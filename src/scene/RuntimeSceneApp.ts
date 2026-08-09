@@ -1026,6 +1026,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         buildReflectionPlanes: () => this.buildRuntimeReflectionPlanes(),
         buildReflectiveSurfaces: () => this.buildRuntimeReflectiveSurfaces(),
       },
+      worldGeometry: {
+        buildBlockingVolumes: () => this.buildRuntimeBlockingVolumes(),
+        buildSplines: () => this.buildRuntimeSplines(),
+        buildLandscapes: () => this.buildRuntimeLandscapes(),
+        buildFoliage: () => this.buildRuntimeFoliage(),
+      },
     });
     this.pointerLook = new PointerLookSource(canvas, {
       onInputModeChange: (mode) => {
@@ -2246,10 +2252,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     this.levelRuntime.buildEnvironmentRender();
     this.levelRuntime.buildReflectionObjects();
-    this.buildRuntimeBlockingVolumes();
-    this.buildRuntimeSplines();
-    await this.buildRuntimeLandscapes();
-    await this.buildRuntimeFoliage();
+    await this.levelRuntime.buildWorldGeometry();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);

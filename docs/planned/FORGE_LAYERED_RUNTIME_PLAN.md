@@ -211,6 +211,14 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > mevcut runtime warm-up kabul engelidir. Engine paketinde de önce yeni testler
 > geçiyor, ardından eksik dialogue fixture’ında duruyor.
 
+> **Uygulama kaydı (2026-08-09, C/2):** Terrain/foliage dilimi de
+> `LevelRuntime`a taşındı: `blocking-volumes → splines → landscapes → foliage`.
+> Landscape ve foliage handler’ları `await` ile sıralı çalışır; editor-only AI
+> navigation/target-point/widget hazırlıkları ortak level-content zincirinin
+> dışında kalır. Birim test bu asenkron sırayı doğrular; TypeScript, production
+> build, import ve strict dist kapıları yeniden yeşildir. Browser’daki landscape
+> runtime kabulü C/1’de kaydedilen shader warm-up eşiği nedeniyle açık kalır.
+
 ### Faz D — Capability modül sistemi (Katman 2 iskeleti)
 - **İş:** Opt-in `CapabilityModule` arayüzü + kayıt/lifecycle. Modül, LevelRuntime
   build'inden sonra `onLevelLoaded(ctx)` ile beslenir; `update(dt)`/`dispose()`

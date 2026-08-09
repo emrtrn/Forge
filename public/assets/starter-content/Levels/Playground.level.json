@@ -372,6 +372,7 @@
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
     "killZ": -10,
+    "gameMode": "forge.tpsCharacter",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"

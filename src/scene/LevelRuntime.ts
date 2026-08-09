@@ -23,6 +23,13 @@ export const LEVEL_RUNTIME_REFLECTION_OBJECT_STEPS = [
   "reflective-surfaces",
 ] as const;
 
+export const LEVEL_RUNTIME_WORLD_GEOMETRY_STEPS = [
+  "blocking-volumes",
+  "splines",
+  "landscapes",
+  "foliage",
+] as const;
+
 export interface LevelRuntimeEnvironmentRenderHandlers {
   readonly fitSunShadow: () => void;
   readonly applyBackgroundAndAmbient: () => void;
@@ -39,21 +46,31 @@ export interface LevelRuntimeReflectionObjectHandlers {
   readonly buildReflectiveSurfaces: () => void;
 }
 
+export interface LevelRuntimeWorldGeometryHandlers {
+  readonly buildBlockingVolumes: () => void;
+  readonly buildSplines: () => void;
+  readonly buildLandscapes: () => Promise<void>;
+  readonly buildFoliage: () => Promise<void>;
+}
+
 export interface LevelRuntimeOptions {
   readonly mode: LevelRuntimeMode;
   readonly environmentRender: LevelRuntimeEnvironmentRenderHandlers;
   readonly reflectionObjects: LevelRuntimeReflectionObjectHandlers;
+  readonly worldGeometry: LevelRuntimeWorldGeometryHandlers;
 }
 
 export class LevelRuntime {
   readonly mode: LevelRuntimeMode;
   private readonly environmentRender: LevelRuntimeEnvironmentRenderHandlers;
   private readonly reflectionObjects: LevelRuntimeReflectionObjectHandlers;
+  private readonly worldGeometry: LevelRuntimeWorldGeometryHandlers;
 
   constructor(options: LevelRuntimeOptions) {
     this.mode = options.mode;
     this.environmentRender = options.environmentRender;
     this.reflectionObjects = options.reflectionObjects;
+    this.worldGeometry = options.worldGeometry;
   }
 
   /**
@@ -80,5 +97,14 @@ export class LevelRuntime {
     handlers.buildReflectionCaptures();
     handlers.buildReflectionPlanes();
     handlers.buildReflectiveSurfaces();
+  }
+
+  /** Builds authored world geometry after render environment and reflections exist. */
+  async buildWorldGeometry(): Promise<void> {
+    const handlers = this.worldGeometry;
+    handlers.buildBlockingVolumes();
+    handlers.buildSplines();
+    await handlers.buildLandscapes();
+    await handlers.buildFoliage();
   }
 }

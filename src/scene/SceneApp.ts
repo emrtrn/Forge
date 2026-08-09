@@ -1302,6 +1302,12 @@ export class SceneApp {
         buildReflectionPlanes: () => this.buildReflectionPlanes(),
         buildReflectiveSurfaces: () => this.buildReflectiveSurfaces(),
       },
+      worldGeometry: {
+        buildBlockingVolumes: () => this.buildBlockingVolumes(),
+        buildSplines: () => this.buildSplines(),
+        buildLandscapes: () => this.buildLandscapes(),
+        buildFoliage: () => this.buildFoliage(),
+      },
     });
     this.orthoCamera = new OrthographicCamera(-5, 5, 5, -5, this.camera.near, this.camera.far);
     this.activeCamera = this.camera;
@@ -3180,12 +3186,9 @@ export class SceneApp {
 
     this.levelRuntime.buildEnvironmentRender();
     this.levelRuntime.buildReflectionObjects();
-    this.buildBlockingVolumes();
+    await this.levelRuntime.buildWorldGeometry();
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();
-    this.buildSplines();
-    await this.buildLandscapes();
-    await this.buildFoliage();
     this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();

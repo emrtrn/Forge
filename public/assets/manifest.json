@@ -20296,29 +20296,6 @@
       "license": "Unknown"
     },
     {
-      "id": "tree-foliagetype",
-      "name": "Tree.Foliagetype",
-      "assetType": "foliageType",
-      "category": "foliage",
-      "path": "assets/foliage/Tree.foliagetype.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "foliage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 429
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "sm-road-dirty",
       "name": "SM Road Dirty",
       "assetType": "staticMesh",
@@ -20342,29 +20319,6 @@
       "license": "Unknown"
     },
     {
-      "id": "bush-foliagetype",
-      "name": "Bush.Foliagetype",
-      "assetType": "foliageType",
-      "category": "foliage",
-      "path": "assets/foliage/Bush.foliagetype.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "foliage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 429
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "highpolyplane",
       "name": "Highpoly Plane",
       "assetType": "staticMesh",
@@ -20384,29 +20338,6 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 118660
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "mat-material",
-      "name": "Mat.Material",
-      "assetType": "material",
-      "category": "ThreeAgesContent",
-      "path": "assets/ThreeAgesContent/mat.material.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "ThreeAgesContent",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 636
       },
       "license": "Unknown"
     }

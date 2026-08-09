@@ -980,7 +980,7 @@ const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void>
 };
 
 registerBuildManifestParityTests(check);
-registerLevelRuntimeTests(check);
+await registerLevelRuntimeTests(check, checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

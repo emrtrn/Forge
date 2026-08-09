@@ -369,7 +369,6 @@ import {
   computeModelLocalBounds,
   computeSceneRoomBounds,
   createSceneCharacterMixer,
-  createSceneRuntimeCore,
   DEFAULT_SCENE_AMBIENT_COLOR,
   DEFAULT_SCENE_AMBIENT_INTENSITY,
   DEFAULT_SCENE_BACKGROUND_COLOR,
@@ -384,12 +383,12 @@ import {
   readSceneRuntimeStats,
   registerSceneShapeModels,
   resolveSceneWorldSettings,
-  resizeSceneRuntimeViewport,
   sceneModelAssetIds,
   SCENE_CAMERA_TARGET,
   startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
+import { SceneShell } from "./SceneShell";
 import {
   defaultLightIntensity,
   formatLightType,
@@ -956,6 +955,7 @@ const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
 ] as const;
 
 export class SceneApp {
+  private readonly sceneShell: SceneShell;
   private renderer: WebGLRenderer;
   private scene: Scene;
   private camera: PerspectiveCamera;
@@ -1278,12 +1278,12 @@ export class SceneApp {
     this.canvas = canvas;
     this.editorEnabled = options.enabled;
 
-    const runtimeCore = createSceneRuntimeCore(canvas, {
+    this.sceneShell = new SceneShell(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     });
-    this.renderer = runtimeCore.renderer;
-    this.scene = runtimeCore.scene;
-    this.camera = runtimeCore.camera;
+    this.renderer = this.sceneShell.renderer;
+    this.scene = this.sceneShell.scene;
+    this.camera = this.sceneShell.camera;
     this.orthoCamera = new OrthographicCamera(-5, 5, 5, -5, this.camera.near, this.camera.far);
     this.activeCamera = this.camera;
     this.syncOrthoCameraFromPerspective();
@@ -1560,7 +1560,7 @@ export class SceneApp {
     // EngineApp.dispose() is async (subsystems may release async resources);
     // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
     void this.engineApp.dispose();
-    this.renderer.dispose();
+    this.sceneShell.dispose();
   }
 
   getRenderStats(): { drawCalls: number; triangles: number } {
@@ -12566,9 +12566,7 @@ export class SceneApp {
     if (width === this.lastViewportWidth && height === this.lastViewportHeight) return;
     this.lastViewportWidth = width;
     this.lastViewportHeight = height;
-    const resetView = resizeSceneRuntimeViewport({
-      camera: this.camera,
-      renderer: this.renderer,
+    const resetView = this.sceneShell.resize({
       width,
       height,
       viewTouched: this.cameraController.hasTouched,

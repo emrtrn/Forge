@@ -2,7 +2,7 @@
 ## LevelRuntime · Capability Modülleri · Game Modülü
 
 > Tarih: 2026-08-09
-> Durum: **Planlanan.** Kod uygulanmadı. Yeni bir oturumda faz faz uygulanacak.
+> Durum: **Uygulanıyor.** Faz A tamamlandı; Faz B kodu uygulandı ve browser smoke kabulü bekliyor.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -146,6 +146,17 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   farklar (editör-only / runtime-only) açıkça listelenir ve beklenen sayıdadır.
 - **Neden önce:** Sonraki refactor'ların drift yaratmadığını bu test yakalar.
 
+> **Uygulama kaydı (2026-08-09):** Faz A tamamlandı. `src/scene/buildManifest.ts`,
+> editor ve runtime kabuklarındaki mevcut semantik adımları, kategori ve sıra ile
+> kayda alır. `tests/engine/buildManifestParity.test.ts`, ortak level-content
+> kümesinin aynı olduğunu, kabuğa özel adımların açıkça listelendiğini ve mevcut
+> environment/reflection sıra farkının görünür kaldığını doğrular. `tsc`,
+> `verify:imports`, production build ve strict dist doğrulaması yeşil. Engine
+> testi yeni kontrollerden sonra, depoda bulunmayan
+> `public/assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json`
+> fixture'ı nedeniyle mevcut bir dialogue testinde duruyor; bu Faz A değişikliğinin
+> dışında kalan açık bir test altyapısı sorunudur.
+
 ### Faz B — SceneShell ayrımı (Katman 0)
 - **İş:** renderer/scene/camera/loop yaşam döngüsünü ince bir `SceneShell`'e al
   (`SceneRuntimeCore`'daki `createSceneRuntimeCore` + resize + stats bunun çekirdeği).
@@ -154,6 +165,17 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   fonksiyonları buraya delege), iki kabuk import'ları.
 - **Kabul:** Editör ve runtime aynı SceneShell'i kurar; demo + `?editor` bootlar;
   smoke testleri (`smoke:browser`) yeşil.
+
+> **Uygulama kaydı (2026-08-09):** `SceneShell`, renderer/scene/camera ve
+> responsive resize yaşam döngüsünün ortak sahibi olarak eklendi. `SceneApp` ve
+> `RuntimeSceneApp` bu kabuğu doğrudan kullanıyor; geriye uyum için
+> `SceneRuntimeCore` kurulum/resize API'leri SceneShell'e delege ediyor. TypeScript,
+> import, production build ve strict dist doğrulaması yeşil. Engine test paketi,
+> Faz A kontrolleri geçtikten sonra Faz A'da kaydedilen eksik dialogue fixture'ında
+> duruyor. Browser smoke kabulü tamamlanamadı: 5173 portu Forge yerine kullanıcının
+> ThreeAges Vite sunucusuna aitti; yanlış sunucuya karşı koşan deneme zaman aşımına
+> uğradı ve geçici smoke dosyaları teardown ile geri alındı. Kullanıcı sunucusuna
+> dokunulmadı.
 
 ### Faz C — LevelRuntime çekirdeği (Katman 1, tek pipeline)
 - **İş:** Yeni `LevelRuntime` sınıfı: Level'dan gelen **tüm sahne içeriğini** tek

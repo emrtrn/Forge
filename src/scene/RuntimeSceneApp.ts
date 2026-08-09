@@ -139,7 +139,6 @@ import {
   computeModelLocalBounds,
   computeSceneRoomBounds,
   createSceneCharacterMixer,
-  createSceneRuntimeCore,
   DEFAULT_SCENE_BACKGROUND_COLOR,
   DEFAULT_SCENE_GRAVITY,
   DEFAULT_SCENE_KILL_Z,
@@ -151,11 +150,11 @@ import {
   readSceneRuntimeMemory,
   registerSceneShapeModels,
   resolveSceneWorldSettings,
-  resizeSceneRuntimeViewport,
   sceneModelAssetIds,
   startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
+import { SceneShell } from "./SceneShell";
 import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
@@ -649,6 +648,7 @@ function describeLoadError(error: unknown): string {
 }
 
 export class RuntimeSceneApp implements RuntimeStatsApp {
+  private readonly sceneShell: SceneShell;
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
@@ -998,16 +998,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   constructor(canvas: HTMLCanvasElement, options: RuntimeSceneAppOptions = {}) {
     this.debug = options.debug ?? false;
-    const runtimeCore = createSceneRuntimeCore(canvas, {
+    this.sceneShell = new SceneShell(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     });
-    this.renderer = runtimeCore.renderer;
+    this.renderer = this.sceneShell.renderer;
     applyEditorMatchedPlayLook(this.renderer);
-    this.scene = runtimeCore.scene;
+    this.scene = this.sceneShell.scene;
     // The VFX subsystem owns one persistent container; live effects come and go
     // as its children (survives scene rebuilds — only its instances are cleared).
     this.scene.add(this.vfxSubsystem.root);
-    this.camera = runtimeCore.camera;
+    this.camera = this.sceneShell.camera;
     this.pointerLook = new PointerLookSource(canvas, {
       onInputModeChange: (mode) => {
         const wasGame = this.inputMode === "game";
@@ -1394,7 +1394,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.disposeInstanceProbeMaterials();
     this.interactionPromptElement.remove();
     void this.engineApp.dispose();
-    this.renderer.dispose();
+    this.sceneShell.dispose();
   }
 
   getRenderStats(): { drawCalls: number; triangles: number } {
@@ -5385,9 +5385,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private handleResize = (): void => {
-    const resetView = resizeSceneRuntimeViewport({
-      camera: this.camera,
-      renderer: this.renderer,
+    const resetView = this.sceneShell.resize({
       width: window.innerWidth,
       height: window.innerHeight,
       viewTouched: this.cameraViewTouched,

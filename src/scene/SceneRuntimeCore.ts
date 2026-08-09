@@ -23,12 +23,8 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { applyRootMotionToClip, type RootMotionClipSetting } from "@engine/render-three/rootMotion";
 
+import { SceneShell, resizeSceneShellViewport } from "./SceneShell";
 import {
-  applyResponsiveCameraViewport,
-  createSceneCamera,
-} from "@engine/render-three/camera";
-import {
-  createSceneRenderer,
   readRenderStats,
   readRenderMemory,
   type RenderMemoryStats,
@@ -84,8 +80,6 @@ import { buildSplineCurveCache } from "@engine/scene/splineCurve";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 
-const MAX_PIXEL_RATIO = 2;
-
 export const SCENE_CAMERA_TARGET = new Vector3(0, 0.65, -0.2);
 export const DEFAULT_SCENE_STATIC_OBJECTS_CAST_SHADOWS = false;
 export const DEFAULT_SCENE_STATIC_OBJECTS_RECEIVE_SHADOWS = true;
@@ -117,11 +111,7 @@ export function createSceneRuntimeCore(
   canvas: HTMLCanvasElement,
   options: { backgroundColor: string | number },
 ): SceneRuntimeCore {
-  const renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
-  const scene = new Scene();
-  scene.background = new Color(options.backgroundColor);
-  const camera = createSceneCamera();
-  return { renderer, scene, camera };
+  return new SceneShell(canvas, options);
 }
 
 export function applyEditorMatchedPlayLook(renderer: WebGLRenderer): void {
@@ -149,14 +139,7 @@ export function resizeSceneRuntimeViewport(options: {
   height: number;
   viewTouched: boolean;
 }): boolean {
-  const resetView = applyResponsiveCameraViewport(options.camera, {
-    width: options.width,
-    height: options.height,
-    target: SCENE_CAMERA_TARGET,
-    viewTouched: options.viewTouched,
-  });
-  options.renderer.setSize(options.width, options.height, false);
-  return resetView;
+  return resizeSceneShellViewport(options);
 }
 
 export function resolveSceneWorldSettings(

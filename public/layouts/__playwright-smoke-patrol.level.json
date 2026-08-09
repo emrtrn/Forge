@@ -547,26 +547,5 @@
     }
   ],
   "landscapes": [],
-  "actors": [
-    {
-      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
-      "position": [
-        2.35,
-        0,
-        -5.67
-      ],
-      "scaleLocked": true,
-      "rotationYDeg": 0,
-      "scale": 0.4,
-      "patrolRoute": {
-        "source": "spline",
-        "splineId": "spline-1",
-        "entry": "nearest",
-        "wrapMode": "loop",
-        "speed": 2.4,
-        "acceptanceRadius": 0.55,
-        "lookAheadDistance": 1.2
-      }
-    }
-  ]
+  "actors": []
 }

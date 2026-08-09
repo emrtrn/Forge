@@ -2,7 +2,7 @@
 ## LevelRuntime · Capability Modülleri · Game Modülü
 
 > Tarih: 2026-08-09
-> Durum: **Uygulanıyor.** Faz A tamamlandı; Faz B editor smoke’u geçti, runtime warm-up kabulü açık. Faz C’nin environment/reflection ilk dilimi tamamlandı.
+> Durum: **Uygulanıyor.** Faz A–C kodu tamamlandı. Faz B/C runtime warm-up browser kabulü açık; sıradaki uygulama fazı D (Capability modül sistemi).
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -218,6 +218,17 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > dışında kalır. Birim test bu asenkron sırayı doğrular; TypeScript, production
 > build, import ve strict dist kapıları yeniden yeşildir. Browser’daki landscape
 > runtime kabulü C/1’de kaydedilen shader warm-up eşiği nedeniyle açık kalır.
+
+> **Uygulama kaydı (2026-08-09, C/3 — Faz C tamamlandı):** Core content zinciri
+> (`models → shape-models → UVW → material-slots → scene-entities → actors`) da
+> LevelRuntime handler’larına taşındı. Her iki kabuk artık ortak sahne içeriğinin
+> tamamını tek `await levelRuntime.build()` çağrısıyla kurar; Faz A manifesti bu
+> ortak adımların tam sıralı eşitliğini korur. Collider/AI/gameplay başlatma
+> yaşam döngüsü, capability sınırını korumak için Faz D–E’de modüllere ayrılacak.
+> Tam-pipeline unit testi, TypeScript, production build, import ve strict dist
+> doğrulamaları yeşildir; hedef editor viewport smoke da geçer. Engine paketinin
+> geri kalanı eksik dialogue fixture’ında, runtime browser kabulü ise shader
+> warm-up eşiğinde açık kalır.
 
 ### Faz D — Capability modül sistemi (Katman 2 iskeleti)
 - **İş:** Opt-in `CapabilityModule` arayüzü + kayıt/lifecycle. Modül, LevelRuntime

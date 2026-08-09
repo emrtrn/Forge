@@ -30,6 +30,22 @@ export const LEVEL_RUNTIME_WORLD_GEOMETRY_STEPS = [
   "foliage",
 ] as const;
 
+export const LEVEL_RUNTIME_CORE_CONTENT_STEPS = [
+  "models",
+  "shape-models",
+  "asset-uvw",
+  "material-slots",
+  "scene-entities",
+  "actor-instances",
+] as const;
+
+export const LEVEL_RUNTIME_BUILD_STEPS = [
+  ...LEVEL_RUNTIME_CORE_CONTENT_STEPS,
+  ...LEVEL_RUNTIME_ENVIRONMENT_RENDER_STEPS,
+  ...LEVEL_RUNTIME_REFLECTION_OBJECT_STEPS,
+  ...LEVEL_RUNTIME_WORLD_GEOMETRY_STEPS,
+] as const;
+
 export interface LevelRuntimeEnvironmentRenderHandlers {
   readonly fitSunShadow: () => void;
   readonly applyBackgroundAndAmbient: () => void;
@@ -53,11 +69,22 @@ export interface LevelRuntimeWorldGeometryHandlers {
   readonly buildFoliage: () => Promise<void>;
 }
 
+export interface LevelRuntimeCoreContentHandlers {
+  readonly loadModels: () => Promise<void>;
+  readonly registerShapeModels: () => void;
+  readonly applyAssetUvwMappings: () => Promise<void>;
+  readonly applyMaterialSlots: () => Promise<void>;
+  readonly beforeBuildSceneEntities: () => Promise<void>;
+  readonly buildSceneEntities: () => void;
+  readonly buildActorInstances: () => Promise<void>;
+}
+
 export interface LevelRuntimeOptions {
   readonly mode: LevelRuntimeMode;
   readonly environmentRender: LevelRuntimeEnvironmentRenderHandlers;
   readonly reflectionObjects: LevelRuntimeReflectionObjectHandlers;
   readonly worldGeometry: LevelRuntimeWorldGeometryHandlers;
+  readonly coreContent: LevelRuntimeCoreContentHandlers;
 }
 
 export class LevelRuntime {
@@ -65,12 +92,14 @@ export class LevelRuntime {
   private readonly environmentRender: LevelRuntimeEnvironmentRenderHandlers;
   private readonly reflectionObjects: LevelRuntimeReflectionObjectHandlers;
   private readonly worldGeometry: LevelRuntimeWorldGeometryHandlers;
+  private readonly coreContent: LevelRuntimeCoreContentHandlers;
 
   constructor(options: LevelRuntimeOptions) {
     this.mode = options.mode;
     this.environmentRender = options.environmentRender;
     this.reflectionObjects = options.reflectionObjects;
     this.worldGeometry = options.worldGeometry;
+    this.coreContent = options.coreContent;
   }
 
   /**
@@ -106,5 +135,25 @@ export class LevelRuntime {
     handlers.buildSplines();
     await handlers.buildLandscapes();
     await handlers.buildFoliage();
+  }
+
+  /** Loads all authored models and material state before building scene objects. */
+  async buildCoreContent(): Promise<void> {
+    const handlers = this.coreContent;
+    await handlers.loadModels();
+    handlers.registerShapeModels();
+    await handlers.applyAssetUvwMappings();
+    await handlers.applyMaterialSlots();
+    await handlers.beforeBuildSceneEntities();
+    handlers.buildSceneEntities();
+    await handlers.buildActorInstances();
+  }
+
+  /** Builds every shared authored level-content group in canonical order. */
+  async build(): Promise<void> {
+    await this.buildCoreContent();
+    this.buildEnvironmentRender();
+    this.buildReflectionObjects();
+    await this.buildWorldGeometry();
   }
 }

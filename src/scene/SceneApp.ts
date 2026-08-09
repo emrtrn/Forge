@@ -1178,6 +1178,7 @@ export class SceneApp {
   private metadataSchema: MetadataSchema | null = null;
   private layout: RoomLayout | null = null;
   private models = new Map<string, GLTF>();
+  private convertedUnlitMaterials = 0;
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
   private instanceOverrideObjects = new Map<string, Object3D[]>();
@@ -1307,6 +1308,39 @@ export class SceneApp {
         buildSplines: () => this.buildSplines(),
         buildLandscapes: () => this.buildLandscapes(),
         buildFoliage: () => this.buildFoliage(),
+      },
+      coreContent: {
+        loadModels: async () => {
+          const loader = this.assetLoader;
+          const layout = this.layout;
+          if (!loader || !layout) throw new Error("Editor level content is not ready to load models.");
+          this.models = await loader.loadGroups(layout.loadGroups);
+          await this.loadMissingSceneModels();
+          this.convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
+          this.localBounds = computeModelLocalBounds(this.models);
+        },
+        registerShapeModels: () => this.registerShapeModelsFromLayout(),
+        applyAssetUvwMappings: () => this.refreshAssetUvwMapping(undefined, { rebuild: false }),
+        applyMaterialSlots: () => this.refreshAssetMaterialSlots(undefined, { rebuild: false }),
+        beforeBuildSceneEntities: async () => {
+          const loader = this.assetLoader;
+          if (!loader) throw new Error("Editor level content is not ready to load asset placements.");
+          this.assetPlacements.clear();
+          for (const asset of await loader.loadEditableAssets()) {
+            this.assetPlacements.set(asset.id, asset.placement);
+          }
+        },
+        buildSceneEntities: () => {
+          const layout = this.layout;
+          if (!layout) throw new Error("Editor level content is not ready to build entities.");
+          buildSceneEntities(layout, {
+            addInstance: (assetId, placements) =>
+              this.scene.add(this.createInstancedModel(assetId, placements)),
+            addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
+            addLight: (light) => this.addLight(light),
+          });
+        },
+        buildActorInstances: () => this.loadActorInstances(),
       },
     });
     this.orthoCamera = new OrthographicCamera(-5, 5, 5, -5, this.camera.near, this.camera.far);
@@ -3160,33 +3194,8 @@ export class SceneApp {
     }
     this.ensureDefaultLights();
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
-    this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
-    await this.loadMissingSceneModels();
-    const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
-    this.localBounds = computeModelLocalBounds(this.models);
+    await this.levelRuntime.build();
 
-    // Shape actors persist as `shape:<type>` instances; their synthetic models
-    // aren't part of any loadGroup, so register them before the scene is built.
-    this.registerShapeModelsFromLayout();
-    await this.refreshAssetUvwMapping(undefined, { rebuild: false });
-    await this.refreshAssetMaterialSlots(undefined, { rebuild: false });
-
-    this.assetPlacements.clear();
-    for (const asset of await this.assetLoader.loadEditableAssets()) {
-      this.assetPlacements.set(asset.id, asset.placement);
-    }
-
-    buildSceneEntities(this.layout, {
-      addInstance: (assetId, placements) =>
-        this.scene.add(this.createInstancedModel(assetId, placements)),
-      addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
-      addLight: (light) => this.addLight(light),
-    });
-    await this.loadActorInstances();
-
-    this.levelRuntime.buildEnvironmentRender();
-    this.levelRuntime.buildReflectionObjects();
-    await this.levelRuntime.buildWorldGeometry();
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();
     this.buildWorldWidgetMarkers();
@@ -3203,7 +3212,7 @@ export class SceneApp {
         layout: this.layout.name,
         processedAssetBytes: bytes,
         materialStats,
-        convertedUnlitMaterials,
+        convertedUnlitMaterials: this.convertedUnlitMaterials,
         note:
           materialStats.basic > 0
             ? "Unlit runtime materials remain; scene lights do not affect those assets."

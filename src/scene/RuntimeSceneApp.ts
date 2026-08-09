@@ -817,6 +817,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
   private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
   private models = new Map<string, GLTF>();
+  private convertedUnlitMaterials = 0;
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
   /**
@@ -1031,6 +1032,44 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         buildSplines: () => this.buildRuntimeSplines(),
         buildLandscapes: () => this.buildRuntimeLandscapes(),
         buildFoliage: () => this.buildRuntimeFoliage(),
+      },
+      coreContent: {
+        loadModels: async () => {
+          const loader = this.assetLoader;
+          const layout = this.layout;
+          if (!loader || !layout) throw new Error("Runtime level content is not ready to load models.");
+          this.setLoadingStatus("Loading models");
+          const expectedModelIds = await this.collectExpectedModelIds();
+          this.loadProgress.clear();
+          this.loadProgress.expectAll(expectedModelIds);
+          this.models = await loader.loadGroups(layout.loadGroups);
+          await this.loadMissingSceneModels();
+          await this.loadActorMeshModels();
+          this.setLoadingStatus("Preparing scene");
+          this.convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
+          this.localBounds = computeModelLocalBounds(this.models);
+        },
+        registerShapeModels: () => {
+          const layout = this.layout;
+          if (!layout) throw new Error("Runtime level content is not ready to register shape models.");
+          registerSceneShapeModels(layout, this.models, this.localBounds);
+        },
+        applyAssetUvwMappings: () => this.applyAssetUvwMappings(),
+        applyMaterialSlots: () => this.loadSceneMaterials(),
+        beforeBuildSceneEntities: async () => {},
+        buildSceneEntities: () => {
+          const layout = this.layout;
+          if (!layout) throw new Error("Runtime level content is not ready to build entities.");
+          buildSceneEntities(layout, {
+            addInstance: (assetId, placements) => {
+              if (isMarkerAssetId(assetId)) return;
+              this.scene.add(this.createInstancedModel(assetId, placements));
+            },
+            addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
+            addLight: (light) => this.addLight(light),
+          });
+        },
+        buildActorInstances: async () => this.addActorObjects(),
       },
     });
     this.pointerLook = new PointerLookSource(canvas, {
@@ -2215,44 +2254,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.applyPlayerStartSpawn(spawnTag);
     // Declare every model this level will load up front (P4) so the loading bar's
     // total is right before the first GLB streams in; the loader marks each done.
-    this.setLoadingStatus("Loading models");
-    const expectedModelIds = await this.collectExpectedModelIds();
-    this.loadProgress.clear();
-    this.loadProgress.expectAll(expectedModelIds);
-    this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
-    await this.loadMissingSceneModels();
-    await this.loadActorMeshModels();
-    this.setLoadingStatus("Preparing scene");
-    const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
-    this.localBounds = computeModelLocalBounds(this.models);
+    await this.levelRuntime.build();
     // Shape actors persist as `shape:<type>` instances whose synthetic models are
     // not in any loadGroup; register them before the scene is built, or the
     // instanced-model builder throws and aborts scene construction (the editor
     // does the same via registerShapeModelsFromLayout).
-    registerSceneShapeModels(this.layout, this.models, this.localBounds);
-    await this.applyAssetUvwMappings();
     // Resolve material overrides + default slots into the cache before instances
     // build, so createInstancedModel can render the assigned materials (mirrors
     // the editor's material-override path; otherwise Play shows the base mesh).
-    await this.loadSceneMaterials();
 
-    buildSceneEntities(this.layout, {
-      addInstance: (assetId, placements) => {
+    /*
         // Marker gizmos (Player Start, Ambient Sound) are editor-only authoring
         // helpers: the runtime never renders the gizmo mesh. It still reads their
         // transform — Player Start as the TPS spawn, Ambient Sound as the emitter
         // point for its (separately-built) audio entity.
-        if (isMarkerAssetId(assetId)) return;
-        this.scene.add(this.createInstancedModel(assetId, placements));
-      },
-      addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
-      addLight: (light) => this.addLight(light),
-    });
-    this.addActorObjects();
+    */
 
-    this.levelRuntime.buildEnvironmentRender();
-    this.levelRuntime.buildReflectionObjects();
-    await this.levelRuntime.buildWorldGeometry();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -2263,7 +2280,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         layout: this.layout.name,
         processedAssetBytes: bytes,
         materialStats,
-        convertedUnlitMaterials,
+        convertedUnlitMaterials: this.convertedUnlitMaterials,
       }),
     );
 

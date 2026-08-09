@@ -155,6 +155,7 @@ import {
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
 import { SceneShell } from "./SceneShell";
+import { LevelRuntime } from "./LevelRuntime";
 import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
@@ -649,6 +650,7 @@ function describeLoadError(error: unknown): string {
 
 export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly sceneShell: SceneShell;
+  private readonly levelRuntime: LevelRuntime;
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
@@ -1008,6 +1010,23 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // as its children (survives scene rebuilds — only its instances are cleared).
     this.scene.add(this.vfxSubsystem.root);
     this.camera = this.sceneShell.camera;
+    this.levelRuntime = new LevelRuntime({
+      mode: "runtime",
+      environmentRender: {
+        fitSunShadow: () => this.fitSunShadowToScene(),
+        applyBackgroundAndAmbient: () => this.applyBackgroundAndAmbient(),
+        applySky: () => this.applyRuntimeSky(),
+        applyReflectionEnvironment: () => this.applyRuntimeReflection(true),
+        applyPostProcess: () => this.applyRuntimePostProcess(),
+        applyFog: () => this.applyRuntimeFog(),
+        applyClouds: () => this.applyRuntimeClouds(),
+      },
+      reflectionObjects: {
+        buildReflectionCaptures: () => this.buildRuntimeReflectionCaptures(),
+        buildReflectionPlanes: () => this.buildRuntimeReflectionPlanes(),
+        buildReflectiveSurfaces: () => this.buildRuntimeReflectiveSurfaces(),
+      },
+    });
     this.pointerLook = new PointerLookSource(canvas, {
       onInputModeChange: (mode) => {
         const wasGame = this.inputMode === "game";
@@ -2225,19 +2244,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     this.addActorObjects();
 
-    this.fitSunShadowToScene();
-    this.applyBackgroundAndAmbient();
-    this.applyRuntimeSky();
-    this.applyRuntimeReflection(true);
-    this.applyRuntimePostProcess();
-    this.applyRuntimeFog();
-    this.applyRuntimeClouds();
-    // Bake placed Sphere Reflection Captures from the finished scene + environment,
-    // then assign nearest-probe envMaps (Play parity with the editor).
-    this.buildRuntimeReflectionCaptures();
-    // Planar reflections come last so they don't leak into the probe cubemaps.
-    this.buildRuntimeReflectionPlanes();
-    this.buildRuntimeReflectiveSurfaces();
+    this.levelRuntime.buildEnvironmentRender();
+    this.levelRuntime.buildReflectionObjects();
     this.buildRuntimeBlockingVolumes();
     this.buildRuntimeSplines();
     await this.buildRuntimeLandscapes();

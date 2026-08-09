@@ -31,10 +31,10 @@ const EXPECTED_RUNTIME_ONLY = [
 ];
 
 export function registerBuildManifestParityTests(check: Check): void {
-  check("build manifest keeps editor and runtime level-content steps in the same set", () => {
+  check("build manifest keeps editor and runtime level-content steps in the same ordered pipeline", () => {
     assert.deepEqual(
-      [...buildStepIds("editor", "level-content")].sort(),
-      [...buildStepIds("runtime", "level-content")].sort(),
+      buildStepIds("editor", "level-content"),
+      buildStepIds("runtime", "level-content"),
     );
   });
 
@@ -45,12 +45,12 @@ export function registerBuildManifestParityTests(check: Check): void {
     assert.equal(report.sharedLevelContent.length, 24);
   });
 
-  check("build manifest preserves the audited environment/reflection ordering drift", () => {
+  check("build manifest records the canonical LevelRuntime environment/render order", () => {
     const editor = buildManifestFor("editor").map((step) => step.id);
     const runtime = buildManifestFor("runtime").map((step) => step.id);
-    assert.ok(editor.indexOf("post-process") < editor.indexOf("reflection-environment"));
+    assert.ok(editor.indexOf("reflection-environment") < editor.indexOf("post-process"));
     assert.ok(runtime.indexOf("reflection-environment") < runtime.indexOf("post-process"));
-    assert.ok(editor.indexOf("reflection-captures") > editor.indexOf("reflective-surfaces"));
+    assert.ok(editor.indexOf("reflection-captures") < editor.indexOf("reflection-planes"));
     assert.ok(runtime.indexOf("reflection-captures") < runtime.indexOf("reflection-planes"));
   });
 }

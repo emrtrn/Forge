@@ -389,6 +389,7 @@ import {
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
 import { SceneShell } from "./SceneShell";
+import { LevelRuntime } from "./LevelRuntime";
 import {
   defaultLightIntensity,
   formatLightType,
@@ -956,6 +957,7 @@ const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
 
 export class SceneApp {
   private readonly sceneShell: SceneShell;
+  private readonly levelRuntime: LevelRuntime;
   private renderer: WebGLRenderer;
   private scene: Scene;
   private camera: PerspectiveCamera;
@@ -1284,6 +1286,23 @@ export class SceneApp {
     this.renderer = this.sceneShell.renderer;
     this.scene = this.sceneShell.scene;
     this.camera = this.sceneShell.camera;
+    this.levelRuntime = new LevelRuntime({
+      mode: "editor",
+      environmentRender: {
+        fitSunShadow: () => this.fitSunShadowToScene(),
+        applyBackgroundAndAmbient: () => this.applyBackgroundAndAmbient(),
+        applySky: () => this.applySkyAtmosphere(),
+        applyReflectionEnvironment: () => this.applyReflection(true),
+        applyPostProcess: () => this.applyPostProcess(),
+        applyFog: () => this.applyHeightFog(),
+        applyClouds: () => this.applyCloudLayer(),
+      },
+      reflectionObjects: {
+        buildReflectionCaptures: () => this.buildReflectionCaptures(),
+        buildReflectionPlanes: () => this.buildReflectionPlanes(),
+        buildReflectiveSurfaces: () => this.buildReflectiveSurfaces(),
+      },
+    });
     this.orthoCamera = new OrthographicCamera(-5, 5, 5, -5, this.camera.near, this.camera.far);
     this.activeCamera = this.camera;
     this.syncOrthoCameraFromPerspective();
@@ -3159,16 +3178,8 @@ export class SceneApp {
     });
     await this.loadActorInstances();
 
-    this.fitSunShadowToScene();
-    this.applyBackgroundAndAmbient();
-    this.applySkyAtmosphere();
-    this.applyPostProcess();
-    this.applyHeightFog();
-    this.applyCloudLayer();
-    this.applyReflection(true);
-    this.buildReflectionPlanes();
-    this.buildReflectiveSurfaces();
-    this.buildReflectionCaptures();
+    this.levelRuntime.buildEnvironmentRender();
+    this.levelRuntime.buildReflectionObjects();
     this.buildBlockingVolumes();
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();

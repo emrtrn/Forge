@@ -2,7 +2,7 @@
 ## LevelRuntime · Capability Modülleri · Game Modülü
 
 > Tarih: 2026-08-09
-> Durum: **Uygulanıyor.** Faz A tamamlandı; Faz B kodu uygulandı ve browser smoke kabulü bekliyor.
+> Durum: **Uygulanıyor.** Faz A tamamlandı; Faz B editor smoke’u geçti, runtime warm-up kabulü açık. Faz C’nin environment/reflection ilk dilimi tamamlandı.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -196,6 +196,20 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 - **Uyarı:** En büyük faz. Alt-adımlara böl (her capability grubu ayrı commit:
   önce env/render grubu, sonra reflection grubu, sonra terrain/foliage grubu),
   her alt-adımda gate.
+
+> **Uygulama kaydı (2026-08-09, C/1):** `LevelRuntime`, environment/render ve
+> reflection-object sıralarının tek sahibi olarak eklendi. İki kabuk, kendi
+> uygulama ayrıntılarını handler olarak verir; ortak sıra `sun-shadow →
+> background/ambient → sky → environment reflection → post → fog → cloud →
+> reflection captures → planes → reflective surfaces` artık tek yerdedir.
+> Probe capture’lar planar/mirror yüzeylerden önce bake edilir; bu runtime’ın
+> mevcut geri-beslemeyi önleyen sırasıdır ve editor de aynı sıraya hizalanmıştır.
+> Faz A manifest testi ortak level-content için artık sıralı eşitlik denetler.
+> `tsc`, production build, import ve strict dist kapıları yeşil. İlgili editor
+> viewport smoke’u geçti. Runtime locomotion smoke’u ise exception olmadan
+> `Warming shaders 31 / 31` aşamasında 30 saniyelik loading eşiğini aştı; bu
+> mevcut runtime warm-up kabul engelidir. Engine paketinde de önce yeni testler
+> geçiyor, ardından eksik dialogue fixture’ında duruyor.
 
 ### Faz D — Capability modül sistemi (Katman 2 iskeleti)
 - **İş:** Opt-in `CapabilityModule` arayüzü + kayıt/lifecycle. Modül, LevelRuntime

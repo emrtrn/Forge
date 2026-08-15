@@ -147,7 +147,7 @@ export function registerRuntimeCapabilityModuleTests(check: Check): void {
 
   check("the default module set keeps the runtime's authored tick order", () => {
     const runtime = startTestRuntime(createDefaultRuntimeModules());
-    assert.deepEqual(runtime.tickOrder, ["movingPlatform", "splinePathFollower"]);
+    assert.deepEqual(runtime.tickOrder, ["movingPlatform", "splinePathFollower", "dialogue"]);
   });
 
   check("moving-platform module drives platforms and publishes them to the solver", () => {

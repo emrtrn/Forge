@@ -12,9 +12,14 @@
  * state), hence a factory rather than a shared constant.
  */
 import type { CapabilityModule } from "./CapabilityModule";
+import { createDialogueModule } from "./dialogueModule";
 import { createMovingPlatformModule } from "./movingPlatformModule";
 import { createSplineFollowerModule } from "./splineFollowerModule";
 
 export function createDefaultRuntimeModules(): CapabilityModule[] {
-  return [createMovingPlatformModule(), createSplineFollowerModule()];
+  return [
+    createMovingPlatformModule(),
+    createSplineFollowerModule(),
+    createDialogueModule(),
+  ];
 }

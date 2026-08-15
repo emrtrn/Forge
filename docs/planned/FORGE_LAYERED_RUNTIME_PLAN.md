@@ -4,7 +4,7 @@
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
 > Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower)
-> tamam; sıradaki modül dialogue.
+> ve E/2 (dialogue) tamam; sıradaki modül save-game.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -357,6 +357,32 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > Kapılar: `tsc`, `verify:imports`, production build, **936/936 engine check**,
 > `verify:dist --strict` yeşil. Browser: `runtime-locomotion` (25.7 sn) ve
 > `runtime-playflow` (37.2 sn) smoke'ları geçiyor.
+
+> **Uygulama kaydı (2026-08-15, E/2 — dialogue modülü):** Dialogue & Voice'un
+> tamamı `capabilities/dialogueModule.ts`'e taşındı: `DialogueSubsystem`,
+> `ConversationDirector`, iki DOM overlay (altyazı satırı + seçim paneli),
+> manifest'ten `dialogueVoice`/`dialogueLine`/`conversation` kaydı ve
+> `play-dialogue` / `start-conversation` script-message tetikleyicileri.
+> `RuntimeSceneApp`'ten `setupDialogue`, `loadDialogueAssets`, iki overlay mount
+> yardımcısı, iki abonelik alanı ve teardown/dispose satırları çıktı (~150 satır).
+>
+> Modülün kabuktan istediği her şey servis üzerinden ve **hepsi opsiyonel**:
+> `script-message-bus` (behaviorSubsystem), `dialogue-audio` (audioSubsystem +
+> soundCue; audio modülü Faz E'nin ilerisinde) ve `subtitle-localization`
+> (locale registry UI ile paylaşıldığı için kabukta kaldı; `ensureLoaded()`
+> HUD'suz sahnede tabloları yükler). Bus yoksa hiçbir şey tetiklenemez, audio
+> yoksa altyazı metin-uzunluğu tahminiyle görünür, localization yoksa yazılan
+> metin kullanılır — üçü de testle sabitlendi.
+>
+> Seviye kurulumu artık `onLevelLoaded` içinde olduğu için `buildManifest`'teki
+> ayrı `dialogue` runtime adımı kaldırıldı; iş `capability-modules` adımının
+> içinde. Yeni birim testi `tests/engine/dialogueModule.test.ts` (manifest kaydı,
+> bus'tan satır çalma, bilinmeyen satırın no-op olması, seviye teardown'unda
+> tetikleyicilerin bırakılması, servissiz host'ta sessiz çalışma).
+>
+> Kapılar: `build:verify` uçtan uca yeşil (**938/938 engine check**). Browser:
+> `runtime-playflow`, `runtime-script-message`, `runtime-checkpoint` smoke'ları
+> geçiyor.
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

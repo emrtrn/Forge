@@ -95,7 +95,8 @@ const RUNTIME_BUILD_MANIFEST: readonly BuildManifestStep[] = [
   runtimeOnly("runtime-ui"),
   runtimeOnly("quality-settings"),
   runtimeOnly("lod-bias"),
-  runtimeOnly("dialogue"),
+  // Layer 2 modules run their own level setup here (dialogue asset registration
+  // and its script-message triggers moved into `dialogueModule` in Phase E).
   runtimeOnly("capability-modules"),
   runtimeOnly("shader-warmup"),
 ];

@@ -968,6 +968,7 @@ import { registerBuildManifestParityTests } from "../tests/engine/buildManifestP
 import { registerLevelRuntimeTests } from "../tests/engine/levelRuntime.test";
 import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegistry.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
+import { registerDialogueModuleTests } from "../tests/engine/dialogueModule.test";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -985,6 +986,7 @@ registerBuildManifestParityTests(check);
 await registerLevelRuntimeTests(check, checkAsync);
 await registerCapabilityRegistryTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
+await registerDialogueModuleTests(checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

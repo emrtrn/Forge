@@ -20,9 +20,12 @@ import {
 } from "./capabilities/RuntimeServices";
 import {
   characterTransformResetService,
+  dialogueAudioService,
   movingPlatformQueryService,
+  scriptMessageBusService,
   splineFollowerDebugService,
   splineRegistrySourceService,
+  subtitleLocalizationService,
 } from "./capabilities/runtimeServiceKeys";
 import { LoadingOverlay } from "./loadingOverlay";
 import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgress";
@@ -86,20 +89,10 @@ import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
 import { collapseCoincidentFloors, findGroundLayersAt } from "@/game/collision";
 import { slopeCosFromDegrees } from "@/game/slopeSurface";
-import {
-  DialogueSubsystem,
-  type DialogueAudioPlayback,
-  type DialogueAudioRequest,
+import type {
+  DialogueAudioPlayback,
+  DialogueAudioRequest,
 } from "@engine/dialogue/dialogueSubsystem";
-import {
-  isDialogueLineAsset,
-  isDialogueVoiceAsset,
-  type DialoguePlayContext,
-} from "@engine/dialogue/dialogueTypes";
-import { ConversationDirector } from "@engine/dialogue/conversationDirector";
-import { isConversationAsset } from "@engine/dialogue/conversationTypes";
-import { SubtitleOverlay } from "./subtitleOverlay";
-import { ConversationOverlay } from "./conversationOverlay";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { GamepadInputSource } from "@/input/gamepadInputSource";
 import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
@@ -635,18 +628,6 @@ export interface RuntimeSceneAppOptions {
   readonly capabilities?: readonly CapabilityModule[];
 }
 
-/** Mounts the dialogue subtitle overlay into `#ui-overlay`, or null when absent. */
-function mountSubtitleOverlay(): SubtitleOverlay | null {
-  const host = typeof document !== "undefined" ? document.getElementById("ui-overlay") : null;
-  return host ? new SubtitleOverlay(host) : null;
-}
-
-/** Mounts the conversation choice overlay into `#ui-overlay`, or null when absent. */
-function mountConversationOverlay(): ConversationOverlay | null {
-  const host = typeof document !== "undefined" ? document.getElementById("ui-overlay") : null;
-  return host ? new ConversationOverlay(host) : null;
-}
-
 const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
   "Damage.Apply",
   "Damage.Died",
@@ -735,64 +716,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     backend: "web-audio",
     resolveClipUrl: (clipId) => this.soundUrlById.get(clipId) ?? null,
   });
-  /** Bottom-centre subtitle line for dialogue (null when no #ui-overlay host). */
-  private readonly subtitleOverlay = mountSubtitleOverlay();
-  /**
-   * Dialogue & Voice runtime: resolves authored lines to audio + subtitles.
-   * Audio is delegated back to {@link audioSubsystem}; subtitles drive the
-   * overlay above. Voices/lines are registered from the manifest on scene load.
-   */
-  private readonly dialogueSubsystem = new DialogueSubsystem({
-    playAudio: (request) => this.playDialogueAudio(request),
-    // D4 localization: a line's localizationKey resolves its subtitle against the
-    // active `.loc.json` locale table (read live so a locale switch takes effect).
-    // Missing entries fall back to the authored text. Per-locale *audio* stays as
-    // context mappings, so no audio lookup is wired here.
-    localization: {
-      resolveSubtitle: (key) => this.localeRegistry?.resolveOptional(key),
-    },
-    onSubtitleShow: (event) =>
-      this.subtitleOverlay?.show({
-        lineId: event.lineId,
-        text: event.text,
-        ...(event.speakerName ? { speakerName: event.speakerName } : {}),
-      }),
-    onSubtitleHide: (lineId) => this.subtitleOverlay?.hide(lineId),
-    // Feeds line completion to the conversation director so it can advance a
-    // running conversation to the next node once a line's subtitle finishes.
-    onLineEnd: (info) => this.conversationDirector.notifyLineEnd(info.lineId, info.interrupted),
-  });
-  /** Unsubscribes the `play-dialogue` script-message trigger (released on dispose). */
-  private dialogueUnsub: (() => void) | null = null;
-  /** Interactive choice panel for conversations (null when no #ui-overlay host). */
-  private readonly conversationOverlay = mountConversationOverlay();
-  /**
-   * Conversation runtime (Faz D3): walks authored `*.conversation.json` graphs,
-   * playing each line through {@link dialogueSubsystem}, showing choice UI, and
-   * emitting `event` nodes onto the script-message bus. Started by the
-   * `start-conversation` script message.
-   */
-  private readonly conversationDirector = new ConversationDirector({
-    playLine: (lineId, context) => this.dialogueSubsystem.playLine(lineId, context),
-    stopLine: (lineId) => this.dialogueSubsystem.stopLine(lineId),
-    emitEvent: (event) =>
-      this.behaviorSubsystem.emitScriptMessage(
-        event.eventId,
-        "conversation",
-        event.payload ?? {},
-      ),
-    showChoices: (view) =>
-      this.conversationOverlay?.show(
-        {
-          choices: view.choices,
-          ...(view.prompt !== undefined ? { prompt: view.prompt } : {}),
-        },
-        (index) => this.conversationDirector.choose(index),
-      ),
-    hideChoices: () => this.conversationOverlay?.hide(),
-  });
-  /** Unsubscribes the `start-conversation` script-message trigger (released on dispose). */
-  private conversationUnsub: (() => void) | null = null;
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   /** Gamepad → action-map bridge (poll-only, fed once per frame in the loop). */
   private readonly gamepadInput = new GamepadInputSource(this.inputActions);
@@ -1051,6 +974,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.characterMovementSubsystem.resetEntityTransform(entityId, transform);
       this.syncEntityTransform(entityId, transform);
     });
+    this.runtimeServices.provide(scriptMessageBusService, {
+      subscribe: (type, handler) => this.behaviorSubsystem.subscribeScriptMessage(type, handler),
+      emit: (type, source, payload) =>
+        this.behaviorSubsystem.emitScriptMessage(type, source, payload),
+    });
+    this.runtimeServices.provide(dialogueAudioService, (request) =>
+      this.playDialogueAudio(request),
+    );
+    this.runtimeServices.provide(subtitleLocalizationService, {
+      // The UI loads the locale tables for HUD/menu text; a scene with neither
+      // still needs them for subtitles, so load on demand here.
+      ensureLoaded: async () => {
+        if (!this.localeRegistry) this.localeRegistry = await this.loadUiLocaleRegistry();
+      },
+      resolveSubtitle: (key) => this.localeRegistry?.resolveOptional(key),
+    });
     this.levelRuntime = new LevelRuntime({
       mode: "runtime",
       environmentRender: {
@@ -1244,7 +1183,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     this.runtimeServices.addSubsystem("gameplay", this.behaviorSubsystem);
     this.runtimeServices.addSubsystem("presentation", this.audioSubsystem);
-    this.runtimeServices.addSubsystem("presentation", this.dialogueSubsystem);
     this.runtimeServices.addSubsystem("presentation", this.vfxSubsystem);
     // Every subsystem — shell-owned and module-owned — is now known, so install
     // the engine tick in slot order. Nothing may be queued after this point.
@@ -1441,13 +1379,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.clearAiScriptStimulusBridge();
     this.clearAiAttackAnimationBridge();
     this.gameStateStore = null;
-    this.dialogueUnsub?.();
-    this.dialogueUnsub = null;
-    this.conversationUnsub?.();
-    this.conversationUnsub = null;
-    this.conversationDirector.stop();
-    this.subtitleOverlay?.dispose();
-    this.conversationOverlay?.dispose();
     this.loadingOverlay?.dispose();
     this.loadingOverlay = null;
     this.removeAiNavigationDebugView();
@@ -2389,7 +2320,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // quality bias after this level's scene graph has been fully assembled.
     applyLodBias(this.scene, this.qualityExtensions.lodBias);
     this.refreshGraphicsUiFields();
-    await this.setupDialogue();
     // Layer 2 modules see the finished level (scene content + engine world) and
     // may add their own scene objects, so they run before the shader warm-up
     // compiles what is visible. The registry isolates module failures itself.
@@ -2840,16 +2770,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.uiDefs.clear();
     this.uiThemes.clear();
     this.localeRegistry = null;
-    this.dialogueUnsub?.();
-    this.dialogueUnsub = null;
-    this.conversationUnsub?.();
-    this.conversationUnsub = null;
-    this.conversationDirector.stop();
 
     // Empty the subsystems so the engine loop ticks nothing until the rebuild
     // re-feeds them (a half-built scene must never be simulated/animated).
-    // (Module-owned subsystems — moving platforms, spline followers — were
-    // already emptied by `capabilities.levelUnloaded()` at the top.)
+    // (Module-owned subsystems — moving platforms, spline followers, dialogue —
+    // were already emptied by `capabilities.levelUnloaded()` at the top.)
     this.animationSubsystem.clear();
     this.physicsSubsystem.setEntities([]);
     this.characterMovementSubsystem.clear();
@@ -3558,84 +3483,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.soundCueDefs.set(cueId, null);
       return null;
     }
-  }
-
-  /**
-   * Registers every `dialogueVoice` / `dialogueLine` / `conversation` manifest
-   * asset, then subscribes the `play-dialogue` and `start-conversation` script
-   * messages as triggers. Gameplay/interactions emit `play-dialogue` with a
-   * `lineId` (and optional `speakerVoiceId` / `targetVoiceId` / `locale`) to
-   * start a bark, or `start-conversation` with a `conversationId` to run a
-   * conversation graph.
-   */
-  private async setupDialogue(): Promise<void> {
-    await this.loadDialogueAssets();
-    // Ensure subtitle localization works even for a scene with no HUD/menu (where
-    // `setupRuntimeUi` returns before loading locale tables). Reuses the registry
-    // already loaded for the UI when present; loads it on demand otherwise.
-    if (!this.localeRegistry) this.localeRegistry = await this.loadUiLocaleRegistry();
-    // Re-subscribe from scratch: a scene rebuild clears message-bus subscriptions.
-    this.dialogueUnsub?.();
-    this.dialogueUnsub = this.behaviorSubsystem.subscribeScriptMessage(
-      "play-dialogue",
-      (envelope) => {
-        const payload = envelope.payload;
-        const lineId = typeof payload.lineId === "string" ? payload.lineId : "";
-        if (!lineId) return;
-        const context: DialoguePlayContext = {};
-        if (typeof payload.speakerVoiceId === "string") {
-          context.speakerVoiceId = payload.speakerVoiceId;
-        }
-        if (typeof payload.targetVoiceId === "string") {
-          context.targetVoiceId = payload.targetVoiceId;
-        }
-        if (typeof payload.locale === "string") context.locale = payload.locale;
-        this.dialogueSubsystem.playLine(lineId, context);
-      },
-    );
-
-    this.conversationUnsub?.();
-    this.conversationUnsub = this.behaviorSubsystem.subscribeScriptMessage(
-      "start-conversation",
-      (envelope) => {
-        const conversationId =
-          typeof envelope.payload.conversationId === "string"
-            ? envelope.payload.conversationId
-            : "";
-        if (conversationId) this.conversationDirector.start(conversationId);
-      },
-    );
-  }
-
-  /**
-   * Fetches + registers dialogue voice/line assets and conversation graphs from
-   * the manifest. Conversations are re-registered fresh each scene load (the
-   * director drops any running conversation and its stale registrations first).
-   */
-  private async loadDialogueAssets(): Promise<void> {
-    if (!this.assetLoader) return;
-    const manifest = await this.assetLoader.loadManifest();
-    this.conversationDirector.clear();
-    await Promise.all(
-      manifest.assets.map(async (asset) => {
-        const kind = assetType(asset);
-        if (kind !== "dialogueVoice" && kind !== "dialogueLine" && kind !== "conversation") return;
-        try {
-          const response = await fetch(projectFileUrl(assetPath(asset)), { cache: "no-cache" });
-          if (!response.ok) return;
-          const data = (await response.json()) as unknown;
-          if (kind === "dialogueVoice" && isDialogueVoiceAsset(data)) {
-            this.dialogueSubsystem.registerVoice(data);
-          } else if (kind === "dialogueLine" && isDialogueLineAsset(data)) {
-            this.dialogueSubsystem.registerLine(data);
-          } else if (kind === "conversation" && isConversationAsset(data)) {
-            this.conversationDirector.register(data);
-          }
-        } catch {
-          // Missing/malformed dialogue asset: skip it (the scene still plays).
-        }
-      }),
-    );
   }
 
   /**

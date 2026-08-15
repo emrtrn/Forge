@@ -11,6 +11,9 @@ import type {
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
+import type { CapabilityModule } from "./capabilities/CapabilityModule";
+import { CapabilityRegistry, createCapabilityRegistry } from "./capabilities/capabilityRegistry";
+import { createRuntimeContext } from "./capabilities/RuntimeContext";
 import { LoadingOverlay } from "./loadingOverlay";
 import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgress";
 import { loadRoomLayout } from "./roomLayout";
@@ -617,6 +620,13 @@ export interface RuntimeSceneAppOptions {
   readonly qualityExtensions?: QualityExtensions;
   /** Optional fork override for asynchronous runtime-actor spawn dispatch. */
   readonly spawnBudgetPerFrame?: number;
+  /**
+   * Opt-in Layer 2 capability modules, in the order they should run. Injected by
+   * the composition root (`main.ts`) so a fork changes its runtime behavior set
+   * without editing this shell. Omitted means "no extra capabilities": the
+   * Layer 1 level content still builds in full.
+   */
+  readonly capabilities?: readonly CapabilityModule[];
 }
 
 /** Mounts the dialogue subtitle overlay into `#ui-overlay`, or null when absent. */
@@ -651,6 +661,8 @@ function describeLoadError(error: unknown): string {
 export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly sceneShell: SceneShell;
   private readonly levelRuntime: LevelRuntime;
+  /** Layer 2 modules registered for this runtime; empty until a fork opts in. */
+  private readonly capabilities: CapabilityRegistry;
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
@@ -1011,6 +1023,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // as its children (survives scene rebuilds — only its instances are cleared).
     this.scene.add(this.vfxSubsystem.root);
     this.camera = this.sceneShell.camera;
+    this.capabilities = createCapabilityRegistry(options.capabilities ?? []);
     this.levelRuntime = new LevelRuntime({
       mode: "runtime",
       environmentRender: {
@@ -1355,6 +1368,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.tickStartupCalibration(deltaMs / 1000);
       this.tickAdaptiveQuality(deltaMs / 1000);
       this.applyKillZ();
+      // Layer 2 ticks after the engine spine and before the Game Mode (Layer 3),
+      // so game rules read capability state produced this frame.
+      this.capabilities.update(deltaMs / 1000);
       // Consume the `menu` edge after input advances, before the Game Mode reads
       // input, so opening a screen suppresses this frame's camera/movement.
       this.updateUiInput();
@@ -1384,6 +1400,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
+    this.capabilities.dispose();
     window.removeEventListener("resize", this.handleResize);
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.handleVisibilityChange);
@@ -2343,6 +2360,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     applyLodBias(this.scene, this.qualityExtensions.lodBias);
     this.refreshGraphicsUiFields();
     await this.setupDialogue();
+    // Layer 2 modules see the finished level (scene content + engine world) and
+    // may add their own scene objects, so they run before the shader warm-up
+    // compiles what is visible. The registry isolates module failures itself.
+    await this.capabilities.levelLoaded(
+      createRuntimeContext({
+        mode: this.levelRuntime.mode,
+        levelPath: layoutPath,
+        scene: this.scene,
+        camera: this.camera,
+        engineApp: this.engineApp,
+        assetLoader: this.assetLoader,
+        layout: this.layout,
+        sceneDocument,
+      }),
+    );
     await this.warmRuntimeShaders();
   }
 
@@ -2730,6 +2762,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * immediately so the engine loop ticks an empty world during the async load.
    */
   private teardownScene(): void {
+    // Layer 2 first: modules drop their per-level state while the world they
+    // observed is still intact, before Layer 1 content starts disappearing.
+    this.capabilities.levelUnloaded();
     // Game Mode + UI hosts first: null them before emptying the world so the
     // frame(s) between teardown and rebuild skip their update paths.
     this.gameModeSession?.dispose();

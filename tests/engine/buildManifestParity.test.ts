@@ -27,6 +27,7 @@ const EXPECTED_RUNTIME_ONLY = [
   "quality-settings",
   "lod-bias",
   "dialogue",
+  "capability-modules",
   "shader-warmup",
 ];
 

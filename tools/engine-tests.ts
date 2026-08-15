@@ -966,6 +966,7 @@ import { getGameEditorCatalog, setGameEditorCatalog } from "../src/editor/gameEd
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 import { registerBuildManifestParityTests } from "../tests/engine/buildManifestParity.test";
 import { registerLevelRuntimeTests } from "../tests/engine/levelRuntime.test";
+import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegistry.test";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -981,6 +982,7 @@ const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void>
 
 registerBuildManifestParityTests(check);
 await registerLevelRuntimeTests(check, checkAsync);
+await registerCapabilityRegistryTests(check, checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

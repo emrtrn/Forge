@@ -19,6 +19,9 @@
  *   - game/**, src/game/**       must not import  editor
  *   - src/scene/RuntimeSceneApp.ts   must not import  editor
  *                          (the Game Mode shell must stay editor-free)
+ *   - src/scene/capabilities/**      must not import  editor · game
+ *                          (Layer 2 capability modules stay generic: game rules
+ *                           belong to Layer 3, authoring to the editor shell)
  *
  * Heuristic like verify-dist: it matches import/export/dynamic-import specifiers
  * with line-anchored patterns (so JSDoc `* import ...` and `// import ...` lines
@@ -45,6 +48,7 @@ const FORBIDDEN = {
   editor: new Set(["game"]),
   game: new Set(["editor"]),
   runtime: new Set(["editor"]),
+  capability: new Set(["editor", "game"]),
 };
 
 const RULE_REASON = {
@@ -56,6 +60,8 @@ const RULE_REASON = {
   "editor->game": "editor core stays generic — inject via @/editor/gameEditorRegistry, do not import @/game",
   "game->editor": "game must not import editor",
   "runtime->editor": "the Game Mode shell (RuntimeSceneApp) must stay editor-free",
+  "capability->editor": "capability modules (Layer 2) must stay editor-free",
+  "capability->game": "capability modules (Layer 2) stay generic — game rules belong to the game module (Layer 3)",
 };
 
 const TEXT_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
@@ -67,6 +73,7 @@ function toPosix(p) {
 /** The boundary a source file belongs to, from its repo-relative path. */
 function fileLayer(relPath) {
   if (relPath === "src/scene/RuntimeSceneApp.ts") return "runtime";
+  if (relPath.startsWith("src/scene/capabilities/")) return "capability";
   if (relPath.startsWith("engine/")) return "engine";
   if (relPath.startsWith("editor/") || relPath.startsWith("src/editor/")) return "editor";
   if (relPath.startsWith("game/") || relPath.startsWith("src/game/")) return "game";

@@ -2,7 +2,7 @@
 ## LevelRuntime · Capability Modülleri · Game Modülü
 
 > Tarih: 2026-08-09
-> Durum: **Uygulanıyor.** Faz A–C kodu tamamlandı. Faz B/C runtime warm-up browser kabulü açık; sıradaki uygulama fazı D (Capability modül sistemi).
+> Durum: **Uygulanıyor.** Faz A–D kodu tamamlandı. Faz B/C runtime warm-up browser kabulü açık; sıradaki uygulama fazı E (baked subsystem'leri modüle taşıma).
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -238,6 +238,38 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   `capabilityRegistry.ts`, `RuntimeContext.ts` (modüllere verilen bağlam:
   scene, entities, assetLoader, engineApp erişimi — dar ve stabil tutulur).
 - **Kabul:** Boş registry ile runtime aynen çalışır; tip kontrol + testler yeşil.
+
+> **Uygulama kaydı (2026-08-15, Faz D tamamlandı):** `src/scene/capabilities/`
+> altında üç dosyalık iskelet eklendi: `CapabilityModule.ts` (tüm hook'ları
+> opsiyonel arayüz), `RuntimeContext.ts` (dar bağlam + `createRuntimeContext`
+> tembel entity indeksi), `capabilityRegistry.ts` (`CapabilityRegistry` +
+> `createCapabilityRegistry`). Yaşam döngüsü sözleşmesi: kurulum
+> (`onLevelLoaded`, `update`) kayıt sırasında, teardown (`onLevelUnloaded`,
+> `dispose`) ters sırada; hook fırlatan modül karantinaya alınır (seviye başına
+> bir kez raporlanır, sonraki level yüklemesinde temizlenir) — böylece bir modül
+> hatası boot'u düşürmez (I6). Aynı id ile ikinci kayıt hata fırlatır (sessiz
+> kayıp yok, I5). `RuntimeSceneApp` yalnız dört noktadan bağlanır: opsiyonel
+> `capabilities` seçeneğiyle kayıt (IoC), `buildScene` sonunda shader warm-up'tan
+> hemen önce `levelLoaded`, frame döngüsünde Game Mode'dan önce `update`,
+> `teardownScene`/`dispose` içinde teardown. Davranış taşınmadı; varsayılan set
+> boş olduğundan demo birebir aynı. `buildManifest` yeni `capability-modules`
+> runtime adımını kaydeder ve `verify:imports` artık `src/scene/capabilities/**`
+> için `editor`+`game` import yasağını uygular. Yeni birim testleri
+> (`tests/engine/capabilityRegistry.test.ts`, 9 kontrol) sıra, ters teardown,
+> karantina, id çakışması ve context lookup'ını doğrular. `tsc`,
+> `verify:imports`, production build ve strict dist yeşil; engine paketi Faz A'da
+> kaydedilen eksik dialogue fixture'ında durmaya devam ediyor (aşağıdaki not).
+
+> **Açık engel (Faz A'dan beri):** `npm run test:engine`,
+> `public/assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json`
+> bulunamadığı için duruyor. Kök neden bulundu: `22f2351` ("Add Forge Runtime
+> Editor Parity Plan and Audit Report") commit'i plan dokümanının yanında
+> starter-content'in büyük bölümünü de silmiş (Dialogue, AI, Actors, Levels,
+> Localization, Script, George.glb — ~21.5k satır silme + `manifest.json`
+> yeniden yazımı). Muhtemelen çalışan dev sunucusunun/Content Browser'ın yerel
+> dosyaları değiştirmesi commit'e karışmış. Faz E'ye geçmeden önce bu içeriğin
+> `22f2351^`'ten geri alınıp alınmayacağına karar verilmeli; `build:verify`
+> bu düzeltilene kadar kırmızı kalır.
 
 ### Faz E — Baked subsystem'leri modüle taşı (Katman 2 dolumu)
 - **İş:** §3 tablosundaki her baked subsystem'i bir CapabilityModule'e çıkar:

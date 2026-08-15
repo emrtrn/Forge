@@ -96,6 +96,7 @@ const RUNTIME_BUILD_MANIFEST: readonly BuildManifestStep[] = [
   runtimeOnly("quality-settings"),
   runtimeOnly("lod-bias"),
   runtimeOnly("dialogue"),
+  runtimeOnly("capability-modules"),
   runtimeOnly("shader-warmup"),
 ];
 

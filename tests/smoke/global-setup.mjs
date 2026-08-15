@@ -28,6 +28,18 @@ async function readOptionalText(path) {
   }
 }
 
+/**
+ * X of the runtime walk corridor (Player Start + every gameplay sensor).
+ *
+ * The smoke scenes inherit the source level's static meshes, and Playground's
+ * walls sit at world x ∈ [-4.3, -0.2] (`Wall_400x300.glb`'s origin is a corner,
+ * so a placement at x = -4.18 reaches to -0.18). A corridor on x = 0 puts the
+ * pawn's capsule against that wall: it walks ~4 m, jams at z = -3.99 and never
+ * reaches a sensor, which reads as "triggers are broken" rather than "the pawn
+ * is standing on a wall". x = 4 clears every inherited placement.
+ */
+const WALK_CORRIDOR_X = 4;
+
 function ensureInstanceGroup(scene, assetId) {
   if (!Array.isArray(scene.instances)) scene.instances = [];
   let group = scene.instances.find((entry) => entry?.assetId === assetId);
@@ -66,7 +78,7 @@ function prepareSmokeSourceScene(scene) {
   const starts = ensureInstanceGroup(copy, "marker:playerStart");
   starts.placements = [
     {
-      position: [0, 0, 0],
+      position: [WALK_CORRIDOR_X, 0, 0],
       name: "Player Start",
       collision: false,
       rotationYDeg: 0,
@@ -74,12 +86,19 @@ function prepareSmokeSourceScene(scene) {
     },
   ];
 
+  // Ground for the whole walk line. `Floor_400x400.glb`'s origin sits at a
+  // *corner* (local x/z run 0..4), so the placement position is the floor's
+  // near corner, not its centre: a 4 m mesh at scale 4 covers
+  // x ∈ [-8, 8], z ∈ [-14, 2], covering the whole walk corridor from the Player
+  // Start down to the portal at z = -10. Getting this wrong is silent and looks
+  // like a movement bug: the pawn simply walks off the edge, falls past killZ
+  // and respawns at the start, forever.
   const floor = ensureInstanceGroup(copy, "floor-400x400");
   floor.placements = [
     {
-      position: [0, 0, -1.5],
+      position: [-8, 0, -14],
       rotationYDeg: 0,
-      scale: 3,
+      scale: 4,
       scaleLocked: true,
     },
   ];
@@ -91,7 +110,7 @@ function prepareSmokeSourceScene(scene) {
   const triggers = ensureInstanceGroup(copy, "shape:cube");
   triggers.placements = [
     {
-      position: [0, 1, -4],
+      position: [WALK_CORRIDOR_X, 1, -4],
       name: "Smoke Checkpoint",
       scale: [12, 4, 3],
       sensor: true,
@@ -103,7 +122,7 @@ function prepareSmokeSourceScene(scene) {
       // emits an "Interaction.Activated" script message, giving the Actor Runtime
       // API (A6 messaging) smoke an observable script-message flow in the ?debug
       // "script messages" block — no key press needed (no authored inputAction).
-      position: [0, 1, -6],
+      position: [WALK_CORRIDOR_X, 1, -6],
       name: "Smoke Interact",
       scale: [12, 4, 2],
       sensor: true,
@@ -112,7 +131,7 @@ function prepareSmokeSourceScene(scene) {
       interaction: { action: "activate", prompt: "Activate" },
     },
     {
-      position: [0, 1, -10],
+      position: [WALK_CORRIDOR_X, 1, -10],
       name: "Smoke Portal",
       scale: [12, 4, 3],
       sensor: true,
@@ -146,7 +165,7 @@ function prepareSmokeTargetScene(scene) {
   const starts = ensureInstanceGroup(copy, "marker:playerStart");
   starts.placements = [
     {
-      position: [0, 0, 0],
+      position: [WALK_CORRIDOR_X, 0, 0],
       name: "Player Start",
       collision: false,
       rotationYDeg: 0,
@@ -155,12 +174,14 @@ function prepareSmokeTargetScene(scene) {
     },
   ];
 
+  // Same corner-origin arithmetic as the source scene: cover the arrival point
+  // at the origin and the return portal at z = -6.
   const floor = ensureInstanceGroup(copy, "floor-400x400");
   floor.placements = [
     {
-      position: [0, 0, 0],
+      position: [-8, 0, -14],
       rotationYDeg: 0,
-      scale: 3,
+      scale: 4,
       scaleLocked: true,
     },
   ];
@@ -172,7 +193,7 @@ function prepareSmokeTargetScene(scene) {
   const returnPortal = ensureInstanceGroup(copy, "shape:cube");
   returnPortal.placements = [
     {
-      position: [0, 1, -6],
+      position: [WALK_CORRIDOR_X, 1, -6],
       name: "Smoke Return Portal",
       scale: [12, 4, 3],
       sensor: true,

@@ -19,9 +19,9 @@ test("editor AI Navigation Volume smoke: add, inspect, show, save, reload", asyn
 
   await expect(page.getByTestId("outliner-row")).toHaveCount(rowCountBefore + 1);
   await expect(page.getByTestId("outliner-row").filter({ hasText: "AI Navigation Volume" }).last()).toBeVisible();
-  await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
-    "volume / AI navigation volume",
-  );
+  // Type-specific controls identify the selection; the shared Details chrome
+  // (`finalizeDetailsRender`) strips the `.detail-heading` the renderer emits.
+  await expect(page.locator('[data-inspector-pane="details"] [data-ai-nav-size="0"]')).toBeVisible();
   await expect(page.locator('[data-ai-nav-size="0"]')).toHaveValue("10");
   await expect(page.locator('[data-ai-nav-size="1"]')).toHaveValue("4");
   await expect(page.locator('[data-ai-nav-size="2"]')).toHaveValue("10");

@@ -27,15 +27,18 @@ test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ 
   await deleteExistingLandscape(page);
   await page.getByTestId("add-actor-button").hover();
   await page.getByRole("button", { name: /^Terrain/ }).hover();
-  await page.getByRole("button", { name: "Landscape" }).click();
+  // Scope to the category submenu: the Undo button's aria-label is dynamic
+  // ("Undo Delete Landscape"), so an unscoped "Landscape" role query is ambiguous.
+  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape" }).click();
 
   const landscapeRows = page.getByTestId("outliner-row").filter({ hasText: "Landscape" });
   await expect(landscapeRows.first()).toBeVisible();
   await landscapeRows.first().click();
-  await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
-    "terrain / landscape",
-  );
-  await expect(page.locator('[data-landscape-tool="raise"]')).toBeVisible();
+  // Type-specific controls identify the selection; the shared Details chrome
+  // (`finalizeDetailsRender`) strips the `.detail-heading` the renderer emits.
+  await expect(
+    page.locator('[data-inspector-pane="details"] [data-landscape-tool="raise"]'),
+  ).toBeVisible();
 
   await page.evaluate(() => {
     const setNumber = (key: string, value: string): void => {
@@ -77,9 +80,9 @@ test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ 
   await page.goto(`/?editor&landscapeSmokeReload=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
-  await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
-    "terrain / landscape",
-  );
+  await expect(
+    page.locator('[data-inspector-pane="details"] [data-landscape-tool="raise"]'),
+  ).toBeVisible();
   const reloadedData = await page.evaluate(async () => {
     const response = await fetch(`/landscapes/landscape-1.landscape.json?reload=${Date.now()}`);
     if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);

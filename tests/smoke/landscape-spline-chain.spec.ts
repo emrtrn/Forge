@@ -17,7 +17,11 @@ test("editor and Play render the authored asphalt spline chain without browser e
 
   const landscape = page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first();
   await landscape.click();
-  await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText("terrain / landscape");
+  // Type-specific controls identify the selection; the shared Details chrome
+  // (`finalizeDetailsRender`) strips the `.detail-heading` the renderer emits.
+  await expect(
+    page.locator('[data-inspector-pane="details"] [data-landscape-mode="splines"]'),
+  ).toBeVisible();
   await page.locator('[data-landscape-mode="splines"]').click();
   await page.keyboard.press("f");
   // The editor's post-process OutputPass reports its fullscreen triangle in

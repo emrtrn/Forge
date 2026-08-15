@@ -12,7 +12,11 @@ test("Content Drawer exposes file Cut/Copy and enables Paste after copying", asy
   const sourceTreeRow = page.locator(`button.folder-row[title="${sourceDir}"]`);
   await expect(sourceTreeRow).toBeVisible({ timeout: 30_000 });
   await sourceTreeRow.dispatchEvent("click");
-  await expect(page.locator("[data-content-path]")).toHaveText(sourceDir);
+  // Breadcrumb buttons carry their full path as `title`; the last is the folder.
+  await expect(page.locator("[data-content-path] .content-breadcrumb").last()).toHaveAttribute(
+    "title",
+    sourceDir,
+  );
 
   const sourceCard = page.locator(`[data-asset-path="${sourcePath}"]`);
   await expect(sourceCard).toBeVisible();

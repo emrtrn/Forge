@@ -28,11 +28,12 @@ test("editor Target Point smoke: add, inspect, edit, save, reload", async ({ pag
   await expect(page.getByTestId("outliner-row")).toHaveCount(rowCountBefore + 2);
   await expect(page.getByTestId("outliner-row").filter({ hasText: "Target Point" }).first()).toBeVisible();
   await page.getByTestId("outliner-row").filter({ hasText: "Target Point" }).first().click();
-  await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
-    "ai / target point",
-  );
-
-  await expect(page.locator("[data-target-point-next]")).toBeVisible();
+  // The Details panel identifies the selection by its type-specific controls: the
+  // shared chrome (`finalizeDetailsRender`) strips the `.detail-heading` each
+  // renderer emits, so asserting on that heading only tested the chrome.
+  await expect(
+    page.locator('[data-inspector-pane="details"] [data-target-point-next]'),
+  ).toBeVisible();
   await page.locator("[data-target-point-next]").selectOption("target-point-2");
   await expect(page.locator("[data-target-point-next]")).toHaveValue("target-point-2");
 

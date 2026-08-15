@@ -40,6 +40,10 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
   await expect(page.getByRole("button", { name: "New Folder" })).toBeVisible();
   await page.keyboard.press("Escape");
 
+  // The thumbnail-size button cycles small → medium → large and starts on
+  // medium (unpersisted, so the attribute is absent until the first click).
+  await drawer.locator("[data-content-view]").click();
+  await expect(drawer).toHaveAttribute("data-content-view", "large");
   await drawer.locator("[data-content-view]").click();
   await expect(drawer).toHaveAttribute("data-content-view", "small");
 

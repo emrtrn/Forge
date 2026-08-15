@@ -12,7 +12,12 @@ test("Content Drawer restores its last selected folder after a page refresh", as
   const folder = page.locator(`button.folder-row[title="${folderPath}"]`);
   await expect(folder).toBeVisible({ timeout: 30_000 });
   await folder.click();
-  await expect(page.locator("[data-content-path]")).toHaveText(folderPath);
+  // The path label renders clickable breadcrumbs ("All > Content > …"), each
+  // carrying its full path as `title`; the last one is the selected folder.
+  await expect(page.locator("[data-content-path] .content-breadcrumb").last()).toHaveAttribute(
+    "title",
+    folderPath,
+  );
 
   await page.goto(`/?editor&contentDrawerStateReload=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
@@ -21,7 +26,12 @@ test("Content Drawer restores its last selected folder after a page refresh", as
     timeout: 30_000,
   });
   await page.locator("[data-content-toggle]").click();
-  await expect(page.locator("[data-content-path]")).toHaveText(folderPath);
+  // The path label renders clickable breadcrumbs ("All > Content > …"), each
+  // carrying its full path as `title`; the last one is the selected folder.
+  await expect(page.locator("[data-content-path] .content-breadcrumb").last()).toHaveAttribute(
+    "title",
+    folderPath,
+  );
 
   await page.evaluate((prefix) => {
     for (const key of Object.keys(window.localStorage)) {

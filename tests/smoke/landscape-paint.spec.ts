@@ -27,14 +27,18 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await deleteExistingLandscape(page);
   await page.getByTestId("add-actor-button").hover();
   await page.getByRole("button", { name: /^Terrain/ }).hover();
-  await page.getByRole("button", { name: "Landscape" }).click();
+  // Scope to the category submenu: the Undo button's aria-label is dynamic
+  // ("Undo Delete Landscape"), so an unscoped "Landscape" role query is ambiguous.
+  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape" }).click();
 
   const landscapeRows = page.getByTestId("outliner-row").filter({ hasText: "Landscape" });
   await expect(landscapeRows.first()).toBeVisible();
   await landscapeRows.first().click();
-  await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
-    "terrain / landscape",
-  );
+  // Type-specific controls identify the selection; the shared Details chrome
+  // (`finalizeDetailsRender`) strips the `.detail-heading` the renderer emits.
+  await expect(
+    page.locator('[data-inspector-pane="details"] [data-landscape-mode="paint"]'),
+  ).toBeVisible();
 
   await page.locator('[data-landscape-mode="paint"]').click();
   await expect(page.locator('[data-landscape-paint-tool="paint"]')).toBeVisible();

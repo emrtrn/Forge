@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "type": "uiLoc",
+  "locale": "tr",
+  "strings": {
+    "dialogue.welcome": "Forge'a hoş geldin. Hikâyen play tuşuna bastığın anda başlar."
+  }
+}

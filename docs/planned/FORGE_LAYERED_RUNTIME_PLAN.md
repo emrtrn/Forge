@@ -260,16 +260,18 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > `verify:imports`, production build ve strict dist yeşil; engine paketi Faz A'da
 > kaydedilen eksik dialogue fixture'ında durmaya devam ediyor (aşağıdaki not).
 
-> **Açık engel (Faz A'dan beri):** `npm run test:engine`,
-> `public/assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json`
-> bulunamadığı için duruyor. Kök neden bulundu: `22f2351` ("Add Forge Runtime
-> Editor Parity Plan and Audit Report") commit'i plan dokümanının yanında
-> starter-content'in büyük bölümünü de silmiş (Dialogue, AI, Actors, Levels,
-> Localization, Script, George.glb — ~21.5k satır silme + `manifest.json`
-> yeniden yazımı). Muhtemelen çalışan dev sunucusunun/Content Browser'ın yerel
-> dosyaları değiştirmesi commit'e karışmış. Faz E'ye geçmeden önce bu içeriğin
-> `22f2351^`'ten geri alınıp alınmayacağına karar verilmeli; `build:verify`
-> bu düzeltilene kadar kırmızı kalır.
+> **Faz A'dan beri açık olan test engeli kapandı (2026-08-15):** `test:engine`,
+> `22f2351` ("Add Forge Runtime Editor Parity Plan and Audit Report") commit'inde
+> starter-content'in bir bölümü silindiği için duruyordu. O temizlik bilinçliydi;
+> yalnız engine testlerinin fixture olarak okuduğu **7 asset** geri alındı
+> (`Dialogue/DV_Narrator` + `DL_Welcome` + `CONV_Welcome`,
+> `Localization/en` + `tr`, `AI/Boss_Phase_Demo.blackboard` + `.stateTree`),
+> her biri `22f2351~1`'deki manifest girdisiyle ve eski manifest sırasındaki
+> yerine yeniden kaydedildi. Silinen geri kalan içerik (AI TestRange, Actors,
+> Land/MeshPaint level'ları, Script, George.glb) bilerek geri alınmadı.
+> `build:verify` artık uçtan uca yeşil: `tsc` + `vite build` +
+> **924/924 engine check** + `verify:dist --strict`; `check:assets` PASS
+> (yalnız geri gelen 7 asset için thumbnail uyarısı).
 
 ### Faz E — Baked subsystem'leri modüle taşı (Katman 2 dolumu)
 - **İş:** §3 tablosundaki her baked subsystem'i bir CapabilityModule'e çıkar:

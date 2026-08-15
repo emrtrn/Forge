@@ -2361,6 +2361,87 @@
       "license": "Unknown"
     },
     {
+      "id": "dv-narrator",
+      "name": "DV Narrator",
+      "assetType": "dialogueVoice",
+      "category": "Dialogue",
+      "path": "assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json",
+      "tags": [
+        "starter",
+        "dialogue",
+        "voice"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Dialogue",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 194
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "dl-welcome",
+      "name": "DL Welcome",
+      "assetType": "dialogueLine",
+      "category": "Dialogue",
+      "path": "assets/starter-content/Dialogue/DL_Welcome.dialogue.json",
+      "tags": [
+        "starter",
+        "dialogue",
+        "line"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Dialogue",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 522
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "conv-welcome",
+      "name": "CONV Welcome",
+      "assetType": "conversation",
+      "category": "Dialogue",
+      "path": "assets/starter-content/Dialogue/CONV_Welcome.conversation.json",
+      "tags": [
+        "starter",
+        "dialogue",
+        "conversation"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Dialogue",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 724
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "hud",
       "name": "Starter HUD",
       "assetType": "ui",
@@ -2440,6 +2521,60 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 7842
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "loc-en",
+      "name": "Localization EN",
+      "assetType": "ui",
+      "category": "Localization",
+      "path": "assets/starter-content/Localization/en.loc.json",
+      "tags": [
+        "starter",
+        "localization",
+        "locale"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 160
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "loc-tr",
+      "name": "Localization TR",
+      "assetType": "ui",
+      "category": "Localization",
+      "path": "assets/starter-content/Localization/tr.loc.json",
+      "tags": [
+        "starter",
+        "localization",
+        "locale"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 180
       },
       "license": "Unknown"
     },
@@ -20177,6 +20312,61 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 269
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "boss-phase-demo-blackboard",
+      "name": "Boss Phase Demo.Blackboard",
+      "assetType": "blackboard",
+      "category": "AI",
+      "path": "assets/starter-content/AI/Boss_Phase_Demo.blackboard.json",
+      "tags": [
+        "demo",
+        "ai",
+        "stateTree"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 965
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "boss-phase-demo-state-tree",
+      "name": "Boss Phase Demo.StateTree",
+      "assetType": "stateTree",
+      "category": "AI",
+      "path": "assets/starter-content/AI/Boss_Phase_Demo.stateTree.json",
+      "tags": [
+        "demo",
+        "ai",
+        "stateTree",
+        "boss"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 7153
       },
       "license": "Unknown"
     },

@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "type": "blackboard",
+  "keys": [
+    {
+      "key": "target",
+      "kind": "entity",
+      "default": null
+    },
+    {
+      "key": "hasLineOfSight",
+      "kind": "boolean",
+      "default": false
+    },
+    {
+      "key": "lastKnownTargetPosition",
+      "kind": "vec3",
+      "default": null
+    },
+    {
+      "key": "liveTargetPosition",
+      "kind": "vec3",
+      "default": null
+    },
+    {
+      "key": "targetDistance",
+      "kind": "number",
+      "default": null
+    },
+    {
+      "key": "inAttackRange",
+      "kind": "boolean",
+      "default": false
+    },
+    {
+      "key": "bossPhase",
+      "kind": "string",
+      "default": "patrol"
+    },
+    {
+      "key": "enraged",
+      "kind": "boolean",
+      "default": false
+    },
+    {
+      "key": "currentPatrolTarget",
+      "kind": "string",
+      "default": null
+    },
+    {
+      "key": "patrolTargetPosition",
+      "kind": "vec3",
+      "default": null
+    }
+  ]
+}

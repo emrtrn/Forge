@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "type": "dialogueLine",
+  "id": "dl-welcome",
+  "spokenText": "Welcome to Forge. Your story starts the moment you press play.",
+  "subtitleText": "Welcome to Forge. Your story starts the moment you press play.",
+  "voiceActorDirection": "Warm, calm, inviting.",
+  "mature": false,
+  "contexts": [
+    {
+      "speakerVoiceId": "dv-narrator",
+      "locale": "en",
+      "audioSourceId": "starter-snd-ui-confirm",
+      "audioSourceType": "sound",
+      "localizationKey": "dialogue.welcome"
+    }
+  ]
+}

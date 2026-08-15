@@ -15,6 +15,11 @@ import {
   createRuntimeContext,
   type RuntimeContext,
 } from "../../src/scene/capabilities/RuntimeContext";
+import {
+  createRuntimeServiceHost,
+  runtimeServiceKey,
+  type RuntimeServices,
+} from "../../src/scene/capabilities/RuntimeServices";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -40,6 +45,10 @@ function testContext(entities: Entity[] = []): RuntimeContext {
     layout: { name: "test" } as unknown as RoomLayout,
     sceneDocument,
   });
+}
+
+function testServices(): RuntimeServices {
+  return createRuntimeServiceHost({ syncEntityTransform: () => {} });
 }
 
 /** Records every lifecycle hook it receives, and optionally throws in one of them. */
@@ -191,6 +200,56 @@ export async function registerCapabilityRegistryTests(
     assert.equal(context.entities.length, 2);
     assert.equal(context.entity("b")?.id, "b");
     assert.equal(context.entity("missing"), undefined);
+  });
+
+  await checkAsync("modules attach to the runtime in registration order, before any level", async () => {
+    const calls: string[] = [];
+    const attaching = (id: string): CapabilityModule => ({
+      id,
+      onRuntimeStart: () => calls.push(`${id}:start`),
+      onLevelLoaded: () => calls.push(`${id}:loaded`),
+    });
+    const registry = createCapabilityRegistry([attaching("first"), attaching("second")]);
+    registry.runtimeStart(testServices());
+    await registry.levelLoaded(testContext());
+    assert.deepEqual(calls, ["first:start", "second:start", "first:loaded", "second:loaded"]);
+  });
+
+  await checkAsync("a module that fails to attach stays out for good, the rest still run", async () => {
+    const calls: string[] = [];
+    const broken: CapabilityModule = {
+      id: "broken",
+      onRuntimeStart: () => {
+        calls.push("broken:start");
+        throw new Error("attach failed");
+      },
+      // A module that never attached has no subsystems registered, so letting it
+      // back in on the next level would run half-built state, not recover it.
+      onLevelLoaded: () => calls.push("broken:loaded"),
+      onLevelUnloaded: () => calls.push("broken:unloaded"),
+      update: () => calls.push("broken:update"),
+    };
+    const registry = createCapabilityRegistry([broken, recordingModule("healthy", calls)]);
+    await withSilencedErrors(async () => {
+      registry.runtimeStart(testServices());
+      await registry.levelLoaded(testContext());
+      registry.update(0.016);
+      registry.levelUnloaded();
+      await registry.levelLoaded(testContext());
+      registry.update(0.016);
+    });
+    assert.deepEqual(calls, [
+      "broken:start",
+      "healthy:loaded",
+      "healthy:update",
+      "healthy:unloaded",
+      "healthy:loaded",
+      "healthy:update",
+    ]);
+  });
+
+  check("a runtime context without a service host resolves nothing instead of throwing", () => {
+    assert.equal(testContext().resolve(runtimeServiceKey<string>("absent")), undefined);
   });
 
   check("disposed capability registry refuses further registration", () => {

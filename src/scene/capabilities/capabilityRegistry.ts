@@ -14,14 +14,21 @@
  */
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeContext } from "./RuntimeContext";
+import type { RuntimeServices } from "./RuntimeServices";
 
-type Hook = "onLevelLoaded" | "onLevelUnloaded" | "update" | "dispose";
+type Hook = "onRuntimeStart" | "onLevelLoaded" | "onLevelUnloaded" | "update" | "dispose";
 
 export class CapabilityRegistry {
   private readonly modules: CapabilityModule[] = [];
   private readonly byId = new Map<string, CapabilityModule>();
   /** Ids of modules skipped for the rest of the level after a hook threw. */
   private readonly quarantined = new Set<string>();
+  /**
+   * Ids of modules whose `onRuntimeStart` threw. Unlike per-level quarantine
+   * this is permanent: a module that never finished attaching (its subsystems
+   * were never queued) cannot be given "another chance" on the next level.
+   */
+  private readonly startFailed = new Set<string>();
   private disposed = false;
 
   get size(): number {
@@ -56,11 +63,29 @@ export class CapabilityRegistry {
     return this;
   }
 
+  /**
+   * Attaches every module to the runtime shell, in registration order: this is
+   * where modules create and queue their subsystems and publish their services.
+   * Runs once, during shell construction, before any level is built.
+   */
+  runtimeStart(services: RuntimeServices): void {
+    for (const module of this.modules) {
+      if (!module.onRuntimeStart) continue;
+      try {
+        module.onRuntimeStart(services);
+      } catch (error) {
+        this.startFailed.add(module.id);
+        this.quarantine(module, "onRuntimeStart", error);
+      }
+    }
+  }
+
   /** Feeds the built level to every module, in registration order. */
   async levelLoaded(context: RuntimeContext): Promise<void> {
     this.quarantined.clear();
+    for (const id of this.startFailed) this.quarantined.add(id);
     for (const module of this.modules) {
-      if (!module.onLevelLoaded) continue;
+      if (!module.onLevelLoaded || this.quarantined.has(module.id)) continue;
       try {
         await module.onLevelLoaded(context);
       } catch (error) {
@@ -71,7 +96,10 @@ export class CapabilityRegistry {
 
   /** Drops per-level module state before a Level Travel rebuild (reverse order). */
   levelUnloaded(): void {
-    this.forEachReversed("onLevelUnloaded", (module) => module.onLevelUnloaded?.());
+    this.forEachReversed("onLevelUnloaded", (module) => {
+      if (this.startFailed.has(module.id)) return;
+      module.onLevelUnloaded?.();
+    });
   }
 
   update(deltaSeconds: number): void {

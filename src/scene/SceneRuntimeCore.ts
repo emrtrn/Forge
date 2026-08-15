@@ -1009,14 +1009,18 @@ export async function startSceneRuntime(options: {
   physics: SceneEntitySink;
   behavior: SceneEntitySink;
   characterMovement?: SceneEntitySink;
-  movingPlatform?: SceneEntitySink;
-  splinePathFollower?: SceneEntitySink;
+  /**
+   * Sinks contributed by Layer 2 capability modules (moving platforms, spline
+   * followers…), fed in module-registration order. They see the entity set
+   * after physics and before the shell's remaining subsystems, which is where
+   * the subsystems they replaced used to be seeded.
+   */
+  moduleSinks?: readonly SceneEntitySink[];
   ai?: SceneEntitySink;
   engineApp: SceneEngineSpine;
 }): Promise<void> {
   options.physics.setEntities(options.sceneDocument.entities);
-  options.movingPlatform?.setEntities(options.sceneDocument.entities);
-  options.splinePathFollower?.setEntities(options.sceneDocument.entities);
+  for (const sink of options.moduleSinks ?? []) sink.setEntities(options.sceneDocument.entities);
   options.characterMovement?.setEntities(options.sceneDocument.entities);
   options.ai?.setEntities(options.sceneDocument.entities);
   options.behavior.setEntities(options.sceneDocument.entities);

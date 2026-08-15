@@ -10,6 +10,7 @@
  * (`ForgeGameModule`), authoring belongs to the editor shell.
  */
 import type { RuntimeContext } from "./RuntimeContext";
+import type { RuntimeServices } from "./RuntimeServices";
 
 export interface CapabilityModule {
   /**
@@ -17,6 +18,14 @@ export interface CapabilityModule {
    * diagnostics, and the quarantine log when a hook throws.
    */
   readonly id: string;
+
+  /**
+   * Runs once while the runtime shell is being constructed, before any level
+   * exists. This is where a module creates the engine subsystems it owns,
+   * queues them into a tick slot, asks to be fed the level's entities, and
+   * publishes the services other modules may resolve.
+   */
+  onRuntimeStart?(services: RuntimeServices): void;
 
   /**
    * Runs after the LevelRuntime pipeline has built the level's scene content.

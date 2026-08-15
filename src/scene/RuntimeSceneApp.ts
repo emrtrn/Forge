@@ -14,6 +14,16 @@ import { AssetLoader } from "./assetLoader";
 import type { CapabilityModule } from "./capabilities/CapabilityModule";
 import { CapabilityRegistry, createCapabilityRegistry } from "./capabilities/capabilityRegistry";
 import { createRuntimeContext } from "./capabilities/RuntimeContext";
+import {
+  createRuntimeServiceHost,
+  type RuntimeServiceHost,
+} from "./capabilities/RuntimeServices";
+import {
+  characterTransformResetService,
+  movingPlatformQueryService,
+  splineFollowerDebugService,
+  splineRegistrySourceService,
+} from "./capabilities/runtimeServiceKeys";
 import { LoadingOverlay } from "./loadingOverlay";
 import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgress";
 import { loadRoomLayout } from "./roomLayout";
@@ -40,11 +50,7 @@ import {
 } from "@engine/ai/behaviorAsset";
 import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
-import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
-import {
-  SplinePathFollowerSubsystem,
-  type SplinePathFollowerDebugState,
-} from "@engine/scene/splinePathFollower";
+import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import { resolveCharacterCapsule } from "@engine/scene/capsule";
 import {
   findGridPath,
@@ -677,8 +683,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
-  private readonly movingPlatformSubsystem: MovingPlatformSubsystem;
-  private readonly splinePathFollowerSubsystem: SplinePathFollowerSubsystem;
+  /**
+   * Attachment surface the Layer 2 modules were given: it owns the tick-slot
+   * ordering of every engine subsystem (shell-owned and module-owned alike) and
+   * the shared services the two sides resolve each other through.
+   */
+  private readonly runtimeServices: RuntimeServiceHost;
   private readonly characterMovementSubsystem: CharacterMovementSubsystem;
   /** Owns every AIController possessing an NPC pawn (decision tick lands in Faz 2). */
   private readonly aiSubsystem = new AISubsystem({
@@ -1030,6 +1040,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.scene.add(this.vfxSubsystem.root);
     this.camera = this.sceneShell.camera;
     this.capabilities = createCapabilityRegistry(options.capabilities ?? []);
+    this.runtimeServices = createRuntimeServiceHost({
+      syncEntityTransform: this.syncEntityTransform,
+    });
+    // Shell-owned services the modules bind to loosely. Both are read at call
+    // time, so they stay correct across level rebuilds (the spline registry is
+    // replaced per level) and do not constrain module start order.
+    this.runtimeServices.provide(splineRegistrySourceService, () => this.splineRegistry);
+    this.runtimeServices.provide(characterTransformResetService, (entityId, transform) => {
+      this.characterMovementSubsystem.resetEntityTransform(entityId, transform);
+      this.syncEntityTransform(entityId, transform);
+    });
     this.levelRuntime = new LevelRuntime({
       mode: "runtime",
       environmentRender: {
@@ -1123,7 +1144,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The adaptive controller's base ceiling is the resolved profile above; it
     // only ever reduces below it and restores back up to it (plan §17.3).
     this.adaptiveController = new AdaptiveQualityController(this.qualitySettings);
-    this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
+    // Layer 2 attaches here: modules create their subsystems, queue them into a
+    // tick slot and publish their services before the shell's own subsystems
+    // are queued, so a module's slot — not its start order — fixes its tick.
+    this.capabilities.runtimeStart(this.runtimeServices);
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
       this.syncEntityTransform,
@@ -1141,34 +1165,26 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           !this.gameModeSession.playerState.pawnControlSuspended,
         getMoveIntent: (entityId, transform, deltaSeconds) =>
           this.aiMoveIntentForEntity(entityId, transform, deltaSeconds),
-        platforms: this.movingPlatformSubsystem,
-      },
-    );
-    // A SplinePathFollower is an explicit kinematic route owner. It runs after
-    // character/AI movement and resets that subsystem's local copy, so an AI
-    // controller cannot overwrite its spline sample on the following frame.
-    this.splinePathFollowerSubsystem = new SplinePathFollowerSubsystem(
-      () => this.splineRegistry,
-      (entityId, transform) => {
-        this.characterMovementSubsystem.resetEntityTransform(entityId, transform);
-        this.syncEntityTransform(entityId, transform);
+        // Resolved per call, so the solver simply sees no platforms when the
+        // moving-platform module is switched off (I3) — and does not care
+        // whether that module attached before or after it.
+        platforms: {
+          platforms: () =>
+            this.runtimeServices.resolve(movingPlatformQueryService)?.platforms() ?? [],
+        },
       },
     );
 
-    this.engineApp.registerSubsystem(this.animationSubsystem);
-    this.engineApp.registerSubsystem(this.inputSubsystem);
-    this.engineApp.registerSubsystem(this.physicsSubsystem);
-    // The platform subsystem must tick before character movement so a rider is
-    // carried by the same frame's platform delta (no one-frame lag).
-    this.engineApp.registerSubsystem(this.movingPlatformSubsystem);
+    // Tick order is declared by slot, not by registration sequence: see
+    // RUNTIME_TICK_SLOTS for what each slot means and why the order matters.
+    this.runtimeServices.addSubsystem("pre-physics", this.animationSubsystem);
+    this.runtimeServices.addSubsystem("pre-physics", this.inputSubsystem);
+    this.runtimeServices.addSubsystem("physics", this.physicsSubsystem);
     // AI decisions tick before character movement so an agent's move-intent (Faz 3)
     // is consumed by the same frame's movement resolve. In Faz 1 the subsystem
     // holds controllers + blackboards only and does no per-frame work.
-    this.engineApp.registerSubsystem(this.aiSubsystem);
-    this.engineApp.registerSubsystem(this.characterMovementSubsystem);
-    // Explicit spline movement is applied last so it wins over optional AI/nav
-    // move intents on the same actor.
-    this.engineApp.registerSubsystem(this.splinePathFollowerSubsystem);
+    this.runtimeServices.addSubsystem("decision", this.aiSubsystem);
+    this.runtimeServices.addSubsystem("movement", this.characterMovementSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       this.createSceneBehaviorRegistry(),
@@ -1226,10 +1242,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ),
       moveTo: (request) => this.requestAiMove(request),
     });
-    this.engineApp.registerSubsystem(this.behaviorSubsystem);
-    this.engineApp.registerSubsystem(this.audioSubsystem);
-    this.engineApp.registerSubsystem(this.dialogueSubsystem);
-    this.engineApp.registerSubsystem(this.vfxSubsystem);
+    this.runtimeServices.addSubsystem("gameplay", this.behaviorSubsystem);
+    this.runtimeServices.addSubsystem("presentation", this.audioSubsystem);
+    this.runtimeServices.addSubsystem("presentation", this.dialogueSubsystem);
+    this.runtimeServices.addSubsystem("presentation", this.vfxSubsystem);
+    // Every subsystem — shell-owned and module-owned — is now known, so install
+    // the engine tick in slot order. Nothing may be queued after this point.
+    this.runtimeServices.installSubsystems((subsystem) =>
+      this.engineApp.registerSubsystem(subsystem),
+    );
     // Per-subsystem tick timing (P5.1): `?debug` enables it for the overlay; the
     // adaptive controller also needs it as the bottleneck classifier's passive CPU
     // signal (§7.3), then with a smaller window since it reads seconds-scale trends.
@@ -1629,9 +1650,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.splineRegistry.getSplinesByTag(tag);
   }
 
-  /** Snapshots Generic Spline-driven entities for `?debug` and browser smoke checks. */
+  /**
+   * Snapshots Generic Spline-driven entities for `?debug` and browser smoke
+   * checks. Empty when the spline-follower module is not part of this runtime's
+   * capability set — there is nothing following a spline to report.
+   */
   getSplinePathFollowerDebugSnapshot(): readonly SplinePathFollowerDebugState[] {
-    return this.splinePathFollowerSubsystem.followers();
+    return this.runtimeServices.resolve(splineFollowerDebugService)?.followers() ?? [];
   }
 
   /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */
@@ -2330,8 +2355,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await startSceneRuntime({
       sceneDocument,
       physics: this.physicsSubsystem,
-      movingPlatform: this.movingPlatformSubsystem,
-      splinePathFollower: this.splinePathFollowerSubsystem,
+      moduleSinks: this.runtimeServices.entitySinks(),
       characterMovement: this.characterMovementSubsystem,
       ai: this.aiSubsystem,
       behavior: this.behaviorSubsystem,
@@ -2379,6 +2403,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         assetLoader: this.assetLoader,
         layout: this.layout,
         sceneDocument,
+        services: this.runtimeServices,
       }),
     );
     await this.warmRuntimeShaders();
@@ -2823,10 +2848,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     // Empty the subsystems so the engine loop ticks nothing until the rebuild
     // re-feeds them (a half-built scene must never be simulated/animated).
+    // (Module-owned subsystems — moving platforms, spline followers — were
+    // already emptied by `capabilities.levelUnloaded()` at the top.)
     this.animationSubsystem.clear();
     this.physicsSubsystem.setEntities([]);
-    this.movingPlatformSubsystem.clear();
-    this.splinePathFollowerSubsystem.clear();
     this.characterMovementSubsystem.clear();
     this.aiPathFollowing.clear();
     this.navGridCache.clear();

@@ -9,6 +9,7 @@
  *   ?debug     attaches the perf overlay in any mode.
  */
 import { RuntimeSceneApp } from "@/scene/RuntimeSceneApp";
+import { createDefaultRuntimeModules } from "@/scene/capabilities/defaultRuntimeModules";
 import { attachDebugStats } from "@/scene/debugStats";
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -54,7 +55,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  const app = new RuntimeSceneApp(canvas, { scriptMessageTraceLimit, debug: params.has("debug") });
+  // Inversion of control, runtime side: the composition root chooses which Layer 2
+  // capabilities this build ships with. A fork edits this list — never the shell.
+  const app = new RuntimeSceneApp(canvas, {
+    scriptMessageTraceLimit,
+    debug: params.has("debug"),
+    capabilities: createDefaultRuntimeModules(),
+  });
 
   // Perf readout (qa-poki standard) behind ?debug — invisible in production.
   if (params.has("debug")) {

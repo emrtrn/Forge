@@ -17,6 +17,7 @@ import type { SceneDocument } from "@engine/scene/sceneDocument";
 
 import type { LevelRuntimeMode } from "../LevelRuntime";
 import type { AssetLoader } from "../assetLoader";
+import type { RuntimeServiceKey, RuntimeServices } from "./RuntimeServices";
 
 export interface RuntimeContextInit {
   /** Which shell built the level; modules that are runtime-only can bail on "editor". */
@@ -34,6 +35,12 @@ export interface RuntimeContextInit {
    * has to re-derive them from the layout.
    */
   readonly sceneDocument: SceneDocument;
+  /**
+   * The runtime's shared-service container, so a module can reach a sibling
+   * capability at level time as well as at start time. Optional: a host that
+   * publishes no services (tests, a bare shell) simply resolves nothing.
+   */
+  readonly services?: RuntimeServices;
 }
 
 export interface RuntimeContext extends RuntimeContextInit {
@@ -41,6 +48,8 @@ export interface RuntimeContext extends RuntimeContextInit {
   readonly entities: readonly Entity[];
   /** Entity lookup by id, or undefined when this level has no such entity. */
   entity(id: string): Entity | undefined;
+  /** Shared-service lookup; `undefined` means the providing module is off. */
+  resolve<T>(key: RuntimeServiceKey<T>): T | undefined;
 }
 
 /**
@@ -61,6 +70,9 @@ export function createRuntimeContext(init: RuntimeContextInit): RuntimeContext {
         for (const entity of init.sceneDocument.entities) index.set(entity.id, entity);
       }
       return index.get(id);
+    },
+    resolve<T>(key: RuntimeServiceKey<T>): T | undefined {
+      return init.services?.resolve(key);
     },
   };
 }

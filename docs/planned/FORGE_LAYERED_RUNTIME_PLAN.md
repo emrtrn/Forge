@@ -2,7 +2,9 @@
 ## LevelRuntime · Capability Modülleri · Game Modülü
 
 > Tarih: 2026-08-09
-> Durum: **Uygulanıyor.** Faz A–D kodu tamamlandı. Faz B/C runtime warm-up browser kabulü açık; sıradaki uygulama fazı E (baked subsystem'leri modüle taşıma).
+> Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
+> Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower)
+> tamam; sıradaki modül dialogue.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -314,6 +316,47 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   (moving-platform, spline-follower) → dialogue → save-game → runtime-UI →
   skeletal → character-movement → ai. Modüller arası bağımlılık (ör. character-
   movement ↔ skeletal) `RuntimeContext` üzerinden gevşek çözülür.
+
+> **Uygulama kaydı (2026-08-15, E/1 — bağlanma mekanizması + ilk iki modül):**
+> Faz D iskeleti yalnız `onLevelLoaded` veriyordu; bir subsystem'i modüle taşımak
+> için iki şey daha gerekiyordu ve ikisi de bu dilimde eklendi:
+>
+> 1. **`onRuntimeStart(services)` hook'u** (`RuntimeServices.ts`): modül, kabuk
+>    kurulurken kendi subsystem'ini yaratır, bir **tick slot**'una sıraya koyar,
+>    seviye entity kümesi için sink kaydeder ve servislerini yayımlar.
+> 2. **Tick slot sözleşmesi** (`RUNTIME_TICK_SLOTS`: `pre-physics → physics →
+>    platform → decision → movement → post-movement → gameplay → presentation`).
+>    Subsystem tick sırası gerçek davranıştır (platform binicisinden önce hareket
+>    etmeli; spline rotası AI move-intent'i ezmeli). Subsystem'ler bağımsız
+>    modüllere dağılınca "önce kaydolan önce tick'ler" fork için okunamaz hale
+>    gelirdi; slot, sırayı işin anlamına sabitler (Unreal tick group'larının küçük
+>    ölçekli hali). Kabuğun kendi subsystem'leri de artık slot üzerinden
+>    kaydediliyor, dolayısıyla modül kayıt sırası simülasyonu sessizce değiştiremez.
+>
+> Modüller arası gevşek bağ tek bir yerde listelenen tipli servis anahtarlarıyla
+> kuruldu (`runtimeServiceKeys.ts`): `moving-platform-query`,
+> `spline-registry-source`, `character-transform-reset`, `spline-follower-debug`.
+> `resolve()` `undefined` dönmesi normaldir = o modül kapalı (I3). Aynı id ile
+> ikinci `provide` hata fırlatır (sessiz kayıp yok, I5).
+>
+> Taşınanlar: `movingPlatformModule` (`platform` slotu) ve `splineFollowerModule`
+> (`post-movement` slotu). `RuntimeSceneApp` artık bu iki subsystem'i tanımıyor:
+> karakter hareketi platformları `movingPlatformQueryService` üzerinden **çağrı
+> anında** okuyor (modül kapalıysa boş liste), spline takipçisi de spline
+> registry'sini ve karakter-transform reset'ini aynı şekilde tembel çözüyor —
+> karaktersiz bir oyunda reset servisi hiç yayımlanmaz ve transform doğrudan
+> yazılır. Varsayılan set `capabilities/defaultRuntimeModules.ts`'de; `main.ts`
+> kompozisyon kökü onu enjekte ediyor (editör catalog IoC deseninin runtime
+> eşleniği), böylece demo davranışı birebir korunur (I6).
+>
+> Kayıt defteri (`capabilityRegistry`) `runtimeStart` için ayrı bir kalıcı
+> karantina tutar: `onRuntimeStart` fırlatan modül subsystem'lerini hiç
+> kaydettirememiştir, dolayısıyla sonraki seviyede "yeni bir şans" verilmez
+> (seviye başına karantina davranışı değişmedi).
+>
+> Kapılar: `tsc`, `verify:imports`, production build, **936/936 engine check**,
+> `verify:dist --strict` yeşil. Browser: `runtime-locomotion` (25.7 sn) ve
+> `runtime-playflow` (37.2 sn) smoke'ları geçiyor.
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

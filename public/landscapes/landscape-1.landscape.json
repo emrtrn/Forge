@@ -83243,5 +83243,121 @@
       ]
     }
   ],
-  "splines": []
+  "splines": [
+    {
+      "id": "spline-1",
+      "points": [
+        {
+          "id": "point-1",
+          "position": [
+            -4.28,
+            2,
+            38.72
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-2",
+          "position": [
+            -23.65,
+            2,
+            28.46
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-3",
+          "position": [
+            -38.12,
+            2,
+            1.12
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-4",
+          "position": [
+            -31.09,
+            2,
+            -30.35
+          ],
+          "width": 6,
+          "falloff": 3
+        }
+      ],
+      "segments": [
+        {
+          "id": "segment-1",
+          "startPointId": "point-1",
+          "endPointId": "point-2",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          },
+          "mesh": {
+            "enabled": true,
+            "assetId": "sm-road-asphalt",
+            "alignToTerrain": true,
+            "deform": true
+          }
+        },
+        {
+          "id": "segment-2",
+          "startPointId": "point-2",
+          "endPointId": "point-3",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          },
+          "mesh": {
+            "enabled": true,
+            "assetId": "sm-road-asphalt",
+            "alignToTerrain": true,
+            "deform": true
+          }
+        },
+        {
+          "id": "segment-3",
+          "startPointId": "point-3",
+          "endPointId": "point-4",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          },
+          "mesh": {
+            "enabled": true,
+            "assetId": "sm-road-asphalt",
+            "alignToTerrain": true,
+            "deform": true
+          }
+        }
+      ],
+      "name": "Spline 1",
+      "smooth": true
+    }
+  ]
 }

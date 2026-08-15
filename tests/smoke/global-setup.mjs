@@ -10,6 +10,13 @@ const SMOKE_SCENE = "layouts/__playwright-smoke.level.json";
 const SMOKE_TARGET_SCENE = "layouts/__playwright-smoke-target.level.json";
 const SMOKE_PATROL_SCENE = "layouts/__playwright-smoke-patrol.level.json";
 const SMOKE_MENU = "assets/__playwright-smoke-menu.ui.json";
+/**
+ * Authored landscape sidecar, shared by every level. The sculpt/paint smokes
+ * delete the existing landscape and save a fresh one, which overwrites the
+ * authored spline chain that `landscape-spline-chain.spec.ts` asserts on — and
+ * leaves the file dirty in git. Snapshot it here so teardown puts it back.
+ */
+const LANDSCAPE_SIDECAR = "landscapes/landscape-1.landscape.json";
 const SMOKE_SCENE_PATH = resolve("public", SMOKE_SCENE);
 const SMOKE_TARGET_SCENE_PATH = resolve("public", SMOKE_TARGET_SCENE);
 const SMOKE_PATROL_SCENE_PATH = resolve("public", SMOKE_PATROL_SCENE);
@@ -287,6 +294,10 @@ export default async function globalSetup() {
         { path: SMOKE_TARGET_SCENE, raw: await readOptionalText(SMOKE_TARGET_SCENE_PATH) },
         { path: SMOKE_PATROL_SCENE, raw: await readOptionalText(SMOKE_PATROL_SCENE_PATH) },
         { path: SMOKE_MENU, raw: await readOptionalText(SMOKE_MENU_PATH) },
+        {
+          path: LANDSCAPE_SIDECAR,
+          raw: await readOptionalText(resolve("public", LANDSCAPE_SIDECAR)),
+        },
       ],
       smokeScenes: [SMOKE_SCENE, SMOKE_TARGET_SCENE, SMOKE_PATROL_SCENE],
       smokeFiles: [SMOKE_MENU],

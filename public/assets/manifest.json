@@ -20316,6 +20316,58 @@
       "license": "Unknown"
     },
     {
+      "id": "ai-test-blackboard",
+      "name": "AI Test.Blackboard",
+      "assetType": "blackboard",
+      "category": "AI",
+      "path": "assets/starter-content/AI/AI_Test.blackboard.json",
+      "tags": [
+        "demo",
+        "ai"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 693
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ai-test-behavior-tree",
+      "name": "AI Test.Behavior",
+      "assetType": "behaviorTree",
+      "category": "AI",
+      "path": "assets/starter-content/AI/AI_Test.behavior.json",
+      "tags": [
+        "demo",
+        "ai"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 5772
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "boss-phase-demo-blackboard",
       "name": "Boss Phase Demo.Blackboard",
       "assetType": "blackboard",
@@ -20367,6 +20419,29 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 7153
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ai-character-actor",
+      "name": "AI Character.Actor",
+      "assetType": "prefab",
+      "category": "Script",
+      "path": "assets/starter-content/Script/AI_Character.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 350
       },
       "license": "Unknown"
     },

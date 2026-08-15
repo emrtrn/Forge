@@ -36,9 +36,17 @@ test("editor and Play render the authored asphalt spline chain without browser e
       splines?: Array<{ segments: Array<{ mesh?: { enabled?: boolean; assetId?: string; deform?: boolean } }> }>;
     };
   });
+  // The authored chain in `public/landscapes/landscape-1.landscape.json`: three
+  // deforming segments on the asphalt road mesh. (`sm-asphalt` was renamed to
+  // `sm-road-asphalt`; this spec still asserted the old id and an old count.)
   const segments = spline.splines?.[0]?.segments ?? [];
-  expect(segments).toHaveLength(2);
-  expect(segments.every((segment) => segment.mesh?.enabled && segment.mesh.assetId === "sm-asphalt" && segment.mesh.deform)).toBeTruthy();
+  expect(segments).toHaveLength(3);
+  expect(
+    segments.every(
+      (segment) =>
+        segment.mesh?.enabled && segment.mesh.assetId === "sm-road-asphalt" && segment.mesh.deform,
+    ),
+  ).toBeTruthy();
 
   await canvas.screenshot({ path: testInfo.outputPath("asphalt-spline-chain.png") });
   expect(pageErrors).toEqual([]);

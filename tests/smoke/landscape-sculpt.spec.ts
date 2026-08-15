@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
+import { preserveLandscapeSidecar } from "./landscapeSidecar";
 
 test.setTimeout(210_000);
+
+// This spec saves a landscape, which rewrites the shared authored sidecar.
+preserveLandscapeSidecar();
 
 async function deleteExistingLandscape(page: Page): Promise<void> {
   const landscapeRows = page.getByTestId("outliner-row").filter({ hasText: "Landscape" });

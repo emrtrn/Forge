@@ -22,6 +22,9 @@ test("content browser create menu offers AI asset kinds", async ({ page }) => {
 
   const menu = page.locator(".context-menu");
   await expect(menu).toBeVisible();
+  // The AI kinds moved under an "Artificial Intelligence" flyout, which opens on
+  // hover — without it they are present in the DOM but hidden.
+  await menu.getByText("Artificial Intelligence", { exact: true }).hover();
   await expect(menu.getByText("AI Blackboard", { exact: true })).toBeVisible();
   await expect(menu.getByText("AI Behavior Tree", { exact: true })).toBeVisible();
   await expect(menu.getByText("AI Query (EQS)", { exact: true })).toBeVisible();

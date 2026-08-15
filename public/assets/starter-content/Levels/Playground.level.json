@@ -454,9 +454,120 @@
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [],
+  "aiNavigationVolumes": [
+    {
+      "id": "ai-navigation-volume-1",
+      "position": [
+        -2.73,
+        2.44,
+        -3.1
+      ],
+      "name": "AI Navigation Volume",
+      "scale": 1,
+      "size": [
+        20,
+        5,
+        20
+      ],
+      "agentRadius": 0.1,
+      "clearancePadding": 0.1
+    }
+  ],
   "targetPoints": [],
-  "splines": [],
+  "splines": [
+    {
+      "id": "spline-1",
+      "position": [
+        -1.59,
+        0,
+        -1.9
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": true,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              -0.8,
+              0,
+              -0.34
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              4.17,
+              0,
+              -1.06
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              6.24,
+              0,
+              2.89
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              2.18,
+              0,
+              6.85
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              -1.83,
+              0,
+              4.55
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline",
+      "debug": {
+        "visible": true,
+        "color": "#ffffff",
+        "resolution": 32
+      }
+    }
+  ],
   "landscapes": [],
-  "actors": []
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
+      "position": [
+        2.35,
+        0,
+        -5.67
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "scale": 0.4,
+      "patrolRoute": {
+        "source": "spline",
+        "splineId": "spline-1",
+        "entry": "nearest",
+        "wrapMode": "loop",
+        "speed": 2,
+        "acceptanceRadius": 0.35,
+        "lookAheadDistance": 2.2
+      }
+    }
+  ]
 }

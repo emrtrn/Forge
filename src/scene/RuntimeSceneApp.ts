@@ -652,6 +652,12 @@ const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
 
 const AI_ATTACK_ANIMATION_MESSAGE_TYPES = ["ai.attack.intent", "boss.attack.intent"] as const;
 
+/**
+ * Upper bound on the pre-gameplay shader warm-up. Past this the level starts and
+ * any remaining programs compile on first use — a stutter, not a stuck boot.
+ */
+const SHADER_WARMUP_TIMEOUT_MS = 15_000;
+
 /** Compact one-line reason for a failed asset load (for the load-progress detail). */
 function describeLoadError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -2383,11 +2389,34 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * still present, moving first-use shader work out of active gameplay.  The
    * renderer's compile pass is a best-effort preload: browser/driver failures
    * must not turn an otherwise valid level boot into a black screen.
+   *
+   * `compileAsync` only resolves once every program reports `COMPLETION_STATUS_KHR`,
+   * which three queries unconditionally — without `KHR_parallel_shader_compile`
+   * that query returns null forever, so the promise never settles and the loading
+   * overlay hangs on "Warming shaders" for good (software renderers such as
+   * SwiftShader, and older drivers, land here). The synchronous `compile` issues
+   * exactly the same GPU work; only the readiness poll is unavailable. The
+   * timeout then covers the remaining case of a driver that advertises the
+   * extension but stalls anyway: a slow warm-up must cost frames, never the boot.
    */
   private async warmRuntimeShaders(): Promise<void> {
     this.setLoadingStatus("Warming shaders");
     try {
-      await this.renderer.compileAsync(this.scene, this.camera);
+      if (!this.renderer.extensions.has("KHR_parallel_shader_compile")) {
+        this.renderer.compile(this.scene, this.camera);
+        return;
+      }
+      const warmed = await Promise.race([
+        this.renderer.compileAsync(this.scene, this.camera).then(() => true),
+        new Promise<boolean>((resolve) => {
+          setTimeout(() => resolve(false), SHADER_WARMUP_TIMEOUT_MS);
+        }),
+      ]);
+      if (!warmed) {
+        console.warn(
+          `[runtime] shader warm-up did not finish within ${SHADER_WARMUP_TIMEOUT_MS} ms; starting anyway`,
+        );
+      }
     } catch (error) {
       console.warn("[runtime] shader warm-up failed; continuing without preload:", describeLoadError(error));
     }

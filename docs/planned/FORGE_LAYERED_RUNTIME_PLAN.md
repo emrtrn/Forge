@@ -260,6 +260,32 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > `verify:imports`, production build ve strict dist yeşil; engine paketi Faz A'da
 > kaydedilen eksik dialogue fixture'ında durmaya devam ediyor (aşağıdaki not).
 
+> **Faz B/C'den beri açık olan runtime browser kabulü kapandı (2026-08-15).**
+> "Warming shaders'ta 30 sn eşiğini aşıyor" olarak kaydedilen engel iki ayrı
+> nedenden oluşuyordu ve ikisi de düzeltildi:
+>
+> 1. **Smoke yanlış sunucuya koşuyordu.** `playwright.config.ts` 5173'ü
+>    `reuseExistingServer: true` ile kullanıyordu; o portta kullanıcının başka bir
+>    Forge fork'unun (ThreeAges) dev sunucusu vardı. Fork bu şablonun kopyası
+>    olduğu için tüm Forge route'larına cevap veriyor: editör smoke'ları *yanlış
+>    çalışma kopyasına* karşı geçiyor, runtime smoke'ları o projenin ağır
+>    level'ını yüklerken zaman aşımına uğruyordu. Smoke artık kendi portunu
+>    (5273, `npm run dev:smoke`) kullanıyor ve `reuseExistingServer: false` ile
+>    her zaman kendi sunucusunu başlatıyor — port doluysa `--strictPort` yüksek
+>    sesle hata verir, sessizce yabancı repoya bağlanmaz.
+> 2. **Gerçek runtime hatası: sonsuz "Warming shaders".** `compileAsync`, her
+>    programın `COMPLETION_STATUS_KHR` değerini bekler; three bu sorguyu koşulsuz
+>    yapar, dolayısıyla `KHR_parallel_shader_compile` yoksa sorgu hep null döner,
+>    promise **hiç settle olmaz** ve yükleme ekranı sonsuza kadar asılı kalır
+>    (ölçüldü: 150 sn'de bile bitmedi; headless Chromium → SwiftShader). Bu yalnız
+>    testi değil, o eklentiyi desteklemeyen her tarayıcı/sürücüde gerçek oyuncuyu
+>    da etkiler. `warmRuntimeShaders` artık eklenti yoksa senkron
+>    `renderer.compile()` kullanıyor (aynı GPU işi, sadece hazır-olma yoklaması
+>    yok) ve eklenti varsa 15 sn'lik timeout ile yarıştırıyor — yavaş warm-up
+>    kare kaybettirir, boot'u düşürmez.
+>
+> Sonuç: `runtime-locomotion` smoke'u 23.3 sn'de geçiyor.
+
 > **Faz A'dan beri açık olan test engeli kapandı (2026-08-15):** `test:engine`,
 > `22f2351` ("Add Forge Runtime Editor Parity Plan and Audit Report") commit'inde
 > starter-content'in bir bölümü silindiği için duruyordu. O temizlik bilinçliydi;

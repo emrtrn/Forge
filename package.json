@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:smoke": "vite --host 127.0.0.1 --port 5273 --strictPort",
     "dev:lan": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "editor": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "editor:lan": "vite --host 0.0.0.0 --port 5173 --strictPort",

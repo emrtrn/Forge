@@ -151,7 +151,11 @@ engine/editor.
    `npm run smoke:browser` runs a Playwright Chromium smoke for `?editor` boot,
    shape placement, Details transform, undo/redo, Save Layout, clean editor
    reload, and runtime `/` boot. It uses a temporary copied layout so the
-   template scene is restored after the run.
+   template scene is restored after the run. **Smoke runs on port 5273
+   (`npm run dev:smoke`), never the 5173 used by `npm run editor`, and never
+   reuses an existing server:** a Forge fork is a copy of this repo, so a fork's
+   dev server on the shared port answers every Forge route and silently becomes
+   the system under test.
 3. Improve asset catalog UI placement-rule affordances.
 4. Later: a `tools/create-project.mjs` scaffold that stamps out a new project
    from the template (copy + rename + reset project data).

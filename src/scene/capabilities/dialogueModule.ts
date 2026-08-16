@@ -35,7 +35,7 @@ import type { RuntimeServices } from "./RuntimeServices";
 import {
   dialogueAudioService,
   scriptMessageBusService,
-  subtitleLocalizationService,
+  localizationService,
 } from "./runtimeServiceKeys";
 
 export const DIALOGUE_MODULE_ID = "dialogue";
@@ -139,7 +139,7 @@ export function createDialogueModule(): CapabilityModule {
         // context mappings, so no audio lookup is wired here.
         localization: {
           resolveSubtitle: (key) =>
-            services.resolve(subtitleLocalizationService)?.resolveSubtitle(key),
+            services.resolve(localizationService)?.resolveSubtitle(key),
         },
         onSubtitleShow: (event) =>
           subtitleOverlay?.show({
@@ -179,7 +179,7 @@ export function createDialogueModule(): CapabilityModule {
       await loadDialogueAssets(await context.assetLoader.loadManifest());
       // Subtitles must localize even in a scene with no HUD or menu, where the
       // UI never loads the locale tables.
-      await context.resolve(subtitleLocalizationService)?.ensureLoaded();
+      await context.resolve(localizationService)?.ensureLoaded();
       if (context.services) subscribeTriggers(context.services);
     },
 

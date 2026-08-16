@@ -26,12 +26,15 @@ import {
   movingPlatformQueryService,
   projectIdentityService,
   saveGameCommandsService,
+  localizationService,
   scriptMessageBusService,
   splineFollowerDebugService,
   splineRegistrySourceService,
-  subtitleLocalizationService,
-  uiScreenStackService,
+  uiDebugService,
+  uiHostService,
+  uiPresenterService,
   uiViewModelService,
+  type RuntimeUiPresenter,
   type SaveGameCommands,
 } from "./capabilities/runtimeServiceKeys";
 import { LoadingOverlay } from "./loadingOverlay";
@@ -356,13 +359,9 @@ import {
   type AssetSkeletonDef,
 } from "@/scene/assetSkeletonLoader";
 import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
-import { normalizeUiWidgetDef, type UiWidgetDef } from "@engine/ui/uiWidget";
-import { normalizeUiThemeDef, type UiThemeDef } from "@engine/ui/uiTheme";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
+import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import { LocaleRegistry, normalizeUiLocaleTable } from "@engine/ui/uiLocale";
-import { normalizeWorldWidgets } from "@engine/ui/uiWorldWidget";
-import { RuntimeUiSubsystem } from "@/ui/RuntimeUiSubsystem";
-import { WorldUiSubsystem, type WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import {
   GameStateStore,
   normalizeGameRules,
@@ -868,14 +867,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private killZ = DEFAULT_SCENE_KILL_Z;
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   private inputMode: InputMode = "ui";
-  /** UMG Lite runtime UI host; null when the layout authors no HUD/pause widget. */
-  private uiSubsystem: RuntimeUiSubsystem | null = null;
-  /** World-space UI host (projected DOM billboards); null when the layout places none. */
-  private worldUiSubsystem: WorldUiSubsystem | null = null;
   /** ViewModel-lite store backing UI `{ "bind": "path" }` props (e.g. `player.speed`). */
   private readonly uiStore = new UiViewModelStore();
-  /** Pause-menu widget pushed on the `menu` action; null when none is configured. */
-  private pauseMenuDef: UiWidgetDef | null = null;
   /** Minimal gameplay-rules store; null when the scene authors no `gameRules`. */
   private gameStateStore: GameStateStore | null = null;
   /** Unsubscribe for the `game-event` script-message bridge into the rules store. */
@@ -884,15 +877,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private aiStimulusUnsubs: Array<() => void> = [];
   /** Unsubscribes AI attack intent -> one-shot animation bridge handlers. */
   private aiAttackAnimationUnsubs: Array<() => void> = [];
-  /** Modal screens shown when the rules layer resolves a win/loss; null when none. */
-  private winScreenDef: UiWidgetDef | null = null;
-  private loseScreenDef: UiWidgetDef | null = null;
   /** True once the win/loss screen for the current terminal round has been pushed. */
   private gameOutcomeShown = false;
-  /** All loaded `.ui.json` widget defs keyed by asset id (used by Include resolution). */
-  private readonly uiDefs = new Map<string, UiWidgetDef>();
-  /** Loaded UI theme defs keyed by their `theme` reference (asset id or path). */
-  private readonly uiThemes = new Map<string, UiThemeDef>();
   /** Loaded UI localization tables + active locale; null when the scene authors none. */
   private localeRegistry: LocaleRegistry | null = null;
   /** Slotless user preferences (audio mix, locale); null when storage is unavailable. */
@@ -983,12 +969,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.provide(dialogueAudioService, (request) =>
       this.playDialogueAudio(request),
     );
-    this.runtimeServices.provide(subtitleLocalizationService, {
-      // The UI loads the locale tables for HUD/menu text; a scene with neither
-      // still needs them for subtitles, so load on demand here.
+    // Locale tables are shared by widget text and dialogue subtitles, so the
+    // shell owns them (it also persists the player's locale choice) and whichever
+    // capability needs them first triggers the load.
+    this.runtimeServices.provide(localizationService, {
       ensureLoaded: async () => {
         if (!this.localeRegistry) this.localeRegistry = await this.loadUiLocaleRegistry();
       },
+      registry: () => this.localeRegistry,
       resolveSubtitle: (key) => this.localeRegistry?.resolveOptional(key),
     });
     // The project loads asynchronously, so this is a getter: a module that
@@ -1010,8 +998,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.travelCoordinator.enqueueLevelTravel(levelPath),
     );
     this.runtimeServices.provide(uiViewModelService, this.uiStore);
-    this.runtimeServices.provide(uiScreenStackService, {
-      clearScreens: () => this.uiSubsystem?.clearScreens(),
+    // What the UI capability needs back from the shell: the input edge, the
+    // input-mode switch a screen forces, the canvas size and the reserved
+    // widget-message chain.
+    this.runtimeServices.provide(uiHostService, {
+      menuPressed: () => this.inputActions.pressed("menu"),
+      onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
+      viewportSize: () => ({
+        width: this.renderer.domElement.clientWidth,
+        height: this.renderer.domElement.clientHeight,
+      }),
+      resolveEntityPosition: (entityId, target) =>
+        this.resolveEntityWorldPosition(entityId, target),
+      handleReservedMessage: (message) => this.handleReservedUiMessage(message),
     });
     this.levelRuntime = new LevelRuntime({
       mode: "runtime",
@@ -1081,7 +1080,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         // Losing pointer lock during play (Escape / alt-tab) opens the pause menu.
         // This covers browsers that swallow the Escape keydown under pointer lock,
         // where the `menu` action edge would otherwise never fire.
-        if (mode === "ui" && wasGame) this.openPauseMenu();
+        if (mode === "ui" && wasGame) this.uiPresenter()?.openPauseMenu();
       },
     });
     this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
@@ -1350,14 +1349,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // Layer 2 ticks after the engine spine and before the Game Mode (Layer 3),
       // so game rules read capability state produced this frame.
       this.capabilities.update(deltaMs / 1000);
-      // Consume the `menu` edge after input advances, before the Game Mode reads
-      // input, so opening a screen suppresses this frame's camera/movement.
-      this.updateUiInput();
+      // (The `menu` edge is consumed by the UI capability inside
+      // `capabilities.update` above — after input advances, before the Game Mode
+      // reads it — so opening a screen suppresses this frame's camera/movement.)
       this.gameModeSession?.update(deltaMs / 1000);
       this.updateAiCharacterAnimations(deltaMs / 1000);
       this.updateGameRules(deltaMs / 1000);
       this.updateUiStore();
-      this.updateWorldUi();
+      this.uiPresenter()?.projectWorldWidgets();
       this.updateAudioListener();
       this.updateColliderDebugWires();
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
@@ -1384,10 +1383,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     }
-    this.uiSubsystem?.dispose();
-    this.uiSubsystem = null;
-    this.worldUiSubsystem?.dispose();
-    this.worldUiSubsystem = null;
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
     this.clearAiScriptStimulusBridge();
@@ -2086,10 +2081,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   getUiDebugSnapshot(): UiDebugSnapshot {
     return buildUiDebugSnapshot({
-      host: this.uiSubsystem?.getDebugSnapshot() ?? null,
+      host: this.runtimeServices.resolve(uiDebugService)?.host() ?? null,
       fields: this.uiStore.snapshot(),
       locale: this.localeRegistry?.activeLocale ?? null,
-      world: this.worldUiSubsystem?.getDebugSnapshot() ?? { count: 0, visible: 0 },
+      world: this.runtimeServices.resolve(uiDebugService)?.world() ?? { count: 0, visible: 0 },
     });
   }
 
@@ -2322,7 +2317,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.setLoadingStatus("Starting");
     await this.loadCharacterSkeletons();
     await this.startGameMode();
-    await this.setupRuntimeUi();
+    this.setupRuntimeUi();
     // Apply the persisted graphics profile now that the scene's lights + composer
     // exist (shadows, render scale, particle density; post-process already resolved
     // at the seeded profile during build). Runs on every scene build so Level
@@ -2432,6 +2427,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private saveGameCommands(): SaveGameCommands | undefined {
     return this.runtimeServices.resolve(saveGameCommandsService);
+  }
+
+  /**
+   * The mounted runtime UI host, or undefined when this level authored no UI (or
+   * the capability is off). Resolved at call time: every caller treats a missing
+   * host as "nothing to close, nothing to show".
+   */
+  private uiPresenter(): RuntimeUiPresenter | undefined {
+    return this.runtimeServices.resolve(uiPresenterService);
   }
 
   requestSaveGameLoad(payload: unknown): boolean {
@@ -2775,21 +2779,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.gameModeSession?.dispose();
     this.gameModeSession = null;
     this.activeGameMode = null;
-    this.uiSubsystem?.dispose();
-    this.uiSubsystem = null;
-    this.worldUiSubsystem?.dispose();
-    this.worldUiSubsystem = null;
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
     this.clearAiScriptStimulusBridge();
     this.clearAiAttackAnimationBridge();
     this.gameStateStore = null;
     this.gameOutcomeShown = false;
-    this.pauseMenuDef = null;
-    this.winScreenDef = null;
-    this.loseScreenDef = null;
-    this.uiDefs.clear();
-    this.uiThemes.clear();
+    // Widget defs, themes and the two UI hosts belong to `runtimeUiModule`, torn
+    // down by `capabilities.levelUnloaded()` at the top of this method.
     this.localeRegistry = null;
 
     // Empty the subsystems so the engine loop ticks nothing until the rebuild
@@ -3007,123 +3004,46 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Mounts the UMG Lite runtime UI host when the layout authors a HUD and/or a
-   * pause-menu widget (`worldSettings.hudWidget` / `pauseMenuWidget`). No-op when
-   * neither is set, so a scene with no UI pays nothing. Widget `message` actions
-   * are emitted as `ui-action` script messages (UI → gameplay); the screen stack
-   * routes input through {@link handleUiScreenStackChange}.
+   * The shell's half of the runtime UI: the ViewModel fields a HUD binds to and
+   * the gameplay-rules store behind them. Mounting the widgets themselves is the
+   * `runtimeUiModule` capability's job (Phase E), which runs right after this.
    */
-  private async setupRuntimeUi(): Promise<void> {
+  private setupRuntimeUi(): void {
     if (!this.layout) return;
-    const host = document.getElementById("ui-overlay");
-    if (!host) return;
-    const hudId = this.layout.worldSettings?.hudWidget;
-    const pauseId = this.layout.worldSettings?.pauseMenuWidget;
-    const winId = this.layout.worldSettings?.winScreenWidget;
-    const loseId = this.layout.worldSettings?.loseScreenWidget;
-    const gameRules = normalizeGameRules(this.layout.worldSettings?.gameRules);
-    const worldWidgets = normalizeWorldWidgets(this.layout.worldWidgets);
-    const wantsScreenHost = Boolean(hudId || pauseId || winId || loseId);
-    if (!wantsScreenHost && worldWidgets.length === 0 && !gameRules) return;
-
-    // Load ALL .ui.json assets so Include refs in any widget can be resolved.
-    const allDefs = await this.loadAllUiWidgetDefs();
-    for (const [id, def] of allDefs) this.uiDefs.set(id, def);
-    await this.loadUiThemeDefs(this.uiDefs.values());
-    this.localeRegistry = await this.loadUiLocaleRegistry();
-
     // Seed bound fields so the initial render shows values (not blanks/zeroes).
     this.uiStore.setField("player.speed", 0);
     this.uiStore.setField("player.speedLabel", "Speed 0.0 m/s");
-    // `save.slots.*` are seeded by the save capability's own level hook, which
-    // runs right after this build step (or never, when that module is off).
+    // `save.slots.*` are seeded by the save capability's own level hook.
 
-    if (wantsScreenHost) {
-      this.uiSubsystem = new RuntimeUiSubsystem(host, {
-        store: this.uiStore,
-        ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
-        resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
-        resolveWidget: (src) => this.uiDefs.get(src) ?? null,
-        onMessageAction: (action) => {
-          // Reserved `game:*` / `travel:` widget messages drive the rules layer or
-          // Level Travel in-shell; all other messages forward to gameplay as a
-          // `ui-action` script message.
-          if (this.handleGameUiMessage(action.message)) return;
-          if (this.handleTravelUiMessage(action.message)) return;
-          if (this.saveGameCommands()?.handleUiMessage(action.message)) return;
-          if (this.handleSettingsUiMessage(action.message)) return;
-          this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
-        },
-        onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
-      });
-      if (hudId) {
-        const hud = this.uiDefs.get(hudId);
-        if (hud) this.uiSubsystem.setHud(hud);
-      }
-      if (pauseId) this.pauseMenuDef = this.uiDefs.get(pauseId) ?? null;
-      if (winId) this.winScreenDef = this.uiDefs.get(winId) ?? null;
-      if (loseId) this.loseScreenDef = this.uiDefs.get(loseId) ?? null;
-    }
-
-    if (gameRules) {
-      this.gameStateStore = new GameStateStore(gameRules);
-      // Bridge content-emitted `game-event` script messages into the rules store
-      // so triggers/actor scripts (score, objective progress, win/lose) drive it
-      // without the engine knowing any project rule. Released in dispose().
-      this.gameEventUnsub = this.behaviorSubsystem.subscribeScriptMessage(
-        "game-event",
-        (envelope) => {
-          const event = parseGameEvent(envelope.payload);
-          if (event) this.gameStateStore?.dispatch(event);
-        },
-      );
-      // Seed bound fields so the HUD's first render shows authored starting values.
-      for (const [path, value] of Object.entries(this.gameStateStore.hudFields())) {
-        this.uiStore.setField(path, value);
-      }
-    }
-
-    if (worldWidgets.length > 0) {
-      this.worldUiSubsystem = new WorldUiSubsystem(host, {
-        resolveWidget: (src) => this.uiDefs.get(src) ?? null,
-        resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
-        store: this.uiStore,
-        ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
-        onMessageAction: (action) => {
-          if (this.handleTravelUiMessage(action.message)) return;
-          if (this.saveGameCommands()?.handleUiMessage(action.message)) return;
-          if (this.handleSettingsUiMessage(action.message)) return;
-          this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
-        },
-        resolveEntityPosition: (entityId, target) => this.resolveEntityWorldPosition(entityId, target),
-      });
-      this.worldUiSubsystem.setWidgets(worldWidgets);
+    const gameRules = normalizeGameRules(this.layout.worldSettings?.gameRules);
+    if (!gameRules) return;
+    this.gameStateStore = new GameStateStore(gameRules);
+    // Bridge content-emitted `game-event` script messages into the rules store
+    // so triggers/actor scripts (score, objective progress, win/lose) drive it
+    // without the engine knowing any project rule. Released in dispose().
+    this.gameEventUnsub = this.behaviorSubsystem.subscribeScriptMessage(
+      "game-event",
+      (envelope) => {
+        const event = parseGameEvent(envelope.payload);
+        if (event) this.gameStateStore?.dispatch(event);
+      },
+    );
+    // Seed bound fields so the HUD's first render shows authored starting values.
+    for (const [path, value] of Object.entries(this.gameStateStore.hudFields())) {
+      this.uiStore.setField(path, value);
     }
   }
 
   /**
-   * Loads all `.ui.json` widget assets from the manifest (excludes `.theme.json`).
-   * Used by {@link setupRuntimeUi} to populate the Include resolver registry.
+   * The reserved widget-message chain the UI capability tries before forwarding
+   * a message to gameplay: rules buttons, Level Travel, save slots and user
+   * settings. Anything unclaimed here reaches gameplay as a `ui-action`.
    */
-  private async loadAllUiWidgetDefs(): Promise<Map<string, UiWidgetDef>> {
-    const out = new Map<string, UiWidgetDef>();
-    if (!this.assetLoader) return out;
-    const manifest = await this.assetLoader.loadManifest();
-    const uiAssets = manifest.assets.filter(
-      (entry) => assetType(entry) === "ui" && assetPath(entry).endsWith(".ui.json"),
-    );
-    await Promise.all(
-      uiAssets.map(async (asset) => {
-        try {
-          const response = await fetch(projectFileUrl(assetPath(asset)), { cache: "no-cache" });
-          if (!response.ok) return;
-          out.set(asset.id, normalizeUiWidgetDef(await response.json(), asset.name));
-        } catch {
-          // Missing/malformed UI asset: skip it (the scene still plays).
-        }
-      }),
-    );
-    return out;
+  private handleReservedUiMessage(message: string): boolean {
+    if (this.handleGameUiMessage(message)) return true;
+    if (this.handleTravelUiMessage(message)) return true;
+    if (this.saveGameCommands()?.handleUiMessage(message)) return true;
+    return this.handleSettingsUiMessage(message);
   }
 
   /**
@@ -3168,33 +3088,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Loads the theme defs referenced by the given widgets (`def.theme`) into
-   * {@link uiThemes}, keyed by the reference. A reference resolves as a manifest
-   * `ui` asset id first, else as a direct public-relative path (matching the
-   * plan's `assets/ui/default.theme.json` form). Missing/malformed themes are
-   * skipped — a themeless widget falls back to the built-in CSS variables.
-   */
-  private async loadUiThemeDefs(widgets: Iterable<UiWidgetDef>): Promise<void> {
-    const refs = new Set<string>();
-    for (const widget of widgets) if (widget.theme) refs.add(widget.theme);
-    if (refs.size === 0) return;
-    const manifest = this.assetLoader ? await this.assetLoader.loadManifest() : null;
-    await Promise.all(
-      [...refs].map(async (ref) => {
-        const asset = manifest?.assets.find((entry) => entry.id === ref);
-        const path = asset ? assetPath(asset) : ref;
-        try {
-          const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
-          if (!response.ok) return;
-          this.uiThemes.set(ref, normalizeUiThemeDef(await response.json(), ref));
-        } catch {
-          // Missing/malformed theme: skip it (widget uses default CSS variables).
-        }
-      }),
-    );
-  }
-
-  /**
    * Routes input as the UI screen stack opens/closes. A screen forces `ui` input
    * (suppressing gameplay) and frees the cursor; closing the last screen re-grabs
    * pointer lock when the active camera uses it (a no-op for right-drag).
@@ -3224,28 +3117,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.touchInput.attach();
   }
 
-  /** Toggles the pause menu on the `menu` action edge (Escape). */
-  private updateUiInput(): void {
-    if (!this.uiSubsystem) return;
-    if (!this.inputActions.pressed("menu")) return;
-    if (this.uiSubsystem.screenDepth > 0) this.uiSubsystem.back();
-    else this.openPauseMenu();
-  }
-
-  /** Pushes the configured pause menu when one exists and no screen is open. */
-  private openPauseMenu(): void {
-    if (!this.uiSubsystem || !this.pauseMenuDef) return;
-    if (this.uiSubsystem.screenDepth > 0) return;
-    this.uiSubsystem.pushScreen(this.pauseMenuDef);
-  }
-
   /**
    * Feeds the ViewModel store the possessed pawn's live state, then flushes so
    * only widgets bound to a changed field re-render. v1 surfaces the player's
    * planar speed (`player.speed` / `player.speedLabel`); the HUD binds to these.
    */
   private updateUiStore(): void {
-    if (!this.uiSubsystem && !this.worldUiSubsystem) return;
     const possessed = this.gameModeSession?.playerState.pawnEntityId ?? null;
     const speed = (possessed ? this.locomotionReports.get(possessed)?.planarSpeed : 0) ?? 0;
     this.uiStore.setField("player.speed", speed);
@@ -3263,7 +3140,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private updateGameRules(dt: number): void {
     const store = this.gameStateStore;
     if (!store) return;
-    const paused = (this.uiSubsystem?.screenDepth ?? 0) > 0;
+    const paused = (this.uiPresenter()?.screenDepth() ?? 0) > 0;
     if (!paused) store.tick(dt);
     for (const [path, value] of Object.entries(store.hudFields())) {
       this.uiStore.setField(path, value);
@@ -3276,11 +3153,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Presents the win/loss screen for a settled round, replacing any open screen. */
   private showGameOutcome(phase: GamePhase): void {
-    if (!this.uiSubsystem) return;
-    const def = phase === "won" ? this.winScreenDef : this.loseScreenDef;
-    if (!def) return;
-    if (this.uiSubsystem.screenDepth > 0) this.uiSubsystem.clearScreens();
-    this.uiSubsystem.pushScreen(def);
+    this.uiPresenter()?.showOutcomeScreen(phase === "won" ? "won" : "lost");
   }
 
   /**
@@ -3294,7 +3167,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.restartGame();
         return true;
       case "game:resume":
-        this.uiSubsystem?.clearScreens();
+        this.uiPresenter()?.clearScreens();
         return true;
       default:
         return false;
@@ -3345,8 +3218,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private handleSettingsUiMessage(message: string): boolean {
     if (message === "settings:open:graphics") {
-      const def = this.uiDefs.get("graphics-settings");
-      if (def) this.uiSubsystem?.pushScreen(def);
+      this.uiPresenter()?.pushWidget("graphics-settings");
       return true;
     }
     if (message.startsWith("settings:graphics:")) {
@@ -3397,18 +3269,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!this.gameStateStore) return;
     this.gameStateStore.dispatch({ kind: "restart" });
     this.gameOutcomeShown = false;
-    this.uiSubsystem?.clearScreens();
+    this.uiPresenter()?.clearScreens();
     this.behaviorSubsystem.emitScriptMessage("game-restart", "game", {});
-  }
-
-  /**
-   * Projects each world-space UI widget onto the screen for this frame, using the
-   * live camera + the canvas pixel size. No-op when the layout places none.
-   */
-  private updateWorldUi(): void {
-    if (!this.worldUiSubsystem) return;
-    const canvas = this.renderer.domElement;
-    this.worldUiSubsystem.update(this.camera, canvas.clientWidth, canvas.clientHeight);
   }
 
   /**

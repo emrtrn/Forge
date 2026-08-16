@@ -12,7 +12,7 @@
  *     unavailable" instead of persisting an empty payload;
  *   - no level travel → a load cannot reach its level, so it fails visibly
  *     rather than half-restoring the current one;
- *   - no UI ViewModel / screen stack → the capability still saves and loads, it
+ *   - no UI ViewModel / no mounted UI → the capability still saves and loads, it
  *     just has no menu to update.
  * Switching this module off removes save/load only: the level's content, its
  * scripts and its checkpoint volumes are untouched — a checkpoint simply stops
@@ -44,7 +44,7 @@ import {
   levelTravelService,
   projectIdentityService,
   saveGameCommandsService,
-  uiScreenStackService,
+  uiPresenterService,
   uiViewModelService,
 } from "./runtimeServiceKeys";
 
@@ -169,7 +169,7 @@ export function createSaveGameModule(options: SaveGameModuleOptions = {}): Capab
       setStatus(slot, "Load failed");
       return;
     }
-    services?.resolve(uiScreenStackService)?.clearScreens();
+    services?.resolve(uiPresenterService)?.clearScreens();
   }
 
   function deleteSlot(slot: SaveGameUiSlotId): void {

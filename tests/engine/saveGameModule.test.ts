@@ -29,7 +29,7 @@ import {
   levelTravelService,
   projectIdentityService,
   saveGameCommandsService,
-  uiScreenStackService,
+  uiPresenterService,
   uiViewModelService,
 } from "../../src/scene/capabilities/runtimeServiceKeys";
 
@@ -98,7 +98,18 @@ function testHost(): {
   });
   host.provide(levelTravelService, (levelPath) => travelled.push(levelPath));
   host.provide(uiViewModelService, uiStore);
-  host.provide(uiScreenStackService, { clearScreens: () => (screensCleared += 1) });
+  // Only `clearScreens` matters here; the rest of the presenter is a level's
+  // mounted UI, which this module never touches.
+  host.provide(uiPresenterService, {
+    screenDepth: () => 0,
+    clearScreens: () => {
+      screensCleared += 1;
+    },
+    openPauseMenu: () => {},
+    pushWidget: () => false,
+    showOutcomeScreen: () => false,
+    projectWorldWidgets: () => {},
+  });
 
   return {
     host,

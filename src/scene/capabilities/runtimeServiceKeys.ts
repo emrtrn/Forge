@@ -14,6 +14,8 @@
  * subsystem is baked into the shell; as later Phase E slices extract those,
  * the provider moves to the module without the consumers changing.
  */
+import type { Vector3 } from "three";
+
 import type {
   ScriptMessageEnvelope,
   ScriptMessagePayload,
@@ -30,7 +32,10 @@ import type {
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { SplineRegistry } from "@engine/scene/splineRegistry";
+import type { LocaleRegistry } from "@engine/ui/uiLocale";
 import type { UiViewModelStore } from "@engine/ui/uiViewModel";
+import type { UiSubsystemDebugSnapshot } from "@/ui/RuntimeUiSubsystem";
+import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 
 import { runtimeServiceKey } from "./RuntimeServices";
 
@@ -85,18 +90,23 @@ export type DialogueAudioPlayer = (
 export const dialogueAudioService = runtimeServiceKey<DialogueAudioPlayer>("dialogue-audio");
 
 /**
- * Subtitle localization against the active `.loc.json` table.
- * Provided by: the runtime shell (the locale registry is shared with the UI).
+ * The active `.loc.json` tables. Shared, not owned by one capability: dialogue
+ * localizes subtitles with it and the UI capability localizes widget text with
+ * the very same registry, so it stays with the shell (which also persists the
+ * player's locale choice) rather than being pulled into whichever module happens
+ * to need it first.
+ * Provided by: the runtime shell.
  */
-export interface SubtitleLocalization {
-  /** Loads the locale tables if the UI has not already — a scene may have no HUD. */
+export interface RuntimeLocalization {
+  /** Loads this level's tables if nothing has yet — a scene may have no HUD. */
   ensureLoaded(): Promise<void>;
+  /** The loaded registry, or null when the project authors no locale tables. */
+  registry(): LocaleRegistry | null;
   /** Live lookup, so switching locale takes effect without re-registering lines. */
   resolveSubtitle(key: string): string | undefined;
 }
 
-export const subtitleLocalizationService =
-  runtimeServiceKey<SubtitleLocalization>("subtitle-localization");
+export const localizationService = runtimeServiceKey<RuntimeLocalization>("localization");
 
 /**
  * Stable id of the active project, used to namespace anything persisted for it
@@ -141,15 +151,67 @@ export const levelTravelService = runtimeServiceKey<(levelPath: string) => void>
 export const uiViewModelService = runtimeServiceKey<UiViewModelStore>("ui-view-model");
 
 /**
- * Closing whatever screen stack is open, returning to gameplay — what a
- * successful "Load" click must do to the pause menu it was clicked in.
- * Provided by: the runtime shell (runtime UI is still baked in).
+ * The mounted runtime UI host: what is open on top of gameplay and how to change
+ * it. Consumers ask for effects, never for widgets — the rules layer freezes its
+ * round while anything is open and pushes an outcome screen when it settles, a
+ * successful save-load closes the menu it was clicked in — so none of them needs
+ * to know how a widget is loaded or rendered. `undefined` means this level
+ * mounted no UI at all (or the capability is off), which every caller treats as
+ * "nothing to close, nothing to show".
+ * Provided by: `runtimeUiModule`.
  */
-export interface UiScreenStack {
+export interface RuntimeUiPresenter {
+  /** Open screen count; 0 means gameplay is in front. */
+  screenDepth(): number;
+  /** Closes every open screen, returning to gameplay. */
   clearScreens(): void;
+  /** Pushes the level's pause menu, if it authored one and nothing is open. */
+  openPauseMenu(): void;
+  /** Pushes a loaded widget by asset id; false when this level has no such widget. */
+  pushWidget(widgetId: string): boolean;
+  /** Pushes the level's authored win/lose screen, replacing anything open. */
+  showOutcomeScreen(outcome: "won" | "lost"): boolean;
+  /**
+   * Re-projects world-space widgets onto the screen. Driven by the shell rather
+   * than the module's own tick, because it must run after the Game Mode has
+   * moved the camera for this frame or billboards trail it by one frame.
+   */
+  projectWorldWidgets(): void;
 }
 
-export const uiScreenStackService = runtimeServiceKey<UiScreenStack>("ui-screen-stack");
+export const uiPresenterService = runtimeServiceKey<RuntimeUiPresenter>("runtime-ui-presenter");
+
+/**
+ * What the UI capability needs back from the shell, and nothing more: the input
+ * edge that opens a menu, the input-mode switch a screen forces, the canvas size
+ * world-space widgets project against, and the shell's reserved-message chain
+ * (`game:*`, `travel:`, `save:*`, `settings:*`), which is tried before a widget
+ * message is forwarded to gameplay as a `ui-action`.
+ * Provided by: the runtime shell.
+ */
+export interface RuntimeUiHost {
+  /** True on the frame the `menu` action edge fires (Escape / gamepad Start). */
+  menuPressed(): boolean;
+  /** The screen stack opened or closed: the shell re-routes input and the cursor. */
+  onScreenStackChange(depth: number): void;
+  /** Canvas pixel size, for projecting world-space widgets this frame. */
+  viewportSize(): { readonly width: number; readonly height: number };
+  /** World position of the entity a world-space widget is attached to. */
+  resolveEntityPosition(entityId: string, target: Vector3): boolean;
+  /** Handles a reserved widget message; false = forward it to gameplay. */
+  handleReservedMessage(message: string): boolean;
+}
+
+export const uiHostService = runtimeServiceKey<RuntimeUiHost>("ui-host");
+
+/** Read side of the `?debug` UI overlay: the mounted hosts' own snapshots. */
+export interface UiDebugSource {
+  host(): UiSubsystemDebugSnapshot | null;
+  world(): WorldUiDebugSnapshot;
+}
+
+/** Provided by: `runtimeUiModule`. */
+export const uiDebugService = runtimeServiceKey<UiDebugSource>("ui-debug");
 
 /**
  * The save capability's command surface, for the shell hooks that can only live

@@ -91,12 +91,14 @@ const RUNTIME_BUILD_MANIFEST: readonly BuildManifestStep[] = [
   runtimeOnly("auto-play-particles"),
   runtimeOnly("character-skeletons"),
   runtimeOnly("game-mode"),
-  runtimeOnly("runtime-ui"),
+  // Shell-side UI only: the ViewModel seed + the game-rules store. Mounting the
+  // widgets is `runtimeUiModule`'s work, inside `capability-modules` below.
+  runtimeOnly("game-rules"),
   runtimeOnly("quality-settings"),
   runtimeOnly("lod-bias"),
   // Layer 2 modules run their own level setup here: dialogue asset registration
-  // with its script-message triggers, and the save-game restore + slot-field
-  // seeding, both moved out of the shell in Phase E.
+  // with its script-message triggers, the save-game restore + slot-field seeding,
+  // and the runtime UI hosts — all moved out of the shell in Phase E.
   runtimeOnly("capability-modules"),
   runtimeOnly("shader-warmup"),
 ];

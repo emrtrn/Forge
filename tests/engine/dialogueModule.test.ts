@@ -24,7 +24,7 @@ import {
 import {
   dialogueAudioService,
   scriptMessageBusService,
-  subtitleLocalizationService,
+  localizationService,
   type ScriptMessageBus,
 } from "../../src/scene/capabilities/runtimeServiceKeys";
 
@@ -121,10 +121,11 @@ export async function registerDialogueModuleTests(checkAsync: CheckAsync): Promi
         played.push(request);
         return { stop: () => undefined };
       });
-      host.provide(subtitleLocalizationService, {
+      host.provide(localizationService, {
         ensureLoaded: async () => {
           localeLoads += 1;
         },
+        registry: () => null,
         resolveSubtitle: () => undefined,
       });
 

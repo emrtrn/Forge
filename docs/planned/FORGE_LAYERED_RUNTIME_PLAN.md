@@ -4,7 +4,8 @@
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
 > Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
-> E/2 (dialogue) ve E/3 (save-game) tamam; sıradaki modül runtime-UI.
+> E/2 (dialogue), E/3 (save-game) ve E/4 (runtime-UI) tamam; sıradaki modül
+> skeletal-animation.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -119,7 +120,7 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | `aiSubsystem` + `loadAiAssets` + nav | **2** | `aiModule` (opt-in) |
 | `setupDialogue` + `loadDialogueAssets` | **2** | `dialogueModule` (opt-in) |
 | ~~`saveCoordinator` (`RuntimeSaveCoordinator`)~~ | **2** | ✅ `saveGameModule` (E/3) |
-| `setupRuntimeUi` + widget/locale/theme yükleme | **2** | `runtimeUiModule` (opt-in) |
+| ~~`setupRuntimeUi` + widget/theme yükleme~~ | **2** | ✅ `runtimeUiModule` (E/4); locale kabukta (dialogue ile paylaşımlı), kurallar Katman 3 |
 | `loadCharacterSkeletons` | **2** | `skeletalAnimationModule` (opt-in) |
 | `playAutoPlayAudio` / `playAutoPlayParticles` | **2** | `audioModule` / `vfxModule` (opt-in; auto-play hook) |
 | `startGameMode` + `gameModes/registry` | **3** | Game modülü zaten burada; genişletilir |
@@ -427,6 +428,59 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > Kapılar: `build:verify` uçtan uca yeşil (**942/942 engine check**),
 > `verify:imports` PASS. Browser: `runtime-checkpoint` (33.3 sn),
 > `runtime-playflow` (37.0 sn) ve `runtime-portal` (40.7 sn) smoke'ları geçiyor.
+
+> **Uygulama kaydı (2026-08-16, E/4 — runtime-UI modülü):** `setupRuntimeUi`'ın
+> sunum yarısı `capabilities/runtimeUiModule.ts`'e taşındı: `.ui.json` widget ve
+> tema yükleme, `RuntimeUiSubsystem` (HUD + ekran yığını), `WorldUiSubsystem`
+> (yansıtılan billboard'lar), duraklatma menüsü ve widget `message` yönlendirmesi.
+> `RuntimeSceneApp`'ten `uiSubsystem`, `worldUiSubsystem`, `uiDefs`, `uiThemes`,
+> `pauseMenuDef`/`winScreenDef`/`loseScreenDef` alanları ve `loadAllUiWidgetDefs`,
+> `loadUiThemeDefs`, `updateUiInput`, `openPauseMenu`, `updateWorldUi` metotları
+> çıktı.
+>
+> **Sınır (plan §3/§8 uyarınca): sunum Katman 2, veri ve kurallar kabukta.**
+> Kabukta kalanlar ve nedenleri:
+>
+> - `uiStore` (ViewModel): `player.*`, `loading.*`, `graphics.*`, `save.slots.*`
+>   alanlarını birçok kabuk/modül yazıyor — UI'ın verisi, UI'ın kendisi değil.
+> - `localeRegistry`: aynı tablolar hem widget metnini hem dialogue altyazısını
+>   besliyor. Modüle taşınsa iki modül arasında "hangisi önce yükler" sırası
+>   doğardı; kabukta durunca ikisi de `localization` servisinden çözer
+>   (eski `subtitle-localization` anahtarı bu yüzden `localization` oldu ve
+>   `registry()` kazandı).
+> - `GameStateStore` + `game:*` mesajları: kurallar Katman 3, capability modülü
+>   `@/game` import edemez. Kural katmanı UI'a yalnız etki olarak konuşuyor
+>   (`screenDepth()`, `showOutcomeScreen("won"|"lost")`, `clearScreens()`).
+>
+> Modülün yayımladıkları: `runtime-ui-presenter` (ekran derinliği, temizle,
+> duraklatma menüsü, id ile widget push, sonuç ekranı, world-widget projeksiyonu)
+> ve `ui-debug` (`?debug` overlay'i için host/world snapshot). Save modülü
+> menüyü kapatmak için artık bu presenter'ı çözüyor — Faz E'nin söz verdiği
+> "sağlayıcı modüle taşınır, tüketici değişmez" durumu. Kabuğun yayımladığı tek
+> yeni yüzey `ui-host`: `menu` kenarı, ekran yığını değişince input modu,
+> canvas ölçüsü, entity dünya konumu ve ayrılmış mesaj zinciri
+> (`game:*` → `travel:` → `save:*` → `settings:*`, sonra gameplay'e `ui-action`).
+>
+> **Kare sırası korundu:** `menu` kenarı modülün `update()`'inde tüketiliyor —
+> `capabilities.update` zaten motor tick'inden sonra, Game Mode'dan önce koşuyor,
+> yani ekran açmak o karenin kamera/hareketini hâlâ bastırıyor. World-widget
+> projeksiyonu ise bilinçli olarak modülün tick'ine konmadı: kamera bu kare
+> hareket ettikten *sonra* çalışması gerekiyor, yoksa billboard'lar bir kare
+> geriden gelirdi; kabuk `projectWorldWidgets()`'i eski `updateWorldUi()` yerinde
+> çağırıyor.
+>
+> `buildManifest`'teki `runtime-ui` adımı `game-rules` olarak daraldı (kabukta
+> kalan iş bu); widget mount'u `capability-modules` adımının içinde.
+>
+> Yeni birim testi `tests/engine/runtimeUiModule.test.ts` (3 kontrol): DOM'suz
+> host'ta hiçbir şey mount etmeme + tüm presenter çağrılarının no-op olması,
+> UI yazmayan level'da manifest'in hiç okunmaması ("bedava" özelliği), ve modül
+> kapalıyken presenter/debug servislerinin hiç var olmaması.
+>
+> Kapılar: `build:verify` uçtan uca yeşil (**945/945 engine check**),
+> `verify:imports` PASS. Browser: `runtime-playflow`, `runtime-checkpoint`,
+> `runtime-portal`, `runtime-locomotion`, `runtime-script-message` smoke'ları
+> geçiyor (5/5).
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

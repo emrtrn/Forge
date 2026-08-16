@@ -99,8 +99,8 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
-import { collapseCoincidentFloors, findGroundLayersAt } from "@/game/collision";
-import { slopeCosFromDegrees } from "@/game/slopeSurface";
+import { collapseCoincidentFloors, findGroundLayersAt } from "@engine/movement/characterCollision";
+import { slopeCosFromDegrees } from "@engine/movement/slopeSurface";
 import type {
   DialogueAudioPlayback,
   DialogueAudioRequest,
@@ -113,14 +113,14 @@ import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import { CharacterMovementSubsystem, type CharacterMoveIntent } from "@/game/characterMovementSystem";
-import type { Aabb3 } from "@/game/collision";
+import { CharacterMovementSubsystem, type CharacterMoveIntent } from "@engine/movement/characterMovementSubsystem";
+import type { Aabb3 } from "@engine/movement/characterCollision";
 import {
   DEFAULT_LOCOMOTION_THRESHOLDS,
   locomotionConfigForSkeleton,
   resolveLocomotionAnimation,
   type LocomotionInput,
-} from "@/game/locomotionAnimation";
+} from "@engine/movement/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
 import { isGameModeClassRef } from "@/game/gameModes/catalog";
 import { createProjectGameMode } from "@/game/gameModes/projectGameMode";

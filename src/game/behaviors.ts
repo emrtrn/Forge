@@ -10,10 +10,10 @@ import type {
   BehaviorRegistry,
   BehaviorUpdate,
 } from "@engine/behavior/behaviorSubsystem";
-import { facingYawFromMove, planarMoveStep } from "./playerMovement";
-import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "./verticalMotion";
-import { resolvePlanarMovement, type PlanarDelta } from "./collision";
-import type { LocomotionInput } from "./locomotionAnimation";
+import { facingYawFromMove, planarMoveStep } from "@engine/movement/planarMovement";
+import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "@engine/movement/verticalMotion";
+import { resolvePlanarMovement, type PlanarDelta } from "@engine/movement/characterCollision";
+import type { LocomotionInput } from "@engine/movement/locomotionAnimation";
 import {
   initialInteractionState,
   stepInteractionTrigger,

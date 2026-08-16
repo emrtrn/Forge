@@ -382,9 +382,9 @@ import {
   planarMoveStep,
   planarMoveStepRelativeToYaw,
   rotateYawToward,
-} from "../src/game/playerMovement";
+} from "../engine/movement/planarMovement";
 import { createBehaviorRegistry } from "../src/game/behaviors";
-import { CharacterMovementSubsystem } from "../src/game/characterMovementSystem";
+import { CharacterMovementSubsystem } from "../engine/movement/characterMovementSubsystem";
 import type { TransformComponent } from "../engine/scene/components";
 import {
   desiredFollowPose,
@@ -398,13 +398,13 @@ import {
   desiredSpringArmCameraPose,
   resolveSpringArmCollision,
 } from "../src/game/springArmCamera";
-import { groundedAt, stepVerticalMotion } from "../src/game/verticalMotion";
+import { groundedAt, stepVerticalMotion } from "../engine/movement/verticalMotion";
 import {
   UPHILL_SLOWDOWN_REST,
   climbSlopeSample,
   updateUphillSlowdown,
   uphillSpeedScale,
-} from "../src/game/uphillSlowdown";
+} from "../engine/movement/uphillSlowdown";
 import {
   collapseCoincidentFloors,
   filterWalkableBlockers,
@@ -415,13 +415,13 @@ import {
   resolvePlanarMovementSubstepped,
   safeSubstepLength,
   type Aabb3,
-} from "../src/game/collision";
+} from "../engine/movement/characterCollision";
 import {
   sampleTriangleHeight,
   slopeCosFromDegrees,
   triangleUpNormal,
   type GroundTriangle,
-} from "../src/game/slopeSurface";
+} from "../engine/movement/slopeSurface";
 import {
   classifyLocomotion,
   locomotionConfigForSkeleton,
@@ -431,7 +431,7 @@ import {
   selectLocomotionClip,
   type LocomotionAssetConfig,
   type LocomotionInput,
-} from "../src/game/locomotionAnimation";
+} from "../engine/movement/locomotionAnimation";
 import { initialInteractionState, stepInteractionTrigger } from "../src/game/interaction";
 import {
   GameStateStore,

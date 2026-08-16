@@ -1,8 +1,7 @@
 /**
- * Pure, headless-testable player movement math. No Three.js or DOM: behaviors
- * (src/game/behaviors.ts) feed it the current input snapshot and it returns the
- * planar position delta and facing yaw, which the behavior writes into the
- * mutable transform.
+ * Pure, headless-testable planar movement math. No Three.js or DOM: the caller
+ * feeds it the current input snapshot and it returns the planar position delta
+ * and facing yaw, which the caller writes into the mutable transform.
  *
  * Axis convention (matches the engine's WASD bindings):
  *   forward -> -z, back -> +z, left -> -x, right -> +x.

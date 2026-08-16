@@ -1,20 +1,20 @@
-import { readCharacterMovementComponent, readTransformComponent } from "@engine/scene/components";
-import type { CharacterMovementComponent, TransformComponent } from "@engine/scene/components";
-import { resolveCharacterCapsule, type CharacterCapsuleResolution } from "@engine/scene/capsule";
-import type { EngineUpdateContext, Subsystem } from "@engine/core/Subsystem";
-import type { Entity, EntityId } from "@engine/scene/entity";
-import type { ActionMap } from "@engine/input/actionMap";
-import type { LaunchOptions, PhysicsQuery, TransformSink } from "@engine/behavior/behaviorSubsystem";
+import { readCharacterMovementComponent, readTransformComponent } from "../scene/components";
+import type { CharacterMovementComponent, TransformComponent } from "../scene/components";
+import { resolveCharacterCapsule, type CharacterCapsuleResolution } from "../scene/capsule";
+import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
+import type { Entity, EntityId } from "../scene/entity";
+import type { ActionMap } from "../input/actionMap";
+import type { LaunchOptions, PhysicsQuery, TransformSink } from "../behavior/behaviorSubsystem";
 import type {
   MovingPlatformQuery,
   PlatformState,
-} from "@engine/physics/movingPlatformSubsystem";
+} from "../physics/movingPlatformSubsystem";
 import {
   facingYawFromMove,
   planarMoveStep,
   planarMoveStepRelativeToYaw,
   rotateYawToward,
-} from "./playerMovement";
+} from "./planarMovement";
 import { groundedAt, stepVerticalMotion, type VerticalMotionState } from "./verticalMotion";
 import {
   filterWalkableBlockers,
@@ -25,7 +25,7 @@ import {
   type Aabb3,
   type GroundHit,
   type PlanarDelta,
-} from "./collision";
+} from "./characterCollision";
 import { slopeCosFromDegrees } from "./slopeSurface";
 import {
   UPHILL_SLOWDOWN_REST,

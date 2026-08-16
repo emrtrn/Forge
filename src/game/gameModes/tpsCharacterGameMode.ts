@@ -31,7 +31,7 @@ import {
   DEFAULT_LOCOMOTION_THRESHOLDS,
   EMPTY_LOCOMOTION_CONFIG,
   type LocomotionAssetConfig,
-} from "@/game/locomotionAnimation";
+} from "@engine/movement/locomotionAnimation";
 import {
   resolveMontageBindings,
   type MontageBinding,

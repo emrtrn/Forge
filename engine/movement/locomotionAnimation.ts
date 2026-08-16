@@ -1,7 +1,7 @@
 /**
  * Pure, headless-testable mapping from a player's movement state to an animation
  * clip. No Three.js or DOM: the runtime shell feeds it the per-frame locomotion
- * snapshot the player behavior reports (src/game/behaviors.ts) plus the clip
+ * snapshot the character movement solver reports plus the clip
  * names the character asset actually carries, and it returns the clip to play.
  *
  * Two layers keep both ends testable and asset-agnostic:

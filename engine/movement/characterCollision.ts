@@ -2,7 +2,7 @@
  * Pure, headless-testable collision response: resolve a proposed horizontal move
  * against static collider AABBs so the player cannot walk through walls and
  * slides along them instead. No Three.js, DOM, or physics-engine dependency —
- * the player behavior (src/game/behaviors.ts) feeds it the AABBs the physics
+ * its caller (the character movement solver, or a game behavior) feeds it the AABBs the physics
  * subsystem already derives.
  *
  * Movement is resolved on the XZ plane (vertical motion is G2's floor clamp). A
@@ -17,7 +17,7 @@
  * and avoids snapping out of pre-existing overlaps.
  */
 import { sampleTriangleHeight, triangleNormal, type GroundTriangle } from "./slopeSurface";
-import type { NavigationRole } from "@engine/scene/collision";
+import type { NavigationRole } from "../scene/collision";
 
 export interface Aabb3 {
   readonly min: readonly [number, number, number];

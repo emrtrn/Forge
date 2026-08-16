@@ -1,5 +1,5 @@
 import type { CameraComponent, SpringArmComponent } from "@engine/scene/components";
-import type { Aabb3 } from "./collision";
+import type { Aabb3 } from "@engine/movement/characterCollision";
 import { lerpVec3, type FollowCameraPose, type Vec3 } from "./followCamera";
 import { forwardFromLookAngles, type LookAngles } from "./gameModes/cameraControl";
 

@@ -15,7 +15,7 @@
 import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { UiFieldValue } from "@engine/ui/uiViewModel";
 import type { InputMode } from "@/game/gameModes/types";
-import type { LocomotionInput } from "@/game/locomotionAnimation";
+import type { LocomotionInput } from "@engine/movement/locomotionAnimation";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import type {
   GameModeDebugSnapshot,

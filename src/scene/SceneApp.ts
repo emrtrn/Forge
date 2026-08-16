@@ -67,9 +67,9 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import { collapseCoincidentFloors, findGroundLayersAt } from "@/game/collision";
+import { collapseCoincidentFloors, findGroundLayersAt } from "@engine/movement/characterCollision";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
-import { slopeCosFromDegrees } from "@/game/slopeSurface";
+import { slopeCosFromDegrees } from "@engine/movement/slopeSurface";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
 import {
   assetPath,

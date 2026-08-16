@@ -1,6 +1,6 @@
 /**
  * Pure, headless-testable vertical motion: gravity, a grounded jump, and a floor
- * clamp. No Three.js or DOM — the player behavior (src/game/behaviors.ts) keeps
+ * clamp. No Three.js or DOM — its caller (the character movement solver, or a game behavior) keeps
  * one state per entity and feeds it the per-tick inputs, writing the returned
  * `y` into the transform.
  *

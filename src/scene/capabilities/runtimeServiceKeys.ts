@@ -23,9 +23,14 @@ import type {
   DialogueAudioRequest,
 } from "@engine/dialogue/dialogueSubsystem";
 import type { MovingPlatformQuery } from "@engine/physics/movingPlatformSubsystem";
+import type {
+  GameSaveRestoreRequest,
+  GameSaveState,
+} from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { SplineRegistry } from "@engine/scene/splineRegistry";
+import type { UiViewModelStore } from "@engine/ui/uiViewModel";
 
 import { runtimeServiceKey } from "./RuntimeServices";
 
@@ -92,6 +97,80 @@ export interface SubtitleLocalization {
 
 export const subtitleLocalizationService =
   runtimeServiceKey<SubtitleLocalization>("subtitle-localization");
+
+/**
+ * Stable id of the active project, used to namespace anything persisted for it
+ * (save slots today, more later). A getter, because the project manifest is
+ * loaded asynchronously after the shell is constructed; `null` means "no project
+ * loaded yet", so a consumer must resolve it at use time, not at start time.
+ * Provided by: the runtime shell (owner of the active project).
+ */
+export const projectIdentityService = runtimeServiceKey<() => string | null>("project-identity");
+
+/**
+ * Capturing and restoring the *gameplay* half of a save: which entity the player
+ * possesses, where it stands, and the persistent behavior state. It stays in the
+ * shell because it reads live game-mode/character/behavior state; the save
+ * capability owns only the slots, the storage and the load handshake.
+ * Provided by: the runtime shell.
+ */
+export interface GameplaySaveState {
+  /** Current savable state, or null when there is nothing savable yet (pre-boot). */
+  capture(): GameSaveState | null;
+  /** Applies a decoded restore to the live scene (persistent state + player pawn). */
+  restore(request: GameSaveRestoreRequest): void;
+}
+
+export const gameplaySaveStateService =
+  runtimeServiceKey<GameplaySaveState>("gameplay-save-state");
+
+/**
+ * Enqueues a level change, the same handoff a portal uses. Loading a save is a
+ * travel to the saved level followed by a restore, so the capability needs this
+ * rather than a level loader of its own.
+ * Provided by: the runtime shell (the travel coordinator owns the queue).
+ */
+export const levelTravelService = runtimeServiceKey<(levelPath: string) => void>("level-travel");
+
+/**
+ * The UI ViewModel store a HUD binds to. A capability writes its fields
+ * (`save.slots.*`) and flushes; without a store, the capability still works and
+ * simply has nothing to display.
+ * Provided by: the runtime shell (runtime UI is still baked in).
+ */
+export const uiViewModelService = runtimeServiceKey<UiViewModelStore>("ui-view-model");
+
+/**
+ * Closing whatever screen stack is open, returning to gameplay — what a
+ * successful "Load" click must do to the pause menu it was clicked in.
+ * Provided by: the runtime shell (runtime UI is still baked in).
+ */
+export interface UiScreenStack {
+  clearScreens(): void;
+}
+
+export const uiScreenStackService = runtimeServiceKey<UiScreenStack>("ui-screen-stack");
+
+/**
+ * The save capability's command surface, for the shell hooks that can only live
+ * where the event arrives: a widget message, a `checkpoint` behavior firing, a
+ * travel superseding a load in flight, and the shell's public load entry point.
+ * `undefined` means the module is off — save widget messages then fall through
+ * to gameplay as ordinary `ui-action` messages and checkpoints do nothing.
+ * Provided by: `saveGameModule`.
+ */
+export interface SaveGameCommands {
+  /** Handles a reserved `save:*` widget message; false = not ours, keep routing. */
+  handleUiMessage(message: string): boolean;
+  /** Autosaves into `slot` from a `checkpoint` behavior; never interrupts play. */
+  writeCheckpointSave(slot: string): void;
+  /** Loads a decoded payload: travels to its level, then restores after the build. */
+  requestSaveGameLoad(payload: unknown): boolean;
+  /** Drops a latched restore because a different travel superseded it. */
+  clearPendingRestore(): void;
+}
+
+export const saveGameCommandsService = runtimeServiceKey<SaveGameCommands>("save-game-commands");
 
 /** Read side of the spline-follower debug overlay (`?debug`) and browser smokes. */
 export interface SplineFollowerDebugSource {

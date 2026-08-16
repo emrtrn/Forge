@@ -14,6 +14,7 @@
 import type { CapabilityModule } from "./CapabilityModule";
 import { createDialogueModule } from "./dialogueModule";
 import { createMovingPlatformModule } from "./movingPlatformModule";
+import { createSaveGameModule } from "./saveGameModule";
 import { createSplineFollowerModule } from "./splineFollowerModule";
 
 export function createDefaultRuntimeModules(): CapabilityModule[] {
@@ -21,5 +22,6 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     createMovingPlatformModule(),
     createSplineFollowerModule(),
     createDialogueModule(),
+    createSaveGameModule(),
   ];
 }

@@ -22,7 +22,6 @@ const EXPECTED_RUNTIME_ONLY = [
   "auto-play-particles",
   "character-skeletons",
   "game-mode",
-  "save-game-restore",
   "runtime-ui",
   "quality-settings",
   "lod-bias",

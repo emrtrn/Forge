@@ -1,4 +1,12 @@
-import type { UiFieldValue } from "@engine/ui/uiViewModel";
+/**
+ * The reserved save-game slot set and its UI contract.
+ *
+ * Widget messages (`save:write|load|delete:<slot>`) and the `save.slots.*`
+ * ViewModel fields are the whole surface a HUD needs to drive save/load, so the
+ * slot list, the message parser and the field builder live together. Consumed by
+ * the save-game capability module; a fork restyles the widget, not this shape.
+ */
+import type { UiFieldValue } from "../ui/uiViewModel";
 
 export const SAVE_GAME_UI_SLOTS = [
   { slot: "quick", label: "Quick Save" },

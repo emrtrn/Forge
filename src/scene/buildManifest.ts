@@ -91,12 +91,12 @@ const RUNTIME_BUILD_MANIFEST: readonly BuildManifestStep[] = [
   runtimeOnly("auto-play-particles"),
   runtimeOnly("character-skeletons"),
   runtimeOnly("game-mode"),
-  runtimeOnly("save-game-restore"),
   runtimeOnly("runtime-ui"),
   runtimeOnly("quality-settings"),
   runtimeOnly("lod-bias"),
-  // Layer 2 modules run their own level setup here (dialogue asset registration
-  // and its script-message triggers moved into `dialogueModule` in Phase E).
+  // Layer 2 modules run their own level setup here: dialogue asset registration
+  // with its script-message triggers, and the save-game restore + slot-field
+  // seeding, both moved out of the shell in Phase E.
   runtimeOnly("capability-modules"),
   runtimeOnly("shader-warmup"),
 ];

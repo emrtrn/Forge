@@ -443,12 +443,12 @@ import {
   applySaveState,
   collectSaveState,
   consumeRestoreForLoadedLevel,
-} from "../src/game/saveGame";
+} from "../engine/persistence/saveGameState";
 import {
   buildSaveGameUiFields,
   emptySaveGameUiSlots,
   readSaveGameUiCommand,
-} from "../src/game/saveGameUi";
+} from "../engine/persistence/saveGameSlots";
 import { firstConnectedGamepad, readGamepadCodes } from "../src/input/gamepadInput";
 import { joystickMoveCodes, joystickVector } from "../src/input/virtualJoystick";
 import {
@@ -969,6 +969,7 @@ import { registerLevelRuntimeTests } from "../tests/engine/levelRuntime.test";
 import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegistry.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
 import { registerDialogueModuleTests } from "../tests/engine/dialogueModule.test";
+import { registerSaveGameModuleTests } from "../tests/engine/saveGameModule.test";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -987,6 +988,7 @@ await registerLevelRuntimeTests(check, checkAsync);
 await registerCapabilityRegistryTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
 await registerDialogueModuleTests(checkAsync);
+await registerSaveGameModuleTests(check, checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

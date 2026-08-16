@@ -1,15 +1,19 @@
 /**
- * Game save payload contract.
+ * Save payload contract: which runtime facts become a save-game payload, and how
+ * a loaded payload becomes a restore request.
  *
- * The engine persistence store only knows about opaque payloads. This module is
- * the game-owned serializer boundary: it chooses which runtime facts become a
- * save-game payload and how a loaded payload becomes a restore request.
+ * {@link SaveGameStore} next door owns only the storage mechanics and treats the
+ * payload as opaque; this module is the shape. It sits in the engine (not in
+ * `src/game`) because the facts it captures — the active level, the possessed
+ * pawn's transform, the behavior state explicitly opted into persistence — are
+ * platform facts every fork shares. The save-game *capability* that drives it is
+ * `src/scene/capabilities/saveGameModule.ts`, and capability modules may not
+ * import game code; project-specific save data belongs in a fork's own payload
+ * on top of this one, not in here.
  */
-import type {
-  PersistentScriptStateEntry,
-} from "@engine/behavior/behaviorSubsystem";
-import type { TransformComponent } from "@engine/scene/components";
-import type { SceneJsonValue } from "@engine/scene/entity";
+import type { PersistentScriptStateEntry } from "../behavior/behaviorSubsystem";
+import type { TransformComponent } from "../scene/components";
+import type { SceneJsonValue } from "../scene/entity";
 
 export interface SavedPlayerTransform {
   readonly position: readonly [number, number, number];

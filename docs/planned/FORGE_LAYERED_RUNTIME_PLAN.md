@@ -3,8 +3,8 @@
 
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
-> Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower)
-> ve E/2 (dialogue) tamam; sıradaki modül save-game.
+> Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
+> E/2 (dialogue) ve E/3 (save-game) tamam; sıradaki modül runtime-UI.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -118,7 +118,7 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | `movingPlatformSubsystem`, `splinePathFollowerSubsystem` | **2** | modüller (opt-in) |
 | `aiSubsystem` + `loadAiAssets` + nav | **2** | `aiModule` (opt-in) |
 | `setupDialogue` + `loadDialogueAssets` | **2** | `dialogueModule` (opt-in) |
-| `saveCoordinator` (`RuntimeSaveCoordinator`) | **2** | `saveGameModule` (opt-in) |
+| ~~`saveCoordinator` (`RuntimeSaveCoordinator`)~~ | **2** | ✅ `saveGameModule` (E/3) |
 | `setupRuntimeUi` + widget/locale/theme yükleme | **2** | `runtimeUiModule` (opt-in) |
 | `loadCharacterSkeletons` | **2** | `skeletalAnimationModule` (opt-in) |
 | `playAutoPlayAudio` / `playAutoPlayParticles` | **2** | `audioModule` / `vfxModule` (opt-in; auto-play hook) |
@@ -383,6 +383,50 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > Kapılar: `build:verify` uçtan uca yeşil (**938/938 engine check**). Browser:
 > `runtime-playflow`, `runtime-script-message`, `runtime-checkpoint` smoke'ları
 > geçiyor.
+
+> **Uygulama kaydı (2026-08-16, E/3 — save-game modülü):** Slot tabanlı
+> save/load'un tamamı `capabilities/saveGameModule.ts`'e taşındı: `SaveGameStore`,
+> bekleyen-restore mandalı, quick/slot yazma-yükleme-silme, checkpoint autosave,
+> ayrılmış `save:*` widget mesajları ve `save.slots.*` ViewModel alanları.
+> `src/scene/runtimeSaveCoordinator.ts` silindi; `RuntimeSceneApp`'ten
+> `saveCoordinator` alanı, `createRuntimeSaveGameStore`, `setStore`,
+> `applyPendingRestore` ve `refreshUiFields` çağrıları çıktı.
+>
+> **Sınır düzeltmesi:** capability modülleri `@/game` import edemez (I7 kapısı),
+> ama save sözleşmesi `src/game`'deydi. İçeriği zaten jenerikti (aktif level yolu,
+> pawn transformu, kalıcı behavior state'i) — bu yüzden `src/game/saveGame.ts` →
+> `engine/persistence/saveGameState.ts` ve `src/game/saveGameUi.ts` →
+> `engine/persistence/saveGameSlots.ts` olarak taşındı. Fork'a özel save verisi
+> bu payload'ın *üstüne* eklenir, içine değil.
+>
+> Modülün kabuktan istediği her şey servis üzerinden ve hepsi opsiyonel:
+> `project-identity` (slot ad alanı; proje asenkron yüklendiği için getter),
+> `gameplay-save-state` (capture/restore — canlı game-mode/karakter/behavior
+> state'i okuduğu için kabukta kaldı), `level-travel` (save yüklemek = kaydedilen
+> level'a travel + build sonrası restore), `ui-view-model` ve `ui-screen-stack`.
+> Kabuğun modülden istediği tek yüzey `save-game-commands`: widget mesajı,
+> checkpoint, travel'ın mandalı düşürmesi ve public `requestSaveGameLoad` — dördü
+> de olayın geldiği yerde çözülüyor. Modül kapalıyken `resolve` `undefined` döner:
+> checkpoint hacmi hâlâ geçerli bir tetikleyicidir, sadece yazacak yeri yoktur ve
+> `save:*` mesajları normal `ui-action` olarak gameplay'e düşer (I3).
+>
+> **Sıra değişikliği (bilinçli):** restore + slot alanlarının doldurulması artık
+> `onLevelLoaded` içinde, yani `setupRuntimeUi`'dan *sonra* çalışıyor (eskiden
+> hemen `startGameMode` sonrasıydı). Aradaki adımların hiçbiri kalıcı behavior
+> state'ini ya da pawn transformunu okumuyor ve hepsi ilk kareden önce, yükleme
+> ekranı hâlâ açıkken bitiyor; alan tazelemesi `flush()` ile bittiği için açık bir
+> menü de anında güncelleniyor. `buildManifest`'teki ayrı `save-game-restore`
+> runtime adımı bu yüzden kaldırıldı — iş `capability-modules` adımının içinde.
+>
+> Yeni birim testi `tests/engine/saveGameModule.test.ts` (4 kontrol): slot yazma +
+> UI alanları + level eşleşmeli restore (yanlış level'da mandalda kalır, doğru
+> level'da bir kez uygulanır), checkpoint autosave + travel'ın mandalı düşürmesi,
+> host servisleri eksikken bozulmadan çalışma, ve modülsüz runtime'da komut
+> yüzeyinin hiç var olmaması.
+>
+> Kapılar: `build:verify` uçtan uca yeşil (**942/942 engine check**),
+> `verify:imports` PASS. Browser: `runtime-checkpoint` (33.3 sn),
+> `runtime-playflow` (37.0 sn) ve `runtime-portal` (40.7 sn) smoke'ları geçiyor.
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

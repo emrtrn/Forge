@@ -971,6 +971,7 @@ import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCap
 import { registerDialogueModuleTests } from "../tests/engine/dialogueModule.test";
 import { registerSaveGameModuleTests } from "../tests/engine/saveGameModule.test";
 import { registerRuntimeUiModuleTests } from "../tests/engine/runtimeUiModule.test";
+import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAnimationModule.test";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -991,6 +992,7 @@ registerRuntimeCapabilityModuleTests(check);
 await registerDialogueModuleTests(checkAsync);
 await registerSaveGameModuleTests(check, checkAsync);
 await registerRuntimeUiModuleTests(check, checkAsync);
+await registerSkeletalAnimationModuleTests(check, checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

@@ -16,6 +16,7 @@
  */
 import type { Vector3 } from "three";
 
+import type { AssetManifest } from "@engine/assets/manifest";
 import type {
   ScriptMessageEnvelope,
   ScriptMessagePayload,
@@ -36,6 +37,8 @@ import type { LocaleRegistry } from "@engine/ui/uiLocale";
 import type { UiViewModelStore } from "@engine/ui/uiViewModel";
 import type { UiSubsystemDebugSnapshot } from "@/ui/RuntimeUiSubsystem";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
+
+import type { AssetSkeletonDef } from "../assetSkeletonLoader";
 
 import { runtimeServiceKey } from "./RuntimeServices";
 
@@ -233,6 +236,38 @@ export interface SaveGameCommands {
 }
 
 export const saveGameCommandsService = runtimeServiceKey<SaveGameCommands>("save-game-commands");
+
+/**
+ * The active project's asset manifest. Modules that need it at level time read
+ * `context.assetLoader` instead; this exists for the ones the shell calls
+ * *during* a build, before their level hook has run.
+ * Provided by: the runtime shell (owner of the asset loader).
+ */
+export const assetManifestService =
+  runtimeServiceKey<() => Promise<AssetManifest | null>>("asset-manifest");
+
+/**
+ * Authored skeletal metadata (`*.skeleton.json`): blend spaces, the anim-set
+ * role map, sockets, notifies, montages and root motion. One capability owns
+ * loading and caching them; attaching a def to a character stays with the shell,
+ * because a character ref is a Game Mode (Layer 3) type — Phase F moves that
+ * boundary, not this one.
+ *
+ * Switched off, every character resolves to no metadata: it still renders and
+ * plays its authored clip, but with no blend spaces, root motion or notifies —
+ * exactly what a game with no skeletal characters wants to stop paying for.
+ * Provided by: `skeletalAnimationModule`.
+ */
+export interface SkeletonLibrary {
+  /**
+   * Loads the sidecars for these model assets, deduped per asset and cached
+   * until the level unloads. An asset with no sidecar resolves to the safe empty
+   * default, so a caller can attach the result unconditionally.
+   */
+  load(assetIds: readonly string[]): Promise<ReadonlyMap<string, AssetSkeletonDef>>;
+}
+
+export const skeletonLibraryService = runtimeServiceKey<SkeletonLibrary>("skeleton-library");
 
 /** Read side of the spline-follower debug overlay (`?debug`) and browser smokes. */
 export interface SplineFollowerDebugSource {

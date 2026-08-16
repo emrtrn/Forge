@@ -16,12 +16,14 @@ import { createDialogueModule } from "./dialogueModule";
 import { createMovingPlatformModule } from "./movingPlatformModule";
 import { createRuntimeUiModule } from "./runtimeUiModule";
 import { createSaveGameModule } from "./saveGameModule";
+import { createSkeletalAnimationModule } from "./skeletalAnimationModule";
 import { createSplineFollowerModule } from "./splineFollowerModule";
 
 export function createDefaultRuntimeModules(): CapabilityModule[] {
   return [
     createMovingPlatformModule(),
     createSplineFollowerModule(),
+    createSkeletalAnimationModule(),
     createDialogueModule(),
     // The UI mounts before save-game so the save menu's slot fields are seeded
     // into an already-bound widget (order here is setup order, never tick order).

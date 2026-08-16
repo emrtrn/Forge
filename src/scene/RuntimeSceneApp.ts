@@ -26,8 +26,10 @@ import {
   movingPlatformQueryService,
   projectIdentityService,
   saveGameCommandsService,
+  assetManifestService,
   localizationService,
   scriptMessageBusService,
+  skeletonLibraryService,
   splineFollowerDebugService,
   splineRegistrySourceService,
   uiDebugService,
@@ -353,11 +355,6 @@ import {
   resolveMeshMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/scene/assetMaterialSlotsLoader";
-import {
-  defaultAssetSkeleton,
-  loadAssetSkeleton,
-  type AssetSkeletonDef,
-} from "@/scene/assetSkeletonLoader";
 import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
@@ -998,6 +995,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.travelCoordinator.enqueueLevelTravel(levelPath),
     );
     this.runtimeServices.provide(uiViewModelService, this.uiStore);
+    // Read at call time: the manifest only exists once the project has loaded.
+    this.runtimeServices.provide(assetManifestService, async () =>
+      this.assetLoader ? await this.assetLoader.loadManifest() : null,
+    );
     // What the UI capability needs back from the shell: the input edge, the
     // input-mode switch a screen forces, the canvas size and the reserved
     // widget-message chain.
@@ -2315,7 +2316,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Character skeletal metadata (blend spaces / anim-set) drives the Game Mode's
     // locomotion animator, so attach it to the refs before the session possesses.
     this.setLoadingStatus("Starting");
-    await this.loadCharacterSkeletons();
+    await this.attachCharacterSkeletons();
     await this.startGameMode();
     this.setupRuntimeUi();
     // Apply the persisted graphics profile now that the scene's lights + composer
@@ -3311,29 +3312,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Loads each character's `*.skeleton.json` sidecar (deduped per asset) and
-   * attaches the result to every {@link RuntimeCharacterRef}. The Game Mode reads
-   * `ref.skeleton` to drive blend-space locomotion; assets without a sidecar get
-   * the safe empty default. Runs after the refs are built, before possession.
+   * Attaches each character's authored skeletal metadata, which the Game Mode
+   * reads at possession to drive blend-space locomotion. The sidecars themselves
+   * are loaded and cached by the skeletal-animation capability; with that module
+   * off, `ref.skeleton` stays absent and every consumer falls back to its
+   * no-metadata path. Runs after the refs are built, before possession — which
+   * is why the shell drives it rather than the module's own level hook.
    */
-  private async loadCharacterSkeletons(): Promise<void> {
-    if (!this.assetLoader || this.characterRefs.length === 0) return;
-    const manifest = await this.assetLoader.loadManifest();
-    const byAsset = new Map<string, Promise<AssetSkeletonDef>>();
-    const skeletonFor = (assetId: string): Promise<AssetSkeletonDef> => {
-      let pending = byAsset.get(assetId);
-      if (!pending) {
-        const asset = manifest.assets.find((entry) => entry.id === assetId);
-        pending = asset ? loadAssetSkeleton(assetPath(asset)) : Promise.resolve(defaultAssetSkeleton());
-        byAsset.set(assetId, pending);
-      }
-      return pending;
-    };
-    await Promise.all(
-      this.characterRefs.map(async (ref) => {
-        ref.skeleton = await skeletonFor(ref.placement.assetId);
-      }),
-    );
+  private async attachCharacterSkeletons(): Promise<void> {
+    if (this.characterRefs.length === 0) return;
+    const library = this.runtimeServices.resolve(skeletonLibraryService);
+    if (!library) return;
+    const loaded = await library.load(this.characterRefs.map((ref) => ref.placement.assetId));
+    for (const ref of this.characterRefs) {
+      const skeleton = loaded.get(ref.placement.assetId);
+      if (skeleton) ref.skeleton = skeleton;
+    }
   }
 
   /** Maps manifest `sound`, `soundCue`, and effect asset ids to fetchable file URLs. */

@@ -4,8 +4,8 @@
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
 > Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
-> E/2 (dialogue), E/3 (save-game) ve E/4 (runtime-UI) tamam; sıradaki modül
-> skeletal-animation.
+> E/2 (dialogue), E/3 (save-game), E/4 (runtime-UI) ve E/5 (skeletal) tamam;
+> sıradaki modül character-movement.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -121,7 +121,7 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | `setupDialogue` + `loadDialogueAssets` | **2** | `dialogueModule` (opt-in) |
 | ~~`saveCoordinator` (`RuntimeSaveCoordinator`)~~ | **2** | ✅ `saveGameModule` (E/3) |
 | ~~`setupRuntimeUi` + widget/theme yükleme~~ | **2** | ✅ `runtimeUiModule` (E/4); locale kabukta (dialogue ile paylaşımlı), kurallar Katman 3 |
-| `loadCharacterSkeletons` | **2** | `skeletalAnimationModule` (opt-in) |
+| ~~`loadCharacterSkeletons`~~ | **2** | ✅ `skeletalAnimationModule` (E/5); sidecar kütüphanesi modülde, ref'e iliştirme Faz F'ye kadar kabukta |
 | `playAutoPlayAudio` / `playAutoPlayParticles` | **2** | `audioModule` / `vfxModule` (opt-in; auto-play hook) |
 | `startGameMode` + `gameModes/registry` | **3** | Game modülü zaten burada; genişletilir |
 | `behaviorSubsystem` + `createSceneBehaviorRegistry` | **2/3** | Behavior çekirdeği modül; kurallar fork'ta |
@@ -481,6 +481,39 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > `verify:imports` PASS. Browser: `runtime-playflow`, `runtime-checkpoint`,
 > `runtime-portal`, `runtime-locomotion`, `runtime-script-message` smoke'ları
 > geçiyor (5/5).
+
+> **Uygulama kaydı (2026-08-16, E/5 — skeletal-animation modülü):**
+> `capabilities/skeletalAnimationModule.ts`, `*.skeleton.json` sidecar
+> kütüphanesinin (blend space, anim-set rol haritası, socket, notify, montage,
+> root motion) tek sahibi: varlık başına tek fetch, level boyunca cache, level
+> boşalınca sıfırlama. Kabuktaki `loadCharacterSkeletons` gitti.
+>
+> **Sınır (Faz F'ye kadar bilinçli yarım):** modül def'i karaktere *iliştirmiyor*.
+> `RuntimeCharacterRef` bir Game Mode tipi (Katman 3, `src/game/gameModes/types.ts`)
+> ve capability modülü `@/game` import edemez; üstelik metadata Game Mode pawn'ı
+> sahiplenmeden **önce** hazır olmalı, bu da her capability'nin `onLevelLoaded`
+> hook'undan önce gelen bir an. Bu yüzden kabuk `skeleton-library` servisini o
+> noktada çağırıp tek satırlık iliştirmeyi kendi yapıyor
+> (`attachCharacterSkeletons`). Game Mode'un kendisi modül olduğunda (Faz F) bu
+> sıra kısıtı ortadan kalkar ve iliştirme de modüle geçebilir.
+>
+> Modül kapalıyken `resolve` `undefined` döner, iliştirme adımı no-op olur ve her
+> karakterin `ref.skeleton`'ı yok kalır: karakter hâlâ render edilir ve yazılmış
+> klibini oynatır, yalnız blend space / root motion / notify devre dışı kalır —
+> iskeletsiz bir oyunun hiç ödemek istemediği maliyet (I3).
+>
+> Yeni kabuk servisi `asset-manifest` (`() => Promise<AssetManifest | null>`):
+> level hook'undan *önce* kabuk tarafından çağrılan modüller manifest'i
+> `context.assetLoader`'dan alamaz. Dar ve yeniden kullanılabilir.
+>
+> Yeni birim testi `tests/engine/skeletalAnimationModule.test.ts` (3 kontrol):
+> yerleşim sayısından bağımsız varlık başına tek fetch + eksik sidecar'ın boş
+> varsayılana düşmesi + level başına cache sıfırlanması, manifest yokken
+> varsayılana düşme, ve modül kapalıyken kütüphanenin hiç var olmaması.
+>
+> Kapılar: `build:verify` yeşil (**948/948 engine check**), `verify:imports` PASS.
+> Browser: `runtime-locomotion`, `runtime-playflow`, `ai-patrol` (iskelet
+> metadatasını gerçekten kullanan üç smoke) geçiyor.
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

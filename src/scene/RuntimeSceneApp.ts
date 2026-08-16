@@ -23,10 +23,11 @@ import {
   dialogueAudioService,
   gameplaySaveStateService,
   levelTravelService,
-  movingPlatformQueryService,
   projectIdentityService,
   saveGameCommandsService,
   assetManifestService,
+  characterMovementHostService,
+  characterMovementQueryService,
   localizationService,
   scriptMessageBusService,
   skeletonLibraryService,
@@ -36,6 +37,7 @@ import {
   uiHostService,
   uiPresenterService,
   uiViewModelService,
+  type CharacterMovementQuery,
   type RuntimeUiPresenter,
   type SaveGameCommands,
 } from "./capabilities/runtimeServiceKeys";
@@ -113,7 +115,7 @@ import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import { CharacterMovementSubsystem, type CharacterMoveIntent } from "@engine/movement/characterMovementSubsystem";
+import type { CharacterMoveIntent } from "@engine/movement/characterMovementSubsystem";
 import type { Aabb3 } from "@engine/movement/characterCollision";
 import {
   DEFAULT_LOCOMOTION_THRESHOLDS,
@@ -669,7 +671,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the shared services the two sides resolve each other through.
    */
   private readonly runtimeServices: RuntimeServiceHost;
-  private readonly characterMovementSubsystem: CharacterMovementSubsystem;
   /** Owns every AIController possessing an NPC pawn (decision tick lands in Faz 2). */
   private readonly aiSubsystem = new AISubsystem({
     taskRegistry: createGameAiTaskRegistry(),
@@ -954,10 +955,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // time, so they stay correct across level rebuilds (the spline registry is
     // replaced per level) and do not constrain module start order.
     this.runtimeServices.provide(splineRegistrySourceService, () => this.splineRegistry);
-    this.runtimeServices.provide(characterTransformResetService, (entityId, transform) => {
-      this.characterMovementSubsystem.resetEntityTransform(entityId, transform);
-      this.syncEntityTransform(entityId, transform);
-    });
     this.runtimeServices.provide(scriptMessageBusService, {
       subscribe: (type, handler) => this.behaviorSubsystem.subscribeScriptMessage(type, handler),
       emit: (type, source, payload) =>
@@ -1109,33 +1106,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Layer 2 attaches here: modules create their subsystems, queue them into a
     // tick slot and publish their services before the shell's own subsystems
     // are queued, so a module's slot — not its start order — fixes its tick.
-    this.capabilities.runtimeStart(this.runtimeServices);
-    this.characterMovementSubsystem = new CharacterMovementSubsystem(
-      this.inputActions,
-      this.syncEntityTransform,
-      this.physicsSubsystem,
-      {
-        getGravityY: () => this.gravityY,
-        getControlYaw: (entityId) => this.gameModeSession?.controlYawForEntity?.(entityId),
-        reportLocomotion: (entityId, report) => {
-          this.locomotionReports.set(entityId, report);
-        },
-        dynamicBlockers: (entityId) => this.characterBlockerAabbs(entityId),
-        isPlayerControlled: (entityId) =>
-          this.inputMode !== "ui" &&
-          this.gameModeSession?.playerState.pawnEntityId === entityId &&
-          !this.gameModeSession.playerState.pawnControlSuspended,
-        getMoveIntent: (entityId, transform, deltaSeconds) =>
-          this.aiMoveIntentForEntity(entityId, transform, deltaSeconds),
-        // Resolved per call, so the solver simply sees no platforms when the
-        // moving-platform module is switched off (I3) — and does not care
-        // whether that module attached before or after it.
-        platforms: {
-          platforms: () =>
-            this.runtimeServices.resolve(movingPlatformQueryService)?.platforms() ?? [],
-        },
+    // The world the movement solver moves characters through: input, physics,
+    // level gravity, the Game Mode's yaw + possession, AI intents and the
+    // locomotion sink. All live shell state, so the capability is handed it
+    // rather than reaching for it.
+    this.runtimeServices.provide(characterMovementHostService, {
+      actions: this.inputActions,
+      physics: this.physicsSubsystem,
+      getGravityY: () => this.gravityY,
+      getControlYaw: (entityId) => this.gameModeSession?.controlYawForEntity?.(entityId),
+      isPlayerControlled: (entityId) =>
+        this.inputMode !== "ui" &&
+        this.gameModeSession?.playerState.pawnEntityId === entityId &&
+        !this.gameModeSession.playerState.pawnControlSuspended,
+      getMoveIntent: (entityId, transform, deltaSeconds) =>
+        this.aiMoveIntentForEntity(entityId, transform, deltaSeconds),
+      reportLocomotion: (entityId, report) => {
+        this.locomotionReports.set(entityId, report);
       },
-    );
+      dynamicBlockers: (entityId) => this.characterBlockerAabbs(entityId),
+    });
+    this.capabilities.runtimeStart(this.runtimeServices);
 
     // Tick order is declared by slot, not by registration sequence: see
     // RUNTIME_TICK_SLOTS for what each slot means and why the order matters.
@@ -1146,7 +1137,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // is consumed by the same frame's movement resolve. In Faz 1 the subsystem
     // holds controllers + blackboards only and does no per-frame work.
     this.runtimeServices.addSubsystem("decision", this.aiSubsystem);
-    this.runtimeServices.addSubsystem("movement", this.characterMovementSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       this.createSceneBehaviorRegistry(),
@@ -1179,7 +1169,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           // AddImpulse vs LaunchCharacter (A6).
           addImpulse: (entityId, impulse) => this.physicsSubsystem.applyImpulse(entityId, impulse),
           launch: (entityId, velocity, launchOptions) =>
-            this.characterMovementSubsystem.launch(entityId, velocity, launchOptions),
+            this.characterMovement()?.launch(entityId, velocity, launchOptions),
           spawn: (request) => {
             this.spawnCoordinator.enqueueRuntimeActor(request);
           },
@@ -1189,7 +1179,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         // subsystem the simulated dynamic bodies; character wins when both exist.
         velocityProvider: {
           velocityOf: (entityId) =>
-            this.characterMovementSubsystem.velocityOf(entityId) ??
+            this.characterMovement()?.velocityOf(entityId) ??
             this.physicsSubsystem.velocityOf(entityId),
         },
       },
@@ -1724,7 +1714,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private aiAgentClearanceView(): AiNavAgentClearanceView[] {
     const out: AiNavAgentClearanceView[] = [];
     for (const entityId of this.aiPathFollowing.keys()) {
-      const transform = this.characterMovementSubsystem.transformOf(entityId);
+      const transform = this.characterMovement()?.transformOf(entityId) ?? null;
       if (!transform) continue;
       const agent = this.aiNavAgentForEntity(entityId);
       out.push({
@@ -1746,7 +1736,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private requestAiMove(request: AiMoveRequest): AiBehaviorStatus {
     const entityId = request.controller.pawnEntityId;
-    const transform = this.characterMovementSubsystem.transformOf(entityId);
+    const transform = this.characterMovement()?.transformOf(entityId) ?? null;
     if (!transform) return "failure";
     const acceptanceRadius = request.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
     if (distance3d(transform.position, request.position) <= acceptanceRadius) {
@@ -2013,7 +2003,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Every other live character (player + NPCs) as a separation neighbor. */
   private aiSeparationNeighbors(entityId: string): AvoidanceNeighbor[] {
     const neighbors: AvoidanceNeighbor[] = [];
-    this.characterMovementSubsystem.forEachCharacter((otherId, other) => {
+    this.characterMovement()?.forEachCharacter((otherId, other) => {
       if (otherId === entityId) return;
       neighbors.push({
         position: other.position,
@@ -2031,7 +2021,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private characterBlockerAabbs(excludeEntityId: string): Aabb3[] {
     const blockers: Aabb3[] = [];
-    this.characterMovementSubsystem.forEachCharacter((entityId, transform) => {
+    this.characterMovement()?.forEachCharacter((entityId, transform) => {
       if (entityId === excludeEntityId) return;
       const half = this.physicsSubsystem.colliderHalfExtents(entityId);
       if (!half) return;
@@ -2067,7 +2057,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       locomotionReportOf: (entityId) => this.locomotionReports.get(entityId),
       movementModeOf: (entityId) => this.possessedMovementMode(entityId),
       positionOf: (entityId) => {
-        const transform = this.characterMovementSubsystem.transformOf(entityId);
+        const transform = this.characterMovement()?.transformOf(entityId) ?? null;
         return transform
           ? [transform.position[0], transform.position[1], transform.position[2]]
           : null;
@@ -2296,7 +2286,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       sceneDocument,
       physics: this.physicsSubsystem,
       moduleSinks: this.runtimeServices.entitySinks(),
-      characterMovement: this.characterMovementSubsystem,
       ai: this.aiSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
@@ -2426,6 +2415,26 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * registered. Resolved at call time so a fork's module set — not this shell —
    * decides whether saving exists at all.
    */
+  /**
+   * The character movement solver's read side, or undefined when no movement
+   * capability is registered — in which case there simply are no solved
+   * characters, which every caller here already handles.
+   */
+  private characterMovement(): CharacterMovementQuery | undefined {
+    return this.runtimeServices.resolve(characterMovementQueryService);
+  }
+
+  /**
+   * Teleports a character: through the solver when one exists (so it does not
+   * overwrite the write from its stale local copy next frame), directly to
+   * render/physics otherwise.
+   */
+  private resetCharacterTransform(entityId: string, transform: TransformComponent): void {
+    const reset = this.runtimeServices.resolve(characterTransformResetService);
+    if (reset) reset(entityId, transform);
+    else this.syncEntityTransform(entityId, transform);
+  }
+
   private saveGameCommands(): SaveGameCommands | undefined {
     return this.runtimeServices.resolve(saveGameCommandsService);
   }
@@ -2796,7 +2805,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // were already emptied by `capabilities.levelUnloaded()` at the top.)
     this.animationSubsystem.clear();
     this.physicsSubsystem.setEntities([]);
-    this.characterMovementSubsystem.clear();
     this.aiPathFollowing.clear();
     this.navGridCache.clear();
     this.navBlockerRevisionRef = null;
@@ -3713,8 +3721,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!target) return;
     const reset = cloneTransform(target);
     this.locomotionReports.delete(entityId);
-    this.characterMovementSubsystem.resetEntityTransform(entityId, reset);
-    this.syncEntityTransform(entityId, reset);
+    this.resetCharacterTransform(entityId, reset);
   }
 
   private applySavedPlayerTransform(player: SavedPlayerTransform): void {
@@ -3728,9 +3735,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       scale: [...current.scale],
     };
     this.locomotionReports.delete(entityId);
-    this.characterMovementSubsystem.resetEntityTransform(entityId, restored);
     this.behaviorSubsystem.resetEntityTransform(entityId, restored);
-    this.syncEntityTransform(entityId, restored);
+    this.resetCharacterTransform(entityId, restored);
     this.pawnRespawnTransforms.set(entityId, cloneTransform(restored));
   }
 

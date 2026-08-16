@@ -17,10 +17,16 @@
 import type { Vector3 } from "three";
 
 import type { AssetManifest } from "@engine/assets/manifest";
+import type { LaunchOptions, PhysicsQuery } from "@engine/behavior/behaviorSubsystem";
 import type {
   ScriptMessageEnvelope,
   ScriptMessagePayload,
 } from "@engine/behavior/scriptMessages";
+import type { ActionMap } from "@engine/input/actionMap";
+import type { CharacterMoveIntent } from "@engine/movement/characterMovementSubsystem";
+import type { Aabb3 } from "@engine/movement/characterCollision";
+import type { LocomotionInput } from "@engine/movement/locomotionAnimation";
+import type { TransformComponent } from "@engine/scene/components";
 import type {
   DialogueAudioPlayback,
   DialogueAudioRequest,
@@ -62,11 +68,71 @@ export const splineRegistrySourceService =
  * Teleports an entity in the character movement solver's own state and syncs
  * the result to render/physics. A mover that writes a transform directly (a
  * spline route) must call this, or the solver overwrites it from its stale
- * local copy on the next frame.
- * Provided by: the runtime shell (character movement is still baked in).
+ * local copy on the next frame. `undefined` means no solver exists, so the
+ * mover writes the transform directly.
+ * Provided by: `characterMovementModule`.
  */
 export const characterTransformResetService =
   runtimeServiceKey<PhysicsTransformSink>("character-transform-reset");
+
+/**
+ * Reading the character movement solver's live state. Everything the shell asks
+ * of the solver from outside its own tick: where a character is, how fast it is
+ * going, iterating them all (neighbor avoidance, blocker AABBs) and launching
+ * one (knockback). `undefined` means no solver is registered, and every caller
+ * degrades to "there are no solved characters" — the case a top-down game with
+ * no pawns wants.
+ * Provided by: `characterMovementModule`.
+ */
+export interface CharacterMovementQuery {
+  transformOf(entityId: string): TransformComponent | null;
+  velocityOf(entityId: string): readonly [number, number, number] | null;
+  forEachCharacter(
+    visit: (entityId: string, transform: Readonly<TransformComponent>) => void,
+  ): void;
+  launch(
+    entityId: string,
+    velocity: readonly [number, number, number],
+    options?: LaunchOptions,
+  ): void;
+}
+
+export const characterMovementQueryService =
+  runtimeServiceKey<CharacterMovementQuery>("character-movement-query");
+
+/**
+ * What the movement solver needs from the world it moves characters through.
+ * All of it is shell-owned live state — gravity from the level, control yaw and
+ * possession from the Game Mode (Layer 3), AI move intents, the physics query
+ * the solver traces against — so it is handed in rather than reached for.
+ * Without it the module registers no solver at all: there is nothing to move
+ * characters *with*.
+ * Provided by: the runtime shell.
+ */
+export interface CharacterMovementHost {
+  /** Input actions the possessed pawn is driven by. */
+  readonly actions: ActionMap;
+  /** Collider/ground queries the solver traces against (Layer 1 physics). */
+  readonly physics: PhysicsQuery;
+  getGravityY(): number;
+  /** Camera-relative yaw the Game Mode wants this entity to move along. */
+  getControlYaw(entityId: string): number | null | undefined;
+  /** True only for the pawn the Game Mode possessed, while input is not in UI. */
+  isPlayerControlled(entityId: string): boolean;
+  /** This frame's AI move intent for a non-possessed character, if any. */
+  getMoveIntent(
+    entityId: string,
+    transform: Readonly<TransformComponent>,
+    deltaSeconds: number,
+  ): CharacterMoveIntent | null | undefined;
+  /** Publishes the per-frame locomotion snapshot HUD/animation read. */
+  reportLocomotion(entityId: string, report: LocomotionInput): void;
+  /** Other characters' AABBs, so pawns do not walk through each other. */
+  dynamicBlockers(entityId: string, transform: Readonly<TransformComponent>): readonly Aabb3[];
+}
+
+export const characterMovementHostService =
+  runtimeServiceKey<CharacterMovementHost>("character-movement-host");
 
 /**
  * The script-message bus: how gameplay triggers a capability ("play-dialogue")

@@ -12,6 +12,7 @@
  * state), hence a factory rather than a shared constant.
  */
 import type { CapabilityModule } from "./CapabilityModule";
+import { createCharacterMovementModule } from "./characterMovementModule";
 import { createDialogueModule } from "./dialogueModule";
 import { createMovingPlatformModule } from "./movingPlatformModule";
 import { createRuntimeUiModule } from "./runtimeUiModule";
@@ -23,6 +24,9 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
   return [
     createMovingPlatformModule(),
     createSplineFollowerModule(),
+    // Registered after the platform module purely for readability — the solver
+    // resolves platforms per call, and its tick comes from the `movement` slot.
+    createCharacterMovementModule(),
     createSkeletalAnimationModule(),
     createDialogueModule(),
     // The UI mounts before save-game so the save menu's slot fields are seeded

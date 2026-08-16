@@ -4,8 +4,8 @@
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
 > Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
-> E/2 (dialogue), E/3 (save-game), E/4 (runtime-UI) ve E/5 (skeletal) tamam;
-> sıradaki modül character-movement.
+> E/2 (dialogue), E/3 (save-game), E/4 (runtime-UI), E/5 (skeletal) ve E/6
+> (character-movement) tamam; sıradaki modül AI.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -115,7 +115,7 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | `buildScene` sahne içeriği: instances, char-mesh, light, sky, fog, cloud, reflection*, post, landscape, foliage, spline, blocking-volume, material, UVW, shape, collider derivation | **1** | `LevelRuntime` içinde tek pipeline; editör + runtime çağırır |
 | `applySkyAtmosphere` ↔ `applyRuntimeSky` (ve tüm ikizler, AUDIT §2) | **1** | Tek metot, `mode` bayrağı |
 | `physicsSubsystem` (Rapier), collider box'lar | **1** | LevelRuntime (fizik sahne içeriğinin parçası) |
-| `characterMovementSubsystem` | **2** | `characterMovementModule` (opt-in) |
+| ~~`characterMovementSubsystem`~~ | **2** | ✅ `characterMovementModule` (E/6); solver `src/game` → `engine/movement/` taşındı |
 | `movingPlatformSubsystem`, `splinePathFollowerSubsystem` | **2** | modüller (opt-in) |
 | `aiSubsystem` + `loadAiAssets` + nav | **2** | `aiModule` (opt-in) |
 | `setupDialogue` + `loadDialogueAssets` | **2** | `dialogueModule` (opt-in) |
@@ -514,6 +514,64 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > Kapılar: `build:verify` yeşil (**948/948 engine check**), `verify:imports` PASS.
 > Browser: `runtime-locomotion`, `runtime-playflow`, `ai-patrol` (iskelet
 > metadatasını gerçekten kullanan üç smoke) geçiyor.
+
+> **Uygulama kaydı (2026-08-16, E/6 — character-movement modülü, iki commit):**
+>
+> **Hazırlık commit'i (`7630b38`) — solver `src/game`'den çıktı.** Plan
+> `CharacterMovementSubsystem`'i Katman 2 sayıyor, ama solver ve altı yardımcısı
+> `src/game`'deydi; capability modülü `@/game` import edemez (E/3'teki save
+> sözleşmesiyle aynı sınır). Yedisi de saf, varlıktan bağımsız karakter-hareket
+> matematiği — içlerinde tek bir proje kuralı yok — bu yüzden değişmeden
+> `engine/movement/` altına taşındı:
+>
+> - `characterMovementSystem.ts` → `characterMovementSubsystem.ts`
+> - `playerMovement.ts` → `planarMovement.ts` ("player" bir oyun kavramı)
+> - `collision.ts` → `characterCollision.ts` (`engine/scene/collision.ts` ile
+>   karışmasın)
+> - `verticalMotion`, `slopeSurface`, `uphillSlowdown`, `locomotionAnimation`
+>
+> ~20 import yeri yeniden yazıldı, mantık değişmedi. Yan kazanç: editör kabuğu
+> `src/scene/SceneApp.ts` artık collision/slope yardımcıları için `@/game`'e
+> uzanmıyor. **Fork notu:** bu dosyalar fork'un sahip olduğu `src/game`
+> ağacından çıktı; upstream sync yapan bir fork onları yer değiştirmiş görecek.
+>
+> **Modül commit'i — `capabilities/characterMovementModule.ts`.** Kapsül
+> çarpışması, zemin probu/step-up, eğim, yerçekimi ve zıplama, knockback launch,
+> hareketli platform binme: hepsi `movement` slotunda tick'leyen modülde.
+> `RuntimeSceneApp`'ten `characterMovementSubsystem` alanı ve 14 çağrı yeri
+> çıktı; `startSceneRuntime`'daki ayrı `characterMovement` sink'i yerini modülün
+> kendi `addEntitySink`'ine bıraktı.
+>
+> Kabuk tek bir toplu servis veriyor — `character-movement-host`: input action'ları,
+> physics query'si, level yerçekimi, Game Mode'un control yaw'ı ve possess durumu,
+> AI move-intent'i, locomotion rapor sink'i, dinamik blocker AABB'leri. Hepsi
+> canlı kabuk/Katman 3 durumu olduğu için modüle *verilir*, modül onlara uzanmaz.
+> Host yoksa modül solver'ı **hiç kaydetmez** — hareket ettirecek bir dünya yok.
+> Platformlar istisna: çağrı anında `moving-platform-query`'den çözülüyor, yani
+> iki modülün bağlanma sırası önemsiz.
+>
+> Modülün yayımladıkları: `character-movement-query` (transformOf, velocityOf,
+> forEachCharacter, launch) ve `character-transform-reset` — ikincisinin
+> sağlayıcısı kabuktan modüle geçti, tüketicileri (spline follower) değişmedi.
+> Kabuk `resetCharacterTransform` ile ışınlıyor: solver varsa onun üzerinden
+> (yoksa bir sonraki kare bayat kopyasından geri yazar), yoksa doğrudan
+> render/physics'e.
+>
+> Modül kapalıyken karakterler pawn olarak simüle edilmez: level, mesh'leri,
+> fizik gövdeleri ve script'leri aynen durur, kabuğun transform/velocity
+> sorguları "çözülmüş karakter yok" der. Planın var oluş sebebi olan
+> tepeden-bakışlı / pawn'sız senaryo tam olarak budur (I3).
+>
+> Yeni birim testi `tests/engine/characterMovementModule.test.ts` (4 kontrol):
+> solver kurulumu + iki yüzeyin yayımlanması + entity beslemesi, reset servisinin
+> hem solver'ı hem render'ı hizalaması ve level teardown'ında boşalması,
+> platform modülü *sonra* kaydolsa bile tembel çözülmesi (slot sırası korunur),
+> ve host yokken hiçbir şeyin kaydolmaması.
+>
+> Kapılar: `build:verify` yeşil (**952/952 engine check**), `verify:imports` PASS.
+> Browser: sekiz smoke geçiyor — `runtime-locomotion`, `runtime-checkpoint`,
+> `runtime-portal`, `runtime-playflow`, `runtime-script-message`, `ai-patrol`,
+> `ai-navigation-clearance` (editör + runtime).
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

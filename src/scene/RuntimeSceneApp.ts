@@ -29,6 +29,9 @@ import {
   characterMovementHostService,
   characterMovementQueryService,
   localizationService,
+  aiCommandsService,
+  aiDebugService,
+  aiHostService,
   scriptMessageBusService,
   skeletonLibraryService,
   splineFollowerDebugService,
@@ -37,6 +40,7 @@ import {
   uiHostService,
   uiPresenterService,
   uiViewModelService,
+  type AiNavigationDebugSnapshot,
   type CharacterMovementQuery,
   type RuntimeUiPresenter,
   type SaveGameCommands,
@@ -55,54 +59,13 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import type { ScriptMessagePayload } from "@engine/behavior/scriptMessages";
-import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
-import { createTargetPointIndex, targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
-import type { AiMoveRequest } from "@engine/ai/behaviorRunner";
-import {
-  normalizeAiBehaviorTreeAsset,
-  normalizeAiBlackboardAsset,
-  type AiBehaviorStatus,
-  type AiBehaviorTreeAsset,
-  type AiBlackboardAsset,
-} from "@engine/ai/behaviorAsset";
-import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
+import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
-import { resolveCharacterCapsule } from "@engine/scene/capsule";
-import {
-  findGridPath,
-  searchNavGrid,
-  NavGridCache,
-  advanceWaypoint,
-  type NavAgent,
-  type NavAabb,
-  type NavBlocker,
-  type PathFollowingState,
-} from "@engine/navigation/gridNavigation";
-import { resolveNavAgentProfile } from "@engine/navigation/navAgentProfile";
-import {
-  freshStuckState,
-  isStuck,
-  separationSteering,
-  updateStuckState,
-  type AvoidanceNeighbor,
-  type StuckState,
-} from "@engine/navigation/localAvoidance";
-import {
-  createAiNavigationView,
-  disposeAiNavigationView,
-  inflateNavBlocker2d,
-  type AiNavAgentClearanceView,
-  type AiPerceptionView,
-  type AiQueryCandidateView,
-  type AiTargetPointRouteView,
-} from "@engine/render-three/aiNavigationView";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
-import { collapseCoincidentFloors, findGroundLayersAt } from "@engine/movement/characterCollision";
-import { slopeCosFromDegrees } from "@engine/movement/slopeSurface";
 import type {
   DialogueAudioPlayback,
   DialogueAudioRequest,
@@ -115,7 +78,6 @@ import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import type { CharacterMoveIntent } from "@engine/movement/characterMovementSubsystem";
 import type { Aabb3 } from "@engine/movement/characterCollision";
 import {
   DEFAULT_LOCOMOTION_THRESHOLDS,
@@ -300,7 +262,6 @@ import {
 } from "@engine/render-three/spline";
 import { splineDeformMeshColliderPrimitive } from "@engine/render-three/splineDeformMesh";
 import { normalizeSplineGenerators, resolveSplineDeformMeshGenerator } from "@engine/scene/splineGenerator";
-import { aiNavigationVolumeAabb } from "@engine/render-three/aiNavigationVolume";
 import { readRotation, readScale } from "@engine/scene/transform";
 import { createSplineRegistry, type SplineQuery, type SplineRegistry } from "@engine/scene/splineRegistry";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
@@ -394,7 +355,6 @@ import {
   COLLIDER_COMPONENT,
   readAudioComponent,
   readAIControllerComponent,
-  readBehaviorComponent,
   readCharacterMovementComponent,
   readColliderComponent,
   readLightComponent,
@@ -484,47 +444,11 @@ export interface AdaptiveDebugSnapshot {
   lastChange: { record: AdaptiveChangeRecord; ageSeconds: number } | null;
 }
 
-interface RuntimeAiPathFollowing {
-  goal: Vec3;
-  /** Spline tangent supplied by patrol authoring; nav heading remains authoritative near blockers. */
-  preferredDirection?: Vec3;
-  speed?: number;
-  acceptanceRadius?: number;
-  state: PathFollowingState;
-  /** Progress window feeding stuck detection (replan / give up). */
-  stuck: StuckState;
-  /** Stuck-recovery replans burned on the current goal. */
-  replans: number;
-}
-
 interface RuntimeAiCharacterAnimator {
   readonly ref: RuntimeCharacterRef;
   readonly animator: CrossfadeAnimator;
   readonly config: ReturnType<typeof locomotionConfigForSkeleton>;
   oneShot: { clip: string; remaining: number; blendOutSeconds: number } | null;
-}
-
-/** One AI path follower's live state for the `?debug` overlay. */
-export interface AiNavFollowerDebug {
-  readonly entityId: string;
-  readonly status: PathFollowingState["status"];
-  readonly waypointIndex: number;
-  readonly pathLength: number;
-  readonly path: readonly Vec3[];
-  readonly goal: Vec3;
-  readonly speed?: number;
-  readonly acceptanceRadius?: number;
-  readonly replans: number;
-  readonly secondsWithoutProgress: number;
-}
-
-export interface AiNavigationDebugSnapshot {
-  readonly blockers: readonly NavAabb[];
-  readonly inflatedBlockers: readonly NavBlocker[];
-  readonly agentClearances: readonly AiNavAgentClearanceView[];
-  readonly bounds: readonly NavAabb[];
-  readonly cellSize: number;
-  readonly followers: readonly AiNavFollowerDebug[];
 }
 
 /** Active-gameplay seconds before the one-time startup measurement pass fires
@@ -542,47 +466,6 @@ const ADAPTIVE_PROFILER_WINDOW_FRAMES = 60;
  * hot path — the frame-time `metrics()` percentile sort runs only on this cadence
  * (accumulated delta is passed through, so cooldown/stable timers stay accurate). */
 const ADAPTIVE_TICK_INTERVAL_SECONDS = 0.5;
-
-const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
-const AI_NAV_CELL_SIZE = 0.5;
-const AI_NAV_GRID_SAFETY_MARGIN = AI_NAV_CELL_SIZE * 0.5;
-const AI_NAV_MIN_TOP_SUPPORT_RADIUS = 0.15;
-/**
- * Acceptance radius for intermediate path waypoints. Kept tight (independent of
- * the authored final-goal acceptance) so a generous goal tolerance can't make
- * the agent skip a corner waypoint early and cut through an inflated blocker.
- */
-const AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE = Math.min(AI_NAV_CELL_SIZE * 0.35, 0.2);
-/** How strongly agent-separation steering blends into the desired path direction. */
-const AI_SEPARATION_WEIGHT = 0.75;
-/** Spline patrols stay on their authored rail; nearby actors may nudge, not redirect, them. */
-const AI_SPLINE_SEPARATION_WEIGHT = 0.25;
-/** Spline tangent influence when a nav path points broadly in the same direction. */
-const AI_SPLINE_TANGENT_STEERING_WEIGHT = 0.35;
-/** Stuck recoveries (replans) per goal before the move fails outright. */
-const AI_MAX_STUCK_REPLANS = 2;
-/**
- * Granularity the agent foot height is snapped to when keying a baked nav grid.
- * Baking is per foot-plane (it decides which blockers are vertical obstacles), so
- * without bucketing an agent's per-frame Y jitter would rebuild the grid every
- * tick. Half a cell is coarse enough to keep the cache stable on flat ground yet
- * fine enough to separate distinct floors.
- */
-const AI_NAV_FOOT_Y_BUCKET = AI_NAV_CELL_SIZE;
-
-function bucketNavFootY(footY: number): number {
-  if (!Number.isFinite(footY)) return 0;
-  return Math.round(footY / AI_NAV_FOOT_Y_BUCKET) * AI_NAV_FOOT_Y_BUCKET;
-}
-
-/** Cheap order-sensitive signature of authored nav bounds for cache invalidation. */
-function navBoundsSignature(bounds: readonly NavAabb[]): string {
-  let signature = "";
-  for (const bound of bounds) {
-    signature += `${bound.min[0]},${bound.min[1]},${bound.min[2]},${bound.max[0]},${bound.max[1]},${bound.max[2]};`;
-  }
-  return signature;
-}
 
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
@@ -629,15 +512,6 @@ export interface RuntimeSceneAppOptions {
   readonly capabilities?: readonly CapabilityModule[];
 }
 
-const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
-  "Damage.Apply",
-  "Damage.Died",
-  "damage",
-  "alert",
-  "ui-action",
-  "game-event",
-] as const;
-
 const AI_ATTACK_ANIMATION_MESSAGE_TYPES = ["ai.attack.intent", "boss.attack.intent"] as const;
 
 /**
@@ -671,28 +545,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the shared services the two sides resolve each other through.
    */
   private readonly runtimeServices: RuntimeServiceHost;
-  /** Owns every AIController possessing an NPC pawn (decision tick lands in Faz 2). */
-  private readonly aiSubsystem = new AISubsystem({
-    taskRegistry: createGameAiTaskRegistry(),
-    blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
-    perceptionSourceFilter: (entity) => this.isAiPerceptionSource(entity),
-    qualityFocusPosition: () => this.qualityFocusPosition(),
-  });
-  private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
-  /**
-   * Bakes one nav grid per agent profile and reuses it across path queries while
-   * static blockers + nav bounds are unchanged (the Unreal navmesh-bake analogue).
-   * Keyed by {@link aiNavRevisionToken}; rebuilds automatically when that token
-   * changes. Only used when an AI Navigation Volume supplies query-independent
-   * bounds — otherwise the grid extent depends on start/goal and can't be baked.
-   */
-  private readonly navGridCache = new NavGridCache();
-  /** Last static-blocker array identity seen; a new reference bumps the revision. */
-  private navBlockerRevisionRef: readonly NavAabb[] | null = null;
-  private navSurfaceRevisionRef: ReturnType<PhysicsSubsystem["staticSurfaceTriangles"]> | null = null;
-  private navBlockerRevision = 0;
   private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
-  private aiNavigationView: Group | null = null;
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
   /** Manifest soundCue asset id -> fetchable file URL. */
@@ -872,7 +725,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Unsubscribe for the `game-event` script-message bridge into the rules store. */
   private gameEventUnsub: (() => void) | null = null;
   /** Unsubscribes script-message -> AI perception stimulus bridge handlers. */
-  private aiStimulusUnsubs: Array<() => void> = [];
   /** Unsubscribes AI attack intent -> one-shot animation bridge handlers. */
   private aiAttackAnimationUnsubs: Array<() => void> = [];
   /** True once the win/loss screen for the current terminal round has been pushed. */
@@ -932,7 +784,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly syncEntityTransform = (entityId: string, transform: TransformComponent): void => {
     this.applyEntityTransformToRender(entityId, transform);
     this.physicsSubsystem.setEntityTransform(entityId, transform);
-    this.aiSubsystem.updateEntityTransform(entityId, transform);
+    // Perception reads entity transforms, so a write made outside the solver has
+    // to reach the AI capability too — resolved per call, absent when it is off.
+    this.runtimeServices.resolve(aiCommandsService)?.updateEntityTransform(entityId, transform);
   };
 
   constructor(canvas: HTMLCanvasElement, options: RuntimeSceneAppOptions = {}) {
@@ -957,8 +811,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.provide(splineRegistrySourceService, () => this.splineRegistry);
     this.runtimeServices.provide(scriptMessageBusService, {
       subscribe: (type, handler) => this.behaviorSubsystem.subscribeScriptMessage(type, handler),
-      emit: (type, source, payload) =>
-        this.behaviorSubsystem.emitScriptMessage(type, source, payload),
+      emit: (type, source, payload, target) =>
+        this.behaviorSubsystem.emitScriptMessage(type, source, payload, target),
     });
     this.runtimeServices.provide(dialogueAudioService, (request) =>
       this.playDialogueAudio(request),
@@ -1119,12 +973,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.inputMode !== "ui" &&
         this.gameModeSession?.playerState.pawnEntityId === entityId &&
         !this.gameModeSession.playerState.pawnControlSuspended,
+      // Resolved per call, so a runtime with no AI capability simply never has
+      // an intent for a character and the solver leaves it to input alone.
       getMoveIntent: (entityId, transform, deltaSeconds) =>
-        this.aiMoveIntentForEntity(entityId, transform, deltaSeconds),
+        this.runtimeServices
+          .resolve(aiCommandsService)
+          ?.moveIntentFor(entityId, transform, deltaSeconds),
       reportLocomotion: (entityId, report) => {
         this.locomotionReports.set(entityId, report);
       },
       dynamicBlockers: (entityId) => this.characterBlockerAabbs(entityId),
+    });
+    // The world the AI capability perceives and plans through. Everything here is
+    // shell-owned (the physics-derived nav world, the focus point, the locomotion
+    // sink) except the task registry, which is the game's own Layer 3 vocabulary
+    // injected through the shell because a capability may not import `@/game`.
+    this.runtimeServices.provide(aiHostService, {
+      debug: this.debug,
+      taskRegistry: createGameAiTaskRegistry(),
+      navigation: this.physicsSubsystem,
+      qualityFocusPosition: () => this.qualityFocusPosition(),
+      reportIdleLocomotion: (entityId) => this.reportAiIdleLocomotion(entityId),
     });
     this.capabilities.runtimeStart(this.runtimeServices);
 
@@ -1133,10 +1002,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.addSubsystem("pre-physics", this.animationSubsystem);
     this.runtimeServices.addSubsystem("pre-physics", this.inputSubsystem);
     this.runtimeServices.addSubsystem("physics", this.physicsSubsystem);
-    // AI decisions tick before character movement so an agent's move-intent (Faz 3)
-    // is consumed by the same frame's movement resolve. In Faz 1 the subsystem
-    // holds controllers + blackboards only and does no per-frame work.
-    this.runtimeServices.addSubsystem("decision", this.aiSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       this.createSceneBehaviorRegistry(),
@@ -1184,16 +1049,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         },
       },
     );
-    this.aiSubsystem.configure({
-      emitMessage: (message) =>
-        this.behaviorSubsystem.emitScriptMessage(
-          message.type,
-          message.source,
-          message.payload,
-          message.target,
-        ),
-      moveTo: (request) => this.requestAiMove(request),
-    });
     this.runtimeServices.addSubsystem("gameplay", this.behaviorSubsystem);
     this.runtimeServices.addSubsystem("presentation", this.audioSubsystem);
     this.runtimeServices.addSubsystem("presentation", this.vfxSubsystem);
@@ -1359,7 +1214,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.camera.position,
         this.qualitySettings.foliageCullDistanceScale,
       );
-      if (this.debug) this.updateAiNavigationDebugView();
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
@@ -1376,12 +1230,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
-    this.clearAiScriptStimulusBridge();
     this.clearAiAttackAnimationBridge();
     this.gameStateStore = null;
     this.loadingOverlay?.dispose();
     this.loadingOverlay = null;
-    this.removeAiNavigationDebugView();
     this.keyboardInput.detach();
     this.gamepadInput.detach();
     this.touchInput?.detach();
@@ -1457,7 +1309,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   applyQualityExtensions(extensions: QualityExtensions): void {
     this.qualityExtensions = { ...extensions };
-    this.aiSubsystem.setDistanceUpdateSettings(
+    this.runtimeServices.resolve(aiCommandsService)?.setDistanceUpdateSettings(
       extensions.aiUpdateHz !== undefined ? { farUpdateHz: extensions.aiUpdateHz } : {},
     );
     this.animationSubsystem.setDistanceUpdateSettings(
@@ -1567,9 +1419,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.behaviorSubsystem.getScriptMessageDebugSnapshot();
   }
 
-  /** Snapshots the AI subsystem (active controllers + blackboards) for `?debug`. */
+  /**
+   * Snapshots the AI subsystem (active controllers + blackboards) for `?debug`.
+   * Reports a disabled, controller-less AI when no AI capability is registered.
+   */
   getAiDebugSnapshot(): AiDebugSnapshot {
-    return this.aiSubsystem.getDebugSnapshot();
+    return (
+      this.runtimeServices.resolve(aiDebugService)?.controllers() ?? {
+        enabled: false,
+        controllerCount: 0,
+        controllers: [],
+      }
+    );
   }
 
   /** Public runtime spline facade for game systems; never exposes mutable layout data. */
@@ -1590,237 +1451,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.runtimeServices.resolve(splineFollowerDebugService)?.followers() ?? [];
   }
 
-  /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */
+  /**
+   * Snapshots AI path following (waypoints, stuck recovery) for `?debug`. Empty
+   * when no AI capability is registered: nothing is planning a path, so there is
+   * no nav world to describe either.
+   */
   getAiNavigationDebugSnapshot(): AiNavigationDebugSnapshot {
-    const blockers = this.physicsSubsystem.staticNavigationBlockerAabbs();
-    const agentClearances = this.aiAgentClearanceView();
-    const maxClearance = Math.max(0, ...agentClearances.map((clearance) => clearance.radius));
-    return {
-      blockers,
-      inflatedBlockers: maxClearance > 0 ? blockers.map((blocker) => inflateNavBlocker2d(blocker, maxClearance)) : [],
-      agentClearances,
-      bounds: this.aiNavigationBounds(),
-      cellSize: AI_NAV_CELL_SIZE,
-      followers: [...this.aiPathFollowing.entries()].map(([entityId, follow]) => ({
-        entityId,
-        status: follow.state.status,
-        waypointIndex: follow.state.waypointIndex,
-        pathLength: follow.state.path.length,
-        path: follow.state.path,
-        goal: follow.goal,
-        ...(follow.speed !== undefined ? { speed: follow.speed } : {}),
-        ...(follow.acceptanceRadius !== undefined ? { acceptanceRadius: follow.acceptanceRadius } : {}),
-        replans: follow.replans,
-        secondsWithoutProgress: follow.stuck.secondsWithoutProgress,
-      })),
-    };
-  }
-
-  private updateAiNavigationDebugView(): void {
-    this.removeAiNavigationDebugView();
-    const snapshot = this.getAiNavigationDebugSnapshot();
-    const perception = this.aiPerceptionView();
-    const queries = this.aiQueryView();
-    const routes = this.aiTargetPointRouteView();
-    if (
-      snapshot.followers.length === 0 &&
-      snapshot.blockers.length === 0 &&
-      snapshot.inflatedBlockers.length === 0 &&
-      snapshot.agentClearances.length === 0 &&
-      snapshot.bounds.length === 0 &&
-      perception.length === 0 &&
-      queries.length === 0 &&
-      routes.length === 0
-    ) return;
-    this.aiNavigationView = createAiNavigationView({
-      blockers: snapshot.blockers,
-      inflatedBlockers: snapshot.inflatedBlockers,
-      agentClearances: snapshot.agentClearances,
-      bounds: snapshot.bounds,
-      cellSize: snapshot.cellSize,
-      followers: snapshot.followers,
-      perception,
-      queries,
-      routes,
-    });
-    this.scene.add(this.aiNavigationView);
-  }
-
-  /** Target Point patrol route overlay: markers, `next` links, active AI highlight. */
-  private aiTargetPointRouteView(): AiTargetPointRouteView[] {
-    const points = this.layout?.targetPoints ?? [];
-    if (points.length === 0) return [];
-    const index = createTargetPointIndex(targetPointEntriesFromLayout(points));
-    const activeIds = new Set<string>();
-    for (const controller of this.aiSubsystem.getDebugSnapshot().controllers) {
-      for (const entry of controller.blackboard.entries) {
-        if (typeof entry.value === "string" && entry.value.length > 0) activeIds.add(entry.value);
+    return (
+      this.runtimeServices.resolve(aiDebugService)?.navigation() ?? {
+        blockers: [],
+        inflatedBlockers: [],
+        agentClearances: [],
+        bounds: [],
+        cellSize: 0,
+        followers: [],
       }
-    }
-    return index.all().map((entry) => {
-      const next = index.next(entry.id);
-      return {
-        id: entry.id,
-        position: entry.position,
-        next: next ? next.position : null,
-        ...(activeIds.has(entry.id) ? { active: true } : {}),
-      };
-    });
+    );
   }
 
-  private aiPerceptionView(): AiPerceptionView[] {
-    return this.aiSubsystem.getDebugSnapshot().controllers
-      .filter((controller) => controller.position && controller.forward && controller.perceptionConfig)
-      .map((controller) => ({
-        entityId: controller.pawnEntityId,
-        position: controller.position!,
-        forward: controller.forward!,
-        ...(controller.perceptionConfig!.sightRadius !== undefined
-          ? { sightRadius: controller.perceptionConfig!.sightRadius }
-          : {}),
-        ...(controller.perceptionConfig!.fieldOfViewDeg !== undefined
-          ? { fieldOfViewDeg: controller.perceptionConfig!.fieldOfViewDeg }
-          : {}),
-        ...(controller.perceptionConfig!.hearingRadius !== undefined
-          ? { hearingRadius: controller.perceptionConfig!.hearingRadius }
-          : {}),
-      }));
-  }
-
-  private aiQueryView(): AiQueryCandidateView[] {
-    const out: AiQueryCandidateView[] = [];
-    for (const controller of this.aiSubsystem.getDebugSnapshot().controllers) {
-      const query = controller.query;
-      if (!query) continue;
-      const winnerId = query.winner?.id ?? null;
-      const candidates = query.candidates.length > 0
-        ? query.candidates
-        : query.winner
-          ? [query.winner]
-          : [];
-      for (const candidate of candidates) {
-        out.push({
-          ...(candidate.entityId ? { entityId: candidate.entityId } : {}),
-          position: candidate.position,
-          score: candidate.score,
-          failedTests: candidate.failedTests,
-          winner: candidate.id === winnerId,
-        });
-      }
-    }
-    return out;
-  }
-
-  private aiAgentClearanceView(): AiNavAgentClearanceView[] {
-    const out: AiNavAgentClearanceView[] = [];
-    for (const entityId of this.aiPathFollowing.keys()) {
-      const transform = this.characterMovement()?.transformOf(entityId) ?? null;
-      if (!transform) continue;
-      const agent = this.aiNavAgentForEntity(entityId);
-      out.push({
-        entityId,
-        position: transform.position,
-        agentRadius: Math.max(0, agent.radius),
-        radius: this.aiEffectiveClearanceRadius(agent),
-      });
-    }
-    return out;
-  }
-
-  private removeAiNavigationDebugView(): void {
-    if (!this.aiNavigationView) return;
-    this.scene.remove(this.aiNavigationView);
-    disposeAiNavigationView(this.aiNavigationView);
-    this.aiNavigationView = null;
-  }
-
-  private requestAiMove(request: AiMoveRequest): AiBehaviorStatus {
-    const entityId = request.controller.pawnEntityId;
-    const transform = this.characterMovement()?.transformOf(entityId) ?? null;
-    if (!transform) return "failure";
-    const acceptanceRadius = request.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
-    if (distance3d(transform.position, request.position) <= acceptanceRadius) {
-      this.aiPathFollowing.delete(entityId);
-      if (request.preserveLocomotionOnSuccess !== true) this.reportAiIdleLocomotion(entityId);
-      return "success";
-    }
-    const existing = this.aiPathFollowing.get(entityId);
-    if (!existing || !samePoint3d(existing.goal, request.position)) {
-      const path = this.buildAiPath(entityId, transform.position, request.position);
-      if (path.status === "failure" || path.points.length < 2) {
-        this.aiPathFollowing.set(entityId, {
-          goal: [...request.position],
-          ...(request.preferredDirection ? { preferredDirection: [...request.preferredDirection] } : {}),
-          ...(request.speed !== undefined ? { speed: request.speed } : {}),
-          ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
-          state: { path: [], waypointIndex: 0, status: "failure" },
-          stuck: freshStuckState(transform.position),
-          replans: 0,
-        });
-        return "failure";
-      }
-      this.aiPathFollowing.set(entityId, {
-        goal: [...request.position],
-        ...(request.preferredDirection ? { preferredDirection: [...request.preferredDirection] } : {}),
-        ...(request.speed !== undefined ? { speed: request.speed } : {}),
-        ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
-        state: { path: path.points, waypointIndex: 1, status: "following" },
-        stuck: freshStuckState(transform.position),
-        replans: 0,
-      });
-      return "running";
-    }
-    if (existing.speed !== request.speed) {
-      if (request.speed === undefined) {
-        delete existing.speed;
-      } else {
-        existing.speed = request.speed;
-      }
-    }
-    if (existing.acceptanceRadius !== request.acceptanceRadius) {
-      if (request.acceptanceRadius === undefined) {
-        delete existing.acceptanceRadius;
-      } else {
-        existing.acceptanceRadius = request.acceptanceRadius;
-      }
-    }
-    if (request.preferredDirection) {
-      existing.preferredDirection = [...request.preferredDirection];
-    } else {
-      delete existing.preferredDirection;
-    }
-    // A memoized failure (unreachable goal or exhausted stuck recovery) keeps
-    // failing this goal until the task asks for a different one — replanning
-    // the same unreachable goal every behavior tick would re-run A* for nothing.
-    return existing.state.status === "failure" ? "failure" : "running";
-  }
-
-  private buildAiPath(entityId: string, start: Vec3, goal: Vec3) {
-    const bounds = this.aiNavigationBounds();
-    const agent = this.aiNavAgentForEntity(entityId);
-    const blockers = this.physicsSubsystem.staticNavigationBlockerAabbs();
-    if (bounds.length === 0) {
-      // No authored AI Navigation Volume: the grid extent is derived from
-      // start/goal, so it is single-query only and can't be baked/reused.
-      return findGridPath({ start, goal: [...goal], agent, blockers, cellSize: AI_NAV_CELL_SIZE });
-    }
-    const surfaces = this.physicsSubsystem.staticNavigationSurfaceTriangles();
-    // Bounded case: bake once per agent profile and reuse across queries. The
-    // grid rebuilds automatically when a static blocker moves or a nav volume is
-    // edited (both fold into the revision token), so there is no manual build.
-    const navFootY = bucketNavFootY(start[1]);
-    const grid = this.navGridCache.getOrBuild(this.aiNavRevisionToken(blockers, surfaces, bounds), {
-      agent,
-      blockers,
-      bounds,
-      footY: navFootY,
-      cellSize: AI_NAV_CELL_SIZE,
-      sampleFloorYs: this.aiNavFloorSampler(blockers, surfaces, bounds, agent, navFootY),
-    });
-    if (!grid) return { status: "failure" as const, points: [], visited: 0 };
-    return searchNavGrid(grid, start, goal);
-  }
-
+  /**
+   * Settles an agent into idle the frame its move ends at the goal, instead of
+   * leaving the last walking report standing. Handed to the AI capability as
+   * part of its host: the locomotion reports are the shell's.
+   */
   private reportAiIdleLocomotion(entityId: string): void {
     const previous = this.locomotionReports.get(entityId);
     this.locomotionReports.set(entityId, {
@@ -1828,195 +1481,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       grounded: previous?.grounded ?? true,
       velocityY: 0,
     });
-  }
-
-  /**
-   * Revision token for the baked nav grid cache: bumps a counter whenever the
-   * physics static-blocker array is rebuilt (identity changes on spawn/destroy/
-   * move/collision-toggle) and folds in an authored-bounds signature, so any
-   * change to obstacles or nav volumes invalidates every cached grid.
-   */
-  private aiNavRevisionToken(
-    blockers: readonly NavAabb[],
-    surfaces: ReturnType<PhysicsSubsystem["staticSurfaceTriangles"]>,
-    bounds: readonly NavAabb[],
-  ): string {
-    if (blockers !== this.navBlockerRevisionRef) {
-      this.navBlockerRevisionRef = blockers;
-      this.navBlockerRevision += 1;
-    }
-    if (surfaces !== this.navSurfaceRevisionRef) {
-      this.navSurfaceRevisionRef = surfaces;
-      this.navBlockerRevision += 1;
-    }
-    return `${this.navBlockerRevision}|${navBoundsSignature(bounds)}`;
-  }
-
-  private aiNavigationBounds(): NavAabb[] {
-    const bounds: NavAabb[] = [];
-    for (const volume of this.layout?.aiNavigationVolumes ?? []) {
-      const bound = aiNavigationVolumeAabb(volume);
-      if (!bound) continue;
-      bounds.push({
-        min: [bound.min[0], bound.min[1], bound.min[2]],
-        max: [bound.max[0], bound.max[1], bound.max[2]],
-      });
-    }
-    return bounds;
-  }
-
-  private aiNavAgentForEntity(entityId: string): NavAgent {
-    const entity = this.actorEntityById.get(entityId);
-    const movement = entity ? readCharacterMovementComponent(entity) : undefined;
-    const navAgent = entity ? readAIControllerComponent(entity)?.navAgent : undefined;
-    const characterCapsule = entity && movement ? resolveCharacterCapsule(entity) : undefined;
-    return resolveNavAgentProfile({
-      ...(navAgent ? { navAgent } : {}),
-      ...(movement ? { movement } : {}),
-      colliderHalfExtents:
-        characterCapsule?.halfExtents ?? this.physicsSubsystem.colliderHalfExtents(entityId),
-    });
-  }
-
-  private aiNavFloorSampler(
-    blockers: readonly NavAabb[],
-    surfaces: ReturnType<PhysicsSubsystem["staticSurfaceTriangles"]>,
-    bounds: readonly NavAabb[],
-    agent: NavAgent,
-    preferredFloorY: number,
-  ): (x: number, z: number) => readonly number[] | null {
-    const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
-    const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? 50);
-    return (x, z) => {
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (const bound of bounds) {
-        if (x < bound.min[0] || x > bound.max[0] || z < bound.min[2] || z > bound.max[2]) continue;
-        minY = Math.min(minY, bound.min[1]);
-        maxY = Math.max(maxY, bound.max[1]);
-      }
-      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY < minY) return null;
-      const hits = findGroundLayersAt([x, maxY, z], blockers, {
-        footprintHalf,
-        maxStepUp: 0,
-        maxStepDown: maxY - minY,
-        surfaces,
-        maxSlopeCos,
-        preferredFloorY,
-        requiredSupportRadius: Math.min(Math.max(0, agent.radius), AI_NAV_MIN_TOP_SUPPORT_RADIUS),
-        // Recast walkableHeight: reject floor cells with less than the agent's
-        // height of clearance above them, so no nav floor is baked under a
-        // ramp/stair (nor on a wedge's downward-facing underside).
-        requiredHeadroom: Math.max(0, agent.height),
-        respectNavigationRole: true,
-      });
-      // Collapse near-coincident walkable surfaces into a single navigable floor,
-      // keeping the highest of each cluster. A solid floor mesh (`complexAsSimple`)
-      // reports both its top face and its slab underside/thickness as walkable
-      // layers a few centimetres apart; CharacterMovement grounds the pawn on the
-      // highest one, but the multi-layer nav grid would otherwise keep the lower
-      // phantom layer and route the path through it — leaving interior waypoints
-      // below the walking pawn. The follower's tight vertical acceptance can't
-      // clear that gap, so the agent stalls a few steps in. Surfaces within the
-      // agent's step height are one floor it can freely traverse, so this matches
-      // movement while leaving genuinely distinct floors (upper platforms) intact.
-      const layers = collapseCoincidentFloors(
-        hits.map((hit) => hit.floorY),
-        Math.max(agent.stepHeight ?? 0, 1e-3),
-      );
-      return layers.length > 0 ? layers : null;
-    };
-  }
-
-  private aiEffectiveClearanceRadius(agent: NavAgent): number {
-    return Math.max(0, agent.radius) + Math.max(0, agent.clearancePadding ?? 0) + AI_NAV_GRID_SAFETY_MARGIN;
-  }
-
-  private aiMoveIntentForEntity(
-    entityId: string,
-    transform: Readonly<TransformComponent>,
-    deltaSeconds: number,
-  ): CharacterMoveIntent | null {
-    const follow = this.aiPathFollowing.get(entityId);
-    if (!follow || follow.state.status !== "following") return null;
-    let state = follow.state;
-    const advance = advanceWaypoint(state.path, state.waypointIndex, transform.position, {
-      final: follow.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS,
-      intermediate: AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE,
-    });
-    if (advance.arrived) {
-      this.aiPathFollowing.delete(entityId);
-      return { direction: [0, 0], speed: 0 };
-    }
-    if (advance.waypointIndex !== state.waypointIndex) {
-      state = { ...state, waypointIndex: advance.waypointIndex };
-      follow.state = state;
-    }
-    let target = state.path[state.waypointIndex];
-    if (!target) {
-      this.aiPathFollowing.delete(entityId);
-      return null;
-    }
-    // Stuck recovery: no planar progress for a while means something the grid
-    // doesn't know about (usually another agent) is blocking the lane. Replan
-    // from the current position, and fail the move once replanning stops helping.
-    follow.stuck = updateStuckState(follow.stuck, transform.position, deltaSeconds);
-    if (isStuck(follow.stuck)) {
-      follow.stuck = freshStuckState(transform.position);
-      follow.replans += 1;
-      const path =
-        follow.replans > AI_MAX_STUCK_REPLANS
-          ? null
-          : this.buildAiPath(entityId, transform.position, follow.goal);
-      if (!path || path.status === "failure" || path.points.length < 2) {
-        follow.state = { path: [], waypointIndex: 0, status: "failure" };
-        return null;
-      }
-      follow.state = { path: path.points, waypointIndex: 1, status: "following" };
-      target = follow.state.path[1]!;
-    }
-    const dx = target[0] - transform.position[0];
-    const dz = target[2] - transform.position[2];
-    const length = Math.hypot(dx, dz);
-    // Local avoidance: blend a separation push away from nearby characters into
-    // the path direction so agents shoulder past each other instead of stacking.
-    const separation = separationSteering(
-      transform.position,
-      this.aiNavAgentForEntity(entityId).radius,
-      this.aiSeparationNeighbors(entityId),
-    );
-    const pathDirection: [number, number] = length > 0 ? [dx / length, dz / length] : [0, 0];
-    const steered = blendAiPathDirection(pathDirection, follow.preferredDirection);
-    const separationWeight = follow.preferredDirection
-      ? AI_SPLINE_SEPARATION_WEIGHT
-      : AI_SEPARATION_WEIGHT;
-    const direction: [number, number] = [
-      steered[0] + separation[0] * separationWeight,
-      steered[1] + separation[1] * separationWeight,
-    ];
-    return {
-      direction,
-      ...(follow.speed !== undefined ? { speed: follow.speed } : {}),
-    };
-  }
-
-  /** Every other live character (player + NPCs) as a separation neighbor. */
-  private aiSeparationNeighbors(entityId: string): AvoidanceNeighbor[] {
-    const neighbors: AvoidanceNeighbor[] = [];
-    this.characterMovement()?.forEachCharacter((otherId, other) => {
-      if (otherId === entityId) return;
-      neighbors.push({
-        position: other.position,
-        radius: this.aiNavAgentForEntity(otherId).radius,
-      });
-    });
-    return neighbors;
-  }
-
-  private isAiPerceptionSource(entity: Entity): boolean {
-    if (readCharacterMovementComponent(entity)) return true;
-    if (readAIControllerComponent(entity)) return true;
-    return readBehaviorComponent(entity)?.scriptId === "input-move";
   }
 
   private characterBlockerAabbs(excludeEntityId: string): Aabb3[] {
@@ -2264,8 +1728,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     await this.loadCollisionDefs();
     await this.populateAssetUrls();
-    await this.loadAiAssets();
-    this.aiSubsystem.setTargetPoints(targetPointEntriesFromLayout(this.layout.targetPoints));
+    // The AI capability's assets and Target Point routes must be resolved before
+    // the entity set below derives its controllers — a controller's blackboard
+    // schema is read out of those assets as it is built.
+    await this.runtimeServices.resolve(aiCommandsService)?.prepareLevel(this.layout);
     const baseDocument = roomLayoutToSceneDocument(this.layout, {
       colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
@@ -2286,11 +1752,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       sceneDocument,
       physics: this.physicsSubsystem,
       moduleSinks: this.runtimeServices.entitySinks(),
-      ai: this.aiSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
-    this.bindAiScriptStimulusBridge();
     this.bindAiAttackAnimationBridge();
     // Auto-play audio/particles must never abort scene start: a single bad cue or
     // emitter cannot be allowed to stop the game mode + UI (lines below) from
@@ -2372,42 +1836,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     } catch (error) {
       console.warn("[runtime] shader warm-up failed; continuing without preload:", describeLoadError(error));
     }
-  }
-
-  private async loadAiAssets(): Promise<void> {
-    if (!this.assetLoader) return;
-    const manifest = await this.assetLoader.loadManifest();
-    const blackboards = new Map<string, AiBlackboardAsset>();
-    const behaviors = new Map<string, AiBehaviorTreeAsset>();
-    const stateTrees = new Map<string, AiStateTreeAsset>();
-    await Promise.all(
-      manifest.assets.map(async (asset) => {
-        const type = assetType(asset);
-        if (type !== "blackboard" && type !== "behaviorTree" && type !== "stateTree") return;
-        const path = assetPath(asset);
-        try {
-          const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
-          if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-          const json = await response.json();
-          if (type === "blackboard") {
-            const blackboard = normalizeAiBlackboardAsset(json);
-            blackboards.set(asset.id, blackboard);
-            blackboards.set(path, blackboard);
-          } else if (type === "stateTree") {
-            const stateTree = normalizeAiStateTreeAsset(json);
-            stateTrees.set(asset.id, stateTree);
-            stateTrees.set(path, stateTree);
-          } else {
-            const behavior = normalizeAiBehaviorTreeAsset(json);
-            behaviors.set(asset.id, behavior);
-            behaviors.set(path, behavior);
-          }
-        } catch (error) {
-          console.warn("[ai] failed to load AI asset", path, describeLoadError(error));
-        }
-      }),
-    );
-    this.aiSubsystem.setAssetLibrary({ blackboards, behaviors, stateTrees });
   }
 
   /**
@@ -2791,7 +2219,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.activeGameMode = null;
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
-    this.clearAiScriptStimulusBridge();
     this.clearAiAttackAnimationBridge();
     this.gameStateStore = null;
     this.gameOutcomeShown = false;
@@ -2805,11 +2232,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // were already emptied by `capabilities.levelUnloaded()` at the top.)
     this.animationSubsystem.clear();
     this.physicsSubsystem.setEntities([]);
-    this.aiPathFollowing.clear();
-    this.navGridCache.clear();
-    this.navBlockerRevisionRef = null;
     this.aiCharacterAnimators.clear();
-    this.aiSubsystem.setEntities([]);
     this.behaviorSubsystem.setEntities([]);
     this.splineRegistry = createSplineRegistry();
 
@@ -2942,25 +2365,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.pawnRespawnTransforms.clear();
     this.activeInteractionPromptEntityId = null;
     this.interactionPromptElement.hidden = true;
-  }
-
-  private bindAiScriptStimulusBridge(): void {
-    this.clearAiScriptStimulusBridge();
-    this.aiStimulusUnsubs = AI_SCRIPT_STIMULUS_MESSAGE_TYPES.map((type) =>
-      this.behaviorSubsystem.subscribeScriptMessage(type, (envelope) => {
-        this.aiSubsystem.emitScriptStimulus({
-          type: envelope.type,
-          source: envelope.source,
-          ...(envelope.target !== undefined ? { target: envelope.target } : {}),
-          payload: envelope.payload,
-        });
-      }),
-    );
-  }
-
-  private clearAiScriptStimulusBridge(): void {
-    for (const unsubscribe of this.aiStimulusUnsubs) unsubscribe();
-    this.aiStimulusUnsubs = [];
   }
 
   private bindAiAttackAnimationBridge(): void {
@@ -4596,7 +4000,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private buildRuntimeSplines(): void {
     this.splineRegistry = createSplineRegistry(this.layout?.splines);
-    this.aiSubsystem.configure({ splineRegistry: this.splineRegistry });
     for (const actor of this.layout?.splines ?? []) {
       const built = buildSplineInstanceGeneratorGroup({
         actor,
@@ -5431,40 +4834,6 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
     rotation: [...transform.rotation],
     scale: [...transform.scale],
   };
-}
-
-function distance3d(a: readonly [number, number, number], b: readonly [number, number, number]): number {
-  return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-}
-
-function samePoint3d(a: readonly [number, number, number], b: readonly [number, number, number]): boolean {
-  return distance3d(a, b) <= 1e-6;
-}
-
-/**
- * Keeps navigation authoritative while smoothing clear spline patrol stretches.
- * A tangent pointing backward or sideways is ignored so this cannot pull an
- * agent through a nav corner or obstacle.
- */
-function blendAiPathDirection(
-  pathDirection: readonly [number, number],
-  preferredDirection: Vec3 | undefined,
-): [number, number] {
-  const pathLength = Math.hypot(pathDirection[0], pathDirection[1]);
-  if (!(pathLength > 1e-6) || !preferredDirection) return [pathDirection[0], pathDirection[1]];
-  const tangentLength = Math.hypot(preferredDirection[0], preferredDirection[2]);
-  if (!(tangentLength > 1e-6)) return [pathDirection[0], pathDirection[1]];
-  const pathX = pathDirection[0] / pathLength;
-  const pathZ = pathDirection[1] / pathLength;
-  const tangentX = preferredDirection[0] / tangentLength;
-  const tangentZ = preferredDirection[2] / tangentLength;
-  const alignment = pathX * tangentX + pathZ * tangentZ;
-  if (!(alignment > 0)) return [pathX, pathZ];
-  const weight = AI_SPLINE_TANGENT_STEERING_WEIGHT * alignment;
-  const blendedX = pathX * (1 - weight) + tangentX * weight;
-  const blendedZ = pathZ * (1 - weight) + tangentZ * weight;
-  const blendedLength = Math.hypot(blendedX, blendedZ);
-  return blendedLength > 1e-6 ? [blendedX / blendedLength, blendedZ / blendedLength] : [pathX, pathZ];
 }
 
 /** Human-readable label for a quality level (settings-screen status text). */

@@ -11,6 +11,7 @@
  * Every entry must be constructed fresh per runtime (modules own subsystem
  * state), hence a factory rather than a shared constant.
  */
+import { createAiModule } from "./aiModule";
 import type { CapabilityModule } from "./CapabilityModule";
 import { createCharacterMovementModule } from "./characterMovementModule";
 import { createDialogueModule } from "./dialogueModule";
@@ -27,6 +28,9 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     // Registered after the platform module purely for readability — the solver
     // resolves platforms per call, and its tick comes from the `movement` slot.
     createCharacterMovementModule(),
+    // After the movement module so its entity sink still runs first, matching the
+    // order the two subsystems were seeded in before either was a module.
+    createAiModule(),
     createSkeletalAnimationModule(),
     createDialogueModule(),
     // The UI mounts before save-game so the save menu's slot fields are seeded

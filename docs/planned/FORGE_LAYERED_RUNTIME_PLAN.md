@@ -4,8 +4,8 @@
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
 > Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
-> E/2 (dialogue), E/3 (save-game), E/4 (runtime-UI), E/5 (skeletal) ve E/6
-> (character-movement) tamam; sıradaki modül AI.
+> E/2 (dialogue), E/3 (save-game), E/4 (runtime-UI), E/5 (skeletal), E/6
+> (character-movement) ve E/7 (AI) tamam; kalan modüller audio ve vfx.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -117,7 +117,7 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | `physicsSubsystem` (Rapier), collider box'lar | **1** | LevelRuntime (fizik sahne içeriğinin parçası) |
 | ~~`characterMovementSubsystem`~~ | **2** | ✅ `characterMovementModule` (E/6); solver `src/game` → `engine/movement/` taşındı |
 | `movingPlatformSubsystem`, `splinePathFollowerSubsystem` | **2** | modüller (opt-in) |
-| `aiSubsystem` + `loadAiAssets` + nav | **2** | `aiModule` (opt-in) |
+| ~~`aiSubsystem` + `loadAiAssets` + nav~~ | **2** | ✅ `aiModule` (E/7); AI karakter animatörleri + attack köprüsü Faz F'ye kadar kabukta |
 | `setupDialogue` + `loadDialogueAssets` | **2** | `dialogueModule` (opt-in) |
 | ~~`saveCoordinator` (`RuntimeSaveCoordinator`)~~ | **2** | ✅ `saveGameModule` (E/3) |
 | ~~`setupRuntimeUi` + widget/theme yükleme~~ | **2** | ✅ `runtimeUiModule` (E/4); locale kabukta (dialogue ile paylaşımlı), kurallar Katman 3 |
@@ -572,6 +572,73 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > Browser: sekiz smoke geçiyor — `runtime-locomotion`, `runtime-checkpoint`,
 > `runtime-portal`, `runtime-playflow`, `runtime-script-message`, `ai-patrol`,
 > `ai-navigation-clearance` (editör + runtime).
+
+> **Uygulama kaydı (2026-08-26, E/7 — AI modülü):** Karar katmanı ve kararları
+> yürüten navigasyonun tamamı `capabilities/aiModule.ts`'e taşındı: `AISubsystem`
+> (`decision` slotu), `*.behaviortree/blackboard/statetree.json` varlık kütüphanesi,
+> Target Point rotaları, `moveTo` arkasındaki tüm yol takibi (fırınlanmış nav
+> grid + revizyon önbelleği, ajan clearance profilleri, yürünebilir zemin
+> örnekleyici, waypoint ilerletme, takılma kurtarma, yerel ayrışma yönlendirmesi),
+> script-mesaj → uyarıcı köprüsü ve `?debug` nav/algı overlay'i.
+> `RuntimeSceneApp` bu işin **692 satırını** bıraktı (4855 satıra indi): 22 metot,
+> 8 alan, tüm `AI_NAV_*` sabitleri ve dokuz `@engine/navigation` /
+> `@engine/render-three/aiNavigation*` import'u çıktı.
+>
+> Kabuk tek bir toplu servis veriyor — `ai-host`: `?debug` bayrağı, oyunun
+> Katman 3 görev kütüphanesi (`createGameAiTaskRegistry`; capability `@/game`
+> import edemez, bu yüzden kabuk enjekte ediyor), fizik türevli nav dünyası
+> (`ai-navigation-query`: algı engelleri, nav rolü filtreli blocker'lar +
+> yürünebilir üçgenler, collider yarı-boyutu), kalite odak noktası ve boşta
+> lokomosyon raporu. Host yoksa modül **hiçbir şey kaydetmez** — algılanacak ya
+> da planlanacak bir dünya yok. Kardeş modüller tembel çözülüyor ve hepsi
+> opsiyonel: `script-message-bus` (yoksa uyarıcı yok), `character-movement-query`
+> (yoksa ajanın plan yapacağı bir konumu yok) ve `spline-registry-source`.
+>
+> **Spline kaydı artık proxy.** Eskiden `buildRuntimeSplines` her seviyede
+> `aiSubsystem.configure({ splineRegistry })` çağırıyordu; modül seviye
+> hook'undan *önce* tick'leyebileceği için bu bir yarış olurdu. Yerine çağrı
+> anında `spline-registry-source`'u çözen ince bir `SplineRegistry` proxy'si
+> konstrüksiyon anında veriliyor: Level Travel'da bayatlamıyor, kaynak hiç yoksa
+> devriye rotası bulunamıyor, o kadar.
+>
+> Modülün yayımladıkları: `ai-commands` (seviye hazırlama, transform senkronu,
+> kare başına move-intent, uzak-NPC tick temposu) ve `ai-debug` (controller +
+> navigasyon anlık görüntüleri). Kabuk `getAiDebugSnapshot` /
+> `getAiNavigationDebugSnapshot`'ı bunlardan çözüyor ve modül kapalıyken boş
+> varsayılana düşüyor. `ScriptMessageBus.emit` `target` parametresi kazandı —
+> AI'ın adresli mesajı bus üzerinden geçerken sessizce düşüyordu.
+>
+> **Sıra kısıtı (E/5 ile aynı desen):** bir controller'ın blackboard şeması
+> varlıklardan okunarak kurulur, yani AI varlıkları entity kümesi beslenmeden
+> *önce* hazır olmalı — bu da her capability'nin `onLevelLoaded`'ından önceki bir
+> an. Bu yüzden kabuk `ai-commands.prepareLevel(layout)`'u tam eski
+> `loadAiAssets()` + `setTargetPoints()` yerinde çağırıyor. Uyarıcı abonelikleri
+> ise `onLevelLoaded`'da: bus'ın sahibi `behaviorSubsystem` modül başlatmadan
+> *sonra* kuruluyor, dolayısıyla `onRuntimeStart`'ta abone olmak mümkün değil.
+>
+> **Kabukta bilinçli kalanlar:** AI karakter animatörleri
+> (`aiCharacterAnimators`, `registerAiCharacterAnimator`,
+> `updateAiCharacterAnimations`) ve `ai.attack.intent` animasyon köprüsü.
+> İkisi de `RuntimeCharacterRef` üzerinden çalışıyor — bu bir Game Mode tipi
+> (Katman 3) — ve E/5'teki iskelet iliştirmesiyle aynı sınırda duruyor; Faz F
+> Game Mode'u modüle çevirdiğinde bu kısıt kalkar.
+>
+> Modül kapalıyken hiçbir controller koşmaz: NPC entity'leri render edilir, fizik
+> gövdeleri ve script'leri aynen çalışır, sadece karar üretmezler ve hareket
+> çözücüye onlar için intent verilmez (I3).
+>
+> Yeni birim testi `tests/engine/aiModule.test.ts` (4 kontrol): `decision`
+> slotuna kurulum + entity beslemesinden controller türetme + host'un nav
+> dünyasını ve layout nav hacimlerini raporlama + seviye teardown'unda boşalma,
+> altı uyarıcı mesaj tipine abonelik ve teardown'da bırakılması, bus'sız ve
+> manifest'siz host'ta bozulmadan çalışma, ve host yokken hiçbir şeyin
+> kaydolmaması.
+>
+> Kapılar: `build:verify` uçtan uca yeşil (**956/956 engine check**),
+> `verify:imports` PASS, `verify:dist --strict` PASS. Browser: yedi smoke geçiyor
+> — `ai-patrol`, `ai-navigation-clearance` (editör + runtime),
+> `ai-navigation-volume`, `runtime-locomotion`, `runtime-playflow`,
+> `runtime-script-message`.
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

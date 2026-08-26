@@ -35,10 +35,9 @@ export function renderOutlinerPanel(options: OutlinerPanelOptions): void {
   options.summary.textContent = `${objects.length} actors (${objects.filter((object) => object.selected).length} selected)`;
 
   if (filter) {
-    const matches = typeMatches.filter((object) => {
-      const haystack = `${object.label} ${object.assetId} ${object.kind}`.toLocaleLowerCase();
-      return haystack.includes(filter);
-    });
+    const matches = typeMatches.filter((object) =>
+      object.label.toLocaleLowerCase().startsWith(filter),
+    );
     replaceOutlinerRows(options, matches.map((object) => ({ object, depth: 0 })), objects.length);
     return;
   }

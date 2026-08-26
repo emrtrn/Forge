@@ -16,8 +16,15 @@
  */
 import type { Vector3 } from "three";
 
+import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
+import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
 import type { AssetManifest } from "@engine/assets/manifest";
-import type { LaunchOptions, PhysicsQuery } from "@engine/behavior/behaviorSubsystem";
+import type {
+  LaunchOptions,
+  PhysicsAabb,
+  PhysicsQuery,
+  PhysicsSurfaceTriangle,
+} from "@engine/behavior/behaviorSubsystem";
 import type {
   ScriptMessageEnvelope,
   ScriptMessagePayload,
@@ -31,12 +38,19 @@ import type {
   DialogueAudioPlayback,
   DialogueAudioRequest,
 } from "@engine/dialogue/dialogueSubsystem";
+import type {
+  NavAabb,
+  NavBlocker,
+  PathFollowingState,
+} from "@engine/navigation/gridNavigation";
 import type { MovingPlatformQuery } from "@engine/physics/movingPlatformSubsystem";
 import type {
   GameSaveRestoreRequest,
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
+import type { AiNavAgentClearanceView } from "@engine/render-three/aiNavigationView";
+import type { RoomLayout, Vec3 } from "@engine/scene/layout";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { SplineRegistry } from "@engine/scene/splineRegistry";
 import type { LocaleRegistry } from "@engine/ui/uiLocale";
@@ -141,7 +155,8 @@ export const characterMovementHostService =
  */
 export interface ScriptMessageBus {
   subscribe(type: string, handler: (envelope: ScriptMessageEnvelope) => void): () => void;
-  emit(type: string, source: string, payload?: ScriptMessagePayload): void;
+  /** `target` addresses one entity; omitted broadcasts to every subscriber. */
+  emit(type: string, source: string, payload?: ScriptMessagePayload, target?: string): void;
 }
 
 export const scriptMessageBusService = runtimeServiceKey<ScriptMessageBus>("script-message-bus");
@@ -343,3 +358,118 @@ export interface SplineFollowerDebugSource {
 /** Provided by: `splineFollowerModule`. */
 export const splineFollowerDebugService =
   runtimeServiceKey<SplineFollowerDebugSource>("spline-follower-debug");
+
+/**
+ * The physics-derived world the AI capability plans through. It is deliberately
+ * narrower than `PhysicsQuery`: perception needs sight occluders, the nav bake
+ * needs the navigation-role-filtered blockers and walkable triangles, and an
+ * agent profile falls back to a pawn's collider size. Nothing here mutates.
+ * Provided by: the runtime shell (owner of the physics subsystem).
+ */
+export interface AiNavigationQuery {
+  /** Sight occluders for perception line-of-sight checks. */
+  staticBlockerAabbs(): readonly PhysicsAabb[];
+  /** Static obstacles the nav grid is eroded from (`ignored` bodies omitted). */
+  staticNavigationBlockerAabbs(): readonly PhysicsAabb[];
+  /** Walkable triangles the nav grid seeds floor layers from. */
+  staticNavigationSurfaceTriangles(): readonly PhysicsSurfaceTriangle[];
+  /** Collider size an agent profile falls back to when nothing is authored. */
+  colliderHalfExtents(entityId: string): readonly [number, number, number] | null;
+}
+
+/**
+ * What the AI capability needs from the shell it plans inside. All of it is live
+ * shell state (the physics world, the focus point for the far-NPC cadence, the
+ * locomotion snapshot HUD/animation read) or a Layer 3 injection (the task
+ * registry a fork's game module contributes), so it is handed in rather than
+ * reached for. Without a host the module registers nothing: there is no world to
+ * perceive, plan or move through.
+ * Provided by: the runtime shell.
+ */
+export interface AiHost {
+  /** `?debug`: build the nav/perception overlay into the level's scene. */
+  readonly debug: boolean;
+  /**
+   * The game module's behavior-tree task registry (Layer 3). Omitted means the
+   * engine built-ins — the generic wait / setBlackboard / sendMessage / moveTo
+   * set every project starts from.
+   */
+  readonly taskRegistry?: AiTaskRegistry;
+  readonly navigation: AiNavigationQuery;
+  /** Normally the possessed pawn; `null` disables the far-NPC update cadence. */
+  qualityFocusPosition(): readonly [number, number, number] | null;
+  /**
+   * Publishes a zeroed locomotion snapshot for an agent whose move just ended at
+   * its goal, so the animation layer settles into idle on the same frame instead
+   * of holding the last walking report.
+   */
+  reportIdleLocomotion(entityId: string): void;
+}
+
+export const aiHostService = runtimeServiceKey<AiHost>("ai-host");
+
+/**
+ * What the shell asks of the AI capability, at the points where only the shell
+ * knows the event happened: a level's AI assets have to be resolved before its
+ * controllers are derived, a transform written outside the solver has to reach
+ * perception, the movement solver needs this frame's intent, and the optional
+ * quality profile retunes the far-NPC cadence.
+ *
+ * `undefined` means the module is off: no controller ever runs, `moveIntentFor`
+ * is never consulted (so every character is either player-driven or still), and
+ * the level builds and plays exactly as it does now minus its NPC decisions.
+ * Provided by: `aiModule`.
+ */
+export interface AiCommands {
+  /**
+   * Resolves this level's AI assets (blackboards, behavior trees, state trees)
+   * and its Target Point routes. Must be awaited before the level's entity set
+   * is fed, because a controller's blackboard schema is read from those assets
+   * as it is built.
+   */
+  prepareLevel(layout: RoomLayout): Promise<void>;
+  /** Feeds a transform written outside the solver back into perception. */
+  updateEntityTransform(entityId: string, transform: TransformComponent): void;
+  /** This frame's move intent for a path-following agent, or null. */
+  moveIntentFor(
+    entityId: string,
+    transform: Readonly<TransformComponent>,
+    deltaSeconds: number,
+  ): CharacterMoveIntent | null;
+  /** Optional Phase 7 far-NPC update cadence; empty settings keep every frame. */
+  setDistanceUpdateSettings(settings: AiDistanceUpdateSettings): void;
+}
+
+export const aiCommandsService = runtimeServiceKey<AiCommands>("ai-commands");
+
+/** One AI path follower's live state for the `?debug` overlay. */
+export interface AiNavFollowerDebug {
+  readonly entityId: string;
+  readonly status: PathFollowingState["status"];
+  readonly waypointIndex: number;
+  readonly pathLength: number;
+  readonly path: readonly Vec3[];
+  readonly goal: Vec3;
+  readonly speed?: number;
+  readonly acceptanceRadius?: number;
+  readonly replans: number;
+  readonly secondsWithoutProgress: number;
+}
+
+export interface AiNavigationDebugSnapshot {
+  readonly blockers: readonly NavAabb[];
+  readonly inflatedBlockers: readonly NavBlocker[];
+  readonly agentClearances: readonly AiNavAgentClearanceView[];
+  readonly bounds: readonly NavAabb[];
+  readonly cellSize: number;
+  readonly followers: readonly AiNavFollowerDebug[];
+}
+
+/** Read side of the `?debug` AI overlays: controllers and path following. */
+export interface AiDebugSource {
+  controllers(): AiDebugSnapshot;
+  navigation(): AiNavigationDebugSnapshot;
+}
+
+/** Provided by: `aiModule`. */
+export const aiDebugService = runtimeServiceKey<AiDebugSource>("ai-debug");

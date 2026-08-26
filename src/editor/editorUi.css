@@ -962,6 +962,8 @@
 
 .outliner-list {
   display: grid;
+  align-content: start;
+  grid-auto-rows: min-content;
   gap: 0;
   min-height: 0;
   overflow: auto;

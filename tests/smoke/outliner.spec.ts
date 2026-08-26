@@ -48,3 +48,43 @@ test("scene outliner smoke: filter, visibility, lock, and summary", async ({ pag
   await expect(page.getByTestId("outliner-filter")).toHaveClass(/is-filtered/);
   await expect(rows).toHaveCount(initialCount - meshCount);
 });
+
+test("scene outliner keeps filtered rows compact and reveals the selected actor", async ({ page }) => {
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  const list = page.locator("[data-outliner-list]");
+  const rows = page.getByTestId("outliner-row");
+  await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+  const firstRow = rows.first();
+  const firstLabel = (await firstRow.locator("strong").textContent())?.trim() ?? "";
+  expect(firstLabel.length).toBeGreaterThan(0);
+
+  await page.locator("[data-outliner-search]").fill(firstLabel.slice(0, 3));
+  await expect(rows.first()).toHaveClass(/outliner-row/);
+  expect(
+    await rows.evaluateAll((entries) => entries.every((entry) => entry.getBoundingClientRect().height <= 42)),
+  ).toBe(true);
+  expect(
+    await list.evaluate((element) => {
+      const row = element.querySelector<HTMLElement>("[data-object-id]");
+      return Boolean(row) && row.getBoundingClientRect().height < element.getBoundingClientRect().height;
+    }),
+  ).toBe(true);
+
+  await page.locator("[data-outliner-search]").fill("");
+  await list.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await firstRow.dispatchEvent("click");
+  await expect(firstRow).toHaveClass(/active/);
+  expect(
+    await firstRow.evaluate((row) => {
+      const list = row.closest<HTMLElement>("[data-outliner-list]");
+      if (!list) return false;
+      const rowRect = row.getBoundingClientRect();
+      const listRect = list.getBoundingClientRect();
+      return rowRect.top >= listRect.top && rowRect.bottom <= listRect.bottom;
+    }),
+  ).toBe(true);
+});

@@ -17,8 +17,8 @@ import type { BottleneckResult } from "@engine/perf/bottleneckClassifier";
 import { formatAdaptiveChange } from "@engine/perf/adaptiveQuality";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
+import type { AiNavigationDebugSnapshot } from "./capabilities/runtimeServiceKeys";
 import type {
-  AiNavigationDebugSnapshot,
   GameModeDebugSnapshot,
   PerfMemorySnapshot,
   RuntimeStatsApp,

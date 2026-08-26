@@ -968,6 +968,7 @@ import { registerBuildManifestParityTests } from "../tests/engine/buildManifestP
 import { registerLevelRuntimeTests } from "../tests/engine/levelRuntime.test";
 import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegistry.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
+import { registerAiModuleTests } from "../tests/engine/aiModule.test";
 import { registerDialogueModuleTests } from "../tests/engine/dialogueModule.test";
 import { registerSaveGameModuleTests } from "../tests/engine/saveGameModule.test";
 import { registerRuntimeUiModuleTests } from "../tests/engine/runtimeUiModule.test";
@@ -990,6 +991,7 @@ registerBuildManifestParityTests(check);
 await registerLevelRuntimeTests(check, checkAsync);
 await registerCapabilityRegistryTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
+await registerAiModuleTests(checkAsync);
 await registerDialogueModuleTests(checkAsync);
 await registerSaveGameModuleTests(check, checkAsync);
 await registerRuntimeUiModuleTests(check, checkAsync);

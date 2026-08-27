@@ -43,11 +43,18 @@ const MANIFEST = {
   assets: [
     { id: "SFX_Chime", type: "sound", path: "Audio/SFX_Chime.wav" },
     { id: "SC_Chime", type: "soundCue", path: "Audio/SC_Chime.soundcue.json" },
+    { id: "SC_Broken", type: "soundCue", path: "Audio/SC_Broken.soundcue.json" },
     { id: "SM_Rock", type: "model", path: "Meshes/SM_Rock.glb" },
   ],
 };
 
-/** Serves the sound cue above; anything else 404s, as in a real project. */
+/**
+ * A cue file with the right header and nothing the evaluator can walk — the
+ * hand-edited / truncated case that used to take the tab down.
+ */
+const BROKEN_CUE = { schema: 1, type: "soundCue", name: "SC_Broken" };
+
+/** Serves the two cues above; anything else 404s, as in a real project. */
 async function withStubbedFetch(
   run: (requested: string[]) => Promise<void>,
 ): Promise<void> {
@@ -56,6 +63,9 @@ async function withStubbedFetch(
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
     requested.push(url);
+    if (url.includes("SC_Broken")) {
+      return { ok: true, json: async () => BROKEN_CUE } as unknown as Response;
+    }
     if (!url.includes("SC_Chime")) return { ok: false, json: async () => ({}) } as unknown as Response;
     return { ok: true, json: async () => CUE } as unknown as Response;
   }) as typeof globalThis.fetch;
@@ -63,6 +73,18 @@ async function withStubbedFetch(
     await run(requested);
   } finally {
     globalThis.fetch = original;
+  }
+}
+
+/** Silences (and counts) the module's warnings while a check runs. */
+async function withMutedWarnings(run: (warnings: string[]) => Promise<void>): Promise<void> {
+  const original = console.warn;
+  const warnings: string[] = [];
+  console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(" "));
+  try {
+    await run(warnings);
+  } finally {
+    console.warn = original;
   }
 }
 
@@ -189,6 +211,48 @@ export async function registerAudioModuleTests(checkAsync: CheckAsync): Promise<
       registry.levelUnloaded();
       assert.equal(commands.getBusVolume("sfx"), 0.25, "the mix is per session, not per level");
       registry.dispose();
+    });
+  });
+
+  await checkAsync("a malformed sound cue costs its own sound and nothing else", async () => {
+    await withStubbedFetch(async (requested) => {
+      await withMutedWarnings(async (warnings) => {
+        const { host } = startedHost();
+        const commands = host.resolve(audioCommandsService)!;
+        commands.prepareLevel(MANIFEST as never);
+
+        // Loading a cue is fire-and-forget, so a throw inside it would become an
+        // unhandled rejection — a dead tab — rather than one emitter going quiet.
+        commands.playEntityAudio(
+          emitter("actor:0", { sourceType: "soundCue", sourceId: "SC_Broken", clipId: "" }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(drain(commands).length, 0, "the broken cue played nothing");
+        assert.equal(
+          warnings.filter((line) => line.includes("SC_Broken")).length,
+          1,
+          "and said so once, by name",
+        );
+
+        // Diagnosed once: the failure is cached, so a second trigger neither
+        // re-fetches nor re-warns.
+        commands.playEntityAudio(
+          emitter("actor:1", { sourceType: "soundCue", sourceId: "SC_Broken", clipId: "" }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(requested.filter((url) => url.includes("SC_Broken")).length, 1);
+        assert.equal(warnings.filter((line) => line.includes("SC_Broken")).length, 1);
+
+        // A good cue in the same level is unaffected.
+        commands.playEntityAudio(
+          emitter("actor:2", { sourceType: "soundCue", sourceId: "SC_Chime", clipId: "" }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(
+          drain(commands).map((request) => request.clipId),
+          ["SFX_Chime"],
+        );
+      });
     });
   });
 

@@ -9,6 +9,7 @@
  * The `rng` parameter accepts any `() => number` in [0, 1). Pass a seeded PRNG
  * in unit tests to get deterministic results.
  */
+import { SOUND_CUE_NODE_KINDS } from "./soundCueTypes";
 import type {
   SoundCueAsset,
   SoundCueConnection,
@@ -158,6 +159,40 @@ function evalNode(
  * @param cue   - The parsed soundcue.json asset.
  * @param rng   - Random number generator in [0, 1). Defaults to `Math.random`.
  */
+/**
+ * Structural gate for JSON that claims to be a Sound Cue.
+ *
+ * {@link evaluateSoundCue} and {@link validateSoundCueGraph} both walk `nodes`,
+ * `connections` and `output` without re-checking them, so anything that fails
+ * this must never reach them. A hand-edited, truncated or half-written
+ * `*.soundcue.json` would otherwise throw out of its caller — and on the
+ * runtime's fire-and-forget load path that surfaces as an unhandled rejection
+ * (a dead tab) instead of one missing sound.
+ *
+ * Deliberately shallow: it checks the shape the traversal relies on, not the
+ * graph's semantics. `validateSoundCueGraph` is what reports authoring problems
+ * in a cue that *is* structurally a cue.
+ */
+export function isSoundCueAsset(value: unknown): value is SoundCueAsset {
+  if (typeof value !== "object" || value === null) return false;
+  const cue = value as Partial<SoundCueAsset>;
+  if (cue.schema !== 1 || cue.type !== "soundCue") return false;
+  if (typeof cue.output !== "object" || cue.output === null) return false;
+  if (!Array.isArray(cue.nodes) || !Array.isArray(cue.connections)) return false;
+  const kinds = new Set<string>(SOUND_CUE_NODE_KINDS);
+  for (const node of cue.nodes) {
+    if (typeof node !== "object" || node === null) return false;
+    const { id, kind } = node as { id?: unknown; kind?: unknown };
+    if (typeof id !== "string" || typeof kind !== "string" || !kinds.has(kind)) return false;
+  }
+  for (const connection of cue.connections) {
+    if (typeof connection !== "object" || connection === null) return false;
+    const { from, to } = connection as { from?: unknown; to?: unknown };
+    if (typeof from !== "string" || typeof to !== "string") return false;
+  }
+  return true;
+}
+
 export function evaluateSoundCue(
   cue: SoundCueAsset,
   rng: () => number = Math.random,

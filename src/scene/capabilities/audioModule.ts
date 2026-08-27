@@ -24,9 +24,13 @@
  * behind. And the persisted volume preference stays in the shell's user-settings
  * store — the module owns the live mix, not the player's saved choice.
  */
-import { AudioSubsystem } from "@engine/audio/audioSubsystem";
+import { AudioSubsystem, type AudioPlayOptions } from "@engine/audio/audioSubsystem";
 import type { AudioBusId } from "@engine/audio/audioBus";
-import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
+import {
+  evaluateSoundCue,
+  isSoundCueAsset,
+  type ResolvedPlayEvent,
+} from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
 import { assetPath, assetType, type AssetManifest } from "@engine/assets/manifest";
 import type {
@@ -71,13 +75,64 @@ export function createAudioModule(): CapabilityModule {
         soundCueDefs.set(cueId, null);
         return null;
       }
-      const data = (await response.json()) as SoundCueAsset;
+      const data: unknown = await response.json();
+      // A hand-edited or truncated cue must fail here, once, with a name in the
+      // log — not inside the evaluator on a fire-and-forget promise, where it
+      // would surface as an unhandled rejection instead of a missing sound.
+      if (!isSoundCueAsset(data)) {
+        console.warn(`[audio] "${cueId}" is not a valid sound cue; ignoring it.`);
+        soundCueDefs.set(cueId, null);
+        return null;
+      }
       soundCueDefs.set(cueId, data);
       return data;
     } catch {
       soundCueDefs.set(cueId, null);
       return null;
     }
+  }
+
+  /**
+   * Resolves a cue's graph to play events and fires them, honouring each event's
+   * delay. `scale` folds in the caller's own volume/pitch/loop/spatial overrides
+   * (an Audio component's; a dialogue line has none).
+   *
+   * Evaluation is guarded because it is reached from a fire-and-forget promise:
+   * a cue that passes the structural gate can still describe a graph the
+   * evaluator chokes on, and one bad cue must cost its own sound, nothing more.
+   */
+  function fireSoundCue(
+    cueId: string,
+    cue: SoundCueAsset,
+    scale: (event: ResolvedPlayEvent, cue: SoundCueAsset) => AudioPlayOptions,
+  ): void {
+    let events: readonly ResolvedPlayEvent[];
+    try {
+      events = evaluateSoundCue(cue);
+    } catch (error) {
+      console.warn(`[audio] sound cue "${cueId}" could not be evaluated:`, error);
+      return;
+    }
+    for (const event of events) {
+      const options = scale(event, cue);
+      if (event.delaySeconds > 0) {
+        setTimeout(() => audio.playOneShot(event.clipId, options), event.delaySeconds * 1000);
+      } else {
+        audio.playOneShot(event.clipId, options);
+      }
+    }
+  }
+
+  /** Loads a cue and fires it; never rejects, so no caller needs to catch. */
+  function playSoundCue(
+    cueId: string,
+    scale: (event: ResolvedPlayEvent, cue: SoundCueAsset) => AudioPlayOptions,
+  ): void {
+    void loadSoundCue(cueId)
+      .then((cue) => {
+        if (cue) fireSoundCue(cueId, cue, scale);
+      })
+      .catch((error) => console.warn(`[audio] sound cue "${cueId}" failed to play:`, error));
   }
 
   /**
@@ -88,22 +143,12 @@ export function createAudioModule(): CapabilityModule {
    */
   function playDialogueAudio(request: DialogueAudioRequest): DialogueAudioPlayback | null {
     if (request.sourceType === "soundCue") {
-      void loadSoundCue(request.sourceId).then((cue) => {
-        if (!cue) return;
-        for (const ev of evaluateSoundCue(cue)) {
-          const opts = {
-            volume: ev.volume,
-            loop: ev.loop,
-            pitch: ev.pitch,
-            ...(cue.output.bus ? { bus: cue.output.bus } : {}),
-          };
-          if (ev.delaySeconds > 0) {
-            setTimeout(() => audio.playOneShot(ev.clipId, opts), ev.delaySeconds * 1000);
-          } else {
-            audio.playOneShot(ev.clipId, opts);
-          }
-        }
-      });
+      playSoundCue(request.sourceId, (event, cue) => ({
+        volume: event.volume,
+        loop: event.loop,
+        pitch: event.pitch,
+        ...(cue.output.bus ? { bus: cue.output.bus } : {}),
+      }));
       return { stop: () => undefined };
     }
     // Raw sound: the audio subsystem resolves the asset id to a file URL itself.
@@ -129,26 +174,16 @@ export function createAudioModule(): CapabilityModule {
 
     if (component.sourceType === "soundCue" && component.sourceId) {
       // Async: load cue, evaluate graph, fire each resolved event.
-      void loadSoundCue(component.sourceId).then((cue) => {
-        if (!cue) return;
-        for (const ev of evaluateSoundCue(cue)) {
-          const opts = {
-            volume: ev.volume * component.volume,
-            loop: ev.loop || component.loop,
-            // The component's pitch multiplier scales the cue's own pitch (Unreal parity).
-            pitch: ev.pitch * componentPitch,
-            spatial: component.spatial,
-            // Route the cue through its authored mix bus (default master).
-            ...(cue.output.bus ? { bus: cue.output.bus } : {}),
-            ...spatialOpts,
-          };
-          if (ev.delaySeconds > 0) {
-            setTimeout(() => audio.playOneShot(ev.clipId, opts), ev.delaySeconds * 1000);
-          } else {
-            audio.playOneShot(ev.clipId, opts);
-          }
-        }
-      });
+      playSoundCue(component.sourceId, (event, cue) => ({
+        volume: event.volume * component.volume,
+        loop: event.loop || component.loop,
+        // The component's pitch multiplier scales the cue's own pitch (Unreal parity).
+        pitch: event.pitch * componentPitch,
+        spatial: component.spatial,
+        // Route the cue through its authored mix bus (default master).
+        ...(cue.output.bus ? { bus: cue.output.bus } : {}),
+        ...spatialOpts,
+      }));
       return;
     }
     audio.playOneShot(component.clipId, {

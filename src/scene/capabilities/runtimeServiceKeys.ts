@@ -14,7 +14,7 @@
  * subsystem is baked into the shell; as later Phase E slices extract those,
  * the provider moves to the module without the consumers changing.
  */
-import type { Vector3 } from "three";
+import type { Scene, Vector3 } from "three";
 
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
@@ -54,6 +54,7 @@ import type {
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
 import type { AiNavAgentClearanceView } from "@engine/render-three/aiNavigationView";
+import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { SplineRegistry } from "@engine/scene/splineRegistry";
@@ -208,6 +209,49 @@ export interface AudioCommands {
 }
 
 export const audioCommandsService = runtimeServiceKey<AudioCommands>("audio-commands");
+
+/**
+ * The scene a VFX capability parents its effect container to. One field, but a
+ * host service rather than a level-time fact: the container is attached once and
+ * outlives every level (a rebuild clears its instances, not the container), so
+ * the module needs it while the runtime is being constructed, before any level
+ * exists. Without it there is nowhere to render an effect and the module stays
+ * unregistered.
+ * Provided by: the runtime shell (owner of the scene shell).
+ */
+export interface VfxHost {
+  readonly scene: Scene;
+}
+
+export const vfxHostService = runtimeServiceKey<VfxHost>("vfx-host");
+
+/**
+ * What the runtime asks of whichever capability owns particles. As with audio,
+ * the shell drives the steps only it knows the timing of — resolving this
+ * level's effect + texture assets before anything can spawn, and starting the
+ * built level's `autoPlay` emitters — while the two entity triggers cover a
+ * runtime-spawned actor and a script's explicit `playParticleEffect`.
+ *
+ * `undefined` means the module is off: emitter actors still exist and still run
+ * their scripts, the triggers become no-ops and `?debug` reports an empty VFX
+ * runtime. Nothing else changes.
+ * Provided by: `vfxModule`.
+ */
+export interface VfxCommands {
+  /** Maps this level's manifest `effect` + `texture` assets to fetchable URLs. */
+  prepareLevel(manifest: AssetManifest): void;
+  /** Spawns every `autoPlay` ParticleEmitter of the freshly built level. */
+  playAutoPlay(document: SceneDocument): Promise<void>;
+  /** Spawns one runtime-spawned entity's `autoPlay` emitter. */
+  playAutoPlayEntity(entity: Entity): Promise<void>;
+  /** Spawns an entity's effect on demand, `autoPlay` or not (a script trigger). */
+  triggerEntityEffect(entity: Entity): Promise<void>;
+  /** Particle-count scale from the active quality profile. */
+  setGlobalDensity(scale: number): void;
+  debugSnapshot(): VfxDebugSnapshot;
+}
+
+export const vfxCommandsService = runtimeServiceKey<VfxCommands>("vfx-commands");
 
 /**
  * The active `.loc.json` tables. Shared, not owned by one capability: dialogue

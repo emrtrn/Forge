@@ -33,6 +33,8 @@ import {
   aiHostService,
   audioCommandsService,
   scriptMessageBusService,
+  vfxCommandsService,
+  vfxHostService,
   skeletonLibraryService,
   splineFollowerDebugService,
   splineRegistrySourceService,
@@ -43,6 +45,7 @@ import {
   type AiNavigationDebugSnapshot,
   type AudioCommands,
   type CharacterMovementQuery,
+  type VfxCommands,
   type RuntimeUiPresenter,
   type SaveGameCommands,
 } from "./capabilities/runtimeServiceKeys";
@@ -353,7 +356,6 @@ import {
   readColliderComponent,
   readLightComponent,
   readRenderableMeshComponent,
-  readParticleEmitterComponent,
   readScriptActorComponent,
   readTransformComponent,
   TRANSFORM_COMPONENT,
@@ -361,7 +363,7 @@ import {
 import type { ColliderComponent, ColliderPrimitive, ColliderShape, TransformComponent } from "@engine/scene/components";
 import type { Entity, EntityComponentData } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
-import { VfxSubsystem, type VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
+import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 
 /**
  * Live gameplay readout for the `?debug` overlay: the active Game Mode, the pawn
@@ -540,19 +542,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private readonly runtimeServices: RuntimeServiceHost;
   private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
-  /** Manifest effect (`.effect.json`) asset id -> fetchable file URL. */
-  private readonly effectUrlById = new Map<string, string>();
-  /** Manifest texture asset id -> fetchable image URL (particle sprite textures). */
-  private readonly textureUrlById = new Map<string, string>();
-  /**
-   * Owns every live particle effect: definition cache, pooling, per-frame advance
-   * and one-shot recycling. Resolves effect ids to URLs through
-   * {@link effectUrlById} and sprite-texture ids through {@link textureUrlById}.
-   */
-  private readonly vfxSubsystem = new VfxSubsystem({
-    resolveEffectUrl: (effectId) => this.effectUrlById.get(effectId) ?? null,
-    resolveTextureUrl: (textureId) => this.textureUrlById.get(textureId) ?? null,
-  });
   /**
    * The play surface handed to the behavior layer. It resolves the audio
    * capability per call, so a runtime without one turns every scripted
@@ -791,9 +780,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.renderer = this.sceneShell.renderer;
     applyEditorMatchedPlayLook(this.renderer);
     this.scene = this.sceneShell.scene;
-    // The VFX subsystem owns one persistent container; live effects come and go
-    // as its children (survives scene rebuilds — only its instances are cleared).
-    this.scene.add(this.vfxSubsystem.root);
     this.camera = this.sceneShell.camera;
     this.capabilities = createCapabilityRegistry(options.capabilities ?? []);
     this.runtimeServices = createRuntimeServiceHost({
@@ -978,6 +964,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // shell-owned (the physics-derived nav world, the focus point, the locomotion
     // sink) except the task registry, which is the game's own Layer 3 vocabulary
     // injected through the shell because a capability may not import `@/game`.
+    // The VFX capability parents its effect container here once, for the whole
+    // runtime's life — hence a host service rather than a level-time fact.
+    this.runtimeServices.provide(vfxHostService, { scene: this.scene });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,
       taskRegistry: createGameAiTaskRegistry(),
@@ -1043,7 +1032,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       },
     );
     this.runtimeServices.addSubsystem("gameplay", this.behaviorSubsystem);
-    this.runtimeServices.addSubsystem("presentation", this.vfxSubsystem);
     // Every subsystem — shell-owned and module-owned — is now known, so install
     // the engine tick in slot order. Nothing may be queued after this point.
     this.runtimeServices.installSubsystems((subsystem) =>
@@ -1088,7 +1076,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.behaviorSubsystem.addEntity(entity, { owner }),
       playAutoPlayAudio: (entity) => this.audioCommands()?.playEntityAudio(entity),
       playAutoPlayParticle: (entity) => {
-        void this.playAutoPlayParticleEntity(entity);
+        void this.vfxCommands()?.playAutoPlayEntity(entity);
       },
     }, options.spawnBudgetPerFrame !== undefined ? { maxSpawnsPerFrame: options.spawnBudgetPerFrame } : {});
 
@@ -1117,7 +1105,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.setActorLightEnabled(entityId, enabled);
       },
       onActorParticleEffect: (entityId) => {
-        void this.playActorParticleEffect(entityId);
+        const entity = this.actorEntityById.get(entityId);
+        if (entity) void this.vfxCommands()?.triggerEntityEffect(entity);
       },
       onLevelTravel: (_entityId, targetLevel, targetSpawn) => {
         this.travelCoordinator.requestLevelTravel(targetLevel, targetSpawn);
@@ -1338,7 +1327,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.qualitySettings = settings;
     this.applyRuntimeResolution();
     this.applyRuntimeShadowQuality();
-    this.vfxSubsystem.setGlobalDensity(settings.particleDensity);
+    this.vfxCommands()?.setGlobalDensity(settings.particleDensity);
     this.applyRuntimePostProcess();
   }
 
@@ -1393,9 +1382,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
   }
 
-  /** Live VFX runtime counts for the `?debug` overlay (active/alive/pool/cache). */
+  /**
+   * Live VFX runtime counts for the `?debug` overlay (active/alive/pool/cache).
+   * All zero when no VFX capability is registered — there is nothing to count.
+   */
   getVfxDebugSnapshot(): VfxDebugSnapshot {
-    return this.vfxSubsystem.getDebugSnapshot();
+    return (
+      this.vfxCommands()?.debugSnapshot() ?? {
+        activeInstances: 0,
+        aliveParticles: 0,
+        pooledInstances: 0,
+        cachedDefinitions: 0,
+        instances: [],
+      }
+    );
   }
 
   /**
@@ -1755,7 +1755,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     } catch (error) {
       console.error("[runtime] auto-play audio failed:", error);
     }
-    void this.playAutoPlayParticles(sceneDocument);
+    void this.vfxCommands()?.playAutoPlay(sceneDocument);
 
     // Character skeletal metadata (blend spaces / anim-set) drives the Game Mode's
     // locomotion animator, so attach it to the refs before the session possesses.
@@ -1863,6 +1863,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the capability is off). Resolved at call time: every caller treats a missing
    * host as "nothing to close, nothing to show".
    */
+  /**
+   * The VFX capability's command surface, or undefined when no VFX module is
+   * registered — in which case the runtime spawns no particles.
+   */
+  private vfxCommands(): VfxCommands | undefined {
+    return this.runtimeServices.resolve(vfxCommandsService);
+  }
+
   /**
    * The audio capability's command surface, or undefined when no audio module is
    * registered — in which case the runtime is simply silent.
@@ -2240,10 +2248,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.aiCharacterAnimators.clear();
     this.behaviorSubsystem.setEntities([]);
     this.splineRegistry = createSplineRegistry();
-
-    // Particle effects: stop live instances (definition cache + pool stay warm
-    // for the rebuild, which re-spawns the same project's effects).
-    this.vfxSubsystem.clear();
 
     // Instanced statics: remove each group (their override clones are children,
     // so they leave with it) and dispose only the InstancedMesh instance buffers
@@ -2752,46 +2756,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Maps manifest effect + texture asset ids to fetchable file URLs, and hands
-   * the manifest to the audio capability so its `sound`/`soundCue` lookups are
-   * filled before anything in the level can play.
+   * Hands this level's manifest to the capabilities that resolve asset ids to
+   * URLs — audio (`sound`/`soundCue`) and VFX (`effect`/`texture`) — before
+   * anything in the level can play or spawn.
    */
   private async populateAssetUrls(): Promise<void> {
     if (!this.assetLoader) return;
     const manifest = await this.assetLoader.loadManifest();
     this.audioCommands()?.prepareLevel(manifest);
-    for (const asset of manifest.assets) {
-      const path = assetPath(asset);
-      if (assetType(asset) === "texture") this.textureUrlById.set(asset.id, projectFileUrl(path));
-      // Prefer the `effect` asset type; fall back to the `.effect.json` suffix so
-      // older manifests (effect assets typed as `prefab`) keep resolving.
-      if (assetType(asset) === "effect" || path.endsWith(".effect.json")) {
-        this.effectUrlById.set(asset.id, projectFileUrl(path));
-      }
-    }
-  }
-
-  /**
-   * Spawns a live particle effect for every ParticleEmitter flagged `autoPlay`,
-   * at the entity's authored position. Resolves the component's `effectId` to a
-   * manifest `.effect.json`, loads + caches it, then adds the effect to the scene
-   * for the frame loop to advance.
-   */
-  private async playAutoPlayParticles(document: SceneDocument): Promise<void> {
-    for (const entity of document.entities) {
-      await this.playAutoPlayParticleEntity(entity);
-    }
-  }
-
-  private async playAutoPlayParticleEntity(entity: Entity): Promise<void> {
-    const particle = readParticleEmitterComponent(entity);
-    if (!particle?.autoPlay || particle.enabled === false) return;
-    const transform = readTransformComponent(entity);
-    if (!transform) return;
-    // Warm the definition so the synchronous play() below hits the cache; the
-    // component's scale/tint/loop fields are the §8 instance overrides.
-    await this.vfxSubsystem.warm(particle.effectId);
-    this.vfxSubsystem.play(particle.effectId, { ...particle, position: transform.position });
+    this.vfxCommands()?.prepareLevel(manifest);
   }
 
   /**
@@ -3504,19 +3477,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       mesh.setMatrixAt(placementIndex, COLLAPSED_INSTANCE_MATRIX);
       mesh.instanceMatrix.needsUpdate = true;
     }
-  }
-
-  private async playActorParticleEffect(entityId: string): Promise<void> {
-    const entity = this.actorEntityById.get(entityId);
-    if (!entity) return;
-    const particle = readParticleEmitterComponent(entity);
-    if (!particle || particle.enabled === false) return;
-    const transform = readTransformComponent(entity);
-    if (!transform) return;
-    // Warm the definition so the synchronous play() below hits the cache; the
-    // component's scale/tint/loop fields are the §8 instance overrides.
-    await this.vfxSubsystem.warm(particle.effectId);
-    this.vfxSubsystem.play(particle.effectId, { ...particle, position: transform.position });
   }
 
   private async applyAssetUvwMappings(): Promise<void> {

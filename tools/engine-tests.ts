@@ -255,7 +255,11 @@ import {
   resolveSpatialPannerConfig,
 } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
-import { evaluateSoundCue, validateSoundCueGraph } from "../engine/audio/soundCueEvaluator";
+import {
+  evaluateSoundCue,
+  isSoundCueAsset,
+  validateSoundCueGraph,
+} from "../engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "../engine/audio/soundCueTypes";
 import {
   estimateSubtitleDurationSeconds,
@@ -970,6 +974,7 @@ import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegis
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
 import { registerAiModuleTests } from "../tests/engine/aiModule.test";
 import { registerAudioModuleTests } from "../tests/engine/audioModule.test";
+import { registerVfxModuleTests } from "../tests/engine/vfxModule.test";
 import { registerDialogueModuleTests } from "../tests/engine/dialogueModule.test";
 import { registerSaveGameModuleTests } from "../tests/engine/saveGameModule.test";
 import { registerRuntimeUiModuleTests } from "../tests/engine/runtimeUiModule.test";
@@ -994,6 +999,7 @@ await registerCapabilityRegistryTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
 await registerAiModuleTests(checkAsync);
 await registerAudioModuleTests(checkAsync);
+await registerVfxModuleTests(checkAsync);
 await registerDialogueModuleTests(checkAsync);
 await registerSaveGameModuleTests(check, checkAsync);
 await registerRuntimeUiModuleTests(check, checkAsync);
@@ -3008,6 +3014,41 @@ const makeCue = (
   connections: SoundCueAsset["connections"],
   output: SoundCueAsset["output"] = {},
 ): SoundCueAsset => ({ schema: 1, type: "soundCue", name: "test-cue", output, nodes, connections });
+
+check("isSoundCueAsset gates the shapes the evaluator walks without checking", () => {
+  const valid = makeCue(
+    [
+      { id: "out", kind: "output" },
+      { id: "src", kind: "source", clipId: "clipA" },
+    ],
+    [{ from: "src", to: "out" }],
+  );
+  assert.equal(isSoundCueAsset(valid), true);
+
+  // Everything the traversal dereferences head-on. Each of these used to throw
+  // out of `evaluateSoundCue`, which on the runtime's fire-and-forget load path
+  // means an unhandled rejection rather than one missing sound.
+  assert.equal(isSoundCueAsset(null), false);
+  assert.equal(isSoundCueAsset("{}"), false);
+  assert.equal(isSoundCueAsset({ ...valid, schema: 2 }), false, "a future schema is not this one");
+  assert.equal(isSoundCueAsset({ ...valid, type: "material" }), false);
+  assert.equal(isSoundCueAsset({ ...valid, output: undefined }), false, "output is dereferenced");
+  assert.equal(isSoundCueAsset({ ...valid, nodes: undefined }), false, "nodes is iterated");
+  assert.equal(isSoundCueAsset({ ...valid, connections: undefined }), false);
+  assert.equal(isSoundCueAsset({ ...valid, nodes: [{ kind: "output" }] }), false, "node needs an id");
+  assert.equal(
+    isSoundCueAsset({ ...valid, nodes: [{ id: "x", kind: "wavePlayer" }] }),
+    false,
+    "an unknown node kind would fall through every evaluator branch",
+  );
+  assert.equal(isSoundCueAsset({ ...valid, connections: [{ from: "src" }] }), false);
+
+  // Structurally a cue, semantically broken: this one is `validateSoundCueGraph`'s
+  // job to report, and the evaluator handles it by producing nothing.
+  const noOutput = makeCue([{ id: "src", kind: "source", clipId: "c" }], []);
+  assert.equal(isSoundCueAsset(noOutput), true);
+  assert.deepEqual(evaluateSoundCue(noOutput), []);
+});
 
 check("sound cue evaluator emits a single event for source → output", () => {
   const cue = makeCue(

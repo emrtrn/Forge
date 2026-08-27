@@ -21,6 +21,7 @@ import { createRuntimeUiModule } from "./runtimeUiModule";
 import { createSaveGameModule } from "./saveGameModule";
 import { createSkeletalAnimationModule } from "./skeletalAnimationModule";
 import { createSplineFollowerModule } from "./splineFollowerModule";
+import { createVfxModule } from "./vfxModule";
 
 export function createDefaultRuntimeModules(): CapabilityModule[] {
   return [
@@ -36,6 +37,7 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     // Before dialogue, which resolves `dialogue-audio` from it — resolution is
     // lazy, so this is readability, not a requirement.
     createAudioModule(),
+    createVfxModule(),
     createDialogueModule(),
     // The UI mounts before save-game so the save menu's slot fields are seeded
     // into an already-bound widget (order here is setup order, never tick order).

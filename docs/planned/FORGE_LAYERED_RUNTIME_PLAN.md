@@ -4,8 +4,9 @@
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
 > Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
-> E/2 (dialogue), E/3 (save-game), E/4 (runtime-UI), E/5 (skeletal), E/6
-> (character-movement), E/7 (AI) ve E/8 (audio) tamam; kalan modül vfx.
+> **Faz E tamamlandı** (E/1 bağlanma mekanizması + moving-platform +
+> spline-follower, E/2 dialogue, E/3 save-game, E/4 runtime-UI, E/5 skeletal,
+> E/6 character-movement, E/7 AI, E/8 audio, E/9 vfx). Sıradaki faz F.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -122,7 +123,7 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | ~~`saveCoordinator` (`RuntimeSaveCoordinator`)~~ | **2** | ✅ `saveGameModule` (E/3) |
 | ~~`setupRuntimeUi` + widget/theme yükleme~~ | **2** | ✅ `runtimeUiModule` (E/4); locale kabukta (dialogue ile paylaşımlı), kurallar Katman 3 |
 | ~~`loadCharacterSkeletons`~~ | **2** | ✅ `skeletalAnimationModule` (E/5); sidecar kütüphanesi modülde, ref'e iliştirme Faz F'ye kadar kabukta |
-| ~~`playAutoPlayAudio`~~ / `playAutoPlayParticles` | **2** | ✅ `audioModule` (E/8, ses + soundCue + dialogue audio); `vfxModule` sırada |
+| ~~`playAutoPlayAudio` / `playAutoPlayParticles`~~ | **2** | ✅ `audioModule` (E/8, ses + soundCue + dialogue audio) · ✅ `vfxModule` (E/9, partikül) |
 | `startGameMode` + `gameModes/registry` | **3** | Game modülü zaten burada; genişletilir |
 | `behaviorSubsystem` + `createSceneBehaviorRegistry` | **2/3** | Behavior çekirdeği modül; kurallar fork'ta |
 | Editör-özel: gizmo, seçim, `refresh*`, `emit*Changed`, authoring overlay | editör | `SceneApp`'te kalır (Katman 0 + authoring) |
@@ -693,6 +694,79 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > `verify:imports` PASS, `verify:dist --strict` PASS. Browser: beş smoke geçiyor
 > — `runtime-playflow`, `runtime-locomotion`, `runtime-script-message`,
 > `runtime-checkpoint`, `runtime-portal`.
+
+> **Uygulama kaydı (2026-08-27, E/8'e ek — bozuk sound cue sağlamlaştırması):**
+> E/8 sırasında görülen (ve taşımadan *önce* de var olan) bir kırılganlık
+> kapatıldı: bozuk bir `*.soundcue.json`, `evaluateSoundCue` içinde fırlatıp
+> `void loadSoundCue(...).then(...)` zincirinde **unhandled rejection**'a
+> dönüşüyordu — eksik bir ses yerine ölü bir sekme.
+>
+> - `engine/audio/soundCueEvaluator.ts`'e `isSoundCueAsset()` eklendi:
+>   değerlendiricinin ve `validateSoundCueGraph`'ın kontrolsüz dolaştığı yapıyı
+>   (`output` nesnesi, `nodes`/`connections` dizileri, her düğümde string `id` +
+>   bilinen `kind`) kapıda tutan sığ bir tip koruyucu. Grafın *anlamı* hâlâ
+>   `validateSoundCueGraph`'ın işi.
+> - `audioModule.loadSoundCue` artık parse sonrası bu kapıdan geçiriyor: geçmezse
+>   cue id'siyle **bir kez** uyarır ve `null` olarak cache'ler.
+> - Değerlendirme + tetikleme tek bir `fireSoundCue`'da toplandı (try/catch), ve
+>   `playSoundCue` zincirine `.catch()` yedeği kondu: yapısal kapıyı geçen ama
+>   değerlendiricinin takıldığı bir graf da yalnız kendi sesine mal olur.
+> - Editör tarafı da aynı kapıya alındı: `soundCueStore.loadSoundCueAsset` yalnız
+>   `schema`/`type` başlığına bakıyordu, kesilmiş bir dosya editörü düşürüyordu;
+>   artık `isSoundCueAsset` başarısız olursa boş cue'ya düşüyor.
+>
+> Testler: `isSoundCueAsset` için engine kontrolü (evaluator'ın doğrudan
+> dereference ettiği her şekil + "yapısal olarak cue ama çıkışsız" ayrımı) ve
+> modül kontrolü "bozuk bir cue yalnız kendi sesine mal olur" (hiç çalmaz, adıyla
+> bir kez uyarır, ikinci tetikte ne yeniden fetch ne yeniden uyarı, aynı
+> seviyedeki sağlam cue etkilenmez). **962/962 engine check.**
+
+> **Uygulama kaydı (2026-08-27, E/9 — vfx modülü, Faz E'nin sonu):** Partikül
+> sisteminin tamamı `capabilities/vfxModule.ts`'e taşındı: `VfxSubsystem`
+> (`presentation` slotu — tanım cache'i, instance havuzu, kalıcı efekt kabı,
+> kare başına ilerletme ve one-shot geri dönüşümü), manifest `effect`/`texture`
+> → URL çözümü, seviyenin `autoPlay` ParticleEmitter'ları ve kalite profilinin
+> partikül yoğunluğu. `RuntimeSceneApp`'ten `vfxSubsystem`, iki URL haritası,
+> `playAutoPlayParticles(+Entity)` ve `playActorParticleEffect` çıktı.
+>
+> **Yeni host servisi `vfx-host` — tek alan, ama neden seviye verisi değil:**
+> efekt kabı (`vfx.root`) bir kez parent'lanır ve *her seviyeden uzun yaşar*
+> (rebuild yalnız instance'ları temizler). Yani modülün sahneye seviye
+> hook'undan önce, runtime kurulurken ihtiyacı var. Host yoksa modül hiçbir şey
+> kaydetmez — efekti koyacak yer yok.
+>
+> Modülün yayımladığı `vfx-commands`: `prepareLevel(manifest)`,
+> `playAutoPlay(document)`, `playAutoPlayEntity(entity)` (runtime'da spawn olan
+> aktör) ve `triggerEntityEffect(entity)` (script'in `playParticleEffect`'i —
+> `autoPlay` şartı aramaz, `enabled: false` ikisini de durdurur), ayrıca
+> `setGlobalDensity` ve `debugSnapshot`. Kabuk `onActorParticleEffect`'te entity
+> aramasını kendi yapıp entity'yi veriyor; `actorEntityById` kabuğun.
+>
+> Audio ile aynı zamanlama gerekçesi: URL çözümü ve auto-play eski çağrı
+> yerlerinde kaldı (`populateAssetUrls` içinde `prepareLevel`, sahne kurulumunda
+> `playAutoPlay`), çünkü `onLevelLoaded` bunlar için fazla geç.
+>
+> Modül kapalıyken emitter aktörleri hâlâ var, seçilebilir ve script'lerini
+> çalıştırır; yalnız partikül olmaz, `?debug` boş bir VFX runtime'ı raporlar ve
+> havuz/cache/kare-başına ilerletme maliyeti hiç ödenmez (I3).
+>
+> Yeni birim testi `tests/engine/vfxModule.test.ts` (4 kontrol): kabın bir kez
+> parent'lanması + yalnız `autoPlay`+`enabled` emitter'ın spawn olması + tanımın
+> yerleşim sayısından bağımsız bir kez warm edilmesi + teardown'da instance'ların
+> durup cache'in sıcak kalması, script tetikleyicisinin `autoPlay` yolundan
+> ayrılması, kalite yoğunluğunun efekti asla durdurmaması + bilinmeyen effect
+> id'sinin cache'lenmiş bir ıska olması, ve sahnesiz runtime'da hiçbir şeyin
+> kaydolmaması.
+>
+> Kapılar: `build:verify` uçtan uca yeşil (**966/966 engine check**),
+> `verify:imports` PASS, `verify:dist --strict` PASS. Browser: beş smoke geçiyor
+> — `runtime-playflow`, `runtime-locomotion`, `runtime-portal`,
+> `runtime-checkpoint`, `runtime-script-message`.
+>
+> **Faz E kapandı.** §3 tablosundaki her baked subsystem artık bir Katman 2
+> modülü; `RuntimeSceneApp` 5486 → 4717 satır. Kabukta bilinçli kalan üç
+> bağ Faz F'nin konusu: AI karakter animatörleri + attack köprüsü, iskelet
+> def'inin karaktere iliştirilmesi, ve Game Mode'un kendisi.
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

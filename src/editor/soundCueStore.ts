@@ -6,6 +6,7 @@
  * normalises the payload server-side (see `tools/saveValidator.ts`). Mirrors
  * the pattern of `materialStore.ts` and `uiWidgetStore.ts`.
  */
+import { isSoundCueAsset } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
 import { projectFileUrl } from "@/project/ProjectSystem";
 
@@ -28,8 +29,11 @@ export async function loadSoundCueAsset(
   try {
     const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
     if (!response.ok) return fallbackCue(fallbackName);
-    const data = (await response.json()) as SoundCueAsset;
-    if (data?.schema !== 1 || data?.type !== "soundCue") return fallbackCue(fallbackName);
+    const data: unknown = await response.json();
+    // The header alone is not enough: the editor walks `nodes`/`connections`
+    // straight after this, so a truncated or hand-edited file has to fall back
+    // to an empty cue rather than throw on the first traversal.
+    if (!isSoundCueAsset(data)) return fallbackCue(fallbackName);
     return data;
   } catch {
     return fallbackCue(fallbackName);

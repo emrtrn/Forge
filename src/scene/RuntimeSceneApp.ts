@@ -1841,6 +1841,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       entities: sceneDocument.entities,
       layout: this.layout,
       registered: this.capabilities.ids(),
+      hasBehaviorRegistry:
+        this.runtimeServices.resolve(behaviorRegistryFactoryService) !== undefined,
     });
     await this.capabilities.levelLoaded(runtimeContext);
     // Layer 3 sees the level last — after every capability it may build on.

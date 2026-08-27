@@ -20063,6 +20063,29 @@
       "license": "Unknown"
     },
     {
+      "id": "script-parityprop-actor",
+      "name": "Script Parity Prop.Actor",
+      "assetType": "prefab",
+      "category": "Gameplay",
+      "path": "assets/starter-content/Gameplay/Script_ParityProp.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Gameplay",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 794
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "script-playercharacter-actor",
       "name": "Script Player Character.Actor",
       "assetType": "prefab",

@@ -10,7 +10,10 @@
 > katalogları oyun modülüne, F/3 oyun kuralları oyun modülüne, F/4 AI karakter
 > animasyonu capability'si + iskelet iliştirmesi modüle).
 > **Faz G tamamlandı** (sessiz-kayıp dedektörü + kaydetme raporu, desteklenmeyen
-> capability uyarısı, serialization drift testleri). Sıradaki faz H.
+> capability uyarısı, serialization drift testleri).
+> **Faz H tamamlandı** (RuntimeParity level + A/B/C testleri + browser smoke +
+> `templates/game-starter`; Definition of Done tarayıcıda kanıtlandı).
+> Sıradaki faz I (isteğe bağlı RTS doğrulama vakası).
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -938,6 +941,81 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   **hiç sahne-kurulum kodu yazmadan** açıp landscape/material/light/env/VFX/actor
   görüntüler. Yalnız kendi gameplay'ini ekler.
 
+> **Uygulama kaydı (2026-08-27, H/1 — RuntimeParity fixture):**
+> `public/layouts/RuntimeParity.level.json` + kendi yükseklik sidecar'ı
+> `public/landscapes/runtime-parity.landscape.json` (65×65, iki paint katmanı).
+> İçerik: landscape, iki statik mesh (`floor-400x400`, `pillar-50x500`), üç
+> materyal ataması — aynı mesh'in iki yerleşimi farklı materyalle (per-placement
+> override), gölge veren directional güneş + point fill, sky atmosphere +
+> skyLightCapture + height fog + cloud layer + post process, auto-play partikül
+> emitter'ı (`starter-fx-fire-loop`), `spin` behavior'lı animasyonlu obje,
+> collision'lı yerleştirilmiş Actor Script (`Script_ParityProp.actor.json`, yeni
+> starter asset) ve Player Start. **Bilerek gameplay yok:** `worldSettings.gameMode`
+> yazılmadı, karakter yok — DoD'nin "sıfır-gameplay" iddiası şablonun kendi
+> oyunuyla maskelenmesin diye.
+>
+> Fixture, kaydetme yolundan geçirilerek üretildi (`validateLayout` +
+> `validateLandscapeData`) ve Faz G dedektörüyle doğrulandı; bu sırada dedektör
+> iki gerçek bulgu verdi (varsayılan-değer eleme + uydurma `skyLightCapture.enabled`
+> alanı) ve fixture düzeltildi.
+>
+> **Uygulama kaydı (2026-08-27, H/2 — testler A/B/C):**
+> `tests/engine/runtimeParityLevel.test.ts` (8 kontrol).
+> (A) **round-trip:** kaydetme sabit nokta — `validateLayout(saved) === saved` ve
+> hiçbir alan düşmüyor (sidecar için de aynısı), yani editörde Save Layout bu
+> fixture'ı aşındıramaz.
+> (B) **instantiation:** türetilen scene document sayımları — yerleşim başına bir
+> entity + ışıklar, 4 collider, 1 ParticleEmitter, 1 Behavior; ayrıca actor
+> sınıfı `normalizeActorScriptDef` → `actorInstanceToEntity` ile çözülüp
+> transform + mesh + collider taşıdığı doğrulanıyor.
+> (C) **parity:** fixture'ın authored ettiği her özellik (`PARITY_FEATURES`
+> tablosu) build manifestinde **paylaşılan level-content adımı** olmalı — yani
+> bu level'da editör viewport'ta görünen her şeyi Play de aynı adımla kuruyor.
+> Tablo aynı zamanda fixture'ın içeriğini de sabitliyor: biri landscape'i ya da
+> materyal override'ını silerse test adıyla düşüyor.
+>
+> Bu arada Faz F'den kalan manifest kayması düzeltildi: `game-rules` adımı
+> `ui-view-model-seed` oldu ve Katman 3 için `game-modules` adımı eklendi
+> (kurallar artık oyun modülünde).
+>
+> **Uygulama kaydı (2026-08-27, H/3 — browser smoke):**
+> `tests/smoke/runtime-parity.spec.ts` — smoke menüsüne eklenen "Parity" travel
+> düğmesiyle **commit'lenmiş level'a olduğu gibi** gidiliyor (smoke onu yeniden
+> yazmıyor). Kontroller: `"layout":"RuntimeParity"` yüklendi, sıfırdan büyük draw
+> call + tris, `vfx active:≥1 alive:≥1`, `mode: Default Camera` +
+> `possessed: none`, hiç `Unsupported runtime capability` uyarısı ve hiç sayfa
+> hatası yok.
+>
+> **Uygulama kaydı (2026-08-27, H/4 — game-starter + DoD kanıtı):**
+> `templates/game-starter/` = `main.ts` (üç çağrı: `createForgeRuntime` →
+> `loadLevel` → `start`, artı `?debug` overlay'i), `main.level.json` (parity
+> fixture'ının starter adıyla kopyası), `index.html`, `README.md`. `tsconfig`
+> `templates`'i de tipliyor, böylece starter çürüyemez; iki birim kontrolü
+> starter'ın level'ının parity fixture'ıyla eşit kaldığını ve `main.ts`'in
+> **yalnız** kompozisyon + debug importları taşıdığını (three/engine/sahne
+> kurucusu yok) doğruluyor.
+>
+> **Faz H'de bulunan bir sessizlik daha kapatıldı:** oyun modülü olmayan bir
+> runtime'da authored `Behavior` script'leri hiçbir şeye çözülmüyor (katalog
+> Katman 3). Artık seviye kurulumunda uyarı basılıyor —
+> `No behavior catalog registered: N authored behavior script(s) …` — yani
+> starter'daki dönen küpün neden durduğu konsolda yazıyor
+> (`capabilityCoverage.ts`, `hasBehaviorRegistry`).
+>
+> **DoD tarayıcıda kanıtlandı:** `tests/smoke/game-starter.spec.ts` starter'ın
+> kendi sayfasını açıyor (`/templates/game-starter/index.html?debug`, level
+> README'deki adımla `public/layouts/`'a kuruluyor) ve seviye tam olarak
+> render ediliyor: draw call/tris > 0, partikül canlı, **hiç oyun modülü yok** →
+> `mode: —`, `possessed: none`. Yani sıfır-gameplay bir uygulama, tek satır
+> sahne-kurulum kodu yazmadan landscape/materyal/ışık/env/VFX/actor görüyor.
+>
+> **Faz H kapandı.** Kapılar: `build:verify` uçtan uca yeşil (**1007/1007 engine
+> check**), `verify:imports` + `verify:dist --strict` PASS, `check:assets` PASS.
+> Browser: **tüm paket 33/33** (`npm run smoke:browser`; iki yeni spec dahil).
+> Not: paket koşarken kaynak dosyası düzenlemeyin — Vite HMR koşan spec'i yeniden
+> yükletiyor ve `editor-authoring` bu yüzden bir kez zaman aşımına uğradı, temiz
+> tekrar koşumda geçti.
+
 ### Faz I — RTS doğrulama vakası (isteğe bağlı ama önerilen)
 - **İş:** Karaktersiz, tepeden bakışlı bir örnek: `rtsCameraGameMode` (edge-pan +
   zoom + seçim iskeleti) + character/skeletal modüllerini kapatan bir modül seti.
@@ -989,14 +1067,15 @@ A (ölçüm) ──▶ B (shell) ──▶ C (LevelRuntime, tek pipeline) ──
 
 1. Editör viewport ve Play **tek** LevelRuntime pipeline'ını kullanır; ikiz
    `build*`/`apply*` metotları kalmaz (I2, Faz A testiyle korunur).
-2. Bir fork, `createForgeRuntime({modules})` + `runtime.use(gameModule)` ile
-   kurulur; `LevelRuntime`/`RuntimeSceneApp` fork tarafından **düzenlenmez** (I4).
+2. ✅ Bir fork, `createForgeRuntime({modules, gameModules})` ile kurulur;
+   `LevelRuntime`/`RuntimeSceneApp` fork tarafından **düzenlenmez** (I4, Faz F).
 3. Capability'ler opt-in; bir modül kapatılınca yalnız o davranış gider, sahne
    içeriği hep görünür (I3).
-4. Sıfır-gameplay `game-starter`, RuntimeParity level'ını ek sahne kodu olmadan
-   çalıştırır (Faz H).
+4. ✅ Sıfır-gameplay `game-starter`, RuntimeParity level'ını ek sahne kodu
+   olmadan çalıştırır (Faz H; `tests/smoke/game-starter.spec.ts` tarayıcıda
+   doğruluyor).
 5. Karaktersiz RTS senaryosu ek entegrasyon olmadan sahneyi tam kurar (Faz I).
-6. Bilinmeyen alan sessizce düşmez; uyarı üretir (I5, Faz G).
+6. ✅ Bilinmeyen alan sessizce düşmez; uyarı üretir (I5, Faz G).
 7. Tüm gate'ler yeşil: `build:verify` (`tsc` + `vite build` + `test:engine` +
    `verify:dist --strict`) + `check:assets` + `smoke:browser`.
 

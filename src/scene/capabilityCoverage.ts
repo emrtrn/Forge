@@ -19,6 +19,7 @@
 import {
   AI_CONTROLLER_COMPONENT,
   AUDIO_COMPONENT,
+  BEHAVIOR_COMPONENT,
   CHARACTER_MOVEMENT_COMPONENT,
   MOVING_PLATFORM_COMPONENT,
   PARTICLE_EMITTER_COMPONENT,
@@ -93,6 +94,13 @@ export interface CapabilityCoverageInput {
   readonly layout: RoomLayout;
   /** Capability module ids registered with this runtime. */
   readonly registered: readonly string[];
+  /**
+   * Whether a Layer 3 game module published a behavior catalog. Behavior scripts
+   * are game content, so a runtime with no game module resolves every authored
+   * `Behavior` component to nothing — correct, but worth saying out loud for the
+   * same reason a switched-off capability is.
+   */
+  readonly hasBehaviorRegistry?: boolean;
 }
 
 /**
@@ -110,6 +118,16 @@ export function collectUnsupportedCapabilities(input: CapabilityCoverageInput): 
     warnings.push(
       `Unsupported runtime capability: "${rule.moduleId}" is not registered, so ${count} authored ${rule.authored}(s) in this level do nothing.`,
     );
+  }
+  if (input.hasBehaviorRegistry === false) {
+    const scripted = input.entities.filter(
+      (entity) => entity.components[BEHAVIOR_COMPONENT] !== undefined,
+    ).length;
+    if (scripted > 0) {
+      warnings.push(
+        `No behavior catalog registered: ${scripted} authored behavior script(s) in this level do nothing. Behavior scripts are game content — a Layer 3 game module publishes the catalog.`,
+      );
+    }
   }
   return warnings;
 }

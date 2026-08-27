@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_ParityProp",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "collider",
+      "component": "Collider",
+      "props": {
+        "shape": "box",
+        "isStatic": true,
+        "isSensor": false,
+        "size": [1, 1, 1],
+        "simulatePhysics": false,
+        "hideInGame": true
+      },
+      "parent": "root"
+    },
+    {
+      "id": "meshRenderer",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "shape-cube"
+      },
+      "parent": "collider"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

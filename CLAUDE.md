@@ -165,4 +165,11 @@ engine/editor.
    the system under test.
 3. Improve asset catalog UI placement-rule affordances.
 4. Later: a `tools/create-project.mjs` scaffold that stamps out a new project
-   from the template (copy + rename + reset project data).
+   from the template (copy + rename + reset project data). Its starting point
+   already exists: `templates/game-starter/` is a zero-gameplay app
+   (`createForgeRuntime` → `loadLevel` → `start`, no scene setup code) whose
+   level is the `public/layouts/RuntimeParity.level.json` fixture — terrain,
+   meshes + a material override, lights, the environment stack, VFX and a
+   collidable Actor Script. `tests/smoke/game-starter.spec.ts` opens it at
+   `/templates/game-starter/index.html?debug` and is the proof that a fork needs
+   no scene-building code of its own.

@@ -974,6 +974,7 @@ import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegis
 import { registerDroppedFieldTests } from "../tests/engine/droppedFields.test";
 import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCoverage.test";
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
+import { registerRuntimeParityLevelTests } from "../tests/engine/runtimeParityLevel.test";
 import { registerForgeGameModuleTests } from "../tests/engine/forgeGameModule.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
 import { registerAiModuleTests } from "../tests/engine/aiModule.test";
@@ -1004,6 +1005,7 @@ await registerCapabilityRegistryTests(check, checkAsync);
 registerDroppedFieldTests(check);
 registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
+registerRuntimeParityLevelTests(check);
 await registerForgeGameModuleTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
 await registerAiModuleTests(checkAsync);

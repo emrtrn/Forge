@@ -32,5 +32,5 @@
       "@project/*": ["project/*"]
     }
   },
-  "include": ["src", "engine", "editor", "builder", "game", "project", "vite.config.ts"]
+  "include": ["src", "engine", "editor", "builder", "game", "project", "templates", "vite.config.ts"]
 }

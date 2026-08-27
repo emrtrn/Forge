@@ -22,10 +22,11 @@ const EXPECTED_RUNTIME_ONLY = [
   "auto-play-particles",
   "character-skeletons",
   "game-mode",
-  "game-rules",
+  "ui-view-model-seed",
   "quality-settings",
   "lod-bias",
   "capability-modules",
+  "game-modules",
   "shader-warmup",
 ];
 

@@ -79,6 +79,31 @@ export function registerCapabilityCoverageTests(check: Check): void {
     assert.match(warnings[0] ?? "", /"save-game".*1 authored checkpoint trigger/);
   });
 
+  check("a runtime with no behavior catalog says its authored scripts are inert", () => {
+    const entities = [
+      entity("actor:0", { [BEHAVIOR_COMPONENT]: { scriptId: "spin" } }),
+      entity("actor:1", { [BEHAVIOR_COMPONENT]: { scriptId: "spin" } }),
+    ];
+    const warnings = collectUnsupportedCapabilities({
+      entities,
+      layout: EMPTY_LAYOUT,
+      registered: [],
+      hasBehaviorRegistry: false,
+    });
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? "", /No behavior catalog registered: 2 authored behavior script/);
+    // With a game module publishing the catalog, nothing is reported.
+    assert.deepEqual(
+      collectUnsupportedCapabilities({
+        entities,
+        layout: EMPTY_LAYOUT,
+        registered: [],
+        hasBehaviorRegistry: true,
+      }),
+      [],
+    );
+  });
+
   check("a level with nothing authored for a missing capability stays quiet", () => {
     assert.deepEqual(
       collectUnsupportedCapabilities({ entities: [], layout: EMPTY_LAYOUT, registered: [] }),

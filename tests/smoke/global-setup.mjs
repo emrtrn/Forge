@@ -9,6 +9,22 @@ const MENU_PATH = resolve("public/assets/starter-content/UI/SaveLoadMenu.ui.json
 const SMOKE_SCENE = "layouts/__playwright-smoke.level.json";
 const SMOKE_TARGET_SCENE = "layouts/__playwright-smoke-target.level.json";
 const SMOKE_PATROL_SCENE = "layouts/__playwright-smoke-patrol.level.json";
+/**
+ * The committed RuntimeParity fixture (Phase H). Unlike the scenes above it is
+ * NOT generated here: the whole point is that the level as shipped — no smoke
+ * rewriting, no gameplay authored into it — builds and renders through the
+ * shared pipeline. The smoke reaches it through the pause menu's travel button.
+ */
+const RUNTIME_PARITY_SCENE = "layouts/RuntimeParity.level.json";
+/**
+ * The game-starter template's level, installed the way its README tells a fork
+ * to install it (copy `main.level.json` into `public/layouts/`). Written here
+ * rather than committed, so the starter smoke exercises the documented step and
+ * teardown can remove it again.
+ */
+const GAME_STARTER_TEMPLATE_LEVEL = resolve("templates/game-starter/main.level.json");
+const GAME_STARTER_SCENE = "layouts/main.level.json";
+const GAME_STARTER_SCENE_PATH = resolve("public", GAME_STARTER_SCENE);
 const SMOKE_MENU = "assets/__playwright-smoke-menu.ui.json";
 /**
  * Authored landscape sidecar, shared by every level. The sculpt/paint smokes
@@ -254,6 +270,17 @@ function prepareSmokeMenu(menu) {
     },
   });
   footer.children.unshift({
+    id: "smoke-parity",
+    widget: "Button",
+    props: {
+      text: "Parity",
+      onClick: {
+        type: "message",
+        message: `travel:${RUNTIME_PARITY_SCENE}`,
+      },
+    },
+  });
+  footer.children.unshift({
     id: "smoke-patrol",
     widget: "Button",
     props: {
@@ -298,6 +325,7 @@ export default async function globalSetup() {
           path: LANDSCAPE_SIDECAR,
           raw: await readOptionalText(resolve("public", LANDSCAPE_SIDECAR)),
         },
+        { path: GAME_STARTER_SCENE, raw: await readOptionalText(GAME_STARTER_SCENE_PATH) },
       ],
       smokeScenes: [SMOKE_SCENE, SMOKE_TARGET_SCENE, SMOKE_PATROL_SCENE],
       smokeFiles: [SMOKE_MENU],
@@ -321,6 +349,9 @@ export default async function globalSetup() {
     "utf8",
   );
   await writeFile(SMOKE_MENU_PATH, `${JSON.stringify(smokeMenu, null, 2)}\n`, "utf8");
+  // The starter template installed the way its README says: copy its level
+  // into public/layouts/. Removed again by teardown.
+  await writeFile(GAME_STARTER_SCENE_PATH, await readFile(GAME_STARTER_TEMPLATE_LEVEL, "utf8"), "utf8");
 
   const smokeManifest = await readJson(MANIFEST_PATH);
   smokeManifest.editor = {

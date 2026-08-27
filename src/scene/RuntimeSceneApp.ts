@@ -14,6 +14,7 @@ import { AssetLoader } from "./assetLoader";
 import type { CapabilityModule } from "./capabilities/CapabilityModule";
 import { CapabilityRegistry, createCapabilityRegistry } from "./capabilities/capabilityRegistry";
 import { createRuntimeContext } from "./capabilities/RuntimeContext";
+import { reportUnsupportedCapabilities } from "./capabilityCoverage";
 import {
   createGameModuleHost,
   type ForgeGameModule,
@@ -1832,6 +1833,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       layout: this.layout,
       sceneDocument,
       services: this.runtimeServices,
+    });
+    // Say out loud what this level authored that this runtime cannot run: a
+    // switched-off capability leaves its authored data inert, and silence there
+    // reads as a bug rather than as the opt-out it is (I5).
+    reportUnsupportedCapabilities({
+      entities: sceneDocument.entities,
+      layout: this.layout,
+      registered: this.capabilities.ids(),
     });
     await this.capabilities.levelLoaded(runtimeContext);
     // Layer 3 sees the level last — after every capability it may build on.

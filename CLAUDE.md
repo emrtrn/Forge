@@ -60,6 +60,13 @@ engine/editor.
   (`tsc --noEmit` + `vite build` + `test:engine` + `verify:dist --strict`) and
   `check:assets` on every push/PR to `main` — the automated mirror of the local
   gate. Keep both green; deploy stays out of CI (per-fork concern).
+- **Save-validator safety net (Faz G):** every save now compares what was sent
+  with what survived (`tools/droppedFields.ts`). A field the allowlist does not
+  copy is reported — dev-server console `[save] …`, `dropped[]` in the response,
+  and a **warning** save status in the editor instead of a clean "Saved" — and
+  `tests/engine/droppedFields.test.ts` + `serializationDrift.test.ts` fail if a
+  runtime-known field stops round-tripping. The allowlist rules below still
+  apply: the net tells you a field was dropped, it does not add it for you.
 - **Save-validator allowlist gotcha:** any new `LayoutPlacement` /
   `LayoutCharacter` / `LayoutLightActor` / `LayoutReflectionPlane` /
   `LayoutBlockingVolume` field — or any new field on a singleton environment actor

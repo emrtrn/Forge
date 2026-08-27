@@ -933,6 +933,12 @@ export interface LayoutSavePayload {
 
 export interface LayoutSaveResult {
   path?: string;
+  /**
+   * Fields the save validator did not copy through (plan I5). Empty/absent on a
+   * clean save; anything listed here was silently lost before this report
+   * existed, and is reported to the user instead of vanishing.
+   */
+  dropped?: readonly string[];
 }
 
 export type LayoutSaver = (payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
@@ -3159,6 +3165,17 @@ export class SceneApp {
     }
     await this.saveFoliageData();
     await this.saveMeshPaintSidecar();
+    const dropped = result.dropped ?? [];
+    if (dropped.length > 0) {
+      // The save still happened — the level is written, minus these fields. Say
+      // so loudly rather than reporting a clean success (I5).
+      console.warn("[save] dropped by the save validator:", dropped.join(", "));
+      this.onStatus?.(
+        `Saved ${result.path ?? "layout"} — ${dropped.length} unsupported field(s) dropped: ${dropped.slice(0, 3).join(", ")}${dropped.length > 3 ? ", …" : ""}`,
+        "warning",
+      );
+      return;
+    }
     this.onStatus?.(`Saved ${result.path ?? "layout"}.`, "success");
   }
 

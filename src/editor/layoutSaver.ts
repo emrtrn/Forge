@@ -19,9 +19,15 @@ export async function saveLayoutViaDevEndpoint(
     ok?: boolean;
     error?: string;
     path?: string;
+    dropped?: string[];
   };
   if (!response.ok || !body.ok) {
     throw new Error(body.error ?? `Save failed: HTTP ${response.status}`);
   }
-  return body.path === undefined ? {} : { path: body.path };
+  // `dropped` lists fields the server-side allowlist did not copy through, so
+  // the editor can warn instead of reporting a clean save (plan I5).
+  return {
+    ...(body.path === undefined ? {} : { path: body.path }),
+    ...(body.dropped && body.dropped.length > 0 ? { dropped: body.dropped } : {}),
+  };
 }

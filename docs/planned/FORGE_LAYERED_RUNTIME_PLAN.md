@@ -8,7 +8,9 @@
 > E/6 character-movement, E/7 AI, E/8 audio, E/9 vfx).
 > **Faz F tamamlandı** (F/1 ForgeGameModule + createForgeRuntime, F/2 Katman 3
 > katalogları oyun modülüne, F/3 oyun kuralları oyun modülüne, F/4 AI karakter
-> animasyonu capability'si + iskelet iliştirmesi modüle). Sıradaki faz G.
+> animasyonu capability'si + iskelet iliştirmesi modüle).
+> **Faz G tamamlandı** (sessiz-kayıp dedektörü + kaydetme raporu, desteklenmeyen
+> capability uyarısı, serialization drift testleri). Sıradaki faz H.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -868,6 +870,59 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   runtime LevelRuntime uyarı yolu.
 - **Kabul:** Yeni bir alan validator'a eklenmeden kaydedilince **uyarı görünür**
   (test); mevcut allowlist davranışı kırılmaz.
+
+> **Uygulama kaydı (2026-08-27, G/1 — sessiz kayıp artık görünür):** Altmış
+> `validate*` fonksiyonunu yeniden yazmak yerine **karşılaştırma** eklendi:
+> `tools/droppedFields.ts` gönderilen gövde ile doğrulanmış çıktıyı gezip
+> *inputta olup outputta olmayan* anahtarları yol olarak raporluyor
+> (`layout.instances[0].glowIntensity`). Tek yönlü ve muhafazakâr: eklenen
+> varsayılanlar, tip dönüşümleri ve yeniden sıralama raporlanmıyor (normalizer'ın
+> işi); uzunluğu değişen dizi ise öğe öğe değil **adet** olarak bildiriliyor —
+> reddedilen bir öğe sonraki tüm indeksleri kaydırdığı için pairwise
+> karşılaştırma tüm kuyruğu yanlışlıkla "düştü" sayardı.
+>
+> Bağlandığı üç uç: `/__save-layout`, `/__save-skeleton`, `/__save-effect`.
+> Sunucu konsola `[save] …` uyarısı basıyor **ve** yanıta `dropped: string[]`
+> ekliyor; `layoutSaver` bunu `LayoutSaveResult.dropped` olarak taşıyor,
+> `SceneApp.saveLayout` ise temiz "Saved" yerine **warning** durumu gösteriyor
+> (`Saved playground.json — 2 unsupported field(s) dropped: …`). Yani kayıp artık
+> hem kaydeden kişiye hem konsola görünüyor.
+>
+> Şablonun kendi seviyeleri dedektörde **temiz** çıkıyor (yanlış pozitif yok);
+> `tests/engine/droppedFields.test.ts` (7 kontrol) bunu canlı bir regresyon
+> kapısına çeviriyor: runtime'ın okuduğu ama validator'ın kopyalamadığı bir alan
+> eklenirse `playground.json` testi düşer.
+>
+> **Uygulama kaydı (2026-08-27, G/2 — tek-kaynak yerine drift kapısı):** Planın
+> "validate* runtime normalizer'ını kullansın" maddesi iskelet sidecar'ında
+> **kasten uygulanmadı**: validator bozuk veriyi reddediyor (400), normalizer ise
+> sessizce düzeltiyor; ikisini birleştirmek "mevcut allowlist davranışı
+> kırılmaz" kuralını çiğner ve kaydetmeyi gevşetirdi. Bunun yerine drift
+> mekanik olarak kapatıldı: `tests/engine/serializationDrift.test.ts` runtime
+> normalizer'ının ürettiği maksimal şekli save validator'dan geçirip
+> `collectDroppedFields`'in **boş** olmasını şart koşuyor (iskelet + effect),
+> ayrıca kaydedilen dosyanın aynı runtime şekline geri normalize olduğunu
+> doğruluyor. Tek tarafa alan eklenirse test tam yolu adıyla düşüyor. Layout
+> tarafında aynı görevi `playground.json` kontrolü görüyor.
+>
+> **Uygulama kaydı (2026-08-27, G/3 — desteklenmeyen capability uyarısı):**
+> `src/scene/capabilityCoverage.ts`, seviye kurulduktan sonra authored içerik ile
+> kayıtlı capability modüllerini karşılaştırıp eksik olan her biri için tek satır
+> basıyor:
+> `Unsupported runtime capability: "vfx" is not registered, so 3 authored
+> ParticleEmitter component(s) in this level do nothing.` Kurallar bileşen
+> (`Audio`, `ParticleEmitter`, `AIController`, `CharacterMovement`,
+> `MovingPlatform`, `SplinePathFollower`), behavior script id (`checkpoint`,
+> `begin-conversation`) ve seviye ayarı (World Settings widget'ları) üzerinden
+> çalışıyor. Bu bir hata değil, teşhis: capability'yi bilerek kapatan fork
+> desteklenen şeyi yapıyor — mesaj yalnızca verinin **neden** ölü olduğunu
+> söylüyor. `tests/engine/capabilityCoverage.test.ts` (6 kontrol) şablonun
+> varsayılan setinin her kuralı kapattığını da doğruluyor, böylece mesaj gürültü
+> hâline gelmiyor.
+>
+> **Faz G kapandı.** Kapılar: `build:verify` yeşil (**998/998 engine check**),
+> `verify:imports` + `verify:dist --strict` PASS; browser: `editor-authoring`
+> (Save Layout yolu) + `runtime-playflow` geçti, `public/` temiz kaldı.
 
 ### Faz H — RuntimeParity level + testler + game-starter (kanıt)
 - **İş:**

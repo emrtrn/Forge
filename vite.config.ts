@@ -42,6 +42,7 @@ import {
   validateSaveAiStateTreePayload,
   validateOpenLevelPayload,
 } from "./tools/saveValidator";
+import { collectDroppedFields, formatDroppedFieldWarning } from "./tools/droppedFields";
 
 // Single-codebase template: this repo's own public/ is the project root that
 // both the game (static fetch) and the editor (authoring middleware) read/write.
@@ -193,6 +194,19 @@ async function readJsonBody(
     chunks.push(buffer);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+}
+
+/**
+ * Reports (to the dev console) any field the allowlist validator did not copy
+ * through, and hands the same list back so the endpoint can return it to the
+ * editor. Silent data loss is the failure mode the allowlist design invites, so
+ * every structured save that can afford the comparison runs it (plan I5).
+ */
+function reportDroppedFields(input: unknown, output: unknown, subject: string): string[] {
+  const report = collectDroppedFields(input, output, subject);
+  const warning = formatDroppedFieldWarning(report, subject);
+  if (warning) console.warn(`[save] ${warning}`);
+  return [...report.paths];
 }
 
 // A 257x257 landscape serializes to well over 1 MB (heights + 4 paint layers of
@@ -1071,13 +1085,26 @@ function layoutEditorPlugin(): Plugin {
             return;
           }
           try {
-            const payload = validateSaveSkeletonPayload(await readJsonBody(req));
+            const body = await readJsonBody(req);
+            const payload = validateSaveSkeletonPayload(body);
+            const dropped = reportDroppedFields(
+              (body as { skeleton?: unknown } | null)?.skeleton,
+              payload.skeleton,
+              "skeleton",
+            );
             const sidecarPath = resolvePublicPath(payload.path);
             const previous = await readFile(sidecarPath, "utf8").catch(() => null);
             const nextSidecar = `${JSON.stringify(payload.skeleton, null, 2)}\n`;
             await writeFile(sidecarPath, nextSidecar, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));
+            res.end(
+              JSON.stringify({
+                ok: true,
+                path: payload.path,
+                changed: previous !== nextSidecar,
+                dropped,
+              }),
+            );
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -1221,13 +1248,21 @@ function layoutEditorPlugin(): Plugin {
             return;
           }
           try {
-            const payload = validateSaveEffectPayload(await readJsonBody(req));
+            const body = await readJsonBody(req);
+            const payload = validateSaveEffectPayload(body);
+            const dropped = reportDroppedFields(
+              (body as { effect?: unknown } | null)?.effect,
+              payload.effect,
+              "effect",
+            );
             const filePath = resolvePublicPath(payload.path);
             const previous = await readFile(filePath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.effect, null, 2)}\n`;
             await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+            res.end(
+              JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, dropped }),
+            );
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -2007,7 +2042,13 @@ function layoutEditorPlugin(): Plugin {
         }
 
         try {
-          const payload = validateSavePayload(await readJsonBody(req));
+          const body = await readJsonBody(req);
+          const payload = validateSavePayload(body);
+          const submitted =
+            body && typeof body === "object" && "layout" in body
+              ? (body as { layout: unknown }).layout
+              : body;
+          const dropped = reportDroppedFields(submitted, payload.layout, "layout");
           const manifest = await readProjectManifest();
           const layoutPath = resolvePublicPath(manifest.editor.defaultScene);
           const previous = await readFile(layoutPath, "utf8").catch(() => null);
@@ -2027,6 +2068,7 @@ function layoutEditorPlugin(): Plugin {
               ok: true,
               path: layoutPath,
               changed: previous !== nextLayout || manifestChanged,
+              dropped,
             }),
           );
         } catch (error) {

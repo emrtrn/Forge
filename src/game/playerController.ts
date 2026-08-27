@@ -10,7 +10,7 @@ import type {
   PlayerControllerDefinition,
   PlayerState,
   PointerLookMode,
-} from "@/game/gameModes/types";
+} from "@/scene/gameModeTypes";
 
 const DEFAULT_CONTROL_ROTATION: LookAngles = { yaw: 0, pitch: 0 };
 

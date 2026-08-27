@@ -1,5 +1,9 @@
 /**
- * Pure TPS spawn resolution (no Three.js/DOM).
+ * Pure Player Start spawn resolution (no Three.js/DOM).
+ *
+ * Player Start is a Layer 1 level marker, not a game rule, so resolving it is
+ * engine work: the runtime shell uses these helpers for any character-possessing
+ * Game Mode, and a fork's own mode gets them for free.
  *
  * In the TPS Game Mode the possessed player starts at the scene's first Player
  * Start marker (an instance under the synthetic `marker:playerStart` asset). When

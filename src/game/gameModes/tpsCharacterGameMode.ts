@@ -60,7 +60,7 @@ import type {
   PlayerControllerDefinition,
   PlayerState,
   RuntimeCharacterRef,
-} from "./types";
+} from "@/scene/gameModeTypes";
 
 /**
  * Third-person follow camera: sits behind (+z) and above the player, looking

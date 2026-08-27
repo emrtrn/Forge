@@ -1,16 +1,18 @@
 /**
  * Canonical runtime input bindings: raw input codes → named actions.
  *
- * This is the code-owned key map the runtime `ActionMap` is seeded with (the
- * "action mapping" half of Forge's input, alongside the look/move axis mapping).
- * It lives here, separate from `RuntimeSceneApp`, so editor-side read-only views
- * (e.g. the Actor Script Details montage→input panel) can resolve an action to
- * its physical key without importing the whole runtime app.
+ * This is the key map the runtime `ActionMap` is seeded with (the "action
+ * mapping" half of Forge's input, alongside the look/move axis mapping). It is
+ * platform default input, not game rules — the action *names* are the engine's
+ * vocabulary (`move-forward`, `jump`, `interact`, `menu`…), so the runtime shell
+ * and editor-side read-only views (e.g. the Actor Script Details montage→input
+ * panel) both resolve an action to its physical key from here. A fork rebinds by
+ * seeding its own `ActionMap`.
  *
- * `SceneApp` keeps its own reduced editor-preview subset; this is the full game
- * set, including the montage-relevant `fire`/`aim`/`emote` actions.
+ * `SceneApp` keeps its own reduced editor-preview subset; this is the full
+ * runtime set, including the montage-relevant `fire`/`aim`/`emote` actions.
  */
-import type { ActionBindings } from "@engine/input/actionMap";
+import type { ActionBindings } from "./actionMap";
 
 export const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   KeyW: "move-forward",

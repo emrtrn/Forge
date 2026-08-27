@@ -7,7 +7,7 @@
 import { DEFAULT_GAME_MODE_ID } from "./catalog";
 import { defaultCameraGameMode } from "./defaultCameraGameMode";
 import { tpsCharacterGameMode } from "./tpsCharacterGameMode";
-import type { GameModeDefinition } from "./types";
+import type { GameModeDefinition } from "@/scene/gameModeTypes";
 
 const MODES = new Map<string, GameModeDefinition>(
   [defaultCameraGameMode, tpsCharacterGameMode].map((mode) => [mode.id, mode]),

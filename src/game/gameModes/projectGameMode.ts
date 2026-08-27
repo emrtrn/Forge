@@ -12,7 +12,7 @@
  * `RuntimeSceneApp.applyPlayerStartSpawn`). Built-in modes are unaffected.
  */
 import { TpsCharacterSession, TPS_PLAYER_CONTROLLER } from "./tpsCharacterGameMode";
-import type { GameModeDefinition, PlayerControllerDefinition } from "./types";
+import type { GameModeDefinition, PlayerControllerDefinition } from "@/scene/gameModeTypes";
 
 /** Resolved config for a project Game Mode, sourced from its Actor Script class. */
 export interface ProjectGameModeConfig {

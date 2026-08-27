@@ -113,6 +113,11 @@ docs, raw authoring assets, or local dev scripts.
 
 - Game Mode (`RuntimeSceneApp` and the `/` branch in `src/main.ts`) must not
   import `src/editor/*` or `editor/*`.
+- `RuntimeSceneApp` must not import `src/game/*` either: which Game Modes,
+  behaviors, AI tasks and gameplay rules exist is Layer 3 content, published by a
+  `ForgeGameModule` (`src/game/gameModule.ts` in the template) that
+  `src/main.ts` injects through `createForgeRuntime`. Both rules are enforced by
+  `npm run verify:imports`.
 - The `EditorUi` import must remain behind `?editor` and `import.meta.env.DEV`.
 - Editor code may depend on shared scene/project APIs and editor-owned
   controller modules.

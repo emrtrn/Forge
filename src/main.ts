@@ -8,8 +8,9 @@
  *              (the editor bundle is a separate chunk, never loaded in game mode).
  *   ?debug     attaches the perf overlay in any mode.
  */
-import { RuntimeSceneApp } from "@/scene/RuntimeSceneApp";
+import { createForgeRuntime } from "@/scene/ForgeRuntime";
 import { createDefaultRuntimeModules } from "@/scene/capabilities/defaultRuntimeModules";
+import { createGameModule } from "@/game/gameModule";
 import { attachDebugStats } from "@/scene/debugStats";
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -56,19 +57,29 @@ async function main(): Promise<void> {
   }
 
   // Inversion of control, runtime side: the composition root chooses which Layer 2
-  // capabilities this build ships with. A fork edits this list — never the shell.
-  const app = new RuntimeSceneApp(canvas, {
+  // capabilities this build ships with, then plugs in the Layer 3 game module.
+  // A fork edits this composition — never the shell (plan I4).
+  const forge = await createForgeRuntime({
+    canvas,
     scriptMessageTraceLimit,
     debug: params.has("debug"),
-    capabilities: createDefaultRuntimeModules(),
+    modules: createDefaultRuntimeModules(),
+    // Layer 3: the game's own module. It publishes what the runtime shell must
+    // not know by itself — the Game Mode catalog, the behavior catalog, the AI
+    // task vocabulary — so a fork swaps its game in here and the shell never
+    // imports `@/game`.
+    gameModules: [createGameModule()],
   });
 
   // Perf readout (qa-poki standard) behind ?debug — invisible in production.
   if (params.has("debug")) {
-    attachDebugStats(app, requireElement("debug-stats"));
+    attachDebugStats(forge.app, requireElement("debug-stats"));
   }
 
-  app.start();
+  // The level is built here rather than inside the runtime's constructor, so
+  // everything a game module registers is in place before the first build.
+  await forge.loadLevel();
+  forge.start();
 }
 
 void main();

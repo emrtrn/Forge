@@ -8,7 +8,7 @@
  *
  * The math (look angles) lives in pure game code.
  */
-import type { InputMode, PointerLookMode } from "@/game/gameModes/types";
+import type { InputMode, PointerLookMode } from "@/scene/gameModeTypes";
 
 export interface PointerLookSourceOptions {
   readonly onInputModeChange?: (mode: InputMode) => void;

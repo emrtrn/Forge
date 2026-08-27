@@ -3,10 +3,12 @@
 
 > Tarih: 2026-08-09
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
-> Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
 > **Faz E tamamlandı** (E/1 bağlanma mekanizması + moving-platform +
 > spline-follower, E/2 dialogue, E/3 save-game, E/4 runtime-UI, E/5 skeletal,
-> E/6 character-movement, E/7 AI, E/8 audio, E/9 vfx). Sıradaki faz F.
+> E/6 character-movement, E/7 AI, E/8 audio, E/9 vfx).
+> **Faz F tamamlandı** (F/1 ForgeGameModule + createForgeRuntime, F/2 Katman 3
+> katalogları oyun modülüne, F/3 oyun kuralları oyun modülüne, F/4 AI karakter
+> animasyonu capability'si + iskelet iliştirmesi modüle). Sıradaki faz G.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -124,8 +126,8 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | ~~`setupRuntimeUi` + widget/theme yükleme~~ | **2** | ✅ `runtimeUiModule` (E/4); locale kabukta (dialogue ile paylaşımlı), kurallar Katman 3 |
 | ~~`loadCharacterSkeletons`~~ | **2** | ✅ `skeletalAnimationModule` (E/5); sidecar kütüphanesi modülde, ref'e iliştirme Faz F'ye kadar kabukta |
 | ~~`playAutoPlayAudio` / `playAutoPlayParticles`~~ | **2** | ✅ `audioModule` (E/8, ses + soundCue + dialogue audio) · ✅ `vfxModule` (E/9, partikül) |
-| `startGameMode` + `gameModes/registry` | **3** | Game modülü zaten burada; genişletilir |
-| `behaviorSubsystem` + `createSceneBehaviorRegistry` | **2/3** | Behavior çekirdeği modül; kurallar fork'ta |
+| ~~`startGameMode` + `gameModes/registry`~~ | **3** | ✅ Katalog `gameModule`'da (F/2); kabuk yalnız oturum yaşam döngüsünü sürer, `game-mode-provider` ile çözer |
+| ~~`behaviorSubsystem` + `createSceneBehaviorRegistry`~~ | **2/3** | ✅ Çekirdek kabukta, katalog `behavior-registry-factory` ile oyun modülünde (F/2); host sözleşmesi `engine/behavior/behaviorHost.ts` |
 | Editör-özel: gizmo, seçim, `refresh*`, `emit*Changed`, authoring overlay | editör | `SceneApp`'te kalır (Katman 0 + authoring) |
 
 > Not: **TPS karakter + 3. şahıs kamera taşınmaz** — zaten Katman 3 (Game Mode).
@@ -784,6 +786,77 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   await forge.loadLevel(startLevel);
   forge.start();
   ```
+
+> **Uygulama kaydı (2026-08-27, F/1 — Katman 3 API):** `src/scene/ForgeGameModule.ts`
+> (arayüz + `createGameModuleHost`) ve `src/scene/ForgeRuntime.ts`
+> (`createForgeRuntime` + `use()` + `loadLevel()` + `start()` + `dispose()`).
+> Fabrika şimdilik `RuntimeSceneApp`'i **sarıyor** (§8'deki öneri). Kabuk artık
+> seviyeyi kendi kendine yüklemiyor: yeni `autoLoadLevel` seçeneği `false`
+> geçilince yükleme `loadLevel()` ile açıkça sürülür, böylece oyun modülü ilk
+> build'den önce kaydolur. `main.ts` yeni kompozisyon kökü.
+>
+> Yaşam döngüsü Katman 2 ile aynı kuralları izliyor (kurulum kayıt sırasında,
+> yıkım ters sırada, hata karantinası) — fork'un iki farklı sözleşme öğrenmesine
+> gerek kalmasın diye kasten aynı. Katman sırası: `onLevelLoaded` Katman 2'den
+> **sonra**, `levelUnloaded`/`dispose` Katman 2'den **önce**, tick ise engine +
+> capability + Game Mode'dan sonra (yazdığı alanlar aynı karede HUD'a akıyor).
+> Yeni test `tests/engine/forgeGameModule.test.ts` (8 kontrol).
+>
+> **Uygulama kaydı (2026-08-27, F/2 — kabuk `@/game`'den kurtuldu):** Üç Katman 3
+> kataloğu artık `src/game/gameModule.ts`'in yayımladığı servisler:
+> `game-mode-provider` (hangi Game Mode'lar var + authored id nasıl çözülür),
+> `behavior-registry-factory` (script id → update fonksiyonu, seviye başına
+> yeniden kurulur) ve `ai-task-registry`. Yanında iki saf taşıma: Game Mode
+> **sözleşmesi** `src/game/gameModes/types.ts` → `src/scene/gameModeTypes.ts`
+> (kabuk ile Katman 3'ün ortak dili; implementasyonlar `src/game`'de kaldı),
+> Player Start çözümü `playerSpawn.ts` → `engine/gameplay/playerSpawn.ts` (marker
+> Katman 1), behavior host sözleşmesi → `engine/behavior/behaviorHost.ts`,
+> giriş tuş haritası → `engine/input/defaultInputBindings.ts`.
+>
+> **Sıra tuzağı ve çözümü:** `use()` ile sonradan kaydedilen bir oyun modülü
+> Katman 2'nin *start* anına yetişemez. Bu yüzden fabrika `gameModules` seçeneği
+> alıyor ve kabuk onları `capabilities.runtimeStart()`'tan **hemen önce**
+> kaydediyor; `ai-task-registry` gibi start anında okunan servisler böylece
+> hazır (`AiHost.taskRegistry` de yakalanan değer değil, çağrı anında çözülen bir
+> fonksiyon oldu). `use()` duruyor — sonradan kaydedilen modül ilk seviye
+> build'inden itibaren görünür.
+>
+> Provider yoksa (oyun modülü kayıtlı değilse) **oturum hiç kurulmuyor**: seviye
+> içeriği tam kuruluyor ve render ediliyor, kimse possess edilmiyor, kamera
+> seviyenin bıraktığı yerde kalıyor (I1/I3). Behavior fabrikası yoksa authored
+> `behavior` bileşenleri hiçbir şeye çözülmüyor, sahne yine kuruluyor.
+> `verify:imports` artık `runtime -> game` importunu da yasaklıyor — kabuğun
+> jenerikliği kapıyla korunuyor.
+>
+> **Uygulama kaydı (2026-08-27, F/3 — oyun kuralları Katman 3'e):** Skor,
+> objective'ler, tur sayacı, kazanma/kaybetme ekranı ve restart düğmesi
+> kabuktan çıktı: `src/game/gameRulesRuntime.ts`, oyun modülünün
+> `onLevelLoaded`/`update`/`onLevelUnloaded` hook'larıyla sürülüyor ve dünyaya
+> yalnız servisler üzerinden dokunuyor (`script-message-bus` → `game-event`,
+> `ui-view-model` → `game.*` alanları, `runtime-ui-presenter` → outcome ekranı).
+> Yeni servis `game-ui-message`: ayrılmış widget mesajı zincirinde Katman 3 ilk
+> sırada denenir (`game:restart` / `game:resume`), sonra kabuğun platform
+> mesajları (travel, save, ayarlar), kalanı gameplay'e `ui-action` olur.
+>
+> **Uygulama kaydı (2026-08-27, F/4 — Faz E'den kalan iki bağ):** AI karakter
+> animatörleri + attack köprüsü yeni Katman 2 modülü
+> `capabilities/aiCharacterAnimationModule.ts` oldu (crossfade animatörler,
+> blend-space config, one-shot attack override, `ai.attack.intent` /
+> `boss.attack.intent` abonelikleri). Kabuk yalnız `character-animation-host`
+> yayımlıyor (mixer sink, kamera mesafesi, locomotion raporu, possessed pawn) ve
+> Game Mode'un possess etmediği AI karakterini `registerAiCharacter` ile veriyor;
+> modül kapalıysa kayıt reddediliyor ve karakter authored klibinde kalıyor.
+> İskelet def'inin karaktere iliştirilmesi `skeletonLibrary.attachToCharacters`
+> ile modüle geçti — kabukta yalnız *ne zaman* çağrıldığı kaldı (possess'ten
+> önce, capability level hook'undan erken), audio/vfx'teki aynı desen.
+> Yeni test `tests/engine/aiCharacterAnimationModule.test.ts` (6 kontrol).
+>
+> **Faz F kapandı.** `RuntimeSceneApp` 4717 → 4590 satır ve artık **hiç `@/game`
+> importu yok**. Kapılar: `build:verify` uçtan uca yeşil (**980/980 engine
+> check**), `verify:imports` PASS (yeni `runtime -> game` kuralıyla),
+> `verify:dist --strict` PASS. Browser: sekiz smoke geçiyor — `runtime-playflow`,
+> `runtime-locomotion`, `runtime-portal`, `runtime-checkpoint`,
+> `runtime-script-message`, `ai-patrol`, `ai-navigation-clearance` (×2).
 
 ### Faz G — Serialization tek-kaynak + sessiz-kayıp uyarısı (I5)
 - **İş:** `*.effect.json` desenini yaygınlaştır: `saveValidator.ts` içindeki

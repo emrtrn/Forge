@@ -14,7 +14,7 @@
  * subsystem is baked into the shell; as later Phase E slices extract those,
  * the provider moves to the module without the consumers changing.
  */
-import type { Scene, Vector3 } from "three";
+import type { AnimationMixer, Object3D, Scene, Vector3 } from "three";
 
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
@@ -58,6 +58,11 @@ import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { SplineRegistry } from "@engine/scene/splineRegistry";
+import type { BehaviorRegistry } from "@engine/behavior/behaviorSubsystem";
+import type { BehaviorRegistryHost } from "@engine/behavior/behaviorHost";
+import type { ActorScriptDef } from "@engine/scene/actorScript";
+
+import type { GameModeDefinition, RuntimeCharacterRef } from "../gameModeTypes";
 import type { LocaleRegistry } from "@engine/ui/uiLocale";
 import type { UiViewModelStore } from "@engine/ui/uiViewModel";
 import type { UiSubsystemDebugSnapshot } from "@/ui/RuntimeUiSubsystem";
@@ -426,6 +431,13 @@ export interface SkeletonLibrary {
    * default, so a caller can attach the result unconditionally.
    */
   load(assetIds: readonly string[]): Promise<ReadonlyMap<string, AssetSkeletonDef>>;
+  /**
+   * Loads and attaches each character's authored metadata in one call. The shell
+   * drives *when* (after the refs are built, before the Game Mode possesses a
+   * pawn — earlier than any capability's level hook), the module owns *what* is
+   * attached. A character whose asset has no sidecar is left untouched.
+   */
+  attachToCharacters(refs: readonly RuntimeCharacterRef[]): Promise<void>;
 }
 
 export const skeletonLibraryService = runtimeServiceKey<SkeletonLibrary>("skeleton-library");
@@ -474,7 +486,12 @@ export interface AiHost {
    * engine built-ins — the generic wait / setBlackboard / sendMessage / moveTo
    * set every project starts from.
    */
-  readonly taskRegistry?: AiTaskRegistry;
+  /**
+   * Resolved when the capability starts, not captured at host time: the shell
+   * publishes this host while it is still constructing, before the Layer 3 game
+   * module that supplies the tasks has registered.
+   */
+  readonly taskRegistry?: () => AiTaskRegistry | undefined;
   readonly navigation: AiNavigationQuery;
   /** Normally the possessed pawn; `null` disables the far-NPC update cadence. */
   qualityFocusPosition(): readonly [number, number, number] | null;
@@ -553,3 +570,105 @@ export interface AiDebugSource {
 
 /** Provided by: `aiModule`. */
 export const aiDebugService = runtimeServiceKey<AiDebugSource>("ai-debug");
+
+/** What the shell must know to pick this Play boot's Game Mode. */
+export interface GameModeResolveRequest {
+  /** The level's authored `worldSettings.gameMode`, or undefined when unset. */
+  readonly gameModeId: string | undefined;
+  /**
+   * Reads a `*.actor.json` class, so a data-driven project Game Mode can build
+   * itself from its class file. Resolution goes through the shell's cache, so a
+   * class already loaded for this level is not fetched twice.
+   */
+  loadActorClass(classRef: string): Promise<ActorScriptDef>;
+}
+
+/**
+ * Layer 3's answer to "which Game Mode runs this level".
+ *
+ * The shell owns the Game Mode *lifecycle* (spawn, possess, tick, teardown) but
+ * not the *catalog*: which modes exist is game content, so the game module
+ * publishes this and the shell never imports `@/game`. Absent — a runtime with
+ * no game module — means no session is created at all: the level's scene
+ * content still builds and renders in full (I1/I3), nothing is possessed, and
+ * the camera stays where the level put it.
+ */
+export interface GameModeProvider {
+  resolve(request: GameModeResolveRequest): Promise<GameModeDefinition>;
+}
+
+/** Provided by: the Layer 3 game module (`src/game/gameModule.ts` in the template). */
+export const gameModeProviderService =
+  runtimeServiceKey<GameModeProvider>("game-mode-provider");
+
+/**
+ * Builds the behavior registry for one level: script id → update function.
+ *
+ * The *catalog* of behaviors is game content, so the game module publishes this
+ * factory and the shell calls it with the world sinks it offers
+ * ({@link BehaviorRegistryHost}). Absent — no game module — leaves scripted
+ * behaviors inert: entities, physics and every other level system still build
+ * (I1), authored `behavior` components simply resolve to nothing.
+ */
+export type BehaviorRegistryFactory = (host: BehaviorRegistryHost) => BehaviorRegistry;
+
+/** Provided by: the Layer 3 game module (`src/game/gameModule.ts` in the template). */
+export const behaviorRegistryFactoryService =
+  runtimeServiceKey<BehaviorRegistryFactory>("behavior-registry-factory");
+
+/**
+ * The game's AI task vocabulary (Unreal's Behavior Tree task palette).
+ *
+ * Read once, while the AI capability starts, so a game module that publishes it
+ * must be registered before the capabilities attach — which is what the
+ * runtime's `gameModules` option guarantees. Absent leaves the AI capability on
+ * the engine's built-in task set.
+ */
+export const aiTaskRegistryService = runtimeServiceKey<AiTaskRegistry>("ai-task-registry");
+
+/**
+ * Layer 3's claim on reserved UI widget messages.
+ *
+ * A widget button emits a string; the shell offers it to the game module first
+ * (the template claims `game:restart` / `game:resume` for its rules screens),
+ * then tries its own platform messages (level travel, save slots, settings), and
+ * anything still unclaimed reaches gameplay as a `ui-action`. Returning true
+ * means "handled — stop the chain".
+ */
+export const gameUiMessageService =
+  runtimeServiceKey<(message: string) => boolean>("game-ui-message");
+
+/**
+ * What the AI-character animation capability needs from the runtime shell: the
+ * render animation subsystem, the camera distance its LOD samples, the
+ * locomotion snapshots the movement layer reports, and who the Game Mode
+ * possesses (that pawn is the mode's to animate, never this module's).
+ */
+export interface CharacterAnimationHost {
+  /** Adds a mixer to the shell's animation subsystem with a distance-LOD probe. */
+  addMixer(mixer: AnimationMixer, distanceSquared: () => number): void;
+  /** Squared distance from the runtime camera to a world object. */
+  distanceSquaredToCamera(object: Object3D): number;
+  /** Latest locomotion snapshot reported for an entity, or undefined. */
+  locomotion(entityId: string): LocomotionInput | undefined;
+  /** The pawn the active Game Mode possesses, or null when none/no mode. */
+  possessedEntityId(): string | null;
+}
+
+/** Provided by: `RuntimeSceneApp`. */
+export const characterAnimationHostService =
+  runtimeServiceKey<CharacterAnimationHost>("character-animation-host");
+
+/** Write side of the AI-character animation capability. */
+export interface CharacterAnimationCommands {
+  /**
+   * Takes ownership of an AI-controlled character's animation. Returns false
+   * when the capability cannot animate it, so the caller can fall back to the
+   * character's plain authored clip.
+   */
+  registerAiCharacter(ref: RuntimeCharacterRef): boolean;
+}
+
+/** Provided by: `aiCharacterAnimationModule`. */
+export const characterAnimationCommandsService =
+  runtimeServiceKey<CharacterAnimationCommands>("character-animation-commands");

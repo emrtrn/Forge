@@ -31,7 +31,7 @@ import type {
   PawnDefinition,
   PlayerControllerDefinition,
   PlayerState,
-} from "./types";
+} from "@/scene/gameModeTypes";
 
 /** Default flythrough speed (units/s) when the pawn declares none. */
 const DEFAULT_CAMERA_SPEED = 6;

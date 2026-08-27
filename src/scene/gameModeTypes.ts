@@ -5,6 +5,12 @@
  * (`src/scene/RuntimeSceneApp.ts`) builds the scene, then hands the selected
  * mode a {@link GameModeContext} and drives the returned {@link GameModeSession}.
  *
+ * This is the *contract* between the shell and Layer 3, so it lives beside the
+ * other runtime API files ({@link ForgeGameModule}) rather than in `src/game`:
+ * the shell may not import the game, but both sides need these types. The mode
+ * *implementations* stay in `src/game/gameModes/` — a fork replaces them and
+ * supplies its own through its game module.
+ *
  * Editor code is never imported here, and a session never writes runtime state
  * back into the saved layout.
  */

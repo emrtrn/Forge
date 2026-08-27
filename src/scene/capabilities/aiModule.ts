@@ -730,7 +730,10 @@ export function createAiModule(): CapabilityModule {
       debug = aiHost.debug;
 
       ai = new AISubsystem({
-        ...(aiHost.taskRegistry ? { taskRegistry: aiHost.taskRegistry } : {}),
+        ...(() => {
+          const taskRegistry = aiHost.taskRegistry?.();
+          return taskRegistry ? { taskRegistry } : {};
+        })(),
         blockers: () => aiHost.navigation.staticBlockerAabbs(),
         perceptionSourceFilter: isPerceptionSource,
         qualityFocusPosition: () => aiHost.qualityFocusPosition(),

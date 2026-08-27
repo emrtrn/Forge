@@ -12,7 +12,7 @@
 import { GAME_MODE_OPTIONS } from "@/game/gameModes/catalog";
 import { BEHAVIOR_SCRIPT_IDS } from "@/game/behaviors";
 import { resolveMontageBindings } from "@/game/montageInputBindings";
-import { formatInputCode, keysForAction } from "@/game/defaultInputBindings";
+import { formatInputCode, keysForAction } from "@engine/input/defaultInputBindings";
 import { createRagdollDriver } from "@/game/ragdollDriver";
 
 export const GAME_EDITOR_CATALOG = {

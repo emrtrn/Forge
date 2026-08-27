@@ -17,8 +17,11 @@
  *                           editor via @/editor/gameEditorRegistry, injected by
  *                           src/main.ts — the editor never imports @/game)
  *   - game/**, src/game/**       must not import  editor
- *   - src/scene/RuntimeSceneApp.ts   must not import  editor
- *                          (the Game Mode shell must stay editor-free)
+ *   - src/scene/RuntimeSceneApp.ts   must not import  editor · game
+ *                          (the runtime shell stays editor-free and generic:
+ *                           game rules, Game Modes, behaviors and AI tasks reach
+ *                           it through the Layer 3 game module's services, which
+ *                           src/main.ts injects — the shell never imports @/game)
  *   - src/scene/capabilities/**      must not import  editor · game
  *                          (Layer 2 capability modules stay generic: game rules
  *                           belong to Layer 3, authoring to the editor shell)
@@ -47,7 +50,7 @@ const FORBIDDEN = {
   engine: new Set(["editor", "game", "builder", "src", "project"]),
   editor: new Set(["game"]),
   game: new Set(["editor"]),
-  runtime: new Set(["editor"]),
+  runtime: new Set(["editor", "game"]),
   capability: new Set(["editor", "game"]),
 };
 
@@ -60,6 +63,8 @@ const RULE_REASON = {
   "editor->game": "editor core stays generic — inject via @/editor/gameEditorRegistry, do not import @/game",
   "game->editor": "game must not import editor",
   "runtime->editor": "the Game Mode shell (RuntimeSceneApp) must stay editor-free",
+  "runtime->game":
+    "the runtime shell stays generic — a game plugs in through a ForgeGameModule (see src/game/gameModule.ts), injected by src/main.ts",
   "capability->editor": "capability modules (Layer 2) must stay editor-free",
   "capability->game": "capability modules (Layer 2) stay generic — game rules belong to the game module (Layer 3)",
 };

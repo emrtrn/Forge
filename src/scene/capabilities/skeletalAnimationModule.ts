@@ -6,13 +6,12 @@
  * spaces, the anim-set role map, sockets, notifies, montages and root motion.
  * One fetch per asset per level, shared by every placement of it.
  *
- * What this module deliberately does *not* own is attaching a def to a
- * character. A character ref (`RuntimeCharacterRef`) is a Game Mode type — Layer
- * 3 — and the shell must have the metadata attached before the Game Mode
- * possesses a pawn, which happens before any capability's level hook runs. So
- * the shell calls {@link SkeletonLibrary.load} at that point and does the
- * one-line attach itself; Phase F, which turns the Game Mode into a module of
- * its own, is where that ordering stops being a constraint.
+ * Attaching a def to a character lives here too (Phase F), through
+ * {@link SkeletonLibrary.attachToCharacters}. Only the *call site* stays in the
+ * shell: the metadata must be on the refs before the Game Mode possesses a pawn,
+ * which is earlier than any capability's level hook — the same "shell decides
+ * when, module decides what" split the audio and VFX capabilities use for their
+ * level preparation.
  *
  * Switched off, no sidecar is ever fetched and every character keeps an absent
  * skeleton: it still renders and plays its authored clip, just without blend
@@ -22,6 +21,7 @@
 import { assetPath } from "@engine/assets/manifest";
 
 import { defaultAssetSkeleton, loadAssetSkeleton, type AssetSkeletonDef } from "../assetSkeletonLoader";
+import type { RuntimeCharacterRef } from "../gameModeTypes";
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeServices } from "./RuntimeServices";
 import { assetManifestService, skeletonLibraryService } from "./runtimeServiceKeys";
@@ -39,6 +39,15 @@ export function createSkeletalAnimationModule(): CapabilityModule {
     onRuntimeStart(runtimeServices) {
       services = runtimeServices;
       runtimeServices.provide(skeletonLibraryService, {
+        async attachToCharacters(refs) {
+          if (refs.length === 0) return;
+          const loaded = await this.load(refs.map((ref: RuntimeCharacterRef) => ref.placement.assetId));
+          for (const ref of refs) {
+            const skeleton = loaded.get(ref.placement.assetId);
+            if (skeleton) ref.skeleton = skeleton;
+          }
+        },
+
         async load(assetIds) {
           const loaded = new Map<string, AssetSkeletonDef>();
           if (assetIds.length === 0) return loaded;

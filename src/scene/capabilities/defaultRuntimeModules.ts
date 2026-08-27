@@ -11,6 +11,7 @@
  * Every entry must be constructed fresh per runtime (modules own subsystem
  * state), hence a factory rather than a shared constant.
  */
+import { createAiCharacterAnimationModule } from "./aiCharacterAnimationModule";
 import { createAiModule } from "./aiModule";
 import { createAudioModule } from "./audioModule";
 import type { CapabilityModule } from "./CapabilityModule";
@@ -33,6 +34,9 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     // After the movement module so its entity sink still runs first, matching the
     // order the two subsystems were seeded in before either was a module.
     createAiModule(),
+    // After the AI module for readability only: it animates from the locomotion
+    // reports the movement solver writes, not from anything the AI module owns.
+    createAiCharacterAnimationModule(),
     createSkeletalAnimationModule(),
     // Before dialogue, which resolves `dialogue-audio` from it — resolution is
     // lazy, so this is readability, not a requirement.

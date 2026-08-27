@@ -511,7 +511,7 @@ import {
   createDefaultPlayerCharacter,
   findPlayerStartTransform,
   hasPlayerCharacter,
-} from "../src/game/gameModes/playerSpawn";
+} from "../engine/gameplay/playerSpawn";
 import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
 import { resolvePlayerCharacter, tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import { resolveMontageBindings } from "../src/game/montageInputBindings";
@@ -537,7 +537,7 @@ import type {
   InputMode,
   PointerLookMode,
   RuntimeCharacterRef,
-} from "../src/game/gameModes/types";
+} from "../src/scene/gameModeTypes";
 import type { Entity } from "../engine/scene/entity";
 import { selectionId, type Selection } from "../editor/core/selection";
 import { EditorSceneController } from "../editor/scene/EditorSceneController";
@@ -971,8 +971,10 @@ import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 import { registerBuildManifestParityTests } from "../tests/engine/buildManifestParity.test";
 import { registerLevelRuntimeTests } from "../tests/engine/levelRuntime.test";
 import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegistry.test";
+import { registerForgeGameModuleTests } from "../tests/engine/forgeGameModule.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
 import { registerAiModuleTests } from "../tests/engine/aiModule.test";
+import { registerAiCharacterAnimationModuleTests } from "../tests/engine/aiCharacterAnimationModule.test";
 import { registerAudioModuleTests } from "../tests/engine/audioModule.test";
 import { registerVfxModuleTests } from "../tests/engine/vfxModule.test";
 import { registerDialogueModuleTests } from "../tests/engine/dialogueModule.test";
@@ -996,8 +998,10 @@ const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void>
 registerBuildManifestParityTests(check);
 await registerLevelRuntimeTests(check, checkAsync);
 await registerCapabilityRegistryTests(check, checkAsync);
+await registerForgeGameModuleTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
 await registerAiModuleTests(checkAsync);
+await registerAiCharacterAnimationModuleTests(checkAsync);
 await registerAudioModuleTests(checkAsync);
 await registerVfxModuleTests(checkAsync);
 await registerDialogueModuleTests(checkAsync);

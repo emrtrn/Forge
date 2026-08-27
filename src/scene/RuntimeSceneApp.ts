@@ -15,11 +15,22 @@ import type { CapabilityModule } from "./capabilities/CapabilityModule";
 import { CapabilityRegistry, createCapabilityRegistry } from "./capabilities/capabilityRegistry";
 import { createRuntimeContext } from "./capabilities/RuntimeContext";
 import {
+  createGameModuleHost,
+  type ForgeGameModule,
+  type GameModuleHost,
+} from "./ForgeGameModule";
+import {
   createRuntimeServiceHost,
   type RuntimeServiceHost,
 } from "./capabilities/RuntimeServices";
 import {
   characterTransformResetService,
+  aiTaskRegistryService,
+  behaviorRegistryFactoryService,
+  characterAnimationCommandsService,
+  characterAnimationHostService,
+  gameUiMessageService,
+  gameModeProviderService,
   gameplaySaveStateService,
   levelTravelService,
   projectIdentityService,
@@ -56,13 +67,13 @@ import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
 import { applyLodBias } from "@engine/render-three/distanceLod";
 import { ActionMap } from "@engine/input/actionMap";
-import { DEFAULT_INPUT_BINDINGS } from "@/game/defaultInputBindings";
+import { DEFAULT_INPUT_BINDINGS } from "@engine/input/defaultInputBindings";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import {
   BehaviorSubsystem,
+  type BehaviorRegistry,
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
-import type { ScriptMessagePayload } from "@engine/behavior/scriptMessages";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
@@ -74,23 +85,13 @@ import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
 import { PointerLookSource } from "@/input/pointerLookSource";
 import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
-import { createBehaviorRegistry } from "@/game/behaviors";
-import { createGameAiTaskRegistry } from "@/game/ai/tasks";
 import type { Aabb3 } from "@engine/movement/characterCollision";
-import {
-  DEFAULT_LOCOMOTION_THRESHOLDS,
-  locomotionConfigForSkeleton,
-  resolveLocomotionAnimation,
-  type LocomotionInput,
-} from "@engine/movement/locomotionAnimation";
-import { resolveGameMode } from "@/game/gameModes/registry";
-import { isGameModeClassRef } from "@/game/gameModes/catalog";
-import { createProjectGameMode } from "@/game/gameModes/projectGameMode";
+import type { LocomotionInput } from "@engine/movement/locomotionAnimation";
 import {
   computePlayerStartSpawn,
   createDefaultPlayerCharacter,
   findPlayerStartTransform,
-} from "@/game/gameModes/playerSpawn";
+} from "@engine/gameplay/playerSpawn";
 import type {
   GameModeContext,
   GameModeDefinition,
@@ -98,7 +99,7 @@ import type {
   InputMode,
   PawnDefinition,
   RuntimeCharacterRef,
-} from "@/game/gameModes/types";
+} from "./gameModeTypes";
 import { loadActiveProject, projectFileUrl, type ActiveProject } from "@/project/ProjectSystem";
 import {
   applySceneBackgroundAndAmbient,
@@ -294,13 +295,8 @@ import {
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import { actorInstanceToEntity } from "@engine/scene/actorInstance";
-import {
-  normalizeActorScriptDef,
-  readGameModeDefaultPawnClassRef,
-  type ActorScriptDef,
-} from "@engine/scene/actorScript";
+import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
-import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
@@ -320,12 +316,6 @@ import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@eng
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import { LocaleRegistry, normalizeUiLocaleTable } from "@engine/ui/uiLocale";
-import {
-  GameStateStore,
-  normalizeGameRules,
-  parseGameEvent,
-  type GamePhase,
-} from "@/game/gameRules";
 import {
   collectSaveState,
   type GameSaveState,
@@ -440,13 +430,6 @@ export interface AdaptiveDebugSnapshot {
   lastChange: { record: AdaptiveChangeRecord; ageSeconds: number } | null;
 }
 
-interface RuntimeAiCharacterAnimator {
-  readonly ref: RuntimeCharacterRef;
-  readonly animator: CrossfadeAnimator;
-  readonly config: ReturnType<typeof locomotionConfigForSkeleton>;
-  oneShot: { clip: string; remaining: number; blendOutSeconds: number } | null;
-}
-
 /** Active-gameplay seconds before the one-time startup measurement pass fires
  * (Faz 4): long enough that the 5 s frame-time window has aged past load/shader
  * warm-up spikes, short enough to settle the profile early. */
@@ -506,9 +489,24 @@ export interface RuntimeSceneAppOptions {
    * Layer 1 level content still builds in full.
    */
   readonly capabilities?: readonly CapabilityModule[];
+  /**
+   * Whether the shell loads the active project's default level by itself during
+   * construction (the historic behavior, kept for direct `new RuntimeSceneApp`
+   * users). `createForgeRuntime` sets this to false: the factory lets the fork
+   * register its game module first, then drives the load through
+   * {@link RuntimeSceneApp.loadLevel}.
+   */
+  readonly autoLoadLevel?: boolean;
+  /**
+   * Layer 3 game modules, registered before the capabilities attach so a module
+   * may publish services a Layer 2 module reads while starting. Injected by the
+   * composition root (`createForgeRuntime`); `useGameModule` adds later ones.
+   */
+  readonly gameModules?: readonly ForgeGameModule[];
 }
 
-const AI_ATTACK_ANIMATION_MESSAGE_TYPES = ["ai.attack.intent", "boss.attack.intent"] as const;
+/** Fallback for a runtime with no game module: no script id resolves. */
+const EMPTY_BEHAVIOR_REGISTRY: BehaviorRegistry = { get: () => undefined };
 
 /**
  * Upper bound on the pre-gameplay shader warm-up. Past this the level starts and
@@ -527,6 +525,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly levelRuntime: LevelRuntime;
   /** Layer 2 modules registered for this runtime; empty until a fork opts in. */
   private readonly capabilities: CapabilityRegistry;
+  /** Layer 3 game modules; empty until a fork calls `use` (via `createForgeRuntime`). */
+  private readonly gameModules: GameModuleHost;
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
@@ -541,7 +541,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the shared services the two sides resolve each other through.
    */
   private readonly runtimeServices: RuntimeServiceHost;
-  private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
   /**
    * The play surface handed to the behavior layer. It resolves the audio
    * capability per call, so a runtime without one turns every scripted
@@ -703,15 +702,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private inputMode: InputMode = "ui";
   /** ViewModel-lite store backing UI `{ "bind": "path" }` props (e.g. `player.speed`). */
   private readonly uiStore = new UiViewModelStore();
-  /** Minimal gameplay-rules store; null when the scene authors no `gameRules`. */
-  private gameStateStore: GameStateStore | null = null;
-  /** Unsubscribe for the `game-event` script-message bridge into the rules store. */
-  private gameEventUnsub: (() => void) | null = null;
-  /** Unsubscribes script-message -> AI perception stimulus bridge handlers. */
-  /** Unsubscribes AI attack intent -> one-shot animation bridge handlers. */
-  private aiAttackAnimationUnsubs: Array<() => void> = [];
-  /** True once the win/loss screen for the current terminal round has been pushed. */
-  private gameOutcomeShown = false;
   /** Loaded UI localization tables + active locale; null when the scene authors none. */
   private localeRegistry: LocaleRegistry | null = null;
   /** Slotless user preferences (audio mix, locale); null when storage is unavailable. */
@@ -967,13 +957,35 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The VFX capability parents its effect container here once, for the whole
     // runtime's life — hence a host service rather than a level-time fact.
     this.runtimeServices.provide(vfxHostService, { scene: this.scene });
+    // What the AI-character animation capability needs from the shell: the
+    // animation subsystem, the camera distance its LOD samples, the locomotion
+    // snapshots the movement layer reports, and the possessed pawn it must skip.
+    this.runtimeServices.provide(characterAnimationHostService, {
+      addMixer: (mixer, distanceSquared) => this.animationSubsystem.add(mixer, { distanceSquared }),
+      distanceSquaredToCamera: (object) => object.position.distanceToSquared(this.camera.position),
+      locomotion: (entityId) => this.locomotionReports.get(entityId),
+      possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
+    });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,
-      taskRegistry: createGameAiTaskRegistry(),
+      // Resolved when the AI capability starts, so the game module (registered
+      // just below, before the capabilities attach) owns the task vocabulary.
+      taskRegistry: () => this.runtimeServices.resolve(aiTaskRegistryService),
       navigation: this.physicsSubsystem,
       qualityFocusPosition: () => this.qualityFocusPosition(),
       reportIdleLocomotion: (entityId) => this.reportAiIdleLocomotion(entityId),
     });
+    // Layer 3 attaches through the same container: a game module registered by
+    // the composition root publishes its game-specific services here, so the
+    // shell and the capabilities can resolve them without importing the game.
+    // It attaches *before* the capabilities, so a service a Layer 2 module reads
+    // while starting (the AI task vocabulary) is already published.
+    this.gameModules = createGameModuleHost({
+      services: this.runtimeServices,
+      scene: this.scene,
+      camera: this.camera,
+    });
+    for (const module of options.gameModules ?? []) this.gameModules.use(module);
     this.capabilities.runtimeStart(this.runtimeServices);
     // The persisted mix is applied here rather than at settings load: the live
     // buses belong to the audio capability, which only exists from this point.
@@ -1081,13 +1093,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }, options.spawnBudgetPerFrame !== undefined ? { maxSpawnsPerFrame: options.spawnBudgetPerFrame } : {});
 
     this.setupLoadingOverlay();
-    void this.loadActiveProjectScene();
+    if (options.autoLoadLevel ?? true) void this.loadActiveProjectScene();
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
   }
 
-  private createSceneBehaviorRegistry(): ReturnType<typeof createBehaviorRegistry> {
-    return createBehaviorRegistry({
+  /**
+   * Builds this level's behavior registry from the game module's factory. Which
+   * behavior scripts exist is game content (Layer 3); what they may call back
+   * into is this shell, so the host sinks below are the whole contract. With no
+   * game module registered the level still builds — authored `behavior`
+   * components simply resolve to nothing.
+   */
+  private createSceneBehaviorRegistry(): BehaviorRegistry {
+    const createRegistry = this.runtimeServices.resolve(behaviorRegistryFactoryService);
+    if (!createRegistry) return EMPTY_BEHAVIOR_REGISTRY;
+    return createRegistry({
       getGravityY: () => this.gravityY,
       reportLocomotion: (entityId, report) => {
         this.locomotionReports.set(entityId, report);
@@ -1150,8 +1171,30 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.uiStore.setField("loading.status", status);
   }
 
+  /**
+   * Registers a Layer 3 game module. Called by `createForgeRuntime().use()`
+   * before the first level is loaded, so the module's `register` hook can
+   * publish services the level build resolves. Registering after a level is
+   * already built is allowed, but that level's `onLevelLoaded` has passed —
+   * the module first sees the next one.
+   */
+  useGameModule(module: ForgeGameModule): void {
+    this.gameModules.use(module);
+  }
+
+  /**
+   * Loads the active project (once) and builds a level: the given public-root
+   * relative path, or the project's default scene when none is given. This is
+   * the explicit entry point `createForgeRuntime` drives; a shell constructed
+   * with `autoLoadLevel` still calls the same path from its constructor.
+   */
+  async loadLevel(levelPath?: string): Promise<void> {
+    await this.loadActiveProjectScene(levelPath);
+  }
+
   start(): void {
     this.lastTime = performance.now();
+    this.gameModules.start();
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.handleVisibilityChange);
     }
@@ -1179,8 +1222,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // `capabilities.update` above — after input advances, before the Game Mode
       // reads it — so opening a screen suppresses this frame's camera/movement.)
       this.gameModeSession?.update(deltaMs / 1000);
-      this.updateAiCharacterAnimations(deltaMs / 1000);
-      this.updateGameRules(deltaMs / 1000);
+      // Layer 3 ticks last: a game module reacts to the world the engine spine,
+      // the capabilities and the Game Mode have already resolved this frame, and
+      // the UI-store flush right below carries whatever it wrote into the HUD.
+      this.gameModules.update(deltaMs / 1000);
       this.updateUiStore();
       this.uiPresenter()?.projectWorldWidgets();
       this.updateAudioListener();
@@ -1203,15 +1248,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
+    // Reverse layering on teardown: Layer 3 first, then Layer 2, so a game
+    // module can still resolve the capability services it was built against.
+    this.gameModules.dispose();
     this.capabilities.dispose();
     window.removeEventListener("resize", this.handleResize);
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     }
-    this.gameEventUnsub?.();
-    this.gameEventUnsub = null;
-    this.clearAiAttackAnimationBridge();
-    this.gameStateStore = null;
     this.loadingOverlay?.dispose();
     this.loadingOverlay = null;
     this.keyboardInput.detach();
@@ -1582,15 +1626,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.interactionPromptElement.hidden = true;
   }
 
-  private async loadActiveProjectScene(): Promise<void> {
+  private async loadActiveProjectScene(levelPath?: string): Promise<void> {
     this.beginLoadingUi("Loading project");
     try {
-      this.activeProject = await loadActiveProject();
-      this.assetLoader = new AssetLoader(this.activeProject.manifest, this.renderer, {
-        onLoaded: (id) => this.loadProgress.markLoaded(id),
-        onFailed: (id, error) => this.loadProgress.markFailed(id, describeLoadError(error)),
-      });
-      await this.buildScene(this.activeProject.manifest.editor.defaultScene, undefined);
+      // The project (manifest + asset loader) is per-runtime, not per-level, so
+      // a second load — a fork calling `loadLevel` again — reuses it.
+      if (!this.activeProject || !this.assetLoader) {
+        this.activeProject = await loadActiveProject();
+        this.assetLoader = new AssetLoader(this.activeProject.manifest, this.renderer, {
+          onLoaded: (id) => this.loadProgress.markLoaded(id),
+          onFailed: (id, error) => this.loadProgress.markFailed(id, describeLoadError(error)),
+        });
+      }
+      await this.buildScene(levelPath ?? this.activeProject.manifest.editor.defaultScene, undefined);
       this.finishLoadingUi();
     } catch (error) {
       // A critical boot failure (project/manifest/layout unreachable) leaves a
@@ -1746,7 +1794,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
-    this.bindAiAttackAnimationBridge();
     // Auto-play audio/particles must never abort scene start: a single bad cue or
     // emitter cannot be allowed to stop the game mode + UI (lines below) from
     // initialising, which would look like "Play won't start".
@@ -1775,19 +1822,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Layer 2 modules see the finished level (scene content + engine world) and
     // may add their own scene objects, so they run before the shader warm-up
     // compiles what is visible. The registry isolates module failures itself.
-    await this.capabilities.levelLoaded(
-      createRuntimeContext({
-        mode: this.levelRuntime.mode,
-        levelPath: layoutPath,
-        scene: this.scene,
-        camera: this.camera,
-        engineApp: this.engineApp,
-        assetLoader: this.assetLoader,
-        layout: this.layout,
-        sceneDocument,
-        services: this.runtimeServices,
-      }),
-    );
+    const runtimeContext = createRuntimeContext({
+      mode: this.levelRuntime.mode,
+      levelPath: layoutPath,
+      scene: this.scene,
+      camera: this.camera,
+      engineApp: this.engineApp,
+      assetLoader: this.assetLoader,
+      layout: this.layout,
+      sceneDocument,
+      services: this.runtimeServices,
+    });
+    await this.capabilities.levelLoaded(runtimeContext);
+    // Layer 3 sees the level last — after every capability it may build on.
+    await this.gameModules.levelLoaded(runtimeContext);
     await this.warmRuntimeShaders();
   }
 
@@ -2222,19 +2270,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * immediately so the engine loop ticks an empty world during the async load.
    */
   private teardownScene(): void {
-    // Layer 2 first: modules drop their per-level state while the world they
-    // observed is still intact, before Layer 1 content starts disappearing.
+    // Layer 3 first, then Layer 2: each layer drops its per-level state while
+    // the world it observed is still intact, before Layer 1 content disappears.
+    this.gameModules.levelUnloaded();
     this.capabilities.levelUnloaded();
     // Game Mode + UI hosts first: null them before emptying the world so the
     // frame(s) between teardown and rebuild skip their update paths.
     this.gameModeSession?.dispose();
     this.gameModeSession = null;
     this.activeGameMode = null;
-    this.gameEventUnsub?.();
-    this.gameEventUnsub = null;
-    this.clearAiAttackAnimationBridge();
-    this.gameStateStore = null;
-    this.gameOutcomeShown = false;
     // Widget defs, themes and the two UI hosts belong to `runtimeUiModule`, torn
     // down by `capabilities.levelUnloaded()` at the top of this method.
     this.localeRegistry = null;
@@ -2245,7 +2289,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // were already emptied by `capabilities.levelUnloaded()` at the top.)
     this.animationSubsystem.clear();
     this.physicsSubsystem.setEntities([]);
-    this.aiCharacterAnimators.clear();
     this.behaviorSubsystem.setEntities([]);
     this.splineRegistry = createSplineRegistry();
 
@@ -2376,59 +2419,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.interactionPromptElement.hidden = true;
   }
 
-  private bindAiAttackAnimationBridge(): void {
-    this.clearAiAttackAnimationBridge();
-    this.aiAttackAnimationUnsubs = AI_ATTACK_ANIMATION_MESSAGE_TYPES.map((type) =>
-      this.behaviorSubsystem.subscribeScriptMessage(type, (envelope) => {
-        this.playAiAttackAnimation(envelope.source, envelope.payload);
-      }),
-    );
-  }
-
-  private clearAiAttackAnimationBridge(): void {
-    for (const unsubscribe of this.aiAttackAnimationUnsubs) unsubscribe();
-    this.aiAttackAnimationUnsubs = [];
-  }
-
-  private playAiAttackAnimation(entityId: string, payload: ScriptMessagePayload): void {
-    const runtime = this.aiCharacterAnimators.get(entityId);
-    if (!runtime || runtime.oneShot) return;
-    const clip = this.resolveAiAttackAnimationClip(payload, runtime.animator.clips);
-    if (!clip) return;
-    runtime.animator.play(clip, 0.08);
-    const duration = runtime.animator.getActiveClip()?.duration ?? 0.65;
-    runtime.oneShot = {
-      clip,
-      remaining: Math.max(0.1, duration),
-      blendOutSeconds: 0.14,
-    };
-  }
-
-  private resolveAiAttackAnimationClip(
-    payload: ScriptMessagePayload,
-    clips: ReadonlySet<string>,
-  ): string | null {
-    const candidates: string[] = [];
-    const animation = payload.animation;
-    if (typeof animation === "string") candidates.push(animation);
-    const attack = payload.attack;
-    if (typeof attack === "string") {
-      candidates.push(attack);
-      candidates.push(`${attack.charAt(0).toUpperCase()}${attack.slice(1)}`);
-    }
-    candidates.push("Punch");
-    for (const candidate of candidates) {
-      if (clips.has(candidate)) return candidate;
-      const caseInsensitive = [...clips].find((clip) => clip.toLowerCase() === candidate.toLowerCase());
-      if (caseInsensitive) return caseInsensitive;
-    }
-    return null;
-  }
-
   /**
-   * The shell's half of the runtime UI: the ViewModel fields a HUD binds to and
-   * the gameplay-rules store behind them. Mounting the widgets themselves is the
-   * `runtimeUiModule` capability's job (Phase E), which runs right after this.
+   * The shell's half of the runtime UI: the ViewModel fields a HUD binds to.
+   * Mounting the widgets themselves is the `runtimeUiModule` capability's job
+   * (Phase E), which runs right after this; the authored gameplay rules behind
+   * the `game.*` fields belong to the Layer 3 game module (Phase F).
    */
   private setupRuntimeUi(): void {
     if (!this.layout) return;
@@ -2436,24 +2431,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.uiStore.setField("player.speed", 0);
     this.uiStore.setField("player.speedLabel", "Speed 0.0 m/s");
     // `save.slots.*` are seeded by the save capability's own level hook.
-
-    const gameRules = normalizeGameRules(this.layout.worldSettings?.gameRules);
-    if (!gameRules) return;
-    this.gameStateStore = new GameStateStore(gameRules);
-    // Bridge content-emitted `game-event` script messages into the rules store
-    // so triggers/actor scripts (score, objective progress, win/lose) drive it
-    // without the engine knowing any project rule. Released in dispose().
-    this.gameEventUnsub = this.behaviorSubsystem.subscribeScriptMessage(
-      "game-event",
-      (envelope) => {
-        const event = parseGameEvent(envelope.payload);
-        if (event) this.gameStateStore?.dispatch(event);
-      },
-    );
-    // Seed bound fields so the HUD's first render shows authored starting values.
-    for (const [path, value] of Object.entries(this.gameStateStore.hudFields())) {
-      this.uiStore.setField(path, value);
-    }
   }
 
   /**
@@ -2462,7 +2439,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * settings. Anything unclaimed here reaches gameplay as a `ui-action`.
    */
   private handleReservedUiMessage(message: string): boolean {
-    if (this.handleGameUiMessage(message)) return true;
+    // Layer 3 first: the game module claims its own rules buttons (`game:*` in
+    // the template) before the shell considers its platform-level messages.
+    if (this.runtimeServices.resolve(gameUiMessageService)?.(message) === true) return true;
     if (this.handleTravelUiMessage(message)) return true;
     if (this.saveGameCommands()?.handleUiMessage(message)) return true;
     return this.handleSettingsUiMessage(message);
@@ -2555,50 +2534,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Advances the gameplay-rules store (when configured), mirrors its bindable
-   * `game.*` fields into the UI ViewModel store, and pushes the configured
-   * win/loss screen once when the round settles. The round freezes while any
-   * screen (pause or outcome) is open, so pausing genuinely pauses the timer.
-   * Flushed by {@link updateUiStore}, which runs immediately after.
-   */
-  private updateGameRules(dt: number): void {
-    const store = this.gameStateStore;
-    if (!store) return;
-    const paused = (this.uiPresenter()?.screenDepth() ?? 0) > 0;
-    if (!paused) store.tick(dt);
-    for (const [path, value] of Object.entries(store.hudFields())) {
-      this.uiStore.setField(path, value);
-    }
-    if (!this.gameOutcomeShown && store.phase !== "playing") {
-      this.gameOutcomeShown = true;
-      this.showGameOutcome(store.phase);
-    }
-  }
-
-  /** Presents the win/loss screen for a settled round, replacing any open screen. */
-  private showGameOutcome(phase: GamePhase): void {
-    this.uiPresenter()?.showOutcomeScreen(phase === "won" ? "won" : "lost");
-  }
-
-  /**
-   * Intercepts reserved `game:*` UI widget messages (win/loss/pause buttons):
-   * `game:restart` restarts the round, `game:resume` closes the open screen.
-   * Returns true when handled so the message isn't also forwarded to gameplay.
-   */
-  private handleGameUiMessage(message: string): boolean {
-    switch (message) {
-      case "game:restart":
-        this.restartGame();
-        return true;
-      case "game:resume":
-        this.uiPresenter()?.clearScreens();
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /**
    * Intercepts a reserved `travel:` UI widget message so a menu (e.g. "New Game")
    * can start Level Travel (P2). The message is `travel:<layoutPath>` or
    * `travel:<layoutPath>#<spawnTag>` — the path is the destination level, the
@@ -2683,21 +2618,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Restarts the rules round in place: resets the store to its authored initial
-   * state, closes any open screen (resuming gameplay), and broadcasts a
-   * `game-restart` script message so content can reset itself (respawn pickups,
-   * move the player home). A full world reset is the game's responsibility — the
-   * framework owns only the rules state. No-op without a rules store.
-   */
-  private restartGame(): void {
-    if (!this.gameStateStore) return;
-    this.gameStateStore.dispatch({ kind: "restart" });
-    this.gameOutcomeShown = false;
-    this.uiPresenter()?.clearScreens();
-    this.behaviorSubsystem.emitScriptMessage("game-restart", "game", {});
-  }
-
-  /**
    * Drives the spatial-audio listener from the runtime camera each frame, so a
    * spatial cue's PannerNode pans/attenuates relative to where the player looks.
    */
@@ -2737,22 +2657,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Attaches each character's authored skeletal metadata, which the Game Mode
-   * reads at possession to drive blend-space locomotion. The sidecars themselves
-   * are loaded and cached by the skeletal-animation capability; with that module
-   * off, `ref.skeleton` stays absent and every consumer falls back to its
-   * no-metadata path. Runs after the refs are built, before possession — which
-   * is why the shell drives it rather than the module's own level hook.
+   * Hands this level's characters to the skeletal-animation capability, which
+   * attaches each one's authored metadata (blend spaces, anim-set, root motion)
+   * — what the Game Mode reads at possession to drive blend-space locomotion.
+   * With that module off, `ref.skeleton` stays absent and every consumer falls
+   * back to its no-metadata path. The shell owns only the *timing*: after the
+   * refs are built, before possession, which is earlier than any capability's
+   * level hook.
    */
   private async attachCharacterSkeletons(): Promise<void> {
-    if (this.characterRefs.length === 0) return;
-    const library = this.runtimeServices.resolve(skeletonLibraryService);
-    if (!library) return;
-    const loaded = await library.load(this.characterRefs.map((ref) => ref.placement.assetId));
-    for (const ref of this.characterRefs) {
-      const skeleton = loaded.get(ref.placement.assetId);
-      if (skeleton) ref.skeleton = skeleton;
-    }
+    await this.runtimeServices
+      .resolve(skeletonLibraryService)
+      ?.attachToCharacters(this.characterRefs);
   }
 
   /**
@@ -2768,29 +2684,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Resolves the Game Mode for this Play boot, caching the result. A project Game
-   * Mode (`worldSettings.gameMode` is a `*.actor.json` class ref) is loaded and
-   * built from its Actor Script class; built-in ids resolve through the registry.
-   * A class ref that is not actually a `gameMode` class falls back to the default
-   * camera mode, so a stale/mis-typed reference can't break Play.
+   * Resolves the Game Mode for this Play boot, caching the result. *Which* modes
+   * exist is game content, so the answer comes from the Layer 3 game module's
+   * `game-mode-provider` service — the shell drives a mode's lifecycle without
+   * knowing the catalog. `null` means no game module is registered (or it
+   * publishes no provider): the level still builds and renders in full, nothing
+   * is possessed, and the camera stays where the level put it.
    */
-  private async resolveActiveGameMode(): Promise<GameModeDefinition> {
+  private async resolveActiveGameMode(): Promise<GameModeDefinition | null> {
     if (this.activeGameMode) return this.activeGameMode;
-    const id = this.layout?.worldSettings?.gameMode;
-    let mode: GameModeDefinition;
-    if (isGameModeClassRef(id)) {
-      const def = await this.loadActorClass(id as string);
-      mode =
-        def.parentClass === "gameMode"
-          ? createProjectGameMode({
-              classRef: id as string,
-              displayName: def.name,
-              defaultPawnClassRef: readGameModeDefaultPawnClassRef(def),
-            })
-          : resolveGameMode(undefined);
-    } else {
-      mode = resolveGameMode(id);
-    }
+    const provider = this.runtimeServices.resolve(gameModeProviderService);
+    if (!provider) return null;
+    const mode = await provider.resolve({
+      gameModeId: this.layout?.worldSettings?.gameMode,
+      loadActorClass: (classRef) => this.loadActorClass(classRef),
+    });
     this.activeGameMode = mode;
     return mode;
   }
@@ -2812,7 +2720,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async applyPlayerStartSpawn(spawnTag?: string): Promise<void> {
     if (!this.layout) return;
     const mode = await this.resolveActiveGameMode();
-    if (mode.defaultPawn.kind !== "character") return;
+    if (!mode || mode.defaultPawn.kind !== "character") return;
 
     const spawn = computePlayerStartSpawn(this.layout, spawnTag);
     if (spawn) {
@@ -2892,19 +2800,25 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async startGameMode(): Promise<void> {
     this.applyPlayCameraHandoff();
     const mode = await this.resolveActiveGameMode();
-    const session = mode.createSession(this.createGameModeContext());
-    session.spawnDefaultPawn();
-    session.possess();
-    this.gameModeSession = session;
-    this.cachePawnRespawnTransform(session.playerState.pawnEntityId);
+    if (mode) {
+      const session = mode.createSession(this.createGameModeContext());
+      session.spawnDefaultPawn();
+      session.possess();
+      this.gameModeSession = session;
+      this.cachePawnRespawnTransform(session.playerState.pawnEntityId);
+    }
 
     // Characters the Game Mode did not possess keep their single authored clip.
-    const possessedEntityId = session.playerState.pawnEntityId;
+    // With no game module registered that is every character in the level.
+    const possessedEntityId = this.gameModeSession?.playerState.pawnEntityId ?? null;
     for (const ref of this.characterRefs) {
       if (ref.entityId === possessedEntityId) continue;
+      // An AI-controlled character animates from its locomotion reports, which
+      // is the AI-character animation capability's job. With that module off the
+      // registration is refused and the character keeps its authored clip below.
       if (ref.isAiControlled && ref.hasCharacterMovement) {
-        this.registerAiCharacterAnimator(ref);
-        continue;
+        const animation = this.runtimeServices.resolve(characterAnimationCommandsService);
+        if (animation?.registerAiCharacter(ref)) continue;
       }
       const mixer = createSceneCharacterMixer(
         ref.object,
@@ -2917,47 +2831,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           distanceSquared: () => ref.object.position.distanceToSquared(this.camera.position),
         });
       }
-    }
-  }
-
-  private registerAiCharacterAnimator(ref: RuntimeCharacterRef): void {
-    const config = locomotionConfigForSkeleton(ref.skeleton);
-    const animator = new CrossfadeAnimator(ref.object, ref.gltf.animations, {
-      ...(ref.skeleton?.rootMotion ? { rootMotion: ref.skeleton.rootMotion } : {}),
-    });
-    const initial = resolveLocomotionAnimation(
-      { planarSpeed: 0, grounded: true, velocityY: 0 },
-      animator.clips,
-      config,
-      DEFAULT_LOCOMOTION_THRESHOLDS,
-    );
-    if (initial.kind === "blend") animator.playBlend(initial.weights);
-    else if (initial.clip) animator.play(initial.clip, 0);
-    this.animationSubsystem.add(animator.mixer, {
-      distanceSquared: () => ref.object.position.distanceToSquared(this.camera.position),
-    });
-    this.aiCharacterAnimators.set(ref.entityId, { ref, animator, config, oneShot: null });
-  }
-
-  private updateAiCharacterAnimations(deltaSeconds: number): void {
-    for (const [entityId, runtime] of this.aiCharacterAnimators) {
-      if (entityId === this.gameModeSession?.playerState.pawnEntityId) continue;
-      let fadeSeconds = deltaSeconds > 0 ? 0.18 : 0;
-      if (runtime.oneShot) {
-        runtime.oneShot.remaining -= Math.max(0, deltaSeconds);
-        if (runtime.oneShot.remaining > 0) continue;
-        fadeSeconds = runtime.oneShot.blendOutSeconds;
-        runtime.oneShot = null;
-      }
-      const report = this.locomotionReports.get(entityId);
-      const result = resolveLocomotionAnimation(
-        report ?? { planarSpeed: 0, grounded: true, velocityY: 0 },
-        runtime.animator.clips,
-        runtime.config,
-        DEFAULT_LOCOMOTION_THRESHOLDS,
-      );
-      if (result.kind === "blend") runtime.animator.playBlend(result.weights);
-      else if (result.clip) runtime.animator.play(result.clip, fadeSeconds);
     }
   }
 

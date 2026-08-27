@@ -5,7 +5,7 @@
 > Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
 > Faz E sürüyor: E/1 (bağlanma mekanizması + moving-platform + spline-follower),
 > E/2 (dialogue), E/3 (save-game), E/4 (runtime-UI), E/5 (skeletal), E/6
-> (character-movement) ve E/7 (AI) tamam; kalan modüller audio ve vfx.
+> (character-movement), E/7 (AI) ve E/8 (audio) tamam; kalan modül vfx.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -122,7 +122,7 @@ Level JSON ──loadRoomLayout──▶ RoomLayout ──▶ LevelRuntime.build
 | ~~`saveCoordinator` (`RuntimeSaveCoordinator`)~~ | **2** | ✅ `saveGameModule` (E/3) |
 | ~~`setupRuntimeUi` + widget/theme yükleme~~ | **2** | ✅ `runtimeUiModule` (E/4); locale kabukta (dialogue ile paylaşımlı), kurallar Katman 3 |
 | ~~`loadCharacterSkeletons`~~ | **2** | ✅ `skeletalAnimationModule` (E/5); sidecar kütüphanesi modülde, ref'e iliştirme Faz F'ye kadar kabukta |
-| `playAutoPlayAudio` / `playAutoPlayParticles` | **2** | `audioModule` / `vfxModule` (opt-in; auto-play hook) |
+| ~~`playAutoPlayAudio`~~ / `playAutoPlayParticles` | **2** | ✅ `audioModule` (E/8, ses + soundCue + dialogue audio); `vfxModule` sırada |
 | `startGameMode` + `gameModes/registry` | **3** | Game modülü zaten burada; genişletilir |
 | `behaviorSubsystem` + `createSceneBehaviorRegistry` | **2/3** | Behavior çekirdeği modül; kurallar fork'ta |
 | Editör-özel: gizmo, seçim, `refresh*`, `emit*Changed`, authoring overlay | editör | `SceneApp`'te kalır (Katman 0 + authoring) |
@@ -639,6 +639,60 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > — `ai-patrol`, `ai-navigation-clearance` (editör + runtime),
 > `ai-navigation-volume`, `runtime-locomotion`, `runtime-playflow`,
 > `runtime-script-message`.
+
+> **Uygulama kaydı (2026-08-27, E/8 — audio modülü):** Runtime'ın ses üreten
+> her parçası `capabilities/audioModule.ts`'e taşındı: `AudioSubsystem`
+> (`presentation` slotu, mix bus'ları, uzamsal dinleyici, klip çalma), manifest
+> `sound`/`soundCue` → URL çözümü, soundCue tanım önbelleği + graf değerlendirmesi,
+> seviyenin `autoPlay` Audio bileşenleri ve dialogue'un ses tarafı.
+> `RuntimeSceneApp`'ten `audioSubsystem`, üç URL/def haritası, `loadSoundCue`,
+> `playDialogueAudio`, `playAutoPlayAudio(+Entity)` ve `resumeAudioOnFirstGesture`
+> çıktı.
+>
+> **`dialogue-audio` sağlayıcısı kabuktan modüle geçti** — E/2'nin söz verdiği
+> durum: `dialogueModule` onu zaten çağrı anında çözüyordu, tek satırı bile
+> değişmedi.
+>
+> Modülün yayımladığı `audio-commands`: `bus` (behavior katmanının çaldığı düz
+> yüzey), `prepareLevel(manifest)`, `playAutoPlay(document)`,
+> `playEntityAudio(entity)` (runtime'da spawn olan aktör için),
+> `setListenerPose`, `setBusVolume`/`getBusVolume`.
+>
+> **Zamanlama neden servis üzerinden:** URL çözümü ve auto-play, `onLevelLoaded`
+> için fazla geç — bir script `startSceneRuntime` ile seviye hook'u arasındaki
+> karelerde ses çalabilir. Bu yüzden ikisi de tam eski çağrı yerlerinde kalıyor
+> (`populateAssetUrls` içinde `prepareLevel`, sahne kurulumunda `playAutoPlay`),
+> yalnız sahibi değişti (AI'daki `prepareLevel` deseniyle aynı).
+>
+> **Kabukta bilinçli kalanlar:** (1) dinleyici pozu — kamera bu kare *hareket
+> ettikten sonra* örneklenmeli, yoksa panning bir kare geriden gelir; kabuk
+> `updateAudioListener()`'ı eski yerinde çağırıp modüle `setListenerPose` ile
+> itiyor. (2) Oyuncunun kalıcı ses tercihi `userSettingsStore`'da; modül canlı
+> mix'in sahibi, kaydedilmiş tercihin değil. `applyUserAudioSettings` artık
+> `capabilities.runtimeStart`'tan *sonra* çağrılıyor (canlı bus'lar o an var).
+>
+> Behavior katmanı `AudioBus`'ı doğrudan almıyor: kabuk çağrı anında çözen ince
+> bir adaptör veriyor (`behaviorAudioBus`), `play()` modülsüz runtime'da
+> `silentAudioPlayback()` ile zaten durdurulmuş bir handle döndürüyor — çağıran
+> hiçbir null kontrolü yapmıyor.
+>
+> Modül kapalıyken runtime sessiz: script'in `playSound`'u no-op, ambient emitter
+> hiç başlamaz, dialogue satırı altyazısını metin-uzunluğu tahminiyle gösterir ve
+> ayarlar ekranının ses kaydırıcıları dinleyeni olmayan bir tercihi kaydeder (I3).
+>
+> Yeni birim testi `tests/engine/audioModule.test.ts` (4 kontrol): `presentation`
+> slotuna kurulum + iki yüzeyin yayımlanması + yalnız `autoPlay` işaretli
+> emitter'ların başlaması + spawn yolunun aynı kapıdan geçmesi, dialogue'un iki
+> kaynak türü (ham `sound` + fetch edilip değerlendirilen `soundCue`, ikinci
+> satırda yeniden fetch etmeyen önbellek), mix'in seviyeye değil oturuma ait
+> olması, ve modülsüz runtime'da her iki servisin de hiç var olmaması.
+> `runtimeCapabilityModules.test.ts`'teki varsayılan tick sırası beklentisi
+> `audio` ile güncellendi.
+>
+> Kapılar: `build:verify` uçtan uca yeşil (**960/960 engine check**),
+> `verify:imports` PASS, `verify:dist --strict` PASS. Browser: beş smoke geçiyor
+> — `runtime-playflow`, `runtime-locomotion`, `runtime-script-message`,
+> `runtime-checkpoint`, `runtime-portal`.
 
 ### Faz F — ForgeGameModule + createForgeRuntime (Katman 3 API)
 - **İş:** `ForgeGameModule` arayüzü (`register(runtime)` / `onLevelLoaded(ctx)` /

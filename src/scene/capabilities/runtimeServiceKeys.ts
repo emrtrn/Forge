@@ -19,6 +19,8 @@ import type { Vector3 } from "three";
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
 import type { AssetManifest } from "@engine/assets/manifest";
+import type { AudioBus } from "@engine/audio/audioSubsystem";
+import type { AudioBusId } from "@engine/audio/audioBus";
 import type {
   LaunchOptions,
   PhysicsAabb,
@@ -34,6 +36,8 @@ import type { CharacterMoveIntent } from "@engine/movement/characterMovementSubs
 import type { Aabb3 } from "@engine/movement/characterCollision";
 import type { LocomotionInput } from "@engine/movement/locomotionAnimation";
 import type { TransformComponent } from "@engine/scene/components";
+import type { Entity } from "@engine/scene/entity";
+import type { SceneDocument } from "@engine/scene/sceneDocument";
 import type {
   DialogueAudioPlayback,
   DialogueAudioRequest,
@@ -165,13 +169,45 @@ export const scriptMessageBusService = runtimeServiceKey<ScriptMessageBus>("scri
  * Plays a resolved dialogue line's audio and hands back a stop handle, or null
  * when nothing could be played (subtitle timing then falls back to its
  * text-length estimate).
- * Provided by: the runtime shell (audio + sound cues are still baked in).
+ * Provided by: `audioModule`.
  */
 export type DialogueAudioPlayer = (
   request: DialogueAudioRequest,
 ) => DialogueAudioPlayback | null;
 
 export const dialogueAudioService = runtimeServiceKey<DialogueAudioPlayer>("dialogue-audio");
+
+/**
+ * Everything the runtime asks of whichever capability owns sound. The shell
+ * drives the parts only it knows the timing of — resolving this level's audio
+ * assets before anything can play, starting the built level's ambient emitters,
+ * and pushing the listener pose after the camera has moved this frame — while
+ * `bus` is the plain play surface behaviors and spawned actors reach through.
+ *
+ * `undefined` means the module is off: scripts' `playSound` becomes a no-op,
+ * ambient emitters never start, and the settings screen's volume sliders persist
+ * a preference with nothing listening. Nothing else changes.
+ * Provided by: `audioModule`.
+ */
+export interface AudioCommands {
+  /** One-shot / looping playback, as handed to the behavior layer. */
+  readonly bus: AudioBus;
+  /** Maps this level's manifest `sound` + `soundCue` assets to fetchable URLs. */
+  prepareLevel(manifest: AssetManifest): void;
+  /** Starts every `autoPlay` Audio component of the freshly built level. */
+  playAutoPlay(document: SceneDocument): void;
+  /** Starts one runtime-spawned entity's `autoPlay` Audio component. */
+  playEntityAudio(entity: Entity): void;
+  /** Spatial listener pose; pushed from the frame loop, after the camera moves. */
+  setListenerPose(
+    position: readonly [number, number, number],
+    forward: readonly [number, number, number],
+  ): void;
+  setBusVolume(bus: AudioBusId, volume: number): void;
+  getBusVolume(bus: AudioBusId): number;
+}
+
+export const audioCommandsService = runtimeServiceKey<AudioCommands>("audio-commands");
 
 /**
  * The active `.loc.json` tables. Shared, not owned by one capability: dialogue

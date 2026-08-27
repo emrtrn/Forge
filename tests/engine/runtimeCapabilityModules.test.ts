@@ -146,8 +146,15 @@ export function registerRuntimeCapabilityModuleTests(check: Check): void {
   });
 
   check("the default module set keeps the runtime's authored tick order", () => {
+    // Only the modules that register a subsystem without a host service appear:
+    // character movement and AI both need one, and this bare runtime has neither.
     const runtime = startTestRuntime(createDefaultRuntimeModules());
-    assert.deepEqual(runtime.tickOrder, ["movingPlatform", "splinePathFollower", "dialogue"]);
+    assert.deepEqual(runtime.tickOrder, [
+      "movingPlatform",
+      "splinePathFollower",
+      "audio",
+      "dialogue",
+    ]);
   });
 
   check("moving-platform module drives platforms and publishes them to the solver", () => {

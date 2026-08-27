@@ -12,6 +12,7 @@
  * state), hence a factory rather than a shared constant.
  */
 import { createAiModule } from "./aiModule";
+import { createAudioModule } from "./audioModule";
 import type { CapabilityModule } from "./CapabilityModule";
 import { createCharacterMovementModule } from "./characterMovementModule";
 import { createDialogueModule } from "./dialogueModule";
@@ -32,6 +33,9 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     // order the two subsystems were seeded in before either was a module.
     createAiModule(),
     createSkeletalAnimationModule(),
+    // Before dialogue, which resolves `dialogue-audio` from it — resolution is
+    // lazy, so this is readability, not a requirement.
+    createAudioModule(),
     createDialogueModule(),
     // The UI mounts before save-game so the save menu's slot fields are seeded
     // into an already-bound widget (order here is setup order, never tick order).

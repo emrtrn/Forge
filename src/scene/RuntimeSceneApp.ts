@@ -20,7 +20,6 @@ import {
 } from "./capabilities/RuntimeServices";
 import {
   characterTransformResetService,
-  dialogueAudioService,
   gameplaySaveStateService,
   levelTravelService,
   projectIdentityService,
@@ -32,6 +31,7 @@ import {
   aiCommandsService,
   aiDebugService,
   aiHostService,
+  audioCommandsService,
   scriptMessageBusService,
   skeletonLibraryService,
   splineFollowerDebugService,
@@ -41,6 +41,7 @@ import {
   uiPresenterService,
   uiViewModelService,
   type AiNavigationDebugSnapshot,
+  type AudioCommands,
   type CharacterMovementQuery,
   type RuntimeUiPresenter,
   type SaveGameCommands,
@@ -62,14 +63,8 @@ import type { ScriptMessagePayload } from "@engine/behavior/scriptMessages";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
-import { AudioSubsystem } from "@engine/audio/audioSubsystem";
+import type { AudioBus, AudioPlaybackHandle } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
-import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
-import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
-import type {
-  DialogueAudioPlayback,
-  DialogueAudioRequest,
-} from "@engine/dialogue/dialogueSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { GamepadInputSource } from "@/input/gamepadInputSource";
 import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
@@ -353,7 +348,6 @@ import {
 } from "@engine/scene/collision";
 import {
   COLLIDER_COMPONENT,
-  readAudioComponent,
   readAIControllerComponent,
   readCharacterMovementComponent,
   readColliderComponent,
@@ -546,12 +540,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private readonly runtimeServices: RuntimeServiceHost;
   private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
-  /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
-  private readonly soundUrlById = new Map<string, string>();
-  /** Manifest soundCue asset id -> fetchable file URL. */
-  private readonly soundCueUrlById = new Map<string, string>();
-  /** Parsed soundCue assets, cached by id. */
-  private readonly soundCueDefs = new Map<string, SoundCueAsset | null>();
   /** Manifest effect (`.effect.json`) asset id -> fetchable file URL. */
   private readonly effectUrlById = new Map<string, string>();
   /** Manifest texture asset id -> fetchable image URL (particle sprite textures). */
@@ -565,10 +553,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     resolveEffectUrl: (effectId) => this.effectUrlById.get(effectId) ?? null,
     resolveTextureUrl: (textureId) => this.textureUrlById.get(textureId) ?? null,
   });
-  private readonly audioSubsystem = new AudioSubsystem({
-    backend: "web-audio",
-    resolveClipUrl: (clipId) => this.soundUrlById.get(clipId) ?? null,
-  });
+  /**
+   * The play surface handed to the behavior layer. It resolves the audio
+   * capability per call, so a runtime without one turns every scripted
+   * `playSound` into a no-op instead of failing to construct.
+   */
+  private readonly behaviorAudioBus: AudioBus = {
+    playOneShot: (clipId, options) => this.audioCommands()?.bus.playOneShot(clipId, options),
+    play: (clipId, options) =>
+      this.audioCommands()?.bus.play(clipId, options) ?? silentAudioPlayback(clipId),
+  };
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   /** Gamepad → action-map bridge (poll-only, fed once per frame in the loop). */
   private readonly gamepadInput = new GamepadInputSource(this.inputActions);
@@ -814,9 +808,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       emit: (type, source, payload, target) =>
         this.behaviorSubsystem.emitScriptMessage(type, source, payload, target),
     });
-    this.runtimeServices.provide(dialogueAudioService, (request) =>
-      this.playDialogueAudio(request),
-    );
     // Locale tables are shared by widget text and dialogue subtitles, so the
     // shell owns them (it also persists the player's locale choice) and whichever
     // capability needs them first triggers the load.
@@ -939,7 +930,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.interactionPromptElement = this.createInteractionPromptElement();
     this.userSettingsStore = createRuntimeUserSettingsStore();
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
-    this.applyUserAudioSettings(this.userSettings);
     // Seed the active quality profile from the persisted graphics preference so the
     // first scene build resolves post-process at the player's chosen profile (the
     // remaining knobs — shadows, resolution, particle density — are applied once
@@ -996,6 +986,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       reportIdleLocomotion: (entityId) => this.reportAiIdleLocomotion(entityId),
     });
     this.capabilities.runtimeStart(this.runtimeServices);
+    // The persisted mix is applied here rather than at settings load: the live
+    // buses belong to the audio capability, which only exists from this point.
+    this.applyUserAudioSettings(this.userSettings);
 
     // Tick order is declared by slot, not by registration sequence: see
     // RUNTIME_TICK_SLOTS for what each slot means and why the order matters.
@@ -1008,7 +1001,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.inputActions,
       this.syncEntityTransform,
       this.physicsSubsystem,
-      this.audioSubsystem,
+      this.behaviorAudioBus,
       {
         messageTraceLimit: options.scriptMessageTraceLimit ?? 0,
         onMessageWarnings: (warnings) => {
@@ -1050,7 +1043,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       },
     );
     this.runtimeServices.addSubsystem("gameplay", this.behaviorSubsystem);
-    this.runtimeServices.addSubsystem("presentation", this.audioSubsystem);
     this.runtimeServices.addSubsystem("presentation", this.vfxSubsystem);
     // Every subsystem — shell-owned and module-owned — is now known, so install
     // the engine tick in slot order. Nothing may be queued after this point.
@@ -1071,7 +1063,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.attachTouchControls(canvas);
     this.pointerLook.attach();
     this.pointerButtons.attach();
-    this.resumeAudioOnFirstGesture();
 
     this.travelCoordinator = new RuntimeTravelCoordinator({
       clearPendingRestore: () => this.saveGameCommands()?.clearPendingRestore(),
@@ -1095,7 +1086,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       addEntityToPhysics: (entity) => this.physicsSubsystem.addEntity(entity),
       addEntityToBehavior: (entity, owner) =>
         this.behaviorSubsystem.addEntity(entity, { owner }),
-      playAutoPlayAudio: (entity) => this.playAutoPlayAudioEntity(entity),
+      playAutoPlayAudio: (entity) => this.audioCommands()?.playEntityAudio(entity),
       playAutoPlayParticle: (entity) => {
         void this.playAutoPlayParticleEntity(entity);
       },
@@ -1760,7 +1751,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // emitter cannot be allowed to stop the game mode + UI (lines below) from
     // initialising, which would look like "Play won't start".
     try {
-      this.playAutoPlayAudio(sceneDocument);
+      this.audioCommands()?.playAutoPlay(sceneDocument);
     } catch (error) {
       console.error("[runtime] auto-play audio failed:", error);
     }
@@ -1872,6 +1863,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the capability is off). Resolved at call time: every caller treats a missing
    * host as "nothing to close, nothing to show".
    */
+  /**
+   * The audio capability's command surface, or undefined when no audio module is
+   * registered — in which case the runtime is simply silent.
+   */
+  private audioCommands(): AudioCommands | undefined {
+    return this.runtimeServices.resolve(audioCommandsService);
+  }
+
   private uiPresenter(): RuntimeUiPresenter | undefined {
     return this.runtimeServices.resolve(uiPresenterService);
   }
@@ -1880,15 +1879,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.saveGameCommands()?.requestSaveGameLoad(payload) ?? false;
   }
 
+  /**
+   * The player's saved mix preference is the shell's; the live buses are the
+   * audio capability's. Without that capability the preference still persists —
+   * it simply has nothing to apply to until one is registered.
+   */
   setUserAudioBusVolume(bus: AudioBusId, volume: number): boolean {
-    this.audioSubsystem.setBusVolume(bus, volume);
+    const audio = this.audioCommands();
+    audio?.setBusVolume(bus, volume);
     const ok = this.userSettingsStore?.setAudioBusVolume(bus, volume) ?? false;
     this.userSettings = this.userSettingsStore?.read() ?? {
       ...this.userSettings,
       audio: {
         busVolumes: {
           ...this.userSettings.audio.busVolumes,
-          [bus]: this.audioSubsystem.getBusVolume(bus),
+          [bus]: audio?.getBusVolume(bus) ?? volume,
         },
       },
     };
@@ -2495,8 +2500,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private applyUserAudioSettings(settings: UserSettings): void {
+    const audio = this.audioCommands();
+    if (!audio) return;
     for (const [bus, volume] of Object.entries(settings.audio.busVolumes)) {
-      if (isAudioBusId(bus)) this.audioSubsystem.setBusVolume(bus, volume);
+      if (isAudioBusId(bus)) audio.setBusVolume(bus, volume);
     }
   }
 
@@ -2691,9 +2698,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * spatial cue's PannerNode pans/attenuates relative to where the player looks.
    */
   private updateAudioListener(): void {
+    const audio = this.audioCommands();
+    if (!audio) return;
     this.camera.getWorldPosition(this.listenerPos);
     this.camera.getWorldDirection(this.listenerDir);
-    this.audioSubsystem.setListenerPose(
+    audio.setListenerPose(
       [this.listenerPos.x, this.listenerPos.y, this.listenerPos.z],
       [this.listenerDir.x, this.listenerDir.y, this.listenerDir.z],
     );
@@ -2742,131 +2751,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
   }
 
-  /** Maps manifest `sound`, `soundCue`, and effect asset ids to fetchable file URLs. */
+  /**
+   * Maps manifest effect + texture asset ids to fetchable file URLs, and hands
+   * the manifest to the audio capability so its `sound`/`soundCue` lookups are
+   * filled before anything in the level can play.
+   */
   private async populateAssetUrls(): Promise<void> {
     if (!this.assetLoader) return;
     const manifest = await this.assetLoader.loadManifest();
+    this.audioCommands()?.prepareLevel(manifest);
     for (const asset of manifest.assets) {
       const path = assetPath(asset);
-      if (assetType(asset) === "sound") this.soundUrlById.set(asset.id, projectFileUrl(path));
-      if (assetType(asset) === "soundCue") this.soundCueUrlById.set(asset.id, projectFileUrl(path));
       if (assetType(asset) === "texture") this.textureUrlById.set(asset.id, projectFileUrl(path));
       // Prefer the `effect` asset type; fall back to the `.effect.json` suffix so
       // older manifests (effect assets typed as `prefab`) keep resolving.
       if (assetType(asset) === "effect" || path.endsWith(".effect.json")) {
         this.effectUrlById.set(asset.id, projectFileUrl(path));
-      }
-    }
-  }
-
-  /** Fetches and caches a soundCue asset by id. Returns null on failure. */
-  private async loadSoundCue(cueId: string): Promise<SoundCueAsset | null> {
-    if (this.soundCueDefs.has(cueId)) return this.soundCueDefs.get(cueId) ?? null;
-    const url = this.soundCueUrlById.get(cueId);
-    if (!url) { this.soundCueDefs.set(cueId, null); return null; }
-    try {
-      const response = await fetch(url, { cache: "no-cache" });
-      if (!response.ok) { this.soundCueDefs.set(cueId, null); return null; }
-      const data = (await response.json()) as SoundCueAsset;
-      this.soundCueDefs.set(cueId, data);
-      return data;
-    } catch {
-      this.soundCueDefs.set(cueId, null);
-      return null;
-    }
-  }
-
-  /**
-   * Plays a resolved dialogue line's audio through the {@link audioSubsystem} and
-   * hands the subsystem a control handle. Raw `sound` sources play directly; a
-   * `soundCue` source is evaluated and fired best-effort (subtitle timing then
-   * falls back to the text-length estimate, since a cue reports no duration).
-   */
-  private playDialogueAudio(request: DialogueAudioRequest): DialogueAudioPlayback | null {
-    if (request.sourceType === "soundCue") {
-      void this.loadSoundCue(request.sourceId).then((cue) => {
-        if (!cue) return;
-        for (const ev of evaluateSoundCue(cue)) {
-          const opts = {
-            volume: ev.volume,
-            loop: ev.loop,
-            pitch: ev.pitch,
-            ...(cue.output.bus ? { bus: cue.output.bus } : {}),
-          };
-          if (ev.delaySeconds > 0) {
-            setTimeout(() => this.audioSubsystem.playOneShot(ev.clipId, opts), ev.delaySeconds * 1000);
-          } else {
-            this.audioSubsystem.playOneShot(ev.clipId, opts);
-          }
-        }
-      });
-      return { stop: () => undefined };
-    }
-    // Raw sound: the audio subsystem resolves the asset id to a file URL itself.
-    const handle = this.audioSubsystem.play(request.sourceId, {});
-    return { stop: () => handle.stop() };
-  }
-
-  /** Plays every Audio component flagged `autoPlay` once the scene is built (ambient). */
-  private playAutoPlayAudio(document: SceneDocument): void {
-    for (const entity of document.entities) {
-      try {
-        this.playAutoPlayAudioEntity(entity);
-      } catch (error) {
-        // One unplayable emitter must not stop the rest (or the scene start).
-        console.error(`[runtime] auto-play audio failed for ${entity.id}:`, error);
-      }
-    }
-  }
-
-  private playAutoPlayAudioEntity(entity: Entity): void {
-    {
-      const audio = readAudioComponent(entity);
-      if (!audio?.autoPlay) return;
-      const position = audio.spatial ? readTransformComponent(entity)?.position : undefined;
-      // Spatial placement + authored sphere-attenuation overrides for the PannerNode.
-      const spatialOpts =
-        audio.spatial && position
-          ? {
-              position: [position[0], position[1], position[2]] as const,
-              ...(audio.refDistance !== undefined ? { refDistance: audio.refDistance } : {}),
-              ...(audio.maxDistance !== undefined ? { maxDistance: audio.maxDistance } : {}),
-              ...(audio.rolloff !== undefined ? { rolloff: audio.rolloff } : {}),
-            }
-          : {};
-      const componentPitch = audio.pitch ?? 1;
-
-      if (audio.sourceType === "soundCue" && audio.sourceId) {
-        // Async: load cue, evaluate graph, fire each resolved event.
-        void this.loadSoundCue(audio.sourceId).then((cue) => {
-          if (!cue) return;
-          const events = evaluateSoundCue(cue);
-          for (const ev of events) {
-            const opts = {
-              volume: ev.volume * audio.volume,
-              loop: ev.loop || audio.loop,
-              // The component's pitch multiplier scales the cue's own pitch (Unreal parity).
-              pitch: ev.pitch * componentPitch,
-              spatial: audio.spatial,
-              // Route the cue through its authored mix bus (default master).
-              ...(cue.output.bus ? { bus: cue.output.bus } : {}),
-              ...spatialOpts,
-            };
-            if (ev.delaySeconds > 0) {
-              setTimeout(() => this.audioSubsystem.playOneShot(ev.clipId, opts), ev.delaySeconds * 1000);
-            } else {
-              this.audioSubsystem.playOneShot(ev.clipId, opts);
-            }
-          }
-        });
-      } else {
-        this.audioSubsystem.playOneShot(audio.clipId, {
-          volume: audio.volume,
-          loop: audio.loop,
-          spatial: audio.spatial,
-          ...(audio.pitch !== undefined ? { pitch: audio.pitch } : {}),
-          ...spatialOpts,
-        });
       }
     }
   }
@@ -2892,21 +2792,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // component's scale/tint/loop fields are the §8 instance overrides.
     await this.vfxSubsystem.warm(particle.effectId);
     this.vfxSubsystem.play(particle.effectId, { ...particle, position: transform.position });
-  }
-
-  /**
-   * Browser autoplay policies suspend the audio context until a user gesture, so
-   * resume it on the first pointer/key input — then ambient cues auto-played at
-   * scene load begin sounding. One-shot: removes itself after the first gesture.
-   */
-  private resumeAudioOnFirstGesture(): void {
-    const resume = (): void => {
-      this.audioSubsystem.resumeContext();
-      window.removeEventListener("pointerdown", resume);
-      window.removeEventListener("keydown", resume);
-    };
-    window.addEventListener("pointerdown", resume);
-    window.addEventListener("keydown", resume);
   }
 
   /**
@@ -4833,6 +4718,23 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
     position: [...transform.position],
     rotation: [...transform.rotation],
     scale: [...transform.scale],
+  };
+}
+
+/**
+ * An already-stopped playback handle, returned when a script plays a sound in a
+ * runtime that registers no audio capability. Every control on it is inert, so
+ * the caller needs no null check.
+ */
+function silentAudioPlayback(clipId: string): AudioPlaybackHandle {
+  return {
+    clipId,
+    stopped: true,
+    volume: 0,
+    pitch: 1,
+    stop: () => undefined,
+    setVolume: () => undefined,
+    setPitch: () => undefined,
   };
 }
 

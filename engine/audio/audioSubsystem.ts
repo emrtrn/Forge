@@ -19,6 +19,14 @@ import {
 export const AUDIO_SUBSYSTEM_ID = "audio";
 export type AudioBackend = "none" | "web-audio";
 
+/**
+ * How many recent plays {@link AudioSubsystem.playedRequests} keeps.
+ *
+ * Comfortably above what any single test asserts, and far above the "last 10
+ * audio events" a debug panel shows, so trimming is invisible to both readers.
+ */
+export const PLAYED_HISTORY_LIMIT = 128;
+
 export type AudioVec3 = readonly [number, number, number];
 
 export interface AudioPlayOptions {
@@ -36,6 +44,24 @@ export interface AudioPlayOptions {
   rolloff?: number;
   /** Mix bus this play routes through. Defaults to {@link DEFAULT_AUDIO_BUS}. */
   bus?: AudioBusId;
+  /**
+   * Stream this clip through a media element instead of decoding it into memory.
+   *
+   * For the handful of long sounds — music tracks, the ambience bed — where the
+   * decoded-buffer path is the wrong shape. `decodeAudioData` expands a file to
+   * raw float samples and the cache never evicts, so one two-minute stereo track
+   * costs about 44 MiB of RAM for as long as the tab lives (120 s × 48 kHz × 2
+   * channels × 4 bytes) whether or not it is still playing. Twenty of them is
+   * most of a gigabyte. A media element holds a small rolling buffer instead,
+   * and starts sounding before the whole file has arrived — which also removes
+   * the fetch-and-decode wait that would otherwise land in the middle of a
+   * crossfade, on the incoming track.
+   *
+   * The trade is precision: a media element starts when it is ready rather than
+   * on a scheduled sample, so this is wrong for one-shots that must land on a
+   * frame. Every short sound should stay on the buffer path.
+   */
+  stream?: boolean;
 }
 
 /** Resolved sphere-attenuation parameters for a spatial `PannerNode`. */
@@ -54,6 +80,38 @@ export const DEFAULT_SPATIAL_ATTENUATION: SpatialPannerConfig = {
 
 function positiveOr(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/**
+ * The media type Forge's audio pipeline ships by default.
+ *
+ * A project that encodes one format and no fallback — the usual choice, since a
+ * second encode doubles the audio payload — buys one consequence worth naming
+ * here rather than in a comment somewhere downstream: a browser that cannot
+ * decode it plays *nothing*, not a degraded mix. That is what
+ * {@link canPlayAudioFormat} exists to detect. A fork shipping something else
+ * passes its own mime type.
+ */
+export const SHIPPED_AUDIO_MIME = 'audio/ogg; codecs="vorbis"';
+
+/**
+ * Whether this browser will play a media type at all — the check that turns
+ * "there is no sound" into something the game can say out loud.
+ *
+ * `canPlayType` answers with an intention (`""` / `"maybe"` / `"probably"`) and
+ * only the empty string is a real answer: it is the browser stating it will not
+ * try. Anything else is treated as yes, because the alternative — warning a
+ * player whose browser said "maybe" and would have coped — is a worse error than
+ * staying quiet.
+ *
+ * Returns `true` where there is no DOM to ask (tests, tooling). Not knowing is
+ * not evidence, and a headless run must never claim the format is unplayable.
+ */
+export function canPlayAudioFormat(mimeType: string = SHIPPED_AUDIO_MIME): boolean {
+  if (typeof document === "undefined") return true;
+  const probe = document.createElement("audio");
+  if (typeof probe.canPlayType !== "function") return true;
+  return probe.canPlayType(mimeType) !== "";
 }
 
 /**
@@ -83,6 +141,17 @@ export interface AudioPlaybackHandle {
   stop(fadeSeconds?: number): void;
   setVolume(value: number, fadeSeconds?: number): void;
   setPitch(value: number): void;
+  /**
+   * Holds a streamed play where it stands, or lets it go on.
+   *
+   * Streams only, and the asymmetry is the point rather than an omission: a
+   * media element has a position that can be held, a decoded source does not —
+   * `AudioBufferSourceNode` can be started and stopped but never resumed, so
+   * "pause" for a one-shot would have to mean "stop", which is a different
+   * thing and not one any caller has asked for. A no-op there keeps a caller
+   * that pauses everything from silently destroying the short sounds.
+   */
+  setPaused(paused: boolean): void;
 }
 
 export interface AudioBus {
@@ -114,6 +183,10 @@ class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
   private stoppedInternal = false;
   private volumeInternal: number;
   private pitchInternal: number;
+  /** Set instead of `source` when this play streams (see `AudioPlayOptions.stream`). */
+  private media: HTMLAudioElement | null = null;
+  /** Pending pause for a streamed stop that is still fading out. */
+  private mediaStopTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     clipId: string,
@@ -148,12 +221,27 @@ class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
     if (this.stoppedInternal) this.stop(0);
   }
 
+  /**
+   * Attaches a streamed play: the element is the source, so there is no
+   * scheduled start or stop and the pitch rides `playbackRate` on the element.
+   */
+  attachMedia(context: BrowserAudioContext, media: HTMLAudioElement, gain: GainNode): void {
+    this.context = context;
+    this.media = media;
+    this.gain = gain;
+    media.playbackRate = this.pitchInternal;
+    gain.gain.value = this.volumeInternal;
+    media.addEventListener("ended", () => this.finish(), { once: true });
+    if (this.stoppedInternal) this.stop(0);
+  }
+
   stop(fadeSeconds = 0): void {
     this.finish();
     const source = this.source;
+    const media = this.media;
     const gain = this.gain;
     const context = this.context;
-    if (!source || !context) return;
+    if ((!source && !media) || !context) return;
 
     const now = context.currentTime;
     const fade = Math.max(0, fadeSeconds);
@@ -164,8 +252,24 @@ class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
       if (fade > 0) gain.gain.linearRampToValueAtTime(0, stopTime);
       else gain.gain.setValueAtTime(0, now);
     }
+    if (media) {
+      // A media element has no scheduled stop, so the pause waits out the ramp
+      // on a timer. Releasing `src` matters as much as the pause: a paused
+      // element with a source still buffers, and a bed torn down mid-match
+      // would go on pulling its file down for nothing.
+      const release = () => {
+        this.mediaStopTimer = null;
+        media.pause();
+        media.removeAttribute("src");
+        media.load();
+      };
+      if (this.mediaStopTimer !== null) clearTimeout(this.mediaStopTimer);
+      if (fade > 0) this.mediaStopTimer = setTimeout(release, fade * 1000);
+      else release();
+      return;
+    }
     try {
-      source.stop(stopTime);
+      source!.stop(stopTime);
     } catch {
       // Web Audio throws if a source was already stopped; handles are idempotent.
     }
@@ -189,6 +293,23 @@ class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
   setPitch(value: number): void {
     this.pitchInternal = sanitizePitch(value);
     if (this.source) applySourcePitch(this.source, this.pitchInternal, this.sourceBaseRate);
+    if (this.media) this.media.playbackRate = this.pitchInternal;
+  }
+
+  setPaused(paused: boolean): void {
+    const media = this.media;
+    if (!media || this.stoppedInternal) return;
+    if (paused) {
+      media.pause();
+      return;
+    }
+    void media.play().catch(() => undefined);
+  }
+
+  /** Asks a stream the autoplay policy refused to start again, after a gesture. */
+  retryMedia(): void {
+    if (this.stoppedInternal || !this.media) return;
+    void this.media.play().catch(() => undefined);
   }
 
   private finish(): void {
@@ -250,6 +371,23 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   private played: AudioPlayRequest[] = [];
   /** Decoded audio buffers keyed by URL; promise-cached so each file loads once. */
   private readonly buffers = new Map<string, Promise<AudioBuffer | null>>();
+  /**
+   * Decoded length in seconds, keyed by clip id, recorded as each buffer lands.
+   *
+   * Written from the decode rather than authored beside the file, so it cannot
+   * disagree with the audio: a track re-exported a bar longer needs no edit
+   * anywhere. Only what has actually been played is in here, which is why a
+   * consumer that needs a length polls for it instead of asking up front.
+   */
+  private readonly clipDurations = new Map<string, number>();
+  /**
+   * Streamed plays the browser's autoplay policy refused, awaiting a gesture.
+   *
+   * Only streams land here: a decoded buffer starts against a suspended context
+   * and simply becomes audible when it resumes, but a media element's `play()`
+   * is rejected outright and has to be asked again.
+   */
+  private readonly blockedStreams = new Set<RuntimeAudioPlaybackHandle>();
   /** Latest listener pose (camera), applied to the context once it exists. */
   private listenerPosition: AudioVec3 | null = null;
   private listenerForward: AudioVec3 = [0, 0, -1];
@@ -257,6 +395,8 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   private readonly busVolumes: BusVolumes = createDefaultBusVolumes();
   /** Live bus GainNodes, created lazily with the context (`master` → destination). */
   private busNodes: Map<AudioBusId, GainNode> | null = null;
+  /** Urls already reported as undecodable, so the warning is once per clip. */
+  private readonly reportedDecodeFailures = new Set<string>();
 
   constructor(options: AudioSubsystemOptions = {}) {
     this.backend = options.backend ?? "none";
@@ -271,6 +411,24 @@ export class AudioSubsystem implements Subsystem, AudioBus {
    */
   resumeContext(): void {
     void this.context?.resume().catch(() => undefined);
+    if (this.blockedStreams.size === 0) return;
+    for (const handle of [...this.blockedStreams]) {
+      this.blockedStreams.delete(handle);
+      if (!handle.stopped) handle.retryMedia();
+    }
+  }
+
+  /**
+   * Silences everything without ending it — for a tab the player has left.
+   *
+   * The context's own clock stops with it, so a scheduled fade resumes where it
+   * was rather than finishing to nobody. What this does *not* stop is a media
+   * element: a stream keeps advancing its own position through a suspended
+   * context, which is why a streamed bed has to be paused on its handle as well.
+   * Whoever owns the bed does that; this covers everything else.
+   */
+  suspendContext(): void {
+    void this.context?.suspend().catch(() => undefined);
   }
 
   /**
@@ -323,7 +481,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
 
   /**
    * Builds the bus gain graph once per context: `master` → destination, then
-   * music/sfx/ui/ambience → master. Each node starts at its stored bus volume so
+   * every other bus → master. Each node starts at its stored bus volume so
    * a mix set before the context existed is preserved.
    */
   private ensureBusGraph(context: BrowserAudioContext): Map<AudioBusId, GainNode> {
@@ -407,8 +565,29 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     return handle;
   }
 
+  /**
+   * The most recent plays, oldest first, capped at {@link PLAYED_HISTORY_LIMIT}.
+   *
+   * Inspection only — tests assert what a scene played, and the debug overlay
+   * shows the last few events. Bounded because a busy scene fires thousands of
+   * one-shots over a long session, and an unbounded log of them is a leak that
+   * grows with playtime and shows up as nothing but rising memory.
+   */
   playedRequests(): readonly AudioPlayRequest[] {
     return this.played;
+  }
+
+  /**
+   * A clip's decoded length in seconds, or null if it has not been decoded here.
+   *
+   * Null is the ordinary answer for a clip that has never played, for the first
+   * moment after one starts (the fetch and decode are in flight), for a
+   * synthesized tone, and always on the headless backend. A caller that needs a
+   * length before then needs its own fallback — this reports what is known, not
+   * what is authored.
+   */
+  clipDurationSeconds(clipId: string): number | null {
+    return this.clipDurations.get(clipId) ?? null;
   }
 
   update(_context: EngineUpdateContext): void {
@@ -420,6 +599,9 @@ export class AudioSubsystem implements Subsystem, AudioBus {
         continue;
       }
       this.played.push(request);
+      if (this.played.length > PLAYED_HISTORY_LIMIT) {
+        this.played.splice(0, this.played.length - PLAYED_HISTORY_LIMIT);
+      }
       if (this.backend === "web-audio") {
         // A failed clip (bad node param, decode error, etc.) must never throw out
         // of the per-frame update and kill the engine loop.
@@ -438,8 +620,10 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     this.pending = [];
     for (const handle of this.active) handle.stop();
     this.active.clear();
+    this.blockedStreams.clear();
     this.played = [];
     this.buffers.clear();
+    this.clipDurations.clear();
     this.busNodes = null;
     void this.context?.close();
     this.context = null;
@@ -474,8 +658,58 @@ export class AudioSubsystem implements Subsystem, AudioBus {
 
     // Otherwise resolve the clip id to a fetchable audio file (manifest sound).
     const url = this.resolveClipUrl?.(request.clipId) ?? null;
-    if (url) void this.playFile(context, url, request, handle);
-    else handle.stop();
+    if (!url) {
+      handle.stop();
+      return;
+    }
+    if (request.stream) this.playStream(context, url, request, handle);
+    else void this.playFile(context, url, request, handle);
+  }
+
+  /**
+   * Plays a long clip through a media element rather than a decoded buffer.
+   *
+   * Nothing is cached here on purpose. The buffer path caches because decoding
+   * the same one-shot a thousand times would be absurd; a streamed track is
+   * played one at a time and the browser's own HTTP cache already keeps the
+   * bytes, so a second element for the same url is cheap while a second decoded
+   * copy would not be.
+   */
+  private playStream(
+    context: BrowserAudioContext,
+    url: string,
+    request: AudioPlayRequest,
+    handle: RuntimeAudioPlaybackHandle,
+  ): void {
+    const media = new Audio();
+    media.src = url;
+    media.loop = request.loop ?? false;
+    media.preload = "auto";
+    // The length arrives with the metadata, well before the file does, and the
+    // music director is polling for it — a streamed track therefore schedules
+    // its hand-over sooner than a decoded one ever could.
+    media.addEventListener(
+      "loadedmetadata",
+      () => {
+        if (Number.isFinite(media.duration) && media.duration > 0) {
+          this.clipDurations.set(request.clipId, media.duration);
+        }
+      },
+      { once: true },
+    );
+    const source = context.createMediaElementSource(media);
+    const gain = context.createGain();
+    source.connect(gain);
+    this.connectSpatialOutput(context, gain, request);
+    handle.attachMedia(context, media, gain);
+    if (handle.stopped) return;
+    void media.play().catch(() => {
+      // Autoplay policy: the element is refused until the page has a gesture.
+      // Held rather than dropped, because the bed asked for at match start is
+      // exactly the play a policy refuses, and silently losing it would make a
+      // whole match silent. `resumeContext` retries these on the first input.
+      if (!handle.stopped) this.blockedStreams.add(handle);
+    });
   }
 
   private async playFile(
@@ -485,6 +719,10 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     handle: RuntimeAudioPlaybackHandle,
   ): Promise<void> {
     const buffer = await this.loadBuffer(context, url);
+    // Recorded before the early return: a play that was cancelled while its file
+    // was in flight still decoded the buffer, and the length it learned is just
+    // as true as the one a completed play learns.
+    if (buffer) this.clipDurations.set(request.clipId, buffer.duration);
     if (!buffer || handle.stopped) {
       if (!buffer) handle.stop();
       return;
@@ -506,7 +744,24 @@ export class AudioSubsystem implements Subsystem, AudioBus {
       pending = fetch(url)
         .then((response) => response.arrayBuffer())
         .then((data) => context.decodeAudioData(data))
-        .catch(() => null);
+        .catch((error: unknown) => {
+          // Reported, and the reason is a failure mode this used to hide
+          // completely: a browser that cannot decode the shipped codec fails
+          // *every* clip here, and with a silent catch the game simply plays no
+          // sound and says nothing about why. That is the one audio bug a bug
+          // report cannot describe — "there is no sound" reads the same whether
+          // the table failed to load, the context is suspended, or the decoder
+          // refused the format.
+          //
+          // Once per url: a clip that cannot decode is asked for again on
+          // every trigger, and an unbounded log in a per-frame path is its own
+          // bug.
+          if (!this.reportedDecodeFailures.has(url)) {
+            this.reportedDecodeFailures.add(url);
+            console.warn(`[audio] could not decode "${url}" — this browser may not support the format:`, error);
+          }
+          return null;
+        });
       this.buffers.set(url, pending);
     }
     return pending;

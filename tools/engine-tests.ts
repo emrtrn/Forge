@@ -258,6 +258,8 @@ import { MovingPlatformSubsystem } from "../engine/physics/movingPlatformSubsyst
 import {
   AudioSubsystem,
   DEFAULT_SPATIAL_ATTENUATION,
+  PLAYED_HISTORY_LIMIT,
+  canPlayAudioFormat,
   resolveSpatialPannerConfig,
 } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
@@ -308,6 +310,9 @@ import {
   AUDIO_BUS_IDS,
   MENU_DUCK_MIX,
   createDefaultBusVolumes,
+  duckGain,
+  ducksEqual,
+  mergeDucks,
   effectiveBusGain,
   isAudioBusId,
   mergeMixSnapshot,
@@ -4040,6 +4045,8 @@ check("createDefaultBusVolumes seeds every bus at unity", () => {
     sfx: 1,
     ui: 1,
     ambience: 1,
+    voice: 1,
+    notifications: 1,
   });
 });
 
@@ -4075,14 +4082,89 @@ check("isAudioBusId guards the bus id union", () => {
   assert.equal(isAudioBusId(3), false);
 });
 
-check("MENU_DUCK_MIX ducks music/ambience/sfx but leaves ui and master", () => {
+check("MENU_DUCK_MIX ducks music/ambience/sfx/voice but leaves ui, notifications and master", () => {
   const ducked = mergeMixSnapshot(createDefaultBusVolumes(), MENU_DUCK_MIX);
-  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1);
+  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1 && ducked.voice! < 1);
   assert.equal(ducked.ui, 1);
+  // An alert raised while the game is paused still has to reach the player.
+  assert.equal(ducked.notifications, 1);
   assert.equal(ducked.master, 1);
 });
 
+check("ducks merge by minimum, so two reasons to be quiet are not twice as quiet", () => {
+  // Product would take sfx to 0.56 here — deeper than either moment asked for,
+  // and audible as a lurch whichever duck ends first.
+  const merged = mergeDucks([{ sfx: 0.8, music: 0.6 }, { sfx: 0.7, ambience: 0.85 }]);
+  assert.deepEqual(merged, { music: 0.6, sfx: 0.7, ambience: 0.85 });
+  // Order-independent, so the mix never depends on which duck the frame saw first.
+  assert.deepEqual(mergeDucks([{ sfx: 0.7 }, { sfx: 0.8 }]), mergeDucks([{ sfx: 0.8 }, { sfx: 0.7 }]));
+  assert.deepEqual(mergeDucks([]), {});
+
+  // A bus nobody ducks is at unity, not absent-and-therefore-silent.
+  assert.equal(duckGain(merged, "sfx"), 0.7);
+  assert.equal(duckGain(merged, "notifications"), 1);
+
+  // Equality is by effect: an absent bus and a bus at 1 are the same silence, so
+  // a host reconciling every frame can say "nothing changed" without ramping.
+  assert.equal(ducksEqual({ sfx: 0.5 }, { sfx: 0.5, music: 1 }), true);
+  assert.equal(ducksEqual({ sfx: 0.5 }, { sfx: 0.5, music: 0.9 }), false);
+  assert.equal(ducksEqual({}, {}), true);
+});
+
 // --- Audio Bus Lite (subsystem, headless) -------------------------------------
+
+check("audio format support: only an empty canPlayType is a no, and no DOM is not evidence", () => {
+  // The check behind a "this browser has no sound" notice. Its failure modes run
+  // in both directions and both are bad: warn a browser that would have coped
+  // and the game calls itself broken; stay quiet on one that cannot and the
+  // player gets silence with no cause.
+  const original = globalThis.document;
+  try {
+    // `""` is the browser refusing outright — the only real no.
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "" }),
+    };
+    assert.equal(canPlayAudioFormat(), false);
+    // "maybe" is a hedge, not a refusal, and is treated as yes.
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "maybe" }),
+    };
+    assert.equal(canPlayAudioFormat(), true);
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "probably" }),
+    };
+    assert.equal(canPlayAudioFormat(), true);
+    // A build with no `canPlayType` at all cannot be asked, so it is not
+    // accused — Playwright's WebKit is exactly this shape for Web Audio.
+    (globalThis as { document?: unknown }).document = { createElement: () => ({}) };
+    assert.equal(canPlayAudioFormat(), true);
+    // Headless: not knowing is not evidence. A test run must never claim the
+    // shipped format is unplayable.
+    delete (globalThis as { document?: unknown }).document;
+    assert.equal(canPlayAudioFormat(), true);
+  } finally {
+    if (original === undefined) delete (globalThis as { document?: unknown }).document;
+    else (globalThis as { document?: unknown }).document = original;
+  }
+});
+
+check("audio subsystem: the play history is bounded, so a long session is not a leak", () => {
+  const audio = new AudioSubsystem();
+  for (let index = 0; index < PLAYED_HISTORY_LIMIT + 40; index += 1) {
+    audio.play(`shot-${index}`);
+    audio.update({ deltaSeconds: 0, elapsedSeconds: 0 } as never);
+  }
+  const played = audio.playedRequests();
+  assert.equal(played.length, PLAYED_HISTORY_LIMIT);
+  // Oldest first, and it is the *oldest* that is dropped: a debug overlay reads
+  // the tail, so trimming from the front is the only trim that is invisible.
+  assert.equal(played[played.length - 1]?.clipId, `shot-${PLAYED_HISTORY_LIMIT + 39}`);
+  assert.equal(played[0]?.clipId, "shot-40");
+  // Nothing was decoded here, so no clip has a known length — null is the honest
+  // answer, never a zero a caller could schedule against.
+  assert.equal(audio.clipDurationSeconds("shot-0"), null);
+});
+
 
 check("audio subsystem seeds every mix bus at unity", () => {
   const audio = new AudioSubsystem();
@@ -14825,6 +14907,17 @@ check("user settings store: round-trips locale and normalized audio bus volumes"
   };
   assert.equal(raw.schema, 1);
   assert.equal(raw.updatedAt, "2026-07-02T11:00:00.000Z");
+
+  // A volume panel moves on every pointer `input` event, so the bulk write is
+  // not a convenience: one bus at a time would be a read-modify-write per bus
+  // per frame of a drag. Unlisted buses keep whatever was stored.
+  assert.equal(store.setAudioBusVolumes({ music: 0.5, voice: 2, notifications: -1 }), true);
+  assert.deepEqual(store.read().audio.busVolumes, {
+    music: 0.5,
+    sfx: 0,
+    voice: 2,
+    notifications: 0,
+  });
 });
 
 check("user settings store: corrupt data falls back without crashing and write errors return false", () => {

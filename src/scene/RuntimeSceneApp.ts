@@ -4868,6 +4868,7 @@ function silentAudioPlayback(clipId: string): AudioPlaybackHandle {
     stop: () => undefined,
     setVolume: () => undefined,
     setPitch: () => undefined,
+    setPaused: () => undefined,
   };
 }
 

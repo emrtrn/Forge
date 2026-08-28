@@ -29,6 +29,8 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
   Scene,
+  ShaderChunk,
+  ShaderLib,
   Texture,
   Vector2,
   Vector3,
@@ -483,6 +485,12 @@ import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { accumulatedNodeScale, mountSkeletalSocket } from "../engine/render-three/skeletalSocket";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
 import { LayeredClipAnimator } from "../engine/render-three/layeredClipAnimator";
+import {
+  WORLD_MASK_SHADER_SOURCE,
+  applyWorldMask,
+  applyWorldMaskShadow,
+  createWorldMaskUniforms,
+} from "../engine/render-three/worldMaskPatch";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
 import {
   applyRootMotionToClip,
@@ -23563,6 +23571,128 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
   a.onBeforeCompile(noAnchors as never, null as never);
   assert.equal(noAnchors.vertexShader, "x");
   assert.equal(Object.keys(noAnchors.uniforms).length, 0);
+});
+
+check("world mask: the patch survives a three.js upgrade, or fails loudly", () => {
+  // Both anchors are `#include` directives in three's own shader sources. If an
+  // upgrade renames or drops one, `applyWorldMask` finds nothing to replace and
+  // returns quietly — everything renders perfectly, with no mask on any of it.
+  // Nothing else in the build would notice.
+  const { vertexAnchor, fragmentAnchor } = WORLD_MASK_SHADER_SOURCE;
+  for (const [name, lib] of [
+    ["physical", ShaderLib.physical],
+    ["lambert", ShaderLib.lambert],
+    ["basic", ShaderLib.basic],
+    // The shadow path: without this anchor a hidden object still darkens the
+    // ground the viewer can see.
+    ["depth", ShaderLib.depth],
+  ] as const) {
+    assert.ok(lib.vertexShader.includes(vertexAnchor), `${name} vertex still carries ${vertexAnchor}`);
+    assert.ok(
+      lib.fragmentShader.includes(fragmentAnchor),
+      `${name} fragment still carries ${fragmentAnchor}`,
+    );
+  }
+
+  // The patch recomputes world position by mirroring `project_vertex`'s own
+  // sequence, because `transformed` is still object-local there. Miss a matrix
+  // and every instance of a batched model samples the mask at the *model's*
+  // origin — the whole authored world reads one texel, which looks like a mask
+  // bug rather than a transform bug.
+  const projectVertex = ShaderChunk.project_vertex;
+  for (const matrix of ["batchingMatrix", "instanceMatrix", "modelMatrix"]) {
+    const needed = matrix === "modelMatrix" || projectVertex.includes(matrix);
+    if (!needed) continue;
+    assert.ok(
+      WORLD_MASK_SHADER_SOURCE.vertexPatch.includes(matrix),
+      `the world-position patch must apply ${matrix}, as project_vertex does`,
+    );
+  }
+
+  // Sampling outside the mask's span reads the nearest edge texel rather than
+  // whatever the texture's wrap mode does, so scenery standing beyond the masked
+  // area inherits the strip behind it instead of wrapping in the far side.
+  assert.ok(WORLD_MASK_SHADER_SOURCE.fragmentPatch.includes("clamp("));
+  // Strictly greater, so a strength of zero can never discard: that is what makes
+  // `setEnabled(false)` a uniform write instead of a scene-wide recompile.
+  assert.ok(WORLD_MASK_SHADER_SOURCE.fragmentPatch.includes("worldMaskHidden > worldMaskDither"));
+});
+
+check("world mask: the patch chains a material's own shader patch instead of replacing it", () => {
+  // Forge already patches materials through `onBeforeCompile` — the landscape
+  // layer blend and the reflection capture both do. Overwriting the hook would
+  // flatten a layer-blended surface the moment it came under a mask, and the
+  // symptom (one material stopped blending) reads as an asset problem.
+  const uniforms = createWorldMaskUniforms({ span: 100, rangeLow: 0.55, rangeHigh: 0.92 });
+  uniforms.tWorldMask.value = new Texture();
+  const material = new MeshStandardMaterial();
+  let priorRuns = 0;
+  material.onBeforeCompile = (shader) => {
+    priorRuns += 1;
+    shader.uniforms.priorMarker = { value: 1 };
+  };
+  material.customProgramCacheKey = () => "prior-key";
+
+  assert.equal(applyWorldMask(material, uniforms), true, "a fresh material is patched");
+  assert.equal(applyWorldMask(material, uniforms), false, "and never patched twice");
+
+  const shader = {
+    uniforms: {} as Record<string, unknown>,
+    vertexShader: `void main() {
+${WORLD_MASK_SHADER_SOURCE.vertexAnchor}
+}`,
+    fragmentShader: `void main() {
+${WORLD_MASK_SHADER_SOURCE.fragmentAnchor}
+}`,
+  };
+  (material.onBeforeCompile as (s: unknown, r: unknown) => void)(shader, null);
+
+  assert.equal(priorRuns, 1, "the material's own patch still runs");
+  assert.ok(shader.uniforms.priorMarker, "and its uniforms still reach the program");
+  assert.equal(shader.uniforms.tWorldMask, uniforms.tWorldMask, "the mask binds the live uniform");
+  assert.equal(
+    shader.uniforms.worldMaskStrength,
+    uniforms.worldMaskStrength,
+    "including the strength, so disabling never needs a recompile",
+  );
+  assert.ok(shader.fragmentShader.includes("discard"), "and the fragment is actually discarded");
+  assert.ok(
+    material.customProgramCacheKey().includes("prior-key"),
+    "the prior cache key is folded in, not dropped — two programs must not collide",
+  );
+
+  // A patched and an unpatched material must never share a compiled program.
+  const plain = new MeshStandardMaterial();
+  assert.notEqual(
+    material.customProgramCacheKey(),
+    plain.customProgramCacheKey(),
+    "patched and stock materials need distinct cache keys",
+  );
+  material.dispose();
+  plain.dispose();
+});
+
+check("world mask: a shadow caster gets a patched depth material that agrees with what it draws", () => {
+  // Without this, hiding is colour-only: a masked-away object still writes the
+  // shadow map, leaving an object-shaped hole in the light with nothing above it.
+  const uniforms = createWorldMaskUniforms({ span: 64, rangeLow: 0.6, rangeHigh: 0.8 });
+  const cutout = new MeshStandardMaterial({ alphaTest: 0.5, side: DoubleSide });
+  cutout.map = new Texture();
+  const mesh = new Mesh(new PlaneGeometry(1, 1), cutout);
+
+  const depth = applyWorldMaskShadow(mesh, uniforms) ?? assert.fail("expected a depth material");
+  assert.equal(mesh.customDepthMaterial, depth);
+  // Carried across for the usual reason custom depth materials carry them: a
+  // cutout leaf whose shadow is cast by its quad reads as a floating rectangle.
+  assert.equal(depth.alphaTest, 0.5);
+  assert.equal(depth.map, cutout.map);
+  assert.equal(depth.side, DoubleSide);
+  // Idempotent per mesh: a mesh that already has a custom depth material is left
+  // alone rather than having the caller's own one replaced.
+  assert.equal(applyWorldMaskShadow(mesh, uniforms), null);
+
+  depth.dispose();
+  cutout.dispose();
 });
 
 check("assignProbeEnvMapMaterial chains a base layer-blend patch with the capture patch", () => {

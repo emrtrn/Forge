@@ -1812,7 +1812,13 @@ export class EditorUi {
       name.endsWith(".collision.json") ||
       name.endsWith(".materials.json") ||
       name.endsWith(".uvw.json") ||
-      name.endsWith(".vertexcolors.json")
+      name.endsWith(".vertexcolors.json") ||
+      name.endsWith(".skeleton.json") ||
+      // Layout companions saved beside a level (`<layout>.foliage.json`, ...).
+      // The `.foliagetype.json` asset stays listed — it is a real manifest asset.
+      name.endsWith(".landscape.json") ||
+      name.endsWith(".foliage.json") ||
+      name.endsWith(".meshpaint.json")
     );
   }
 

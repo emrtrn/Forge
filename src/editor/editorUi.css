@@ -6033,12 +6033,6 @@
   font-weight: 600;
 }
 .foliage-scale-row { align-items: center; }
-.foliage-scale-inputs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-}
-.foliage-scale-inputs input { min-width: 0; width: 100%; }
 .foliage-advanced {
   margin-top: 6px;
   border-top: 1px solid #262c34;

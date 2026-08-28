@@ -130,7 +130,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   importSelectedLandscapeHeightmap: (rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
   exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
   getSelectedLandscapeResolution: () => { verticesX: number; verticesZ: number; worldSize: number } | null;
-  resampleSelectedLandscape: (preset: "small" | "medium") => void;
+  resampleSelectedLandscape: (preset: "small" | "medium" | "large") => void;
   setSelectedLandscapeWorldSize: (worldSize: number) => void;
   getSelectedLandscapeImportHeight: () => number;
   setSelectedWorldWidget: (patch: {
@@ -386,6 +386,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           <select data-landscape-resolution ${lockedAttr}>
             <option value="small" ${resolution?.verticesX === 65 && resolution.verticesZ === 65 ? "selected" : ""}>Small (65 × 65)</option>
             <option value="medium" ${resolution?.verticesX === 129 && resolution.verticesZ === 129 ? "selected" : ""}>Medium (129 × 129)</option>
+            <option value="large" ${resolution?.verticesX === 257 && resolution.verticesZ === 257 ? "selected" : ""}>High (257 × 257)</option>
           </select>
         </label>
         <label class="detail-row">
@@ -652,7 +653,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
 
   body.querySelector<HTMLSelectElement>("[data-landscape-resolution]")?.addEventListener("change", (event) => {
     const preset = (event.currentTarget as HTMLSelectElement).value;
-    if (preset !== "small" && preset !== "medium") return;
+    if (preset !== "small" && preset !== "medium" && preset !== "large") return;
     options.resampleSelectedLandscape(preset);
     renderLandscapeDetails(options);
   });

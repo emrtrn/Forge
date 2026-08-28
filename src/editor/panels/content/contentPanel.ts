@@ -208,6 +208,12 @@ function createAssetCard(options: ContentPanelOptions, item: BrowserAssetItem): 
   card.draggable = canPlace || canAssignMaterial || canPlaceActorClass;
   card.dataset.assetPath = item.path;
   if (item.editable) card.dataset.assetId = item.editable.id;
+  // The card is only ~118px wide, so any longer name ends in an ellipsis. The
+  // tooltip covers the whole card (not just the clipped label) so the full name
+  // is readable from wherever the pointer happens to rest — and, when the card
+  // carries the amber issue dot, says what the warning is without having to hit
+  // the 9px dot itself.
+  card.title = contentCardTooltip(item.label, issues, contentFileName(item.path));
   card.innerHTML = `
       ${
         issues.length > 0
@@ -221,7 +227,7 @@ function createAssetCard(options: ContentPanelOptions, item: BrowserAssetItem): 
       }
       <span class="asset-thumb" data-asset-thumb>${escapeHtml(item.ext.toUpperCase())}</span>
       <span class="asset-meta">
-        <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
+        <strong>${escapeHtml(item.label)}</strong>
         <span class="asset-type-line">${escapeHtml(formatContentTypeBadge(item.type))}</span>
       </span>
     `;
@@ -373,11 +379,11 @@ function createFolderCard(options: ContentPanelOptions, item: BrowserFolderItem)
   card.className = "asset-card is-folder";
   card.classList.toggle("is-selected", item.path === options.selectedContentFolderPath);
   card.dataset.folderPath = item.path;
-  card.title = item.path;
+  card.title = contentCardTooltip(item.label, [], item.path);
   card.innerHTML = `
       <span class="asset-thumb folder-thumb" aria-hidden="true"><span class="folder-glyph"></span></span>
       <span class="asset-meta">
-        <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
+        <strong>${escapeHtml(item.label)}</strong>
         <span class="asset-type-line">Folder</span>
       </span>
     `;
@@ -440,6 +446,25 @@ function renderContentBreadcrumbs(options: ContentPanelOptions): void {
     current = `${current}/${segment}`;
     appendCrumb(segment, current);
   }
+}
+
+/**
+ * Native-tooltip text for a Content Browser card: the untruncated name, the file
+ * behind it when the two differ, then one line per issue behind the amber dot.
+ * Cards live inside a scrolling grid, so a CSS bubble would be clipped by the
+ * grid's own overflow — the native `title` is the one tooltip that escapes it.
+ */
+function contentCardTooltip(
+  label: string,
+  issues: readonly BrowserAssetIssue[] = [],
+  fileName?: string,
+): string {
+  const file = fileName && fileName !== label ? [fileName] : [];
+  return [label, ...file, ...issues.map((issue) => `⚠ ${issue.label}`)].join("\n");
+}
+
+function contentFileName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
 }
 
 function formatContentTypeLabel(value: string): string {

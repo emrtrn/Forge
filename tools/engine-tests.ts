@@ -16485,18 +16485,19 @@ check("createFoliageType produces a valid, save-clean asset", () => {
   assert.equal(canonical.type, "foliageType");
 });
 
-check("normalizeFoliageType merges a Type Details patch, preserving untouched fields", () => {
+check("normalizeFoliageType canonicalizes Type Details scale ranges to uniform values", () => {
   const base = createFoliageType("Grass", "mesh-1");
   // The Type Details editor sends `{ ...current, ...patch }` through normalize.
+  // Foliage scales uniformly, so a legacy per-axis range collapses to its X value.
   const edited = normalizeFoliageType({ ...base, scaleMin: [0.8, 0.8, 0.8], scaleMax: [1.5, 2, 1.5], randomYaw: false });
   assert.deepEqual(edited.scaleMin, [0.8, 0.8, 0.8]);
-  assert.deepEqual(edited.scaleMax, [1.5, 2, 1.5]);
+  assert.deepEqual(edited.scaleMax, [1.5, 1.5, 1.5]);
   assert.equal(edited.randomYaw, false);
   // Untouched fields survive the merge.
   assert.equal(edited.meshAssetId, "mesh-1");
   assert.equal(edited.name, "Grass");
   assert.equal(edited.alignToNormal, true);
-  // An inverted scale patch is re-ordered so max >= min per axis (no negative range).
+  // An inverted scale patch is re-ordered so max >= min (no negative range).
   const inverted = normalizeFoliageType({ ...base, scaleMin: [2, 2, 2], scaleMax: [1, 1, 1] });
   assert.deepEqual(inverted.scaleMax, [2, 2, 2]);
   // Setting then clearing an optional height limit drops it (undefined = no limit).

@@ -25,6 +25,14 @@ const RUNTIME_PARITY_SCENE = "layouts/RuntimeParity.level.json";
 const GAME_STARTER_TEMPLATE_LEVEL = resolve("templates/game-starter/main.level.json");
 const GAME_STARTER_SCENE = "layouts/main.level.json";
 const GAME_STARTER_SCENE_PATH = resolve("public", GAME_STARTER_SCENE);
+/**
+ * The rts-starter template's level (Phase I), installed the same documented way.
+ * It is the parity fixture with one field added — `worldSettings.gameMode` —
+ * so the characterless starter opens exactly the content the game-starter does.
+ */
+const RTS_STARTER_TEMPLATE_LEVEL = resolve("templates/rts-starter/main.level.json");
+const RTS_STARTER_SCENE = "layouts/rts.level.json";
+const RTS_STARTER_SCENE_PATH = resolve("public", RTS_STARTER_SCENE);
 const SMOKE_MENU = "assets/__playwright-smoke-menu.ui.json";
 /**
  * Authored landscape sidecar, shared by every level. The sculpt/paint smokes
@@ -326,6 +334,7 @@ export default async function globalSetup() {
           raw: await readOptionalText(resolve("public", LANDSCAPE_SIDECAR)),
         },
         { path: GAME_STARTER_SCENE, raw: await readOptionalText(GAME_STARTER_SCENE_PATH) },
+        { path: RTS_STARTER_SCENE, raw: await readOptionalText(RTS_STARTER_SCENE_PATH) },
       ],
       smokeScenes: [SMOKE_SCENE, SMOKE_TARGET_SCENE, SMOKE_PATROL_SCENE],
       smokeFiles: [SMOKE_MENU],
@@ -352,6 +361,7 @@ export default async function globalSetup() {
   // The starter template installed the way its README says: copy its level
   // into public/layouts/. Removed again by teardown.
   await writeFile(GAME_STARTER_SCENE_PATH, await readFile(GAME_STARTER_TEMPLATE_LEVEL, "utf8"), "utf8");
+  await writeFile(RTS_STARTER_SCENE_PATH, await readFile(RTS_STARTER_TEMPLATE_LEVEL, "utf8"), "utf8");
 
   const smokeManifest = await readJson(MANIFEST_PATH);
   smokeManifest.editor = {

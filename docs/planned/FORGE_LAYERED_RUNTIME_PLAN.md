@@ -13,7 +13,9 @@
 > capability uyarısı, serialization drift testleri).
 > **Faz H tamamlandı** (RuntimeParity level + A/B/C testleri + browser smoke +
 > `templates/game-starter`; Definition of Done tarayıcıda kanıtlandı).
-> Sıradaki faz I (isteğe bağlı RTS doğrulama vakası).
+> **Faz I tamamlandı** (`forge.rtsCamera` Game Mode + runtime imleç/tekerlek/pick
+> köprüsü + `templates/rts-starter` + motor ve tarayıcı testleri). Planın tüm
+> fazları kapandı.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
 > Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
@@ -1016,7 +1018,7 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > yükletiyor ve `editor-authoring` bu yüzden bir kez zaman aşımına uğradı, temiz
 > tekrar koşumda geçti.
 
-### Faz I — RTS doğrulama vakası (isteğe bağlı ama önerilen)
+### Faz I — RTS doğrulama vakası — TAMAMLANDI (2026-08-28)
 - **İş:** Karaktersiz, tepeden bakışlı bir örnek: `rtsCameraGameMode` (edge-pan +
   zoom + seçim iskeleti) + character/skeletal modüllerini kapatan bir modül seti.
   Bu, planın gerçek RTS acısını çözdüğünü kanıtlar (RtsApp'e gerek kalmadan).
@@ -1024,6 +1026,68 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
   `templates/game-starter` varyantı.
 - **Kabul:** Aynı LevelRuntime, karaktersiz modül setiyle sahneyi tam kurar;
   hiçbir sahne özelliği elle yeniden bağlanmaz.
+
+> **Uygulama kaydı (2026-08-28, I/1 — runtime imleç köprüsü):**
+> Bir RTS kamerası mouse-look deltasıyla sürülemez; imlecin *mutlak* konumunu,
+> tekerleği ve tıklanan şeyi ister. Bunlar shell'de yoktu, o yüzden Katman 0'a
+> dar bir köprü eklendi: `src/input/pointerCursorSource.ts` (canvas'a göre
+> normalize edilmiş imleç konumu + `deltaMode`'dan bağımsız tekerlek "notch"u;
+> imleç canvas'ı terk edince `null`, yani kenar-pan pencere dışında durur) ve
+> `GameModeContext`'e üç *opsiyonel* üye: `getPointerViewport`,
+> `consumeWheelDelta`, `pickEntityAt`. Pick köprüsü `RuntimeSceneApp`'te bir
+> raycast: yalnız **entity** döndürür (yerleştirilmiş actor / karakter) — arazi,
+> duvar ve dekoratif statikler `null` verir, yani bir mod yanlışlıkla duvar
+> "seçemez". Editörün zengin `ScenePicker`'ı ayrı kalır; bu runtime'ın küçük
+> olanı. Üçü de opsiyonel, çünkü başlıksız/test bağlamları bu köprüyü hiç
+> vermeyebilir.
+>
+> **Uygulama kaydı (2026-08-28, I/2 — `forge.rtsCamera`):**
+> `rtsCameraControl.ts` (saf matematik: kenar bandı rampası, tuş + kenar
+> niyetinin toplanması, yönle dönen pan adımı, çarpımsal ve kenetli zoom, zoom'a
+> göre pan hızı, yer odak noktası ↔ kamera yerleşimi) + `rtsCameraGameMode.ts`
+> (oturum) + `rtsSelection.ts` (seçilen birimin materyalini **klonlayıp** tint
+> eden vurgu — yerinde boyamak aynı sınıfın her kopyasını yakardı). Mod hiçbir
+> şeyi possess etmez: kamera pawn'dır, sabit yön/eğimle bir yer odak noktasına
+> bakar ve pan o odağı kaydırır. `catalog.ts` + `registry.ts`'e kaydedildi, yani
+> editörün World Settings açılır listesinde de bir seçenek. `?debug` overlay'inin
+> `camera:` satırı modun tüm durumunu yazar
+> (`rts-top-down focus:x,z zoom:d selected:id`) — pan etmeyen bir kamera ile
+> girdisi hiç ulaşmamış bir kamerayı ayırt edebilmek için.
+>
+> **Uygulama kaydı (2026-08-28, I/3 — `templates/rts-starter`):**
+> game-starter'ın aynısı, iki farkla: (1) `createDefaultRuntimeModules()` listesi
+> `character-movement` / `skeletal-animation` / `ai-character-animation` elenerek
+> filtrelenir, (2) tek içeriği "benim Game Mode'um RTS kamerası" olan bir
+> `ForgeGameModule`. Level, parity fixture'ının **tek alan** eklenmiş hali
+> (`worldSettings.gameMode`), böylece iki starter'ın *aynı* içeriği açtığı
+> testle sabitlenir. Hâlâ sıfır sahne-kurulum kodu.
+>
+> **Kabul kanıtlandı.** `tests/engine/rtsCameraGameMode.test.ts` (17 kontrol:
+> saf matematik + sahte `GameModeContext` üzerinden sürülen oturum — kenar-pan,
+> WASD, UI modunda donma, tekerlek zoom, tıklama seçimi, vurgunun tam geri
+> alınması) ve `runtimeParityLevel.test.ts`'e 3 kontrol: level parity + `main.ts`
+> içinde three/engine/sahne kurucusu importu yok + **karakter yeteneklerini
+> düşürmek bu level'a hiçbir şeye mal olmuyor** (`collectUnsupportedCapabilities`
+> boş; yalnız behavior kataloğu yokken tek satırlık *o* uyarı çıkıyor) — yani I3
+> tek assertion'da. Tarayıcıda `tests/smoke/rts-starter.spec.ts`: aynı level tam
+> render (draw call/tris > 0, partikül canlı), `mode: RTS Camera`,
+> `possessed: none`, tıklamayla `selected:actor:0` ve boş zeminde temizlenme,
+> kenar-pan odağı kaydırıyor, tekerlek zoom `minDistance`'a kenetleniyor, sıfır
+> sayfa hatası. Smoke'un tıklaması *deterministik*: testin kendisi runtime'ın
+> kamera fabrikası (`createSceneCamera` + `applyResponsiveCameraViewport`) ve
+> modun kendi `rtsCameraPosition`'ıyla kamerayı yeniden kurup birimi projekte
+> ediyor — imleç avlamak ya da zamanlamaya bağlı pan yok.
+>
+> **Faz I'de bulunan bir sessizlik:** three'nin raycaster'ı **görünmez** nesneleri
+> de test ediyor, runtime da bunlardan birkaçını taşıyor (`hideInGame` collider
+> proxy'si, debug wireframe'leri). Pick köprüsü artık isabet noktasından sahne
+> köküne kadar tüm zincirin görünürlüğünü aynı yürüyüşte kontrol ediyor: oyuncunun
+> göremediği bir şeyin arkasından seçim yapılamaz.
+>
+> **Faz I kapandı — planın tamamı kapandı.** Kapılar: `build:verify` uçtan uca
+> yeşil (**1023/1023 engine check**), `verify:imports` + `verify:dist --strict`
+> PASS, `check:assets` PASS. Browser: **tüm paket 34/34**
+> (`npm run smoke:browser`, ~31 dk; yeni `rts-starter` spec'i dahil).
 
 ---
 
@@ -1069,15 +1133,24 @@ A (ölçüm) ──▶ B (shell) ──▶ C (LevelRuntime, tek pipeline) ──
    `build*`/`apply*` metotları kalmaz (I2, Faz A testiyle korunur).
 2. ✅ Bir fork, `createForgeRuntime({modules, gameModules})` ile kurulur;
    `LevelRuntime`/`RuntimeSceneApp` fork tarafından **düzenlenmez** (I4, Faz F).
-3. Capability'ler opt-in; bir modül kapatılınca yalnız o davranış gider, sahne
-   içeriği hep görünür (I3).
+3. ✅ Capability'ler opt-in; bir modül kapatılınca yalnız o davranış gider, sahne
+   içeriği hep görünür (I3; Faz I'de üç karakter modülü düşürülmüş `rts-starter`
+   aynı level'ı tam render ediyor, `runtimeParityLevel.test.ts` bunu
+   `collectUnsupportedCapabilities` ile sabitliyor).
 4. ✅ Sıfır-gameplay `game-starter`, RuntimeParity level'ını ek sahne kodu
    olmadan çalıştırır (Faz H; `tests/smoke/game-starter.spec.ts` tarayıcıda
    doğruluyor).
-5. Karaktersiz RTS senaryosu ek entegrasyon olmadan sahneyi tam kurar (Faz I).
+5. ✅ Karaktersiz RTS senaryosu ek entegrasyon olmadan sahneyi tam kurar (Faz I;
+   `templates/rts-starter` + `tests/smoke/rts-starter.spec.ts` tarayıcıda
+   doğruluyor).
 6. ✅ Bilinmeyen alan sessizce düşmez; uyarı üretir (I5, Faz G).
-7. Tüm gate'ler yeşil: `build:verify` (`tsc` + `vite build` + `test:engine` +
-   `verify:dist --strict`) + `check:assets` + `smoke:browser`.
+7. ✅ Tüm gate'ler yeşil: `build:verify` (`tsc` + `vite build` + `test:engine` +
+   `verify:dist --strict`) + `check:assets` + `smoke:browser` (2026-08-28:
+   1023/1023 engine check, 34/34 browser smoke).
+
+> **Açık kalan tek madde: 1.** Faz I kapsamında doğrulanmadı — ikiz
+> `build*`/`apply*` metotlarının gerçekten kalmadığını Faz A parity testi
+> koruyor, ama bu oturumda ayrıca denetlenmedi.
 
 ---
 

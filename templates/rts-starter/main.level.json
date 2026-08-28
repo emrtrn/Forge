@@ -1,0 +1,232 @@
+{
+  "schema": 1,
+  "name": "rts",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            0,
+            0.2,
+            6
+          ],
+          "name": "Player Start",
+          "collision": false,
+          "rotationYDeg": 180,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "floor-400x400",
+      "placements": [
+        {
+          "position": [
+            -8,
+            0,
+            -8
+          ],
+          "name": "Floor",
+          "scaleLocked": true,
+          "materialSlot": "starter-mat-concrete",
+          "rotationYDeg": 0,
+          "scale": 4
+        }
+      ]
+    },
+    {
+      "assetId": "pillar-50x500",
+      "placements": [
+        {
+          "position": [
+            -3,
+            0,
+            -3
+          ],
+          "name": "Pillar A",
+          "materialSlot": "starter-mat-metal",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            3,
+            0,
+            -3
+          ],
+          "name": "Pillar B (material override)",
+          "materialSlot": "starter-mat-emissive",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": [
+        {
+          "position": [
+            0,
+            2.2,
+            0
+          ],
+          "name": "Spinning Cube",
+          "collisionPreset": "blockAll",
+          "behavior": {
+            "script": "spin",
+            "params": {
+              "speedDeg": 45,
+              "axis": "y"
+            }
+          },
+          "rotationYDeg": 0,
+          "scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "shape:sphere",
+      "placements": [
+        {
+          "position": [
+            2.5,
+            1.2,
+            2.5
+          ],
+          "name": "Effect Emitter",
+          "collision": false,
+          "particle": {
+            "effectId": "starter-fx-fire-loop",
+            "enabled": true,
+            "autoPlay": true,
+            "loop": true
+          },
+          "rotationYDeg": 0,
+          "scale": [
+            0.4,
+            0.4,
+            0.4
+          ]
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true,
+    "backgroundColor": "#0d1117",
+    "gameMode": "forge.rtsCamera"
+  },
+  "skyAtmosphere": {
+    "name": "Sky Atmosphere",
+    "rayleigh": 1.2,
+    "turbidity": 6,
+    "mie": 0.008,
+    "mieDirectionalG": 0.82,
+    "exposure": 0.45,
+    "skyLightCapture": {
+      "intensity": 1.1
+    }
+  },
+  "heightFog": {
+    "name": "Exponential Height Fog",
+    "mode": "exp",
+    "color": "#9fb3c8",
+    "density": 0.012
+  },
+  "cloudLayer": {
+    "name": "Cloud Layer",
+    "color": "#ffffff",
+    "coverage": 0.45,
+    "density": 0.8,
+    "softness": 0.6,
+    "scale": 1.4,
+    "speed": 0.02
+  },
+  "postProcess": {
+    "toneMapping": "aces",
+    "exposure": 1,
+    "bloom": {
+      "enabled": true,
+      "threshold": 0.85,
+      "intensity": 0.35,
+      "radius": 0.4
+    },
+    "vignette": {
+      "enabled": true,
+      "intensity": 0.3
+    },
+    "saturation": 1.05,
+    "contrast": 1.02
+  },
+  "lights": [
+    {
+      "id": "parity-sun",
+      "type": "directional",
+      "position": [
+        6,
+        9,
+        6
+      ],
+      "name": "Sun",
+      "rotation": [
+        -38,
+        24,
+        0
+      ],
+      "color": "#fff4e0",
+      "intensity": 4.5,
+      "castShadow": true
+    },
+    {
+      "id": "parity-fill",
+      "type": "point",
+      "position": [
+        -3,
+        2.5,
+        3
+      ],
+      "name": "Fill Light",
+      "color": "#66ccff",
+      "intensity": 6,
+      "castShadow": false,
+      "distance": 14,
+      "decay": 2
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "parity-landscape",
+      "position": [
+        -32,
+        -0.6,
+        -32
+      ],
+      "dataRef": "landscapes/runtime-parity.landscape.json",
+      "name": "Parity Terrain",
+      "collision": true
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Gameplay/Script_ParityProp.actor.json",
+      "position": [
+        -2.5,
+        0.5,
+        2.5
+      ],
+      "name": "Parity Prop",
+      "rotation": [
+        0,
+        25,
+        0
+      ]
+    }
+  ]
+}

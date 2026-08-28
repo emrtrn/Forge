@@ -6,11 +6,12 @@
  */
 import { DEFAULT_GAME_MODE_ID } from "./catalog";
 import { defaultCameraGameMode } from "./defaultCameraGameMode";
+import { rtsCameraGameMode } from "./rtsCameraGameMode";
 import { tpsCharacterGameMode } from "./tpsCharacterGameMode";
 import type { GameModeDefinition } from "@/scene/gameModeTypes";
 
 const MODES = new Map<string, GameModeDefinition>(
-  [defaultCameraGameMode, tpsCharacterGameMode].map((mode) => [mode.id, mode]),
+  [defaultCameraGameMode, tpsCharacterGameMode, rtsCameraGameMode].map((mode) => [mode.id, mode]),
 );
 
 export { DEFAULT_GAME_MODE_ID } from "./catalog";

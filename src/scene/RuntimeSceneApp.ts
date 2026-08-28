@@ -1,4 +1,4 @@
-import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, type Texture, TextureLoader, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -85,6 +85,7 @@ import { GamepadInputSource } from "@/input/gamepadInputSource";
 import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
 import { PointerLookSource } from "@/input/pointerLookSource";
 import { PointerButtonSource } from "@/input/pointerButtonSource";
+import { PointerCursorSource } from "@/input/pointerCursorSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import type { Aabb3 } from "@engine/movement/characterCollision";
 import type { LocomotionInput } from "@engine/movement/locomotionAnimation";
@@ -100,6 +101,7 @@ import type {
   InputMode,
   PawnDefinition,
   RuntimeCharacterRef,
+  RuntimeEntityPick,
 } from "./gameModeTypes";
 import { loadActiveProject, projectFileUrl, type ActiveProject } from "@/project/ProjectSystem";
 import {
@@ -562,6 +564,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly listenerDir = new Vector3();
   private readonly pointerLook: PointerLookSource;
   private readonly pointerButtons: PointerButtonSource;
+  /** Pointer position + wheel bridge, for modes that steer from the cursor. */
+  private readonly pointerCursor: PointerCursorSource;
+  /** Scratch raycaster for the Game Mode entity-pick bridge (click selection). */
+  private readonly pickRaycaster = new Raycaster();
+  /** Scratch NDC point reused by every pick, so selection allocates nothing. */
+  private readonly pickPoint = new Vector2();
   private readonly behaviorSubsystem: BehaviorSubsystem;
   private frameHandle = 0;
   private lastTime = 0;
@@ -904,6 +912,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       },
     });
     this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
+    this.pointerCursor = new PointerCursorSource(canvas);
     this.interactionPromptElement = this.createInteractionPromptElement();
     this.userSettingsStore = createRuntimeUserSettingsStore();
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
@@ -1064,6 +1073,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.attachTouchControls(canvas);
     this.pointerLook.attach();
     this.pointerButtons.attach();
+    this.pointerCursor.attach();
 
     this.travelCoordinator = new RuntimeTravelCoordinator({
       clearPendingRestore: () => this.saveGameCommands()?.clearPendingRestore(),
@@ -1265,6 +1275,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.touchInput = null;
     this.pointerLook.detach();
     this.pointerButtons.detach();
+    this.pointerCursor.detach();
     // The VFX subsystem is registered, so engineApp.dispose() (below) tears down
     // its effects + caches through the subsystem registry, like the audio one.
     this.gameModeSession?.dispose();
@@ -2963,6 +2974,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       },
       consumeLookDelta: () =>
         this.inputMode === "ui" ? { dx: 0, dy: 0 } : this.pointerLook.consume(),
+      getPointerViewport: () =>
+        this.inputMode === "ui" ? null : this.pointerCursor.viewportPosition(),
+      consumeWheelDelta: () => {
+        const notches = this.pointerCursor.consumeWheel();
+        return this.inputMode === "ui" ? 0 : notches;
+      },
+      pickEntityAt: (x, y) => this.pickEntityAt(x, y),
       getInputMode: () => this.inputMode,
       setInputMode: (mode) => {
         this.inputMode = mode;
@@ -2970,6 +2988,61 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       setMouseCursorVisible: (visible) => this.pointerLook.setMouseCursorVisible(visible),
       setPointerLookMode: (mode) => this.pointerLook.setMode(mode),
     };
+  }
+
+  /**
+   * Resolves the entity under a normalized viewport point for the active Game
+   * Mode's selection (`GameModeContext.pickEntityAt`).
+   *
+   * Only *entities* answer: the walk up from the hit object stops at a placed
+   * actor (`actorEntityId`) or a character (`characterIndex`), so terrain, walls
+   * and other decorative statics pick as null rather than becoming selectable
+   * units. Editor picking is a separate, richer surface (`ScenePicker`); this is
+   * deliberately the runtime's small one.
+   */
+  private pickEntityAt(x: number, y: number): RuntimeEntityPick | null {
+    // Viewport [0,1] from the top-left -> NDC [-1,1] with +y up.
+    this.pickPoint.set(x * 2 - 1, 1 - y * 2);
+    this.pickRaycaster.setFromCamera(this.pickPoint, this.camera);
+    for (const hit of this.pickRaycaster.intersectObjects(this.scene.children, true)) {
+      const entity = this.entityRootOf(hit.object);
+      if (!entity) continue;
+      return {
+        entityId: entity.entityId,
+        object: entity.object,
+        point: [hit.point.x, hit.point.y, hit.point.z],
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Nearest ancestor (or self) that is an entity root, with its entity id — but
+   * only when nothing on the way up to the scene is hidden.
+   *
+   * Three's raycaster tests invisible objects too, and the runtime keeps several
+   * around (a `hideInGame` collider proxy, debug wireframes). A click must never
+   * select through something the player cannot see, so the whole chain is
+   * checked in the same walk.
+   */
+  private entityRootOf(
+    object: Object3D,
+  ): { readonly entityId: string; readonly object: Object3D } | null {
+    let found: { readonly entityId: string; readonly object: Object3D } | null = null;
+    for (let node: Object3D | null = object; node; node = node.parent) {
+      if (!node.visible) return null;
+      if (found) continue;
+      const actorEntityId = node.userData.actorEntityId;
+      if (typeof actorEntityId === "string") {
+        found = { entityId: actorEntityId, object: node };
+        continue;
+      }
+      const characterIndex = node.userData.characterIndex;
+      if (typeof characterIndex === "number") {
+        found = { entityId: characterEntityId(characterIndex), object: node };
+      }
+    }
+    return found;
   }
 
   /**

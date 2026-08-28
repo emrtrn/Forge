@@ -143,6 +143,16 @@ export interface RuntimeCharacterRef {
   skeleton?: AssetSkeletonDef;
 }
 
+/** A scene entity the runtime resolved under a viewport point. */
+export interface RuntimeEntityPick {
+  /** Entity id of the picked actor / character (never a decorative static). */
+  readonly entityId: string;
+  /** The picked entity's root render object. */
+  readonly object: Object3D;
+  /** World-space hit point on that object. */
+  readonly point: Vec3;
+}
+
 /**
  * What the runtime shell exposes to a Game Mode session: the live camera, input,
  * the built characters, and small bridges back into the runtime (animation
@@ -199,6 +209,27 @@ export interface GameModeContext {
    * this into yaw/pitch; modes that ignore it (TPS) simply never call it.
    */
   consumeLookDelta(): { dx: number; dy: number };
+  /**
+   * Where the pointer currently is over the canvas, normalized to [0,1] from the
+   * top-left, or null while it is outside. Absolute position, unlike
+   * {@link consumeLookDelta}: screen-edge camera panning and click selection —
+   * the top-down strategy vocabulary — cannot be derived from a look delta.
+   * Optional so headless/test contexts may omit the whole pointer bridge.
+   */
+  getPointerViewport?(): { readonly x: number; readonly y: number } | null;
+  /**
+   * Wheel notches accumulated since the last call (positive = scrolled down /
+   * away, the conventional zoom-out direction). Resets on read. Optional for the
+   * same reason as {@link getPointerViewport}.
+   */
+  consumeWheelDelta?(): number;
+  /**
+   * Resolves the entity under a normalized viewport point — the runtime half of
+   * click selection. Only entities are returned (placed actors and characters);
+   * decorative statics and terrain pick as null, so a mode never "selects" a
+   * wall. Optional so headless/test contexts may omit it.
+   */
+  pickEntityAt?(x: number, y: number): RuntimeEntityPick | null;
   /** Current runtime input mode. UI mode suppresses gameplay movement/look. */
   getInputMode(): InputMode;
   /** Applies Game/UI input routing for the active PlayerController. */

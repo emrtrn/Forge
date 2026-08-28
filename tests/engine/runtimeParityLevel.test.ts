@@ -33,6 +33,9 @@ import { roomLayoutToSceneDocument } from "../../engine/scene/legacyRoomLayoutAd
 import { actorInstanceToEntity } from "../../engine/scene/actorInstance";
 import { normalizeActorScriptDef } from "../../engine/scene/actorScript";
 import { buildStepIds } from "../../src/scene/buildManifest";
+import { collectUnsupportedCapabilities } from "../../src/scene/capabilityCoverage";
+import { createDefaultRuntimeModules } from "../../src/scene/capabilities/defaultRuntimeModules";
+import { RTS_GAME_MODE_ID } from "../../src/game/gameModes/catalog";
 import { collectDroppedFields } from "../../tools/droppedFields";
 import { validateLandscapeData, validateLayout } from "../../tools/saveValidator";
 
@@ -43,6 +46,14 @@ const RUNTIME_PARITY_LANDSCAPE_PATH = "public/landscapes/runtime-parity.landscap
 const PARITY_PROP_ACTOR_PATH = "public/assets/starter-content/Gameplay/Script_ParityProp.actor.json";
 const GAME_STARTER_LEVEL_PATH = "templates/game-starter/main.level.json";
 const GAME_STARTER_MAIN_PATH = "templates/game-starter/main.ts";
+const RTS_STARTER_LEVEL_PATH = "templates/rts-starter/main.level.json";
+const RTS_STARTER_MAIN_PATH = "templates/rts-starter/main.ts";
+/** What a characterless game switches off (Phase I). */
+const RTS_DROPPED_CAPABILITIES = [
+  "character-movement",
+  "skeletal-animation",
+  "ai-character-animation",
+];
 
 function readJson(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
@@ -232,6 +243,92 @@ export function registerRuntimeParityLevelTests(check: Check): void {
     ]);
     assert.match(source, /createForgeRuntime\(/);
     assert.match(source, /forge\.start\(\)/);
+  });
+
+  // Phase I: the RTS validation case, held to the same standard as the starter.
+  check("rts-starter: its level is the parity fixture plus exactly one Game Mode field", () => {
+    const rts = readJson(RTS_STARTER_LEVEL_PATH);
+    const parity = readJson(RUNTIME_PARITY_LEVEL_PATH);
+    assert.equal(rts.name, "rts");
+    const worldSettings = rts.worldSettings as Record<string, unknown>;
+    assert.equal(worldSettings.gameMode, RTS_GAME_MODE_ID);
+    // Everything else identical: the claim is that a characterless game opens
+    // the *same* content, so a diverged fixture would make it untestable.
+    const { gameMode: _gameMode, ...restSettings } = worldSettings;
+    assert.deepEqual(
+      { ...rts, name: parity.name, worldSettings: restSettings },
+      parity,
+    );
+  });
+
+  check("rts-starter: its app contains no scene-setup code at all", () => {
+    const source = readFileSync(RTS_STARTER_MAIN_PATH, "utf8");
+    const imports = [...source.matchAll(/^import (?:type )?[^;]*?from "([^"]+)"/gm)].map(
+      (match) => match[1],
+    );
+    // Composition, the capability opt-out, the Game Mode it plugs in, and the
+    // `?debug` overlay. No three.js, no engine module, no scene builder: an RTS
+    // needs no app shell of its own any more (I1/I4).
+    assert.deepEqual(imports.sort(), [
+      "@/game/gameModes/rtsCameraGameMode",
+      "@/scene/ForgeGameModule",
+      "@/scene/ForgeRuntime",
+      "@/scene/capabilities/aiCharacterAnimationModule",
+      "@/scene/capabilities/characterMovementModule",
+      "@/scene/capabilities/defaultRuntimeModules",
+      "@/scene/capabilities/runtimeServiceKeys",
+      "@/scene/capabilities/skeletalAnimationModule",
+      "@/scene/debugStats",
+    ]);
+    assert.match(source, /createForgeRuntime\(/);
+    assert.match(source, /forge\.start\(\)/);
+  });
+
+  check("rts-starter: dropping the character capabilities costs this level nothing", () => {
+    const layout = readJson(RTS_STARTER_LEVEL_PATH) as unknown as RoomLayout;
+    const dropped = new Set(RTS_DROPPED_CAPABILITIES);
+    const registered = createDefaultRuntimeModules()
+      .map((module) => module.id)
+      .filter((id) => !dropped.has(id));
+    // The opt-out list must actually name modules the template ships, or the
+    // starter is "dropping" nothing and this check proves nothing.
+    for (const id of RTS_DROPPED_CAPABILITIES) {
+      assert.ok(
+        createDefaultRuntimeModules().some((module) => module.id === id),
+        `the template no longer ships a "${id}" capability`,
+      );
+    }
+
+    const entities = roomLayoutToSceneDocument(layout).entities;
+    const def = normalizeActorScriptDef(readJson(PARITY_PROP_ACTOR_PATH));
+    const actorEntities = (layout.actors ?? []).map((instance, index) =>
+      actorInstanceToEntity(def, instance, index),
+    );
+    const all = [...entities, ...actorEntities];
+
+    // Nothing in this level is authored for a switched-off capability, so the
+    // runtime's coverage report stays silent — the Phase I acceptance criterion
+    // (I3) in one assertion: only the behavior goes, never the scene content.
+    assert.deepEqual(
+      collectUnsupportedCapabilities({
+        entities: all,
+        layout,
+        registered,
+        hasBehaviorRegistry: true,
+      }),
+      [],
+    );
+
+    // And with no behavior catalog — which the minimal starter deliberately has
+    // none of — the one thing that goes quiet is reported by name, not silently.
+    const withoutBehaviors = collectUnsupportedCapabilities({
+      entities: all,
+      layout,
+      registered,
+      hasBehaviorRegistry: false,
+    });
+    assert.equal(withoutBehaviors.length, 1);
+    assert.match(withoutBehaviors[0] ?? "", /No behavior catalog registered/);
   });
 
   check("parity level: it needs no gameplay — no game mode, no characters", () => {

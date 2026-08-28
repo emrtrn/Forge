@@ -472,9 +472,15 @@ import {
   particleEffectPresetDefinition,
 } from "../engine/vfx/particleEffectPresets";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
+import { accumulatedNodeScale, mountSkeletalSocket } from "../engine/render-three/skeletalSocket";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
-import { applyRootMotionToClip, rootMotionPositionNodes } from "../engine/render-three/rootMotion";
+import {
+  applyRootMotionToClip,
+  resolveRootMotionUpAxis,
+  rootMotionClipDisplacement,
+  rootMotionPositionNodes,
+} from "../engine/render-three/rootMotion";
 import { createCharacterSceneObject, entityCharacterItem } from "../engine/render-three/models";
 import {
   DEFAULT_GAME_MODE_ID,
@@ -9331,6 +9337,121 @@ check("CrossfadeAnimator: exposes its clips and tracks the current clip on play"
   assert.equal(animator.currentClip, "walk");
 });
 
+check("CrossfadeAnimator: playRange holds a montage section and reports when it ends", () => {
+  const clips = [new AnimationClip("work", 4, [])];
+  const animator = new CrossfadeAnimator(new Object3D(), clips);
+
+  // A held middle: an actor kneels once, stays down as long as the task takes.
+  animator.playRange("work", { startSeconds: 1, endSeconds: 2, loop: true }, 0);
+  animator.update(1.5);
+  assert.equal(animator.rangeFinished, false);
+  // Wrapped back inside the section rather than running on into the stand-up.
+  animator.update(1.5);
+  assert.equal(animator.rangeFinished, false);
+
+  // A one-shot section clamps on its last pose and says so exactly once.
+  animator.playRange("work", { startSeconds: 2, endSeconds: 3, loop: false }, 0);
+  assert.equal(animator.rangeFinished, false);
+  animator.update(1.5);
+  assert.equal(animator.rangeFinished, true);
+
+  // Leaving the range restores ordinary whole-clip playback.
+  animator.play("work", 0);
+  animator.update(3);
+  assert.equal(animator.rangeFinished, false);
+});
+
+check("montage sections normalize and round-trip, dropping ranges that would freeze a frame", () => {
+  const skeleton = normalizeAssetSkeleton({
+    schema: 1,
+    montages: [
+      {
+        name: "build",
+        clip: "work",
+        slot: "upperBody",
+        sections: [
+          { name: "enter", startSeconds: 0, endSeconds: 0.5 },
+          { name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true },
+          { name: "reversed", startSeconds: 3, endSeconds: 1 },
+          { name: "empty", startSeconds: 1, endSeconds: 1 },
+          { name: "enter", startSeconds: 2, endSeconds: 3 },
+        ],
+      },
+    ],
+  });
+  // Reversed, zero-length and duplicate-named ranges drop: each would leave the
+  // runtime looping one frame, which reads as a frozen actor.
+  assert.deepEqual(skeleton.montages[0]?.sections, [
+    { name: "enter", startSeconds: 0, endSeconds: 0.5, loop: false },
+    { name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true },
+  ]);
+
+  // Allowlist half: sections must survive a save, and the validator refuses the
+  // same malformed ranges loudly rather than dropping them silently.
+  const saved = validateSaveSkeletonPayload({
+    path: "assets/characters/Hero.skeleton.json",
+    skeleton: {
+      montages: [
+        {
+          name: "build",
+          clip: "work",
+          slot: "upperBody",
+          sections: [{ name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true }],
+        },
+      ],
+    },
+  });
+  assert.deepEqual((saved.skeleton.montages[0] as Record<string, unknown>).sections, [
+    { name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true },
+  ]);
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: {
+        montages: [
+          { name: "build", clip: "work", slot: "upperBody", sections: [{ name: "bad", startSeconds: 2, endSeconds: 1 }] },
+        ],
+      },
+    }),
+  );
+});
+
+check("mountSkeletalSocket cancels the bone's inherited scale so authored offsets are metres", () => {
+  // A centimetre-pipeline export: the root carries the 0.01 conversion and every
+  // bone inherits it, so a socket parented straight onto a bone would draw a
+  // 24 cm offset as 2.4 mm.
+  const root = new Object3D();
+  root.scale.setScalar(0.01);
+  const bone = new Object3D();
+  root.add(bone);
+  root.updateMatrixWorld(true);
+  assert.ok(Math.abs(accumulatedNodeScale(bone).x - 0.01) < 1e-9);
+
+  const { socket, mount } = mountSkeletalSocket(bone, {
+    position: [0, 0.03, 0.24],
+    rotation: [0, 90, 0],
+    scale: [1, 1, 1],
+  }, "hand_r");
+  assert.equal(socket.parent, mount);
+  assert.equal(mount.parent, bone);
+  assert.ok(Math.abs(mount.scale.x - 100) < 1e-6, `mount must invert the inherited scale, got ${mount.scale.x}`);
+  // The socket keeps the authored transform verbatim, which is what lets a gizmo
+  // drag be written straight back with no unit conversion.
+  assert.deepEqual(socket.position.toArray(), [0, 0.03, 0.24]);
+  root.updateMatrixWorld(true);
+  const world = new Vector3();
+  socket.getWorldPosition(world);
+  assert.ok(Math.abs(world.z - 0.24) < 1e-6, `socket must land at its authored metres, got ${world.z}`);
+
+  // A degenerate (near-zero) inherited scale is not inverted into infinity.
+  const flat = new Object3D();
+  flat.scale.set(0, 1, 1);
+  const flatBone = new Object3D();
+  flat.add(flatBone);
+  flat.updateMatrixWorld(true);
+  assert.equal(mountSkeletalSocket(flatBone, { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, "s").mount.scale.x, 1);
+});
+
 check("CrossfadeAnimator: playBlend enters blend mode and play() leaves it", () => {
   const root = new Object3D();
   const clips = [
@@ -9414,6 +9535,82 @@ check("root motion clip filtering can pin XYZ on an authored root node", () => {
   assert.deepEqual(Array.from(filtered.tracks[0]!.values), [0, 4, 0, 0, 4, 0]);
   assert.deepEqual(Array.from(filtered.tracks[1]!.values), [10, 1, 10, 12, 2, 12]);
   assert.deepEqual(rootMotionPositionNodes(clip), ["Armature", "Hips"]);
+});
+
+// A rig exported from a Z-up tool carries the conversion on an intermediate
+// node, so the root's position track has its vertical on Z and its travel on Y.
+// Assuming index 1 is vertical strips the jump height and leaves the forward
+// drift running, which is the whole point of the next three checks.
+const buildZUpConvertedRig = (): Object3D => {
+  const root = new Object3D();
+  root.name = "Actor_Root";
+  root.scale.setScalar(0.01);
+  const rig = new Object3D();
+  rig.name = "Actor_Rig";
+  rig.quaternion.setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2);
+  root.add(rig);
+  const hips = new Object3D();
+  hips.name = "mixamorigHips";
+  rig.add(hips);
+  return root;
+};
+
+const buildYUpRig = (): Object3D => {
+  const root = new Object3D();
+  root.name = "Hero_Root";
+  const hips = new Object3D();
+  hips.name = "mixamorigHips";
+  root.add(hips);
+  return root;
+};
+
+/** A jump in miniature: travel on local Y, the jump arc on local Z. */
+const buildZUpJumpClip = (): AnimationClip =>
+  new AnimationClip("jump", 1, [
+    new VectorKeyframeTrack("mixamorigHips.position", [0, 0.5, 1], [0, 0, -85, 0, 120, -152, 0, 245, -85]),
+  ]);
+
+check("root motion up axis is derived from the rig, not assumed to be Y", () => {
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, buildZUpConvertedRig()), "z");
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, buildYUpRig()), "y");
+  // An authored override wins, and an unknown rig falls back to Y.
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", "x", buildZUpConvertedRig()), "x");
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, undefined), "y");
+});
+
+check("lockXZ keeps the rig's own vertical axis and removes its travel axis", () => {
+  const setting = { clip: "jump", mode: "lockXZ" } as const;
+
+  const zUp = applyRootMotionToClip(buildZUpJumpClip(), setting, buildZUpConvertedRig());
+  // Travel (local Y) is pinned to the first key; the arc (local Z) survives.
+  assert.deepEqual(Array.from(zUp.tracks[0]!.values), [0, 0, -85, 0, 0, -152, 0, 0, -85]);
+
+  const yUp = applyRootMotionToClip(buildZUpJumpClip(), setting, buildYUpRig());
+  // Same clip, Y-up rig: now Y is the axis worth keeping and Z gets pinned.
+  assert.deepEqual(Array.from(yUp.tracks[0]!.values), [0, 0, -85, 0, 120, -85, 0, 245, -85]);
+
+  const override = applyRootMotionToClip(
+    buildZUpJumpClip(),
+    { clip: "jump", mode: "lockXZ", upAxis: "y" },
+    buildZUpConvertedRig(),
+  );
+  assert.deepEqual(Array.from(override.tracks[0]!.values), Array.from(yUp.tracks[0]!.values));
+});
+
+check("driveMotion leaves playback untouched and reports the clip's real travel", () => {
+  const clip = buildZUpJumpClip();
+  const setting = { clip: "jump", mode: "driveMotion" } as const;
+
+  // Gameplay owns the movement, so the clip must reach the mixer as authored.
+  assert.equal(applyRootMotionToClip(clip, setting, buildZUpConvertedRig()), clip);
+
+  // Local delta (0, 245, 0) maps through the +90 X conversion and the 0.01 root
+  // scale to 2.45 forward and 0 up — the number gameplay must apply itself,
+  // instead of a hard-coded guess.
+  const travel = rootMotionClipDisplacement(clip, setting, buildZUpConvertedRig());
+  assert.ok(travel, "expected a measured displacement");
+  assert.ok(Math.abs(Math.hypot(travel.x, travel.z) - 2.45) < 1e-4, `forward travel was ${travel.x},${travel.z}`);
+  assert.ok(Math.abs(travel.y) < 1e-4, `vertical travel was ${travel.y}`);
 });
 
 check("splitClipsByUpperBody: routes each track to the half its node belongs to", () => {
@@ -17407,9 +17604,11 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
     run: "Run",
   });
   assert.equal(payload.skeleton.upperBodyBone, "torso");
+  // Sections default to empty: a montage authored before they existed is still
+  // "the whole clip", which is what an empty list means.
   assert.deepEqual(payload.skeleton.montages, [
-    { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08, blendOutSeconds: 0.2 },
-    { name: "aim", clip: "holding-both", slot: "upperBody", loop: true, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
+    { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08, blendOutSeconds: 0.2, sections: [] },
+    { name: "aim", clip: "holding-both", slot: "upperBody", loop: true, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
   ]);
   assert.deepEqual(payload.skeleton.rootMotion, [
     { clip: "Run", mode: "lockXZ", rootNode: "Hips" },
@@ -17504,8 +17703,8 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
     },
   });
   assert.deepEqual(validated.skeleton.montages, [
-    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "block", clip: "guard", slot: "upperBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2 },
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "block", clip: "guard", slot: "upperBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2, sections: [] },
   ]);
 });
 
@@ -17521,8 +17720,8 @@ check("asset skeleton montages normalize and ignore legacy trigger fields", () =
   });
   // Empty name and duplicate name drop; the legacy trigger field is stripped.
   assert.deepEqual(skeleton.montages, [
-    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "guard", clip: "block", slot: "fullBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2 },
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "guard", clip: "block", slot: "fullBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2, sections: [] },
   ]);
 });
 
@@ -18112,8 +18311,8 @@ check("asset skeleton sidecar normalizes animation metadata", () => {
   assert.equal(skeleton.upperBodyBone, "torso");
   // Montages: duplicate name + empty clip dropped; defaults filled; blend clamped.
   assert.deepEqual(skeleton.montages, [
-    { name: "fire", clip: "Shoot", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "aim", clip: "Hold", slot: "upperBody", loop: true, blendInSeconds: 0.25, blendOutSeconds: 4 },
+    { name: "fire", clip: "Shoot", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "aim", clip: "Hold", slot: "upperBody", loop: true, blendInSeconds: 0.25, blendOutSeconds: 4, sections: [] },
   ]);
   assert.equal(skeleton.blendSpaces.length, 1);
   const blend = skeleton.blendSpaces[0]!;

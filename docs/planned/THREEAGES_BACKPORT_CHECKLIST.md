@@ -146,11 +146,14 @@ Her biri kendi branch'i.
   → `tests/smoke/data-table-editor.spec.ts` (hazır, taşınabilir)
 - [x] **2.4 Actor Script `variableOverrides`.** Level bazlı değişken ezme +
   `resolveActorInstanceVariables` tip kontrolü + Details bölümü.
-- [ ] **2.5 Skeletal Mesh Editor paketi.** `driveMotion` root motion modu, Up
+- [x] **2.5 Skeletal Mesh Editor paketi.** `driveMotion` root motion modu, Up
   Axis seçici, Measured Travel / Travel Speed okuması, materyal slot
   override'ı, ölçek telafili socket mount, montage bölümleri (`playRange`),
   `bodyMask` glTF isim sanitizasyonu.
   → `tests/smoke/skeletal-mesh-editor.spec.ts` (hazır, taşınabilir)
+  **Taşınmayan:** ThreeAges'in `ANIMATION_SET_ROLES` genişlemesi (work*/carry*/
+  attack* rolleri) ve `layerAttackWhenMoving` — ikisi de RTS sunum sözlüğü,
+  fork'ta kalır.
 - [x] **2.6 Blocking Volume `navigationRole` + nav string-pulling.** Yatay kutuyu
   yürünebilir güverteye çeviren alan (köprü altı) + `gridNavigation.flatFloor`
   ile düz zeminde yol düzleştirme. `NavigationRole` tipi Forge'da zaten var,

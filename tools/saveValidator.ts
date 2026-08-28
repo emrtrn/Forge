@@ -2424,7 +2424,8 @@ export function validateSaveMaterialSlotsPayload(value: unknown): {
 }
 
 const SKELETON_ANIMATION_SET_ROLES = ["idle", "walk", "run", "jump", "fall"] as const;
-const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ"] as const;
+const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ", "driveMotion"] as const;
+const SKELETON_ROOT_MOTION_UP_AXES = ["x", "y", "z"] as const;
 
 function validateAnimationSet(value: unknown): Record<string, string> {
   if (value === undefined || value === null) return {};
@@ -2605,8 +2606,44 @@ function validateMontage(value: unknown, label: string): Record<string, unknown>
     loop: input.loop === true,
     blendInSeconds: validateBlendSeconds(input.blendInSeconds, `${label}.blendInSeconds`, 0.12),
     blendOutSeconds: validateBlendSeconds(input.blendOutSeconds, `${label}.blendOutSeconds`, 0.2),
+    sections: validateMontageSections(input.sections, `${label}.sections`),
   };
   return output;
+}
+
+/**
+ * Named time ranges inside a montage's clip (see `AssetSkeletonMontageDef`).
+ * Rejected rather than repaired when malformed: a reversed or zero-length range
+ * loops a single frame at runtime, which reads on screen as a frozen actor.
+ */
+function validateMontageSections(value: unknown, label: string): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  const names = new Set<string>();
+  return value.map((item, index) => {
+    const itemLabel = `${label}[${index}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`${itemLabel} must be an object`);
+    }
+    const input = item as Record<string, unknown>;
+    if (typeof input.name !== "string" || input.name.length === 0) {
+      throw new Error(`${itemLabel}.name must be a non-empty string`);
+    }
+    if (names.has(input.name)) throw new Error(`${itemLabel}.name "${input.name}" is duplicated`);
+    names.add(input.name);
+    const start = input.startSeconds;
+    const end = input.endSeconds;
+    if (typeof start !== "number" || !Number.isFinite(start) || start < 0) {
+      throw new Error(`${itemLabel}.startSeconds must be a finite number >= 0`);
+    }
+    if (typeof end !== "number" || !Number.isFinite(end) || end <= start) {
+      throw new Error(`${itemLabel}.endSeconds must be a finite number greater than startSeconds`);
+    }
+    if (input.loop !== undefined && typeof input.loop !== "boolean") {
+      throw new Error(`${itemLabel}.loop must be a boolean`);
+    }
+    return { name: input.name, startSeconds: start, endSeconds: end, loop: input.loop === true };
+  });
 }
 
 function validateMontages(value: unknown): Record<string, unknown>[] {
@@ -2653,6 +2690,16 @@ function validateRootMotion(value: unknown): Record<string, unknown>[] {
         throw new Error(`${label}.rootNode must be a node name string`);
       }
       output.rootNode = input.rootNode;
+    }
+    if (input.upAxis !== undefined && input.upAxis !== null && input.upAxis !== "") {
+      if (
+        !SKELETON_ROOT_MOTION_UP_AXES.includes(
+          input.upAxis as (typeof SKELETON_ROOT_MOTION_UP_AXES)[number],
+        )
+      ) {
+        throw new Error(`${label}.upAxis must be one of ${SKELETON_ROOT_MOTION_UP_AXES.join(", ")}`);
+      }
+      output.upAxis = input.upAxis;
     }
     return output;
   });

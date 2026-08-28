@@ -1066,6 +1066,167 @@ export function validateLandscape(value: unknown): Record<string, unknown> {
   return landscape;
 }
 
+export function validateRiverWater(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("river water must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  for (const key of ["id", "landscapeRef", "splineRef"] as const) {
+    if (typeof input[key] !== "string" || input[key].length === 0) {
+      throw new Error(`river water ${key} must be a non-empty string`);
+    }
+  }
+  const water: Record<string, unknown> = {
+    id: input.id,
+    landscapeRef: input.landscapeRef,
+    splineRef: input.splineRef,
+  };
+  if (typeof input.name === "string") water.name = input.name;
+  if (input.hidden === true) water.hidden = true;
+  if (input.locked === true) water.locked = true;
+  if (typeof input.groupId === "string") water.groupId = input.groupId;
+  if (typeof input.nodeId === "string") water.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") water.parentId = input.parentId;
+  const surfaceLevel = validateOptionalNumber(input.surfaceLevel, "river water surfaceLevel", -10000, 10000);
+  if (surfaceLevel !== undefined) water.surfaceLevel = Number(surfaceLevel.toFixed(3));
+  const widthScale = validateOptionalNumber(input.widthScale, "river water widthScale", 0.05, 10);
+  if (widthScale !== undefined) water.widthScale = Number(widthScale.toFixed(3));
+  const flowSpeed = validateOptionalNumber(input.flowSpeed, "river water flowSpeed", 0, 10);
+  if (flowSpeed !== undefined) water.flowSpeed = Number(flowSpeed.toFixed(3));
+  const normalScale = validateOptionalNumber(input.normalScale, "river water normalScale", 0.05, 20);
+  if (normalScale !== undefined) water.normalScale = Number(normalScale.toFixed(3));
+  if (typeof input.normalTexture === "string" && input.normalTexture.length > 0) {
+    water.normalTexture = input.normalTexture;
+  } else if (input.normalTexture !== undefined && input.normalTexture !== null) {
+    throw new Error("river water normalTexture must be a string, null, or omitted");
+  }
+  for (const key of ["deepColor", "shallowColor", "foamColor"] as const) {
+    if (input[key] !== undefined) water[key] = validateHexColor(input[key], `river water ${key}`);
+  }
+  const opacity = validateOptionalNumber(input.opacity, "river water opacity", 0, 1);
+  if (opacity !== undefined) water.opacity = Number(opacity.toFixed(3));
+  const bedVisibility = validateOptionalNumber(input.bedVisibility, "river water bedVisibility", 0, 1);
+  if (bedVisibility !== undefined) water.bedVisibility = Number(bedVisibility.toFixed(3));
+  const absorptionDistance = validateOptionalNumber(input.absorptionDistance, "river water absorptionDistance", 0.01, 100);
+  if (absorptionDistance !== undefined) water.absorptionDistance = Number(absorptionDistance.toFixed(3));
+  const waveAmplitude = validateOptionalNumber(input.waveAmplitude, "river water waveAmplitude", 0, 1);
+  if (waveAmplitude !== undefined) water.waveAmplitude = Number(waveAmplitude.toFixed(3));
+  const waveLength = validateOptionalNumber(input.waveLength, "river water waveLength", 0.1, 100);
+  if (waveLength !== undefined) water.waveLength = Number(waveLength.toFixed(3));
+  const foamOpacity = validateOptionalNumber(input.foamOpacity, "river water foamOpacity", 0, 1);
+  if (foamOpacity !== undefined) water.foamOpacity = Number(foamOpacity.toFixed(3));
+  const shoreWaveSpacing = validateOptionalNumber(input.shoreWaveSpacing, "river water shoreWaveSpacing", 0.5, 20);
+  if (shoreWaveSpacing !== undefined) water.shoreWaveSpacing = Number(shoreWaveSpacing.toFixed(3));
+  const shoreWaveSpeed = validateOptionalNumber(input.shoreWaveSpeed, "river water shoreWaveSpeed", 0, 10);
+  if (shoreWaveSpeed !== undefined) water.shoreWaveSpeed = Number(shoreWaveSpeed.toFixed(3));
+  const shoreWaveReach = validateOptionalNumber(input.shoreWaveReach, "river water shoreWaveReach", 0.05, 1);
+  if (shoreWaveReach !== undefined) water.shoreWaveReach = Number(shoreWaveReach.toFixed(3));
+  const shoreWaveBreakupScale = validateOptionalNumber(input.shoreWaveBreakupScale, "river water shoreWaveBreakupScale", 0.1, 10);
+  if (shoreWaveBreakupScale !== undefined) water.shoreWaveBreakupScale = Number(shoreWaveBreakupScale.toFixed(3));
+  if (input.foamStamps !== undefined) {
+    if (!Array.isArray(input.foamStamps) || input.foamStamps.length > 64) {
+      throw new Error("river water foamStamps must be an array of at most 64 entries");
+    }
+    const stampIds = new Set<string>();
+    water.foamStamps = input.foamStamps.map((value, index) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`river water foamStamps[${index}] must be an object`);
+      }
+      const stamp = value as Record<string, unknown>;
+      if (typeof stamp.id !== "string" || stamp.id.trim().length === 0 || stampIds.has(stamp.id)) {
+        throw new Error(`river water foamStamps[${index}].id must be a unique non-empty string`);
+      }
+      stampIds.add(stamp.id);
+      if (stamp.kind !== "point" && stamp.kind !== "strip") {
+        throw new Error(`river water foamStamps[${index}].kind must be point or strip`);
+      }
+      if (!isNumberTuple(stamp.position)) {
+        throw new Error(`river water foamStamps[${index}].position must be a numeric Vec3`);
+      }
+      const position = stamp.position.map((axis) => Number(axis.toFixed(3)));
+      const saved: Record<string, unknown> = { id: stamp.id, kind: stamp.kind, position };
+      if (stamp.kind === "strip") {
+        if (!isNumberTuple(stamp.endPosition)) {
+          throw new Error(`river water foamStamps[${index}].endPosition must be a numeric Vec3 for strips`);
+        }
+        saved.endPosition = stamp.endPosition.map((axis) => Number(axis.toFixed(3)));
+      }
+      const radius = validateOptionalNumber(stamp.radius, `river water foamStamps[${index}].radius`, 0.05, 100);
+      const intensity = validateOptionalNumber(stamp.intensity, `river water foamStamps[${index}].intensity`, 0, 1);
+      if (radius === undefined || intensity === undefined) {
+        throw new Error(`river water foamStamps[${index}] requires radius and intensity`);
+      }
+      saved.radius = radius;
+      saved.intensity = intensity;
+      // Legacy ring fields remain optional so older point-stamp layouts keep
+      // their established placement data after Radial Foam replaced the rings.
+      if (stamp.kind === "point") {
+        const ringCount = validateOptionalNumber(stamp.ringCount, `river water foamStamps[${index}].ringCount`, 1, 8);
+        const expansionSpeed = validateOptionalNumber(stamp.expansionSpeed, `river water foamStamps[${index}].expansionSpeed`, 0.05, 5);
+        if (ringCount !== undefined) saved.ringCount = Number(ringCount.toFixed(3));
+        if (expansionSpeed !== undefined) saved.expansionSpeed = Number(expansionSpeed.toFixed(3));
+      }
+      return saved;
+    });
+  }
+  if (input.segmentProfiles !== undefined) {
+    if (!Array.isArray(input.segmentProfiles) || input.segmentProfiles.length > 256) {
+      throw new Error("river water segmentProfiles must be an array of at most 256 entries");
+    }
+    const segmentRefs = new Set<string>();
+    water.segmentProfiles = input.segmentProfiles.map((value, index) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`river water segmentProfiles[${index}] must be an object`);
+      }
+      const profile = value as Record<string, unknown>;
+      if (
+        typeof profile.splineSegmentRef !== "string" ||
+        profile.splineSegmentRef.trim().length === 0 ||
+        segmentRefs.has(profile.splineSegmentRef)
+      ) {
+        throw new Error(`river water segmentProfiles[${index}].splineSegmentRef must be a unique non-empty string`);
+      }
+      segmentRefs.add(profile.splineSegmentRef);
+      const saved: Record<string, unknown> = { splineSegmentRef: profile.splineSegmentRef };
+      const flowSpeedMultiplier = validateOptionalNumber(
+        profile.flowSpeedMultiplier,
+        `river water segmentProfiles[${index}].flowSpeedMultiplier`,
+        0.05,
+        8,
+      );
+      const rapidness = validateOptionalNumber(profile.rapidness, `river water segmentProfiles[${index}].rapidness`, 0, 1);
+      if (flowSpeedMultiplier === undefined && rapidness === undefined) {
+        throw new Error(`river water segmentProfiles[${index}] requires flowSpeedMultiplier or rapidness`);
+      }
+      if (flowSpeedMultiplier !== undefined) saved.flowSpeedMultiplier = flowSpeedMultiplier;
+      if (rapidness !== undefined) saved.rapidness = rapidness;
+      return saved;
+    });
+  }
+  if (input.reflectionMode === "sharedPlanar") water.reflectionMode = "sharedPlanar";
+  else if (input.reflectionMode !== undefined && input.reflectionMode !== "off") {
+    throw new Error("river water reflectionMode must be off or sharedPlanar");
+  }
+  if (typeof input.reflectionGroup === "string" && input.reflectionGroup.length > 0) {
+    water.reflectionGroup = input.reflectionGroup;
+  } else if (input.reflectionGroup !== undefined && input.reflectionGroup !== null) {
+    throw new Error("river water reflectionGroup must be a string, null, or omitted");
+  }
+  if (input.reflectionQuality === "low" || input.reflectionQuality === "medium" || input.reflectionQuality === "high") {
+    water.reflectionQuality = input.reflectionQuality;
+  } else if (input.reflectionQuality !== undefined && input.reflectionQuality !== null) {
+    throw new Error("river water reflectionQuality must be low, medium, high, null, or omitted");
+  }
+  const reflectionStrength = validateOptionalNumber(
+    input.reflectionStrength,
+    "river water reflectionStrength",
+    0,
+    1,
+  );
+  if (reflectionStrength !== undefined) water.reflectionStrength = Number(reflectionStrength.toFixed(3));
+  return water;
+}
+
 const LANDSCAPE_MIN_VERTICES = 65;
 const LANDSCAPE_MAX_VERTICES = 257;
 
@@ -2004,6 +2165,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("landscapes must be an array");
         })();
+  const riverWaters = layout.riverWaters === undefined
+    ? null
+    : Array.isArray(layout.riverWaters)
+      ? layout.riverWaters.map(validateRiverWater)
+      : (() => {
+          throw new Error("riverWaters must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -2088,6 +2256,7 @@ export function validateLayout(value: unknown): unknown {
   if (targetPoints) output.targetPoints = targetPoints;
   if (splines) output.splines = splines;
   if (landscapes) output.landscapes = landscapes;
+  if (riverWaters) output.riverWaters = riverWaters;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

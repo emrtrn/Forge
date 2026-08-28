@@ -4090,6 +4090,15 @@ export class EditorUi {
         this.app.setSelectedSplinePointTangentsLinked(pointId, linked),
       setSelectedReflectionCapture: (patch) => this.app.setSelectedReflectionCapture(patch),
       setSelectedLandscape: (patch) => this.app.setSelectedLandscape(patch),
+      getSelectedLandscapeRiverWaters: () => this.app.getSelectedLandscapeRiverWaters(),
+      createSelectedLandscapeRiverWater: (splineId) => this.app.createSelectedLandscapeRiverWater(splineId),
+      deleteSelectedLandscapeRiverWater: (waterId) => this.app.deleteSelectedLandscapeRiverWater(waterId),
+      setSelectedLandscapeRiverWater: (waterId, patch) =>
+        this.app.setSelectedLandscapeRiverWater(waterId, patch),
+      beginSelectedLandscapeRiverWaterRingFoam: (waterId) =>
+        this.app.beginSelectedLandscapeRiverWaterRingFoam(waterId),
+      removeSelectedLandscapeRiverWaterFoamStamp: (waterId, stampId) =>
+        this.app.removeSelectedLandscapeRiverWaterFoamStamp(waterId, stampId),
       getLandscapeSculptSettings: () => this.app.getLandscapeSculptSettings(),
       setLandscapeSculptSettings: (patch) => this.app.setLandscapeSculptSettings(patch),
       fillSelectedLandscapeLayer: (layerId) => this.app.fillSelectedLandscapeLayer(layerId),

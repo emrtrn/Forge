@@ -1,7 +1,7 @@
 # ThreeAges → Forge Geri Taşıma (Backport) Kontrol Listesi
 
 > Tarih: 2026-08-28
-> Durum: **Uygulanıyor.** Katman 0 ve Katman 1 tamamlandı; sırada Katman 2.
+> Durum: **Uygulanıyor.** Katman 0, 1 ve 2 tamamlandı; kalan yalnız Katman 3.
 > Kaynak depo: `C:\Users\emret\Desktop\Games\ThreeAges` (Forge fork'u, `origin`
 > ThreeAges / `upstream` Forge).
 > Ortak ata: `11bb20e9` (2026-07-15). O noktadan beri ThreeAges 414, Forge 25
@@ -124,7 +124,7 @@ Tek branch: `feat/threeages-backport-layer0`.
 
 Her biri kendi branch'i.
 
-- [ ] **2.1 River Water.** `LayoutRiverWater` + `LayoutRiverWaterFoamStamp` +
+- [x] **2.1 River Water.** `LayoutRiverWater` + `LayoutRiverWaterFoamStamp` +
   `LayoutRiverWaterSegmentProfile` + `RoomLayout.riverWaters[]`; Details'te
   Surface / Flow & Waves / Foam / Reflection blokları; viewport'ta gizmo ile
   taşınan Radial Foam noktaları; paylaşılan planar yansıma; Landscape
@@ -245,3 +245,27 @@ Bunlar bugün `src/game` altında ama oyuna özgü değil. Backport değil,
     clip'li apply'ın tam pass ile birebir aynı değerleri yazdığı dahil.
   - `engine/scene/landscape.ts` içindeki iki yorum fork'un oyununu adıyla
     anıyordu; jenerikleştirildi.
+- **2026-08-28** — **Katman 2 tamamlandı** (`feat/threeages-backport-layer2`,
+  dilim başına bir commit). `npm run build:verify` yeşil (1046 motor kontrolü).
+  Dilimler: 2.6 blocking-volume `navigationRole` + nav string-pulling, 2.4 actor
+  `variableOverrides`, 2.5 Skeletal Mesh Editor paketi, 2.2 mesh particle
+  renderer, 2.3 Data Table Editor, 2.1 River Water. Port sırasında ortaya
+  çıkanlar:
+  - `cloneActorInstance` yeni alanı kopyalamıyordu; düzeltilmeseydi panelden
+    yapılan her override sessizce düşerdi (panelin düzenlemeyi reddetmesinden
+    ayırt edilemez bir hata).
+  - String-pulling nav testlerini kırdı: koridor-merkezi testi artık yayılan
+    waypoint'lere değil pişmiş penalty tablosuna bakıyor, çünkü zaten temiz olan
+    gergin çizgi tercihi çıktıda göstermiyor.
+  - Burst emisyonu bilinçli davranış değişikliği (rate ile burst artık ayrık);
+    ThreeAges'in gerekçeli testi de birlikte taşındı.
+  - `SceneApp` için tam 3-way birleştirme River Water dışında da çok şey çekti
+    (landscape PBR katmanları, yinelenen metotlar); yalnız river hunk'ları
+    süzülüp uygulandı.
+  - **Runtime paritesi:** ThreeAges suyu `authoredWorld` üzerinden çiziyor
+    (Katman 3.1). Forge'da doğru yer `LevelRuntime`: yeni bir `river-waters`
+    adımı eklendi, hem `SceneApp` hem `RuntimeSceneApp` sağlıyor. Aksi hâlde
+    nehir editörde görünüp oyunda görünmezdi.
+  - Data Table Editor'ün metinleri Türkçeydi; İngilizceye çevrildi.
+  - Taşınmayan: `ANIMATION_SET_ROLES` genişlemesi, `layerAttackWhenMoving`,
+    Actor Script wheel spin — üçü de RTS sunum sözlüğü.

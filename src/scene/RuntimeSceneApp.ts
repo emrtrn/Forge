@@ -1,4 +1,4 @@
-import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, type Texture, TextureLoader, Vector2, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -316,7 +316,15 @@ import {
   resolveMeshMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/scene/assetMaterialSlotsLoader";
-import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
+import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
+import {
+  createRiverWaterObject,
+  disposeRiverWaterObject,
+  resolveRiverWater,
+  type RiverWaterObjectLike,
+} from "@engine/render-three/riverWater";
+import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
+import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import { LocaleRegistry, normalizeUiLocaleTable } from "@engine/ui/uiLocale";
@@ -654,6 +662,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private foliageBinding: FoliageRenderBinding | null = null;
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
+  /** Landscape sidecar data by actor id, kept for the River Water pass. */
+  private readonly landscapeDataById = new Map<string, ForgeLandscapeData>();
+  /** Live river-water ribbons, and the planar reflections they share. */
+  private riverWaterObjects: RiverWaterObjectLike[] = [];
+  private riverReflectionSources: PlanarReflectionSource[] = [];
+  private readonly riverWaterTextures = new Map<string, Texture>();
   /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
   private landscapeLayerTextures: Texture[] = [];
   /** Static collider entities generated from collidable runtime landscapes. */
@@ -861,6 +875,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         buildBlockingVolumes: () => this.buildRuntimeBlockingVolumes(),
         buildSplines: () => this.buildRuntimeSplines(),
         buildLandscapes: () => this.buildRuntimeLandscapes(),
+        buildRiverWaters: () => this.buildRuntimeRiverWaters(),
         buildFoliage: () => this.buildRuntimeFoliage(),
       },
       coreContent: {
@@ -1337,8 +1352,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.landscapeDataById.clear();
+    for (const object of this.riverWaterObjects) {
+      this.scene.remove(object);
+      disposeRiverWaterObject(object);
+    }
+    this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
+    for (const texture of this.riverWaterTextures.values()) texture.dispose();
+    this.riverWaterTextures.clear();
     this.landscapeColliderEntities = [];
     this.landscapeColliderObjects.clear();
     this.disposeInstanceProbeMaterials();
@@ -2387,6 +2412,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.landscapeDataById.clear();
+    for (const object of this.riverWaterObjects) {
+      this.scene.remove(object);
+      disposeRiverWaterObject(object);
+    }
+    this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
     this.landscapeColliderEntities = [];
@@ -4022,9 +4055,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
     const datas: ForgeLandscapeData[] = [];
+    this.landscapeDataById.clear();
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
       datas.push(data);
+      // River Water resolves its shape from a Landscape spline, so the data has
+      // to outlive this pass rather than being re-fetched per water body.
+      this.landscapeDataById.set(actor.id, data);
       const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data);
       const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
       this.landscapeObjects.push(object);
@@ -4037,6 +4074,90 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
     }
     await this.buildRuntimeLandscapeSplineMeshes(datas);
+  }
+
+  /**
+   * Builds the visible water ribbons (`layout.riverWaters`) for Play, from the
+   * same resolver and geometry the editor viewport uses — a river must not look
+   * one way while authoring and another in the game.
+   *
+   * Presentation only: a water body owns no collision and no navigation, so this
+   * never touches the physics scene document. Bodies that share a plane and a
+   * reflection group also share one planar-reflection render.
+   */
+  private async buildRuntimeRiverWaters(): Promise<void> {
+    for (const object of this.riverWaterObjects) {
+      this.scene.remove(object);
+      disposeRiverWaterObject(object);
+    }
+    this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
+
+    const waters = this.layout?.riverWaters ?? [];
+    if (waters.length === 0) return;
+    const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
+    for (const actor of waters) {
+      const resolved = resolveRiverWater(actor);
+      const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
+      const data = landscape ? this.landscapeDataById.get(landscape.id) : undefined;
+      const spline = data?.splines?.find((candidate) => candidate.id === resolved.splineRef);
+      if (!landscape || !data || !spline) {
+        console.warn(
+          `[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`,
+        );
+        continue;
+      }
+      let reflectionSource: PlanarReflectionSource | null = null;
+      const planeY = landscape.position[1] + resolved.surfaceLevel;
+      const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+      if (reflectionKey && resolved.reflectionQuality !== "low") {
+        reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
+        if (!reflectionSource) {
+          reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+          reflectionSourceByKey.set(reflectionKey, reflectionSource);
+          this.riverReflectionSources.push(reflectionSource);
+        }
+      }
+      const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
+      const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
+      const object = createRiverWaterObject(
+        {
+          ...resolved,
+          spline,
+          landscapeData: data,
+          position: [...landscape.position],
+          rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
+          foamNoiseMap,
+          reflectionSource,
+        },
+        normalMap,
+      );
+      object.raycast = () => {};
+      this.scene.add(object);
+      this.riverWaterObjects.push(object);
+    }
+  }
+
+  /** Loads a repeatable manifest texture shared by the water materials. */
+  private async loadRuntimeRiverWaterTexture(id: string, purpose: string): Promise<Texture | null> {
+    const cached = this.riverWaterTextures.get(id);
+    if (cached) return cached;
+    const manifest = this.assetManifest;
+    const record = manifest ? assetRecordById(manifest, id) : null;
+    if (!record || assetType(record) !== "texture") {
+      console.warn(`[river-water] ${purpose} texture is not a manifest texture: ${id}.`);
+      return null;
+    }
+    try {
+      const texture = await this.textureLoader.loadAsync(projectFileUrl(assetPath(record)));
+      texture.wrapS = texture.wrapT = RepeatWrapping;
+      this.riverWaterTextures.set(id, texture);
+      return texture;
+    } catch (error) {
+      console.warn(`[river-water] Failed to load ${purpose} texture: ${id}.`, error);
+      return null;
+    }
   }
 
   /**

@@ -465,6 +465,11 @@ import {
 } from "../engine/vfx/particleEffectParser";
 import { ParticleEffect } from "../engine/render-three/particleEffect";
 import { MeshParticleEffect } from "../engine/render-three/meshParticleEffect";
+import { resolveRiverWater, riverWaterReflectionGroupKey } from "../engine/scene/riverWater";
+import {
+  PLANAR_REFLECTION_EXCLUDED_LAYER,
+  planarReflectionLayerMask,
+} from "../engine/render-three/planarReflectionSource";
 import { VfxSubsystem } from "../engine/render-three/vfxSubsystem";
 import type { RuntimeParticleEffect } from "../engine/vfx/particleEffectTypes";
 import {
@@ -623,6 +628,7 @@ import {
   validateReflectiveSurface,
   validateSphereReflectionCapture,
   validateBlockingVolume,
+  validateRiverWater,
   validateAiNavigationVolume,
   validateTargetPoint,
   validateSplineActor,
@@ -22406,6 +22412,145 @@ check("uniqueBlockingVolumeId/Name avoid collisions", () => {
   const volumes = [{ id: "blocking-volume-1", name: "Blocking Volume", position: [0, 0, 0] }];
   assert.equal(uniqueBlockingVolumeId(volumes), "blocking-volume-2");
   assert.equal(uniqueBlockingVolumeName("Blocking Volume", volumes), "Blocking Volume 2");
+});
+
+check("River Water Body resolves defaults and only saves presentation fields", () => {
+  assert.deepEqual(resolveRiverWater(null), {
+    id: "river-water",
+    name: "River Water",
+    hidden: false,
+    landscapeRef: "",
+    splineRef: "",
+    surfaceLevel: 0,
+    widthScale: 1,
+    flowSpeed: 0.35,
+    normalScale: 1,
+    normalTexture: "t-water-n",
+    deepColor: "#063447",
+    shallowColor: "#2f8b91",
+    opacity: 0.82,
+    bedVisibility: 0.05,
+    absorptionDistance: 0.5,
+    waveAmplitude: 0.04,
+    waveLength: 3.5,
+    foamColor: "#e8fff5",
+    foamOpacity: 0.92,
+    shoreWaveSpacing: 5,
+    shoreWaveSpeed: 0.34,
+    shoreWaveReach: 0.36,
+    shoreWaveBreakupScale: 1.25,
+    foamStamps: [],
+    segmentProfiles: [],
+    reflectionMode: "off",
+    reflectionGroup: null,
+    reflectionQuality: "medium",
+    reflectionStrength: 0.34,
+  });
+  assert.deepEqual(validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    surfaceLevel: -1.4,
+    widthScale: 0.88,
+    flowSpeed: 0.35,
+    deepColor: "#123456",
+    opacity: 0.7,
+    bedVisibility: 0.2,
+    absorptionDistance: 0.75,
+    waveAmplitude: 0.08,
+    waveLength: 4,
+    foamColor: "#dffcff",
+    foamOpacity: 0.7,
+    shoreWaveSpacing: 4.5,
+    shoreWaveSpeed: 0.4,
+    shoreWaveReach: 0.4,
+    shoreWaveBreakupScale: 1.1,
+    foamStamps: [
+      { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
+      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
+      { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
+    ],
+    segmentProfiles: [
+      { splineSegmentRef: "segment-2", flowSpeedMultiplier: 1.5, rapidness: 0.7 },
+    ],
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
+    reflectionStrength: 0.85,
+    ignoredCollision: true,
+  }), {
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    surfaceLevel: -1.4,
+    widthScale: 0.88,
+    flowSpeed: 0.35,
+    deepColor: "#123456",
+    opacity: 0.7,
+    bedVisibility: 0.2,
+    absorptionDistance: 0.75,
+    waveAmplitude: 0.08,
+    waveLength: 4,
+    foamColor: "#dffcff",
+    foamOpacity: 0.7,
+    shoreWaveSpacing: 4.5,
+    shoreWaveSpeed: 0.4,
+    shoreWaveReach: 0.4,
+    shoreWaveBreakupScale: 1.1,
+    foamStamps: [
+      { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
+      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
+      { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
+    ],
+    segmentProfiles: [
+      { splineSegmentRef: "segment-2", flowSpeedMultiplier: 1.5, rapidness: 0.7 },
+    ],
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
+    reflectionStrength: 0.85,
+  });
+  // Strength is the visible-amount control and is authored per body, so it must
+  // survive the save round trip and stay inside the 0..1 the shader blends with.
+  assert.throws(() => validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionStrength: 1.5,
+  }));
+  assert.equal(resolveRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionMode: "sharedPlanar",
+    reflectionStrength: 0.9,
+  }).reflectionStrength, 0.9);
+  // Quality picks a capture budget, never how much of it reaches the surface —
+  // two bodies that differ only in quality must resolve the same strength.
+  assert.equal(
+    resolveRiverWater({ id: "a", landscapeRef: "l", splineRef: "s", reflectionQuality: "high" }).reflectionStrength,
+    resolveRiverWater({ id: "b", landscapeRef: "l", splineRef: "s", reflectionQuality: "medium" }).reflectionStrength,
+  );
+  assert.throws(() => validateRiverWater({ id: "river-1", landscapeRef: "landscape-1" }));
+  assert.throws(() => validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    foamStamps: [{ id: "bad-strip", kind: "strip", position: [0, 0, 0], radius: 1, intensity: 1 }],
+  }));
+  const shared = resolveRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
+  });
+  assert.equal(riverWaterReflectionGroupKey(shared, -1.4), "river-a:-1.400:high");
+  assert.equal(riverWaterReflectionGroupKey({ ...shared, reflectionQuality: "low" }, -1.4), null);
+  assert.notEqual(riverWaterReflectionGroupKey(shared, -1.5), riverWaterReflectionGroupKey(shared, -1.4));
+  assert.equal(PLANAR_REFLECTION_EXCLUDED_LAYER, 31);
+  assert.equal(planarReflectionLayerMask(0xffffffff) >>> 0, 0x7fffffff);
 });
 
 check("blockingVolumeCollisionDef builds one solid primitive per shape", () => {

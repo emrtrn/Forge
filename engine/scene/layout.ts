@@ -862,6 +862,106 @@ export interface LayoutLandscape {
   collision?: boolean;
 }
 
+/** A static local foam mask authored independently of RTS units and actors. */
+export interface LayoutRiverWaterFoamStamp {
+  id: string;
+  /** A radial foam point or a capsule-like strip on the river surface. */
+  kind: "point" | "strip";
+  /** Landscape-local centre/start position; only X/Z affect the water ribbon. */
+  position: Vec3;
+  /** Landscape-local strip endpoint. Required for `strip`. */
+  endPosition?: Vec3;
+  /** Influence radius in world units. */
+  radius: number;
+  /** Additive foam contribution, 0..1. */
+  intensity: number;
+  /** Legacy concentric-ring setting retained only for old saved layouts. */
+  ringCount?: number;
+  /** Legacy concentric-ring setting retained only for old saved layouts. */
+  expansionSpeed?: number;
+}
+
+/** Per-spline-segment water presentation override for authored rapids. */
+export interface LayoutRiverWaterSegmentProfile {
+  splineSegmentRef: string;
+  /** Multiplies the body-wide flow speed for this segment. */
+  flowSpeedMultiplier?: number;
+  /** Explicit rapid/foam contribution, 0..1. */
+  rapidness?: number;
+}
+
+/**
+ * A visible river-water body whose shape is resolved from one Landscape spline.
+ * The Landscape remains the authority for spline shape and terrain deformation;
+ * this actor owns only water presentation. It intentionally has no collision or
+ * navigation fields: RTS traversal stays authored by blockers and bridge markers.
+ */
+export interface LayoutRiverWater {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  /** Id of the placed Landscape actor that owns the referenced spline. */
+  landscapeRef: string;
+  /** Id of a spline in that Landscape's `*.landscape.json` sidecar. */
+  splineRef: string;
+  /** Landscape-local, horizontal water height. */
+  surfaceLevel?: number;
+  /** Multiplier over each Landscape spline point's authored width. */
+  widthScale?: number;
+  /** UV-space normal-flow speed in repeats per second. */
+  flowSpeed?: number;
+  /** Repetition multiplier for the flowing normal texture. */
+  normalScale?: number;
+  /** Manifest texture asset id; absent uses the built-in water normal default. */
+  normalTexture?: string;
+  /** Deep-channel colour (hex `#rrggbb`). */
+  deepColor?: string;
+  /** Shallow-bank colour (hex `#rrggbb`). */
+  shallowColor?: string;
+  /** Maximum material alpha, 0..1. */
+  opacity?: number;
+  /** How much of the terrain bed remains visible through the water: 0 = hidden, 1 = clear. */
+  bedVisibility?: number;
+  /** Local water-depth distance over which bed visibility is absorbed, in world units. */
+  absorptionDistance?: number;
+  /** Vertical-only wave amplitude in world units; shore vertices fade to zero. */
+  waveAmplitude?: number;
+  /** Main wave length in world units. */
+  waveLength?: number;
+  /** Tint used by shore, rapid and strip foam. */
+  foamColor?: string;
+  /** Visual blend strength of shore, rapid and strip foam, 0..1. */
+  foamOpacity?: number;
+  /** Number of visible inward-moving shore-wave bands per bank. */
+  shoreWaveSpacing?: number;
+  /** Shore-wave travel speed from bank toward the river centre. */
+  shoreWaveSpeed?: number;
+  /** Normalized inward distance from each bank before shore waves fade out. */
+  shoreWaveReach?: number;
+  /** Tiling factor for the shore-wave breakup texture. */
+  shoreWaveBreakupScale?: number;
+  /** Static foam masks for bridge piers, rocks, rapids, and other authored obstacles. */
+  foamStamps?: LayoutRiverWaterFoamStamp[];
+  /** Static flow/rapid overrides keyed by Landscape spline segment id. */
+  segmentProfiles?: LayoutRiverWaterSegmentProfile[];
+  /** `sharedPlanar` lets same-plane bodies share one reflection render; default is off. */
+  reflectionMode?: "off" | "sharedPlanar";
+  /** Optional shared planar-reflection group. Bodies on different planes must not share it. */
+  reflectionGroup?: string;
+  /** Low disables planar reflection; Medium/High select its target/update budget. */
+  reflectionQuality?: "low" | "medium" | "high";
+  /**
+   * How much of the planar-reflection capture reaches the surface, 0..1. Quality
+   * only buys resolution and update rate, so this is the one knob that changes
+   * how visible a reflection is; the shader still attenuates it by depth and foam.
+   */
+  reflectionStrength?: number;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -894,6 +994,8 @@ export interface RoomLayout {
   splines?: LayoutSplineActor[];
   /** Placed Landscape (heightfield terrain) actors. Faz 1 UX keeps this to one entry. */
   landscapes?: LayoutLandscape[];
+  /** Spline-driven visual water bodies. They do not own collision or navigation. */
+  riverWaters?: LayoutRiverWater[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

@@ -122,6 +122,56 @@ export const MENU_DUCK_MIX: BusDuckMix = {
 };
 
 /**
+ * Duck applied while a critical notice sounds: music and ambience step back so
+ * the alert reads, other sfx are trimmed a little, and `notifications` itself is
+ * untouched. Short — restore as soon as the notice's clip is done.
+ *
+ * Deliberately gentle. The goal is that the alert *wins*, not that the mix
+ * visibly breathes around it; a duck that fires several times a minute under
+ * live play is heard as an audible side-chain pump.
+ */
+export const NOTIFICATION_DUCK_MIX: BusDuckMix = {
+  music: 0.6,
+  ambience: 0.7,
+  sfx: 0.8,
+};
+
+/**
+ * Duck applied while a character speaks — the gentlest of the four, and the one
+ * with the narrowest aim.
+ *
+ * Only nearby action needs to come down under a line, so `sfx` is the bus that
+ * moves and the rest barely does. Music is left where it is on purpose: a bark
+ * is one or two seconds and lands several times a minute, so a bed that dipped
+ * for each one would pump audibly — the same failure the notice duck avoids,
+ * but far more often.
+ */
+export const VOICE_DUCK_MIX: BusDuckMix = {
+  sfx: 0.7,
+  ambience: 0.85,
+};
+
+/**
+ * Duck applied while a stinger announces a change of state (a victory, a
+ * defeat, a milestone) — and the one duck that **cannot name `music`**.
+ *
+ * Stingers ride the `music` bus by design: they are written with the score, and
+ * a player who silenced the music has asked not to hear them. That routing is
+ * also a trap for this duck, because pulling the music bus down here would pull
+ * the stinger down with it — the announcement would duck itself. So the bus duck
+ * clears the *world* around the stinger, and the bed underneath is handled where
+ * it can be handled without touching the bus: `MusicDirector.setDuck`, which
+ * scales the playing track's own gain.
+ */
+export const STINGER_DUCK_MIX: BusDuckMix = {
+  ambience: 0.4,
+  sfx: 0.5,
+};
+
+/** How far the music *bed* is pulled under a stinger — see {@link STINGER_DUCK_MIX}. */
+export const STINGER_MUSIC_BED_DUCK = 0.3;
+
+/**
  * The strongest duck per bus across everything currently ducking.
  *
  * Minimum rather than product, and that is a decision about what a duck means:

@@ -1044,17 +1044,86 @@ import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAn
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 
+/**
+ * The three entry points every check in this suite goes through.
+ *
+ * Two knobs, both set by `tools/run-engine-tests.mjs` from its own flags:
+ *
+ *  - `ENGINE_TESTS_FILTER` — comma-separated, case-insensitive substrings,
+ *    OR'd. A check whose label matches none of them is **skipped without being
+ *    run**, which is what makes a filtered run fast rather than merely quiet.
+ *    A filtered run is never a green build and says so.
+ *  - `ENGINE_TESTS_TIMING` — appends each check's wall time to its line. This
+ *    is the instrument: which checks are expensive is a measurement, and a
+ *    suite that cannot be measured gets optimised by guesswork.
+ *
+ * {@link checkSlow} is the third entry, for a check that costs real time (a
+ * full simulated run, a large fixture). Membership is decided by *duration*,
+ * never by importance — it is an "expensive tests" bucket, not an "unimportant
+ * tests" one. A bare `npm run test:engine` skips them; `--slow`, CI and
+ * `build:verify` run everything, and so does any filtered run, so narrowing to
+ * a subject never hides that subject's expensive checks.
+ */
+const filterTerms = (process.env.ENGINE_TESTS_FILTER ?? "")
+  .split(",")
+  .map((term) => term.trim().toLowerCase())
+  .filter((term) => term.length > 0);
+const showTiming = process.env.ENGINE_TESTS_TIMING === "1";
+/** A filter implies slow: narrowing to a subject must not hide its slow checks. */
+const slowEnabled = process.env.ENGINE_TESTS_SLOW === "1" || filterTerms.length > 0;
+
 let checks = 0;
-const check = (label: string, fn: () => void): void => {
-  fn();
+let skipped = 0;
+let skippedSlow = 0;
+
+const matchesFilter = (label: string): boolean => {
+  if (filterTerms.length === 0) return true;
+  const lowered = label.toLowerCase();
+  return filterTerms.some((term) => lowered.includes(term));
+};
+
+const report = (label: string, startedAt: number): void => {
   checks += 1;
-  console.log(`  ok: ${label}`);
+  const elapsed = showTiming ? ` (${(performance.now() - startedAt).toFixed(0)} ms)` : "";
+  console.log(`  ok: ${label}${elapsed}`);
+};
+
+const check = (label: string, fn: () => void): void => {
+  if (!matchesFilter(label)) {
+    skipped += 1;
+    return;
+  }
+  const startedAt = performance.now();
+  fn();
+  report(label, startedAt);
 };
 const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
+  if (!matchesFilter(label)) {
+    skipped += 1;
+    return;
+  }
+  const startedAt = performance.now();
   await fn();
-  checks += 1;
-  console.log(`  ok: ${label}`);
+  report(label, startedAt);
 };
+/** A check expensive enough that the default suite skips it. See the block above. */
+const checkSlow = (label: string, fn: () => void): void => {
+  if (!slowEnabled) {
+    skippedSlow += 1;
+    return;
+  }
+  check(label, fn);
+};
+/** Async form of {@link checkSlow}. */
+const checkSlowAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
+  if (!slowEnabled) {
+    skippedSlow += 1;
+    return;
+  }
+  await checkAsync(label, fn);
+};
+void checkSlow;
+void checkSlowAsync;
 
 registerBuildManifestParityTests(check);
 await registerLevelRuntimeTests(check, checkAsync);
@@ -29961,7 +30030,26 @@ await checkAsync("spawn coordinator frame-budget queues requests and cancels old
   assert.deepEqual(registered, ["spawned:0", "spawned:1"]);
 });
 
-console.log(`[engine-tests] ${checks} checks passed`);
+if (skipped > 0) {
+  // A filtered run proves something about one subject and nothing about the
+  // suite. Saying so is the point: a green line here would be a lie the next
+  // reader acts on.
+  console.log(
+    `[engine-tests] PARTIAL: ${checks} passed, ${skipped} skipped by ` +
+      `ENGINE_TESTS_FILTER="${process.env.ENGINE_TESTS_FILTER ?? ""}" — not a green build`,
+  );
+  if (checks === 0) {
+    console.error("[engine-tests] the filter matched no check at all — probably a typo");
+    process.exitCode = 1;
+  }
+} else if (skippedSlow > 0) {
+  console.log(
+    `[engine-tests] FAST: ${checks} checks passed, ${skippedSlow} slow check(s) skipped ` +
+      "— run `npm run test:engine:slow` (or --slow) for the full suite",
+  );
+} else {
+  console.log(`[engine-tests] ${checks} checks passed`);
+}
 
 function minimalGlbJson(json: unknown): Uint8Array {
   const encoder = new TextEncoder();

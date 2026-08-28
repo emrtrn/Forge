@@ -56,10 +56,21 @@ engine/editor.
   Manifest paths are relative to the public root.
 - After editing TypeScript, run `npx tsc --noEmit`; the dev server skips
   type-checking.
+- **Engine test levels.** `npm run test:engine` is the full suite.
+  `npm run test:engine -- --filter <terms>` runs only checks whose label matches
+  (comma-separated, case-insensitive, OR'd) — cheap while iterating, and it
+  prints `PARTIAL … not a green build`, because it is not one; a filter that
+  matches nothing exits 1 so a typo is never silent. `--timing` prints each
+  check's duration, and `--slow` (or `npm run test:engine:slow`) adds any check
+  tagged `checkSlow` — an *expensive tests* bucket, not an unimportant one.
+  A filtered run always includes slow checks, so narrowing to a subject cannot
+  hide that subject's expensive ones. Rationale and the split plan this belongs
+  to: `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md`.
 - **CI** (`.github/workflows/ci.yml`) runs `build:verify`
-  (`tsc --noEmit` + `vite build` + `test:engine` + `verify:dist --strict`) and
-  `check:assets` on every push/PR to `main` — the automated mirror of the local
-  gate. Keep both green; deploy stays out of CI (per-fork concern).
+  (`tsc --noEmit` + `vite build` + `test:engine:slow` + `verify:dist --strict`)
+  and `check:assets` on every push/PR to `main` — the automated mirror of the
+  local gate. CI never runs filtered or FAST. Keep both green; deploy stays out
+  of CI (per-fork concern).
 - **Save-validator safety net (Faz G):** every save now compares what was sent
   with what survived (`tools/droppedFields.ts`). A field the allowlist does not
   copy is reported — dev-server console `[save] …`, `dropped[]` in the response,

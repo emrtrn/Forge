@@ -35,8 +35,13 @@ jobs:
         run: npm ci
 
       # build:verify = verify:imports (source-level module-boundary scan) +
-      # build (tsc --noEmit + vite build) + test:engine + verify:dist --strict.
-      # Single gate, matches the local pre-`[x]` ritual.
+      # build (tsc --noEmit + vite build) + test:engine:slow + verify:dist
+      # --strict. Single gate, matches the local pre-`[x]` ritual.
+      #
+      # `test:engine:slow`, not `test:engine`: the default suite is allowed to
+      # skip checks tagged expensive, and CI is the run that must not. Wiring
+      # the gate to the slow script means a future speed-up of the default can
+      # never quietly narrow what CI proves.
       - name: Verify (import graph, type-check, engine tests, build, strict dist scan)
         run: npm run build:verify
 

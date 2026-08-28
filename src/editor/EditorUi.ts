@@ -2792,6 +2792,7 @@ export class EditorUi {
       ...(layer1AoTexturePath ? { layer1AoTextureUrl: projectFileUrl(layer1AoTexturePath) } : {}),
       ...(layerBlendMaskTexturePath ? { layerBlendMaskTextureUrl: projectFileUrl(layerBlendMaskTexturePath) } : {}),
       uvTiling: def.uvTiling,
+      flipY: def.flipY,
       roughness: def.roughness,
       metalness: def.metalness,
       aoIntensity: def.aoIntensity,

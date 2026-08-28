@@ -20,17 +20,23 @@ import {
   FORGE_MATERIAL_LAYER_BLEND_DRIVERS,
   FORGE_MATERIAL_SIDES,
   FORGE_MATERIAL_TYPES,
+  defaultForgeMaterialNormalMotion,
   normalizeForgeMaterialDef,
   type ForgeMaterialAlphaMode,
   type ForgeMaterialDef,
   type ForgeMaterialLayerBlend,
   type ForgeMaterialLayerBlendDriver,
+  type ForgeMaterialNormalMotion,
   type ForgeMaterialSide,
   type ForgeMaterialType,
 } from "@engine/assets/material";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadMaterialAsset, saveMaterialAsset } from "@/editor/materialStore";
-import { createThreeMaterialFromForgeDef } from "@engine/render-three/materials";
+import {
+  advanceForgeMaterialAnimations,
+  createThreeMaterialFromForgeDef,
+  hasForgeMaterialNormalMotion,
+} from "@engine/render-three/materials";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 type StatusTone = "info" | "success" | "warning" | "error";
@@ -129,6 +135,7 @@ export class MaterialEditor {
   private dirty = false;
   private disposed = false;
   private contextLost = false;
+  private previewAnimationFrame = 0;
   private lastPreviewShaderError: string | null = null;
   private textureSearchText = "";
   private textureSearchUntil = 0;
@@ -302,7 +309,9 @@ export class MaterialEditor {
         ${this.textureColorNumberRow("Emissive Map", "emissiveTexture", "emissive", this.def.emissive, "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
         ${this.textureNumberRow("Ambient Occlusion Map", "aoTexture", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
         ${this.vector2Row("UV Tiling", "uvTilingX", "uvTilingY", this.def.uvTiling.x, this.def.uvTiling.y)}
+        <label class="me-row" title="Flip textures vertically on upload (three.js' default). Leave it on for engine-generated UVs — landscape layers, UVW projection, primitives. Turn it OFF when this material is assigned to a glTF/GLB mesh's material slot: glTF UVs run downward from the image top, so a flipped texture binds upside down and reads as a broken UV layout."><span>Flip Y</span><input data-me-field="flipY" type="checkbox" ${this.def.flipY ? "checked" : ""} /></label>
       </div>
+      ${this.normalMotionSection()}
       ${this.layerBlendSection()}
       ${blend ? this.layerSettingsSection(blend) : ""}
     `;
@@ -319,6 +328,25 @@ export class MaterialEditor {
       });
   }
 
+  private normalMotionSection(): string {
+    const motion = this.def.normalMotion ?? defaultForgeMaterialNormalMotion();
+    const enabled = this.def.normalMotion !== null;
+    return `
+      <div class="me-section">
+        <div class="me-section-title">Normal Motion</div>
+        <label class="me-row" title="Samples the same normal map twice with independent UV motion."><span>Enabled</span><input data-me-field="normalMotionEnabled" type="checkbox" ${enabled ? "checked" : ""} /></label>
+        ${enabled ? `
+          ${this.numberRow("Primary Speed X", "normalMotionPrimaryX", motion.primaryVelocity.x, -10, 10, 0.001)}
+          ${this.numberRow("Primary Speed Y", "normalMotionPrimaryY", motion.primaryVelocity.y, -10, 10, 0.001)}
+          ${this.numberRow("Second Tiling X", "normalMotionSecondaryTilingX", motion.secondaryTiling.x, 0.001, 100, 0.01)}
+          ${this.numberRow("Second Tiling Y", "normalMotionSecondaryTilingY", motion.secondaryTiling.y, 0.001, 100, 0.01)}
+          ${this.numberRow("Second Speed X", "normalMotionSecondaryX", motion.secondaryVelocity.x, -10, 10, 0.001)}
+          ${this.numberRow("Second Speed Y", "normalMotionSecondaryY", motion.secondaryVelocity.y, -10, 10, 0.001)}
+          ${this.numberRow("Normal Strength", "normalMotionStrength", motion.strength, 0.05, 4, 0.01)}
+        ` : ""}
+      </div>`;
+  }
+
   private enumOptions<T extends string>(values: readonly T[], current: T): string {
     return values
       .map((value) => `<option value="${value}" ${value === current ? "selected" : ""}>${value}</option>`)
@@ -327,10 +355,19 @@ export class MaterialEditor {
 
   private numberRow(
     label: string,
-    field: keyof Pick<
-      ForgeMaterialDef,
-      "roughness" | "metalness" | "aoIntensity" | "opacity" | "alphaTest" | "emissiveIntensity"
-    >,
+    field: (
+      | keyof Pick<
+          ForgeMaterialDef,
+          "roughness" | "metalness" | "aoIntensity" | "opacity" | "alphaTest" | "emissiveIntensity"
+        >
+      | "normalMotionPrimaryX"
+      | "normalMotionPrimaryY"
+      | "normalMotionSecondaryTilingX"
+      | "normalMotionSecondaryTilingY"
+      | "normalMotionSecondaryX"
+      | "normalMotionSecondaryY"
+      | "normalMotionStrength"
+    ),
     value: number,
     min: number,
     max: number,
@@ -647,8 +684,17 @@ export class MaterialEditor {
       next.ormTexture = input.value || null;
       next.maskTexture = null;
     }
+    else if (field === "flipY") next.flipY = !(input instanceof HTMLInputElement) || input.checked;
     else if (field === "uvTilingX") next.uvTiling = { ...next.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "uvTilingY") next.uvTiling = { ...next.uvTiling, y: numberInput(input.value, 0.001, 100) };
+    else if (field === "normalMotionEnabled") {
+      next.normalMotion = input instanceof HTMLInputElement && input.checked
+        ? defaultForgeMaterialNormalMotion()
+        : null;
+    }
+    else if (field.startsWith("normalMotion")) {
+      next.normalMotion = this.applyNormalMotionField(next.normalMotion, field, input);
+    }
     else if (field === "roughness") next.roughness = numberInput(input.value, 0, 1);
     else if (field === "metalness") next.metalness = numberInput(input.value, 0, 1);
     else if (field === "aoIntensity") next.aoIntensity = numberInput(input.value, 0, 1);
@@ -670,12 +716,33 @@ export class MaterialEditor {
     this.titleEl.textContent = this.def.name;
     this.syncFieldControls(field, input.value);
     this.markDirty();
-    if (field === "layerBlendEnabled" || field === "layerBlendDriver" || field === "useBaseColorAlphaForOpacity") this.renderDetails();
+    if (
+      field === "layerBlendEnabled" ||
+      field === "layerBlendDriver" ||
+      field === "useBaseColorAlphaForOpacity" ||
+      field === "normalMotionEnabled"
+    ) this.renderDetails();
     await this.updatePreviewMaterial();
     this.warnIfTransparentMaterial(field);
     this.warnIfBaseColorAlphaOpacity(field);
     this.warnIfSurfaceMapUsesScalar(field);
     this.warnIfLayerBlendMaskUsesWrongTexture(field);
+  }
+
+  private applyNormalMotionField(
+    current: ForgeMaterialNormalMotion | null,
+    field: string,
+    input: HTMLInputElement | HTMLSelectElement,
+  ): ForgeMaterialNormalMotion {
+    const next = current ?? defaultForgeMaterialNormalMotion();
+    if (field === "normalMotionPrimaryX") next.primaryVelocity = { ...next.primaryVelocity, x: numberInput(input.value, -10, 10) };
+    else if (field === "normalMotionPrimaryY") next.primaryVelocity = { ...next.primaryVelocity, y: numberInput(input.value, -10, 10) };
+    else if (field === "normalMotionSecondaryTilingX") next.secondaryTiling = { ...next.secondaryTiling, x: numberInput(input.value, 0.001, 100) };
+    else if (field === "normalMotionSecondaryTilingY") next.secondaryTiling = { ...next.secondaryTiling, y: numberInput(input.value, 0.001, 100) };
+    else if (field === "normalMotionSecondaryX") next.secondaryVelocity = { ...next.secondaryVelocity, x: numberInput(input.value, -10, 10) };
+    else if (field === "normalMotionSecondaryY") next.secondaryVelocity = { ...next.secondaryVelocity, y: numberInput(input.value, -10, 10) };
+    else if (field === "normalMotionStrength") next.strength = numberInput(input.value, 0.05, 4);
+    return next;
   }
 
   private applyLayerBlendField(
@@ -823,6 +890,7 @@ export class MaterialEditor {
       previousTextures.forEach((texture) => texture.dispose());
       previousMaterial?.dispose();
       this.loadedTextures.push(...loadedTextures);
+      this.syncPreviewAnimation();
     } catch (error) {
       loadedTextures.forEach((texture) => texture.dispose());
       this.setStatus(`Preview texture failed: ${describeError(error)}`, "error");
@@ -855,7 +923,26 @@ export class MaterialEditor {
 
   private renderPreview(): void {
     if (this.disposed || this.contextLost) return;
+    advanceForgeMaterialAnimations(performance.now() / 1000);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private syncPreviewAnimation(): void {
+    if (!hasForgeMaterialNormalMotion(this.previewMaterial)) {
+      if (this.previewAnimationFrame) cancelAnimationFrame(this.previewAnimationFrame);
+      this.previewAnimationFrame = 0;
+      return;
+    }
+    if (this.previewAnimationFrame) return;
+    const tick = () => {
+      if (this.disposed || !hasForgeMaterialNormalMotion(this.previewMaterial)) {
+        this.previewAnimationFrame = 0;
+        return;
+      }
+      this.previewAnimationFrame = requestAnimationFrame(tick);
+      this.renderPreview();
+    };
+    this.previewAnimationFrame = requestAnimationFrame(tick);
   }
 
   private onContextLost = (event: Event): void => {
@@ -898,6 +985,8 @@ export class MaterialEditor {
     if (this.disposed) return;
     if (this.dirty && !window.confirm("Close Material Editor without saving?")) return;
     this.disposed = true;
+    if (this.previewAnimationFrame) cancelAnimationFrame(this.previewAnimationFrame);
+    this.previewAnimationFrame = 0;
     window.removeEventListener("resize", this.resize);
     this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);

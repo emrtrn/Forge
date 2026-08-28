@@ -1,7 +1,7 @@
 # ThreeAges → Forge Geri Taşıma (Backport) Kontrol Listesi
 
 > Tarih: 2026-08-28
-> Durum: **Uygulanıyor.** Katman 0 tamamlandı; sırada Katman 1.
+> Durum: **Uygulanıyor.** Katman 0 ve Katman 1 tamamlandı; sırada Katman 2.
 > Kaynak depo: `C:\Users\emret\Desktop\Games\ThreeAges` (Forge fork'u, `origin`
 > ThreeAges / `upstream` Forge).
 > Ortak ata: `11bb20e9` (2026-07-15). O noktadan beri ThreeAges 414, Forge 25
@@ -99,23 +99,23 @@ Tek branch: `feat/threeages-backport-layer0`.
 
 ## Katman 1 — Başkalarının bağımlılığı
 
-- [ ] **1.1 Materyal `flipY`.** Motor üretimi UV'ler (landscape katmanları, UVW
+- [x] **1.1 Materyal `flipY`.** Motor üretimi UV'ler (landscape katmanları, UVW
   projeksiyon, primitifler) çevrilmiş varsayılanı ister, glTF UV'leri istemez.
   Materyal bazlı bayrak + Material Editor'de tooltip'li onay kutusu.
   → `engine/assets/material.ts`, `engine/render-three/textureConfig.ts`,
   `engine/render-three/materials.ts`, `src/editor/MaterialEditor.ts`,
   `tools/saveValidator.ts`
-- [ ] **1.2 Materyal normal motion.** `ForgeMaterialNormalMotion` — aynı normal
+- [x] **1.2 Materyal normal motion.** `ForgeMaterialNormalMotion` — aynı normal
   haritasını iki bağımsız UV hareketiyle örnekleme. **River Water bunu
   kullanıyor**, o yüzden Katman 2'den önce gelir.
   → aynı dosyalar + `advanceForgeMaterialAnimations` kare kancası
-- [ ] **1.3 Landscape spline performansı.** `SplineCorridorIndex` (uniform grid),
+- [x] **1.3 Landscape spline performansı.** `SplineCorridorIndex` (uniform grid),
   `clip`'li apply, `landscapeGridBoundsForLocalBox`. Apply pass ağ boyutunda
   kareselleşiyordu.
   → `engine/scene/landscape.ts`, `engine/scene/landscapeSplineAdapter.ts`
-- [ ] **1.4 `LandscapeRectPaint` + `blendLandscapeLayerWeight`.** Çizgi yerine
+- [x] **1.4 `LandscapeRectPaint` + `blendLandscapeLayerWeight`.** Çizgi yerine
   alan boyama (bina ayak izi, açıklık), yumuşak köşeli pad.
-- [ ] **1.5 Landscape spline `smoothness`.** Köşe tanjantı; 0 = düz parçaları
+- [x] **1.5 Landscape spline `smoothness`.** Köşe tanjantı; 0 = düz parçaları
   izleyen spline. Yokluğu tarihsel 0.5'i korur.
 
 ---
@@ -219,3 +219,26 @@ Bunlar bugün `src/game` altında ama oyuna özgü değil. Backport değil,
     korunuyor.
   - Landscape "High" preset'i yalnız UI işiydi: `saveValidator`'ın
     `LANDSCAPE_MAX_VERTICES` sınırı zaten 257.
+- **2026-08-28** — **Katman 1 tamamlandı** (aynı branch). Forge bu dilimin beş
+  dosyasının hiçbirine fork noktasından beri dokunmamıştı, bu yüzden materyal ve
+  landscape değişiklikleri ThreeAges'ten `git apply` ile temiz indi; elle
+  yapılan yalnızca allowlist, kare-döngüsü kancaları ve testler oldu.
+  `npm run build:verify` yeşil (1030 motor kontrolü). Port sırasında ortaya
+  çıkanlar:
+  - Save validator'a `flipY`, `normalMotion` (yeni
+    `validateForgeMaterialNormalMotion`) ve landscape spline `smoothness`
+    eklendi — üçü de allowlist'e girmeseydi sessizce düşecekti.
+  - Materyal round-trip testleri iki yeni alanı görünce kırıldı; bu tam olarak
+    drift ağının işi. Beklenen nesneler güncellendi, ayrıca `flipY` ve
+    `normalMotion` için pozitif kapsama yazıldı (varsayılan opt-out davranışı,
+    her doku haritasına yayılma, shader yamasının uniform'u).
+  - `ThumbnailMaterialPreview` `flipY` taşımak zorunda kaldı; küçük resim tek
+    kare olduğu için `normalMotion` orada bilinçli `null`.
+  - `advanceForgeMaterialAnimations` hem `SceneApp` hem `RuntimeSceneApp` kare
+    döngüsüne bağlandı — editör ve runtime paritesi.
+  - Yeni landscape yüzeyi (rect paint/deform, clip'li apply,
+    `landscapeGridBoundsForLocalBox`, `smoothness`) ThreeAges'te yalnız RTS yol
+    testlerinden dolaylı kapsanıyordu; jenerik karşılıkları buraya yazıldı —
+    clip'li apply'ın tam pass ile birebir aynı değerleri yazdığı dahil.
+  - `engine/scene/landscape.ts` içindeki iki yorum fork'un oyununu adıyla
+    anıyordu; jenerikleştirildi.

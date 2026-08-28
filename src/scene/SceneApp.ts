@@ -106,6 +106,7 @@ import {
   type AiTargetPointRouteView,
 } from "@engine/render-three/aiNavigationView";
 import {
+  advanceForgeMaterialAnimations,
   collectMaterialStats,
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
@@ -1554,6 +1555,7 @@ export class SceneApp {
         advanceCloudTime(this.cloudObject, deltaSeconds);
       }
       this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
+      advanceForgeMaterialAnimations(now / 1000);
 
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaSeconds);
       else this.renderer.render(this.scene, this.editorViewportCamera());

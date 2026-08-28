@@ -268,6 +268,7 @@ import { readRotation, readScale } from "@engine/scene/transform";
 import { createSplineRegistry, type SplineQuery, type SplineRegistry } from "@engine/scene/splineRegistry";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
+  advanceForgeMaterialAnimations,
   collectMaterialStats,
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
@@ -1250,6 +1251,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.camera.position,
         this.qualitySettings.foliageCullDistanceScale,
       );
+      advanceForgeMaterialAnimations(now / 1000);
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);

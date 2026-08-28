@@ -36,6 +36,23 @@ export interface ForgeMaterialUvTiling {
   y: number;
 }
 
+/** A signed UV-space velocity in repeats per second. */
+export interface ForgeMaterialUvVelocity {
+  x: number;
+  y: number;
+}
+
+/**
+ * Optional two-sample normal-map motion. It is deliberately generic: water is
+ * one consumer, while materials without this field retain the stock shader.
+ */
+export interface ForgeMaterialNormalMotion {
+  primaryVelocity: ForgeMaterialUvVelocity;
+  secondaryTiling: ForgeMaterialUvTiling;
+  secondaryVelocity: ForgeMaterialUvVelocity;
+  strength: number;
+}
+
 export interface ForgeMaterialLayer {
   baseColor: string;
   baseColorTexture: string | null;
@@ -86,6 +103,17 @@ export interface ForgeMaterialDef {
   emissiveTexture: string | null;
   ormTexture: string | null;
   uvTiling: ForgeMaterialUvTiling;
+  /**
+   * Whether this material's textures are flipped on upload (three.js' default,
+   * matching engine-generated UVs: landscape splats, UVW projection, primitives).
+   *
+   * Turn it **off** for a material assigned to a glTF/GLB mesh through its
+   * material slots: glTF authors V downward from the image top and `GLTFLoader`
+   * therefore never flips its own textures, so a `TextureLoader`-loaded PNG binds
+   * upside down against those exported UVs — the atlas lands on the wrong
+   * islands, which reads as a broken UV layout rather than a flipped image.
+   */
+  flipY: boolean;
   roughness: number;
   metalness: number;
   aoIntensity: number;
@@ -95,6 +123,7 @@ export interface ForgeMaterialDef {
   side: ForgeMaterialSide;
   emissive: string;
   emissiveIntensity: number;
+  normalMotion: ForgeMaterialNormalMotion | null;
   layerBlend: ForgeMaterialLayerBlend | null;
 }
 
@@ -138,6 +167,7 @@ export function defaultForgeMaterialDef(
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.8,
     metalness: 0,
     aoIntensity: 1,
@@ -147,6 +177,7 @@ export function defaultForgeMaterialDef(
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: null,
   };
 
@@ -193,6 +224,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
       : "opaque";
   const legacyMaskTexture = textureRefOrNull(input.maskTexture);
   const layerBlend = layerBlendOrNull(input.layerBlend, legacyMaskTexture);
+  const normalMotion = normalMotionOrNull(input.normalMotion);
   const legacyMaskConsumedByLayerBlend =
     layerBlend?.driver === "maskTexture" &&
     layerBlend.maskTexture === legacyMaskTexture &&
@@ -219,6 +251,9 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     emissiveTexture: textureRefOrNull(input.emissiveTexture),
     ormTexture: textureRefOrNull(input.ormTexture) ?? (legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
+    // Opt-out, not opt-in: every material authored before this field existed was
+    // rendering with three.js' flipped default, so absent must keep meaning `true`.
+    flipY: input.flipY !== false,
     roughness: clamp01(numberOr(input.roughness, 0.8)),
     metalness: clamp01(numberOr(input.metalness, 0)),
     aoIntensity: clamp01(numberOr(input.aoIntensity, 1)),
@@ -228,7 +263,38 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     side: isForgeMaterialSide(input.side) ? input.side : "front",
     emissive: colorOr(input.emissive, "#000000"),
     emissiveIntensity: Math.max(0, numberOr(input.emissiveIntensity, 0)),
+    normalMotion,
     layerBlend,
+  };
+}
+
+export function defaultForgeMaterialNormalMotion(): ForgeMaterialNormalMotion {
+  return {
+    primaryVelocity: { x: 0.012, y: 0.006 },
+    secondaryTiling: { x: 1.37, y: 1.37 },
+    secondaryVelocity: { x: -0.009, y: 0.014 },
+    strength: 0.65,
+  };
+}
+
+function normalMotionOrNull(value: unknown): ForgeMaterialNormalMotion | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const fallback = defaultForgeMaterialNormalMotion();
+  return {
+    primaryVelocity: velocityOr(input.primaryVelocity, fallback.primaryVelocity),
+    secondaryTiling: uvTilingOr(input.secondaryTiling, fallback.secondaryTiling),
+    secondaryVelocity: velocityOr(input.secondaryVelocity, fallback.secondaryVelocity),
+    strength: Math.min(4, Math.max(0.05, numberOr(input.strength, fallback.strength))),
+  };
+}
+
+function velocityOr(value: unknown, fallback: ForgeMaterialUvVelocity): ForgeMaterialUvVelocity {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...fallback };
+  const input = value as Record<string, unknown>;
+  return {
+    x: Math.min(10, Math.max(-10, numberOr(input.x, fallback.x))),
+    y: Math.min(10, Math.max(-10, numberOr(input.y, fallback.y))),
   };
 }
 

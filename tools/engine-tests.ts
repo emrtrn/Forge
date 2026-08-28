@@ -216,6 +216,9 @@ import {
   landscapeHeightsToGrayscale,
   resampleLandscapeHeightmap,
   resampleLandscapeData,
+  applyLandscapeRectDeform,
+  applyLandscapeRectPaint,
+  landscapeGridBoundsForLocalBox,
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
 import {
@@ -705,7 +708,7 @@ import {
   readGameModeDefaultPawnClassRef,
 } from "../engine/scene/actorScript";
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
-import { normalizeForgeMaterialDef } from "../engine/assets/material";
+import { defaultForgeMaterialDef, normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
   normalizeAssetSkeleton,
   resolveBlendSpaceWeights,
@@ -717,8 +720,10 @@ import {
   collectAssetMaterialElements,
 } from "../src/scene/assetMaterialSlotsLoader";
 import {
+  advanceForgeMaterialAnimations,
   createThreeMaterialFromForgeDef,
   EMISSIVE_INTENSITY_SCALE,
+  hasForgeMaterialNormalMotion,
 } from "../engine/render-three/materials";
 import {
   actorInstanceEntityId,
@@ -18226,6 +18231,8 @@ check("material save payload requires a material path and canonical fields", () 
     emissiveTexture: "tex-stone-emissive",
     ormTexture: "tex-stone-m",
     uvTiling: { x: 2, y: 3 },
+    // Absent in the payload: the flip default is opt-out, so it round-trips true.
+    flipY: true,
     roughness: 0.72,
     metalness: 0,
     aoIntensity: 0.6,
@@ -18235,6 +18242,7 @@ check("material save payload requires a material path and canonical fields", () 
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: {
       layer1: {
         baseColor: "#f0f8ff",
@@ -18363,6 +18371,139 @@ check("material save payload requires a material path and canonical fields", () 
   assert.equal(savedLegacyLayerMask.maskTexture, null);
   assert.equal(savedLegacyLayerMask.ormTexture, null);
   assert.equal((savedLegacyLayerMask.layerBlend as Record<string, unknown>).maskTexture, "legacy-mask");
+});
+
+check("material flipY survives normalize and save, and reaches every texture map", () => {
+  // Absent means three.js' flipped default in both the loader and the save path,
+  // so no material authored before the field existed changes how it renders.
+  assert.equal(defaultForgeMaterialDef("Default").flipY, true);
+  assert.equal(
+    normalizeForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Legacy" }).flipY,
+    true,
+  );
+  assert.equal(
+    validateForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Legacy" }).flipY,
+    true,
+  );
+
+  // The allowlist half: an authored `false` must round-trip through the save
+  // validator, or a glTF-UV material silently reverts to flipped on every save.
+  const glTfUvMaterial = {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "GlTf Uv",
+    baseColorTexture: "atlas-bc",
+    flipY: false,
+  };
+  assert.equal(normalizeForgeMaterialDef(glTfUvMaterial).flipY, false);
+  assert.equal(validateForgeMaterialDef(glTfUvMaterial).flipY, false);
+  assert.equal(
+    (validateSaveMaterialPayload({
+      path: "assets/materials/Atlas.material.json",
+      material: glTfUvMaterial,
+    }).material as Record<string, unknown>).flipY,
+    false,
+  );
+
+  // And the render half: every map the material builds carries the flag, base
+  // layer and blend layer alike, so no single surface stays flipped on its own.
+  const flippedMaps = {
+    baseColorTexture: new Texture(),
+    normalTexture: new Texture(),
+    roughnessTexture: new Texture(),
+    metalnessTexture: new Texture(),
+    aoTexture: new Texture(),
+    opacityTexture: new Texture(),
+    emissiveTexture: new Texture(),
+    layer1BaseColorTexture: new Texture(),
+    layer1NormalTexture: new Texture(),
+    layer1AoTexture: new Texture(),
+    layerBlendMaskTexture: new Texture(),
+  };
+  const unflipped = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "GlTf Uv Layered",
+      baseColorTexture: "atlas-bc",
+      normalTexture: "atlas-n",
+      roughnessTexture: "atlas-r",
+      metalnessTexture: "atlas-m",
+      aoTexture: "atlas-ao",
+      opacityTexture: "atlas-o",
+      emissiveTexture: "atlas-e",
+      flipY: false,
+      layerBlend: {
+        driver: "maskTexture",
+        maskTexture: "blend-mask",
+        layer1: { baseColorTexture: "snow-bc", normalTexture: "snow-n", aoTexture: "snow-ao" },
+      },
+    }),
+    flippedMaps,
+  );
+  for (const [name, texture] of Object.entries(flippedMaps)) {
+    assert.equal(texture.flipY, false, `${name} must inherit the material's flipY`);
+  }
+  unflipped.dispose();
+
+  const defaultFlip = new Texture();
+  const flipped = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Engine Uv",
+      baseColorTexture: "grass-bc",
+    }),
+    { baseColorTexture: defaultFlip },
+  );
+  assert.equal(defaultFlip.flipY, true);
+  flipped.dispose();
+});
+
+check("forge normal motion patches the normal shader and updates a shared time uniform", () => {
+  const authored = {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Animated Normal",
+    normalTexture: "normal",
+    normalMotion: {
+      primaryVelocity: { x: 0.01, y: 0.02 },
+      secondaryTiling: { x: 1.5, y: 1.25 },
+      secondaryVelocity: { x: -0.02, y: 0.01 },
+      strength: 0.7,
+    },
+  };
+  // Allowlist half: the whole block round-trips, or an animated material saves
+  // itself back to a still one.
+  assert.deepEqual(validateForgeMaterialDef(authored).normalMotion, authored.normalMotion);
+
+  const material = createThreeMaterialFromForgeDef(normalizeForgeMaterialDef(authored), {
+    normalTexture: new Texture(),
+  });
+  assert.ok(material instanceof MeshStandardMaterial);
+  assert.equal(hasForgeMaterialNormalMotion(material), true);
+  assert.match(material.customProgramCacheKey(), /forge-normal-motion-v1/);
+  const shader = {
+    uniforms: {},
+    fragmentShader: "#include <normal_pars_fragment>\nvoid main() {\n#include <normal_fragment_maps>\n}",
+  };
+  material.onBeforeCompile?.(shader as never, {} as never);
+  assert.match(shader.fragmentShader, /forgeNormalMotionTime/);
+  advanceForgeMaterialAnimations(12.5);
+  assert.equal((shader.uniforms as Record<string, { value: number }>).forgeNormalMotionTime?.value, 12.5);
+  material.dispose();
+
+  // A material without the block keeps the stock shader (and the stock cost).
+  const plain = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Still", normalTexture: "n" }),
+    { normalTexture: new Texture() },
+  );
+  assert.equal(hasForgeMaterialNormalMotion(plain), false);
+  plain.dispose();
 });
 
 check("starter material assets normalize to the canonical material shape", () => {
@@ -18784,6 +18925,7 @@ check("content-new resolves to typed stub files and folders", () => {
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.8,
     metalness: 0,
     aoIntensity: 1,
@@ -18793,6 +18935,7 @@ check("content-new resolves to typed stub files and folders", () => {
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: null,
   });
   const metal = resolveContentNewFile({
@@ -18819,6 +18962,7 @@ check("content-new resolves to typed stub files and folders", () => {
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.3,
     metalness: 1,
     aoIntensity: 1,
@@ -18828,6 +18972,7 @@ check("content-new resolves to typed stub files and folders", () => {
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: null,
   });
 
@@ -20431,6 +20576,19 @@ check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alig
   });
 });
 
+check("landscape spline smoothness round-trips through the save allowlist", () => {
+  // The allowlist half of the tangent knob: a field the validator does not copy
+  // is silently dropped, so an authored corner softness would reset on save.
+  const terrain = createFlatLandscapeData("small");
+  const spline: ForgeLandscapeSpline = { ...smoothBend(true), smoothness: 0 };
+  const saved = validateLandscapeData({ ...terrain, splines: [spline] }) as ForgeLandscapeData;
+  assert.equal(saved.splines?.[0]?.smoothness, 0);
+  assert.equal(saved.splines?.[0]?.smooth, true);
+  // Absent stays absent, so an untouched spline keeps the historic 0.5 default.
+  const plain = validateLandscapeData({ ...terrain, splines: [smoothBend(true)] }) as ForgeLandscapeData;
+  assert.equal(plain.splines?.[0]?.smoothness, undefined);
+});
+
 check("landscape splines support shared-point branches and closed loops", () => {
   const branch: ForgeLandscapeSpline = {
     id: "hub",
@@ -20542,6 +20700,96 @@ check("Landscape spline adapter delegates linear and smooth centerline math to G
   const component = landscapeSplineSegmentComponent(smooth, smooth.segments[0]!);
   assert.equal(component?.points[0]?.pointType, "curveCustom");
   assert.deepEqual(component?.points.map((point) => point.position), [smooth.points[0]!.position, smooth.points[1]!.position]);
+});
+
+check("applyLandscapeRectDeform levels a footprint and blends its edge", () => {
+  const data = createFlatLandscapeData("small");
+  const center = 32 * 65 + 32;
+  const edge = 32 * 65 + 35; // local X +3: inside the falloff band
+  const outside = 32 * 65 + 37; // local X +5: clear of the pad
+  data.heights[center] = 1;
+  data.heights[edge] = 1;
+  data.heights[outside] = 1;
+  const result = applyLandscapeRectDeform(data, [{
+    centerX: 0,
+    centerZ: 0,
+    halfWidth: 2,
+    halfDepth: 2,
+    falloff: 2,
+    targetHeight: 5,
+  }]);
+  assert.equal(result.changed, true);
+  assert.equal(data.heights[center], 5, "the pad core reaches its target elevation");
+  assert.ok(data.heights[edge]! > 1 && data.heights[edge]! < 5, "the edge blends toward surrounding ground");
+  assert.equal(data.heights[outside], 1, "terrain outside the footprint and falloff is unchanged");
+});
+
+check("applyLandscapeRectPaint blends a soft-edged pad and renormalizes the layer set", () => {
+  const data = createFlatLandscapeData("small");
+  const center = 32 * 65 + 32;
+  const outside = 32 * 65 + 40;
+  const dirt = data.layers.find((layer) => layer.id === "dirt")!;
+  const grass = data.layers.find((layer) => layer.id === "grass")!;
+  const result = applyLandscapeRectPaint(data, [{
+    layerId: "dirt",
+    centerX: 0,
+    centerZ: 0,
+    halfWidth: 2,
+    halfDepth: 2,
+    falloff: 2,
+    strength: 1,
+  }]);
+  assert.equal(result.changed, true);
+  assert.ok(dirt.weights[center]! > 0.99, "the pad core reaches full weight");
+  assert.ok(grass.weights[center]! < 0.01, "the rest of the set renormalizes around it");
+  assert.equal(dirt.weights[outside], 0, "outside the pad and its falloff nothing is painted");
+  const total = data.layers.reduce((sum, layer) => sum + layer.weights[center]!, 0);
+  assert.ok(Math.abs(total - 1) < 1e-6, "weights still sum to 1 at a painted vertex");
+});
+
+check("a clipped spline apply reproduces the full pass inside its own rectangle", () => {
+  // The whole point of `clip`: paint and deform are per-vertex independent, so
+  // replaying the same ordered operations over a sub-rectangle must write exactly
+  // the values a full pass would have written there — otherwise a partial repaint
+  // silently diverges from a full one.
+  const spline = straightSpline({ deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } });
+  const full = createFlatLandscapeData("small");
+  applyLandscapeSplineDeform(full, spline);
+
+  const clipped = createFlatLandscapeData("small");
+  const clip = landscapeGridBoundsForLocalBox(clipped.size, { minX: -4, minZ: -4, maxX: 4, maxZ: 4 });
+  assert.ok(clip, "the box overlaps the heightfield");
+  applyLandscapeSplineDeform(clipped, spline, clip);
+  for (let z = clip!.z0; z <= clip!.z1; z += 1) {
+    for (let x = clip!.x0; x <= clip!.x1; x += 1) {
+      const index = z * 65 + x;
+      assert.equal(clipped.heights[index], full.heights[index], `vertex ${x},${z} must match the full pass`);
+    }
+  }
+  // And a box entirely off the heightfield yields no rectangle at all.
+  assert.equal(landscapeGridBoundsForLocalBox(clipped.size, { minX: 500, minZ: 500, maxX: 600, maxZ: 600 }), null);
+});
+
+check("landscape spline smoothness scales the corner tangent, absent keeping the historic 0.5", () => {
+  const historic = landscapeSplineSegmentComponent(smoothBend(true), smoothBend(true).segments[0]!);
+  const leave = historic?.points[0]?.leaveTangent;
+  assert.ok(leave, "a smooth spline carries an authored leave tangent");
+
+  const softened = smoothBend(true);
+  softened.smoothness = 1;
+  const soft = landscapeSplineSegmentComponent(softened, softened.segments[0]!);
+  const softLeave = soft?.points[0]?.leaveTangent;
+  assert.ok(softLeave);
+  // Same direction, twice the reach: 1 is exactly double the absent-default 0.5.
+  for (let axis = 0; axis < 3; axis += 1) {
+    assert.ok(Math.abs(softLeave![axis]! - leave![axis]! * 2) < 1e-9);
+  }
+
+  // Zero makes a "smooth" spline follow its straight pieces again.
+  const straightened = smoothBend(true);
+  straightened.smoothness = 0;
+  const flat = landscapeSplineSegmentComponent(straightened, straightened.segments[0]!);
+  assert.deepEqual(flat?.points[0]?.leaveTangent, [0, 0, 0]);
 });
 
 check("smooth spline deform bows outside the straight corridor", () => {

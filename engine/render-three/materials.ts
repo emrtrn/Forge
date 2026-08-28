@@ -15,11 +15,19 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   ForgeMaterialDef,
   ForgeMaterialLayerBlend,
+  ForgeMaterialNormalMotion,
   ForgeMaterialSide,
 } from "../assets/material";
-import { configureForgeTexture } from "./textureConfig";
+import { configureForgeTexture, type ForgeTextureConfig } from "./textureConfig";
 
 type ShaderPatch = Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
+
+/**
+ * `configureForgeTexture` with the material's own flip convention already bound,
+ * so every map on one material shares it and a map added later cannot silently
+ * fall back to three.js' flipped default.
+ */
+type ForgeTextureConfigurer = (texture: Texture, config: ForgeTextureConfig) => Texture;
 
 export interface MaterialStats {
   basic: number;
@@ -67,6 +75,26 @@ export function isRenderableMesh(
  */
 export const EMISSIVE_INTENSITY_SCALE = 1000;
 
+interface NormalMotionState {
+  time: { value: number };
+  primaryVelocity: { value: Vector2 };
+  secondaryTiling: { value: Vector2 };
+  secondaryVelocity: { value: Vector2 };
+  strength: { value: number };
+}
+
+const normalMotionStates = new Map<MeshStandardMaterial, NormalMotionState>();
+
+/** Updates all live authored normal-motion materials once per rendered frame. */
+export function advanceForgeMaterialAnimations(elapsedSeconds: number): void {
+  const time = Math.max(0, elapsedSeconds);
+  for (const state of normalMotionStates.values()) state.time.value = time;
+}
+
+export function hasForgeMaterialNormalMotion(material: Material | null | undefined): boolean {
+  return material instanceof MeshStandardMaterial && normalMotionStates.has(material);
+}
+
 export function createThreeMaterialFromForgeDef(
   def: ForgeMaterialDef,
   textures: ForgeMaterialTextureMaps = {},
@@ -100,15 +128,18 @@ export function createThreeMaterialFromForgeDef(
           emissiveIntensity: def.emissiveIntensity * EMISSIVE_INTENSITY_SCALE,
         });
 
+  const configureTexture: ForgeTextureConfigurer = (texture, config) =>
+    configureForgeTexture(texture, { ...config, flipY: def.flipY });
+
   if (textures.baseColorTexture) {
-    material.map = configureForgeTexture(textures.baseColorTexture, {
+    material.map = configureTexture(textures.baseColorTexture, {
       srgb: true,
       repeat: def.uvTiling,
       maxAnisotropy: options.maxAnisotropy,
     });
   }
   if (textures.opacityTexture) {
-    material.alphaMap = configureForgeTexture(textures.opacityTexture, {
+    material.alphaMap = configureTexture(textures.opacityTexture, {
       srgb: false,
       repeat: def.uvTiling,
       maxAnisotropy: options.maxAnisotropy,
@@ -116,7 +147,7 @@ export function createThreeMaterialFromForgeDef(
     material.transparent = true;
   }
   if (textures.normalTexture && material instanceof MeshStandardMaterial) {
-    material.normalMap = configureForgeTexture(textures.normalTexture, {
+    material.normalMap = configureTexture(textures.normalTexture, {
       srgb: false,
       repeat: def.uvTiling,
       maxAnisotropy: options.maxAnisotropy,
@@ -124,7 +155,7 @@ export function createThreeMaterialFromForgeDef(
   }
   if (material instanceof MeshStandardMaterial) {
     const ormMap = textures.ormTexture
-      ? configureForgeTexture(textures.ormTexture, {
+      ? configureTexture(textures.ormTexture, {
           srgb: false,
           repeat: def.uvTiling,
           maxAnisotropy: options.maxAnisotropy,
@@ -137,21 +168,21 @@ export function createThreeMaterialFromForgeDef(
       material.aoMapIntensity = def.aoIntensity;
     } else {
       if (textures.roughnessTexture) {
-        material.roughnessMap = configureForgeTexture(textures.roughnessTexture, {
+        material.roughnessMap = configureTexture(textures.roughnessTexture, {
           srgb: false,
           repeat: def.uvTiling,
           maxAnisotropy: options.maxAnisotropy,
         });
       }
       if (textures.metalnessTexture) {
-        material.metalnessMap = configureForgeTexture(textures.metalnessTexture, {
+        material.metalnessMap = configureTexture(textures.metalnessTexture, {
           srgb: false,
           repeat: def.uvTiling,
           maxAnisotropy: options.maxAnisotropy,
         });
       }
       if (textures.aoTexture) {
-        material.aoMap = configureForgeTexture(textures.aoTexture, {
+        material.aoMap = configureTexture(textures.aoTexture, {
           srgb: false,
           repeat: def.uvTiling,
           maxAnisotropy: options.maxAnisotropy,
@@ -160,14 +191,17 @@ export function createThreeMaterialFromForgeDef(
       }
     }
     if (textures.emissiveTexture) {
-      material.emissiveMap = configureForgeTexture(textures.emissiveTexture, {
+      material.emissiveMap = configureTexture(textures.emissiveTexture, {
         srgb: true,
         repeat: def.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       });
     }
     if (def.layerBlend) {
-      applyLayerBlendMaterial(material, def.layerBlend, textures, options);
+      applyLayerBlendMaterial(material, def.layerBlend, textures, options, configureTexture);
+    }
+    if (def.normalMotion && textures.normalTexture) {
+      applyNormalMotionMaterial(material, def.normalMotion);
     }
   }
 
@@ -175,64 +209,131 @@ export function createThreeMaterialFromForgeDef(
   return material;
 }
 
+function applyNormalMotionMaterial(
+  material: MeshStandardMaterial,
+  motion: ForgeMaterialNormalMotion,
+): void {
+  const state: NormalMotionState = {
+    time: { value: 0 },
+    primaryVelocity: { value: new Vector2(motion.primaryVelocity.x, motion.primaryVelocity.y) },
+    secondaryTiling: { value: new Vector2(motion.secondaryTiling.x, motion.secondaryTiling.y) },
+    secondaryVelocity: { value: new Vector2(motion.secondaryVelocity.x, motion.secondaryVelocity.y) },
+    strength: { value: motion.strength },
+  };
+  normalMotionStates.set(material, state);
+  material.addEventListener("dispose", () => normalMotionStates.delete(material));
+
+  const priorPatch = material.onBeforeCompile;
+  const priorCacheKey = material.customProgramCacheKey;
+  material.onBeforeCompile = (shader, renderer) => {
+    priorPatch?.(shader, renderer);
+    patchNormalMotionShader(shader, state);
+  };
+  material.customProgramCacheKey = () =>
+    `${priorCacheKey ? `${priorCacheKey.call(material)}|` : ""}forge-normal-motion-v1`;
+  material.needsUpdate = true;
+}
+
+function patchNormalMotionShader(shader: ShaderPatch, state: NormalMotionState): void {
+  const normalChunk = "#include <normal_fragment_maps>";
+  if (!shader.fragmentShader.includes(normalChunk)) return;
+  shader.uniforms.forgeNormalMotionTime = state.time;
+  shader.uniforms.forgeNormalMotionPrimaryVelocity = state.primaryVelocity;
+  shader.uniforms.forgeNormalMotionSecondaryTiling = state.secondaryTiling;
+  shader.uniforms.forgeNormalMotionSecondaryVelocity = state.secondaryVelocity;
+  shader.uniforms.forgeNormalMotionStrength = state.strength;
+  shader.fragmentShader = shader.fragmentShader.replace(
+    "#include <normal_pars_fragment>",
+    `uniform float forgeNormalMotionTime;
+uniform vec2 forgeNormalMotionPrimaryVelocity;
+uniform vec2 forgeNormalMotionSecondaryTiling;
+uniform vec2 forgeNormalMotionSecondaryVelocity;
+uniform float forgeNormalMotionStrength;
+#include <normal_pars_fragment>`,
+  );
+  shader.fragmentShader = shader.fragmentShader.replace(
+    normalChunk,
+    `#ifdef USE_NORMALMAP_TANGENTSPACE
+  vec3 forgeNormalA = texture2D(
+    normalMap,
+    vNormalMapUv + forgeNormalMotionPrimaryVelocity * forgeNormalMotionTime
+  ).xyz * 2.0 - 1.0;
+  vec3 forgeNormalB = texture2D(
+    normalMap,
+    vNormalMapUv * forgeNormalMotionSecondaryTiling + forgeNormalMotionSecondaryVelocity * forgeNormalMotionTime
+  ).xyz * 2.0 - 1.0;
+  #ifdef USE_PACKED_NORMALMAP
+    forgeNormalA = vec3(forgeNormalA.xy, sqrt(saturate(1.0 - dot(forgeNormalA.xy, forgeNormalA.xy))));
+    forgeNormalB = vec3(forgeNormalB.xy, sqrt(saturate(1.0 - dot(forgeNormalB.xy, forgeNormalB.xy))));
+  #endif
+  vec3 mapN = normalize(mix(forgeNormalA, forgeNormalB, 0.5));
+  mapN.xy *= normalScale * forgeNormalMotionStrength;
+  normal = normalize(tbn * normalize(mapN));
+#else
+  #include <normal_fragment_maps>
+#endif`,
+  );
+}
+
 function applyLayerBlendMaterial(
   material: MeshStandardMaterial,
   blend: ForgeMaterialLayerBlend,
   textures: ForgeMaterialTextureMaps,
   options: ForgeMaterialOptions,
+  configureTexture: ForgeTextureConfigurer,
 ): void {
   const layer1 = blend.layer1;
   const layer1Map = textures.layer1BaseColorTexture
-    ? configureForgeTexture(textures.layer1BaseColorTexture, {
+    ? configureTexture(textures.layer1BaseColorTexture, {
         srgb: true,
         repeat: layer1.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
   const layer1NormalMap = textures.normalTexture && textures.layer1NormalTexture
-    ? configureForgeTexture(textures.layer1NormalTexture, {
+    ? configureTexture(textures.layer1NormalTexture, {
         srgb: false,
         repeat: layer1.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
   const layer1RoughnessMap = textures.layer1RoughnessTexture
-    ? configureForgeTexture(textures.layer1RoughnessTexture, {
+    ? configureTexture(textures.layer1RoughnessTexture, {
         srgb: false,
         repeat: layer1.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
   const layer1MetalnessMap = textures.layer1MetalnessTexture
-    ? configureForgeTexture(textures.layer1MetalnessTexture, {
+    ? configureTexture(textures.layer1MetalnessTexture, {
         srgb: false,
         repeat: layer1.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
   const layer1OpacityMap = textures.layer1OpacityTexture
-    ? configureForgeTexture(textures.layer1OpacityTexture, {
+    ? configureTexture(textures.layer1OpacityTexture, {
         srgb: false,
         repeat: layer1.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
   const layer1EmissiveMap = textures.layer1EmissiveTexture
-    ? configureForgeTexture(textures.layer1EmissiveTexture, {
+    ? configureTexture(textures.layer1EmissiveTexture, {
         srgb: true,
         repeat: layer1.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
   const layer1AoMap = textures.layer1AoTexture
-    ? configureForgeTexture(textures.layer1AoTexture, {
+    ? configureTexture(textures.layer1AoTexture, {
         srgb: false,
         repeat: layer1.uvTiling,
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
   const layerBlendMaskMap = textures.layerBlendMaskTexture
-    ? configureForgeTexture(textures.layerBlendMaskTexture, {
+    ? configureTexture(textures.layerBlendMaskTexture, {
         srgb: false,
         // The blend mask selects between layers across the whole surface, so it maps
         // 1:1 to the base UV — it must NOT inherit layer 1's detail tiling (which would

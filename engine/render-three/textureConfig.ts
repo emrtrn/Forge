@@ -15,6 +15,13 @@ export interface ForgeTextureConfig {
   repeat?: ForgeTextureRepeat | null;
   anisotropy?: number;
   maxAnisotropy?: number | null | undefined;
+  /**
+   * Vertical flip on upload. Defaults to three.js' own `true`, which is what
+   * engine-generated UVs expect; pass `false` for glTF-exported UVs, whose V axis
+   * runs downward from the image top (`GLTFLoader` sets `flipY = false` for the
+   * same reason).
+   */
+  flipY?: boolean;
 }
 
 const DEFAULT_REPEAT: ForgeTextureRepeat = { x: 1, y: 1 };
@@ -29,6 +36,7 @@ export function configureForgeTexture(
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
   texture.repeat.set(repeat.x, repeat.y);
+  texture.flipY = config.flipY ?? true;
   texture.anisotropy = resolveTextureAnisotropy(config);
   texture.needsUpdate = true;
   return texture;

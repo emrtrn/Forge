@@ -144,14 +144,14 @@ Her biri kendi branch'i.
   `game-data/**.json` ile çitlenir, denge kuralı oyun validatöründen enjekte
   edilir. `verify:imports` bu dilimde kritik.
   → `tests/smoke/data-table-editor.spec.ts` (hazır, taşınabilir)
-- [ ] **2.4 Actor Script `variableOverrides`.** Level bazlı değişken ezme +
+- [x] **2.4 Actor Script `variableOverrides`.** Level bazlı değişken ezme +
   `resolveActorInstanceVariables` tip kontrolü + Details bölümü.
 - [ ] **2.5 Skeletal Mesh Editor paketi.** `driveMotion` root motion modu, Up
   Axis seçici, Measured Travel / Travel Speed okuması, materyal slot
   override'ı, ölçek telafili socket mount, montage bölümleri (`playRange`),
   `bodyMask` glTF isim sanitizasyonu.
   → `tests/smoke/skeletal-mesh-editor.spec.ts` (hazır, taşınabilir)
-- [ ] **2.6 Blocking Volume `navigationRole` + nav string-pulling.** Yatay kutuyu
+- [x] **2.6 Blocking Volume `navigationRole` + nav string-pulling.** Yatay kutuyu
   yürünebilir güverteye çeviren alan (köprü altı) + `gridNavigation.flatFloor`
   ile düz zeminde yol düzleştirme. `NavigationRole` tipi Forge'da zaten var,
   eksik olan blocking volume alanı. `saveValidator` allowlist'i gerektirir.

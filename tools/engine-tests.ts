@@ -728,6 +728,7 @@ import {
 import {
   actorInstanceEntityId,
   actorInstanceToEntity,
+  resolveActorInstanceVariables,
   parseActorInstanceEntityIndex,
   parseSpawnedActorEntityIndex,
   spawnedActorEntityId,
@@ -7505,30 +7506,75 @@ check("grid navigation keeps narrow-corner waypoints outside capsule clearance",
   }
 });
 
-check("grid navigation adds clearance cost so corridor routes prefer the middle", () => {
+// Pinned on the baked penalty table, not on emitted waypoints: a flat grid's
+// final path is string-pulled, so wherever the taut line is already clear the
+// clearance cost stays a search preference and never reaches the output.
+check("grid navigation adds clearance cost so cells near a corridor wall cost more", () => {
   const wallL: Aabb3 = { min: [-4, 0, -5], max: [-2, 2, 5] };
   const wallR: Aabb3 = { min: [2, 0, -5], max: [4, 2, 5] };
-  const path = findGridPath({
-    start: [-1.5, 0, -4],
-    goal: [-1.5, 0, 4],
+  const grid = buildNavGrid({
     agent: { radius: 0, height: 1.8 },
     blockers: [wallL, wallR],
     bounds: [{ min: [-4, -1, -6], max: [4, 3, 6] }],
+    footY: 0,
     cellSize: 0.5,
     safetyMargin: 0,
   });
-  assert.equal(path.status, "success");
+  assert.ok(grid);
+  const penaltyAt = (x: number, z: number): number => {
+    const col = Math.round((x - grid.originX) / grid.cellSize);
+    const row = Math.round((z - grid.originZ) / grid.cellSize);
+    return grid.penalty[row * grid.cols + col]!;
+  };
+  assert.equal(penaltyAt(0, 0), 0, "corridor middle must be free of clearance cost");
+  assert.ok(penaltyAt(-1.5, 0) > 0, "a cell hugging the wall must carry clearance cost");
+  assert.ok(penaltyAt(-1.5, 0) > penaltyAt(-1, 0));
+  assert.ok(penaltyAt(-1, 0) > penaltyAt(-0.5, 0));
+});
+
+check("grid navigation string-pulls a flat-grid route instead of emitting the A* staircase", () => {
+  const straight = findGridPath({
+    start: [-4, 0, -4],
+    goal: [4, 0, 1],
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [],
+    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(straight.status, "success");
+  // Open ground on a shallow diagonal is where 8-neighbour A* alternates E/NE
+  // every cell; taut, it is one segment.
+  assert.deepEqual(straight.points, [[-4, 0, -4], [4, 0, 1]]);
+
+  // A heightfield grid must keep the conservative cell route: `segmentSafe` there
+  // cannot see floor holes, ledge erosion or step limits.
+  const heightfield = buildNavGrid({
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [],
+    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
+    footY: 0,
+    cellSize: 0.5,
+    safetyMargin: 0,
+    sampleFloorY: () => 0,
+  });
+  assert.ok(heightfield);
+  assert.equal(heightfield.flatFloor, false);
+  const stepped = searchNavGrid(heightfield, [-4, 0, -4], [4, 0, 1]);
+  assert.equal(stepped.status, "success");
   assert.ok(
-    path.points.some((point) => Math.abs(point[0]) <= 0.5 && Math.abs(point[2]) <= 3),
-    `expected route to move toward corridor center: ${JSON.stringify(path.points)}`,
+    stepped.points.length > straight.points.length,
+    `heightfield route should not be pulled taut: ${JSON.stringify(stepped.points)}`,
   );
 });
 
 check("grid navigation compression keeps grid points when a shortcut would cross a blocker", () => {
   const wall: Aabb3 = { min: [-0.25, 0, 0], max: [0.1, 2, 0.35] };
+  // The goal is chosen so the taut start→goal line runs straight through the
+  // wall: string-pulling must refuse it and keep a corner waypoint instead.
   const path = findGridPath({
     start: [-0.45, 0, 0.3],
-    goal: [2.3, 0, 1.55],
+    goal: [2.3, 0, 0.2],
     agent: { radius: 0, height: 1.8 },
     blockers: [wall],
     bounds: [{ min: [-2, -1, -2], max: [4, 3, 4] }],
@@ -7537,8 +7583,8 @@ check("grid navigation compression keeps grid points when a shortcut would cross
   });
   assert.equal(path.status, "success");
   assert.ok(
-    path.points.some((point) => point[0] === -0.5 && point[2] === 0.5),
-    `expected start-cell waypoint to guard the corner: ${JSON.stringify(path.points)}`,
+    path.points.length > 2,
+    `expected a corner waypoint around the wall: ${JSON.stringify(path.points)}`,
   );
   for (let i = 0; i < path.points.length - 1; i += 1) {
     assert.equal(
@@ -19860,6 +19906,11 @@ check("cloneActorInstance deep-copies fields and shares no references", () => {
       lookAheadDistance: 1.2,
       wrapMode: "loop" as const,
     },
+    // Losing an override here would be silent and total: the Details panel writes
+    // one, the clone strips it, and the placement snaps back to its class default
+    // — indistinguishable from the panel refusing the edit. Every drag and every
+    // undo snapshot goes through this function.
+    variableOverrides: { species: "wolf", count: 3, tags: ["marker", "anchor"] },
   };
   const clone = cloneActorInstance(original);
   assert.deepEqual(clone, original);
@@ -19867,9 +19918,79 @@ check("cloneActorInstance deep-copies fields and shares no references", () => {
   (clone.rotation as number[])[1] = 0;
   assert.ok(clone.patrolRoute);
   clone.patrolRoute.splineId = "route-2";
+  assert.ok(clone.variableOverrides);
+  clone.variableOverrides.species = "deer";
+  (clone.variableOverrides.tags as string[])[0] = "changed";
   assert.equal(original.position[0], 1, "position array must be copied");
   assert.equal(original.rotation[1], 90, "rotation array must be copied");
   assert.equal(original.patrolRoute.splineId, "route-1", "patrol route must be copied");
+  assert.equal(original.variableOverrides.species, "wolf", "variable overrides must be copied");
+  assert.equal(original.variableOverrides.tags[0], "marker", "array override values must be copied");
+});
+
+check("actor instance variable overrides merge declared Actor defaults without leaking unknown or invalid values", () => {
+  const def = normalizeActorScriptDef({
+    name: "Marker",
+    parentClass: "actor",
+    variables: [
+      { key: "owner", label: "Owner", type: "select", default: "player" },
+      { key: "priority", label: "Priority", type: "number", default: 1 },
+      { key: "enabled", label: "Enabled", type: "boolean", default: true },
+      { key: "tags", label: "Tags", type: "tags", default: ["objective"] },
+    ],
+  });
+  const variableOverrides = {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["objective", "anchor"],
+    unknown: "drop",
+    malformed: true,
+  };
+  // A key the class does not declare, and a declared key whose override has the
+  // wrong type, are both ignored rather than reaching the runtime component.
+  assert.deepEqual(resolveActorInstanceVariables(def, variableOverrides), {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["objective", "anchor"],
+  });
+
+  const entity = actorInstanceToEntity(def, {
+    classRef: "Markers/Marker.actor.json",
+    position: [0, 0, 0],
+    variableOverrides,
+  }, 0);
+  assert.deepEqual(readScriptActorComponent(entity)?.variables, {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["objective", "anchor"],
+  });
+
+  // Allowlist half: the whole block round-trips, invalid values are refused, and
+  // an empty override map does not grow an empty object on every save.
+  const saved = validateActorInstance({
+    classRef: "Markers/Marker.actor.json",
+    position: [0, 0, 0],
+    variableOverrides: { owner: "enemy", tags: ["anchor"] },
+  });
+  assert.deepEqual(saved.variableOverrides, { owner: "enemy", tags: ["anchor"] });
+  assert.equal(
+    "variableOverrides" in validateActorInstance({
+      classRef: "Markers/Marker.actor.json",
+      position: [0, 0, 0],
+      variableOverrides: {},
+    }),
+    false,
+  );
+  assert.throws(() =>
+    validateActorInstance({
+      classRef: "Markers/Marker.actor.json",
+      position: [0, 0, 0],
+      variableOverrides: { owner: { nested: true } },
+    }),
+  );
 });
 
 check("validateActorInstance allowlists classRef + transform and rejects bad refs", () => {
@@ -21937,6 +22058,34 @@ check("blockingVolumeCollisionDef builds one solid primitive per shape", () => {
     preset: "blockAll",
   });
   assert.equal(blockingVolumeCollisionDef("cylinder", [2, 2, 2]).primitives[0]!.shape, "cylinder");
+});
+
+check("blocking volume navigationRole reaches the collider and survives a save", () => {
+  // `auto` is the default reading, so it must NOT be written into the collision
+  // def — an explicit role there would override an asset default that agrees.
+  assert.equal("navigationRole" in blockingVolumeCollisionDef("box", [2, 2, 2]), false);
+  assert.equal(blockingVolumeCollisionDef("box", [4, 0.5, 4], "walkable").navigationRole, "walkable");
+  assert.equal(resolveBlockingVolume({ id: "n", position: [0, 0, 0] }).navigationRole, "auto");
+  assert.equal(
+    resolveBlockingVolume({ id: "n", position: [0, 0, 0], navigationRole: "walkable" }).navigationRole,
+    "walkable",
+  );
+
+  // Allowlist half: a walkable deck must round-trip, and `auto` must stay absent
+  // so a default-role brush does not grow a redundant field on every save.
+  const deck = validateBlockingVolume({
+    id: "deck",
+    position: [0, 2, 0],
+    brushShape: "box",
+    size: [8, 0.5, 3],
+    navigationRole: "walkable",
+  });
+  assert.equal(deck.navigationRole, "walkable");
+  assert.equal(
+    "navigationRole" in validateBlockingVolume({ id: "b", position: [0, 0, 0], navigationRole: "auto" }),
+    false,
+  );
+  assert.throws(() => validateBlockingVolume({ id: "b", position: [0, 0, 0], navigationRole: "sideways" }));
 });
 
 check("createBlockingVolumeObject builds an oriented brush; runtime variant is a solid box", () => {

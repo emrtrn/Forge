@@ -195,6 +195,9 @@ export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInsta
   if (actor.rotation !== undefined) clone.rotation = [...actor.rotation];
   if (actor.scale !== undefined) clone.scale = cloneScale(actor.scale);
   if (actor.scaleLocked !== undefined) clone.scaleLocked = actor.scaleLocked;
+  // Not just a spread: a tags override is an array, and copying it by reference
+  // would let an undo snapshot and the live layout share one list.
+  if (actor.variableOverrides !== undefined) clone.variableOverrides = cloneMetadata(actor.variableOverrides);
   if (actor.patrolRoute !== undefined) clone.patrolRoute = { ...actor.patrolRoute };
   return clone;
 }

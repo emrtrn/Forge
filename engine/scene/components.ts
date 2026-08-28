@@ -161,6 +161,8 @@ export interface ScriptInterfacesComponent {
 export interface ScriptActorComponent {
   classRef: string;
   nodeId?: string;
+  /** Resolved class defaults plus this level instance's declared overrides. */
+  variables?: Record<string, import("./layout").MetadataValue>;
 }
 
 export interface ScriptReferenceSelectorComponent {
@@ -693,6 +695,17 @@ export function readScriptActorComponent(entity: Entity): ScriptActorComponent |
   if (!data || typeof data.classRef !== "string" || data.classRef.length === 0) return undefined;
   const component: ScriptActorComponent = { classRef: data.classRef };
   if (typeof data.nodeId === "string" && data.nodeId.length > 0) component.nodeId = data.nodeId;
+  if (data.variables && typeof data.variables === "object" && !Array.isArray(data.variables)) {
+    const variables: Record<string, import("./layout").MetadataValue> = {};
+    for (const [key, value] of Object.entries(data.variables)) {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        variables[key] = value;
+      } else if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+        variables[key] = value;
+      }
+    }
+    if (Object.keys(variables).length > 0) component.variables = variables;
+  }
   return component;
 }
 

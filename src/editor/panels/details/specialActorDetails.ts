@@ -2,6 +2,7 @@ import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import type { ForgeSplineDeformMeshGeneratorDef, ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef, SplineMeshAxis } from "@engine/scene/splineGenerator";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
+import { NAVIGATION_ROLE_VALUES, type NavigationRole } from "@engine/scene/collision";
 import { splinePerformanceWarnings } from "@engine/scene/splineDiagnostics";
 import type {
   EditableAiNavigationVolume,
@@ -63,6 +64,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     brushSides?: number;
     renderInGame?: boolean;
     color?: string;
+    navigationRole?: NavigationRole;
   }) => void;
   setSelectedAiNavigationVolume: (patch: {
     size?: Vec3;
@@ -985,6 +987,16 @@ export function renderBlockingVolumeDetails(options: SpecialActorDetailsOptions)
         formatBrushShapeLabel(shape)
       }</option>`,
   ).join("");
+  const navigationRoleOptions = NAVIGATION_ROLE_VALUES.map((role) => {
+    const label = role === "auto"
+      ? "Block Movement"
+      : role === "walkable"
+        ? "Walkable Deck"
+        : role === "obstacleOnly"
+          ? "Block Movement (No Floor)"
+          : "Ignore for Navigation";
+    return `<option value="${role}" ${volume.navigationRole === role ? "selected" : ""}>${label}</option>`;
+  }).join("");
   body.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
@@ -1013,6 +1025,11 @@ export function renderBlockingVolumeDetails(options: SpecialActorDetailsOptions)
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Actor</div>
+        <label class="detail-row">
+          <span>AI Navigation</span>
+          <select data-brush-navigation-role ${lockedAttr}>${navigationRoleOptions}</select>
+        </label>
+        <div class="detail-hint">Walkable Deck is a horizontal floor: AI agents stand on its top instead of treating it as an obstacle. Use a box fitted to a bridge deck.</div>
         <label class="detail-toggle">
           <input type="checkbox" data-brush-render-in-game ${volume.renderInGame ? "checked" : ""} />
           <span>Render in Game</span>
@@ -1045,6 +1062,14 @@ export function renderBlockingVolumeDetails(options: SpecialActorDetailsOptions)
     ?.addEventListener("change", (event) => {
       options.setSelectedBlockingVolume({
         color: (event.currentTarget as HTMLInputElement).value,
+      });
+    });
+
+  body
+    .querySelector<HTMLSelectElement>("[data-brush-navigation-role]")
+    ?.addEventListener("change", (event) => {
+      options.setSelectedBlockingVolume({
+        navigationRole: (event.currentTarget as HTMLSelectElement).value as NavigationRole,
       });
     });
 

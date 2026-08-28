@@ -200,6 +200,17 @@ export interface NavGrid {
   readonly floorY: Float32Array;
   /** `cols*rows` row-major soft clearance cost added when stepping onto a cell. */
   readonly penalty: Float32Array;
+  /**
+   * True when the grid was baked as a single flat `footY` plane (no
+   * `sampleFloorY`/`sampleFloorYs` hook). On such a grid walkability is fully
+   * described by the blockers + bounds the grid retains, which is exactly what
+   * {@link segmentSafe} tests — so a straight segment it accepts is genuinely
+   * walkable, and the final path may be string-pulled (see
+   * {@link compressPathPoints}). A heightfield grid also encodes floor holes,
+   * ledge erosion and step limits that no segment test can see, so it keeps the
+   * conservative cell-by-cell route.
+   */
+  readonly flatFloor: boolean;
   /** Optional multi-layer heightfield offsets into `layer*` arrays, length `cols*rows + 1`. */
   readonly layerOffsets?: Uint32Array;
   /** Optional multi-layer cell index per layer entry. */
@@ -501,6 +512,7 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
     passable,
     floorY,
     penalty,
+    flatFloor: !heightfield,
     ...(finalLayerOffsets
       ? {
           layerOffsets: finalLayerOffsets,
@@ -579,8 +591,14 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
       const cells = reconstructCells(cameFrom, current).map(coordFromKey);
       return {
         status: "success",
-        points: pathPoints(startFix.point, goalFix.point, cells, toPoint, (a, b) =>
-          segmentSafe(a, b, grid.blockers, grid.clearanceRadius, grid.height, grid.stepHeight, authoredBounds),
+        points: pathPoints(
+          startFix.point,
+          goalFix.point,
+          cells,
+          toPoint,
+          (a, b) =>
+            segmentSafe(a, b, grid.blockers, grid.clearanceRadius, grid.height, grid.stepHeight, authoredBounds),
+          grid.flatFloor,
         ),
         visited,
       };
@@ -1013,7 +1031,8 @@ function layerPathPoints(
   const raw: Vec3[] = [cloneVec3(start)];
   for (const layer of layers) pushDistinctPoint(raw, layerPoint(grid, layer));
   pushDistinctPoint(raw, cloneVec3(goal));
-  return compressPathPoints(raw, segmentSafe);
+  // A layered grid is a heightfield by construction, so never string-pull here.
+  return compressPathPoints(raw, segmentSafe, false);
 }
 
 function popLowestLayer(open: LayerSearchNode[]): LayerSearchNode {
@@ -1093,11 +1112,12 @@ function pathPoints(
   cells: readonly GridCoord[],
   toPoint: (coord: GridCoord) => Vec3,
   segmentSafe: (a: Vec3, b: Vec3) => boolean,
+  stringPull: boolean,
 ): Vec3[] {
   const raw: Vec3[] = [cloneVec3(start)];
   for (const cell of cells) pushDistinctPoint(raw, toPoint(cell));
   pushDistinctPoint(raw, cloneVec3(goal));
-  return compressPathPoints(raw, segmentSafe);
+  return compressPathPoints(raw, segmentSafe, stringPull);
 }
 
 function pushDistinctPoint(points: Vec3[], point: Vec3): void {
@@ -1106,7 +1126,27 @@ function pushDistinctPoint(points: Vec3[], point: Vec3): void {
   points.push(point);
 }
 
-function compressPathPoints(points: readonly Vec3[], segmentSafe: (a: Vec3, b: Vec3) => boolean): Vec3[] {
+/**
+ * Reduce the raw cell-by-cell route to the waypoints an agent actually needs.
+ *
+ * With `stringPull` the rule is the classic funnel/pull-taut one: keep the last
+ * emitted waypoint as an anchor and drop every intermediate point the anchor can
+ * see past, so a route only turns where geometry forces it to. Without it, a
+ * point is kept at every direction change, which preserves the 8-neighbour A*
+ * staircase verbatim — a diagonal run alternates E/NE every cell, and each of
+ * those steps survives as a waypoint the follower then visits one by one. That
+ * is the zig-zag seen on open ground.
+ *
+ * String-pulling is only sound where {@link segmentSafe} is the whole truth about
+ * walkability, i.e. flat grids ({@link NavGrid.flatFloor}). On a heightfield the
+ * dropped cells also carried floor heights, holes and step limits the segment
+ * test cannot see, so those grids keep the conservative route.
+ */
+function compressPathPoints(
+  points: readonly Vec3[],
+  segmentSafe: (a: Vec3, b: Vec3) => boolean,
+  stringPull: boolean,
+): Vec3[] {
   if (points.length <= 2) return points.map(cloneVec3);
   const out: Vec3[] = [cloneVec3(points[0]!)];
   let prevDir = pointDirection(points[0]!, points[1]!);
@@ -1119,7 +1159,10 @@ function compressPathPoints(points: readonly Vec3[], segmentSafe: (a: Vec3, b: V
       Math.abs(current[1] - points[i - 1]![1]) > 1e-6 ||
       Math.abs(next[1] - current[1]) > 1e-6;
     const shortcutSafe = segmentSafe(out[out.length - 1]!, next);
-    if (changedDirection || changedHeight || !shortcutSafe) out.push(cloneVec3(current));
+    const keep = stringPull
+      ? changedHeight || !shortcutSafe
+      : changedDirection || changedHeight || !shortcutSafe;
+    if (keep) out.push(cloneVec3(current));
     prevDir = dir;
   }
   out.push(cloneVec3(points[points.length - 1]!));

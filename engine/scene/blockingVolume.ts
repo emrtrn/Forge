@@ -1,5 +1,5 @@
 import type { BrushShape, LayoutBlockingVolume, Vec3 } from "./layout";
-import type { AssetCollisionDef } from "./collision";
+import type { AssetCollisionDef, NavigationRole } from "./collision";
 
 /**
  * Render-agnostic Blocking Volume model: resolved settings + defaults, shared by
@@ -30,6 +30,8 @@ export interface ResolvedBlockingVolume {
   renderInGame: boolean;
   /** Editor brush tint (hex `#rrggbb`). */
   color: string;
+  /** AI navigation interpretation; `walkable` makes a horizontal box a deck. */
+  navigationRole: NavigationRole;
 }
 
 /** Default brush size: a ~4 m blockout cube at the ~1u≈2m scene scale. */
@@ -51,6 +53,7 @@ export const BLOCKING_VOLUME_DEFAULTS: ResolvedBlockingVolume = {
   renderInGame: false,
   // Unreal's brush wireframe orange.
   color: "#ff8c1a",
+  navigationRole: "auto",
 };
 
 /** Clamps a radial-segment count to the `[MIN, MAX]` integer range. */
@@ -96,6 +99,7 @@ export function resolveBlockingVolume(
     brushSides: actor.brushSides !== undefined ? clampBrushSides(actor.brushSides) : defaults.brushSides,
     renderInGame: actor.renderInGame ?? defaults.renderInGame,
     color: actor.color ?? defaults.color,
+    navigationRole: actor.navigationRole ?? defaults.navigationRole,
   };
 }
 
@@ -126,11 +130,16 @@ export function uniqueBlockingVolumeName(
  * the placement scale into this primitive, so the collider tracks the rendered
  * brush exactly.
  */
-export function blockingVolumeCollisionDef(shape: BrushShape, size: Vec3): AssetCollisionDef {
+export function blockingVolumeCollisionDef(
+  shape: BrushShape,
+  size: Vec3,
+  navigationRole: NavigationRole = "auto",
+): AssetCollisionDef {
   const solid: Vec3 = [size[0], size[1], size[2]];
   return {
     primitives: [{ shape, size: solid }],
     complexity: "projectDefault",
     preset: "blockAll",
+    ...(navigationRole === "auto" ? {} : { navigationRole }),
   };
 }

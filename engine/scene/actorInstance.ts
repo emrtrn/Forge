@@ -21,6 +21,7 @@
  * `read*Component` already parses an arbitrary `EntityComponentData` record.
  */
 import type { ActorScriptDef } from "./actorScript";
+import type { MetadataFieldDef } from "./metadataSchema";
 import {
   BEHAVIOR_COMPONENT,
   COLLIDER_COMPONENT,
@@ -34,7 +35,7 @@ import {
   type TransformComponent,
 } from "./components";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
-import type { LayoutActorInstance, Vec3 } from "./layout";
+import type { LayoutActorInstance, MetadataValue, Vec3 } from "./layout";
 import { readRotation, readScale } from "./transform";
 
 /** A placed actor instance paired with its resolved class + layout index. */
@@ -109,6 +110,29 @@ function readVec3Prop(value: SceneJsonValue | undefined): Vec3 | null {
   const [x, y, z] = value;
   if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return null;
   return [x, y, z];
+}
+
+function matchesVariableType(value: MetadataValue, variable: MetadataFieldDef): boolean {
+  if (variable.type === "number") return typeof value === "number" && Number.isFinite(value);
+  if (variable.type === "boolean") return typeof value === "boolean";
+  if (variable.type === "tags") return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+  return typeof value === "string";
+}
+
+/** Resolves declared class defaults, then accepts type-correct level instance overrides. */
+export function resolveActorInstanceVariables(
+  def: ActorScriptDef,
+  overrides: Readonly<Record<string, MetadataValue>> | undefined,
+): Record<string, MetadataValue> {
+  const values: Record<string, MetadataValue> = {};
+  for (const variable of def.variables) {
+    if (variable.default !== undefined && matchesVariableType(variable.default, variable)) {
+      values[variable.key] = variable.default;
+    }
+    const override = overrides?.[variable.key];
+    if (override !== undefined && matchesVariableType(override, variable)) values[variable.key] = override;
+  }
+  return values;
 }
 
 /**
@@ -224,9 +248,11 @@ export function actorInstanceToEntity(
       })),
     } as unknown as EntityComponentData;
   }
+  const variables = resolveActorInstanceVariables(def, instance.variableOverrides);
   components[SCRIPT_ACTOR_COMPONENT] = {
     classRef: instance.classRef,
     ...(instance.nodeId ? { nodeId: instance.nodeId } : {}),
+    ...(Object.keys(variables).length > 0 ? { variables } : {}),
   } as unknown as EntityComponentData;
   if (def.references.length > 0) {
     components[SCRIPT_REFERENCES_COMPONENT] = {

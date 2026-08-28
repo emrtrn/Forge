@@ -147,6 +147,8 @@ export interface EditableBlockingVolume {
   brushSides: number;
   renderInGame: boolean;
   color: string;
+  /** AI navigation interpretation; `walkable` makes a horizontal box a deck. */
+  navigationRole: NavigationRole;
 }
 
 /**

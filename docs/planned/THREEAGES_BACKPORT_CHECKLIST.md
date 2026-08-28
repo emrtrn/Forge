@@ -138,7 +138,7 @@ Her biri kendi branch'i.
   InstancedMesh, editörde model slot listesi (maks. 8), `burst` emisyonu,
   `maxParticles`, opacity ramp, vfxSubsystem canlı efekt bütçesi, Content
   Browser kartında renderer özeti.
-- [ ] **2.3 Data Table Editor.** Editör + `/__save-gamedata` +
+- [x] **2.3 Data Table Editor.** Editör + `/__save-gamedata` +
   `/__gamedata-defaults` (git HEAD'den tek kaydı geri alma) +
   `gameEditorRegistry` genişlemesi. Doğrulayıcı **yapısal** kalır: yol
   `game-data/**.json` ile çitlenir, denge kuralı oyun validatöründen enjekte

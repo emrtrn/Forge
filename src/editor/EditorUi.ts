@@ -50,6 +50,7 @@ import { attachDebugStats } from "@/scene/debugStats";
 import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
 import {
   getGameEditorCatalog,
+  type EditorDataTableDef,
   type EditorGameModeOption,
 } from "@/editor/gameEditorRegistry";
 import { loadActorScript } from "@/editor/actorScriptStore";
@@ -525,6 +526,7 @@ export class EditorUi {
               <button type="button" data-show-flag="stats">Stats (FPS)</button>
             </div>
           </div>
+          ${this.buildDataTablesMenuMarkup()}
           <div class="editor-play-split">
             <button type="button" class="editor-play-button primary" data-action="play" data-testid="editor-play" aria-label="Play">${TOOLBAR_ICONS.play}<span>Play</span></button>
           </div>
@@ -967,11 +969,19 @@ export class EditorUi {
     // ever pins the menu open).
     this.root
       .querySelectorAll<HTMLButtonElement>(
-        "[data-add-actor-button], .add-actor-category-label, [data-show-button], [data-camera-button], [data-viewmode-button]",
+        "[data-add-actor-button], .add-actor-category-label, [data-show-button], [data-camera-button], [data-viewmode-button], [data-datatables-button]",
       )
       .forEach((button) => {
         button.addEventListener("mousedown", (event) => event.preventDefault());
       });
+
+    // The "Data" menu: each option opens the matching balance table's editor.
+    this.root.querySelectorAll<HTMLButtonElement>("[data-datatable-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const def = this.dataTableDefs().find((table) => table.id === button.dataset.datatableId);
+        if (def) void this.openDataTableEditorByDef(def);
+      });
+    });
 
     this.root.querySelector('[data-action="undo"]')?.addEventListener("click", () => {
       this.app.undo();
@@ -3022,6 +3032,67 @@ export class EditorUi {
    * Opens the node-graph Sound Cue editor for a `*.soundcue.json` asset.
    * Kept behind a dynamic import like the other asset editors.
    */
+  /**
+   * The balance files the game registered as editable data tables, or [] when a
+   * fork ships none (the "Data" menu then stays hidden). Safe before injection.
+   */
+  private dataTableDefs(): readonly EditorDataTableDef[] {
+    try {
+      return getGameEditorCatalog().dataTables ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Popover contents for the topbar "Data" menu — one button per data table. */
+  private buildDataTablesMenuMarkup(): string {
+    const tables = this.dataTableDefs();
+    if (tables.length === 0) return "";
+    const items = tables
+      .map(
+        (def) =>
+          `<button type="button" data-datatable-id="${escapeHtml(def.id)}">${escapeHtml(def.label)}</button>`,
+      )
+      .join("");
+    return `
+      <div class="data-menu topbar-menu">
+        <button type="button" class="topbar-menu-button" data-datatables-button aria-label="Data tables">Data${MENU_CHEVRON}</button>
+        <div class="topbar-popover" data-datatables-popover>${items}</div>
+      </div>`;
+  }
+
+  /**
+   * Opens the form-based Data Table editor for a registered balance table. Kept
+   * behind a dynamic import like the other asset editors; the validator is the
+   * game's own, injected via the catalog, so the editor never imports `@/game`.
+   * Balance files live outside the asset-rooted Content Browser, so this opens
+   * from the topbar "Data" menu rather than a double-click.
+   */
+  private async openDataTableEditorByDef(def: EditorDataTableDef): Promise<void> {
+    try {
+      const { DataTableEditor } = await import("@/editor/DataTableEditor");
+      await DataTableEditor.open({
+        path: def.path,
+        label: def.label,
+        def,
+        // Asset-picker fields choose from the project's own manifest rather than
+        // a typed id.
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Data Table editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
   private async openSoundCueEditor(item: BrowserAssetItem): Promise<void> {
     try {
       const { SoundCueEditor } = await import("@/editor/SoundCueEditor");

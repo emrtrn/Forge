@@ -658,7 +658,9 @@ import {
   validateSaveMeshPaintPayload,
   validateAssetVertexColors,
   validateSaveAssetVertexColorsPayload,
+  validateSaveGameDataPayload,
 } from "./saveValidator";
+import { bucketEntriesByCategory, collectLeaves, partitionLeaves } from "../src/editor/dataTableLayout";
 import {
   normalizeFoliageType,
   normalizeFoliageData,
@@ -28319,6 +28321,86 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
 
 // Runtime `?debug` snapshot builders (P2.5): pure, side-effect-free, so the
 // null-branching + default-fallback logic is exercised without a live scene.
+check("validateSaveGameDataPayload fences writes to game-data JSON and rejects the rest", () => {
+  // The dev endpoint's guard is generic on purpose: path scope + a keyed object,
+  // no balance rules (those ride on the game's injected validator and the runtime
+  // loader). Accepts a real balance path; refuses escapes and non-objects.
+  const ok = validateSaveGameDataPayload({ path: "game-data/balance/units.json", data: { a: {} } });
+  assert.equal(ok.path, "game-data/balance/units.json");
+  assert.deepEqual(ok.data, { a: {} });
+  // A leading slash is normalised rather than rejected.
+  assert.equal(
+    validateSaveGameDataPayload({ path: "/game-data/balance/units.json", data: {} }).path,
+    "game-data/balance/units.json",
+  );
+  for (const bad of [
+    { path: "src/main.ts", data: {} },
+    { path: "game-data/../secret.json", data: {} },
+    { path: "game-data/balance/units.json", data: [] },
+    { path: "game-data/balance/units.json", data: "x" },
+    { path: 42, data: {} },
+    null,
+  ]) {
+    assert.throws(() => validateSaveGameDataPayload(bad), /gameData payload/);
+  }
+});
+
+check("data table categories bucket every entry exactly once", () => {
+  // The two properties the renderer depends on and cannot check for itself.
+  // Losing a row is the failure worth naming: the obvious implementation
+  // (filter per category) drops anything unmatched, and the symptom is an
+  // author adding an entry and finding the editor simply does not show it.
+  const categories = [
+    { id: "a", label: "A", prefixes: ["a."] },
+    { id: "b", label: "B", prefixes: ["b.", "bb."] },
+    { id: "empty", label: "EMPTY", prefixes: ["nothing."] },
+  ];
+  const ids = ["a.one", "b.two", "bb.three", "z.stray", "a.four"];
+  const buckets = bucketEntriesByCategory(ids, categories);
+
+  const flattened = buckets.flatMap((bucket) => [...bucket.entryIds]);
+  assert.deepEqual([...flattened].sort(), [...ids].sort(), "every entry must survive bucketing exactly once");
+  assert.deepEqual(
+    buckets.map((bucket) => bucket.label),
+    ["A", "B", "EMPTY", "UNCATEGORIZED"],
+    "declared order is kept and the catch-all trails it",
+  );
+  // Document order inside a bucket, not prefix order: the file's order is the
+  // one the author edited and the one a diff shows.
+  assert.deepEqual(buckets[0]!.entryIds, ["a.one", "a.four"]);
+  assert.deepEqual(buckets[3]!.entryIds, ["z.stray"]);
+  assert.equal(buckets[2]!.entryIds.length, 0, "a category with no rows still renders");
+
+  // No catch-all heading at all when everything is claimed — an empty "other"
+  // is a heading that says nothing.
+  const clean = bucketEntriesByCategory(["a.one"], categories);
+  assert.equal(clean.length, 3, "the catch-all appears only when it has rows");
+});
+
+check("data table leaves keep their scalar type and group under opted-in blocks", () => {
+  const entry = {
+    cost: { food: 50, wood: 0 },
+    enabled: true,
+    tier: "heavy",
+    tags: ["a", "b"],
+    levels: [{ level: 1, hp: 10 }, { level: 2, hp: 20 }],
+  };
+  // An array of objects groups per element without opt-in; a plain nested object
+  // (`cost`) stays inline, because grouping every object would bury a flat file.
+  // `tags` is opted into whole-list editing; without that a string array walks
+  // to one leaf per index, which is right for a fixed triple and wrong for a list.
+  const groups = partitionLeaves(collectLeaves(entry, "", "", new Set(), new Set(["tags"])));
+  const base = groups.find((group) => group.isBase);
+  assert.ok(base);
+  assert.deepEqual(
+    base!.leaves.map((leaf) => [leaf.path, leaf.type]),
+    [["cost.food", "number"], ["cost.wood", "number"], ["enabled", "boolean"], ["tier", "string"], ["tags", "stringList"]],
+  );
+  const tiers = groups.filter((group) => !group.isBase);
+  assert.equal(tiers.length, 2, "each array element becomes its own block");
+  assert.deepEqual(tiers[0]!.leaves.map((leaf) => leaf.path), ["levels.0.level", "levels.0.hp"]);
+});
+
 check("buildPerfMemorySnapshot passes render memory through and reads the JS heap", () => {
   const render = { geometries: 3, textures: 4, programs: 2 } as unknown as Parameters<
     typeof buildPerfMemorySnapshot

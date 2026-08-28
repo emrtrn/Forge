@@ -24,6 +24,7 @@ import {
   Color,
   Mesh,
   MeshBasicMaterial,
+  Object3D,
   PerspectiveCamera,
   Scene,
   SphereGeometry,
@@ -33,6 +34,8 @@ import {
 } from "three";
 
 import { ParticleEffect, toRuntimeParticleEffect } from "@engine/render-three/particleEffect";
+import { MeshParticleEffect } from "@engine/render-three/meshParticleEffect";
+import { GltfModelLoader } from "@engine/render-three/gltfModelLoader";
 import type { ParticleEffectDefinition } from "@engine/vfx/particleEffectTypes";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 
@@ -45,8 +48,11 @@ export interface PreviewStats {
   capacity: number;
 }
 
+type PreviewParticleEffect = ParticleEffect | MeshParticleEffect;
+
 export class ParticleEffectPreviewViewport {
   private readonly renderer: WebGLRenderer;
+  private readonly modelLoader: GltfModelLoader;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 200);
   private readonly orbit: OrbitViewportCamera;
@@ -59,25 +65,38 @@ export class ParticleEffectPreviewViewport {
   private boundsHelper: Box3Helper | null = null;
 
   private definition: ParticleEffectDefinition | null = null;
-  private effect: ParticleEffect | null = null;
+  private effect: PreviewParticleEffect | null = null;
+  private effectRevision = 0;
   private rafId = 0;
   private lastTime = 0;
   private playing = true;
   private speed = 1;
   private loopPreview = true;
   private replayCooldown = 0;
+  /** Short author-facing feedback for asynchronous mesh-source loading. */
+  private previewMessage: string | null = null;
   private disposed = false;
 
   /**
    * @param resolveTextureUrl Turns a `renderer.texture` asset id into a fetchable
    *   image URL (the editor injects a manifest-backed resolver). Absent keeps the
    *   procedural sprite, matching a texture-less effect.
+   * @param applyModelAuthoredSurface Applies a mesh source's asset-level material
+   *   slot assignments (`*.materials.json`) to the freshly loaded root, so the
+   *   preview shows the surface the game will render rather than the GLB's
+   *   exported default. Absent leaves the model exactly as it was exported.
    */
   constructor(
     private readonly host: HTMLElement,
     private readonly resolveTextureUrl?: (textureId: string) => string | null,
+    private readonly resolveModelUrl?: (modelId: string) => string | null,
+    private readonly applyModelAuthoredSurface?: (
+      modelId: string,
+      root: Object3D,
+    ) => Promise<void>,
   ) {
     this.renderer = new WebGLRenderer({ antialias: true });
+    this.modelLoader = new GltfModelLoader(this.renderer);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.append(this.renderer.domElement);
 
@@ -157,7 +176,14 @@ export class ParticleEffectPreviewViewport {
     return { alive: this.effect.aliveCount(), capacity: this.effect.maxCapacity };
   }
 
+  /** Non-null while a mesh preview is loading or its selected sources are unusable. */
+  getStatus(): string | null {
+    return this.previewMessage;
+  }
+
   private rebuildEffect(): void {
+    const revision = ++this.effectRevision;
+    this.previewMessage = null;
     if (this.effect) {
       this.scene.remove(this.effect.object3D);
       this.effect.dispose();
@@ -165,11 +191,58 @@ export class ParticleEffectPreviewViewport {
     }
     if (!this.definition) return;
     const runtime = toRuntimeParticleEffect(this.definition);
+    if (runtime.rendererType === "mesh") {
+      void this.buildMeshEffect(runtime, revision);
+      return;
+    }
     const textureUrl =
       runtime.texture && this.resolveTextureUrl ? this.resolveTextureUrl(runtime.texture) : null;
     this.effect = new ParticleEffect(runtime, undefined, textureUrl);
     this.effect.setOrigin(0, 0, 0);
     this.scene.add(this.effect.object3D);
+  }
+
+  private async buildMeshEffect(
+    runtime: ReturnType<typeof toRuntimeParticleEffect>,
+    revision: number,
+  ): Promise<void> {
+    const modelIds = (runtime.modelIds ?? []).filter((id) => id.trim().length > 0);
+    if (!this.resolveModelUrl || modelIds.length === 0) {
+      this.setPreviewMessage(revision, "Select at least one static mesh source.");
+      return;
+    }
+    this.setPreviewMessage(revision, `Loading ${modelIds.length} mesh source${modelIds.length === 1 ? "" : "s"}…`);
+    const roots = (
+      await Promise.all(
+        modelIds.map(async (id): Promise<Object3D | null> => {
+          const url = this.resolveModelUrl?.(id);
+          if (!url) return null;
+          try {
+            const scene = (await this.modelLoader.load(id, url)).scene;
+            // Before the effect is built: `MeshParticleEffect` reads the root's
+            // materials at construction, so a slot swap afterwards never lands.
+            await this.applyModelAuthoredSurface?.(id, scene);
+            return scene;
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((root): root is Object3D => root !== null);
+    if (this.disposed || revision !== this.effectRevision) return;
+    if (roots.length === 0) {
+      this.previewMessage = "No valid static mesh source could be loaded.";
+      return;
+    }
+    const effect = new MeshParticleEffect(runtime, roots);
+    effect.setOrigin(0, 0, 0);
+    this.effect = effect;
+    this.scene.add(effect.object3D);
+    this.previewMessage = null;
+  }
+
+  private setPreviewMessage(revision: number, message: string): void {
+    if (!this.disposed && revision === this.effectRevision) this.previewMessage = message;
   }
 
   /** Rebuilds the fixed-bounds wireframe from `system.bounds` (or hides it). */

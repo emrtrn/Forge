@@ -6,10 +6,10 @@
  * the payload server-side (see `tools/saveValidator.ts` → `validateEffectAsset`).
  * Mirrors the pattern of `soundCueStore.ts` and `materialStore.ts`.
  *
- * Both schema-1 and schema-2 asset bodies normalise to the same rich
- * {@link ParticleEffectDefinition} on load; the editor always *saves* schema-2
- * (§7 migration decision), so opening a legacy schema-1 asset and saving it
- * upgrades it in place.
+ * Schema-1, schema-2 and schema-3 asset bodies all normalise to the same rich
+ * {@link ParticleEffectDefinition} on load; the editor saves schema-2 for sprite
+ * effects and schema-3 for mesh (3D model) effects, so opening a legacy schema-1
+ * asset and saving it upgrades it in place.
  */
 import type { ParticleEffectDefinition } from "@engine/vfx/particleEffectTypes";
 import { normalizeEffectDefinition } from "@engine/vfx/particleEffectParser";
@@ -42,7 +42,10 @@ export async function saveEffectAsset(
   path: string,
   definition: ParticleEffectDefinition,
 ): Promise<{ path: string; changed: boolean }> {
-  const effect = { schema: 2, type: "particleEffect", ...definition };
+  // Schema 3 only when the author actually selected the mesh renderer; sprite
+  // effects keep writing schema 2 so older readers still load them (plan §3).
+  const schema = definition.renderer.type === "mesh" ? 3 : 2;
+  const effect = { schema, type: "particleEffect", ...definition };
   const response = await fetch("/__save-effect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

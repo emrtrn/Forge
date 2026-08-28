@@ -967,7 +967,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // injected through the shell because a capability may not import `@/game`.
     // The VFX capability parents its effect container here once, for the whole
     // runtime's life — hence a host service rather than a level-time fact.
-    this.runtimeServices.provide(vfxHostService, { scene: this.scene });
+    this.runtimeServices.provide(vfxHostService, {
+      scene: this.scene,
+      // AssetLoader checks the manifest type before anything reaches GLTFLoader,
+      // so a mesh effect can only ever name ids, never a path or arbitrary URL.
+      // A model that fails to load drops out of the list rather than failing the
+      // whole emitter.
+      loadModels: async (modelIds) => {
+        if (!this.assetLoader) return [];
+        const models = await Promise.all(
+          modelIds.map(async (id) => {
+            try {
+              const scene = (await this.assetLoader!.loadModel(id)).scene;
+              await this.applyVfxMeshMaterialSlots(id, scene);
+              return scene;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        return models.filter((model): model is Group => model !== null);
+      },
+    });
     // What the AI-character animation capability needs from the shell: the
     // animation subsystem, the camera distance its LOD samples, the locomotion
     // snapshots the movement layer reports, and the possessed pawn it must skip.
@@ -3519,6 +3540,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.instanceMeshes.set(assetId, meshes);
     this.instanceProbeMaterials.set(assetId, clonedMaterials);
     return group;
+  }
+
+  /**
+   * Applies an asset's authored material-slot overrides to a model a mesh effect
+   * is about to instance, so a particle model looks the same as the same asset
+   * placed in the level.
+   */
+  private async applyVfxMeshMaterialSlots(assetId: string, root: Object3D): Promise<void> {
+    const manifest =
+      this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
+    if (!manifest) return;
+    let slots = this.assetMaterialSlots.get(assetId);
+    if (!slots) {
+      const asset = manifest.assets.find((entry) => entry.id === assetId);
+      if (!asset) return;
+      slots = await loadAssetMaterialSlots(assetPath(asset));
+      if (!hasAssignedMaterialSlots(slots)) return;
+      this.assetMaterialSlots.set(assetId, slots);
+    }
+    await Promise.all(
+      assignedMaterialSlotIds(slots).map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),
+    );
+    applyMaterialSlotOverrides(root, slots, (materialId) => this.materialCache.get(materialId));
   }
 
   private resolveAssetMaterialSlots(assetId: string): AssetMaterialSlotsDef | undefined {

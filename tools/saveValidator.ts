@@ -3299,10 +3299,16 @@ export function validateSaveSoundCuePayload(value: unknown): {
 // valid value, ranges are ordered min<=max, bounds default). Any new
 // ParticleEffectDefinition field must be added to the parser's normalize* (which
 // this reuses) or it is silently dropped on save.
+//
+// Schema 3 adds the mesh renderer. Its `modelIds` are *manifest asset ids only*
+// — the parser's `isModelAssetId` rejects anything path- or URL-shaped, so this
+// validator and the runtime resolver gate on one shared rule, and a mesh effect
+// whose whole list is rejected fails the save loudly instead of writing an
+// emitter that can never render.
 
 /**
- * Validates + canonicalizes a schema-2 particle effect asset body. Gates on the
- * `{ schema: 2, type: "particleEffect" }` envelope, then runs it through the vfx
+ * Validates + canonicalizes a schema-2/3 particle effect asset body. Gates on the
+ * `{ schema, type: "particleEffect" }` envelope, then runs it through the vfx
  * normalizer and re-attaches the envelope so the saved file round-trips on load.
  */
 export function validateEffectAsset(value: unknown): Record<string, unknown> {
@@ -3310,11 +3316,24 @@ export function validateEffectAsset(value: unknown): Record<string, unknown> {
     throw new Error("effect must be an object");
   }
   const input = value as Record<string, unknown>;
-  if (input.schema !== 2) throw new Error("effect.schema must be 2");
+  if (input.schema !== 2 && input.schema !== 3) throw new Error("effect.schema must be 2 or 3");
   if (input.type !== "particleEffect") throw new Error('effect.type must be "particleEffect"');
   const def = normalizeEffectDefinition(input);
   if (!def) throw new Error("effect body is not a valid particle effect");
-  return { schema: 2, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
+  if (def.renderer.type === "mesh" && def.renderer.modelIds.length === 0) {
+    // The normalizer drops path/URL-shaped and duplicate references, so an
+    // incoming list can normalize to empty. Refuse the save rather than writing
+    // an emitter that can never render, and say which half failed.
+    const authored = (input.renderer as { modelIds?: unknown } | undefined)?.modelIds;
+    const hadEntries = Array.isArray(authored) && authored.length > 0;
+    throw new Error(
+      hadEntries
+        ? "mesh effect renderer model ids must be manifest asset ids (no path, URL or duplicate)"
+        : "mesh effect renderer requires at least one model id",
+    );
+  }
+  const schema = def.renderer.type === "mesh" ? 3 : 2;
+  return { schema, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
 }
 
 export function validateSaveEffectPayload(value: unknown): {

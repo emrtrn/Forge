@@ -226,6 +226,14 @@ export const audioCommandsService = runtimeServiceKey<AudioCommands>("audio-comm
  */
 export interface VfxHost {
   readonly scene: Scene;
+  /**
+   * Resolves manifest static-mesh ids to loaded GLTF scene roots, for effects
+   * whose renderer draws models instead of sprites. Optional: a host that cannot
+   * load models leaves mesh emitters with no sources, and they render nothing
+   * rather than reaching for an arbitrary URL. The ids are manifest ids only —
+   * the effect parser refuses anything path- or URL-shaped before it gets here.
+   */
+  readonly loadModels?: (modelIds: readonly string[]) => Promise<readonly Object3D[]>;
 }
 
 export const vfxHostService = runtimeServiceKey<VfxHost>("vfx-host");

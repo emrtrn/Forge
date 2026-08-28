@@ -134,7 +134,7 @@ Her biri kendi branch'i.
   `panels/details/specialActorDetails.ts`, `src/scene/SceneApp.ts`,
   `tools/saveValidator.ts` (`validateRiverWater`),
   `tests/smoke/river-water-details.spec.ts` (hazır, taşınabilir)
-- [ ] **2.2 Mesh Particle Renderer (effect şeması 3).** `ParticleMeshRendererBlock`,
+- [x] **2.2 Mesh Particle Renderer (effect şeması 3).** `ParticleMeshRendererBlock`,
   InstancedMesh, editörde model slot listesi (maks. 8), `burst` emisyonu,
   `maxParticles`, opacity ramp, vfxSubsystem canlı efekt bütçesi, Content
   Browser kartında renderer özeti.

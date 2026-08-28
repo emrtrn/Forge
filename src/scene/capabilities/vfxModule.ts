@@ -81,6 +81,10 @@ export function createVfxModule(): CapabilityModule {
       vfx = new VfxSubsystem({
         resolveEffectUrl: (effectId) => effectUrlById.get(effectId) ?? null,
         resolveTextureUrl: (textureId) => textureUrlById.get(textureId) ?? null,
+        // Mesh emitters draw manifest models. A host that cannot load them leaves
+        // those emitters sourceless, which renders nothing — the module still
+        // works for every sprite effect.
+        ...(host.loadModels ? { loadMeshModels: host.loadModels } : {}),
       });
       // One persistent container; live effects come and go as its children, so
       // it is parented once and survives every scene rebuild.

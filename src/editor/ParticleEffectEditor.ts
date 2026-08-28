@@ -20,15 +20,25 @@
  * snapshot history of the def — one entry per field-edit session.
  */
 
+import { TextureLoader, type Material, type Object3D } from "three";
+
 import type { ParticleEffectDefinition } from "@engine/vfx/particleEffectTypes";
+import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
 import { loadEffectAsset, saveEffectAsset } from "@/editor/particleEffectStore";
 import { ParticleEffectPreviewViewport } from "@/editor/ParticleEffectPreviewViewport";
 import { particleEffectPresetDefinition } from "@engine/vfx/particleEffectPresets";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  hasAssignedMaterialSlots,
+  loadAssetMaterialSlots,
+} from "@/scene/assetMaterialSlotsLoader";
+import { loadForgeMaterial } from "@/scene/materialAssets";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
-/** Minimal asset record the editor needs to populate the sprite-texture picker. */
+/** Minimal asset record the editor needs to populate renderer asset pickers. */
 export interface ParticleEffectEditorAsset {
   id: string;
   name: string;
@@ -39,7 +49,7 @@ export interface ParticleEffectEditorAsset {
 export interface ParticleEffectEditorOptions {
   path: string;
   label: string;
-  /** Project asset records (for the Renderer sprite-texture picker); optional. */
+  /** Project asset records (for renderer texture and static-mesh pickers); optional. */
   assets?: ParticleEffectEditorAsset[];
   hideDevelopmentContent?: boolean;
   onStatus?: (message: string, tone?: StatusTone) => void;
@@ -69,6 +79,9 @@ const SPAWN_MODES = ["rate", "burst"] as const;
 const BLEND_MODES = ["alpha", "additive"] as const;
 const SORT_MODES = ["none", "distance"] as const;
 const BOUNDS_MODES = ["fixed", "autoPreview"] as const;
+const MESH_SELECTION_MODES = ["random", "sequence"] as const;
+/** Mirrors the parser's `MAX_MESH_MODEL_IDS`: extra slots would be dropped on save. */
+const MAX_MESH_MODEL_SLOTS = 8;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -155,6 +168,9 @@ export class ParticleEffectEditor {
   private path: string;
   private label: string;
   private readonly assets: readonly ParticleEffectEditorAsset[];
+  /** Preview-only slot materials, keyed by material asset id; disposed on close. */
+  private readonly previewSlotMaterials = new Map<string, Material>();
+  private readonly previewTextureLoader = new TextureLoader();
 
   private readonly undoStack: ParticleEffectDefinition[] = [];
   private readonly redoStack: ParticleEffectDefinition[] = [];
@@ -260,6 +276,8 @@ export class ParticleEffectEditor {
       this.dirty = false;
       this.preview = new ParticleEffectPreviewViewport(this.previewHost, (id) =>
         this.resolveTextureUrl(id),
+        (id) => this.resolveModelUrl(id),
+        (id, root) => this.applyModelAuthoredSurface(id, root),
       );
       this.preview.setDefinition(this.def);
       this.statsTimer = window.setInterval(() => this.updateHud(), 150);
@@ -380,16 +398,40 @@ export class ParticleEffectEditor {
     html.push(this.groupClose());
 
     html.push(this.groupOpen("renderer", "Renderer"));
-    html.push(this.roRow("Type", "sprite"));
-    html.push(this.textureRow("Texture", "renderer.texture", d.renderer.texture));
-    if (d.renderer.texture) {
-      // Flipbook (SubUV) only applies to a texture; 1×1 = whole texture (no animation).
-      html.push(this.numRow("Flipbook Cols", "renderer.subUV.cols", d.renderer.subUV.cols, 1, 32, 1));
-      html.push(this.numRow("Flipbook Rows", "renderer.subUV.rows", d.renderer.subUV.rows, 1, 32, 1));
+    html.push(this.enumRow("Type", "renderer.type", d.renderer.type, ["sprite", "mesh"]));
+    if (d.renderer.type === "sprite") {
+      html.push(this.textureRow("Texture", "renderer.texture", d.renderer.texture));
+      if (d.renderer.texture) {
+        // Flipbook (SubUV) only applies to a texture; 1×1 = whole texture (no animation).
+        html.push(this.numRow("Flipbook Cols", "renderer.subUV.cols", d.renderer.subUV.cols, 1, 32, 1));
+        html.push(this.numRow("Flipbook Rows", "renderer.subUV.rows", d.renderer.subUV.rows, 1, 32, 1));
+      }
+      html.push(this.enumRow("Blend Mode", "renderer.blendMode", d.renderer.blendMode, BLEND_MODES));
+      html.push(this.numRow("Softness", "renderer.softness", d.renderer.softness, 0, 1, 0.05));
+      html.push(this.enumRow("Sort Mode", "renderer.sortMode", d.renderer.sortMode, SORT_MODES));
+    } else {
+      const modelIds = d.renderer.modelIds.length > 0 ? d.renderer.modelIds : [""];
+      modelIds.forEach((modelId, index) => {
+        html.push(
+          this.modelRow(
+            `Model ${index + 1}`,
+            `renderer.modelIds.${index}`,
+            modelId,
+            index,
+            modelIds.length,
+          ),
+        );
+      });
+      const atCap = d.renderer.modelIds.length >= MAX_MESH_MODEL_SLOTS;
+      html.push(
+        `<div class="pfx-row"><span class="pfx-row-label">Sources</span><button class="pfx-button" type="button" data-pfx-add-model${atCap ? " disabled" : ""}>Add model</button></div>`,
+      );
+      html.push(this.enumRow("Pick Order", "renderer.modelSelection", d.renderer.modelSelection, MESH_SELECTION_MODES));
+      html.push(this.enumRow("Material", "renderer.materialMode", d.renderer.materialMode, ["source", "tint"]));
+      html.push(this.boolRow("Cast Shadow", "renderer.castShadow", d.renderer.castShadow));
+      html.push(this.boolRow("Receive Shadow", "renderer.receiveShadow", d.renderer.receiveShadow));
+      html.push(this.numRow("Mesh Particle Cap", "renderer.maxModelParticles", d.renderer.maxModelParticles, 1, 256, 1));
     }
-    html.push(this.enumRow("Blend Mode", "renderer.blendMode", d.renderer.blendMode, BLEND_MODES));
-    html.push(this.numRow("Softness", "renderer.softness", d.renderer.softness, 0, 1, 0.05));
-    html.push(this.enumRow("Sort Mode", "renderer.sortMode", d.renderer.sortMode, SORT_MODES));
     html.push(this.groupClose());
 
     html.push(this.groupOpen("bounds", "Bounds"));
@@ -417,10 +459,6 @@ export class ParticleEffectEditor {
 
   private textRow(label: string, path: string, value: string): string {
     return this.row(label, `<input type="text" class="pfx-input" data-path="${esc(path)}" data-kind="text" value="${esc(value)}">`);
-  }
-
-  private roRow(label: string, value: string): string {
-    return this.row(label, `<input type="text" class="pfx-input" value="${esc(value)}" disabled>`);
   }
 
   private numRow(label: string, path: string, value: number, min: number, max: number, step: number): string {
@@ -480,6 +518,41 @@ export class ParticleEffectEditor {
     );
   }
 
+  /**
+   * Static-mesh picker for one mesh renderer source slot, with the list controls
+   * the slot needs: reorder (which matters under `Pick Order: sequence`) and
+   * remove. All three are real `<button>`/`<select>` elements inside the row's
+   * label, so the whole list is reachable and operable from the keyboard.
+   */
+  private modelRow(
+    label: string,
+    path: string,
+    value: string | undefined,
+    index: number,
+    count: number,
+  ): string {
+    const none = `<option value=""${value ? "" : " selected"}>&lt;select static mesh&gt;</option>`;
+    const opts = this.modelAssets(value)
+      .map(
+        (asset) =>
+          `<option value="${esc(asset.id)}"${asset.id === value ? " selected" : ""}>${esc(asset.name)}</option>`,
+      )
+      .join("");
+    const move = (delta: number, glyph: string, name: string, disabled: boolean): string =>
+      `<button class="pfx-row-move" type="button" data-pfx-move-model="${index}" data-pfx-move-delta="${delta}" title="${name} (slot ${index + 1})" aria-label="${name} — model slot ${index + 1}"${disabled ? " disabled" : ""}>${glyph}</button>`;
+    // One grid cell holds the picker + its controls, so the row keeps the same
+    // two-column shape as every other property row.
+    return this.row(
+      label,
+      `<span class="pfx-model-slot">` +
+        `<select class="pfx-input" data-path="${esc(path)}" data-kind="model" aria-label="Model slot ${index + 1} source">${none}${opts}</select>` +
+        move(-1, "↑", "Move up", index === 0) +
+        move(1, "↓", "Move down", index >= count - 1) +
+        `<button class="pfx-row-remove" type="button" data-pfx-remove-model="${index}" title="Remove model slot ${index + 1}" aria-label="Remove model slot ${index + 1}">×</button>` +
+        `</span>`,
+    );
+  }
+
   /** The project's texture assets, sorted by display name for the picker. */
   private textureAssets(currentTextureId?: string | null): ParticleEffectEditorAsset[] {
     return this.assets
@@ -494,10 +567,81 @@ export class ParticleEffectEditor {
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   }
 
+  /** Static model assets, filtered in the same way as the sprite texture picker. */
+  private modelAssets(currentModelId?: string): ParticleEffectEditorAsset[] {
+    return this.assets
+      .filter((asset) => asset.assetType === "staticMesh")
+      .filter(
+        (asset) =>
+          !this.options.hideDevelopmentContent ||
+          asset.id === currentModelId ||
+          !isDevelopmentContentPath(asset.path),
+      )
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  }
+
   /** Resolves a texture asset id to a fetchable image URL for the preview. */
   private resolveTextureUrl(textureId: string): string | null {
     const asset = this.assets.find((a) => a.id === textureId && a.assetType === "texture");
     return asset ? projectFileUrl(asset.path) : null;
+  }
+
+  /** Resolves an editor-selected static mesh id for the live preview. */
+  private resolveModelUrl(modelId: string): string | null {
+    const asset = this.assets.find((a) => a.id === modelId && a.assetType === "staticMesh");
+    return asset ? projectFileUrl(asset.path) : null;
+  }
+
+  /**
+   * Puts the mesh source's authored material on it before the preview builds.
+   *
+   * Kit meshes carry a single default GLB material and get their real surface
+   * from a `*.materials.json` slot assignment, so a raw GLTF load shows the grey
+   * export — the preview would then disagree with the game about what the effect
+   * looks like. A slot that fails to load leaves the exported material in place,
+   * which is still a rendered preview rather than an empty one.
+   */
+  private async applyModelAuthoredSurface(modelId: string, root: Object3D): Promise<void> {
+    const asset = this.assets.find((a) => a.id === modelId && a.assetType === "staticMesh");
+    if (!asset) return;
+    const slots = await loadAssetMaterialSlots(asset.path);
+    if (!hasAssignedMaterialSlots(slots)) return;
+    const manifest = this.previewAssetManifest();
+    for (const id of new Set(assignedMaterialSlotIds(slots))) {
+      if (this.previewSlotMaterials.has(id)) continue;
+      try {
+        this.previewSlotMaterials.set(
+          id,
+          await loadForgeMaterial(manifest, id, this.previewTextureLoader),
+        );
+      } catch {
+        this.setStatus(`Preview material failed: ${id}`, "warning");
+      }
+    }
+    if (this.disposed) return;
+    applyMaterialSlotOverrides(root, slots, (id) => this.previewSlotMaterials.get(id));
+  }
+
+  /** The material/texture slice of the project manifest `loadForgeMaterial` needs. */
+  private previewAssetManifest(): AssetManifest {
+    const assets: AssetRecord[] = [];
+    for (const asset of this.assets) {
+      if (asset.assetType !== "material" && asset.assetType !== "texture") continue;
+      assets.push({
+        id: asset.id,
+        name: asset.name,
+        assetType: asset.assetType,
+        category: "",
+        path: asset.path,
+        tags: [],
+        placeable: false,
+        placement: { surface: "floor", snapToWall: false, allowRotation: true, allowScale: true },
+        runtime: { loadGroup: "editor", castShadow: false, receiveShadow: false, collision: false, bytes: 0 },
+        license: "unknown",
+      });
+    }
+    return { version: 1, generated: "particle-effect-editor-preview", ktx2: false, assets };
   }
 
   private bindDetailInputs(): void {
@@ -512,6 +656,17 @@ export class ParticleEffectEditor {
         // Enum / bool commit immediately (may re-render gated fields).
         el.addEventListener("change", () => this.onFieldToggle(path, kind, el));
       }
+    }
+    for (const button of this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-pfx-add-model]")) {
+      button.addEventListener("click", () => this.addModelSlot());
+    }
+    for (const button of this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-pfx-remove-model]")) {
+      button.addEventListener("click", () => this.removeModelSlot(Number(button.dataset.pfxRemoveModel)));
+    }
+    for (const button of this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-pfx-move-model]")) {
+      button.addEventListener("click", () =>
+        this.moveModelSlot(Number(button.dataset.pfxMoveModel), Number(button.dataset.pfxMoveDelta)),
+      );
     }
   }
 
@@ -543,7 +698,28 @@ export class ParticleEffectEditor {
 
   private onFieldToggle(path: string, kind: string, el: HTMLElement): void {
     this.beginEdit();
-    if (kind === "bool") {
+    if (path === "renderer.type") {
+      const type = (el as HTMLSelectElement).value;
+      this.def.renderer =
+        type === "mesh"
+          ? {
+              type: "mesh",
+              modelIds: [],
+              modelSelection: "random",
+              materialMode: "source",
+              castShadow: false,
+              receiveShadow: true,
+              maxModelParticles: 64,
+            }
+          : {
+              type: "sprite",
+              blendMode: "alpha",
+              softness: 0.5,
+              sortMode: "none",
+              texture: null,
+              subUV: { cols: 1, rows: 1 },
+            };
+    } else if (kind === "bool") {
       setPath(this.def as unknown as Record<string, unknown>, path, (el as HTMLInputElement).checked);
     } else if (kind === "texture") {
       // Empty option = "<none>" → store null so the renderer keeps its procedural sprite.
@@ -558,6 +734,77 @@ export class ParticleEffectEditor {
     this.renderDetails();
     this.renderDiagnostics();
     this.updateFooter();
+  }
+
+  private addModelSlot(): void {
+    if (this.def.renderer.type !== "mesh") return;
+    // The parser keeps at most MAX_MESH_MODEL_SLOTS ids, so a 9th slot would be
+    // dropped on save — refuse it here instead, where the author can see why.
+    if (this.def.renderer.modelIds.length >= MAX_MESH_MODEL_SLOTS) {
+      this.setStatus(`A mesh effect can reference at most ${MAX_MESH_MODEL_SLOTS} models.`, "warning");
+      return;
+    }
+    this.beginEdit();
+    const firstAvailable = this.modelAssets()[0]?.id ?? "";
+    const index = this.def.renderer.modelIds.push(firstAvailable) - 1;
+    this.commit();
+    this.refreshPreview();
+    this.renderAll();
+    // Land on the new slot's picker: the next thing the author wants to set.
+    this.detailsHost
+      .querySelector<HTMLSelectElement>(`select[data-path="renderer.modelIds.${index}"]`)
+      ?.focus();
+  }
+
+  /** Moves a model slot one place up/down; `Pick Order: sequence` follows this order. */
+  private moveModelSlot(index: number, delta: number): void {
+    if (this.def.renderer.type !== "mesh") return;
+    const ids = this.def.renderer.modelIds;
+    const target = index + delta;
+    if (!Number.isInteger(index) || !Number.isInteger(delta)) return;
+    if (index < 0 || index >= ids.length || target < 0 || target >= ids.length) return;
+    this.beginEdit();
+    const [moved] = ids.splice(index, 1);
+    ids.splice(target, 0, moved!);
+    this.commit();
+    this.refreshPreview();
+    this.renderAll();
+    // The details form is re-rendered from scratch, which would drop focus to the
+    // document — follow the row that moved so repeated keyboard presses work.
+    this.focusModelControl(`[data-pfx-move-model="${target}"][data-pfx-move-delta="${delta}"]`);
+  }
+
+  /**
+   * Restores keyboard focus after a details re-render. Falls back to the moved
+   * row's picker when the requested button is now disabled (the slot reached an
+   * end of the list), so focus never vanishes mid-gesture.
+   */
+  private focusModelControl(selector: string): void {
+    const button = this.detailsHost.querySelector<HTMLButtonElement>(selector);
+    if (button && !button.disabled) {
+      button.focus();
+      return;
+    }
+    button?.closest(".pfx-model-slot")?.querySelector<HTMLSelectElement>("select")?.focus();
+  }
+
+  private removeModelSlot(index: number): void {
+    if (this.def.renderer.type !== "mesh" || !Number.isInteger(index) || index < 0) return;
+    this.beginEdit();
+    this.def.renderer.modelIds.splice(index, 1);
+    this.commit();
+    this.refreshPreview();
+    this.renderAll();
+    // Keep the cursor in the list: the row that shifted up into this slot, or
+    // Add model once the last slot is gone.
+    const remaining = this.def.renderer.modelIds.length;
+    const next = Math.min(index, remaining - 1);
+    const fallback = this.detailsHost.querySelector<HTMLButtonElement>("[data-pfx-add-model]");
+    const nextRemove =
+      next >= 0
+        ? this.detailsHost.querySelector<HTMLButtonElement>(`[data-pfx-remove-model="${next}"]`)
+        : null;
+    (nextRemove ?? fallback)?.focus();
   }
 
   private commit(): void {
@@ -616,10 +863,11 @@ export class ParticleEffectEditor {
     if (d.spawn.mode === "rate" && !d.system.loop && d.system.duration <= 0) {
       out.push("duration is zero but rate mode is selected");
     }
-    if (d.renderer.blendMode === "alpha" && d.update.fadeOutTime <= 0 && d.update.endOpacity > 0) {
+    if (d.renderer.type === "sprite" && d.renderer.blendMode === "alpha" && d.update.fadeOutTime <= 0 && d.update.endOpacity > 0) {
       out.push("alpha blend with no fade-out may look harsh");
     }
     if (
+      d.renderer.type === "sprite" &&
       d.renderer.blendMode === "additive" &&
       hexLuminance(d.initialize.startColor) < 0.12 &&
       hexLuminance(d.update.endColor) < 0.12
@@ -631,6 +879,21 @@ export class ParticleEffectEditor {
     }
     if (this.boundsMayClip()) {
       out.push("fixed bounds may clip the effect");
+    }
+    if (d.renderer.type === "mesh" && d.renderer.modelIds.every((id) => id.trim().length === 0)) {
+      out.push("mesh renderer needs at least one static mesh source");
+    }
+    if (d.renderer.type === "mesh") {
+      const knownModelIds = new Set(
+        this.assets.filter((asset) => asset.assetType === "staticMesh").map((asset) => asset.id),
+      );
+      const missing = d.renderer.modelIds.filter((id) => id.trim().length > 0 && !knownModelIds.has(id));
+      if (missing.length > 0) out.push(`mesh source is missing from the Content Drawer: ${missing[0]}`);
+      // Saving de-duplicates, so a repeated slot would quietly disappear.
+      const filled = d.renderer.modelIds.filter((id) => id.trim().length > 0);
+      if (new Set(filled).size < filled.length) {
+        out.push("duplicate mesh source — repeated slots are dropped on save");
+      }
     }
     return out;
   }
@@ -684,8 +947,12 @@ export class ParticleEffectEditor {
     const d = this.def;
     const spawn = d.spawn.mode === "rate" ? `rate ${d.spawn.rate}/s` : `burst ${d.spawn.count}`;
     const loop = d.system.loop ? "loop" : "one-shot";
+    const renderer =
+      d.renderer.type === "mesh"
+        ? `3D model ×${d.renderer.modelIds.filter((id) => id.trim().length > 0).length} (${d.renderer.modelSelection})`
+        : "sprite";
     this.setStatus(
-      `Spawn: ${spawn} · Cap ${d.system.maxParticles} · ${d.renderer.blendMode} · ${loop}`,
+      `Spawn: ${spawn} · Cap ${d.system.maxParticles} · ${renderer} · ${loop}`,
       "info",
     );
   }
@@ -720,6 +987,11 @@ export class ParticleEffectEditor {
   /** Live alive/capacity readout, polled while the editor is open. */
   private updateHud(): void {
     if (!this.preview) return;
+    const status = this.preview.getStatus();
+    if (status) {
+      this.hudEl.textContent = status;
+      return;
+    }
     const { alive, capacity } = this.preview.getStats();
     this.hudEl.textContent = `Alive ${alive} / ${capacity}`;
   }
@@ -788,6 +1060,8 @@ export class ParticleEffectEditor {
     this.statsTimer = 0;
     this.preview?.dispose();
     this.preview = null;
+    for (const material of this.previewSlotMaterials.values()) material.dispose();
+    this.previewSlotMaterials.clear();
     this.overlay.remove();
     if (ParticleEffectEditor.activeInstance === this) ParticleEffectEditor.activeInstance = null;
   }

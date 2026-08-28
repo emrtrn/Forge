@@ -26,8 +26,11 @@ export type NumberRange = [number, number];
 
 export type SpawnMode = "rate" | "burst";
 export type SpawnShape = "point" | "sphere" | "box" | "circle";
-export type RendererType = "sprite";
+export type RendererType = "sprite" | "mesh";
 export type ParticleBlendMode = "alpha" | "additive";
+export type ParticleMeshMaterialMode = "source" | "tint";
+/** How a mesh emitter picks a source among its models on each spawn. */
+export type ParticleMeshSelectionMode = "random" | "sequence";
 export type SortMode = "none" | "distance";
 export type BoundsMode = "fixed" | "autoPreview";
 
@@ -96,8 +99,8 @@ export interface SubUVGrid {
   rows: number;
 }
 
-export interface ParticleRendererBlock {
-  type: RendererType;
+export interface ParticleSpriteRendererBlock {
+  type: "sprite";
   blendMode: ParticleBlendMode;
   softness: number;
   sortMode: SortMode;
@@ -111,6 +114,29 @@ export interface ParticleRendererBlock {
   /** Flipbook grid for the sprite texture; `{1,1}` = no animation (Faz 6b). */
   subUV: SubUVGrid;
 }
+
+/**
+ * Renders each live particle as a shared, manifest-backed static-model instance.
+ * `modelIds` never stores a URL/path: host code resolves these ids against its
+ * asset manifest before it allows a GLTF load, and the normalizer additionally
+ * refuses anything that *looks* like a path or URL (see `isModelAssetId`), so a
+ * hand-edited asset cannot smuggle one past a lenient host resolver.
+ */
+export interface ParticleMeshRendererBlock {
+  type: "mesh";
+  /** One or more manifest static-mesh ids selected by the emitter on spawn. */
+  modelIds: string[];
+  /** `random` picks any source per particle; `sequence` cycles them in list order. */
+  modelSelection: ParticleMeshSelectionMode;
+  /** Keep source materials or permit the renderer's future per-instance tint path. */
+  materialMode: ParticleMeshMaterialMode;
+  castShadow: boolean;
+  receiveShadow: boolean;
+  /** Per-effect upper bound, applied in addition to `system.maxParticles`. */
+  maxModelParticles: number;
+}
+
+export type ParticleRendererBlock = ParticleSpriteRendererBlock | ParticleMeshRendererBlock;
 
 /** The normalized, fully-defaulted authoring form (schema-2 shaped). */
 export interface ParticleEffectDefinition {
@@ -130,11 +156,26 @@ export interface ParticleEffectDefinition {
  */
 export interface RuntimeParticleEffect {
   name?: string;
+  /** Renderer selected by the authored asset; absent means legacy sprite. */
+  rendererType?: RendererType;
   loop: boolean;
-  /** Particles spawned per second. */
+  /** Particles spawned per second. Zero on a burst effect, which emits no trickle. */
   rate: number;
+  /**
+   * Burst emission: `count` particles released together, `delay` seconds after
+   * the effect starts. Present only for `spawn.mode: "burst"` assets.
+   *
+   * This is what makes an explosion read as a hit rather than as a cloud fading
+   * up. It used to be approximated as a continuous rate of `count / lifetime`,
+   * which put the *first* particle a whole `lifetime / count` seconds after the
+   * blow — half a second on a ten-particle burst, long enough that the blast
+   * looked like it belonged to something else.
+   */
+  burst?: { count: number; delay: number };
   /** Particle lifetime in seconds. */
   lifetime: number;
+  /** Authored upper bound for live particles; renderers must never exceed it. */
+  maxParticles?: number;
   startSize: number;
   endSize: number;
   velocity: Vec3;
@@ -143,8 +184,33 @@ export interface RuntimeParticleEffect {
   materialMode: ParticleBlendMode;
   /** Particle tint (hex `#rrggbb`). */
   color: string;
+  /**
+   * Sprite opacity ramp over a particle's life, gated by the fade windows below.
+   * All four are optional and their defaults (1 → 0, no fades) reproduce the plain
+   * linear `1 - t` ramp the sprite renderer used before opacity was authorable.
+   */
+  startOpacity?: number;
+  endOpacity?: number;
+  /** Seconds spent ramping up from 0 at birth; 0 = the particle pops in at full. */
+  fadeInTime?: number;
+  /** Seconds spent ramping down to 0 before death; 0 = it pops out. */
+  fadeOutTime?: number;
   /** Optional sprite texture asset id; absent renders the procedural sprite. */
   texture?: string;
   /** Flipbook grid; present only when animating (`cols*rows > 1`), Faz 6b. */
   subUV?: SubUVGrid;
+  /** Manifest static-mesh ids; populated only for `rendererType: "mesh"`. */
+  modelIds?: string[];
+  /** Per-spawn source pick policy for mesh effects (default `random`). */
+  meshModelSelection?: ParticleMeshSelectionMode;
+  /** Mesh renderer material policy; populated only for mesh effects. */
+  meshMaterialMode?: ParticleMeshMaterialMode;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  maxModelParticles?: number;
+  gravityScale?: number;
+  drag?: number;
+  acceleration?: Vec3;
+  rotation?: NumberRange;
+  angularVelocity?: NumberRange;
 }

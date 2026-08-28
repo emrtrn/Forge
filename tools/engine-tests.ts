@@ -464,6 +464,7 @@ import {
   toRuntimeParticleEffect,
 } from "../engine/vfx/particleEffectParser";
 import { ParticleEffect } from "../engine/render-three/particleEffect";
+import { MeshParticleEffect } from "../engine/render-three/meshParticleEffect";
 import { VfxSubsystem } from "../engine/render-three/vfxSubsystem";
 import type { RuntimeParticleEffect } from "../engine/vfx/particleEffectTypes";
 import {
@@ -16196,11 +16197,17 @@ check("parseRuntimeParticleEffect collapses a schema-1 effect and rejects bad in
       spread: 0.4,
       materialMode: "alpha",
       color: "#a7a7a7",
+      // Schema 1 had no opacity block, so the upgrade path fills the defaults:
+      // a 1 → 0 ramp with the default short fade-out.
+      startOpacity: 1,
+      endOpacity: 0,
+      fadeInTime: 0,
+      fadeOutTime: 0.1,
     },
   );
   // Non-object, unknown schema, or empty schema-1 effectId â†’ null.
   assert.equal(parseRuntimeParticleEffect(null), null);
-  assert.equal(parseRuntimeParticleEffect({ schema: 3 }), null);
+  assert.equal(parseRuntimeParticleEffect({ schema: 4 }), null);
   assert.equal(parseRuntimeParticleEffect({ schema: 1, effectId: "" }), null);
   // Unknown materialMode falls back to alpha; a malformed color falls back to white.
   const fallback = parseRuntimeParticleEffect({
@@ -16332,6 +16339,140 @@ check("renderer.subUV flipbook (VFX Lite Faz 6b) normalizes, clamps, and collaps
   assert.deepEqual(canonical.renderer.subUV, { cols: 6, rows: 6 });
 });
 
+check("schema-3 mesh renderer normalizes, caps, and round-trips through the save validator", () => {
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: {
+      type: "mesh",
+      modelIds: [" debris.stone ", "debris.wood", "debris.stone", "", 42],
+      materialMode: "tint",
+      castShadow: true,
+      receiveShadow: false,
+      maxModelParticles: 999,
+    },
+  });
+  assert.ok(def);
+  assert.equal(def.renderer.type, "mesh");
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  // Trimmed, de-duplicated, non-strings dropped; the per-effect cap is clamped.
+  assert.deepEqual(def.renderer.modelIds, ["debris.stone", "debris.wood"]);
+  assert.equal(def.renderer.materialMode, "tint");
+  assert.equal(def.renderer.maxModelParticles, 256);
+
+  const runtime = toRuntimeParticleEffect(def);
+  assert.equal(runtime.rendererType, "mesh");
+  assert.deepEqual(runtime.modelIds, ["debris.stone", "debris.wood"]);
+
+  const canonical = validateEffectAsset({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["debris.stone"] },
+  }) as { schema: number; renderer: { type: string; modelIds: string[] } };
+  assert.equal(canonical.schema, 3);
+  assert.equal(canonical.renderer.type, "mesh");
+  assert.deepEqual(canonical.renderer.modelIds, ["debris.stone"]);
+  // A mesh emitter with no sources can never render, so the save is refused.
+  assert.throws(() =>
+    validateEffectAsset({ schema: 3, type: "particleEffect", renderer: { type: "mesh" } }),
+  );
+});
+
+check("mesh renderer model refs accept manifest ids only, never a path or URL", () => {
+  // The host resolves ids against its manifest before any GLTF load; this is the
+  // parser-side half of the same contract, so a hand-edited asset cannot smuggle
+  // a path past a lenient resolver. Rejected refs are dropped, not repaired.
+  const hostile = [
+    "../../secret.glb",
+    "assets/Meshes/rock.glb",
+    "C:\\models\\rock.glb",
+    "https://evil.example/rock.glb",
+    "debris stone",
+    "-leading-dash",
+    "x".repeat(129),
+  ];
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: [...hostile, "debris.stone", "kit:debris_wood-01"] },
+  });
+  assert.ok(def);
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  assert.deepEqual(def.renderer.modelIds, ["debris.stone", "kit:debris_wood-01"]);
+
+  // A list that is *entirely* rejected must fail the save loudly (no silent
+  // save), and the message must say which half failed.
+  assert.throws(
+    () =>
+      validateEffectAsset({
+        schema: 3,
+        type: "particleEffect",
+        renderer: { type: "mesh", modelIds: hostile },
+      }),
+    /manifest asset ids/,
+  );
+});
+
+check("mesh model selection normalizes, round-trips, and drives source pick order", () => {
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a", "b"], modelSelection: "sequence" },
+  });
+  assert.ok(def);
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  assert.equal(def.renderer.modelSelection, "sequence");
+  assert.equal(toRuntimeParticleEffect(def).meshModelSelection, "sequence");
+
+  // Unknown / missing values fall back to the documented default.
+  const fallback = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a"], modelSelection: "round-robin" },
+  });
+  assert.equal(fallback?.renderer.type === "mesh" && fallback.renderer.modelSelection, "random");
+
+  const canonical = validateEffectAsset({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a", "b"], modelSelection: "sequence" },
+  }) as { renderer: { modelSelection: string } };
+  assert.equal(canonical.renderer.modelSelection, "sequence");
+
+  // Runtime: `sequence` cycles the sources in authored order, so two sources and
+  // four spawns land 2/2 rather than at the mercy of Math.random.
+  const sources = [
+    new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()),
+    new Mesh(new BoxGeometry(2, 2, 2), new MeshBasicMaterial()),
+  ];
+  const effect = new MeshParticleEffect(
+    runtimeFx({
+      rendererType: "mesh",
+      modelIds: ["a", "b"],
+      meshModelSelection: "sequence",
+      maxParticles: 4,
+      maxModelParticles: 4,
+      loop: true,
+      rate: 100,
+      lifetime: 10,
+    }),
+    sources,
+  );
+  effect.update(0.05);
+  assert.equal(effect.aliveCount(), 4);
+  const visible = effect.object3D.children.map((child) => {
+    const mesh = child as unknown as { count: number; instanceMatrix: { array: Float32Array } };
+    let shown = 0;
+    for (let i = 0; i < mesh.count; i += 1) {
+      // A hidden slot is the zero-scale matrix; a live one has a non-zero column.
+      if (mesh.instanceMatrix.array[i * 16] !== 0) shown += 1;
+    }
+    return shown;
+  });
+  assert.deepEqual(visible, [2, 2]);
+  effect.dispose();
+});
+
 check("schema-1 and its hand-converted schema-2 starter collapse identically", () => {
   // The Faz 1 starter conversion is mechanical: the schema-2 files are authored
   // so the normalize→collapse pipeline reproduces the original schema-1 runtime
@@ -16373,17 +16514,32 @@ check("schema-1 and its hand-converted schema-2 starter collapse identically", (
   );
 });
 
-check("normalizeEffectDefinition maps burst count to an approximate runtime rate", () => {
+check("a burst effect collapses to a burst, not to a trickle spread over its lifetime", () => {
   const runtime = toRuntimeParticleEffect(
     normalizeEffectDefinition({
       schema: 2,
       system: { loop: false },
-      spawn: { mode: "burst", count: 30 },
+      spawn: { mode: "burst", count: 30, delay: 0.25 },
       initialize: { lifetime: [1, 1] },
     })!,
   );
-  // burst count 30 over a ~1s lifetime window â†’ ~30/s continuous approximation.
-  assert.equal(runtime.rate, 30);
+  // The two modes are exclusive: a burst carries no continuous rate. This used
+  // to collapse to `rate: 30` (count over the lifetime window), which does not
+  // make the burst slow - it makes it *late*, because the first particle then
+  // waits a full 1/30 s and the cloud only reaches full size a second in.
+  assert.equal(runtime.rate, 0, "a burst emitter has no trickle");
+  assert.deepEqual(runtime.burst, { count: 30, delay: 0.25 });
+
+  const rateMode = toRuntimeParticleEffect(
+    normalizeEffectDefinition({
+      schema: 2,
+      system: { loop: true },
+      spawn: { mode: "rate", rate: 12, count: 30 },
+      initialize: { lifetime: [1, 1] },
+    })!,
+  );
+  assert.equal(rateMode.rate, 12, "a rate emitter keeps its authored rate");
+  assert.equal(rateMode.burst, undefined, "and releases nothing up front");
 });
 
 // VFX Lite Faz 3 — the preview viewport reads alive/capacity off the runtime

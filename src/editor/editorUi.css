@@ -3830,6 +3830,11 @@
 
 .asset-card.is-actor-script .asset-thumb { color: var(--forge-success-text); }
 
+/* Particle effects: a sprite emitter and a 3D-model (mesh) one are different
+   authoring beasts, so the card glyph says which without opening the editor. */
+.asset-card.is-effect .asset-thumb { color: #7fc7ff; letter-spacing: 0.5px; }
+.asset-card.is-mesh-effect .asset-thumb { color: #f0b45a; }
+
 /* ---------------------------------------------------------------------------
    Material editor (form-based PBR asset editor)
 --------------------------------------------------------------------------- */

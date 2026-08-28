@@ -36,6 +36,13 @@ export interface BrowserAssetIssue {
   label: string;
 }
 
+/** What a Content Browser card shows about a particle effect asset at a glance. */
+export interface ContentEffectSummary {
+  renderer: "sprite" | "mesh";
+  /** Static-mesh sources referenced by a mesh effect (0 for a sprite effect). */
+  modelCount: number;
+}
+
 export const CONTENT_FILTER_ALL = "__all__";
 export type ContentTypeFilter = BrowserAssetItem["type"] | typeof CONTENT_FILTER_ALL;
 
@@ -74,6 +81,12 @@ export interface ContentPanelOptions {
   renderAssetThumbnail: (item: BrowserAssetItem, thumb: HTMLElement) => void | Promise<void>;
   renderMaterialThumbnail: (item: BrowserAssetItem, thumb: HTMLElement) => void | Promise<void>;
   renderTextureThumbnail: (item: BrowserAssetItem, thumb: HTMLElement) => void;
+  /**
+   * Reads a `*.effect.json` far enough to tell a sprite emitter from a 3D-model
+   * (mesh) one, so the card can say which without opening the editor. Cached by
+   * the host; resolves null when the file is missing or unreadable.
+   */
+  describeEffectAsset: (item: BrowserAssetItem) => Promise<ContentEffectSummary | null>;
   beginAssetDragPreview: (assetId: string) => void;
   endAssetDragPreview: () => void;
   setStatus: (message: string, tone?: "info" | "success" | "warning" | "error") => void;
@@ -370,7 +383,38 @@ function renderAssetCardThumbnail(
     void options.renderMaterialThumbnail(item, thumb);
   } else if (thumb && item.type === "texture") {
     options.renderTextureThumbnail(item, thumb);
+  } else if (thumb && item.type === "effect") {
+    renderEffectCardSummary(options, card, item, thumb);
   }
+}
+
+/**
+ * Effect cards carry their renderer in the glyph and the type line — a mesh
+ * (3D model) effect is a different authoring beast from a sprite one, and the
+ * `.effect.json` extension alone never says which. The body is read
+ * asynchronously through the host's cache, so the card renders immediately as a
+ * generic FX and specialises when the read lands.
+ */
+function renderEffectCardSummary(
+  options: ContentPanelOptions,
+  card: HTMLElement,
+  item: BrowserAssetItem,
+  thumb: HTMLElement,
+): void {
+  thumb.textContent = "FX";
+  card.classList.add("is-effect");
+  void options.describeEffectAsset(item).then((summary) => {
+    if (!summary || !thumb.isConnected) return;
+    const mesh = summary.renderer === "mesh";
+    thumb.textContent = mesh ? "FX3D" : "FX";
+    card.classList.toggle("is-mesh-effect", mesh);
+    const typeLine = card.querySelector<HTMLElement>(".asset-type-line");
+    if (typeLine) {
+      typeLine.textContent = mesh
+        ? `Particle Effect · 3D Model ×${summary.modelCount}`
+        : "Particle Effect · Sprite";
+    }
+  });
 }
 
 function createFolderCard(options: ContentPanelOptions, item: BrowserFolderItem): HTMLElement {

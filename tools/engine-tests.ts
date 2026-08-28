@@ -22,6 +22,7 @@ import {
   NoColorSpace,
   Object3D,
   PerspectiveCamera,
+  PlaneGeometry,
   PointLight,
   Quaternion,
   Raycaster,
@@ -802,6 +803,7 @@ import {
   postProcessToneMappingExposure,
   resolvePostProcess,
   scaledBloomResolution,
+  writesSceneDepth,
   POST_PROCESS_DEFAULTS,
 } from "../engine/render-three/postProcess";
 import {
@@ -23877,6 +23879,39 @@ check("scaledBloomResolution scales the bloom target and guards bad input", () =
   assert.deepEqual(scaledBloomResolution(800, 600, 0), [800, 600]);
   assert.deepEqual(scaledBloomResolution(800, 600, Number.NaN), [800, 600]);
   assert.deepEqual(scaledBloomResolution(1, 1, 0.1), [1, 1]);
+});
+
+check("AO skips what the beauty pass never writes depth for", () => {
+  // GTAO renders its G-buffer with an overridden opaque material, so anything it
+  // is allowed to see punches a solid depth wall whatever its own material says.
+  // The rule: no beauty-pass depth ⇒ no AO-pass depth. Overlays and pick volumes
+  // opt out by writing no depth, which they already do to draw correctly.
+  const solid = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  assert.equal(writesSceneDepth(solid), true);
+
+  const overlay = new Mesh(
+    new PlaneGeometry(1, 1),
+    new MeshBasicMaterial({ transparent: true, opacity: 0.18, depthWrite: false }),
+  );
+  assert.equal(writesSceneDepth(overlay), false);
+
+  // A fully transparent pick volume: visible so raycasts hit it, invisible on
+  // screen. Before this rule it drew a dark cube around whatever it wrapped.
+  const pickVolume = new Mesh(
+    new BoxGeometry(2, 3, 2),
+    new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  );
+  assert.equal(writesSceneDepth(pickVolume), false);
+
+  // One opaque slot is real surface, so a mixed multi-material mesh stays in.
+  const mixed = new Mesh(new BoxGeometry(1, 1, 1), [
+    new MeshBasicMaterial({ depthWrite: false }),
+    new MeshStandardMaterial(),
+  ]);
+  assert.equal(writesSceneDepth(mixed), true);
+
+  // Non-meshes carry no material to ask; the pass's own type checks decide them.
+  assert.equal(writesSceneDepth(new Group()), true);
 });
 
 check("createPostProcessAntialiasPass creates SMAA only when enabled", () => {

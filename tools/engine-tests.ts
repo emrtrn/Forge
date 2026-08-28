@@ -507,6 +507,7 @@ import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { accumulatedNodeScale, mountSkeletalSocket } from "../engine/render-three/skeletalSocket";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
 import { LayeredClipAnimator } from "../engine/render-three/layeredClipAnimator";
+import { AuthoredEnvironment } from "../engine/render-three/authoredEnvironment";
 import {
   WORLD_MASK_SHADER_SOURCE,
   applyWorldMask,
@@ -21587,6 +21588,86 @@ check("applySceneFog sets exp/linear fog and clears on hidden/null", () => {
   assert.ok(scene.fog instanceof FogExp2);
   applySceneFog(scene, null);
   assert.equal(scene.fog, null);
+});
+
+// Editor <-> runtime parity guard: AuthoredEnvironment is what every shell that
+// renders a Forge Level applies, so an authored environment singleton can never
+// again exist in one shell and quietly not in the other. Before it, the two
+// copies had already diverged in three places, all asserted below. The GL-free
+// surface is covered here; the IBL cubemap capture needs a real GL context and
+// is left to the browser smoke.
+check("AuthoredEnvironment applies authored fog and reports authored sky light", () => {
+  const scene = new Scene();
+  // renderer/camera are unused by the fog + sky-light-query paths under test.
+  const env = new AuthoredEnvironment({
+    scene,
+    renderer: {} as unknown as WebGLRenderer,
+    camera: () => new PerspectiveCamera(),
+    resolveSunActor: () => null,
+  });
+
+  env.applyFog({ heightFog: { mode: "exp", color: "#334455", density: 0.06 } } as never);
+  assert.ok(scene.fog instanceof FogExp2, "authored height fog reaches scene.fog");
+  assert.equal((scene.fog as FogExp2).density, 0.06);
+  // A Level authoring no fog clears it, rather than inheriting the last level's.
+  env.applyFog({} as never);
+  assert.equal(scene.fog, null);
+
+  // hasAuthoredSkyLight is what lets a shell retire a fallback ambient light once
+  // the authored sky supplies the bounce; keeping both stacks and washes out.
+  assert.equal(env.hasAuthoredSkyLight({ skyAtmosphere: {} } as never), true);
+  assert.equal(env.hasAuthoredSkyLight({ skyAtmosphere: { hidden: true } } as never), false);
+  assert.equal(env.hasAuthoredSkyLight({} as never), false);
+  assert.equal(env.hasAuthoredSkyLight(null), false);
+});
+
+check("AuthoredEnvironment removes a dome the next layout does not author", () => {
+  // The first of the three drifts this class closed: the editor deleted the dome
+  // when its actor went away and the runtime did not, so travelling from a level
+  // with a sky to one without left the old sky standing over the new level. The
+  // symptom is invisible in the shell that is right.
+  const scene = new Scene();
+  const env = new AuthoredEnvironment({
+    scene,
+    renderer: {} as unknown as WebGLRenderer,
+    camera: () => new PerspectiveCamera(),
+    resolveSunActor: () => null,
+  });
+
+  env.applyClouds({ cloudLayer: { coverage: 0.5 } } as never);
+  const dome = scene.children.find((child) => child.type !== "Camera");
+  assert.ok(dome, "an authored cloud layer adds its dome to the scene");
+
+  env.applyClouds({} as never);
+  assert.equal(scene.children.includes(dome), false, "an unauthored cloud layer removes it");
+  // Idempotent: a second apply with nothing authored must not throw on the
+  // already-freed dome, because a rebuild calls these before every load.
+  env.applyClouds(null);
+  env.teardown();
+  env.teardown();
+});
+
+check("AuthoredEnvironment reports an environment change on clear as well as capture", () => {
+  // The third drift: only one shell rebound its probe env maps after a Sky Light
+  // Capture change. Clearing counts as a change too — a shell that rebound only
+  // on capture would leave its probes fading toward a freed render target.
+  const scene = new Scene();
+  let changes = 0;
+  const env = new AuthoredEnvironment({
+    scene,
+    renderer: {} as unknown as WebGLRenderer,
+    camera: () => new PerspectiveCamera(),
+    resolveSunActor: () => null,
+    onEnvironmentChanged: () => { changes += 1; },
+  });
+
+  // No sky, and a hidden sky, both clear the global environment.
+  env.applyReflection(null);
+  assert.equal(changes, 1);
+  assert.equal(scene.environment, null);
+  env.applyReflection({ skyAtmosphere: { hidden: true } } as never);
+  assert.equal(changes, 2);
+  assert.equal(scene.environment, null);
 });
 
 check("validateHeightFog allowlists fields and round-trips through validateLayout", () => {

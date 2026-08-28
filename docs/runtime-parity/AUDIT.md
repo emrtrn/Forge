@@ -280,3 +280,43 @@ Faz 0 tamamlandı. Önerilen ilerleyiş:
 > Bu rapor kod değiştirmedi. Kod değişikliği Faz 2+ ile başlar ve her adımda
 > `npx tsc --noEmit` + `npm run test:engine` + gerektiğinde `npm run build:verify`
 > yeşil kalmalı; büyük tek-seferlik rewrite yapılmamalı (plan §15).
+
+---
+
+## 8. Sonradan Kapanan: Ortam Tekil Aktörleri (2026-08-28)
+
+> Bu bölüm denetimin kendisine ait değil; denetimin §2/(A)'da adıyla saydığı
+> ikiz metotlardan **bir grubun** kapandığını kaydeder.
+
+Denetim `applySkyAtmosphere` ↔ `applyRuntimeSky` çiftini ikiz-drift deseninin
+örneği olarak göstermişti. ThreeAges backport'unun Katman 3.1'i (`authoredWorld`
+/ `authoredEnvironment` uzlaştırması) bu grubu kapattı.
+
+**Uzlaştırmanın sonucu:** iki tasarım rakip değil, tamamlayıcı çıktı.
+
+- **`LevelRuntime` (Forge) sırayı sahiplenir.** Hangi içerik grubu, hangi
+  sırayla kurulur. Kanonik olan budur ve öyle kalır.
+- **`AuthoredEnvironment` (ThreeAges'ten taşındı, `engine/render-three/`)
+  uygulamayı sahiplenir.** O grupların *biri* nasıl uygulanır. Sıra ortaklığı
+  tek başına yetmiyordu: adımlar doğru sırada koşuyor ama ikisi farklı şey
+  yapıyordu.
+
+Taşımadan önce ölçülen üç gerçek sapma (üçü de yalnız *diğer* kabukta görünür,
+yani hiçbiri kendi kabuğunda fark edilmez):
+
+1. Runtime, yeni level hiç sky yazmamışsa eski gökyüzü kubbesini ayakta
+   bırakıyordu; editör aktör silinince kaldırıyordu.
+2. Aynısı bulut kubbesi için.
+3. Sky Light Capture değişince editör prob env map'lerini yeniden bağlıyordu,
+   runtime bağlamıyordu.
+
+Ayrıca editörün `dispose()`'u kubbeleri ve PMREM hedefini hiç serbest
+bırakmıyordu; ortak `teardown()` bunu tek satırda kapattı.
+
+**Taşınmayan:** ThreeAges'in `src/scene/authoredWorld.ts`'i — level'ın statik
+sanatını **sökülebilir tek bir `Group`** olarak döndüren yükleyici. O,
+`RtsApp`'in (ne `SceneApp` ne `RuntimeSceneApp` olan üçüncü bir kabuk) var
+olmasının sonucudur. Forge'un bu soruya cevabı katmanlı runtime planının I4
+invariant'ıdır: fork üçüncü bir kabuk yazmaz, `createForgeRuntime` + bir game
+modülü kullanır. İkinci bir yükleyici taşımak, denetimin §2/(A)'da tarif ettiği
+sorunu bir kez daha kurmak olurdu.

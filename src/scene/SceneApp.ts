@@ -41,7 +41,6 @@ import type {
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
-  WebGLRenderTarget,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -122,40 +121,17 @@ import {
   syncLightObject,
   type LightObjectRecord,
 } from "@engine/render-three/lights";
-import {
-  applySkySunDirection,
-  applySkyToneMapping,
-  applySkyUniforms,
-  createSkyObject,
-  followCameraWithSky,
-  resolveSkyAtmosphere,
-  setSkyLocalToneMappingExposure,
-  skyAtmosphereToneMappingExposure,
-  sunDirectionFromLightRotation,
-} from "@engine/render-three/skyAtmosphere";
-import { applySceneFog, resolveHeightFog } from "@engine/render-three/heightFog";
-import {
-  advanceCloudTime,
-  applyCloudUniforms,
-  createCloudObject,
-  followCameraWithClouds,
-  resolveCloudLayer,
-  type CloudDome,
-} from "@engine/render-three/cloudLayer";
+import { resolveSkyAtmosphere } from "@engine/render-three/skyAtmosphere";
+import { resolveHeightFog } from "@engine/render-three/heightFog";
+import { resolveCloudLayer } from "@engine/render-three/cloudLayer";
 import {
   applyPostProcessToneMapping,
   createPostProcessAntialiasPass,
   createPostProcessEffectPasses,
   PostProcessPipeline,
-  postProcessToneMappingExposure,
   resolvePostProcess,
   type ResolvedPostProcess,
 } from "@engine/render-three/postProcess";
-import {
-  applyReflectionEnvironment,
-  captureSkyEnvironment,
-  resolveReflection,
-} from "@engine/render-three/reflection";
 import {
   applyReflectionPlaneTransform,
   createReflectionPlaneIcon,
@@ -366,7 +342,6 @@ import {
   type SphereReflectionCaptureObject,
   type SphereReflectionCaptureRenderItem,
 } from "@engine/render-three/reflectionCapture";
-import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   applySceneBackgroundAndAmbient,
   buildLandscapeSplineMeshGroup,
@@ -402,6 +377,7 @@ import {
 } from "./SceneRuntimeCore";
 import { SceneShell } from "./SceneShell";
 import { LevelRuntime } from "./LevelRuntime";
+import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
 import {
   defaultLightIntensity,
   formatLightType,
@@ -1097,11 +1073,12 @@ export class SceneApp {
   private orthoViewHeight = ORTHO_DEFAULT_VIEW_HEIGHT;
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
-  /** Sky Atmosphere dome (singleton); null when no sky actor is placed. */
-  private skyObject: Sky | null = null;
-  private cloudObject: CloudDome | null = null;
-  /** Captured Sky Light environment (PMREM) backing `scene.environment`; null when none. */
-  private reflectionTarget: WebGLRenderTarget | null = null;
+  /**
+   * The authored environment singletons (sky dome, Sky Light capture, fog,
+   * clouds). Shared with the runtime shell rather than reimplemented here — see
+   * the header of `engine/render-three/authoredEnvironment.ts`.
+   */
+  private readonly environment: AuthoredEnvironment;
   /** Live `Reflector` meshes for placed Planar Reflection actors, by index. */
   private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
   /** Billboard icons (clickable handles) for placed Mirror Plane actors, by index. */
@@ -1440,6 +1417,19 @@ export class SceneApp {
     this.renderer = this.sceneShell.renderer;
     this.scene = this.sceneShell.scene;
     this.camera = this.sceneShell.camera;
+    this.environment = new AuthoredEnvironment({
+      scene: this.scene,
+      renderer: this.renderer,
+      camera: () => this.camera,
+      resolveSunActor: () => this.sunLightActor(),
+      // The global env that a probe's boundary blend fades toward just changed,
+      // so rebind it onto the probe-covered clones. Guarded because the rebind
+      // rebuilds every instanced model and the initial build reaches this
+      // before any probe has been baked.
+      onEnvironmentChanged: () => {
+        if (this.eligibleProbeBakes().length > 0) this.applyReflectionCaptureEnvMaps();
+      },
+    });
     this.levelRuntime = new LevelRuntime({
       mode: "editor",
       environmentRender: {
@@ -1693,11 +1683,7 @@ export class SceneApp {
       this.cameraPoseStore?.maybeSave(this.camera, now);
       this.updateMeshPaintFlow(deltaSeconds);
       this.updateGizmoScreenScale();
-      if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
-      if (this.cloudObject) {
-        followCameraWithClouds(this.cloudObject, this.camera);
-        advanceCloudTime(this.cloudObject, deltaSeconds);
-      }
+      this.environment.update(deltaSeconds);
       this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
       advanceForgeMaterialAnimations(now / 1000);
 
@@ -1755,6 +1741,10 @@ export class SceneApp {
     this.clearSplinePointOverlay();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
+    // Frees the sky/cloud domes and the Sky Light capture. Previously nothing
+    // here did: the editor only disposed a dome when its actor was deleted, so
+    // closing the editor leaked whatever was still standing.
+    this.environment.teardown();
     this.disposeReflectionCaptureBakes();
     this.disposeInstanceProbeMaterials();
     this.clearMeshPaintColorView();
@@ -10780,27 +10770,7 @@ export class SceneApp {
    * the directional Sun light (the source of truth â€” Unreal's Atmosphere Sun Light).
    */
   private applySkyAtmosphere(): void {
-    const actor = this.layout?.skyAtmosphere ?? null;
-    if (!actor) {
-      if (this.skyObject) {
-        this.scene.remove(this.skyObject);
-        this.skyObject.material.dispose();
-        this.skyObject.geometry.dispose();
-        this.skyObject = null;
-      }
-      applySkyToneMapping(this.renderer, null);
-      return;
-    }
-
-    const resolved = resolveSkyAtmosphere(actor);
-    if (!this.skyObject) {
-      this.skyObject = createSkyObject();
-      this.scene.add(this.skyObject);
-    }
-    applySkyUniforms(this.skyObject, resolved);
-    this.updateSkySunFromLight();
-    followCameraWithSky(this.skyObject, this.camera);
-    applySkyToneMapping(this.renderer, resolved);
+    this.environment.applySky(this.layout);
   }
 
   /**
@@ -10809,10 +10779,7 @@ export class SceneApp {
    * (gizmo or rotation fields) moves the sky live, plus after sky/light edits.
    */
   private updateSkySunFromLight(): void {
-    if (!this.skyObject) return;
-    const sun = this.sunLightActor();
-    if (!sun) return;
-    applySkySunDirection(this.skyObject, sunDirectionFromLightRotation(readRotation(sun)));
+    this.environment.applySunDirection();
   }
 
   /** The scene's Sun light actor (preferred id, else the first directional light). */
@@ -10906,8 +10873,7 @@ export class SceneApp {
    * fog (Faz 1); three.js applies it to every fog-aware material automatically.
    */
   private applyHeightFog(): void {
-    const actor = this.layout?.heightFog ?? null;
-    applySceneFog(this.scene, actor ? resolveHeightFog(actor) : null);
+    this.environment.applyFog(this.layout);
   }
 
   /** Adds the singleton Height Fog (or selects the existing one). */
@@ -10980,24 +10946,7 @@ export class SceneApp {
    * removes the dome from the scene.
    */
   private applyCloudLayer(): void {
-    const actor = this.layout?.cloudLayer ?? null;
-    if (!actor) {
-      if (this.cloudObject) {
-        this.scene.remove(this.cloudObject);
-        this.cloudObject.material.dispose();
-        this.cloudObject.geometry.dispose();
-        this.cloudObject = null;
-      }
-      return;
-    }
-
-    const resolved = resolveCloudLayer(actor);
-    if (!this.cloudObject) {
-      this.cloudObject = createCloudObject();
-      this.scene.add(this.cloudObject);
-    }
-    applyCloudUniforms(this.cloudObject, resolved);
-    followCameraWithClouds(this.cloudObject, this.camera);
+    this.environment.applyClouds(this.layout);
   }
 
   /** Adds the singleton Cloud Layer (or selects the existing one). */
@@ -11072,38 +11021,9 @@ export class SceneApp {
    * only the intensity is re-applied. A hidden/absent sky clears the environment.
    */
   private applyReflection(recapture = false): void {
-    const skyActor = this.layout?.skyAtmosphere ?? null;
-    const sky = skyActor ? resolveSkyAtmosphere(skyActor) : null;
-    if (!sky || sky.hidden) {
-      this.disposeReflectionTarget();
-      applyReflectionEnvironment(this.scene, null, null);
-    } else {
-      if (recapture || !this.reflectionTarget) {
-        this.disposeReflectionTarget();
-        const sun = this.sunLightActor();
-        const sunDirection = sun
-          ? sunDirectionFromLightRotation(readRotation(sun))
-          : new Vector3(0, 1, 0);
-        this.reflectionTarget = captureSkyEnvironment(this.renderer, sky, sunDirection);
-      }
-      applyReflectionEnvironment(
-        this.scene,
-        this.reflectionTarget,
-        resolveReflection(sky.skyLightCapture),
-      );
-    }
-    // The global env that probe boundary-blend fades toward just changed; rebind it
-    // onto the probe-covered clones. No-op during initial build (no bakes yet) and
-    // when there are no probes, so it only costs on later Sky Light Capture edits.
-    if (this.eligibleProbeBakes().length > 0) this.applyReflectionCaptureEnvMaps();
-  }
-
-  /** Frees the captured PMREM render target backing `scene.environment`, if any. */
-  private disposeReflectionTarget(): void {
-    if (this.reflectionTarget) {
-      this.reflectionTarget.dispose();
-      this.reflectionTarget = null;
-    }
+    // The probe-envmap rebind that used to sit here is now the environment's
+    // `onEnvironmentChanged` hook, so the runtime shell gets it too.
+    this.environment.applyReflection(this.layout, recapture);
   }
 
   /**
@@ -11141,16 +11061,7 @@ export class SceneApp {
   }
 
   private applySkyPostProcessExposure(post: ResolvedPostProcess | null): void {
-    if (!this.skyObject) return;
-    const sky = this.layout?.skyAtmosphere ? resolveSkyAtmosphere(this.layout.skyAtmosphere) : null;
-    if (!sky || sky.hidden || !post || post.hidden) {
-      setSkyLocalToneMappingExposure(this.skyObject, null);
-      return;
-    }
-    setSkyLocalToneMappingExposure(
-      this.skyObject,
-      postProcessToneMappingExposure(post.exposure) * skyAtmosphereToneMappingExposure(sky.exposure),
-    );
+    this.environment.applySkyPostProcessExposure(post, this.layout);
   }
 
   /** Adds the singleton Post Process actor (or selects the existing one). */

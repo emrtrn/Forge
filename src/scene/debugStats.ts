@@ -13,6 +13,7 @@ import {
 } from "@engine/perf/perfBudget";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import type { FrameMetrics } from "@engine/perf/frameMetrics";
+import type { GpuFrameStats } from "@engine/perf/gpuTimer";
 import type { BottleneckResult } from "@engine/perf/bottleneckClassifier";
 import { formatAdaptiveChange } from "@engine/perf/adaptiveQuality";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
@@ -54,6 +55,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${drawCalls} draw calls\n` +
       `${triangles} tris` +
       frameMetricsText(app) +
+      gpuFrameText(app) +
       bottleneckText(app) +
       adaptiveText(app) +
       subsystemTimingText(app) +
@@ -89,6 +91,32 @@ export function formatFrameMetrics(metrics: FrameMetrics): string[] {
   return [
     `frame ${metrics.averageFrameTimeMs.toFixed(1)}ms ` +
       `p95 ${metrics.p95FrameTimeMs.toFixed(1)} spikes ${metrics.spikeCount}`,
+  ];
+}
+
+/** The GPU frame-time line, or "" when nothing measured it (no `?debug`, or a
+ * browser without timer queries). Never a zero — see {@link formatGpuFrameStats}. */
+function gpuFrameText(app: RuntimeStatsApp): string {
+  const stats = app.getGpuFrameStats?.();
+  if (!stats) return "";
+  return `\n${formatGpuFrameStats(stats).join("\n")}`;
+}
+
+/**
+ * Formats {@link GpuFrameStats} into an overlay line (pure, DOM-free for unit
+ * tests). Read next to the `frame` line above it, this is the whole point of the
+ * timer: CPU high + GPU low means the frame is bound by what we are issuing, the
+ * reverse means it is bound by what we are asking the GPU to draw.
+ *
+ * The two numbers do NOT add up to the frame time and must not be presented as
+ * though they did — they overlap, and vsync sits outside both. Browsers also
+ * quantise the returned nanoseconds as a side-channel mitigation, so one decimal
+ * is all the precision there is.
+ */
+export function formatGpuFrameStats(stats: GpuFrameStats): string[] {
+  return [
+    `gpu ${stats.lastMs.toFixed(1)}ms ` +
+      `avg ${stats.averageMs.toFixed(1)} max ${stats.maxMs.toFixed(1)}`,
   ];
 }
 

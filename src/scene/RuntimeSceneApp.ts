@@ -140,6 +140,11 @@ import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
 import {
+  GpuFrameTimer,
+  type GpuFrameStats,
+  type GpuTimerContext,
+} from "@engine/perf/gpuTimer";
+import {
   applyQualityToPostProcess,
   defaultGraphicsPreferences,
   effectiveDevicePixelRatio,
@@ -474,6 +479,8 @@ export interface RuntimeStatsApp {
   getUiDebugSnapshot?(): UiDebugSnapshot;
   /** Optional: windowed frame-time stats (avg / P95 / spikes) — always on in runtime. */
   getFrameMetricsSnapshot?(): FrameMetrics;
+  /** Optional: GPU-side frame time when `?debug` has timer queries, else null. */
+  getGpuFrameStats?(): GpuFrameStats | null;
   /** Optional: per-subsystem tick timing when `?debug` profiling is on, else null. */
   getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
   /** Optional: live bottleneck classification (Faz 5) for the `?debug` overlay. */
@@ -515,6 +522,17 @@ export interface RuntimeSceneAppOptions {
    * composition root (`createForgeRuntime`); `useGameModule` adds later ones.
    */
   readonly gameModules?: readonly ForgeGameModule[];
+}
+
+/**
+ * Narrows the renderer's context to the timer-query slice, or `null` on a WebGL1
+ * context (which has no queries at all). A cast would compile and then throw on
+ * the first `createQuery`; the feature test is the honest form, and the timer's
+ * own `create` already treats `null` as "no GPU timing available".
+ */
+function asGpuTimerContext(gl: WebGLRenderingContext | WebGL2RenderingContext): GpuTimerContext | null {
+  const candidate = gl as Partial<GpuTimerContext>;
+  return typeof candidate.createQuery === "function" ? (gl as unknown as GpuTimerContext) : null;
 }
 
 /** Fallback for a runtime with no game module: no script id resolves. */
@@ -588,6 +606,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Skips one frame-time sample after the tab regains focus (drops the rAF
    * catch-up delta so a visibility change is not miscounted as a spike). */
   private skipFrameMetricSample = false;
+  /**
+   * GPU-side frame timing, created only under `?debug` and only where the browser
+   * exposes timer queries — so it stays `null` on a shipping frame and on Safari.
+   * The CPU profiler says how long issuing the frame took; this says how long
+   * executing it took, and only the two together name the bound.
+   */
+  private gpuTimer: GpuFrameTimer | null = null;
   /** Active runtime quality profile. Defaults to Ultra so behaviour is identical
    * to the pre-quality-layer runtime until a profile is applied (Principle #2:
    * this only ever gates authored effects down, never writes layout data). */
@@ -1101,8 +1126,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // signal (§7.3), then with a smaller window since it reads seconds-scale trends.
     // Enabling wraps each subsystem update in a clock read; production without
     // either keeps the un-timed loop.
-    if (this.debug) this.engineApp.enableProfiling();
-    else if (this.userSettings.graphics.adaptiveOptimizationEnabled) {
+    if (this.debug) {
+      this.engineApp.enableProfiling();
+      // Same gate, for the same reason, on the other side of the fence: timer
+      // queries cost a driver round trip per frame, so they exist only while
+      // somebody is reading the overlay. `create` returns null where the
+      // extension is withheld, and the overlay then shows no GPU line at all.
+      this.gpuTimer = GpuFrameTimer.create(asGpuTimerContext(this.renderer.getContext()));
+    } else if (this.userSettings.graphics.adaptiveOptimizationEnabled) {
       this.engineApp.enableProfiling(undefined, ADAPTIVE_PROFILER_WINDOW_FRAMES);
     }
     this.keyboardInput.attach();
@@ -1288,8 +1319,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.qualitySettings.foliageCullDistanceScale,
       );
       advanceForgeMaterialAnimations(now / 1000);
+      // The span covers only the draw submission — post-process included, since a
+      // pipeline's passes are exactly what a GPU-bound frame is usually spending
+      // its time on. Results land a few frames later; `poll` collects them.
+      this.gpuTimer?.begin();
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
+      this.gpuTimer?.end();
+      this.gpuTimer?.poll();
       this.onFrame?.(deltaMs);
     };
     this.frameHandle = requestAnimationFrame(loop);
@@ -1317,6 +1354,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The VFX subsystem is registered, so engineApp.dispose() (below) tears down
     // its effects + caches through the subsystem registry, like the audio one.
     this.gameModeSession?.dispose();
+    this.gpuTimer?.dispose();
+    this.gpuTimer = null;
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionTarget();
@@ -1379,6 +1418,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Windowed frame-time stats (avg / P95 / spikes) over the 5 s decision window. */
   getFrameMetricsSnapshot(): FrameMetrics {
     return this.frameMetrics.metrics();
+  }
+
+  /**
+   * Windowed GPU frame time, or `null` when nothing is measuring it — no `?debug`,
+   * or a browser without `EXT_disjoint_timer_query_webgl2`. Never a zero, because
+   * "the GPU cost nothing" and "nobody measured the GPU" must not read alike.
+   */
+  getGpuFrameStats(): GpuFrameStats | null {
+    const stats = this.gpuTimer?.stats();
+    return stats && stats.samples > 0 ? stats : null;
   }
 
   /** The active runtime quality profile (defaults to Ultra). */

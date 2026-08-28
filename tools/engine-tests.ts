@@ -338,6 +338,7 @@ import {
   isOverBudget,
 } from "../engine/perf/perfBudget";
 import { FrameMetricsMonitor, type FrameMetrics } from "../engine/perf/frameMetrics";
+import { GpuFrameTimer, type GpuTimerContext } from "../engine/perf/gpuTimer";
 import {
   consumeDistanceUpdateDelta,
   isFarFromFocus,
@@ -505,6 +506,7 @@ import {
   formatBottleneck,
   formatFrameMetrics,
   formatGameModeDebug,
+  formatGpuFrameStats,
   formatMemory,
   formatPerfBudget,
   formatSubsystemTiming,
@@ -15543,6 +15545,125 @@ check("debug overlay: formats the frame-time line from a metrics snapshot", () =
     estimatedRefreshIntervalMs: 16.7,
   });
   assert.deepEqual(line, ["frame 17.2ms p95 26.5 spikes 3"]);
+});
+
+/** A scriptable stand-in for the timer-query slice of WebGL2. */
+function fakeGpuTimerContext(options: {
+  supported?: boolean;
+  /** Nanosecond result per query, in the order queries are ended. */
+  results?: number[];
+  /** Resolve results only after this many polls each. */
+  latency?: number;
+} = {}) {
+  const results = [...(options.results ?? [])];
+  const state = {
+    disjoint: false,
+    created: 0,
+    deleted: 0,
+    active: false,
+    beginCount: 0,
+    /** query -> pending polls before it resolves, then its value. */
+    queued: new Map<object, { waits: number; value: number }>(),
+  };
+  const gl: GpuTimerContext = {
+    createQuery: () => {
+      state.created += 1;
+      return {} as WebGLQuery;
+    },
+    deleteQuery: () => { state.deleted += 1; },
+    beginQuery: (_target, query) => {
+      assert.equal(state.active, false, "TIME_ELAPSED queries must never nest");
+      state.active = true;
+      state.beginCount += 1;
+      state.queued.set(query, { waits: options.latency ?? 0, value: results.shift() ?? 0 });
+    },
+    endQuery: () => { state.active = false; },
+    getQueryParameter: (query, pname) => {
+      const entry = state.queued.get(query);
+      if (!entry) return pname === 0x8867 ? true : 0;
+      if (pname === 0x8867) {
+        if (entry.waits > 0) { entry.waits -= 1; return false; }
+        return true;
+      }
+      return entry.value;
+    },
+    getParameter: () => state.disjoint,
+    getExtension: (name) =>
+      options.supported === false || name !== "EXT_disjoint_timer_query_webgl2"
+        ? null
+        : { TIME_ELAPSED_EXT: 0x88bf, GPU_DISJOINT_EXT: 0x8fbb },
+    QUERY_RESULT_AVAILABLE: 0x8867,
+    QUERY_RESULT: 0x8866,
+  };
+  return { gl, state };
+}
+
+check("GPU timer: tags late results, drops a disjoint batch, and returns every query on dispose", () => {
+  // A browser without the extension must yield no timer at all — a timer that
+  // reported zeros would read as "the GPU costs nothing".
+  assert.equal(GpuFrameTimer.create(fakeGpuTimerContext({ supported: false }).gl), null);
+  assert.equal(GpuFrameTimer.create(null), null);
+
+  const { gl, state } = fakeGpuTimerContext({
+    results: [4_000_000, 6_000_000, 8_000_000],
+    latency: 1,
+  });
+  const timer = GpuFrameTimer.create(gl, 4) ?? assert.fail("the fake context supports timing");
+
+  // Frame 1: begun and ended, but the GPU has not finished with it yet — the
+  // whole reason samples carry a tag rather than being read back in place.
+  assert.equal(timer.begin(0), true);
+  timer.end();
+  assert.deepEqual(timer.poll(), []);
+  assert.equal(timer.stats().samples, 0, "nothing is averaged before a result exists");
+
+  // Frame 2 goes out while frame 1 is still in flight; both come back below.
+  timer.begin(7);
+  timer.end();
+  const first = timer.poll();
+  assert.deepEqual(first, [{ tag: 0, ms: 4 }], "nanoseconds are reported as milliseconds");
+  const second = timer.poll();
+  assert.deepEqual(second, [{ tag: 7, ms: 6 }], "a late result still knows which frame it measured");
+
+  // Only untagged frames feed the rolling readout: a caller running a measurement
+  // sweep tags its own deliberately abnormal frames, and those must not drag the
+  // continuous number around.
+  assert.equal(timer.stats().samples, 1);
+  assert.equal(timer.stats().averageMs, 4);
+
+  // A disjoint event means the results in flight were measured across a GPU
+  // state change and are not durations at all.
+  timer.begin(0);
+  timer.end();
+  state.disjoint = true;
+  assert.deepEqual(timer.poll(), [], "a disjoint batch is discarded, not reported");
+  assert.equal(timer.disjointCount, 1);
+  state.disjoint = false;
+
+  // Queries are pooled rather than allocated per frame, and every one is handed
+  // back — a leaked query per frame is a real leak on a long debug session.
+  const createdBeforeReuse = state.created;
+  for (let index = 0; index < 6; index += 1) {
+    timer.begin(0);
+    timer.end();
+    timer.poll();
+  }
+  assert.ok(state.created <= Math.max(createdBeforeReuse, 4), "the pool is bounded and reused");
+  timer.dispose();
+  assert.equal(state.deleted, state.created, "every query created is deleted");
+});
+
+check("debug overlay: formats the GPU frame line at the precision the timer has", () => {
+  assert.deepEqual(
+    formatGpuFrameStats({ lastMs: 7.42, averageMs: 6.851, maxMs: 19.04, samples: 60 }),
+    ["gpu 7.4ms avg 6.9 max 19.0"],
+  );
+  // One decimal, deliberately: browsers quantise the returned nanoseconds as a
+  // side-channel mitigation, so more digits would be invented precision.
+  assert.deepEqual(
+    formatGpuFrameStats({ lastMs: 0.0417, averageMs: 0.0392, maxMs: 0.0511, samples: 8 }),
+    ["gpu 0.0ms avg 0.0 max 0.1"],
+  );
 });
 
 const adaptiveMetrics = (

@@ -482,6 +482,7 @@ import {
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { accumulatedNodeScale, mountSkeletalSocket } from "../engine/render-three/skeletalSocket";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
+import { LayeredClipAnimator } from "../engine/render-three/layeredClipAnimator";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
 import {
   applyRootMotionToClip,
@@ -9682,6 +9683,103 @@ check("LayeredCharacterAnimator: upper montage/aim layers over locomotion legs",
   // A missing upper-body bone disables layering (caller falls back to single-channel).
   const flat = new LayeredCharacterAnimator(rig, buildLayeredClips(), "missing");
   assert.equal(flat.hasUpperBody, false);
+});
+
+/**
+ * The same rig as {@link buildCharacterRig}, with the clip set a caller-timed
+ * driver needs: two gaits, a torso-only reaction with a real duration, a
+ * full-body one-shot, and a pose to hold.
+ */
+const buildClipAnimatorClips = (): AnimationClip[] => {
+  const body = ["root", "leg-left", "leg-right", "torso", "arm-left", "arm-right", "head"];
+  const clip = (name: string, duration: number) =>
+    new AnimationClip(name, duration, body.map(positionTrack));
+  return [clip("walk", 1), clip("run", 0.8), clip("impact", 0.73), clip("death", 3.8), clip("carry", 2)];
+};
+
+check("LayeredClipAnimator: the torso takes a one-shot or a held pose while the legs keep walking", () => {
+  const animator = new LayeredClipAnimator(buildCharacterRig(), buildClipAnimatorClips(), "torso");
+  assert.equal(animator.hasUpperBody, true, "the mask matched, so layering is real rather than a silent no-op");
+
+  animator.play("walk", 0);
+  assert.equal(animator.lowerClip, "walk");
+  assert.equal(animator.upperClip, "walk", "with nothing owning the torso it mirrors the gait");
+
+  // The whole point: the reaction claims the torso and the legs are untouched.
+  animator.playUpperOnce("impact", 0.06);
+  assert.equal(animator.lowerClip, "walk", "the legs keep walking through the blow");
+  assert.equal(animator.upperClip, "impact");
+  assert.equal(animator.isUpperBusy, true);
+
+  // Locomotion keeps driving underneath — a struck character may break into a
+  // run — and must not steal the torso back while the reaction is still playing.
+  animator.play("run", 0.18);
+  assert.equal(animator.lowerClip, "run", "the gait can change mid-reaction");
+  assert.equal(animator.upperClip, "impact", "without cutting the reaction short");
+
+  // And it is released into the gait the legs are on *now*, not the one that was
+  // playing when the blow landed.
+  animator.releaseUpperBody(0);
+  assert.equal(animator.upperClip, "run", "the torso rejoins the current gait");
+  assert.equal(animator.isUpperBusy, false);
+
+  // A held pose is the other way the torso leaves the legs, and the one with no
+  // timer: it lasts as long as the caller keeps asking for it.
+  animator.setUpperBodyPose("carry", 0);
+  assert.equal(animator.upperClip, "carry", "the torso holds the load instead of mirroring the legs");
+  animator.play("walk", 0);
+  assert.equal(animator.lowerClip, "walk", "a carrier that changes pace changes gait");
+  assert.equal(animator.upperClip, "carry", "and keeps holding the same load while doing it");
+
+  // A one-shot still outranks the pose, and hands back the pose, not the gait.
+  animator.playUpperOnce("impact", 0);
+  assert.equal(animator.upperClip, "impact", "a struck carrier reacts from the waist up");
+  animator.releaseUpperBody(0);
+  assert.equal(animator.upperClip, "carry", "the reaction ends back into the carry, not the walk cycle");
+  animator.setUpperBodyPose(null, 0);
+  assert.equal(animator.upperClip, "walk", "an unloaded torso goes back to mirroring the legs");
+  assert.equal(animator.upperBodyPose, null);
+  // A clip the asset does not ship is refused rather than read as "clear", so a
+  // partial sidecar degrades to mirroring the legs instead of dropping a pose.
+  animator.setUpperBodyPose("nope", 0);
+  assert.equal(animator.upperBodyPose, null);
+
+  // Promoting a running full-body action to the torso keeps its playhead, so a
+  // notify window measured against it does not restart mid-action.
+  animator.playOnce("impact", 0);
+  animator.update(0.31);
+  const promotedAt = animator.getActiveClip()?.time ?? 0;
+  animator.playUpperOnce("impact", 0, promotedAt);
+  assert.ok(
+    Math.abs((animator.getUpperActiveClip()?.time ?? 0) - promotedAt) < 1e-6,
+    "promoting a running full-body action keeps its playhead instead of restarting it",
+  );
+
+  // A full-body one-shot reclaims the torso outright: a character killed
+  // mid-reaction falls with all of itself.
+  animator.playOnce("death", 0.06);
+  assert.equal(animator.lowerClip, "death");
+  assert.equal(animator.upperClip, "death", "death owns both channels");
+  assert.equal(animator.isUpperBusy, false);
+  assert.equal(animator.getUpperActiveClip(), null, "and the torso reports no clip of its own");
+
+  // Lengths come from the unsplit originals — a masked half keeps the authored
+  // duration the caller's state machine times against.
+  assert.equal(animator.clipDuration("impact"), 0.73);
+  assert.equal(animator.clipDuration("nope"), null);
+
+  // Ticking is this class's own job (the caller owns the loop and may throttle
+  // it), so both channels advance — a lower channel that never ticked would
+  // leave a layered character's legs frozen.
+  animator.play("walk", 0);
+  animator.update(0.1);
+  assert.equal(animator.lowerClip, "walk");
+
+  // An unmatched bone means an empty mask: every track lands on the lower
+  // channel, so the caller must be told to treat the asset as full-body rather
+  // than layer into a silent no-op.
+  const flatLayered = new LayeredClipAnimator(buildCharacterRig(), buildClipAnimatorClips(), "missing");
+  assert.equal(flatLayered.hasUpperBody, false);
 });
 
 check("pickLocomotionBlendSpace: prefers a named 1D space, else the first usable one", () => {

@@ -1,7 +1,7 @@
 # ThreeAges → Forge Geri Taşıma (Backport) Kontrol Listesi
 
 > Tarih: 2026-08-28
-> Durum: **Uygulanıyor.** Katman 0, 1 ve 2 tamamlandı; kalan yalnız Katman 3.
+> Durum: **TAMAMLANDI.** Katman 0, 1, 2 ve 3 bitti.
 > Kaynak depo: `C:\Users\emret\Desktop\Games\ThreeAges` (Forge fork'u, `origin`
 > ThreeAges / `upstream` Forge).
 > Ortak ata: `11bb20e9` (2026-07-15). O noktadan beri ThreeAges 414, Forge 25
@@ -163,23 +163,30 @@ Her biri kendi branch'i.
 
 ## Katman 3 — Sona bırakılanlar
 
-- [ ] **3.1 `authoredEnvironment` / `authoredWorld` uzlaştırması.** Forge'un
-  `LevelRuntime` / `SceneShell` işiyle **aynı alan**. Burada port değil,
-  iki tasarımın uzlaştırılması gerekiyor. Diğer her şeyden sonra.
-- [ ] **3.2 Veri güdümlü ses olayı tablosu + music director.** Oyun kodu dosya
-  değil olay adlandırır; ses/seviye/cooldown/eşzamanlılık tavanı/mesafe
-  culling veri dosyasında.
-- [ ] **3.3 Ses bus'ları genişlemesi.** `voice` + `notifications` ayrı bus,
-  uzun kliplerde media-element streaming, `setAudioBusVolumes` toplu yazma.
-- [ ] **3.4 GPU zamanlayıcı** (`EXT_disjoint_timer_query_webgl2`).
-- [ ] **3.5 GTAO derinlik tuzağı düzeltmesi** (`writesSceneDepth`).
-- [ ] **3.6 `worldMaskPatch`** — dünya-uzayı maskesiyle fragment bazlı gizleme.
-- [ ] **3.7 `layeredClipAnimator`** — iki kanallı klip animatörü.
-- [ ] **3.8 Perf/araç zinciri:** `browser-perf-report`, `worker-perf-report`,
-  `optimize-building-glb`, `strip-embedded-textures`, `probe-audio-codecs`,
-  `audit-audio-loudness`, `sync-audio-manifest`.
-- [ ] **3.9 `tools/engine-tests.ts` bölme planı.** ThreeAges'te dosya +58 000
-  satır büyüdü ve bölme planı yazıldı; Forge'a taşınırken o plan da gelmeli.
+- [x] **3.1 `authoredEnvironment` / `authoredWorld` uzlaştırması.** Port değil,
+  karar: iki tasarım rakip değil tamamlayıcı çıktı. `LevelRuntime` **sırayı**,
+  yeni `engine/render-three/authoredEnvironment.ts` o gruplardan birinin
+  **uygulamasını** sahiplenir; iki kabuk da ona delege eder. `authoredWorld.ts`
+  taşınmadı (gerekçe: I4 — fork üçüncü bir kabuk yazmaz).
+  → `docs/runtime-parity/AUDIT.md` §8
+- [x] **3.2 Veri güdümlü ses olayı tablosu + music director.**
+  → `engine/audio/audioEventTable.ts`, `engine/audio/musicDirector.ts`
+- [x] **3.3 Ses bus'ları genişlemesi.** `voice` + `notifications` ayrı bus,
+  `BusDuckMix` + `mergeDucks`, media-element streaming (`stream: true`),
+  `canPlayAudioFormat`, `setAudioBusVolumes` toplu yazma.
+- [x] **3.4 GPU zamanlayıcı** (`EXT_disjoint_timer_query_webgl2`).
+  → `engine/perf/gpuTimer.ts` + `?debug` overlay'de `gpu` satırı
+- [x] **3.5 GTAO derinlik tuzağı düzeltmesi** (`writesSceneDepth`).
+- [x] **3.6 `worldMaskPatch`** — dünya-uzayı maskesiyle fragment bazlı gizleme.
+- [x] **3.7 `layeredClipAnimator`** — iki kanallı klip animatörü.
+- [x] **3.8 Perf/araç zinciri:** `perf:browser` + `tools/perf/browserPerfHarness.mjs`,
+  `optimize:glb` (`optimize-mesh-glb.mjs`), `strip-embedded-textures`,
+  `audio:codecs`, `audio:loudness`, `audio:manifest`.
+  **Taşınmadı:** `worker-perf-report.mjs` (birim-sayısı matrisi, oyuna özgü;
+  jenerik yarısı harness olarak geldi).
+- [x] **3.9 `tools/engine-tests.ts` bölme planı** + ölçüm aracı (`--filter`,
+  `--timing`, `--slow` / `checkSlow`, ayrı bundle/koşum süresi).
+  → `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md`
 
 ---
 
@@ -269,3 +276,43 @@ Bunlar bugün `src/game` altında ama oyuna özgü değil. Backport değil,
   - Data Table Editor'ün metinleri Türkçeydi; İngilizceye çevrildi.
   - Taşınmayan: `ANIMATION_SET_ROLES` genişlemesi, `layerAttackWhenMoving`,
     Actor Script wheel spin — üçü de RTS sunum sözlüğü.
+- **2026-08-28** — **Katman 3 tamamlandı** (`feat/threeages-backport-layer3`,
+  madde başına bir commit). `npm run build:verify` yeşil (1077 motor kontrolü).
+  Sıra: 3.4 GPU zamanlayıcı, 3.5 GTAO, 3.7 layered clip animator, 3.6 world
+  mask, 3.3 ses bus'ları, 3.2 ses olay tablosu + music director, 3.8 araç
+  zinciri, 3.9 test bölme planı, 3.1 authored environment uzlaştırması.
+  Port sırasında ortaya çıkanlar:
+  - **3.1 bir port değil bir karardı ve ölçülünce üç gerçek sapma buldu.**
+    `LevelRuntime` sırayı doğru paylaştırıyordu ama iki kabuk aynı adımda farklı
+    şey yapıyordu: runtime, yeni level sky yazmamışsa eski gökyüzü kubbesini
+    ayakta bırakıyordu (bulut kubbesi için de aynısı), ve Sky Light Capture
+    değişince prob env map'lerini yeniden bağlamıyordu. Üçü de yalnız *diğer*
+    kabukta görünen türden. Editörün `dispose()`'u da kubbeleri hiç serbest
+    bırakmıyormuş; ortak `teardown()` onu da kapattı.
+  - Prob env map yeniden bağlaması **guard'sız taşınamadı**: her instanced
+    modeli yeniden kuruyor ve ilk build oraya henüz hiç prob pişmemişken
+    geliyor. Editördeki `eligibleProbeBakes().length > 0` koşulu runtime'a da
+    kondu.
+  - **3.9'da ThreeAges'in rakamları kopyalanmadı, Forge ölçüldü** — ve ölçüm
+    sonucu değiştirdi: orada suit 161 sn'ydi ve dokuz check %97,5'ini yiyordu;
+    burada suit **0,8 sn** ve en yavaş check 49 ms. Yani Faz 1 (`checkSlow`
+    etiketleme) bugün boş bir işlem; araç kondu, plan tetiğini yazdı.
+  - `build:verify` ve CI `test:engine:slow`'a bağlandı, böylece varsayılanın
+    ileride hızlanması kapıyı sessizce zayıflatamaz.
+  - 3.8'de `worker-perf-report.mjs` elendi (oyuna özgü birim-sayısı matrisi);
+    jenerik yarısı `tools/perf/browserPerfHarness.mjs` olarak geldi ve
+    `browser-perf-report` ondan tekrar kullanıyor. Araçların proje-özgü
+    sabitleri (ThreeAges asset yolları, KTX kurulum dizini, ses kategorisi)
+    bayrak/env/keşif ile jenerikleştirildi; hiçbiri artık düzenleme
+    gerektirmiyor.
+  - **Öldürülen bir smoke koşumu layout dosyalarını kirletti** (teardown hiç
+    çalışmadı) ve 5273'te bir vite sunucusu bıraktı. CLAUDE.md'nin uyardığı
+    tam durum; commit öncesi `git checkout -- public/` ile temizlendi.
+
+---
+
+## Kalan iş
+
+Liste kapandı. Kalan tek adım listenin kendi **bitiş şartı**: Forge'a taşınan
+dilimler ThreeAges'ten **silinmeli** ve fork upstream'den sync almalı. Yoksa
+aynı kod iki yerde yaşar ve bir sonraki sync bugünkünden acı olur.

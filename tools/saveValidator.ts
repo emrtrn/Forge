@@ -540,6 +540,20 @@ export function validateActorInstance(value: unknown): Record<string, unknown> {
       ? entry.scale.map((axis) => validateScaleValue(axis, "actor scale component"))
       : validateScaleValue(entry.scale, "actor scale");
   }
+  if (entry.variableOverrides !== undefined) {
+    if (!entry.variableOverrides || typeof entry.variableOverrides !== "object" || Array.isArray(entry.variableOverrides)) {
+      throw new Error("actor instance variableOverrides must be an object");
+    }
+    const overrides: Record<string, string | number | boolean | string[]> = {};
+    for (const [key, value] of Object.entries(entry.variableOverrides as Record<string, unknown>)) {
+      if (!key) throw new Error("actor instance variable override key must not be empty");
+      if (typeof value === "string" || typeof value === "boolean") overrides[key] = value;
+      else if (typeof value === "number" && Number.isFinite(value)) overrides[key] = value;
+      else if (Array.isArray(value) && value.every((item) => typeof item === "string")) overrides[key] = value;
+      else throw new Error(`invalid actor instance variable override ${key}`);
+    }
+    if (Object.keys(overrides).length > 0) actor.variableOverrides = overrides;
+  }
   if (entry.patrolRoute !== undefined) actor.patrolRoute = validateActorPatrolRoute(entry.patrolRoute);
   return actor;
 }
@@ -1052,6 +1066,167 @@ export function validateLandscape(value: unknown): Record<string, unknown> {
   return landscape;
 }
 
+export function validateRiverWater(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("river water must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  for (const key of ["id", "landscapeRef", "splineRef"] as const) {
+    if (typeof input[key] !== "string" || input[key].length === 0) {
+      throw new Error(`river water ${key} must be a non-empty string`);
+    }
+  }
+  const water: Record<string, unknown> = {
+    id: input.id,
+    landscapeRef: input.landscapeRef,
+    splineRef: input.splineRef,
+  };
+  if (typeof input.name === "string") water.name = input.name;
+  if (input.hidden === true) water.hidden = true;
+  if (input.locked === true) water.locked = true;
+  if (typeof input.groupId === "string") water.groupId = input.groupId;
+  if (typeof input.nodeId === "string") water.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") water.parentId = input.parentId;
+  const surfaceLevel = validateOptionalNumber(input.surfaceLevel, "river water surfaceLevel", -10000, 10000);
+  if (surfaceLevel !== undefined) water.surfaceLevel = Number(surfaceLevel.toFixed(3));
+  const widthScale = validateOptionalNumber(input.widthScale, "river water widthScale", 0.05, 10);
+  if (widthScale !== undefined) water.widthScale = Number(widthScale.toFixed(3));
+  const flowSpeed = validateOptionalNumber(input.flowSpeed, "river water flowSpeed", 0, 10);
+  if (flowSpeed !== undefined) water.flowSpeed = Number(flowSpeed.toFixed(3));
+  const normalScale = validateOptionalNumber(input.normalScale, "river water normalScale", 0.05, 20);
+  if (normalScale !== undefined) water.normalScale = Number(normalScale.toFixed(3));
+  if (typeof input.normalTexture === "string" && input.normalTexture.length > 0) {
+    water.normalTexture = input.normalTexture;
+  } else if (input.normalTexture !== undefined && input.normalTexture !== null) {
+    throw new Error("river water normalTexture must be a string, null, or omitted");
+  }
+  for (const key of ["deepColor", "shallowColor", "foamColor"] as const) {
+    if (input[key] !== undefined) water[key] = validateHexColor(input[key], `river water ${key}`);
+  }
+  const opacity = validateOptionalNumber(input.opacity, "river water opacity", 0, 1);
+  if (opacity !== undefined) water.opacity = Number(opacity.toFixed(3));
+  const bedVisibility = validateOptionalNumber(input.bedVisibility, "river water bedVisibility", 0, 1);
+  if (bedVisibility !== undefined) water.bedVisibility = Number(bedVisibility.toFixed(3));
+  const absorptionDistance = validateOptionalNumber(input.absorptionDistance, "river water absorptionDistance", 0.01, 100);
+  if (absorptionDistance !== undefined) water.absorptionDistance = Number(absorptionDistance.toFixed(3));
+  const waveAmplitude = validateOptionalNumber(input.waveAmplitude, "river water waveAmplitude", 0, 1);
+  if (waveAmplitude !== undefined) water.waveAmplitude = Number(waveAmplitude.toFixed(3));
+  const waveLength = validateOptionalNumber(input.waveLength, "river water waveLength", 0.1, 100);
+  if (waveLength !== undefined) water.waveLength = Number(waveLength.toFixed(3));
+  const foamOpacity = validateOptionalNumber(input.foamOpacity, "river water foamOpacity", 0, 1);
+  if (foamOpacity !== undefined) water.foamOpacity = Number(foamOpacity.toFixed(3));
+  const shoreWaveSpacing = validateOptionalNumber(input.shoreWaveSpacing, "river water shoreWaveSpacing", 0.5, 20);
+  if (shoreWaveSpacing !== undefined) water.shoreWaveSpacing = Number(shoreWaveSpacing.toFixed(3));
+  const shoreWaveSpeed = validateOptionalNumber(input.shoreWaveSpeed, "river water shoreWaveSpeed", 0, 10);
+  if (shoreWaveSpeed !== undefined) water.shoreWaveSpeed = Number(shoreWaveSpeed.toFixed(3));
+  const shoreWaveReach = validateOptionalNumber(input.shoreWaveReach, "river water shoreWaveReach", 0.05, 1);
+  if (shoreWaveReach !== undefined) water.shoreWaveReach = Number(shoreWaveReach.toFixed(3));
+  const shoreWaveBreakupScale = validateOptionalNumber(input.shoreWaveBreakupScale, "river water shoreWaveBreakupScale", 0.1, 10);
+  if (shoreWaveBreakupScale !== undefined) water.shoreWaveBreakupScale = Number(shoreWaveBreakupScale.toFixed(3));
+  if (input.foamStamps !== undefined) {
+    if (!Array.isArray(input.foamStamps) || input.foamStamps.length > 64) {
+      throw new Error("river water foamStamps must be an array of at most 64 entries");
+    }
+    const stampIds = new Set<string>();
+    water.foamStamps = input.foamStamps.map((value, index) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`river water foamStamps[${index}] must be an object`);
+      }
+      const stamp = value as Record<string, unknown>;
+      if (typeof stamp.id !== "string" || stamp.id.trim().length === 0 || stampIds.has(stamp.id)) {
+        throw new Error(`river water foamStamps[${index}].id must be a unique non-empty string`);
+      }
+      stampIds.add(stamp.id);
+      if (stamp.kind !== "point" && stamp.kind !== "strip") {
+        throw new Error(`river water foamStamps[${index}].kind must be point or strip`);
+      }
+      if (!isNumberTuple(stamp.position)) {
+        throw new Error(`river water foamStamps[${index}].position must be a numeric Vec3`);
+      }
+      const position = stamp.position.map((axis) => Number(axis.toFixed(3)));
+      const saved: Record<string, unknown> = { id: stamp.id, kind: stamp.kind, position };
+      if (stamp.kind === "strip") {
+        if (!isNumberTuple(stamp.endPosition)) {
+          throw new Error(`river water foamStamps[${index}].endPosition must be a numeric Vec3 for strips`);
+        }
+        saved.endPosition = stamp.endPosition.map((axis) => Number(axis.toFixed(3)));
+      }
+      const radius = validateOptionalNumber(stamp.radius, `river water foamStamps[${index}].radius`, 0.05, 100);
+      const intensity = validateOptionalNumber(stamp.intensity, `river water foamStamps[${index}].intensity`, 0, 1);
+      if (radius === undefined || intensity === undefined) {
+        throw new Error(`river water foamStamps[${index}] requires radius and intensity`);
+      }
+      saved.radius = radius;
+      saved.intensity = intensity;
+      // Legacy ring fields remain optional so older point-stamp layouts keep
+      // their established placement data after Radial Foam replaced the rings.
+      if (stamp.kind === "point") {
+        const ringCount = validateOptionalNumber(stamp.ringCount, `river water foamStamps[${index}].ringCount`, 1, 8);
+        const expansionSpeed = validateOptionalNumber(stamp.expansionSpeed, `river water foamStamps[${index}].expansionSpeed`, 0.05, 5);
+        if (ringCount !== undefined) saved.ringCount = Number(ringCount.toFixed(3));
+        if (expansionSpeed !== undefined) saved.expansionSpeed = Number(expansionSpeed.toFixed(3));
+      }
+      return saved;
+    });
+  }
+  if (input.segmentProfiles !== undefined) {
+    if (!Array.isArray(input.segmentProfiles) || input.segmentProfiles.length > 256) {
+      throw new Error("river water segmentProfiles must be an array of at most 256 entries");
+    }
+    const segmentRefs = new Set<string>();
+    water.segmentProfiles = input.segmentProfiles.map((value, index) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`river water segmentProfiles[${index}] must be an object`);
+      }
+      const profile = value as Record<string, unknown>;
+      if (
+        typeof profile.splineSegmentRef !== "string" ||
+        profile.splineSegmentRef.trim().length === 0 ||
+        segmentRefs.has(profile.splineSegmentRef)
+      ) {
+        throw new Error(`river water segmentProfiles[${index}].splineSegmentRef must be a unique non-empty string`);
+      }
+      segmentRefs.add(profile.splineSegmentRef);
+      const saved: Record<string, unknown> = { splineSegmentRef: profile.splineSegmentRef };
+      const flowSpeedMultiplier = validateOptionalNumber(
+        profile.flowSpeedMultiplier,
+        `river water segmentProfiles[${index}].flowSpeedMultiplier`,
+        0.05,
+        8,
+      );
+      const rapidness = validateOptionalNumber(profile.rapidness, `river water segmentProfiles[${index}].rapidness`, 0, 1);
+      if (flowSpeedMultiplier === undefined && rapidness === undefined) {
+        throw new Error(`river water segmentProfiles[${index}] requires flowSpeedMultiplier or rapidness`);
+      }
+      if (flowSpeedMultiplier !== undefined) saved.flowSpeedMultiplier = flowSpeedMultiplier;
+      if (rapidness !== undefined) saved.rapidness = rapidness;
+      return saved;
+    });
+  }
+  if (input.reflectionMode === "sharedPlanar") water.reflectionMode = "sharedPlanar";
+  else if (input.reflectionMode !== undefined && input.reflectionMode !== "off") {
+    throw new Error("river water reflectionMode must be off or sharedPlanar");
+  }
+  if (typeof input.reflectionGroup === "string" && input.reflectionGroup.length > 0) {
+    water.reflectionGroup = input.reflectionGroup;
+  } else if (input.reflectionGroup !== undefined && input.reflectionGroup !== null) {
+    throw new Error("river water reflectionGroup must be a string, null, or omitted");
+  }
+  if (input.reflectionQuality === "low" || input.reflectionQuality === "medium" || input.reflectionQuality === "high") {
+    water.reflectionQuality = input.reflectionQuality;
+  } else if (input.reflectionQuality !== undefined && input.reflectionQuality !== null) {
+    throw new Error("river water reflectionQuality must be low, medium, high, null, or omitted");
+  }
+  const reflectionStrength = validateOptionalNumber(
+    input.reflectionStrength,
+    "river water reflectionStrength",
+    0,
+    1,
+  );
+  if (reflectionStrength !== undefined) water.reflectionStrength = Number(reflectionStrength.toFixed(3));
+  return water;
+}
+
 const LANDSCAPE_MIN_VERTICES = 65;
 const LANDSCAPE_MAX_VERTICES = 257;
 
@@ -1222,6 +1397,8 @@ function validateLandscapeSplines(value: unknown): Record<string, unknown>[] {
     if (typeof spline.hidden === "boolean") result.hidden = spline.hidden;
     if (typeof spline.locked === "boolean") result.locked = spline.locked;
     if (spline.smooth === true) result.smooth = true;
+    const smoothness = validateOptionalNumber(spline.smoothness, `${path}.smoothness`, 0, 1);
+    if (smoothness !== undefined) result.smoothness = smoothness;
     return result;
   });
 }
@@ -1364,6 +1541,10 @@ export function validateBlockingVolume(value: unknown): Record<string, unknown> 
   }
   if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
     volume.color = input.color;
+  }
+  if (input.navigationRole !== undefined) {
+    if (!isNavigationRole(input.navigationRole)) throw new Error("invalid blocking volume navigationRole");
+    if (input.navigationRole !== "auto") volume.navigationRole = input.navigationRole;
   }
   return volume;
 }
@@ -1984,6 +2165,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("landscapes must be an array");
         })();
+  const riverWaters = layout.riverWaters === undefined
+    ? null
+    : Array.isArray(layout.riverWaters)
+      ? layout.riverWaters.map(validateRiverWater)
+      : (() => {
+          throw new Error("riverWaters must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -2068,6 +2256,7 @@ export function validateLayout(value: unknown): unknown {
   if (targetPoints) output.targetPoints = targetPoints;
   if (splines) output.splines = splines;
   if (landscapes) output.landscapes = landscapes;
+  if (riverWaters) output.riverWaters = riverWaters;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;
@@ -2404,7 +2593,8 @@ export function validateSaveMaterialSlotsPayload(value: unknown): {
 }
 
 const SKELETON_ANIMATION_SET_ROLES = ["idle", "walk", "run", "jump", "fall"] as const;
-const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ"] as const;
+const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ", "driveMotion"] as const;
+const SKELETON_ROOT_MOTION_UP_AXES = ["x", "y", "z"] as const;
 
 function validateAnimationSet(value: unknown): Record<string, string> {
   if (value === undefined || value === null) return {};
@@ -2585,8 +2775,44 @@ function validateMontage(value: unknown, label: string): Record<string, unknown>
     loop: input.loop === true,
     blendInSeconds: validateBlendSeconds(input.blendInSeconds, `${label}.blendInSeconds`, 0.12),
     blendOutSeconds: validateBlendSeconds(input.blendOutSeconds, `${label}.blendOutSeconds`, 0.2),
+    sections: validateMontageSections(input.sections, `${label}.sections`),
   };
   return output;
+}
+
+/**
+ * Named time ranges inside a montage's clip (see `AssetSkeletonMontageDef`).
+ * Rejected rather than repaired when malformed: a reversed or zero-length range
+ * loops a single frame at runtime, which reads on screen as a frozen actor.
+ */
+function validateMontageSections(value: unknown, label: string): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  const names = new Set<string>();
+  return value.map((item, index) => {
+    const itemLabel = `${label}[${index}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`${itemLabel} must be an object`);
+    }
+    const input = item as Record<string, unknown>;
+    if (typeof input.name !== "string" || input.name.length === 0) {
+      throw new Error(`${itemLabel}.name must be a non-empty string`);
+    }
+    if (names.has(input.name)) throw new Error(`${itemLabel}.name "${input.name}" is duplicated`);
+    names.add(input.name);
+    const start = input.startSeconds;
+    const end = input.endSeconds;
+    if (typeof start !== "number" || !Number.isFinite(start) || start < 0) {
+      throw new Error(`${itemLabel}.startSeconds must be a finite number >= 0`);
+    }
+    if (typeof end !== "number" || !Number.isFinite(end) || end <= start) {
+      throw new Error(`${itemLabel}.endSeconds must be a finite number greater than startSeconds`);
+    }
+    if (input.loop !== undefined && typeof input.loop !== "boolean") {
+      throw new Error(`${itemLabel}.loop must be a boolean`);
+    }
+    return { name: input.name, startSeconds: start, endSeconds: end, loop: input.loop === true };
+  });
 }
 
 function validateMontages(value: unknown): Record<string, unknown>[] {
@@ -2633,6 +2859,16 @@ function validateRootMotion(value: unknown): Record<string, unknown>[] {
         throw new Error(`${label}.rootNode must be a node name string`);
       }
       output.rootNode = input.rootNode;
+    }
+    if (input.upAxis !== undefined && input.upAxis !== null && input.upAxis !== "") {
+      if (
+        !SKELETON_ROOT_MOTION_UP_AXES.includes(
+          input.upAxis as (typeof SKELETON_ROOT_MOTION_UP_AXES)[number],
+        )
+      ) {
+        throw new Error(`${label}.upAxis must be one of ${SKELETON_ROOT_MOTION_UP_AXES.join(", ")}`);
+      }
+      output.upAxis = input.upAxis;
     }
     return output;
   });
@@ -2916,6 +3152,30 @@ function validateForgeMaterialLayerBlend(
   };
 }
 
+function validateForgeMaterialNormalMotion(value: unknown): Record<string, unknown> | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("material.normalMotion must be an object or null");
+  }
+  const input = value as Record<string, unknown>;
+  const velocity = (candidate: unknown, label: string): Record<string, number> => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error(`${label} must be an object`);
+    }
+    const vector = candidate as Record<string, unknown>;
+    return {
+      x: validateOptionalNumber(vector.x, `${label}.x`, -10, 10) ?? 0,
+      y: validateOptionalNumber(vector.y, `${label}.y`, -10, 10) ?? 0,
+    };
+  };
+  return {
+    primaryVelocity: velocity(input.primaryVelocity, "material.normalMotion.primaryVelocity"),
+    secondaryTiling: validateUvTiling(input.secondaryTiling, "material.normalMotion.secondaryTiling"),
+    secondaryVelocity: velocity(input.secondaryVelocity, "material.normalMotion.secondaryVelocity"),
+    strength: validateOptionalNumber(input.strength, "material.normalMotion.strength", 0.05, 4) ?? 0.65,
+  };
+}
+
 export function validateForgeMaterialDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("material def must be an object");
@@ -2959,6 +3219,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     );
   const maskTexture = legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture;
   const ormTexture = validateTextureRef(input.ormTexture, "material.ormTexture") ?? maskTexture;
+  const normalMotion = validateForgeMaterialNormalMotion(input.normalMotion);
 
   return {
     schema: 1,
@@ -2977,6 +3238,9 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissiveTexture: validateTextureRef(input.emissiveTexture, "material.emissiveTexture"),
     ormTexture,
     uvTiling: validateUvTiling(input.uvTiling, "material.uvTiling"),
+    // Mirrors `normalizeForgeMaterialDef`: absent means three.js' flipped default,
+    // so only an explicit `false` opts a glTF-UV material out.
+    flipY: input.flipY !== false,
     roughness: validateOptionalNumber(input.roughness, "material.roughness", 0, 1) ?? 0.8,
     metalness: validateOptionalNumber(input.metalness, "material.metalness", 0, 1) ?? 0,
     aoIntensity: validateOptionalNumber(input.aoIntensity, "material.aoIntensity", 0, 1) ?? 1,
@@ -2987,6 +3251,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissive: validateColorHex(input.emissive ?? "#000000", "material.emissive"),
     emissiveIntensity:
       validateOptionalNumber(input.emissiveIntensity, "material.emissiveIntensity", 0, 20) ?? 0,
+    normalMotion,
     layerBlend,
   };
 }
@@ -3194,6 +3459,49 @@ export function validateSaveSoundCuePayload(value: unknown): {
   };
 }
 
+// ─── Game-data table (Data Table editor save) ────────────────────────────────
+//
+// Deliberately a GENERIC structural guard only: it fences writes to
+// `public/game-data/**.json` and requires a keyed-object body, but it does NOT
+// encode any project balance rule. Those rules are project-specific and are
+// enforced elsewhere — by the game's own validator (injected into the Data Table
+// editor via GameEditorCatalog and run before this endpoint is called), and at
+// runtime load. Keeping this generic is what lets `saveValidator.ts` stay free
+// of a fork's balance schemas.
+/**
+ * Normalise + fence a game-data path to `game-data/**.json`. Shared by the save
+ * endpoint and the read-only defaults endpoint so both apply the exact same
+ * scope. Returns the normalised (forward-slash, no leading slash) path.
+ */
+export function validateGameDataPath(path: unknown): string {
+  if (typeof path !== "string") {
+    throw new Error("gameData payload path must be a string");
+  }
+  const normalizedPath = path.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalizedPath.startsWith("game-data/") || !normalizedPath.endsWith(".json")) {
+    throw new Error("gameData payload path must be a game-data/**.json file");
+  }
+  if (normalizedPath.includes("..")) {
+    throw new Error("gameData payload path must not contain ..");
+  }
+  return normalizedPath;
+}
+
+export function validateSaveGameDataPayload(value: unknown): {
+  path: string;
+  data: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("gameData payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const normalizedPath = validateGameDataPath(input.path);
+  if (!input.data || typeof input.data !== "object" || Array.isArray(input.data)) {
+    throw new Error("gameData payload data must be an object keyed by entry id");
+  }
+  return { path: normalizedPath, data: input.data as Record<string, unknown> };
+}
+
 // ─── VFX Lite particle effect (VFX Faz 1 editor save) ────────────────────────
 //
 // THIRD save-validator allowlist surface (after layout placements and skeleton
@@ -3203,10 +3511,16 @@ export function validateSaveSoundCuePayload(value: unknown): {
 // valid value, ranges are ordered min<=max, bounds default). Any new
 // ParticleEffectDefinition field must be added to the parser's normalize* (which
 // this reuses) or it is silently dropped on save.
+//
+// Schema 3 adds the mesh renderer. Its `modelIds` are *manifest asset ids only*
+// — the parser's `isModelAssetId` rejects anything path- or URL-shaped, so this
+// validator and the runtime resolver gate on one shared rule, and a mesh effect
+// whose whole list is rejected fails the save loudly instead of writing an
+// emitter that can never render.
 
 /**
- * Validates + canonicalizes a schema-2 particle effect asset body. Gates on the
- * `{ schema: 2, type: "particleEffect" }` envelope, then runs it through the vfx
+ * Validates + canonicalizes a schema-2/3 particle effect asset body. Gates on the
+ * `{ schema, type: "particleEffect" }` envelope, then runs it through the vfx
  * normalizer and re-attaches the envelope so the saved file round-trips on load.
  */
 export function validateEffectAsset(value: unknown): Record<string, unknown> {
@@ -3214,11 +3528,24 @@ export function validateEffectAsset(value: unknown): Record<string, unknown> {
     throw new Error("effect must be an object");
   }
   const input = value as Record<string, unknown>;
-  if (input.schema !== 2) throw new Error("effect.schema must be 2");
+  if (input.schema !== 2 && input.schema !== 3) throw new Error("effect.schema must be 2 or 3");
   if (input.type !== "particleEffect") throw new Error('effect.type must be "particleEffect"');
   const def = normalizeEffectDefinition(input);
   if (!def) throw new Error("effect body is not a valid particle effect");
-  return { schema: 2, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
+  if (def.renderer.type === "mesh" && def.renderer.modelIds.length === 0) {
+    // The normalizer drops path/URL-shaped and duplicate references, so an
+    // incoming list can normalize to empty. Refuse the save rather than writing
+    // an emitter that can never render, and say which half failed.
+    const authored = (input.renderer as { modelIds?: unknown } | undefined)?.modelIds;
+    const hadEntries = Array.isArray(authored) && authored.length > 0;
+    throw new Error(
+      hadEntries
+        ? "mesh effect renderer model ids must be manifest asset ids (no path, URL or duplicate)"
+        : "mesh effect renderer requires at least one model id",
+    );
+  }
+  const schema = def.renderer.type === "mesh" ? 3 : 2;
+  return { schema, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
 }
 
 export function validateSaveEffectPayload(value: unknown): {

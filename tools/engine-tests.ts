@@ -22,12 +22,15 @@ import {
   NoColorSpace,
   Object3D,
   PerspectiveCamera,
+  PlaneGeometry,
   PointLight,
   Quaternion,
   Raycaster,
   RepeatWrapping,
   SRGBColorSpace,
   Scene,
+  ShaderChunk,
+  ShaderLib,
   Texture,
   Vector2,
   Vector3,
@@ -216,6 +219,9 @@ import {
   landscapeHeightsToGrayscale,
   resampleLandscapeHeightmap,
   resampleLandscapeData,
+  applyLandscapeRectDeform,
+  applyLandscapeRectPaint,
+  landscapeGridBoundsForLocalBox,
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
 import {
@@ -252,8 +258,22 @@ import { MovingPlatformSubsystem } from "../engine/physics/movingPlatformSubsyst
 import {
   AudioSubsystem,
   DEFAULT_SPATIAL_ATTENUATION,
+  PLAYED_HISTORY_LIMIT,
+  canPlayAudioFormat,
   resolveSpatialPannerConfig,
 } from "../engine/audio/audioSubsystem";
+import {
+  AudioEventDirector,
+  jitterPitch,
+  normalizeAudioEventTable,
+  normalizeMusicPlaylistSettings,
+} from "../engine/audio/audioEventTable";
+import {
+  DEFAULT_MUSIC_PLAYLIST_SETTINGS,
+  MusicDirector,
+  crossfadeGains,
+  type MusicPlaylistSettings,
+} from "../engine/audio/musicDirector";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
 import {
   evaluateSoundCue,
@@ -301,11 +321,19 @@ import type { ConversationAsset } from "../engine/dialogue/conversationTypes";
 import {
   AUDIO_BUS_IDS,
   MENU_DUCK_MIX,
+  NOTIFICATION_DUCK_MIX,
+  STINGER_DUCK_MIX,
+  STINGER_MUSIC_BED_DUCK,
+  VOICE_DUCK_MIX,
   createDefaultBusVolumes,
+  duckGain,
+  ducksEqual,
   effectiveBusGain,
   isAudioBusId,
+  mergeDucks,
   mergeMixSnapshot,
   normalizeBusVolume,
+  type BusDuckMix,
 } from "../engine/audio/audioBus";
 import {
   SaveGameStore,
@@ -335,6 +363,7 @@ import {
   isOverBudget,
 } from "../engine/perf/perfBudget";
 import { FrameMetricsMonitor, type FrameMetrics } from "../engine/perf/frameMetrics";
+import { GpuFrameTimer, type GpuTimerContext } from "../engine/perf/gpuTimer";
 import {
   consumeDistanceUpdateDelta,
   isFarFromFocus,
@@ -461,6 +490,12 @@ import {
   toRuntimeParticleEffect,
 } from "../engine/vfx/particleEffectParser";
 import { ParticleEffect } from "../engine/render-three/particleEffect";
+import { MeshParticleEffect } from "../engine/render-three/meshParticleEffect";
+import { resolveRiverWater, riverWaterReflectionGroupKey } from "../engine/scene/riverWater";
+import {
+  PLANAR_REFLECTION_EXCLUDED_LAYER,
+  planarReflectionLayerMask,
+} from "../engine/render-three/planarReflectionSource";
 import { VfxSubsystem } from "../engine/render-three/vfxSubsystem";
 import type { RuntimeParticleEffect } from "../engine/vfx/particleEffectTypes";
 import {
@@ -469,9 +504,23 @@ import {
   particleEffectPresetDefinition,
 } from "../engine/vfx/particleEffectPresets";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
+import { accumulatedNodeScale, mountSkeletalSocket } from "../engine/render-three/skeletalSocket";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
+import { LayeredClipAnimator } from "../engine/render-three/layeredClipAnimator";
+import { AuthoredEnvironment } from "../engine/render-three/authoredEnvironment";
+import {
+  WORLD_MASK_SHADER_SOURCE,
+  applyWorldMask,
+  applyWorldMaskShadow,
+  createWorldMaskUniforms,
+} from "../engine/render-three/worldMaskPatch";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
-import { applyRootMotionToClip, rootMotionPositionNodes } from "../engine/render-three/rootMotion";
+import {
+  applyRootMotionToClip,
+  resolveRootMotionUpAxis,
+  rootMotionClipDisplacement,
+  rootMotionPositionNodes,
+} from "../engine/render-three/rootMotion";
 import { createCharacterSceneObject, entityCharacterItem } from "../engine/render-three/models";
 import {
   DEFAULT_GAME_MODE_ID,
@@ -490,6 +539,7 @@ import {
   formatBottleneck,
   formatFrameMetrics,
   formatGameModeDebug,
+  formatGpuFrameStats,
   formatMemory,
   formatPerfBudget,
   formatSubsystemTiming,
@@ -613,6 +663,7 @@ import {
   validateReflectiveSurface,
   validateSphereReflectionCapture,
   validateBlockingVolume,
+  validateRiverWater,
   validateAiNavigationVolume,
   validateTargetPoint,
   validateSplineActor,
@@ -648,7 +699,9 @@ import {
   validateSaveMeshPaintPayload,
   validateAssetVertexColors,
   validateSaveAssetVertexColorsPayload,
+  validateSaveGameDataPayload,
 } from "./saveValidator";
+import { bucketEntriesByCategory, collectLeaves, partitionLeaves } from "../src/editor/dataTableLayout";
 import {
   normalizeFoliageType,
   normalizeFoliageData,
@@ -705,7 +758,7 @@ import {
   readGameModeDefaultPawnClassRef,
 } from "../engine/scene/actorScript";
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
-import { normalizeForgeMaterialDef } from "../engine/assets/material";
+import { defaultForgeMaterialDef, normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
   normalizeAssetSkeleton,
   resolveBlendSpaceWeights,
@@ -717,12 +770,15 @@ import {
   collectAssetMaterialElements,
 } from "../src/scene/assetMaterialSlotsLoader";
 import {
+  advanceForgeMaterialAnimations,
   createThreeMaterialFromForgeDef,
   EMISSIVE_INTENSITY_SCALE,
+  hasForgeMaterialNormalMotion,
 } from "../engine/render-three/materials";
 import {
   actorInstanceEntityId,
   actorInstanceToEntity,
+  resolveActorInstanceVariables,
   parseActorInstanceEntityIndex,
   parseSpawnedActorEntityIndex,
   spawnedActorEntityId,
@@ -779,6 +835,7 @@ import {
   postProcessToneMappingExposure,
   resolvePostProcess,
   scaledBloomResolution,
+  writesSceneDepth,
   POST_PROCESS_DEFAULTS,
 } from "../engine/render-three/postProcess";
 import {
@@ -988,17 +1045,86 @@ import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAn
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 
+/**
+ * The three entry points every check in this suite goes through.
+ *
+ * Two knobs, both set by `tools/run-engine-tests.mjs` from its own flags:
+ *
+ *  - `ENGINE_TESTS_FILTER` — comma-separated, case-insensitive substrings,
+ *    OR'd. A check whose label matches none of them is **skipped without being
+ *    run**, which is what makes a filtered run fast rather than merely quiet.
+ *    A filtered run is never a green build and says so.
+ *  - `ENGINE_TESTS_TIMING` — appends each check's wall time to its line. This
+ *    is the instrument: which checks are expensive is a measurement, and a
+ *    suite that cannot be measured gets optimised by guesswork.
+ *
+ * {@link checkSlow} is the third entry, for a check that costs real time (a
+ * full simulated run, a large fixture). Membership is decided by *duration*,
+ * never by importance — it is an "expensive tests" bucket, not an "unimportant
+ * tests" one. A bare `npm run test:engine` skips them; `--slow`, CI and
+ * `build:verify` run everything, and so does any filtered run, so narrowing to
+ * a subject never hides that subject's expensive checks.
+ */
+const filterTerms = (process.env.ENGINE_TESTS_FILTER ?? "")
+  .split(",")
+  .map((term) => term.trim().toLowerCase())
+  .filter((term) => term.length > 0);
+const showTiming = process.env.ENGINE_TESTS_TIMING === "1";
+/** A filter implies slow: narrowing to a subject must not hide its slow checks. */
+const slowEnabled = process.env.ENGINE_TESTS_SLOW === "1" || filterTerms.length > 0;
+
 let checks = 0;
-const check = (label: string, fn: () => void): void => {
-  fn();
+let skipped = 0;
+let skippedSlow = 0;
+
+const matchesFilter = (label: string): boolean => {
+  if (filterTerms.length === 0) return true;
+  const lowered = label.toLowerCase();
+  return filterTerms.some((term) => lowered.includes(term));
+};
+
+const report = (label: string, startedAt: number): void => {
   checks += 1;
-  console.log(`  ok: ${label}`);
+  const elapsed = showTiming ? ` (${(performance.now() - startedAt).toFixed(0)} ms)` : "";
+  console.log(`  ok: ${label}${elapsed}`);
+};
+
+const check = (label: string, fn: () => void): void => {
+  if (!matchesFilter(label)) {
+    skipped += 1;
+    return;
+  }
+  const startedAt = performance.now();
+  fn();
+  report(label, startedAt);
 };
 const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
+  if (!matchesFilter(label)) {
+    skipped += 1;
+    return;
+  }
+  const startedAt = performance.now();
   await fn();
-  checks += 1;
-  console.log(`  ok: ${label}`);
+  report(label, startedAt);
 };
+/** A check expensive enough that the default suite skips it. See the block above. */
+const checkSlow = (label: string, fn: () => void): void => {
+  if (!slowEnabled) {
+    skippedSlow += 1;
+    return;
+  }
+  check(label, fn);
+};
+/** Async form of {@link checkSlow}. */
+const checkSlowAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
+  if (!slowEnabled) {
+    skippedSlow += 1;
+    return;
+  }
+  await checkAsync(label, fn);
+};
+void checkSlow;
+void checkSlowAsync;
 
 registerBuildManifestParityTests(check);
 await registerLevelRuntimeTests(check, checkAsync);
@@ -4006,6 +4132,8 @@ check("createDefaultBusVolumes seeds every bus at unity", () => {
     sfx: 1,
     ui: 1,
     ambience: 1,
+    voice: 1,
+    notifications: 1,
   });
 });
 
@@ -4041,14 +4169,751 @@ check("isAudioBusId guards the bus id union", () => {
   assert.equal(isAudioBusId(3), false);
 });
 
-check("MENU_DUCK_MIX ducks music/ambience/sfx but leaves ui and master", () => {
+check("MENU_DUCK_MIX ducks music/ambience/sfx/voice but leaves ui, notifications and master", () => {
   const ducked = mergeMixSnapshot(createDefaultBusVolumes(), MENU_DUCK_MIX);
-  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1);
+  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1 && ducked.voice! < 1);
   assert.equal(ducked.ui, 1);
+  // An alert raised while the game is paused still has to reach the player.
+  assert.equal(ducked.notifications, 1);
   assert.equal(ducked.master, 1);
 });
 
+check("ducks merge by minimum, so two reasons to be quiet are not twice as quiet", () => {
+  // Product would take sfx to 0.56 here — deeper than either moment asked for,
+  // and audible as a lurch whichever duck ends first.
+  const merged = mergeDucks([{ sfx: 0.8, music: 0.6 }, { sfx: 0.7, ambience: 0.85 }]);
+  assert.deepEqual(merged, { music: 0.6, sfx: 0.7, ambience: 0.85 });
+  // Order-independent, so the mix never depends on which duck the frame saw first.
+  assert.deepEqual(mergeDucks([{ sfx: 0.7 }, { sfx: 0.8 }]), mergeDucks([{ sfx: 0.8 }, { sfx: 0.7 }]));
+  assert.deepEqual(mergeDucks([]), {});
+
+  // A bus nobody ducks is at unity, not absent-and-therefore-silent.
+  assert.equal(duckGain(merged, "sfx"), 0.7);
+  assert.equal(duckGain(merged, "notifications"), 1);
+
+  // Equality is by effect: an absent bus and a bus at 1 are the same silence, so
+  // a host reconciling every frame can say "nothing changed" without ramping.
+  assert.equal(ducksEqual({ sfx: 0.5 }, { sfx: 0.5, music: 1 }), true);
+  assert.equal(ducksEqual({ sfx: 0.5 }, { sfx: 0.5, music: 0.9 }), false);
+  assert.equal(ducksEqual({}, {}), true);
+});
+
+
+check("every duck leaves the channels that answer the player alone", () => {
+  // A duck names what steps *back*. Two buses may never appear in one: the
+  // alarm channel (a duck that quietened the notice it was making room for
+  // would be self-defeating) and `master` (which is not a channel but the
+  // volume of everything, ducking included).
+  const ducks: Array<[string, BusDuckMix]> = [
+    ["MENU_DUCK_MIX", MENU_DUCK_MIX],
+    ["NOTIFICATION_DUCK_MIX", NOTIFICATION_DUCK_MIX],
+    ["VOICE_DUCK_MIX", VOICE_DUCK_MIX],
+    ["STINGER_DUCK_MIX", STINGER_DUCK_MIX],
+  ];
+  for (const [name, duck] of ducks) {
+    assert.equal(duckGain(duck, "notifications"), 1, `${name} must not duck the alarm channel`);
+    assert.equal(duckGain(duck, "master"), 1, `${name} must not duck master`);
+    // Every bus it does name has to actually move, or the entry is a comment
+    // pretending to be a mix.
+    for (const bus of AUDIO_BUS_IDS) {
+      if (duck[bus] === undefined) continue;
+      assert.ok(duckGain(duck, bus) < 1, `${name} names ${bus} without ducking it`);
+      assert.ok(duckGain(duck, bus) > 0, `${name} silences ${bus} rather than ducking it`);
+    }
+  }
+});
+
+check("a stinger ducks the world but never the bus it plays on", () => {
+  // The trap this pins: stingers are routed to `music` on purpose (they are
+  // written with the score, and a player who muted the music has asked not to
+  // hear them). A duck that pulled the music bus down under a stinger would
+  // therefore pull the stinger down with it — the announcement ducking itself.
+  // The bed is handled where it can be: the director's own gain.
+  assert.equal(duckGain(STINGER_DUCK_MIX, "music"), 1, "a stinger must not duck its own bus");
+  assert.ok(duckGain(STINGER_DUCK_MIX, "ambience") < 1, "the world must step back under a stinger");
+  assert.ok(STINGER_MUSIC_BED_DUCK > 0 && STINGER_MUSIC_BED_DUCK < 1);
+});
+
+check("the pause duck goes deeper than the ducks that ride live play", () => {
+  // Relationship, not magnitude — every number here is retuned by ear. What
+  // must hold at any tuning: a menu the player opened may take the world well
+  // down, while a duck that fires several times a minute under running play
+  // must stay shallow or it is heard as the mix breathing.
+  for (const [name, duck] of [
+    ["NOTIFICATION_DUCK_MIX", NOTIFICATION_DUCK_MIX],
+    ["VOICE_DUCK_MIX", VOICE_DUCK_MIX],
+  ] as Array<[string, BusDuckMix]>) {
+    assert.ok(
+      duckGain(duck, "ambience") > duckGain(MENU_DUCK_MIX, "ambience"),
+      `${name} must duck the world less than a pause does`,
+    );
+  }
+  // The voice duck is the gentlest of the in-play three on the bus it aims at:
+  // a bark lands far more often than an alarm or an announcement.
+  assert.ok(duckGain(VOICE_DUCK_MIX, "sfx") > duckGain(STINGER_DUCK_MIX, "sfx"));
+});
+
+// --- Audio event table + music director ---------------------------------------
+
+interface AudioPlaybackHandleStub {
+  clipId: string;
+  stopped: boolean;
+  volume: number;
+  pitch: number;
+  stop(fadeSeconds?: number): void;
+  setVolume(value: number, fadeSeconds?: number): void;
+  setPitch(value: number): void;
+  setPaused(paused: boolean): void;
+}
+
+/** A stub handle: enough of the interface for the director's bookkeeping. */
+const fakeAudioHandle = (): { handle: AudioPlaybackHandleStub; finish: () => void } => {
+  const stub: AudioPlaybackHandleStub = {
+    clipId: "stub",
+    stopped: false,
+    volume: 1,
+    pitch: 1,
+    stop() {
+      stub.stopped = true;
+    },
+    setVolume() {},
+    setPitch() {},
+    setPaused() {},
+  };
+  return { handle: stub, finish: () => stub.stop() };
+};
+
+check("audio event table normalizer defaults every field and refuses a broken entry", () => {
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: { "ui.click": { clips: ["snd-click"] } },
+  });
+  const click = table.events["ui.click"]!;
+  // An entry that names only clips is legal and gets an unremarkable one-shot.
+  assert.deepEqual([...click.clips], ["snd-click"]);
+  assert.equal(click.spatial, false);
+  assert.equal(click.loop, false);
+  assert.equal(click.stream, false);
+  assert.ok(click.maxInstances >= 1);
+  assert.ok(click.maxDistance > click.refDistance);
+
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, events: { "ui.click": { clips: [] } } }),
+    /clips must be a non-empty array/,
+  );
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, events: { "ui.click": { clips: ["a"], bus: "reverb" } } }),
+    /is not a valid audio bus id/,
+  );
+  // An inverted attenuation pair silences the panner, which in-game reads as
+  // "never wired" rather than "too quiet" — refused at load instead.
+  assert.throws(
+    () => normalizeAudioEventTable({
+      schema: 1,
+      events: { "ui.click": { clips: ["a"], refDistance: 40, maxDistance: 10 } },
+    }),
+    /must be greater than refDistance/,
+  );
+  // Event ids are a namespace two files have to agree on; a stray capital or
+  // space would make the disagreement invisible.
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, events: { "UI Click": { clips: ["a"] } } }),
+    /dotted snake_case/,
+  );
+
+  // The bus mix is optional; absent means every bus at unity.
+  assert.deepEqual(table.buses, {});
+  const mixed = normalizeAudioEventTable({
+    schema: 1,
+    buses: { music: 0.3 },
+    events: { "ui.click": { clips: ["snd-click"] } },
+  });
+  assert.deepEqual(mixed.buses, { music: 0.3 });
+  // A misspelled bus would otherwise stay at unity with nothing to say why the
+  // mix is wrong — the exact failure this block exists to make loud.
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, buses: { musick: 0.3 }, events: {} }),
+    /is not a valid audio bus id/,
+  );
+});
+
+check("audio event director enforces cooldown, per-event cap and global budget", () => {
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: {
+      "combat.hit": { clips: ["a", "b"], cooldownMs: 100, maxInstances: 2, spatial: true, maxDistance: 40 },
+    },
+  });
+  const handles: AudioPlaybackHandleStub[] = [];
+  const director = new AudioEventDirector(table, {
+    random: () => 0,
+    maxConcurrent: 3,
+    play: () => {
+      const { handle } = fakeAudioHandle();
+      handles.push(handle);
+      return handle;
+    },
+  });
+
+  assert.equal(director.trigger("combat.hit", 0), "played");
+  // Same event inside its cooldown: refused without touching the budget.
+  assert.equal(director.trigger("combat.hit", 0.05), "cooldown");
+  assert.equal(director.trigger("combat.hit", 0.2), "played");
+  // Two are already sounding, and the entry allows two.
+  assert.equal(director.trigger("combat.hit", 0.4), "event-full");
+  assert.equal(director.activeCount(), 2);
+
+  // The distance cull is the cheapest guard and comes before everything else.
+  assert.equal(director.trigger("combat.hit", 5, { distance: 1000 }), "too-far");
+  // An id the table does not answer is reported, never thrown.
+  const unknown: string[] = [];
+  const strict = new AudioEventDirector(table, {
+    play: () => fakeAudioHandle().handle,
+    onUnknownEvent: (id) => unknown.push(id),
+  });
+  assert.equal(strict.trigger("combat.nope", 0), "unknown-event");
+  assert.equal(strict.trigger("combat.nope", 1), "unknown-event");
+  // Once per id: a mistyped name in a per-frame path must not flood the log.
+  assert.deepEqual(unknown, ["combat.nope"]);
+
+  // A finished clip frees its slot — but only once the director is advanced,
+  // which is what keeps the accounting frame-based rather than guessed.
+  for (const handle of handles) handle.stop();
+  assert.equal(director.activeCount(), 2);
+  director.advance();
+  assert.equal(director.activeCount(), 0);
+  assert.equal(director.trigger("combat.hit", 10), "played");
+});
+
+check("audio budget: the peak is what was heard at once, and the two refusals are told apart", () => {
+  // The split is what makes the measurement worth anything: an event's own cap
+  // refusing a fifth copy of a footstep is the design working, while the
+  // *shared* budget refusing anything means the ceiling is silently choosing
+  // which sounds the player hears. A single "refused" counter would average
+  // those two into a number nobody can act on.
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: {
+      "combat.hit": { clips: ["a"], bus: "sfx", maxInstances: 2 },
+      "voice.line": { clips: ["b"], bus: "voice", maxInstances: 1 },
+    },
+  });
+  const handles: AudioPlaybackHandleStub[] = [];
+  const director = new AudioEventDirector(table, {
+    random: () => 0,
+    maxConcurrent: 3,
+    play: () => {
+      const { handle } = fakeAudioHandle();
+      handles.push(handle);
+      return handle;
+    },
+  });
+
+  assert.deepEqual(
+    { active: director.budgetStats().active, peak: director.budgetStats().peak },
+    { active: 0, peak: 0 },
+  );
+  assert.equal(director.trigger("combat.hit", 0), "played");
+  assert.equal(director.trigger("combat.hit", 1), "played");
+  assert.equal(director.trigger("voice.line", 1), "played");
+  // The peak is sampled on advance, not on trigger: a count taken mid-frame
+  // could include a play that had already finished.
+  director.advance();
+  let stats = director.budgetStats();
+  assert.equal(stats.active, 3);
+  assert.equal(stats.peak, 3);
+  assert.equal(stats.limit, 3);
+  // Per channel, because a voice budget is judged per channel, not in total.
+  assert.deepEqual(
+    stats.byBus.map((entry) => [entry.bus, entry.active, entry.peak]),
+    [
+      ["sfx", 2, 2],
+      ["voice", 1, 1],
+    ],
+  );
+
+  // The event's own cap, and then the shared budget — counted apart.
+  assert.equal(director.trigger("combat.hit", 2), "event-full");
+  assert.equal(director.trigger("voice.line", 2), "event-full");
+  stats = director.budgetStats();
+  assert.equal(stats.eventRefusals, 2);
+  assert.equal(stats.budgetRefusals, 0, "no ceiling was reached; both events refused their own");
+
+  // Free one voice so the per-event cap stops biting first, then fill the budget.
+  handles[0]!.stop();
+  director.advance();
+  assert.equal(director.trigger("combat.hit", 3), "played");
+  assert.equal(director.trigger("voice.line", 4), "event-full");
+  const other = new AudioEventDirector(
+    normalizeAudioEventTable({
+      schema: 1,
+      events: { "combat.hit": { clips: ["a"], bus: "sfx", maxInstances: 8 } },
+    }),
+    { random: () => 0, maxConcurrent: 2, play: () => fakeAudioHandle().handle },
+  );
+  assert.equal(other.trigger("combat.hit", 0), "played");
+  assert.equal(other.trigger("combat.hit", 1), "played");
+  assert.equal(other.trigger("combat.hit", 2), "budget-full");
+  assert.equal(other.budgetStats().budgetRefusals, 1);
+  assert.equal(other.budgetStats().eventRefusals, 0);
+
+  // A peak belongs to one session. Carried into the next it would report a
+  // moment that no longer happened — the same reason cooldowns are cleared here.
+  other.reset();
+  const afterReset = other.budgetStats();
+  assert.equal(afterReset.peak, 0);
+  assert.equal(afterReset.active, 0);
+  assert.equal(afterReset.budgetRefusals, 0);
+  assert.deepEqual(afterReset.byBus, []);
+});
+
+check("a duck lasts exactly as long as the sound that asked for it", () => {
+  // `isPlaying` exists for ducking and nothing else: a host has to release a
+  // duck when its cause ends, and a guessed timer is wrong in both directions —
+  // too short and the mix comes back up under the second half of a line, too
+  // long and it hangs open over silence.
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: {
+      "voice.select": { clips: ["a"], maxInstances: 2 },
+      "notify.alert": { clips: ["b"] },
+    },
+  });
+  const handles: AudioPlaybackHandleStub[] = [];
+  const director = new AudioEventDirector(table, {
+    random: () => 0,
+    play: () => {
+      const { handle } = fakeAudioHandle();
+      handles.push(handle);
+      return handle;
+    },
+  });
+  assert.equal(director.isPlaying("voice.select"), false);
+  assert.equal(director.trigger("voice.select", 0), "played");
+  assert.equal(director.isPlaying("voice.select"), true);
+  // Per event, not global: an alarm sounding must not hold the voice duck open.
+  assert.equal(director.trigger("notify.alert", 0), "played");
+  handles[0]!.stop();
+  director.advance();
+  assert.equal(director.isPlaying("voice.select"), false);
+  assert.equal(director.isPlaying("notify.alert"), true);
+  // A refused trigger never arms a duck, because it never became a sound.
+  assert.equal(director.isPlaying("voice.nope"), false);
+  // And a reset drops the lot: a restart must not open ducked by the last one.
+  director.reset();
+  assert.equal(director.isPlaying("notify.alert"), false);
+});
+
+check("audio event pitch jitter stays inside its authored band", () => {
+  assert.equal(jitterPitch(0, () => 0.5), 1);
+  // The extremes of the generator map to the extremes of the band, and a pitch
+  // of zero or below would stop the source dead — so the floor matters.
+  assert.ok(Math.abs(jitterPitch(0.05, () => 0) - 0.95) < 1e-9);
+  assert.ok(Math.abs(jitterPitch(0.05, () => 1) - 1.05) < 1e-9);
+  for (const r of [0, 0.25, 0.5, 0.75, 1]) {
+    const pitch = jitterPitch(0.5, () => r);
+    assert.ok(pitch > 0, `pitch ${pitch} must stay positive`);
+  }
+});
+
+interface MusicHandleStub extends AudioPlaybackHandleStub {
+  gain: number;
+  stopFades: number[];
+  paused: boolean;
+}
+
+const fakeMusicHandle = (clipId: string): MusicHandleStub => {
+  const stub: MusicHandleStub = {
+    clipId,
+    stopped: false,
+    volume: 1,
+    pitch: 1,
+    gain: 1,
+    stopFades: [],
+    paused: false,
+    stop(fadeSeconds = 0) {
+      stub.stopped = true;
+      stub.stopFades.push(fadeSeconds);
+    },
+    setVolume(value: number) {
+      stub.gain = value;
+    },
+    setPitch() {},
+    setPaused(paused: boolean) {
+      stub.paused = paused;
+    },
+  };
+  return stub;
+};
+
+/** Deterministic generator: a shuffle test that flakes teaches nothing. */
+const seededMusicRandom = (seed: number): (() => number) => {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+};
+
+interface MusicRig {
+  readonly director: MusicDirector;
+  readonly played: MusicHandleStub[];
+  /** Advances the director to `toSeconds` in fixed steps, as a frame loop would. */
+  readonly runTo: (toSeconds: number) => void;
+  /** Holds or releases the bed at the rig's current clock reading. */
+  readonly hold: (paused: boolean) => void;
+}
+
+const musicRig = (options: {
+  clips: readonly string[];
+  volume: number;
+  settings: MusicPlaylistSettings;
+  durations?: Record<string, number>;
+  random?: () => number;
+}): MusicRig => {
+  const played: MusicHandleStub[] = [];
+  const director = new MusicDirector({
+    clips: options.clips,
+    volume: options.volume,
+    settings: options.settings,
+    random: options.random ?? seededMusicRandom(7),
+    durationOf: (clipId) => options.durations?.[clipId] ?? null,
+    play: (clipId, gain) => {
+      const handle = fakeMusicHandle(clipId);
+      handle.gain = gain;
+      played.push(handle);
+      return handle;
+    },
+  });
+  let clock = 0;
+  const step = 1 / 60;
+  director.start(clock);
+  return {
+    director,
+    played,
+    runTo: (toSeconds) => {
+      while (clock < toSeconds - 1e-9) {
+        clock = Math.min(toSeconds, clock + step);
+        director.advance(clock);
+      }
+    },
+    hold: (paused: boolean) => director.setPaused(paused, clock),
+  };
+};
+
+check("music crossfade holds its power across the seam", () => {
+  // The reason this is not a linear fade: two tracks that share no waveform sum
+  // by power, so a linear pair is ~3 dB down at the midpoint and every
+  // transition audibly dips. Sine and cosine keep the squares summing to one.
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    const { incoming, outgoing } = crossfadeGains(t);
+    assert.ok(
+      Math.abs(incoming * incoming + outgoing * outgoing - 1) < 1e-9,
+      `crossfade at ${t} loses power`,
+    );
+  }
+  // The ends are the whole point of a fade: silence to full, full to silence.
+  assert.ok(Math.abs(crossfadeGains(0).incoming) < 1e-9);
+  assert.ok(Math.abs(crossfadeGains(1).outgoing) < 1e-9);
+  // Out of range is clamped, not extrapolated — a negative gain inverts a track.
+  assert.ok(Math.abs(crossfadeGains(-5).incoming) < 1e-9);
+  assert.ok(Math.abs(crossfadeGains(9).outgoing) < 1e-9);
+});
+
+check("music director overlaps two tracks and lands the incoming one at full level", () => {
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 4,
+    gapSeconds: 0,
+    segmentSeconds: 100,
+  };
+  const volume = 0.5;
+  const rig = musicRig({
+    clips: ["one", "two"],
+    volume,
+    settings,
+    durations: { one: 20, two: 20 },
+  });
+
+  // One track, rising from silence: the bed fades in rather than snapping on.
+  assert.equal(rig.played.length, 1);
+  assert.equal(rig.played[0]!.gain, 0);
+  rig.runTo(settings.crossfadeSeconds + 1);
+  assert.ok(Math.abs(rig.played[0]!.gain - volume) < 1e-9, "the first track must reach full level");
+
+  // Derived from the same numbers the director is given, so this holds at any
+  // tuning: the fade begins a crossfade before the track's own end.
+  const handoverAt = 20 - settings.crossfadeSeconds;
+  rig.runTo(handoverAt - 0.5);
+  assert.equal(rig.played.length, 1, "nothing may start before the hand-over");
+
+  rig.runTo(handoverAt + settings.crossfadeSeconds / 2);
+  assert.equal(rig.played.length, 2, "the next track must already be under way");
+  assert.ok(rig.director.crossfading, "both tracks must be audible across the seam");
+  const [outgoing, incoming] = rig.played as [MusicHandleStub, MusicHandleStub];
+  assert.ok(!outgoing.stopped, "the outgoing track must fade, not cut");
+  // Mid-fade the pair still sums to the bed's authored level. Relationship, not
+  // magnitude: change `volume` and this follows it.
+  const power = Math.sqrt(outgoing.gain ** 2 + incoming.gain ** 2);
+  assert.ok(Math.abs(power - volume) < 0.02, `crossfade midpoint power ${power} left ${volume}`);
+
+  rig.runTo(handoverAt + settings.crossfadeSeconds + 1);
+  assert.ok(outgoing.stopped, "the outgoing track must be released once its fade is spent");
+  assert.ok(Math.abs(incoming.gain - volume) < 1e-9, "the incoming track must reach full level");
+  assert.ok(!rig.director.crossfading);
+  assert.equal(rig.director.nowPlaying(), incoming.clipId);
+});
+
+check("the music bed can be ducked without touching the music bus", () => {
+  // Why the bed has a duck of its own at all: stingers play on the `music` bus,
+  // so ducking that bus under an announcement would duck the announcement. The
+  // handle's gain is the only stage between the two.
+  const settings: MusicPlaylistSettings = { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 };
+  const volume = 0.5;
+  const rig = musicRig({ clips: ["one", "two"], volume, settings, durations: { one: 40, two: 40 } });
+  rig.runTo(settings.crossfadeSeconds + 1);
+  const track = rig.played[0]!;
+  assert.ok(Math.abs(track.gain - volume) < 1e-9);
+
+  rig.director.setDuck(STINGER_MUSIC_BED_DUCK);
+  assert.ok(
+    Math.abs(track.gain - volume * STINGER_MUSIC_BED_DUCK) < 1e-9,
+    "the bed must play at authored x duck",
+  );
+  // Derived from the same numbers, so this holds at any tuning or retune.
+  assert.ok(track.gain < volume && track.gain > 0);
+  rig.director.setDuck(1);
+  assert.ok(Math.abs(track.gain - volume) < 1e-9, "releasing the duck restores the authored level");
+});
+
+check("a duck applied mid-crossfade rides the fade instead of fighting it", () => {
+  // The failure this rules out: writing the ducked level straight onto a track
+  // that is still rising jumps it off its curve, which is heard as a click in
+  // the middle of a transition. The ramp owns the gain; the duck only changes
+  // what it is ramping towards.
+  const settings: MusicPlaylistSettings = { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 };
+  const volume = 0.5;
+  const duck = 0.4;
+  const rig = musicRig({ clips: ["one", "two"], volume, settings, durations: { one: 20, two: 20 } });
+  rig.runTo(settings.crossfadeSeconds + 1);
+  const handoverAt = 20 - settings.crossfadeSeconds;
+  rig.runTo(handoverAt + settings.crossfadeSeconds / 2);
+  assert.ok(rig.director.crossfading, "the rig must be mid-transition for this check to mean anything");
+  rig.director.setDuck(duck);
+  rig.runTo(handoverAt + settings.crossfadeSeconds / 2 + 1 / 60);
+  const [outgoing, incoming] = rig.played as [MusicHandleStub, MusicHandleStub];
+  // Both halves scale together, so the seam keeps its equal-power shape — the
+  // transition simply happens quieter.
+  const power = Math.sqrt(outgoing.gain ** 2 + incoming.gain ** 2);
+  assert.ok(Math.abs(power - volume * duck) < 0.02, `ducked crossfade power ${power} left the curve`);
+  rig.runTo(handoverAt + settings.crossfadeSeconds + 1);
+  assert.ok(Math.abs(incoming.gain - volume * duck) < 1e-9, "the incoming track lands at the ducked level");
+});
+
+check("music director hands over from the measured duration, not the fallback", () => {
+  // The fallback exists only for a clip that has not decoded yet. A director
+  // that kept using it would fade in the middle of a track and, worse, let a
+  // long one run past its own end into silence.
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 3,
+    gapSeconds: 0,
+    segmentSeconds: 100,
+  };
+  const measured = musicRig({
+    clips: ["a", "b"],
+    volume: 1,
+    settings,
+    durations: { a: 30, b: 30 },
+  });
+  measured.runTo(30 - settings.crossfadeSeconds + 0.5);
+  assert.equal(measured.played.length, 2, "a 30s track must hand over well before 100s");
+
+  // With no duration to read — a clip still loading, or no audio device at all —
+  // the hold falls back to the authored segment instead of running forever.
+  const unmeasured = musicRig({ clips: ["a", "b"], volume: 1, settings });
+  unmeasured.runTo(settings.segmentSeconds - settings.crossfadeSeconds - 1);
+  assert.equal(unmeasured.played.length, 1, "the fallback must not hand over early");
+  unmeasured.runTo(settings.segmentSeconds - settings.crossfadeSeconds + 1);
+  assert.equal(unmeasured.played.length, 2, "the fallback must still hand over");
+});
+
+check("music director's gap setting separates the tracks instead of overlapping them", () => {
+  // Both transitions are offered — a true crossfade, and a fade-out / window /
+  // fade-in. One number picks between them, so a project that wants the second
+  // must actually get silence in the middle rather than a slower overlap.
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 2,
+    gapSeconds: 3,
+    segmentSeconds: 100,
+  };
+  const rig = musicRig({
+    clips: ["a", "b"],
+    volume: 1,
+    settings,
+    durations: { a: 12, b: 12 },
+  });
+  let everOverlapped = false;
+  for (let mark = 0; mark <= 20; mark += 0.25) {
+    rig.runTo(mark);
+    if (rig.director.crossfading) everOverlapped = true;
+  }
+  assert.ok(!everOverlapped, "a gapped transition must never have two tracks audible");
+  assert.equal(rig.played.length, 2, "the next track must still start after the gap");
+  assert.ok(rig.played[0]!.stopped, "the first track must be released");
+});
+
+check("a held music bed neither plays nor ages", () => {
+  // The bug: the track plays on the audio device's clock, the hand-over is
+  // scheduled on the host's per-frame clock, and a hidden tab stops one but not
+  // the other. The track ran out while the schedule stood still, and the player
+  // came back to silence until the schedule caught up.
+  const rig = musicRig({
+    clips: ["a", "b"],
+    volume: 1,
+    settings: { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 },
+    durations: { a: 60, b: 60 },
+  });
+  rig.runTo(20);
+  const first = rig.played[0]!;
+  assert.equal(rig.played.length, 1);
+  assert.equal(first.paused, false);
+
+  rig.hold(true);
+  assert.equal(first.paused, true, "holding the bed must stop the track sounding");
+  // Past the hand-over the schedule would have reached (60 - 4 = 56s) had it
+  // kept running. Nothing may start: a bed nobody is hearing must not advance.
+  rig.runTo(80);
+  assert.equal(rig.played.length, 1, "a held bed must not hand over");
+  assert.equal(rig.director.nowPlaying(), first.clipId, "the same track is still the one held");
+
+  rig.hold(false);
+  assert.equal(first.paused, false, "releasing the bed resumes the same track");
+  // And the schedule resumes where it left off rather than firing at once: the
+  // 60 seconds it was held move the hand-over by 60 seconds, so the track still
+  // gets the 36 it had left.
+  rig.runTo(90);
+  assert.equal(rig.played.length, 1, "the hand-over must not fire off the held time");
+  rig.runTo(116.1);
+  assert.equal(rig.played.length, 2, "the hand-over lands a full track-length later");
+});
+
+check("a playlist switch crossfades at once rather than waiting out the track", () => {
+  // The state machine's whole audible effect. Without it a new playlist would
+  // arrive whenever the running track happened to end, which is up to a full
+  // segment after the moment that asked for it.
+  const settings: MusicPlaylistSettings = { crossfadeSeconds: 2, gapSeconds: 0, segmentSeconds: 100 };
+  const rig = musicRig({ clips: ["calm"], volume: 1, settings, durations: { calm: 90, tense: 90 } });
+  rig.runTo(10);
+  assert.equal(rig.director.nowPlaying(), "calm");
+
+  rig.director.setPlaylist(["tense"], 1, 10);
+  rig.runTo(10 + 1 / 30);
+  assert.equal(rig.played.length, 2, "the switch hands over on the next frame, not at track end");
+  assert.equal(rig.director.nowPlaying(), "tense");
+
+  // Re-stating the live playlist is a no-op: the host reconciles state every
+  // frame, so this is called sixty times a second and must cost nothing.
+  rig.director.setPlaylist(["tense"], 1, 12);
+  rig.runTo(14);
+  assert.equal(rig.played.length, 2, "an unchanged playlist must not restart the bed");
+});
+
+check("music director's shuffle bag plays every track before repeating one", () => {
+  // Independent random picks repeat: over four tracks one transition in four
+  // replays the piece that just ended, which reads as the music having stopped
+  // changing. The bag also has to refuse the seam between passes, where a plain
+  // shuffle is free to put the outgoing track at the head of the next round.
+  const clips = ["a", "b", "c", "d"];
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 1,
+    gapSeconds: 0,
+    segmentSeconds: 10,
+  };
+  for (const seed of [1, 2, 3, 17, 4242]) {
+    const rig = musicRig({ clips, volume: 1, settings, random: seededMusicRandom(seed) });
+    rig.runTo(settings.segmentSeconds * 12);
+    const order = rig.played.map((handle) => handle.clipId);
+    assert.ok(order.length >= 8, `seed ${seed} produced too few tracks to judge`);
+    for (let i = 1; i < order.length; i += 1) {
+      assert.notEqual(order[i], order[i - 1], `seed ${seed} repeated "${order[i]}" back-to-back`);
+    }
+    // Each completed pass is a permutation of the playlist: nothing is starved.
+    for (let start = 0; start + clips.length <= order.length; start += clips.length) {
+      const pass = new Set(order.slice(start, start + clips.length));
+      assert.equal(pass.size, clips.length, `seed ${seed} pass at ${start} was not a full round`);
+    }
+  }
+});
+
+check("music playlist settings default, and a nonsensical one is refused", () => {
+  // Absent is legal: a project with one track has no seam to describe.
+  assert.deepEqual(normalizeMusicPlaylistSettings(undefined), DEFAULT_MUSIC_PLAYLIST_SETTINGS);
+  const parsed = normalizeMusicPlaylistSettings({ crossfadeSeconds: 2, gapSeconds: 1 });
+  assert.equal(parsed.crossfadeSeconds, 2);
+  assert.equal(parsed.gapSeconds, 1);
+  assert.equal(parsed.segmentSeconds, DEFAULT_MUSIC_PLAYLIST_SETTINGS.segmentSeconds);
+  // Every one of these is silent when wrong — the music simply changes oddly,
+  // with nothing to say why — so they are refused at the file rather than
+  // clamped into something the author did not write.
+  assert.throws(() => normalizeMusicPlaylistSettings({ crossfadeSeconds: -1 }));
+  assert.throws(() => normalizeMusicPlaylistSettings({ gapSeconds: "later" }));
+  assert.throws(() => normalizeMusicPlaylistSettings({ segmentSeconds: 0 }));
+  assert.throws(() => normalizeMusicPlaylistSettings([]));
+});
+
 // --- Audio Bus Lite (subsystem, headless) -------------------------------------
+
+check("audio format support: only an empty canPlayType is a no, and no DOM is not evidence", () => {
+  // The check behind a "this browser has no sound" notice. Its failure modes run
+  // in both directions and both are bad: warn a browser that would have coped
+  // and the game calls itself broken; stay quiet on one that cannot and the
+  // player gets silence with no cause.
+  const original = globalThis.document;
+  try {
+    // `""` is the browser refusing outright — the only real no.
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "" }),
+    };
+    assert.equal(canPlayAudioFormat(), false);
+    // "maybe" is a hedge, not a refusal, and is treated as yes.
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "maybe" }),
+    };
+    assert.equal(canPlayAudioFormat(), true);
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "probably" }),
+    };
+    assert.equal(canPlayAudioFormat(), true);
+    // A build with no `canPlayType` at all cannot be asked, so it is not
+    // accused — Playwright's WebKit is exactly this shape for Web Audio.
+    (globalThis as { document?: unknown }).document = { createElement: () => ({}) };
+    assert.equal(canPlayAudioFormat(), true);
+    // Headless: not knowing is not evidence. A test run must never claim the
+    // shipped format is unplayable.
+    delete (globalThis as { document?: unknown }).document;
+    assert.equal(canPlayAudioFormat(), true);
+  } finally {
+    if (original === undefined) delete (globalThis as { document?: unknown }).document;
+    else (globalThis as { document?: unknown }).document = original;
+  }
+});
+
+check("audio subsystem: the play history is bounded, so a long session is not a leak", () => {
+  const audio = new AudioSubsystem();
+  for (let index = 0; index < PLAYED_HISTORY_LIMIT + 40; index += 1) {
+    audio.play(`shot-${index}`);
+    audio.update({ deltaSeconds: 0, elapsedSeconds: 0 } as never);
+  }
+  const played = audio.playedRequests();
+  assert.equal(played.length, PLAYED_HISTORY_LIMIT);
+  // Oldest first, and it is the *oldest* that is dropped: a debug overlay reads
+  // the tail, so trimming from the front is the only trim that is invisible.
+  assert.equal(played[played.length - 1]?.clipId, `shot-${PLAYED_HISTORY_LIMIT + 39}`);
+  assert.equal(played[0]?.clipId, "shot-40");
+  // Nothing was decoded here, so no clip has a known length — null is the honest
+  // answer, never a zero a caller could schedule against.
+  assert.equal(audio.clipDurationSeconds("shot-0"), null);
+});
+
 
 check("audio subsystem seeds every mix bus at unity", () => {
   const audio = new AudioSubsystem();
@@ -7500,30 +8365,75 @@ check("grid navigation keeps narrow-corner waypoints outside capsule clearance",
   }
 });
 
-check("grid navigation adds clearance cost so corridor routes prefer the middle", () => {
+// Pinned on the baked penalty table, not on emitted waypoints: a flat grid's
+// final path is string-pulled, so wherever the taut line is already clear the
+// clearance cost stays a search preference and never reaches the output.
+check("grid navigation adds clearance cost so cells near a corridor wall cost more", () => {
   const wallL: Aabb3 = { min: [-4, 0, -5], max: [-2, 2, 5] };
   const wallR: Aabb3 = { min: [2, 0, -5], max: [4, 2, 5] };
-  const path = findGridPath({
-    start: [-1.5, 0, -4],
-    goal: [-1.5, 0, 4],
+  const grid = buildNavGrid({
     agent: { radius: 0, height: 1.8 },
     blockers: [wallL, wallR],
     bounds: [{ min: [-4, -1, -6], max: [4, 3, 6] }],
+    footY: 0,
     cellSize: 0.5,
     safetyMargin: 0,
   });
-  assert.equal(path.status, "success");
+  assert.ok(grid);
+  const penaltyAt = (x: number, z: number): number => {
+    const col = Math.round((x - grid.originX) / grid.cellSize);
+    const row = Math.round((z - grid.originZ) / grid.cellSize);
+    return grid.penalty[row * grid.cols + col]!;
+  };
+  assert.equal(penaltyAt(0, 0), 0, "corridor middle must be free of clearance cost");
+  assert.ok(penaltyAt(-1.5, 0) > 0, "a cell hugging the wall must carry clearance cost");
+  assert.ok(penaltyAt(-1.5, 0) > penaltyAt(-1, 0));
+  assert.ok(penaltyAt(-1, 0) > penaltyAt(-0.5, 0));
+});
+
+check("grid navigation string-pulls a flat-grid route instead of emitting the A* staircase", () => {
+  const straight = findGridPath({
+    start: [-4, 0, -4],
+    goal: [4, 0, 1],
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [],
+    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(straight.status, "success");
+  // Open ground on a shallow diagonal is where 8-neighbour A* alternates E/NE
+  // every cell; taut, it is one segment.
+  assert.deepEqual(straight.points, [[-4, 0, -4], [4, 0, 1]]);
+
+  // A heightfield grid must keep the conservative cell route: `segmentSafe` there
+  // cannot see floor holes, ledge erosion or step limits.
+  const heightfield = buildNavGrid({
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [],
+    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
+    footY: 0,
+    cellSize: 0.5,
+    safetyMargin: 0,
+    sampleFloorY: () => 0,
+  });
+  assert.ok(heightfield);
+  assert.equal(heightfield.flatFloor, false);
+  const stepped = searchNavGrid(heightfield, [-4, 0, -4], [4, 0, 1]);
+  assert.equal(stepped.status, "success");
   assert.ok(
-    path.points.some((point) => Math.abs(point[0]) <= 0.5 && Math.abs(point[2]) <= 3),
-    `expected route to move toward corridor center: ${JSON.stringify(path.points)}`,
+    stepped.points.length > straight.points.length,
+    `heightfield route should not be pulled taut: ${JSON.stringify(stepped.points)}`,
   );
 });
 
 check("grid navigation compression keeps grid points when a shortcut would cross a blocker", () => {
   const wall: Aabb3 = { min: [-0.25, 0, 0], max: [0.1, 2, 0.35] };
+  // The goal is chosen so the taut start→goal line runs straight through the
+  // wall: string-pulling must refuse it and keep a corner waypoint instead.
   const path = findGridPath({
     start: [-0.45, 0, 0.3],
-    goal: [2.3, 0, 1.55],
+    goal: [2.3, 0, 0.2],
     agent: { radius: 0, height: 1.8 },
     blockers: [wall],
     bounds: [{ min: [-2, -1, -2], max: [4, 3, 4] }],
@@ -7532,8 +8442,8 @@ check("grid navigation compression keeps grid points when a shortcut would cross
   });
   assert.equal(path.status, "success");
   assert.ok(
-    path.points.some((point) => point[0] === -0.5 && point[2] === 0.5),
-    `expected start-cell waypoint to guard the corner: ${JSON.stringify(path.points)}`,
+    path.points.length > 2,
+    `expected a corner waypoint around the wall: ${JSON.stringify(path.points)}`,
   );
   for (let i = 0; i < path.points.length - 1; i += 1) {
     assert.equal(
@@ -9280,6 +10190,121 @@ check("CrossfadeAnimator: exposes its clips and tracks the current clip on play"
   assert.equal(animator.currentClip, "walk");
 });
 
+check("CrossfadeAnimator: playRange holds a montage section and reports when it ends", () => {
+  const clips = [new AnimationClip("work", 4, [])];
+  const animator = new CrossfadeAnimator(new Object3D(), clips);
+
+  // A held middle: an actor kneels once, stays down as long as the task takes.
+  animator.playRange("work", { startSeconds: 1, endSeconds: 2, loop: true }, 0);
+  animator.update(1.5);
+  assert.equal(animator.rangeFinished, false);
+  // Wrapped back inside the section rather than running on into the stand-up.
+  animator.update(1.5);
+  assert.equal(animator.rangeFinished, false);
+
+  // A one-shot section clamps on its last pose and says so exactly once.
+  animator.playRange("work", { startSeconds: 2, endSeconds: 3, loop: false }, 0);
+  assert.equal(animator.rangeFinished, false);
+  animator.update(1.5);
+  assert.equal(animator.rangeFinished, true);
+
+  // Leaving the range restores ordinary whole-clip playback.
+  animator.play("work", 0);
+  animator.update(3);
+  assert.equal(animator.rangeFinished, false);
+});
+
+check("montage sections normalize and round-trip, dropping ranges that would freeze a frame", () => {
+  const skeleton = normalizeAssetSkeleton({
+    schema: 1,
+    montages: [
+      {
+        name: "build",
+        clip: "work",
+        slot: "upperBody",
+        sections: [
+          { name: "enter", startSeconds: 0, endSeconds: 0.5 },
+          { name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true },
+          { name: "reversed", startSeconds: 3, endSeconds: 1 },
+          { name: "empty", startSeconds: 1, endSeconds: 1 },
+          { name: "enter", startSeconds: 2, endSeconds: 3 },
+        ],
+      },
+    ],
+  });
+  // Reversed, zero-length and duplicate-named ranges drop: each would leave the
+  // runtime looping one frame, which reads as a frozen actor.
+  assert.deepEqual(skeleton.montages[0]?.sections, [
+    { name: "enter", startSeconds: 0, endSeconds: 0.5, loop: false },
+    { name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true },
+  ]);
+
+  // Allowlist half: sections must survive a save, and the validator refuses the
+  // same malformed ranges loudly rather than dropping them silently.
+  const saved = validateSaveSkeletonPayload({
+    path: "assets/characters/Hero.skeleton.json",
+    skeleton: {
+      montages: [
+        {
+          name: "build",
+          clip: "work",
+          slot: "upperBody",
+          sections: [{ name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true }],
+        },
+      ],
+    },
+  });
+  assert.deepEqual((saved.skeleton.montages[0] as Record<string, unknown>).sections, [
+    { name: "loop", startSeconds: 0.5, endSeconds: 2, loop: true },
+  ]);
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: {
+        montages: [
+          { name: "build", clip: "work", slot: "upperBody", sections: [{ name: "bad", startSeconds: 2, endSeconds: 1 }] },
+        ],
+      },
+    }),
+  );
+});
+
+check("mountSkeletalSocket cancels the bone's inherited scale so authored offsets are metres", () => {
+  // A centimetre-pipeline export: the root carries the 0.01 conversion and every
+  // bone inherits it, so a socket parented straight onto a bone would draw a
+  // 24 cm offset as 2.4 mm.
+  const root = new Object3D();
+  root.scale.setScalar(0.01);
+  const bone = new Object3D();
+  root.add(bone);
+  root.updateMatrixWorld(true);
+  assert.ok(Math.abs(accumulatedNodeScale(bone).x - 0.01) < 1e-9);
+
+  const { socket, mount } = mountSkeletalSocket(bone, {
+    position: [0, 0.03, 0.24],
+    rotation: [0, 90, 0],
+    scale: [1, 1, 1],
+  }, "hand_r");
+  assert.equal(socket.parent, mount);
+  assert.equal(mount.parent, bone);
+  assert.ok(Math.abs(mount.scale.x - 100) < 1e-6, `mount must invert the inherited scale, got ${mount.scale.x}`);
+  // The socket keeps the authored transform verbatim, which is what lets a gizmo
+  // drag be written straight back with no unit conversion.
+  assert.deepEqual(socket.position.toArray(), [0, 0.03, 0.24]);
+  root.updateMatrixWorld(true);
+  const world = new Vector3();
+  socket.getWorldPosition(world);
+  assert.ok(Math.abs(world.z - 0.24) < 1e-6, `socket must land at its authored metres, got ${world.z}`);
+
+  // A degenerate (near-zero) inherited scale is not inverted into infinity.
+  const flat = new Object3D();
+  flat.scale.set(0, 1, 1);
+  const flatBone = new Object3D();
+  flat.add(flatBone);
+  flat.updateMatrixWorld(true);
+  assert.equal(mountSkeletalSocket(flatBone, { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }, "s").mount.scale.x, 1);
+});
+
 check("CrossfadeAnimator: playBlend enters blend mode and play() leaves it", () => {
   const root = new Object3D();
   const clips = [
@@ -9365,6 +10390,82 @@ check("root motion clip filtering can pin XYZ on an authored root node", () => {
   assert.deepEqual(rootMotionPositionNodes(clip), ["Armature", "Hips"]);
 });
 
+// A rig exported from a Z-up tool carries the conversion on an intermediate
+// node, so the root's position track has its vertical on Z and its travel on Y.
+// Assuming index 1 is vertical strips the jump height and leaves the forward
+// drift running, which is the whole point of the next three checks.
+const buildZUpConvertedRig = (): Object3D => {
+  const root = new Object3D();
+  root.name = "Actor_Root";
+  root.scale.setScalar(0.01);
+  const rig = new Object3D();
+  rig.name = "Actor_Rig";
+  rig.quaternion.setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2);
+  root.add(rig);
+  const hips = new Object3D();
+  hips.name = "mixamorigHips";
+  rig.add(hips);
+  return root;
+};
+
+const buildYUpRig = (): Object3D => {
+  const root = new Object3D();
+  root.name = "Hero_Root";
+  const hips = new Object3D();
+  hips.name = "mixamorigHips";
+  root.add(hips);
+  return root;
+};
+
+/** A jump in miniature: travel on local Y, the jump arc on local Z. */
+const buildZUpJumpClip = (): AnimationClip =>
+  new AnimationClip("jump", 1, [
+    new VectorKeyframeTrack("mixamorigHips.position", [0, 0.5, 1], [0, 0, -85, 0, 120, -152, 0, 245, -85]),
+  ]);
+
+check("root motion up axis is derived from the rig, not assumed to be Y", () => {
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, buildZUpConvertedRig()), "z");
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, buildYUpRig()), "y");
+  // An authored override wins, and an unknown rig falls back to Y.
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", "x", buildZUpConvertedRig()), "x");
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, undefined), "y");
+});
+
+check("lockXZ keeps the rig's own vertical axis and removes its travel axis", () => {
+  const setting = { clip: "jump", mode: "lockXZ" } as const;
+
+  const zUp = applyRootMotionToClip(buildZUpJumpClip(), setting, buildZUpConvertedRig());
+  // Travel (local Y) is pinned to the first key; the arc (local Z) survives.
+  assert.deepEqual(Array.from(zUp.tracks[0]!.values), [0, 0, -85, 0, 0, -152, 0, 0, -85]);
+
+  const yUp = applyRootMotionToClip(buildZUpJumpClip(), setting, buildYUpRig());
+  // Same clip, Y-up rig: now Y is the axis worth keeping and Z gets pinned.
+  assert.deepEqual(Array.from(yUp.tracks[0]!.values), [0, 0, -85, 0, 120, -85, 0, 245, -85]);
+
+  const override = applyRootMotionToClip(
+    buildZUpJumpClip(),
+    { clip: "jump", mode: "lockXZ", upAxis: "y" },
+    buildZUpConvertedRig(),
+  );
+  assert.deepEqual(Array.from(override.tracks[0]!.values), Array.from(yUp.tracks[0]!.values));
+});
+
+check("driveMotion leaves playback untouched and reports the clip's real travel", () => {
+  const clip = buildZUpJumpClip();
+  const setting = { clip: "jump", mode: "driveMotion" } as const;
+
+  // Gameplay owns the movement, so the clip must reach the mixer as authored.
+  assert.equal(applyRootMotionToClip(clip, setting, buildZUpConvertedRig()), clip);
+
+  // Local delta (0, 245, 0) maps through the +90 X conversion and the 0.01 root
+  // scale to 2.45 forward and 0 up — the number gameplay must apply itself,
+  // instead of a hard-coded guess.
+  const travel = rootMotionClipDisplacement(clip, setting, buildZUpConvertedRig());
+  assert.ok(travel, "expected a measured displacement");
+  assert.ok(Math.abs(Math.hypot(travel.x, travel.z) - 2.45) < 1e-4, `forward travel was ${travel.x},${travel.z}`);
+  assert.ok(Math.abs(travel.y) < 1e-4, `vertical travel was ${travel.y}`);
+});
+
 check("splitClipsByUpperBody: routes each track to the half its node belongs to", () => {
   const rig = buildCharacterRig();
   const upper = collectSubtreeNodeNames(rig, "torso");
@@ -9421,6 +10522,103 @@ check("LayeredCharacterAnimator: upper montage/aim layers over locomotion legs",
   // A missing upper-body bone disables layering (caller falls back to single-channel).
   const flat = new LayeredCharacterAnimator(rig, buildLayeredClips(), "missing");
   assert.equal(flat.hasUpperBody, false);
+});
+
+/**
+ * The same rig as {@link buildCharacterRig}, with the clip set a caller-timed
+ * driver needs: two gaits, a torso-only reaction with a real duration, a
+ * full-body one-shot, and a pose to hold.
+ */
+const buildClipAnimatorClips = (): AnimationClip[] => {
+  const body = ["root", "leg-left", "leg-right", "torso", "arm-left", "arm-right", "head"];
+  const clip = (name: string, duration: number) =>
+    new AnimationClip(name, duration, body.map(positionTrack));
+  return [clip("walk", 1), clip("run", 0.8), clip("impact", 0.73), clip("death", 3.8), clip("carry", 2)];
+};
+
+check("LayeredClipAnimator: the torso takes a one-shot or a held pose while the legs keep walking", () => {
+  const animator = new LayeredClipAnimator(buildCharacterRig(), buildClipAnimatorClips(), "torso");
+  assert.equal(animator.hasUpperBody, true, "the mask matched, so layering is real rather than a silent no-op");
+
+  animator.play("walk", 0);
+  assert.equal(animator.lowerClip, "walk");
+  assert.equal(animator.upperClip, "walk", "with nothing owning the torso it mirrors the gait");
+
+  // The whole point: the reaction claims the torso and the legs are untouched.
+  animator.playUpperOnce("impact", 0.06);
+  assert.equal(animator.lowerClip, "walk", "the legs keep walking through the blow");
+  assert.equal(animator.upperClip, "impact");
+  assert.equal(animator.isUpperBusy, true);
+
+  // Locomotion keeps driving underneath — a struck character may break into a
+  // run — and must not steal the torso back while the reaction is still playing.
+  animator.play("run", 0.18);
+  assert.equal(animator.lowerClip, "run", "the gait can change mid-reaction");
+  assert.equal(animator.upperClip, "impact", "without cutting the reaction short");
+
+  // And it is released into the gait the legs are on *now*, not the one that was
+  // playing when the blow landed.
+  animator.releaseUpperBody(0);
+  assert.equal(animator.upperClip, "run", "the torso rejoins the current gait");
+  assert.equal(animator.isUpperBusy, false);
+
+  // A held pose is the other way the torso leaves the legs, and the one with no
+  // timer: it lasts as long as the caller keeps asking for it.
+  animator.setUpperBodyPose("carry", 0);
+  assert.equal(animator.upperClip, "carry", "the torso holds the load instead of mirroring the legs");
+  animator.play("walk", 0);
+  assert.equal(animator.lowerClip, "walk", "a carrier that changes pace changes gait");
+  assert.equal(animator.upperClip, "carry", "and keeps holding the same load while doing it");
+
+  // A one-shot still outranks the pose, and hands back the pose, not the gait.
+  animator.playUpperOnce("impact", 0);
+  assert.equal(animator.upperClip, "impact", "a struck carrier reacts from the waist up");
+  animator.releaseUpperBody(0);
+  assert.equal(animator.upperClip, "carry", "the reaction ends back into the carry, not the walk cycle");
+  animator.setUpperBodyPose(null, 0);
+  assert.equal(animator.upperClip, "walk", "an unloaded torso goes back to mirroring the legs");
+  assert.equal(animator.upperBodyPose, null);
+  // A clip the asset does not ship is refused rather than read as "clear", so a
+  // partial sidecar degrades to mirroring the legs instead of dropping a pose.
+  animator.setUpperBodyPose("nope", 0);
+  assert.equal(animator.upperBodyPose, null);
+
+  // Promoting a running full-body action to the torso keeps its playhead, so a
+  // notify window measured against it does not restart mid-action.
+  animator.playOnce("impact", 0);
+  animator.update(0.31);
+  const promotedAt = animator.getActiveClip()?.time ?? 0;
+  animator.playUpperOnce("impact", 0, promotedAt);
+  assert.ok(
+    Math.abs((animator.getUpperActiveClip()?.time ?? 0) - promotedAt) < 1e-6,
+    "promoting a running full-body action keeps its playhead instead of restarting it",
+  );
+
+  // A full-body one-shot reclaims the torso outright: a character killed
+  // mid-reaction falls with all of itself.
+  animator.playOnce("death", 0.06);
+  assert.equal(animator.lowerClip, "death");
+  assert.equal(animator.upperClip, "death", "death owns both channels");
+  assert.equal(animator.isUpperBusy, false);
+  assert.equal(animator.getUpperActiveClip(), null, "and the torso reports no clip of its own");
+
+  // Lengths come from the unsplit originals — a masked half keeps the authored
+  // duration the caller's state machine times against.
+  assert.equal(animator.clipDuration("impact"), 0.73);
+  assert.equal(animator.clipDuration("nope"), null);
+
+  // Ticking is this class's own job (the caller owns the loop and may throttle
+  // it), so both channels advance — a lower channel that never ticked would
+  // leave a layered character's legs frozen.
+  animator.play("walk", 0);
+  animator.update(0.1);
+  assert.equal(animator.lowerClip, "walk");
+
+  // An unmatched bone means an empty mask: every track lands on the lower
+  // channel, so the caller must be told to treat the asset as full-body rather
+  // than layer into a silent no-op.
+  const flatLayered = new LayeredClipAnimator(buildCharacterRig(), buildClipAnimatorClips(), "missing");
+  assert.equal(flatLayered.hasUpperBody, false);
 });
 
 check("pickLocomotionBlendSpace: prefers a named 1D space, else the first usable one", () => {
@@ -14458,6 +15656,17 @@ check("user settings store: round-trips locale and normalized audio bus volumes"
   };
   assert.equal(raw.schema, 1);
   assert.equal(raw.updatedAt, "2026-07-02T11:00:00.000Z");
+
+  // A volume panel moves on every pointer `input` event, so the bulk write is
+  // not a convenience: one bus at a time would be a read-modify-write per bus
+  // per frame of a drag. Unlisted buses keep whatever was stored.
+  assert.equal(store.setAudioBusVolumes({ music: 0.5, voice: 2, notifications: -1 }), true);
+  assert.deepEqual(store.read().audio.busVolumes, {
+    music: 0.5,
+    sfx: 0,
+    voice: 2,
+    notifications: 0,
+  });
 });
 
 check("user settings store: corrupt data falls back without crashing and write errors return false", () => {
@@ -15288,6 +16497,125 @@ check("debug overlay: formats the frame-time line from a metrics snapshot", () =
   assert.deepEqual(line, ["frame 17.2ms p95 26.5 spikes 3"]);
 });
 
+/** A scriptable stand-in for the timer-query slice of WebGL2. */
+function fakeGpuTimerContext(options: {
+  supported?: boolean;
+  /** Nanosecond result per query, in the order queries are ended. */
+  results?: number[];
+  /** Resolve results only after this many polls each. */
+  latency?: number;
+} = {}) {
+  const results = [...(options.results ?? [])];
+  const state = {
+    disjoint: false,
+    created: 0,
+    deleted: 0,
+    active: false,
+    beginCount: 0,
+    /** query -> pending polls before it resolves, then its value. */
+    queued: new Map<object, { waits: number; value: number }>(),
+  };
+  const gl: GpuTimerContext = {
+    createQuery: () => {
+      state.created += 1;
+      return {} as WebGLQuery;
+    },
+    deleteQuery: () => { state.deleted += 1; },
+    beginQuery: (_target, query) => {
+      assert.equal(state.active, false, "TIME_ELAPSED queries must never nest");
+      state.active = true;
+      state.beginCount += 1;
+      state.queued.set(query, { waits: options.latency ?? 0, value: results.shift() ?? 0 });
+    },
+    endQuery: () => { state.active = false; },
+    getQueryParameter: (query, pname) => {
+      const entry = state.queued.get(query);
+      if (!entry) return pname === 0x8867 ? true : 0;
+      if (pname === 0x8867) {
+        if (entry.waits > 0) { entry.waits -= 1; return false; }
+        return true;
+      }
+      return entry.value;
+    },
+    getParameter: () => state.disjoint,
+    getExtension: (name) =>
+      options.supported === false || name !== "EXT_disjoint_timer_query_webgl2"
+        ? null
+        : { TIME_ELAPSED_EXT: 0x88bf, GPU_DISJOINT_EXT: 0x8fbb },
+    QUERY_RESULT_AVAILABLE: 0x8867,
+    QUERY_RESULT: 0x8866,
+  };
+  return { gl, state };
+}
+
+check("GPU timer: tags late results, drops a disjoint batch, and returns every query on dispose", () => {
+  // A browser without the extension must yield no timer at all — a timer that
+  // reported zeros would read as "the GPU costs nothing".
+  assert.equal(GpuFrameTimer.create(fakeGpuTimerContext({ supported: false }).gl), null);
+  assert.equal(GpuFrameTimer.create(null), null);
+
+  const { gl, state } = fakeGpuTimerContext({
+    results: [4_000_000, 6_000_000, 8_000_000],
+    latency: 1,
+  });
+  const timer = GpuFrameTimer.create(gl, 4) ?? assert.fail("the fake context supports timing");
+
+  // Frame 1: begun and ended, but the GPU has not finished with it yet — the
+  // whole reason samples carry a tag rather than being read back in place.
+  assert.equal(timer.begin(0), true);
+  timer.end();
+  assert.deepEqual(timer.poll(), []);
+  assert.equal(timer.stats().samples, 0, "nothing is averaged before a result exists");
+
+  // Frame 2 goes out while frame 1 is still in flight; both come back below.
+  timer.begin(7);
+  timer.end();
+  const first = timer.poll();
+  assert.deepEqual(first, [{ tag: 0, ms: 4 }], "nanoseconds are reported as milliseconds");
+  const second = timer.poll();
+  assert.deepEqual(second, [{ tag: 7, ms: 6 }], "a late result still knows which frame it measured");
+
+  // Only untagged frames feed the rolling readout: a caller running a measurement
+  // sweep tags its own deliberately abnormal frames, and those must not drag the
+  // continuous number around.
+  assert.equal(timer.stats().samples, 1);
+  assert.equal(timer.stats().averageMs, 4);
+
+  // A disjoint event means the results in flight were measured across a GPU
+  // state change and are not durations at all.
+  timer.begin(0);
+  timer.end();
+  state.disjoint = true;
+  assert.deepEqual(timer.poll(), [], "a disjoint batch is discarded, not reported");
+  assert.equal(timer.disjointCount, 1);
+  state.disjoint = false;
+
+  // Queries are pooled rather than allocated per frame, and every one is handed
+  // back — a leaked query per frame is a real leak on a long debug session.
+  const createdBeforeReuse = state.created;
+  for (let index = 0; index < 6; index += 1) {
+    timer.begin(0);
+    timer.end();
+    timer.poll();
+  }
+  assert.ok(state.created <= Math.max(createdBeforeReuse, 4), "the pool is bounded and reused");
+  timer.dispose();
+  assert.equal(state.deleted, state.created, "every query created is deleted");
+});
+
+check("debug overlay: formats the GPU frame line at the precision the timer has", () => {
+  assert.deepEqual(
+    formatGpuFrameStats({ lastMs: 7.42, averageMs: 6.851, maxMs: 19.04, samples: 60 }),
+    ["gpu 7.4ms avg 6.9 max 19.0"],
+  );
+  // One decimal, deliberately: browsers quantise the returned nanoseconds as a
+  // side-channel mitigation, so more digits would be invented precision.
+  assert.deepEqual(
+    formatGpuFrameStats({ lastMs: 0.0417, averageMs: 0.0392, maxMs: 0.0511, samples: 8 }),
+    ["gpu 0.0ms avg 0.0 max 0.1"],
+  );
+});
+
 const adaptiveMetrics = (
   avg: number,
   { p95 = avg, sampleCount = 300, windowSeconds = 5 }: { p95?: number; sampleCount?: number; windowSeconds?: number } = {},
@@ -15948,11 +17276,17 @@ check("parseRuntimeParticleEffect collapses a schema-1 effect and rejects bad in
       spread: 0.4,
       materialMode: "alpha",
       color: "#a7a7a7",
+      // Schema 1 had no opacity block, so the upgrade path fills the defaults:
+      // a 1 → 0 ramp with the default short fade-out.
+      startOpacity: 1,
+      endOpacity: 0,
+      fadeInTime: 0,
+      fadeOutTime: 0.1,
     },
   );
   // Non-object, unknown schema, or empty schema-1 effectId â†’ null.
   assert.equal(parseRuntimeParticleEffect(null), null);
-  assert.equal(parseRuntimeParticleEffect({ schema: 3 }), null);
+  assert.equal(parseRuntimeParticleEffect({ schema: 4 }), null);
   assert.equal(parseRuntimeParticleEffect({ schema: 1, effectId: "" }), null);
   // Unknown materialMode falls back to alpha; a malformed color falls back to white.
   const fallback = parseRuntimeParticleEffect({
@@ -16084,6 +17418,140 @@ check("renderer.subUV flipbook (VFX Lite Faz 6b) normalizes, clamps, and collaps
   assert.deepEqual(canonical.renderer.subUV, { cols: 6, rows: 6 });
 });
 
+check("schema-3 mesh renderer normalizes, caps, and round-trips through the save validator", () => {
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: {
+      type: "mesh",
+      modelIds: [" debris.stone ", "debris.wood", "debris.stone", "", 42],
+      materialMode: "tint",
+      castShadow: true,
+      receiveShadow: false,
+      maxModelParticles: 999,
+    },
+  });
+  assert.ok(def);
+  assert.equal(def.renderer.type, "mesh");
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  // Trimmed, de-duplicated, non-strings dropped; the per-effect cap is clamped.
+  assert.deepEqual(def.renderer.modelIds, ["debris.stone", "debris.wood"]);
+  assert.equal(def.renderer.materialMode, "tint");
+  assert.equal(def.renderer.maxModelParticles, 256);
+
+  const runtime = toRuntimeParticleEffect(def);
+  assert.equal(runtime.rendererType, "mesh");
+  assert.deepEqual(runtime.modelIds, ["debris.stone", "debris.wood"]);
+
+  const canonical = validateEffectAsset({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["debris.stone"] },
+  }) as { schema: number; renderer: { type: string; modelIds: string[] } };
+  assert.equal(canonical.schema, 3);
+  assert.equal(canonical.renderer.type, "mesh");
+  assert.deepEqual(canonical.renderer.modelIds, ["debris.stone"]);
+  // A mesh emitter with no sources can never render, so the save is refused.
+  assert.throws(() =>
+    validateEffectAsset({ schema: 3, type: "particleEffect", renderer: { type: "mesh" } }),
+  );
+});
+
+check("mesh renderer model refs accept manifest ids only, never a path or URL", () => {
+  // The host resolves ids against its manifest before any GLTF load; this is the
+  // parser-side half of the same contract, so a hand-edited asset cannot smuggle
+  // a path past a lenient resolver. Rejected refs are dropped, not repaired.
+  const hostile = [
+    "../../secret.glb",
+    "assets/Meshes/rock.glb",
+    "C:\\models\\rock.glb",
+    "https://evil.example/rock.glb",
+    "debris stone",
+    "-leading-dash",
+    "x".repeat(129),
+  ];
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: [...hostile, "debris.stone", "kit:debris_wood-01"] },
+  });
+  assert.ok(def);
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  assert.deepEqual(def.renderer.modelIds, ["debris.stone", "kit:debris_wood-01"]);
+
+  // A list that is *entirely* rejected must fail the save loudly (no silent
+  // save), and the message must say which half failed.
+  assert.throws(
+    () =>
+      validateEffectAsset({
+        schema: 3,
+        type: "particleEffect",
+        renderer: { type: "mesh", modelIds: hostile },
+      }),
+    /manifest asset ids/,
+  );
+});
+
+check("mesh model selection normalizes, round-trips, and drives source pick order", () => {
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a", "b"], modelSelection: "sequence" },
+  });
+  assert.ok(def);
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  assert.equal(def.renderer.modelSelection, "sequence");
+  assert.equal(toRuntimeParticleEffect(def).meshModelSelection, "sequence");
+
+  // Unknown / missing values fall back to the documented default.
+  const fallback = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a"], modelSelection: "round-robin" },
+  });
+  assert.equal(fallback?.renderer.type === "mesh" && fallback.renderer.modelSelection, "random");
+
+  const canonical = validateEffectAsset({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a", "b"], modelSelection: "sequence" },
+  }) as { renderer: { modelSelection: string } };
+  assert.equal(canonical.renderer.modelSelection, "sequence");
+
+  // Runtime: `sequence` cycles the sources in authored order, so two sources and
+  // four spawns land 2/2 rather than at the mercy of Math.random.
+  const sources = [
+    new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()),
+    new Mesh(new BoxGeometry(2, 2, 2), new MeshBasicMaterial()),
+  ];
+  const effect = new MeshParticleEffect(
+    runtimeFx({
+      rendererType: "mesh",
+      modelIds: ["a", "b"],
+      meshModelSelection: "sequence",
+      maxParticles: 4,
+      maxModelParticles: 4,
+      loop: true,
+      rate: 100,
+      lifetime: 10,
+    }),
+    sources,
+  );
+  effect.update(0.05);
+  assert.equal(effect.aliveCount(), 4);
+  const visible = effect.object3D.children.map((child) => {
+    const mesh = child as unknown as { count: number; instanceMatrix: { array: Float32Array } };
+    let shown = 0;
+    for (let i = 0; i < mesh.count; i += 1) {
+      // A hidden slot is the zero-scale matrix; a live one has a non-zero column.
+      if (mesh.instanceMatrix.array[i * 16] !== 0) shown += 1;
+    }
+    return shown;
+  });
+  assert.deepEqual(visible, [2, 2]);
+  effect.dispose();
+});
+
 check("schema-1 and its hand-converted schema-2 starter collapse identically", () => {
   // The Faz 1 starter conversion is mechanical: the schema-2 files are authored
   // so the normalize→collapse pipeline reproduces the original schema-1 runtime
@@ -16125,17 +17593,32 @@ check("schema-1 and its hand-converted schema-2 starter collapse identically", (
   );
 });
 
-check("normalizeEffectDefinition maps burst count to an approximate runtime rate", () => {
+check("a burst effect collapses to a burst, not to a trickle spread over its lifetime", () => {
   const runtime = toRuntimeParticleEffect(
     normalizeEffectDefinition({
       schema: 2,
       system: { loop: false },
-      spawn: { mode: "burst", count: 30 },
+      spawn: { mode: "burst", count: 30, delay: 0.25 },
       initialize: { lifetime: [1, 1] },
     })!,
   );
-  // burst count 30 over a ~1s lifetime window â†’ ~30/s continuous approximation.
-  assert.equal(runtime.rate, 30);
+  // The two modes are exclusive: a burst carries no continuous rate. This used
+  // to collapse to `rate: 30` (count over the lifetime window), which does not
+  // make the burst slow - it makes it *late*, because the first particle then
+  // waits a full 1/30 s and the cloud only reaches full size a second in.
+  assert.equal(runtime.rate, 0, "a burst emitter has no trickle");
+  assert.deepEqual(runtime.burst, { count: 30, delay: 0.25 });
+
+  const rateMode = toRuntimeParticleEffect(
+    normalizeEffectDefinition({
+      schema: 2,
+      system: { loop: true },
+      spawn: { mode: "rate", rate: 12, count: 30 },
+      initialize: { lifetime: [1, 1] },
+    })!,
+  );
+  assert.equal(rateMode.rate, 12, "a rate emitter keeps its authored rate");
+  assert.equal(rateMode.burst, undefined, "and releases nothing up front");
 });
 
 // VFX Lite Faz 3 — the preview viewport reads alive/capacity off the runtime
@@ -16485,18 +17968,19 @@ check("createFoliageType produces a valid, save-clean asset", () => {
   assert.equal(canonical.type, "foliageType");
 });
 
-check("normalizeFoliageType merges a Type Details patch, preserving untouched fields", () => {
+check("normalizeFoliageType canonicalizes Type Details scale ranges to uniform values", () => {
   const base = createFoliageType("Grass", "mesh-1");
   // The Type Details editor sends `{ ...current, ...patch }` through normalize.
+  // Foliage scales uniformly, so a legacy per-axis range collapses to its X value.
   const edited = normalizeFoliageType({ ...base, scaleMin: [0.8, 0.8, 0.8], scaleMax: [1.5, 2, 1.5], randomYaw: false });
   assert.deepEqual(edited.scaleMin, [0.8, 0.8, 0.8]);
-  assert.deepEqual(edited.scaleMax, [1.5, 2, 1.5]);
+  assert.deepEqual(edited.scaleMax, [1.5, 1.5, 1.5]);
   assert.equal(edited.randomYaw, false);
   // Untouched fields survive the merge.
   assert.equal(edited.meshAssetId, "mesh-1");
   assert.equal(edited.name, "Grass");
   assert.equal(edited.alignToNormal, true);
-  // An inverted scale patch is re-ordered so max >= min per axis (no negative range).
+  // An inverted scale patch is re-ordered so max >= min (no negative range).
   const inverted = normalizeFoliageType({ ...base, scaleMin: [2, 2, 2], scaleMax: [1, 1, 1] });
   assert.deepEqual(inverted.scaleMax, [2, 2, 2]);
   // Setting then clearing an optional height limit drops it (undefined = no limit).
@@ -17355,9 +18839,11 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
     run: "Run",
   });
   assert.equal(payload.skeleton.upperBodyBone, "torso");
+  // Sections default to empty: a montage authored before they existed is still
+  // "the whole clip", which is what an empty list means.
   assert.deepEqual(payload.skeleton.montages, [
-    { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08, blendOutSeconds: 0.2 },
-    { name: "aim", clip: "holding-both", slot: "upperBody", loop: true, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
+    { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08, blendOutSeconds: 0.2, sections: [] },
+    { name: "aim", clip: "holding-both", slot: "upperBody", loop: true, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
   ]);
   assert.deepEqual(payload.skeleton.rootMotion, [
     { clip: "Run", mode: "lockXZ", rootNode: "Hips" },
@@ -17452,8 +18938,8 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
     },
   });
   assert.deepEqual(validated.skeleton.montages, [
-    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "block", clip: "guard", slot: "upperBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2 },
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "block", clip: "guard", slot: "upperBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2, sections: [] },
   ]);
 });
 
@@ -17469,8 +18955,8 @@ check("asset skeleton montages normalize and ignore legacy trigger fields", () =
   });
   // Empty name and duplicate name drop; the legacy trigger field is stripped.
   assert.deepEqual(skeleton.montages, [
-    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "guard", clip: "block", slot: "fullBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2 },
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "guard", clip: "block", slot: "fullBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2, sections: [] },
   ]);
 });
 
@@ -18060,8 +19546,8 @@ check("asset skeleton sidecar normalizes animation metadata", () => {
   assert.equal(skeleton.upperBodyBone, "torso");
   // Montages: duplicate name + empty clip dropped; defaults filled; blend clamped.
   assert.deepEqual(skeleton.montages, [
-    { name: "fire", clip: "Shoot", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "aim", clip: "Hold", slot: "upperBody", loop: true, blendInSeconds: 0.25, blendOutSeconds: 4 },
+    { name: "fire", clip: "Shoot", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "aim", clip: "Hold", slot: "upperBody", loop: true, blendInSeconds: 0.25, blendOutSeconds: 4, sections: [] },
   ]);
   assert.equal(skeleton.blendSpaces.length, 1);
   const blend = skeleton.blendSpaces[0]!;
@@ -18225,6 +19711,8 @@ check("material save payload requires a material path and canonical fields", () 
     emissiveTexture: "tex-stone-emissive",
     ormTexture: "tex-stone-m",
     uvTiling: { x: 2, y: 3 },
+    // Absent in the payload: the flip default is opt-out, so it round-trips true.
+    flipY: true,
     roughness: 0.72,
     metalness: 0,
     aoIntensity: 0.6,
@@ -18234,6 +19722,7 @@ check("material save payload requires a material path and canonical fields", () 
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: {
       layer1: {
         baseColor: "#f0f8ff",
@@ -18362,6 +19851,139 @@ check("material save payload requires a material path and canonical fields", () 
   assert.equal(savedLegacyLayerMask.maskTexture, null);
   assert.equal(savedLegacyLayerMask.ormTexture, null);
   assert.equal((savedLegacyLayerMask.layerBlend as Record<string, unknown>).maskTexture, "legacy-mask");
+});
+
+check("material flipY survives normalize and save, and reaches every texture map", () => {
+  // Absent means three.js' flipped default in both the loader and the save path,
+  // so no material authored before the field existed changes how it renders.
+  assert.equal(defaultForgeMaterialDef("Default").flipY, true);
+  assert.equal(
+    normalizeForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Legacy" }).flipY,
+    true,
+  );
+  assert.equal(
+    validateForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Legacy" }).flipY,
+    true,
+  );
+
+  // The allowlist half: an authored `false` must round-trip through the save
+  // validator, or a glTF-UV material silently reverts to flipped on every save.
+  const glTfUvMaterial = {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "GlTf Uv",
+    baseColorTexture: "atlas-bc",
+    flipY: false,
+  };
+  assert.equal(normalizeForgeMaterialDef(glTfUvMaterial).flipY, false);
+  assert.equal(validateForgeMaterialDef(glTfUvMaterial).flipY, false);
+  assert.equal(
+    (validateSaveMaterialPayload({
+      path: "assets/materials/Atlas.material.json",
+      material: glTfUvMaterial,
+    }).material as Record<string, unknown>).flipY,
+    false,
+  );
+
+  // And the render half: every map the material builds carries the flag, base
+  // layer and blend layer alike, so no single surface stays flipped on its own.
+  const flippedMaps = {
+    baseColorTexture: new Texture(),
+    normalTexture: new Texture(),
+    roughnessTexture: new Texture(),
+    metalnessTexture: new Texture(),
+    aoTexture: new Texture(),
+    opacityTexture: new Texture(),
+    emissiveTexture: new Texture(),
+    layer1BaseColorTexture: new Texture(),
+    layer1NormalTexture: new Texture(),
+    layer1AoTexture: new Texture(),
+    layerBlendMaskTexture: new Texture(),
+  };
+  const unflipped = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "GlTf Uv Layered",
+      baseColorTexture: "atlas-bc",
+      normalTexture: "atlas-n",
+      roughnessTexture: "atlas-r",
+      metalnessTexture: "atlas-m",
+      aoTexture: "atlas-ao",
+      opacityTexture: "atlas-o",
+      emissiveTexture: "atlas-e",
+      flipY: false,
+      layerBlend: {
+        driver: "maskTexture",
+        maskTexture: "blend-mask",
+        layer1: { baseColorTexture: "snow-bc", normalTexture: "snow-n", aoTexture: "snow-ao" },
+      },
+    }),
+    flippedMaps,
+  );
+  for (const [name, texture] of Object.entries(flippedMaps)) {
+    assert.equal(texture.flipY, false, `${name} must inherit the material's flipY`);
+  }
+  unflipped.dispose();
+
+  const defaultFlip = new Texture();
+  const flipped = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Engine Uv",
+      baseColorTexture: "grass-bc",
+    }),
+    { baseColorTexture: defaultFlip },
+  );
+  assert.equal(defaultFlip.flipY, true);
+  flipped.dispose();
+});
+
+check("forge normal motion patches the normal shader and updates a shared time uniform", () => {
+  const authored = {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Animated Normal",
+    normalTexture: "normal",
+    normalMotion: {
+      primaryVelocity: { x: 0.01, y: 0.02 },
+      secondaryTiling: { x: 1.5, y: 1.25 },
+      secondaryVelocity: { x: -0.02, y: 0.01 },
+      strength: 0.7,
+    },
+  };
+  // Allowlist half: the whole block round-trips, or an animated material saves
+  // itself back to a still one.
+  assert.deepEqual(validateForgeMaterialDef(authored).normalMotion, authored.normalMotion);
+
+  const material = createThreeMaterialFromForgeDef(normalizeForgeMaterialDef(authored), {
+    normalTexture: new Texture(),
+  });
+  assert.ok(material instanceof MeshStandardMaterial);
+  assert.equal(hasForgeMaterialNormalMotion(material), true);
+  assert.match(material.customProgramCacheKey(), /forge-normal-motion-v1/);
+  const shader = {
+    uniforms: {},
+    fragmentShader: "#include <normal_pars_fragment>\nvoid main() {\n#include <normal_fragment_maps>\n}",
+  };
+  material.onBeforeCompile?.(shader as never, {} as never);
+  assert.match(shader.fragmentShader, /forgeNormalMotionTime/);
+  advanceForgeMaterialAnimations(12.5);
+  assert.equal((shader.uniforms as Record<string, { value: number }>).forgeNormalMotionTime?.value, 12.5);
+  material.dispose();
+
+  // A material without the block keeps the stock shader (and the stock cost).
+  const plain = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Still", normalTexture: "n" }),
+    { normalTexture: new Texture() },
+  );
+  assert.equal(hasForgeMaterialNormalMotion(plain), false);
+  plain.dispose();
 });
 
 check("starter material assets normalize to the canonical material shape", () => {
@@ -18783,6 +20405,7 @@ check("content-new resolves to typed stub files and folders", () => {
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.8,
     metalness: 0,
     aoIntensity: 1,
@@ -18792,6 +20415,7 @@ check("content-new resolves to typed stub files and folders", () => {
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: null,
   });
   const metal = resolveContentNewFile({
@@ -18818,6 +20442,7 @@ check("content-new resolves to typed stub files and folders", () => {
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.3,
     metalness: 1,
     aoIntensity: 1,
@@ -18827,6 +20452,7 @@ check("content-new resolves to typed stub files and folders", () => {
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: null,
   });
 
@@ -19714,6 +21340,11 @@ check("cloneActorInstance deep-copies fields and shares no references", () => {
       lookAheadDistance: 1.2,
       wrapMode: "loop" as const,
     },
+    // Losing an override here would be silent and total: the Details panel writes
+    // one, the clone strips it, and the placement snaps back to its class default
+    // — indistinguishable from the panel refusing the edit. Every drag and every
+    // undo snapshot goes through this function.
+    variableOverrides: { species: "wolf", count: 3, tags: ["marker", "anchor"] },
   };
   const clone = cloneActorInstance(original);
   assert.deepEqual(clone, original);
@@ -19721,9 +21352,79 @@ check("cloneActorInstance deep-copies fields and shares no references", () => {
   (clone.rotation as number[])[1] = 0;
   assert.ok(clone.patrolRoute);
   clone.patrolRoute.splineId = "route-2";
+  assert.ok(clone.variableOverrides);
+  clone.variableOverrides.species = "deer";
+  (clone.variableOverrides.tags as string[])[0] = "changed";
   assert.equal(original.position[0], 1, "position array must be copied");
   assert.equal(original.rotation[1], 90, "rotation array must be copied");
   assert.equal(original.patrolRoute.splineId, "route-1", "patrol route must be copied");
+  assert.equal(original.variableOverrides.species, "wolf", "variable overrides must be copied");
+  assert.equal(original.variableOverrides.tags[0], "marker", "array override values must be copied");
+});
+
+check("actor instance variable overrides merge declared Actor defaults without leaking unknown or invalid values", () => {
+  const def = normalizeActorScriptDef({
+    name: "Marker",
+    parentClass: "actor",
+    variables: [
+      { key: "owner", label: "Owner", type: "select", default: "player" },
+      { key: "priority", label: "Priority", type: "number", default: 1 },
+      { key: "enabled", label: "Enabled", type: "boolean", default: true },
+      { key: "tags", label: "Tags", type: "tags", default: ["objective"] },
+    ],
+  });
+  const variableOverrides = {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["objective", "anchor"],
+    unknown: "drop",
+    malformed: true,
+  };
+  // A key the class does not declare, and a declared key whose override has the
+  // wrong type, are both ignored rather than reaching the runtime component.
+  assert.deepEqual(resolveActorInstanceVariables(def, variableOverrides), {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["objective", "anchor"],
+  });
+
+  const entity = actorInstanceToEntity(def, {
+    classRef: "Markers/Marker.actor.json",
+    position: [0, 0, 0],
+    variableOverrides,
+  }, 0);
+  assert.deepEqual(readScriptActorComponent(entity)?.variables, {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["objective", "anchor"],
+  });
+
+  // Allowlist half: the whole block round-trips, invalid values are refused, and
+  // an empty override map does not grow an empty object on every save.
+  const saved = validateActorInstance({
+    classRef: "Markers/Marker.actor.json",
+    position: [0, 0, 0],
+    variableOverrides: { owner: "enemy", tags: ["anchor"] },
+  });
+  assert.deepEqual(saved.variableOverrides, { owner: "enemy", tags: ["anchor"] });
+  assert.equal(
+    "variableOverrides" in validateActorInstance({
+      classRef: "Markers/Marker.actor.json",
+      position: [0, 0, 0],
+      variableOverrides: {},
+    }),
+    false,
+  );
+  assert.throws(() =>
+    validateActorInstance({
+      classRef: "Markers/Marker.actor.json",
+      position: [0, 0, 0],
+      variableOverrides: { owner: { nested: true } },
+    }),
+  );
 });
 
 check("validateActorInstance allowlists classRef + transform and rejects bad refs", () => {
@@ -19887,6 +21588,86 @@ check("applySceneFog sets exp/linear fog and clears on hidden/null", () => {
   assert.ok(scene.fog instanceof FogExp2);
   applySceneFog(scene, null);
   assert.equal(scene.fog, null);
+});
+
+// Editor <-> runtime parity guard: AuthoredEnvironment is what every shell that
+// renders a Forge Level applies, so an authored environment singleton can never
+// again exist in one shell and quietly not in the other. Before it, the two
+// copies had already diverged in three places, all asserted below. The GL-free
+// surface is covered here; the IBL cubemap capture needs a real GL context and
+// is left to the browser smoke.
+check("AuthoredEnvironment applies authored fog and reports authored sky light", () => {
+  const scene = new Scene();
+  // renderer/camera are unused by the fog + sky-light-query paths under test.
+  const env = new AuthoredEnvironment({
+    scene,
+    renderer: {} as unknown as WebGLRenderer,
+    camera: () => new PerspectiveCamera(),
+    resolveSunActor: () => null,
+  });
+
+  env.applyFog({ heightFog: { mode: "exp", color: "#334455", density: 0.06 } } as never);
+  assert.ok(scene.fog instanceof FogExp2, "authored height fog reaches scene.fog");
+  assert.equal((scene.fog as FogExp2).density, 0.06);
+  // A Level authoring no fog clears it, rather than inheriting the last level's.
+  env.applyFog({} as never);
+  assert.equal(scene.fog, null);
+
+  // hasAuthoredSkyLight is what lets a shell retire a fallback ambient light once
+  // the authored sky supplies the bounce; keeping both stacks and washes out.
+  assert.equal(env.hasAuthoredSkyLight({ skyAtmosphere: {} } as never), true);
+  assert.equal(env.hasAuthoredSkyLight({ skyAtmosphere: { hidden: true } } as never), false);
+  assert.equal(env.hasAuthoredSkyLight({} as never), false);
+  assert.equal(env.hasAuthoredSkyLight(null), false);
+});
+
+check("AuthoredEnvironment removes a dome the next layout does not author", () => {
+  // The first of the three drifts this class closed: the editor deleted the dome
+  // when its actor went away and the runtime did not, so travelling from a level
+  // with a sky to one without left the old sky standing over the new level. The
+  // symptom is invisible in the shell that is right.
+  const scene = new Scene();
+  const env = new AuthoredEnvironment({
+    scene,
+    renderer: {} as unknown as WebGLRenderer,
+    camera: () => new PerspectiveCamera(),
+    resolveSunActor: () => null,
+  });
+
+  env.applyClouds({ cloudLayer: { coverage: 0.5 } } as never);
+  const dome = scene.children.find((child) => child.type !== "Camera");
+  assert.ok(dome, "an authored cloud layer adds its dome to the scene");
+
+  env.applyClouds({} as never);
+  assert.equal(scene.children.includes(dome), false, "an unauthored cloud layer removes it");
+  // Idempotent: a second apply with nothing authored must not throw on the
+  // already-freed dome, because a rebuild calls these before every load.
+  env.applyClouds(null);
+  env.teardown();
+  env.teardown();
+});
+
+check("AuthoredEnvironment reports an environment change on clear as well as capture", () => {
+  // The third drift: only one shell rebound its probe env maps after a Sky Light
+  // Capture change. Clearing counts as a change too — a shell that rebound only
+  // on capture would leave its probes fading toward a freed render target.
+  const scene = new Scene();
+  let changes = 0;
+  const env = new AuthoredEnvironment({
+    scene,
+    renderer: {} as unknown as WebGLRenderer,
+    camera: () => new PerspectiveCamera(),
+    resolveSunActor: () => null,
+    onEnvironmentChanged: () => { changes += 1; },
+  });
+
+  // No sky, and a hidden sky, both clear the global environment.
+  env.applyReflection(null);
+  assert.equal(changes, 1);
+  assert.equal(scene.environment, null);
+  env.applyReflection({ skyAtmosphere: { hidden: true } } as never);
+  assert.equal(changes, 2);
+  assert.equal(scene.environment, null);
 });
 
 check("validateHeightFog allowlists fields and round-trips through validateLayout", () => {
@@ -20430,6 +22211,19 @@ check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alig
   });
 });
 
+check("landscape spline smoothness round-trips through the save allowlist", () => {
+  // The allowlist half of the tangent knob: a field the validator does not copy
+  // is silently dropped, so an authored corner softness would reset on save.
+  const terrain = createFlatLandscapeData("small");
+  const spline: ForgeLandscapeSpline = { ...smoothBend(true), smoothness: 0 };
+  const saved = validateLandscapeData({ ...terrain, splines: [spline] }) as ForgeLandscapeData;
+  assert.equal(saved.splines?.[0]?.smoothness, 0);
+  assert.equal(saved.splines?.[0]?.smooth, true);
+  // Absent stays absent, so an untouched spline keeps the historic 0.5 default.
+  const plain = validateLandscapeData({ ...terrain, splines: [smoothBend(true)] }) as ForgeLandscapeData;
+  assert.equal(plain.splines?.[0]?.smoothness, undefined);
+});
+
 check("landscape splines support shared-point branches and closed loops", () => {
   const branch: ForgeLandscapeSpline = {
     id: "hub",
@@ -20541,6 +22335,96 @@ check("Landscape spline adapter delegates linear and smooth centerline math to G
   const component = landscapeSplineSegmentComponent(smooth, smooth.segments[0]!);
   assert.equal(component?.points[0]?.pointType, "curveCustom");
   assert.deepEqual(component?.points.map((point) => point.position), [smooth.points[0]!.position, smooth.points[1]!.position]);
+});
+
+check("applyLandscapeRectDeform levels a footprint and blends its edge", () => {
+  const data = createFlatLandscapeData("small");
+  const center = 32 * 65 + 32;
+  const edge = 32 * 65 + 35; // local X +3: inside the falloff band
+  const outside = 32 * 65 + 37; // local X +5: clear of the pad
+  data.heights[center] = 1;
+  data.heights[edge] = 1;
+  data.heights[outside] = 1;
+  const result = applyLandscapeRectDeform(data, [{
+    centerX: 0,
+    centerZ: 0,
+    halfWidth: 2,
+    halfDepth: 2,
+    falloff: 2,
+    targetHeight: 5,
+  }]);
+  assert.equal(result.changed, true);
+  assert.equal(data.heights[center], 5, "the pad core reaches its target elevation");
+  assert.ok(data.heights[edge]! > 1 && data.heights[edge]! < 5, "the edge blends toward surrounding ground");
+  assert.equal(data.heights[outside], 1, "terrain outside the footprint and falloff is unchanged");
+});
+
+check("applyLandscapeRectPaint blends a soft-edged pad and renormalizes the layer set", () => {
+  const data = createFlatLandscapeData("small");
+  const center = 32 * 65 + 32;
+  const outside = 32 * 65 + 40;
+  const dirt = data.layers.find((layer) => layer.id === "dirt")!;
+  const grass = data.layers.find((layer) => layer.id === "grass")!;
+  const result = applyLandscapeRectPaint(data, [{
+    layerId: "dirt",
+    centerX: 0,
+    centerZ: 0,
+    halfWidth: 2,
+    halfDepth: 2,
+    falloff: 2,
+    strength: 1,
+  }]);
+  assert.equal(result.changed, true);
+  assert.ok(dirt.weights[center]! > 0.99, "the pad core reaches full weight");
+  assert.ok(grass.weights[center]! < 0.01, "the rest of the set renormalizes around it");
+  assert.equal(dirt.weights[outside], 0, "outside the pad and its falloff nothing is painted");
+  const total = data.layers.reduce((sum, layer) => sum + layer.weights[center]!, 0);
+  assert.ok(Math.abs(total - 1) < 1e-6, "weights still sum to 1 at a painted vertex");
+});
+
+check("a clipped spline apply reproduces the full pass inside its own rectangle", () => {
+  // The whole point of `clip`: paint and deform are per-vertex independent, so
+  // replaying the same ordered operations over a sub-rectangle must write exactly
+  // the values a full pass would have written there — otherwise a partial repaint
+  // silently diverges from a full one.
+  const spline = straightSpline({ deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } });
+  const full = createFlatLandscapeData("small");
+  applyLandscapeSplineDeform(full, spline);
+
+  const clipped = createFlatLandscapeData("small");
+  const clip = landscapeGridBoundsForLocalBox(clipped.size, { minX: -4, minZ: -4, maxX: 4, maxZ: 4 });
+  assert.ok(clip, "the box overlaps the heightfield");
+  applyLandscapeSplineDeform(clipped, spline, clip);
+  for (let z = clip!.z0; z <= clip!.z1; z += 1) {
+    for (let x = clip!.x0; x <= clip!.x1; x += 1) {
+      const index = z * 65 + x;
+      assert.equal(clipped.heights[index], full.heights[index], `vertex ${x},${z} must match the full pass`);
+    }
+  }
+  // And a box entirely off the heightfield yields no rectangle at all.
+  assert.equal(landscapeGridBoundsForLocalBox(clipped.size, { minX: 500, minZ: 500, maxX: 600, maxZ: 600 }), null);
+});
+
+check("landscape spline smoothness scales the corner tangent, absent keeping the historic 0.5", () => {
+  const historic = landscapeSplineSegmentComponent(smoothBend(true), smoothBend(true).segments[0]!);
+  const leave = historic?.points[0]?.leaveTangent;
+  assert.ok(leave, "a smooth spline carries an authored leave tangent");
+
+  const softened = smoothBend(true);
+  softened.smoothness = 1;
+  const soft = landscapeSplineSegmentComponent(softened, softened.segments[0]!);
+  const softLeave = soft?.points[0]?.leaveTangent;
+  assert.ok(softLeave);
+  // Same direction, twice the reach: 1 is exactly double the absent-default 0.5.
+  for (let axis = 0; axis < 3; axis += 1) {
+    assert.ok(Math.abs(softLeave![axis]! - leave![axis]! * 2) < 1e-9);
+  }
+
+  // Zero makes a "smooth" spline follow its straight pieces again.
+  const straightened = smoothBend(true);
+  straightened.smoothness = 0;
+  const flat = landscapeSplineSegmentComponent(straightened, straightened.segments[0]!);
+  assert.deepEqual(flat?.points[0]?.leaveTangent, [0, 0, 0]);
 });
 
 check("smooth spline deform bows outside the straight corridor", () => {
@@ -21681,6 +23565,145 @@ check("uniqueBlockingVolumeId/Name avoid collisions", () => {
   assert.equal(uniqueBlockingVolumeName("Blocking Volume", volumes), "Blocking Volume 2");
 });
 
+check("River Water Body resolves defaults and only saves presentation fields", () => {
+  assert.deepEqual(resolveRiverWater(null), {
+    id: "river-water",
+    name: "River Water",
+    hidden: false,
+    landscapeRef: "",
+    splineRef: "",
+    surfaceLevel: 0,
+    widthScale: 1,
+    flowSpeed: 0.35,
+    normalScale: 1,
+    normalTexture: "t-water-n",
+    deepColor: "#063447",
+    shallowColor: "#2f8b91",
+    opacity: 0.82,
+    bedVisibility: 0.05,
+    absorptionDistance: 0.5,
+    waveAmplitude: 0.04,
+    waveLength: 3.5,
+    foamColor: "#e8fff5",
+    foamOpacity: 0.92,
+    shoreWaveSpacing: 5,
+    shoreWaveSpeed: 0.34,
+    shoreWaveReach: 0.36,
+    shoreWaveBreakupScale: 1.25,
+    foamStamps: [],
+    segmentProfiles: [],
+    reflectionMode: "off",
+    reflectionGroup: null,
+    reflectionQuality: "medium",
+    reflectionStrength: 0.34,
+  });
+  assert.deepEqual(validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    surfaceLevel: -1.4,
+    widthScale: 0.88,
+    flowSpeed: 0.35,
+    deepColor: "#123456",
+    opacity: 0.7,
+    bedVisibility: 0.2,
+    absorptionDistance: 0.75,
+    waveAmplitude: 0.08,
+    waveLength: 4,
+    foamColor: "#dffcff",
+    foamOpacity: 0.7,
+    shoreWaveSpacing: 4.5,
+    shoreWaveSpeed: 0.4,
+    shoreWaveReach: 0.4,
+    shoreWaveBreakupScale: 1.1,
+    foamStamps: [
+      { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
+      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
+      { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
+    ],
+    segmentProfiles: [
+      { splineSegmentRef: "segment-2", flowSpeedMultiplier: 1.5, rapidness: 0.7 },
+    ],
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
+    reflectionStrength: 0.85,
+    ignoredCollision: true,
+  }), {
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    surfaceLevel: -1.4,
+    widthScale: 0.88,
+    flowSpeed: 0.35,
+    deepColor: "#123456",
+    opacity: 0.7,
+    bedVisibility: 0.2,
+    absorptionDistance: 0.75,
+    waveAmplitude: 0.08,
+    waveLength: 4,
+    foamColor: "#dffcff",
+    foamOpacity: 0.7,
+    shoreWaveSpacing: 4.5,
+    shoreWaveSpeed: 0.4,
+    shoreWaveReach: 0.4,
+    shoreWaveBreakupScale: 1.1,
+    foamStamps: [
+      { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
+      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
+      { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
+    ],
+    segmentProfiles: [
+      { splineSegmentRef: "segment-2", flowSpeedMultiplier: 1.5, rapidness: 0.7 },
+    ],
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
+    reflectionStrength: 0.85,
+  });
+  // Strength is the visible-amount control and is authored per body, so it must
+  // survive the save round trip and stay inside the 0..1 the shader blends with.
+  assert.throws(() => validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionStrength: 1.5,
+  }));
+  assert.equal(resolveRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionMode: "sharedPlanar",
+    reflectionStrength: 0.9,
+  }).reflectionStrength, 0.9);
+  // Quality picks a capture budget, never how much of it reaches the surface —
+  // two bodies that differ only in quality must resolve the same strength.
+  assert.equal(
+    resolveRiverWater({ id: "a", landscapeRef: "l", splineRef: "s", reflectionQuality: "high" }).reflectionStrength,
+    resolveRiverWater({ id: "b", landscapeRef: "l", splineRef: "s", reflectionQuality: "medium" }).reflectionStrength,
+  );
+  assert.throws(() => validateRiverWater({ id: "river-1", landscapeRef: "landscape-1" }));
+  assert.throws(() => validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    foamStamps: [{ id: "bad-strip", kind: "strip", position: [0, 0, 0], radius: 1, intensity: 1 }],
+  }));
+  const shared = resolveRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
+  });
+  assert.equal(riverWaterReflectionGroupKey(shared, -1.4), "river-a:-1.400:high");
+  assert.equal(riverWaterReflectionGroupKey({ ...shared, reflectionQuality: "low" }, -1.4), null);
+  assert.notEqual(riverWaterReflectionGroupKey(shared, -1.5), riverWaterReflectionGroupKey(shared, -1.4));
+  assert.equal(PLANAR_REFLECTION_EXCLUDED_LAYER, 31);
+  assert.equal(planarReflectionLayerMask(0xffffffff) >>> 0, 0x7fffffff);
+});
+
 check("blockingVolumeCollisionDef builds one solid primitive per shape", () => {
   assert.deepEqual(blockingVolumeCollisionDef("box", [2, 3, 4]), {
     primitives: [{ shape: "box", size: [2, 3, 4] }],
@@ -21688,6 +23711,34 @@ check("blockingVolumeCollisionDef builds one solid primitive per shape", () => {
     preset: "blockAll",
   });
   assert.equal(blockingVolumeCollisionDef("cylinder", [2, 2, 2]).primitives[0]!.shape, "cylinder");
+});
+
+check("blocking volume navigationRole reaches the collider and survives a save", () => {
+  // `auto` is the default reading, so it must NOT be written into the collision
+  // def — an explicit role there would override an asset default that agrees.
+  assert.equal("navigationRole" in blockingVolumeCollisionDef("box", [2, 2, 2]), false);
+  assert.equal(blockingVolumeCollisionDef("box", [4, 0.5, 4], "walkable").navigationRole, "walkable");
+  assert.equal(resolveBlockingVolume({ id: "n", position: [0, 0, 0] }).navigationRole, "auto");
+  assert.equal(
+    resolveBlockingVolume({ id: "n", position: [0, 0, 0], navigationRole: "walkable" }).navigationRole,
+    "walkable",
+  );
+
+  // Allowlist half: a walkable deck must round-trip, and `auto` must stay absent
+  // so a default-role brush does not grow a redundant field on every save.
+  const deck = validateBlockingVolume({
+    id: "deck",
+    position: [0, 2, 0],
+    brushShape: "box",
+    size: [8, 0.5, 3],
+    navigationRole: "walkable",
+  });
+  assert.equal(deck.navigationRole, "walkable");
+  assert.equal(
+    "navigationRole" in validateBlockingVolume({ id: "b", position: [0, 0, 0], navigationRole: "auto" }),
+    false,
+  );
+  assert.throws(() => validateBlockingVolume({ id: "b", position: [0, 0, 0], navigationRole: "sideways" }));
 });
 
 check("createBlockingVolumeObject builds an oriented brush; runtime variant is a solid box", () => {
@@ -22444,6 +24495,128 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
   assert.equal(Object.keys(noAnchors.uniforms).length, 0);
 });
 
+check("world mask: the patch survives a three.js upgrade, or fails loudly", () => {
+  // Both anchors are `#include` directives in three's own shader sources. If an
+  // upgrade renames or drops one, `applyWorldMask` finds nothing to replace and
+  // returns quietly — everything renders perfectly, with no mask on any of it.
+  // Nothing else in the build would notice.
+  const { vertexAnchor, fragmentAnchor } = WORLD_MASK_SHADER_SOURCE;
+  for (const [name, lib] of [
+    ["physical", ShaderLib.physical],
+    ["lambert", ShaderLib.lambert],
+    ["basic", ShaderLib.basic],
+    // The shadow path: without this anchor a hidden object still darkens the
+    // ground the viewer can see.
+    ["depth", ShaderLib.depth],
+  ] as const) {
+    assert.ok(lib.vertexShader.includes(vertexAnchor), `${name} vertex still carries ${vertexAnchor}`);
+    assert.ok(
+      lib.fragmentShader.includes(fragmentAnchor),
+      `${name} fragment still carries ${fragmentAnchor}`,
+    );
+  }
+
+  // The patch recomputes world position by mirroring `project_vertex`'s own
+  // sequence, because `transformed` is still object-local there. Miss a matrix
+  // and every instance of a batched model samples the mask at the *model's*
+  // origin — the whole authored world reads one texel, which looks like a mask
+  // bug rather than a transform bug.
+  const projectVertex = ShaderChunk.project_vertex;
+  for (const matrix of ["batchingMatrix", "instanceMatrix", "modelMatrix"]) {
+    const needed = matrix === "modelMatrix" || projectVertex.includes(matrix);
+    if (!needed) continue;
+    assert.ok(
+      WORLD_MASK_SHADER_SOURCE.vertexPatch.includes(matrix),
+      `the world-position patch must apply ${matrix}, as project_vertex does`,
+    );
+  }
+
+  // Sampling outside the mask's span reads the nearest edge texel rather than
+  // whatever the texture's wrap mode does, so scenery standing beyond the masked
+  // area inherits the strip behind it instead of wrapping in the far side.
+  assert.ok(WORLD_MASK_SHADER_SOURCE.fragmentPatch.includes("clamp("));
+  // Strictly greater, so a strength of zero can never discard: that is what makes
+  // `setEnabled(false)` a uniform write instead of a scene-wide recompile.
+  assert.ok(WORLD_MASK_SHADER_SOURCE.fragmentPatch.includes("worldMaskHidden > worldMaskDither"));
+});
+
+check("world mask: the patch chains a material's own shader patch instead of replacing it", () => {
+  // Forge already patches materials through `onBeforeCompile` — the landscape
+  // layer blend and the reflection capture both do. Overwriting the hook would
+  // flatten a layer-blended surface the moment it came under a mask, and the
+  // symptom (one material stopped blending) reads as an asset problem.
+  const uniforms = createWorldMaskUniforms({ span: 100, rangeLow: 0.55, rangeHigh: 0.92 });
+  uniforms.tWorldMask.value = new Texture();
+  const material = new MeshStandardMaterial();
+  let priorRuns = 0;
+  material.onBeforeCompile = (shader) => {
+    priorRuns += 1;
+    shader.uniforms.priorMarker = { value: 1 };
+  };
+  material.customProgramCacheKey = () => "prior-key";
+
+  assert.equal(applyWorldMask(material, uniforms), true, "a fresh material is patched");
+  assert.equal(applyWorldMask(material, uniforms), false, "and never patched twice");
+
+  const shader = {
+    uniforms: {} as Record<string, unknown>,
+    vertexShader: `void main() {
+${WORLD_MASK_SHADER_SOURCE.vertexAnchor}
+}`,
+    fragmentShader: `void main() {
+${WORLD_MASK_SHADER_SOURCE.fragmentAnchor}
+}`,
+  };
+  (material.onBeforeCompile as (s: unknown, r: unknown) => void)(shader, null);
+
+  assert.equal(priorRuns, 1, "the material's own patch still runs");
+  assert.ok(shader.uniforms.priorMarker, "and its uniforms still reach the program");
+  assert.equal(shader.uniforms.tWorldMask, uniforms.tWorldMask, "the mask binds the live uniform");
+  assert.equal(
+    shader.uniforms.worldMaskStrength,
+    uniforms.worldMaskStrength,
+    "including the strength, so disabling never needs a recompile",
+  );
+  assert.ok(shader.fragmentShader.includes("discard"), "and the fragment is actually discarded");
+  assert.ok(
+    material.customProgramCacheKey().includes("prior-key"),
+    "the prior cache key is folded in, not dropped — two programs must not collide",
+  );
+
+  // A patched and an unpatched material must never share a compiled program.
+  const plain = new MeshStandardMaterial();
+  assert.notEqual(
+    material.customProgramCacheKey(),
+    plain.customProgramCacheKey(),
+    "patched and stock materials need distinct cache keys",
+  );
+  material.dispose();
+  plain.dispose();
+});
+
+check("world mask: a shadow caster gets a patched depth material that agrees with what it draws", () => {
+  // Without this, hiding is colour-only: a masked-away object still writes the
+  // shadow map, leaving an object-shaped hole in the light with nothing above it.
+  const uniforms = createWorldMaskUniforms({ span: 64, rangeLow: 0.6, rangeHigh: 0.8 });
+  const cutout = new MeshStandardMaterial({ alphaTest: 0.5, side: DoubleSide });
+  cutout.map = new Texture();
+  const mesh = new Mesh(new PlaneGeometry(1, 1), cutout);
+
+  const depth = applyWorldMaskShadow(mesh, uniforms) ?? assert.fail("expected a depth material");
+  assert.equal(mesh.customDepthMaterial, depth);
+  // Carried across for the usual reason custom depth materials carry them: a
+  // cutout leaf whose shadow is cast by its quad reads as a floating rectangle.
+  assert.equal(depth.alphaTest, 0.5);
+  assert.equal(depth.map, cutout.map);
+  assert.equal(depth.side, DoubleSide);
+  // Idempotent per mesh: a mesh that already has a custom depth material is left
+  // alone rather than having the caller's own one replaced.
+  assert.equal(applyWorldMaskShadow(mesh, uniforms), null);
+
+  depth.dispose();
+  cutout.dispose();
+});
+
 check("assignProbeEnvMapMaterial chains a base layer-blend patch with the capture patch", () => {
   const fakeTexture = { isTexture: true } as unknown;
   const makeBake = (parallax: boolean): SphereReflectionCaptureBake =>
@@ -22856,6 +25029,39 @@ check("scaledBloomResolution scales the bloom target and guards bad input", () =
   assert.deepEqual(scaledBloomResolution(800, 600, 0), [800, 600]);
   assert.deepEqual(scaledBloomResolution(800, 600, Number.NaN), [800, 600]);
   assert.deepEqual(scaledBloomResolution(1, 1, 0.1), [1, 1]);
+});
+
+check("AO skips what the beauty pass never writes depth for", () => {
+  // GTAO renders its G-buffer with an overridden opaque material, so anything it
+  // is allowed to see punches a solid depth wall whatever its own material says.
+  // The rule: no beauty-pass depth ⇒ no AO-pass depth. Overlays and pick volumes
+  // opt out by writing no depth, which they already do to draw correctly.
+  const solid = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  assert.equal(writesSceneDepth(solid), true);
+
+  const overlay = new Mesh(
+    new PlaneGeometry(1, 1),
+    new MeshBasicMaterial({ transparent: true, opacity: 0.18, depthWrite: false }),
+  );
+  assert.equal(writesSceneDepth(overlay), false);
+
+  // A fully transparent pick volume: visible so raycasts hit it, invisible on
+  // screen. Before this rule it drew a dark cube around whatever it wrapped.
+  const pickVolume = new Mesh(
+    new BoxGeometry(2, 3, 2),
+    new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  );
+  assert.equal(writesSceneDepth(pickVolume), false);
+
+  // One opaque slot is real surface, so a mixed multi-material mesh stays in.
+  const mixed = new Mesh(new BoxGeometry(1, 1, 1), [
+    new MeshBasicMaterial({ depthWrite: false }),
+    new MeshStandardMaterial(),
+  ]);
+  assert.equal(writesSceneDepth(mixed), true);
+
+  // Non-meshes carry no material to ask; the pass's own type checks decide them.
+  assert.equal(writesSceneDepth(new Group()), true);
 });
 
 check("createPostProcessAntialiasPass creates SMAA only when enabled", () => {
@@ -27566,6 +29772,86 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
 
 // Runtime `?debug` snapshot builders (P2.5): pure, side-effect-free, so the
 // null-branching + default-fallback logic is exercised without a live scene.
+check("validateSaveGameDataPayload fences writes to game-data JSON and rejects the rest", () => {
+  // The dev endpoint's guard is generic on purpose: path scope + a keyed object,
+  // no balance rules (those ride on the game's injected validator and the runtime
+  // loader). Accepts a real balance path; refuses escapes and non-objects.
+  const ok = validateSaveGameDataPayload({ path: "game-data/balance/units.json", data: { a: {} } });
+  assert.equal(ok.path, "game-data/balance/units.json");
+  assert.deepEqual(ok.data, { a: {} });
+  // A leading slash is normalised rather than rejected.
+  assert.equal(
+    validateSaveGameDataPayload({ path: "/game-data/balance/units.json", data: {} }).path,
+    "game-data/balance/units.json",
+  );
+  for (const bad of [
+    { path: "src/main.ts", data: {} },
+    { path: "game-data/../secret.json", data: {} },
+    { path: "game-data/balance/units.json", data: [] },
+    { path: "game-data/balance/units.json", data: "x" },
+    { path: 42, data: {} },
+    null,
+  ]) {
+    assert.throws(() => validateSaveGameDataPayload(bad), /gameData payload/);
+  }
+});
+
+check("data table categories bucket every entry exactly once", () => {
+  // The two properties the renderer depends on and cannot check for itself.
+  // Losing a row is the failure worth naming: the obvious implementation
+  // (filter per category) drops anything unmatched, and the symptom is an
+  // author adding an entry and finding the editor simply does not show it.
+  const categories = [
+    { id: "a", label: "A", prefixes: ["a."] },
+    { id: "b", label: "B", prefixes: ["b.", "bb."] },
+    { id: "empty", label: "EMPTY", prefixes: ["nothing."] },
+  ];
+  const ids = ["a.one", "b.two", "bb.three", "z.stray", "a.four"];
+  const buckets = bucketEntriesByCategory(ids, categories);
+
+  const flattened = buckets.flatMap((bucket) => [...bucket.entryIds]);
+  assert.deepEqual([...flattened].sort(), [...ids].sort(), "every entry must survive bucketing exactly once");
+  assert.deepEqual(
+    buckets.map((bucket) => bucket.label),
+    ["A", "B", "EMPTY", "UNCATEGORIZED"],
+    "declared order is kept and the catch-all trails it",
+  );
+  // Document order inside a bucket, not prefix order: the file's order is the
+  // one the author edited and the one a diff shows.
+  assert.deepEqual(buckets[0]!.entryIds, ["a.one", "a.four"]);
+  assert.deepEqual(buckets[3]!.entryIds, ["z.stray"]);
+  assert.equal(buckets[2]!.entryIds.length, 0, "a category with no rows still renders");
+
+  // No catch-all heading at all when everything is claimed — an empty "other"
+  // is a heading that says nothing.
+  const clean = bucketEntriesByCategory(["a.one"], categories);
+  assert.equal(clean.length, 3, "the catch-all appears only when it has rows");
+});
+
+check("data table leaves keep their scalar type and group under opted-in blocks", () => {
+  const entry = {
+    cost: { food: 50, wood: 0 },
+    enabled: true,
+    tier: "heavy",
+    tags: ["a", "b"],
+    levels: [{ level: 1, hp: 10 }, { level: 2, hp: 20 }],
+  };
+  // An array of objects groups per element without opt-in; a plain nested object
+  // (`cost`) stays inline, because grouping every object would bury a flat file.
+  // `tags` is opted into whole-list editing; without that a string array walks
+  // to one leaf per index, which is right for a fixed triple and wrong for a list.
+  const groups = partitionLeaves(collectLeaves(entry, "", "", new Set(), new Set(["tags"])));
+  const base = groups.find((group) => group.isBase);
+  assert.ok(base);
+  assert.deepEqual(
+    base!.leaves.map((leaf) => [leaf.path, leaf.type]),
+    [["cost.food", "number"], ["cost.wood", "number"], ["enabled", "boolean"], ["tier", "string"], ["tags", "stringList"]],
+  );
+  const tiers = groups.filter((group) => !group.isBase);
+  assert.equal(tiers.length, 2, "each array element becomes its own block");
+  assert.deepEqual(tiers[0]!.leaves.map((leaf) => leaf.path), ["levels.0.level", "levels.0.hp"]);
+});
+
 check("buildPerfMemorySnapshot passes render memory through and reads the JS heap", () => {
   const render = { geometries: 3, textures: 4, programs: 2 } as unknown as Parameters<
     typeof buildPerfMemorySnapshot
@@ -27825,7 +30111,26 @@ await checkAsync("spawn coordinator frame-budget queues requests and cancels old
   assert.deepEqual(registered, ["spawned:0", "spawned:1"]);
 });
 
-console.log(`[engine-tests] ${checks} checks passed`);
+if (skipped > 0) {
+  // A filtered run proves something about one subject and nothing about the
+  // suite. Saying so is the point: a green line here would be a lie the next
+  // reader acts on.
+  console.log(
+    `[engine-tests] PARTIAL: ${checks} passed, ${skipped} skipped by ` +
+      `ENGINE_TESTS_FILTER="${process.env.ENGINE_TESTS_FILTER ?? ""}" — not a green build`,
+  );
+  if (checks === 0) {
+    console.error("[engine-tests] the filter matched no check at all — probably a typo");
+    process.exitCode = 1;
+  }
+} else if (skippedSlow > 0) {
+  console.log(
+    `[engine-tests] FAST: ${checks} checks passed, ${skippedSlow} slow check(s) skipped ` +
+      "— run `npm run test:engine:slow` (or --slow) for the full suite",
+  );
+} else {
+  console.log(`[engine-tests] ${checks} checks passed`);
+}
 
 function minimalGlbJson(json: unknown): Uint8Array {
   const encoder = new TextEncoder();

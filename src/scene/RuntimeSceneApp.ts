@@ -1,4 +1,4 @@
-import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, type Texture, TextureLoader, Vector2, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -6,7 +6,6 @@ import type {
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
-  WebGLRenderTarget,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -136,9 +135,15 @@ import {
 } from "./SceneRuntimeCore";
 import { SceneShell } from "./SceneShell";
 import { LevelRuntime } from "./LevelRuntime";
+import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
 import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
+import {
+  GpuFrameTimer,
+  type GpuFrameStats,
+  type GpuTimerContext,
+} from "@engine/perf/gpuTimer";
 import {
   applyQualityToPostProcess,
   defaultGraphicsPreferences,
@@ -168,40 +173,13 @@ import { evaluatePerfBudget } from "@engine/perf/perfBudget";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
 import {
-  applySkySunDirection,
-  applySkyToneMapping,
-  applySkyUniforms,
-  createSkyObject,
-  followCameraWithSky,
-  resolveSkyAtmosphere,
-  setSkyLocalToneMappingExposure,
-  skyAtmosphereToneMappingExposure,
-  sunDirectionFromLightRotation,
-} from "@engine/render-three/skyAtmosphere";
-import { applySceneFog, resolveHeightFog } from "@engine/render-three/heightFog";
-import {
-  advanceCloudTime,
-  applyCloudUniforms,
-  createCloudObject,
-  followCameraWithClouds,
-  resolveCloudLayer,
-  type CloudDome,
-} from "@engine/render-three/cloudLayer";
-import {
   applyPostProcessToneMapping,
   createPostProcessAntialiasPass,
   createPostProcessEffectPasses,
   hasPostProcessEffectPasses,
   PostProcessPipeline,
-  postProcessToneMappingExposure,
   resolvePostProcess,
-  type ResolvedPostProcess,
 } from "@engine/render-three/postProcess";
-import {
-  applyReflectionEnvironment,
-  captureSkyEnvironment,
-  resolveReflection,
-} from "@engine/render-three/reflection";
 import {
   applyProbeEnvMapToObject,
   assignProbeEnvMapMaterial,
@@ -266,8 +244,8 @@ import { splineDeformMeshColliderPrimitive } from "@engine/render-three/splineDe
 import { normalizeSplineGenerators, resolveSplineDeformMeshGenerator } from "@engine/scene/splineGenerator";
 import { readRotation, readScale } from "@engine/scene/transform";
 import { createSplineRegistry, type SplineQuery, type SplineRegistry } from "@engine/scene/splineRegistry";
-import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
+  advanceForgeMaterialAnimations,
   collectMaterialStats,
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
@@ -315,7 +293,15 @@ import {
   resolveMeshMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/scene/assetMaterialSlotsLoader";
-import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
+import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
+import {
+  createRiverWaterObject,
+  disposeRiverWaterObject,
+  resolveRiverWater,
+  type RiverWaterObjectLike,
+} from "@engine/render-three/riverWater";
+import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
+import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import { LocaleRegistry, normalizeUiLocaleTable } from "@engine/ui/uiLocale";
@@ -465,6 +451,8 @@ export interface RuntimeStatsApp {
   getUiDebugSnapshot?(): UiDebugSnapshot;
   /** Optional: windowed frame-time stats (avg / P95 / spikes) — always on in runtime. */
   getFrameMetricsSnapshot?(): FrameMetrics;
+  /** Optional: GPU-side frame time when `?debug` has timer queries, else null. */
+  getGpuFrameStats?(): GpuFrameStats | null;
   /** Optional: per-subsystem tick timing when `?debug` profiling is on, else null. */
   getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
   /** Optional: live bottleneck classification (Faz 5) for the `?debug` overlay. */
@@ -506,6 +494,17 @@ export interface RuntimeSceneAppOptions {
    * composition root (`createForgeRuntime`); `useGameModule` adds later ones.
    */
   readonly gameModules?: readonly ForgeGameModule[];
+}
+
+/**
+ * Narrows the renderer's context to the timer-query slice, or `null` on a WebGL1
+ * context (which has no queries at all). A cast would compile and then throw on
+ * the first `createQuery`; the feature test is the honest form, and the timer's
+ * own `create` already treats `null` as "no GPU timing available".
+ */
+function asGpuTimerContext(gl: WebGLRenderingContext | WebGL2RenderingContext): GpuTimerContext | null {
+  const candidate = gl as Partial<GpuTimerContext>;
+  return typeof candidate.createQuery === "function" ? (gl as unknown as GpuTimerContext) : null;
 }
 
 /** Fallback for a runtime with no game module: no script id resolves. */
@@ -579,6 +578,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Skips one frame-time sample after the tab regains focus (drops the rAF
    * catch-up delta so a visibility change is not miscounted as a spike). */
   private skipFrameMetricSample = false;
+  /**
+   * GPU-side frame timing, created only under `?debug` and only where the browser
+   * exposes timer queries — so it stays `null` on a shipping frame and on Safari.
+   * The CPU profiler says how long issuing the frame took; this says how long
+   * executing it took, and only the two together name the bound.
+   */
+  private gpuTimer: GpuFrameTimer | null = null;
   /** Active runtime quality profile. Defaults to Ultra so behaviour is identical
    * to the pre-quality-layer runtime until a profile is applied (Principle #2:
    * this only ever gates authored effects down, never writes layout data). */
@@ -653,6 +659,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private foliageBinding: FoliageRenderBinding | null = null;
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
+  /** Landscape sidecar data by actor id, kept for the River Water pass. */
+  private readonly landscapeDataById = new Map<string, ForgeLandscapeData>();
+  /** Live river-water ribbons, and the planar reflections they share. */
+  private riverWaterObjects: RiverWaterObjectLike[] = [];
+  private riverReflectionSources: PlanarReflectionSource[] = [];
+  private readonly riverWaterTextures = new Map<string, Texture>();
   /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
   private landscapeLayerTextures: Texture[] = [];
   /** Static collider entities generated from collidable runtime landscapes. */
@@ -686,11 +698,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
-  /** Sky Atmosphere dome (singleton); null when no sky actor is in the layout. */
-  private skyObject: Sky | null = null;
-  private cloudObject: CloudDome | null = null;
-  /** Captured Sky Light environment (PMREM) backing `scene.environment`; null when none. */
-  private reflectionTarget: WebGLRenderTarget | null = null;
+  /**
+   * The authored environment singletons (sky dome, Sky Light capture, fog,
+   * clouds). Shared with the editor shell rather than reimplemented here — see
+   * the header of `engine/render-three/authoredEnvironment.ts` for the three
+   * places the two copies had already drifted.
+   */
+  private readonly environment: AuthoredEnvironment;
   private postProcessPipeline: PostProcessPipeline | null = null;
   private cameraViewTouched = false;
   /** Latest per-entity locomotion snapshot a behavior reported (read by the Game Mode). */
@@ -840,16 +854,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.resolveEntityWorldPosition(entityId, target),
       handleReservedMessage: (message) => this.handleReservedUiMessage(message),
     });
+    this.environment = new AuthoredEnvironment({
+      scene: this.scene,
+      renderer: this.renderer,
+      camera: () => this.camera,
+      resolveSunActor: () => this.sunLightActor(),
+      // Rebinding matters here for the same reason it does in the editor: the
+      // global env that a probe's boundary blend fades toward just changed. The
+      // guard is not an optimisation — the rebind rebuilds every instanced model,
+      // and the initial build reaches this before any probe has been baked.
+      onEnvironmentChanged: () => {
+        if (this.eligibleProbeBakes().length > 0) this.applyRuntimeReflectionCaptureEnvMaps();
+      },
+    });
     this.levelRuntime = new LevelRuntime({
       mode: "runtime",
       environmentRender: {
         fitSunShadow: () => this.fitSunShadowToScene(),
         applyBackgroundAndAmbient: () => this.applyBackgroundAndAmbient(),
-        applySky: () => this.applyRuntimeSky(),
-        applyReflectionEnvironment: () => this.applyRuntimeReflection(true),
+        applySky: () => this.environment.applySky(this.layout),
+        applyReflectionEnvironment: () => this.environment.applyReflection(this.layout, true),
         applyPostProcess: () => this.applyRuntimePostProcess(),
-        applyFog: () => this.applyRuntimeFog(),
-        applyClouds: () => this.applyRuntimeClouds(),
+        applyFog: () => this.environment.applyFog(this.layout),
+        applyClouds: () => this.environment.applyClouds(this.layout),
       },
       reflectionObjects: {
         buildReflectionCaptures: () => this.buildRuntimeReflectionCaptures(),
@@ -860,6 +887,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         buildBlockingVolumes: () => this.buildRuntimeBlockingVolumes(),
         buildSplines: () => this.buildRuntimeSplines(),
         buildLandscapes: () => this.buildRuntimeLandscapes(),
+        buildRiverWaters: () => this.buildRuntimeRiverWaters(),
         buildFoliage: () => this.buildRuntimeFoliage(),
       },
       coreContent: {
@@ -966,7 +994,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // injected through the shell because a capability may not import `@/game`.
     // The VFX capability parents its effect container here once, for the whole
     // runtime's life — hence a host service rather than a level-time fact.
-    this.runtimeServices.provide(vfxHostService, { scene: this.scene });
+    this.runtimeServices.provide(vfxHostService, {
+      scene: this.scene,
+      // AssetLoader checks the manifest type before anything reaches GLTFLoader,
+      // so a mesh effect can only ever name ids, never a path or arbitrary URL.
+      // A model that fails to load drops out of the list rather than failing the
+      // whole emitter.
+      loadModels: async (modelIds) => {
+        if (!this.assetLoader) return [];
+        const models = await Promise.all(
+          modelIds.map(async (id) => {
+            try {
+              const scene = (await this.assetLoader!.loadModel(id)).scene;
+              await this.applyVfxMeshMaterialSlots(id, scene);
+              return scene;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        return models.filter((model): model is Group => model !== null);
+      },
+    });
     // What the AI-character animation capability needs from the shell: the
     // animation subsystem, the camera distance its LOD samples, the locomotion
     // snapshots the movement layer reports, and the possessed pawn it must skip.
@@ -1064,8 +1113,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // signal (§7.3), then with a smaller window since it reads seconds-scale trends.
     // Enabling wraps each subsystem update in a clock read; production without
     // either keeps the un-timed loop.
-    if (this.debug) this.engineApp.enableProfiling();
-    else if (this.userSettings.graphics.adaptiveOptimizationEnabled) {
+    if (this.debug) {
+      this.engineApp.enableProfiling();
+      // Same gate, for the same reason, on the other side of the fence: timer
+      // queries cost a driver round trip per frame, so they exist only while
+      // somebody is reading the overlay. `create` returns null where the
+      // extension is withheld, and the overlay then shows no GPU line at all.
+      this.gpuTimer = GpuFrameTimer.create(asGpuTimerContext(this.renderer.getContext()));
+    } else if (this.userSettings.graphics.adaptiveOptimizationEnabled) {
       this.engineApp.enableProfiling(undefined, ADAPTIVE_PROFILER_WINDOW_FRAMES);
     }
     this.keyboardInput.attach();
@@ -1241,17 +1296,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.uiPresenter()?.projectWorldWidgets();
       this.updateAudioListener();
       this.updateColliderDebugWires();
-      if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
-      if (this.cloudObject) {
-        followCameraWithClouds(this.cloudObject, this.camera);
-        advanceCloudTime(this.cloudObject, deltaMs / 1000);
-      }
+      this.environment.update(deltaMs / 1000);
       this.foliageBinding?.updateCulling(
         this.camera.position,
         this.qualitySettings.foliageCullDistanceScale,
       );
+      advanceForgeMaterialAnimations(now / 1000);
+      // The span covers only the draw submission — post-process included, since a
+      // pipeline's passes are exactly what a GPU-bound frame is usually spending
+      // its time on. Results land a few frames later; `poll` collects them.
+      this.gpuTimer?.begin();
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
+      this.gpuTimer?.end();
+      this.gpuTimer?.poll();
       this.onFrame?.(deltaMs);
     };
     this.frameHandle = requestAnimationFrame(loop);
@@ -1279,9 +1337,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The VFX subsystem is registered, so engineApp.dispose() (below) tears down
     // its effects + caches through the subsystem registry, like the audio one.
     this.gameModeSession?.dispose();
+    this.gpuTimer?.dispose();
+    this.gpuTimer = null;
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
-    this.disposeReflectionTarget();
+    this.environment.teardown();
     for (const bake of this.reflectionCaptureBakes) {
       if (bake) disposeSphereReflectionCaptureBake(bake);
     }
@@ -1314,8 +1374,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.landscapeDataById.clear();
+    for (const object of this.riverWaterObjects) {
+      this.scene.remove(object);
+      disposeRiverWaterObject(object);
+    }
+    this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
+    for (const texture of this.riverWaterTextures.values()) texture.dispose();
+    this.riverWaterTextures.clear();
     this.landscapeColliderEntities = [];
     this.landscapeColliderObjects.clear();
     this.disposeInstanceProbeMaterials();
@@ -1331,6 +1401,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Windowed frame-time stats (avg / P95 / spikes) over the 5 s decision window. */
   getFrameMetricsSnapshot(): FrameMetrics {
     return this.frameMetrics.metrics();
+  }
+
+  /**
+   * Windowed GPU frame time, or `null` when nothing is measuring it — no `?debug`,
+   * or a browser without `EXT_disjoint_timer_query_webgl2`. Never a zero, because
+   * "the GPU cost nothing" and "nobody measured the GPU" must not read alike.
+   */
+  getGpuFrameStats(): GpuFrameStats | null {
+    const stats = this.gpuTimer?.stats();
+    return stats && stats.samples > 0 ? stats : null;
   }
 
   /** The active runtime quality profile (defaults to Ultra). */
@@ -2364,6 +2444,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.landscapeDataById.clear();
+    for (const object of this.riverWaterObjects) {
+      this.scene.remove(object);
+      disposeRiverWaterObject(object);
+    }
+    this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
     this.landscapeColliderEntities = [];
@@ -2403,19 +2491,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.ambientLight = null;
     }
 
-    // Sky / cloud domes own their geometry + shader material.
-    if (this.skyObject) {
-      this.scene.remove(this.skyObject);
-      disposeSceneMeshResources(this.skyObject);
-      this.skyObject = null;
-    }
-    if (this.cloudObject) {
-      this.scene.remove(this.cloudObject);
-      disposeSceneMeshResources(this.cloudObject);
-      this.cloudObject = null;
-    }
-    this.disposeReflectionTarget();
-    this.scene.environment = null;
+    // Sky / cloud domes own their geometry + shader material; the environment
+    // frees them along with the Sky Light capture and `scene.environment`.
+    this.environment.teardown();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
 
@@ -3519,6 +3597,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return group;
   }
 
+  /**
+   * Applies an asset's authored material-slot overrides to a model a mesh effect
+   * is about to instance, so a particle model looks the same as the same asset
+   * placed in the level.
+   */
+  private async applyVfxMeshMaterialSlots(assetId: string, root: Object3D): Promise<void> {
+    const manifest =
+      this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
+    if (!manifest) return;
+    let slots = this.assetMaterialSlots.get(assetId);
+    if (!slots) {
+      const asset = manifest.assets.find((entry) => entry.id === assetId);
+      if (!asset) return;
+      slots = await loadAssetMaterialSlots(assetPath(asset));
+      if (!hasAssignedMaterialSlots(slots)) return;
+      this.assetMaterialSlots.set(assetId, slots);
+    }
+    await Promise.all(
+      assignedMaterialSlotIds(slots).map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),
+    );
+    applyMaterialSlotOverrides(root, slots, (materialId) => this.materialCache.get(materialId));
+  }
+
   private resolveAssetMaterialSlots(assetId: string): AssetMaterialSlotsDef | undefined {
     const slots = this.assetMaterialSlots.get(assetId);
     return hasAssignedMaterialSlots(slots) ? slots : undefined;
@@ -3976,9 +4077,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
     const datas: ForgeLandscapeData[] = [];
+    this.landscapeDataById.clear();
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
       datas.push(data);
+      // River Water resolves its shape from a Landscape spline, so the data has
+      // to outlive this pass rather than being re-fetched per water body.
+      this.landscapeDataById.set(actor.id, data);
       const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data);
       const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
       this.landscapeObjects.push(object);
@@ -3991,6 +4096,90 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
     }
     await this.buildRuntimeLandscapeSplineMeshes(datas);
+  }
+
+  /**
+   * Builds the visible water ribbons (`layout.riverWaters`) for Play, from the
+   * same resolver and geometry the editor viewport uses — a river must not look
+   * one way while authoring and another in the game.
+   *
+   * Presentation only: a water body owns no collision and no navigation, so this
+   * never touches the physics scene document. Bodies that share a plane and a
+   * reflection group also share one planar-reflection render.
+   */
+  private async buildRuntimeRiverWaters(): Promise<void> {
+    for (const object of this.riverWaterObjects) {
+      this.scene.remove(object);
+      disposeRiverWaterObject(object);
+    }
+    this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
+
+    const waters = this.layout?.riverWaters ?? [];
+    if (waters.length === 0) return;
+    const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
+    for (const actor of waters) {
+      const resolved = resolveRiverWater(actor);
+      const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
+      const data = landscape ? this.landscapeDataById.get(landscape.id) : undefined;
+      const spline = data?.splines?.find((candidate) => candidate.id === resolved.splineRef);
+      if (!landscape || !data || !spline) {
+        console.warn(
+          `[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`,
+        );
+        continue;
+      }
+      let reflectionSource: PlanarReflectionSource | null = null;
+      const planeY = landscape.position[1] + resolved.surfaceLevel;
+      const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+      if (reflectionKey && resolved.reflectionQuality !== "low") {
+        reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
+        if (!reflectionSource) {
+          reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+          reflectionSourceByKey.set(reflectionKey, reflectionSource);
+          this.riverReflectionSources.push(reflectionSource);
+        }
+      }
+      const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
+      const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
+      const object = createRiverWaterObject(
+        {
+          ...resolved,
+          spline,
+          landscapeData: data,
+          position: [...landscape.position],
+          rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
+          foamNoiseMap,
+          reflectionSource,
+        },
+        normalMap,
+      );
+      object.raycast = () => {};
+      this.scene.add(object);
+      this.riverWaterObjects.push(object);
+    }
+  }
+
+  /** Loads a repeatable manifest texture shared by the water materials. */
+  private async loadRuntimeRiverWaterTexture(id: string, purpose: string): Promise<Texture | null> {
+    const cached = this.riverWaterTextures.get(id);
+    if (cached) return cached;
+    const manifest = this.assetManifest;
+    const record = manifest ? assetRecordById(manifest, id) : null;
+    if (!record || assetType(record) !== "texture") {
+      console.warn(`[river-water] ${purpose} texture is not a manifest texture: ${id}.`);
+      return null;
+    }
+    try {
+      const texture = await this.textureLoader.loadAsync(projectFileUrl(assetPath(record)));
+      texture.wrapS = texture.wrapT = RepeatWrapping;
+      this.riverWaterTextures.set(id, texture);
+      return texture;
+    } catch (error) {
+      console.warn(`[river-water] Failed to load ${purpose} texture: ${id}.`, error);
+      return null;
+    }
   }
 
   /**
@@ -4286,87 +4475,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
   }
 
-  /**
-   * Renders the Sky Atmosphere dome at runtime. Like the editor, the directional
-   * Sun light is the source of truth for the sun: its (persisted) rotation places
-   * the sun disc. The runtime only builds the backdrop + tone mapping.
-   */
-  private applyRuntimeSky(): void {
-    const actor = this.layout?.skyAtmosphere ?? null;
-    if (!actor) {
-      applySkyToneMapping(this.renderer, null);
-      return;
-    }
-    const resolved = resolveSkyAtmosphere(actor);
-    if (!this.skyObject) {
-      this.skyObject = createSkyObject();
-      this.scene.add(this.skyObject);
-    }
-    applySkyUniforms(this.skyObject, resolved);
-    const sun = this.sunLightActor();
-    if (sun) applySkySunDirection(this.skyObject, sunDirectionFromLightRotation(readRotation(sun)));
-    followCameraWithSky(this.skyObject, this.camera);
-    applySkyToneMapping(this.renderer, resolved);
-  }
-
-  /**
-   * Applies the Exponential Height Fog to `scene.fog` at runtime (distance-based,
-   * Faz 1). Mirrors the editor's applyHeightFog so Play looks identical.
-   */
-  private applyRuntimeFog(): void {
-    const actor = this.layout?.heightFog ?? null;
-    applySceneFog(this.scene, actor ? resolveHeightFog(actor) : null);
-  }
-
-  /**
-   * Builds the static Cloud Layer dome at runtime (mirrors the editor's
-   * applyCloudLayer) so Play shows the same procedural clouds. Absent/hidden
-   * clouds leave the scene without the dome.
-   */
-  private applyRuntimeClouds(): void {
-    const actor = this.layout?.cloudLayer ?? null;
-    if (!actor) return;
-    const resolved = resolveCloudLayer(actor);
-    if (!this.cloudObject) {
-      this.cloudObject = createCloudObject();
-      this.scene.add(this.cloudObject);
-    }
-    applyCloudUniforms(this.cloudObject, resolved);
-    followCameraWithClouds(this.cloudObject, this.camera);
-  }
-
-  /**
-   * Mirrors the editor's Sky Atmosphere-owned Sky Light Capture in Play: capture
-   * the authored sky once and use it as the global PBR environment/ambient bounce
-   * wherever no local Sphere Reflection Capture applies.
-   */
-  private applyRuntimeReflection(recapture = false): void {
-    const skyActor = this.layout?.skyAtmosphere ?? null;
-    const sky = skyActor ? resolveSkyAtmosphere(skyActor) : null;
-    if (!sky || sky.hidden) {
-      this.disposeReflectionTarget();
-      applyReflectionEnvironment(this.scene, null, null);
-      return;
-    }
-
-    if (recapture || !this.reflectionTarget) {
-      this.disposeReflectionTarget();
-      const sun = this.sunLightActor();
-      const sunDirection = sun
-        ? sunDirectionFromLightRotation(readRotation(sun))
-        : new Vector3(0, 1, 0);
-      this.reflectionTarget = captureSkyEnvironment(this.renderer, sky, sunDirection);
-    }
-
-    applyReflectionEnvironment(this.scene, this.reflectionTarget, resolveReflection(sky.skyLightCapture));
-  }
-
-  private disposeReflectionTarget(): void {
-    if (!this.reflectionTarget) return;
-    this.reflectionTarget.dispose();
-    this.reflectionTarget = null;
-  }
-
   /** Applies global Post Process renderer properties after Sky tone mapping. */
   private applyRuntimePostProcess(): void {
     const actor = this.layout?.postProcess ?? null;
@@ -4376,7 +4484,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const authored = actor ? resolvePostProcess(actor) : null;
     const resolved = authored ? applyQualityToPostProcess(authored, this.qualitySettings) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
-    this.applyRuntimeSkyPostProcessExposure(resolved);
+    this.environment.applySkyPostProcessExposure(resolved, this.layout);
     if (!hasPostProcessEffectPasses(resolved)) {
       this.postProcessPipeline?.dispose();
       this.postProcessPipeline = null;
@@ -4403,19 +4511,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         width: window.innerWidth,
         height: window.innerHeight,
       }),
-    );
-  }
-
-  private applyRuntimeSkyPostProcessExposure(post: ResolvedPostProcess | null): void {
-    if (!this.skyObject) return;
-    const sky = this.layout?.skyAtmosphere ? resolveSkyAtmosphere(this.layout.skyAtmosphere) : null;
-    if (!sky || sky.hidden || !post || post.hidden) {
-      setSkyLocalToneMappingExposure(this.skyObject, null);
-      return;
-    }
-    setSkyLocalToneMappingExposure(
-      this.skyObject,
-      postProcessToneMappingExposure(post.exposure) * skyAtmosphereToneMappingExposure(sky.exposure),
     );
   }
 
@@ -4652,6 +4747,7 @@ function silentAudioPlayback(clipId: string): AudioPlaybackHandle {
     stop: () => undefined,
     setVolume: () => undefined,
     setPitch: () => undefined,
+    setPaused: () => undefined,
   };
 }
 

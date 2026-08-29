@@ -42,6 +42,10 @@ export interface ParticleEffectOverrides {
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
+const clamp01 = (value: number): number =>
+  Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+const clampMin0 = (value: number): number => (Number.isFinite(value) ? Math.max(0, value) : 0);
+
 // Back-compat aliases: the runtime path (RuntimeSceneApp) and tests reference the
 // flat runtime effect + the normalize→collapse entry point through these names.
 export {
@@ -111,6 +115,12 @@ export class ParticleEffect {
   private readonly capacity: number;
   private readonly lifetime: number;
   private readonly rate: number;
+  // Authored opacity ramp + fade windows. Not override-affected, so they are read
+  // once from the definition; the defaults reproduce the old linear 1 → 0 ramp.
+  private readonly startOpacity: number;
+  private readonly endOpacity: number;
+  private readonly fadeInTime: number;
+  private readonly fadeOutTime: number;
   // Effective (override-applied) simulation params; recomputed by applyOverrides.
   private loop: boolean;
   private startSize: number;
@@ -134,6 +144,11 @@ export class ParticleEffect {
   private spawnAccumulator = 0;
   /** Global density multiplier on the spawn rate (quality knob, 1 = authored). */
   private densityScale = 1;
+  /** Authored burst, or 0 particles for a pure rate emitter. */
+  private readonly burstCount: number;
+  private readonly burstDelay: number;
+  /** Whether this play has already released its burst; cleared by {@link reset}. */
+  private burstFired = false;
 
   /**
    * @param textureUrl Resolved sprite-texture URL (the app boundary turns the
@@ -148,6 +163,10 @@ export class ParticleEffect {
     this.definition = definition;
     this.lifetime = definition.lifetime;
     this.rate = definition.rate;
+    this.startOpacity = clamp01(definition.startOpacity ?? 1);
+    this.endOpacity = clamp01(definition.endOpacity ?? 0);
+    this.fadeInTime = clampMin0(definition.fadeInTime ?? 0);
+    this.fadeOutTime = clampMin0(definition.fadeOutTime ?? 0);
     // Effective params default to the un-scaled asset; applyOverrides() below
     // re-derives them (and the shader colour) from `overrides`.
     this.loop = definition.loop;
@@ -155,8 +174,12 @@ export class ParticleEffect {
     this.endSize = definition.endSize;
     this.velocity = [...definition.velocity];
     this.spread = definition.spread;
-    // Max particles alive at once ≈ rate * lifetime; pad for spawn jitter.
-    this.capacity = Math.max(8, Math.ceil(this.rate * this.lifetime) + 4);
+    this.burstCount = Math.max(0, Math.round(definition.burst?.count ?? 0));
+    this.burstDelay = clampMin0(definition.burst?.delay ?? 0);
+    // Max particles alive at once ≈ rate * lifetime, plus a burst that lands all
+    // at once; pad for spawn jitter. The burst term is not optional padding — a
+    // capacity that cannot hold it would silently drop the tail of every blast.
+    this.capacity = Math.max(8, Math.ceil(this.rate * this.lifetime) + this.burstCount + 4);
     this.positions = new Float32Array(this.capacity * 3);
     this.sizes = new Float32Array(this.capacity);
     this.alphas = new Float32Array(this.capacity);
@@ -239,6 +262,7 @@ export class ParticleEffect {
     this.applyOverrides(overrides);
     this.elapsed = 0;
     this.spawnAccumulator = 0;
+    this.burstFired = false;
     this.ages.fill(-1);
     this.positions.fill(0);
     this.sizes.fill(0);
@@ -290,8 +314,19 @@ export class ParticleEffect {
       this.positions[base + 1] = this.positions[base + 1]! + this.velocities[base + 1]! * dt;
       this.positions[base + 2] = this.positions[base + 2]! + this.velocities[base + 2]! * dt;
       this.sizes[i] = startSize + (endSize - startSize) * t;
-      this.alphas[i] = 1 - t;
+      this.alphas[i] = this.opacityAt(age, t);
       this.lifeTs[i] = t;
+    }
+
+    // The burst goes out whole, on the first tick at or past its delay — this is
+    // the frame the effect was played on when the delay is 0, which is what makes
+    // a blast land with the blow instead of trailing it.
+    if (!this.burstFired && this.burstCount > 0 && this.elapsed >= this.burstDelay) {
+      this.burstFired = true;
+      // Thinned by the same quality knob as the rate below: a low-density setting
+      // must reduce the blast, not exempt it.
+      const count = Math.round(this.burstCount * this.densityScale);
+      for (let i = 0; i < count; i += 1) this.spawnParticle();
     }
 
     // A looping effect emits forever; a one-shot emits for one lifetime window.
@@ -311,9 +346,27 @@ export class ParticleEffect {
     this.geometry.attributes.aLifeT!.needsUpdate = true;
   }
 
+  /**
+   * Per-particle alpha at `age` seconds (life fraction `t`): the authored
+   * start→end opacity ramp, multiplied by the fade-in window measured from birth
+   * and the fade-out window measured into death. The two windows are independent
+   * multipliers, so overlapping them on a short lifetime lowers the peak rather
+   * than fighting over the curve.
+   */
+  private opacityAt(age: number, t: number): number {
+    let alpha = this.startOpacity + (this.endOpacity - this.startOpacity) * t;
+    if (this.fadeInTime > 0) alpha *= Math.min(1, age / this.fadeInTime);
+    if (this.fadeOutTime > 0) alpha *= Math.min(1, (this.lifetime - age) / this.fadeOutTime);
+    return clamp01(alpha);
+  }
+
   /** A non-looping effect is finished once it stopped emitting and all particles died. */
   isFinished(): boolean {
     if (this.loop) return false;
+    // A burst still owed is work outstanding, however long the effect has run:
+    // a delay past the lifetime would otherwise see the instance recycled before
+    // it ever emitted, and the blast would simply never appear.
+    if (!this.burstFired && this.burstCount > 0) return false;
     if (this.elapsed <= this.lifetime) return false;
     for (let i = 0; i < this.capacity; i += 1) {
       if (this.ages[i]! >= 0) return false;
@@ -361,7 +414,9 @@ export class ParticleEffect {
     this.velocities[slot * 3 + 1] = velocity[1] + (Math.random() * 2 - 1) * spread * 0.3;
     this.velocities[slot * 3 + 2] = velocity[2] + jitter();
     this.sizes[slot] = startSize;
-    this.alphas[slot] = 1;
+    // Birth alpha comes from the same curve, so a fade-in starts at 0 instead of
+    // flashing at full opacity for the frame between spawn and the next update.
+    this.alphas[slot] = this.opacityAt(0, 0);
     this.lifeTs[slot] = 0;
   }
 }

@@ -402,7 +402,7 @@ function blockingVolumeComponents(volume: LayoutBlockingVolume): EntityComponent
     source,
     true,
     undefined,
-    blockingVolumeCollisionDef(resolved.brushShape, resolved.size),
+    blockingVolumeCollisionDef(resolved.brushShape, resolved.size, resolved.navigationRole),
     undefined,
   );
   if (collider) components[COLLIDER_COMPONENT] = toData(collider);

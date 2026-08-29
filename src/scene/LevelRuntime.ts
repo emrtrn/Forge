@@ -27,6 +27,7 @@ export const LEVEL_RUNTIME_WORLD_GEOMETRY_STEPS = [
   "blocking-volumes",
   "splines",
   "landscapes",
+  "river-waters",
   "foliage",
 ] as const;
 
@@ -66,6 +67,8 @@ export interface LevelRuntimeWorldGeometryHandlers {
   readonly buildBlockingVolumes: () => void;
   readonly buildSplines: () => void;
   readonly buildLandscapes: () => Promise<void>;
+  /** Spline-driven water bodies; runs after the Landscapes whose splines shape them. */
+  readonly buildRiverWaters: () => Promise<void>;
   readonly buildFoliage: () => Promise<void>;
 }
 
@@ -134,6 +137,7 @@ export class LevelRuntime {
     handlers.buildBlockingVolumes();
     handlers.buildSplines();
     await handlers.buildLandscapes();
+    await handlers.buildRiverWaters();
     await handlers.buildFoliage();
   }
 

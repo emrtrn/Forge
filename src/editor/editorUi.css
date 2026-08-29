@@ -1277,6 +1277,34 @@
   gap: 8px;
 }
 
+/* An overridden actor variable gains a third column for its reset control and
+   a marker on the label, so "pinned on this placement" reads apart from
+   "inherited from the class". */
+.detail-row.actor-var-overridden {
+  grid-template-columns: 86px 1fr auto;
+}
+
+.detail-row.actor-var-overridden > span::after {
+  content: "•";
+  margin-left: 4px;
+  color: var(--forge-accent, #4f9cf0);
+}
+
+.detail-inline-button {
+  height: 30px;
+  min-width: 26px;
+  border: 1px solid var(--forge-border-strong);
+  border-radius: 6px;
+  padding: 0 6px;
+  color: #c8d0d4;
+  background: #101316;
+  cursor: pointer;
+}
+
+.detail-inline-button:hover {
+  color: #ffffff;
+}
+
 .detail-row span {
   color: #c8d0d4;
 }
@@ -3802,6 +3830,11 @@
 
 .asset-card.is-actor-script .asset-thumb { color: var(--forge-success-text); }
 
+/* Particle effects: a sprite emitter and a 3D-model (mesh) one are different
+   authoring beasts, so the card glyph says which without opening the editor. */
+.asset-card.is-effect .asset-thumb { color: #7fc7ff; letter-spacing: 0.5px; }
+.asset-card.is-mesh-effect .asset-thumb { color: #f0b45a; }
+
 /* ---------------------------------------------------------------------------
    Material editor (form-based PBR asset editor)
 --------------------------------------------------------------------------- */
@@ -6033,12 +6066,6 @@
   font-weight: 600;
 }
 .foliage-scale-row { align-items: center; }
-.foliage-scale-inputs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-}
-.foliage-scale-inputs input { min-width: 0; width: 100%; }
 .foliage-advanced {
   margin-top: 6px;
   border-top: 1px solid #262c34;

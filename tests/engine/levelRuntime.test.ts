@@ -39,6 +39,7 @@ export async function registerLevelRuntimeTests(check: Check, checkAsync: CheckA
         buildBlockingVolumes: record("blocking-volumes"),
         buildSplines: record("splines"),
         buildLandscapes: async () => record("landscapes")(),
+        buildRiverWaters: async () => record("river-waters")(),
         buildFoliage: async () => record("foliage")(),
       };
       const coreContent: LevelRuntimeCoreContentHandlers = {
@@ -87,6 +88,7 @@ export async function registerLevelRuntimeTests(check: Check, checkAsync: CheckA
           await Promise.resolve();
           record("landscapes")();
         },
+        buildRiverWaters: async () => record("river-waters")(),
         buildFoliage: async () => record("foliage")(),
       },
       coreContent: {
@@ -127,6 +129,7 @@ export async function registerLevelRuntimeTests(check: Check, checkAsync: CheckA
         buildBlockingVolumes: empty,
         buildSplines: empty,
         buildLandscapes: async () => {},
+        buildRiverWaters: async () => {},
         buildFoliage: async () => {},
       },
       coreContent: {
@@ -168,6 +171,7 @@ export async function registerLevelRuntimeTests(check: Check, checkAsync: CheckA
         buildBlockingVolumes: record("blocking-volumes"),
         buildSplines: record("splines"),
         buildLandscapes: async () => record("landscapes")(),
+        buildRiverWaters: async () => record("river-waters")(),
         buildFoliage: async () => record("foliage")(),
       },
       coreContent: {

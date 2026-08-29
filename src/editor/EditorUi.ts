@@ -50,6 +50,7 @@ import { attachDebugStats } from "@/scene/debugStats";
 import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
 import {
   getGameEditorCatalog,
+  type EditorDataTableDef,
   type EditorGameModeOption,
 } from "@/editor/gameEditorRegistry";
 import { loadActorScript } from "@/editor/actorScriptStore";
@@ -99,6 +100,11 @@ import {
   bindComponentsInputs,
   renderComponentsSection,
 } from "./panels/details/componentDetails";
+import { normalizeEffectDefinition } from "@engine/vfx/particleEffectParser";
+import {
+  bindActorVariableInputs,
+  renderActorVariableSection,
+} from "./panels/details/actorVariableDetails";
 import {
   bindMetadataInputs,
   renderMetadataSections,
@@ -143,6 +149,7 @@ import {
   renderContentFilterOptions,
   type BrowserAssetItem,
   type BrowserFolderItem,
+  type ContentEffectSummary,
   type ContentTypeFilter,
 } from "./panels/content/contentPanel";
 
@@ -357,6 +364,7 @@ export class EditorUi {
   private readonly thumbnailRenderer = new ThumbnailRenderer();
   private readonly materialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
   private readonly modelMaterialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
+  private readonly effectSummaryCache = new Map<string, Promise<ContentEffectSummary | null>>();
   private activeTool: EditorTool = "move";
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
@@ -518,6 +526,7 @@ export class EditorUi {
               <button type="button" data-show-flag="stats">Stats (FPS)</button>
             </div>
           </div>
+          ${this.buildDataTablesMenuMarkup()}
           <div class="editor-play-split">
             <button type="button" class="editor-play-button primary" data-action="play" data-testid="editor-play" aria-label="Play">${TOOLBAR_ICONS.play}<span>Play</span></button>
           </div>
@@ -960,11 +969,19 @@ export class EditorUi {
     // ever pins the menu open).
     this.root
       .querySelectorAll<HTMLButtonElement>(
-        "[data-add-actor-button], .add-actor-category-label, [data-show-button], [data-camera-button], [data-viewmode-button]",
+        "[data-add-actor-button], .add-actor-category-label, [data-show-button], [data-camera-button], [data-viewmode-button], [data-datatables-button]",
       )
       .forEach((button) => {
         button.addEventListener("mousedown", (event) => event.preventDefault());
       });
+
+    // The "Data" menu: each option opens the matching balance table's editor.
+    this.root.querySelectorAll<HTMLButtonElement>("[data-datatable-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const def = this.dataTableDefs().find((table) => table.id === button.dataset.datatableId);
+        if (def) void this.openDataTableEditorByDef(def);
+      });
+    });
 
     this.root.querySelector('[data-action="undo"]')?.addEventListener("click", () => {
       this.app.undo();
@@ -1729,6 +1746,7 @@ export class EditorUi {
         renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
         renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
         renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
+        describeEffectAsset: (item) => this.describeEffectAsset(item),
         beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
         endAssetDragPreview: () => this.handleAssetDragEnd(),
         setStatus: (message, tone) => this.setStatus(message, tone),
@@ -1785,6 +1803,7 @@ export class EditorUi {
       renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
       renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
       renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
+      describeEffectAsset: (item) => this.describeEffectAsset(item),
       beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
       endAssetDragPreview: () => this.handleAssetDragEnd(),
       setStatus: (message, tone) => this.setStatus(message, tone),
@@ -1812,7 +1831,13 @@ export class EditorUi {
       name.endsWith(".collision.json") ||
       name.endsWith(".materials.json") ||
       name.endsWith(".uvw.json") ||
-      name.endsWith(".vertexcolors.json")
+      name.endsWith(".vertexcolors.json") ||
+      name.endsWith(".skeleton.json") ||
+      // Layout companions saved beside a level (`<layout>.foliage.json`, ...).
+      // The `.foliagetype.json` asset stays listed — it is a real manifest asset.
+      name.endsWith(".landscape.json") ||
+      name.endsWith(".foliage.json") ||
+      name.endsWith(".meshpaint.json")
     );
   }
 
@@ -2679,6 +2704,34 @@ export class EditorUi {
     }
   }
 
+  /**
+   * Renderer summary for a particle effect card (sprite vs 3D model + source
+   * count), cached per path so scrolling the Content Browser does not re-fetch.
+   * Invalidated when the Particle Effect editor saves that asset.
+   */
+  private describeEffectAsset(item: BrowserAssetItem): Promise<ContentEffectSummary | null> {
+    let cached = this.effectSummaryCache.get(item.path);
+    if (!cached) {
+      cached = this.describeEffectAssetUncached(item.path);
+      this.effectSummaryCache.set(item.path, cached);
+    }
+    return cached;
+  }
+
+  private async describeEffectAssetUncached(path: string): Promise<ContentEffectSummary | null> {
+    try {
+      const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+      if (!response.ok) return null;
+      const def = normalizeEffectDefinition((await response.json()) as unknown);
+      if (!def) return null;
+      return def.renderer.type === "mesh"
+        ? { renderer: "mesh", modelCount: def.renderer.modelIds.length }
+        : { renderer: "sprite", modelCount: 0 };
+    } catch {
+      return null;
+    }
+  }
+
   private renderTextureThumbnail(item: BrowserAssetItem, thumb: HTMLElement): void {
     thumb.replaceChildren();
     const image = document.createElement("img");
@@ -2786,6 +2839,7 @@ export class EditorUi {
       ...(layer1AoTexturePath ? { layer1AoTextureUrl: projectFileUrl(layer1AoTexturePath) } : {}),
       ...(layerBlendMaskTexturePath ? { layerBlendMaskTextureUrl: projectFileUrl(layerBlendMaskTexturePath) } : {}),
       uvTiling: def.uvTiling,
+      flipY: def.flipY,
       roughness: def.roughness,
       metalness: def.metalness,
       aoIntensity: def.aoIntensity,
@@ -2978,6 +3032,67 @@ export class EditorUi {
    * Opens the node-graph Sound Cue editor for a `*.soundcue.json` asset.
    * Kept behind a dynamic import like the other asset editors.
    */
+  /**
+   * The balance files the game registered as editable data tables, or [] when a
+   * fork ships none (the "Data" menu then stays hidden). Safe before injection.
+   */
+  private dataTableDefs(): readonly EditorDataTableDef[] {
+    try {
+      return getGameEditorCatalog().dataTables ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Popover contents for the topbar "Data" menu — one button per data table. */
+  private buildDataTablesMenuMarkup(): string {
+    const tables = this.dataTableDefs();
+    if (tables.length === 0) return "";
+    const items = tables
+      .map(
+        (def) =>
+          `<button type="button" data-datatable-id="${escapeHtml(def.id)}">${escapeHtml(def.label)}</button>`,
+      )
+      .join("");
+    return `
+      <div class="data-menu topbar-menu">
+        <button type="button" class="topbar-menu-button" data-datatables-button aria-label="Data tables">Data${MENU_CHEVRON}</button>
+        <div class="topbar-popover" data-datatables-popover>${items}</div>
+      </div>`;
+  }
+
+  /**
+   * Opens the form-based Data Table editor for a registered balance table. Kept
+   * behind a dynamic import like the other asset editors; the validator is the
+   * game's own, injected via the catalog, so the editor never imports `@/game`.
+   * Balance files live outside the asset-rooted Content Browser, so this opens
+   * from the topbar "Data" menu rather than a double-click.
+   */
+  private async openDataTableEditorByDef(def: EditorDataTableDef): Promise<void> {
+    try {
+      const { DataTableEditor } = await import("@/editor/DataTableEditor");
+      await DataTableEditor.open({
+        path: def.path,
+        label: def.label,
+        def,
+        // Asset-picker fields choose from the project's own manifest rather than
+        // a typed id.
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Data Table editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
   private async openSoundCueEditor(item: BrowserAssetItem): Promise<void> {
     try {
       const { SoundCueEditor } = await import("@/editor/SoundCueEditor");
@@ -3019,7 +3134,12 @@ export class EditorUi {
         })),
         hideDevelopmentContent: !this.showDevelopmentContent,
         onStatus: (message, tone) => this.setStatus(message, tone),
-        onSaved: () => this.renderContentAssets(),
+        onSaved: () => {
+          // The card's renderer summary is read from the file, so drop it before
+          // re-rendering — a sprite→3D model switch must show up immediately.
+          this.effectSummaryCache.delete(item.path);
+          this.renderContentAssets();
+        },
       });
     } catch (error) {
       this.setStatus(
@@ -3970,6 +4090,15 @@ export class EditorUi {
         this.app.setSelectedSplinePointTangentsLinked(pointId, linked),
       setSelectedReflectionCapture: (patch) => this.app.setSelectedReflectionCapture(patch),
       setSelectedLandscape: (patch) => this.app.setSelectedLandscape(patch),
+      getSelectedLandscapeRiverWaters: () => this.app.getSelectedLandscapeRiverWaters(),
+      createSelectedLandscapeRiverWater: (splineId) => this.app.createSelectedLandscapeRiverWater(splineId),
+      deleteSelectedLandscapeRiverWater: (waterId) => this.app.deleteSelectedLandscapeRiverWater(waterId),
+      setSelectedLandscapeRiverWater: (waterId, patch) =>
+        this.app.setSelectedLandscapeRiverWater(waterId, patch),
+      beginSelectedLandscapeRiverWaterRingFoam: (waterId) =>
+        this.app.beginSelectedLandscapeRiverWaterRingFoam(waterId),
+      removeSelectedLandscapeRiverWaterFoamStamp: (waterId, stampId) =>
+        this.app.removeSelectedLandscapeRiverWaterFoamStamp(waterId, stampId),
       getLandscapeSculptSettings: () => this.app.getLandscapeSculptSettings(),
       setLandscapeSculptSettings: (patch) => this.app.setLandscapeSculptSettings(patch),
       fillSelectedLandscapeLayer: (layerId) => this.app.fillSelectedLandscapeLayer(layerId),
@@ -4132,7 +4261,9 @@ export class EditorUi {
           complexAsSimple: this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple",
         }),
         components:
-          renderComponentsSection(selection, this.editableAssets) + this.renderActorPatrolRouteSection(selection),
+          renderComponentsSection(selection, this.editableAssets)
+          + renderActorVariableSection(this.app.getSelectedActorVariables(), selection.locked)
+          + this.renderActorPatrolRouteSection(selection),
         metadata: renderMetadataSections(selection, this.metadataSchema),
       },
     });
@@ -4183,7 +4314,15 @@ export class EditorUi {
           setSelectionInteraction: (interaction) => this.app.setSelectionInteraction(interaction),
           setSelectionMovingPlatform: (platform) => this.app.setSelectionMovingPlatform(platform),
         }),
-      bindActorPatrolRouteInputs: () => this.bindActorPatrolRouteInputs(selection),
+      bindActorPatrolRouteInputs: () => {
+        bindActorVariableInputs({
+          body: this.detailsBody,
+          locked: selection.locked,
+          variables: () => this.app.getSelectedActorVariables(),
+          setVariable: (key, value) => this.app.setSelectedActorVariable(key, value),
+        });
+        this.bindActorPatrolRouteInputs(selection);
+      },
       bindMetadataInputs: () =>
         bindMetadataInputs({
           body: this.detailsBody,

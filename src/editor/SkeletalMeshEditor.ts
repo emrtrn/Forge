@@ -19,6 +19,7 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
@@ -28,6 +29,7 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   Spherical,
+  TextureLoader,
   Vector3,
   WebGLRenderer,
   type AnimationMixer,
@@ -38,7 +40,16 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHelper.js";
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
-import { applyRootMotionToClips, rootMotionPositionNodes } from "@engine/render-three/rootMotion";
+import { mountSkeletalSocket } from "@engine/render-three/skeletalSocket";
+import {
+  ROOT_MOTION_UP_AXES,
+  applyRootMotionToClips,
+  resolveRootMotionNode,
+  resolveRootMotionUpAxis,
+  rootMotionClipDisplacement,
+  rootMotionPositionNodes,
+} from "@engine/render-three/rootMotion";
+import type { RootMotionUpAxis } from "@engine/render-three/rootMotion";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import type { Entity } from "@engine/scene/entity";
 import type { Vec3 } from "@engine/scene/layout";
@@ -49,6 +60,18 @@ import {
 } from "@/editor/gameEditorRegistry";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
+import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  collectAssetMaterialElements,
+  defaultAssetMaterialSlots,
+  loadAssetMaterialSlots,
+  saveAssetMaterialSlots,
+  type AssetMaterialElement,
+  type AssetMaterialSlotsDef,
+} from "@/editor/assetMaterialSlotsStore";
+import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
+import { loadForgeMaterial } from "@/scene/materialAssets";
 import {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
@@ -88,6 +111,8 @@ export interface SkeletalMeshEditorOptions {
   assets?: AssetPickerItem[];
   /** Optional status sink (surfaces to the host editor's status bar). */
   onStatus?: (message: string, tone?: "info" | "warning" | "error") => void;
+  /** Lets the host refresh model previews and live scene instances after saving slots. */
+  onMaterialSlotsSaved?: (assetId: string) => void;
 }
 
 type PersonaMode = "skeleton" | "animation" | "physics";
@@ -135,7 +160,10 @@ interface MorphTargetControl {
 }
 
 interface SocketOverlay {
+  /** The authored socket node: what the gizmo drives and what saves verbatim. */
   root: Group;
+  /** The scale-cancelling parent on the bone; removing this unmounts the pair. */
+  mount: Group;
   marker: Mesh;
   socket: AssetSkeletonSocketDef;
   previewRoot: Object3D | null;
@@ -151,6 +179,14 @@ interface PhysicsOverlay {
 interface ConstraintOverlay {
   line: Line;
   constraint: AssetSkeletonPhysicsConstraintDef;
+}
+
+/** Inner scroll boxes of the details panel whose position survives a re-render. */
+const DETAILS_SCROLL_PANES = [".sm-clip-list", ".sm-bone-tree"] as const;
+
+interface DetailsScroll {
+  host: number;
+  panes: Map<string, number>;
 }
 
 export class SkeletalMeshEditor {
@@ -171,6 +207,7 @@ export class SkeletalMeshEditor {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 1000);
   private readonly loader: GLTFLoader;
+  private readonly textureLoader = new TextureLoader();
   private readonly modelGroup = new Group();
   private readonly helperGroup = new Group();
   private readonly resizeObserver: ResizeObserver;
@@ -217,6 +254,10 @@ export class SkeletalMeshEditor {
   private stats: MeshStats = emptyStats();
   private readonly skinnedMeshes: SkinnedMesh[] = [];
   private readonly materials = new Set<Material>();
+  private materialSlots: AssetMaterialSlotsDef = defaultAssetMaterialSlots();
+  private materialElements: AssetMaterialElement[] = [];
+  private previewMaterials = new Map<string, MeshBasicMaterial | MeshStandardMaterial>();
+  private readonly originalMeshMaterials = new Map<Mesh, Mesh["material"]>();
   private readonly meshSections: MeshSectionInfo[] = [];
   private readonly morphTargets: MorphTargetControl[] = [];
   private boneRoots: BoneNode[] = [];
@@ -305,6 +346,7 @@ export class SkeletalMeshEditor {
     this.startRenderLoop();
 
     void this.loadModel();
+    void this.loadMaterialSlots();
   }
 
   private buildScene(): void {
@@ -341,6 +383,9 @@ export class SkeletalMeshEditor {
       this.buildSkeletonHelper(gltf.scene);
       this.buildNormalHelpers(gltf.scene);
       await this.loadSkeleton();
+      if (assignedMaterialSlotIds(this.materialSlots).length > 0) {
+        await this.applyPreviewMaterials({ dirty: false, status: false });
+      }
       this.rebuildPlaybackAnimator();
       this.selectedClipName = this.resolveInitialClip();
       if (this.selectedClipName) this.selectClip(this.selectedClipName, { autoplay: false, crossfade: false });
@@ -365,6 +410,15 @@ export class SkeletalMeshEditor {
     this.rebuildSocketOverlays();
   }
 
+  private async loadMaterialSlots(): Promise<void> {
+    this.materialSlots = await loadAssetMaterialSlots(this.options.modelPath);
+    if (this.disposed) return;
+    this.renderDetails();
+    if (this.modelRoot && assignedMaterialSlotIds(this.materialSlots).length > 0) {
+      await this.applyPreviewMaterials({ dirty: false, status: false });
+    }
+  }
+
   private sanitizeRootMotion(): void {
     const available = new Set(this.clips.map((clip) => clip.name));
     const rootMotion = this.skeleton.rootMotion.filter((setting) => available.has(setting.clip));
@@ -375,7 +429,7 @@ export class SkeletalMeshEditor {
     const root = this.modelRoot;
     if (!root) return;
     this.mixer?.stopAllAction();
-    this.playbackClips = applyRootMotionToClips(this.clips, this.skeleton.rootMotion);
+    this.playbackClips = applyRootMotionToClips(this.clips, this.skeleton.rootMotion, root);
     this.playbackClipByName.clear();
     for (const clip of this.playbackClips) this.playbackClipByName.set(clip.name, clip);
     this.animator = new CrossfadeAnimator(root, this.playbackClips);
@@ -440,6 +494,9 @@ export class SkeletalMeshEditor {
       }
       if (object instanceof Bone) boneSet.add(object);
       if (!(object instanceof Mesh)) return;
+      if (!this.originalMeshMaterials.has(object)) {
+        this.originalMeshMaterials.set(object, object.material);
+      }
       stats.meshCount += 1;
       const geometry = object.geometry;
       const position = geometry.getAttribute("position");
@@ -477,6 +534,7 @@ export class SkeletalMeshEditor {
     this.bones = [...boneSet];
     this.boneRoots = buildBoneTree(this.bones);
     this.nodeNames = nodeNames;
+    this.materialElements = collectAssetMaterialElements(root);
   }
 
   private collectMorphTargets(mesh: Mesh, targets: Map<string, MorphTargetControl>): void {
@@ -693,6 +751,7 @@ export class SkeletalMeshEditor {
   }
 
   private renderDetails(): void {
+    const scroll = this.captureDetailsScroll();
     const modeBody =
       this.mode === "animation"
         ? this.renderAnimationDetails()
@@ -706,6 +765,32 @@ export class SkeletalMeshEditor {
       ${this.renderMeshDetails()}
     `;
     this.bindDetails();
+    this.restoreDetailsScroll(scroll);
+  }
+
+  /**
+   * The details panel is rebuilt with innerHTML on every state change, which
+   * would otherwise snap the panel and its inner lists (clips, bones) back to
+   * the top - stepping through clips one by one loses the reading position.
+   */
+  private captureDetailsScroll(): DetailsScroll {
+    const panes = new Map<string, number>();
+    for (const selector of DETAILS_SCROLL_PANES) {
+      const pane = this.detailsHost.querySelector<HTMLElement>(selector);
+      if (pane) panes.set(selector, pane.scrollTop);
+    }
+    return { host: this.detailsHost.scrollTop, panes };
+  }
+
+  private restoreDetailsScroll(scroll: DetailsScroll): void {
+    this.detailsHost.scrollTop = scroll.host;
+    for (const [selector, top] of scroll.panes) {
+      const pane = this.detailsHost.querySelector<HTMLElement>(selector);
+      if (pane) pane.scrollTop = top;
+    }
+    this.detailsHost
+      .querySelector<HTMLElement>(".sm-clip-row.is-selected")
+      ?.scrollIntoView({ block: "nearest" });
   }
 
   private renderSkeletonDetails(): string {
@@ -896,6 +981,13 @@ export class SkeletalMeshEditor {
   private renderRootMotionDetails(clip: AnimationClip): string {
     const setting = this.rootMotionSetting(clip.name);
     const mode = setting?.mode ?? "preserve";
+    const rootNode = resolveRootMotionNode(clip, setting?.rootNode);
+    // The position track lives in the root's parent space, which is Y-up only by
+    // convention - show which axis was actually detected so a wrong auto-guess
+    // is visible instead of quietly locking the wrong pair.
+    const detectedAxis = rootNode
+      ? resolveRootMotionUpAxis(rootNode, undefined, this.modelRoot ?? undefined)
+      : "y";
     return `
       <div class="sm-section">
         <div class="sm-section-title">Root Motion</div>
@@ -913,8 +1005,38 @@ export class SkeletalMeshEditor {
             ${this.rootMotionNodeOptions(clip, setting?.rootNode ?? "")}
           </select>
         </label>
-        <div class="sm-hint">In-place modes pin the chosen node's position track during playback; the source GLTF stays unchanged.</div>
+        <label class="sm-row">
+          <span>Up Axis</span>
+          <select data-skel-root-motion-up="${escapeHtml(clip.name)}" ${mode === "lockXZ" ? "" : "disabled"}>
+            <option value="" ${setting?.upAxis ? "" : "selected"}>Auto (${detectedAxis.toUpperCase()})</option>
+            ${ROOT_MOTION_UP_AXES.map(
+              (axis) =>
+                `<option value="${axis}" ${axis === setting?.upAxis ? "selected" : ""}>${axis.toUpperCase()}</option>`,
+            ).join("")}
+          </select>
+        </label>
+        ${this.renderRootMotionTravel(clip, setting)}
+        <div class="sm-hint">${rootMotionModeHint(mode, setting?.upAxis ?? detectedAxis)}</div>
       </div>
+    `;
+  }
+
+  /**
+   * What the clip actually travels, measured from its own keys. For a
+   * `driveMotion` clip this is the figure gameplay code must apply to the actor,
+   * so it beats hard-coding a guessed lunge distance.
+   */
+  private renderRootMotionTravel(
+    clip: AnimationClip,
+    setting: AssetSkeletonRootMotionDef | null,
+  ): string {
+    const travel = rootMotionClipDisplacement(clip, setting ?? undefined, this.modelRoot ?? undefined);
+    if (!travel) return "";
+    const horizontal = Math.hypot(travel.x, travel.z);
+    const speed = clip.duration > 0 ? horizontal / clip.duration : 0;
+    return `
+      <div class="sm-row"><span>Measured Travel</span><strong>${horizontal.toFixed(2)} fwd / ${travel.y.toFixed(2)} up</strong></div>
+      <div class="sm-row"><span>Travel Speed</span><strong>${speed.toFixed(2)} /s over ${clip.duration.toFixed(2)}s</strong></div>
     `;
   }
 
@@ -1129,19 +1251,22 @@ export class SkeletalMeshEditor {
       <div class="sm-section">
         <div class="sm-section-title">Materials</div>
         ${
-          this.materials.size
-            ? [...this.materials]
+          this.materialElements.length
+            ? this.materialElements
                 .map(
-                  (material, index) => `
-                    <div class="sm-row">
-                      <span>Element ${index}</span>
-                      <strong>${escapeHtml(material.name || material.type || "Material")}</strong>
-                    </div>
+                  (element) => `
+                    <label class="sm-row">
+                      <span>Element ${element.slotIndex} <small>${escapeHtml(element.sourceMaterialName)}</small></span>
+                      <select data-skel-material-slot="${element.slotIndex}">
+                        ${this.materialSlotOptions(element.slotIndex)}
+                      </select>
+                    </label>
                   `,
                 )
                 .join("")
-            : `<div class="sm-empty">No materials found.</div>`
+            : `<div class="sm-empty">No material elements found.</div>`
         }
+        <div class="sm-hint">Assign a Material asset here to override the embedded GLB material. Save writes a .materials.json sidecar.</div>
       </div>
       <div class="sm-section">
         <div class="sm-section-title">Sections <span class="sm-count">${this.meshSections.length}</span></div>
@@ -1194,6 +1319,95 @@ export class SkeletalMeshEditor {
         }
       </div>
     `;
+  }
+
+  private materialSlotOptions(slotIndex: number): string {
+    const materials = this.options.assets?.filter((asset) => asset.assetType === "material") ?? [];
+    const selectedMaterialId = this.materialSlots.slots[slotIndex] ?? "";
+    return [`<option value="" ${selectedMaterialId ? "" : "selected"}>Embedded</option>`]
+      .concat(
+        materials.map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              selectedMaterialId === asset.id ? "selected" : ""
+            }>${escapeHtml(asset.name)}</option>`,
+        ),
+      )
+      .join("");
+  }
+
+  private async applyPreviewMaterial(
+    slotIndex: number,
+    materialId: string,
+    options: { dirty?: boolean; status?: boolean } = {},
+  ): Promise<void> {
+    const slots = [...this.materialSlots.slots];
+    slots[slotIndex] = materialId;
+    while (slots.length > 0 && !slots[slots.length - 1]) slots.pop();
+    this.materialSlots = { schema: 1, slots };
+    await this.applyPreviewMaterials(options);
+  }
+
+  private async applyPreviewMaterials(options: { dirty?: boolean; status?: boolean } = {}): Promise<void> {
+    this.disposePreviewMaterials();
+    this.restoreOriginalMaterials();
+    const materialIds = [...new Set(assignedMaterialSlotIds(this.materialSlots))];
+    if (materialIds.length === 0) {
+      this.applyWireframe();
+      if (options.dirty) this.markDirty();
+      if (options.status !== false) this.setStatus("Material slots cleared; using embedded materials.");
+      return;
+    }
+    try {
+      const manifest = this.previewAssetManifest();
+      for (const id of materialIds) {
+        const record = this.options.assets?.find((asset) => asset.id === id);
+        if (!record) throw new Error(`Material not found: ${id}`);
+        const material = await loadForgeMaterial(manifest, id, this.textureLoader, {
+          maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
+        });
+        this.previewMaterials.set(id, material);
+      }
+      applyMaterialSlotOverrides(this.modelGroup, this.materialSlots, (id) => this.previewMaterials.get(id));
+      this.applyWireframe();
+      if (options.dirty) this.markDirty();
+      if (options.status !== false) this.setStatus("Preview material slots updated.");
+    } catch (error) {
+      this.setStatus(`Material preview failed: ${describeError(error)}`, "error");
+    }
+  }
+
+  private previewAssetManifest(): AssetManifest {
+    const assets: AssetRecord[] = [];
+    for (const asset of this.options.assets ?? []) {
+      if (asset.assetType !== "material" && asset.assetType !== "texture") continue;
+      assets.push({
+        id: asset.id,
+        name: asset.name,
+        assetType: asset.assetType,
+        category: "",
+        path: asset.path,
+        tags: [],
+        placeable: false,
+        placement: { surface: "floor", snapToWall: false, allowRotation: true, allowScale: true },
+        runtime: { loadGroup: "editor", castShadow: false, receiveShadow: false, collision: false, bytes: 0 },
+        license: "unknown",
+      });
+    }
+    return { version: 1, generated: "skeletal-mesh-editor-preview", ktx2: false, assets };
+  }
+
+  private disposePreviewMaterials(): void {
+    for (const material of this.previewMaterials.values()) {
+      material.map?.dispose();
+      if (material instanceof MeshStandardMaterial) material.normalMap?.dispose();
+      material.dispose();
+    }
+    this.previewMaterials.clear();
+  }
+
+  private restoreOriginalMaterials(): void {
+    for (const [mesh, material] of this.originalMeshMaterials) mesh.material = material;
   }
 
   private bindDetails(): void {
@@ -1253,9 +1467,19 @@ export class SkeletalMeshEditor {
         this.setRootMotionNode(select.dataset.skelRootMotionNode ?? "", select.value);
       });
     });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-root-motion-up]").forEach((select) => {
+      select.addEventListener("change", () => {
+        this.setRootMotionUpAxis(select.dataset.skelRootMotionUp ?? "", select.value);
+      });
+    });
     this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-role]").forEach((select) => {
       select.addEventListener("change", () => {
         this.setAnimationRole(select.dataset.skelRole as AnimationSetRole, select.value);
+      });
+    });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-material-slot]").forEach((select) => {
+      select.addEventListener("change", () => {
+        void this.applyPreviewMaterial(Number(select.dataset.skelMaterialSlot), select.value, { dirty: true });
       });
     });
     this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-morph]").forEach((input) => {
@@ -1416,17 +1640,19 @@ export class SkeletalMeshEditor {
     for (const socket of this.skeleton.sockets) {
       const bone = this.bones.find((item) => item.name === socket.bone);
       if (!bone) continue;
-      const root = new Group();
-      root.name = `Socket:${socket.name}`;
-      applySocketTransform(root, socket);
+      // The same mount the runtime binds through, so the preview is drawn at the
+      // size and offset the Actor will ship: these rigs export at scale 0.01, and
+      // a socket parented straight to the bone previews a 4cm marker as 0.4mm.
+      // The socket node keeps the authored transform verbatim, which is what lets
+      // `socketFromObject` write a gizmo drag back with no unit conversion.
+      const { socket: root, mount } = mountSkeletalSocket(bone, socket, `Socket:${socket.name}`);
       const marker = new Mesh(
         new SphereGeometry(0.04, 14, 8),
         new MeshBasicMaterial({ color: socket.name === this.selectedSocketName ? 0xffb648 : 0x7ac7ff, depthTest: false }),
       );
       marker.renderOrder = 5;
       root.add(marker);
-      bone.add(root);
-      const overlay: SocketOverlay = { root, marker, socket, previewRoot: null, previewAssetId: null };
+      const overlay: SocketOverlay = { root, mount, marker, socket, previewRoot: null, previewAssetId: null };
       this.socketOverlays.push(overlay);
       void this.attachSocketPreview(overlay);
     }
@@ -1436,7 +1662,9 @@ export class SkeletalMeshEditor {
   private disposeSocketOverlays(): void {
     for (const overlay of this.socketOverlays) {
       this.clearSocketPreview(overlay);
-      overlay.root.removeFromParent();
+      // The mount, not the socket: unmounting the child would leave the
+      // scale-cancelling group behind on the bone, one per rebuild.
+      overlay.mount.removeFromParent();
       overlay.marker.geometry.dispose();
       if (Array.isArray(overlay.marker.material)) {
         for (const material of overlay.marker.material) material.dispose();
@@ -2511,6 +2739,7 @@ export class SkeletalMeshEditor {
         clip: clipName,
         mode,
         ...(current?.rootNode ? { rootNode: current.rootNode } : {}),
+        ...(current?.upAxis ? { upAxis: current.upAxis } : {}),
       };
       this.skeleton = {
         ...this.skeleton,
@@ -2527,6 +2756,23 @@ export class SkeletalMeshEditor {
     if (!current || current.mode === "preserve") return;
     const next: AssetSkeletonRootMotionDef = { clip: clipName, mode: current.mode };
     if (rootNode) next.rootNode = rootNode;
+    if (current.upAxis) next.upAxis = current.upAxis;
+    this.skeleton = {
+      ...this.skeleton,
+      rootMotion: upsertRootMotion(this.skeleton.rootMotion, next),
+    };
+    this.markDirty();
+    this.restartSelectedClipPreview();
+  }
+
+  private setRootMotionUpAxis(clipName: string, upAxis: string): void {
+    const current = this.rootMotionSetting(clipName);
+    if (!current || current.mode === "preserve") return;
+    const next: AssetSkeletonRootMotionDef = { clip: clipName, mode: current.mode };
+    if (current.rootNode) next.rootNode = current.rootNode;
+    if (ROOT_MOTION_UP_AXES.includes(upAxis as RootMotionUpAxis)) {
+      next.upAxis = upAxis as RootMotionUpAxis;
+    }
     this.skeleton = {
       ...this.skeleton,
       rootMotion: upsertRootMotion(this.skeleton.rootMotion, next),
@@ -2833,6 +3079,9 @@ export class SkeletalMeshEditor {
       loop: false,
       blendInSeconds: 0.12,
       blendOutSeconds: 0.2,
+      // Sectionless: the montage is its whole clip until an asset carves it up
+      // by hand in the sidecar. Section authoring has no editor UI yet.
+      sections: [],
     };
     this.skeleton = { ...this.skeleton, montages: [...this.skeleton.montages, montage] };
     this.selectedMontageName = name;
@@ -3021,7 +3270,7 @@ export class SkeletalMeshEditor {
   }
 
   private applyWireframe(): void {
-    for (const material of this.materials) {
+    for (const material of [...this.materials, ...this.previewMaterials.values()]) {
       if ("wireframe" in material) {
         (material as Material & { wireframe: boolean }).wireframe = this.wireframe;
         material.needsUpdate = true;
@@ -3044,9 +3293,18 @@ export class SkeletalMeshEditor {
 
   private async save(): Promise<void> {
     try {
-      const result = await saveAssetSkeleton(this.options.modelPath, this.skeleton);
+      const [skeletonResult, materialResult] = await Promise.all([
+        saveAssetSkeleton(this.options.modelPath, this.skeleton),
+        saveAssetMaterialSlots(this.options.modelPath, this.materialSlots),
+      ]);
       this.overlay.querySelector<HTMLButtonElement>("[data-sm-save]")?.classList.remove("is-dirty");
-      this.setStatus(result.changed ? `Saved ${result.path}` : "No skeleton metadata changes to save.");
+      const changed = skeletonResult.changed || materialResult.changed;
+      this.setStatus(
+        changed
+          ? `Saved ${skeletonResult.path} and ${materialResult.path}`
+          : "No skeleton or material-slot changes to save.",
+      );
+      if (this.options.assetId) this.options.onMaterialSlotsSaved?.(this.options.assetId);
     } catch (error) {
       this.setStatus(`Save failed: ${describeError(error)}`, "error");
     }
@@ -3066,6 +3324,8 @@ export class SkeletalMeshEditor {
     this.disposeNormalHelpers();
     this.disposeSocketOverlays();
     this.disposePhysicsOverlays();
+    this.restoreOriginalMaterials();
+    this.disposePreviewMaterials();
     this.boneMarker.geometry.dispose();
     if (Array.isArray(this.boneMarker.material)) {
       for (const material of this.boneMarker.material) material.dispose();
@@ -3138,9 +3398,26 @@ function upsertRootMotion(
 }
 
 function rootMotionModeLabel(mode: RootMotionMode): string {
-  if (mode === "lockXZ") return "In Place: Lock XZ";
-  if (mode === "lockXYZ") return "In Place: Lock XYZ";
+  // "Horizontal"/"All", not "XZ"/"XYZ": which track components are horizontal
+  // depends on the rig's up axis, so naming them by axis letter misleads.
+  if (mode === "lockXZ") return "In Place: Lock Horizontal";
+  if (mode === "lockXYZ") return "In Place: Lock All";
+  if (mode === "driveMotion") return "Root Motion -> Gameplay";
   return "Preserve Root Motion";
+}
+
+function rootMotionModeHint(mode: RootMotionMode, upAxis: RootMotionUpAxis): string {
+  const axis = upAxis.toUpperCase();
+  if (mode === "lockXZ") {
+    return `Horizontal travel is removed and the vertical axis (${axis}) is kept, so jump arcs and walk bob survive. The source GLTF stays unchanged.`;
+  }
+  if (mode === "lockXYZ") {
+    return "The root is pinned to the clip's first frame on all three axes. The source GLTF stays unchanged.";
+  }
+  if (mode === "driveMotion") {
+    return "Declares that gameplay owns this clip's travel: playback is left as authored, and the measured travel above is what your code must apply to the actor. No runtime driver moves the capsule yet.";
+  }
+  return "The clip plays exactly as authored and nothing moves the actor.";
 }
 
 function emptyStats(): MeshStats {
@@ -3176,17 +3453,6 @@ function formatVec3Array(value: Vec3): string {
 
 function formatRoleLabel(role: AnimationSetRole): string {
   return role.length > 0 ? role[0]!.toUpperCase() + role.slice(1) : role;
-}
-
-function applySocketTransform(root: Object3D, socket: AssetSkeletonSocketDef): void {
-  root.position.set(socket.position[0], socket.position[1], socket.position[2]);
-  root.rotation.set(
-    MathUtils.degToRad(socket.rotation[0]),
-    MathUtils.degToRad(socket.rotation[1]),
-    MathUtils.degToRad(socket.rotation[2]),
-    "XYZ",
-  );
-  root.scale.set(socket.scale[0], socket.scale[1], socket.scale[2]);
 }
 
 function socketFromObject(root: Object3D, socket: AssetSkeletonSocketDef): AssetSkeletonSocketDef {

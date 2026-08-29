@@ -7,6 +7,8 @@ Current files:
 - `bindings.ts`: editor-only DOM listener wiring for pointer, keyboard,
   drag/drop, wheel, and cleanup.
 - `keyboard.ts`: keyboard-code filters and editable-target guards for editor controls.
+- `editorCameraController.ts`: viewport camera fly/orbit/pan/dolly navigation.
+- `editorCameraPose.ts`: per-level viewport pose persistence across editor reloads.
 
 Rules:
 

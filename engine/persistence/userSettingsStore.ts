@@ -166,6 +166,23 @@ export class UserSettingsStore {
     });
   }
 
+  /**
+   * Write several bus volumes as one change.
+   *
+   * Not just a convenience: a volume panel moves on every pointer `input` event,
+   * and doing that one bus at a time would be a read-modify-write per bus per
+   * frame of a drag. Unlisted buses keep their stored value.
+   */
+  setAudioBusVolumes(volumes: BusMixSnapshot): boolean {
+    const current = this.read();
+    const busVolumes: BusMixSnapshot = { ...current.audio.busVolumes };
+    for (const id of AUDIO_BUS_IDS) {
+      const value = volumes[id];
+      if (value !== undefined) busVolumes[id] = normalizeBusVolume(value);
+    }
+    return this.update({ audio: { busVolumes } });
+  }
+
   storageKey(): string {
     return this.key;
   }

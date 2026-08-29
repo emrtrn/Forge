@@ -4,6 +4,8 @@ import {
   NoToneMapping,
   Vector2,
   type Camera,
+  type Material,
+  type Mesh,
   type Object3D,
   type Scene,
   type WebGLRenderer,
@@ -125,16 +127,49 @@ const DOF_MAXBLUR_SCALE = 0.01;
 const AO_RADIUS_SCALE = 0.1;
 
 /**
- * GTAOPass computes AO from a normal+depth G-buffer it renders by overriding the
- * whole scene's material. Its built-in visibility cull only skips Points / Lines,
- * so editor billboard {@link Sprite} icons (camera-facing quads that punch a depth
- * wall → black halos around actor icons) pollute that buffer. This subclass also
- * hides sprites and anything flagged `userData.noAmbientOcclusion` during the AO
- * pass so those 2D overlays never receive occlusion. Real geometry — including
- * characters — stays in, so it gets proper AO (see {@link AO_RADIUS_SCALE} for the
- * scale tuning that keeps small objects from self-occluding to black). Visibility
- * is restored by the base pass within the same frame (after the beauty
- * RenderPass), so nothing else is affected.
+ * Whether an object contributes to the beauty pass's depth buffer — the test that
+ * decides whether it may contribute to the AO one.
+ *
+ * A `depthWrite: false` material is the engine-wide marker for "this is drawn over
+ * the world, it is not part of it": overlays and decals, particle sprites, the
+ * cloud dome, invisible pick volumes, and any Forge material authored
+ * `alphaMode: blend` all set it. Non-meshes have no material to ask and are left
+ * to the type checks. A multi-material mesh counts as writing depth when *any*
+ * slot does, since that slot is real surface.
+ */
+export function writesSceneDepth(object: Object3D): boolean {
+  const mesh = object as Mesh;
+  if (!mesh.isMesh) return true;
+  const material = mesh.material as Material | Material[] | undefined;
+  if (!material) return true;
+  const slots = Array.isArray(material) ? material : [material];
+  return slots.length === 0 || slots.some((slot) => slot?.depthWrite !== false);
+}
+
+/**
+ * GTAOPass computes AO from a normal+depth G-buffer it renders by **overriding the
+ * whole scene's material**. That override is the trap: it replaces each material
+ * with an opaque depth/normal one, so an object that writes no depth in the beauty
+ * pass suddenly writes a solid depth wall in the AO pass — occluding everything
+ * behind it and self-occluding to black — while never appearing to be lit at all.
+ *
+ * GTAOPass's built-in cull only skips Points / Lines. This subclass also skips:
+ *
+ *  - **Sprites** — camera-facing quads, which showed as black halos around the
+ *    editor's billboard actor icons.
+ *  - **Anything that writes no depth** ({@link writesSceneDepth}) — the general
+ *    form of the same bug. It covers translucent ground overlays (selection
+ *    decals, placement previews), deliberately invisible pick volumes, particle
+ *    sprites and the cloud dome, without any of them having to know that AO
+ *    exists. Without it a zero-opacity pick box draws a dark cube around whatever
+ *    it wraps, and a blended overlay renders as flat black.
+ *  - **`userData.noAmbientOcclusion === true`** — the explicit opt-out, for real
+ *    depth-writing geometry that still should not receive AO.
+ *
+ * Solid geometry — including characters — stays in and gets proper AO (see
+ * {@link AO_RADIUS_SCALE} for the tuning that keeps small objects from
+ * self-occluding). Visibility is restored by the base pass within the same frame
+ * (after the beauty RenderPass), so nothing else is affected.
  */
 class ForgeGtaoPass extends GTAOPass {
   /** Overrides GTAOPass's internal (untyped) normal-pass visibility cull. */
@@ -153,7 +188,8 @@ class ForgeGtaoPass extends GTAOPass {
         probe.isLine ||
         probe.isLine2 ||
         probe.isSprite ||
-        object.userData.noAmbientOcclusion === true
+        object.userData.noAmbientOcclusion === true ||
+        !writesSceneDepth(object)
       ) {
         object.visible = false;
         cache.push(object);

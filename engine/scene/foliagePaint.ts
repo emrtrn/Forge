@@ -112,11 +112,12 @@ export function rollFoliageInstance(
   hit: FoliageSurfaceHit,
   rng: () => number,
 ): FoliageInstanceRoll {
-  const scale: Vec3 = [
-    lerp(type.scaleMin[0], type.scaleMax[0], rng()),
-    lerp(type.scaleMin[1], type.scaleMax[1], rng()),
-    lerp(type.scaleMin[2], type.scaleMax[2], rng()),
-  ];
+  const scaleRatio = lerp(type.scaleMin[0], type.scaleMax[0], rng());
+  // Keep yaw/offset/seed rolls stable for existing deterministic brushes: scale
+  // used to consume one PRNG draw per axis, but now its one ratio drives XYZ.
+  rng();
+  rng();
+  const scale: Vec3 = [scaleRatio, scaleRatio, scaleRatio];
   const yawDeg = type.randomYaw ? rng() * 360 : 0;
   const zOffset = lerp(type.zOffsetMin, type.zOffsetMax, rng());
   const seed = Math.floor(rng() * 0xffffffff) >>> 0;

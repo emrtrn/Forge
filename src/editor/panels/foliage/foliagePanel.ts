@@ -51,7 +51,7 @@ export interface FoliagePanelOptions {
 const TOOLS: { id: FoliageTool; label: string; tip: string }[] = [
   { id: "select", label: "Select", tip: "Click an instance to select it (Shift/Ctrl toggles)" },
   { id: "lasso", label: "Lasso", tip: "Drag the brush over instances to select them (Ctrl/Alt subtracts)" },
-  { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type" },
+  { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type; Shift+drag erases every type under the brush" },
   { id: "erase", label: "Erase", tip: "Drag to erase EVERY foliage type under the brush" },
   { id: "single", label: "Single", tip: "Left-click to place ONE instance (no drag)" },
   { id: "fill", label: "Fill", tip: "Click a surface to fill its whole footprint with the active type" },
@@ -99,14 +99,12 @@ function boolField(label: string, attr: string, value: boolean): string {
     </label>`;
 }
 
-function scaleRow(label: string, axisAttr: string, vec: readonly number[]): string {
-  const cell = (axis: number): string =>
-    `<input type="number" step="0.05" min="0.001" value="${vec[axis]}" ${axisAttr}="${axis}" />`;
+function scaleRow(label: string, attr: string, vec: readonly number[]): string {
   return `
-    <div class="detail-row foliage-scale-row">
+    <label class="detail-row foliage-scale-row">
       <span>${label}</span>
-      <div class="foliage-scale-inputs">${cell(0)}${cell(1)}${cell(2)}</div>
-    </div>`;
+      <input type="number" step="0.05" min="0.001" value="${vec[0]}" ${attr} />
+    </label>`;
 }
 
 // Persisted across the panel's frequent innerHTML re-renders (a native <details>
@@ -548,22 +546,15 @@ function bindTypeDetails(options: FoliagePanelOptions): void {
     });
   });
 
-  const bindScale = (
-    datasetKey: "foliageTypeScaleMin" | "foliageTypeScaleMax",
-    base: readonly number[],
-    key: "scaleMin" | "scaleMax",
-  ): void => {
+  const bindScale = (key: "scaleMin" | "scaleMax"): void => {
     body.querySelectorAll<HTMLInputElement>(`[data-${key === "scaleMin" ? "foliage-type-scale-min" : "foliage-type-scale-max"}]`).forEach((input) => {
       input.addEventListener("change", () => {
-        const axis = Number(input.dataset[datasetKey]);
         const value = Number(input.value);
-        if (!Number.isFinite(value) || axis < 0 || axis > 2) return;
-        const vec = [...base] as [number, number, number];
-        vec[axis] = value;
-        options.updateType({ [key]: vec } as Partial<ForgeFoliageTypeDef>);
+        if (!Number.isFinite(value)) return;
+        options.updateType({ [key]: [value, value, value] } as Partial<ForgeFoliageTypeDef>);
       });
     });
   };
-  bindScale("foliageTypeScaleMin", activeType.scaleMin, "scaleMin");
-  bindScale("foliageTypeScaleMax", activeType.scaleMax, "scaleMax");
+  bindScale("scaleMin");
+  bindScale("scaleMax");
 }

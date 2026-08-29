@@ -36,7 +36,7 @@ export interface ForgeFoliageTypeDef {
   radius: number;
   /** Relative paint density multiplier (`0..1+`); scales samples per brush dab. */
   density: number;
-  /** Per-axis random scale range applied to each instance (`scaleMin..scaleMax`). */
+  /** Uniform random scale range applied to each instance (`scaleMin..scaleMax`). */
   scaleMin: Vec3;
   scaleMax: Vec3;
   /** Randomize yaw (Y rotation) per instance. */
@@ -124,14 +124,14 @@ function readOptionalNumber(value: unknown): number | undefined {
 export function normalizeFoliageType(raw: unknown): ForgeFoliageTypeDef {
   const source = (raw ?? {}) as Partial<ForgeFoliageTypeDef> & Record<string, unknown>;
   const d = FOLIAGE_TYPE_DEFAULTS;
-  const scaleMin = readVec3(source.scaleMin, d.scaleMin).map((n) => clampMin(n, 0.001)) as Vec3;
-  const scaleMax = readVec3(source.scaleMax, d.scaleMax).map((n) => clampMin(n, 0.001)) as Vec3;
-  // Keep scaleMax >= scaleMin per-axis so range sampling never inverts.
-  const orderedMax: Vec3 = [
-    Math.max(scaleMin[0], scaleMax[0]),
-    Math.max(scaleMin[1], scaleMax[1]),
-    Math.max(scaleMin[2], scaleMax[2]),
-  ];
+  // Foliage only supports uniform scaling: keep the Vec3 file shape for
+  // backwards compatibility, but canonicalize its X component across all axes.
+  // This also makes legacy non-uniform definitions safe on their next save.
+  const scaleMinValue = clampMin(readVec3(source.scaleMin, d.scaleMin)[0], 0.001);
+  // Keep scaleMax >= scaleMin so range sampling never inverts.
+  const scaleMaxValue = Math.max(scaleMinValue, clampMin(readVec3(source.scaleMax, d.scaleMax)[0], 0.001));
+  const scaleMin: Vec3 = [scaleMinValue, scaleMinValue, scaleMinValue];
+  const orderedMax: Vec3 = [scaleMaxValue, scaleMaxValue, scaleMaxValue];
   const slopeMin = clampRange(finiteNumber(source.slopeMin, d.slopeMin), 0, 90);
   const slopeMax = clampRange(finiteNumber(source.slopeMax, d.slopeMax), 0, 90);
   const zOffsetMin = finiteNumber(source.zOffsetMin, d.zOffsetMin);

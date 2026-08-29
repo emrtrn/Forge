@@ -50,6 +50,7 @@ export interface ThumbnailMaterialPreview {
   layer1AoTextureUrl?: string;
   layerBlendMaskTextureUrl?: string;
   uvTiling: ForgeMaterialUvTiling;
+  flipY: boolean;
   roughness: number;
   metalness: number;
   aoIntensity: number;
@@ -267,6 +268,7 @@ function thumbnailPreviewToMaterialDef(preview: ThumbnailMaterialPreview): Forge
     emissiveTexture: preview.emissiveTextureUrl ? "__thumbnail-emissive" : null,
     ormTexture: preview.ormTextureUrl ? "__thumbnail-orm" : null,
     uvTiling: preview.uvTiling,
+    flipY: preview.flipY,
     roughness: preview.roughness,
     metalness: preview.metalness,
     aoIntensity: preview.aoIntensity,
@@ -277,6 +279,8 @@ function thumbnailPreviewToMaterialDef(preview: ThumbnailMaterialPreview): Forge
     side: preview.side,
     emissive: preview.emissive,
     emissiveIntensity: preview.emissiveIntensity,
+    // A thumbnail is a single still frame, so animated normals buy it nothing.
+    normalMotion: null,
     layerBlend: preview.layerBlend ?? null,
   };
 }

@@ -20,12 +20,37 @@ import { AnimationClip, PropertyBinding, type Object3D } from "three";
  */
 export function collectSubtreeNodeNames(root: Object3D, rootBone: string): Set<string> {
   const names = new Set<string>();
-  const start = root.name === rootBone ? root : root.getObjectByName(rootBone);
+  const start = findMaskRootBone(root, rootBone);
   if (!start) return names;
   start.traverse((node) => {
     if (node.name) names.add(node.name);
   });
   return names;
+}
+
+/**
+ * Resolves the authored bone name against the loaded scene, tolerating the
+ * rename glTF loading performs.
+ *
+ * `GLTFLoader` runs every node name through `PropertyBinding.sanitizeNodeName`,
+ * which strips the characters a track path reserves — a Mixamo rig authored as
+ * `mixamorig:Spine` is called `mixamorigSpine` by the time it is an `Object3D`.
+ * Sidecars are written against the names an artist sees in the DCC tool and
+ * against the ones the editor lists, so both spellings turn up in real data
+ * (a rig's own sidecar can carry each spelling). Matching only
+ * the literal name would leave the mask silently empty, which is the one failure
+ * mode that looks exactly like "layering is not implemented".
+ */
+function findMaskRootBone(root: Object3D, rootBone: string): Object3D | null {
+  const direct = root.name === rootBone ? root : root.getObjectByName(rootBone);
+  if (direct) return direct;
+  const sanitized = PropertyBinding.sanitizeNodeName(rootBone);
+  let match: Object3D | null = null;
+  root.traverse((node) => {
+    if (match || !node.name) return;
+    if (node.name === sanitized || PropertyBinding.sanitizeNodeName(node.name) === sanitized) match = node;
+  });
+  return match;
 }
 
 /** The two masked variants of a character's clip set, keyed by the same names. */

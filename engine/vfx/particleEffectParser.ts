@@ -26,7 +26,11 @@ import type {
   ParticleBounds,
   ParticleEffectDefinition,
   ParticleInitializeBlock,
+  ParticleMeshMaterialMode,
+  ParticleMeshRendererBlock,
+  ParticleMeshSelectionMode,
   ParticleRendererBlock,
+  ParticleSpriteRendererBlock,
   ParticleSpawnBlock,
   ParticleSystemBlock,
   ParticleUpdateBlock,
@@ -46,7 +50,23 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SPAWN_MODES: readonly SpawnMode[] = ["rate", "burst"];
 const SPAWN_SHAPES: readonly SpawnShape[] = ["point", "sphere", "box", "circle"];
 const BLEND_MODES: readonly ParticleBlendMode[] = ["alpha", "additive"];
+const MESH_MATERIAL_MODES: readonly ParticleMeshMaterialMode[] = ["source", "tint"];
+const MESH_SELECTION_MODES: readonly ParticleMeshSelectionMode[] = ["random", "sequence"];
 const SORT_MODES: readonly SortMode[] = ["none", "distance"];
+const MAX_MESH_MODEL_IDS = 8;
+const MAX_MODEL_PARTICLES = 256;
+/** Upper bound on a manifest asset id; longer strings are not ids. */
+const MAX_MODEL_ID_LENGTH = 128;
+/**
+ * The shape a mesh renderer accepts as a model reference: a manifest asset id,
+ * i.e. letters/digits plus `-`, `_`, `.` and `:` separators. Deliberately narrow
+ * so a hand-edited (or hostile) asset cannot express a path or URL — no slashes,
+ * no backslashes, no scheme colon-slash-slash, no `..` traversal, no whitespace.
+ * The host still resolves the id against its manifest before any GLTF load; this
+ * is the parser-side half of the same contract, which `tools/saveValidator.ts`
+ * reuses so save and load agree on exactly one rule.
+ */
+const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -195,8 +215,41 @@ function readSubUV(value: unknown): SubUVGrid {
   return { cols: axis(data.cols), rows: axis(data.rows) };
 }
 
-function normalizeRenderer(value: unknown): ParticleRendererBlock {
-  const data = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+/**
+ * True when `value` is a usable manifest model reference (see
+ * {@link MODEL_ID_PATTERN}). Exported so the save validator and any host-side
+ * resolver can gate on the identical rule instead of re-deriving one.
+ */
+export function isModelAssetId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_MODEL_ID_LENGTH &&
+    MODEL_ID_PATTERN.test(value) &&
+    !value.includes("..")
+  );
+}
+
+/**
+ * Keeps up to {@link MAX_MESH_MODEL_IDS} distinct, id-shaped references in
+ * authored order. Non-strings, path/URL-shaped entries and duplicates are
+ * dropped rather than repaired — a rejected reference must not silently become a
+ * different model.
+ */
+function normalizeModelIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const unique = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "string") continue;
+    const id = raw.trim();
+    if (!isModelAssetId(id) || unique.has(id)) continue;
+    unique.add(id);
+    if (unique.size >= MAX_MESH_MODEL_IDS) break;
+  }
+  return [...unique];
+}
+
+function normalizeSpriteRenderer(data: Record<string, unknown>): ParticleSpriteRendererBlock {
   return {
     type: "sprite",
     blendMode: readEnum(data.blendMode, BLEND_MODES, "alpha"),
@@ -205,6 +258,26 @@ function normalizeRenderer(value: unknown): ParticleRendererBlock {
     texture: readTextureRef(data.texture),
     subUV: readSubUV(data.subUV),
   };
+}
+
+function normalizeMeshRenderer(data: Record<string, unknown>): ParticleMeshRendererBlock {
+  return {
+    type: "mesh",
+    modelIds: normalizeModelIds(data.modelIds),
+    modelSelection: readEnum(data.modelSelection, MESH_SELECTION_MODES, "random"),
+    materialMode: readEnum(data.materialMode, MESH_MATERIAL_MODES, "source"),
+    castShadow: readBool(data.castShadow, false),
+    receiveShadow: readBool(data.receiveShadow, true),
+    maxModelParticles: Math.min(
+      MAX_MODEL_PARTICLES,
+      Math.round(clampMin(finiteNumber(data.maxModelParticles, 64), 1)),
+    ),
+  };
+}
+
+function normalizeRenderer(value: unknown): ParticleRendererBlock {
+  const data = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return data.type === "mesh" ? normalizeMeshRenderer(data) : normalizeSpriteRenderer(data);
 }
 
 function readTags(value: unknown): string[] {
@@ -318,7 +391,7 @@ function normalizeSchema1(data: Record<string, unknown>): ParticleEffectDefiniti
 export function normalizeEffectDefinition(value: unknown): ParticleEffectDefinition | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const data = value as Record<string, unknown>;
-  if (data.schema === 2) return normalizeSchema2(data);
+  if (data.schema === 2 || data.schema === 3) return normalizeSchema2(data);
   if (data.schema === 1) return normalizeSchema1(data);
   return null;
 }
@@ -331,28 +404,57 @@ export function normalizeEffectDefinition(value: unknown): ParticleEffectDefinit
 export function toRuntimeParticleEffect(def: ParticleEffectDefinition): RuntimeParticleEffect {
   const speedMid = rangeMid(def.initialize.speed);
   const dir = def.initialize.direction;
-  // For burst mode the simple renderer has no burst concept yet; approximate a
-  // continuous rate that emits ~count particles across one lifetime window.
   const lifetimeMid = rangeMid(def.initialize.lifetime);
-  const rate =
-    def.spawn.mode === "rate"
-      ? def.spawn.rate
-      : def.spawn.count / Math.max(0.05, lifetimeMid);
+  // The two spawn modes are exclusive, as they are in the authored schema: a
+  // burst releases its whole count at once and then stops, so it carries no
+  // trickle, and a rate emitter has nothing to release up front. Burst used to be
+  // flattened into `count / lifetime` particles per second, which is not a slow
+  // burst — it is a *late* one, because the first particle then waits
+  // `lifetime / count` seconds to appear.
+  const burstMode = def.spawn.mode === "burst";
   return {
     ...(def.name ? { name: def.name } : {}),
+    ...(def.renderer.type === "mesh" ? { rendererType: "mesh" as const } : {}),
     loop: def.system.loop,
-    rate,
+    rate: burstMode ? 0 : def.spawn.rate,
+    ...(burstMode ? { burst: { count: def.spawn.count, delay: def.spawn.delay } } : {}),
     lifetime: clampMin(lifetimeMid, 0.01),
+    ...(def.renderer.type === "mesh" ? { maxParticles: def.system.maxParticles } : {}),
     startSize: rangeMid(def.initialize.startSize),
     endSize: rangeMid(def.update.endSize),
     velocity: [dir[0] * speedMid, dir[1] * speedMid, dir[2] * speedMid],
     spread: def.initialize.spreadAngleDeg / SPREAD_SCALE,
-    materialMode: def.renderer.blendMode,
+    // `ParticleEffect` currently consumes these sprite-compatible fields. Mesh
+    // fields below carry the complete renderer contract for the instanced path.
+    materialMode: def.renderer.type === "sprite" ? def.renderer.blendMode : "alpha",
     color: def.initialize.startColor,
-    ...(def.renderer.texture ? { texture: def.renderer.texture } : {}),
+    // The sprite renderer consumes the authored opacity ramp directly; the mesh
+    // path ignores it (opaque instanced meshes have no per-particle alpha yet).
+    startOpacity: def.initialize.startOpacity,
+    endOpacity: def.update.endOpacity,
+    fadeInTime: def.update.fadeInTime,
+    fadeOutTime: def.update.fadeOutTime,
+    ...(def.renderer.type === "sprite" && def.renderer.texture
+      ? { texture: def.renderer.texture }
+      : {}),
     // Emit the flipbook grid only when it actually animates (frames > 1).
-    ...(def.renderer.subUV.cols * def.renderer.subUV.rows > 1
+    ...(def.renderer.type === "sprite" && def.renderer.subUV.cols * def.renderer.subUV.rows > 1
       ? { subUV: { cols: def.renderer.subUV.cols, rows: def.renderer.subUV.rows } }
+      : {}),
+    ...(def.renderer.type === "mesh"
+      ? {
+          modelIds: [...def.renderer.modelIds],
+          meshModelSelection: def.renderer.modelSelection,
+          meshMaterialMode: def.renderer.materialMode,
+          castShadow: def.renderer.castShadow,
+          receiveShadow: def.renderer.receiveShadow,
+          maxModelParticles: def.renderer.maxModelParticles,
+          gravityScale: def.update.gravityScale,
+          drag: def.update.drag,
+          acceleration: [...def.update.acceleration],
+          rotation: [...def.initialize.rotation],
+          angularVelocity: [...def.initialize.angularVelocity],
+        }
       : {}),
   };
 }

@@ -1,7 +1,8 @@
 # Performans Teşhis Aracı Planı (`?debug`)
 
 > Oluşturma: 2026-08-28 (ThreeAges backport devamı)
-> Durum: **F0 + F1 + F2 tamam** (2026-08-29). Sıradaki faz F3. Faz sırası F0 → F6.
+> Durum: **F0–F6 tamam — plan kapandı** (2026-08-29). Kalan tek açık madde
+> editör kabuğunda GPU taraması (F5 altında, gerekçesiyle).
 > Kaynak: ThreeAges `src/game/rts/debug/*` + `RtsApp.ts` teşhis katmanı.
 
 Forge'un `?debug` overlay'i bugün **okunan** bir şey; ThreeAges'inki
@@ -80,10 +81,10 @@ döngüsü olmadığı için birebir taşınmaz.
 | Takılma sayaçları, piksel, graf gezinme, gölge envanteri | ✔ | ✔ | F0 ✅ |
 | Kare bölgeleri + grup ağacı + tam muhasebe | ✔ | ✔ | F1 ✅ |
 | Panelde buton / tablo modalı / panoya kopyala | ✔ | ✔ | F2 ✅ |
-| CPU kare dökümü | ✔ | ✘ | F3 |
-| Zaman ölçeği + duraklatma | ✔ | ✘ | F4 |
-| GPU A/B taraması | ✔ | ✘ | F5 |
-| Makine tanığı (dataset) + kalite matrisi koşusu | ✔ | ✘ | F6 |
+| CPU kare dökümü | ✔ | ✔ | F3 ✅ |
+| Zaman ölçeği + duraklatma | ✔ | ✔ | F4 ✅ |
+| GPU A/B taraması | ✔ | ✔ | F5 ✅ |
+| Makine tanığı (dataset) + kalite matrisi koşusu | ✔ | ✔ | F6 ✅ |
 
 ## 2. Taşınan ilkeler
 
@@ -258,22 +259,46 @@ içinde.
 
 ThreeAges'ten en doğrudan taşınan parça (`rtsFrameCapture.ts`, 230 satır, saf).
 
-- [ ] `engine/perf/frameCapture.ts`: `buildFrameCapture` + `frameCaptureTableView`
-      + `formatFrameCaptureText`. §2.1 ve §2.2 ilkeleri burada yaşıyor.
-- [ ] Panel butonu: bir sonraki kareyi silahlandırır; yakalama karenin **son
-      işi**dir (açtığı modal, anlattığı karenin parçası olmamalı).
-- [ ] Modal başlığı bağlamı taşır: toplam/ort/tepe ms, pencere kare sayısı,
-      zaman ölçeği (F4 geldiğinde), sahne saati.
-- [ ] `tests/engine/frameCapture.test.ts`: artık aritmetiği, grup çıkarması,
-      sıfır-toplam kenar durumu, metin çıktısı.
+- [x] `engine/perf/frameCapture.ts`: `buildFrameCapture` + `frameCaptureTableView`
+      + `formatFrameCaptureText`. §2.1 ve §2.2 ilkeleri burada yaşıyor: satırlar
+      kareyi bölüyor (toplamları **kareye eşit**), ve her satır yakalanan karenin
+      ms'inin yanında pencere ortalaması + pencere tepesi taşıyor.
+- [x] **Satır şekli F1'inkinden bilinçli olarak farklı.** F1 canlı okunan bir
+      ağaç: grup kendi satırını korur, çocuklar altına girintilenir. F3 tek
+      karenin düz sıralaması: ayrıştırılan grup **çocuklarıyla değiştirilir**,
+      artığı ayrı satır olur — böylece satırlar maliyete göre sıralanıp yine de
+      kareye toplanır. Grubu da çocuklarını da listelemek 8 ms'i iki kez sayar ve
+      tablodaki her yüzdeyi sessizce bozardı. (Planın "aynı modal, ayrı satır
+      şekli" kuralı tam olarak bu.)
+- [x] **Çalışmayan bölge sıfır değil "—".** Profiler artık kare içi birikimi
+      ayrı tutuyor (`currentFrame`, `endFrame` temizliyor), bir bölge o karede
+      hiç girilmediyse `frameMs: null` — pencere sütunları yine dolu, yani
+      "pahalı sandığım şey bu karede hiç çalışmamış" tabloda görünüyor.
+      Bir karede iki kez girilen bölge o kare için **toplanıyor**.
+- [x] Panel butonu bir sonraki kareyi silahlandırıyor; yakalama karenin son işi,
+      kendi toplamı kaydedildikten **sonra**, `endFrame`'den önce. Modalın açtığı
+      birkaç yüz DOM düğümü anlattığı karenin dışına düşüyor.
+- [x] Modal başlığı bağlamı taşıyor: toplam / ort / tepe ms, pencere kare sayısı,
+      sahne saati, ve zaman ölçeği — `FrameCaptureContext` alanları F4 için
+      şimdiden yerinde (`timeScale`, `paused`), varsayılan durumda tek kelime
+      yazmıyor.
+- [x] `tests/engine/frameCapture.test.ts`: 10 check — artık aritmetiği, grup
+      çıkarması, çalışmayan bölge, paydasız kenar durumu, metin çıktısı,
+      `endFrame` temizliği.
+- [x] Paket disiplini: yakalama aritmetiği **oyun paketinde değil**. Kabuk ham
+      örnekleri + yalnız kendisinin bildiği bağlamı veriyor, tabloyu silahlandıran
+      taraf (`debugPanel`) kuruyor. `index-*.js` 643.9 → 640.6 kB.
 
-**Duraklatma notu:** ThreeAges tabloyu okurken maçı duraklatır. Forge'da
-duraklatma F4'le geliyor; F3 onsuz da sevk edilebilir — tablo zaten donmuş,
-arkada sahne dönmeye devam eder. F4 gelince yakalama duraklatmayı sahiplenir ve
-kapanışta sahneyi bulduğu hâlde bırakır.
+**Duraklatma notu:** F3 duraklatmasız sevk edildi (tablo zaten donmuş). F4
+geldiğinde yakalama duraklatmayı **sahiplenmedi**, çünkü gerek kalmadı: hız
+seçici panelde ayrı bir kontrol, okuyucu isterse önce duraklatıp sonra yakalıyor,
+ve yakalama hangi koşulda alındığını tablonun başlığında yazıyor (`paused` /
+`4x`). Duraklatmayı yakalamaya bağlamak, duraklatmak istemeyen bir okuyucuya
+duraklatma dayatırdı.
 
-**Bitiş şartı:** `?debug` → "Kare maliyeti" → satırları toplamı kareye eşit olan,
-panoya kopyalanabilir bir tablo.
+**Bitiş şartı:** ✅ `?debug` → "Frame cost" → satırları toplamı kareye eşit olan,
+panoya kopyalanabilir bir tablo. 1110 check + `build:verify` + `verify:dist
+--strict` + `verify:imports` yeşil.
 
 ### F4 — Zaman ölçeği ve duraklatma
 
@@ -281,21 +306,37 @@ En çok yeni iş, en çok mimari karar (§1.3). Ve teşhisten bağımsız değer
 yüksek olan faz: PIE'si olmayan Forge'da "Play sekmesinde hızlandır/duraklat"
 tek başına kazanç.
 
-- [ ] `engine/core/timeControl.ts`: `paused`, `timeScale`, ve "duraklatmayı ben mi
-      aldım" sahipliği (teşhis duraklatması oyuncunun duraklatmasını ezmemeli).
-- [ ] Döngüde tek uygulama noktası, ama **tüketiciler ayrık**: `frameMetrics` ham
-      delta görmeye devam eder (takılma ölçümü zaman ölçeğinden etkilenmemeli),
-      simülasyon/animasyon/fizik ölçekli deltayı alır, UI ve kamera kararı ayrıca
-      verilir.
-- [ ] Duraklatmada **render devam eder** — sweep'in ihtiyacı tam olarak budur.
-- [ ] Debug hız seçici (1X/2X/4X/8X) panel kontrol yuvasına oturur.
-- [ ] ThreeAges'in alt-adım modeli **taşınmaz**: orada 8X = kare başına 8 sabit
-      simülasyon tick'i. Forge'da sabit adımlı döngü yok; `timeScale` çarpanı
-      olarak başlanır, sabit adım gerektiğinde ayrı bir karar olarak ele alınır.
+- [x] `engine/core/timeControl.ts`: `timeScale` + **tutulan** duraklatma.
+      Duraklatma bir bayrak değil bir **sahip kümesi**: menü, ara sahne ve teşhis
+      aynı anda tutabilir, herkes yalnız kendi tutuşunu bırakır. Bayrak olsaydı
+      "son bırakan kazanır" olurdu — teşhis panelinin oyuncunun menüsünü sessizce
+      açması tam olarak böyle olur.
+- [x] Döngüde tek uygulama noktası, **üç ayrı delta** ile:
+      `rawDeltaMs` (ekranın yaptığı — yalnız `frameMetrics`),
+      `deltaMs` (gerçek geçen süre, kırpılmış — adaptif kalite, startup
+      kalibrasyonu, ve **bakış/girdi**), `simulationMs` (ölçekli, duraklatmada
+      tam olarak 0 — motor, capabilities, Game Mode, game modules, environment,
+      post-process). Kamera kararı bilinçli: `beforeEngineUpdate` yalnız kontrol
+      rotasyonunu güncelliyor, gerçek zamanda kalıyor, böylece **duraklatılmış
+      sahnede etrafa bakılabiliyor** — teşhis duraklatmasının başlıca faydası.
+- [x] Mutlak saatle çalışan malzeme animasyonları için ayrı bir
+      `simulationClockMs` — yoksa kayan bir malzeme duran sahnede kaymaya devam
+      ederdi.
+- [x] Duraklatmada **render devam ediyor** (F5'in ihtiyacı bu); yalnız
+      post-process'in dt'si duruyor.
+- [x] `src/scene/debugSpeedControl.ts`: Pause + 1x/2x/4x/8x, panelin rezerve
+      kontrol yuvasında. Canlı durumdan boyanıyor — başkası duraklatmışsa buton
+      "bu duraklatmayı ben kaldıramam" diye sararıyor, işe yaramayan bir Resume
+      sunmuyor.
+- [x] Alt-adım modeli **taşınmadı**: `timeScale` çarpanı. Sabit adımlı döngü
+      gerektiğinde ayrı bir karar.
 
-**Bitiş şartı:** `?debug` panelinden hız değiştirilebiliyor ve duraklatılabiliyor;
-`frameMetrics` hâlâ ham delta ölçüyor; duraklatılmış sahne çiziliyor;
-`tests/engine/timeControl.test.ts` sahiplik ve ölçek matematiğini kapsıyor.
+**Bitiş şartı:** ✅ `?debug` panelinden hız değiştirilebiliyor ve
+duraklatılabiliyor; `frameMetrics` hâlâ ham delta ölçüyor (test 4x'te ve
+duraklatmada takılmanın hâlâ sayıldığını kilitliyor); duraklatılmış sahne
+çiziliyor; `tests/engine/timeControl.test.ts` sahiplik ve ölçek matematiğini
+kapsıyor. 1115 check + `build:verify` + `verify:dist --strict` +
+`verify:imports` yeşil.
 
 ### F5 — GPU dökümü (A/B taraması)
 
@@ -305,44 +346,84 @@ kategorili — [LevelRuntime.ts:26](../../src/scene/LevelRuntime.ts#L26): landsc
 foliage, river waters, splines, blocking volumes, static mesh'ler, actor
 instances, post-process.
 
-- [ ] `engine/perf/gpuSweep.ts` (323 satır, saf) + `gpuSweepRunner.ts` (204, saf).
-      **Bracketli taban zorunlu**: her adım kendi öncesi ve sonrası tabanıyla
-      karşılaştırılır. Sebebi kayıtta kalsın — duraklatılmış, ucuz bir sahne
-      GPU'nun güç durumunu düşürür; tek bir baştaki tabana göre ölçülürse drift
-      "kapatınca 7 ms *maliyet*" gibi ters işaretli satırlar üretir, ve driver'ın
-      disjoint bayrağı bunu **yakalamaz** (her süre kendi başına doğru bir
-      süredir — yavaşlamış bir GPU'nun süresi). Bracket'ı kendi tasarrufu kadar
-      oynayan satır sayı değil `belirsiz` olarak yayınlanır.
-- [ ] Kategori planı **veriden** türetilir: motor `LevelRuntime` kategorilerini
-      sunar, proje kendi köklerini ekler. Gölge adımı `shadowMap.enabled` değil
-      `autoUpdate` dondurmasıyla yapılır (aksi hâlde materyal yeniden derlemesi
-      ölçülen karenin içine düşer ve gölgenin maliyeti sanılır).
-- [ ] Editör overlay'leri (gizmo, seçim konturu, ızgara) kendi kategorisi olur —
-      editörde ölçüm yapan biri bunun kaç ms olduğunu bilmeli.
-- [ ] Duraklatma F4'ten gelir; tarama boyunca sahne kıpırdamamalı.
-- [ ] `tests/engine/gpuSweep.test.ts`: bracket ortalaması, gürültü tabanı,
-      drift/`belirsiz` kararı, disjoint sayımı, zamanlayıcı programı (geç gelen
-      örnekler, aç kalan adım, iptal).
+- [x] `engine/perf/gpuSweep.ts` + `gpuSweepRunner.ts`, ikisi de saf.
+      **Bracketli taban** birebir taşındı: her adım kendi öncesi ve sonrası
+      tabanının ortasıyla karşılaştırılıyor, bracket kendi tasarrufu kadar
+      oynadıysa satır sayı değil `uncertain`. Testte kayan bir taban (6→12 ms)
+      ile doğrulandı: tek tabana göre ters işaretli çıkacak satırlar bracket'la
+      sıfıra iniyor.
+- [x] **Kategori planı veriden türetiliyor** — ve planın öngördüğünden daha
+      temiz bir kaynaktan: `LevelRuntime` adımlarından değil, F0'da eklenen
+      `forgeSceneSource` etiketlerinden. Yani gölge envanterinin kovaları ile
+      tarama satırları **aynı** veriden geliyor; bir fork içerik türünü
+      etiketleyince hem envanterde hem taramada satır kazanıyor, motorda sabit
+      kategori tablosu yok. Kuyruk `other`'a birleşiyor (adım başına ~20 kare,
+      etiketsiz sahne mesh başına kova üretebilirdi).
+- [x] Gölge adımı `shadowMap.enabled` değil **`autoUpdate` dondurması** —
+      gerekçesi kodda: `enabled` gölge örnekleyen her materyali yeniden derletir
+      ve o derleme ölçülen karenin içine düşüp gölgenin maliyeti sanılır.
+      Ayrıca post-process adımı (pipeline'ı atlayıp düz çizim).
+- [x] Duraklatma F4'ten geliyor; tarama **kendi** tutma sahibini alıyor
+      (`gpu-sweep`), bitişte yalnız onu bırakıyor — oyuncunun duraklatması
+      varsa olduğu gibi kalıyor.
+- [x] `tests/engine/gpuSweep.test.ts`: 12 check — bracket ortalaması, gürültü
+      tabanı, drift/`uncertain` kararı, sıralama, disjoint sayımı ve
+      zamanlayıcı programı (geç gelen örnek, aç kalan adım, iptal, eksik taban).
+- [x] Editör overlay'leri (`gizmo`, seçim konturu, fırça imleçleri, spline ve
+      çarpışma yardımcıları) `editor-overlay` olarak etiketlendi — editörün
+      gölge envanteri ve graf satırı bunları artık tek, dürüst bir kova olarak
+      raporluyor.
+- [ ] **Açık kalan:** editör kabuğunda taramanın kendisi yok. `SceneApp`'in GPU
+      zamanlayıcısı hiç yok (`enableProfiling` de yok), dolayısıyla orada
+      ölçülecek bir şey yok — etiketleme yerinde, eksik olan zamanlayıcı +
+      koşum bağlantısı. Ayrı bir iş olarak bırakıldı.
 
-**Bitiş şartı:** `?debug` → "GPU dökümü" → kategorileri sırayla kapatıp tasarruf
+**Bitiş şartı:** ✅ `?debug` → "GPU sweep" → kategorileri sırayla kapatıp tasarruf
 tablosu üreten, sınırlarını kendi notlarında yazan bir koşum; zamanlayıcısı
-olmayan tarayıcıda sıfır değil açıklama gösteriyor.
+olmayan tarayıcıda sıfır değil açıklama gösteriyor. 1127 check + `build:verify`
++ `verify:dist --strict` + `verify:imports` yeşil. (Editör tarafı yukarıdaki
+açık madde.)
 
 ### F6 — Makine tanığı ve kalite matrisi
 
-- [ ] Canvas dataset'ine örneklenmiş JSON perf tanığı (ThreeAges'te
-      `data-rts-perf`, 0.5 sn temposunda). Tarayıcı kayıtlarıyla korelasyon ve
-      smoke testleri için; **kare başına değil** örneklenmiş, yoksa gözlem
-      problemin kendisi olur.
-- [ ] Jenerik kalite matrisi koşusu (`perf:quality` benzeri): aynı seviye, aynı
-      kamera turu, Low/Medium/High/Adaptive satırları.
-      `tools/perf/browserPerfHarness.mjs` zaten burada ve `browser-perf-report`
-      onu kullanıyor; eklenecek olan matris döngüsü ve rapor formatı.
-- [ ] Smoke: `tests/smoke/` altında panelin açıldığını, bir kare dökümü
-      alındığını ve modalın kapandığını doğrulayan bir spec (port 5273, asla 5173).
+- [x] `engine/perf/perfWitness.ts` + canvas'ta `data-forge-perf`, 0.5 sn
+      temposunda ve `debugOnly` bölge olarak işaretli. Ölçülmeyen GPU `null`,
+      sıfır değil. Fork alanları `setPerfWitnessExtra` ile ekleniyor ve şablonun
+      alanlarını **asla** gölgeleyemiyor — yoksa `quality` her fork'ta başka bir
+      şey demek olurdu ve tanık karşılaştırılamazdı.
+      Harness tarafı zaten hazırdı: `browserPerfHarness.mjs` bu attribute'u
+      okuyordu ama şablon hiç yazmıyordu; eksik olan tam olarak bu uçtu.
+- [x] `npm run perf:quality` (`tools/quality-matrix-report.mjs`): Low / Medium /
+      High / Adaptive, aynı sunucu, aynı build, aynı süre, arka arkaya. Profil
+      sayfa yüklenmeden **localStorage'a** ekiliyor (runtime'a debug amaçlı bir
+      URL parametresi eklemedim: oyuncunun ayarını sessizce ezen bir bayrak
+      er geç ürüne sızar), ve rapor istenen profili değil **koşan** profili
+      yazıyor. Kendi portu 4175.
+      **Kamera turu yok ve bu bilinçli:** şablonun kamera-yolu kavramı yok, her
+      fork'unki farklı olurdu; satırlar "seviye başladığı gibi, dokunulmadan"
+      koşuyor, rapor da bunu söylüyor.
+- [x] `tests/smoke/debug-panel.spec.ts` (port 5273): panel + readout satırları,
+      tanık JSON'u, kare dökümü → tablo → panoya kopyala → kapat, ve teşhis
+      duraklatması (duraklatılmışken karelerin çizilmeye devam ettiği dahil).
 
-**Bitiş şartı:** `npm run perf:quality` dört satırlık karşılaştırılabilir bir
-rapor üretiyor; smoke suite paneli sürüyor.
+**Bitiş şartı:** ✅ `npm run perf:quality` dört satırlık karşılaştırılabilir bir
+rapor üretiyor (ekilen profilin gerçekten koştuğu JSON'da doğrulandı); smoke
+suite paneli sürüyor ve geçiyor.
+
+**Smoke'un bulduğu iki gerçek kusur** — birim testlerin ulaşamayacağı, tam da bu
+spec'in var olma sebebi:
+
+1. **Pointer lock panele erişimi tamamen kapatıyordu.** Kilitli imleçte her
+   pointer olayı, imleç nerede olursa olsun canvas'a gidiyor; yani oynanış
+   sırasında panelin hiçbir butonuna tıklanamıyor. Tarayıcının kendi çıkışı
+   (Esc) bunu çözüyor ve spec de kullanıcı gibi Esc'e basıyor — ama bu ancak
+   (2) düzeltildikten sonra işe yarıyor.
+2. **Panel oyun UI ekranlarının altında kalıyordu.** Esc kilidi bırakıyor ve
+   aynı tuş oyunun menü ekranını açıyor; tam ekran o katman paneli örtüyordu.
+   Yani imleci geri aldığınız an panel kayboluyordu. `z-index` verildi (panel
+   45, modal 46): menü bir teşhis yüzeyini gizleyemez.
+   Ayrıca readout 1584 px'e kadar uzayıp ekranın iki katına taşıyordu; panel
+   artık viewport'a sınırlı ve readout kendi içinde kayıyor.
 
 ## 5. Kapsam dışı
 
@@ -389,6 +470,45 @@ duran üç katmanı (aritmetik / kabuk / oyun) ayırmaktır.
 
 ## 8. İlerleme günlüğü
 
+- **2026-08-29 — F6 tamam, plan kapandı.** Tanık için altyapının yarısı zaten
+  buradaydı (`browserPerfHarness` attribute'u okuyordu, şablon yazmıyordu),
+  kalite matrisi de mevcut harness'in üstüne bir döngü oldu. Asıl değer
+  smoke'tan geldi: panel, birim testlerin hepsi yeşilken **kullanılamaz**
+  durumdaydı — pointer lock butonlara erişimi kapatıyordu, ve kilidi bırakan
+  Esc tuşu oyunun menü ekranını açıp paneli örtüyordu. İkisi de yalnız gerçek
+  bir tarayıcıda görülebilecek kusurlardı ve ikisi de düzeltildi (§F6).
+  Planın "kabuk aptal, çekirdek saf" ilkesinin bedeli bu: saf taraf tastamam
+  doğruyken kabuk hiç çalışmıyor olabilir, ve bunu ancak sürülen bir tarayıcı
+  söyler.
+## 8. İlerleme günlüğü
+
+- **2026-08-29 — F5 tamam (editör tarafı hariç).** Planın beklediği gibi
+  Forge'da ThreeAges'tekinden temiz çıktı, ama beklenen sebepten değil:
+  kategoriler `LevelRuntime` adımlarından değil F0'ın `forgeSceneSource`
+  etiketlerinden türedi. Bu daha iyi bir kaynak — gölge envanteri ile tarama
+  artık **aynı** veriyi kullanıyor, yani iki tablo aynı içerik kavramından
+  bahsettiğinde aynı adı yazıyor, ve fork tek bir etiketle ikisini birden
+  kazanıyor. Ayrıca `GpuFrameTimer` zaten tag + disjoint sayacı taşıyordu
+  (Forge burada ThreeAges'in önündeydi), koşum için ek altyapı gerekmedi.
+  Editör kabuğunda tarama yok ve bu bilinçli: `SceneApp`'in GPU zamanlayıcısı
+  hiç yok, dolayısıyla eklenecek olan ölçüm değil ölçüm altyapısıydı.
+- **2026-08-29 — F4 tamam.** Planın §1.3'te işaret ettiği boşluk kapandı:
+  Forge'un motorunda artık pause/timeScale var, ve teşhisten bağımsız değeri
+  gerçekten en yüksek faz buydu. İki karar planın bıraktığı boşluğu doldurdu.
+  (1) Kamera/bakış **gerçek zamanda** kaldı: `beforeEngineUpdate` yalnız
+  kontrol rotasyonunu güncelliyor, dolayısıyla duraklatılmış sahnede etrafa
+  bakmak mümkün ve dünya yine de kıpırdamıyor. (2) Mutlak saatle çalışan
+  malzeme animasyonları delta almıyordu; ölçekli bir `simulationClockMs`
+  eklendi, yoksa duran sahnede kaymaya devam ederlerdi — döngüde "tek
+  uygulama noktası"nın tek satır olmadığı yer burasıydı.
+- **2026-08-29 — F3 tamam.** Planın ThreeAges'ten devraldığı desende bir
+  varsayım Forge'da tutmuyordu: orada her bölge her kare kaydediliyor, burada
+  kaydedilmiyor (Game Mode oturumu yoksa `gameMode` bölgesi hiç girilmez).
+  Pencerenin `lastMs`'ini kare değeri saymak, çalışmayan bir bölgeye bir
+  önceki karenin sayısını yazardı. Bu yüzden profiler'a kare-içi birikim
+  eklendi ve çalışmayan bölge `null` — §2.3'ün (yokluk ≠ sıfır) tablodaki
+  karşılığı. F2'nin geçici tablosu kaldırıldı; yakalama onu her bakımdan
+  kapsıyor (aynı satırlar + geldiği kare).
 - **2026-08-29 — F2 tamam.** Planın öngörmediği tek karar: panel yeni bir
   element eklemek yerine `#debug-stats`'ı devraldı. Sebebi editörde ortaya
   çıktı — o element id'siyle viewport host'a taşınıyor ve kendi CSS'ini

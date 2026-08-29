@@ -54,6 +54,40 @@ export interface SubsystemTiming {
   readonly debugOnly?: boolean;
 }
 
+/**
+ * One region as a single frame recorded it, beside the window it sits in.
+ *
+ * Both halves are needed and neither replaces the other: one frame on its own
+ * is noise (a GC pause, a shader compile, a cadence tick that fires every few
+ * seconds), and a window on its own cannot show the frame you just watched
+ * stutter.
+ */
+export interface FrameRegionSample {
+  readonly id: string;
+  readonly parent: string | null;
+  readonly debugOnly: boolean;
+  /**
+   * Cost in the captured frame, summed over every span recorded under this id
+   * that frame. `null` means the region did not run at all — which is a
+   * different fact from running for no measurable time, and is reported as
+   * such rather than as a zero.
+   */
+  readonly frameMs: number | null;
+  readonly averageMs: number;
+  readonly maxMs: number;
+}
+
+/** One frame's regions, with the window they are read against. */
+export interface FrameProfileCapture {
+  /** The captured frame's own total, or null when nothing measured the frame. */
+  readonly totalMs: number | null;
+  readonly averageTotalMs: number;
+  readonly maxTotalMs: number;
+  /** Frames the average and peak columns cover. */
+  readonly windowFrames: number;
+  readonly regions: readonly FrameRegionSample[];
+}
+
 /** The whole frame — the denominator every region is a share of. */
 export interface FrameTotals {
   readonly lastMs: number;
@@ -147,6 +181,13 @@ export class SubsystemProfiler implements SubsystemTimingRecorder {
   readonly regions = new FrameRegionRegistry();
   /** The whole-frame window, filled only once something calls {@link recordFrame}. */
   private frameWindow: RollingWindow | null = null;
+  /**
+   * What each region has cost *this* frame so far, cleared by {@link endFrame}.
+   *
+   * Accumulated rather than overwritten, so a region entered more than once in
+   * a frame reports the frame's total for it and not just its last span.
+   */
+  private readonly currentFrame = new Map<string, number>();
   private frameCount = 0;
 
   constructor(private readonly windowFrames: number = DEFAULT_WINDOW_FRAMES) {}
@@ -161,6 +202,7 @@ export class SubsystemProfiler implements SubsystemTimingRecorder {
       this.windows.set(id, window);
     }
     window.push(sample);
+    this.currentFrame.set(id, (this.currentFrame.get(id) ?? 0) + sample);
   }
 
   /** Declares where a region sits in the frame. See {@link FrameRegionRegistry}. */
@@ -188,6 +230,38 @@ export class SubsystemProfiler implements SubsystemTimingRecorder {
    */
   endFrame(): void {
     this.frameCount += 1;
+    this.currentFrame.clear();
+  }
+
+  /**
+   * The frame in progress, with each region's cost in it beside its window.
+   *
+   * Must be called **before** {@link endFrame} clears the frame, and as the
+   * last thing the frame does — whatever the caller then draws with the result
+   * must not be part of the frame the result describes.
+   */
+  captureFrame(): FrameProfileCapture {
+    const frameWindow = this.frameWindow;
+    const regions: FrameRegionSample[] = [];
+    for (const [id, window] of this.windows) {
+      regions.push({
+        id,
+        parent: this.regions.parentOf(id),
+        debugOnly: this.regions.isDebugOnly(id),
+        // Absent, not zero: a region that did not run this frame and one that
+        // ran immeasurably fast are different findings.
+        frameMs: this.currentFrame.get(id) ?? null,
+        averageMs: window.average,
+        maxMs: window.max,
+      });
+    }
+    return {
+      totalMs: frameWindow ? frameWindow.last : null,
+      averageTotalMs: frameWindow?.average ?? 0,
+      maxTotalMs: frameWindow?.max ?? 0,
+      windowFrames: frameWindow?.count ?? 0,
+      regions,
+    };
   }
 
   snapshot(): SubsystemProfileSnapshot {
@@ -245,6 +319,7 @@ export class SubsystemProfiler implements SubsystemTimingRecorder {
   clear(): void {
     this.windows.clear();
     this.frameWindow = null;
+    this.currentFrame.clear();
     this.frameCount = 0;
   }
 }

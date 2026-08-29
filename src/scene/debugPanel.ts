@@ -24,9 +24,11 @@
  * of its own inside.
  */
 import type { DebugTableView } from "@engine/perf/debugTableView";
-import { frameRegionTableView } from "@engine/perf/frameRegions";
+import { buildFrameCapture, frameCaptureTableView } from "@engine/perf/frameCapture";
+import { gpuSweepTableView, gpuSweepUnavailableView } from "@engine/perf/gpuSweep";
 
 import { attachDebugStats } from "./debugStats";
+import { DebugSpeedControl } from "./debugSpeedControl";
 import { DebugTableModal } from "./debugTableModal";
 import type { RuntimeStatsApp } from "./RuntimeSceneApp";
 
@@ -125,19 +127,41 @@ export function attachDebugPanel(
 ): DebugPanel {
   const panel = new DebugPanel(element, options);
   attachDebugStats(app, panel.readoutElement);
+  // Into the reserved slot, so it stays leftmost however many actions arrive
+  // later. A state you leave set does not belong among buttons you fire.
+  const time = app.getTimeControl?.();
+  if (time) panel.mountControl(new DebugSpeedControl(time));
   // Offered only where something is actually profiling. A button that opens
   // an empty table teaches the reader that the instrument is broken, which is
   // worse than not offering it: the editor shell profiles nothing today, and
   // simply has no frame-cost button.
-  if (app.getSubsystemProfileSnapshot) {
+  if (app.armFrameCapture) {
     panel.addAction({
       id: "frame-cost",
       label: "Frame cost",
-      hint: "Freeze the current frame account as a table: every region, its share, and what is left unmeasured",
+      hint: "Measure the next frame and break it down: every region, its share of that frame, its rolling average and peak, and what is left unmeasured",
       run: () => {
-        const snapshot = app.getSubsystemProfileSnapshot?.();
-        if (!snapshot || snapshot.subsystems.length === 0) return;
-        panel.showTable(frameRegionTableView(snapshot));
+        // Armed, not taken here: a capture made inside this click handler
+        // would describe a frame that was already half over, with the click
+        // handler in it.
+        app.armFrameCapture?.((captured, context) =>
+          panel.showTable(frameCaptureTableView(buildFrameCapture(captured, context))),
+        );
+      },
+    });
+  }
+  if (app.startGpuSweep) {
+    panel.addAction({
+      id: "gpu-sweep",
+      label: "GPU sweep",
+      hint: "Turn each content category off in turn and measure what it gives back. Holds the scene still and takes several seconds.",
+      run: () => {
+        app.startGpuSweep?.((outcome) => {
+          if (outcome.kind === "done") panel.showTable(gpuSweepTableView(outcome.sweep));
+          else if (outcome.kind === "failed") {
+            panel.showTable(gpuSweepUnavailableView(outcome.reason));
+          }
+        });
       },
     });
   }

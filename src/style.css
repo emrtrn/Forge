@@ -499,8 +499,23 @@ body {
    --------------------------------------------------------------------------- */
 
 /* The readout is the only part that must keep the monospace pre-wrap layout;
-   the root now also holds buttons, which must not inherit `white-space: pre`. */
+   the root now also holds buttons, which must not inherit `white-space: pre`.
+
+   Bounded to the viewport, with the readout scrolling inside it. The readout
+   runs to ninety-odd lines in a busy scene and used to spill two screens past
+   the bottom of the window, where none of it could be read and where it
+   confused pointer hit-testing for anything trying to click the controls.
+   Keeping the control strip outside the scroller is the other half of the
+   reason it sits above the readout. */
 .forge-debug-panel {
+  /* Above the game UI layers. A diagnostic surface a menu screen can cover is
+     not a diagnostic surface: opening a screen is exactly the moment you get the
+     cursor back and want to reach these controls. The table modal sits one
+     higher again, over the panel that opened it. */
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 16px);
   white-space: normal;
   pointer-events: none;
 }
@@ -539,10 +554,39 @@ body {
 }
 
 .forge-debug-panel-readout {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* Scrollable, so it takes the pointer over its own corner of the screen.
+     A worthwhile trade only because this whole surface exists behind `?debug`:
+     the alternative is ninety lines of readout that cannot be read past the
+     first forty. */
+  pointer-events: auto;
   margin: 0;
   font: inherit;
   color: inherit;
   white-space: pre;
+}
+
+/* The speed picker lives in the reserved slot; `is-active` marks the state the
+   world is actually in, which is not always the one this control asked for. */
+.forge-debug-speed {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.forge-debug-panel-button.is-active {
+  border-color: #7fff7f;
+  background: rgba(127, 255, 127, 0.25);
+  color: #eaffea;
+}
+
+/* Paused by something else as well: this control cannot resume the world, and
+   an amber tint says so rather than offering a Resume that does nothing. */
+.forge-debug-panel-button[data-forge-debug-held="other"] {
+  border-color: #ffd54a;
+  color: #ffd54a;
 }
 
 /* --- the frozen table modal ------------------------------------------------ */
@@ -552,7 +596,7 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 40;
+  z-index: 46;
   display: flex;
   flex-direction: column;
   gap: 8px;

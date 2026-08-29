@@ -15,6 +15,7 @@
     "check:assets": "node tools/run-asset-manifest-health.mjs",
     "perf:assets": "node tools/run-asset-perf-report.mjs",
     "perf:browser": "node tools/browser-perf-report.mjs",
+    "perf:quality": "node tools/quality-matrix-report.mjs",
     "audio:manifest": "node tools/sync-audio-manifest.mjs",
     "audio:loudness": "node tools/audit-audio-loudness.mjs",
     "audio:codecs": "node tools/probe-audio-codecs.mjs",

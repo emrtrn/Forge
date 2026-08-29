@@ -16,6 +16,7 @@ import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
 import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { isRenderableMesh } from "@engine/render-three/materials";
+import { tagSceneSource } from "./runtimeDebugSnapshot";
 import type { PostProcessPipeline } from "@engine/render-three/postProcess";
 
 // Keep the scene selection outline aligned with the editor UI accent token
@@ -45,6 +46,9 @@ export class EditorSelectionOutline {
   }) {
     this.scene = options.scene;
     this.proxyRoot.name = "editor-selection-outline-proxies";
+    // Authoring-only geometry, bucketed apart from scene content so an editor
+    // frame stays comparable with a runtime one.
+    tagSceneSource(this.proxyRoot, "editor-overlay");
     this.scene.add(this.proxyRoot);
 
     this.outlinePass = new OutlinePass(

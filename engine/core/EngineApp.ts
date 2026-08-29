@@ -1,6 +1,10 @@
 import type { EngineUpdateContext, Subsystem } from "./Subsystem";
 import { SubsystemRegistry } from "./SubsystemRegistry";
-import { SubsystemProfiler, type SubsystemProfileSnapshot } from "./subsystemProfiler";
+import {
+  SubsystemProfiler,
+  type FrameProfileCapture,
+  type SubsystemProfileSnapshot,
+} from "./subsystemProfiler";
 import type { FrameRegionDefinition } from "../perf/frameRegions";
 
 export class EngineApp {
@@ -79,6 +83,19 @@ export class EngineApp {
    */
   endProfileFrame(): void {
     this.profiler?.endFrame();
+  }
+
+  /**
+   * The frame in progress, region by region, or null when nothing is
+   * profiling. Must be read before {@link endProfileFrame} clears the frame.
+   */
+  captureProfileFrame(): FrameProfileCapture | null {
+    return this.profiler?.captureFrame() ?? null;
+  }
+
+  /** Scene seconds since the loop started — the clock a capture is placed on. */
+  get sceneSeconds(): number {
+    return this.elapsedSeconds;
   }
 
   async init(): Promise<void> {

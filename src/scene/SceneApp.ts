@@ -46,10 +46,22 @@ import type {
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   buildSceneCostSnapshot,
+  tagSceneSource,
   type DrawingBufferSnapshot,
   type SceneCostObject,
   type SceneCostSnapshot,
 } from "./runtimeDebugSnapshot";
+
+/**
+ * The bucket every authoring-only visual is tagged with: gizmo, selection
+ * outline proxies, brush cursors, spline and collision helpers.
+ *
+ * One bucket rather than one per widget, because the question a reader has in
+ * the editor is "how much of this frame is the editor itself?" — and because
+ * these are the rows a runtime frame does not have at all, so lumping them in
+ * with content would make an editor frame incomparable with a shipped one.
+ */
+const EDITOR_OVERLAY_SOURCE = "editor-overlay";
 
 import { AssetLoader } from "./assetLoader";
 import { EngineApp } from "@engine/core/EngineApp";
@@ -1605,7 +1617,7 @@ export class SceneApp {
 
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
-    this.scene.add(this.gizmoGroup);
+    this.scene.add(tagSceneSource(this.gizmoGroup, EDITOR_OVERLAY_SOURCE));
 
     // Register subsystems before scene load adds work to them (e.g. character
     // animations push mixers during loadActiveProjectScene) and before the
@@ -5276,7 +5288,7 @@ export class SceneApp {
       }
     }
     this.splinePointOverlay = overlay;
-    this.scene.add(overlay);
+    this.scene.add(tagSceneSource(overlay, EDITOR_OVERLAY_SOURCE));
   }
 
   private createSplinePointLabel(text: string): Sprite {
@@ -7494,7 +7506,7 @@ export class SceneApp {
     cursor.renderOrder = 20;
     cursor.visible = false;
     this.foliageBrushCursor = cursor;
-    this.scene.add(cursor);
+    this.scene.add(tagSceneSource(cursor, EDITOR_OVERLAY_SOURCE));
     return cursor;
   }
 
@@ -7991,7 +8003,7 @@ export class SceneApp {
     cursor.renderOrder = 20;
     cursor.visible = false;
     this.meshPaintBrushCursor = cursor;
-    this.scene.add(cursor);
+    this.scene.add(tagSceneSource(cursor, EDITOR_OVERLAY_SOURCE));
     return cursor;
   }
 
@@ -8207,7 +8219,7 @@ export class SceneApp {
     cursor.renderOrder = 20;
     cursor.visible = false;
     this.landscapeBrushCursor = cursor;
-    this.scene.add(cursor);
+    this.scene.add(tagSceneSource(cursor, EDITOR_OVERLAY_SOURCE));
     return cursor;
   }
 
@@ -9885,7 +9897,7 @@ export class SceneApp {
       const helper = createSphereReflectionCaptureObject(this.reflectionCaptureItem(actor));
       helper.userData.reflectionCaptureIndex = index;
       this.reflectionCaptureObjects.push(helper);
-      this.scene.add(helper);
+      this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
       const icon = createSphereReflectionCaptureIcon();
       icon.userData.reflectionCaptureIndex = index;
       this.reflectionCaptureIcons.push(icon);
@@ -10120,7 +10132,7 @@ export class SceneApp {
     const helper = createSphereReflectionCaptureObject(this.reflectionCaptureItem(actor));
     this.reflectionCaptureObjects.splice(insertionIndex, 0, helper);
     this.reflectionCaptureBakes.splice(insertionIndex, 0, null);
-    this.scene.add(helper);
+    this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
     const icon = createSphereReflectionCaptureIcon();
     this.reflectionCaptureIcons.splice(insertionIndex, 0, icon);
     this.scene.add(icon);
@@ -12679,7 +12691,7 @@ export class SceneApp {
       const helper = new LineSegments(geometry, material);
       helper.name = "editor-collision-box";
       this.collisionBoxes.push(helper);
-      this.scene.add(helper);
+      this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
     }
     this.updateLandscapeCollisionWires();
   }
@@ -12725,7 +12737,7 @@ export class SceneApp {
         "XYZ",
       );
       this.collisionBoxes.push(helper);
-      this.scene.add(helper);
+      this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
     }
   }
 

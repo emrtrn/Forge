@@ -1046,6 +1046,10 @@ import { registerCharacterMovementModuleTests } from "../tests/engine/characterM
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 import { registerPerfReadoutTests } from "../tests/engine/perfReadout.test";
 import { registerFrameRegionTests } from "../tests/engine/frameRegions.test";
+import { registerFrameCaptureTests } from "../tests/engine/frameCapture.test";
+import { registerTimeControlTests } from "../tests/engine/timeControl.test";
+import { registerGpuSweepTests } from "../tests/engine/gpuSweep.test";
+import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 
 /**
  * The three entry points every check in this suite goes through.
@@ -1149,6 +1153,10 @@ registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
 registerPerfReadoutTests(check);
 registerFrameRegionTests(check);
+registerFrameCaptureTests(check);
+registerTimeControlTests(check);
+registerGpuSweepTests(check);
+registerPerfWitnessTests(check);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

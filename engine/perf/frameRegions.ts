@@ -22,7 +22,6 @@
  * here names a game concept, and there is no fixed table of region ids.
  */
 import type { SubsystemProfileSnapshot, SubsystemTiming } from "../core/subsystemProfiler";
-import { withClipboardText, type DebugTableView } from "./debugTableView";
 
 /**
  * The whole frame. Reserved: it is the denominator, so it must never be
@@ -240,68 +239,3 @@ export function buildFrameRegionRows(snapshot: SubsystemProfileSnapshot): FrameR
   return rows;
 }
 
-/**
- * Renders the frame account as a table for the `?debug` modal.
- *
- * The same rows the overlay prints, with the two things a text overlay has no
- * room for: a share bar behind each row, and the notes that say what the table
- * does *not* prove. Kept beside the arithmetic rather than in the modal, because
- * the caveats belong to the measurement — the renderer only draws cells.
- */
-export function frameRegionTableView(
-  snapshot: SubsystemProfileSnapshot,
-  meta = "",
-): DebugTableView {
-  const rows = buildFrameRegionRows(snapshot);
-  const frame = snapshot.frame;
-  const measured = snapshot.totalAverageMs;
-  const diagnostic = snapshot.debugOnlyAverageMs ?? 0;
-  const notes = [
-    "Rows are windowed averages, not one frame: a single frame is noise (a GC, a shader compile, a rare cadence tick).",
-    "A group's row already contains its children; only the top-level rows sum to the frame.",
-    "`(other)` and `unmeasured` are leftovers, never something that was timed on its own.",
-  ];
-  if (frame) {
-    notes.unshift(
-      `Frame ${frame.averageMs.toFixed(2)} ms average over ${frame.samples} frames, peak ${frame.maxMs.toFixed(2)} ms.`,
-    );
-  } else {
-    // Said rather than omitted: a table with no denominator cannot claim any
-    // coverage at all, and silence there reads as full coverage.
-    notes.unshift("Nothing measured the whole frame, so the rows have no denominator and no shares.");
-  }
-  if (diagnostic > 0) {
-    notes.push(
-      `${diagnostic.toFixed(2)} ms of this frame is diagnostic-only work (marked *) that the shipped build never runs.`,
-    );
-  }
-  return withClipboardText({
-    title: "Frame cost (CPU)",
-    meta: frame
-      ? `frame ${frame.averageMs.toFixed(2)} ms · measured ${(
-          (measured / frame.averageMs) * 100
-        ).toFixed(0)}%${meta ? ` · ${meta}` : ""}`
-      : `regions ${measured.toFixed(2)} ms${meta ? ` · ${meta}` : ""}`,
-    columns: [
-      { label: "region", align: "left" },
-      { label: "avg ms", align: "right" },
-      { label: "last ms", align: "right" },
-      { label: "peak ms", align: "right" },
-      { label: "share", align: "right" },
-    ],
-    rows: rows.map((row) => ({
-      kind: row.residual ? "residual" : row.debugOnly ? "debug" : "region",
-      share: row.shareOfFrame,
-      cells: [
-        `${"  ".repeat(row.depth)}${row.id}${row.debugOnly ? " *" : ""}`,
-        row.averageMs.toFixed(2),
-        row.lastMs.toFixed(2),
-        // A residual has no peak of its own; a dash says so rather than "0.00",
-        // which would read as "it never spiked" instead of "not measurable here".
-        row.residual ? "—" : row.maxMs.toFixed(2),
-        frame ? `${Math.round(row.shareOfFrame * 100)}%` : "—",
-      ],
-    })),
-    notes,
-  });
-}

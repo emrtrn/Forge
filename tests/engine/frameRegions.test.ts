@@ -15,7 +15,6 @@ import type { Subsystem } from "../../engine/core/Subsystem";
 import { SubsystemProfiler } from "../../engine/core/subsystemProfiler";
 import {
   buildFrameRegionRows,
-  frameRegionTableView,
   FrameRegionRegistry,
   FRAME_REGION_ID,
   UNMEASURED_REGION_ID,
@@ -255,53 +254,6 @@ export function registerFrameRegionTests(check: Check): void {
     app.endProfileFrame();
     const late = app.getProfileSnapshot()!.subsystems.find((timing) => timing.id === "late");
     assert.equal(late?.parent, ENGINE_REGION_ID);
-  });
-check("the frame table states its denominator, its leftovers and its limits", () => {
-    const profiler = new SubsystemProfiler(4);
-    profiler.declareRegion({ id: "engine" });
-    profiler.declareRegion({ id: "physics", parent: "engine" });
-    profiler.declareRegion({ id: "debugWires", debugOnly: true });
-    profiler.record("engine", 4);
-    profiler.record("physics", 3);
-    profiler.record("debugWires", 2);
-    profiler.recordFrame(10);
-    profiler.endFrame();
-
-    const view = frameRegionTableView(profiler.snapshot());
-    assert.equal(view.title, "Frame cost (CPU)");
-    // The meta line answers "is this most of the frame?" before any row is read.
-    // 4 of 10 ms measured — the diagnostic wires are not part of that share.
-    assert.equal(view.meta, "frame 10.00 ms · measured 40%");
-    assert.deepEqual(
-      view.rows.map((row) => [row.cells[0], row.kind]),
-      [
-        ["engine", "region"],
-        ["  physics", "region"],
-        ["  engine (other)", "residual"],
-        ["debugWires *", "debug"],
-        ["unmeasured", "residual"],
-      ],
-    );
-    // A residual has no peak of its own, and a dash says so: "0.00" there would
-    // read as "it never spiked" rather than "not measurable here".
-    assert.equal(view.rows[2]!.cells[3], "—");
-    assert.equal(view.rows[0]!.cells[3], "4.00");
-    // The limits travel with the table rather than in someone's memory.
-    assert.ok(view.notes.some((note) => note.includes("windowed averages, not one frame")));
-    assert.ok(view.notes.some((note) => note.includes("only the top-level rows sum to the frame")));
-    assert.ok(view.notes.some((note) => note.includes("diagnostic-only work")));
-  });
-
-  check("a frame table with no denominator says so instead of claiming coverage", () => {
-    const profiler = new SubsystemProfiler(4);
-    profiler.record("physics", 3);
-    profiler.endFrame();
-    const view = frameRegionTableView(profiler.snapshot());
-    assert.equal(view.meta, "regions 3.00 ms");
-    // Every share is a dash, not 0% and not 100%: there is nothing to be a
-    // share of, and silence there would read as full coverage.
-    assert.deepEqual(view.rows.map((row) => row.cells[4]), ["—"]);
-    assert.ok(view.notes.some((note) => note.includes("no denominator")));
   });
 
   check("debugTableToText aligns the grid so a pasted table is still readable", () => {

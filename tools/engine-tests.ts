@@ -1049,6 +1049,7 @@ import { registerFrameRegionTests } from "../tests/engine/frameRegions.test";
 import { registerFrameCaptureTests } from "../tests/engine/frameCapture.test";
 import { registerTimeControlTests } from "../tests/engine/timeControl.test";
 import { registerGpuSweepTests } from "../tests/engine/gpuSweep.test";
+import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.test";
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 
 /**
@@ -1156,6 +1157,7 @@ registerFrameRegionTests(check);
 registerFrameCaptureTests(check);
 registerTimeControlTests(check);
 registerGpuSweepTests(check);
+registerGpuSweepSessionTests(check);
 registerPerfWitnessTests(check);
 
 function listPublicFiles(root: string): string[] {

@@ -1,8 +1,9 @@
 # Performans Teşhis Aracı Planı (`?debug`)
 
 > Oluşturma: 2026-08-28 (ThreeAges backport devamı)
-> Durum: **F0–F6 tamam — plan kapandı** (2026-08-29). Kalan tek açık madde
-> editör kabuğunda GPU taraması (F5 altında, gerekçesiyle).
+> Durum: **F0–F6 tamam — plan kapandı** (2026-08-29). F5'in editör kabuğu
+> maddesi de kapandı (2026-08-29): editör viewport'u artık aynı GPU
+> zamanlayıcısını ve aynı taramayı çalıştırıyor.
 > Kaynak: ThreeAges `src/game/rts/debug/*` + `RtsApp.ts` teşhis katmanı.
 
 Forge'un `?debug` overlay'i bugün **okunan** bir şey; ThreeAges'inki
@@ -123,6 +124,8 @@ engine/perf/gpuSweep.ts         A/B tasarruf aritmetiği + tablo (saf)
 engine/perf/gpuSweepRunner.ts   tarama zamanlayıcısı (saf)
 engine/core/timeControl.ts      pause/resume + timeScale (saf)
 
+src/scene/gpuSweepSession.ts    timer + adım planı + sahnenin geri konması
+                                (iki kabuk da bunu kullanır)
 src/scene/debugPanel.ts         kontrol şeridi + readout kabuğu (DOM)
 src/scene/debugTableModal.ts    donmuş tablo + panoya kopyala (DOM)
 src/scene/debugStats.ts         mevcut metin readout (F0'da genişler)
@@ -373,16 +376,40 @@ instances, post-process.
       çarpışma yardımcıları) `editor-overlay` olarak etiketlendi — editörün
       gölge envanteri ve graf satırı bunları artık tek, dürüst bir kova olarak
       raporluyor.
-- [ ] **Açık kalan:** editör kabuğunda taramanın kendisi yok. `SceneApp`'in GPU
-      zamanlayıcısı hiç yok (`enableProfiling` de yok), dolayısıyla orada
-      ölçülecek bir şey yok — etiketleme yerinde, eksik olan zamanlayıcı +
-      koşum bağlantısı. Ayrı bir iş olarak bırakıldı.
+- [x] **Editör kabuğu (2026-08-29, ayrı iş olarak kapandı).** Zamanlayıcı +
+      koşum bağlantısı `SceneApp`'e kondu, ama **kopyalanarak değil**: kabuk
+      tarafı (timer sorguları, sahne etiketlerinden türeyen adım planı, sahnenin
+      geri konması) tek bir modüle çıkarıldı — `src/scene/gpuSweepSession.ts` —
+      ve iki kabuk da onu kullanıyor. Yüz satırlık sorgu etiketleme + geri alma
+      mantığının ikinci bir kopyası, iki kabuğun sessizce farklı şeyler ölçmeye
+      başlamasının yoludur.
+- [x] Ölçümün maliyeti okuyucuya bağlı: editörde zamanlayıcı **Show > Stats**
+      bayrağıyla açılıp kapanıyor (`setGpuProfilingEnabled`), runtime'ın `?debug`
+      kapısının editördeki karşılığı. Panel kapalıyken kare başına sürücü gidiş
+      dönüşü yok. Panel çalışan bir tarama sırasında kapatılırsa sahne geri
+      konuyor ama **tablo üretilmiyor**: paneli kapatan kimse tablo beklemiyor.
+- [x] Editörde **zaman tutma yok ve gerekmiyor**: viewport'un `TimeControl`'ü
+      yok, ama davranış zaten duruyor (behavior/physics/AI yazarken kapalı).
+      Kayan malzeme, dönen gökyüzü ve okuyucunun kendi kamerası için savunma
+      bracket'li taban — satırı `uncertain` işaretler, arkasında duramayacağı bir
+      tasarrufu yazmaz. (Runtime'ın `gpu-sweep` tutma sahibi olduğu gibi kaldı.)
+- [x] Editör kabuğunun kazandığı asıl satır: `editor-overlay`. Gizmo, seçim
+      konturu ve fırça imleçleri artık ölçülüyor — "yazarken ödediğim bu mu?"
+      sorusunun cevabı tabloda tek, dürüst bir satır.
+- [x] `tests/engine/gpuSweepSession.test.ts`: 6 check — tarayıcıda zamanlayıcı
+      yokken açıklama (sıfır tablosu değil), etiket başına tasarruf ataması,
+      bitişte sahnenin/gölgenin geri konması ve yalnız kendi tutmasının
+      bırakılması, post-process satırının yalnız pipeline varken çıkması,
+      koşu ortasında kapatmanın sahneyi geri koyup **rapor etmemesi**, ve
+      etiketli tarama karelerinin sürekli `gpu` okumasını kirletmemesi. Tarayıcısız
+      koşuyor: modül `three`'yi yalnız tip olarak alıyor.
 
 **Bitiş şartı:** ✅ `?debug` → "GPU sweep" → kategorileri sırayla kapatıp tasarruf
 tablosu üreten, sınırlarını kendi notlarında yazan bir koşum; zamanlayıcısı
 olmayan tarayıcıda sıfır değil açıklama gösteriyor. 1127 check + `build:verify`
-+ `verify:dist --strict` + `verify:imports` yeşil. (Editör tarafı yukarıdaki
-açık madde.)
++ `verify:dist --strict` + `verify:imports` yeşil. Editör kabuğu 2026-08-29'da
+aynı koşumu devraldı: 1137 check + `build:verify` + `verify:dist --strict` +
+`verify:imports` yeşil.
 
 ### F6 — Makine tanığı ve kalite matrisi
 

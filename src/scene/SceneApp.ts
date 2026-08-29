@@ -51,6 +51,10 @@ import {
   type SceneCostObject,
   type SceneCostSnapshot,
 } from "./runtimeDebugSnapshot";
+// Shared with the runtime shell, so both viewports measure the same way.
+import { GpuSweepSession } from "./gpuSweepSession";
+import type { GpuSweepOutcome } from "@engine/perf/gpuSweepRunner";
+import type { GpuFrameStats } from "@engine/perf/gpuTimer";
 
 /**
  * The bucket every authoring-only visual is tagged with: gizmo, selection
@@ -1260,6 +1264,17 @@ export class SceneApp {
   /** Billboard icons (clickable markers) for placed world-space UI widgets, by index. */
   private worldWidgetIcons: Sprite[] = [];
   private postProcessPipeline: PostProcessPipeline | null = null;
+  /**
+   * GPU-side frame timing and the A/B sweep that uses it — the same session the
+   * runtime shell runs, so the editor viewport answers the question in the same
+   * units the game will.
+   *
+   * Constructed always (it touches nothing until enabled) and enabled only while
+   * the perf panel is up (`setGpuProfilingEnabled`, driven by Show > Stats):
+   * timer queries cost a driver round trip per frame, and an authoring session
+   * that never opens the overlay should not pay for one.
+   */
+  private readonly gpuSweepSession: GpuSweepSession;
   private autoSaveTimer = 0;
   private frameHandle = 0;
   private lastTime = 0;
@@ -1436,6 +1451,19 @@ export class SceneApp {
     this.renderer = this.sceneShell.renderer;
     this.scene = this.sceneShell.scene;
     this.camera = this.sceneShell.camera;
+    // No `hold` is passed: this viewport has no time control, and it does not
+    // need one — gameplay, physics and AI are already switched off while
+    // authoring, and what still moves (a scrolling material, a drifting sky,
+    // the camera under the reader's own hand) is exactly what the bracketed
+    // baseline exists to catch. It marks a row `uncertain` rather than
+    // reporting a saving it cannot stand behind.
+    this.gpuSweepSession = new GpuSweepSession({
+      renderer: this.renderer,
+      scene: this.scene,
+      renderStats: () => this.getRenderStats(),
+      sceneSeconds: () => this.engineApp.sceneSeconds,
+      postProcessActive: () => this.postProcessPipeline !== null,
+    });
     this.environment = new AuthoredEnvironment({
       scene: this.scene,
       renderer: this.renderer,
@@ -1706,8 +1734,13 @@ export class SceneApp {
       this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
       advanceForgeMaterialAnimations(now / 1000);
 
-      if (this.postProcessPipeline) this.postProcessPipeline.render(deltaSeconds);
-      else this.renderer.render(this.scene, this.editorViewportCamera());
+      // The sweep decides what this frame draws and tags the GPU query with the
+      // step it belongs to; with the panel closed both calls are a null check.
+      this.gpuSweepSession.beginFrame();
+      if (this.postProcessPipeline && !this.gpuSweepSession.bypassPostProcess) {
+        this.postProcessPipeline.render(deltaSeconds);
+      } else this.renderer.render(this.scene, this.editorViewportCamera());
+      this.gpuSweepSession.endFrame();
       this.onFrame?.(deltaMs);
     };
     this.frameHandle = requestAnimationFrame(loop);
@@ -1758,6 +1791,7 @@ export class SceneApp {
     this.clearSplineGeneratedGroups();
     this.clearSplineGeneratorPreviewTimers();
     this.clearSplinePointOverlay();
+    this.gpuSweepSession.dispose();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     // Frees the sky/cloud domes and the Sky Light capture. Previously nothing
@@ -1804,6 +1838,43 @@ export class SceneApp {
 
   getRenderStats(): { drawCalls: number; triangles: number } {
     return readSceneRuntimeStats(this.renderer);
+  }
+
+  /**
+   * Turns GPU timer queries on or off. Driven by the editor's Show > Stats flag,
+   * so the per-frame driver round trip exists exactly while somebody is reading
+   * the overlay — the editor's counterpart of the runtime's `?debug` gate.
+   *
+   * Switching it off abandons a sweep in progress: the scene is put back, but no
+   * table appears, because whoever just closed the panel is not waiting for one.
+   */
+  setGpuProfilingEnabled(enabled: boolean): void {
+    if (enabled) this.gpuSweepSession.enable();
+    else this.gpuSweepSession.disable();
+  }
+
+  /**
+   * Windowed GPU frame time, or `null` when nothing is measuring it — the perf
+   * panel is closed, or the browser withholds `EXT_disjoint_timer_query_webgl2`.
+   * Never a zero: "the GPU cost nothing" and "nobody measured the GPU" must not
+   * read alike.
+   */
+  getGpuFrameStats(): GpuFrameStats | null {
+    return this.gpuSweepSession.frameStats();
+  }
+
+  /**
+   * Runs the GPU A/B sweep over the editor viewport: each content category is
+   * switched off in turn and what it gives back is measured.
+   *
+   * Worth having here and not only in the runtime, because the editor scene is
+   * the one being *authored* — and because it carries content the runtime never
+   * draws. The authoring overlays are tagged `editor-overlay`, so the gizmo,
+   * selection outlines and brush cursors come back as one honest row rather than
+   * hiding inside everything else.
+   */
+  startGpuSweep(consume: (outcome: GpuSweepOutcome) => void): void {
+    this.gpuSweepSession.start(consume);
   }
 
   /**

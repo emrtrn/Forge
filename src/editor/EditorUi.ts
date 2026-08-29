@@ -918,6 +918,10 @@ export class EditorUi {
       attachDebugPanel(this.app, element);
       this.statsAttached = true;
     }
+    // The GPU timer follows the same flag: its queries cost a driver round trip
+    // per frame, so an authoring session with the overlay closed pays nothing —
+    // the editor's counterpart of the runtime's `?debug` gate.
+    this.app.setGpuProfilingEnabled(on);
     element.hidden = !on;
     this.statsVisible = on;
   }

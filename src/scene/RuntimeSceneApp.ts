@@ -149,24 +149,12 @@ import {
 import type { FrameCaptureContext } from "@engine/perf/frameCapture";
 import type { FrameProfileCapture } from "@engine/core/subsystemProfiler";
 import { TimeControl } from "@engine/core/timeControl";
-import { GpuSweepRunner, type GpuSweepOutcome } from "@engine/perf/gpuSweepRunner";
+import type { GpuSweepOutcome } from "@engine/perf/gpuSweepRunner";
 import { buildPerfWitness, serializePerfWitness } from "@engine/perf/perfWitness";
-
-/**
- * One entry of the sweep plan: a label, and how to switch that content out of
- * the frame and back in. The runner never sees the toggle — it schedules ids and
- * this shell owns the scene, which is what keeps the scheduler unit-testable.
- */
-interface GpuSweepStep {
-  readonly id: string;
-  readonly apply: (off: boolean) => void;
-}
-import {
-  GpuFrameTimer,
-  type GpuFrameSample,
-  type GpuFrameStats,
-  type GpuTimerContext,
-} from "@engine/perf/gpuTimer";
+// The timer queries, the step plan and the scene restoration live in one place
+// because the editor viewport runs the same sweep; see `gpuSweepSession`.
+import { GpuSweepSession } from "./gpuSweepSession";
+import type { GpuFrameStats } from "@engine/perf/gpuTimer";
 import {
   applyQualityToPostProcess,
   defaultGraphicsPreferences,
@@ -346,7 +334,6 @@ import {
   buildPerfMemorySnapshot,
   buildSceneCostSnapshot,
   buildUiDebugSnapshot,
-  sceneSourceOf,
   tagSceneSource,
   type AudioBudgetReadout,
   type DrawingBufferSnapshot,
@@ -568,17 +555,6 @@ export interface RuntimeSceneAppOptions {
 }
 
 /**
- * Narrows the renderer's context to the timer-query slice, or `null` on a WebGL1
- * context (which has no queries at all). A cast would compile and then throw on
- * the first `createQuery`; the feature test is the honest form, and the timer's
- * own `create` already treats `null` as "no GPU timing available".
- */
-function asGpuTimerContext(gl: WebGLRenderingContext | WebGL2RenderingContext): GpuTimerContext | null {
-  const candidate = gl as Partial<GpuTimerContext>;
-  return typeof candidate.createQuery === "function" ? (gl as unknown as GpuTimerContext) : null;
-}
-
-/**
  * The shell's own frame regions (F1).
  *
  * Ids are technical and English by template rule, and they are *this shell's*
@@ -605,15 +581,6 @@ const FRAME_REGION_RENDER = "render";
 
 /** The pause the sweep takes. Its own, so finishing releases only its own. */
 const GPU_SWEEP_TIME_HOLDER = "gpu-sweep";
-/**
- * Content categories the sweep will measure separately before the rest are
- * merged into one. A cap, because the sweep costs roughly twenty frames per
- * step and an untagged scene can produce a bucket per loose mesh.
- */
-const GPU_SWEEP_MAX_CATEGORIES = 8;
-/** Synthetic steps: not scene content, but the two biggest per-frame passes. */
-const GPU_SWEEP_SHADOW_ID = "shadow map";
-const GPU_SWEEP_POST_ID = "post-process";
 
 /**
  * How often the machine-readable witness is written to the canvas.
@@ -697,12 +664,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * catch-up delta so a visibility change is not miscounted as a spike). */
   private skipFrameMetricSample = false;
   /**
-   * GPU-side frame timing, created only under `?debug` and only where the browser
-   * exposes timer queries — so it stays `null` on a shipping frame and on Safari.
-   * The CPU profiler says how long issuing the frame took; this says how long
-   * executing it took, and only the two together name the bound.
+   * GPU-side frame timing and the A/B sweep that uses it. Constructed always
+   * (it touches nothing until enabled) but only *enabled* under `?debug`, and
+   * only where the browser exposes timer queries — so it stays silent on a
+   * shipping frame and on Safari. The CPU profiler says how long issuing the
+   * frame took; this says how long executing it took, and only the two together
+   * name the bound.
    */
-  private gpuTimer: GpuFrameTimer | null = null;
+  private readonly gpuSweepSession: GpuSweepSession;
   /** Active runtime quality profile. Defaults to Ultra so behaviour is identical
    * to the pre-quality-layer runtime until a profile is applied (Principle #2:
    * this only ever gates authored effects down, never writes layout data). */
@@ -844,17 +813,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private armedFrameCapture: FrameCaptureConsumer | null = null;
   /** Pause holders and the speed multiplier; see {@link TimeControl}. */
   private readonly timeControl = new TimeControl();
-  /** The GPU A/B sweep in progress, or null. See {@link startGpuSweep}. */
-  private gpuSweep: GpuSweepRunner | null = null;
-  /** Its step plan: how to turn each measured category off and back on. */
-  private gpuSweepPlan: readonly GpuSweepStep[] = [];
-  private gpuSweepConsume: ((outcome: GpuSweepOutcome) => void) | null = null;
-  /** Which plan entry is currently switched off, so it can be switched back. */
-  private gpuSweepApplied: number | null = null;
-  /** Last seen disjoint tally, to notice a *new* one rather than a total. */
-  private gpuSweepDisjointSeen = 0;
-  /** Set by the sweep's post-process step: draw straight, skipping the pipeline. */
-  private gpuSweepBypassPostProcess = false;
   /** Milliseconds until the next witness sample; only advanced under `?debug`. */
   private perfWitnessDueInMs = 0;
   /**
@@ -941,6 +899,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     applyEditorMatchedPlayLook(this.renderer);
     this.scene = this.sceneShell.scene;
     this.camera = this.sceneShell.camera;
+    this.gpuSweepSession = new GpuSweepSession({
+      renderer: this.renderer,
+      scene: this.scene,
+      renderStats: () => this.getRenderStats(),
+      sceneSeconds: () => this.engineApp.sceneSeconds,
+      postProcessActive: () => this.postProcessPipeline !== null,
+      // The sweep holds the world still for the duration under its own holder,
+      // because an A/B across several seconds only means anything if the two
+      // sides are the same scene. Rendering carries on — that is the whole
+      // measurement. A pause the game was already holding is left as found.
+      hold: () => this.timeControl.pause(GPU_SWEEP_TIME_HOLDER),
+      release: () => this.timeControl.resume(GPU_SWEEP_TIME_HOLDER),
+    });
     this.capabilities = createCapabilityRegistry(options.capabilities ?? []);
     this.runtimeServices = createRuntimeServiceHost({
       syncEntityTransform: this.syncEntityTransform,
@@ -1269,7 +1240,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // queries cost a driver round trip per frame, so they exist only while
       // somebody is reading the overlay. `create` returns null where the
       // extension is withheld, and the overlay then shows no GPU line at all.
-      this.gpuTimer = GpuFrameTimer.create(asGpuTimerContext(this.renderer.getContext()));
+      this.gpuSweepSession.enable();
     } else if (this.userSettings.graphics.adaptiveOptimizationEnabled) {
       this.engineApp.enableProfiling(undefined, ADAPTIVE_PROFILER_WINDOW_FRAMES);
       // Declared here too: the bottleneck classifier reads the same profiler,
@@ -1515,19 +1486,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // The sweep decides what this frame draws, and tags the GPU query with the
       // step it belongs to. Tag 0 stays reserved for ordinary frames, so the
       // rolling `gpu` readout is never fed a deliberately crippled frame.
-      const sweepStep = this.gpuSweep?.currentStep() ?? null;
-      this.applyGpuSweepStep(sweepStep?.planIndex ?? null);
-      this.gpuTimer?.begin(sweepStep?.tag ?? 0);
+      this.gpuSweepSession.beginFrame();
       // Simulation time, not real time: the frame is still drawn while the world
       // is held (the GPU sweep depends on exactly that), but an animated pass must
       // not keep advancing over a scene that has stopped.
-      if (this.postProcessPipeline && !this.gpuSweepBypassPostProcess) {
+      if (this.postProcessPipeline && !this.gpuSweepSession.bypassPostProcess) {
         this.postProcessPipeline.render(simulationMs / 1000);
       }
       else this.renderer.render(this.scene, this.camera);
-      this.gpuTimer?.end();
-      const gpuSamples = this.gpuTimer?.poll() ?? [];
-      if (this.gpuSweep) this.advanceGpuSweep(gpuSamples);
+      this.gpuSweepSession.endFrame();
       // CPU only — what it cost to *issue* the frame, not to draw it. The GPU
       // side of the same span is the `gpu` line, and the two are read together
       // precisely because they are not the same number.
@@ -1582,8 +1549,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The VFX subsystem is registered, so engineApp.dispose() (below) tears down
     // its effects + caches through the subsystem registry, like the audio one.
     this.gameModeSession?.dispose();
-    this.gpuTimer?.dispose();
-    this.gpuTimer = null;
+    this.gpuSweepSession.dispose();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.environment.teardown();
@@ -1749,126 +1715,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * The sweep's step plan, derived from the scene rather than from a table.
-   *
-   * Content categories come from the same `forgeSceneSource` tags the shadow
-   * inventory buckets by, so a fork that adds a content kind gets a sweep row
-   * for it by tagging it and nothing else. The tail is merged into one `other`
-   * row: the sweep costs roughly twenty frames per step, and an untagged scene
-   * can otherwise produce a bucket per loose mesh.
-   *
-   * Then two passes that are not content at all but are usually the largest
-   * single things in the frame.
-   */
-  private buildGpuSweepPlan(): GpuSweepStep[] {
-    const bySource = new Map<string, Object3D[]>();
-    for (const child of this.scene.children) {
-      // Already hidden: turning it off would measure nothing and spend twenty
-      // frames doing it.
-      if (!child.visible) continue;
-      const source = sceneSourceOf(
-        child as unknown as SceneCostObject,
-        this.scene as unknown as SceneCostObject,
-      );
-      const bucket = bySource.get(source);
-      if (bucket) bucket.push(child);
-      else bySource.set(source, [child]);
-    }
-    const ranked = [...bySource.entries()].sort((a, b) => b[1].length - a[1].length);
-    const kept = ranked.slice(0, GPU_SWEEP_MAX_CATEGORIES);
-    const rest = ranked.slice(GPU_SWEEP_MAX_CATEGORIES).flatMap(([, objects]) => objects);
-    const steps: GpuSweepStep[] = kept.map(([id, objects]) => ({
-      id,
-      apply: (off: boolean) => {
-        for (const object of objects) object.visible = !off;
-      },
-    }));
-    if (rest.length > 0) {
-      steps.push({
-        id: "other",
-        apply: (off: boolean) => {
-          for (const object of rest) object.visible = !off;
-        },
-      });
-    }
-    steps.push({
-      id: GPU_SWEEP_SHADOW_ID,
-      // Frozen, not disabled. Flipping `shadowMap.enabled` recompiles every
-      // material that samples a shadow, and that compile lands inside the frame
-      // being measured — where it would be read as the cost of shadows.
-      // Freezing `autoUpdate` skips the shadow depth pass instead, which is the
-      // per-frame cost this row is asking about.
-      apply: (off: boolean) => {
-        this.renderer.shadowMap.autoUpdate = !off;
-      },
-    });
-    if (this.postProcessPipeline) {
-      steps.push({
-        id: GPU_SWEEP_POST_ID,
-        apply: (off: boolean) => {
-          this.gpuSweepBypassPostProcess = off;
-        },
-      });
-    }
-    return steps;
-  }
-
-  /** Switches the scene into the configuration one step wants, and back out. */
-  private applyGpuSweepStep(planIndex: number | null): void {
-    if (this.gpuSweepApplied === planIndex) return;
-    if (this.gpuSweepApplied !== null) {
-      this.gpuSweepPlan[this.gpuSweepApplied]?.apply(false);
-    }
-    this.gpuSweepApplied = planIndex;
-    if (planIndex !== null) this.gpuSweepPlan[planIndex]?.apply(true);
-  }
-
-  /** Feeds one frame's tagged GPU results into the sweep and advances it. */
-  private advanceGpuSweep(samples: readonly GpuFrameSample[]): void {
-    const sweep = this.gpuSweep;
-    if (!sweep) return;
-    for (const sample of samples) {
-      if (sample.tag !== 0) sweep.acceptSample(sample.tag, sample.ms);
-    }
-    const disjoint = this.gpuTimer?.disjointCount ?? 0;
-    if (disjoint > this.gpuSweepDisjointSeen) {
-      this.gpuSweepDisjointSeen = disjoint;
-      sweep.noteDisjoint();
-    }
-    sweep.noteFrame();
-    const stats = this.getRenderStats();
-    const outcome = sweep.advance({
-      drawCalls: stats.drawCalls,
-      triangles: stats.triangles,
-      sceneSeconds: this.engineApp.sceneSeconds,
-    });
-    if (outcome.kind === "running") return;
-    this.finishGpuSweep(outcome);
-  }
-
-  /** Restores the scene, releases only this run's pause, and reports. */
-  private finishGpuSweep(outcome: GpuSweepOutcome): void {
-    this.applyGpuSweepStep(null);
-    this.gpuSweepBypassPostProcess = false;
-    this.renderer.shadowMap.autoUpdate = true;
-    this.gpuSweep = null;
-    this.gpuSweepPlan = [];
-    this.timeControl.resume(GPU_SWEEP_TIME_HOLDER);
-    const consume = this.gpuSweepConsume;
-    this.gpuSweepConsume = null;
-    consume?.(outcome);
-  }
-
-  /**
-   * Arms a one-frame CPU capture; the consumer is called once, at the end of
-   * the next frame.
-   *
-   * Armed rather than taken on the spot, because a capture requested from a
-   * button click would describe a frame that was already half over, with the
-   * click handler's own work inside it. Never fires while nothing is
-   * profiling — there would be nothing to report.
-   */
-  /**
    * Starts the GPU A/B sweep: turns each content category off in turn, with an
    * untouched frame measured either side of every step, and reports what each
    * one gives back.
@@ -1884,20 +1730,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * answer wearing the clothes of a right one.
    */
   startGpuSweep(consume: (outcome: GpuSweepOutcome) => void): void {
-    if (this.gpuSweep) return;
-    if (!this.gpuTimer) {
-      consume({ kind: "failed", reason: "This browser has no GPU timer queries." });
-      return;
-    }
-    this.gpuSweepPlan = this.buildGpuSweepPlan();
-    if (this.gpuSweepPlan.length === 0) {
-      consume({ kind: "failed", reason: "Nothing in this scene to turn off." });
-      return;
-    }
-    this.gpuSweepConsume = consume;
-    this.gpuSweepDisjointSeen = this.gpuTimer.disjointCount;
-    this.gpuSweep = new GpuSweepRunner(this.gpuSweepPlan.map(({ id }) => ({ id })));
-    this.timeControl.pause(GPU_SWEEP_TIME_HOLDER);
+    this.gpuSweepSession.start(consume);
   }
 
   /**
@@ -1910,6 +1743,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.timeControl;
   }
 
+  /**
+   * Arms a one-frame CPU capture; the consumer is called once, at the end of
+   * the next frame.
+   *
+   * Armed rather than taken on the spot, because a capture requested from a
+   * button click would describe a frame that was already half over, with the
+   * click handler's own work inside it. Never fires while nothing is
+   * profiling — there would be nothing to report.
+   */
   armFrameCapture(consume: FrameCaptureConsumer): void {
     if (!this.engineApp.profiling) return;
     this.armedFrameCapture = consume;
@@ -1926,8 +1768,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * "the GPU cost nothing" and "nobody measured the GPU" must not read alike.
    */
   getGpuFrameStats(): GpuFrameStats | null {
-    const stats = this.gpuTimer?.stats();
-    return stats && stats.samples > 0 ? stats : null;
+    return this.gpuSweepSession.frameStats();
   }
 
   /** Stall tallies over the same window the `frame` line averages. */

@@ -21,6 +21,7 @@ import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
 import type { AssetManifest } from "@engine/assets/manifest";
 import type { AudioBus } from "@engine/audio/audioSubsystem";
 import type { AudioBusId } from "@engine/audio/audioBus";
+import type { AudioVoiceStats } from "@engine/audio/audioSubsystem";
 import type {
   LaunchOptions,
   PhysicsAabb,
@@ -211,6 +212,8 @@ export interface AudioCommands {
   ): void;
   setBusVolume(bus: AudioBusId, volume: number): void;
   getBusVolume(bus: AudioBusId): number;
+  /** Shared voice budget (active/peak/limit/refusals) for the `?debug` overlay. */
+  voiceStats(): AudioVoiceStats;
 }
 
 export const audioCommandsService = runtimeServiceKey<AudioCommands>("audio-commands");

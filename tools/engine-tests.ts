@@ -542,7 +542,7 @@ import {
   formatGpuFrameStats,
   formatMemory,
   formatPerfBudget,
-  formatSubsystemTiming,
+  formatFrameRegions,
   formatUiDebug,
   formatVfxDebug,
   groupThousands,
@@ -1044,6 +1044,8 @@ import { registerRuntimeUiModuleTests } from "../tests/engine/runtimeUiModule.te
 import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAnimationModule.test";
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
+import { registerPerfReadoutTests } from "../tests/engine/perfReadout.test";
+import { registerFrameRegionTests } from "../tests/engine/frameRegions.test";
 
 /**
  * The three entry points every check in this suite goes through.
@@ -1145,6 +1147,8 @@ await registerRuntimeUiModuleTests(check, checkAsync);
 await registerSkeletalAnimationModuleTests(check, checkAsync);
 registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
+registerPerfReadoutTests(check);
+registerFrameRegionTests(check);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];
@@ -16062,7 +16066,15 @@ check("subsystem profiler: window drops old samples, clamps negatives, top(n) + 
     ["y", "z"],
   );
   many.clear();
-  assert.deepEqual(many.snapshot(), { subsystems: [], totalAverageMs: 0, frames: 0 });
+  // The frame denominator clears with the windows; region declarations do not,
+  // because a level teardown does not change the shape of the frame.
+  assert.deepEqual(many.snapshot(), {
+    subsystems: [],
+    totalAverageMs: 0,
+    debugOnlyAverageMs: 0,
+    frames: 0,
+    frame: null,
+  });
 });
 
 check("subsystem profiler: registry times each subsystem with an injected clock", () => {
@@ -16087,16 +16099,32 @@ check("subsystem profiler: registry times each subsystem with an injected clock"
 
   app.update(0.016);
   assert.deepEqual(ticks, ["first", "second"]);
+  // The subsystem block no longer closes the profiler's frame: it is one
+  // region of the frame, and everything the shell runs after it would fall
+  // outside a frame that ended here (F1, plan §1.1).
+  assert.equal(app.getProfileSnapshot()!.frames, 0);
+  app.recordFrame(8);
+  app.endProfileFrame();
   const snapshot = app.getProfileSnapshot();
   assert.ok(snapshot);
   assert.equal(snapshot!.frames, 1);
+  // The whole frame is the denominator and is kept out of the region list.
+  assert.equal(snapshot!.frame?.averageMs, 8);
+  assert.equal(snapshot!.subsystems.some((timing) => timing.id === "frame"), false);
+  // The block as a whole is a region too, with the subsystems as its children:
+  // its 5 ms (five clock reads at 1 ms apiece) minus their 2 ms is the
+  // registry's own overhead, which nothing else would ever report.
   assert.deepEqual(
-    snapshot!.subsystems.map((s) => [s.id, s.lastMs]),
+    snapshot!.subsystems.map((s) => [s.id, s.lastMs, s.parent]),
     [
-      ["first", 1],
-      ["second", 1],
+      ["engine", 5, null],
+      ["first", 1, "engine"],
+      ["second", 1, "engine"],
     ],
   );
+  // Roots only: counting the group and its children would double 2 of the 5 ms
+  // and hand the bottleneck classifier a CPU share it could never justify.
+  assert.equal(snapshot!.totalAverageMs, 5);
 });
 
 check("perf budget: flags over-budget metrics and keeps a stable row order", () => {
@@ -16826,15 +16854,33 @@ check("adaptive quality: formatAdaptiveChange summarises reduce (with bottleneck
   );
 });
 
-check("debug overlay: formats subsystem timing, memory and budget blocks", () => {
+check("debug overlay: formats the frame account, memory and budget blocks", () => {
   const profiler = new SubsystemProfiler(4);
+  profiler.declareRegion({ id: "engine" });
+  profiler.declareRegion({ id: "physics", parent: "engine" });
+  profiler.declareRegion({ id: "behavior", parent: "engine" });
+  profiler.declareRegion({ id: "render" });
+  profiler.record("engine", 3.5);
   profiler.record("physics", 2);
   profiler.record("behavior", 1);
+  profiler.record("render", 4);
+  profiler.recordFrame(10);
   profiler.endFrame();
-  const timingLines = formatSubsystemTiming(profiler.snapshot(), 1);
-  assert.equal(timingLines[0], "perf (avg/frame 3.00ms)");
-  assert.equal(timingLines.length, 2); // header + top 1
-  assert.ok(timingLines[1]!.startsWith("  physics 2.00ms"));
+  const timingLines = formatFrameRegions(profiler.snapshot());
+  // The header answers the question a top-N listing could not: of the 10 ms
+  // frame, 7.5 ms (engine + render) was measured at all.
+  assert.equal(timingLines[0], "frame 10.00ms (last 10.00 peak 10.00) measured 75%");
+  assert.deepEqual(timingLines.slice(1), [
+    "  render             4.00 / 4.00 / 4.00 40%",
+    "  engine             3.50 / 3.50 / 3.50 35%",
+    "    physics          2.00 / 2.00 / 2.00 20%",
+    "    behavior         1.00 / 1.00 / 1.00 10%",
+    // The engine block cost half a millisecond more than the subsystems it
+    // ran — the registry's own overhead, which has nowhere else to appear.
+    "~   engine (other)   0.50 / 0.50 / 0.00 5%",
+    // And the frame cost 2.5 ms that nothing timed at all.
+    "~ unmeasured         2.50 / 2.50 / 0.00 25%",
+  ]);
 
   const memoryLines = formatMemory({
     render: { geometries: 42, textures: 30, programs: 12 },

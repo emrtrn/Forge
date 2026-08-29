@@ -77,9 +77,24 @@ export interface BottleneckInput {
 const DEGRADE_MULTIPLIER = 1.25;
 /** P95 above target × this, with an OK average, reads as a hitch not steady load. */
 const SPIKE_P95_MULTIPLIER = 2;
-/** Subsystems explaining ≥ this share of the frame → CPU bound. */
+/**
+ * Measured CPU explaining ≥ this share of the frame → CPU bound.
+ *
+ * Reviewed when frame regions landed (F1) and deliberately left where it was.
+ * The window these are read against widened that day — `totalAverageMs` used
+ * to cover only the engine subsystem block, and now covers every top-level
+ * region of the frame, so a frame whose cost sat in the Game Mode or the
+ * render submit used to read as `gpu` purely because nothing had measured it.
+ * That was a bug in the input, not in the thresholds: 60% of the frame spent
+ * on CPU meant CPU-bound before and means it now. Moving the numbers to
+ * compensate for a signal that has just become correct would be guessing, and
+ * they are re-tuned when there is data saying so.
+ *
+ * Diagnostic-only regions stay out of that total (see `debugOnlyAverageMs`),
+ * so running the overlay cannot tip its own verdict.
+ */
 const CPU_SHARE_HIGH = 0.6;
-/** Subsystems explaining ≤ this share → the rest is off-CPU (GPU/compositor). */
+/** Measured CPU explaining ≤ this share → the rest is off-CPU (GPU/compositor). */
 const CPU_SHARE_LOW = 0.35;
 /** Render-scale probe improvement that counts as confirming a GPU bottleneck. */
 const PROBE_IMPROVEMENT = 0.15;

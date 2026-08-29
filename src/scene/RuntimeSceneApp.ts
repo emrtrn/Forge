@@ -138,7 +138,11 @@ import { LevelRuntime } from "./LevelRuntime";
 import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
 import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
-import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
+import {
+  FrameMetricsMonitor,
+  type FrameMetrics,
+  type FrameSpikeCounts,
+} from "@engine/perf/frameMetrics";
 import {
   GpuFrameTimer,
   type GpuFrameStats,
@@ -321,8 +325,17 @@ import { RuntimeActorSpawnCoordinator } from "./runtimeActorSpawnCoordinator";
 import {
   buildGameModeDebugSnapshot,
   buildPerfMemorySnapshot,
+  buildSceneCostSnapshot,
   buildUiDebugSnapshot,
+  tagSceneSource,
+  type AudioBudgetReadout,
+  type DrawingBufferSnapshot,
+  type SceneCostObject,
+  type SceneCostSnapshot,
 } from "./runtimeDebugSnapshot";
+// Re-exported: the overlay formatters have always imported the `?debug`
+// snapshot shapes from this shell, and both are still read through it.
+export type { AudioBudgetReadout, DrawingBufferSnapshot };
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -453,6 +466,18 @@ export interface RuntimeStatsApp {
   getFrameMetricsSnapshot?(): FrameMetrics;
   /** Optional: GPU-side frame time when `?debug` has timer queries, else null. */
   getGpuFrameStats?(): GpuFrameStats | null;
+  /** Optional: stall tallies (>33/50/100 ms) over the same frame-time window. */
+  getFrameSpikeCounts?(): FrameSpikeCounts;
+  /** Optional: the drawing buffer being shaded — the only per-pixel-cost input. */
+  getDrawingBufferSnapshot?(): DrawingBufferSnapshot;
+  /**
+   * Optional: what a render pass walks, plus shadow casters by scene source.
+   * Sampled on the overlay's own cadence, never per frame — a full traversal
+   * charged to every frame becomes part of the cost it exists to explain.
+   */
+  getSceneCostSnapshot?(): SceneCostSnapshot;
+  /** Optional: the shared voice budget, or null when nothing measures one. */
+  getAudioBudgetSnapshot?(): AudioBudgetReadout | null;
   /** Optional: per-subsystem tick timing when `?debug` profiling is on, else null. */
   getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
   /** Optional: live bottleneck classification (Faz 5) for the `?debug` overlay. */
@@ -506,6 +531,30 @@ function asGpuTimerContext(gl: WebGLRenderingContext | WebGL2RenderingContext): 
   const candidate = gl as Partial<GpuTimerContext>;
   return typeof candidate.createQuery === "function" ? (gl as unknown as GpuTimerContext) : null;
 }
+
+/**
+ * The shell's own frame regions (F1).
+ *
+ * Ids are technical and English by template rule, and they are *this shell's*
+ * regions — not a taxonomy the engine imposes. A fork that adds a phase to its
+ * loop declares its own id beside these; nothing here has to be edited for a
+ * new region to appear in the readout.
+ *
+ * The subsystem block is not among them: it declares itself as `engine` from
+ * inside {@link SubsystemRegistry}, with every subsystem as its child.
+ */
+const FRAME_REGION_SPAWN = "spawn";
+const FRAME_REGION_QUALITY = "quality";
+const FRAME_REGION_CAPABILITIES = "capabilities";
+const FRAME_REGION_GAME_MODE = "gameMode";
+const FRAME_REGION_GAME_MODULES = "gameModules";
+const FRAME_REGION_UI = "ui";
+const FRAME_REGION_AUDIO_LISTENER = "audioListener";
+const FRAME_REGION_DEBUG_WIRES = "debugWires";
+const FRAME_REGION_ENVIRONMENT = "environment";
+const FRAME_REGION_FOLIAGE = "foliage";
+const FRAME_REGION_MATERIALS = "materials";
+const FRAME_REGION_RENDER = "render";
 
 /** Fallback for a runtime with no game module: no script id resolves. */
 const EMPTY_BEHAVIOR_REGISTRY: BehaviorRegistry = { get: () => undefined };
@@ -920,7 +969,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           buildSceneEntities(layout, {
             addInstance: (assetId, placements) => {
               if (isMarkerAssetId(assetId)) return;
-              this.scene.add(this.createInstancedModel(assetId, placements));
+              this.scene.add(
+                tagSceneSource(this.createInstancedModel(assetId, placements), "static-mesh"),
+              );
             },
             addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
             addLight: (light) => this.addLight(light),
@@ -1115,6 +1166,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // either keeps the un-timed loop.
     if (this.debug) {
       this.engineApp.enableProfiling();
+      this.declareFrameRegions();
       // Same gate, for the same reason, on the other side of the fence: timer
       // queries cost a driver round trip per frame, so they exist only while
       // somebody is reading the overlay. `create` returns null where the
@@ -1122,6 +1174,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.gpuTimer = GpuFrameTimer.create(asGpuTimerContext(this.renderer.getContext()));
     } else if (this.userSettings.graphics.adaptiveOptimizationEnabled) {
       this.engineApp.enableProfiling(undefined, ADAPTIVE_PROFILER_WINDOW_FRAMES);
+      // Declared here too: the bottleneck classifier reads the same profiler,
+      // and without the parent links it would sum a group and its children
+      // together and see a CPU share above 1.0.
+      this.declareFrameRegions();
     }
     this.keyboardInput.attach();
     this.gamepadInput.attach();
@@ -1273,43 +1329,82 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       else this.frameMetrics.record(rawDeltaMs);
       const deltaMs = Math.min(rawDeltaMs, 100);
       this.lastTime = now;
+      // Frame regions (F1). Every span below is bracketed by `perfMark` /
+      // `perfRegion`, which cost one property read each while profiling is off.
+      // The frame itself is timed around all of it as the denominator, and it
+      // opens here — before the gamepad poll — so that nothing the loop does
+      // falls outside the number the regions are shares of. The difference
+      // between it and them is the `unmeasured` row, and that row is the
+      // reason the account can be trusted at all.
+      const frameMark = this.perfMark();
       // Gamepad is poll-only: feed it before the input subsystem advances.
       this.gamepadInput.poll();
       this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
       this.engineApp.update(deltaMs / 1000);
+      let mark = this.perfMark();
       this.spawnCoordinator.advance();
+      this.perfRegion(FRAME_REGION_SPAWN, mark);
+      mark = this.perfMark();
       this.tickStartupCalibration(deltaMs / 1000);
       this.tickAdaptiveQuality(deltaMs / 1000);
       this.applyKillZ();
+      this.perfRegion(FRAME_REGION_QUALITY, mark);
       // Layer 2 ticks after the engine spine and before the Game Mode (Layer 3),
       // so game rules read capability state produced this frame.
+      mark = this.perfMark();
       this.capabilities.update(deltaMs / 1000);
+      this.perfRegion(FRAME_REGION_CAPABILITIES, mark);
       // (The `menu` edge is consumed by the UI capability inside
       // `capabilities.update` above — after input advances, before the Game Mode
       // reads it — so opening a screen suppresses this frame's camera/movement.)
+      mark = this.perfMark();
       this.gameModeSession?.update(deltaMs / 1000);
+      this.perfRegion(FRAME_REGION_GAME_MODE, mark);
       // Layer 3 ticks last: a game module reacts to the world the engine spine,
       // the capabilities and the Game Mode have already resolved this frame, and
       // the UI-store flush right below carries whatever it wrote into the HUD.
+      mark = this.perfMark();
       this.gameModules.update(deltaMs / 1000);
+      this.perfRegion(FRAME_REGION_GAME_MODULES, mark);
+      mark = this.perfMark();
       this.updateUiStore();
       this.uiPresenter()?.projectWorldWidgets();
+      this.perfRegion(FRAME_REGION_UI, mark);
+      mark = this.perfMark();
       this.updateAudioListener();
+      this.perfRegion(FRAME_REGION_AUDIO_LISTENER, mark);
+      mark = this.perfMark();
       this.updateColliderDebugWires();
+      this.perfRegion(FRAME_REGION_DEBUG_WIRES, mark);
+      mark = this.perfMark();
       this.environment.update(deltaMs / 1000);
+      this.perfRegion(FRAME_REGION_ENVIRONMENT, mark);
+      mark = this.perfMark();
       this.foliageBinding?.updateCulling(
         this.camera.position,
         this.qualitySettings.foliageCullDistanceScale,
       );
+      this.perfRegion(FRAME_REGION_FOLIAGE, mark);
+      mark = this.perfMark();
       advanceForgeMaterialAnimations(now / 1000);
+      this.perfRegion(FRAME_REGION_MATERIALS, mark);
       // The span covers only the draw submission — post-process included, since a
       // pipeline's passes are exactly what a GPU-bound frame is usually spending
       // its time on. Results land a few frames later; `poll` collects them.
+      mark = this.perfMark();
       this.gpuTimer?.begin();
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
       this.gpuTimer?.end();
       this.gpuTimer?.poll();
+      // CPU only — what it cost to *issue* the frame, not to draw it. The GPU
+      // side of the same span is the `gpu` line, and the two are read together
+      // precisely because they are not the same number.
+      this.perfRegion(FRAME_REGION_RENDER, mark);
+      // The frame is closed before the overlay callback: the readout is a
+      // consumer of the frame it reports, never part of it.
+      this.engineApp.recordFrame(this.perfElapsed(frameMark));
+      this.engineApp.endProfileFrame();
       this.onFrame?.(deltaMs);
     };
     this.frameHandle = requestAnimationFrame(loop);
@@ -1398,6 +1493,58 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return readSceneRuntimeStats(this.renderer);
   }
 
+  /**
+   * Declares the shape of this shell's frame to the profiler.
+   *
+   * Every region here is top-level: they are the phases of the loop, siblings
+   * of the `engine` block rather than children of it. The one nested group in
+   * the runtime today is `engine` itself, whose children are the subsystems —
+   * and a capability module's subsystem lands there too, because it ticks in
+   * the registry, not inside `capabilities.update()`.
+   */
+  private declareFrameRegions(): void {
+    for (const id of [
+      FRAME_REGION_SPAWN,
+      FRAME_REGION_QUALITY,
+      FRAME_REGION_CAPABILITIES,
+      FRAME_REGION_GAME_MODE,
+      FRAME_REGION_GAME_MODULES,
+      FRAME_REGION_UI,
+      FRAME_REGION_AUDIO_LISTENER,
+      FRAME_REGION_ENVIRONMENT,
+      FRAME_REGION_FOLIAGE,
+      FRAME_REGION_MATERIALS,
+      FRAME_REGION_RENDER,
+    ]) {
+      this.engineApp.declareRegion({ id });
+    }
+    // Marked, not hidden: the collider wires are drawn for the diagnostic route
+    // only, so a reader comparing this frame with a shipped one can see which
+    // milliseconds the shipped build never pays.
+    this.engineApp.declareRegion({ id: FRAME_REGION_DEBUG_WIRES, debugOnly: true });
+  }
+
+  /**
+   * Opens a timing span, or returns 0 when nothing is profiling.
+   *
+   * One property read in the off case — no clock, no closure, no allocation —
+   * which is what lets the loop above stay instrumented unconditionally
+   * instead of growing a second debug-only copy of itself.
+   */
+  private perfMark(): number {
+    return this.engineApp.profiling ? performance.now() : 0;
+  }
+
+  /** Closes a span opened by {@link perfMark} and files it under `id`. */
+  private perfRegion(id: string, mark: number): void {
+    if (mark !== 0) this.engineApp.recordRegion(id, performance.now() - mark);
+  }
+
+  /** Elapsed milliseconds since a {@link perfMark}, or 0 when it never opened. */
+  private perfElapsed(mark: number): number {
+    return mark === 0 ? 0 : performance.now() - mark;
+  }
+
   /** Windowed frame-time stats (avg / P95 / spikes) over the 5 s decision window. */
   getFrameMetricsSnapshot(): FrameMetrics {
     return this.frameMetrics.metrics();
@@ -1411,6 +1558,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   getGpuFrameStats(): GpuFrameStats | null {
     const stats = this.gpuTimer?.stats();
     return stats && stats.samples > 0 ? stats : null;
+  }
+
+  /** Stall tallies over the same window the `frame` line averages. */
+  getFrameSpikeCounts(): FrameSpikeCounts {
+    return this.frameMetrics.spikeCounts();
+  }
+
+  /**
+   * The drawing buffer being shaded: CSS size and the effective pixel ratio the
+   * quality profile settled on (not `window.devicePixelRatio`, which is what the
+   * display offers rather than what is being rendered).
+   */
+  getDrawingBufferSnapshot(): DrawingBufferSnapshot {
+    const size = this.renderer.getSize(new Vector2());
+    return { width: size.x, height: size.y, pixelRatio: this.renderer.getPixelRatio() };
+  }
+
+  /**
+   * Walks the visible scene once for the graph and shadow-caster readouts.
+   *
+   * Called by the overlay on its half-second cadence, never from the frame loop.
+   */
+  getSceneCostSnapshot(): SceneCostSnapshot {
+    return buildSceneCostSnapshot(this.scene as unknown as SceneCostObject);
+  }
+
+  /**
+   * The shared voice budget, or `null` when no audio capability is registered —
+   * a silent runtime and an unmeasured one must not read alike.
+   */
+  getAudioBudgetSnapshot(): AudioBudgetReadout | null {
+    return this.audioCommands()?.voiceStats() ?? null;
   }
 
   /** The active runtime quality profile (defaults to Ultra). */
@@ -3272,7 +3451,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const object = this.buildActorHostObject(entity);
     if (!object) return;
     object.userData.actorEntityId = entity.id;
-    this.scene.add(object);
+    this.scene.add(tagSceneSource(object, "actor"));
     this.actorObjects.set(entity.id, object);
     const meshScale = readRenderableMeshComponent(entity)?.scale;
     if (meshScale) this.actorMeshScales.set(entity.id, meshScale);
@@ -3309,7 +3488,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     wire.renderOrder = 999;
     wire.frustumCulled = false;
-    this.scene.add(wire);
+    this.scene.add(tagSceneSource(wire, "debug"));
     this.colliderDebugWires.set(entity.id, wire);
     this.updateColliderDebugWire(entity.id, wire);
   }
@@ -3790,7 +3969,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         disposeMeshPaintCloneGeometries(previous);
         this.scene.remove(previous);
       }
-      this.scene.add(this.createInstancedModel(instance.assetId, instance.placements));
+      this.scene.add(
+          tagSceneSource(this.createInstancedModel(instance.assetId, instance.placements), "static-mesh"),
+        );
     }
     const globalEnv = this.scene.environment;
     const globalEnvIntensity = this.scene.environmentIntensity;
@@ -3831,7 +4012,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     planes.forEach((actor) => {
       const reflector = createReflectionPlaneObject(this.reflectionPlaneItem(actor));
       this.reflectionPlaneObjects.push(reflector);
-      this.scene.add(reflector);
+      this.scene.add(tagSceneSource(reflector, "reflection-plane"));
     });
   }
 
@@ -3865,7 +4046,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const item = this.reflectiveSurfaceItem(actor);
       const surface = createReflectiveSurfaceObject(item, this.reflectiveSurfaceMaterial(item.material));
       this.reflectiveSurfaceObjects.push(surface);
-      this.scene.add(surface);
+      this.scene.add(tagSceneSource(surface, "reflective-surface"));
     });
   }
 
@@ -3892,7 +4073,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const object = createRuntimeBlockingVolumeObject(item);
       object.visible = item.renderInGame && !item.hidden;
       this.blockingVolumeObjects.push(object);
-      this.scene.add(object);
+      this.scene.add(tagSceneSource(object, "blocking-volume"));
     });
   }
 
@@ -3921,14 +4102,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
       if (!built.group) continue;
       this.splineGeneratedGroups.push(built.group);
-      this.scene.add(built.group);
+      this.scene.add(tagSceneSource(built.group, "spline"));
       this.splineColliderEntities.push(...this.splineDeformColliderEntities(actor, built.group));
     }
     if (!this.debug) return;
     for (const entry of this.splineRegistry.all()) {
       const object = createSplineObject(entry.actor);
       this.splineDebugObjects.push(object);
-      this.scene.add(object);
+      this.scene.add(tagSceneSource(object, "spline"));
     }
   }
 
@@ -4087,7 +4268,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data);
       const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
       this.landscapeObjects.push(object);
-      this.scene.add(object);
+      this.scene.add(tagSceneSource(object, "landscape"));
       const colliderEntity = this.landscapeColliderEntity(actor, data);
       if (colliderEntity) {
         this.landscapeColliderEntities.push(colliderEntity);
@@ -4156,7 +4337,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         normalMap,
       );
       object.raycast = () => {};
-      this.scene.add(object);
+      this.scene.add(tagSceneSource(object, "river-water"));
       this.riverWaterObjects.push(object);
     }
   }
@@ -4205,7 +4386,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       for (const [id, model] of loaded) this.models.set(id, model);
     }
     const binding = new FoliageRenderBinding();
-    this.scene.add(binding.root);
+    this.scene.add(tagSceneSource(binding.root, "foliage"));
     const generated: LayoutFoliageGroup[] = [];
     for (const rule of data.landscapeRules ?? []) {
       const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
@@ -4399,7 +4580,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const index = this.characterObjects.length;
     const character = buildSceneCharacterObject(gltf, placement, index);
     character.userData.characterIndex = index;
-    this.scene.add(character);
+    this.scene.add(tagSceneSource(character, "character"));
     this.characterObjects.push(character);
     // Offer the character to the active Game Mode; possession + animation are the
     // mode's responsibility (the default camera mode possesses nothing). The
@@ -4419,7 +4600,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // reach wireframe) — those are authoring-only helpers.
     const record = buildSceneLightObject(actor, index, { gizmo: false });
     tagSceneLightRecordIndex(record, index);
-    this.scene.add(record.root);
+    this.scene.add(tagSceneSource(record.root, "light"));
     if (record.target) this.scene.add(record.target);
     this.lightObjects.push(record);
     if (isSceneSunLight(actor, this.sun)) {

@@ -247,6 +247,7 @@ export function createAudioModule(): CapabilityModule {
         setListenerPose: (position, forward) => audio.setListenerPose(position, forward),
         setBusVolume: (bus: AudioBusId, volume: number) => audio.setBusVolume(bus, volume),
         getBusVolume: (bus: AudioBusId) => audio.getBusVolume(bus),
+        voiceStats: () => audio.voiceStats(),
       });
 
       // The dialogue capability asks whoever owns audio to play a line; before

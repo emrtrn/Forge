@@ -12,7 +12,8 @@ import {
   type BudgetMetric,
 } from "@engine/perf/perfBudget";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
-import type { FrameMetrics } from "@engine/perf/frameMetrics";
+import { buildFrameRegionRows } from "@engine/perf/frameRegions";
+import type { FrameMetrics, FrameSpikeCounts } from "@engine/perf/frameMetrics";
 import type { GpuFrameStats } from "@engine/perf/gpuTimer";
 import type { BottleneckResult } from "@engine/perf/bottleneckClassifier";
 import { formatAdaptiveChange } from "@engine/perf/adaptiveQuality";
@@ -20,15 +21,16 @@ import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import type { AiNavigationDebugSnapshot } from "./capabilities/runtimeServiceKeys";
 import type {
+  AudioBudgetReadout,
+  DrawingBufferSnapshot,
   GameModeDebugSnapshot,
   PerfMemorySnapshot,
   RuntimeStatsApp,
   UiDebugSnapshot,
 } from "./RuntimeSceneApp";
+import type { SceneCostSnapshot } from "./runtimeDebugSnapshot";
 
 const UPDATE_INTERVAL_MS = 500;
-/** How many of the most expensive subsystems the overlay lists. */
-const TOP_SUBSYSTEMS = 3;
 
 export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): void {
   let accumMs = 0;
@@ -55,12 +57,16 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${drawCalls} draw calls\n` +
       `${triangles} tris` +
       frameMetricsText(app) +
+      frameSpikeText(app) +
       gpuFrameText(app) +
+      drawingBufferText(app) +
+      sceneCostText(app) +
       bottleneckText(app) +
       adaptiveText(app) +
       subsystemTimingText(app) +
       memoryText(app) +
       budgetText(app, drawCalls, triangles) +
+      audioBudgetText(app) +
       vfxDebugText(app) +
       gameModeDebugText(app) +
       aiDebugText(app) +
@@ -92,6 +98,135 @@ export function formatFrameMetrics(metrics: FrameMetrics): string[] {
     `frame ${metrics.averageFrameTimeMs.toFixed(1)}ms ` +
       `p95 ${metrics.p95FrameTimeMs.toFixed(1)} spikes ${metrics.spikeCount}`,
   ];
+}
+
+/** The stall-tally line, or "" when the app reports no spike counts. */
+function frameSpikeText(app: RuntimeStatsApp): string {
+  const counts = app.getFrameSpikeCounts?.();
+  if (!counts) return "";
+  return `\n${formatFrameSpikes(counts).join("\n")}`;
+}
+
+/**
+ * Formats {@link FrameSpikeCounts} into an overlay line (pure, DOM-free for unit
+ * tests). Read under the averaged `frame` line, which is exactly what it exists
+ * to contradict: an average of 14 ms and four frames over 100 ms in the same
+ * window is a smooth reading of a game that visibly hitches, and only this line
+ * says so. The three thresholds are separate rather than summed because they are
+ * different findings — a 35 ms frame is a dropped one, a 100 ms frame is a stall
+ * the player feels.
+ */
+export function formatFrameSpikes(counts: FrameSpikeCounts): string[] {
+  return [
+    `stalls >33ms ${counts.over33ms} >50ms ${counts.over50ms} >100ms ${counts.over100ms}`,
+  ];
+}
+
+/** The drawing-buffer line, or "" when the app reports no buffer size. */
+function drawingBufferText(app: RuntimeStatsApp): string {
+  const buffer = app.getDrawingBufferSnapshot?.();
+  if (!buffer) return "";
+  return `\n${formatDrawingBuffer(buffer).join("\n")}`;
+}
+
+/**
+ * Formats the drawing buffer being shaded — CSS size times the effective pixel
+ * ratio, which the quality profile caps and scales (pure, DOM-free).
+ *
+ * Here because it is the one input to per-pixel cost that no other line reports.
+ * A frame whose cost survives deleting half the scene’s geometry is asking about
+ * pixels, not content, and without this line "is this fill rate?" can only be
+ * guessed at.
+ */
+export function formatDrawingBuffer(buffer: DrawingBufferSnapshot): string[] {
+  const width = Math.round(buffer.width * buffer.pixelRatio);
+  const height = Math.round(buffer.height * buffer.pixelRatio);
+  return [
+    `buffer ${groupThousands(width)}x${groupThousands(height)} ` +
+      `ratio ${buffer.pixelRatio.toFixed(2)} ${compactCount(width * height)} px`,
+  ];
+}
+
+/** The scene-graph + shadow-caster block, or "" when the app samples neither. */
+function sceneCostText(app: RuntimeStatsApp): string {
+  const snapshot = app.getSceneCostSnapshot?.();
+  if (!snapshot) return "";
+  return `\n${formatSceneCost(snapshot).join("\n")}`;
+}
+
+/**
+ * Formats a {@link SceneCostSnapshot} into overlay lines (pure, DOM-free).
+ *
+ * The graph line belongs next to the draw-call count because the pair is the
+ * finding: a small draw count beside a large node count means the frame is being
+ * *walked*, not submitted, and no amount of further batching would touch it.
+ *
+ * The shadow buckets follow because a shadowing light walks that same graph a
+ * second time, and the bucket labels say which content is paying for it. Labels
+ * come from the scene (see `sceneSourceOf`), never from a table in the engine —
+ * the template has no content taxonomy of its own.
+ */
+export function formatSceneCost(snapshot: SceneCostSnapshot): string[] {
+  const lines = [
+    `graph ${groupThousands(snapshot.graph.objects)} nodes ` +
+      `${groupThousands(snapshot.graph.meshes)} meshes (walked per pass)`,
+  ];
+  if (snapshot.shadows.length === 0) return lines;
+  lines.push("shadow casters");
+  const width = Math.max(...snapshot.shadows.map((bucket) => bucket.source.length));
+  for (const bucket of snapshot.shadows) {
+    lines.push(
+      `  ${bucket.source.padEnd(width)} ${groupThousands(bucket.meshes)} mesh ` +
+        `${compactCount(bucket.triangles)} tris`,
+    );
+  }
+  return lines;
+}
+
+/** The voice-budget block; always present, because absence is itself a finding. */
+function audioBudgetText(app: RuntimeStatsApp): string {
+  if (!app.getAudioBudgetSnapshot) return "";
+  return `\n${formatAudioBudget(app.getAudioBudgetSnapshot()).join("\n")}`;
+}
+
+/**
+ * Formats the shared voice budget into overlay lines (pure, DOM-free).
+ *
+ * A voice budget starts as a guess and can only be settled by measurement, never
+ * by listening: a player hears a mix that is too busy, not a ceiling that is
+ * being hit, and the two are different findings with opposite fixes (retune the
+ * levels, or raise the ceiling). A budget never approached is headroom nobody is
+ * using; one hit in every fight is silently deciding what the player hears.
+ *
+ * `null` renders as a sentence rather than as zeros — a mixer with nothing in it
+ * and an audio capability that was never registered look identical in a silent
+ * scene, and only one of them is a bug.
+ */
+export function formatAudioBudget(stats: AudioBudgetReadout | null): string[] {
+  if (!stats) return ["audio - no voice budget reported"];
+  const events =
+    stats.eventRefusals === undefined ? "" : ` event ${groupThousands(stats.eventRefusals)}`;
+  const lines = [
+    `audio ${stats.active}/${stats.limit} voices peak ${stats.peak} ` +
+      `refused budget ${groupThousands(stats.budgetRefusals)}${events}`,
+  ];
+  // Per channel, because a voice budget is judged per channel: one music bed, a
+  // handful of ambience and voice, the rest effects. A total alone hides which
+  // channel is the one that filled.
+  const busy = stats.byBus.filter((entry) => entry.peak > 0);
+  if (busy.length > 0) {
+    lines.push(`  ${busy.map((entry) => `${entry.bus} ${entry.active}/${entry.peak}`).join(" ")}`);
+  }
+  return lines;
+}
+
+/** `1.24M` / `540K` / `812` — triangle and pixel counts are unreadable ungrouped. */
+export function compactCount(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${Math.round(value / 1000)}K`;
+  return groupThousands(value);
 }
 
 /** The GPU frame-time line, or "" when nothing measured it (no `?debug`, or a
@@ -165,30 +300,63 @@ export function formatAdaptiveQuality(snapshot: {
   return lines;
 }
 
-/** The subsystem-timing block, or "" when profiling is off / no samples yet. */
+/** The frame-region block, or "" when profiling is off / no samples yet. */
 function subsystemTimingText(app: RuntimeStatsApp): string {
   const snapshot = app.getSubsystemProfileSnapshot?.();
   if (!snapshot || snapshot.subsystems.length === 0) return "";
-  return `\n${formatSubsystemTiming(snapshot, TOP_SUBSYSTEMS).join("\n")}`;
+  return `\n${formatFrameRegions(snapshot).join("\n")}`;
 }
 
+/** Longest region label decides the column, so the millisecond figures line up. */
+const REGION_LABEL_WIDTH = 18;
+
 /**
- * Formats a {@link SubsystemProfileSnapshot} into overlay lines (pure, DOM-free
- * for unit tests): a header with the total windowed tick cost, then the `topN`
- * most expensive subsystems with their average / last / peak millisecond cost.
+ * Formats a {@link SubsystemProfileSnapshot} as the frame account (pure,
+ * DOM-free for unit tests): a header stating what the frame cost and how much of
+ * it was measured, then every region worst first, children indented under their
+ * group, and the leftover rows that make the two agree.
+ *
+ * It replaced a "top 3 subsystems" listing, and the difference is the point.
+ * Three numbers out of a frame answer "what is expensive?" and leave "is that
+ * most of the frame?" unanswered — which is the only question that decides
+ * whether optimising the top row is worth doing at all. Here the header says the
+ * measured share outright and `unmeasured` names the rest.
+ *
+ * Markers, because the overlay is single-colour plain text and has no other
+ * affordance: `~` is a residual (leftover, never timed on its own) and `*` is
+ * cost only the diagnostic route pays.
  */
-export function formatSubsystemTiming(
-  snapshot: SubsystemProfileSnapshot,
-  topN: number,
-): string[] {
-  const lines = [`perf (avg/frame ${snapshot.totalAverageMs.toFixed(2)}ms)`];
-  for (const timing of snapshot.subsystems.slice(0, Math.max(0, topN))) {
+export function formatFrameRegions(snapshot: SubsystemProfileSnapshot): string[] {
+  const rows = buildFrameRegionRows(snapshot);
+  const frame = snapshot.frame;
+  const measured = snapshot.totalAverageMs;
+  // Diagnostic cost is stated separately rather than folded into the measured
+  // share: it is real time this frame spent, and time the shipped build never
+  // spends, and a single percentage cannot say both.
+  const diagnostic = snapshot.debugOnlyAverageMs ?? 0;
+  const diagnosticNote =
+    frame && diagnostic > 0 ? ` +${percent(diagnostic, frame.averageMs)} diag` : "";
+  const header = frame
+    ? `frame ${frame.averageMs.toFixed(2)}ms (last ${frame.lastMs.toFixed(2)} ` +
+      `peak ${frame.maxMs.toFixed(2)}) measured ${percent(measured, frame.averageMs)}` +
+      diagnosticNote
+    : `frame — unmeasured; regions ${measured.toFixed(2)}ms`;
+  const lines = [header];
+  for (const row of rows) {
+    const marker = row.residual ? "~" : row.debugOnly ? "*" : " ";
+    const label = `${"  ".repeat(row.depth)}${row.id}`;
     lines.push(
-      `  ${timing.id} ${timing.averageMs.toFixed(2)}ms ` +
-        `(last ${timing.lastMs.toFixed(2)} peak ${timing.maxMs.toFixed(2)})`,
+      `${marker} ${label.padEnd(REGION_LABEL_WIDTH)} ${row.averageMs.toFixed(2)} / ` +
+        `${row.lastMs.toFixed(2)} / ${row.maxMs.toFixed(2)}` +
+        (frame ? ` ${percent(row.averageMs, frame.averageMs)}` : ""),
     );
   }
   return lines;
+}
+
+/** `38%` — or `—%` where there is no denominator to be a share of. */
+function percent(value: number, total: number): string {
+  return total > 0 ? `${Math.round((value / total) * 100)}%` : "—%";
 }
 
 /** The memory-counter block, or "" when the app exposes no memory snapshot. */

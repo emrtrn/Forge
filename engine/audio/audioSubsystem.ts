@@ -159,9 +159,40 @@ export interface AudioBus {
   play(clipId: string, options?: AudioPlayOptions): AudioPlaybackHandle;
 }
 
+/**
+ * Ceiling on plays sounding at once, shared by every bus.
+ *
+ * Generous rather than tuned: the template has no mix to tune it against, and a
+ * ceiling that bites in an ordinary scene would silently decide what the player
+ * hears. It exists so the peak has something to be read against and so a fork
+ * that does start dropping voices finds out from the readout rather than from a
+ * bug report. Forks lower it (`maxVoices`) once their own mix is measured.
+ */
+export const DEFAULT_MAX_VOICES = 64;
+
+/** What the shared voice budget has cost — read by the `?debug` overlay. */
+export interface AudioVoiceStats {
+  /** Plays sounding right now (a queued play counts from the moment it starts). */
+  readonly active: number;
+  /** The most that were ever sounding at once, since the last reset. */
+  readonly peak: number;
+  /** The ceiling those are measured against ({@link DEFAULT_MAX_VOICES}). */
+  readonly limit: number;
+  /** Plays refused because the ceiling was full — the budget actually biting. */
+  readonly budgetRefusals: number;
+  /** Per channel, busiest first: a voice budget is judged per bus, not in total. */
+  readonly byBus: ReadonlyArray<{
+    readonly bus: AudioBusId;
+    readonly active: number;
+    readonly peak: number;
+  }>;
+}
+
 export interface AudioSubsystemOptions {
   backend?: AudioBackend;
   clips?: AudioClipManifest;
+  /** Shared voice ceiling; defaults to {@link DEFAULT_MAX_VOICES}. */
+  maxVoices?: number;
   /**
    * Resolves a `clipId` that is not a built-in tone clip to a fetchable audio
    * file URL (e.g. a manifest `sound` asset). Returning null skips playback.
@@ -176,6 +207,8 @@ type AudioSourceNode = AudioBufferSourceNode | OscillatorNode;
 
 class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
   readonly clipId: string;
+  /** Resolved once, at construction: the budget is accounted per bus. */
+  readonly bus: AudioBusId;
   private source: AudioSourceNode | null = null;
   private gain: GainNode | null = null;
   private context: BrowserAudioContext | null = null;
@@ -194,6 +227,7 @@ class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
     private readonly onStop: (handle: RuntimeAudioPlaybackHandle) => void = () => undefined,
   ) {
     this.clipId = clipId;
+    this.bus = options.bus && isAudioBusId(options.bus) ? options.bus : DEFAULT_AUDIO_BUS;
     this.volumeInternal = sanitizeVolume(options.volume);
     this.pitchInternal = sanitizePitch(options.pitch);
   }
@@ -397,9 +431,22 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   private busNodes: Map<AudioBusId, GainNode> | null = null;
   /** Urls already reported as undecodable, so the warning is once per clip. */
   private readonly reportedDecodeFailures = new Set<string>();
+  /** Shared voice ceiling; see {@link DEFAULT_MAX_VOICES}. */
+  private readonly maxVoices: number;
+  /** Live plays per bus, kept incrementally so the readout costs no walk. */
+  private readonly activeByBus = new Map<AudioBusId, number>();
+  /**
+   * Peaks rather than instantaneous counts, because the moment worth knowing
+   * about — a crowd of emitters firing while an alert posts over them — lasts a
+   * few frames and nobody is reading a debug overlay at that instant.
+   */
+  private peakVoices = 0;
+  private readonly peakVoicesByBus = new Map<AudioBusId, number>();
+  private budgetRefusals = 0;
 
   constructor(options: AudioSubsystemOptions = {}) {
     this.backend = options.backend ?? "none";
+    this.maxVoices = Math.max(1, Math.round(options.maxVoices ?? DEFAULT_MAX_VOICES));
     this.clips = options.clips ?? DEFAULT_AUDIO_CLIP_MANIFEST;
     if (options.resolveClipUrl) this.resolveClipUrl = options.resolveClipUrl;
   }
@@ -558,11 +605,65 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   play(clipId: string, options: AudioPlayOptions = {}): AudioPlaybackHandle {
     const request = { clipId, ...options };
     const handle = new RuntimeAudioPlaybackHandle(clipId, options, (stopped) => {
-      this.active.delete(stopped);
+      this.releaseVoice(stopped);
     });
-    this.active.add(handle);
+    // Refused rather than queued: a play that cannot be heard should not also
+    // occupy the budget, and the caller gets a handle that reads as stopped
+    // instead of one that never sounds for reasons it cannot inspect.
+    if (this.active.size >= this.maxVoices) {
+      this.budgetRefusals += 1;
+      handle.stop();
+      return handle;
+    }
+    this.retainVoice(handle);
     this.pending.push({ request, handle });
     return handle;
+  }
+
+  /**
+   * What the budget has actually been asked for — the ceiling's verification, as
+   * data rather than as an impression. Costs nothing when nothing reads it: the
+   * counts are maintained as plays start and stop.
+   */
+  voiceStats(): AudioVoiceStats {
+    const byBus: Array<{ bus: AudioBusId; active: number; peak: number }> = [];
+    for (const [bus, peak] of this.peakVoicesByBus) {
+      byBus.push({ bus, active: this.activeByBus.get(bus) ?? 0, peak });
+    }
+    byBus.sort((a, b) => b.peak - a.peak || a.bus.localeCompare(b.bus));
+    return {
+      active: this.active.size,
+      peak: this.peakVoices,
+      limit: this.maxVoices,
+      budgetRefusals: this.budgetRefusals,
+      byBus,
+    };
+  }
+
+  /** Clears the peaks and the refusal tally (a new measurement window). */
+  resetVoiceStats(): void {
+    this.peakVoices = this.active.size;
+    this.peakVoicesByBus.clear();
+    for (const [bus, count] of this.activeByBus) this.peakVoicesByBus.set(bus, count);
+    this.budgetRefusals = 0;
+  }
+
+  /** Books a play into the budget and updates the total + per-bus peaks. */
+  private retainVoice(handle: RuntimeAudioPlaybackHandle): void {
+    this.active.add(handle);
+    const bus = handle.bus;
+    const next = (this.activeByBus.get(bus) ?? 0) + 1;
+    this.activeByBus.set(bus, next);
+    if (this.active.size > this.peakVoices) this.peakVoices = this.active.size;
+    if (next > (this.peakVoicesByBus.get(bus) ?? 0)) this.peakVoicesByBus.set(bus, next);
+  }
+
+  /** Returns a play's voice to the budget. Idempotent — stop() can arrive twice. */
+  private releaseVoice(handle: RuntimeAudioPlaybackHandle): void {
+    if (!this.active.delete(handle)) return;
+    const remaining = (this.activeByBus.get(handle.bus) ?? 1) - 1;
+    if (remaining > 0) this.activeByBus.set(handle.bus, remaining);
+    else this.activeByBus.delete(handle.bus);
   }
 
   /**
@@ -595,7 +696,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     this.pending = [];
     for (const { request, handle } of requests) {
       if (handle.stopped) {
-        this.active.delete(handle);
+        this.releaseVoice(handle);
         continue;
       }
       this.played.push(request);
@@ -618,8 +719,9 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   dispose(): void {
     for (const { handle } of this.pending) handle.stop();
     this.pending = [];
-    for (const handle of this.active) handle.stop();
+    for (const handle of [...this.active]) handle.stop();
     this.active.clear();
+    this.activeByBus.clear();
     this.blockedStreams.clear();
     this.played = [];
     this.buffers.clear();

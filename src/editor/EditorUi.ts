@@ -46,7 +46,7 @@ import {
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
-import { attachDebugStats } from "@/scene/debugStats";
+import { attachDebugPanel } from "@/scene/debugPanel";
 import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
 import {
   getGameEditorCatalog,
@@ -904,17 +904,18 @@ export class EditorUi {
   }
 
   /**
-   * Shows or hides the `#debug-stats` perf overlay (FPS / draw calls / …).
-   * The overlay is a plain HTML element the runtime writes to via `onFrame`;
-   * we attach that writer lazily on first show so an editor session that never
-   * opens the overlay pays nothing for it. Hiding leaves the writer attached but
-   * `attachDebugStats` short-circuits while the element is not displayed.
+   * Shows or hides the `#debug-stats` perf panel (control strip + readout).
+   * The panel is built lazily on first show, so an editor session that never
+   * opens it pays nothing for it. One flag governs the whole panel and not
+   * only its text — buttons left hanging over a switched-off readout would be
+   * a control strip for nothing. Hiding leaves the writer attached, and
+   * `attachDebugStats` short-circuits while the readout is not displayed.
    */
   private setStatsVisible(on: boolean): void {
     const element = document.getElementById("debug-stats");
     if (!element) return;
     if (on && !this.statsAttached) {
-      attachDebugStats(this.app, element);
+      attachDebugPanel(this.app, element);
       this.statsAttached = true;
     }
     element.hidden = !on;

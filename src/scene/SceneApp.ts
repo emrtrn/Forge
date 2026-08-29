@@ -31,6 +31,7 @@ import {
   SpriteMaterial,
   Texture,
   TextureLoader,
+  Vector2,
   Vector3,
 } from "three";
 import type {
@@ -43,6 +44,12 @@ import type {
   WebGLRenderer,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import {
+  buildSceneCostSnapshot,
+  type DrawingBufferSnapshot,
+  type SceneCostObject,
+  type SceneCostSnapshot,
+} from "./runtimeDebugSnapshot";
 
 import { AssetLoader } from "./assetLoader";
 import { EngineApp } from "@engine/core/EngineApp";
@@ -1785,6 +1792,27 @@ export class SceneApp {
 
   getRenderStats(): { drawCalls: number; triangles: number } {
     return readSceneRuntimeStats(this.renderer);
+  }
+
+  /**
+   * The drawing buffer being shaded, for the `?debug` overlay. Present on the
+   * editor shell too because the question it answers — is this frame paying for
+   * pixels or for content? — is asked while authoring, not only while playing.
+   */
+  getDrawingBufferSnapshot(): DrawingBufferSnapshot {
+    const size = this.renderer.getSize(new Vector2());
+    return { width: size.x, height: size.y, pixelRatio: this.renderer.getPixelRatio() };
+  }
+
+  /**
+   * Graph size and shadow casters by scene source, for the `?debug` overlay.
+   *
+   * The editor scene carries the authoring overlays too (gizmo, outlines, brush
+   * cursors), so its numbers are honestly larger than the runtime’s — which is
+   * itself worth seeing, and is why the buckets are labelled rather than summed.
+   */
+  getSceneCostSnapshot(): SceneCostSnapshot {
+    return buildSceneCostSnapshot(this.scene as unknown as SceneCostObject);
   }
 
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {

@@ -1,7 +1,7 @@
 # Performans Teşhis Aracı Planı (`?debug`)
 
 > Oluşturma: 2026-08-28 (ThreeAges backport devamı)
-> Durum: **Planlandı, başlanmadı.** Faz sırası F0 → F6.
+> Durum: **F0 + F1 + F2 tamam** (2026-08-29). Sıradaki faz F3. Faz sırası F0 → F6.
 > Kaynak: ThreeAges `src/game/rts/debug/*` + `RtsApp.ts` teşhis katmanı.
 
 Forge'un `?debug` overlay'i bugün **okunan** bir şey; ThreeAges'inki
@@ -77,9 +77,9 @@ döngüsü olmadığı için birebir taşınmaz.
 | --- | --- | --- | --- |
 | Ölçüm altyapısı (`engine/perf/*`, profiler) | ✔ | ✔ (aynı) | — |
 | Metin readout | ✔ | ✔ (daha geniş) | — |
-| Takılma sayaçları, piksel, graf gezinme, gölge envanteri | ✔ | ✘ | F0 |
-| Kare bölgeleri + grup ağacı + tam muhasebe | ✔ | ✘ | F1 |
-| Panelde buton / tablo modalı / panoya kopyala | ✔ | ✘ | F2 |
+| Takılma sayaçları, piksel, graf gezinme, gölge envanteri | ✔ | ✔ | F0 ✅ |
+| Kare bölgeleri + grup ağacı + tam muhasebe | ✔ | ✔ | F1 ✅ |
+| Panelde buton / tablo modalı / panoya kopyala | ✔ | ✔ | F2 ✅ |
 | CPU kare dökümü | ✔ | ✘ | F3 |
 | Zaman ölçeği + duraklatma | ✔ | ✘ | F4 |
 | GPU A/B taraması | ✔ | ✘ | F5 |
@@ -149,77 +149,110 @@ proje/oyun                      bölge kaydı ve sweep kategorisi sağlar
 Mevcut `#debug-stats` metnine ThreeAges'in en çok işe yarayan beş satırını
 ekler. Hiçbiri yeni altyapı istemiyor.
 
-- [ ] **Takılma sayaçları**: `>33ms / >50ms / >100ms`. `spikeCounts()` zaten var
-      ([frameMetrics.ts:173](../../engine/perf/frameMetrics.ts#L173)), overlay
-      okumuyor.
-- [ ] **Çizim tamponu**: CSS boyut × effective pixel ratio + toplam piksel.
-      "Bu kare fill-rate'e mi takılı?" sorusunun tek girdisi; başka hiçbir satır
-      söylemiyor.
-- [ ] **Sahne grafiği maliyeti**: `traverseVisible` ile düğüm + mesh sayısı.
-      Az draw call yanında devasa düğüm sayısı = kare **gezilmekten** pahalı,
-      gönderilmekten değil; batch'lemek dokunmaz. Snapshot temposunda örneklenir
-      (kare başına değil — yoksa açıklamaya çalıştığı maliyetin parçası olur).
-- [ ] **Gölge caster envanteri**: mesh + üçgen, kategori kovalarına ayrılmış,
-      `InstancedMesh.count` çarpanı dahil. Kovalar Forge'da jenerik olmalı
-      (ThreeAges'teki `actors/mapArt/other` yerine sahne kaynağına göre).
-- [ ] **Ses voice bütçesi**: aktif/limit, tepe, bütçe ve olay redleri, bus başına.
-      Yaklaşılmayan bütçe kullanılmayan headroom'dur; her çatışmada dolan bütçe
-      oyuncunun ne duyacağına sessizce karar veriyordur.
+- [x] **Takılma sayaçları**: `>33ms / >50ms / >100ms`. `spikeCounts()` zaten
+      vardı, overlay okumuyordu; artık `getFrameSpikeCounts()` → `formatFrameSpikes`.
+      Üç eşik ayrı tutuldu, toplanmadı: dört düşen kare ile tek bir 100 ms donma
+      toplamda aynı sayıyı verir, bulgu olarak farklı şeylerdir.
+- [x] **Çizim tamponu**: `formatDrawingBuffer` — CSS boyut × **effective** pixel
+      ratio (`renderer.getPixelRatio()`, `devicePixelRatio` değil: ekranın
+      sunduğu değil, gerçekten çizilen) + toplam piksel.
+- [x] **Sahne grafiği maliyeti**: `buildSceneCostSnapshot` görünür ağacı bir kez
+      gezip düğüm + mesh sayar. Overlay'in kendi 500 ms temposunda örnekleniyor,
+      kare başına değil.
+- [x] **Gölge caster envanteri**: aynı gezinmeden çıkıyor; mesh + üçgen,
+      `InstancedMesh.count` çarpanı dahil (bir orman tek düğüm ama binlerce
+      çizim). Kovalar **veriden**: `tagSceneSource()` ile sahneyi kuran taraf
+      etiketliyor (`static-mesh`, `landscape`, `foliage`, `spline`,
+      `blocking-volume`, `reflection-plane`, `reflective-surface`,
+      `river-water`, `character`, `actor`, `light`, `debug`), etiketsiz nesne
+      üst düzey sahne çocuğunun adına/tipine düşüyor. Motorda sabit kategori
+      tablosu yok; kuyruk `other`'a toplanıyor.
+- [x] **Ses voice bütçesi**: `AudioSubsystem` bunu hiç ölçmüyordu —
+      `AudioEventDirector` motorda duruyor ama runtime'a bağlı değil. Bu yüzden
+      bütçe muhasebesi subsystem'in kendisine kondu: `maxVoices`
+      (`DEFAULT_MAX_VOICES = 64`), bus başına aktif/tepe, ve tavan dolduğunda
+      **red** (`budgetRefusals`) — reddedilen çağrı sessizce ölen değil, durmuş
+      okunan bir handle alıyor. `voiceStats()` → `AudioCommands` →
+      `formatAudioBudget`. Ölçen yoksa satır sıfır değil cümle yazıyor.
 
-**Bitiş şartı:** `?debug` overlay'i bu beş satırı gösteriyor; her biri için
-`formatX` saf fonksiyonu ve `tests/engine/` altında birim testi var; profiler
-kapalıyken hiçbiri ek maliyet üretmiyor.
+**Bitiş şartı:** ✅ `?debug` overlay'i beş satırı da gösteriyor; her biri saf bir
+`formatX` + `tests/engine/perfReadout.test.ts` altında birim testli (12 yeni
+check); traversal yalnız overlay'in yarım saniyelik temposunda, hiçbiri kare
+döngüsünde değil. Çizim tamponu ve sahne maliyeti editör kabuğunda (`SceneApp`)
+da var: "bu kare piksele mi içeriğe mi ödüyor?" sorusu yazarken de soruluyor.
 
 ### F1 — Kare bölgeleri ve tam muhasebe
 
 F3'ün ön koşulu. §1.1 ve §1.2 bulgularını kapatır.
 
-- [ ] `engine/perf/frameRegions.ts`: bölge kaydı — `id`, `parent`, `debugOnly`.
-      Kayıt **veri**, sabit tablo değil; subsystem'ler ve kabuk kendi bölgelerini
-      bildirir.
-- [ ] `SubsystemProfiler`'a grup farkındalığı (ya da kaydın profiler dışında
-      tutulup capture'da birleştirilmesi — hangisinin daha az sızdırdığı
-      uygulamada kararlaştırılır, ikisi de kabul edilebilir).
-- [ ] `endFrame()` çağrısı `SubsystemRegistry.update` içinden **karenin gerçek
-      sonuna** taşınır. Bu bir davranış değişikliğidir: adaptif kalitenin
-      bottleneck sınıflandırıcısı da bu profiler'ı okuyor
-      ([RuntimeSceneApp.ts:1124](../../src/scene/RuntimeSceneApp.ts#L1124)), yani
-      pencere içeriği genişleyecek. Sınıflandırıcının eşikleri gözden geçirilmeli.
-- [ ] Kabuk bölgeleri işaretlenir: `render` (CPU gönderim maliyeti, GPU değil),
-      `ui`, `environment`, `gameMode`, `gameModules`, `capabilities`, ve tamamı
-      için `frame` (payda; asla satır değil).
-- [ ] `perfMark/perfMeasure` eşdeğeri: profiler kapalıyken **tek property
-      okuması** maliyetinde olmalı (ThreeAges deseni: `perfMark()` kapalıyken `0`
-      döner).
+- [x] `engine/perf/frameRegions.ts`: bölge kaydı (`id`, `parent`, `debugOnly`) +
+      `buildFrameRegionRows` muhasebesi. Kayıt **veri**: `SubsystemRegistry`
+      kendini `engine` diye, kabuk kendi fazlarını, fork kendi bölgesini bildirir.
+      `frame` id'si rezerve — `declare` ile bildirilmeye çalışılırsa **atar**,
+      çünkü paydanın satır olması bu modülün var oluş sebebi olan tek hata.
+- [x] Grup farkındalığı profiler'a kondu (planın izin verdiği iki yoldan biri):
+      `declareRegion` + `recordFrame`, ve `SubsystemTiming` artık `parent` +
+      `debugOnly` taşıyor. Böylece `buildFrameRegionRows` yalnız snapshot'ı alıp
+      saf çalışıyor — kabuk overlay'e kayıt geçirmiyor.
+- [x] `endFrame()` `SubsystemRegistry.update` içinden çıktı; kareyi artık döngü
+      sahibi kapatıyor (`engineApp.endProfileFrame()`), üstelik overlay
+      callback'inden **önce**: readout anlattığı karenin parçası değil.
+- [x] **Sınıflandırıcı gözden geçirildi.** `totalAverageMs` artık yalnız **kök**
+      bölgeleri topluyor (grup zaten çocuklarını içerdiği için toplasaydı aynı
+      milisaniyeyi iki kez sayar, CPU payı 1.0'ı aşardı). Eşikler (0.6 / 0.35)
+      **bilerek yerinde bırakıldı**: değişen şey girdinin doğruluğuydu, eşiğin
+      anlamı değil — karenin %60'ı CPU'daysa o kare eskiden de CPU-bound'du,
+      sadece ölçülmediği için `gpu` okunuyordu. Veri olmadan eşik oynatmak tahmin
+      olurdu. Ayrıca `debugOnlyAverageMs` ayrı tutuldu: teşhisin kendi maliyeti
+      verdiği hükmü kendi başına `cpu`ya çeviremiyor (test bunu kilitliyor).
+- [x] Kabuk bölgeleri: `spawn`, `quality`, `capabilities`, `gameMode`,
+      `gameModules`, `ui`, `audioListener`, `environment`, `foliage`,
+      `materials`, `render` (CPU gönderim maliyeti), ve `debugWires`
+      (`debugOnly`). `frame` payda olarak `recordFrame` ile, kendi penceresinde.
+- [x] `perfMark`/`perfRegion`/`perfElapsed`: kapalıyken tek property okuması
+      (`engineApp.profiling`) + `0` dönüşü — saat yok, closure yok, ayırma yok.
+      Döngü bu yüzden koşulsuz işaretli; ikinci bir debug kopyası yok.
 
-**Bitiş şartı:** `?debug` açıkken subsystem timing bloğu bugünkü top-3 yerine
-gruplanmış bölgeleri gösteriyor; `frame` bölgesi karenin tamamını kapsıyor;
-`test:engine` yeşil ve bottleneck sınıflandırıcısının testleri yeni pencereyle
-geçiyor.
+**Bitiş şartı:** ✅ `?debug` timing bloğu top-3 yerine kare hesabını gösteriyor —
+başlıkta karenin ms'i ve **ölçülen yüzdesi**, altında bölgeler pahalıdan ucuza,
+grupların çocukları girintili, `~` artık satırları (`engine (other)`,
+`unmeasured`) ve `*` teşhis-maliyeti işaretiyle. Üst düzey satırların toplamı
+kareye **eşit**. 1099 check + `build:verify` + `verify:dist --strict` +
+`verify:imports` yeşil.
 
 ### F2 — Panel kabuğu ve tablo modalı
 
-- [ ] `src/scene/debugPanel.ts`: `#debug-stats` üstünde kontrol şeridi + altında
-      readout. Kontrol yuvası **readout'un üstünde**, çünkü satır sayısı büyüdükçe
-      buton yer değiştirmemeli.
-- [ ] `src/scene/debugTableModal.ts`: ortalanmış, kapanabilir, **donmuş** tablo +
-      panoya kopyala. Donmuş olması şart — canlı bir tablo okunurken ölçülüyor
-      olur, ve duraklatılmış bir sahnede her simülasyon satırı sıfır okunur.
-- [ ] `engine/perf/debugTableView.ts`: iki tablo (CPU dökümü ve GPU taraması)
-      aynı modalı paylaşır ama **satır şekli paylaşmaz**; modal yalnız hazır
-      hücreleri çizer. Bu, birinin aritmetiğini diğerinin sessizce miras almasını
-      engelleyen şeydir.
-- [ ] Dinamik import: panel yalnız `?debug` varken yüklenir; `verify:dist --strict`
-      temiz kalır.
-- [ ] Editör: Show > Stats bugün overlay'i gizliyor
-      ([EditorUi.ts:913](../../src/editor/EditorUi.ts#L913)); aynı bayrak paneli de
-      yönetmeli.
-- [ ] CSS `.forge-debug-*` ön ekiyle; ThreeAges'in `.rts-debug-*` kuralları
-      (29 adet) buraya uyarlanır.
+- [x] `src/scene/debugPanel.ts`: kontrol şeridi readout'un **üstünde**. Panel
+      ayrı bir kardeş eklemek yerine mevcut `#debug-stats` elementini
+      **devralıyor** — o element hem runtime hem editör CSS'ini (viewport host'a
+      taşınma dahil) zaten taşıyor; devralmak hepsini bozmadan korudu, readout
+      içeride kendi `<pre>`'sini aldı. Kalıcı bir kontrol için (F4 hız seçici)
+      ayrı bir `control-slot` boşken bile rezerve.
+- [x] `src/scene/debugTableModal.ts`: ortalanmış, kapanabilir, **donmuş** tablo +
+      panoya kopyala (pano reddedilirse ölçüm kaybolmuyor, konsola yazılıyor).
+      Satır arkasında pay çubuğu — pahalı satır tek sayı okunmadan bulunuyor.
+- [x] `engine/perf/debugTableView.ts`: `DebugTableView` + `debugTableToText`.
+      Modal aptal bir hücre çizici; her sayı, birim ve uyarı ölçümü yapan
+      tablodan geliyor. `debugTableToText` hem pano metni hem de tablonun
+      tarayıcısız test edilebilmesinin yolu.
+- [x] Dinamik import: `main.ts` artık `await import("@/scene/debugPanel")`.
+      Yan etkisi hoş — `debugStats` de oyun paketinden çıktı: build çıktısında
+      ayrı bir `debugPanel-*.js` (16.2 kB) chunk'ı var, `index-*.js` küçüldü.
+- [x] Editör: Show > Stats artık `attachDebugPanel` çağırıyor; tek bayrak tüm
+      paneli yönetiyor (yoksa kapalı bir readout'un üstünde boşta duran butonlar
+      kalırdı).
+- [x] CSS `.forge-debug-*` ön ekiyle `src/style.css` içinde.
+- [x] **Buton yer tutucu değil:** F1'in verisi hazır olduğu için ilk aksiyon
+      gerçek — "Frame cost" canlı kare hesabını dondurup tabloya döküyor.
+      Yalnız profil tutan kabukta gösteriliyor (editör kabuğu profil tutmuyor,
+      orada buton hiç yok): boş tablo açan bir buton, okuyucuya aracın bozuk
+      olduğunu öğretir.
 
-**Bitiş şartı:** `?debug` panelinde tıklanabilir bir kontrol şeridi var, boş bir
-tablo modalı açılıp kapanıyor, kopyala butonu metni panoya yazıyor; oyun paketi
-büyümüyor.
+**Bitiş şartı:** ✅ `?debug` panelinde tıklanabilir kontrol şeridi var, tablo
+modalı açılıp kapanıyor, kopyala butonu metni panoya yazıyor; oyun paketi
+büyümedi — tersine, panel ayrı chunk'a taşındığı için küçüldü. Tarayıcı tarafı
+(gerçek tıklama + pano) F6'daki smoke spec'ine bırakıldı; saf taraf 1102 check
+içinde.
 
 ### F3 — Kare maliyeti (CPU) dökümü
 
@@ -356,6 +389,33 @@ duran üç katmanı (aritmetik / kabuk / oyun) ayırmaktır.
 
 ## 8. İlerleme günlüğü
 
+- **2026-08-29 — F2 tamam.** Planın öngörmediği tek karar: panel yeni bir
+  element eklemek yerine `#debug-stats`'ı devraldı. Sebebi editörde ortaya
+  çıktı — o element id'siyle viewport host'a taşınıyor ve kendi CSS'ini
+  taşıyor; kardeş bir panel eklemek ikisini de kopyalamak demekti. Ayrıca
+  ilk aksiyon boş bir yer tutucu olarak değil, F1'in verisiyle gerçek bir
+  tablo olarak geldi; F3 bunu tek kare yakalamasıyla değiştirecek.
+- **2026-08-29 — F1 tamam.** §1.1 ve §1.2 kapandı. Uygulamada iki karar
+  planın bıraktığı boşluğu doldurdu. (1) Grup farkındalığı profiler'a kondu,
+  capture'a değil: böylece muhasebe (`buildFrameRegionRows`) yalnız snapshot
+  alan saf bir fonksiyon oldu ve kabuk overlay'e ikinci bir nesne geçirmiyor.
+  (2) Planda olmayan bir şey çıktı: `debugOnly` yalnız *işaretlemek* için
+  yetmiyordu — sınıflandırıcı aynı `totalAverageMs`'i okuduğu için, overlay'in
+  kendi maliyeti kareyi CPU eşiğinin üstüne itip **teşhisin oyunu değil
+  kendini teşhis etmesine** yol açabiliyordu. Bu yüzden teşhis maliyeti
+  `debugOnlyAverageMs` olarak ayrıldı; §2.5 ilkesi artık yalnız bir işaret
+  değil, hükmü koruyan bir sınır. Eşikler veri olmadan oynatılmadı.
+- **2026-08-29 — F0 tamam.** Beş readout satırı, saf formatter + 12 birim test.
+  İki şey planın beklediğinden farklı çıktı. (1) Gölge kovaları için Forge'da
+  hazır bir içerik taksonomisi yoktu; kova adı **veri** yapıldı
+  (`tagSceneSource` + üst düzey ada düşen yedek), böylece bir fork kendi içerik
+  türünü readout'u düzenlemeden kovalıyor. (2) Ses bütçesi hiç ölçülmüyordu:
+  `AudioEventDirector` motorda test edilmiş hâlde duruyor ama hiçbir tüketicisi
+  yok, dolayısıyla okunacak sayaç da yoktu. Bütçe `AudioSubsystem`'e kondu —
+  yani planın "sayaçlar zaten burada" varsayımı ses için geçerli değildi.
+  Bu, F0'ı bir okuma katmanı olmaktan çıkarıp küçük bir motor eklemesi yaptı.
+  Kapı yeşil: `tsc` + 1089 check + `build:verify` + `verify:dist --strict` +
+  `verify:imports`.
 - **2026-08-28** — Plan yazıldı. Forge tarafında ölçülen üç bulgu planın şeklini
   belirledi: profiler'ın kare sınırı karenin sonu değil (§1.1), profiler'da grup
   kavramı yok (§1.2), runtime'da zaman kontrolü hiç yok (§1.3). Kod yazılmadı.

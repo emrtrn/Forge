@@ -1,6 +1,13 @@
 import type { EngineUpdateContext, Subsystem } from "./Subsystem";
 import type { SubsystemTimingRecorder } from "./subsystemProfiler";
 
+/**
+ * The frame region the whole subsystem block is measured as. Its children are
+ * the individual subsystems, so the group's residual is the registry's own
+ * overhead — the loop, the map walk, the timing calls themselves.
+ */
+export const ENGINE_REGION_ID = "engine";
+
 export class SubsystemRegistry {
   private readonly subsystems = new Map<string, Subsystem>();
   /** When set (only under `?debug`), each subsystem's `update()` is timed. */
@@ -12,6 +19,10 @@ export class SubsystemRegistry {
       throw new Error(`Subsystem already registered: ${subsystem.id}`);
     }
     this.subsystems.set(subsystem.id, subsystem);
+    // A module can register after profiling was switched on (a capability
+    // attaching mid-session); declare it now or it reads as a top-level region
+    // and gets counted twice against the frame.
+    this.profiler?.declareRegion?.({ id: subsystem.id, parent: ENGINE_REGION_ID });
     return subsystem;
   }
 
@@ -54,6 +65,12 @@ export class SubsystemRegistry {
   setProfiler(profiler: SubsystemTimingRecorder | null, now?: () => number): void {
     this.profiler = profiler;
     if (now) this.now = now;
+    if (profiler?.declareRegion) {
+      profiler.declareRegion({ id: ENGINE_REGION_ID });
+      for (const id of this.subsystems.keys()) {
+        profiler.declareRegion({ id, parent: ENGINE_REGION_ID });
+      }
+    }
   }
 
   update(context: EngineUpdateContext): void {
@@ -65,13 +82,20 @@ export class SubsystemRegistry {
       return;
     }
     const now = this.now;
+    const blockStart = now();
     for (const subsystem of this.subsystems.values()) {
       if (!subsystem.update) continue;
       const start = now();
       subsystem.update(context);
       profiler.record(subsystem.id, now() - start);
     }
-    profiler.endFrame();
+    // The block as a whole, so its residual reports what the registry itself
+    // costs on top of the subsystems it runs.
+    profiler.record(ENGINE_REGION_ID, now() - blockStart);
+    // No endFrame() here: the subsystem block is one region of the frame, not
+    // the end of it. Everything the shell does afterwards — game modes, UI,
+    // the environment, the render submit — happens after this returns, and
+    // closing the frame here is what used to make all of it invisible.
   }
 
   async dispose(): Promise<void> {

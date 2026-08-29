@@ -11,7 +11,6 @@
 import { createForgeRuntime } from "@/scene/ForgeRuntime";
 import { createDefaultRuntimeModules } from "@/scene/capabilities/defaultRuntimeModules";
 import { createGameModule } from "@/game/gameModule";
-import { attachDebugStats } from "@/scene/debugStats";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -71,9 +70,12 @@ async function main(): Promise<void> {
     gameModules: [createGameModule()],
   });
 
-  // Perf readout (qa-poki standard) behind ?debug — invisible in production.
+  // Perf panel (readout + control strip + table modal) behind ?debug.
+  // Dynamically imported for the same reason the editor is: it is a
+  // diagnostic surface, and a shipped game should not carry a byte of it.
   if (params.has("debug")) {
-    attachDebugStats(forge.app, requireElement("debug-stats"));
+    const { attachDebugPanel } = await import("@/scene/debugPanel");
+    attachDebugPanel(forge.app, requireElement("debug-stats"));
   }
 
   // The level is built here rather than inside the runtime's constructor, so

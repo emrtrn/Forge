@@ -1,7 +1,7 @@
 # Save-Game Envelope Contract
 
-> Status: written for P3 of
-> `docs/ongoing/RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md`.
+> Status: written for P3 of `RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md`
+> (removed from the repo on 2026-07-14 in `e107f11`; its content is in git history).
 > Audience: fork/template consumers building save/load into a concrete game.
 
 Forge ships a small, deliberate save-game core. A fork does **not** need to

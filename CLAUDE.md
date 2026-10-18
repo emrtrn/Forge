@@ -35,8 +35,11 @@ engine/editor.
 - `docs/architecture/ARCHITECTURE.md`: boundary contract.
 - `docs/architecture/ARCHITECTURE_PLAN_SOURCE.md`: imported source architecture plan.
 - `docs/architecture/LAUNCH_WORKFLOW.md`: practical VS Code and URL launch path.
-- `docs/planned/EDITOR_UI_SLICING_PLAN.md`: first extraction plan for keeping
-  `EditorUi.ts` from growing as a monolith.
+- `docs/architecture/FORGE_LAYERED_RUNTIME_PLAN.md`: layered runtime rules
+  (LevelRuntime, capability modules, game module); all phases closed, kept as
+  the reference the starter templates point to.
+- `docs/COMPLETED_WORK_INDEX.md`: index of completed plans archived outside the
+  repo (e.g. `EDITOR_UI_SLICING_PLAN.md`).
 - `docs/architecture/UNREAL_BASICS_LESSONS.md`: the canonical roadmap. Top section is the
   **active execution track** (Gameplay/Runtime, G1–G6, with status legend +
   Progress Log); §1–§6 are the Unreal-derived architecture lessons (north star +

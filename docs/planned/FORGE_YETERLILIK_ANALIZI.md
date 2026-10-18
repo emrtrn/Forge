@@ -403,7 +403,8 @@ akislari incelenecek.
      placement-rule affordances siradaki adim olarak kalsin.
   - **Guncel aksiyon durumu (2026-07-04):** Aksiyon 1 tamamlandi
     (`smoke:browser` yesil); Aksiyon 2 plan + dort uygulama dilimi olarak
-    tamamlandi (`docs/planned/EDITOR_UI_SLICING_PLAN.md`, `transformRows.ts`,
+    tamamlandi (`EDITOR_UI_SLICING_PLAN.md`, simdi arsivde — bkz.
+    `docs/COMPLETED_WORK_INDEX.md`; `transformRows.ts`,
     `instanceDetails.ts`, `materialDetails.ts`, `collisionDetails.ts`,
     `physicsDetails.ts`, `componentDetails.ts`; tsc + engine tests +
     verify:imports + smoke yesil);
@@ -577,6 +578,9 @@ degerlendirilecek.
   eksigi engelliyor.
 - Planlama notu (2026-07-05): Kalan isler fazlara ayrildi ve takip kaynagi
   olarak `docs/ongoing/RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md` eklendi.
+  (Not, 2026-10-18: dosya 2026-07-14'te `e107f11` ile repodan kaldirildi,
+  arsive tasinmadi; icerigi git gecmisinde. Kaldirildiginda P5 kapanis
+  maddeleri hala aciktir.)
 - Aksiyonlar:
   1. Behavior state sizintisini dogrula ve kapat: registry'yi scene-load
      basina yeniden yarat (veya reset API'si ekle), `collisionAudioPlayed`'i

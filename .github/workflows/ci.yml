@@ -3,7 +3,7 @@ name: CI
 # Automates the local `build:verify` discipline: every push/PR to main runs
 # type-check + engine tests + build + strict dist scan, plus asset-manifest
 # health. Mirrors the gate documented in
-# docs/completed/PLATFORM_FOUNDATIONS_CHECKLIST.md (P0).
+# the archived PLATFORM_FOUNDATIONS_CHECKLIST.md (P0; see docs/COMPLETED_WORK_INDEX.md).
 
 on:
   push:

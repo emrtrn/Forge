@@ -49,7 +49,7 @@ The module publishes what the runtime shell must not know by itself — the Game
 Mode catalog, the behavior catalog, the AI task vocabulary — and receives the
 level through its own `onLevelLoaded`. See `src/game/gameModule.ts` for the
 template's own implementation, and
-`docs/planned/FORGE_LAYERED_RUNTIME_PLAN.md` for the layering rules.
+`docs/architecture/FORGE_LAYERED_RUNTIME_PLAN.md` for the layering rules.
 
 ## What a game module unlocks
 

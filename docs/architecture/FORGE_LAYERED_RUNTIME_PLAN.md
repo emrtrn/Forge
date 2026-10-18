@@ -17,7 +17,7 @@
 > köprüsü + `templates/rts-starter` + motor ve tarayıcı testleri). Planın tüm
 > fazları kapandı.
 > Dayanak: [`docs/runtime-parity/AUDIT.md`](../runtime-parity/AUDIT.md) (Faz 0 denetimi).
-> Bu doküman eski [`FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](FORGE_RUNTIME_EDITOR_PARITY_PLAN.md)'in
+> Bu doküman eski `FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`'nin (arşivde; bkz. [`docs/COMPLETED_WORK_INDEX.md`](../COMPLETED_WORK_INDEX.md))
 > yerine geçer; onun yerini denetim bulgularıyla güncellenmiş somut bir uygulama
 > planı alır. Eski doküman referans/tarihçe olarak kalabilir.
 

@@ -2,7 +2,7 @@ import type { Vec3 } from "./layout";
 
 /**
  * Generic Spline component data contract (Faz 1 of
- * `docs/planned/FORGE_GENERIC_SPLINE_SYSTEM_RESEARCH_AND_PLAN.md`).
+ * archived `FORGE_GENERIC_SPLINE_SYSTEM_RESEARCH_AND_PLAN.md` — see `docs/COMPLETED_WORK_INDEX.md`).
  *
  * Pure data + normalization only: no curve math (Faz 2), no scene/editor
  * integration (Faz 4+), and no Three.js imports. Point positions are stored in

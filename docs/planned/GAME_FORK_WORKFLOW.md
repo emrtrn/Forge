@@ -1,7 +1,9 @@
 # Forge → Oyun Fork İş Akışı
 
 > Tarih: 2026-06-26
-> Durum: Planlama / referans doküman. Kod uygulanmadı.
+> Durum: Referans doküman. İlk gerçek fork (`minigolf`, `origin` = oyun /
+> `upstream` = Forge) bu akışla kuruldu; araç tarafı (`tools/create-project.mjs`)
+> henüz yok.
 > Amaç: Forge şablonundan bağımsız oyun repoları türetme ve bakım sürecini
 > standart hale getirmek.
 

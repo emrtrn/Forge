@@ -1,7 +1,7 @@
 # Skeletal Facing Override Backlog
 
 > Durum: Bilincli backlog
-> Kaynak: `docs/ongoing/RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md` P4
+> Kaynak: `RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md` (2026-07-14'te `e107f11` ile repodan kaldirildi, arsive tasinmadi; icerigi git gecmisinde) P4
 > Ilgili tamamlanmis is: `AI_SYSTEM_RESEARCH_AND_PLAN.md`
 > (bkz. `docs/COMPLETED_WORK_INDEX.md`)
 

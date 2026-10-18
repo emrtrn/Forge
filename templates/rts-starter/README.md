@@ -79,4 +79,4 @@ on the `camera:` line — `rts-top-down zoom:… selected:…`.
 No `RtsApp`. No copy of `buildScene`. No editing of `RuntimeSceneApp`,
 `LevelRuntime` or any capability module. That is the acceptance criterion of the
 layered runtime plan's Phase I — see
-`docs/planned/FORGE_LAYERED_RUNTIME_PLAN.md`.
+`docs/architecture/FORGE_LAYERED_RUNTIME_PLAN.md`.

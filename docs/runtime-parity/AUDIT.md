@@ -2,7 +2,7 @@
 
 > Tarih: 2026-08-09
 > Kapsam: **Yalnızca haritalama.** Kod değiştirilmedi.
-> Kaynak plan: [`docs/planned/FORGE_RUNTIME_EDITOR_PARITY_PLAN.md`](../planned/FORGE_RUNTIME_EDITOR_PARITY_PLAN.md) (§5, Faz 0)
+> Kaynak plan: `FORGE_RUNTIME_EDITOR_PARITY_PLAN.md` (§5, Faz 0; arşivde — bkz. [`docs/COMPLETED_WORK_INDEX.md`](../COMPLETED_WORK_INDEX.md)). Uygulama planı: [`docs/architecture/FORGE_LAYERED_RUNTIME_PLAN.md`](../architecture/FORGE_LAYERED_RUNTIME_PLAN.md)
 > Yöntem: `src/main.ts`, `src/scene/*`, `src/editor/*`, `engine/scene/*`,
 > `tools/saveValidator.ts` üzerinde statik okuma + grep. Satır referansları bu
 > commit'e göredir; yeniden düzenlemede kayabilir.

@@ -1,6 +1,6 @@
 /**
  * Presentation-only spline performance warnings (Faz 12 hardening of
- * `docs/planned/FORGE_GENERIC_SPLINE_SYSTEM_RESEARCH_AND_PLAN.md`, §19.4).
+ * archived `FORGE_GENERIC_SPLINE_SYSTEM_RESEARCH_AND_PLAN.md` — see `docs/COMPLETED_WORK_INDEX.md`, §19.4).
  *
  * Pure and dependency-free: it never touches Three.js, the layout, or generator
  * state, so both the editor Details panel and headless engine checks feed it the

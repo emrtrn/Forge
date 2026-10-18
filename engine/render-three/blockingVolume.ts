@@ -43,7 +43,8 @@ export {
  * sphere) built at the brush `size`; the actor's transform (position/rotation/scale)
  * orients and further sizes it. In the **editor** it draws as a translucent orange
  * brush + wireframe (Unreal's brush look); in **runtime** (Play) it draws as a solid
- * neutral grey-box, and the caller toggles `visible` from `renderInGame`.
+ * brush using its authored colour (neutral grey when absent), and the caller
+ * toggles `visible` from `renderInGame`.
  *
  * Geometry is built from the shape + size, so a shape or size change requires
  * rebuilding the object (mirrors the Planar Reflection resolution rebuild).
@@ -130,19 +131,21 @@ export function createBlockingVolumeObject(item: BlockingVolumeRenderItem): Bloc
 }
 
 /**
- * Builds the runtime (Play) brush object: a solid neutral grey-box that casts +
- * receives shadows. Caller sets `visible` from `renderInGame` (off = invisible-but-
- * blocking; collision is independent of this mesh).
+ * Builds the runtime (Play) brush object, casting and receiving shadows.
+ * Pass the layout's optional colour separately: `item.color` already includes
+ * the editor's orange default, which must not become the runtime fallback.
+ * Caller sets `visible` from `renderInGame` (collision is independent).
  */
 export function createRuntimeBlockingVolumeObject(
   item: BlockingVolumeRenderItem,
+  color: string = RUNTIME_BLOCKING_VOLUME_COLOR,
 ): BlockingVolumeObject {
   const group = new Group();
   group.name = item.name;
   const fill = new Mesh(
     createBlockingVolumeGeometry(item.brushShape, item.size, item.brushSides),
     new MeshStandardMaterial({
-      color: new Color(RUNTIME_BLOCKING_VOLUME_COLOR),
+      color: new Color(color),
       roughness: 0.85,
       metalness: 0,
     }),

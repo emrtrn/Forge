@@ -52,6 +52,7 @@ import {
 import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget";
 import { normalizeWorldWidgets } from "../engine/ui/uiWorldWidget";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
+import { normalizeVehicleAsset, normalizeVehicleAssetPath } from "../engine/physics/vehicle/vehicleTypes";
 import {
   buildParticleEffectPresetBody,
   isParticleEffectPreset,
@@ -3548,6 +3549,22 @@ export function validateEffectAsset(value: unknown): Record<string, unknown> {
   return { schema, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
 }
 
+/** Vehicle asset saves share the runtime field allowlist and version checks. */
+export function validateSaveVehiclePayload(value: unknown): {
+  path: string;
+  vehicle: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("vehicle payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const path = normalizeVehicleAssetPath(input.path);
+  if (!path) throw new Error("vehicle path must be public-root-relative and end with .vehicle.json");
+  const vehicle = normalizeVehicleAsset(input.vehicle);
+  if (!vehicle) throw new Error('vehicle must be an object with schema: 1 and type: "vehicle"');
+  return { path, vehicle: vehicle as unknown as Record<string, unknown> };
+}
+
 export function validateSaveEffectPayload(value: unknown): {
   path: string;
   effect: Record<string, unknown>;
@@ -4346,6 +4363,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   stateTree: "AI",
   animation: "animation",
   effect: "effect",
+  vehicle: "vehicle",
   foliageType: "foliage",
   prefab: "prefab",
   ui: "UI",

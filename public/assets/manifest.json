@@ -20676,6 +20676,29 @@
       "license": "Unknown"
     },
     {
+      "id": "reference-car-vehicle",
+      "name": "Reference Car",
+      "assetType": "vehicle",
+      "category": "Gameplay",
+      "path": "assets/starter-content/Gameplay/ReferenceCar.vehicle.json",
+      "tags": ["vehicle"],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Gameplay",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 366
+      },
+      "license": "CC0"
+    },
+    {
       "id": "vehicletest-level",
       "name": "VehicleTest.Level",
       "assetType": "level",

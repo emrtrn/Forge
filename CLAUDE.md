@@ -115,6 +115,17 @@ engine/editor.
   block in the parser, or it is silently dropped on save. Effect assets carry
   `assetType: "effect"` in the manifest (`engine/assets/manifest.ts`); the runtime
   still falls back to the `.effect.json` suffix for older `prefab`-typed manifests.
+- **Fourth allowlist surface — `*.vehicle.json` vehicle asset (schema 1):**
+  `/__save-vehicle` validates through `validateSaveVehiclePayload`, reusing
+  `normalizeVehicleAsset` / `normalizeVehicleDefinition`
+  (`engine/physics/vehicle/vehicleTypes.ts`) as the runtime/save field allowlist.
+  New vehicle or wheel fields must be added there or saving drops them (and
+  reports them in `dropped[]`). Assets carry `assetType: "vehicle"`; a `Vehicle`
+  component's `asset` is a public-root-relative `.vehicle.json` path. Inline
+  scalar props override that asset; a valid inline wheels list replaces its
+  whole wheel list. Missing/malformed assets fall back to inline/reference-car
+  settings with a warning. Asset expansion is runtime-only; actor saves preserve
+  the authored reference and inline props.
 
 ## Codex Tooling Context
 
@@ -136,7 +147,7 @@ engine/editor.
   validator guarded where they write structured data:
   `/__save-collision`, `/__save-actor`, `/__new-behavior`,
   `/__save-material-slots`, `/__save-skeleton`, `/__save-material`,
-  `/__save-ui`, `/__save-soundcue`, `/__save-effect`,
+  `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,
   `/__import-asset`, and `/__open-level`.

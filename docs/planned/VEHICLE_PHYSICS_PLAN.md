@@ -1,7 +1,8 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
-> Durum: **Faz 0 ve Faz 1 tamam** (kod + testler + tarayıcı smoke'u); sırada
-> Faz 2. Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
+> Durum: **Faz 0, Faz 1 ve Faz 2 kodu tamam**; sırada Faz 3.
+> Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
+> Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
 >
 > Denemek için: editörde Content Browser → `Levels/VehicleTest` → Open Level →
@@ -142,19 +143,52 @@ geldi.
       `tests/smoke/vehicle.spec.ts` (possess, W ile >20 km/h, S ile geri).
 - [ ] `?debug` wire: süspansiyon ışınları, temas noktaları → Faz 5'e taşındı.
 
-## Faz 2 — Veri: `*.vehicle.json` asset
+## Faz 2 — Veri: `*.vehicle.json` asset ✅
 
-- [ ] Manifest `assetType: "vehicle"` (`engine/assets/manifest.ts`).
-- [ ] `normalizeVehicleDefinition` (runtime normalizer, tek doğruluk kaynağı —
+- [x] Manifest `assetType: "vehicle"` (`engine/assets/manifest.ts`), uzantıdan
+      tür çıkarımı ve import kaydı. Referans araba asset'i manifest'te kayıtlı.
+- [x] `normalizeVehicleDefinition` (runtime normalizer, tek doğruluk kaynağı —
       effect asset'indeki `normalizeEffectDefinition` deseni);
       `vehicleDefinitionFromComponent` bunun üstüne oturur.
-- [ ] `Vehicle` component'ine `asset` prop'u (`*.vehicle.json` yolu); inline
+- [x] `Vehicle` component'ine `asset` prop'u (`*.vehicle.json` yolu); inline
       props asset'in üstüne override olarak uygulanır.
-- [ ] `/__save-vehicle` + `validateSaveVehiclePayload` →
+- [x] `/__save-vehicle` + `validateSaveVehiclePayload` →
       `tools/saveValidator.ts` (**4. allowlist yüzeyi**; CLAUDE.md'ye eklenir).
-- [ ] `/__save-actor` yolunun `Vehicle` component props'unu düşürmediğini
+- [x] `/__save-actor` yolunun `Vehicle` component props'unu düşürmediğini
       doğrulayan test (actor sınıfı editörde kaydedilince tekerlekler kalmalı).
-- [ ] Sürüşü kalıcı yapan gerekiyorsa: save-game'e araç hızı (şu an yalnız poz).
+- [ ] Opsiyonel araç hızını save-game'e yazma **Faz 4'e bırakıldı**; bu dilim
+      araç tanımı/yükleme/kaydetme içindir. Save-game şimdilik yalnız pozu tutar.
+
+Uygulama sözleşmesi:
+
+- Asset gövdesi `{ "schema": 1, "type": "vehicle", ...VehicleDefinition }`.
+  Eksik alanlar referans araba varsayılanlarından tamamlanır; bilinmeyen alanlar
+  kayıtta `dropped[]` ile raporlanır. Geçersiz sürüm/tür kaydedilmez.
+- `src/scene/vehicleAssetLoader.ts` statik dosyayı okur, aynı asset'e paralel
+  okumaları tek istekte toplar. Runtime actor sınıfı çözümlemesinde çalışır;
+  yerleştirilen/default pawn/spawn edilen actor yolları aynı çözümlemeyi kullanır.
+- Inline sayısal ayarlar asset'i ezer; geçerli inline `wheels` listesi tüm
+  tekerlek listesini değiştirir. Boş/geçersiz liste taban tekerlekleri korur.
+  Eksik/bozuk asset uyarı verir ve inline/referans araba ayarlarına düşer.
+- Actor dosyası genişletilmez: çözülmüş ayarlar yalnız runtime kopyasına yazılır.
+  `Script_ReferenceCar.actor.json` artık `Gameplay/ReferenceCar.vehicle.json`
+  asset'ini kullanır. Component props örneği:
+
+```json
+{
+  "asset": "assets/starter-content/Gameplay/ReferenceCar.vehicle.json",
+  "massKg": 950
+}
+```
+
+Doğrulama (2026-10-18): TypeScript kontrolü; tam engine paketi **1168 kontrol**;
+araç Playwright smoke'u **3 test** (asset'ten sürüş/fren/geri, endpoint ile gerçek
+kayıt/tekrar okuma/geçersiz kayıt reddi, asset motor kuvveti + inline önceliği).
+`build:verify` geçti: import sınırları, TypeScript + üretim build'i, slow engine
+paketi (1168 kontrol), `verify:dist --strict` (editör kodu runtime paketine sızmıyor).
+`check:assets`: 0 hata, 873 uyarı (thumbnail ve kayıt dışı dosyalar).
+Codex Security taraması çalıştırılmadı; yeni endpoint için dar kapsamlı diff
+incelemesi önerildi.
 
 ## Faz 3 — Aktarma organları (drivetrain)
 

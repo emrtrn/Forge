@@ -875,6 +875,7 @@ import {
   blockingVolumeCollisionDef,
   createBlockingVolumeObject,
   createRuntimeBlockingVolumeObject,
+  disposeBlockingVolumeObject,
   resolveBlockingVolume,
   uniqueBlockingVolumeId,
   uniqueBlockingVolumeName,
@@ -1056,6 +1057,9 @@ import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAn
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 import { registerVehicleRuntimeTests } from "../tests/engine/vehicleRuntime.test";
+import { registerVehicleAssetTests } from "../tests/engine/vehicleAssets.test";
+import { resolveActorVehicleAssets } from "../src/scene/vehicleAssetLoader";
+import { normalizeVehicleAsset } from "../engine/physics/vehicle/vehicleTypes";
 import { registerPerfReadoutTests } from "../tests/engine/perfReadout.test";
 import { registerFrameRegionTests } from "../tests/engine/frameRegions.test";
 import { registerFrameCaptureTests } from "../tests/engine/frameCapture.test";
@@ -1165,6 +1169,7 @@ await registerSkeletalAnimationModuleTests(check, checkAsync);
 registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
 registerVehicleRuntimeTests(check);
+await registerVehicleAssetTests(check, checkAsync);
 registerPerfReadoutTests(check);
 registerFrameRegionTests(check);
 registerFrameCaptureTests(check);
@@ -7049,7 +7054,9 @@ await checkAsync("the starter Reference Car actor drives in the VehicleTest leve
     ) as { worldSettings: { gameMode: string }; actors: LayoutActorInstance[] };
     assert.equal(level.worldSettings.gameMode, "forge.vehicle");
     const instance = level.actors[0] ?? assert.fail("car placement");
-    const entity = actorInstanceToEntity(def, instance, 0);
+    const resolved = await resolveActorVehicleAssets(def, async (path) =>
+      normalizeVehicleAsset(JSON.parse(readFileSync(`public/${path}`, "utf8"))));
+    const entity = actorInstanceToEntity(resolved, instance, 0);
 
     const physics = new PhysicsSubsystem({ backend: "rapier" });
     physics.setGravity([0, -9.81, 0]);
@@ -24276,6 +24283,23 @@ check("createBlockingVolumeObject builds an oriented brush; runtime variant is a
   // The runtime variant is a single grey-box group (no wireframe handle).
   const runtime = createRuntimeBlockingVolumeObject(item);
   assert.equal(runtime.children.length, 1);
+  const runtimeFill = runtime.children[0] as Mesh<BoxGeometry, MeshStandardMaterial>;
+  assert.equal(runtimeFill.material.color.getHexString(), "9aa0a6");
+  // An explicitly authored colour reaches Play, including the editor's default
+  // orange when deliberately chosen; an absent colour must still stay grey.
+  for (const color of ["#7b4b1e", "#ff8c1a"]) {
+    const actor = { id: "ground", position: item.position, color };
+    const tinted = createRuntimeBlockingVolumeObject(
+      { ...item, ...resolveBlockingVolume(actor) },
+      actor.color,
+    );
+    const fill = tinted.children[0] as Mesh<BoxGeometry, MeshStandardMaterial>;
+    assert.equal(fill.material.color.getHexString(), color.slice(1));
+    assert.equal(fill.material.transparent, false);
+    disposeBlockingVolumeObject(tinted);
+  }
+  disposeBlockingVolumeObject(runtime);
+  disposeBlockingVolumeObject(brush);
 });
 
 check("createBlockingVolumeObject: translucent fill is not pickable, only the edges are", () => {

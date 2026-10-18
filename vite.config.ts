@@ -34,6 +34,7 @@ import {
   validateGameDataPath,
   validateSaveSoundCuePayload,
   validateSaveEffectPayload,
+  validateSaveVehiclePayload,
   validateSaveFoliagePayload,
   validateSaveMeshPaintPayload,
   validateSaveAssetVertexColorsPayload,
@@ -883,6 +884,7 @@ const PRIVILEGED_URLS = new Set([
   "/__save-landscape",
   "/__save-soundcue",
   "/__save-effect",
+  "/__save-vehicle",
   "/__save-foliage",
   "/__save-foliage-type",
   "/__save-dialogue-voice",
@@ -1319,6 +1321,37 @@ function layoutEditorPlugin(): Plugin {
             res.end(
               JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
             );
+          }
+          return;
+        }
+
+        // Vehicle assets use the same public-root fence and dropped-field
+        // reporting as effect saves. This route is loopback-only and dev-only.
+        if (req.url === "/__save-vehicle") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const payload = validateSaveVehiclePayload(body);
+            const dropped = reportDroppedFields(
+              (body as { vehicle?: unknown } | null)?.vehicle,
+              payload.vehicle,
+              "vehicle",
+            );
+            const filePath = resolvePublicPath(payload.path);
+            await mkdir(resolve(filePath, ".."), { recursive: true });
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.vehicle, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, dropped }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
           }
           return;
         }

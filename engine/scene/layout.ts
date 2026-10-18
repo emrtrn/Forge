@@ -730,7 +730,7 @@ export interface LayoutBlockingVolume {
   brushSides?: number;
   /** Draw as a solid grey-box in Play. Absent/false means invisible-but-blocking. */
   renderInGame?: boolean;
-  /** Editor brush tint (hex `#rrggbb`). */
+  /** Editor brush tint and Play surface colour (hex `#rrggbb`); absent stays grey in Play. */
   color?: string;
   /**
    * AI navigation interpretation. `walkable` turns a horizontal box into a

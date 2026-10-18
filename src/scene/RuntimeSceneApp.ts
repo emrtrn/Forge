@@ -292,6 +292,7 @@ import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/acto
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
+import { createVehicleAssetLoader, resolveActorVehicleAssets } from "@/scene/vehicleAssetLoader";
 import {
   applyAssetUvwMapping,
   loadAssetUvw,
@@ -783,6 +784,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly actorMeshScales = new Map<string, Vec3>();
   /** Resolved `*.actor.json` classes, cached by classRef across instances. */
   private readonly actorClassCache = new Map<string, ActorScriptDef>();
+  private readonly loadVehicleAsset = createVehicleAssetLoader();
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
@@ -3625,6 +3627,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     } catch {
       def = normalizeActorScriptDef({}, classRef);
     }
+    def = await resolveActorVehicleAssets(def, this.loadVehicleAsset);
     this.actorClassCache.set(classRef, def);
     return def;
   }
@@ -4298,7 +4301,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const volumes = this.layout?.blockingVolumes ?? [];
     volumes.forEach((actor) => {
       const item = this.blockingVolumeItem(actor);
-      const object = createRuntimeBlockingVolumeObject(item);
+      const object = createRuntimeBlockingVolumeObject(item, actor.color);
       object.visible = item.renderInGame && !item.hidden;
       this.blockingVolumeObjects.push(object);
       this.scene.add(tagSceneSource(object, "blocking-volume"));

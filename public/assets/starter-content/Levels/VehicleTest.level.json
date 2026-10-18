@@ -57,20 +57,21 @@
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#9fb3c8",
-    "killZ": -20,
+    "backgroundColor": "#ffffff",
     "gameMode": "forge.vehicle"
   },
   "skyAtmosphere": {
-    "name": "Sky Atmosphere",
-    "rayleigh": 0.2,
+    "rayleigh": 1,
     "turbidity": 4,
-    "mie": 0.008,
-    "mieDirectionalG": 0.82,
-    "exposure": 0.45,
-    "skyLightCapture": {
-      "intensity": 1
-    }
+    "mie": 0.002,
+    "mieDirectionalG": 0.85
+  },
+  "heightFog": {},
+  "cloudLayer": {
+    "coverage": 0.4,
+    "density": 0.5,
+    "scale": 2,
+    "speed": 0.1
   },
   "lights": [
     {
@@ -107,7 +108,7 @@
         160
       ],
       "renderInGame": true,
-      "color": "#3b3b3b"
+      "color": "#725637"
     },
     {
       "id": "vehicle-test-ramp",

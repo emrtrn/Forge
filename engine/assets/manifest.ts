@@ -14,6 +14,7 @@ export type AssetType =
   | "stateTree"
   | "animation"
   | "effect"
+  | "vehicle"
   | "foliageType"
   | "prefab"
   | "ui"
@@ -143,6 +144,7 @@ const UI_EXTENSIONS = new Set(["ui.json", "theme.json", "loc.json"]);
 // of PREFAB_EXTENSIONS so effect assets carry `assetType: "effect"` rather than
 // being sniffed as generic prefabs.
 const EFFECT_EXTENSIONS = new Set(["effect.json"]);
+const VEHICLE_EXTENSIONS = new Set(["vehicle.json"]);
 // Foliage Type assets (engine/scene/foliage.ts). Distinct from the per-layout
 // `<layout>.foliage.json` instance sidecar (which is a layout companion, not a
 // manifest asset) so path-based classification never confuses the two.
@@ -179,6 +181,7 @@ export const ASSET_TYPES: readonly AssetType[] = [
   "stateTree",
   "animation",
   "effect",
+  "vehicle",
   "foliageType",
   "prefab",
   "ui",
@@ -218,6 +221,7 @@ export function inferAssetTypeFromPath(path: string): AssetType | null {
   if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
   if (UI_EXTENSIONS.has(compoundExtensionOf(lower))) return "ui";
   if (EFFECT_EXTENSIONS.has(compoundExtensionOf(lower))) return "effect";
+  if (VEHICLE_EXTENSIONS.has(compoundExtensionOf(lower))) return "vehicle";
   if (FOLIAGE_TYPE_EXTENSIONS.has(compoundExtensionOf(lower))) return "foliageType";
   if (PREFAB_EXTENSIONS.has(compoundExtensionOf(lower))) return "prefab";
   return null;
@@ -409,7 +413,7 @@ export function validateAssetManifest(
         code: "asset-type",
         assetId,
         message:
-          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, conversation, blackboard, behaviorTree, aiQuery, stateTree, animation, effect, foliageType, prefab, ui, or level.",
+          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, conversation, blackboard, behaviorTree, aiQuery, stateTree, animation, effect, vehicle, foliageType, prefab, ui, or level.",
       });
     }
 

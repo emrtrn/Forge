@@ -5,8 +5,8 @@
  * metres, kilograms, newtons, seconds — and every vector is chassis-local with
  * Forge's model convention: +Y up, +Z forward, so the car's right is -X.
  *
- * Faz 2 loads this from a `*.vehicle.json` asset; until then callers build it
- * in code and pass it through {@link resolveVehicleDefinition}.
+ * Authored as `*.vehicle.json` assets or inline Vehicle component props.
+ * Runtime loading and saving share {@link normalizeVehicleDefinition}.
  */
 export type VehicleVec3 = readonly [number, number, number];
 
@@ -65,6 +65,12 @@ export interface VehicleDefinition {
   readonly steerSpeed: number;
   /** Below this forward speed (m/s) the brake input reverses instead of braking. */
   readonly reverseSpeedThreshold: number;
+}
+
+/** Versioned on-disk envelope; physics only needs the definition inside it. */
+export interface VehicleAsset extends VehicleDefinition {
+  readonly schema: 1;
+  readonly type: "vehicle";
 }
 
 /** Driver intent, refreshed by the controller each frame. */
@@ -150,25 +156,60 @@ export type VehicleDefinitionInput = Partial<Omit<VehicleDefinition, "wheels">> 
  * the default, so a half-authored definition still drives.
  */
 export function resolveVehicleDefinition(input: VehicleDefinitionInput): VehicleDefinition {
+  return normalizeVehicleDefinition(input)!;
+}
+
+/**
+ * Single field allowlist for assets, inline props and saves. Invalid fields keep
+ * the base value; a valid inline wheels array replaces the entire base array.
+ * Missing/empty/malformed wheels retain the base wheels, as in Faz 1 components.
+ */
+export function normalizeVehicleDefinition(
+  value: unknown,
+  base: VehicleDefinition = referenceCarDefaults(),
+): VehicleDefinition | null {
+  if (!isRecord(value)) return null;
+  const input = value;
+  const wheels = Array.isArray(input.wheels)
+    ? input.wheels.filter(
+        (wheel): wheel is VehicleWheelDefinitionInput => isRecord(wheel) && isVec3(wheel.position),
+      )
+    : [];
   return {
-    massKg: positive(input.massKg, DEFAULT_VEHICLE.massKg),
-    centerOfMassOffset: vec3(input.centerOfMassOffset, DEFAULT_VEHICLE.centerOfMassOffset),
-    maxEngineForce: nonNegative(input.maxEngineForce, DEFAULT_VEHICLE.maxEngineForce),
-    maxReverseForce: nonNegative(input.maxReverseForce, DEFAULT_VEHICLE.maxReverseForce),
-    maxBrakeForce: nonNegative(input.maxBrakeForce, DEFAULT_VEHICLE.maxBrakeForce),
-    handbrakeForce: nonNegative(input.handbrakeForce, DEFAULT_VEHICLE.handbrakeForce),
+    massKg: positive(input.massKg, base.massKg),
+    centerOfMassOffset: vec3(input.centerOfMassOffset, base.centerOfMassOffset),
+    maxEngineForce: nonNegative(input.maxEngineForce, base.maxEngineForce),
+    maxReverseForce: nonNegative(input.maxReverseForce, base.maxReverseForce),
+    maxBrakeForce: nonNegative(input.maxBrakeForce, base.maxBrakeForce),
+    handbrakeForce: nonNegative(input.handbrakeForce, base.handbrakeForce),
     rollingResistanceForce: nonNegative(
       input.rollingResistanceForce,
-      DEFAULT_VEHICLE.rollingResistanceForce,
+      base.rollingResistanceForce,
     ),
-    maxSteerAngleDeg: Math.min(80, nonNegative(input.maxSteerAngleDeg, DEFAULT_VEHICLE.maxSteerAngleDeg)),
-    steerSpeed: positive(input.steerSpeed, DEFAULT_VEHICLE.steerSpeed),
+    maxSteerAngleDeg: Math.min(80, nonNegative(input.maxSteerAngleDeg, base.maxSteerAngleDeg)),
+    steerSpeed: positive(input.steerSpeed, base.steerSpeed),
     reverseSpeedThreshold: nonNegative(
       input.reverseSpeedThreshold,
-      DEFAULT_VEHICLE.reverseSpeedThreshold,
+      base.reverseSpeedThreshold,
     ),
-    wheels: input.wheels.map(resolveWheel),
+    wheels: (wheels.length > 0 ? wheels : base.wheels).map(resolveWheel),
   };
+}
+
+/** Runtime and save validation use exactly the same versioned asset shape. */
+export function normalizeVehicleAsset(value: unknown): VehicleAsset | null {
+  if (!isRecord(value) || value.schema !== 1 || value.type !== "vehicle") return null;
+  const definition = normalizeVehicleDefinition(value);
+  return definition ? { schema: 1, type: "vehicle", ...definition } : null;
+}
+
+/** Public-root-relative paths only; shared by static reads and dev saves. */
+export function normalizeVehicleAssetPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const path = value.trim().replace(/\\/g, "/");
+  if (!path.endsWith(".vehicle.json") || /[?#:%\u0000-\u001f]/.test(path)) return null;
+  if (path.split("/").some((part) => !part || part === "." || part === "..")) return null;
+  return path;
 }
 
 function resolveWheel(wheel: VehicleWheelDefinitionInput): VehicleWheelDefinition {
@@ -201,51 +242,37 @@ function flag(value: unknown, fallback: boolean): boolean {
  * take the handbrake.
  */
 export function createReferenceCarDefinition(): VehicleDefinition {
+  return referenceCarDefaults();
+}
+
+function referenceCarDefaults(): VehicleDefinition {
   const halfTrack = 0.8;
   const frontZ = 1.35;
   const rearZ = -1.3;
   const hardPointY = -0.1;
-  return resolveVehicleDefinition({
-    wheels: [
+  return {
+    ...DEFAULT_VEHICLE,
+    centerOfMassOffset: [...DEFAULT_VEHICLE.centerOfMassOffset],
+    wheels: ([
       { position: [halfTrack, hardPointY, frontZ], steer: true },
       { position: [-halfTrack, hardPointY, frontZ], steer: true },
       { position: [halfTrack, hardPointY, rearZ], drive: true, handbrake: true },
       { position: [-halfTrack, hardPointY, rearZ], drive: true, handbrake: true },
-    ],
-  });
+    ] satisfies VehicleWheelDefinitionInput[]).map(resolveWheel),
+  };
 }
 
 /**
  * Reads a `Vehicle` component's props into a definition. Every field is
- * optional: scalar props override the reference car, and an authored `wheels`
+ * optional: scalar props override the loaded asset (or reference car), and an authored `wheels`
  * array replaces its wheels (entries without a `position` are dropped). Props
  * that are not an object yield null — the chassis stays a plain dynamic body.
  */
-export function vehicleDefinitionFromComponent(props: unknown): VehicleDefinition | null {
-  if (!isRecord(props)) return null;
-  const reference = createReferenceCarDefinition();
-  const wheels = Array.isArray(props.wheels)
-    ? props.wheels.filter(
-        (wheel): wheel is VehicleWheelDefinitionInput => isRecord(wheel) && isVec3(wheel.position),
-      )
-    : [];
-  const number = (key: keyof Omit<VehicleDefinition, "wheels" | "centerOfMassOffset">): number =>
-    typeof props[key] === "number" ? (props[key] as number) : reference[key];
-  return resolveVehicleDefinition({
-    massKg: number("massKg"),
-    centerOfMassOffset: isVec3(props.centerOfMassOffset)
-      ? props.centerOfMassOffset
-      : reference.centerOfMassOffset,
-    maxEngineForce: number("maxEngineForce"),
-    maxReverseForce: number("maxReverseForce"),
-    maxBrakeForce: number("maxBrakeForce"),
-    handbrakeForce: number("handbrakeForce"),
-    rollingResistanceForce: number("rollingResistanceForce"),
-    maxSteerAngleDeg: number("maxSteerAngleDeg"),
-    steerSpeed: number("steerSpeed"),
-    reverseSpeedThreshold: number("reverseSpeedThreshold"),
-    wheels: wheels.length > 0 ? wheels : reference.wheels,
-  });
+export function vehicleDefinitionFromComponent(
+  props: unknown,
+  asset?: VehicleDefinition,
+): VehicleDefinition | null {
+  return normalizeVehicleDefinition(props, asset);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -253,18 +280,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isVec3(value: unknown): value is VehicleVec3 {
-  return Array.isArray(value) && value.length === 3 && value.every((n) => typeof n === "number");
+  return Array.isArray(value) && value.length === 3 && value.every((n) => typeof n === "number" && Number.isFinite(n));
 }
 
-function positive(value: number | undefined, fallback: number): number {
+function positive(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function nonNegative(value: number | undefined, fallback: number): number {
+function nonNegative(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-function vec3(value: VehicleVec3 | undefined, fallback: VehicleVec3): VehicleVec3 {
-  if (!value || value.length !== 3 || !value.every((n) => Number.isFinite(n))) return [...fallback];
+function vec3(value: unknown, fallback: VehicleVec3): VehicleVec3 {
+  if (!isVec3(value)) return [...fallback];
   return [value[0], value[1], value[2]];
 }

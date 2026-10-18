@@ -8,6 +8,7 @@ import {
 } from "../scene/components";
 import { interactionGroupsInteract, type NavigationRole } from "../scene/collision";
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
+import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
 import type { Entity, EntityId } from "../scene/entity";
 import type {
   PhysicsAabb,
@@ -46,6 +47,10 @@ export type PhysicsTransformSink = (entityId: EntityId, transform: TransformComp
 
 export interface PhysicsSubsystemOptions {
   backend?: PhysicsBackend;
+  /** Rapier simulation slice in seconds (default 1/60); see {@link FixedStepClock}. */
+  fixedTimestep?: number;
+  /** Max Rapier slices per frame (default 4); a longer frame drops its backlog. */
+  maxSubstepsPerFrame?: number;
 }
 
 /** Optional Phase 7 policy for dynamically simulated bodies in large worlds. */
@@ -94,6 +99,12 @@ interface RapierBodyRecord {
   isSensor: boolean;
 }
 
+/** A dynamic body's simulated pose one fixed step back, the render blend's start. */
+interface PreviousBodyPose {
+  position: Vec3;
+  rotation: PoseQuat;
+}
+
 interface SuspendedDynamicBody {
   linearVelocity: Vec3;
   angularVelocity: Vec3;
@@ -138,9 +149,33 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private gravity: Vec3 = [0, -9.81, 0];
   private transformSink: PhysicsTransformSink | null = null;
   private enabled = true;
+  private readonly stepClock: FixedStepClock;
+  /** Rapier slices taken by the latest `update()` (0 on a frame shorter than a step). */
+  private frameStepCount = 0;
+  /** Dynamic poses before the latest slice, for render interpolation. */
+  private previousPoses = new Map<EntityId, PreviousBodyPose>();
 
   constructor(options: PhysicsSubsystemOptions = {}) {
     this.backend = options.backend ?? "placeholder";
+    this.stepClock = new FixedStepClock({
+      step: options.fixedTimestep,
+      maxSubsteps: options.maxSubstepsPerFrame,
+    });
+  }
+
+  /** The fixed Rapier slice length in seconds. */
+  fixedTimestep(): number {
+    return this.stepClock.step;
+  }
+
+  /** How many fixed slices the latest `update()` simulated. */
+  lastFrameStepCount(): number {
+    return this.frameStepCount;
+  }
+
+  /** Render blend (0..1) between the previous and latest simulated dynamic poses. */
+  interpolationAlpha(): number {
+    return this.stepClock.alpha;
   }
 
   /**
@@ -242,6 +277,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
     const rapier = this.rapierBodies.get(entityId);
     if (!rapier) return;
+    // A teleport must not render as a one-step slide from the old pose.
+    this.previousPoses.delete(entityId);
     const translation = vectorFromTransform(transform);
     const rotation = quaternionFromEulerDegrees(transform.rotation);
     if (rapier.body.isKinematic()) {
@@ -281,6 +318,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     );
     this.collisionDisabled.delete(entityId);
     this.suspendedDynamicBodies.delete(entityId);
+    this.previousPoses.delete(entityId);
     const record = this.rapierBodies.get(entityId);
     if (record) {
       for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
@@ -620,14 +658,23 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       return;
     }
     if (this.rapierWorld) {
-      const deltaSeconds = Math.max(0, Math.min(_context.deltaSeconds, 1 / 20));
-      if (deltaSeconds > 0) this.rapierWorld.timestep = deltaSeconds;
-      this.updateDynamicActiveArea();
-      this.rapierWorld.step();
-      this.updateRapierContacts();
+      // Fixed slices, not one frame-sized step: the result must not depend on
+      // the frame rate. A frame shorter than a slice simulates nothing and only
+      // advances the render blend below.
+      const steps = this.stepClock.advance(_context.deltaSeconds);
+      this.frameStepCount = steps;
+      if (steps > 0) {
+        this.updateDynamicActiveArea();
+        for (let index = 0; index < steps; index += 1) {
+          if (index === steps - 1) this.capturePreviousPoses();
+          this.rapierWorld.step();
+        }
+        this.updateRapierContacts();
+      }
       this.syncRapierDynamicTransforms();
       return;
     }
+    this.frameStepCount = 0;
     const contacts: PhysicsContact[] = [];
     for (let i = 0; i < this.bodies.length; i += 1) {
       for (let j = i + 1; j < this.bodies.length; j += 1) {
@@ -696,6 +743,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!RAPIER) return;
     this.rapierWorld?.free();
     this.rapierWorld = new RAPIER.World(vectorFromVec3(this.gravity));
+    this.rapierWorld.timestep = this.stepClock.step;
+    this.stepClock.reset();
+    this.previousPoses.clear();
     this.rapierBodies.clear();
     this.suspendedDynamicBodies.clear();
     this.rapierColliderToEntity.clear();
@@ -797,6 +847,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         rapier.body.setLinvel({ x: 0, y: 0, z: 0 }, false);
         rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, false);
         rapier.body.sleep();
+        this.previousPoses.delete(entityId);
       } else if (!outsideActiveArea && suspended) {
         rapier.body.setLinvel(
           {
@@ -871,20 +922,51 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
   }
 
+  /** Records every live dynamic body's pose right before the frame's last slice. */
+  private capturePreviousPoses(): void {
+    if (!this.transformSink) return;
+    for (const [entityId, rapier] of this.rapierBodies.entries()) {
+      if (this.suspendedDynamicBodies.has(entityId)) continue;
+      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      if (!body?.collider.simulatePhysics) continue;
+      const translation = rapier.body.translation();
+      const rotation = rapier.body.rotation();
+      this.previousPoses.set(entityId, {
+        position: [translation.x, translation.y, translation.z],
+        rotation: { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w },
+      });
+    }
+  }
+
+  /**
+   * Sends each dynamic body's render pose to the sink, blended between the
+   * previous and latest slice by the step clock's leftover. The sink only feeds
+   * rendering, so the blend never leaks into the simulation; `body.transform`
+   * (sensor AABBs) keeps the true simulated pose.
+   */
   private syncRapierDynamicTransforms(): void {
     if (!this.transformSink) return;
+    const alpha = this.stepClock.alpha;
     for (const [entityId, rapier] of this.rapierBodies.entries()) {
       const body = this.bodies.find((candidate) => candidate.id === entityId);
       if (!body?.collider.simulatePhysics) continue;
       if (this.suspendedDynamicBodies.has(entityId)) continue;
       const translation = rapier.body.translation();
-      const rotation = eulerDegreesFromQuaternion(rapier.body.rotation());
-      const transform: TransformComponent = {
-        position: [translation.x, translation.y, translation.z],
-        rotation,
+      const rotation = rapier.body.rotation();
+      const position: Vec3 = [translation.x, translation.y, translation.z];
+      body.transform = {
+        position,
+        rotation: eulerDegreesFromQuaternion(rotation),
         scale: [...body.transform.scale],
       };
-      body.transform = cloneTransform(transform);
+      const previous = this.previousPoses.get(entityId);
+      const transform: TransformComponent = previous
+        ? {
+            position: lerpPosition(previous.position, position, alpha),
+            rotation: eulerDegreesFromQuaternion(nlerpQuaternion(previous.rotation, rotation, alpha)),
+            scale: [...body.transform.scale],
+          }
+        : cloneTransform(body.transform);
       this.transformSink(entityId, transform);
     }
   }

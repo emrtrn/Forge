@@ -247,6 +247,7 @@ import {
   normalizeLodBias,
 } from "../engine/render-three/distanceLod";
 import { rotatedBoxAabb, rotatedBoxFootprintXZ } from "../engine/physics/rotatedBox";
+import { FixedStepClock, lerpPosition, nlerpQuaternion } from "../engine/physics/fixedStep";
 import {
   initialElapsed,
   oneWaySeconds,
@@ -6622,6 +6623,149 @@ await checkAsync("rapier backend stays on placeholder when the scene has no coll
   app.update(0.016);
   assert.deepEqual(physics.contactsForEntity("decor"), []);
   await app.dispose();
+});
+
+// Vehicle plan Faz 0: the Rapier world advances in fixed slices, so the frame
+// rate never changes the simulation; the leftover only drives render blending.
+check("fixed step clock takes the same slice count at 30, 60 and 144 Hz", () => {
+  for (const hz of [30, 60, 144]) {
+    const clock = new FixedStepClock({ step: 1 / 60 });
+    let steps = 0;
+    for (let frame = 0; frame < hz; frame += 1) steps += clock.advance(1 / hz);
+    assert.ok(Math.abs(steps - 60) <= 1, `${hz} Hz took ${steps} slices for one second`);
+  }
+});
+
+check("fixed step clock snaps jittery 60 Hz frames to one slice and caps the backlog", () => {
+  const clock = new FixedStepClock({ step: 1 / 60, maxSubsteps: 4 });
+  // Real vsync jitter: frames scatter around 1/60 but average exactly to it.
+  const jitter = [-0.0007, 0.0005, 0.0002, -0.0003, 0.0006, -0.0003].map((d) => 1 / 60 + d);
+  for (let frame = 0; frame < 120; frame += 1) {
+    assert.equal(clock.advance(jitter[frame % jitter.length] ?? 0), 1, `frame ${frame}`);
+  }
+  assert.equal(clock.advance(0), 0);
+  assert.equal(clock.advance(Number.NaN), 0);
+  assert.equal(clock.advance(1), 4); // a one-second hitch simulates at most 4 slices
+  assert.equal(clock.alpha, 0); // ...and drops the rest instead of spiralling
+  assert.equal(clock.advance(1 / 120), 0);
+  assert.ok(Math.abs(clock.alpha - 0.5) < 1e-9, `alpha=${clock.alpha}`);
+  clock.reset();
+  assert.equal(clock.alpha, 0);
+});
+
+check("pose interpolation lerps position and takes the short rotation path", () => {
+  assert.deepEqual(lerpPosition([0, 0, 0], [2, 4, -6], 0.5), [1, 2, -3]);
+  const identity = { x: 0, y: 0, z: 0, w: 1 };
+  const halfTurnY = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 }; // 90° about Y
+  const mid = nlerpQuaternion(identity, halfTurnY, 0.5);
+  assert.ok(Math.abs(Math.hypot(mid.x, mid.y, mid.z, mid.w) - 1) < 1e-9);
+  assert.ok(Math.abs(2 * Math.atan2(mid.y, mid.w) - Math.PI / 4) < 1e-9, "midpoint is 45°");
+  // The same rotation with a flipped sign must not blend the long way round.
+  const negated = { x: -halfTurnY.x, y: -halfTurnY.y, z: -halfTurnY.z, w: -halfTurnY.w };
+  const short = nlerpQuaternion(identity, negated, 0.5);
+  assert.ok(Math.abs(Math.abs(2 * Math.atan2(short.y, short.w)) - Math.PI / 4) < 1e-9);
+});
+
+function fallingCrateEntity(position: Vec3 = [0, 5, 0]): Entity {
+  return {
+    id: "crate",
+    components: {
+      Transform: { position, rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: {
+        shape: "box",
+        size: [1, 1, 1],
+        isStatic: false,
+        isSensor: false,
+        simulatePhysics: true,
+      },
+    },
+  };
+}
+
+async function withQuietRapierInit(run: () => Promise<void>): Promise<void> {
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await run();
+  } finally {
+    console.warn = warn;
+  }
+}
+
+await checkAsync("rapier fixed step simulates the same fall at 30 Hz and 144 Hz", async () => {
+  await withQuietRapierInit(async () => {
+    const finalHeights: number[] = [];
+    for (const hz of [30, 144]) {
+      const physics = new PhysicsSubsystem({ backend: "rapier" });
+      physics.setGravity([0, -10, 0]);
+      let y = Number.NaN;
+      physics.setTransformSink((_id, transform) => {
+        y = transform.position[1];
+      });
+      physics.setEntities([fallingCrateEntity()]);
+      const app = new EngineApp();
+      app.registerSubsystem(physics);
+      await app.init();
+      let steps = 0;
+      for (let frame = 0; frame < hz; frame += 1) {
+        app.update(1 / hz);
+        steps += physics.lastFrameStepCount();
+      }
+      assert.equal(physics.fixedTimestep(), 1 / 60);
+      assert.ok(Math.abs(steps - 60) <= 1, `${hz} Hz simulated ${steps} slices`);
+      finalHeights.push(y);
+      await app.dispose();
+    }
+    const [at30, at144] = finalHeights;
+    // ~5 m in one second at g=10; the render pose trails the last slice by one step.
+    assert.ok(at30 !== undefined && at144 !== undefined && at30 < 1, `fell to ${at30}`);
+    assert.ok(Math.abs(at30 - at144) < 1e-3, `30 Hz y=${at30} vs 144 Hz y=${at144}`);
+  });
+});
+
+await checkAsync("rapier render pose blends between slices and a teleport skips the blend", async () => {
+  await withQuietRapierInit(async () => {
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setGravity([0, -10, 0]);
+    let rendered: TransformComponent | null = null;
+    physics.setTransformSink((_id, transform) => {
+      rendered = transform;
+    });
+    physics.setEntities([fallingCrateEntity()]);
+    const app = new EngineApp();
+    app.registerSubsystem(physics);
+    await app.init();
+    const renderedY = (): number => (rendered as TransformComponent | null)?.position[1] ?? Number.NaN;
+
+    for (let frame = 0; frame < 10; frame += 1) app.update(1 / 60);
+    const beforeLastSlice = renderedY(); // alpha 0 renders the pose one slice back
+    app.update(1 / 120);
+    assert.equal(physics.lastFrameStepCount(), 0); // half a slice: nothing simulated...
+    assert.ok(Math.abs(physics.interpolationAlpha() - 0.5) < 1e-6);
+    const halfway = renderedY(); // ...but the render pose still moves on
+    app.update(1 / 120);
+    assert.equal(physics.lastFrameStepCount(), 1);
+    const latest = renderedY();
+    assert.ok(
+      beforeLastSlice > halfway && halfway > latest,
+      `expected ${beforeLastSlice} > ${halfway} > ${latest}`,
+    );
+
+    physics.setEntityTransform("crate", {
+      position: [10, 5, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+    });
+    app.update(1 / 120);
+    const teleported = (rendered as TransformComponent | null)?.position ?? assert.fail("rendered");
+    assert.deepEqual(teleported, [10, 5, 0]);
+    await app.dispose();
+  });
 });
 
 check("behavior can react to physics contacts from the engine tick", () => {

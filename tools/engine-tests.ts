@@ -248,6 +248,13 @@ import {
 } from "../engine/render-three/distanceLod";
 import { rotatedBoxAabb, rotatedBoxFootprintXZ } from "../engine/physics/rotatedBox";
 import { FixedStepClock, lerpPosition, nlerpQuaternion } from "../engine/physics/fixedStep";
+import { computeVehicleDrive } from "../engine/physics/vehicle/vehicleDrive";
+import {
+  createReferenceCarDefinition,
+  NEUTRAL_VEHICLE_INPUT,
+  resolveVehicleDefinition,
+  type VehicleInput,
+} from "../engine/physics/vehicle/vehicleTypes";
 import {
   initialElapsed,
   oneWaySeconds,
@@ -6765,6 +6772,221 @@ await checkAsync("rapier render pose blends between slices and a teleport skips 
     const teleported = (rendered as TransformComponent | null)?.position ?? assert.fail("rendered");
     assert.deepEqual(teleported, [10, 5, 0]);
     await app.dispose();
+  });
+});
+
+// Vehicle plan Faz 1: ray-cast vehicle on the Rapier world.
+check("resolveVehicleDefinition fills defaults and rejects unusable numbers", () => {
+  const definition = resolveVehicleDefinition({
+    massKg: -5,
+    maxEngineForce: Number.NaN,
+    maxSteerAngleDeg: 400,
+    wheels: [{ position: [1, 0, 2], radius: 0, drive: true }],
+  });
+  assert.equal(definition.massKg, 1200);
+  assert.equal(definition.maxEngineForce, 6000);
+  assert.equal(definition.maxSteerAngleDeg, 80);
+  const wheel = definition.wheels[0] ?? assert.fail("wheel");
+  assert.deepEqual(wheel.position, [1, 0, 2]);
+  assert.equal(wheel.radius, 0.35);
+  assert.equal(wheel.drive, true);
+  assert.equal(wheel.steer, false);
+  assert.equal(wheel.brake, true);
+});
+
+check("computeVehicleDrive splits pedals across drive, brake and handbrake wheels", () => {
+  const car = createReferenceCarDefinition(); // front: steer; rear: drive + handbrake
+  const input = (patch: Partial<VehicleInput>): VehicleInput => ({ ...NEUTRAL_VEHICLE_INPUT, ...patch });
+
+  const throttle = computeVehicleDrive(car, input({ throttle: 1 }), 5, 0, 1 / 60);
+  assert.deepEqual(throttle.wheels.map((w) => w.engineForce), [0, 0, 3000, 3000]);
+  assert.ok(throttle.wheels.every((w) => w.brakeForce === 0), "no rolling resistance under throttle");
+
+  const braking = computeVehicleDrive(car, input({ brake: 1 }), 10, 0, 1 / 60);
+  assert.ok(braking.wheels.every((w) => w.engineForce === 0));
+  assert.deepEqual(braking.wheels.map((w) => w.brakeForce), [2750, 2750, 2750, 2750]);
+
+  const reversing = computeVehicleDrive(car, input({ brake: 1 }), 0.2, 0, 1 / 60);
+  assert.deepEqual(reversing.wheels.map((w) => w.engineForce), [0, 0, -1500, -1500]);
+
+  // Throttle while still rolling backwards brakes first instead of fighting the roll.
+  const recovering = computeVehicleDrive(car, input({ throttle: 1 }), -3, 0, 1 / 60);
+  assert.ok(recovering.wheels.every((w) => w.engineForce === 0));
+  assert.ok(recovering.wheels.every((w) => w.brakeForce > 0));
+
+  const handbrake = computeVehicleDrive(car, input({ handbrake: true }), 5, 0, 1 / 60);
+  const [frontLeft, , rearLeft] = handbrake.wheels;
+  assert.equal(frontLeft?.brakeForce, 75); // coasting rolling resistance only
+  assert.equal(rearLeft?.brakeForce, 75 + 2500);
+});
+
+check("computeVehicleDrive eases steering and turns right as a negative yaw", () => {
+  const car = createReferenceCarDefinition(); // steerSpeed 3/s, full lock 35°
+  const right: VehicleInput = { ...NEUTRAL_VEHICLE_INPUT, steer: 1 };
+  const first = computeVehicleDrive(car, right, 0, 0, 0.1);
+  assert.ok(Math.abs(first.steer - 0.3) < 1e-9, `steer=${first.steer}`);
+  const [front, , rear] = first.wheels;
+  assert.ok(Math.abs((front?.steering ?? 0) - (-0.3 * 35 * Math.PI) / 180) < 1e-9);
+  assert.equal(rear?.steering, 0);
+  const full = computeVehicleDrive(car, right, 0, first.steer, 1);
+  assert.equal(full.steer, 1); // clamps at the target, no overshoot
+  const back = computeVehicleDrive(car, NEUTRAL_VEHICLE_INPUT, 0, 1, 0.1);
+  assert.ok(Math.abs(back.steer - 0.7) < 1e-9);
+});
+
+const VEHICLE_SLICE = 1 / 60;
+
+async function createVehicleTestWorld(options: { slopeDeg?: number } = {}) {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, -9.81, 0]);
+  let pose: TransformComponent | null = null;
+  physics.setTransformSink((entityId, transform) => {
+    if (entityId === "car") pose = transform;
+  });
+  const slope = options.slopeDeg ?? 0;
+  const entities: Entity[] = [
+    {
+      id: "ground",
+      components: {
+        Transform: { position: [0, -0.5, 0], rotation: [-slope, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [400, 1, 400], isStatic: true, isSensor: false },
+      },
+    },
+    {
+      id: "car",
+      components: {
+        Transform: { position: [0, 1, 0], rotation: [-slope, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1.8, 0.6, 4.2],
+          isStatic: false,
+          isSensor: false,
+          simulatePhysics: true,
+        },
+      },
+    },
+  ];
+  physics.setEntities(entities);
+  await physics.init();
+  let frame = 0;
+  const tick = (seconds: number): void => {
+    const frames = Math.round(seconds / VEHICLE_SLICE);
+    for (let index = 0; index < frames; index += 1) {
+      frame += 1;
+      physics.update({ deltaSeconds: VEHICLE_SLICE, elapsedSeconds: frame * VEHICLE_SLICE, frame });
+    }
+  };
+  const position = (): Vec3 => {
+    const current = pose as TransformComponent | null;
+    return current ? [...current.position] : assert.fail("car pose not synced");
+  };
+  const drive = (patch: Partial<VehicleInput>): void =>
+    physics.setVehicleInput("car", { ...NEUTRAL_VEHICLE_INPUT, ...patch });
+  return { physics, entities, tick, position, drive };
+}
+
+await checkAsync("rapier vehicle only attaches to a live dynamic chassis", async () => {
+  await withQuietRapierInit(async () => {
+    const placeholder = new PhysicsSubsystem();
+    placeholder.setEntities([fallingCrateEntity()]);
+    assert.equal(placeholder.createVehicle("crate", createReferenceCarDefinition()), false);
+
+    const world = await createVehicleTestWorld();
+    assert.equal(world.physics.createVehicle("ground", createReferenceCarDefinition()), false);
+    assert.equal(world.physics.createVehicle("missing", createReferenceCarDefinition()), false);
+    assert.equal(world.physics.createVehicle("car", createReferenceCarDefinition()), true);
+    assert.equal(world.physics.hasVehicle("car"), true);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle settles on its suspension with every wheel grounded", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.tick(3);
+    const state = world.physics.vehicleState("car") ?? assert.fail("vehicle state");
+    assert.equal(state.wheels.length, 4);
+    for (const wheel of state.wheels) {
+      assert.ok(wheel.inContact, "wheel off the ground at rest");
+      // ~7 cm static sag: g / (4 wheels × stiffness 30) below the 0.35 m rest length.
+      assert.ok(wheel.suspensionLength > 0.25 && wheel.suspensionLength < 0.34, `length=${wheel.suspensionLength}`);
+    }
+    // Ground top is y=0: hard point (-0.1) + spring + radius puts the body ~0.73 up.
+    const [, y] = world.position();
+    assert.ok(y > 0.68 && y < 0.78, `chassis y=${y}`);
+    assert.ok(Math.abs(state.forwardSpeed) < 0.05, `creeping at ${state.forwardSpeed}`);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle drives forward, steers right, brakes and reverses", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.tick(1);
+
+    world.drive({ throttle: 1 });
+    world.tick(3);
+    const afterThrottle = world.position();
+    const speed = world.physics.vehicleState("car")?.forwardSpeed ?? 0;
+    assert.ok(speed > 10 && speed < 15, `3 s of full throttle reached ${speed} m/s`);
+    assert.ok(afterThrottle[2] > 15, `forward is +Z: z=${afterThrottle[2]}`);
+    assert.ok(Math.abs(afterThrottle[0]) < 0.1, `drifted sideways: x=${afterThrottle[0]}`);
+    assert.ok(Math.abs(afterThrottle[1] - 0.73) < 0.08, `chassis y=${afterThrottle[1]}`);
+
+    world.drive({ throttle: 0.5, steer: 1 });
+    world.tick(1.5);
+    const afterTurn = world.position();
+    assert.ok(afterTurn[0] < afterThrottle[0] - 2, `right turn heads to -X: x=${afterTurn[0]}`);
+
+    world.drive({ brake: 1 });
+    world.tick(2.5);
+    const stopped = world.physics.vehicleState("car")?.forwardSpeed ?? Number.NaN;
+    assert.ok(stopped < 0, `holding brake past a stop reverses: ${stopped}`);
+    world.tick(1.5);
+    const reversing = world.physics.vehicleState("car")?.forwardSpeed ?? Number.NaN;
+    assert.ok(reversing < -2, `reverse speed ${reversing}`);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle handbrake holds on a slope and releasing it rolls downhill", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld({ slopeDeg: 8 });
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.drive({ handbrake: true });
+    world.tick(1);
+    const held = world.position();
+    world.tick(3);
+    const later = world.position();
+    assert.ok(Math.abs(later[2] - held[2]) < 0.15, `handbrake crept ${later[2] - held[2]} m`);
+
+    // The parked chassis is asleep by now; releasing must wake it.
+    world.drive({});
+    world.tick(2);
+    const rolled = world.position();
+    assert.ok(later[2] - rolled[2] > 1, `rolled ${later[2] - rolled[2]} m downhill`);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle survives a world rebuild and leaves with its entity", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.physics.setEntities(world.entities); // e.g. a level reload rebuilds the world
+    assert.equal(world.physics.hasVehicle("car"), true);
+    world.tick(1);
+    world.drive({ throttle: 1 });
+    world.tick(1);
+    assert.ok((world.physics.vehicleState("car")?.forwardSpeed ?? 0) > 3, "re-attached vehicle drives");
+
+    world.physics.removeEntity("car");
+    assert.equal(world.physics.hasVehicle("car"), false);
+    assert.equal(world.physics.vehicleState("car"), null);
+    world.tick(0.1); // stepping without the chassis must not touch a freed controller
+    world.physics.dispose();
   });
 });
 

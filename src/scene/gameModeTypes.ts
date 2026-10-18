@@ -24,6 +24,8 @@ import type { LocomotionInput } from "@engine/movement/locomotionAnimation";
 import type { AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 import type { RagdollGroupDesc, RagdollPose } from "@engine/physics/ragdoll";
 import type { ScriptMessageEnvelope } from "@engine/behavior/scriptMessages";
+import type { TransformComponent } from "@engine/scene/components";
+import type { VehicleInput, VehicleState } from "@engine/physics/vehicle/vehicleTypes";
 
 export type Vec3 = [number, number, number];
 export type InputMode = "game" | "ui" | "game-and-ui";
@@ -33,11 +35,12 @@ export type MouseCursorMode = "show" | "hide";
 /**
  * The pawn a Game Mode spawns/possesses. `camera` is a runtime-only flythrough
  * pawn (no scene object — the camera itself is the pawn); `character` possesses
- * an existing layout character.
+ * an existing layout character; `vehicle` possesses a placed actor carrying a
+ * `Vehicle` component.
  */
 export interface PawnDefinition {
   readonly id: string;
-  readonly kind: "camera" | "character";
+  readonly kind: "camera" | "character" | "vehicle";
   /**
    * For `character` pawns, the asset spawned as the default player when the scene
    * has no authored player character. (Temporary: a future build lets the user
@@ -82,8 +85,9 @@ export interface PlayerControllerDefinition {
    * - `camera-pawn`: take over the runtime camera (no character possession).
    * - `first-input-move-character`: possess the explicitly resolved player
    *   character (metadata `player` tag, else first `input-move` behavior).
+   * - `first-vehicle`: possess the level's first `Vehicle` actor.
    */
-  readonly possess: "camera-pawn" | "first-input-move-character";
+  readonly possess: "camera-pawn" | "first-input-move-character" | "first-vehicle";
 }
 
 /** A static Game Mode definition registered in the runtime registry. */
@@ -143,6 +147,24 @@ export interface RuntimeCharacterRef {
   skeleton?: AssetSkeletonDef;
 }
 
+/**
+ * The level's ray-cast vehicles (entities with a `Vehicle` component), as a
+ * Game Mode drives them: Unreal's vehicle movement component surface, scaled
+ * down to pedals, steering and a reset.
+ */
+export interface GameModeVehicles {
+  /** Entity ids of every live vehicle, in level order. */
+  ids(): readonly string[];
+  /** Driver intent the vehicle follows until the next call. */
+  setInput(entityId: string, input: VehicleInput): void;
+  /** Live speed + wheel readback, or null when the id is not a vehicle. */
+  state(entityId: string): VehicleState | null;
+  /** The vehicle's rendered (interpolated) root object, for cameras. */
+  object(entityId: string): Object3D | null;
+  /** Teleports the vehicle to `transform` at rest (flip recovery). */
+  reset(entityId: string, transform: TransformComponent): void;
+}
+
 /** A scene entity the runtime resolved under a viewport point. */
 export interface RuntimeEntityPick {
   /** Entity id of the picked actor / character (never a decorative static). */
@@ -186,6 +208,11 @@ export interface GameModeContext {
   sampleRagdoll?(id: number): RagdollPose[];
   /** Removes a spawned ragdoll (bodies, colliders, joints). */
   despawnRagdoll?(id: number): void;
+  /**
+   * The level's ray-cast vehicles. Optional so headless/test contexts may omit
+   * it; a level without `Vehicle` actors simply reports no ids.
+   */
+  readonly vehicles?: GameModeVehicles;
   /**
    * Subscribes the session to a runtime script message (e.g. `death`/`ragdoll`),
    * optionally scoped to one target entity, returning an unsubscribe handle. This

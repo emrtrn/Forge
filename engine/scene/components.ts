@@ -29,6 +29,8 @@ export const SCRIPT_REFERENCES_COMPONENT = "ScriptReferences";
 export const SCRIPT_DISPATCHERS_COMPONENT = "ScriptDispatchers";
 export const AI_CONTROLLER_COMPONENT = "AIController";
 export const SMART_OBJECT_COMPONENT = "SmartObject";
+/** Ray-cast wheeled vehicle on a dynamic chassis (`engine/physics/vehicle`). */
+export const VEHICLE_COMPONENT = "Vehicle";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape =

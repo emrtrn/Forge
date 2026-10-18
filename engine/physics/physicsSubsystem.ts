@@ -2,6 +2,7 @@ import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
   readColliderComponent,
   readTransformComponent,
+  VEHICLE_COMPONENT,
   type ColliderComponent,
   type ColliderPrimitive,
   type TransformComponent,
@@ -12,6 +13,7 @@ import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./
 import { computeVehicleDrive } from "./vehicle/vehicleDrive";
 import {
   NEUTRAL_VEHICLE_INPUT,
+  vehicleDefinitionFromComponent,
   type VehicleDefinition,
   type VehicleInput,
   type VehicleState,
@@ -73,6 +75,8 @@ interface PhysicsBody {
   id: EntityId;
   transform: TransformComponent;
   collider: ColliderComponent;
+  /** From the entity's `Vehicle` component: the body becomes a vehicle chassis. */
+  vehicle?: VehicleDefinition;
 }
 
 interface Aabb {
@@ -108,6 +112,8 @@ type RapierVehicleController = ReturnType<RapierWorld["createVehicleController"]
 interface VehicleRecord {
   readonly entityId: EntityId;
   readonly definition: VehicleDefinition;
+  /** `component`: built from the entity's `Vehicle` component; `api`: `createVehicle`. */
+  readonly source: "component" | "api";
   controller: RapierVehicleController | null;
   input: VehicleInput;
   /** Smoothed steering input (-1..1). */
@@ -214,6 +220,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const record: VehicleRecord = {
       entityId,
       definition,
+      source: "api",
       controller: null,
       input: NEUTRAL_VEHICLE_INPUT,
       steer: 0,
@@ -233,6 +240,36 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
   hasVehicle(entityId: EntityId): boolean {
     return this.vehicles.has(entityId);
+  }
+
+  /**
+   * Teleports a vehicle to `transform` at rest — the "flip back onto the
+   * wheels" reset every driving game needs. Velocities and steering are zeroed.
+   */
+  resetVehicle(entityId: EntityId, transform: TransformComponent): void {
+    const record = this.vehicles.get(entityId);
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !rapier) return;
+    this.setEntityTransform(entityId, transform);
+    rapier.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    record.steer = 0;
+  }
+
+  /** Every entity currently driven as a vehicle, in creation order. */
+  vehicleEntityIds(): EntityId[] {
+    return [...this.vehicles.keys()];
+  }
+
+  /**
+   * The latest *simulated* pose of a dynamic body (not the render blend), or
+   * null for static/kinematic/unknown entities. Hosts read it where the
+   * entity's own Transform component is stale because physics moves the body.
+   */
+  simulatedTransform(entityId: EntityId): TransformComponent | null {
+    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    if (!body?.collider.simulatePhysics || !this.rapierBodies.has(entityId)) return null;
+    return cloneTransform(body.transform);
   }
 
   /** Sets the driver intent the vehicle follows until the next call. */
@@ -342,6 +379,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.staticSurfaceSpatialIndex = null;
     this.staticNavigationBlockerCache = null;
     this.staticNavigationSurfaceCache = null;
+    // Component vehicles are rebuilt from the new entity set; API ones persist.
+    for (const [entityId, vehicle] of this.vehicles) {
+      if (vehicle.source === "component") this.removeVehicle(entityId);
+    }
     if (this.rapierModule) this.rebuildRapierWorld();
   }
 
@@ -860,6 +901,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
     for (const body of this.bodies) this.addRapierBody(body);
     for (const [entityId, vehicle] of this.vehicles) {
+      if (vehicle.controller) continue; // a component vehicle addRapierBody just built
       if (!this.attachVehicleController(vehicle)) this.vehicles.delete(entityId);
     }
   }
@@ -975,6 +1017,17 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: body.collider.isSensor,
     });
     for (const collider of colliders) this.rapierColliderToEntity.set(collider.handle, body.id);
+    if (body.vehicle && !this.vehicles.has(body.id)) {
+      const record: VehicleRecord = {
+        entityId: body.id,
+        definition: body.vehicle,
+        source: "component",
+        controller: null,
+        input: NEUTRAL_VEHICLE_INPUT,
+        steer: 0,
+      };
+      if (this.attachVehicleController(record)) this.vehicles.set(body.id, record);
+    }
   }
 
   private updateRapierContacts(): void {
@@ -1488,11 +1541,14 @@ function bodyFromEntity(entity: Entity): PhysicsBody | null {
   const transform = readTransformComponent(entity);
   const collider = readColliderComponent(entity);
   if (!transform || !collider) return null;
-  return {
+  const body: PhysicsBody = {
     id: entity.id,
     transform: cloneTransform(transform),
     collider: cloneCollider(collider),
   };
+  const vehicle = vehicleDefinitionFromComponent(entity.components[VEHICLE_COMPONENT]);
+  if (vehicle) body.vehicle = vehicle;
+  return body;
 }
 
 function cloneCollider(collider: ColliderComponent): ColliderComponent {

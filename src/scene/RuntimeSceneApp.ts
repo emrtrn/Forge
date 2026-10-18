@@ -29,6 +29,7 @@ import {
   behaviorRegistryFactoryService,
   characterAnimationCommandsService,
   characterAnimationHostService,
+  vehicleHostService,
   gameUiMessageService,
   gameModeProviderService,
   gameplaySaveStateService,
@@ -1144,6 +1145,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       distanceSquaredToCamera: (object) => object.position.distanceToSquared(this.camera.position),
       locomotion: (entityId) => this.locomotionReports.get(entityId),
       possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
+    });
+    this.runtimeServices.provide(vehicleHostService, {
+      vehicleIds: () => this.physicsSubsystem.vehicleEntityIds(),
+      vehicleState: (entityId) => this.physicsSubsystem.vehicleState(entityId),
+      actorObject: (entityId) => this.actorObjects.get(entityId) ?? null,
     });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,
@@ -3370,6 +3376,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (character) return character;
     const entity = this.actorEntityById.get(entityId);
     if (!entity) return null;
+    // A simulated actor (a crate, a vehicle pawn) is moved by physics, not by its
+    // Transform component, so the component would still read its spawn pose.
+    const simulated = this.physicsSubsystem.simulatedTransform(entityId);
+    if (simulated) return simulated;
     const transform = readTransformComponent(entity);
     return transform ? cloneTransform(transform) : null;
   }
@@ -3431,6 +3441,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       spawnRagdoll: (desc, options) => this.physicsSubsystem.spawnRagdoll(desc, options),
       sampleRagdoll: (id) => this.physicsSubsystem.sampleRagdoll(id),
       despawnRagdoll: (id) => this.physicsSubsystem.despawnRagdoll(id),
+      vehicles: {
+        ids: () => this.physicsSubsystem.vehicleEntityIds(),
+        setInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
+        state: (entityId) => this.physicsSubsystem.vehicleState(entityId),
+        object: (entityId) => this.actorObjects.get(entityId) ?? null,
+        reset: (entityId, transform) => this.physicsSubsystem.resetVehicle(entityId, transform),
+      },
       onScriptMessage: (type, handler, options) =>
         this.behaviorSubsystem.subscribeScriptMessage(
           type,

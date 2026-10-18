@@ -1,7 +1,12 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
-> Durum: **Faz 0 sürüyor.** Hedef: Forge'a Unreal Chaos Vehicles benzeri,
-> veri odaklı (data-driven) tekerlekli araç desteği — runtime + editör.
+> Durum: **Faz 0 ve Faz 1 tamam** (kod + testler + tarayıcı smoke'u); sırada
+> Faz 2. Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
+> (data-driven) tekerlekli araç desteği — runtime + editör.
+>
+> Denemek için: editörde Content Browser → `Levels/VehicleTest` → Open Level →
+> Play. W/S gaz–fren/geri, A/D direksiyon, Space el freni, E aracı tekerleklerine
+> geri oturtur.
 
 ## Karar: Rapier raycast vehicle + ince "aktarma organları" katmanı
 
@@ -89,47 +94,67 @@ Bilinen sınırlamalar (Faz 0'da bilerek bırakılanlar):
   çok adımlı karede karakterin dinamik cisimlere verdiği itme bir adımda
   yoğunlaşır. Karakter hareketi Rapier dışı çözüldüğü için şimdilik sorun değil.
 
-## Faz 1 — Çekirdek araç (hard-code, kanıt dilimi)
+## Faz 1 — Çekirdek araç (kanıt dilimi) ✅
 
-Amaç: Tek bir test seviyesinde, kodda tanımlı bir araç sürülebilsin.
+Amaç: Tek bir test seviyesinde bir araç sürülebilsin. Plandan sapma: araç
+kodda değil, ilk günden **actor sınıfındaki `Vehicle` component'iyle** tanımlı
+(Unreal'ın `ChaosVehicleMovementComponent` deseni) — Faz 2'nin yarısı erkenden
+geldi.
 
-- [ ] `engine/physics/vehicle/vehicleTypes.ts`: `VehicleDefinition`
-      (şasi kütlesi, ağırlık merkezi ofseti, tekerlek listesi) ve
-      `VehicleWheelDefinition` (bağlantı noktası, yarıçap, süspansiyon rest
-      length / stiffness / damping / max travel, `frictionSlip`,
-      `sideFrictionStiffness`, `steer` / `drive` / `brake` / `handbrake`
-      bayrakları).
-- [ ] `PhysicsSubsystem` içinde araç kaydı: `createVehicle(entityId, def)` →
-      şasi body'sine `createVehicleController`, tekerlekler `addWheel`.
-      `removeEntity` / `rebuildRapierWorld` araçları da temizler.
-- [ ] Alt-adım kancası: her `world.step()` öncesi `controller.updateVehicle(step)`
-      (Faz 0 döngüsünün içinde). Tekerlek ışınları şasinin kendi
-      collider'ını hariç tutar (filter predicate / collision grupları).
-- [ ] Girdi → `VehicleInput { throttle, brake, steer, handbrake }` (−1..1),
-      `engine/input` action map'ine `Vehicle*` action'ları.
-- [ ] Basit sürüş: throttle → sabit `engineForce`, brake → `setWheelBrake`,
-      steer → `setWheelSteering` (yumuşatılmış).
-- [ ] Görsel: tekerlek mesh'leri `wheelChassisConnectionPoint` +
-      `wheelSuspensionLength` + `wheelRotation` + `wheelSteering`'den konumlanır
-      (Faz 0 interpolasyonu şasiye uygulanır; tekerlekler şasiye bağlı).
-- [ ] `?debug` wire: süspansiyon ışınları, temas noktaları, kuvvet çizgileri.
-- [ ] Testler (node, Rapier): araç düz zeminde dinlenir (süspansiyon
-      denge yüksekliği), throttle ile ileri gider, steer ile döner, brake ile
-      durur, rampada geri kaymaz (el freni).
+### 1a — motor (`3781ed6`)
 
-## Faz 2 — Veri: `*.vehicle.json` asset + layout bağlantısı
+- [x] `engine/physics/vehicle/vehicleTypes.ts`: SI birimli `VehicleDefinition`
+      / `VehicleWheelDefinition`, `resolveVehicleDefinition` (varsayılan +
+      sınırlama), referans arka itişli araba, girdi/durum tipleri. Eksen
+      kuralı: +Y yukarı, +Z ileri, aracın sağı −X.
+- [x] `vehicleDrive.ts` (saf): gaz, fren→durunca geri, el freni, yuvarlanma
+      direnci, yumuşatılmış direksiyon.
+- [x] `PhysicsSubsystem`: `createVehicle` / `removeVehicle` /
+      `setVehicleInput` / `vehicleState` / `resetVehicle`; tanımdan kütle +
+      ağırlık merkezi + kutu ataleti; her sabit adım öncesi `updateVehicle`;
+      fren kuvveti adım başı impulse'a çevrilir; girdi değişimi uyuyan şasiyi
+      uyandırır; dünya yeniden kurulunca araç yeniden bağlanır.
+
+### 1b — runtime
+
+- [x] `Vehicle` component (`VEHICLE_COMPONENT`, `ACTOR_COMPONENT_KINDS`):
+      props bir `VehicleDefinition` alt kümesi (boş = referans araba);
+      fizik alt sistemi component'li entity'yi kendiliğinden araç yapar.
+- [x] Girdi: yeni action yerine mevcut sözlük — `move-forward/back` pedal,
+      `move-left/right` direksiyon, `jump` el freni, `interact` (E) reset.
+- [x] `forge.vehicle` Game Mode (`src/game/gameModes/vehicleGameMode.ts`):
+      ilk `Vehicle` aktörünü possess eder (fizik geç gelirse geç possess),
+      UI modunda nötr girdi, takip kamerası (yön takibi + hıza bağlı FOV),
+      E ile dik reset. Sözleşme: `GameModeContext.vehicles`, pawn türü
+      `vehicle`, possess `first-vehicle`.
+- [x] `vehicle` capability modülü: süspansiyon ışını başına tekerlek mesh'i
+      (yay boyu, direksiyon, dönüş); aktörün ölçeğini telafi eder; modül
+      kapalıyken araç yine sürülür (I3).
+- [x] Shell: `vehicleHostService`; `transformForEntity` simüle edilen
+      aktörlerde fizik pozunu okur (kalite odağı / save state artık spawn
+      noktasında takılmaz).
+- [x] İçerik: `Gameplay/Script_ReferenceCar.actor.json` (pivotu altta olan
+      `shape-cube` gövde, collider `center` ile hizalı, tekerlekler component'te)
+      + `Levels/VehicleTest.level.json` (zemin, rampa + plato, bordür, sütunlar).
+- [x] Testler: 8 Rapier (dinlenme, sürüş, dönüş, fren/geri, rampada el freni,
+      rebuild) + component/actor dosyası entegrasyonu + 8 runtime (saf
+      yardımcılar, oturum, tekerlek modülü) + tarayıcı smoke'u
+      `tests/smoke/vehicle.spec.ts` (possess, W ile >20 km/h, S ile geri).
+- [ ] `?debug` wire: süspansiyon ışınları, temas noktaları → Faz 5'e taşındı.
+
+## Faz 2 — Veri: `*.vehicle.json` asset
 
 - [ ] Manifest `assetType: "vehicle"` (`engine/assets/manifest.ts`).
 - [ ] `normalizeVehicleDefinition` (runtime normalizer, tek doğruluk kaynağı —
-      effect asset'indeki `normalizeEffectDefinition` deseni).
+      effect asset'indeki `normalizeEffectDefinition` deseni);
+      `vehicleDefinitionFromComponent` bunun üstüne oturur.
+- [ ] `Vehicle` component'ine `asset` prop'u (`*.vehicle.json` yolu); inline
+      props asset'in üstüne override olarak uygulanır.
 - [ ] `/__save-vehicle` + `validateSaveVehiclePayload` →
       `tools/saveValidator.ts` (**4. allowlist yüzeyi**; CLAUDE.md'ye eklenir).
-- [ ] Placement alanı `vehicleAssetId` (+ gerekirse `wheelMeshAssetId`) →
-      `applyTransformFields` allowlist'i; `droppedFields` /
-      `serializationDrift` testleri kapsar.
-- [ ] `actorInstanceToEntity` / runtime entity: `Vehicle` bileşeni; şasi
-      collider'ı mevcut collision preset sisteminden.
-- [ ] `RuntimeParity` level'ına bir araç → `game-starter` smoke'u kapsar.
+- [ ] `/__save-actor` yolunun `Vehicle` component props'unu düşürmediğini
+      doğrulayan test (actor sınıfı editörde kaydedilince tekerlekler kalmalı).
+- [ ] Sürüşü kalıcı yapan gerekiyorsa: save-game'e araç hızı (şu an yalnız poz).
 
 ## Faz 3 — Aktarma organları (drivetrain)
 
@@ -149,16 +174,20 @@ Amaç: Tek bir test seviyesinde, kodda tanımlı bir araç sürülebilsin.
 
 ## Faz 4 — Oynanış entegrasyonu
 
-- [ ] `src/scene/capabilities/vehicleModule.ts` capability modülü; tick slotu
-      `pre-physics` (girdi → araç komutu) + fizik alt-adım kancası.
-- [ ] Pawn: araç possess edilebilir; karakter **araca bin / in** (enter/exit
-      noktası, karakter gizlenir/bağlanır). Save-game: araç pozu + hız.
-- [ ] Kamera: araç takip kamerası (spring arm, hıza bağlı FOV / mesafe).
+- [x] `vehicleModule.ts` capability modülü ve possess edilebilir araç pawn'ı
+      (Faz 1b'de geldi).
+- [ ] Karakter **araca bin / in** (enter/exit noktası, karakter
+      gizlenir/bağlanır, TPS ↔ araç possess geçişi). Save-game: araç hızı.
+- [ ] Kamera: spring arm çarpışması (kamera duvar arkasına girmesin), fareyle
+      etrafına bakma.
 - [ ] Ses kancası: RPM → motor ses cue pitch'i (audio modülü üzerinden).
 - [ ] AI: basit spline / nav takip eden araç sürücüsü (opsiyonel, ayrı dilim).
 
 ## Faz 5 — Editör yüzeyi
 
+- [ ] `?debug` wire: süspansiyon ışınları, temas noktaları (Faz 1'den).
+- [ ] Actor Script editöründe `Vehicle` component'i için form (şu an
+      component eklenebiliyor ama props'u yalnız JSON'dan düzenleniyor).
 - [ ] Add-Actor menüsünde "Vehicle".
 - [ ] Details: araç asset seçimi + hızlı ayarlar.
 - [ ] Vehicle asset editörü (form tabanlı, VFX Lite deseni): tekerlek listesi,

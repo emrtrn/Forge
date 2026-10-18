@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_ReferenceCar",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "chassis",
+      "component": "Collider",
+      "props": {
+        "shape": "box",
+        "isStatic": false,
+        "isSensor": false,
+        "size": [1.8, 0.6, 4.2],
+        "center": [0, 0.3, 0],
+        "simulatePhysics": true,
+        "linearDamping": 0.05,
+        "angularDamping": 0.6,
+        "hideInGame": true
+      },
+      "parent": "root"
+    },
+    {
+      "id": "body",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "shape-cube",
+        "scale": [1.8, 0.6, 4.2]
+      },
+      "parent": "chassis"
+    },
+    {
+      "id": "vehicle",
+      "component": "Vehicle",
+      "props": {
+        "massKg": 1200,
+        "centerOfMassOffset": [0, -0.05, 0],
+        "wheels": [
+          { "position": [0.8, 0.2, 1.35], "steer": true },
+          { "position": [-0.8, 0.2, 1.35], "steer": true },
+          { "position": [0.8, 0.2, -1.3], "drive": true, "handbrake": true },
+          { "position": [-0.8, 0.2, -1.3], "drive": true, "handbrake": true }
+        ]
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

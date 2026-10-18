@@ -136,6 +136,7 @@ export const ACTOR_COMPONENT_KINDS = [
   "Camera",
   "AIController",
   "SmartObject",
+  "Vehicle",
 ] as const;
 export type ActorComponentKind = (typeof ACTOR_COMPONENT_KINDS)[number];
 

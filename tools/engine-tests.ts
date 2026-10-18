@@ -94,6 +94,7 @@ import {
   SCRIPT_REFERENCES_COMPONENT,
   AI_CONTROLLER_COMPONENT,
   SMART_OBJECT_COMPONENT,
+  VEHICLE_COMPONENT,
 } from "../engine/scene/components";
 import {
   advanceSplinePathFollower,
@@ -253,6 +254,7 @@ import {
   createReferenceCarDefinition,
   NEUTRAL_VEHICLE_INPUT,
   resolveVehicleDefinition,
+  vehicleDefinitionFromComponent,
   type VehicleInput,
 } from "../engine/physics/vehicle/vehicleTypes";
 import {
@@ -802,6 +804,7 @@ import {
   type AssetManifest,
 } from "../engine/assets/manifest";
 import type {
+  LayoutActorInstance,
   LayoutCharacter,
   LayoutLightActor,
   LayoutPlacement,
@@ -1052,6 +1055,7 @@ import { registerRuntimeUiModuleTests } from "../tests/engine/runtimeUiModule.te
 import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAnimationModule.test";
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
+import { registerVehicleRuntimeTests } from "../tests/engine/vehicleRuntime.test";
 import { registerPerfReadoutTests } from "../tests/engine/perfReadout.test";
 import { registerFrameRegionTests } from "../tests/engine/frameRegions.test";
 import { registerFrameCaptureTests } from "../tests/engine/frameCapture.test";
@@ -1160,6 +1164,7 @@ await registerRuntimeUiModuleTests(check, checkAsync);
 await registerSkeletalAnimationModuleTests(check, checkAsync);
 registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
+registerVehicleRuntimeTests(check);
 registerPerfReadoutTests(check);
 registerFrameRegionTests(check);
 registerFrameCaptureTests(check);
@@ -6987,6 +6992,90 @@ await checkAsync("rapier vehicle survives a world rebuild and leaves with its en
     assert.equal(world.physics.vehicleState("car"), null);
     world.tick(0.1); // stepping without the chassis must not touch a freed controller
     world.physics.dispose();
+  });
+});
+
+check("vehicleDefinitionFromComponent overrides the reference car and replaces its wheels", () => {
+  assert.equal(vehicleDefinitionFromComponent(undefined), null);
+  assert.equal(vehicleDefinitionFromComponent([1, 2]), null);
+  const reference = createReferenceCarDefinition();
+  assert.deepEqual(vehicleDefinitionFromComponent({}), reference);
+  const tuned = vehicleDefinitionFromComponent({
+    massKg: 900,
+    maxEngineForce: "fast",
+    wheels: [
+      { position: [0, 0, 1], steer: true, drive: "yes" },
+      { radius: 0.4 }, // no position: dropped
+    ],
+  });
+  assert.equal(tuned?.massKg, 900);
+  assert.equal(tuned?.maxEngineForce, reference.maxEngineForce);
+  assert.equal(tuned?.wheels.length, 1);
+  assert.equal(tuned?.wheels[0]?.steer, true);
+  assert.equal(tuned?.wheels[0]?.drive, false); // non-boolean flag falls back
+});
+
+await checkAsync("a Vehicle component makes physics build the vehicle, and a rebuild re-reads it", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    const car = world.entities[1] ?? assert.fail("car entity");
+    const withVehicle: Entity = {
+      ...car,
+      components: { ...car.components, [VEHICLE_COMPONENT]: { massKg: 900 } },
+    };
+    world.physics.setEntities([world.entities[0]!, withVehicle]);
+    assert.deepEqual(world.physics.vehicleEntityIds(), ["car"]);
+    world.tick(1);
+    assert.ok(world.physics.vehicleState("car")?.wheels.every((wheel) => wheel.inContact));
+    const simulated = world.physics.simulatedTransform("car") ?? assert.fail("simulated pose");
+    assert.ok(simulated.position[1] < 1, "the chassis pose reflects the simulation, not the spawn");
+    assert.equal(world.physics.simulatedTransform("ground"), null);
+
+    world.physics.setEntities(world.entities); // the component is gone in the new level
+    assert.deepEqual(world.physics.vehicleEntityIds(), []);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("the starter Reference Car actor drives in the VehicleTest level's physics", async () => {
+  await withQuietRapierInit(async () => {
+    const def =
+      normalizeActorScriptDef(
+        JSON.parse(readFileSync("public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")),
+      ) ?? assert.fail("Script_ReferenceCar did not normalize");
+    assert.ok(def.components.some((node) => node.component === VEHICLE_COMPONENT), "Vehicle node survives");
+    const level = JSON.parse(
+      readFileSync("public/assets/starter-content/Levels/VehicleTest.level.json", "utf8"),
+    ) as { worldSettings: { gameMode: string }; actors: LayoutActorInstance[] };
+    assert.equal(level.worldSettings.gameMode, "forge.vehicle");
+    const instance = level.actors[0] ?? assert.fail("car placement");
+    const entity = actorInstanceToEntity(def, instance, 0);
+
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setGravity([0, -9.81, 0]);
+    physics.setEntities([
+      {
+        id: "ground",
+        components: {
+          Transform: { position: [0, -0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          Collider: { shape: "box", size: [160, 1, 160], isStatic: true, isSensor: false },
+        },
+      },
+      entity,
+    ]);
+    await physics.init();
+    assert.deepEqual(physics.vehicleEntityIds(), [entity.id]);
+    const step = (seconds: number) => {
+      for (let frame = 0; frame < Math.round(seconds * 60); frame += 1) {
+        physics.update({ deltaSeconds: 1 / 60, elapsedSeconds: 0, frame });
+      }
+    };
+    step(1.5);
+    physics.setVehicleInput(entity.id, { ...NEUTRAL_VEHICLE_INPUT, throttle: 1 });
+    step(2);
+    const speed = physics.vehicleState(entity.id)?.forwardSpeed ?? 0;
+    assert.ok(speed > 7, `starter car reached only ${speed} m/s`);
+    physics.dispose();
   });
 });
 

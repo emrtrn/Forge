@@ -183,11 +183,15 @@ function resolveWheel(wheel: VehicleWheelDefinitionInput): VehicleWheelDefinitio
     maxSuspensionForce: positive(wheel.maxSuspensionForce, DEFAULT_WHEEL.maxSuspensionForce),
     frictionSlip: nonNegative(wheel.frictionSlip, DEFAULT_WHEEL.frictionSlip),
     sideFrictionStiffness: nonNegative(wheel.sideFrictionStiffness, DEFAULT_WHEEL.sideFrictionStiffness),
-    steer: wheel.steer ?? DEFAULT_WHEEL.steer,
-    drive: wheel.drive ?? DEFAULT_WHEEL.drive,
-    brake: wheel.brake ?? DEFAULT_WHEEL.brake,
-    handbrake: wheel.handbrake ?? DEFAULT_WHEEL.handbrake,
+    steer: flag(wheel.steer, DEFAULT_WHEEL.steer),
+    drive: flag(wheel.drive, DEFAULT_WHEEL.drive),
+    brake: flag(wheel.brake, DEFAULT_WHEEL.brake),
+    handbrake: flag(wheel.handbrake, DEFAULT_WHEEL.handbrake),
   };
+}
+
+function flag(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 /**
@@ -209,6 +213,47 @@ export function createReferenceCarDefinition(): VehicleDefinition {
       { position: [-halfTrack, hardPointY, rearZ], drive: true, handbrake: true },
     ],
   });
+}
+
+/**
+ * Reads a `Vehicle` component's props into a definition. Every field is
+ * optional: scalar props override the reference car, and an authored `wheels`
+ * array replaces its wheels (entries without a `position` are dropped). Props
+ * that are not an object yield null — the chassis stays a plain dynamic body.
+ */
+export function vehicleDefinitionFromComponent(props: unknown): VehicleDefinition | null {
+  if (!isRecord(props)) return null;
+  const reference = createReferenceCarDefinition();
+  const wheels = Array.isArray(props.wheels)
+    ? props.wheels.filter(
+        (wheel): wheel is VehicleWheelDefinitionInput => isRecord(wheel) && isVec3(wheel.position),
+      )
+    : [];
+  const number = (key: keyof Omit<VehicleDefinition, "wheels" | "centerOfMassOffset">): number =>
+    typeof props[key] === "number" ? (props[key] as number) : reference[key];
+  return resolveVehicleDefinition({
+    massKg: number("massKg"),
+    centerOfMassOffset: isVec3(props.centerOfMassOffset)
+      ? props.centerOfMassOffset
+      : reference.centerOfMassOffset,
+    maxEngineForce: number("maxEngineForce"),
+    maxReverseForce: number("maxReverseForce"),
+    maxBrakeForce: number("maxBrakeForce"),
+    handbrakeForce: number("handbrakeForce"),
+    rollingResistanceForce: number("rollingResistanceForce"),
+    maxSteerAngleDeg: number("maxSteerAngleDeg"),
+    steerSpeed: number("steerSpeed"),
+    reverseSpeedThreshold: number("reverseSpeedThreshold"),
+    wheels: wheels.length > 0 ? wheels : reference.wheels,
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isVec3(value: unknown): value is VehicleVec3 {
+  return Array.isArray(value) && value.length === 3 && value.every((n) => typeof n === "number");
 }
 
 function positive(value: number | undefined, fallback: number): number {

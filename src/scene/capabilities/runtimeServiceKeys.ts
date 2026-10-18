@@ -54,6 +54,7 @@ import type {
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
+import type { VehicleState } from "@engine/physics/vehicle/vehicleTypes";
 import type { AiNavAgentClearanceView } from "@engine/render-three/aiNavigationView";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
@@ -158,6 +159,21 @@ export interface CharacterMovementHost {
 
 export const characterMovementHostService =
   runtimeServiceKey<CharacterMovementHost>("character-movement-host");
+
+/**
+ * What the shell gives the vehicle capability: the physics vehicles' live
+ * readback and the actor objects they render on. Provided by the shell
+ * because both the physics world and the actor objects are shell-owned.
+ */
+export interface VehicleHost {
+  /** Entity ids of every live vehicle, in level order. */
+  vehicleIds(): readonly string[];
+  vehicleState(entityId: string): VehicleState | null;
+  /** The actor's root render object (scaled by placement × mesh scale). */
+  actorObject(entityId: string): Object3D | null;
+}
+
+export const vehicleHostService = runtimeServiceKey<VehicleHost>("vehicle-host");
 
 /**
  * The script-message bus: how gameplay triggers a capability ("play-dialogue")

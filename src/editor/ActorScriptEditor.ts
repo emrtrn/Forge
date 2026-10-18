@@ -114,6 +114,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   SpringArm: "⌐",
   Camera: "🎥",
   AIController: "🧠",
+  Vehicle: "🚗",
 };
 
 function escapeHtml(value: string): string {

@@ -1057,6 +1057,7 @@ import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAn
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 import { registerVehicleRuntimeTests } from "../tests/engine/vehicleRuntime.test";
+import { registerVehicleDrivetrainTests } from "../tests/engine/vehicleDrivetrain.test";
 import { registerVehicleAssetTests } from "../tests/engine/vehicleAssets.test";
 import { resolveActorVehicleAssets } from "../src/scene/vehicleAssetLoader";
 import { normalizeVehicleAsset } from "../engine/physics/vehicle/vehicleTypes";
@@ -1169,6 +1170,7 @@ await registerSkeletalAnimationModuleTests(check, checkAsync);
 registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
 registerVehicleRuntimeTests(check);
+registerVehicleDrivetrainTests(check);
 await registerVehicleAssetTests(check, checkAsync);
 registerPerfReadoutTests(check);
 registerFrameRegionTests(check);
@@ -6846,7 +6848,7 @@ check("computeVehicleDrive eases steering and turns right as a negative yaw", ()
 
 const VEHICLE_SLICE = 1 / 60;
 
-async function createVehicleTestWorld(options: { slopeDeg?: number } = {}) {
+async function createVehicleTestWorld(options: { slopeDeg?: number; groundSize?: number } = {}) {
   const physics = new PhysicsSubsystem({ backend: "rapier" });
   physics.setGravity([0, -9.81, 0]);
   let pose: TransformComponent | null = null;
@@ -6859,7 +6861,7 @@ async function createVehicleTestWorld(options: { slopeDeg?: number } = {}) {
       id: "ground",
       components: {
         Transform: { position: [0, -0.5, 0], rotation: [-slope, 0, 0], scale: [1, 1, 1] },
-        Collider: { shape: "box", size: [400, 1, 400], isStatic: true, isSensor: false },
+        Collider: { shape: "box", size: [options.groundSize ?? 400, 1, options.groundSize ?? 400], isStatic: true, isSensor: false },
       },
     },
     {
@@ -7083,6 +7085,75 @@ await checkAsync("the starter Reference Car actor drives in the VehicleTest leve
     const speed = physics.vehicleState(entity.id)?.forwardSpeed ?? 0;
     assert.ok(speed > 7, `starter car reached only ${speed} m/s`);
     physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle drivetrain reference car reaches 100 km/h consistently across frame rates", async () => {
+  await withQuietRapierInit(async () => {
+    const asset = normalizeVehicleAsset(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
+    const times: number[] = [];
+    for (const hz of [30, 60, 144]) {
+      const world = await createVehicleTestWorld({ groundSize: 2000 });
+      try {
+        world.physics.createVehicle("car", asset);
+        world.tick(1);
+        world.drive({ throttle: 1 });
+        let reachedAt = 0;
+        const gears = new Set<number>();
+        for (let frame = 1; frame <= hz * 16; frame += 1) {
+          world.physics.update({ deltaSeconds: 1 / hz, elapsedSeconds: 1 + frame / hz, frame });
+          const state = world.physics.vehicleState("car")!;
+          gears.add(state.drivetrain!.gear);
+          assert.ok(state.drivetrain!.engineRpm >= asset.drivetrain!.engine.idleRpm);
+          assert.ok(state.drivetrain!.engineRpm <= asset.drivetrain!.engine.maxRpm);
+          if (state.forwardSpeed >= 100 / 3.6) {
+            assert.ok(state.wheels.every((wheel) => wheel.inContact), "0–100 finishes on grounded wheels");
+            reachedAt = frame / hz;
+            break;
+          }
+        }
+        assert.ok(reachedAt >= 6 && reachedAt <= 14, `${hz} Hz: 0–100 took ${reachedAt || ">16"} s`);
+        assert.ok(gears.has(1) && gears.has(2), "automatic upshift occurred");
+        times.push(reachedAt);
+        world.physics.resetVehicle("car", { position: [0, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+        assert.deepEqual(world.physics.vehicleState("car")!.drivetrain,
+          { engineRpm: asset.drivetrain!.engine.idleRpm, gear: 1, shiftTimeRemaining: 0 });
+        assert.equal(world.physics.vehicleState("car")!.forwardSpeed, 0);
+      } finally {
+        world.physics.dispose();
+      }
+    }
+    assert.ok(Math.max(...times) - Math.min(...times) < 0.05, `frame-rate drift: ${times}`);
+    console.info(`[vehicle] 0–100 km/h at 30/60/144 Hz: ${times.map((time) => time.toFixed(3)).join(" / ")} s`);
+  });
+});
+
+await checkAsync("rapier vehicle aerodynamics slow a coasting chassis and compress suspension with downforce", async () => {
+  await withQuietRapierInit(async () => {
+    const results: { speed: number; spring: number }[] = [];
+    for (const aerodynamics of [
+      { dragCoefficient: 0, downforceCoefficient: 0 },
+      { dragCoefficient: 4, downforceCoefficient: 0 },
+      { dragCoefficient: 0, downforceCoefficient: 12 },
+    ]) {
+      const world = await createVehicleTestWorld();
+      try {
+        const definition = vehicleDefinitionFromComponent({ aerodynamics })!;
+        world.physics.createVehicle("car", definition);
+        world.tick(2);
+        world.physics.applyImpulse("car", [0, 0, definition.massKg * 20]);
+        world.tick(1);
+        const state = world.physics.vehicleState("car")!;
+        assert.ok(state.wheels.every((wheel) => wheel.inContact));
+        results.push({ speed: state.forwardSpeed,
+          spring: state.wheels.reduce((sum, wheel) => sum + wheel.suspensionLength, 0) / state.wheels.length });
+      } finally {
+        world.physics.dispose();
+      }
+    }
+    assert.ok(results[1]!.speed < results[0]!.speed - 0.8, `drag: ${JSON.stringify(results)}`);
+    assert.ok(results[2]!.spring < results[0]!.spring - 0.01, `downforce: ${JSON.stringify(results)}`);
   });
 });
 

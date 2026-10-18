@@ -100,15 +100,19 @@ test("vehicle smoke: the Reference Car is possessed and drives on W", async ({ p
 test("vehicle asset save endpoint persists normalized data and reports dropped fields", async ({ request }) => {
   const path = `assets/__vehicle-smoke-${randomUUID()}.vehicle.json`;
   try {
+    const reference = JSON.parse(await readFile(resolve("public", VEHICLE_ASSET), "utf8"));
     expect((await request.get("/__save-vehicle")).status()).toBe(405);
     const response = await request.post("/__save-vehicle", { data: {
-      path, vehicle: { schema: 1, type: "vehicle", massKg: 950, extra: true },
+      path, vehicle: { ...reference, massKg: 950, extra: true },
     } });
     expect(response.ok()).toBe(true);
     expect(await response.json()).toMatchObject({ ok: true, changed: true, dropped: ["vehicle.extra"] });
     const saved = JSON.parse(await readFile(resolve("public", path), "utf8"));
     expect(saved.massKg).toBe(950);
     expect(saved.wheels).toHaveLength(4);
+    expect(saved.drivetrain).toEqual(reference.drivetrain);
+    expect(saved.steeringSpeedCurve).toEqual(reference.steeringSpeedCurve);
+    expect(saved.aerodynamics).toEqual(reference.aerodynamics);
     expect(saved.extra).toBeUndefined();
     const staticRead = await request.get(`/${path}`);
     expect(await staticRead.json()).toEqual(saved);
@@ -157,5 +161,32 @@ test("vehicle asset controls the engine force and inline actor props override it
   await page.keyboard.down("KeyW");
   await expect.poll(async () => (await readVehicleCamera(page)).kmh, { timeout: 15_000 }).toBeGreaterThan(20);
   await page.keyboard.up("KeyW");
+  expect(pageErrors).toEqual([]);
+});
+
+test("vehicle drivetrain shows RPM shifts to second reverses and resets in the browser", async ({ page }) => {
+  // A long flat lane keeps the gear check independent of the authored ramp.
+  await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    level.instances = [];
+    level.blockingVolumes = [level.blockingVolumes.find((volume: { id: string }) => volume.id === "vehicle-test-ground")];
+    level.blockingVolumes[0].size = [2000, 1, 2000];
+    await route.fulfill({ response, json: level });
+  });
+  const pageErrors = await openVehicleTest(page);
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText(/gear:1 rpm:900/);
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect(stats).toContainText(/gear:2 rpm:[1-6]\d{3}/, { timeout: 20_000 });
+  expect((await readVehicleCamera(page)).kmh).toBeGreaterThan(50);
+  await page.keyboard.up("KeyW");
+  await page.keyboard.down("KeyS");
+  await expect(stats).toContainText(/gear:R rpm:/, { timeout: 20_000 });
+  await expect.poll(async () => (await readVehicleCamera(page)).kmh, { timeout: 10_000 }).toBeLessThan(-2);
+  await page.keyboard.up("KeyS");
+  await page.keyboard.press("KeyE");
+  await expect(stats).toContainText(/speed:0km\/h gear:1 rpm:900 shift:0.00s/);
   expect(pageErrors).toEqual([]);
 });

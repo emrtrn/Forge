@@ -126,6 +126,11 @@ engine/editor.
   whole wheel list. Missing/malformed assets fall back to inline/reference-car
   settings with a warning. Asset expansion is runtime-only; actor saves preserve
   the authored reference and inline props.
+  The optional `drivetrain` block enables torque/RPM/gearing; missing/null keeps
+  legacy flat-force behavior. Engine/transmission/differential inline objects
+  merge field-by-field; authored curves/gear lists replace their base lists.
+  Wheel `axle`, `steeringSpeedCurve`, `handbrakeSideFrictionMultiplier` and
+  `aerodynamics` use the same normalizer and must round-trip too.
 
 ## Codex Tooling Context
 

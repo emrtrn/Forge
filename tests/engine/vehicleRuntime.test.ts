@@ -72,7 +72,7 @@ class FakeVehicles implements GameModeVehicles {
     this.inputs.push(input);
   }
   state(): VehicleState | null {
-    return { forwardSpeed: this.speed, wheels: [] };
+    return { forwardSpeed: this.speed, wheels: [], drivetrain: null };
   }
   objectFor(): Object3D | null {
     return this.object;
@@ -276,7 +276,7 @@ export function registerVehicleRuntimeTests(check: Check): void {
     let live = true;
     host.provide(vehicleHostService, {
       vehicleIds: () => (live ? ["car"] : []),
-      vehicleState: () => ({ forwardSpeed: 0, wheels }),
+      vehicleState: () => ({ forwardSpeed: 0, wheels, drivetrain: null }),
       actorObject: () => actor,
     });
 

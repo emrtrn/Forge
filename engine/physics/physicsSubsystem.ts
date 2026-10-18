@@ -11,10 +11,12 @@ import { interactionGroupsInteract, type NavigationRole } from "../scene/collisi
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
 import { computeVehicleDrive } from "./vehicle/vehicleDrive";
+import { computeVehicleAerodynamics, initialVehicleDrivetrainState } from "./vehicle/vehicleDrivetrain";
 import {
   NEUTRAL_VEHICLE_INPUT,
   vehicleDefinitionFromComponent,
   type VehicleDefinition,
+  type VehicleDrivetrainState,
   type VehicleInput,
   type VehicleState,
   type VehicleVec3,
@@ -118,6 +120,7 @@ interface VehicleRecord {
   input: VehicleInput;
   /** Smoothed steering input (-1..1). */
   steer: number;
+  drivetrain: VehicleDrivetrainState | null;
 }
 
 interface RapierBodyRecord {
@@ -224,6 +227,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       controller: null,
       input: NEUTRAL_VEHICLE_INPUT,
       steer: 0,
+      drivetrain: initialVehicleDrivetrainState(definition),
     };
     if (!this.attachVehicleController(record)) return false;
     this.vehicles.set(entityId, record);
@@ -254,6 +258,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     rapier.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     record.steer = 0;
+    record.drivetrain = initialVehicleDrivetrainState(record.definition);
   }
 
   /** Every entity currently driven as a vehicle, in creation order. */
@@ -297,6 +302,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!record || !controller || !rapier) return null;
     return {
       forwardSpeed: chassisForwardSpeed(rapier.body),
+      drivetrain: record.drivetrain ? { ...record.drivetrain } : null,
       wheels: record.definition.wheels.map((wheel, index) => {
         const inContact = controller.wheelIsInContact(index);
         const contact = inContact ? controller.wheelContactPoint(index) : null;
@@ -976,14 +982,23 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         chassisForwardSpeed(rapier.body),
         record.steer,
         deltaSeconds,
+        record.drivetrain,
       );
       record.steer = drive.steer;
+      record.drivetrain = drive.drivetrain;
       drive.wheels.forEach((command, index) => {
         controller.setWheelEngineForce(index, command.engineForce);
         // The controller takes the brake as a per-slice impulse cap.
         controller.setWheelBrake(index, command.brakeForce * deltaSeconds);
         controller.setWheelSteering(index, command.steering);
+        controller.setWheelSideFrictionStiffness(index, command.sideFrictionStiffness);
       });
+      const velocity = rapier.body.linvel();
+      const force = computeVehicleAerodynamics(record.definition, [velocity.x, velocity.y, velocity.z]);
+      if (force.some((component) => component !== 0)) {
+        // Impulses apply this slice only; addForce would accumulate between slices.
+        rapier.body.applyImpulse({ x: force[0] * deltaSeconds, y: force[1] * deltaSeconds, z: force[2] * deltaSeconds }, false);
+      }
       const body = this.bodies.find((candidate) => candidate.id === record.entityId);
       controller.updateVehicle(
         deltaSeconds,
@@ -1025,6 +1040,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         controller: null,
         input: NEUTRAL_VEHICLE_INPUT,
         steer: 0,
+        drivetrain: initialVehicleDrivetrainState(body.vehicle),
       };
       if (this.attachVehicleController(record)) this.vehicles.set(body.id, record);
     }

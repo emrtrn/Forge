@@ -195,6 +195,7 @@
       "castShadow": true
     }
   ],
+  "splines": [],
   "landscapes": [
     {
       "id": "landscape-1",
@@ -211,12 +212,11 @@
     {
       "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
       "position": [
-        4.36,
-        -0.08,
-        11.38
+        -7.94,
+        -0.13,
+        -3.95
       ],
-      "rotationYDeg": 0,
-      "scale": 1
+      "rotationYDeg": 0
     }
   ]
 }

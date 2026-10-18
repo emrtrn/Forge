@@ -13,6 +13,8 @@ export type VehicleVec3 = readonly [number, number, number];
 export interface VehicleWheelDefinition {
   /** Suspension hard point (top of the spring), chassis-local. */
   readonly position: VehicleVec3;
+  /** Torque-mode axle; inferred from local Z when omitted (+Z = front). */
+  readonly axle: "front" | "rear";
   readonly radius: number;
   /** Spring length at rest; the wheel centre hangs this far below `position`. */
   readonly suspensionRestLength: number;
@@ -35,7 +37,7 @@ export interface VehicleWheelDefinition {
   readonly sideFrictionStiffness: number;
   /** Turned by the steering input. */
   readonly steer: boolean;
-  /** Receives engine force. */
+  /** Receives engine force in legacy flat-force mode; drivetrain uses axle. */
   readonly drive: boolean;
   /** Receives the foot brake. */
   readonly brake: boolean;
@@ -49,7 +51,7 @@ export interface VehicleDefinition {
   /** Centre of mass relative to the chassis origin; lower is harder to roll. */
   readonly centerOfMassOffset: VehicleVec3;
   readonly wheels: readonly VehicleWheelDefinition[];
-  /** Total forward drive force, split across `drive` wheels (Faz 3: torque curve). */
+  /** Total forward force cap; flat-force output when drivetrain is null. */
   readonly maxEngineForce: number;
   /** Total reverse drive force, split across `drive` wheels. */
   readonly maxReverseForce: number;
@@ -65,6 +67,45 @@ export interface VehicleDefinition {
   readonly steerSpeed: number;
   /** Below this forward speed (m/s) the brake input reverses instead of braking. */
   readonly reverseSpeedThreshold: number;
+  /** Null preserves the Faz 1 flat-force behavior for existing assets. */
+  readonly drivetrain: VehicleDrivetrainDefinition | null;
+  readonly steeringSpeedCurve: readonly VehicleSteeringPoint[];
+  /** Scales lateral stiffness on handbrake wheels while held (0..1). */
+  readonly handbrakeSideFrictionMultiplier: number;
+  /** F = coefficient * speed², coefficients in kg/m. */
+  readonly aerodynamics: { readonly dragCoefficient: number; readonly downforceCoefficient: number };
+}
+
+export interface VehicleTorquePoint { readonly rpm: number; readonly torqueNm: number }
+export interface VehicleSteeringPoint { readonly speedMps: number; readonly scale: number }
+export interface VehicleDrivetrainDefinition {
+  readonly engine: {
+    readonly idleRpm: number;
+    readonly maxRpm: number;
+    readonly torqueCurve: readonly VehicleTorquePoint[];
+    readonly engineBrakeTorqueNm: number;
+  };
+  readonly transmission: {
+    readonly forwardRatios: readonly number[];
+    readonly reverseRatio: number;
+    readonly finalDriveRatio: number;
+    readonly efficiency: number;
+    readonly upshiftRpm: number;
+    readonly downshiftRpm: number;
+    readonly shiftDurationSeconds: number;
+  };
+  readonly differential: {
+    readonly driveType: "FWD" | "RWD" | "AWD";
+    /** AWD only. Missing axles redistribute their share to existing wheels. */
+    readonly frontTorqueShare: number;
+  };
+}
+
+export interface VehicleDrivetrainState {
+  readonly engineRpm: number;
+  /** -1 = reverse; 1..N = forward (automatic, no manual neutral). */
+  readonly gear: number;
+  readonly shiftTimeRemaining: number;
 }
 
 /** Versioned on-disk envelope; physics only needs the definition inside it. */
@@ -113,9 +154,10 @@ export interface VehicleState {
   /** Signed speed along the chassis forward axis (m/s). */
   readonly forwardSpeed: number;
   readonly wheels: readonly VehicleWheelState[];
+  readonly drivetrain: VehicleDrivetrainState | null;
 }
 
-const DEFAULT_WHEEL: Omit<VehicleWheelDefinition, "position"> = {
+const DEFAULT_WHEEL: Omit<VehicleWheelDefinition, "position" | "axle"> = {
   radius: 0.35,
   suspensionRestLength: 0.35,
   suspensionMaxTravel: 0.25,
@@ -142,12 +184,38 @@ const DEFAULT_VEHICLE: Omit<VehicleDefinition, "wheels"> = {
   maxSteerAngleDeg: 35,
   steerSpeed: 3,
   reverseSpeedThreshold: 0.5,
+  drivetrain: null,
+  steeringSpeedCurve: [{ speedMps: 0, scale: 1 }],
+  handbrakeSideFrictionMultiplier: 1,
+  aerodynamics: { dragCoefficient: 0, downforceCoefficient: 0 },
+};
+
+const DEFAULT_DRIVETRAIN: VehicleDrivetrainDefinition = {
+  engine: {
+    idleRpm: 900, maxRpm: 6500, engineBrakeTorqueNm: 40,
+    torqueCurve: [
+      { rpm: 900, torqueNm: 160 }, { rpm: 2500, torqueNm: 260 },
+      { rpm: 4500, torqueNm: 300 }, { rpm: 6500, torqueNm: 200 },
+    ],
+  },
+  transmission: {
+    forwardRatios: [3.4, 2.1, 1.4, 1, 0.8], reverseRatio: 3.2,
+    finalDriveRatio: 3.42, efficiency: 0.9,
+    upshiftRpm: 5500, downshiftRpm: 1800, shiftDurationSeconds: 0.2,
+  },
+  differential: { driveType: "RWD", frontTorqueShare: 0.5 },
 };
 
 export type VehicleWheelDefinitionInput = Partial<VehicleWheelDefinition> &
   Pick<VehicleWheelDefinition, "position">;
-export type VehicleDefinitionInput = Partial<Omit<VehicleDefinition, "wheels">> & {
+export type VehicleDefinitionInput = Partial<Omit<VehicleDefinition, "wheels" | "drivetrain" | "aerodynamics">> & {
   readonly wheels: readonly VehicleWheelDefinitionInput[];
+  readonly drivetrain?: {
+    readonly engine?: Partial<VehicleDrivetrainDefinition["engine"]>;
+    readonly transmission?: Partial<VehicleDrivetrainDefinition["transmission"]>;
+    readonly differential?: Partial<VehicleDrivetrainDefinition["differential"]>;
+  } | null;
+  readonly aerodynamics?: Partial<VehicleDefinition["aerodynamics"]>;
 };
 
 /**
@@ -193,7 +261,77 @@ export function normalizeVehicleDefinition(
       base.reverseSpeedThreshold,
     ),
     wheels: (wheels.length > 0 ? wheels : base.wheels).map(resolveWheel),
+    drivetrain: input.drivetrain === null ? null
+      : normalizeDrivetrain(input.drivetrain, base.drivetrain),
+    steeringSpeedCurve: normalizeSteeringCurve(input.steeringSpeedCurve, base.steeringSpeedCurve),
+    handbrakeSideFrictionMultiplier: unit(input.handbrakeSideFrictionMultiplier, base.handbrakeSideFrictionMultiplier),
+    aerodynamics: {
+      dragCoefficient: nonNegative(record(input.aerodynamics).dragCoefficient, base.aerodynamics.dragCoefficient),
+      downforceCoefficient: nonNegative(record(input.aerodynamics).downforceCoefficient, base.aerodynamics.downforceCoefficient),
+    },
   };
+}
+
+/** Partial nested inline blocks override the asset; null explicitly selects legacy mode. */
+function normalizeDrivetrain(value: unknown, base: VehicleDrivetrainDefinition | null): VehicleDrivetrainDefinition | null {
+  if (!isRecord(value) && !base) return null;
+  const fallback = base ?? DEFAULT_DRIVETRAIN;
+  const input = record(value);
+  const engine = record(input.engine);
+  const gearbox = record(input.transmission);
+  const differential = record(input.differential);
+  const idleRpm = bounded(engine.idleRpm, fallback.engine.idleRpm, 100, 20000);
+  const maxRpm = bounded(engine.maxRpm, fallback.engine.maxRpm, idleRpm + 100, 30000);
+  const upshiftRpm = bounded(gearbox.upshiftRpm, fallback.transmission.upshiftRpm, idleRpm + 50, maxRpm);
+  const ratios = Array.isArray(gearbox.forwardRatios)
+    ? gearbox.forwardRatios.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 20).slice(0, 12)
+    : [];
+  const curve = Array.isArray(engine.torqueCurve) ? engine.torqueCurve
+    .filter((point): point is Record<string, unknown> => isRecord(point))
+    .filter((point) => typeof point.rpm === "number" && Number.isFinite(point.rpm) && point.rpm >= 0
+      && typeof point.torqueNm === "number" && Number.isFinite(point.torqueNm) && point.torqueNm >= 0)
+    .map((point) => ({ rpm: point.rpm as number, torqueNm: point.torqueNm as number })) : [];
+  return {
+    engine: {
+      idleRpm, maxRpm,
+      torqueCurve: uniqueSortedPoints(curve.length ? curve : fallback.engine.torqueCurve, (point) => point.rpm),
+      engineBrakeTorqueNm: nonNegative(engine.engineBrakeTorqueNm, fallback.engine.engineBrakeTorqueNm),
+    },
+    transmission: {
+      forwardRatios: ratios.length ? [...new Set(ratios)].sort((a, b) => b - a) : [...fallback.transmission.forwardRatios],
+      reverseRatio: bounded(gearbox.reverseRatio, fallback.transmission.reverseRatio, 0.01, 20),
+      finalDriveRatio: bounded(gearbox.finalDriveRatio, fallback.transmission.finalDriveRatio, 0.01, 20),
+      efficiency: unit(gearbox.efficiency, fallback.transmission.efficiency),
+      upshiftRpm,
+      downshiftRpm: bounded(gearbox.downshiftRpm, fallback.transmission.downshiftRpm, idleRpm, upshiftRpm - 1),
+      shiftDurationSeconds: bounded(gearbox.shiftDurationSeconds, fallback.transmission.shiftDurationSeconds, 0, 5),
+    },
+    differential: {
+      driveType: differential.driveType === "FWD" || differential.driveType === "RWD" || differential.driveType === "AWD"
+        ? differential.driveType : fallback.differential.driveType,
+      frontTorqueShare: unit(differential.frontTorqueShare, fallback.differential.frontTorqueShare),
+    },
+  };
+}
+
+function normalizeSteeringCurve(value: unknown, fallback: readonly VehicleSteeringPoint[]): VehicleSteeringPoint[] {
+  const points = Array.isArray(value) ? value
+    .filter((point): point is Record<string, unknown> => isRecord(point))
+    .filter((point) => typeof point.speedMps === "number" && Number.isFinite(point.speedMps) && point.speedMps >= 0
+      && typeof point.scale === "number" && Number.isFinite(point.scale))
+    .map((point) => ({ speedMps: point.speedMps as number, scale: unit(point.scale, 1) })) : [];
+  return uniqueSortedPoints(points.length ? points : fallback, (point) => point.speedMps);
+}
+
+function uniqueSortedPoints<T>(points: readonly T[], key: (point: T) => number): T[] {
+  return [...new Map(points.map((point) => [key(point), { ...point }])).values()]
+    .sort((a, b) => key(a) - key(b));
+}
+
+function record(value: unknown): Record<string, unknown> { return isRecord(value) ? value : {}; }
+function unit(value: unknown, fallback: number): number { return bounded(value, fallback, 0, 1); }
+function bounded(value: unknown, fallback: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, typeof value === "number" && Number.isFinite(value) ? value : fallback));
 }
 
 /** Runtime and save validation use exactly the same versioned asset shape. */
@@ -215,6 +353,7 @@ export function normalizeVehicleAssetPath(value: unknown): string | null {
 function resolveWheel(wheel: VehicleWheelDefinitionInput): VehicleWheelDefinition {
   return {
     position: vec3(wheel.position, [0, 0, 0]),
+    axle: wheel.axle === "front" || wheel.axle === "rear" ? wheel.axle : wheel.position[2] >= 0 ? "front" : "rear",
     radius: positive(wheel.radius, DEFAULT_WHEEL.radius),
     suspensionRestLength: nonNegative(wheel.suspensionRestLength, DEFAULT_WHEEL.suspensionRestLength),
     suspensionMaxTravel: nonNegative(wheel.suspensionMaxTravel, DEFAULT_WHEEL.suspensionMaxTravel),
@@ -253,6 +392,8 @@ function referenceCarDefaults(): VehicleDefinition {
   return {
     ...DEFAULT_VEHICLE,
     centerOfMassOffset: [...DEFAULT_VEHICLE.centerOfMassOffset],
+    aerodynamics: { ...DEFAULT_VEHICLE.aerodynamics },
+    steeringSpeedCurve: DEFAULT_VEHICLE.steeringSpeedCurve.map((point) => ({ ...point })),
     wheels: ([
       { position: [halfTrack, hardPointY, frontZ], steer: true },
       { position: [-halfTrack, hardPointY, frontZ], steer: true },

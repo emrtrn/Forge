@@ -148,11 +148,16 @@ class VehicleSession implements GameModeSession {
     readonly cameraSource: string | null;
   } {
     const id = this.vehicleId;
-    const speed = id ? (this.context.vehicles?.state(id)?.forwardSpeed ?? 0) : 0;
+    const state = id ? this.context.vehicles?.state(id) : null;
+    const speed = state?.forwardSpeed ?? 0;
+    const drivetrain = state?.drivetrain;
+    const engine = drivetrain
+      ? ` gear:${drivetrain.gear < 0 ? "R" : drivetrain.gear} rpm:${Math.round(drivetrain.engineRpm)} shift:${drivetrain.shiftTimeRemaining.toFixed(2)}s`
+      : "";
     return {
       controlYawDeg: this.heading ? yawDegreesFromHeading(this.heading) : null,
       controlPitchDeg: null,
-      cameraSource: `vehicle-chase pawn:${id ?? "none"} speed:${(speed * 3.6).toFixed(0)}km/h`,
+      cameraSource: `vehicle-chase pawn:${id ?? "none"} speed:${(speed * 3.6).toFixed(0)}km/h${engine}`,
     };
   }
 

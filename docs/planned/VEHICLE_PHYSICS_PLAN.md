@@ -1,6 +1,6 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
-> Durum: **Faz 0, Faz 1 ve Faz 2 kodu tamam**; sırada Faz 3.
+> Durum: **Faz 0–3 temel kod kapsamı tamam**; sırada Faz 4.
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
@@ -190,21 +190,67 @@ paketi (1168 kontrol), `verify:dist --strict` (editör kodu runtime paketine sı
 Codex Security taraması çalıştırılmadı; yeni endpoint için dar kapsamlı diff
 incelemesi önerildi.
 
-## Faz 3 — Aktarma organları (drivetrain)
+## Faz 3 — Aktarma organları (drivetrain) ✅
 
-- [ ] Motor: tork eğrisi (RPM → Nm, birkaç nokta + lineer interpolasyon),
+- [x] Motor: tork eğrisi (RPM → Nm, birkaç nokta + lineer interpolasyon),
       idle / max RPM, motor freni.
-- [ ] Vites kutusu: ileri oranlar, geri, final drive, otomatik vites
+- [x] Vites kutusu: ileri oranlar, geri, final drive, otomatik vites
       (yukarı/aşağı RPM eşikleri), vites geçiş süresi.
-- [ ] Diferansiyel: FWD / RWD / AWD (ön/arka tork paylaşımı).
-- [ ] Tekerlek torku → `engineForce` (tork / yarıçap), sürüş tekerlekleri
+- [x] Diferansiyel: FWD / RWD / AWD (ön/arka tork paylaşımı).
+- [x] Tekerlek torku → `engineForce` (tork / yarıçap), sürüş tekerlekleri
       arası paylaşım.
-- [ ] Hıza bağlı direksiyon açısı eğrisi, el freninde arka yanal sürtünme
+- [x] Hıza bağlı direksiyon açısı eğrisi, el freninde arka yanal sürtünme
       düşüşü (drift).
-- [ ] Aerodinamik sürükleme + downforce (basit `F = k·v²`).
-- [ ] Opsiyonel: anti-roll bar (aks başına süspansiyon farkından kuvvet).
-- [ ] Saf fonksiyon testleri (tork eğrisi, vites seçimi) + Rapier entegrasyon
+- [x] Aerodinamik sürükleme + downforce (basit `F = k·v²`).
+- [ ] Opsiyonel anti-roll bar: bu dilimde uygulanmadı; ayrı sürüş ayarı dilimine bırakıldı.
+- [x] Saf fonksiyon testleri (tork eğrisi, vites seçimi) + Rapier entegrasyon
       testi (0–100 süresi tanımlı aralıkta).
+
+Uygulama sözleşmesi:
+
+- `engine/physics/vehicle/vehicleDrivetrain.ts`: saf tork örnekleme, otomatik
+  vites/histerezis, vites geçişinde güç kesilmesi, aks bazında tork paylaşımı ve
+  aerodinamik kuvvetler. `PhysicsSubsystem` sabit adım başına uygular; reset,
+  RPM/vitesi de başlangıç durumuna alır.
+- Asset'te isteğe bağlı `drivetrain.engine` (`idleRpm`, `maxRpm`, `torqueCurve`,
+  `engineBrakeTorqueNm`), `drivetrain.transmission` (`forwardRatios`,
+  `reverseRatio`, `finalDriveRatio`, `efficiency`, `upshiftRpm`, `downshiftRpm`,
+  `shiftDurationSeconds`) ve `drivetrain.differential` (`driveType`,
+  `frontTorqueShare`) blokları vardır. Referans araba bunları kullanır.
+- `drivetrain` eksik/null ise eski sabit kuvvet modeli korunur. Tork modunda
+  `maxEngineForce` / `maxReverseForce` toplam tekerlek kuvvetinin üst sınırıdır.
+  Inline iç bloklar alan bazında asset'i ezer; eğriler/oran listeleri değiştirilir.
+  Runtime ve save aynı normalizer'ı kullanır; yeni alanlar kayıtta korunur.
+- Tekerlek `axle` alanı `front`/`rear`; yoksa yerel Z'den çıkarılır. Diferansiyel
+  torku bu akslara dağıtır; eski `drive` bayrağı yalnız sabit kuvvet modunda
+  kullanılır. AWD'de ön pay `frontTorqueShare`, arka pay `1 - frontTorqueShare`.
+  Her tekerlekte kuvvet = payına düşen tork / kendi yarıçapı.
+- `steeringSpeedCurve`: `{ speedMps, scale }` noktaları; hızın mutlak değerine
+  göre maksimum direksiyon açısını azaltır. `handbrakeSideFrictionMultiplier`
+  el freni tekerleklerinin yanal sertliğini ölçekler; bırakınca eski tutuş döner.
+- `aerodynamics.dragCoefficient` hız vektörüne ters sürükleme;
+  `downforceCoefficient` yatay hızın karesiyle dünya -Y yönünde basma üretir.
+  Katsayılar kg/m, kuvvet newton; sabit adımda tek seferlik impulse uygulanır.
+- `VehicleState.drivetrain` RPM, vites ve kalan geçiş süresini verir.
+  `?debug` satırına `gear`, `rpm`, `shift` eklendi. RPM modeli boyuna şasi hızı /
+  tekerlek yarıçapı ile bağlıdır; kalkışta idle sınırı basit debriyaj kaymasını
+  temsil eder. Bağımsız boşta devir, debriyaj ataleti ve lastik kayması modeli yoktur.
+- Araç smoke'u bağımsız çalıştırılabilir:
+  `npm.cmd run smoke:browser -- --config playwright.vehicle.config.ts`.
+  Bu config ortak suite'in seviye/landscape dosyalarını değiştiren fixture'larını
+  kullanmaz; araç testleri seviyeyi istek üzerinde seçer.
+
+Doğrulama (2026-10-18): `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+(**1181 kontrol**) ve `npm.cmd run build:verify` (import sınırları, üretim build'i,
+slow engine paketi, strict dist) geçti. Araç Chromium smoke'u **4/4** geçti:
+sürüş/fren/geri, yeni alanlarla gerçek kayıt/okuma, inline önceliği ve
+RPM/ikinci vites/geri vites/reset. Referans araba düz zeminde 30/60/144 FPS'de
+0–100 km/sa için yaklaşık **13,3 s** verdi (test kabul aralığı 6–14 s,
+FPS'ler arasında <0,05 s). Rapier testleri sürüklemenin hızı azaltmasını ve
+downforce'un süspansiyonu sıkıştırmasını da doğruluyor.
+`check:assets`: **0 hata, 873 uyarı**. Codex Security diff incelemesi önerildi;
+tarama çalıştırılmadı. Opsiyonel anti-roll ve insan tarafından sürüş hissi
+ayarı bu doğrulamanın dışında.
 
 ## Faz 4 — Oynanış entegrasyonu
 

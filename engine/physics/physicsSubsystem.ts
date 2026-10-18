@@ -9,6 +9,14 @@ import {
 import { interactionGroupsInteract, type NavigationRole } from "../scene/collision";
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
+import { computeVehicleDrive } from "./vehicle/vehicleDrive";
+import {
+  NEUTRAL_VEHICLE_INPUT,
+  type VehicleDefinition,
+  type VehicleInput,
+  type VehicleState,
+  type VehicleVec3,
+} from "./vehicle/vehicleTypes";
 import type { Entity, EntityId } from "../scene/entity";
 import type {
   PhysicsAabb,
@@ -90,6 +98,21 @@ type RapierWorld = InstanceType<RapierModule["World"]>;
 type RapierRigidBody = ReturnType<RapierWorld["createRigidBody"]>;
 type RapierCollider = ReturnType<RapierWorld["createCollider"]>;
 type RapierImpulseJoint = ReturnType<RapierWorld["createImpulseJoint"]>;
+type RapierVehicleController = ReturnType<RapierWorld["createVehicleController"]>;
+
+/**
+ * A ray-cast vehicle bound to a dynamic chassis entity. The definition and the
+ * driver state outlive a world rebuild; the controller is re-created on the
+ * new world's chassis body.
+ */
+interface VehicleRecord {
+  readonly entityId: EntityId;
+  readonly definition: VehicleDefinition;
+  controller: RapierVehicleController | null;
+  input: VehicleInput;
+  /** Smoothed steering input (-1..1). */
+  steer: number;
+}
 
 interface RapierBodyRecord {
   id: EntityId;
@@ -154,6 +177,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private frameStepCount = 0;
   /** Dynamic poses before the latest slice, for render interpolation. */
   private previousPoses = new Map<EntityId, PreviousBodyPose>();
+  private vehicles = new Map<EntityId, VehicleRecord>();
 
   constructor(options: PhysicsSubsystemOptions = {}) {
     this.backend = options.backend ?? "placeholder";
@@ -176,6 +200,82 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   /** Render blend (0..1) between the previous and latest simulated dynamic poses. */
   interpolationAlpha(): number {
     return this.stepClock.alpha;
+  }
+
+  /**
+   * Turns a dynamic (`simulatePhysics`) entity into a ray-cast vehicle chassis:
+   * its mass and centre of mass come from the definition, and each wheel is a
+   * suspension ray. Returns false — leaving the body untouched — when Rapier is
+   * not live or the entity is not a dynamic body. Replaces an existing vehicle
+   * on the same entity.
+   */
+  createVehicle(entityId: EntityId, definition: VehicleDefinition): boolean {
+    this.removeVehicle(entityId);
+    const record: VehicleRecord = {
+      entityId,
+      definition,
+      controller: null,
+      input: NEUTRAL_VEHICLE_INPUT,
+      steer: 0,
+    };
+    if (!this.attachVehicleController(record)) return false;
+    this.vehicles.set(entityId, record);
+    return true;
+  }
+
+  /** Detaches the vehicle controller; the chassis stays a plain dynamic body. */
+  removeVehicle(entityId: EntityId): void {
+    const record = this.vehicles.get(entityId);
+    if (!record) return;
+    if (record.controller) this.rapierWorld?.removeVehicleController(record.controller);
+    this.vehicles.delete(entityId);
+  }
+
+  hasVehicle(entityId: EntityId): boolean {
+    return this.vehicles.has(entityId);
+  }
+
+  /** Sets the driver intent the vehicle follows until the next call. */
+  setVehicleInput(entityId: EntityId, input: VehicleInput): void {
+    const record = this.vehicles.get(entityId);
+    if (!record) return;
+    const previous = record.input;
+    record.input = { ...input };
+    const active = input.throttle !== 0 || input.brake !== 0 || input.steer !== 0 || input.handbrake;
+    const changed =
+      input.throttle !== previous.throttle ||
+      input.brake !== previous.brake ||
+      input.steer !== previous.steer ||
+      input.handbrake !== previous.handbrake;
+    // A parked car sleeps and the ray-cast controller does not wake it on its
+    // own — including a handbrake release on a slope, which must let it roll.
+    if (active || changed) this.rapierBodies.get(entityId)?.body.wakeUp();
+  }
+
+  /** Live speed and per-wheel suspension readback, or null when not a vehicle. */
+  vehicleState(entityId: EntityId): VehicleState | null {
+    const record = this.vehicles.get(entityId);
+    const controller = record?.controller;
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !controller || !rapier) return null;
+    return {
+      forwardSpeed: chassisForwardSpeed(rapier.body),
+      wheels: record.definition.wheels.map((wheel, index) => {
+        const inContact = controller.wheelIsInContact(index);
+        const contact = inContact ? controller.wheelContactPoint(index) : null;
+        const hardPoint = controller.wheelHardPoint(index);
+        return {
+          position: wheel.position,
+          radius: wheel.radius,
+          suspensionLength: controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength,
+          steering: controller.wheelSteering(index) ?? 0,
+          rotation: controller.wheelRotation(index) ?? 0,
+          inContact,
+          contactPoint: contact ? [contact.x, contact.y, contact.z] : null,
+          hardPoint: hardPoint ? [hardPoint.x, hardPoint.y, hardPoint.z] : null,
+        };
+      }),
+    };
   }
 
   /**
@@ -319,6 +419,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.collisionDisabled.delete(entityId);
     this.suspendedDynamicBodies.delete(entityId);
     this.previousPoses.delete(entityId);
+    this.removeVehicle(entityId);
     const record = this.rapierBodies.get(entityId);
     if (record) {
       for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
@@ -667,6 +768,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         this.updateDynamicActiveArea();
         for (let index = 0; index < steps; index += 1) {
           if (index === steps - 1) this.capturePreviousPoses();
+          // Vehicles push velocity into their chassis right before each slice.
+          this.updateVehicles(this.stepClock.step);
           this.rapierWorld.step();
         }
         this.updateRapierContacts();
@@ -736,11 +839,14 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.suspendedDynamicBodies.clear();
     this.rapierColliderToEntity.clear();
     this.ragdollGroups.clear();
+    this.vehicles.clear();
   }
 
   private rebuildRapierWorld(): void {
     const RAPIER = this.rapierModule;
     if (!RAPIER) return;
+    // Controllers die with the old world; the records re-attach below.
+    for (const vehicle of this.vehicles.values()) vehicle.controller = null;
     this.rapierWorld?.free();
     this.rapierWorld = new RAPIER.World(vectorFromVec3(this.gravity));
     this.rapierWorld.timestep = this.stepClock.step;
@@ -753,6 +859,96 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.ragdollGroups.clear();
 
     for (const body of this.bodies) this.addRapierBody(body);
+    for (const [entityId, vehicle] of this.vehicles) {
+      if (!this.attachVehicleController(vehicle)) this.vehicles.delete(entityId);
+    }
+  }
+
+  /**
+   * Builds the Rapier controller for a vehicle record on its chassis body. Mass
+   * comes from the definition instead of the colliders (density 0), with a box
+   * inertia from the chassis collider size and the authored centre of mass.
+   */
+  private attachVehicleController(record: VehicleRecord): boolean {
+    const world = this.rapierWorld;
+    const rapier = this.rapierBodies.get(record.entityId);
+    const body = this.bodies.find((candidate) => candidate.id === record.entityId);
+    if (!world || !rapier || !body?.collider.simulatePhysics || !rapier.body.isDynamic()) return false;
+
+    const { definition } = record;
+    for (const collider of rapier.colliders) collider.setDensity(0);
+    const [width, height, length] = [
+      body.collider.size[0] ?? 1,
+      body.collider.size[1] ?? 1,
+      body.collider.size[2] ?? 1,
+    ];
+    const mass = definition.massKg;
+    rapier.body.setAdditionalMassProperties(
+      mass,
+      vectorFromVec3([...definition.centerOfMassOffset]),
+      {
+        x: (mass / 12) * (height * height + length * length),
+        y: (mass / 12) * (width * width + length * length),
+        z: (mass / 12) * (width * width + height * height),
+      },
+      { x: 0, y: 0, z: 0, w: 1 },
+      true,
+    );
+    rapier.body.recomputeMassPropertiesFromColliders();
+
+    const controller = world.createVehicleController(rapier.body);
+    controller.indexUpAxis = 1;
+    controller.setIndexForwardAxis = 2;
+    definition.wheels.forEach((wheel, index) => {
+      controller.addWheel(
+        vectorFromVec3([...wheel.position]),
+        { x: 0, y: -1, z: 0 },
+        { x: -1, y: 0, z: 0 },
+        wheel.suspensionRestLength,
+        wheel.radius,
+      );
+      controller.setWheelMaxSuspensionTravel(index, wheel.suspensionMaxTravel);
+      controller.setWheelSuspensionStiffness(index, wheel.suspensionStiffness);
+      controller.setWheelSuspensionCompression(index, wheel.suspensionCompression);
+      controller.setWheelSuspensionRelaxation(index, wheel.suspensionRelaxation);
+      controller.setWheelMaxSuspensionForce(index, wheel.maxSuspensionForce);
+      controller.setWheelFrictionSlip(index, wheel.frictionSlip);
+      controller.setWheelSideFrictionStiffness(index, wheel.sideFrictionStiffness);
+    });
+    record.controller = controller;
+    return true;
+  }
+
+  /** Feeds each vehicle's drive commands and runs its wheel rays for one slice. */
+  private updateVehicles(deltaSeconds: number): void {
+    const RAPIER = this.rapierModule;
+    if (!RAPIER) return;
+    for (const record of this.vehicles.values()) {
+      const controller = record.controller;
+      const rapier = this.rapierBodies.get(record.entityId);
+      if (!controller || !rapier) continue;
+      if (this.suspendedDynamicBodies.has(record.entityId)) continue;
+      const drive = computeVehicleDrive(
+        record.definition,
+        record.input,
+        chassisForwardSpeed(rapier.body),
+        record.steer,
+        deltaSeconds,
+      );
+      record.steer = drive.steer;
+      drive.wheels.forEach((command, index) => {
+        controller.setWheelEngineForce(index, command.engineForce);
+        // The controller takes the brake as a per-slice impulse cap.
+        controller.setWheelBrake(index, command.brakeForce * deltaSeconds);
+        controller.setWheelSteering(index, command.steering);
+      });
+      const body = this.bodies.find((candidate) => candidate.id === record.entityId);
+      controller.updateVehicle(
+        deltaSeconds,
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        body?.collider.collisionGroups,
+      );
+    }
   }
 
   private addRapierBody(body: PhysicsBody): void {
@@ -992,6 +1188,19 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: left.isSensor || right.isSensor,
     });
   }
+}
+
+/** Signed linear speed along the body's local +Z (Forge's model forward). */
+function chassisForwardSpeed(body: RapierRigidBody): number {
+  const q = body.rotation();
+  // Local +Z rotated into world space (third column of the rotation matrix).
+  const forward: VehicleVec3 = [
+    2 * (q.x * q.z + q.w * q.y),
+    2 * (q.y * q.z - q.w * q.x),
+    1 - 2 * (q.x * q.x + q.y * q.y),
+  ];
+  const v = body.linvel();
+  return v.x * forward[0] + v.y * forward[1] + v.z * forward[2];
 }
 
 function contactKey(a: EntityId, b: EntityId): string {

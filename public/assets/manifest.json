@@ -20694,8 +20694,36 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1354
+        "bytes": 1574
       },
+      "license": "CC0"
+    },
+    {
+      "id": "kenney-sedan-sports",
+      "name": "Sedan Sports",
+      "assetType": "staticMesh",
+      "category": "Vehicles",
+      "path": "assets/kenney-car-kit/sedan-sports.glb",
+      "thumbnail": "assets/kenney-car-kit/sedan-sports.png",
+      "tags": ["vehicle", "car", "Kenney"],
+      "placeable": true,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": true },
+      "runtime": { "loadGroup": "Vehicles", "castShadow": true, "receiveShadow": true, "collision": true, "bytes": 177676 },
+      "source": { "origin": "Kenney", "pack": "Car Kit", "packVersion": "3.1" },
+      "license": "CC0"
+    },
+    {
+      "id": "kenney-car-kit-colormap",
+      "name": "Car Kit Colormap",
+      "assetType": "texture",
+      "category": "Vehicles",
+      "path": "assets/kenney-car-kit/Textures/colormap.png",
+      "thumbnail": "assets/kenney-car-kit/Textures/colormap.png",
+      "tags": ["Kenney"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "Vehicles", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 12371 },
+      "source": { "origin": "Kenney", "pack": "Car Kit", "packVersion": "3.1" },
       "license": "CC0"
     },
     {

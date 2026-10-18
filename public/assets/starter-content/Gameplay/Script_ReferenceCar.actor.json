@@ -17,8 +17,8 @@
         "shape": "box",
         "isStatic": false,
         "isSensor": false,
-        "size": [1.8, 0.6, 4.2],
-        "center": [0, 0.3, 0],
+        "size": [2.08, 1.52, 4.08],
+        "center": [0, 1, -0.04],
         "simulatePhysics": true,
         "linearDamping": 0.05,
         "angularDamping": 0.6,
@@ -30,8 +30,8 @@
       "id": "body",
       "component": "MeshRenderer",
       "props": {
-        "assetId": "shape-cube",
-        "scale": [1.8, 0.6, 4.2]
+        "assetId": "kenney-sedan-sports",
+        "scale": [1.6, 1.6, 1.6]
       },
       "parent": "chassis"
     },

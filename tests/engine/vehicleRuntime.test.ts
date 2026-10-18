@@ -14,7 +14,7 @@
  *       object from the host's live wheel readback.
  */
 import assert from "node:assert/strict";
-import { Group, PerspectiveCamera, Vector3, type Object3D } from "three";
+import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, PerspectiveCamera, Vector3, type Object3D } from "three";
 
 import { ActionMap } from "../../engine/input/actionMap";
 import { DEFAULT_INPUT_BINDINGS } from "../../engine/input/defaultInputBindings";
@@ -263,6 +263,55 @@ export function registerVehicleRuntimeTests(check: Check): void {
     assert.equal(reset.rotation[0], 0);
     assert.equal(reset.rotation[2], 0);
     assert.ok(Math.abs(Math.abs(reset.rotation[1]) - 90) < 1e-3, `yaw=${reset.rotation[1]}`);
+  });
+
+  check("vehicle module binds model wheel nodes without duplicate tyres and restores the hierarchy on unload", () => {
+    const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+    const registry = createCapabilityRegistry([createVehicleModule()]);
+    registry.runtimeStart(host);
+    const actor = new Group();
+    actor.scale.setScalar(1.6);
+    actor.position.set(5, 2, -3);
+    actor.rotation.y = Math.PI / 2;
+    const geometry = new BoxGeometry(0.35, 0.6, 0.6);
+    geometry.translate(0.125, 0, 0); // an inner-hub pivot, as in the Kenney model
+    const material = new MeshStandardMaterial();
+    let geometryDisposed = false;
+    geometry.addEventListener("dispose", () => { geometryDisposed = true; });
+    const node = new Mesh(geometry, material);
+    node.name = "authored-wheel";
+    node.position.set(0.3, 0.3, 0.66);
+    actor.add(node);
+    const original = node.position.clone();
+    let wheel = { ...wheelState([0.68, 0.83, 1.056], 0.35), radius: 0.48, visualNode: node.name };
+    host.provide(vehicleHostService, {
+      vehicleIds: () => ["car"], vehicleState: () => ({ forwardSpeed: 0, drivetrain: null, wheels: [wheel] }),
+      actorObject: () => actor,
+    });
+    registry.update(1 / 60);
+    const container = actor.getObjectByName("VehicleWheels")!;
+    const pivot = container.children[0]!;
+    assert.equal(pivot.children.length, 1);
+    assert.equal(pivot.children[0], node, "use the model's actual wheel");
+    actor.updateWorldMatrix(true, true);
+    const bounds = new Box3().setFromObject(node);
+    const expected = new Vector3(0.68, 0.48, 1.056).applyAxisAngle(new Vector3(0, 1, 0), Math.PI / 2).add(actor.position);
+    assert.ok(bounds.getCenter(new Vector3()).distanceTo(expected) < 1e-6, "geometry centred on the physical axle");
+    assert.ok(Math.abs(bounds.getSize(new Vector3()).y - 0.96) < 1e-6, "model radius matches physics");
+    wheel = { ...wheel, suspensionLength: 0.2, steering: 0.3, rotation: 2 };
+    registry.update(1 / 60);
+    assert.equal(pivot.rotation.y, 0.3);
+    assert.equal(pivot.rotation.x, 2);
+    assert.ok(Math.abs(pivot.position.y - 0.63) < 1e-6);
+    registry.levelUnloaded();
+    assert.equal(node.parent, actor);
+    assert.deepEqual(node.position.toArray(), original.toArray());
+    assert.equal(node.matrixAutoUpdate, true);
+    assert.equal(actor.getObjectByName("VehicleWheels"), undefined);
+    registry.dispose();
+    assert.equal(geometryDisposed, false, "the rig does not own GLTF geometry");
+    geometry.dispose();
+    material.dispose();
   });
 
   // (C) the wheel visuals module.

@@ -310,6 +310,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         return {
           position: wheel.position,
           radius: wheel.radius,
+          ...(wheel.visualNode ? { visualNode: wheel.visualNode } : {}),
           suspensionLength: controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength,
           steering: controller.wheelSteering(index) ?? 0,
           rotation: controller.wheelRotation(index) ?? 0,

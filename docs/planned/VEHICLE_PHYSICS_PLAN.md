@@ -252,6 +252,38 @@ downforce'un süspansiyonu sıkıştırmasını da doğruluyor.
 tarama çalıştırılmadı. Opsiyonel anti-roll ve insan tarafından sürüş hissi
 ayarı bu doğrulamanın dışında.
 
+### Referans araç görseli — Kenney Sedan Sports (2026-10-18)
+
+- Kutunun yerini `kenney-sedan-sports` manifest asset'i aldı:
+  `assets/kenney-car-kit/sedan-sports.glb`; model, harici `Textures/colormap.png`,
+  thumbnail ve paketin CC0 `License.txt` dosyası projeye kopyalandı.
+- Mesh ölçeği 1,6; gövde collider'ı `[2.08, 1.52, 4.08]`, merkez
+  `[0, 1, -0.04]`. Tekerlek yarıçapı 0,48 m, aks merkezleri X = ±0,68,
+  Z = ±1,056; süspansiyon üst noktası Y = 0,83. Ağırlık merkezi Y = 0,45.
+  Final drive, yeni yarıçapla aynı tork/hız oranını korumak için 4,690285714.
+- `VehicleWheelDefinition.visualNode` / wheel state'teki eş alan, GLB'deki
+  `wheel-front-left/right` ve `wheel-back-left/right` düğümlerini bağlar.
+  `vehicleModule` gerçek model parçalarını merkezlenmiş fizik pivotlarına taşır;
+  direksiyon/dönüş/süspansiyonu uygular ve unload'da özgün hiyerarşiyi geri kurar.
+  Geometri/materyalleri dispose etmez; bunlar model yükleyicisine aittir.
+  `visualNode` olmayan araçlar önceki prosedürel tekerlekleri kullanır.
+- Alan runtime/save ortak normalizer'ında korunur. Tarayıcı testi canlı sahnede
+  6 mesh (gövde, spoiler, dört özgün tekerlek), yüklenmiş doku, ön aks direksiyonu
+  ve tekerlek dönüşünü doğrular; ek prosedürel lastik üretilmez.
+- 0–100 testi artık referans actor'ün gerçek collider'ını kullanır; önceki genel
+  kutu fixture'ıyla yapılan ölçümle doğrudan karşılaştırılmaz. Güncel sonuçlar
+  30/60/144 FPS'de **7,033 / 7,017 / 7,021 s**, mevcut 6–14 s aralığında.
+- Doğrulama: TypeScript, tam engine **1182 kontrol**, `build:verify`, araç
+  Chromium smoke'u **5 test** geçti. Asset sağlık kontrolü **0 hata, 873 uyarı**.
+  Yeni kayıt alanı ve görsel kontrolü ayrıca hedefli çalıştırıldı.
+- Görsel sınır: mevcut `VehicleTest` atmosfer/ışığında sahnenin geneli çok koyu
+  göründü. Renk/doku ayrıca test sırasında düz aydınlatma ve üç çeyrek kamera
+  görünümünde kontrol edildi; bu kontrol authored seviye dosyasını değiştirmez.
+  Kanıt: `test-results/vehicle-Kenney-sedan-uses--1cf4b--four-animated-model-wheels-chromium/`
+  altındaki `kenney-sedan-parked.png`, `kenney-sedan-driving.png`,
+  `kenney-sedan-lit-preview.png`. Codex Security diff incelemesi önerildi;
+  tarama çalıştırılmadı.
+
 ## Faz 4 — Oynanış entegrasyonu
 
 - [x] `vehicleModule.ts` capability modülü ve possess edilebilir araç pawn'ı

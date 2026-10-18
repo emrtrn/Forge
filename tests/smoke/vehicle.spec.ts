@@ -110,6 +110,8 @@ test("vehicle asset save endpoint persists normalized data and reports dropped f
     const saved = JSON.parse(await readFile(resolve("public", path), "utf8"));
     expect(saved.massKg).toBe(950);
     expect(saved.wheels).toHaveLength(4);
+    expect(saved.wheels.map((wheel: { visualNode: string }) => wheel.visualNode))
+      .toEqual(reference.wheels.map((wheel: { visualNode: string }) => wheel.visualNode));
     expect(saved.drivetrain).toEqual(reference.drivetrain);
     expect(saved.steeringSpeedCurve).toEqual(reference.steeringSpeedCurve);
     expect(saved.aerodynamics).toEqual(reference.aerodynamics);
@@ -188,5 +190,99 @@ test("vehicle drivetrain shows RPM shifts to second reverses and resets in the b
   await page.keyboard.up("KeyS");
   await page.keyboard.press("KeyE");
   await expect(stats).toContainText(/speed:0km\/h gear:1 rpm:900 shift:0.00s/);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Kenney sedan uses its textured body and four animated model wheels", async ({ page }, testInfo) => {
+  // Three's existing devtools observation hook lets this test inspect the live
+  // render scene without exposing test globals in the production application.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __vehicleScenes: any[]; __vehicleRenderer?: any };
+    w.__vehicleScenes = [];
+    w.__THREE_DEVTOOLS__ = new EventTarget();
+    w.__THREE_DEVTOOLS__.addEventListener("observe", (event) => {
+      const object = (event as CustomEvent).detail;
+      if (object?.isScene) w.__vehicleScenes.push(object);
+      if (object?.isWebGLRenderer) w.__vehicleRenderer = object;
+    });
+  });
+  const modelResponse = page.waitForResponse((response) => response.url().includes("kenney-car-kit/sedan-sports.glb"));
+  const textureResponse = page.waitForResponse((response) => response.url().includes("kenney-car-kit/Textures/colormap.png"));
+  const pageErrors = await openVehicleTest(page);
+  expect((await modelResponse).ok()).toBe(true);
+  expect((await textureResponse).ok()).toBe(true);
+  const snapshot = () => page.evaluate(() => {
+    const scenes = (window as unknown as { __vehicleScenes: any[] }).__vehicleScenes;
+    let actor: any;
+    for (const scene of scenes) scene.traverse((node: any) => {
+      if (node.userData.actorEntityId === "actor:0") actor = node;
+    });
+    if (!actor) return null;
+    const rig = actor.getObjectByName("VehicleWheels");
+    if (!rig) return null;
+    let meshes = 0;
+    actor.traverse((node: any) => { if (node.isMesh) meshes += 1; });
+    const body = actor.getObjectByName("body");
+    return {
+      meshes, textured: (body?.material.map?.image?.width ?? 0) > 0,
+      wheels: rig.children.map((pivot: any) => ({
+        name: pivot.children[0]?.name, childCount: pivot.children.length,
+        y: pivot.position.y, steer: pivot.rotation.y, spin: pivot.rotation.x,
+      })),
+    };
+  });
+  await expect.poll(async () => (await snapshot())?.wheels.length).toBe(4);
+  const parked = (await snapshot())!;
+  expect(parked.meshes).toBe(6); // body, spoiler, four original wheels
+  expect(parked.textured).toBe(true);
+  expect(parked.wheels.every((wheel: any) => wheel.childCount === 1 && wheel.name.startsWith("wheel-"))).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("kenney-sedan-parked.png") });
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyD");
+  await expect.poll(async () => Math.abs((await snapshot())!.wheels[0].steer)).toBeGreaterThan(0.1);
+  expect(Math.abs((await snapshot())!.wheels[2].steer)).toBeLessThan(0.001);
+  await page.keyboard.up("KeyD");
+  await page.keyboard.down("KeyW");
+  await expect.poll(async () => Math.abs((await snapshot())!.wheels[2].spin)).toBeGreaterThan(1);
+  await expect.poll(async () => (await readVehicleCamera(page)).kmh).toBeGreaterThan(5);
+  await page.keyboard.up("KeyW");
+  await page.screenshot({ path: testInfo.outputPath("kenney-sedan-driving.png") });
+  // A separate plain-lit inspection view distinguishes the imported material
+  // from the authored VehicleTest atmosphere/lighting. No layout is saved.
+  await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    delete level.skyAtmosphere;
+    delete level.heightFog;
+    delete level.cloudLayer;
+    level.worldSettings.ambientIntensity = 2;
+    level.worldSettings.backgroundColor = "#c8d8e8";
+    await route.fulfill({ response, json: level });
+  });
+  await page.reload();
+  await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 60_000 });
+  await expect(page.locator(".forge-loading")).toBeHidden();
+  await expect.poll(async () => (await snapshot())?.textured).toBe(true);
+  await page.addStyleTag({ content: "#debug-stats { display: none !important; }" });
+  // Inspect both axles from a three-quarter angle in this QA view only.
+  await page.evaluate(() => {
+    const w = window as unknown as { __vehicleScenes: any[]; __vehicleRenderer: any };
+    let actor: any;
+    for (const scene of w.__vehicleScenes) scene.traverse((node: any) => {
+      if (node.userData.actorEntityId === "actor:0") actor = node;
+    });
+    const renderer = w.__vehicleRenderer;
+    const render = renderer.render.bind(renderer);
+    renderer.render = (scene: any, camera: any) => {
+      if (scene === actor.parent && camera.isPerspectiveCamera) {
+        const target = actor.getWorldPosition(actor.position.clone());
+        camera.position.copy(target).add(target.clone().set(4, 3, -6));
+        camera.lookAt(target.x, target.y + 0.7, target.z);
+      }
+      render(scene, camera);
+    };
+  });
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+  await page.screenshot({ path: testInfo.outputPath("kenney-sedan-lit-preview.png") });
   expect(pageErrors).toEqual([]);
 });

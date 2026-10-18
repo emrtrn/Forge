@@ -2,7 +2,7 @@
   "schema": 1,
   "type": "vehicle",
   "massKg": 1200,
-  "centerOfMassOffset": [0, -0.05, 0],
+  "centerOfMassOffset": [0, 0.45, 0],
   "maxEngineForce": 12000,
   "maxReverseForce": 4000,
   "drivetrain": {
@@ -20,7 +20,7 @@
     "transmission": {
       "forwardRatios": [3.4, 2.1, 1.4, 1, 0.8],
       "reverseRatio": 3.2,
-      "finalDriveRatio": 3.42,
+      "finalDriveRatio": 4.690285714,
       "efficiency": 0.9,
       "upshiftRpm": 5500,
       "downshiftRpm": 1800,
@@ -37,9 +37,9 @@
   "handbrakeSideFrictionMultiplier": 0.3,
   "aerodynamics": { "dragCoefficient": 0.42, "downforceCoefficient": 1.2 },
   "wheels": [
-    { "position": [0.8, 0.2, 1.35], "steer": true },
-    { "position": [-0.8, 0.2, 1.35], "steer": true },
-    { "position": [0.8, 0.2, -1.3], "drive": true, "handbrake": true },
-    { "position": [-0.8, 0.2, -1.3], "drive": true, "handbrake": true }
+    { "position": [0.68, 0.83, 1.056], "radius": 0.48, "steer": true, "visualNode": "wheel-front-left" },
+    { "position": [-0.68, 0.83, 1.056], "radius": 0.48, "steer": true, "visualNode": "wheel-front-right" },
+    { "position": [0.68, 0.83, -1.056], "radius": 0.48, "drive": true, "handbrake": true, "visualNode": "wheel-back-left" },
+    { "position": [-0.68, 0.83, -1.056], "radius": 0.48, "drive": true, "handbrake": true, "visualNode": "wheel-back-right" }
   ]
 }

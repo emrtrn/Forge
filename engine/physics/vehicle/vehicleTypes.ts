@@ -11,6 +11,8 @@
 export type VehicleVec3 = readonly [number, number, number];
 
 export interface VehicleWheelDefinition {
+  /** Optional model node to animate instead of generating a cylinder wheel. */
+  readonly visualNode?: string;
   /** Suspension hard point (top of the spring), chassis-local. */
   readonly position: VehicleVec3;
   /** Torque-mode axle; inferred from local Z when omitted (+Z = front). */
@@ -134,6 +136,7 @@ export const NEUTRAL_VEHICLE_INPUT: VehicleInput = Object.freeze({
 
 /** Live per-wheel readback, for wheel visuals and debug drawing. */
 export interface VehicleWheelState {
+  readonly visualNode?: string;
   /** Hard point, chassis-local (as authored). */
   readonly position: VehicleVec3;
   readonly radius: number;
@@ -352,6 +355,8 @@ export function normalizeVehicleAssetPath(value: unknown): string | null {
 
 function resolveWheel(wheel: VehicleWheelDefinitionInput): VehicleWheelDefinition {
   return {
+    ...(typeof wheel.visualNode === "string" && wheel.visualNode.trim()
+      ? { visualNode: wheel.visualNode.trim() } : {}),
     position: vec3(wheel.position, [0, 0, 0]),
     axle: wheel.axle === "front" || wheel.axle === "rear" ? wheel.axle : wheel.position[2] >= 0 ? "front" : "rear",
     radius: positive(wheel.radius, DEFAULT_WHEEL.radius),

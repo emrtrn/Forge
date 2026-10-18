@@ -13,11 +13,14 @@
  * or after the level hooks, and a runtime-spawned vehicle gets wheels too.
  */
 import {
+  Box3,
   BoxGeometry,
   CylinderGeometry,
   Group,
   Mesh,
   MeshStandardMaterial,
+  Matrix4,
+  Vector3,
   type BufferGeometry,
   type Object3D,
 } from "three";
@@ -37,6 +40,53 @@ interface WheelRig {
   /** Child of the actor root that cancels its (placement × mesh) scale. */
   readonly container: Group;
   readonly wheels: Group[];
+  readonly restoreNodes: (() => void)[];
+}
+
+/** Move an authored wheel into a physics pivot, preserving its geometry/materials.
+ * Recenter its bounds (many models pivot at the inner hub), fit its radius, and
+ * bake ancestor scale so the outer wheel rig can keep working in physics metres.
+ */
+function bindModelWheel(actor: Object3D, node: Object3D, wheel: VehicleWheelState, pivot: Group): (() => void) | null {
+  if (!node.parent || node === actor) return null;
+  actor.updateWorldMatrix(true, true);
+  const worldToChassis = new Matrix4().makeScale(actor.scale.x, actor.scale.y, actor.scale.z)
+    .multiply(new Matrix4().copy(actor.matrixWorld).invert());
+  const bounds = new Box3();
+  node.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    child.geometry.computeBoundingBox();
+    if (child.geometry.boundingBox) bounds.union(child.geometry.boundingBox.clone()
+      .applyMatrix4(new Matrix4().copy(worldToChassis).multiply(child.matrixWorld)));
+  });
+  if (bounds.isEmpty()) return null;
+  const centre = bounds.getCenter(new Vector3());
+  const size = bounds.getSize(new Vector3());
+  const radius = Math.max(size.y, size.z) / 2;
+  if (!(radius > 0)) return null;
+  const fit = wheel.radius / radius;
+  const local = new Matrix4().makeScale(fit, fit, fit)
+    .multiply(new Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z))
+    .multiply(worldToChassis).multiply(node.matrixWorld);
+  const parent = node.parent;
+  const index = parent.children.indexOf(node);
+  const original = { matrix: node.matrix.clone(), position: node.position.clone(),
+    quaternion: node.quaternion.clone(), scale: node.scale.clone(), autoUpdate: node.matrixAutoUpdate };
+  pivot.add(node);
+  node.matrix.copy(local);
+  node.matrixAutoUpdate = false;
+  node.matrixWorldNeedsUpdate = true;
+  return () => {
+    parent.add(node);
+    parent.children.splice(parent.children.indexOf(node), 1);
+    parent.children.splice(index, 0, node);
+    node.position.copy(original.position);
+    node.quaternion.copy(original.quaternion);
+    node.scale.copy(original.scale);
+    node.matrix.copy(original.matrix);
+    node.matrixAutoUpdate = original.autoUpdate;
+    node.matrixWorldNeedsUpdate = true;
+  };
 }
 
 export function createVehicleModule(): CapabilityModule {
@@ -47,10 +97,15 @@ export function createVehicleModule(): CapabilityModule {
   const hubMaterial = new MeshStandardMaterial({ color: "#a7b0ba", roughness: 0.45, metalness: 0.6 });
 
   const clearRigs = (): void => {
-    for (const rig of rigs.values()) rig.container.removeFromParent();
+    for (const rig of rigs.values()) releaseRig(rig);
     rigs.clear();
     for (const geometry of geometries) geometry.dispose();
     geometries.length = 0;
+  };
+
+  const releaseRig = (rig: WheelRig): void => {
+    for (const restore of [...rig.restoreNodes].reverse()) restore();
+    rig.container.removeFromParent();
   };
 
   const buildWheel = (radius: number): Group => {
@@ -73,19 +128,35 @@ export function createVehicleModule(): CapabilityModule {
     const existing = rigs.get(entityId);
     const object = host.actorObject(entityId);
     if (existing && existing.host === object) return existing;
-    existing?.container.removeFromParent();
+    if (existing) releaseRig(existing);
     rigs.delete(entityId);
     const state = host.vehicleState(entityId);
     if (!object || !state) return null;
     const container = new Group();
     container.name = "VehicleWheels";
+    const restoreNodes: (() => void)[] = [];
+    const boundNodes = new Set<Object3D>();
     const wheels = state.wheels.map((wheel) => {
+      const node = wheel.visualNode ? object.getObjectByName(wheel.visualNode) : undefined;
+      if (node && !boundNodes.has(node)) {
+        const pivot = new Group();
+        pivot.name = `VehicleWheel:${wheel.visualNode}`;
+        pivot.rotation.order = "YXZ";
+        const restore = bindModelWheel(object, node, wheel, pivot);
+        if (restore) {
+          boundNodes.add(node);
+          restoreNodes.push(restore);
+          container.add(pivot);
+          return pivot;
+        }
+      }
+      if (wheel.visualNode) console.warn(`[vehicle] Wheel node ${wheel.visualNode} is missing or unusable; using a generated wheel.`);
       const group = buildWheel(wheel.radius);
       container.add(group);
       return group;
     });
     object.add(container);
-    const rig: WheelRig = { host: object, container, wheels };
+    const rig: WheelRig = { host: object, container, wheels, restoreNodes };
     rigs.set(entityId, rig);
     return rig;
   };
@@ -107,7 +178,7 @@ export function createVehicleModule(): CapabilityModule {
       const live = host.vehicleIds();
       for (const entityId of rigs.keys()) {
         if (!live.includes(entityId)) {
-          rigs.get(entityId)?.container.removeFromParent();
+          releaseRig(rigs.get(entityId)!);
           rigs.delete(entityId);
         }
       }

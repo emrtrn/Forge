@@ -7093,9 +7093,16 @@ await checkAsync("rapier vehicle drivetrain reference car reaches 100 km/h consi
     const asset = normalizeVehicleAsset(JSON.parse(readFileSync(
       "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
     const times: number[] = [];
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")));
+    const collider = actor.components.find((node) => node.component === "Collider")!.props;
     for (const hz of [30, 60, 144]) {
       const world = await createVehicleTestWorld({ groundSize: 2000 });
       try {
+        // The measured reference uses its authored chassis origin/shape, which
+        // changes when a real car model replaces the proof slice's cube.
+        const car = world.entities[1]!;
+        world.physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
         world.physics.createVehicle("car", asset);
         world.tick(1);
         world.drive({ throttle: 1 });

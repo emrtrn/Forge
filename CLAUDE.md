@@ -131,6 +131,10 @@ engine/editor.
   merge field-by-field; authored curves/gear lists replace their base lists.
   Wheel `axle`, `steeringSpeedCurve`, `handbrakeSideFrictionMultiplier` and
   `aerodynamics` use the same normalizer and must round-trip too.
+  Wheel `visualNode` optionally names a mesh/group in the vehicle model. The
+  vehicle capability animates that node around its centred physical axle,
+  restores it on unload, and leaves model geometry/material ownership with the
+  asset loader. Omitted/unusable nodes use the procedural wheel fallback.
 
 ## Codex Tooling Context
 

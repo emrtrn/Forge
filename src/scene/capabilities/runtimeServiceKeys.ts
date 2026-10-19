@@ -54,7 +54,7 @@ import type {
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
-import type { VehicleDefinition, VehicleState } from "@engine/physics/vehicle/vehicleTypes";
+import type { VehicleDefinition, VehicleInput, VehicleState } from "@engine/physics/vehicle/vehicleTypes";
 import type { AiNavAgentClearanceView } from "@engine/render-three/aiNavigationView";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
@@ -174,13 +174,46 @@ export interface VehicleHost {
   /** The actor's root render object (scaled by placement × mesh scale). */
   actorObject(entityId: string): Object3D | null;
   /**
-   * Whether someone is driving the vehicle — today the player's possessed pawn.
-   * A parked car's engine is off; an AI driver would answer true here too.
+   * Whether someone is driving the vehicle — the player's possessed pawn or an
+   * AI driver at the wheel. A parked car's engine is off.
    */
   isDriven(entityId: string): boolean;
+  /** The player's possessed pawn, or null (an AI driver yields to the player). */
+  possessedEntityId(): string | null;
+  /** Driver intent the vehicle follows until the next call (an AI driver's pedals). */
+  setVehicleInput(entityId: string, input: VehicleInput): void;
 }
 
 export const vehicleHostService = runtimeServiceKey<VehicleHost>("vehicle-host");
+
+/** One AI driver's state, for `?debug` and browser smokes. */
+export interface VehicleAiDriverDebugState {
+  readonly entityId: string;
+  readonly splineId: string;
+  /** Progress along its route (m). */
+  readonly distance: number;
+  /** The speed it is aiming for (m/s). */
+  readonly speedLimit: number;
+  /** At the wheel, pressing the pedals this tick. */
+  readonly driving: boolean;
+  /** Reached the end of a route that ends, and parked. */
+  readonly finished: boolean;
+  /** The player took this car over; the AI no longer drives it. */
+  readonly released: boolean;
+  readonly missingRoute: boolean;
+}
+
+/**
+ * The vehicle AI drivers (`VehicleAiDriver` components). The shell asks it
+ * whether a car has an AI at the wheel (its engine runs) and reads its debug
+ * snapshot. Provided by: `vehicleAiModule`.
+ */
+export interface VehicleAiCommands {
+  isDriving(entityId: string): boolean;
+  drivers(): readonly VehicleAiDriverDebugState[];
+}
+
+export const vehicleAiService = runtimeServiceKey<VehicleAiCommands>("vehicle-ai");
 
 /**
  * The script-message bus: how gameplay triggers a capability ("play-dialogue")

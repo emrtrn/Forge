@@ -20782,6 +20782,52 @@
         "bytes": 2211
       },
       "license": "Unknown"
+    },
+    {
+      "id": "script-aireferencecar-actor",
+      "name": "Script AI Reference Car.Actor",
+      "assetType": "prefab",
+      "category": "Gameplay",
+      "path": "assets/starter-content/Gameplay/Script_AiReferenceCar.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Gameplay",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1479
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "vehicletrack-level",
+      "name": "VehicleTrack.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/starter-content/Levels/VehicleTrack.level.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 4503
+      },
+      "license": "Unknown"
     }
   ]
 }

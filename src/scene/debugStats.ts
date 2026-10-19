@@ -73,6 +73,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       aiInspectorText(app) +
       aiNavDebugText(app) +
       splinePathFollowerDebugText(app) +
+      vehicleAiDebugText(app) +
       uiDebugText(app) +
       scriptMessageDebugText(app);
     accumMs = 0;
@@ -690,6 +691,21 @@ function splinePathFollowerDebugText(app: RuntimeStatsApp): string {
   for (const follower of followers.slice(0, 4)) {
     const missing = follower.missingSpline ? " missing" : "";
     lines.push(`  ${follower.entityId}: ${follower.splineId} d:${follower.distance.toFixed(2)}${missing}`);
+  }
+  return `\n${lines.join("\n")}`;
+}
+
+/** Vehicle AI driver block, or "" when the runtime has none; smokes parse it. */
+function vehicleAiDebugText(app: RuntimeStatsApp): string {
+  const drivers = app.getVehicleAiDebugSnapshot?.() ?? [];
+  if (drivers.length === 0) return "";
+  const lines = [`vehicle ai (${drivers.length})`];
+  for (const driver of drivers.slice(0, 4)) {
+    const status = driver.missingRoute ? "missing-route" : driver.released ? "released"
+      : driver.finished ? "parked" : driver.driving ? "driving" : "idle";
+    lines.push(
+      `  ${driver.entityId}: ${driver.splineId} ${status} d:${driver.distance.toFixed(1)} limit:${driver.speedLimit.toFixed(1)}`,
+    );
   }
   return `\n${lines.join("\n")}`;
 }

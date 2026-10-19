@@ -24,6 +24,7 @@ import {
   MOVING_PLATFORM_COMPONENT,
   PARTICLE_EMITTER_COMPONENT,
   SPLINE_PATH_FOLLOWER_COMPONENT,
+  VEHICLE_AI_DRIVER_COMPONENT,
   readBehaviorComponent,
 } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
@@ -69,6 +70,7 @@ const COVERAGE_RULES: readonly CoverageRule[] = [
   componentRule("character-movement", CHARACTER_MOVEMENT_COMPONENT),
   componentRule("moving-platform", MOVING_PLATFORM_COMPONENT),
   componentRule("spline-follower", SPLINE_PATH_FOLLOWER_COMPONENT),
+  componentRule("vehicle-ai", VEHICLE_AI_DRIVER_COMPONENT),
   behaviorRule("dialogue", "conversation trigger", ["begin-conversation"]),
   behaviorRule("save-game", "checkpoint trigger", ["checkpoint"]),
   {

@@ -1353,6 +1353,8 @@ export class SceneApp {
   private readonly textureLoader = new TextureLoader();
   private readonly materialCache = new Map<string, Material>();
   private readonly materialLoads = new Map<string, Promise<Material>>();
+  /** Instance groups to rebuild once a pending material load resolves (one rebuild per asset). */
+  private readonly materialLoadRebuilds = new Map<string, Set<string>>();
   private readonly wireframeMaterialStates = new Map<WireframeCapableMaterial, boolean>();
   private characterObjects: Object3D[] = [];
   /** Render object per placed actor instance, index-aligned with `layout.actors`. */
@@ -1520,6 +1522,7 @@ export class SceneApp {
           for (const asset of await loader.loadEditableAssets()) {
             this.assetPlacements.set(asset.id, asset.placement);
           }
+          await this.preloadPlacementMaterials();
         },
         buildSceneEntities: () => {
           const layout = this.layout;
@@ -3895,26 +3898,32 @@ export class SceneApp {
     if (cached) return Promise.resolve(cached);
     const pending = this.materialLoads.get(materialId);
     if (pending) {
-      if (assetIdToRebuild) {
-        void pending.then(
-          () => this.rebuildInstanceGroup(assetIdToRebuild),
-          () => undefined,
-        );
-      }
+      // Every placement sharing a still-loading slot lands here; queueing a
+      // rebuild per call rebuilt an N-placement group N times (N² clones).
+      if (assetIdToRebuild) this.materialLoadRebuilds.get(materialId)?.add(assetIdToRebuild);
       return pending;
     }
     if (!this.manifest) return Promise.resolve(undefined);
+    const rebuildAssetIds = new Set<string>(assetIdToRebuild ? [assetIdToRebuild] : []);
+    this.materialLoadRebuilds.set(materialId, rebuildAssetIds);
+    const releaseRebuilds = () => {
+      if (this.materialLoadRebuilds.get(materialId) === rebuildAssetIds) {
+        this.materialLoadRebuilds.delete(materialId);
+      }
+    };
     const load = loadForgeMaterial(this.manifest, materialId, this.textureLoader, {
       maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
     })
       .then((material) => {
         this.materialCache.set(materialId, material);
         this.materialLoads.delete(materialId);
-        if (assetIdToRebuild) this.rebuildInstanceGroup(assetIdToRebuild);
+        releaseRebuilds();
+        for (const assetId of rebuildAssetIds) this.rebuildInstanceGroup(assetId);
         return material;
       })
       .catch((error) => {
         this.materialLoads.delete(materialId);
+        releaseRebuilds();
         this.onStatus?.(
           `Material load failed: ${error instanceof Error ? error.message : String(error)}`,
           "error",
@@ -3923,6 +3932,22 @@ export class SceneApp {
       });
     this.materialLoads.set(materialId, load);
     return load;
+  }
+
+  /**
+   * Loads every placement `materialSlot` override before the first scene build,
+   * so each instance group is built once with its final materials instead of
+   * being rebuilt as each override resolves. Failures are reported by
+   * `ensureMaterialLoaded`; the build then falls back to the asset's material.
+   */
+  private async preloadPlacementMaterials(): Promise<void> {
+    const materialIds = new Set<string>();
+    for (const instance of this.layout?.instances ?? []) {
+      for (const placement of instance.placements) {
+        if (placement.materialSlot) materialIds.add(placement.materialSlot);
+      }
+    }
+    await Promise.allSettled([...materialIds].map((materialId) => this.ensureMaterialLoaded(materialId)));
   }
 
   private rebuildInstanceGroup(assetId: string): void {

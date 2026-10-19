@@ -251,6 +251,12 @@ import { rotatedBoxAabb, rotatedBoxFootprintXZ } from "../engine/physics/rotated
 import { FixedStepClock, lerpPosition, nlerpQuaternion } from "../engine/physics/fixedStep";
 import { computeVehicleDrive } from "../engine/physics/vehicle/vehicleDrive";
 import {
+  DEFAULT_VEHICLE_ROUTE_DRIVER,
+  startVehicleRoute,
+  stepVehicleRouteDriver,
+  type VehicleRoute,
+} from "../engine/physics/vehicle/vehicleRouteDriver";
+import {
   createReferenceCarDefinition,
   NEUTRAL_VEHICLE_INPUT,
   resolveVehicleDefinition,
@@ -1060,6 +1066,7 @@ import { registerCharacterMovementModuleTests } from "../tests/engine/characterM
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 import { registerVehicleRuntimeTests } from "../tests/engine/vehicleRuntime.test";
 import { registerVehicleEntryTests } from "../tests/engine/vehicleEntry.test";
+import { registerVehicleAiTests } from "../tests/engine/vehicleAi.test";
 import { registerVehicleDrivetrainTests } from "../tests/engine/vehicleDrivetrain.test";
 import { registerVehicleAssetTests } from "../tests/engine/vehicleAssets.test";
 import { resolveActorVehicleAssets } from "../src/scene/vehicleAssetLoader";
@@ -1174,6 +1181,7 @@ registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
 registerVehicleRuntimeTests(check);
 registerVehicleEntryTests(check);
+registerVehicleAiTests(check);
 registerVehicleDrivetrainTests(check);
 await registerVehicleAssetTests(check, checkAsync);
 registerPerfReadoutTests(check);
@@ -7233,6 +7241,107 @@ await checkAsync("rapier vehicle motion survives a save: speed, gear and handbra
     } finally {
       target.physics.dispose();
     }
+  });
+});
+
+/** A circle of radius `r` through the origin, leaving it along +Z (a right-hand loop). */
+function circleVehicleRoute(r: number): VehicleRoute {
+  return {
+    length: 2 * Math.PI * r,
+    loop: true,
+    locationAt: (s) => [-r + r * Math.cos(s / r), 0, r * Math.sin(s / r)],
+    directionAt: (s) => [-Math.sin(s / r), 0, Math.cos(s / r)],
+    closestDistanceTo: (p) => {
+      const angle = Math.atan2(p[2], p[0] + r);
+      return (((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) * r;
+    },
+  };
+}
+
+/** A straight `length` m road from the origin along +Z that ends. */
+function straightVehicleRoute(length: number): VehicleRoute {
+  return {
+    length,
+    loop: false,
+    locationAt: (s) => [0, 0, Math.min(length, Math.max(0, s))],
+    directionAt: () => [0, 0, 1],
+    closestDistanceTo: (p) => Math.min(length, Math.max(0, p[2])),
+  };
+}
+
+/**
+ * Drives the reference car (its authored chassis collider) with the route
+ * driver for `seconds`, reading the simulated pose each frame like the runtime
+ * module does. Returns per-frame samples.
+ */
+async function driveReferenceCarOnRoute(route: VehicleRoute, seconds: number, settings = DEFAULT_VEHICLE_ROUTE_DRIVER) {
+  const asset = normalizeVehicleAsset(JSON.parse(readFileSync(
+    "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
+  const actor = normalizeActorScriptDef(JSON.parse(readFileSync(
+    "public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")));
+  const collider = actor.components.find((node) => node.component === "Collider")!.props;
+  const world = await createVehicleTestWorld({ groundSize: 2000 });
+  const samples: { position: Vec3; speed: number; distance: number; finished: boolean; input: VehicleInput }[] = [];
+  try {
+    const car = world.entities[1]!;
+    world.physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
+    world.physics.createVehicle("car", asset);
+    world.tick(0.5);
+    let state = startVehicleRoute(route, world.physics.simulatedTransform("car")!.position, "nearest");
+    const forward = new Vector3();
+    for (let frame = 1; frame <= seconds * 60; frame += 1) {
+      const pose = world.physics.simulatedTransform("car")!;
+      const toRad = Math.PI / 180;
+      forward.set(0, 0, 1).applyEuler(new Euler(pose.rotation[0] * toRad, pose.rotation[1] * toRad, pose.rotation[2] * toRad));
+      const flat = Math.hypot(forward.x, forward.z) || 1;
+      const speed = world.physics.vehicleState("car")!.forwardSpeed;
+      const step = stepVehicleRouteDriver(route, state, {
+        position: pose.position,
+        heading: { x: forward.x / flat, z: forward.z / flat },
+      }, speed, asset, settings);
+      state = step.state;
+      world.physics.setVehicleInput("car", step.input);
+      world.physics.update({ deltaSeconds: VEHICLE_SLICE, elapsedSeconds: 1 + frame * VEHICLE_SLICE, frame });
+      samples.push({ position: [...pose.position], speed, distance: state.distance, finished: step.finished, input: step.input });
+    }
+  } finally {
+    world.physics.dispose();
+  }
+  return samples;
+}
+
+await checkAsync("rapier vehicle route driver laps a circle on its own pedals, staying in its lane", async () => {
+  await withQuietRapierInit(async () => {
+    const r = 30;
+    const route = circleVehicleRoute(r);
+    const samples = await driveReferenceCarOnRoute(route, 40);
+    let travelled = 0;
+    let worstLane = 0;
+    for (let index = 1; index < samples.length; index += 1) {
+      const step = samples[index]!.distance - samples[index - 1]!.distance;
+      travelled += step < -route.length / 2 ? step + route.length : step; // across the lap seam
+      const [x, , z] = samples[index]!.position;
+      if (index > 120) worstLane = Math.max(worstLane, Math.abs(Math.hypot(x + r, z) - r));
+    }
+    const cruise = Math.max(...samples.slice(600).map((sample) => sample.speed));
+    console.info(`[vehicle-ai] circle r=${r}: ${(travelled / route.length).toFixed(2)} laps, worst lane error ${worstLane.toFixed(2)} m, top ${cruise.toFixed(1)} m/s`);
+    assert.ok(travelled > route.length * 1.2, `only ${(travelled / route.length).toFixed(2)} laps in 40 s`);
+    assert.ok(worstLane < 2, `wandered ${worstLane.toFixed(2)} m off the line`);
+    assert.ok(cruise < DEFAULT_VEHICLE_ROUTE_DRIVER.targetSpeed + 1.5, `overshot the target speed: ${cruise}`);
+  });
+});
+
+await checkAsync("rapier vehicle route driver stops at the end of a route that ends and parks", async () => {
+  await withQuietRapierInit(async () => {
+    const samples = await driveReferenceCarOnRoute(straightVehicleRoute(80), 25);
+    const last = samples.at(-1)!;
+    console.info(`[vehicle-ai] straight 80 m: stopped at z=${last.position[2].toFixed(2)}, top ${Math.max(...samples.map((s) => s.speed)).toFixed(1)} m/s`);
+    assert.ok(Math.max(...samples.map((sample) => sample.speed)) > DEFAULT_VEHICLE_ROUTE_DRIVER.targetSpeed - 1.5, "reached cruise");
+    assert.equal(last.finished, true);
+    assert.ok(Math.abs(last.speed) < 0.5, `still rolling at ${last.speed}`);
+    assert.ok(last.position[2] > 72 && last.position[2] < 82, `stopped at z=${last.position[2]}`);
+    assert.equal(last.input.handbrake, true, "parked on the handbrake");
+    assert.ok(samples.every((sample) => sample.speed > -0.5), "never reverses");
   });
 });
 

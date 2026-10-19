@@ -2,8 +2,8 @@
 
 > Durum: **Faz 0–3 temel kod kapsamı tamam**; Faz 4'te **araca bin/in (4a)**,
 > **save-game araç durumu (4b)**, **takip kamerası çarpışma + fareyle bakma
-> (4c)** ve **RPM → motor sesi (4d)** tamam. Faz 4'te yalnız opsiyonel AI
-> sürücü dilimi açık; sıradaki büyük adım Faz 5 (editör yüzeyi).
+> (4c)**, **RPM → motor sesi (4d)** ve **spline takip eden AI sürücü (4e)**
+> tamam; Faz 4 kapandı. Sıradaki büyük adım Faz 5 (editör yüzeyi).
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
@@ -16,6 +16,8 @@
 > A/D direksiyon, Space el freni, E aracı tekerleklerine geri oturtur.
 > Testler seviyenin authored modundan bağımsız: smoke her testte modu route ile
 > seçer, engine testi iki modu da kabul eder.
+> AI sürücü: `Levels/VehicleTrack` — oval asfalt spline'da kendi kendine tur
+> atan bir AI arabası, ortada oyuncunun arabası ve Player Start (yaya mod).
 
 ## Karar: Rapier raycast vehicle + ince "aktarma organları" katmanı
 
@@ -303,7 +305,8 @@ ayarı bu doğrulamanın dışında.
 - [x] **4c — Kamera:** spring arm çarpışması (kamera duvar arkasına girmesin),
       fareyle etrafına bakma.
 - [x] **4d — Ses kancası:** RPM → motor ses cue pitch'i (audio modülü üzerinden).
-- [ ] AI: basit spline / nav takip eden araç sürücüsü (opsiyonel, ayrı dilim).
+- [x] **4e — AI:** basit spline takip eden araç sürücüsü (nav/Target Point takibi
+      kapsam dışı bırakıldı).
 
 ### 4a — araca bin / in ✅
 
@@ -471,6 +474,72 @@ ayarı bu doğrulamanın dışında.
   yer tutucu sesin ve eğrinin dinlenip ayarlanması kullanıcı smoke'u.
 - Doğrulama (2026-10-19): `tsc`, tam engine **1204 kontrol**, `build:verify`
   geçti; araç Chromium smoke'u **9/9**; `check:assets` 0 hata.
+
+### 4e — spline takip eden AI sürücü ✅
+
+- `VehicleAiDriver` component (`ACTOR_COMPONENT_KINDS`): `splineId`, `entry`
+  (`nearest`/`start`), `wrapMode` (`loop`/`clamp`; yoksa kapalı spline tur atar,
+  açık spline sonunda durur), `targetSpeed` (m/s, 0..100, varsayılan 12),
+  `lookAheadDistance` (m, 1..50, varsayılan 5), `enabled`. Props düz JSON olarak
+  actor'den entity'ye akar; ek allowlist yüzeyi yok.
+- Spline id seviyeye ait: yeniden kullanılan sınıf (`Script_AiReferenceCar`)
+  `splineId` bırakmaz; yerleştirmenin mevcut `patrolRoute` alanı (spline
+  kaynağı) bu araca `splineId`, `entry`, `wrapMode` (`pingPong` hariç — karakter
+  devriye modu) ve `speed` → `targetSpeed` olarak birleşir
+  (`actorInstanceToEntity`). Alan zaten layout'ta kayıtlı/allowlist'te.
+- Saf sürücü `engine/physics/vehicle/vehicleRouteDriver.ts`:
+  - **Direksiyon:** pure pursuit — `lookAhead + hız × 0,5 s` ilerideki noktaya
+    bisiklet modeli açısı, araç dingil mesafesiyle, hıza bağlı direksiyon
+    eğrisinin kilidine bölünür.
+  - **Hız:** hedef hız; önündeki virajın keskinliğine göre (`90°` virajda %35'e
+    kadar) düşer; açık rotada `√(2·a·kalan)` ile sonda durur ve el freninde park
+    eder. Pedal: hız açığına orantılı gaz (+küçük ileri besleme); limitin
+    üstündeyken fren — yalnız araç belirgin ileri giderken (fren düşük hızda
+    geri vites olur).
+  - **İlerleme:** son bilinen mesafenin çevresinde kısa bir pencerede (−3 m ..
+    max(8 m, hız × 1,5 s)) en yakın nokta; rota kendine yaklaşsa da yanlış
+    parçaya atlamaz. Katılış bir kez `getClosestDistanceToPoint` ile.
+  - Rapier testi (referans araba, gerçek collider): R=30 dairede 40 s'de
+    **1,88 tur**, şeritten en fazla **0,29 m** sapma, hedef hızı aşmıyor; 80 m
+    açık düz rotada 12 m/s'ye çıkıp **z ≈ 79,2**'de durup el frenine geçiyor,
+    hiç geri gitmiyor.
+- `vehicle-ai` capability modülü (`vehicleAiModule.ts`, varsayılan modüllerde):
+  `decision` slotunda (karakter AI'ı ile aynı) sürücü başına adım; girdi
+  `VehicleHost.setVehicleInput` ile fiziğe — araç asla elle taşınmaz. Oyuncu
+  önceliklidir: possess edilen araca dokunulmaz ve oyuncu bir kez sürdü mü AI
+  onu bir daha sürmez (Unreal'da possess AI controller'ı bırakır). Spline
+  yoksa bekler; modül kapalıysa AI arabaları park eder. Kapsam raporu
+  (`capabilityCoverage`) modül kapalıyken authored sürücüleri söyler.
+- `VehicleHost` ek alanları: `possessedEntityId`, `setVehicleInput`; `isDriven`
+  artık possess **veya** AI sürüyorsa doğru — AI arabasının motor sesi (4d)
+  de çalar. `vehicleAiService` (`isDriving`, `drivers()`); `?debug`'da
+  `vehicle ai (n)` bloğu: `entity: spline durum d:<m> limit:<m/s>` (durum
+  `driving` / `parked` / `released` / `missing-route` / `idle`).
+- İçerik: `Gameplay/Script_AiReferenceCar.actor.json` (referans araba +
+  `VehicleAiDriver`, hedef 14 m/s) ve `Levels/VehicleTrack.level.json`
+  (VehicleTest'in zemin/ışık/ortamı; merkez (0, 15), yarıçaplar 28 × 40 m,
+  8 noktalı kapalı `curveAuto` spline `vehicle-track-loop` + `sm-road-asphalt`
+  deformMesh yolu, ~215 m tur; oyuncu arabası ortada, AI arabası rotada).
+  Manifest'e iki kayıt. Görsel kontrol: GPU'lu headless üstten görünümde yol
+  ovali ve rotadaki AI arabası doğru çiziliyor.
+- Testler: component okuyucu, `patrolRoute` birleşmesi ve commit'li seviyenin
+  kapalı spline'a bağlanması; modül (pedallar, pure pursuit yönü, limit üstünde
+  fren, eksik spline, devre dışı sürücü, oyuncu devralınca bırakma, level
+  kapanışı); Rapier daire turu + açık rotada durma; varsayılan modül tick
+  sırası. Tarayıcı smoke'u: `VehicleTrack`'te AI `driving`, ilerleme 70 m'yi
+  geçip tur sonunda başa sarar.
+- Bilinen sınırlar: yalnız spline (nav grid / Target Point takibi yok); çarpışma
+  kaçınma ve sollama yok (öndeki araca çarpar); takılma kurtarma yok (duvara
+  sıkışırsa geri manevra yapmaz); geri giderek sürmez; runtime'da spawn edilen
+  AI araçları sürülmez (entity sink yalnız level kurulumunda dolar); sürücü
+  durumu ve "oyuncu devraldı" bilgisi save-game'e girmez — yüklemede AI araç
+  kaydedilen pozdan en yakın rota noktasına yeniden katılır.
+- Doğrulama (2026-10-19): `tsc`, tam engine **1210 kontrol**, `build:verify`
+  geçti; araç Chromium smoke'u **10/10**; `check:assets` 0 hata. Ortak smoke
+  paketi 41/45: kırılan 4 test (`ai-patrol`, `ai-navigation-clearance` —
+  `controllers: 0`; `landscape-spline-chain` — 28 segment / beklenen 3;
+  `runtime-checkpoint` — debug paneli Load butonunu örtüyor) bu dilimden
+  bağımsız: iki AI testi 4e değişiklikleri stash'liyken de aynı şekilde kırıldı.
 
 ## Faz 5 — Editör yüzeyi
 

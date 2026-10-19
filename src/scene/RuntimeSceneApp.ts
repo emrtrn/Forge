@@ -49,6 +49,8 @@ import {
   vfxHostService,
   skeletonLibraryService,
   splineFollowerDebugService,
+  vehicleAiService,
+  type VehicleAiDriverDebugState,
   splineRegistrySourceService,
   uiDebugService,
   uiHostService,
@@ -478,6 +480,7 @@ export interface RuntimeStatsApp {
   getAiNavigationDebugSnapshot?(): AiNavigationDebugSnapshot;
   /** Optional: runtime Generic Spline followers for the `?debug` overlay. */
   getSplinePathFollowerDebugSnapshot?(): readonly SplinePathFollowerDebugState[];
+  getVehicleAiDebugSnapshot?(): readonly VehicleAiDriverDebugState[];
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
@@ -1156,7 +1159,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       vehicleState: (entityId) => this.physicsSubsystem.vehicleState(entityId),
       vehicleDefinition: (entityId) => this.physicsSubsystem.vehicleDefinition(entityId),
       actorObject: (entityId) => this.actorObjects.get(entityId) ?? null,
-      isDriven: (entityId) => this.gameModeSession?.playerState.pawnEntityId === entityId,
+      isDriven: (entityId) =>
+        this.gameModeSession?.playerState.pawnEntityId === entityId ||
+        this.runtimeServices.resolve(vehicleAiService)?.isDriving(entityId) === true,
+      possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
+      setVehicleInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
     });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,
@@ -1979,6 +1986,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   getSplinePathFollowerDebugSnapshot(): readonly SplinePathFollowerDebugState[] {
     return this.runtimeServices.resolve(splineFollowerDebugService)?.followers() ?? [];
+  }
+
+  /**
+   * Snapshots the vehicle AI drivers for `?debug` and browser smoke checks.
+   * Empty when the vehicle-ai module is not part of this runtime.
+   */
+  getVehicleAiDebugSnapshot(): readonly VehicleAiDriverDebugState[] {
+    return this.runtimeServices.resolve(vehicleAiService)?.drivers() ?? [];
   }
 
   /**

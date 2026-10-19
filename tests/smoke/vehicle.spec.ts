@@ -21,6 +21,7 @@ import { resolve } from "node:path";
  */
 const VEHICLE_LEVEL = "assets/starter-content/Levels/VehicleTest.level.json";
 const VEHICLE_LOADED = '"layout":"VehicleTest"';
+const TRACK_LEVEL = "assets/starter-content/Levels/VehicleTrack.level.json";
 const VEHICLE_ASSET = "assets/starter-content/Gameplay/ReferenceCar.vehicle.json";
 const VEHICLE_ACTOR = "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json";
 /** Debug-overlay mode name → the `worldSettings.gameMode` that selects it. */
@@ -62,10 +63,11 @@ async function openVehicleTest(
   page: Page,
   mode: VehicleTestMode = "Vehicle",
   editLevel?: (level: LevelJson) => void,
+  levelPath = VEHICLE_LEVEL,
 ): Promise<string[]> {
   const consoleMessages: string[] = [];
   const pageErrors: string[] = [];
-  await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
+  await page.route(`**/${levelPath}`, async (route) => {
     const response = await route.fetch();
     const level = await response.json();
     level.worldSettings.gameMode = GAME_MODES[mode];
@@ -79,7 +81,7 @@ async function openVehicleTest(
   await page.route("**/project.3dgame.json", async (route) => {
     const response = await route.fetch();
     const project = (await response.json()) as { editor: { defaultScene: string } };
-    project.editor.defaultScene = VEHICLE_LEVEL;
+    project.editor.defaultScene = levelPath;
     await route.fulfill({ response, json: project });
   });
 
@@ -91,7 +93,8 @@ async function openVehicleTest(
 
   await page.goto(`/?debug&vehicleSmoke=${Date.now()}`);
   await expect(page.locator("#game-canvas")).toBeVisible();
-  await waitForConsoleText(page, consoleMessages, VEHICLE_LOADED);
+  await waitForConsoleText(page, consoleMessages, levelPath === VEHICLE_LEVEL ? VEHICLE_LOADED
+    : `"layout":"${levelPath.split("/").pop()!.replace(".level.json", "")}"`);
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
 
   const stats = page.locator("#debug-stats");
@@ -308,6 +311,40 @@ test("vehicle engine sound loops while driving, revs with the throttle and stops
   await expect(stats).not.toContainText("vehicle-chase", { timeout: 20_000 });
   await expect.poll(async () => (await running()).length, { timeout: 5_000 }).toBe(0);
   expect((await engines()).length).toBe(1); // one voice for the whole drive
+  expect(pageErrors).toEqual([]);
+});
+
+/** The `?debug` vehicle AI rows: entity → status and progress. */
+async function readVehicleAi(page: Page): Promise<Map<string, { status: string; distance: number; limit: number }>> {
+  const text = (await page.locator("#debug-stats").textContent()) ?? "";
+  const rows = new Map<string, { status: string; distance: number; limit: number }>();
+  for (const match of text.matchAll(/^\s+(\S+): \S+ (\S+) d:([\d.]+) limit:([\d.]+)$/gm)) {
+    rows.set(match[1]!, { status: match[2]!, distance: Number(match[3]), limit: Number(match[4]) });
+  }
+  return rows;
+}
+
+test("vehicle AI driver laps the VehicleTrack loop on its own pedals", async ({ page }) => {
+  const pageErrors = await openVehicleTest(page, "Vehicle", undefined, TRACK_LEVEL);
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText("vehicle ai (1)", { timeout: 30_000 });
+  // The player's car (the first vehicle) is possessed; the AI car drives itself.
+  await expect(stats).toContainText(/vehicle-chase pawn:actor:0/);
+  await expect.poll(async () => (await readVehicleAi(page)).get("actor:1")?.status, { timeout: 15_000 }).toBe("driving");
+
+  // Progress climbs past a third of the ~215 m loop, and then laps round to the start.
+  let peak = 0;
+  await expect.poll(async () => {
+    const distance = (await readVehicleAi(page)).get("actor:1")?.distance ?? 0;
+    peak = Math.max(peak, distance);
+    return peak;
+  }, { timeout: 40_000 }).toBeGreaterThan(70);
+  await expect.poll(async () => {
+    const distance = (await readVehicleAi(page)).get("actor:1")?.distance ?? 0;
+    if (distance > peak) peak = distance;
+    return peak > 180 && distance < 60;
+  }, { timeout: 60_000 }).toBe(true);
+  expect((await readVehicleAi(page)).get("actor:1")?.status).toBe("driving");
   expect(pageErrors).toEqual([]);
 });
 

@@ -115,6 +115,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   Camera: "🎥",
   AIController: "🧠",
   Vehicle: "🚗",
+  VehicleAiDriver: "AI🚗",
 };
 
 function escapeHtml(value: string): string {

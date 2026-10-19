@@ -126,6 +126,11 @@ engine/editor.
   whole wheel list. Missing/malformed assets fall back to inline/reference-car
   settings with a warning. Asset expansion is runtime-only; actor saves preserve
   the authored reference and inline props.
+  A placed actor may carry level-owned `vehicleOverrides` (`asset`, the
+  `VEHICLE_OVERRIDE_SCALAR_KEYS` scalars, `engineSound` loop or `null`), layered
+  onto the class's Vehicle props before the asset resolves; new override keys go
+  in `validateActorVehicleOverrides` (`tools/saveValidator.ts`) and
+  `cloneActorInstance` too.
   The optional `drivetrain` block enables torque/RPM/gearing; missing/null keeps
   legacy flat-force behavior. Engine/transmission/differential inline objects
   merge field-by-field; authored curves/gear lists replace their base lists.

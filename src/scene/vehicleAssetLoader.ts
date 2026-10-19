@@ -3,10 +3,12 @@ import type { ActorScriptDef } from "@engine/scene/actorScript";
 import { VEHICLE_COMPONENT } from "@engine/scene/components";
 import type { SceneJsonValue } from "@engine/scene/entity";
 import {
+  applyVehicleOverrides,
   normalizeVehicleAsset,
   normalizeVehicleAssetPath,
   vehicleDefinitionFromComponent,
   type VehicleDefinition,
+  type VehicleOverrides,
 } from "@engine/physics/vehicle/vehicleTypes";
 import { projectFileUrl } from "@/project/ProjectSystem";
 
@@ -57,4 +59,20 @@ export async function resolveActorVehicleAssets(
     };
   }));
   return { ...def, components };
+}
+
+/**
+ * A copy of the (unresolved) class whose `Vehicle` component carries one
+ * placement's level-owned overrides; resolve it afterwards so an overridden
+ * asset is the one loaded. A class without a Vehicle is returned as is.
+ */
+export function withVehicleOverrides(def: ActorScriptDef, overrides: VehicleOverrides): ActorScriptDef {
+  if (!def.components.some((node) => node.component === VEHICLE_COMPONENT)) return def;
+  return {
+    ...def,
+    components: def.components.map((node) => node.component !== VEHICLE_COMPONENT ? node : {
+      ...node,
+      props: applyVehicleOverrides(node.props, overrides) as Record<string, SceneJsonValue>,
+    }),
+  };
 }

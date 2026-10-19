@@ -498,6 +498,9 @@ import {
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import { readRenderableMeshComponent } from "@engine/scene/components";
 import type { AiPatrolRoute, TransformComponent } from "@engine/scene/components";
+import { VEHICLE_COMPONENT } from "@engine/scene/components";
+import type { SceneJsonValue } from "@engine/scene/entity";
+import type { VehicleOverrides } from "@engine/physics/vehicle/vehicleTypes";
 import type { Entity } from "@engine/scene/entity";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { actorInstanceToEntity, resolveActorInstanceVariables } from "@engine/scene/actorInstance";
@@ -6218,6 +6221,49 @@ export class SceneApp {
     if (!this.selection || this.selection.kind !== "actor") return undefined;
     const route = this.layout?.actors?.[this.selection.index]?.patrolRoute;
     return route ? { ...route } : undefined;
+  }
+
+  /**
+   * The selected placement's class `Vehicle` props (as authored, asset
+   * unexpanded) and its own overrides, or null when the class has no Vehicle
+   * (or is not loaded yet).
+   */
+  getSelectedActorVehicle(): {
+    classProps: Record<string, SceneJsonValue>;
+    overrides: VehicleOverrides | undefined;
+  } | null {
+    if (!this.selection || this.selection.kind !== "actor") return null;
+    const instance = this.layout?.actors?.[this.selection.index];
+    if (!instance) return null;
+    const node = this.actorClassCache.get(instance.classRef)?.components
+      .find((component) => component.component === VEHICLE_COMPONENT);
+    if (!node) return null;
+    const overrides = cloneActorInstance(instance).vehicleOverrides;
+    return { classProps: { ...node.props }, overrides };
+  }
+
+  /** Replaces the selected placement's vehicle overrides with undo/redo; empty clears them. */
+  setSelectedActorVehicleOverrides(overrides: VehicleOverrides | undefined): void {
+    if (!this.layout || !this.selection || this.selection.kind !== "actor") return;
+    const index = this.selection.index;
+    const actor = this.layout.actors?.[index];
+    if (!actor || actor.locked) return;
+    const before = cloneActorInstance(actor);
+    const after = cloneActorInstance(actor);
+    if (overrides && Object.keys(overrides).length > 0) after.vehicleOverrides = overrides;
+    else delete after.vehicleOverrides;
+    const apply = (next: LayoutActorInstance): void => {
+      if (!this.layout?.actors) return;
+      this.layout.actors[index] = cloneActorInstance(next);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Edit Vehicle Overrides",
+      redo: () => apply(after),
+      undo: () => apply(before),
+    });
   }
 
   setSelectedActorPatrolRoute(route: AiPatrolRoute | undefined): void {

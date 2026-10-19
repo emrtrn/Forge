@@ -294,7 +294,7 @@ import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/acto
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
-import { createVehicleAssetLoader, resolveActorVehicleAssets } from "@/scene/vehicleAssetLoader";
+import { createVehicleAssetLoader, resolveActorVehicleAssets, withVehicleOverrides } from "@/scene/vehicleAssetLoader";
 import {
   applyAssetUvwMapping,
   loadAssetUvw,
@@ -788,6 +788,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly actorMeshScales = new Map<string, Vec3>();
   /** Resolved `*.actor.json` classes, cached by classRef across instances. */
   private readonly actorClassCache = new Map<string, ActorScriptDef>();
+  private readonly rawActorClassCache = new Map<string, ActorScriptDef>();
   private readonly loadVehicleAsset = createVehicleAssetLoader();
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
@@ -1155,6 +1156,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
     });
     this.runtimeServices.provide(vehicleHostService, {
+      debug: this.debug,
       vehicleIds: () => this.physicsSubsystem.vehicleEntityIds(),
       vehicleState: (entityId) => this.physicsSubsystem.vehicleState(entityId),
       vehicleDefinition: (entityId) => this.physicsSubsystem.vehicleDefinition(entityId),
@@ -3726,7 +3728,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const actors = this.layout?.actors ?? [];
     const entities = await Promise.all(
       actors.map(async (instance, index) => {
-        const def = await this.loadActorClass(instance.classRef);
+        // A placement's vehicle overrides may name another asset, so they are
+        // layered onto the raw class and resolved per placement.
+        const def = instance.vehicleOverrides
+          ? await resolveActorVehicleAssets(
+            withVehicleOverrides(await this.loadRawActorClass(instance.classRef), instance.vehicleOverrides),
+            this.loadVehicleAsset,
+          )
+          : await this.loadActorClass(instance.classRef);
         return actorInstanceToEntity(def, instance, index);
       }),
     );
@@ -3735,9 +3744,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const entity of entities) this.registerActorEntity(entity);
   }
 
-  /** Fetches + normalizes an `*.actor.json` class, caching by classRef (never throws). */
+  /** Fetches + normalizes an `*.actor.json` class with its vehicle asset resolved, cached by classRef (never throws). */
   private async loadActorClass(classRef: string): Promise<ActorScriptDef> {
     const cached = this.actorClassCache.get(classRef);
+    if (cached) return cached;
+    const def = await resolveActorVehicleAssets(await this.loadRawActorClass(classRef), this.loadVehicleAsset);
+    this.actorClassCache.set(classRef, def);
+    return def;
+  }
+
+  /** The class as authored — vehicle asset references unexpanded — cached by classRef. */
+  private async loadRawActorClass(classRef: string): Promise<ActorScriptDef> {
+    const cached = this.rawActorClassCache.get(classRef);
     if (cached) return cached;
     let def: ActorScriptDef;
     try {
@@ -3746,8 +3764,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     } catch {
       def = normalizeActorScriptDef({}, classRef);
     }
-    def = await resolveActorVehicleAssets(def, this.loadVehicleAsset);
-    this.actorClassCache.set(classRef, def);
+    this.rawActorClassCache.set(classRef, def);
     return def;
   }
 
@@ -3898,7 +3915,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private addActorCharacterRef(entity: Entity, object: Object3D): void {
     const actor = readScriptActorComponent(entity);
     if (!actor) return;
-    const def = this.actorClassCache.get(actor.classRef);
+    // An overridden vehicle placement may only have filled the raw cache; parentClass is the same.
+    const def = this.actorClassCache.get(actor.classRef) ?? this.rawActorClassCache.get(actor.classRef);
     if (def?.parentClass !== "character") return;
     const renderer = readRenderableMeshComponent(entity);
     const gltf = renderer ? this.models.get(renderer.assetId) : undefined;

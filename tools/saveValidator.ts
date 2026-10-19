@@ -52,7 +52,11 @@ import {
 import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget";
 import { normalizeWorldWidgets } from "../engine/ui/uiWorldWidget";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
-import { normalizeVehicleAsset, normalizeVehicleAssetPath } from "../engine/physics/vehicle/vehicleTypes";
+import {
+  normalizeVehicleAsset,
+  normalizeVehicleAssetPath,
+  VEHICLE_OVERRIDE_SCALAR_KEYS,
+} from "../engine/physics/vehicle/vehicleTypes";
 import {
   buildParticleEffectPresetBody,
   isParticleEffectPreset,
@@ -556,7 +560,41 @@ export function validateActorInstance(value: unknown): Record<string, unknown> {
     if (Object.keys(overrides).length > 0) actor.variableOverrides = overrides;
   }
   if (entry.patrolRoute !== undefined) actor.patrolRoute = validateActorPatrolRoute(entry.patrolRoute);
+  if (entry.vehicleOverrides !== undefined) {
+    const overrides = validateActorVehicleOverrides(entry.vehicleOverrides);
+    if (Object.keys(overrides).length > 0) actor.vehicleOverrides = overrides;
+  }
   return actor;
+}
+
+/** Mirrors `applyVehicleOverrides`: asset path, the quick scalars, engine sound loop or null. */
+function validateActorVehicleOverrides(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("actor vehicleOverrides must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const overrides: Record<string, unknown> = {};
+  if (input.asset !== undefined) {
+    const asset = normalizeVehicleAssetPath(input.asset);
+    if (!asset) throw new Error("actor vehicleOverrides asset must be a .vehicle.json path");
+    overrides.asset = asset;
+  }
+  for (const key of VEHICLE_OVERRIDE_SCALAR_KEYS) {
+    if (input[key] === undefined) continue;
+    const number = requireFiniteNumber(input[key], `actor vehicleOverrides ${key}`);
+    if (number < 0) throw new Error(`actor vehicleOverrides ${key} must be non-negative`);
+    overrides[key] = number;
+  }
+  if (input.engineSound === null) {
+    overrides.engineSound = null;
+  } else if (input.engineSound !== undefined) {
+    const sound = (input.engineSound as Record<string, unknown> | undefined)?.sound;
+    if (typeof sound !== "string" || !sound.trim()) {
+      throw new Error("actor vehicleOverrides engineSound must be null or { sound }");
+    }
+    overrides.engineSound = { sound: sound.trim() };
+  }
+  return overrides;
 }
 
 function validateActorPatrolRoute(value: unknown): Record<string, unknown> {

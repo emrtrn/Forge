@@ -199,6 +199,13 @@ export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInsta
   // would let an undo snapshot and the live layout share one list.
   if (actor.variableOverrides !== undefined) clone.variableOverrides = cloneMetadata(actor.variableOverrides);
   if (actor.patrolRoute !== undefined) clone.patrolRoute = { ...actor.patrolRoute };
+  if (actor.vehicleOverrides !== undefined) {
+    const { engineSound, ...scalars } = actor.vehicleOverrides;
+    clone.vehicleOverrides = {
+      ...scalars,
+      ...(engineSound !== undefined ? { engineSound: engineSound && { ...engineSound } } : {}),
+    };
+  }
   return clone;
 }
 

@@ -151,7 +151,7 @@ geldi.
       rebuild) + component/actor dosyası entegrasyonu + 8 runtime (saf
       yardımcılar, oturum, tekerlek modülü) + tarayıcı smoke'u
       `tests/smoke/vehicle.spec.ts` (possess, W ile >20 km/h, S ile geri).
-- [ ] `?debug` wire: süspansiyon ışınları, temas noktaları → Faz 5'e taşındı.
+- [x] `?debug` wire: süspansiyon ışınları, temas noktaları → Faz 5'te yapıldı.
 
 ## Faz 2 — Veri: `*.vehicle.json` asset ✅
 
@@ -543,11 +543,43 @@ ayarı bu doğrulamanın dışında.
 
 ## Faz 5 — Editör yüzeyi
 
-- [ ] `?debug` wire: süspansiyon ışınları, temas noktaları (Faz 1'den).
-- [ ] Actor Script editöründe `Vehicle` component'i için form (şu an
+- [x] `?debug` wire: süspansiyon ışınları, temas noktaları (Faz 1'den).
+      `VehicleHost.debug` (AI'daki `AiHost.debug` deseni) açıkken `vehicle`
+      capability her rig'e tek bir `LineSegments` asar
+      (`src/scene/capabilities/vehicleSuspensionWire.ts`): tekerlek konteyneriyle
+      aynı şasi çerçevesinde, tekerlek başına sarı yay (hard point → merkez),
+      mavi kelepçe menzili işaretleri (`rest ± maxTravel`, Rapier/Bullet modeli),
+      yeşil temas çizgisi + haç (fizikten gelen dünya koordinatlı temas noktası
+      şasi çerçevesine çevrilir), havadaki tekerlekte kırmızı yarıçap çizgisi.
+      Sabit boyutlu buffer, gereksiz segmentler sıfır uzunluğa çökertilir;
+      `?debug` yokken hiç kurulmaz. Test: `vehicleRuntime.test.ts` ("?debug
+      suspension wire"); tarayıcıda VehicleTest `?debug` ile gözle doğrulandı.
+- [x] Actor Script editöründe `Vehicle` component'i için form (şu an
       component eklenebiliyor ama props'u yalnız JSON'dan düzenleniyor).
+      `src/editor/vehicleComponentFields.ts`: Vehicle Asset seçici (`vehicle`
+      tipli manifest asset'leri), hızlı override'lar (kütle, motor/geri/fren/el
+      freni kuvveti, max direksiyon açısı, direksiyon hızı — anahtar listesi
+      engine'de `VEHICLE_OVERRIDE_SCALAR_KEYS`) boş = asset'ten miras, placeholder
+      miras değeri gösterir (asset tembel okunur); Engine Sound: asset'ten /
+      Silent (`null`) / ses-cue seçimi (inline ayarları koruyup yalnız loop'u
+      değiştirir). Tekerlek/süspansiyon/drivetrain asset'te kalır (not gösterilir).
+      `VehicleAiDriver` için de form: spline id, entry, wrap, hedef hız,
+      look-ahead, enabled (varsayılanlar yazılmaz).
 - [ ] Add-Actor menüsünde "Vehicle".
-- [ ] Details: araç asset seçimi + hızlı ayarlar.
+- [x] Details: araç asset seçimi + hızlı ayarlar.
+      Yeni yerleştirme alanı `LayoutActorInstance.vehicleOverrides`
+      (`asset`, hızlı skalerler, `engineSound: {sound} | null`) — `patrolRoute`
+      gibi level'a ait override. Sınıfında `Vehicle` olan aktör seçilince
+      Details'te "Vehicle" bölümü (aynı form, `surface: "details"`, boş = sınıf
+      değeri, kilitli yerleştirmede salt okunur, undo/redo'lu). Runtime: override'lı
+      yerleştirme için ham sınıf alınır, `applyVehicleOverrides` /
+      `withVehicleOverrides` ile birleştirilir, sonra asset çözülür — böylece
+      override edilen asset yüklenen asset olur. Save allowlist:
+      `validateActorVehicleOverrides` (`tools/saveValidator.ts`); clone
+      (`cloneActorInstance`) derin kopyalar. Testler:
+      `tests/engine/vehicleEditorFields.test.ts` (7 kontrol). Tarayıcıda gözle:
+      form + Details düzenleme + Ctrl+Z; `maxEngineForce: 0` override'lı
+      VehicleTest'te araç W ile 0 km/h'te kaldı (override'sız 62 km/h).
 - [ ] Vehicle asset editörü (form tabanlı, VFX Lite deseni): tekerlek listesi,
       süspansiyon, tork eğrisi grafiği, vites tablosu.
 - [ ] Viewport: tekerlek bağlantı noktaları gizmo ile sürüklenebilir,

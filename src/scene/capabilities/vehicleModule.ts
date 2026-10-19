@@ -18,6 +18,10 @@
  * Rigs are built lazily, the first frame a vehicle id shows up with a render
  * object, so the module does not depend on whether physics initialised before
  * or after the level hooks, and a runtime-spawned vehicle gets wheels too.
+ *
+ * Under `?debug` (the host's `debug` flag) each rig also carries a suspension
+ * wire — springs, clamp range and ground contacts (Faz 5) — so a shipped game
+ * never builds one.
  */
 import {
   Box3,
@@ -29,6 +33,7 @@ import {
   Matrix4,
   Vector3,
   type BufferGeometry,
+  type LineSegments,
   type Object3D,
 } from "three";
 
@@ -44,6 +49,11 @@ import {
   type AudioCommands,
   type VehicleHost,
 } from "./runtimeServiceKeys";
+import {
+  createVehicleSuspensionWire,
+  disposeVehicleSuspensionWire,
+  updateVehicleSuspensionWire,
+} from "./vehicleSuspensionWire";
 
 export const VEHICLE_MODULE_ID = "vehicle";
 
@@ -64,6 +74,8 @@ interface WheelRig {
   readonly container: Group;
   readonly wheels: Group[];
   readonly restoreNodes: (() => void)[];
+  /** `?debug` suspension wire, in the container's chassis frame. */
+  debugWire: LineSegments | null;
 }
 
 /** Move an authored wheel into a physics pivot, preserving its geometry/materials.
@@ -181,7 +193,24 @@ export function createVehicleModule(): CapabilityModule {
 
   const releaseRig = (rig: WheelRig): void => {
     for (const restore of [...rig.restoreNodes].reverse()) restore();
+    if (rig.debugWire) disposeVehicleSuspensionWire(rig.debugWire);
+    rig.debugWire = null;
     rig.container.removeFromParent();
+  };
+
+  const updateDebugWire = (host: VehicleHost, entityId: string, rig: WheelRig, state: VehicleState): void => {
+    if (rig.debugWire?.userData.wheelCount !== state.wheels.length) {
+      if (rig.debugWire) disposeVehicleSuspensionWire(rig.debugWire);
+      rig.debugWire = createVehicleSuspensionWire(state.wheels.length);
+      rig.debugWire.userData.wheelCount = state.wheels.length;
+      // A sibling of the wheel container, not a child: the container holds
+      // exactly one pivot per wheel. Same scale cancel, so the same frame.
+      rig.host.add(rig.debugWire);
+    }
+    rig.debugWire.scale.copy(rig.container.scale);
+    // Contacts come back in world space; bring them into the chassis frame.
+    rig.debugWire.updateWorldMatrix(true, false);
+    updateVehicleSuspensionWire(rig.debugWire, rig.debugWire, state.wheels, host.vehicleDefinition(entityId));
   };
 
   const buildWheel = (radius: number): Group => {
@@ -232,7 +261,7 @@ export function createVehicleModule(): CapabilityModule {
       return group;
     });
     object.add(container);
-    const rig: WheelRig = { host: object, container, wheels, restoreNodes };
+    const rig: WheelRig = { host: object, container, wheels, restoreNodes, debugWire: null };
     rigs.set(entityId, rig);
     return rig;
   };
@@ -273,6 +302,7 @@ export function createVehicleModule(): CapabilityModule {
           const group = rig.wheels[index];
           if (group) poseWheel(group, wheel);
         });
+        if (host.debug) updateDebugWire(host, entityId, rig, state);
         updateEngine(host, audio, entityId, state, rig.host);
       }
     },

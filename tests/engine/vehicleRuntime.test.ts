@@ -14,7 +14,7 @@
  *       object from the host's live wheel readback.
  */
 import assert from "node:assert/strict";
-import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, PerspectiveCamera, Vector3, type Object3D } from "three";
+import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, PerspectiveCamera, Vector3, type LineSegments, type Object3D } from "three";
 
 import { ActionMap } from "../../engine/input/actionMap";
 import { DEFAULT_INPUT_BINDINGS } from "../../engine/input/defaultInputBindings";
@@ -47,6 +47,7 @@ import {
   audioCommandsService,
   vehicleHostService,
   type AudioCommands,
+  type VehicleHost,
 } from "../../src/scene/capabilities/runtimeServiceKeys";
 import { createVehicleModule } from "../../src/scene/capabilities/vehicleModule";
 import { vehicleEngineSoundLevels } from "../../engine/physics/vehicle/vehicleEngineSound";
@@ -554,6 +555,68 @@ export function registerVehicleRuntimeTests(check: Check): void {
     assert.equal(plays.length, 3, "taking the wheel again starts it afresh");
     registry.levelUnloaded();
     assert.ok(plays[2]!.calls.some((call) => call.kind === "stop"), "a level teardown silences it");
+    registry.dispose();
+  });
+
+  check("vehicle module draws a ?debug suspension wire in the chassis frame and drops it with the rig", () => {
+    const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+    const registry = createCapabilityRegistry([createVehicleModule()]);
+    registry.runtimeStart(host);
+    const actor = new Group();
+    actor.position.set(10, 2, -5);
+    actor.rotation.y = Math.PI / 2;
+    actor.scale.set(2, 2, 2); // the rig container cancels it: the wire is in metres
+    const definition = normalizeVehicleDefinition({
+      wheels: [
+        { position: [0.8, 0, 1.2], suspensionRestLength: 0.4, suspensionMaxTravel: 0.1 },
+        { position: [-0.8, 0, -1.2] },
+      ],
+    })!;
+    // Front wheel on the ground: its hit, in world space, is 0.3 + 0.35 below the
+    // hard point. Chassis-local (0.8, -0.65, 1.2) yawed +90° → world offset (1.2, -0.65, -0.8).
+    const front = { ...wheelState([0.8, 0, 1.2], 0.3), contactPoint: [11.2, 1.35, -5.8] as [number, number, number] };
+    const rear = { ...wheelState([-0.8, 0, -1.2], 0.4), inContact: false };
+    let debug = true;
+    host.provide(vehicleHostService, {
+      get debug() { return debug; },
+      vehicleIds: () => ["car"],
+      vehicleState: () => ({ forwardSpeed: 0, engineLoad: 0, drivetrain: null, wheels: [front, rear] }),
+      vehicleDefinition: () => definition,
+      actorObject: () => actor,
+      isDriven: () => false,
+    } as unknown as VehicleHost);
+
+    registry.update(1 / 60);
+    const wire = actor.getObjectByName("VehicleSuspensionDebug") as LineSegments | undefined
+      ?? assert.fail("no suspension wire under ?debug");
+    const rig = actor.getObjectByName("VehicleWheels")!;
+    assert.equal(wire.parent, actor, "a sibling of the wheel rig");
+    assert.equal(rig.children.length, 2, "the rig holds only the wheel pivots");
+    assert.deepEqual(wire.scale.toArray(), rig.scale.toArray(), "the same chassis frame");
+    const positions = wire.geometry.getAttribute("position");
+    const colors = wire.geometry.getAttribute("color");
+    const at = (vertex: number) => [positions.getX(vertex), positions.getY(vertex), positions.getZ(vertex)];
+    const near = (actual: number[], expected: number[], label: string) =>
+      assert.ok(actual.every((value, index) => Math.abs(value - expected[index]!) < 1e-5), `${label}: ${actual}`);
+    near(at(0), [0.8, 0, 1.2], "spring starts at the hard point");
+    near(at(1), [0.8, -0.3, 1.2], "spring ends at the wheel centre");
+    near(at(3), [0.8, -0.65, 1.2], "contact brought from world into the chassis frame");
+    // Range ticks after the 2 + 3 contact segments: rest − travel, then rest + travel.
+    assert.ok(Math.abs(positions.getY(10) - -0.3) < 1e-6, "bump-stop tick at rest − travel");
+    assert.ok(Math.abs(positions.getY(14) - -0.5) < 1e-6, "droop tick at rest + travel");
+    // The rear wheel (vertex 18 on) is airborne: its radius below the centre, in red.
+    near(at(20), [-0.8, -0.4, -1.2], "airborne link starts at the centre");
+    near(at(21), [-0.8, -0.75, -1.2], "and spans the radius");
+    assert.ok(colors.getX(21) > 0.9 && colors.getY(21) < 0.5, "airborne is red");
+    assert.ok(colors.getY(3) > 0.6 && colors.getX(3) < 0.3, "contact is green");
+
+    registry.levelUnloaded();
+    assert.equal(actor.getObjectByName("VehicleSuspensionDebug"), undefined);
+
+    debug = false;
+    registry.update(1 / 60);
+    assert.ok(actor.getObjectByName("VehicleWheels"), "the rig is rebuilt");
+    assert.equal(actor.getObjectByName("VehicleSuspensionDebug"), undefined, "no wire without ?debug");
     registry.dispose();
   });
 

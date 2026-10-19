@@ -53,6 +53,19 @@ import {
   type AssetSkeletonMontageDef,
 } from "@/scene/assetSkeletonLoader";
 import { getGameEditorCatalog } from "@/editor/gameEditorRegistry";
+import {
+  setVehicleAiDriverChoice,
+  setVehicleAsset,
+  setVehicleEngineSound,
+  setVehicleScalarOverride,
+  vehicleAiDriverFields,
+  vehicleComponentFields,
+} from "@/editor/vehicleComponentFields";
+import { createVehicleAssetLoader } from "@/scene/vehicleAssetLoader";
+import {
+  createReferenceCarDefinition,
+  type VehicleDefinition,
+} from "@engine/physics/vehicle/vehicleTypes";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -166,6 +179,9 @@ export class ActorScriptEditor {
   private readonly clipsByAssetId = new Map<string, readonly string[]>();
   /** Asset ids whose skeleton sidecar load was already kicked off (avoid refetch). */
   private readonly skeletonLoadStarted = new Set<string>();
+  /** Vehicle assets read for the Vehicle form's inherited values (null = unreadable). */
+  private readonly vehicleAssets = new Map<string, VehicleDefinition | null>();
+  private readonly loadVehicleAsset = createVehicleAssetLoader();
 
   private constructor(private readonly options: ActorScriptEditorOptions) {
     this.def = defaultActorScriptDef(options.label);
@@ -805,6 +821,8 @@ export class ActorScriptEditor {
     const cameraField = node.component === "Camera" ? cameraFields(node) : "";
     const springArmField = node.component === "SpringArm" ? springArmFields(node) : "";
     const aiControllerField = node.component === "AIController" ? this.aiControllerFields(node) : "";
+    const vehicleField = node.component === "Vehicle" ? this.vehicleFields(node) : "";
+    const vehicleAiField = node.component === "VehicleAiDriver" ? vehicleAiDriverFields(node.props) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -839,6 +857,8 @@ export class ActorScriptEditor {
       ${springArmField}
       ${cameraField}
       ${aiControllerField}
+      ${vehicleField}
+      ${vehicleAiField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${transformRows}
       <details class="as-advanced">
@@ -1059,6 +1079,38 @@ export class ActorScriptEditor {
         <select ${attr}>${options}</select>
       </label>
     `;
+  }
+
+  /**
+   * The Vehicle form: asset picker + per-class overrides whose placeholders show
+   * the inherited value. The asset is read lazily (like the skeleton sidecar)
+   * and the form re-renders once it lands.
+   */
+  private vehicleFields(node: ComponentTemplateNode): string {
+    const asset = typeof node.props.asset === "string" ? node.props.asset : "";
+    let inherited: VehicleDefinition | null | undefined = createReferenceCarDefinition();
+    if (asset) {
+      inherited = this.vehicleAssets.get(asset);
+      if (inherited === undefined && !this.vehicleAssets.has(asset)) void this.ensureVehicleAssetLoaded(asset, node.id);
+    }
+    return vehicleComponentFields(node.props, {
+      vehicleAssets: (this.options.assets ?? [])
+        .filter((entry) => entry.assetType === "vehicle")
+        .map((entry) => ({ path: entry.path, name: entry.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      soundAssets: [...this.soundAssets(), ...this.cueAssets()],
+      inherited,
+    });
+  }
+
+  private async ensureVehicleAssetLoaded(path: string, componentId: string): Promise<void> {
+    const definition = await this.loadVehicleAsset(path);
+    if (this.disposed) return;
+    this.vehicleAssets.set(path, definition);
+    const node = this.def.components.find((component) => component.id === componentId);
+    if (this.selection.kind === "component" && this.selection.id === componentId && node?.props.asset === path) {
+      this.renderDetails();
+    }
   }
 
   /**
@@ -1343,6 +1395,7 @@ export class ActorScriptEditor {
     this.bindSpringArmDetails(node);
     this.bindCameraDetails(node);
     this.bindAIControllerDetails(node);
+    this.bindVehicleDetails(node);
     this.bindNumberProps(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
@@ -1757,6 +1810,60 @@ export class ActorScriptEditor {
       else node.props.doCollisionTest = false;
       this.markDirty();
       this.renderDetails();
+    });
+  }
+
+  /**
+   * Wires the Vehicle and VehicleAiDriver forms (no-op without one). Vehicle
+   * overrides are blank-means-inherit, so they bind here rather than through the
+   * generic `data-as-num`; the AI driver's numbers do use it.
+   */
+  private bindVehicleDetails(node: ComponentTemplateNode): void {
+    const commit = (): void => {
+      this.markDirty();
+      this.renderDetails();
+    };
+    const asset = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-vehicle-asset]");
+    asset?.addEventListener("change", () => {
+      setVehicleAsset(node.props, asset.value);
+      commit();
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-as-vehicle-num]").forEach((input) => {
+      const key = input.dataset.asVehicleNum;
+      if (!key) return;
+      input.addEventListener("input", () => {
+        if (setVehicleScalarOverride(node.props, key, input.value)) this.markDirty();
+      });
+      input.addEventListener("change", () => {
+        setVehicleScalarOverride(node.props, key, input.value);
+        commit();
+      });
+    });
+    const sound = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-vehicle-engine-sound]");
+    sound?.addEventListener("change", () => {
+      setVehicleEngineSound(node.props, sound.value);
+      commit();
+    });
+    const spline = this.detailsHost.querySelector<HTMLInputElement>("[data-as-vehicle-ai-spline]");
+    spline?.addEventListener("change", () => {
+      const value = spline.value.trim();
+      if (value) node.props.splineId = value;
+      else delete node.props.splineId;
+      commit();
+    });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-as-vehicle-ai-select]").forEach((select) => {
+      const key = select.dataset.asVehicleAiSelect;
+      if (key !== "entry" && key !== "wrapMode") return;
+      select.addEventListener("change", () => {
+        setVehicleAiDriverChoice(node.props, key, select.value);
+        commit();
+      });
+    });
+    const enabled = this.detailsHost.querySelector<HTMLInputElement>("[data-as-vehicle-ai-enabled]");
+    enabled?.addEventListener("change", () => {
+      if (enabled.checked) delete node.props.enabled;
+      else node.props.enabled = false;
+      commit();
     });
   }
 

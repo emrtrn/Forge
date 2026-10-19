@@ -506,6 +506,53 @@ export function vehicleDefinitionFromComponent(
   return normalizeVehicleDefinition(props, asset);
 }
 
+/**
+ * The scalar `Vehicle` fields a level designer may override per class or per
+ * placement — the quick knobs; wheels, suspension and the drivetrain stay with
+ * the vehicle asset.
+ */
+export const VEHICLE_OVERRIDE_SCALAR_KEYS = [
+  "massKg",
+  "maxEngineForce",
+  "maxReverseForce",
+  "maxBrakeForce",
+  "handbrakeForce",
+  "maxSteerAngleDeg",
+  "steerSpeed",
+] as const satisfies readonly (keyof VehicleDefinition)[];
+
+export type VehicleOverrideScalarKey = (typeof VEHICLE_OVERRIDE_SCALAR_KEYS)[number];
+
+/**
+ * A placed actor's level-owned overrides on its class's `Vehicle` component
+ * (vehicle plan Faz 5): another asset, the quick scalars, or the engine sound
+ * (`null` silences this car). Absent fields keep the class's value.
+ */
+export type VehicleOverrides = {
+  asset?: string;
+  engineSound?: { sound: string } | null;
+} & { [K in VehicleOverrideScalarKey]?: number };
+
+/**
+ * Layers placement overrides onto a class's `Vehicle` props, before the asset
+ * is resolved — so an overridden `asset` is the one loaded. The engine sound
+ * swaps only the loop and keeps the class's inline tuning.
+ */
+export function applyVehicleOverrides(
+  props: Readonly<Record<string, unknown>>,
+  overrides: VehicleOverrides,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...props };
+  if (overrides.asset !== undefined) merged.asset = overrides.asset;
+  for (const key of VEHICLE_OVERRIDE_SCALAR_KEYS) {
+    const value = overrides[key];
+    if (typeof value === "number" && Number.isFinite(value)) merged[key] = value;
+  }
+  if (overrides.engineSound === null) merged.engineSound = null;
+  else if (overrides.engineSound) merged.engineSound = { ...record(props.engineSound), sound: overrides.engineSound.sound };
+  return merged;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -22,6 +22,20 @@ import type {
 } from "@/scene/SceneApp";
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import type { AiPatrolRoute } from "@engine/scene/components";
+import type { SceneJsonValue } from "@engine/scene/entity";
+import {
+  applyVehicleOverrides,
+  vehicleDefinitionFromComponent,
+  type VehicleDefinition,
+  type VehicleOverrides,
+} from "@engine/physics/vehicle/vehicleTypes";
+import { createVehicleAssetLoader } from "@/scene/vehicleAssetLoader";
+import {
+  setVehicleAsset,
+  setVehicleEngineSound,
+  setVehicleScalarOverride,
+  vehicleComponentFields,
+} from "@/editor/vehicleComponentFields";
 import {
   AMBIENT_SOUND_ASSET_ID,
   PLAYER_START_ASSET_ID,
@@ -369,6 +383,10 @@ export class EditorUi {
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
   private editableAssets: EditableAsset[] = [];
+  /** Vehicle assets read for the Details Vehicle section (null = unreadable). */
+  private readonly vehicleAssetDefs = new Map<string, VehicleDefinition | null>();
+  private readonly vehicleAssetLoads = new Set<string>();
+  private readonly loadVehicleAsset = createVehicleAssetLoader();
   private assetTreeRoot: ProjectDirNode | null = null;
   /** All project Actor Script classes discovered for editor pickers (game mode / pawn). */
   private projectActorClasses: { path: string; name: string; parentClass: ParentClass }[] = [];
@@ -825,6 +843,75 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLButtonElement>("[data-view-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.viewMode === state.mode);
     });
+  }
+
+  /**
+   * Per-placement Vehicle overrides (vehicle plan Faz 5) for an actor whose class
+   * has a `Vehicle` component. Placeholders show what the class resolves to with
+   * this placement's asset choice; the asset is read lazily and Details
+   * re-renders once it lands.
+   */
+  private renderActorVehicleSection(selection: EditableSelection): string {
+    if (selection.kind !== "actor") return "";
+    const vehicle = this.app.getSelectedActorVehicle();
+    if (!vehicle) return "";
+    const overrides = vehicle.overrides ?? {};
+    const classAsset = typeof vehicle.classProps.asset === "string" ? vehicle.classProps.asset : "";
+    const asset = overrides.asset ?? classAsset;
+    let inherited: VehicleDefinition | null | undefined;
+    if (!asset) inherited = vehicleDefinitionFromComponent(vehicle.classProps);
+    else if (!this.vehicleAssetDefs.has(asset)) void this.loadDetailsVehicleAsset(asset);
+    else {
+      const loaded = this.vehicleAssetDefs.get(asset);
+      // An unreadable asset still has the class's inline values on the reference car.
+      const classLayer = applyVehicleOverrides(vehicle.classProps, { asset });
+      inherited = loaded === null ? null : vehicleDefinitionFromComponent(classLayer, loaded);
+    }
+    const assets = this.editableAssets;
+    return vehicleComponentFields(overrides as Record<string, SceneJsonValue>, {
+      surface: "details",
+      classAsset,
+      disabled: selection.locked,
+      inherited,
+      vehicleAssets: assets
+        .filter((entry) => assetType(entry) === "vehicle")
+        .map((entry) => ({ path: assetPath(entry), name: entry.displayName ?? entry.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      soundAssets: assets
+        .filter((entry) => assetType(entry) === "sound" || assetType(entry) === "soundCue")
+        .map((entry) => ({ id: entry.id, name: entry.displayName ?? entry.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  }
+
+  private async loadDetailsVehicleAsset(path: string): Promise<void> {
+    if (this.vehicleAssetLoads.has(path)) return;
+    this.vehicleAssetLoads.add(path);
+    this.vehicleAssetDefs.set(path, await this.loadVehicleAsset(path));
+    if (this.selected?.kind === "actor") this.renderDetails(this.selected);
+  }
+
+  private bindActorVehicleInputs(selection: EditableSelection): void {
+    if (selection.kind !== "actor" || selection.locked) return;
+    const section = this.detailsBody.querySelector<HTMLElement>("[data-actor-vehicle-section]");
+    if (!section) return;
+    const commit = (edit: (overrides: Record<string, SceneJsonValue>) => void): void => {
+      const overrides = { ...(this.app.getSelectedActorVehicle()?.overrides ?? {}) } as Record<string, SceneJsonValue>;
+      edit(overrides);
+      this.app.setSelectedActorVehicleOverrides(overrides as VehicleOverrides);
+      this.renderDetails(this.selected);
+    };
+    const asset = section.querySelector<HTMLSelectElement>("[data-as-vehicle-asset]");
+    asset?.addEventListener("change", () => commit((overrides) => setVehicleAsset(overrides, asset.value)));
+    section.querySelectorAll<HTMLInputElement>("[data-as-vehicle-num]").forEach((input) => {
+      const key = input.dataset.asVehicleNum;
+      if (!key) return;
+      input.addEventListener("change", () => commit((overrides) => {
+        setVehicleScalarOverride(overrides, key, input.value);
+      }));
+    });
+    const sound = section.querySelector<HTMLSelectElement>("[data-as-vehicle-engine-sound]");
+    sound?.addEventListener("change", () => commit((overrides) => setVehicleEngineSound(overrides, sound.value)));
   }
 
   private renderActorPatrolRouteSection(selection: EditableSelection): string {
@@ -4268,6 +4355,7 @@ export class EditorUi {
         components:
           renderComponentsSection(selection, this.editableAssets)
           + renderActorVariableSection(this.app.getSelectedActorVariables(), selection.locked)
+          + this.renderActorVehicleSection(selection)
           + this.renderActorPatrolRouteSection(selection),
         metadata: renderMetadataSections(selection, this.metadataSchema),
       },
@@ -4326,6 +4414,7 @@ export class EditorUi {
           variables: () => this.app.getSelectedActorVariables(),
           setVariable: (key, value) => this.app.setSelectedActorVariable(key, value),
         });
+        this.bindActorVehicleInputs(selection);
         this.bindActorPatrolRouteInputs(selection);
       },
       bindMetadataInputs: () =>

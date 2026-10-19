@@ -239,6 +239,8 @@ export interface LayoutActorInstance {
   variableOverrides?: LayoutMetadata;
   /** Optional level-owned override merged into this actor's AIController at spawn. */
   patrolRoute?: AiPatrolRoute;
+  /** Optional level-owned overrides on the class's `Vehicle` component (asset, quick scalars, engine sound). */
+  vehicleOverrides?: VehicleOverrides;
 }
 
 export interface LayoutCharacter {
@@ -1004,3 +1006,4 @@ export interface RoomLayout {
   worldWidgets?: WorldUiWidget[];
 }
 import type { AiPatrolRoute } from "./components";
+import type { VehicleOverrides } from "../physics/vehicle/vehicleTypes";

@@ -166,6 +166,8 @@ export const characterMovementHostService =
  * because both the physics world and the actor objects are shell-owned.
  */
 export interface VehicleHost {
+  /** `?debug`: draw each vehicle's suspension rays and ground contacts. */
+  readonly debug?: boolean;
   /** Entity ids of every live vehicle, in level order. */
   vehicleIds(): readonly string[];
   vehicleState(entityId: string): VehicleState | null;

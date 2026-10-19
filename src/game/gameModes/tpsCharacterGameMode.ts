@@ -191,7 +191,7 @@ export class TpsCharacterSession implements GameModeSession {
       options.vehicleEntry === undefined ? DEFAULT_VEHICLE_ENTRY : options.vehicleEntry;
     this.driver = new VehicleDriver(
       context,
-      this.controller.cameraManager,
+      this.controller,
       DEFAULT_VEHICLE_CHASE_CAMERA,
       CAMERA_SOURCE_BLEND_SECONDS,
     );
@@ -402,7 +402,9 @@ export class TpsCharacterSession implements GameModeSession {
   }
 
   beforeEngineUpdate(deltaSeconds: number): void {
-    this.controller.updateControlRotation(deltaSeconds);
+    // Behind the wheel the look input orbits the chase camera instead: the
+    // driver consumes it, and the on-foot view waits where it was.
+    if (!this.ridingVehicleId) this.controller.updateControlRotation(deltaSeconds);
     if (this.ridingVehicleId) this.updateDriving(this.ridingVehicleId);
     else this.tryEnterVehicle();
   }

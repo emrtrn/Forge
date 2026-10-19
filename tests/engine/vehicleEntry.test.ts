@@ -73,6 +73,7 @@ function fakeWorld() {
   let carAlive = true;
   let speed = 0;
   let inputMode: InputMode = "game";
+  let pendingLook = { dx: 0, dy: 0 };
   const context: GameModeContext = {
     camera,
     actions,
@@ -94,7 +95,11 @@ function fakeWorld() {
     staticBlockerAabbs: () => blockers,
     addMixer: () => {},
     markCameraControlled: () => {},
-    consumeLookDelta: () => ({ dx: 0, dy: 0 }),
+    consumeLookDelta: () => {
+      const look = pendingLook;
+      pendingLook = { dx: 0, dy: 0 };
+      return look;
+    },
     getInputMode: () => inputMode,
     setInputMode: (mode) => {
       inputMode = mode;
@@ -120,6 +125,10 @@ function fakeWorld() {
     },
     setInputMode: (mode: InputMode) => {
       inputMode = mode;
+    },
+    /** Pointer travel the next look read consumes. */
+    look(dx: number, dy: number): void {
+      pendingLook = { dx, dy };
     },
     /** One frame with `code` freshly pressed (the edge `pressed()` sees). */
     press(code: string): void {
@@ -284,6 +293,26 @@ export function registerVehicleEntryTests(check: Check): void {
     assert.equal(second.hidden.get("hero"), false);
     assert.equal(second.collision.get("hero"), true);
     assert.deepEqual(second.inputs.at(-1), PARKED_VEHICLE_INPUT);
+  });
+
+  check("tps driver's mouse orbits the chase camera, not the on-foot control rotation", () => {
+    const world = fakeWorld();
+    const session = startSession(world);
+    session.boardVehicle("car");
+    session.beforeEngineUpdate?.(1 / 60);
+    session.update(1 / 60);
+    const before = session.getCameraDebug?.().cameraSource ?? "";
+    assert.match(before, / look:0$/);
+    world.look(-(Math.PI / 4) / 0.003, 0);
+    session.beforeEngineUpdate?.(1 / 60); // must leave the look input to the chase camera
+    session.update(1 / 60);
+    assert.match(session.getCameraDebug?.().cameraSource ?? "", / look:45$/);
+    // Out again: the view faces the way the car faces, as on any exit.
+    world.press("KeyE");
+    session.beforeEngineUpdate?.(1 / 60);
+    assert.equal(session.drivingVehicleId, null);
+    const yaw = session.getCameraDebug?.().controlYawDeg ?? Number.NaN;
+    assert.ok(Math.abs(Math.abs(yaw) - 180) < 1e-6, `facing +Z after getting out: yaw=${yaw}`);
   });
 
   check("tps save-game load seats the player straight back in the car it was driving", () => {

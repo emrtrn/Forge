@@ -1,7 +1,8 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
-> Durum: **Faz 0–3 temel kod kapsamı tamam**; Faz 4'te **araca bin/in (4a)**
-> ve **save-game araç durumu (4b)** tamam, sırada kamera (4c).
+> Durum: **Faz 0–3 temel kod kapsamı tamam**; Faz 4'te **araca bin/in (4a)**,
+> **save-game araç durumu (4b)** ve **takip kamerası çarpışma + fareyle bakma
+> (4c)** tamam, sırada RPM → motor sesi (4d).
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
@@ -298,8 +299,8 @@ ayarı bu doğrulamanın dışında.
       TPS ↔ araç possess geçişi).
 - [x] **4b — Save-game:** seviyedeki tüm araçların pozu/hızı/el freni/vitesi ve
       "araçta mı" durumu; yüklemede oyuncu sürdüğü araca geri oturur.
-- [ ] Kamera: spring arm çarpışması (kamera duvar arkasına girmesin), fareyle
-      etrafına bakma.
+- [x] **4c — Kamera:** spring arm çarpışması (kamera duvar arkasına girmesin),
+      fareyle etrafına bakma.
 - [ ] Ses kancası: RPM → motor ses cue pitch'i (audio modülü üzerinden).
 - [ ] AI: basit spline / nav takip eden araç sürücüsü (opsiyonel, ayrı dilim).
 
@@ -373,6 +374,52 @@ ayarı bu doğrulamanın dışında.
   atlanır (uyarı).
 - Doğrulama (2026-10-19): `tsc`, tam engine **1193 kontrol**, `build:verify`
   geçti; araç Chromium smoke'u **7/7**.
+
+### 4c — takip kamerası: çarpışma + fareyle bakma ✅
+
+- Takip kamerası artık bir spring arm: kol, bakış hedefinden (araç kökü +
+  `lookHeight`) kamera noktasına uzanır. Saf matematik `vehicleCameraControl.ts`:
+  `chaseCameraOrbitPosition` (ortalanmışken eski `chaseCameraPosition` ile
+  birebir aynı), `clampChaseOrbit`, `recenterChaseOrbit`, `stepChaseArmFraction`.
+- **Fareyle bakma:** fare / `look-x`/`look-y` eksenleri aracın arkasına göre bir
+  yörünge açısı (yaw + pitch) çevirir; yükseklik −5°..60° bandında, yaw
+  (−π, π]'ye sarılır (birkaç tur dönen bakış kısa yoldan geri döner). Girdi
+  `RuntimePlayerController.consumeLookInput` / `applyLook` ile okunur; hassasiyet
+  ve Y ters çevirme controller tanımından gelir. `forge.vehicle` sağ tuşla
+  sürükleyerek, TPS içindeki sürücü pointer-lock fareyle bakar. TPS'te
+  araçtayken fare girdisi yaya control rotation'ını çevirmez; inişte bakış yine
+  aracın baktığı yöne döner.
+- **Geri dönme:** fare `lookRecenterDelay` (1,5 s) boyunca bırakılırsa ve araç
+  `lookRecenterMinSpeed`'in (1 m/s) üstündeyse yörünge `lookRecenterRate` (2,5/s)
+  ile arkaya döner. Park hâlindeki araçta oyuncunun seçtiği bakış kalır.
+- **Çarpışma:** `GameModeContext.traceCamera(from, to)` → `PhysicsSubsystem.traceCamera`:
+  Rapier ışını yalnız **sabit (fixed)** collider'lara; dinamik/kinematik
+  gövdeler (aracın kendi şasisi, kutular, karakterler, hareketli platformlar),
+  sensörler, `setEntityCollisionEnabled` ile kapatılanlar ve profili `camera`
+  trace kanalını **ignore** eden collider'lar geçirilir (Unreal Camera channel).
+  Bu kanal yanıtı yeni türetilmiş `ColliderComponent.ignoreCameraTrace` alanıyla
+  layout placement / blocking volume profilinden taşınır (authored alan değil;
+  allowlist değişmedi). Rapier yoksa `null`: AABB engelleri döndürülmüş rampada
+  kamerayı sürekli içeri çekerdi.
+- Kol bir engelde **aynı karede** içeri girer (duvarla arasında
+  `collisionPadding` 0,3 m), görüş açılınca `collisionRecoverRate` (4/s) ile
+  yumuşakça uzar. Çarpışma yumuşatılmış kamera noktasına çıkışta uygulanır;
+  takip yumuşatmasına geri beslenmez.
+- `?debug` `camera:` satırına ` arm:<0..1> look:<derece>` eklendi (mevcut
+  `pawn:`/`speed:`/`gear:` okuyucuları etkilenmez).
+- Testler: saf yörünge/sınır/sarma, geri dönme koşulları, kol adımı; oturumda
+  sürükle → yan görüş, sürüşte arkaya dönüş, duvarda anında içeri + yumuşak
+  dışarı; TPS'te fare yaya bakışını çevirmez; Rapier `traceCamera` (duvar
+  mesafesi, ignore cam, dinamik kutu, sensör, sıfır boy, çalışma anında kapatma,
+  Rapier'siz null); layout `responses.camera: "ignore"` → `ignoreCameraTrace`.
+  Tarayıcı smoke'u: arabanın arkasına route ile duvar → `arm < 0,7`; sağ tuşla
+  sürükle → `look > 30°`, kol duvardan kurtulup `> 0,95`.
+- Bilinen sınırlar: ışın ince (küre süpürme yok) — sıyırarak geçen açılarda
+  kamera duvara 0,3 m'den yakın görünebilir; çok dar yerde kol aracın gövdesi
+  içine kadar kısalabilir (pivot gövde içinde); hareketli platformlar kamerayı
+  durdurmaz; geri giderken kamera öne dönmez.
+- Doğrulama (2026-10-19): `tsc`, tam engine **1199 kontrol**, `build:verify`
+  geçti; araç Chromium smoke'u **8/8**.
 
 ## Faz 5 — Editör yüzeyi
 

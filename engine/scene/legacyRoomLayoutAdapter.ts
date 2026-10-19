@@ -620,6 +620,7 @@ function colliderComponent(
   // Channel filtering: establish membership/filter so an Ignore response drops
   // the pair. Objects without a preset stay unset (interact with everything).
   if (profile) component.collisionGroups = collisionInteractionGroups(profile);
+  if (profile?.responses.camera === "ignore") component.ignoreCameraTrace = true;
   copyPhysicsSettings(component, source.physics);
   return component;
 }

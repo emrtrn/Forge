@@ -251,6 +251,12 @@ export interface ColliderComponent {
   simulationGeneratesHitEvents?: boolean;
   /** Packed Rapier interaction groups (membership<<16 | filter). Absent = interact with all. */
   collisionGroups?: number;
+  /**
+   * The profile ignores the `camera` trace channel: a spring-arm camera passes
+   * through this collider instead of being pulled in by it. Derived from the
+   * collision preset/responses, like {@link collisionGroups}.
+   */
+  ignoreCameraTrace?: boolean;
   simulatePhysics?: boolean;
   massKg?: number;
   linearDamping?: number;
@@ -868,6 +874,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
     component.simulationGeneratesHitEvents = data.simulationGeneratesHitEvents;
   }
   if (typeof data.collisionGroups === "number") component.collisionGroups = data.collisionGroups;
+  if (data.ignoreCameraTrace === true) component.ignoreCameraTrace = true;
   if (typeof data.simulatePhysics === "boolean") component.simulatePhysics = data.simulatePhysics;
   if (typeof data.massKg === "number") component.massKg = data.massKg;
   if (typeof data.linearDamping === "number") component.linearDamping = data.linearDamping;

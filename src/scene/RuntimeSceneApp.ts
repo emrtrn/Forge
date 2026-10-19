@@ -3551,6 +3551,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       teleportCharacter: (entityId, position, yawDeg) => {
         this.teleportCharacterPawn(entityId, position, yawDeg);
       },
+      traceCamera: (from, to) => this.physicsSubsystem.traceCamera(from, to),
       onScriptMessage: (type, handler, options) =>
         this.behaviorSubsystem.subscribeScriptMessage(
           type,

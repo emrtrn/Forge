@@ -28,7 +28,12 @@ import { GAME_MODE_OPTIONS, VEHICLE_GAME_MODE_ID } from "../../src/game/gameMode
 import { resolveGameMode } from "../../src/game/gameModes/registry";
 import {
   blendHeading,
+  CENTERED_CHASE_ORBIT,
+  chaseCameraOrbitPosition,
   chaseCameraPosition,
+  clampChaseOrbit,
+  recenterChaseOrbit,
+  stepChaseArmFraction,
   DEFAULT_VEHICLE_CHASE_CAMERA,
   planarHeadingFromQuaternion,
   speedFieldOfView,
@@ -88,6 +93,8 @@ function fakeContext(vehicles: FakeVehicles) {
   const actions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   let inputMode: InputMode = "game";
   let cameraControlled = false;
+  let pendingLook = { dx: 0, dy: 0 };
+  let trace: ((from: readonly number[], to: readonly number[]) => number | null) | null = null;
   const context = {
     camera,
     actions,
@@ -107,7 +114,12 @@ function fakeContext(vehicles: FakeVehicles) {
     markCameraControlled: () => {
       cameraControlled = true;
     },
-    consumeLookDelta: () => ({ dx: 0, dy: 0 }),
+    consumeLookDelta: () => {
+      const look = pendingLook;
+      pendingLook = { dx: 0, dy: 0 };
+      return look;
+    },
+    traceCamera: (from: readonly number[], to: readonly number[]) => trace?.(from, to) ?? null,
     getInputMode: () => inputMode,
     setInputMode: (mode: InputMode) => {
       inputMode = mode;
@@ -123,6 +135,14 @@ function fakeContext(vehicles: FakeVehicles) {
       inputMode = mode;
     },
     cameraControlled: () => cameraControlled,
+    /** Pointer travel the next look read consumes. */
+    look(dx: number, dy: number): void {
+      pendingLook = { dx, dy };
+    },
+    /** What the camera trace reports from now on (null = always clear). */
+    setTrace(next: ((from: readonly number[], to: readonly number[]) => number | null) | null): void {
+      trace = next;
+    },
     /** Holds a raw key across ticks (the press edge already consumed). */
     hold(code: string): void {
       actions.handleDown(code);
@@ -181,6 +201,52 @@ export function registerVehicleRuntimeTests(check: Check): void {
     assert.deepEqual(blendHeading({ x: 0, z: 1 }, { x: 0, z: -1 }, 0.5), { x: 0, z: -1 });
     assert.equal(speedFieldOfView(60, 0, settings), 60);
     assert.equal(speedFieldOfView(60, -1000, settings), 60 + settings.fovBoostDeg);
+  });
+
+  check("vehicle chase orbit: centred is the authored framing, yaw looks round, elevation is bounded", () => {
+    const settings = DEFAULT_VEHICLE_CHASE_CAMERA;
+    const car = { x: 2, y: 1, z: 5 };
+    const ahead = { x: 0, z: 1 };
+    const centred = chaseCameraOrbitPosition(car, ahead, settings, CENTERED_CHASE_ORBIT);
+    const authored = chaseCameraPosition(car, ahead, settings);
+    assert.ok(Math.hypot(centred.x - authored.x, centred.y - authored.y, centred.z - authored.z) < 1e-9);
+
+    // Looking left (+yaw) swings the camera out to the car's right (-X).
+    const boom = Math.hypot(settings.distance, settings.height - settings.lookHeight);
+    const left = chaseCameraOrbitPosition(car, ahead, settings, { yaw: Math.PI / 2, pitch: 0 });
+    assert.ok(Math.abs(left.x - (car.x - settings.distance)) < 1e-9 && Math.abs(left.z - car.z) < 1e-9);
+    // Looking down (-pitch) raises it; the boom length never changes.
+    const down = chaseCameraOrbitPosition(car, ahead, settings, { yaw: 0, pitch: -0.4 });
+    assert.ok(down.y > authored.y);
+    const pivot = { x: car.x, y: car.y + settings.lookHeight, z: car.z };
+    assert.ok(Math.abs(Math.hypot(down.x - pivot.x, down.y - pivot.y, down.z - pivot.z) - boom) < 1e-9);
+
+    const toDeg = 180 / Math.PI;
+    const elevation = (orbit: { yaw: number; pitch: number }) => {
+      const at = chaseCameraOrbitPosition(car, ahead, settings, clampChaseOrbit(orbit, settings));
+      return Math.asin((at.y - pivot.y) / boom) * toDeg;
+    };
+    assert.ok(Math.abs(elevation({ yaw: 0, pitch: -5 }) - settings.maxElevationDeg) < 1e-6, "no flipping over the top");
+    assert.ok(Math.abs(elevation({ yaw: 0, pitch: 5 }) - settings.minElevationDeg) < 1e-6, "no diving under the road");
+    // Three turns round still swing back the short way.
+    assert.ok(Math.abs(clampChaseOrbit({ yaw: 6 * Math.PI + 0.25, pitch: 0 }, settings).yaw - 0.25) < 1e-9);
+  });
+
+  check("vehicle chase orbit swings back only once idle and moving; the arm pulls in at once and eases out", () => {
+    const settings = DEFAULT_VEHICLE_CHASE_CAMERA;
+    const orbit = { yaw: 1, pitch: -0.2 };
+    assert.deepEqual(recenterChaseOrbit(orbit, settings.lookRecenterDelay / 2, 20, 0.1, settings), orbit, "still looking");
+    assert.deepEqual(recenterChaseOrbit(orbit, 10, 0, 0.1, settings), orbit, "parked: the view stays put");
+    const easing = recenterChaseOrbit(orbit, 10, -20, 0.1, settings);
+    assert.ok(easing.yaw < orbit.yaw && easing.yaw > 0 && easing.pitch > orbit.pitch && easing.pitch < 0);
+
+    const boom = 7;
+    const padding = settings.collisionPadding / boom;
+    assert.ok(Math.abs(stepChaseArmFraction(1, 0.5, boom, 1 / 60, settings) - (0.5 - padding)) < 1e-12, "in at once");
+    assert.equal(stepChaseArmFraction(1, 0.01, boom, 1 / 60, settings), 0, "never behind the pivot");
+    const out = stepChaseArmFraction(0.4, null, boom, 1 / 60, settings);
+    assert.ok(out > 0.4 && out < 0.5, `eases out: ${out}`);
+    assert.equal(stepChaseArmFraction(1, null, boom, 1 / 60, settings), 1);
   });
 
   check("vehicle mode is registered and selectable", () => {
@@ -245,6 +311,49 @@ export function registerVehicleRuntimeTests(check: Check): void {
     assert.ok(fake.camera.fov > baseFov, "faster reads wider");
     session.dispose();
     assert.equal(fake.camera.fov, baseFov, "the mode gives the camera its FOV back");
+  });
+
+  check("vehicle chase camera orbits with the mouse, swings back once driving, and pulls in at walls", () => {
+    const vehicles = new FakeVehicles();
+    const fake = fakeContext(vehicles);
+    const session = vehicleGameMode.createSession(fake.context);
+    session.spawnDefaultPawn();
+    session.possess();
+    const settings = DEFAULT_VEHICLE_CHASE_CAMERA;
+    const run = (seconds: number) => {
+      for (let t = 0; t < seconds; t += 1 / 60) session.update(1 / 60);
+    };
+    session.update(1 / 60);
+    assert.ok(fake.camera.position.distanceTo(new Vector3(0, settings.height, -settings.distance)) < 1e-6);
+
+    // Drag left a quarter turn (default 0.003 rad/px): the view looks left, the
+    // camera swings out to the car's right, and a parked car keeps that view.
+    fake.look(-(Math.PI / 2) / 0.003, 0);
+    run(3);
+    assert.ok(fake.camera.position.x < -settings.distance + 0.3, `camera x=${fake.camera.position.x}`);
+    assert.ok(Math.abs(fake.camera.position.z) < 0.3, `camera z=${fake.camera.position.z}`);
+    assert.match(session.getCameraDebug?.().cameraSource ?? "", / arm:1\.00 look:90$/);
+
+    // Driving off with the mouse left alone: back behind the car.
+    vehicles.speed = 15;
+    run(settings.lookRecenterDelay + 3);
+    assert.ok(fake.camera.position.distanceTo(new Vector3(0, settings.height, -settings.distance)) < 0.3);
+
+    // A wall halfway along the boom: the camera is in front of it on the same frame…
+    const pivot = new Vector3(0, settings.lookHeight, 0);
+    const boom = Math.hypot(settings.distance, settings.height - settings.lookHeight);
+    fake.setTrace(() => 0.5);
+    session.update(1 / 60);
+    const pulled = fake.camera.position.distanceTo(pivot);
+    assert.ok(Math.abs(pulled - (boom / 2 - settings.collisionPadding)) < 0.05, `pulled in to ${pulled}`);
+    // …and grows back smoothly, not in one jump, once the view clears.
+    fake.setTrace(null);
+    session.update(1 / 60);
+    const easing = fake.camera.position.distanceTo(pivot);
+    assert.ok(easing > pulled && easing < boom - 1, `easing out at ${easing}`);
+    run(3);
+    assert.ok(Math.abs(fake.camera.position.distanceTo(pivot) - boom) < 0.05);
+    session.dispose();
   });
 
   check("vehicle session E resets the car upright, lifted, keeping its heading", () => {

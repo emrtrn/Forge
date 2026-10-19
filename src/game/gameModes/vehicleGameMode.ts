@@ -39,7 +39,7 @@ class VehicleSession implements GameModeSession {
   ) {
     this.controller = new RuntimePlayerController(VEHICLE_PLAYER_CONTROLLER, context);
     this.playerState = this.controller.playerState;
-    this.driver = new VehicleDriver(context, this.controller.cameraManager, settings);
+    this.driver = new VehicleDriver(context, this.controller, settings);
   }
 
   private get vehicleId(): string | null {
@@ -98,7 +98,16 @@ class VehicleSession implements GameModeSession {
 
 export const VEHICLE_PLAYER_CONTROLLER: PlayerControllerDefinition = {
   id: "forge.vehicleController",
-  inputActions: ["move-forward", "move-back", "move-left", "move-right", "jump", "interact"],
+  inputActions: [
+    "move-forward",
+    "move-back",
+    "move-left",
+    "move-right",
+    "jump",
+    "interact",
+    "look-x",
+    "look-y",
+  ],
   inputMode: "game",
   pointerLookMode: "right-drag",
   mouseCursor: "show",

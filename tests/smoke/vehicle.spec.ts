@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -219,6 +220,45 @@ test("vehicle save-game: a quick-save while driving loads back behind the wheel,
   await expect.poll(async () => readPawnPosition(page).then(() => true, () => false)).toBe(true);
   const exitedAt = await readPawnPosition(page);
   expect(Math.hypot(exitedAt[0] - boardedAt[0], exitedAt[2] - boardedAt[2])).toBeGreaterThan(8);
+  expect(pageErrors).toEqual([]);
+});
+
+/** The chase camera's spring-arm fraction and look-around yaw off the overlay. */
+async function readChaseArm(page: Page): Promise<{ arm: number; lookDeg: number }> {
+  const text = (await page.locator("#debug-stats").textContent()) ?? "";
+  const match = text.match(/vehicle-chase .* arm:([\d.]+) look:(-?\d+)/);
+  if (!match) throw new Error(`no chase arm readout in the overlay:\n${text}`);
+  return { arm: Number(match[1]), lookDeg: Number(match[2]) };
+}
+
+test("vehicle chase camera stops in front of a wall and orbits with a right-drag", async ({ page }) => {
+  // A wall right behind the parked car, across the chase camera's boom.
+  const pageErrors = await openVehicleTest(page, "Vehicle", (level) => {
+    level.blockingVolumes.push({
+      id: "smoke-camera-wall",
+      name: "Camera Wall",
+      position: [0, 2, -4],
+      size: [8, 4, 0.4],
+      renderInGame: true,
+      color: "#888888",
+    });
+  });
+  await expect.poll(async () => (await readChaseArm(page)).arm, { timeout: 15_000 }).toBeLessThan(0.7);
+  expect((await readChaseArm(page)).arm).toBeGreaterThan(0.2);
+  expect((await readChaseArm(page)).lookDeg).toBe(0);
+
+  // Right-drag left: the view turns left, off the wall, and the arm grows back.
+  await page.addStyleTag({ content: "#debug-stats, #debug-stats * { pointer-events: none !important; }" });
+  const canvas = page.locator("#game-canvas");
+  const box = (await canvas.boundingBox()) ?? assert.fail("no canvas box");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(x - 300, y, { steps: 10 });
+  await page.mouse.up({ button: "right" });
+  await expect.poll(async () => (await readChaseArm(page)).lookDeg, { timeout: 10_000 }).toBeGreaterThan(30);
+  await expect.poll(async () => (await readChaseArm(page)).arm, { timeout: 10_000 }).toBeGreaterThan(0.95);
   expect(pageErrors).toEqual([]);
 });
 

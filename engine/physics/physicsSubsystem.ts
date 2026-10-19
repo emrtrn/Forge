@@ -160,6 +160,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * collectors; with Rapier their colliders are also `setEnabled(false)`.
    */
   private collisionDisabled = new Set<EntityId>();
+  /** Entities whose collider ignores the camera trace channel; rebuilt lazily. */
+  private cameraIgnoredCache: Set<EntityId> | null = null;
   /** Cached movement blockers (static colliders don't move); rebuilt lazily. */
   private staticBlockerCache: Aabb[] | null = null;
   /** Cached walkable surface triangles (static trimesh); rebuilt lazily. */
@@ -434,6 +436,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.collisionDisabled.clear();
     this.suspendedDynamicBodies.clear();
     this.staticBlockerCache = null;
+    this.cameraIgnoredCache = null;
     this.staticSurfaceCache = null;
     this.staticSurfaceSpatialIndex = null;
     this.staticNavigationBlockerCache = null;
@@ -454,6 +457,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.contacts = [];
     if (body.collider.isStatic) {
       this.staticBlockerCache = null;
+      this.cameraIgnoredCache = null;
       this.staticSurfaceCache = null;
       this.staticSurfaceSpatialIndex = null;
       this.staticNavigationBlockerCache = null;
@@ -470,6 +474,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     // A static body moving (editor drag) invalidates the cached blocker AABBs.
     if (body.collider.isStatic) {
       this.staticBlockerCache = null;
+      this.cameraIgnoredCache = null;
       this.staticSurfaceCache = null;
       this.staticSurfaceSpatialIndex = null;
       this.staticNavigationBlockerCache = null;
@@ -507,6 +512,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       this.bodies = remaining;
       if (removedStatic) {
         this.staticBlockerCache = null;
+        this.cameraIgnoredCache = null;
         this.staticSurfaceCache = null;
         this.staticSurfaceSpatialIndex = null;
         this.staticNavigationBlockerCache = null;
@@ -544,6 +550,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const body = this.bodies.find((candidate) => candidate.id === entityId);
     if (body?.collider.isStatic) {
       this.staticBlockerCache = null;
+      this.cameraIgnoredCache = null;
       this.staticSurfaceCache = null;
       this.staticSurfaceSpatialIndex = null;
       this.staticNavigationBlockerCache = null;
@@ -587,6 +594,59 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
     this.staticBlockerCache = blockers;
     return blockers;
+  }
+
+  /**
+   * Camera trace along `from → to` against the static world — Unreal's Camera
+   * channel: fixed, non-sensor colliders whose profile does not ignore the
+   * camera. Returns the fraction (0..1) of the segment at which the first one is
+   * hit, or null when the view is clear. Moving bodies (dynamic, kinematic) never
+   * block, so a car's own chassis or a passing crate does not yank the view;
+   * neither does a collider switched off with `setEntityCollisionEnabled`.
+   * Null without a Rapier world: the exact shapes live there, and the AABB
+   * blockers would pull the camera in at every rotated ramp.
+   */
+  traceCamera(from: Vec3, to: Vec3): number | null {
+    const RAPIER = this.rapierModule;
+    const world = this.rapierWorld;
+    if (!RAPIER || !world) return null;
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const dz = to[2] - from[2];
+    const length = Math.hypot(dx, dy, dz);
+    if (!(length > 1e-6)) return null;
+    const ray = new RAPIER.Ray(
+      { x: from[0], y: from[1], z: from[2] },
+      { x: dx / length, y: dy / length, z: dz / length },
+    );
+    const ignored = this.cameraIgnoredEntities();
+    const hit = world.castRay(
+      ray,
+      length,
+      true,
+      RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC |
+        RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC |
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+      undefined,
+      undefined,
+      undefined,
+      ignored.size === 0 && this.collisionDisabled.size === 0
+        ? undefined
+        : (collider) => {
+            // A disabled collider still answers scene queries until the next step.
+            const entityId = this.rapierColliderToEntity.get(collider.handle) ?? "";
+            return !ignored.has(entityId) && !this.collisionDisabled.has(entityId);
+          },
+    );
+    return hit ? Math.min(1, Math.max(0, hit.timeOfImpact / length)) : null;
+  }
+
+  private cameraIgnoredEntities(): Set<EntityId> {
+    if (this.cameraIgnoredCache) return this.cameraIgnoredCache;
+    const ignored = new Set<EntityId>();
+    for (const body of this.bodies) if (body.collider.ignoreCameraTrace) ignored.add(body.id);
+    this.cameraIgnoredCache = ignored;
+    return ignored;
   }
 
   /**
@@ -1644,6 +1704,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
     clone.simulationGeneratesHitEvents = collider.simulationGeneratesHitEvents;
   }
   if (collider.collisionGroups !== undefined) clone.collisionGroups = collider.collisionGroups;
+  if (collider.ignoreCameraTrace !== undefined) clone.ignoreCameraTrace = collider.ignoreCameraTrace;
   if (collider.simulatePhysics !== undefined) clone.simulatePhysics = collider.simulatePhysics;
   if (collider.massKg !== undefined) clone.massKg = collider.massKg;
   if (collider.linearDamping !== undefined) clone.linearDamping = collider.linearDamping;

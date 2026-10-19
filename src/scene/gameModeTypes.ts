@@ -230,6 +230,13 @@ export interface GameModeContext {
    */
   teleportCharacter?(entityId: string, position: Vec3, yawDeg: number): void;
   /**
+   * Camera-channel trace from `from` to `to` against the static world: the
+   * fraction (0..1) of the way at which a blocker sits, or null when clear. A
+   * spring-arm camera pulls in to it so it never ends up behind a wall.
+   * Optional for the same reason; without it the camera does not collide.
+   */
+  traceCamera?(from: Vec3, to: Vec3): number | null;
+  /**
    * Subscribes the session to a runtime script message (e.g. `death`/`ragdoll`),
    * optionally scoped to one target entity, returning an unsubscribe handle. This
    * is the inbound counterpart to {@link emitAnimNotify}: it lets game logic or

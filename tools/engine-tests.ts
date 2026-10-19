@@ -7218,6 +7218,43 @@ await checkAsync("rapier vehicle motion survives a save: speed, gear and handbra
   });
 });
 
+await checkAsync("rapier camera trace stops at static walls and passes moving, sensor and camera-ignoring bodies", async () => {
+  await withQuietRapierInit(async () => {
+    const box = (id: string, z: number, collider: Partial<ColliderComponent> = {}): Entity => ({
+      id,
+      components: {
+        Transform: { position: [0, 1, z], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [10, 4, 1], isStatic: true, isSensor: false, ...collider },
+      },
+    });
+    const entities = [
+      box("wall", 5),
+      box("glass", 10, { ignoreCameraTrace: true }),
+      box("crate", -5, { isStatic: false, simulatePhysics: true, enableGravity: false }),
+      box("trigger", -10, { isSensor: true }),
+    ];
+    const placeholder = new PhysicsSubsystem();
+    placeholder.setEntities(entities);
+    assert.equal(placeholder.traceCamera([0, 1, 0], [0, 1, 20]), null, "no exact shapes without Rapier");
+
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setEntities(entities);
+    await physics.init();
+    try {
+      physics.update({ deltaSeconds: VEHICLE_SLICE, elapsedSeconds: VEHICLE_SLICE, frame: 1 });
+      const wall = physics.traceCamera([0, 1, 0], [0, 1, 20]) ?? assert.fail("the wall was missed");
+      assert.ok(Math.abs(wall - 4.5 / 20) < 1e-4, `wall face at ${wall * 20} m`);
+      assert.equal(physics.traceCamera([0, 1, 6], [0, 1, 20]), null, "camera-ignoring glass");
+      assert.equal(physics.traceCamera([0, 1, 0], [0, 1, -20]), null, "a dynamic crate and a sensor");
+      assert.equal(physics.traceCamera([0, 1, 0], [0, 1, 0]), null, "a zero-length boom");
+      physics.setEntityCollisionEnabled("wall", false);
+      assert.equal(physics.traceCamera([0, 1, 0], [0, 1, 9]), null, "collision switched off at runtime");
+    } finally {
+      physics.dispose();
+    }
+  });
+});
+
 await checkAsync("rapier vehicle aerodynamics slow a coasting chassis and compress suspension with downforce", async () => {
   await withQuietRapierInit(async () => {
     const results: { speed: number; spring: number }[] = [];
@@ -11564,6 +11601,33 @@ check("placement collision overrides beat asset collision defaults at runtime", 
     }),
   );
   assert.equal(collider?.collisionGroups, triggerGroups);
+});
+
+check("a placement that ignores the camera channel lets camera traces through it", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "camera-channel-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "crate",
+        placements: [{ position: [0, 0, 0], responses: { camera: "ignore" } }, { position: [3, 0, 0] }],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    ["crate", { primitives: [{ shape: "box", size: [1, 1, 1] }], complexity: "projectDefault", preset: "blockAll" }],
+  ]);
+  const doc = roomLayoutToSceneDocument(layout, { collisionDefs: defs });
+  const collider = (index: number) => {
+    const entity = doc.entities.find((e) => e.id === instanceEntityId("crate", index));
+    return entity ? readColliderComponent(entity) : undefined;
+  };
+  assert.equal(collider(0)?.ignoreCameraTrace, true);
+  assert.equal(collider(0)?.isStatic, true, "it still blocks movement");
+  assert.equal(collider(1)?.ignoreCameraTrace, undefined);
 });
 
 check("navigation role uses placement override before asset collision default", () => {

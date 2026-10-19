@@ -64,18 +64,38 @@ export class RuntimePlayerController {
   }
 
   updateControlRotation(deltaSeconds: number): LookAngles {
-    if (this.context.getInputMode() === "ui") return this.controlRotation;
+    const { dx, dy } = this.consumeLookInput(deltaSeconds);
+    if (dx === 0 && dy === 0) return this.controlRotation;
+    this.controlRotation = this.applyLook(this.controlRotation, dx, dy);
+    return this.controlRotation;
+  }
+
+  /**
+   * This tick's look input — pointer travel plus the analog look axes, in
+   * pointer-pixel units — consumed so nothing else turns with it. Zero in UI
+   * mode. For a camera that orbits on its own angles (a vehicle chase camera)
+   * instead of the control rotation; {@link applyLook} turns it into radians.
+   */
+  consumeLookInput(deltaSeconds: number): { readonly dx: number; readonly dy: number } {
+    if (this.context.getInputMode() === "ui") return { dx: 0, dy: 0 };
     const pointer = this.context.consumeLookDelta();
     const axisRate = this.definition.lookAxisRate ?? DEFAULT_LOOK_AXIS_RATE;
     const dt = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : 0;
-    const dx = pointer.dx + this.axisDelta("look-x", axisRate, dt);
-    const dy = pointer.dy + this.axisDelta("look-y", axisRate, dt);
-    if (dx === 0 && dy === 0) return this.controlRotation;
-    this.controlRotation = applyConfiguredMouseLook(this.controlRotation, dx, dy, {
-      sensitivity: this.definition.lookSensitivity,
-      invertY: this.definition.invertLookY,
-    });
-    return this.controlRotation;
+    return {
+      dx: pointer.dx + this.axisDelta("look-x", axisRate, dt),
+      dy: pointer.dy + this.axisDelta("look-y", axisRate, dt),
+    };
+  }
+
+  /** Turns `angles` by a look input with this controller's sensitivity and inversion. */
+  applyLook(angles: LookAngles, dx: number, dy: number, pitchLimit?: number): LookAngles {
+    return applyConfiguredMouseLook(
+      angles,
+      dx,
+      dy,
+      { sensitivity: this.definition.lookSensitivity, invertY: this.definition.invertLookY },
+      pitchLimit,
+    );
   }
 
   controlYawForEntity(entityId: string): number | null {

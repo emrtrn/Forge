@@ -588,8 +588,22 @@ ayarı bu doğrulamanın dışında.
       `tests/engine/vehicleEditorFields.test.ts` (7 kontrol). Tarayıcıda gözle:
       form + Details düzenleme + Ctrl+Z; `maxEngineForce: 0` override'lı
       VehicleTest'te araç W ile 0 km/h'te kaldı (override'sız 62 km/h).
-- [ ] Vehicle asset editörü (form tabanlı, VFX Lite deseni): tekerlek listesi,
+- [x] Vehicle asset editörü (form tabanlı, VFX Lite deseni): tekerlek listesi,
       süspansiyon, tork eğrisi grafiği, vites tablosu.
+      `src/editor/VehicleAssetEditor.ts` (Content Browser'da `*.vehicle.json`
+      çift tık; pfx kabuğu + `vhe-` parçaları), `vehicleAssetStore.ts`
+      (`/__save-vehicle`), `vehicleAssetEditorModel.ts` (saf: üstten tekerlek
+      şeması — tıklanınca tekerlek kartı açılır, tork/güç grafiği + vites
+      noktaları, vites başına redline hızı, teşhisler: direksiyon/fren/çekiş
+      eksik, yay aracı taşıyamıyor, upshift ≥ redline…). Bölümler: şasi, sürüş
+      kuvvetleri, direksiyon (+ hız eğrisi tablosu), tekerlek kartları (ekle /
+      ayna / sil, tüm süspansiyon + lastik alanları, bayraklar), drivetrain
+      aç/kapa (tork eğrisi ve vites tabloları), aerodinamik, motor sesi aç/kapa.
+      Undo/redo anlık görüntü; Duplicate; kayıt normalize edilmiş tanımı geri
+      gösterir, `dropped[]` uyarı olur. Testler: `vehicleEditorFields.test.ts`
+      (model 3 kontrol), smoke `tests/smoke/vehicle-asset-editor.spec.ts`
+      (kayıt isteği yakalanır, commit'li asset yazılmaz). Not: editörden kayıt
+      seyrek asset'i tüm varsayılanlarıyla açık yazar (effect editörüyle aynı).
 - [ ] Viewport: tekerlek bağlantı noktaları gizmo ile sürüklenebilir,
       süspansiyon menzili ve tekerlek yarıçapı wire olarak çizilir.
 - [ ] Browser smoke (`npm run smoke:browser`, port 5273): araç yerleştir →

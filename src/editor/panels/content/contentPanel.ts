@@ -73,6 +73,7 @@ export interface ContentPanelOptions {
   openMaterialEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openSoundCueEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openParticleEffectEditor: (item: BrowserAssetItem) => void | Promise<void>;
+  openVehicleAssetEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openDialogueEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openBehaviorTreeEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openStateTreeEditor: (item: BrowserAssetItem) => void | Promise<void>;
@@ -336,6 +337,12 @@ function bindAssetOpeners(
     card.addEventListener("dblclick", (event) => {
       event.preventDefault();
       void options.openParticleEffectEditor(item);
+    });
+  }
+  if (item.type === "vehicle") {
+    card.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      void options.openVehicleAssetEditor(item);
     });
   }
   if (item.type === "dialogueVoice" || item.type === "dialogueLine") {

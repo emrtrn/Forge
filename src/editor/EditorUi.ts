@@ -1845,6 +1845,7 @@ export class EditorUi {
         openMaterialEditor: (item) => this.openMaterialEditor(item),
         openSoundCueEditor: (item) => this.openSoundCueEditor(item),
         openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
+        openVehicleAssetEditor: (item) => this.openVehicleAssetEditor(item),
         openDialogueEditor: (item) => this.openDialogueEditor(item),
         openBehaviorTreeEditor: (item) => this.openBehaviorTreeEditor(item),
         openStateTreeEditor: (item) => this.openStateTreeEditor(item),
@@ -1902,6 +1903,7 @@ export class EditorUi {
       openMaterialEditor: (item) => this.openMaterialEditor(item),
       openSoundCueEditor: (item) => this.openSoundCueEditor(item),
       openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
+        openVehicleAssetEditor: (item) => this.openVehicleAssetEditor(item),
       openDialogueEditor: (item) => this.openDialogueEditor(item),
       openBehaviorTreeEditor: (item) => this.openBehaviorTreeEditor(item),
       openStateTreeEditor: (item) => this.openStateTreeEditor(item),
@@ -2571,6 +2573,7 @@ export class EditorUi {
     if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
     if (item.type === "soundCue") return () => void this.openSoundCueEditor(item);
     if (item.type === "effect") return () => void this.openParticleEffectEditor(item);
+    if (item.type === "vehicle") return () => void this.openVehicleAssetEditor(item);
     if (item.type === "dialogueVoice" || item.type === "dialogueLine") {
       return () => void this.openDialogueEditor(item);
     }
@@ -3282,6 +3285,35 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(
         `Could not open Particle Effect editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  /** Opens the Vehicle asset editor for a `*.vehicle.json` (vehicle plan Faz 5). */
+  private async openVehicleAssetEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { VehicleAssetEditor } = await import("@/editor/VehicleAssetEditor");
+      await VehicleAssetEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.vehicle\.json$/i, ""),
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => {
+          // A placed car's Details placeholders read this asset; re-read it.
+          this.vehicleAssetDefs.clear();
+          this.vehicleAssetLoads.clear();
+          this.renderContentAssets();
+        },
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Vehicle editor: ${error instanceof Error ? error.message : String(error)}`,
         "error",
       );
     }

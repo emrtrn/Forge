@@ -6,10 +6,12 @@
  * driver's implicit defaults stay implicit.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { cloneActorInstance } from "../../editor/core/layoutSnapshots";
 import {
   applyVehicleOverrides,
+  normalizeVehicleAsset,
   normalizeVehicleDefinition,
   vehicleDefinitionFromComponent,
   type VehicleDefinition,
@@ -28,6 +30,15 @@ import {
   vehicleAiDriverFields,
   vehicleComponentFields,
 } from "../../src/editor/vehicleComponentFields";
+import {
+  drivenWheels,
+  enginePeaks,
+  gearTopSpeedsKmh,
+  torqueAtRpm,
+  torqueCurveSvg,
+  vehicleDiagnostics,
+  vehicleTopViewSvg,
+} from "../../src/editor/vehicleAssetEditorModel";
 import { withVehicleOverrides } from "../../src/scene/vehicleAssetLoader";
 import { collectDroppedFields } from "../../tools/droppedFields";
 import { validateActorInstance } from "../../tools/saveValidator";
@@ -197,5 +208,59 @@ export function registerVehicleEditorFieldsTests(check: Check): void {
     assert.match(html, /Class default \(diesel\)/);
     assert.match(html, /data-as-vehicle-num="massKg"[^>]*disabled/, "a locked placement is read-only");
     assert.doesNotMatch(html, /as-field/);
+  });
+
+  // The Vehicle asset editor's read-outs (top view, graph, gear table, diagnostics).
+  const reference = (): VehicleDefinition => normalizeVehicleAsset(JSON.parse(readFileSync(
+    "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
+
+  check("vehicle asset editor model: driven axle, torque lookup, peaks and gear top speeds", () => {
+    const car = reference();
+    assert.deepEqual(drivenWheels(car).map((wheel) => wheel.axle), ["rear", "rear"], "RWD drives the rear axle");
+    assert.equal(drivenWheels({ ...car, drivetrain: null }).length, 2, "flat force follows the Drive flags");
+    const drivetrain = car.drivetrain!;
+    assert.equal(torqueAtRpm(drivetrain, 3500), 280, "linear between 2500/260 and 4500/300");
+    assert.equal(torqueAtRpm(drivetrain, 100), 160, "held flat below the curve");
+    assert.equal(torqueAtRpm(drivetrain, 9000), 200, "held flat past the curve");
+    const peaks = enginePeaks(drivetrain);
+    assert.ok(Math.abs(peaks.torqueNm - 300) < 1e-9 && Math.abs(peaks.torqueRpm - 4500) < 60);
+    assert.ok(peaks.powerKw > 130 && peaks.powerKw < 160, `peak power ${peaks.powerKw}`);
+    const speeds = gearTopSpeedsKmh(car);
+    assert.equal(speeds.length, 5);
+    const top = ((6500 / 60) * 2 * Math.PI) / (0.8 * drivetrain.transmission.finalDriveRatio) * 0.48 * 3.6;
+    assert.ok(Math.abs(speeds[4]! - top) < 1e-9);
+    assert.ok(speeds.every((speed, index) => index === 0 || speed > speeds[index - 1]!), "each gear is taller");
+    assert.deepEqual(gearTopSpeedsKmh({ ...car, drivetrain: null }), []);
+  });
+
+  check("vehicle asset editor diagnostics: the reference car is clean, broken setups are named", () => {
+    const car = reference();
+    assert.deepEqual(vehicleDiagnostics(car), []);
+    assert.deepEqual(vehicleDiagnostics({ ...car, wheels: [] }), ["No wheels: the chassis has nothing to stand on."]);
+    const front = car.wheels.map((wheel) => ({ ...wheel, steer: false, axle: "front" as const }));
+    const issues = vehicleDiagnostics({ ...car, wheels: front });
+    assert.ok(issues.includes("No wheel steers."));
+    assert.ok(issues.includes("RWD: no wheel sits on the driven axle."));
+    const soft = car.wheels.map((wheel) => ({ ...wheel, suspensionStiffness: 1 }));
+    assert.match(vehicleDiagnostics({ ...car, wheels: soft }).join(" "), /Wheel 1: the spring is too soft/);
+    const drivetrain = car.drivetrain!;
+    const redline = { ...drivetrain, transmission: { ...drivetrain.transmission, upshiftRpm: drivetrain.engine.maxRpm } };
+    assert.ok(vehicleDiagnostics({ ...car, drivetrain: redline }).some((issue) => issue.startsWith("Upshift RPM")));
+  });
+
+  check("vehicle asset editor schematics: one clickable tyre per wheel and a dot per torque point", () => {
+    const car = reference();
+    const top = vehicleTopViewSvg(car, 2);
+    assert.equal(top.match(/data-vhe-wheel="/g)?.length, 4);
+    assert.match(top, /class="vhe-wheel is-driven is-selected" data-vhe-wheel="2"/);
+    assert.match(top, /class="vhe-wheel is-steer" data-vhe-wheel="0"/);
+    assert.equal(top.match(/vhe-handbrake/g)?.length, 2);
+    // +X is the car's left: wheel 1 (x = +0.68) is drawn left of wheel 2 (x = -0.68).
+    const cx = (index: number) => Number(top.match(new RegExp(`data-vhe-wheel="${index}"><rect x="([0-9.]+)"`))![1]);
+    assert.ok(cx(0) < cx(1));
+    const graph = torqueCurveSvg(car.drivetrain!);
+    assert.equal(graph.match(/data-vhe-torque-point=/g)?.length, 4);
+    assert.match(graph, /class="vhe-shift-up"/);
+    assert.doesNotMatch(graph, /NaN/);
   });
 }

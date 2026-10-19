@@ -1300,6 +1300,40 @@
       "license": "Project-local placeholder; replace before distribution if needed"
     },
     {
+      "id": "starter-snd-engine-loop",
+      "name": "Engine Loop Placeholder",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/S_Engine_Loop.wav",
+      "tags": [
+        "starter",
+        "sound",
+        "vehicle",
+        "engine",
+        "loop"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 88244
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
       "id": "starter-snd-ambient-room",
       "name": "Room Ambience Placeholder",
       "assetType": "sound",

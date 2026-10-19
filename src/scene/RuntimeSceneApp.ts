@@ -1154,7 +1154,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.provide(vehicleHostService, {
       vehicleIds: () => this.physicsSubsystem.vehicleEntityIds(),
       vehicleState: (entityId) => this.physicsSubsystem.vehicleState(entityId),
+      vehicleDefinition: (entityId) => this.physicsSubsystem.vehicleDefinition(entityId),
       actorObject: (entityId) => this.actorObjects.get(entityId) ?? null,
+      isDriven: (entityId) => this.gameModeSession?.playerState.pawnEntityId === entityId,
     });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,
@@ -5261,6 +5263,7 @@ function silentAudioPlayback(clipId: string): AudioPlaybackHandle {
     stop: () => undefined,
     setVolume: () => undefined,
     setPitch: () => undefined,
+    setPosition: () => undefined,
     setPaused: () => undefined,
   };
 }

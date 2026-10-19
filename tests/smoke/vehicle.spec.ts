@@ -262,6 +262,55 @@ test("vehicle chase camera stops in front of a wall and orbits with a right-drag
   expect(pageErrors).toEqual([]);
 });
 
+test("vehicle engine sound loops while driving, revs with the throttle and stops on getting out", async ({ page }) => {
+  // Keep a handle on every Web Audio buffer source the page creates, so the
+  // test can read the engine voice's loop, decoded length and playback rate.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __forgeSources: AudioBufferSourceNode[] };
+    w.__forgeSources = [];
+    const create = BaseAudioContext.prototype.createBufferSource;
+    BaseAudioContext.prototype.createBufferSource = function (this: BaseAudioContext) {
+      const source = create.call(this);
+      const stop = source.stop.bind(source);
+      source.stop = (when?: number) => {
+        (source as unknown as { __stopped: boolean }).__stopped = true;
+        stop(when);
+      };
+      w.__forgeSources.push(source);
+      return source;
+    };
+  });
+  const engines = () => page.evaluate(() => {
+    const w = window as unknown as { __forgeSources: (AudioBufferSourceNode & { __stopped?: boolean })[] };
+    // The starter engine loop is the only 2 s looped clip in this level.
+    return w.__forgeSources
+      .filter((source) => source.loop && source.buffer && Math.abs(source.buffer.duration - 2) < 0.01)
+      .map((source) => ({ rate: source.playbackRate.value, stopped: source.__stopped === true }));
+  });
+  const running = async () => (await engines()).filter((engine) => !engine.stopped);
+
+  const pageErrors = await openVehicleTest(page, "Script_GameMode");
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText(/possessed: (?!actor:0|none)\S+/, { timeout: 30_000 });
+  expect(await engines()).toEqual([]); // a parked car's engine is off
+
+  await page.locator("#game-canvas").click();
+  await page.keyboard.press("KeyE");
+  await expect(stats).toContainText("possessed: actor:0", { timeout: 10_000 });
+  await expect.poll(async () => (await running()).length, { timeout: 15_000 }).toBe(1);
+  expect(Math.abs((await running())[0]!.rate - 1)).toBeLessThan(0.05); // idle pitch
+
+  await page.keyboard.down("KeyW");
+  await expect.poll(async () => (await running())[0]?.rate ?? 0, { timeout: 15_000 }).toBeGreaterThan(1.3);
+  await page.keyboard.up("KeyW");
+
+  await page.keyboard.press("KeyE");
+  await expect(stats).not.toContainText("vehicle-chase", { timeout: 20_000 });
+  await expect.poll(async () => (await running()).length, { timeout: 5_000 }).toBe(0);
+  expect((await engines()).length).toBe(1); // one voice for the whole drive
+  expect(pageErrors).toEqual([]);
+});
+
 test("vehicle asset save endpoint persists normalized data and reports dropped fields", async ({ request }) => {
   const path = `assets/__vehicle-smoke-${randomUUID()}.vehicle.json`;
   try {

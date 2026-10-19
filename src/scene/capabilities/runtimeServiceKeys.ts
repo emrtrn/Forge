@@ -19,7 +19,7 @@ import type { AnimationMixer, Object3D, Scene, Vector3 } from "three";
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
 import type { AssetManifest } from "@engine/assets/manifest";
-import type { AudioBus } from "@engine/audio/audioSubsystem";
+import type { AudioBus, AudioPlaybackHandle, AudioPlayOptions } from "@engine/audio/audioSubsystem";
 import type { AudioBusId } from "@engine/audio/audioBus";
 import type { AudioVoiceStats } from "@engine/audio/audioSubsystem";
 import type {
@@ -54,7 +54,7 @@ import type {
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
-import type { VehicleState } from "@engine/physics/vehicle/vehicleTypes";
+import type { VehicleDefinition, VehicleState } from "@engine/physics/vehicle/vehicleTypes";
 import type { AiNavAgentClearanceView } from "@engine/render-three/aiNavigationView";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
@@ -169,8 +169,15 @@ export interface VehicleHost {
   /** Entity ids of every live vehicle, in level order. */
   vehicleIds(): readonly string[];
   vehicleState(entityId: string): VehicleState | null;
+  /** The resolved definition the vehicle was built from (its engine sound lives there). */
+  vehicleDefinition(entityId: string): VehicleDefinition | null;
   /** The actor's root render object (scaled by placement × mesh scale). */
   actorObject(entityId: string): Object3D | null;
+  /**
+   * Whether someone is driving the vehicle — today the player's possessed pawn.
+   * A parked car's engine is off; an AI driver would answer true here too.
+   */
+  isDriven(entityId: string): boolean;
 }
 
 export const vehicleHostService = runtimeServiceKey<VehicleHost>("vehicle-host");
@@ -221,6 +228,15 @@ export interface AudioCommands {
   playAutoPlay(document: SceneDocument): void;
   /** Starts one runtime-spawned entity's `autoPlay` Audio component. */
   playEntityAudio(entity: Entity): void;
+  /**
+   * Starts a looping sound the caller keeps steering — a car's engine: its
+   * volume, pitch and (spatial) position change every frame. `sourceId` is a
+   * manifest `sound`, or a `soundCue` whose first play event is looped with the
+   * cue's own volume/pitch as multipliers and on the cue's bus. The handle works
+   * at once even while a cue is still loading; a source that cannot play hands
+   * back a handle that reads as stopped.
+   */
+  playLoop(sourceId: string, options?: AudioPlayOptions): AudioPlaybackHandle;
   /** Spatial listener pose; pushed from the frame loop, after the camera moves. */
   setListenerPose(
     position: readonly [number, number, number],

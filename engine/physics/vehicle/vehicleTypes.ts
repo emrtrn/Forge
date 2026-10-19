@@ -76,7 +76,42 @@ export interface VehicleDefinition {
   readonly handbrakeSideFrictionMultiplier: number;
   /** F = coefficient * speed², coefficients in kg/m. */
   readonly aerodynamics: { readonly dragCoefficient: number; readonly downforceCoefficient: number };
+  /** Looped engine sound driven by RPM and load; null = a silent car. */
+  readonly engineSound: VehicleEngineSoundDefinition | null;
 }
+
+/**
+ * The engine's voice (vehicle plan 4d): one looped sound whose pitch follows
+ * the RPM and whose volume follows the engine load, as an Unreal vehicle
+ * Blueprint drives its engine audio component's pitch and volume multipliers.
+ * Presentation data — physics never reads it — kept on the vehicle so a car's
+ * asset describes the whole car.
+ */
+export interface VehicleEngineSoundDefinition {
+  /** Manifest `sound` or `soundCue` asset id, looped while the car is driven. */
+  readonly sound: string;
+  /** Pitch multiplier at idle RPM and at max RPM (linear in between). */
+  readonly idlePitch: number;
+  readonly maxPitch: number;
+  /** Volume at idle off the throttle, and at full engine load (0..1). */
+  readonly idleVolume: number;
+  readonly loadVolume: number;
+  /** A car without a drivetrain has no RPM: its pitch follows speed up to this (m/s). */
+  readonly speedForMaxPitch: number;
+  /** Spatial sphere attenuation around the car (m). */
+  readonly refDistance: number;
+  readonly maxDistance: number;
+}
+
+const DEFAULT_ENGINE_SOUND: Omit<VehicleEngineSoundDefinition, "sound"> = {
+  idlePitch: 1,
+  maxPitch: 2.2,
+  idleVolume: 0.35,
+  loadVolume: 0.9,
+  speedForMaxPitch: 30,
+  refDistance: 6,
+  maxDistance: 80,
+};
 
 export interface VehicleTorquePoint { readonly rpm: number; readonly torqueNm: number }
 export interface VehicleSteeringPoint { readonly speedMps: number; readonly scale: number }
@@ -171,6 +206,12 @@ export interface VehicleWheelState {
 export interface VehicleState {
   /** Signed speed along the chassis forward axis (m/s). */
   readonly forwardSpeed: number;
+  /**
+   * How hard the engine is asked to pull (0..1): the pedal driving the car,
+   * forward or in reverse. Zero coasting, braking and through a gear change's
+   * power cut — what an engine sound's volume follows.
+   */
+  readonly engineLoad: number;
   readonly wheels: readonly VehicleWheelState[];
   readonly drivetrain: VehicleDrivetrainState | null;
 }
@@ -206,6 +247,7 @@ const DEFAULT_VEHICLE: Omit<VehicleDefinition, "wheels"> = {
   steeringSpeedCurve: [{ speedMps: 0, scale: 1 }],
   handbrakeSideFrictionMultiplier: 1,
   aerodynamics: { dragCoefficient: 0, downforceCoefficient: 0 },
+  engineSound: null,
 };
 
 const DEFAULT_DRIVETRAIN: VehicleDrivetrainDefinition = {
@@ -226,7 +268,7 @@ const DEFAULT_DRIVETRAIN: VehicleDrivetrainDefinition = {
 
 export type VehicleWheelDefinitionInput = Partial<VehicleWheelDefinition> &
   Pick<VehicleWheelDefinition, "position">;
-export type VehicleDefinitionInput = Partial<Omit<VehicleDefinition, "wheels" | "drivetrain" | "aerodynamics">> & {
+export type VehicleDefinitionInput = Partial<Omit<VehicleDefinition, "wheels" | "drivetrain" | "aerodynamics" | "engineSound">> & {
   readonly wheels: readonly VehicleWheelDefinitionInput[];
   readonly drivetrain?: {
     readonly engine?: Partial<VehicleDrivetrainDefinition["engine"]>;
@@ -234,6 +276,7 @@ export type VehicleDefinitionInput = Partial<Omit<VehicleDefinition, "wheels" | 
     readonly differential?: Partial<VehicleDrivetrainDefinition["differential"]>;
   } | null;
   readonly aerodynamics?: Partial<VehicleDefinition["aerodynamics"]>;
+  readonly engineSound?: Partial<VehicleEngineSoundDefinition> | null;
 };
 
 /**
@@ -287,6 +330,33 @@ export function normalizeVehicleDefinition(
       dragCoefficient: nonNegative(record(input.aerodynamics).dragCoefficient, base.aerodynamics.dragCoefficient),
       downforceCoefficient: nonNegative(record(input.aerodynamics).downforceCoefficient, base.aerodynamics.downforceCoefficient),
     },
+    engineSound: input.engineSound === null ? null
+      : normalizeEngineSound(input.engineSound, base.engineSound),
+  };
+}
+
+/**
+ * Inline fields override the asset's one by one; null switches the sound off.
+ * A block with no usable `sound` id (and none to inherit) is no sound at all.
+ */
+function normalizeEngineSound(
+  value: unknown,
+  base: VehicleEngineSoundDefinition | null,
+): VehicleEngineSoundDefinition | null {
+  if (!isRecord(value)) return base ? { ...base } : null;
+  const fallback = base ?? { ...DEFAULT_ENGINE_SOUND, sound: "" };
+  const sound = typeof value.sound === "string" && value.sound.trim() ? value.sound.trim() : fallback.sound;
+  if (!sound) return null;
+  const refDistance = bounded(value.refDistance, fallback.refDistance, 0.1, 1000);
+  return {
+    sound,
+    idlePitch: bounded(value.idlePitch, fallback.idlePitch, 0.1, 4),
+    maxPitch: bounded(value.maxPitch, fallback.maxPitch, 0.1, 4),
+    idleVolume: unit(value.idleVolume, fallback.idleVolume),
+    loadVolume: unit(value.loadVolume, fallback.loadVolume),
+    speedForMaxPitch: bounded(value.speedForMaxPitch, fallback.speedForMaxPitch, 0.1, 200),
+    refDistance,
+    maxDistance: bounded(value.maxDistance, fallback.maxDistance, refDistance + 1, 5000),
   };
 }
 

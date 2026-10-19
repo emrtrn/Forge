@@ -76,6 +76,46 @@ export async function registerVehicleAssetTests(check: Check, checkAsync: CheckA
       ["vehicle.ignored", "vehicle.wheels[0].ignoredWheel"]);
   });
 
+  check("vehicle engine sound: the asset block saves intact, inline fields override one by one, null silences", () => {
+    const asset = normalizeVehicleAsset(JSON.parse(readFileSync(`public/${PATH}`, "utf8")))!;
+    assert.deepEqual(asset.engineSound, {
+      sound: "starter-snd-engine-loop",
+      idlePitch: 1,
+      maxPitch: 2.2,
+      idleVolume: 0.35,
+      loadVolume: 0.9,
+      speedForMaxPitch: 30,
+      refDistance: 6,
+      maxDistance: 80,
+    });
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+      assets: { id: string; assetType: string; path: string }[];
+    };
+    const sound = manifest.assets.find((entry) => entry.id === asset.engineSound!.sound);
+    assert.equal(sound?.assetType, "sound", "the reference car's engine is a manifest sound");
+    assert.ok(readFileSync(`public/${sound!.path}`).length > 1000);
+
+    const saved = validateSaveVehiclePayload({ path: PATH, vehicle: asset });
+    assert.deepEqual(saved.vehicle.engineSound, asset.engineSound);
+    assert.deepEqual(collectDroppedFields(asset, saved.vehicle).paths, []);
+
+    const tuned = vehicleDefinitionFromComponent({ engineSound: { maxPitch: 3, idleVolume: "loud" } }, asset)!;
+    assert.deepEqual(tuned.engineSound, { ...asset.engineSound!, maxPitch: 3 });
+    assert.equal(vehicleDefinitionFromComponent({ engineSound: null }, asset)!.engineSound, null);
+    assert.deepEqual(vehicleDefinitionFromComponent({ massKg: 900 }, asset)!.engineSound, asset.engineSound);
+
+    // No sound id to play, and none to inherit: no engine sound at all.
+    assert.equal(normalizeVehicleDefinition({ engineSound: { idlePitch: 1 } })!.engineSound, null);
+    assert.equal(normalizeVehicleDefinition({})!.engineSound, null);
+    const clamped = normalizeVehicleDefinition({
+      engineSound: { sound: "  engine  ", idlePitch: 99, idleVolume: 2, refDistance: 50, maxDistance: 10 },
+    })!.engineSound!;
+    assert.equal(clamped.sound, "engine");
+    assert.equal(clamped.idlePitch, 4);
+    assert.equal(clamped.idleVolume, 1);
+    assert.equal(clamped.maxDistance, 51, "the far end stays past the near one");
+  });
+
   check("vehicle asset saves reject invalid envelopes and unsafe paths", () => {
     const vehicle = { schema: 1, type: "vehicle" };
     for (const path of ["../x.vehicle.json", "assets/../x.vehicle.json", "assets\\..\\x.vehicle.json",

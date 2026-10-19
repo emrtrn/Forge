@@ -4301,6 +4301,7 @@ interface AudioPlaybackHandleStub {
   stop(fadeSeconds?: number): void;
   setVolume(value: number, fadeSeconds?: number): void;
   setPitch(value: number): void;
+  setPosition(position: readonly [number, number, number]): void;
   setPaused(paused: boolean): void;
 }
 
@@ -4316,6 +4317,7 @@ const fakeAudioHandle = (): { handle: AudioPlaybackHandleStub; finish: () => voi
     },
     setVolume() {},
     setPitch() {},
+    setPosition() {},
     setPaused() {},
   };
   return { handle: stub, finish: () => stub.stop() };
@@ -4577,6 +4579,7 @@ const fakeMusicHandle = (clipId: string): MusicHandleStub => {
       stub.gain = value;
     },
     setPitch() {},
+    setPosition() {},
     setPaused(paused: boolean) {
       stub.paused = paused;
     },
@@ -6836,6 +6839,20 @@ check("computeVehicleDrive splits pedals across drive, brake and handbrake wheel
   assert.equal(rearLeft?.brakeForce, 75 + 2500);
 });
 
+check("computeVehicleDrive reports the driving pedal as engine load, not a braking one or a shift cut", () => {
+  const car = createReferenceCarDefinition(); // reverse threshold 0.5 m/s
+  const input = (patch: Partial<VehicleInput>): VehicleInput => ({ ...NEUTRAL_VEHICLE_INPUT, ...patch });
+  assert.equal(computeVehicleDrive(car, input({ throttle: 0.6 }), 10, 0, 1 / 60).engineLoad, 0.6);
+  assert.equal(computeVehicleDrive(car, input({ brake: 1 }), 10, 0, 1 / 60).engineLoad, 0, "braking");
+  assert.equal(computeVehicleDrive(car, input({ brake: 0.8 }), 0, 0, 1 / 60).engineLoad, 0.8, "reversing");
+  assert.equal(computeVehicleDrive(car, input({ throttle: 1 }), -5, 0, 1 / 60).engineLoad, 0, "throttle as brake");
+  assert.equal(computeVehicleDrive(car, NEUTRAL_VEHICLE_INPUT, 10, 0, 1 / 60).engineLoad, 0, "coasting");
+  const geared = resolveVehicleDefinition({ wheels: car.wheels, drivetrain: {} });
+  const midShift = { engineRpm: 3000, gear: 2, shiftTimeRemaining: 0.15 };
+  assert.equal(computeVehicleDrive(geared, input({ throttle: 1 }), 15, 0, 1 / 60, midShift).engineLoad, 0,
+    "the power cut of a gear change");
+});
+
 check("computeVehicleDrive eases steering and turns right as a negative yaw", () => {
   const car = createReferenceCarDefinition(); // steerSpeed 3/s, full lock 35°
   const right: VehicleInput = { ...NEUTRAL_VEHICLE_INPUT, steer: 1 };
@@ -6947,6 +6964,7 @@ await checkAsync("rapier vehicle drives forward, steers right, brakes and revers
     const afterThrottle = world.position();
     const speed = world.physics.vehicleState("car")?.forwardSpeed ?? 0;
     assert.ok(speed > 10 && speed < 15, `3 s of full throttle reached ${speed} m/s`);
+    assert.equal(world.physics.vehicleState("car")?.engineLoad, 1, "the engine pulls flat out");
     assert.ok(afterThrottle[2] > 15, `forward is +Z: z=${afterThrottle[2]}`);
     assert.ok(Math.abs(afterThrottle[0]) < 0.1, `drifted sideways: x=${afterThrottle[0]}`);
     assert.ok(Math.abs(afterThrottle[1] - 0.73) < 0.08, `chassis y=${afterThrottle[1]}`);

@@ -22,6 +22,12 @@ export interface VehicleDriveResult {
   /** Smoothed steering input (-1..1) to feed back in next slice. */
   readonly steer: number;
   readonly drivetrain: VehicleDrivetrainState | null;
+  /**
+   * The pedal that is driving the car this slice (0..1) — throttle forward or
+   * brake-as-reverse, not a pedal that is braking — and 0 through a gear
+   * change's power cut. What an engine sound's volume follows.
+   */
+  readonly engineLoad: number;
 }
 
 /**
@@ -75,9 +81,11 @@ export function computeVehicleDrive(
     ? definition.rollingResistanceForce / wheels.length
     : 0;
 
+  const shifting = (drivetrain?.state.shiftTimeRemaining ?? 0) > 0;
   return {
     steer,
     drivetrain: drivetrain?.state ?? null,
+    engineLoad: shifting ? 0 : Math.max(forwardPedal, reversePedal),
     wheels: wheels.map((wheel, index) => {
       let brakeForce = rollingPerWheel + (drivetrain?.engineBrakeForces[index] ?? 0);
       if (wheel.brake && brakeCount > 0) brakeForce += (footBrake * definition.maxBrakeForce) / brakeCount;

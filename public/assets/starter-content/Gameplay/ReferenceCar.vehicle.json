@@ -41,5 +41,14 @@
     { "position": [-0.68, 0.83, 1.056], "radius": 0.48, "steer": true, "visualNode": "wheel-front-right" },
     { "position": [0.68, 0.83, -1.056], "radius": 0.48, "drive": true, "handbrake": true, "visualNode": "wheel-back-left" },
     { "position": [-0.68, 0.83, -1.056], "radius": 0.48, "drive": true, "handbrake": true, "visualNode": "wheel-back-right" }
-  ]
+  ],
+  "engineSound": {
+    "sound": "starter-snd-engine-loop",
+    "idlePitch": 1,
+    "maxPitch": 2.2,
+    "idleVolume": 0.35,
+    "loadVolume": 0.9,
+    "refDistance": 6,
+    "maxDistance": 80
+  }
 }

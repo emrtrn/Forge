@@ -1,8 +1,9 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
 > Durum: **Faz 0–3 temel kod kapsamı tamam**; Faz 4'te **araca bin/in (4a)**,
-> **save-game araç durumu (4b)** ve **takip kamerası çarpışma + fareyle bakma
-> (4c)** tamam, sırada RPM → motor sesi (4d).
+> **save-game araç durumu (4b)**, **takip kamerası çarpışma + fareyle bakma
+> (4c)** ve **RPM → motor sesi (4d)** tamam. Faz 4'te yalnız opsiyonel AI
+> sürücü dilimi açık; sıradaki büyük adım Faz 5 (editör yüzeyi).
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
@@ -301,7 +302,7 @@ ayarı bu doğrulamanın dışında.
       "araçta mı" durumu; yüklemede oyuncu sürdüğü araca geri oturur.
 - [x] **4c — Kamera:** spring arm çarpışması (kamera duvar arkasına girmesin),
       fareyle etrafına bakma.
-- [ ] Ses kancası: RPM → motor ses cue pitch'i (audio modülü üzerinden).
+- [x] **4d — Ses kancası:** RPM → motor ses cue pitch'i (audio modülü üzerinden).
 - [ ] AI: basit spline / nav takip eden araç sürücüsü (opsiyonel, ayrı dilim).
 
 ### 4a — araca bin / in ✅
@@ -420,6 +421,56 @@ ayarı bu doğrulamanın dışında.
   durdurmaz; geri giderken kamera öne dönmez.
 - Doğrulama (2026-10-19): `tsc`, tam engine **1199 kontrol**, `build:verify`
   geçti; araç Chromium smoke'u **8/8**.
+
+### 4d — motor sesi ✅
+
+- Veri: araç asset'inde / `Vehicle` component'inde isteğe bağlı `engineSound`
+  bloğu — `sound` (manifest `sound` ya da `soundCue` id'si), `idlePitch` /
+  `maxPitch` (0,1..4), `idleVolume` / `loadVolume` (0..1), `speedForMaxPitch`
+  (drivetrain'siz araçta RPM yerine hız, m/s), `refDistance` / `maxDistance`.
+  Runtime ve `/__save-vehicle` aynı `normalizeVehicleDefinition`'ı kullanır;
+  inline alanlar asset'i tek tek ezer, `engineSound: null` sesi kapatır,
+  kullanılabilir `sound` id'si yoksa (ve miras alınacak yoksa) ses yoktur.
+- Referans araba: `starter-snd-engine-loop`
+  (`Sounds/S_Engine_Loop.wav`, 2 s, 22,05 kHz mono, ~88 KB). **Sentezlenmiş yer
+  tutucu**: 4 silindir / 900 RPM ≈ 30 Hz ateşleme darbeleri dairesel toplanır,
+  dikişsiz döngü. Kenney Sci-Fi Sounds'daki `engineCircular_*` sabit döngü
+  değil (seviyesi dalgalanan süpürmeler, dikişte sıçrama), `spaceEngineLarge`
+  ise 27 Hz'lik uğultu — o yüzden kullanılmadı. Fork gerçek kaydını koyar.
+- Fizik: `VehicleState.engineLoad` (0..1) = o adımda arabayı **süren** pedal
+  (ileri gaz ya da geri vitesteki fren); frenleyen pedal, boşta kayma ve vites
+  geçişinin güç kesimi 0. Kuvvet/üst sınır oranı yerine pedal: yüksek viteste
+  tork düştüğü için oran tam gazda bile sesi kısardı.
+- `vehicleEngineSound.ts` (saf): pitch = idle→max, devir oranıyla
+  (`(rpm - idle) / (max - idle)`, drivetrain'siz `|hız| / speedForMaxPitch`);
+  ses = idle→load, `max(yük, devir × 0,5)` ağırlığıyla (gazsız yüksek devir —
+  motor freni — yine duyulur). Aralık dışı RPM kırpılır.
+- Audio: `AudioPlaybackHandle.setPosition` (spatial çalmanın panner'ını taşır;
+  spatial olmayan çalmada no-op) ve `AudioCommands.playLoop(sourceId, options)`:
+  hemen kullanılabilen yönlendirilebilir döngü. Ham ses anında bağlanır; cue
+  yüklenince ilk play olayını döngüye alır (cue'nun volume/pitch'i çarpan, bus'ı
+  cue'nunki) ve o ana kadar ayarlanan son değerleri uygular. Çalamayan kaynak
+  "stopped" okunur.
+- `vehicle` capability modülü: **sürülen** (`VehicleHost.isDriven` — şimdilik
+  oyuncunun possess ettiği pawn) ve `engineSound`'u olan araç için tek bir
+  spatial, döngülü ses (`sfx` bus); her kare pitch, 0,08 s rampalı volume ve
+  aracın konumu. Sürücü inince 0,5 s'de söner; level kapanınca susar. Ses
+  katmanının reddettiği ses (voice bütçesi, eksik kaynak) her kare yeniden
+  istenmez; araca yeniden binince taze başlar. Audio modülü kapalıysa araç
+  sessizdir, sürüş etkilenmez.
+- Testler: normalizer (kayıt round-trip, inline override, null, kırpma, referans
+  asset + manifest kaydı), saf ses seviyeleri, pedal yükü (fren/geri/vites
+  kesimi), Rapier tam gazda `engineLoad = 1`, `playLoop` (ham ses, yüklenmeden
+  yönlendirilen cue, bozuk cue, yüklenmeden durdurma), araç modülü ses yaşam
+  döngüsü. Tarayıcı smoke'u gerçek Web Audio düğümünü izler: park hâlinde ses
+  yok → E ile binince 2 s'lik döngü rölantide (rate ≈ 1) → W ile rate > 1,3 →
+  E ile inince `stop`; tüm sürüş boyunca tek ses.
+- Bilinen sınırlar: tek katmanlı motor sesi (Unreal'daki RPM'e göre çapraz
+  geçişli çok katmanlı ses yok); park hâlindeki ya da AI'nın sürdüğü araçlar
+  sessiz (AI sürücü gelince `isDriven` genişler); kulakla ayar yapılmadı —
+  yer tutucu sesin ve eğrinin dinlenip ayarlanması kullanıcı smoke'u.
+- Doğrulama (2026-10-19): `tsc`, tam engine **1204 kontrol**, `build:verify`
+  geçti; araç Chromium smoke'u **9/9**; `check:assets` 0 hata.
 
 ## Faz 5 — Editör yüzeyi
 

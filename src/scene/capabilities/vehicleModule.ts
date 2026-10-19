@@ -1,12 +1,19 @@
 /**
- * Layer 2 capability: wheel visuals for ray-cast vehicles (vehicle plan Faz 1).
+ * Layer 2 capability: wheel visuals and engine sound for ray-cast vehicles
+ * (vehicle plan Faz 1, 4d).
  *
  * Physics owns the vehicle itself — the `Vehicle` component turns a dynamic
  * actor into a chassis with suspension rays, whether or not this module runs.
  * What this module adds is what a ray has no mesh for: a wheel per suspension
  * ray, hung at the live spring length, yawed by the steering and spun by the
- * rolling distance. Switching it off leaves an invisible-wheeled but fully
- * drivable car (I3).
+ * rolling distance. Switching it off leaves an invisible-wheeled, silent but
+ * fully drivable car (I3).
+ *
+ * A driven car with an `engineSound` also gets one looped, spatial engine
+ * voice through the audio capability: pitch from the RPM, volume from the
+ * engine load, position from the car. It starts when someone takes the wheel
+ * and fades out when they leave it; without the audio capability the car is
+ * simply silent.
  *
  * Rigs are built lazily, the first frame a vehicle id shows up with a render
  * object, so the module does not depend on whether physics initialised before
@@ -25,15 +32,31 @@ import {
   type Object3D,
 } from "three";
 
-import type { VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
+import type { AudioPlaybackHandle } from "@engine/audio/audioSubsystem";
+import { vehicleEngineSoundLevels } from "@engine/physics/vehicle/vehicleEngineSound";
+import type { VehicleState, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
 
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeServices } from "./RuntimeServices";
-import { vehicleHostService, type VehicleHost } from "./runtimeServiceKeys";
+import {
+  audioCommandsService,
+  vehicleHostService,
+  type AudioCommands,
+  type VehicleHost,
+} from "./runtimeServiceKeys";
 
 export const VEHICLE_MODULE_ID = "vehicle";
 
 const TYRE_WIDTH = 0.26;
+/** Seconds the engine takes to die away once the driver leaves the car. */
+const ENGINE_STOP_FADE_SECONDS = 0.5;
+/** Per-frame volume ramp; smooths a load step (throttle stab, gear change cut). */
+const ENGINE_VOLUME_RAMP_SECONDS = 0.08;
+
+interface EngineVoice {
+  readonly sound: string;
+  readonly handle: AudioPlaybackHandle;
+}
 
 interface WheelRig {
   readonly host: Object3D;
@@ -92,6 +115,59 @@ function bindModelWheel(actor: Object3D, node: Object3D, wheel: VehicleWheelStat
 export function createVehicleModule(): CapabilityModule {
   let services: RuntimeServices | null = null;
   const rigs = new Map<string, WheelRig>();
+  const engines = new Map<string, EngineVoice>();
+  const scratch = new Vector3();
+
+  const stopEngine = (entityId: string, fadeSeconds = ENGINE_STOP_FADE_SECONDS): void => {
+    engines.get(entityId)?.handle.stop(fadeSeconds);
+    engines.delete(entityId);
+  };
+
+  const stopEngines = (fadeSeconds = 0): void => {
+    for (const entityId of [...engines.keys()]) stopEngine(entityId, fadeSeconds);
+  };
+
+  /**
+   * Runs, steers or stops one car's engine voice. A voice the audio layer
+   * refused (voice budget, missing source) stays parked as stopped until the
+   * car is left and taken again — never re-requested every frame.
+   */
+  const updateEngine = (
+    host: VehicleHost,
+    audio: AudioCommands | undefined,
+    entityId: string,
+    state: VehicleState,
+    object: Object3D,
+  ): void => {
+    const definition = host.vehicleDefinition(entityId);
+    const sound = definition?.engineSound ?? null;
+    if (!audio || !definition || !sound || !host.isDriven(entityId)) {
+      stopEngine(entityId);
+      return;
+    }
+    const levels = vehicleEngineSoundLevels(sound, definition, state);
+    object.getWorldPosition(scratch);
+    const position = [scratch.x, scratch.y, scratch.z] as const;
+    const voice = engines.get(entityId);
+    if (!voice || voice.sound !== sound.sound) {
+      if (voice) stopEngine(entityId);
+      const handle = audio.playLoop(sound.sound, {
+        volume: levels.volume,
+        pitch: levels.pitch,
+        spatial: true,
+        position,
+        refDistance: sound.refDistance,
+        maxDistance: sound.maxDistance,
+        bus: "sfx",
+      });
+      engines.set(entityId, { sound: sound.sound, handle });
+      return;
+    }
+    if (voice.handle.stopped) return;
+    voice.handle.setPitch(levels.pitch);
+    voice.handle.setVolume(levels.volume, ENGINE_VOLUME_RAMP_SECONDS);
+    voice.handle.setPosition(position);
+  };
   const geometries: BufferGeometry[] = [];
   const tyreMaterial = new MeshStandardMaterial({ color: "#1c1e21", roughness: 0.92 });
   const hubMaterial = new MeshStandardMaterial({ color: "#a7b0ba", roughness: 0.45, metalness: 0.6 });
@@ -170,17 +246,22 @@ export function createVehicleModule(): CapabilityModule {
 
     onLevelUnloaded() {
       clearRigs();
+      stopEngines();
     },
 
     update() {
       const host = services?.resolve(vehicleHostService);
       if (!host) return;
+      const audio = services?.resolve(audioCommandsService);
       const live = host.vehicleIds();
       for (const entityId of rigs.keys()) {
         if (!live.includes(entityId)) {
           releaseRig(rigs.get(entityId)!);
           rigs.delete(entityId);
         }
+      }
+      for (const entityId of [...engines.keys()]) {
+        if (!live.includes(entityId)) stopEngine(entityId);
       }
       for (const entityId of live) {
         const rig = ensureRig(host, entityId);
@@ -192,11 +273,13 @@ export function createVehicleModule(): CapabilityModule {
           const group = rig.wheels[index];
           if (group) poseWheel(group, wheel);
         });
+        updateEngine(host, audio, entityId, state, rig.host);
       }
     },
 
     dispose() {
       clearRigs();
+      stopEngines();
       tyreMaterial.dispose();
       hubMaterial.dispose();
       services = null;

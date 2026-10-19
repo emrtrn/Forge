@@ -43,8 +43,15 @@ import {
 import { vehicleGameMode } from "../../src/game/gameModes/vehicleGameMode";
 import { createCapabilityRegistry } from "../../src/scene/capabilities/capabilityRegistry";
 import { createRuntimeServiceHost } from "../../src/scene/capabilities/RuntimeServices";
-import { vehicleHostService } from "../../src/scene/capabilities/runtimeServiceKeys";
+import {
+  audioCommandsService,
+  vehicleHostService,
+  type AudioCommands,
+} from "../../src/scene/capabilities/runtimeServiceKeys";
 import { createVehicleModule } from "../../src/scene/capabilities/vehicleModule";
+import { vehicleEngineSoundLevels } from "../../engine/physics/vehicle/vehicleEngineSound";
+import { normalizeVehicleDefinition } from "../../engine/physics/vehicle/vehicleTypes";
+import type { AudioPlaybackHandle, AudioPlayOptions } from "../../engine/audio/audioSubsystem";
 import type { GameModeContext, GameModeVehicles, InputMode } from "../../src/scene/gameModeTypes";
 
 type Check = (label: string, fn: () => void) => void;
@@ -77,7 +84,7 @@ class FakeVehicles implements GameModeVehicles {
     this.inputs.push(input);
   }
   state(): VehicleState | null {
-    return { forwardSpeed: this.speed, wheels: [], drivetrain: null };
+    return { forwardSpeed: this.speed, engineLoad: 0, wheels: [], drivetrain: null };
   }
   objectFor(): Object3D | null {
     return this.object;
@@ -249,6 +256,34 @@ export function registerVehicleRuntimeTests(check: Check): void {
     assert.equal(stepChaseArmFraction(1, null, boom, 1 / 60, settings), 1);
   });
 
+  check("vehicle engine sound pitch follows the revs and volume the load", () => {
+    const geared = normalizeVehicleDefinition({
+      wheels: [{ position: [0, 0, 1] }],
+      drivetrain: {},
+      engineSound: { sound: "engine" },
+    })!;
+    const sound = geared.engineSound!;
+    const state = (rpm: number, engineLoad: number, forwardSpeed = 0) => ({
+      forwardSpeed,
+      engineLoad,
+      wheels: [],
+      drivetrain: { engineRpm: rpm, gear: 1, shiftTimeRemaining: 0 },
+    });
+    assert.deepEqual(vehicleEngineSoundLevels(sound, geared, state(900, 0)), { pitch: 1, volume: 0.35 });
+    const flatOut = vehicleEngineSoundLevels(sound, geared, state(6500, 1));
+    assert.ok(Math.abs(flatOut.pitch - 2.2) < 1e-9 && Math.abs(flatOut.volume - 0.9) < 1e-9);
+    // Revving off the throttle (engine braking) still carries at half weight.
+    const coasting = vehicleEngineSoundLevels(sound, geared, state(6500, 0));
+    assert.ok(Math.abs(coasting.volume - (0.35 + 0.55 * 0.5)) < 1e-9, `coasting ${coasting.volume}`);
+    // Over-revved readback clamps rather than shrieking past maxPitch.
+    assert.ok(Math.abs(vehicleEngineSoundLevels(sound, geared, state(9000, 1)).pitch - 2.2) < 1e-9);
+
+    // No drivetrain, no RPM: speed stands in, either direction.
+    const flat = normalizeVehicleDefinition({ wheels: [{ position: [0, 0, 1] }], engineSound: { sound: "engine" } })!;
+    const reversing = { forwardSpeed: -15, engineLoad: 1, wheels: [], drivetrain: null };
+    assert.ok(Math.abs(vehicleEngineSoundLevels(flat.engineSound!, flat, reversing).pitch - 1.6) < 1e-9);
+  });
+
   check("vehicle mode is registered and selectable", () => {
     assert.ok(GAME_MODE_OPTIONS.some((option) => option.id === VEHICLE_GAME_MODE_ID));
     assert.equal(resolveGameMode(VEHICLE_GAME_MODE_ID), vehicleGameMode);
@@ -394,8 +429,10 @@ export function registerVehicleRuntimeTests(check: Check): void {
     const original = node.position.clone();
     let wheel = { ...wheelState([0.68, 0.83, 1.056], 0.35), radius: 0.48, visualNode: node.name };
     host.provide(vehicleHostService, {
-      vehicleIds: () => ["car"], vehicleState: () => ({ forwardSpeed: 0, drivetrain: null, wheels: [wheel] }),
+      vehicleIds: () => ["car"], vehicleState: () => ({ forwardSpeed: 0, engineLoad: 0, drivetrain: null, wheels: [wheel] }),
+      vehicleDefinition: () => null,
       actorObject: () => actor,
+      isDriven: () => false,
     });
     registry.update(1 / 60);
     const container = actor.getObjectByName("VehicleWheels")!;
@@ -423,7 +460,103 @@ export function registerVehicleRuntimeTests(check: Check): void {
     material.dispose();
   });
 
-  // (C) the wheel visuals module.
+  // (C) the wheel visuals + engine sound module.
+  check("vehicle module runs a spatial engine voice only while the car is driven", () => {
+    const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+    const registry = createCapabilityRegistry([createVehicleModule()]);
+    registry.runtimeStart(host);
+    const actor = new Group();
+    actor.position.set(3, 1, -4);
+    actor.updateMatrixWorld(true);
+    const definition = normalizeVehicleDefinition({
+      wheels: [{ position: [0, 0, 1] }],
+      drivetrain: {},
+      engineSound: { sound: "engine", refDistance: 5, maxDistance: 70 },
+    })!;
+    let driven = false;
+    let rpm = 900;
+    let engineLoad = 0;
+    host.provide(vehicleHostService, {
+      vehicleIds: () => ["car"],
+      vehicleState: () => ({
+        forwardSpeed: 0,
+        engineLoad,
+        wheels: [wheelState([0, 0, 1], 0.3)],
+        drivetrain: { engineRpm: rpm, gear: 1, shiftTimeRemaining: 0 },
+      }),
+      vehicleDefinition: () => definition,
+      actorObject: () => actor,
+      isDriven: () => driven,
+    });
+    type Call = { kind: string; value: unknown; fade?: number };
+    const plays: { sourceId: string; options: AudioPlayOptions; calls: Call[]; refuse: boolean }[] = [];
+    let refuseNext = false;
+    host.provide(audioCommandsService, {
+      playLoop: (sourceId: string, options: AudioPlayOptions = {}) => {
+        const play = { sourceId, options, calls: [] as Call[], refuse: refuseNext };
+        refuseNext = false;
+        plays.push(play);
+        const handle = {
+          clipId: sourceId,
+          get stopped() { return play.refuse || play.calls.some((call) => call.kind === "stop"); },
+          volume: 1,
+          pitch: 1,
+          stop: (fade?: number) => play.calls.push({ kind: "stop", value: null, ...(fade !== undefined ? { fade } : {}) }),
+          setVolume: (value: number, fade?: number) => play.calls.push({ kind: "volume", value, ...(fade !== undefined ? { fade } : {}) }),
+          setPitch: (value: number) => play.calls.push({ kind: "pitch", value }),
+          setPosition: (value: readonly number[]) => play.calls.push({ kind: "position", value: [...value] }),
+          setPaused: () => {},
+        } as AudioPlaybackHandle;
+        return handle;
+      },
+    } as unknown as AudioCommands);
+
+    registry.update(1 / 60);
+    assert.equal(plays.length, 0, "a parked car's engine is off");
+
+    driven = true;
+    registry.update(1 / 60);
+    assert.equal(plays.length, 1);
+    const [engine] = plays;
+    assert.equal(engine!.sourceId, "engine");
+    assert.deepEqual(engine!.options, {
+      volume: 0.35, pitch: 1, spatial: true, position: [3, 1, -4], refDistance: 5, maxDistance: 70, bus: "sfx",
+    });
+
+    rpm = 6500;
+    engineLoad = 1;
+    actor.position.set(3, 1, 10);
+    actor.updateMatrixWorld(true);
+    registry.update(1 / 60);
+    assert.equal(plays.length, 1, "steered, not restarted");
+    const pitch = engine!.calls.find((call) => call.kind === "pitch");
+    const volume = engine!.calls.find((call) => call.kind === "volume");
+    assert.ok(Math.abs((pitch?.value as number) - 2.2) < 1e-9);
+    assert.ok(Math.abs((volume?.value as number) - 0.9) < 1e-9 && (volume?.fade ?? 0) > 0, "eased, not stepped");
+    assert.deepEqual(engine!.calls.find((call) => call.kind === "position")?.value, [3, 1, 10]);
+
+    driven = false;
+    registry.update(1 / 60);
+    const stop = engine!.calls.find((call) => call.kind === "stop");
+    assert.ok(stop && (stop.fade ?? 0) > 0, "the engine dies away when the driver leaves");
+
+    // A voice the audio layer refuses is not re-requested every frame.
+    driven = true;
+    refuseNext = true;
+    registry.update(1 / 60);
+    registry.update(1 / 60);
+    assert.equal(plays.length, 2);
+
+    driven = false;
+    registry.update(1 / 60);
+    driven = true;
+    registry.update(1 / 60);
+    assert.equal(plays.length, 3, "taking the wheel again starts it afresh");
+    registry.levelUnloaded();
+    assert.ok(plays[2]!.calls.some((call) => call.kind === "stop"), "a level teardown silences it");
+    registry.dispose();
+  });
+
   check("vehicle module hangs a wheel per suspension ray and follows the live readback", () => {
     const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
     const registry = createCapabilityRegistry([createVehicleModule()]);
@@ -434,8 +567,10 @@ export function registerVehicleRuntimeTests(check: Check): void {
     let live = true;
     host.provide(vehicleHostService, {
       vehicleIds: () => (live ? ["car"] : []),
-      vehicleState: () => ({ forwardSpeed: 0, wheels, drivetrain: null }),
+      vehicleState: () => ({ forwardSpeed: 0, engineLoad: 0, wheels, drivetrain: null }),
+      vehicleDefinition: () => null,
       actorObject: () => actor,
+      isDriven: () => false,
     });
 
     registry.update(1 / 60);

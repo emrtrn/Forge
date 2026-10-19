@@ -38,6 +38,7 @@ const YAW_90 = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 }; // +Z turned on
 function stateWithContacts(contactYs: readonly (number | null)[]): VehicleState {
   return {
     forwardSpeed: 0,
+    engineLoad: 0,
     drivetrain: null,
     wheels: contactYs.map((y) => ({
       position: [0, 0, 0],

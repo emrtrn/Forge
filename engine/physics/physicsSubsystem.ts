@@ -122,6 +122,8 @@ interface VehicleRecord {
   /** Smoothed steering input (-1..1). */
   steer: number;
   drivetrain: VehicleDrivetrainState | null;
+  /** The driving pedal of the latest slice (0..1); see `VehicleDriveResult.engineLoad`. */
+  engineLoad: number;
 }
 
 interface RapierBodyRecord {
@@ -231,6 +233,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       input: NEUTRAL_VEHICLE_INPUT,
       steer: 0,
       drivetrain: initialVehicleDrivetrainState(definition),
+      engineLoad: 0,
     };
     if (!this.attachVehicleController(record)) return false;
     this.vehicles.set(entityId, record);
@@ -262,6 +265,12 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     record.steer = 0;
     record.drivetrain = initialVehicleDrivetrainState(record.definition);
+    record.engineLoad = 0;
+  }
+
+  /** The resolved definition a vehicle was built from, or null when not a vehicle. */
+  vehicleDefinition(entityId: EntityId): VehicleDefinition | null {
+    return this.vehicles.get(entityId)?.definition ?? null;
   }
 
   /**
@@ -356,6 +365,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!record || !controller || !rapier) return null;
     return {
       forwardSpeed: chassisForwardSpeed(rapier.body),
+      engineLoad: record.engineLoad,
       drivetrain: record.drivetrain ? { ...record.drivetrain } : null,
       wheels: record.definition.wheels.map((wheel, index) => {
         const inContact = controller.wheelIsInContact(index);
@@ -1104,6 +1114,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       );
       record.steer = drive.steer;
       record.drivetrain = drive.drivetrain;
+      record.engineLoad = drive.engineLoad;
       drive.wheels.forEach((command, index) => {
         controller.setWheelEngineForce(index, command.engineForce);
         // The controller takes the brake as a per-slice impulse cap.
@@ -1159,6 +1170,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         input: NEUTRAL_VEHICLE_INPUT,
         steer: 0,
         drivetrain: initialVehicleDrivetrainState(body.vehicle),
+        engineLoad: 0,
       };
       if (this.attachVehicleController(record)) this.vehicles.set(body.id, record);
     }

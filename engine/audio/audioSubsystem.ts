@@ -142,6 +142,12 @@ export interface AudioPlaybackHandle {
   setVolume(value: number, fadeSeconds?: number): void;
   setPitch(value: number): void;
   /**
+   * Moves a spatial play's emitter (a sound riding on something that moves, like
+   * a car's engine). A no-op for a play started without `spatial` + `position`:
+   * it has no panner to move, and growing one mid-play would change its mix.
+   */
+  setPosition(position: AudioVec3): void;
+  /**
    * Holds a streamed play where it stands, or lets it go on.
    *
    * Streams only, and the asymmetry is the point rather than an omission: a
@@ -213,6 +219,8 @@ class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
   private gain: GainNode | null = null;
   private context: BrowserAudioContext | null = null;
   private sourceBaseRate = 1;
+  /** The play's `PannerNode`, when it was started spatial with a position. */
+  private panner: PannerNode | null = null;
   private stoppedInternal = false;
   private volumeInternal: number;
   private pitchInternal: number;
@@ -328,6 +336,20 @@ class RuntimeAudioPlaybackHandle implements AudioPlaybackHandle {
     this.pitchInternal = sanitizePitch(value);
     if (this.source) applySourcePitch(this.source, this.pitchInternal, this.sourceBaseRate);
     if (this.media) this.media.playbackRate = this.pitchInternal;
+  }
+
+  /** Receives the panner a spatial play routes through (see `connectSpatialOutput`). */
+  attachPanner(panner: PannerNode | null): void {
+    this.panner = panner;
+  }
+
+  setPosition(position: AudioVec3): void {
+    const panner = this.panner;
+    const context = this.context;
+    if (!panner || !context || this.stoppedInternal) return;
+    setAudioVec3(context, panner.positionX, panner.positionY, panner.positionZ, position, () =>
+      panner.setPosition?.(position[0], position[1], position[2]),
+    );
   }
 
   setPaused(paused: boolean): void {
@@ -570,13 +592,15 @@ export class AudioSubsystem implements Subsystem, AudioBus {
 
   /**
    * Connects a play's gain to its mix bus. Spatial plays with a position route
-   * through a `PannerNode` (sphere attenuation) first; everything else feeds the
-   * bus directly. The bus graph chains to the destination.
+   * through a `PannerNode` (sphere attenuation) first, handed to the play so it
+   * can move it later; everything else feeds the bus directly. The bus graph
+   * chains to the destination.
    */
   private connectSpatialOutput(
     context: BrowserAudioContext,
     gain: GainNode,
     request: AudioPlayRequest,
+    handle: RuntimeAudioPlaybackHandle,
   ): void {
     const output = this.busOutput(context, request);
     if (!request.spatial || !request.position) {
@@ -596,6 +620,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     );
     gain.connect(panner);
     panner.connect(output);
+    handle.attachPanner(panner);
   }
 
   playOneShot(clipId: string, options: AudioPlayOptions = {}): void {
@@ -750,7 +775,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
       const now = context.currentTime;
       oscillator.frequency.value = tone.frequencyHz;
       oscillator.connect(gain);
-      this.connectSpatialOutput(context, gain, request);
+      this.connectSpatialOutput(context, gain, request, handle);
       handle.attach(context, oscillator, gain);
       if (handle.stopped) return;
       oscillator.start(now);
@@ -802,7 +827,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     const source = context.createMediaElementSource(media);
     const gain = context.createGain();
     source.connect(gain);
-    this.connectSpatialOutput(context, gain, request);
+    this.connectSpatialOutput(context, gain, request, handle);
     handle.attachMedia(context, media, gain);
     if (handle.stopped) return;
     void media.play().catch(() => {
@@ -834,7 +859,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     source.loop = request.loop ?? false;
     const gain = context.createGain();
     source.connect(gain);
-    this.connectSpatialOutput(context, gain, request);
+    this.connectSpatialOutput(context, gain, request, handle);
     handle.attach(context, source, gain);
     if (handle.stopped) return;
     source.start();

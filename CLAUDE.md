@@ -129,8 +129,11 @@ engine/editor.
   The optional `drivetrain` block enables torque/RPM/gearing; missing/null keeps
   legacy flat-force behavior. Engine/transmission/differential inline objects
   merge field-by-field; authored curves/gear lists replace their base lists.
-  Wheel `axle`, `steeringSpeedCurve`, `handbrakeSideFrictionMultiplier` and
-  `aerodynamics` use the same normalizer and must round-trip too.
+  Wheel `axle`, `steeringSpeedCurve`, `handbrakeSideFrictionMultiplier`,
+  `aerodynamics` and `engineSound` use the same normalizer and must round-trip
+  too. `engineSound` (a `sound`/`soundCue` id + pitch/volume/distance tuning)
+  is presentation data the `vehicle` capability plays while the car is driven;
+  inline fields override the asset's one by one and `null` silences the car.
   Wheel `visualNode` optionally names a mesh/group in the vehicle model. The
   vehicle capability animates that node around its centred physical axle,
   restores it on unload, and leaves model geometry/material ownership with the

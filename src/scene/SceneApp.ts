@@ -4328,17 +4328,25 @@ export class SceneApp {
    * placement through the undo stack and selects it. Async: the drop handler
    * fires this without awaiting.
    */
-  async addActorAt(classRef: string, clientX: number, clientY: number): Promise<void> {
+  async addActorAt(
+    classRef: string,
+    clientX: number,
+    clientY: number,
+    options: { fallbackToCamera?: boolean } = {},
+  ): Promise<void> {
     if (!this.layout) return;
     const hit = this.picker.clientToSurface(clientX, clientY);
-    if (!hit) return;
+    const point = hit
+      ? [hit.x, hit.y, hit.z]
+      : options.fallbackToCamera ? this.defaultActorPosition(6) : null;
+    if (!point) return;
     const def = await this.resolveActorClass(classRef);
     const instance: LayoutActorInstance = {
       classRef,
       position: [
-        snapValue(hit.x, this.snapSettings.move, this.snapSettings.moveEnabled),
-        round(hit.y),
-        snapValue(hit.z, this.snapSettings.move, this.snapSettings.moveEnabled),
+        snapValue(point[0]!, this.snapSettings.move, this.snapSettings.moveEnabled),
+        round(point[1]!),
+        snapValue(point[2]!, this.snapSettings.move, this.snapSettings.moveEnabled),
       ],
       rotationYDeg: snapValue(0, this.snapSettings.rotate, this.snapSettings.rotateEnabled),
     };
@@ -4356,6 +4364,17 @@ export class SceneApp {
         this.removeActorPlacement(index);
         this.select(null);
       },
+    });
+  }
+
+  /**
+   * Places an actor class on the surface under the viewport centre (Add Actor
+   * click), or in front of the camera when nothing is under it.
+   */
+  async addActorAtViewportCenter(classRef: string): Promise<void> {
+    const rect = this.canvas.getBoundingClientRect();
+    await this.addActorAt(classRef, rect.left + rect.width / 2, rect.top + rect.height / 2, {
+      fallbackToCamera: true,
     });
   }
 

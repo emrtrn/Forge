@@ -54,6 +54,8 @@ export const ACTOR_TYPE_ICONS = {
   character: S('<circle cx="8" cy="5" r="2.4"/><path d="M3.4 13.2a4.6 4.6 0 0 1 9.2 0z"/>'),
   /** Gameplay / blueprint node — connected nodes. */
   gameplay: S('<rect x="2.4" y="6" width="4" height="4" rx="1"/><rect x="9.6" y="3" width="4" height="4" rx="1"/><rect x="9.6" y="9" width="4" height="4" rx="1"/><path d="M6.4 8h1.6M11.6 7v2"/>'),
+  /** Vehicle — a car side view on two wheels. */
+  vehicle: S('<path d="M1.8 10.6V8.4l1.6-.4 1.8-2.6h4.6L12 8l2.2.5v2.1z"/><circle cx="4.6" cy="11" r="1.4"/><circle cx="11.4" cy="11" r="1.4"/>'),
   /** Spline — a curved path with endpoint and control markers. */
   spline: S('<path d="M2.5 12c1.1-7.3 9.9-7.3 11 0"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="13.5" cy="12" r="1.2"/><circle cx="8" cy="5.2" r="1"/>'),
   /** Group / folder actor. */

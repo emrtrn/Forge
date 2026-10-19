@@ -302,7 +302,13 @@ const ADD_ACTOR_CATEGORIES: readonly { label: string; icon: ActorTypeIcon }[] = 
   { label: "Sounds", icon: "sound" },
   { label: "UI", icon: "widget" },
   { label: "Gameplay", icon: "gameplay" },
+  { label: "Vehicles", icon: "vehicle" },
 ];
+
+/** Shown in a category no entry fills yet (Vehicles before any class has a Vehicle). */
+const ADD_ACTOR_EMPTY_HINTS: Readonly<Record<string, string>> = {
+  Vehicles: "No vehicle classes yet. Add a Vehicle component to an Actor Script.",
+};
 
 const SHAPE_ACTOR_ICONS = {
   cube: "shapeCube",
@@ -389,7 +395,7 @@ export class EditorUi {
   private readonly loadVehicleAsset = createVehicleAssetLoader();
   private assetTreeRoot: ProjectDirNode | null = null;
   /** All project Actor Script classes discovered for editor pickers (game mode / pawn). */
-  private projectActorClasses: { path: string; name: string; parentClass: ParentClass }[] = [];
+  private projectActorClasses: { path: string; name: string; parentClass: ParentClass; vehicle: boolean }[] = [];
   /** Project `gameMode` Actor Scripts discovered for the World Settings dropdown. */
   private projectGameModes: EditorGameModeOption[] = [];
   private selectedFolder = "";
@@ -441,8 +447,11 @@ export class EditorUi {
   private importTargetDir = "";
   /** Existing model selected for the next Reimport upload, if any. */
   private reimportTarget: BrowserAssetItem | null = null;
-  /** All placeable Add Actor entries, built once (drives menu + search). */
-  private readonly addActorEntries: AddActorEntry[];
+  /**
+   * All placeable Add Actor entries (drives menu + search). Rebuilt when the
+   * project class scan finds a different set of vehicle classes.
+   */
+  private addActorEntries: AddActorEntry[];
 
   constructor(private readonly app: SceneApp) {
     document.body.classList.add("editor-mode");
@@ -1688,9 +1697,15 @@ export class EditorUi {
     this.projectActorClasses = await Promise.all(
       actorPaths.map(async (path) => {
         const def = await loadActorScript(path, path);
-        return { path, name: def.name || path, parentClass: def.parentClass };
+        return {
+          path,
+          name: def.name || path,
+          parentClass: def.parentClass,
+          vehicle: def.components.some((node) => node.component === "Vehicle"),
+        };
       }),
     );
+    this.refreshAddActorMenu();
 
     const next: EditorGameModeOption[] = this.projectActorClasses
       .filter((cls) => cls.parentClass === "gameMode")
@@ -2165,7 +2180,35 @@ export class EditorUi {
     );
     special("spline", "Spline", "Gameplay", "spline", () => this.app.addSpline());
 
+    // Vehicles are project content, not engine built-ins: every Actor Script
+    // class with a Vehicle component, found by the Content Browser scan.
+    this.projectActorClasses
+      .filter((cls) => cls.vehicle)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach((cls) => {
+        entries.push({
+          key: `vehicle:${cls.path}`,
+          label: cls.name,
+          category: "Vehicles",
+          icon: "vehicle",
+          drag: { mime: "application/x-forge-actor-class", payload: () => cls.path },
+          onClick: () => void this.app.addActorAtViewportCenter(cls.path),
+        });
+      });
+
     return entries;
+  }
+
+  /** Re-renders the Add Actor popover when the class scan changed its entries. */
+  private refreshAddActorMenu(): void {
+    const next = this.buildAddActorEntries();
+    const keys = (entries: readonly AddActorEntry[]) => entries.map((entry) => `${entry.key}|${entry.label}`).join("\n");
+    if (keys(next) === keys(this.addActorEntries)) return;
+    this.addActorEntries = next;
+    const popover = this.root.querySelector<HTMLElement>("[data-add-actor-popover]");
+    if (!popover) return;
+    popover.innerHTML = this.buildAddActorMenuMarkup();
+    this.bindAddActorMenu();
   }
 
   /** Markup for the Add Actor popover body: search row, category submenus, and
@@ -2175,7 +2218,10 @@ export class EditorUi {
       const rows = this.addActorEntries
         .filter((entry) => entry.category === cat.label)
         .map((entry) => this.addActorItemMarkup(entry, { includeAttr: true }))
-        .join("");
+        .join("")
+        || (ADD_ACTOR_EMPTY_HINTS[cat.label]
+          ? `<div class="add-actor-empty">${escapeHtml(ADD_ACTOR_EMPTY_HINTS[cat.label]!)}</div>`
+          : "");
       return (
         `<div class="add-actor-category">` +
         `<button type="button" class="add-actor-category-label">${ACTOR_TYPE_ICONS[cat.icon]}<span>${cat.label}</span></button>` +

@@ -71,3 +71,32 @@ test("Camera, view mode, and Show menus use flat rows", async ({ page }) => {
     "0px",
   );
 });
+
+test("Add Actor Vehicles lists the project's vehicle classes and places one on click", async ({ page }) => {
+  // Placing marks the layout dirty; never let the autosave write the smoke layout.
+  await page.route("**/__save-layout**", (route) => route.fulfill({ status: 200, json: { ok: true } }));
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  const actorCount = async (): Promise<number> => {
+    const text = (await page.getByText(/^\d+ actors/).first().textContent()) ?? "";
+    return Number(text.match(/^(\d+)/)?.[1] ?? -1);
+  };
+  await expect.poll(actorCount, { timeout: 30_000 }).toBeGreaterThan(0);
+
+  const popover = page.locator("[data-add-actor-popover]");
+  await page.getByTestId("add-actor-button").hover();
+  await popover.getByRole("button", { name: /^Vehicles/ }).hover();
+  // Vehicles are project classes found by the Content Browser scan, not built-ins.
+  const car = popover.locator(
+    '[data-add-key="vehicle:assets/starter-content/Gameplay/Script_ReferenceCar.actor.json"]',
+  );
+  await expect(car).toBeVisible({ timeout: 30_000 });
+  await expect(car).toHaveAttribute("draggable", "true");
+
+  const before = await actorCount();
+  await car.click();
+  await expect.poll(actorCount).toBe(before + 1);
+  await expect(page.locator("[data-actor-vehicle-section]")).toBeVisible();
+  await page.getByRole("button", { name: "Undo Place Script_ReferenceCar" }).click();
+  await expect.poll(actorCount).toBe(before);
+});

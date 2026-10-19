@@ -565,7 +565,15 @@ ayarı bu doğrulamanın dışında.
       değiştirir). Tekerlek/süspansiyon/drivetrain asset'te kalır (not gösterilir).
       `VehicleAiDriver` için de form: spline id, entry, wrap, hedef hız,
       look-ahead, enabled (varsayılanlar yazılmaz).
-- [ ] Add-Actor menüsünde "Vehicle".
+- [x] Add-Actor menüsünde "Vehicle".
+      Yeni "Vehicles" kategorisi: araçlar engine yerleşiği değil proje içeriği —
+      Content Browser taramasında `Vehicle` component'i taşıyan her Actor Script
+      sınıfı bir giriş olur (tarama değişince menü yeniden kurulur; hiç yoksa
+      ipucu satırı). Sürükle-bırak `application/x-forge-actor-class` ile, tıklama
+      `SceneApp.addActorAtViewportCenter` ile (viewport merkezindeki yüzeye, yoksa
+      kameranın önüne) yerleştirir; yerleşen aktör seçilir ve Details'te Vehicle
+      bölümü açılır. Smoke: `tests/smoke/add-actor-menu.spec.ts` ("Add Actor
+      Vehicles …": listeler, tıkla-yerleştir, undo).
 - [x] Details: araç asset seçimi + hızlı ayarlar.
       Yeni yerleştirme alanı `LayoutActorInstance.vehicleOverrides`
       (`asset`, hızlı skalerler, `engineSound: {sound} | null`) — `patrolRoute`

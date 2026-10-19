@@ -1,6 +1,7 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
-> Durum: **Faz 0–3 temel kod kapsamı tamam**; sırada Faz 4.
+> Durum: **Faz 0–3 temel kod kapsamı tamam**; Faz 4'te **araca bin/in (4a)**
+> tamam, sırada save-game araç durumu (4b) ve kamera (4c).
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
@@ -8,6 +9,9 @@
 > Denemek için: editörde Content Browser → `Levels/VehicleTest` → Open Level →
 > Play. W/S gaz–fren/geri, A/D direksiyon, Space el freni, E aracı tekerleklerine
 > geri oturtur.
+> Yaya olarak: World Settings → Game Mode → `Script_GameMode` (proje TPS modu);
+> karakter arabanın sürücü kapısı yanındaki Player Start'ta doğar. E ile bin,
+> sür, E ile dur ve in.
 
 ## Karar: Rapier raycast vehicle + ince "aktarma organları" katmanı
 
@@ -288,12 +292,48 @@ ayarı bu doğrulamanın dışında.
 
 - [x] `vehicleModule.ts` capability modülü ve possess edilebilir araç pawn'ı
       (Faz 1b'de geldi).
-- [ ] Karakter **araca bin / in** (enter/exit noktası, karakter
-      gizlenir/bağlanır, TPS ↔ araç possess geçişi). Save-game: araç hızı.
+- [x] **4a — Karakter araca bin / in** (enter/exit noktası, karakter gizlenir,
+      TPS ↔ araç possess geçişi).
+- [ ] **4b — Save-game:** sürülen araç (hangi araç, poz, hız) ve "araçta mı"
+      durumu. Şu an araçtayken kaydedilirse oyuncu pozu olarak arabanın pozu
+      yazılır; yüklemede karakter o noktada yaya doğar, araba kendi spawn'ında.
 - [ ] Kamera: spring arm çarpışması (kamera duvar arkasına girmesin), fareyle
       etrafına bakma.
 - [ ] Ses kancası: RPM → motor ses cue pitch'i (audio modülü üzerinden).
 - [ ] AI: basit spline / nav takip eden araç sürücüsü (opsiyonel, ayrı dilim).
+
+### 4a — araca bin / in ✅
+
+- `VehicleDriver` (`src/game/gameModes/vehicleDriver.ts`): pedal eşlemesi, takip
+  kamerası, dik reset ve `?debug` satırı tek yerde. `forge.vehicle` ve TPS aynı
+  sürücüyü kullanır; kamera artık `PlayerCameraManager` üzerinden gider, böylece
+  yaya ↔ araç geçişinde görüş hedefi 0,25 s harmanlanır.
+- Saf kurallar `vehicleEntry.ts`: erişim yarıçapı (yatay 3,5 m, en yakın araç),
+  iniş noktaları sırası sürücü kapısı (yerel +X) → yolcu kapısı (−X) → arka;
+  yalnız aracın yaw'ı izlenir (yan yatmış araçtan da yere inilir). Statik
+  engel AABB'leriyle dolu nokta atlanır; hepsi doluysa sürücü kapısı.
+  Yer yüksekliği en alçak teker temasından, temas yoksa şasi kökünden.
+- `TpsCharacterSession` (dolayısıyla proje Game Mode'ları da): yayayken E,
+  erişimdeki araca biner — karakter gizlenir, çarpışması kapanır, controller
+  aracı possess eder. Araçtayken E: araç `maxExitSpeed`'in (2 m/s) üstündeyse
+  önce gidiş yönüne karşı fren + el freni, yavaşlayınca iner. Araç el freninde
+  park eder; karakter kapı noktasına ışınlanır, aracın baktığı yöne döner,
+  kamera arkasına geçer. Araç yok olursa karakter bindiği yerde görünür olur.
+  Ragdoll istekleri sürüş sırasında bekletilir. `vehicleEntry: null` ile kapanır.
+- `GameModeContext` isteğe bağlı köprüleri: `setEntityHidden`,
+  `setEntityCollisionEnabled`, `teleportCharacter` (shell'de çözücü + davranış
+  katmanından ışınlama; save-game yüklemesi de aynı yolu kullanır). Çarpışması
+  kapalı karakter diğer karakterlerin hareket engeli listesinden düşer.
+- `VehicleTest` seviyesine sürücü kapısı yanında bir Player Start eklendi
+  (`forge.vehicle` modunu etkilemez).
+- Testler: `tests/engine/vehicleEntry.test.ts` (8 kontrol: erişim, kapı sırası,
+  engel/zemin, zemin yüksekliği, durdurma pedalı, bin–sür–fren–in döngüsü, araç
+  kaybolması + dispose, UI modu / kapatma). Tarayıcı smoke'u: proje Game Mode'u
+  ile E → `vehicle-chase` → W ile >15 km/sa → E → yaya possess → W ile yürüme.
+- Bilinen sınırlar: binme/inme animasyonu yok (anında); kapı tanımı asset'te
+  değil sabit ofset; ters dönmüş araç TPS'te düzeltilemez (yalnız `forge.vehicle`
+  modunda E reset); `reverseSpeedThreshold` 2 m/s'den büyük bir araçta durdurma
+  pedalı fren yerine geri vitese düşebilir.
 
 ## Faz 5 — Editör yüzeyi
 

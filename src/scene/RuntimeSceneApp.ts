@@ -2012,6 +2012,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const blockers: Aabb3[] = [];
     this.characterMovement()?.forEachCharacter((entityId, transform) => {
       if (entityId === excludeEntityId) return;
+      // A switched-off character (a driver riding inside a vehicle) blocks nobody.
+      if (!this.physicsSubsystem.isEntityCollisionEnabled(entityId)) return;
       const half = this.physicsSubsystem.colliderHalfExtents(entityId);
       if (!half) return;
       blockers.push({
@@ -3360,17 +3362,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private applySavedPlayerTransform(player: SavedPlayerTransform): void {
     const entityId = this.gameModeSession?.playerState.pawnEntityId;
     if (!entityId) return;
+    const restored = this.teleportCharacterPawn(entityId, player.position, player.facingYawDeg);
+    if (restored) this.pawnRespawnTransforms.set(entityId, cloneTransform(restored));
+  }
+
+  /**
+   * Moves a character to `position` facing `yawDeg`, keeping its scale and tilt:
+   * through the movement solver and the behavior layer, so neither writes its
+   * stale copy back next frame. Returns the applied transform.
+   */
+  private teleportCharacterPawn(
+    entityId: string,
+    position: readonly [number, number, number],
+    yawDeg: number,
+  ): TransformComponent | null {
     const current = this.transformForEntity(entityId);
-    if (!current) return;
-    const restored: TransformComponent = {
-      position: [player.position[0], player.position[1], player.position[2]],
-      rotation: [current.rotation[0], player.facingYawDeg, current.rotation[2]],
+    if (!current) return null;
+    const moved: TransformComponent = {
+      position: [position[0], position[1], position[2]],
+      rotation: [current.rotation[0], yawDeg, current.rotation[2]],
       scale: [...current.scale],
     };
     this.locomotionReports.delete(entityId);
-    this.behaviorSubsystem.resetEntityTransform(entityId, restored);
-    this.resetCharacterTransform(entityId, restored);
-    this.pawnRespawnTransforms.set(entityId, cloneTransform(restored));
+    this.behaviorSubsystem.resetEntityTransform(entityId, moved);
+    this.resetCharacterTransform(entityId, moved);
+    return moved;
+  }
+
+  /** Shows/hides a character's or actor's rendered object (Game Mode bridge). */
+  private setEntityHidden(entityId: string, hidden: boolean): void {
+    const character = this.characterRefs.find((ref) => ref.entityId === entityId);
+    if (character) character.object.visible = !hidden;
+    else this.setActorObjectVisible(entityId, !hidden);
   }
 
   private transformForEntity(entityId: string): TransformComponent | null {
@@ -3449,6 +3472,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         state: (entityId) => this.physicsSubsystem.vehicleState(entityId),
         object: (entityId) => this.actorObjects.get(entityId) ?? null,
         reset: (entityId, transform) => this.physicsSubsystem.resetVehicle(entityId, transform),
+      },
+      setEntityHidden: (entityId, hidden) => this.setEntityHidden(entityId, hidden),
+      setEntityCollisionEnabled: (entityId, enabled) =>
+        this.physicsSubsystem.setEntityCollisionEnabled(entityId, enabled),
+      teleportCharacter: (entityId, position, yawDeg) => {
+        this.teleportCharacterPawn(entityId, position, yawDeg);
       },
       onScriptMessage: (type, handler, options) =>
         this.behaviorSubsystem.subscribeScriptMessage(

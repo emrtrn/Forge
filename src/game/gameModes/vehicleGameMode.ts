@@ -13,22 +13,11 @@
  * engine update is what the next slices drive with, and the camera reads the
  * interpolated render pose afterwards — no jitter between the two.
  */
-import { Quaternion, Vector3 } from "three";
 import { RuntimePlayerController } from "@/game/playerController";
 import { NEUTRAL_VEHICLE_INPUT } from "@engine/physics/vehicle/vehicleTypes";
 import { VEHICLE_GAME_MODE_ID } from "./catalog";
-import {
-  blendHeading,
-  chaseCameraPosition,
-  DEFAULT_VEHICLE_CHASE_CAMERA,
-  followAlpha,
-  planarHeadingFromQuaternion,
-  speedFieldOfView,
-  vehicleInputFromActions,
-  yawDegreesFromHeading,
-  type PlanarHeading,
-  type VehicleChaseCameraSettings,
-} from "./vehicleCameraControl";
+import { DEFAULT_VEHICLE_CHASE_CAMERA, type VehicleChaseCameraSettings } from "./vehicleCameraControl";
+import { VehicleDriver } from "./vehicleDriver";
 import type {
   GameModeContext,
   GameModeDefinition,
@@ -38,26 +27,19 @@ import type {
   PlayerState,
 } from "@/scene/gameModeTypes";
 
-/** How high above its current spot a reset drops the car back onto its wheels. */
-const RESET_LIFT = 1;
-
 class VehicleSession implements GameModeSession {
   readonly playerState: PlayerState;
   readonly gameState: GameState = { elapsedSeconds: 0 };
   private readonly controller: RuntimePlayerController;
-  private readonly position = new Vector3();
-  private readonly quaternion = new Quaternion();
-  private heading: PlanarHeading | null = null;
-  private cameraPlaced = false;
-  private baseFov: number;
+  private readonly driver: VehicleDriver;
 
   constructor(
     private readonly context: GameModeContext,
-    private readonly settings: VehicleChaseCameraSettings,
+    settings: VehicleChaseCameraSettings,
   ) {
     this.controller = new RuntimePlayerController(VEHICLE_PLAYER_CONTROLLER, context);
     this.playerState = this.controller.playerState;
-    this.baseFov = context.camera.fov;
+    this.driver = new VehicleDriver(context, this.controller.cameraManager, settings);
   }
 
   private get vehicleId(): string | null {
@@ -80,65 +62,24 @@ class VehicleSession implements GameModeSession {
       const first = this.context.vehicles?.ids()[0];
       if (first) this.controller.possess(first);
     }
-    const vehicles = this.context.vehicles;
     const id = this.vehicleId;
-    if (!vehicles || !id) return;
-    if (this.context.getInputMode() === "ui") {
-      vehicles.setInput(id, NEUTRAL_VEHICLE_INPUT);
-      return;
+    if (!this.context.vehicles || !id) return;
+    this.driver.drive(id);
+    if (this.context.getInputMode() !== "ui" && this.context.actions.pressed("interact")) {
+      this.driver.resetUpright(id);
     }
-    vehicles.setInput(id, vehicleInputFromActions(this.context.actions));
-    if (this.context.actions.pressed("interact")) this.resetUpright(id);
   }
 
   update(deltaSeconds: number): void {
     this.gameState.elapsedSeconds += deltaSeconds;
-    const vehicles = this.context.vehicles;
     const id = this.vehicleId;
-    const object = id ? vehicles?.object(id) : null;
-    if (!vehicles || !id || !object) return;
-
-    object.getWorldPosition(this.position);
-    object.getWorldQuaternion(this.quaternion);
-    const facing = planarHeadingFromQuaternion(this.quaternion);
-    if (facing) {
-      this.heading = this.heading
-        ? blendHeading(this.heading, facing, followAlpha(this.settings.headingFollowRate, deltaSeconds))
-        : facing;
-    }
-    if (!this.heading) return;
-
-    const { camera } = this.context;
-    const desired = chaseCameraPosition(this.position, this.heading, this.settings);
-    if (this.cameraPlaced) {
-      const alpha = followAlpha(this.settings.positionFollowRate, deltaSeconds);
-      camera.position.set(
-        camera.position.x + (desired.x - camera.position.x) * alpha,
-        camera.position.y + (desired.y - camera.position.y) * alpha,
-        camera.position.z + (desired.z - camera.position.z) * alpha,
-      );
-    } else {
-      camera.position.set(desired.x, desired.y, desired.z);
-      this.cameraPlaced = true;
-    }
-    camera.up.set(0, 1, 0);
-    camera.lookAt(this.position.x, this.position.y + this.settings.lookHeight, this.position.z);
-
-    const speed = vehicles.state(id)?.forwardSpeed ?? 0;
-    const fov = speedFieldOfView(this.baseFov, speed, this.settings);
-    if (Math.abs(camera.fov - fov) > 0.01) {
-      camera.fov = fov;
-      camera.updateProjectionMatrix();
-    }
+    if (id) this.driver.updateCamera(id, deltaSeconds);
   }
 
   dispose(): void {
     const id = this.vehicleId;
     if (id) this.context.vehicles?.setInput(id, NEUTRAL_VEHICLE_INPUT);
-    if (this.context.camera.fov !== this.baseFov) {
-      this.context.camera.fov = this.baseFov;
-      this.context.camera.updateProjectionMatrix();
-    }
+    this.driver.restoreFov();
     this.controller.unpossess();
   }
 
@@ -147,32 +88,11 @@ class VehicleSession implements GameModeSession {
     readonly controlPitchDeg: number | null;
     readonly cameraSource: string | null;
   } {
-    const id = this.vehicleId;
-    const state = id ? this.context.vehicles?.state(id) : null;
-    const speed = state?.forwardSpeed ?? 0;
-    const drivetrain = state?.drivetrain;
-    const engine = drivetrain
-      ? ` gear:${drivetrain.gear < 0 ? "R" : drivetrain.gear} rpm:${Math.round(drivetrain.engineRpm)} shift:${drivetrain.shiftTimeRemaining.toFixed(2)}s`
-      : "";
     return {
-      controlYawDeg: this.heading ? yawDegreesFromHeading(this.heading) : null,
+      controlYawDeg: this.driver.debugYawDeg(),
       controlPitchDeg: null,
-      cameraSource: `vehicle-chase pawn:${id ?? "none"} speed:${(speed * 3.6).toFixed(0)}km/h${engine}`,
+      cameraSource: this.driver.debugSource(this.vehicleId),
     };
-  }
-
-  /** Drops the car upright, a little above where it is, still facing the same way. */
-  private resetUpright(id: string): void {
-    const object = this.context.vehicles?.object(id);
-    if (!object) return;
-    object.getWorldPosition(this.position);
-    object.getWorldQuaternion(this.quaternion);
-    const heading = planarHeadingFromQuaternion(this.quaternion) ?? this.heading ?? { x: 0, z: 1 };
-    this.context.vehicles?.reset(id, {
-      position: [this.position.x, this.position.y + RESET_LIFT, this.position.z],
-      rotation: [0, yawDegreesFromHeading(heading), 0],
-      scale: [object.scale.x, object.scale.y, object.scale.z],
-    });
   }
 }
 

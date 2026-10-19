@@ -4,6 +4,20 @@
   "loadGroups": [],
   "instances": [
     {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            2.5,
+            0,
+            -1.5
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
       "assetId": "sm-road-asphalt",
       "placements": [
         {

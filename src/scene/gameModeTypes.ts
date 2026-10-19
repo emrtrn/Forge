@@ -214,6 +214,22 @@ export interface GameModeContext {
    */
   readonly vehicles?: GameModeVehicles;
   /**
+   * Shows or hides an entity's rendered object (Unreal `SetActorHiddenInGame`):
+   * a character riding inside a vehicle. Optional so headless/test contexts may
+   * omit it.
+   */
+  setEntityHidden?(entityId: string, hidden: boolean): void;
+  /**
+   * Runtime collision toggle (Unreal `SetActorEnableCollision`): a hidden driver
+   * must not shove the car it sits in. Optional for the same reason.
+   */
+  setEntityCollisionEnabled?(entityId: string, enabled: boolean): void;
+  /**
+   * Teleports a character pawn through its movement solver, keeping its scale
+   * and tilt (a driver stepping out of a vehicle). Optional for the same reason.
+   */
+  teleportCharacter?(entityId: string, position: Vec3, yawDeg: number): void;
+  /**
    * Subscribes the session to a runtime script message (e.g. `death`/`ragdoll`),
    * optionally scoped to one target entity, returning an unsubscribe handle. This
    * is the inbound counterpart to {@link emitAnimNotify}: it lets game logic or

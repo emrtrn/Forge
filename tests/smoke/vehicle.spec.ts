@@ -42,7 +42,7 @@ async function readVehicleCamera(page: Page): Promise<{ pawn: string; kmh: numbe
   return { pawn: match[1]!, kmh: Number(match[2]) };
 }
 
-async function openVehicleTest(page: Page): Promise<string[]> {
+async function openVehicleTest(page: Page, mode = "Vehicle"): Promise<string[]> {
   const consoleMessages: string[] = [];
   const pageErrors: string[] = [];
 
@@ -68,8 +68,10 @@ async function openVehicleTest(page: Page): Promise<string[]> {
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
 
   const stats = page.locator("#debug-stats");
-  await expect(stats).toContainText("mode: Vehicle", { timeout: 30_000 });
-  await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
+  await expect(stats).toContainText(`mode: ${mode}`, { timeout: 30_000 });
+  if (mode === "Vehicle") {
+    await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
+  }
   return pageErrors;
 }
 
@@ -94,6 +96,53 @@ test("vehicle smoke: the Reference Car is possessed and drives on W", async ({ p
     .toBeLessThan(-2);
   await page.keyboard.up("KeyS");
 
+  expect(pageErrors).toEqual([]);
+});
+
+test("vehicle smoke: a TPS character gets in with E, drives, and steps out beside the car", async ({ page }) => {
+  // Same level, played on foot: the starter project Game Mode (a TPS session)
+  // spawns its Player Character at the Player Start beside the driver's door.
+  await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    level.worldSettings.gameMode = "assets/starter-content/Gameplay/Script_GameMode.actor.json";
+    await route.fulfill({ response, json: level });
+  });
+  const pageErrors = await openVehicleTest(page, "Script_GameMode");
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText(/possessed: (?!actor:0|none)\S+/, { timeout: 30_000 });
+  await expect(stats).not.toContainText("vehicle-chase");
+
+  await page.locator("#game-canvas").click();
+  await page.keyboard.press("KeyE");
+  await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 10_000 });
+  await expect(stats).toContainText("possessed: actor:0");
+
+  await page.keyboard.down("KeyW");
+  await expect
+    .poll(async () => (await readVehicleCamera(page)).kmh, { timeout: 15_000 })
+    .toBeGreaterThan(15);
+  await page.keyboard.up("KeyW");
+
+  // E at speed brakes the car to a crawl first, then the character steps out.
+  await page.keyboard.press("KeyE");
+  await expect(stats).not.toContainText("vehicle-chase", { timeout: 15_000 });
+  await expect(stats).toContainText(/possessed: (?!actor:0|none)\S+/);
+  // The character walks again: it is the possessed pawn, so W moves it.
+  const readPos = async () => {
+    const match = ((await stats.textContent()) ?? "").match(/pos: (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/);
+    if (!match) throw new Error("no pawn position in the overlay");
+    return [Number(match[1]), Number(match[2]), Number(match[3])];
+  };
+  const before = await readPos();
+  await page.keyboard.down("KeyW");
+  await expect
+    .poll(async () => {
+      const now = await readPos();
+      return Math.hypot(now[0]! - before[0]!, now[2]! - before[2]!);
+    }, { timeout: 10_000 })
+    .toBeGreaterThan(0.5);
+  await page.keyboard.up("KeyW");
   expect(pageErrors).toEqual([]);
 });
 

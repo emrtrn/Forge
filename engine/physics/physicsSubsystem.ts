@@ -508,6 +508,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
   }
 
+  /** False while {@link setEntityCollisionEnabled} has the entity switched off. */
+  isEntityCollisionEnabled(entityId: EntityId): boolean {
+    return !this.collisionDisabled.has(entityId);
+  }
+
   contactsForEntity(entityId: EntityId): readonly PhysicsContact[] {
     return this.contacts.filter((contact) => contact.a === entityId || contact.b === entityId);
   }

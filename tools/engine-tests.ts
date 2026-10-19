@@ -1057,6 +1057,7 @@ import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAn
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 import { registerVehicleRuntimeTests } from "../tests/engine/vehicleRuntime.test";
+import { registerVehicleEntryTests } from "../tests/engine/vehicleEntry.test";
 import { registerVehicleDrivetrainTests } from "../tests/engine/vehicleDrivetrain.test";
 import { registerVehicleAssetTests } from "../tests/engine/vehicleAssets.test";
 import { resolveActorVehicleAssets } from "../src/scene/vehicleAssetLoader";
@@ -1170,6 +1171,7 @@ await registerSkeletalAnimationModuleTests(check, checkAsync);
 registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
 registerVehicleRuntimeTests(check);
+registerVehicleEntryTests(check);
 registerVehicleDrivetrainTests(check);
 await registerVehicleAssetTests(check, checkAsync);
 registerPerfReadoutTests(check);

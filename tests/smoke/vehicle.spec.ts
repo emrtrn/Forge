@@ -530,3 +530,56 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
   await page.screenshot({ path: testInfo.outputPath("kenney-sedan-lit-preview.png") });
   expect(pageErrors).toEqual([]);
 });
+
+test("vehicle authoring: place a car from Add Actor, save, Play, and drive it", async ({ page, context }) => {
+  // The editor opens the shared smoke level (global setup copies it, teardown
+  // restores it). Serve it as a flat, car-free copy of VehicleTest in
+  // forge.vehicle mode, so the placed car is the only vehicle to possess.
+  const flat = JSON.parse(await readFile(resolve("public", VEHICLE_LEVEL), "utf8")) as LevelJson;
+  flatLane(flat);
+  flat.blockingVolumes[0].size = [1000, 1, 1000]; // the save allowlist's largest volume
+  flat.actors = [];
+  flat.worldSettings.gameMode = GAME_MODES.Vehicle;
+  await page.route("**/__playwright-smoke.level.json", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({ json: flat });
+  });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto(`/?editor&vehicleAuthoring=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  const popover = page.locator("[data-add-actor-popover]");
+  await page.getByTestId("add-actor-button").hover();
+  await popover.getByRole("button", { name: /^Vehicles/ }).hover();
+  await popover
+    .locator('[data-add-key="vehicle:assets/starter-content/Gameplay/Script_ReferenceCar.actor.json"]')
+    .click({ timeout: 30_000 });
+  await expect(page.locator("[data-actor-vehicle-section]")).toBeVisible({ timeout: 10_000 });
+
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+
+  // Play saves again and opens the game route in a new tab.
+  const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
+  await runtime.waitForLoadState("domcontentloaded");
+  await expect(runtime.locator("#game-canvas")).toBeVisible();
+  const runtimeErrors: string[] = [];
+  runtime.on("pageerror", (error) => runtimeErrors.push(error.message));
+
+  // Same saved level, with the overlay that reads back the car's speed.
+  await runtime.goto(`/?debug&vehicleAuthoring=${Date.now()}`);
+  await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  const stats = runtime.locator("#debug-stats");
+  await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
+  await runtime.locator("#game-canvas").click();
+  await runtime.keyboard.down("KeyW");
+  await expect
+    .poll(async () => (await readVehicleCamera(runtime)).kmh, { timeout: 20_000 })
+    .toBeGreaterThan(15);
+  await runtime.keyboard.up("KeyW");
+  await runtime.close();
+
+  expect(pageErrors).toEqual([]);
+  expect(runtimeErrors).toEqual([]);
+});

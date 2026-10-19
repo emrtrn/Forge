@@ -606,8 +606,13 @@ ayarı bu doğrulamanın dışında.
       seyrek asset'i tüm varsayılanlarıyla açık yazar (effect editörüyle aynı).
 - [ ] Viewport: tekerlek bağlantı noktaları gizmo ile sürüklenebilir,
       süspansiyon menzili ve tekerlek yarıçapı wire olarak çizilir.
-- [ ] Browser smoke (`npm run smoke:browser`, port 5273): araç yerleştir →
+- [x] Browser smoke (`npm run smoke:browser`, port 5273): araç yerleştir →
       kaydet → Play → sür.
+      `tests/smoke/vehicle.spec.ts` ("vehicle authoring: …"): editör smoke
+      seviyesini düz, araçsız VehicleTest kopyası (`forge.vehicle`) olarak alır,
+      Add Actor → Vehicles → Script_ReferenceCar, Save, Play (yeni sekme oyunu
+      açar), aynı kayıtlı seviye `?debug` ile → W ile >15 km/h. Kayıt
+      global-setup'ın geçici smoke seviyesine yazar, teardown geri yükler.
 
 ## Kapsam dışı (şimdilik)
 

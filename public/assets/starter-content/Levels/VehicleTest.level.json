@@ -72,7 +72,7 @@
   "worldSettings": {
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
-    "gameMode": "forge.vehicle"
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
   },
   "skyAtmosphere": {
     "rayleigh": 1,

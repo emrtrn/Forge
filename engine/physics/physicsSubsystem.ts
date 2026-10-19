@@ -18,6 +18,7 @@ import {
   type VehicleDefinition,
   type VehicleDrivetrainState,
   type VehicleInput,
+  type VehicleMotionState,
   type VehicleState,
   type VehicleVec3,
 } from "./vehicle/vehicleTypes";
@@ -259,6 +260,57 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     record.steer = 0;
     record.drivetrain = initialVehicleDrivetrainState(record.definition);
+  }
+
+  /**
+   * The vehicle's velocities, handbrake and gearbox position, or null when the
+   * id is not a live vehicle — the half of a save its pose does not cover.
+   */
+  vehicleMotion(entityId: EntityId): VehicleMotionState | null {
+    const record = this.vehicles.get(entityId);
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !rapier) return null;
+    const linear = rapier.body.linvel();
+    const angular = rapier.body.angvel();
+    return {
+      linearVelocity: [linear.x, linear.y, linear.z],
+      angularVelocity: [angular.x, angular.y, angular.z],
+      handbrake: record.input.handbrake,
+      drivetrain: record.drivetrain
+        ? { gear: record.drivetrain.gear, engineRpm: record.drivetrain.engineRpm }
+        : null,
+    };
+  }
+
+  /**
+   * Puts a vehicle back where and how a save found it: teleported to
+   * `transform`, moving at the saved velocities, on (or off) its handbrake and
+   * in the saved gear. A gear the definition does not have, or a drivetrain on
+   * a car that has none, falls back to the reset state; RPM is clamped to the
+   * engine's range. Returns false when the id is not a live vehicle.
+   */
+  restoreVehicle(entityId: EntityId, transform: TransformComponent, motion: VehicleMotionState): boolean {
+    const record = this.vehicles.get(entityId);
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !rapier) return false;
+    this.resetVehicle(entityId, transform);
+    const [vx, vy, vz] = motion.linearVelocity;
+    const [wx, wy, wz] = motion.angularVelocity;
+    rapier.body.setLinvel({ x: vx, y: vy, z: vz }, true);
+    rapier.body.setAngvel({ x: wx, y: wy, z: wz }, true);
+    record.input = { ...NEUTRAL_VEHICLE_INPUT, handbrake: motion.handbrake };
+    const drivetrain = record.definition.drivetrain;
+    const gear = motion.drivetrain?.gear ?? 0;
+    const gearExists = gear === -1 || (gear >= 1 && gear <= (drivetrain?.transmission.forwardRatios.length ?? 0));
+    if (drivetrain && motion.drivetrain && gearExists) {
+      const { idleRpm, maxRpm } = drivetrain.engine;
+      record.drivetrain = {
+        gear,
+        engineRpm: Math.min(maxRpm, Math.max(idleRpm, motion.drivetrain.engineRpm)),
+        shiftTimeRemaining: 0,
+      };
+    }
+    return true;
   }
 
   /** Every entity currently driven as a vehicle, in creation order. */

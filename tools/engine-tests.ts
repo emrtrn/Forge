@@ -256,6 +256,8 @@ import {
   resolveVehicleDefinition,
   vehicleDefinitionFromComponent,
   type VehicleInput,
+  type VehicleMotionState,
+  type VehicleState,
 } from "../engine/physics/vehicle/vehicleTypes";
 import {
   initialElapsed,
@@ -7056,7 +7058,13 @@ await checkAsync("the starter Reference Car actor drives in the VehicleTest leve
     const level = JSON.parse(
       readFileSync("public/assets/starter-content/Levels/VehicleTest.level.json", "utf8"),
     ) as { worldSettings: { gameMode: string }; actors: LayoutActorInstance[] };
-    assert.equal(level.worldSettings.gameMode, "forge.vehicle");
+    // Driven directly (`forge.vehicle`) or boarded on foot (the project TPS mode).
+    assert.ok(
+      ["forge.vehicle", "assets/starter-content/Gameplay/Script_GameMode.actor.json"].includes(
+        level.worldSettings.gameMode,
+      ),
+      `VehicleTest plays in a mode that reaches the car: ${level.worldSettings.gameMode}`,
+    );
     const instance = level.actors[0] ?? assert.fail("car placement");
     const resolved = await resolveActorVehicleAssets(def, async (path) =>
       normalizeVehicleAsset(JSON.parse(readFileSync(`public/${path}`, "utf8"))));
@@ -7135,6 +7143,78 @@ await checkAsync("rapier vehicle drivetrain reference car reaches 100 km/h consi
     }
     assert.ok(Math.max(...times) - Math.min(...times) < 0.05, `frame-rate drift: ${times}`);
     console.info(`[vehicle] 0–100 km/h at 30/60/144 Hz: ${times.map((time) => time.toFixed(3)).join(" / ")} s`);
+  });
+});
+
+await checkAsync("rapier vehicle motion survives a save: speed, gear and handbrake restore into a fresh world", async () => {
+  await withQuietRapierInit(async () => {
+    const asset = normalizeVehicleAsset(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")));
+    const collider = actor.components.find((node) => node.component === "Collider")!.props;
+    /** A flat world with the reference car on its authored chassis collider. */
+    const referenceCarWorld = async () => {
+      const world = await createVehicleTestWorld({ groundSize: 2000 });
+      const car = world.entities[1]!;
+      world.physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
+      world.physics.createVehicle("car", asset);
+      return world;
+    };
+    const source = await referenceCarWorld();
+    let saved: { transform: TransformComponent; motion: VehicleMotionState; state: VehicleState };
+    try {
+      source.tick(1);
+      source.drive({ throttle: 1 });
+      source.tick(6);
+      saved = {
+        transform: source.physics.simulatedTransform("car") ?? assert.fail("no simulated pose"),
+        motion: source.physics.vehicleMotion("car") ?? assert.fail("no vehicle motion"),
+        state: source.physics.vehicleState("car") ?? assert.fail("no vehicle state"),
+      };
+      assert.ok(saved.state.forwardSpeed > 15, `saved at ${saved.state.forwardSpeed} m/s`);
+      assert.ok(saved.state.drivetrain!.gear >= 2, "saved past first gear");
+      assert.deepEqual(saved.motion.drivetrain, {
+        gear: saved.state.drivetrain!.gear,
+        engineRpm: saved.state.drivetrain!.engineRpm,
+      });
+      assert.equal(saved.motion.handbrake, false);
+      assert.equal(source.physics.vehicleMotion("ground"), null);
+    } finally {
+      source.physics.dispose();
+    }
+
+    const target = await referenceCarWorld();
+    try {
+      target.tick(0.5);
+      assert.equal(target.physics.restoreVehicle("ground", saved.transform, saved.motion), false);
+      assert.equal(target.physics.restoreVehicle("car", saved.transform, saved.motion), true);
+      const restored = target.physics.vehicleState("car")!;
+      assert.ok(Math.abs(restored.forwardSpeed - saved.state.forwardSpeed) < 0.01,
+        `restored at ${restored.forwardSpeed} m/s, saved ${saved.state.forwardSpeed}`);
+      assert.deepEqual(restored.drivetrain, { ...saved.motion.drivetrain!, shiftTimeRemaining: 0 });
+      const pose = target.physics.simulatedTransform("car")!;
+      for (let axis = 0; axis < 3; axis += 1) {
+        assert.ok(Math.abs(pose.position[axis]! - saved.transform.position[axis]!) < 1e-4, `position ${axis}`);
+        assert.ok(Math.abs(pose.rotation[axis]! - saved.transform.rotation[axis]!) < 1e-3, `rotation ${axis}`);
+      }
+      // It carries on coasting from there instead of starting from rest.
+      const startZ = pose.position[2];
+      target.tick(0.5);
+      assert.ok(target.position()[2] - startZ > 6, `coasted ${target.position()[2] - startZ} m`);
+
+      // A gear the car does not have falls back to the reset gearbox; RPM is clamped.
+      const rest = { linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] } as const;
+      target.physics.restoreVehicle("car", saved.transform, { ...rest, handbrake: true, drivetrain: { gear: 9, engineRpm: 3000 } });
+      assert.deepEqual(target.physics.vehicleState("car")!.drivetrain,
+        { gear: 1, engineRpm: asset.drivetrain!.engine.idleRpm, shiftTimeRemaining: 0 });
+      assert.equal(target.physics.vehicleMotion("car")!.handbrake, true, "parked on its handbrake");
+      target.physics.restoreVehicle("car", saved.transform, { ...rest, handbrake: false, drivetrain: { gear: -1, engineRpm: 99_999 } });
+      assert.deepEqual(target.physics.vehicleState("car")!.drivetrain,
+        { gear: -1, engineRpm: asset.drivetrain!.engine.maxRpm, shiftTimeRemaining: 0 });
+    } finally {
+      target.physics.dispose();
+    }
   });
 });
 
@@ -16129,6 +16209,8 @@ check("game save serializer: collects level, player facing, and persistent state
       { entityId: "coin", key: "collected", value: true },
       { entityId: "lamp", key: "enabled", value: false },
     ],
+    vehicles: [],
+    drivingVehicleId: null,
   });
   assert.deepEqual(applySaveState(state), {
     levelPath: "Levels/Playground.level.json",
@@ -16137,7 +16219,57 @@ check("game save serializer: collects level, player facing, and persistent state
       { entityId: "coin", key: "collected", value: true },
       { entityId: "lamp", key: "enabled", value: false },
     ],
+    vehicles: [],
+    drivingVehicleId: null,
   });
+});
+
+check("game save serializer: round-trips vehicles and the ride, dropping only bad vehicle entries", () => {
+  const car = {
+    entityId: "actor:0",
+    position: [12, 0.4, -30] as [number, number, number],
+    rotation: [2, 95, -1] as [number, number, number],
+    linearVelocity: [9, 0, -1] as [number, number, number],
+    angularVelocity: [0, 0.2, 0] as [number, number, number],
+    handbrake: false,
+    drivetrain: { gear: 2, engineRpm: 4100 },
+  };
+  const parked = { ...car, entityId: "actor:1", linearVelocity: [0, 0, 0] as [number, number, number],
+    angularVelocity: [0, 0, 0] as [number, number, number], handbrake: true, drivetrain: null };
+  const state = collectSaveState({
+    activeLevelPath: "Levels/VehicleTest.level.json",
+    playerTransform: { position: car.position, rotation: car.rotation },
+    vehicles: [car, parked],
+    drivingVehicleId: "actor:0",
+  });
+  assert.deepEqual(state.vehicles, [car, parked]);
+  assert.equal(state.drivingVehicleId, "actor:0");
+  const restore = applySaveState(JSON.parse(JSON.stringify(state)));
+  assert.deepEqual(restore?.vehicles, [car, parked]);
+  assert.equal(restore?.drivingVehicleId, "actor:0");
+
+  // A damaged entry loses that car its pose, not the whole load.
+  const damaged = applySaveState({
+    activeLevelPath: "Levels/VehicleTest.level.json",
+    player: null,
+    flags: [],
+    vehicles: [
+      { ...car, linearVelocity: [Number.NaN, 0, 0] },
+      { ...car, entityId: "" },
+      { ...car, entityId: "neutral-gear", drivetrain: { gear: 0, engineRpm: 900 } },
+      { ...car, entityId: "fractional-gear", drivetrain: { gear: 1.5, engineRpm: 900 } },
+      { ...parked, handbrake: "yes" },
+      { ...parked, handbrake: true, entityId: "actor:1" },
+    ],
+    drivingVehicleId: "",
+  });
+  assert.deepEqual(damaged?.vehicles, [{ ...parked, handbrake: false }], "first valid entry per id wins");
+  assert.equal(damaged?.drivingVehicleId, null);
+
+  // A save written before vehicles were captured still loads, on foot.
+  const legacy = applySaveState({ activeLevelPath: "Levels/A.level.json", player: null, flags: [] });
+  assert.deepEqual(legacy?.vehicles, []);
+  assert.equal(legacy?.drivingVehicleId, null);
 });
 
 check("game save serializer: rejects bad player transforms and drops non-json flags", () => {
@@ -16163,6 +16295,8 @@ check("game save serializer: rejects bad player transforms and drops non-json fl
       levelPath: "Levels/A.level.json",
       player: null,
       persistentState: [{ entityId: "ok", key: "enabled", value: true }],
+      vehicles: [],
+      drivingVehicleId: null,
     },
   );
 });

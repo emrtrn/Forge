@@ -301,6 +301,18 @@ export interface GameModeSession {
   beforeEngineUpdate?(deltaSeconds: number): void;
   /** Optional control yaw for camera-relative pawn movement. */
   controlYawForEntity?(entityId: string): number | null;
+  /**
+   * The vehicle an on-foot pawn is driving, or null on foot — what a save-game
+   * records as "in a vehicle". Absent for a mode that never boards one,
+   * including one whose pawn *is* the vehicle.
+   */
+  readonly drivingVehicleId?: string | null;
+  /**
+   * Seats the player straight in `vehicleEntityId`: a save-game load, so no
+   * reach check and no `interact` press. Returns false when it cannot (the car
+   * is gone, boarding is off, the pawn is not in control of itself).
+   */
+  boardVehicle?(vehicleEntityId: string): boolean;
   /** Optional runtime camera/control state for debug overlays. */
   getCameraDebug?(): {
     readonly controlYawDeg: number | null;

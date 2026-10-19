@@ -322,6 +322,7 @@ import {
   collectSaveState,
   type GameSaveState,
   type SavedPlayerTransform,
+  type SavedVehicleState,
 } from "@engine/persistence/saveGameState";
 import { createLocalStorageAdapter } from "@engine/persistence/saveGameStore";
 import {
@@ -950,7 +951,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       capture: () => this.collectCurrentSaveState(),
       restore: (request) => {
         this.behaviorSubsystem.applyPersistentStateSnapshot(request.persistentState);
-        if (request.player) this.applySavedPlayerTransform(request.player);
+        const restoredVehicles = this.applySavedVehicles(request.vehicles);
+        if (request.player) this.applySavedPlayerTransform(request.player, restoredVehicles);
+        if (request.drivingVehicleId) this.applySavedVehicleRide(request.drivingVehicleId);
       },
     });
     this.runtimeServices.provide(levelTravelService, (levelPath) =>
@@ -3065,7 +3068,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       activeLevelPath: this.activeLevelPath,
       playerTransform,
       persistentState: this.behaviorSubsystem.getPersistentStateSnapshot(),
+      vehicles: this.collectSavedVehicles(),
+      drivingVehicleId: this.gameModeSession?.drivingVehicleId ?? null,
     });
+  }
+
+  /** Every live vehicle's simulated pose and motion, for the save payload. */
+  private collectSavedVehicles(): SavedVehicleState[] {
+    const vehicles: SavedVehicleState[] = [];
+    for (const entityId of this.physicsSubsystem.vehicleEntityIds()) {
+      const transform = this.transformForEntity(entityId);
+      const motion = this.physicsSubsystem.vehicleMotion(entityId);
+      if (!transform || !motion) continue;
+      vehicles.push({
+        entityId,
+        position: [...transform.position],
+        rotation: [...transform.rotation],
+        linearVelocity: [...motion.linearVelocity],
+        angularVelocity: [...motion.angularVelocity],
+        handbrake: motion.handbrake,
+        drivetrain: motion.drivetrain,
+      });
+    }
+    return vehicles;
   }
 
   /**
@@ -3359,11 +3384,58 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.resetCharacterTransform(entityId, reset);
   }
 
-  private applySavedPlayerTransform(player: SavedPlayerTransform): void {
+  private applySavedPlayerTransform(
+    player: SavedPlayerTransform,
+    restoredVehicles: ReadonlySet<string>,
+  ): void {
     const entityId = this.gameModeSession?.playerState.pawnEntityId;
     if (!entityId) return;
+    // A pawn that is itself a vehicle (`forge.vehicle`) came back with its
+    // motion from the vehicle list; a save from before that list existed still
+    // puts it at the saved spot, at rest.
+    if (this.physicsSubsystem.hasVehicle(entityId)) {
+      if (restoredVehicles.has(entityId)) return;
+      const current = this.transformForEntity(entityId);
+      if (!current) return;
+      this.physicsSubsystem.resetVehicle(entityId, {
+        position: [...player.position],
+        rotation: [0, player.facingYawDeg, 0],
+        scale: [...current.scale],
+      });
+      return;
+    }
     const restored = this.teleportCharacterPawn(entityId, player.position, player.facingYawDeg);
     if (restored) this.pawnRespawnTransforms.set(entityId, cloneTransform(restored));
+  }
+
+  /**
+   * Puts each saved vehicle that still exists in this level back at its saved
+   * pose and motion (keeping its current scale). Returns the ids restored.
+   */
+  private applySavedVehicles(vehicles: readonly SavedVehicleState[]): Set<string> {
+    const restored = new Set<string>();
+    for (const saved of vehicles) {
+      const current = this.transformForEntity(saved.entityId);
+      if (!current) continue;
+      const ok = this.physicsSubsystem.restoreVehicle(
+        saved.entityId,
+        { position: [...saved.position], rotation: [...saved.rotation], scale: [...current.scale] },
+        saved,
+      );
+      if (ok) restored.add(saved.entityId);
+      else console.warn("[runtime] saved vehicle is not a vehicle in this level", saved.entityId);
+    }
+    return restored;
+  }
+
+  /**
+   * Seats the player back in the vehicle they were driving. When that cannot
+   * happen (the car is gone, or the Game Mode does not board vehicles) the
+   * on-foot pawn simply stays where the player transform put it.
+   */
+  private applySavedVehicleRide(vehicleEntityId: string): void {
+    if (this.gameModeSession?.boardVehicle?.(vehicleEntityId)) return;
+    console.warn("[runtime] saved vehicle ride could not be restored", vehicleEntityId);
   }
 
   /**

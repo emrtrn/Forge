@@ -110,6 +110,21 @@ export interface VehicleDrivetrainState {
   readonly shiftTimeRemaining: number;
 }
 
+/**
+ * What a moving vehicle carries beyond its pose: velocities, the handbrake it
+ * stands on and its gearbox position. Read and re-applied around a save-game
+ * (vehicle plan 4b) so a car saved at speed comes back at speed.
+ */
+export interface VehicleMotionState {
+  /** World m/s. */
+  readonly linearVelocity: VehicleVec3;
+  /** World rad/s. */
+  readonly angularVelocity: VehicleVec3;
+  readonly handbrake: boolean;
+  /** Null for a car without a drivetrain (flat-force model). */
+  readonly drivetrain: { readonly gear: number; readonly engineRpm: number } | null;
+}
+
 /** Versioned on-disk envelope; physics only needs the definition inside it. */
 export interface VehicleAsset extends VehicleDefinition {
   readonly schema: 1;

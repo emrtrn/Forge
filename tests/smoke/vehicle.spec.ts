@@ -15,12 +15,20 @@ import { resolve } from "node:path";
  *
  * The level is opened by rewriting the project manifest's `defaultScene` in
  * flight, so neither the committed project file nor the shared smoke setup is
- * touched.
+ * touched. Each test also picks the level's Game Mode in flight, so the mode
+ * the level happens to be authored with does not decide what is tested.
  */
 const VEHICLE_LEVEL = "assets/starter-content/Levels/VehicleTest.level.json";
 const VEHICLE_LOADED = '"layout":"VehicleTest"';
 const VEHICLE_ASSET = "assets/starter-content/Gameplay/ReferenceCar.vehicle.json";
 const VEHICLE_ACTOR = "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json";
+/** Debug-overlay mode name → the `worldSettings.gameMode` that selects it. */
+const GAME_MODES = {
+  Vehicle: "forge.vehicle",
+  Script_GameMode: "assets/starter-content/Gameplay/Script_GameMode.actor.json",
+} as const;
+type VehicleTestMode = keyof typeof GAME_MODES;
+type LevelJson = any; // raw level JSON, edited in flight
 
 test.setTimeout(210_000);
 
@@ -34,6 +42,13 @@ async function waitForConsoleText(
   await page.waitForEvent("console", { predicate: () => seen(), timeout: 60_000 });
 }
 
+/** Strips the ramp and props and stretches the ground into a long flat lane. */
+function flatLane(level: LevelJson): void {
+  level.instances = [];
+  level.blockingVolumes = [level.blockingVolumes.find((volume: { id: string }) => volume.id === "vehicle-test-ground")];
+  level.blockingVolumes[0].size = [2000, 1, 2000];
+}
+
 /** The vehicle mode publishes its pawn and speed on the overlay's `camera:` line. */
 async function readVehicleCamera(page: Page): Promise<{ pawn: string; kmh: number }> {
   const text = (await page.locator("#debug-stats").textContent()) ?? "";
@@ -42,9 +57,20 @@ async function readVehicleCamera(page: Page): Promise<{ pawn: string; kmh: numbe
   return { pawn: match[1]!, kmh: Number(match[2]) };
 }
 
-async function openVehicleTest(page: Page, mode = "Vehicle"): Promise<string[]> {
+async function openVehicleTest(
+  page: Page,
+  mode: VehicleTestMode = "Vehicle",
+  editLevel?: (level: LevelJson) => void,
+): Promise<string[]> {
   const consoleMessages: string[] = [];
   const pageErrors: string[] = [];
+  await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    level.worldSettings.gameMode = GAME_MODES[mode];
+    editLevel?.(level);
+    await route.fulfill({ response, json: level });
+  });
 
   await page.context().addInitScript(() => {
     localStorage.clear();
@@ -102,12 +128,6 @@ test("vehicle smoke: the Reference Car is possessed and drives on W", async ({ p
 test("vehicle smoke: a TPS character gets in with E, drives, and steps out beside the car", async ({ page }) => {
   // Same level, played on foot: the starter project Game Mode (a TPS session)
   // spawns its Player Character at the Player Start beside the driver's door.
-  await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
-    const response = await route.fetch();
-    const level = await response.json();
-    level.worldSettings.gameMode = "assets/starter-content/Gameplay/Script_GameMode.actor.json";
-    await route.fulfill({ response, json: level });
-  });
   const pageErrors = await openVehicleTest(page, "Script_GameMode");
   const stats = page.locator("#debug-stats");
   await expect(stats).toContainText(/possessed: (?!actor:0|none)\S+/, { timeout: 30_000 });
@@ -143,6 +163,62 @@ test("vehicle smoke: a TPS character gets in with E, drives, and steps out besid
     }, { timeout: 10_000 })
     .toBeGreaterThan(0.5);
   await page.keyboard.up("KeyW");
+  expect(pageErrors).toEqual([]);
+});
+
+/** The possessed character's world position off the `?debug` game-mode block (none in a car). */
+async function readPawnPosition(page: Page): Promise<[number, number, number]> {
+  const text = (await page.locator("#debug-stats").textContent()) ?? "";
+  const match = text.match(/pos: (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/);
+  if (!match) throw new Error(`no pawn position in the overlay:
+${text}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+test("vehicle save-game: a quick-save while driving loads back behind the wheel, moving", async ({ page }) => {
+  // On foot (TPS), with the starter Save / Load menu as the pause menu.
+  const pageErrors = await openVehicleTest(page, "Script_GameMode", (level) => {
+    level.worldSettings.pauseMenuWidget = "menu";
+  });
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText(/possessed: (?!actor:0|none)\S+/, { timeout: 30_000 });
+  await expect(stats).toContainText('save.slots.quick.status = "Empty"');
+
+  await expect.poll(async () => readPawnPosition(page).then(() => true, () => false)).toBe(true);
+  const boardedAt = await readPawnPosition(page);
+  await page.locator("#game-canvas").click();
+  await page.keyboard.press("KeyE");
+  await expect(stats).toContainText("possessed: actor:0", { timeout: 10_000 });
+  await page.keyboard.down("KeyW");
+  await expect
+    .poll(async () => (await readVehicleCamera(page)).kmh, { timeout: 20_000 })
+    .toBeGreaterThan(25);
+  await page.keyboard.up("KeyW");
+
+  // The overlay keeps reporting, but must not sit over the menu's buttons.
+  await page.addStyleTag({ content: "#debug-stats, #debug-stats * { pointer-events: none !important; }" });
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-ui-id="title"]')).toContainText("Save / Load");
+  await page.locator('[data-ui-id="quick-save"]').click();
+  await expect(stats).toContainText(/save\.slots\.quick\.status = "Saved /, { timeout: 10_000 });
+  await page.locator('[data-ui-id="quick-load"]').click();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+
+  // Back in the car — not on foot at the Player Start, not in a car parked at
+  // its spawn at rest: still rolling from the saved speed.
+  await expect(stats).toContainText("possessed: actor:0", { timeout: 30_000 });
+  await expect(stats).toContainText(/vehicle-chase pawn:actor:0/);
+  expect((await readVehicleCamera(page)).kmh).toBeGreaterThan(5);
+
+  // E still gets the character out — beside the car where it was saved, well
+  // away from where it was boarded.
+  await page.locator("#game-canvas").click();
+  await page.keyboard.press("KeyE");
+  await expect(stats).not.toContainText("vehicle-chase", { timeout: 20_000 });
+  await expect(stats).toContainText(/possessed: (?!actor:0|none)\S+/);
+  await expect.poll(async () => readPawnPosition(page).then(() => true, () => false)).toBe(true);
+  const exitedAt = await readPawnPosition(page);
+  expect(Math.hypot(exitedAt[0] - boardedAt[0], exitedAt[2] - boardedAt[2])).toBeGreaterThan(8);
   expect(pageErrors).toEqual([]);
 });
 
@@ -217,15 +293,7 @@ test("vehicle asset controls the engine force and inline actor props override it
 
 test("vehicle drivetrain shows RPM shifts to second reverses and resets in the browser", async ({ page }) => {
   // A long flat lane keeps the gear check independent of the authored ramp.
-  await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
-    const response = await route.fetch();
-    const level = await response.json();
-    level.instances = [];
-    level.blockingVolumes = [level.blockingVolumes.find((volume: { id: string }) => volume.id === "vehicle-test-ground")];
-    level.blockingVolumes[0].size = [2000, 1, 2000];
-    await route.fulfill({ response, json: level });
-  });
-  const pageErrors = await openVehicleTest(page);
+  const pageErrors = await openVehicleTest(page, "Vehicle", flatLane);
   const stats = page.locator("#debug-stats");
   await expect(stats).toContainText(/gear:1 rpm:900/);
   await page.locator("#game-canvas").click();
@@ -304,6 +372,7 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
     delete level.skyAtmosphere;
     delete level.heightFog;
     delete level.cloudLayer;
+    level.worldSettings.gameMode = GAME_MODES.Vehicle;
     level.worldSettings.ambientIntensity = 2;
     level.worldSettings.backgroundColor = "#c8d8e8";
     await route.fulfill({ response, json: level });

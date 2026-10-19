@@ -1,17 +1,19 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
 > Durum: **Faz 0–3 temel kod kapsamı tamam**; Faz 4'te **araca bin/in (4a)**
-> tamam, sırada save-game araç durumu (4b) ve kamera (4c).
+> ve **save-game araç durumu (4b)** tamam, sırada kamera (4c).
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
 >
 > Denemek için: editörde Content Browser → `Levels/VehicleTest` → Open Level →
-> Play. W/S gaz–fren/geri, A/D direksiyon, Space el freni, E aracı tekerleklerine
-> geri oturtur.
-> Yaya olarak: World Settings → Game Mode → `Script_GameMode` (proje TPS modu);
-> karakter arabanın sürücü kapısı yanındaki Player Start'ta doğar. E ile bin,
-> sür, E ile dur ve in.
+> Play. Seviye `5f4ce2d`'den beri yaya modla (`Script_GameMode`, proje TPS
+> modu) geliyor: karakter arabanın sürücü kapısı yanındaki Player Start'ta
+> doğar. E ile bin, sür, E ile dur ve in.
+> Doğrudan araçla: World Settings → Game Mode → `forge.vehicle`. W/S gaz–fren/geri,
+> A/D direksiyon, Space el freni, E aracı tekerleklerine geri oturtur.
+> Testler seviyenin authored modundan bağımsız: smoke her testte modu route ile
+> seçer, engine testi iki modu da kabul eder.
 
 ## Karar: Rapier raycast vehicle + ince "aktarma organları" katmanı
 
@@ -294,9 +296,8 @@ ayarı bu doğrulamanın dışında.
       (Faz 1b'de geldi).
 - [x] **4a — Karakter araca bin / in** (enter/exit noktası, karakter gizlenir,
       TPS ↔ araç possess geçişi).
-- [ ] **4b — Save-game:** sürülen araç (hangi araç, poz, hız) ve "araçta mı"
-      durumu. Şu an araçtayken kaydedilirse oyuncu pozu olarak arabanın pozu
-      yazılır; yüklemede karakter o noktada yaya doğar, araba kendi spawn'ında.
+- [x] **4b — Save-game:** seviyedeki tüm araçların pozu/hızı/el freni/vitesi ve
+      "araçta mı" durumu; yüklemede oyuncu sürdüğü araca geri oturur.
 - [ ] Kamera: spring arm çarpışması (kamera duvar arkasına girmesin), fareyle
       etrafına bakma.
 - [ ] Ses kancası: RPM → motor ses cue pitch'i (audio modülü üzerinden).
@@ -334,6 +335,44 @@ ayarı bu doğrulamanın dışında.
   değil sabit ofset; ters dönmüş araç TPS'te düzeltilemez (yalnız `forge.vehicle`
   modunda E reset); `reverseSpeedThreshold` 2 m/s'den büyük bir araçta durdurma
   pedalı fren yerine geri vitese düşebilir.
+
+### 4b — save-game araç durumu ✅
+
+- Payload (`engine/persistence/saveGameState.ts`, şema 1'de **eklemeli** alanlar):
+  `vehicles[]` — seviyedeki **her** canlı araç için `entityId`, `position`,
+  `rotation` (Euler derece, `TransformComponent` kuralı), `linearVelocity`
+  (m/s), `angularVelocity` (rad/s), `handbrake`, `drivetrain` (`gear`,
+  `engineRpm` ya da null) — ve `drivingVehicleId` (yayadan binilmiş araç; yayada
+  ve aracın kendisi pawn olan `forge.vehicle`'da null). Yalnız sürülen değil tüm
+  araçlar yazılır: seviyenin öbür ucuna park edilmiş araba yüklemede orada kalır.
+- `player` alanı değişmedi: araçtayken pawn araç olduğundan arabanın pozu. Bu,
+  araç yüklemede yoksa karakterin ayağa kalktığı nokta.
+- Doğrulama yüklemede: bozuk araç girdisi yalnız o aracın pozunu kaybettirir,
+  yüklemeyi değil; aynı id'de ilk geçerli girdi kazanır; vites `-1` ya da `≥1`
+  tam sayı olmalı. 4b öncesi kayıtlar `vehicles: []`, `drivingVehicleId: null`
+  ile yaya yüklenir.
+- `PhysicsSubsystem.vehicleMotion(id)` (hız, el freni, vites/RPM okuma) ve
+  `restoreVehicle(id, transform, motion)`: `resetVehicle` + hızlar + el freni
+  girdisi + vites. Tanımda olmayan vites (ya da drivetrain'siz araç) sıfır
+  vites kutusuna düşer; RPM motor aralığına kırpılır; vites geçişi sıfırlanır.
+- Shell sırası: kalıcı state → araçlar (mevcut ölçek korunur) → oyuncu pozu →
+  araca oturma. Pawn'ı araç olan modda oyuncu pozu atlanır (araç listesinden
+  geldi); araç listesi olmayan eski kayıtta o araç kayıtlı noktaya durağan konur.
+- `GameModeSession` isteğe bağlı `drivingVehicleId` ve `boardVehicle(id)`:
+  `TpsCharacterSession` erişim kontrolü / E basışı olmadan biner. Oturamazsa
+  (araç yok, binme kapalı) uyarı verilir ve karakter `player` pozunda yaya kalır.
+- Testler: payload round-trip + bozuk girdi/eski kayıt (engine); Rapier'de
+  hızlanan araç anlık görüntüsü yeni dünyaya hız/vites/poz ile geri yüklenir ve
+  yuvarlanmaya devam eder, geçersiz vites/RPM kırpma, el freni; TPS
+  `boardVehicle`. Tarayıcı smoke'u: TPS'te bin → >25 km/sa → pause menü quick
+  save → quick load → `actor:0` possess, hâlâ >5 km/sa, E ile kaydedilen yerin
+  yanında in.
+- Bilinen sınırlar: araç dışındaki dinamik gövdeler (kutular) hâlâ kayda
+  girmez; direksiyon açısı ve süspansiyon sıkışması kaydedilmez (ilk adımda
+  oturur); runtime'da spawn edilen araçların id'si yeni oturumda eşleşmezse
+  atlanır (uyarı).
+- Doğrulama (2026-10-19): `tsc`, tam engine **1193 kontrol**, `build:verify`
+  geçti; araç Chromium smoke'u **7/7**.
 
 ## Faz 5 — Editör yüzeyi
 

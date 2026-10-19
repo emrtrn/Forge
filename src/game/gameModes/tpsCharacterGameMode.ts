@@ -426,6 +426,15 @@ export class TpsCharacterSession implements GameModeSession {
     if (target) this.enterVehicle(player, target);
   }
 
+  boardVehicle(vehicleEntityId: string): boolean {
+    const player = this.player;
+    if (!this.vehicleEntry || !player || this.ridingVehicleId) return false;
+    if (this.ragdoll || this.getup || this.playerState.pawnControlSuspended) return false;
+    if (!this.context.vehicles?.ids().includes(vehicleEntityId)) return false;
+    this.enterVehicle(player, vehicleEntityId);
+    return true;
+  }
+
   private enterVehicle(player: RuntimeCharacterRef, vehicleId: string): void {
     this.ridingVehicleId = vehicleId;
     this.exitRequested = false;

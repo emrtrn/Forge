@@ -6,7 +6,8 @@
  *   (B) the TPS session against a recording fake context — E climbs in (hide,
  *       collision off, possess the car, chase camera), keys drive, E again
  *       brakes to a crawl, then steps out at the driver's door facing the way
- *       the car faces, with the car parked on its handbrake.
+ *       the car faces, with the car parked on its handbrake; a save-game
+ *       load seats the player straight back in the car it was driving.
  */
 import assert from "node:assert/strict";
 import { Group, Object3D, PerspectiveCamera, Vector3 } from "three";
@@ -283,6 +284,31 @@ export function registerVehicleEntryTests(check: Check): void {
     assert.equal(second.hidden.get("hero"), false);
     assert.equal(second.collision.get("hero"), true);
     assert.deepEqual(second.inputs.at(-1), PARKED_VEHICLE_INPUT);
+  });
+
+  check("tps save-game load seats the player straight back in the car it was driving", () => {
+    const world = fakeWorld();
+    const session = startSession(world);
+    // Out of reach and without E: a restore is not a boarding attempt.
+    world.hero.position.set(40, 0, 0);
+    assert.equal(session.boardVehicle("ghost"), false, "a car that is not in the level");
+    assert.equal(session.drivingVehicleId, null);
+    assert.equal(session.boardVehicle("car"), true);
+    assert.equal(session.drivingVehicleId, "car");
+    assert.equal(session.playerState.pawnEntityId, "car");
+    assert.equal(world.hidden.get("hero"), true);
+    assert.equal(world.collision.get("hero"), false);
+    assert.equal(session.boardVehicle("car"), false, "already driving");
+    world.hold("KeyW");
+    session.beforeEngineUpdate?.(1 / 60);
+    assert.deepEqual(world.inputs.at(-1), { throttle: 1, brake: 0, steer: 0, handbrake: false });
+
+    const optedOut = fakeWorld();
+    const plain = new TpsCharacterSession(optedOut.context, undefined, { vehicleEntry: null });
+    plain.spawnDefaultPawn();
+    plain.possess();
+    assert.equal(plain.boardVehicle("car"), false, "a session that never boards vehicles");
+    assert.equal(plain.playerState.pawnEntityId, "hero");
   });
 
   check("tps vehicle entry is off in UI mode and when the session opts out", () => {

@@ -1,9 +1,12 @@
 # Araç Fiziği Planı (Vehicle Physics)
 
-> Durum: **Faz 0–3 temel kod kapsamı tamam**; Faz 4'te **araca bin/in (4a)**,
+> Durum: **Faz 0–5 kod kapsamı tamam.** Faz 4'te **araca bin/in (4a)**,
 > **save-game araç durumu (4b)**, **takip kamerası çarpışma + fareyle bakma
-> (4c)**, **RPM → motor sesi (4d)** ve **spline takip eden AI sürücü (4e)**
-> tamam; Faz 4 kapandı. Sıradaki büyük adım Faz 5 (editör yüzeyi).
+> (4c)**, **RPM → motor sesi (4d)** ve **spline takip eden AI sürücü (4e)**;
+> Faz 5'te (2026-10-19) `?debug` süspansiyon wire'ı, Vehicle / AI driver
+> formları, yerleştirme başına `vehicleOverrides`, Add Actor → Vehicles,
+> Vehicle asset editörü, Actor Script viewport'unda tekerlek gizmo'su ve
+> yerleştir→kaydet→Play→sür smoke'u.
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
@@ -604,8 +607,20 @@ ayarı bu doğrulamanın dışında.
       (model 3 kontrol), smoke `tests/smoke/vehicle-asset-editor.spec.ts`
       (kayıt isteği yakalanır, commit'li asset yazılmaz). Not: editörden kayıt
       seyrek asset'i tüm varsayılanlarıyla açık yazar (effect editörüyle aynı).
-- [ ] Viewport: tekerlek bağlantı noktaları gizmo ile sürüklenebilir,
+- [x] Viewport: tekerlek bağlantı noktaları gizmo ile sürüklenebilir,
       süspansiyon menzili ve tekerlek yarıçapı wire olarak çizilir.
+      Karar (2026-10-19): Actor Script viewport'u — sınıfın modeli ile Vehicle
+      component'i orada buluşur. `ActorScriptViewport.setVehicleWheels`: tekerlek
+      başına camgöbeği bağlantı noktası tutamacı + yay ekseni, `rest ± maxTravel`
+      işaretleri ve dinlenmedeki lastik çemberi (`wheelWireSegments`), aktör kökü
+      (şasi) çerçevesinde — runtime tekerlek rig'iyle aynı. Tutamaca tıkla →
+      tekerlek seçilir, Move gizmo'su bağlanır; sürükleme
+      `ActorScriptEditor.moveWheel` ile yazılır: inline tekerlekler →
+      component; asset'ten gelen tekerlekler → asset taslağı, sınıfla birlikte
+      Save'de `/__save-vehicle` (durum satırı paylaşılan asset'e yazılacağını
+      söyler); ikisi de yoksa referans araba tekerlekleri inline'a açılır.
+      Smoke: `vehicle-asset-editor.spec.ts` ("Actor Script viewport drags …",
+      tutamaç pikselleri ile bulunur, kayıt yakalanır).
 - [x] Browser smoke (`npm run smoke:browser`, port 5273): araç yerleştir →
       kaydet → Play → sür.
       `tests/smoke/vehicle.spec.ts` ("vehicle authoring: …"): editör smoke

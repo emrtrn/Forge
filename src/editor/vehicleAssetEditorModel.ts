@@ -207,3 +207,35 @@ export function torqueCurveSvg(drivetrain: VehicleDrivetrainDefinition): string 
   ].join("");
   return `<svg class="vhe-graph" viewBox="0 0 ${width} ${height}" role="img" aria-label="Torque and power curve">${axis}${shifts}<polyline class="vhe-power" points="${power}"/><polyline class="vhe-torque" points="${torque}"/>${dots}${labels}</svg>`;
 }
+
+/** What the Actor Script viewport needs to draw one wheel (chassis frame, metres). */
+export type VehicleWheelPreview = Pick<
+  VehicleWheelDefinition,
+  "position" | "radius" | "suspensionRestLength" | "suspensionMaxTravel"
+>;
+
+/**
+ * Line-segment endpoints (flat xyz pairs) for one wheel's wire, relative to its
+ * hard point: the spring axis down to full droop, ticks at the clamp range
+ * (`rest ± maxTravel`), and the tyre circle (rolling about X) hung at rest.
+ */
+export function wheelWireSegments(wheel: VehicleWheelPreview, circleSteps = 24): number[] {
+  const out: number[] = [];
+  const rest = wheel.suspensionRestLength;
+  const travel = wheel.suspensionMaxTravel;
+  const droop = rest + travel;
+  out.push(0, 0, 0, 0, -droop, 0);
+  const tick = 0.07;
+  for (const length of [Math.max(0, rest - travel), droop]) {
+    out.push(-tick, -length, 0, tick, -length, 0, 0, -length, -tick, 0, -length, tick);
+  }
+  for (let step = 0; step < circleSteps; step += 1) {
+    const a = (step / circleSteps) * Math.PI * 2;
+    const b = ((step + 1) / circleSteps) * Math.PI * 2;
+    out.push(
+      0, -rest + Math.sin(a) * wheel.radius, Math.cos(a) * wheel.radius,
+      0, -rest + Math.sin(b) * wheel.radius, Math.cos(b) * wheel.radius,
+    );
+  }
+  return out;
+}

@@ -38,6 +38,7 @@ import {
   torqueCurveSvg,
   vehicleDiagnostics,
   vehicleTopViewSvg,
+  wheelWireSegments,
 } from "../../src/editor/vehicleAssetEditorModel";
 import { withVehicleOverrides } from "../../src/scene/vehicleAssetLoader";
 import { collectDroppedFields } from "../../tools/droppedFields";
@@ -262,5 +263,20 @@ export function registerVehicleEditorFieldsTests(check: Check): void {
     assert.equal(graph.match(/data-vhe-torque-point=/g)?.length, 4);
     assert.match(graph, /class="vhe-shift-up"/);
     assert.doesNotMatch(graph, /NaN/);
+  });
+
+  check("Actor Script viewport wheel wire: spring to full droop, clamp ticks, tyre circle at rest", () => {
+    const points = wheelWireSegments({ position: [0, 0, 0], radius: 0.5, suspensionRestLength: 0.4, suspensionMaxTravel: 0.1 }, 8);
+    assert.equal(points.length % 6, 0, "whole segments");
+    assert.deepEqual(points.slice(0, 6), [0, 0, 0, 0, -0.5, 0], "hard point down to rest + travel");
+    const ys = (from: number, count: number) => Array.from({ length: count * 2 }, (_, i) => points[(from + i) * 3 + 1]!);
+    assert.ok(ys(2, 2).every((y) => Math.abs(y - -0.3) < 1e-9), "bump-stop ticks at rest − travel");
+    assert.ok(ys(6, 2).every((y) => Math.abs(y - -0.5) < 1e-9), "droop ticks at rest + travel");
+    const circle = points.slice(10 * 3); // after the spring (2) and tick (8) vertices
+    assert.equal(circle.length / 6, 8);
+    for (let i = 0; i < circle.length; i += 3) {
+      assert.equal(circle[i], 0, "the tyre rolls about X");
+      assert.ok(Math.abs(Math.hypot(circle[i + 1]! + 0.4, circle[i + 2]!) - 0.5) < 1e-9, "radius around the rest centre");
+    }
   });
 }

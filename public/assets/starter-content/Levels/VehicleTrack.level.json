@@ -75,47 +75,9 @@
       "color": "#725637"
     }
   ],
-  "actors": [
-    {
-      "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
-      "position": [
-        0,
-        1.2,
-        0
-      ],
-      "name": "Player Car",
-      "rotation": [
-        0,
-        0,
-        0
-      ]
-    },
-    {
-      "classRef": "assets/starter-content/Gameplay/Script_AiReferenceCar.actor.json",
-      "name": "AI Car",
-      "position": [
-        28,
-        1.2,
-        15
-      ],
-      "rotation": [
-        0,
-        0,
-        0
-      ],
-      "patrolRoute": {
-        "source": "spline",
-        "splineId": "vehicle-track-loop",
-        "entry": "nearest",
-        "lookAheadDistance": 1.2,
-        "wrapMode": "loop"
-      }
-    }
-  ],
   "splines": [
     {
       "id": "vehicle-track-loop",
-      "name": "Track Loop",
       "position": [
         0,
         0,
@@ -205,6 +167,7 @@
           }
         ]
       },
+      "name": "Track Loop",
       "runtime": {
         "tags": [
           "vehicle-route"
@@ -215,11 +178,12 @@
           "id": "asphalt",
           "type": "deformMesh",
           "meshAsset": "sm-road-asphalt",
+          "collisionEnabled": false,
           "forwardAxis": "z",
           "upAxis": "y",
           "sampleSteps": 16,
           "geometryMode": "segments",
-          "uvMode": "tileByDistance",
+          "uvMode": "stretch",
           "uvTileLength": 4,
           "crossSectionScale": [
             1,
@@ -229,8 +193,45 @@
       ],
       "debug": {
         "visible": true,
-        "color": "#ffd166",
+        "color": "#ffffff",
         "resolution": 48
+      }
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
+      "position": [
+        0,
+        1.2,
+        0
+      ],
+      "name": "Player Car",
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "classRef": "assets/starter-content/Gameplay/Script_AiReferenceCar.actor.json",
+      "position": [
+        28,
+        1.2,
+        15
+      ],
+      "name": "AI Car",
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "patrolRoute": {
+        "source": "spline",
+        "splineId": "vehicle-track-loop",
+        "entry": "nearest",
+        "wrapMode": "loop",
+        "lookAheadDistance": 1.2
       }
     }
   ]

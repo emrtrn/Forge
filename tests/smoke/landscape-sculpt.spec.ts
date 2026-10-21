@@ -16,7 +16,7 @@ async function deleteExistingLandscape(page: Page): Promise<void> {
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
 }
 
-test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ page }) => {
+test("editor Landscape sculpt smoke: add, sculpt, edit during save, retry, reload", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
@@ -69,10 +69,56 @@ test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ 
 
   await expect(page.getByTestId("editor-undo")).toBeEnabled();
   await page.getByTestId("editor-undo").click();
-  await page.getByTestId("editor-redo").click();
 
-  await page.getByTestId("editor-save").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  // Delay a real successful response after the server wrote the sculpted data.
+  // Undo while it is pending must stay dirty and reach disk on the next Save.
+  let releaseFirstSave!: () => void;
+  const firstResponseGate = new Promise<void>((resolve) => { releaseFirstSave = resolve; });
+  let firstSaveStarted = false;
+  let holdFirstResponse = true;
+  const landscapeWrites: number[][] = [];
+  await page.route("**/__save-landscape", async (route) => {
+    const heights = (route.request().postDataJSON() as { landscape: { heights: number[] } }).landscape.heights;
+    // An already queued autosave can still carry the earlier flat Undo
+    // snapshot. Let it finish and hold the first sculpted snapshot explicitly.
+    const hold = holdFirstResponse && heights.some((height) => Math.abs(height) > 0.001);
+    if (hold) holdFirstResponse = false;
+    const response = await route.fetch();
+    expect(response.ok()).toBeTruthy();
+    if (hold) {
+      firstSaveStarted = true;
+      await firstResponseGate;
+    }
+    await route.fulfill({ response });
+    if (hold || firstSaveStarted) landscapeWrites.push(heights);
+  });
+  try {
+    await page.getByTestId("editor-redo").click();
+    await page.getByTestId("editor-save").click();
+    await expect.poll(() => firstSaveStarted).toBe(true);
+    await page.getByTestId("editor-undo").click();
+    const firstResponse = page.waitForResponse((response) => response.url().endsWith("/__save-landscape"));
+    releaseFirstSave();
+    await firstResponse;
+
+    await page.getByTestId("editor-save").click();
+    await expect.poll(() => landscapeWrites.length).toBeGreaterThanOrEqual(2);
+    expect(landscapeWrites[0]!.some((height) => Math.abs(height) > 0.001)).toBeTruthy();
+    expect(landscapeWrites[1]!.every((height) => Math.abs(height) < 0.001)).toBeTruthy();
+    const undoneHeights = await page.evaluate(async () => {
+      const response = await fetch(`/landscapes/landscape-1.landscape.json?undo=${Date.now()}`);
+      return ((await response.json()) as { heights: number[] }).heights;
+    });
+    expect(undoneHeights).toEqual(landscapeWrites[1]);
+
+    await page.getByTestId("editor-redo").click();
+    await page.getByTestId("editor-save").click();
+    await expect.poll(() => landscapeWrites.length).toBeGreaterThanOrEqual(3);
+    await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  } finally {
+    releaseFirstSave();
+    await page.unroute("**/__save-landscape");
+  }
 
   const landscapeData = await page.evaluate(async () => {
     const response = await fetch(`/landscapes/landscape-1.landscape.json?smoke=${Date.now()}`);

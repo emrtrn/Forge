@@ -217,7 +217,6 @@ import {
 import {
   computeFoliageResourceUsage,
   createEmptyFoliageData,
-  foliageDataPath,
   normalizeFoliageType,
   uniqueLandscapeFoliageRuleId,
   uniqueFoliageGroupId,
@@ -249,7 +248,6 @@ import { loadFoliageData, loadFoliageTypeByPath, loadFoliageTypesForData } from 
 import {
   createEmptyMeshPaintData,
   fillMeshVertexColors,
-  meshPaintDataPath,
   paintMeshVertexColors,
   repairMeshPaintTopology,
   removeMeshPaintPlacement,
@@ -258,7 +256,7 @@ import {
   type LayoutMeshPaintData,
   type LayoutMeshPaintPlacement,
 } from "@engine/scene/meshPaint";
-import { saveMeshPaintData } from "@/editor/meshPaintStore";
+import { EditorSaveSession, type EditorSaveSource } from "@/editor/editorSaveCoordinator";
 import {
   loadAssetVertexColors,
   saveAssetVertexColors,
@@ -1121,8 +1119,6 @@ export class SceneApp {
   private foliageData: LayoutFoliageData = createEmptyFoliageData();
   /** Placement-scoped vertex-color sidecar for Mesh Paint Mode. */
   private meshPaintData: LayoutMeshPaintData = createEmptyMeshPaintData();
-  /** True when Mesh Paint sidecar changes still need the editor Save action. */
-  private meshPaintDataDirty = false;
   /** Mesh Paint Mode is separate from Material Editor and owns the left pointer. */
   private meshPaintModeActive = false;
   private meshPaintBrushCursor: Mesh | null = null;
@@ -1152,8 +1148,6 @@ export class SceneApp {
   };
   /** Resolved Foliage Types referenced by the sidecar, keyed by asset id. */
   private foliageTypes = new Map<string, ForgeFoliageTypeDef>();
-  /** True when the foliage sidecar has unsaved changes. */
-  private foliageDataDirty = false;
   /** Terrain ids whose generated foliage batches are waiting for a debounced rebuild. */
   private readonly dirtyGeneratedFoliageLandscapes = new Set<string>();
   private generatedFoliageRebuildTimer: number | null = null;
@@ -1192,8 +1186,10 @@ export class SceneApp {
   private landscapeData = new Map<string, ForgeLandscapeData>();
   /** Last height scale used for a heightmap import, echoed back into the Details input. */
   private lastLandscapeImportHeight = 20;
-  /** Landscape ids whose sidecar has changed since the last successful save. */
-  private landscapeDataDirty = new Set<string>();
+  private readonly editorSaves = new EditorSaveSession(
+    () => this.editorSaveSource(),
+    (message, tone) => this.onStatus?.(message, tone),
+  );
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
   private landscapeLayerMaterialCache = new Map<string, ForgeMaterialLayer>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
@@ -3456,13 +3452,20 @@ export class SceneApp {
     }
   }
 
-  async saveLayout(): Promise<void> {
+  saveLayout(): Promise<void> {
+    return this.editorSaves.saveLayout();
+  }
+
+  private editorSaveSource(): EditorSaveSource {
     if (!this.layout) throw new Error("Layout is not loaded yet.");
     if (!this.layoutSaver) {
       throw new Error("Layout saving is available only when the editor saver is installed.");
     }
-    const result = await this.layoutSaver({
+    if (!this.activeProject) throw new Error("Saving requires an active project.");
+    return {
       layout: this.layout,
+      layoutSaver: this.layoutSaver,
+      scenePath: this.activeProject.manifest.editor.defaultScene,
       editor: {
         gridSize: this.snapSettings.move,
         gridEnabled: this.snapSettings.moveEnabled,
@@ -3471,24 +3474,10 @@ export class SceneApp {
         snapScale: this.snapSettings.scale,
         snapScaleEnabled: this.snapSettings.scaleEnabled,
       },
-    });
-    for (const id of this.landscapeDataDirty) {
-      await this.saveLandscapeData(id);
-    }
-    await this.saveFoliageData();
-    await this.saveMeshPaintSidecar();
-    const dropped = result.dropped ?? [];
-    if (dropped.length > 0) {
-      // The save still happened — the level is written, minus these fields. Say
-      // so loudly rather than reporting a clean success (I5).
-      console.warn("[save] dropped by the save validator:", dropped.join(", "));
-      this.onStatus?.(
-        `Saved ${result.path ?? "layout"} — ${dropped.length} unsupported field(s) dropped: ${dropped.slice(0, 3).join(", ")}${dropped.length > 3 ? ", …" : ""}`,
-        "warning",
-      );
-      return;
-    }
-    this.onStatus?.(`Saved ${result.path ?? "layout"}.`, "success");
+      landscapeData: this.landscapeData,
+      foliageData: this.foliageData,
+      meshPaintData: this.meshPaintData,
+    };
   }
 
   private async loadActiveProjectScene(): Promise<void> {
@@ -3516,7 +3505,7 @@ export class SceneApp {
     });
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.meshPaintData = await loadMeshPaintData(this.activeProject.manifest.editor.defaultScene);
-    this.meshPaintDataDirty = false;
+    this.editorSaves.meshPaintSaveRevision.reset();
     // Normalize world widgets so the editor never reads a malformed anchor (the
     // runtime normalizes on its own load path); keeps the saved JSON clean too.
     if (this.layout.worldWidgets) {
@@ -6619,11 +6608,11 @@ export class SceneApp {
     this.landscapeSplineMeshGroups = [];
     this.landscapeSplineOverlays = [];
     this.landscapeData.clear();
-    this.landscapeDataDirty.clear();
+    this.editorSaves.landscapeSaveRevisions.clear();
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
-      if (ensureLandscapeLayers(data)) this.landscapeDataDirty.add(actor.id);
+      if (ensureLandscapeLayers(data)) this.markLandscapeDirty(actor.id);
       this.landscapeData.set(actor.id, data);
     }
     landscapes.forEach((actor, index) => {
@@ -6774,7 +6763,7 @@ export class SceneApp {
     this.foliageTypes.clear();
     this.foliageSelection.clear();
     this.foliageData = await loadFoliageData(this.foliageScenePath());
-    this.foliageDataDirty = false;
+    this.editorSaves.foliageSaveRevision.reset();
     const manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
     if (manifest) {
       this.foliageTypes = await loadFoliageTypesForData(this.foliageData, manifest);
@@ -7045,7 +7034,7 @@ export class SceneApp {
       this.foliageData.groups = this.foliageData.groups.filter(
         (group) => group.foliageTypeId !== assetId,
       );
-      this.foliageDataDirty = true;
+      this.editorSaves.foliageSaveRevision.markDirty();
     }
     this.foliageTypes.delete(assetId);
     const removedRuleIds = (this.foliageData.landscapeRules ?? [])
@@ -7057,7 +7046,7 @@ export class SceneApp {
     );
     if (this.foliageData.landscapeRules.length !== beforeRuleCount) {
       for (const ruleId of removedRuleIds) this.foliageBinding?.removeGroup(`generated-${ruleId}`);
-      this.foliageDataDirty = true;
+      this.editorSaves.foliageSaveRevision.markDirty();
     }
     if (this.foliageToolSettings.activeTypeId === assetId) {
       this.foliageToolSettings.activeTypeId = this.foliageTypes.keys().next().value ?? null;
@@ -7078,7 +7067,7 @@ export class SceneApp {
       seed: Math.max(0, Math.floor(input.seed)) >>> 0,
     };
     this.foliageData.landscapeRules = [...rules, rule];
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.rebuildAllGeneratedFoliage();
     this.emitFoliageChanged();
     this.scheduleAutoSave();
@@ -7097,7 +7086,7 @@ export class SceneApp {
       seed: Math.max(0, Math.floor(patch.seed ?? current.seed)) >>> 0,
     };
     this.foliageData.landscapeRules = rules.map((rule) => (rule.id === id ? next : rule));
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.rebuildAllGeneratedFoliage();
     this.emitFoliageChanged();
     this.scheduleAutoSave();
@@ -7108,7 +7097,7 @@ export class SceneApp {
     const next = rules.filter((rule) => rule.id !== id);
     if (next.length === rules.length) return;
     this.foliageData.landscapeRules = next;
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.foliageBinding?.removeGroup(`generated-${id}`);
     this.emitFoliageChanged();
     this.scheduleAutoSave();
@@ -7247,7 +7236,7 @@ export class SceneApp {
       added += 1;
     }
     if (added === 0) return true;
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.rebuildFoliageGroupObject(group);
     this.emitFoliageChanged();
     return true;
@@ -7273,7 +7262,7 @@ export class SceneApp {
     const rng = makeFoliageRng((this.foliageToolSettings.randomSeed + group.instances.length + 1) >>> 0);
     const instance = foliageInstanceFromRoll(active.type, rollFoliageInstance(active.type, hit, rng));
     group.instances.push(instance);
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.rebuildFoliageGroupObject(group);
     this.emitFoliageChanged();
     return true;
@@ -7336,7 +7325,7 @@ export class SceneApp {
       this.onStatus?.("Fill added no foliage — filters or spacing rejected every sample.", "info");
       return true;
     }
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.rebuildFoliageGroupObject(group);
     this.onStatus?.(`Filled ${added} foliage instance${added === 1 ? "" : "s"}.`, "success");
     this.emitFoliageChanged();
@@ -7383,7 +7372,7 @@ export class SceneApp {
     });
     // Erase re-indexes kept instances, so any instance selection is now stale.
     this.clearFoliageSelection();
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.emitFoliageChanged();
     return true;
   }
@@ -7554,7 +7543,7 @@ export class SceneApp {
       const group = groupsById.get(groupId);
       if (group) this.rebuildFoliageGroupObject(group);
     }
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.refreshFoliageSelectionOverlay();
     this.emitFoliageChanged();
   }
@@ -7607,7 +7596,7 @@ export class SceneApp {
       const group = groupsById.get(groupId);
       if (group) this.rebuildFoliageGroupObject(group);
     }
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.refreshFoliageSelectionOverlay();
     this.onStatus?.(
       `Reapplied ${count} foliage instance${count === 1 ? "" : "s"}.`,
@@ -7645,7 +7634,7 @@ export class SceneApp {
       if (affected.has(group.id)) this.rebuildFoliageGroupObject(group);
     }
     this.foliageSelection.clear();
-    this.foliageDataDirty = true;
+    this.editorSaves.foliageSaveRevision.markDirty();
     this.refreshFoliageSelectionOverlay();
     this.emitFoliageChanged();
   }
@@ -7746,19 +7735,6 @@ export class SceneApp {
     return true;
   }
 
-  /** Saves the foliage sidecar via the dev endpoint when it has unsaved changes. */
-  private async saveFoliageData(): Promise<void> {
-    if (!this.foliageDataDirty) return;
-    const path = foliageDataPath(this.foliageScenePath());
-    const response = await fetch("/__save-foliage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path, foliage: this.foliageData }),
-    });
-    if (!response.ok) throw new Error(`Foliage save failed: HTTP ${response.status}`);
-    this.foliageDataDirty = false;
-  }
-
   onMeshPaintChanged: (() => void) | undefined;
 
   isMeshPaintModeActive(): boolean {
@@ -7842,7 +7818,7 @@ export class SceneApp {
       changed += 1;
     }
     if (changed > 0) {
-      this.meshPaintDataDirty = true;
+      this.editorSaves.meshPaintSaveRevision.markDirty();
       this.onStatus?.(`Filled ${changed} mesh primitive${changed === 1 ? "" : "s"}.`, "success");
       this.onMeshPaintChanged?.();
     }
@@ -7904,7 +7880,7 @@ export class SceneApp {
       this.onStatus?.("Paste skipped: selected placement topology is incompatible.", "warning");
       return;
     }
-    this.meshPaintDataDirty = true;
+    this.editorSaves.meshPaintSaveRevision.markDirty();
     this.rebuildInstanceGroup(selection.assetId);
     this.onStatus?.(`Pasted ${pasted} mesh primitive${pasted === 1 ? "" : "s"}.`, "success");
     this.onMeshPaintChanged?.();
@@ -7997,7 +7973,7 @@ export class SceneApp {
         this.onStatus?.("Asset defaults are incompatible with this placement's current mesh topology.", "warning");
         return;
       }
-      this.meshPaintDataDirty = true;
+      this.editorSaves.meshPaintSaveRevision.markDirty();
       this.rebuildInstanceGroup(selection.assetId);
       this.onStatus?.(`Applied ${applied} asset vertex-color default${applied === 1 ? "" : "s"} to the selected placement.`, "success");
       this.onMeshPaintChanged?.();
@@ -8054,7 +8030,7 @@ export class SceneApp {
       this.onStatus?.("Mesh Paint repair needs saved source positions and a compatible primitive. Repaint legacy sidecars once before a future reimport.", "warning");
       return;
     }
-    this.meshPaintDataDirty = true;
+    this.editorSaves.meshPaintSaveRevision.markDirty();
     this.rebuildInstanceGroup(selection.assetId);
     this.onStatus?.(
       skipped > 0
@@ -8076,7 +8052,7 @@ export class SceneApp {
       selection.placementIndex,
     );
     if (this.meshPaintData.placements.length === before) return;
-    this.meshPaintDataDirty = true;
+    this.editorSaves.meshPaintSaveRevision.markDirty();
     this.rebuildInstanceGroup(selection.assetId);
     this.onStatus?.("Cleared Mesh Paint for selected placement.", "success");
     this.onMeshPaintChanged?.();
@@ -8101,7 +8077,7 @@ export class SceneApp {
     for (const placement of placements) {
       this.meshPaintData = upsertMeshPaintPlacement(this.meshPaintData, placement);
     }
-    this.meshPaintDataDirty = true;
+    this.editorSaves.meshPaintSaveRevision.markDirty();
     this.rebuildInstanceGroup(selection.assetId);
     return true;
   }
@@ -8286,17 +8262,7 @@ export class SceneApp {
       colors: Array.from(result.colors),
       positions: Array.from(position.array as ArrayLike<number>),
     });
-    this.meshPaintDataDirty = true;
-  }
-
-  private async saveMeshPaintSidecar(): Promise<void> {
-    if (!this.meshPaintDataDirty) return;
-    if (!this.activeProject) throw new Error("Mesh Paint save requires an active project.");
-    await saveMeshPaintData(
-      meshPaintDataPath(this.activeProject.manifest.editor.defaultScene),
-      this.meshPaintData,
-    );
-    this.meshPaintDataDirty = false;
+    this.editorSaves.meshPaintSaveRevision.markDirty();
   }
 
   /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
@@ -8814,7 +8780,7 @@ export class SceneApp {
       current.heights = [...heights];
       current.layers = cloneLandscapeLayers(layers);
       ensureLandscapeLayers(current);
-      this.landscapeDataDirty.add(stroke.landscapeId);
+      this.markLandscapeDirty(stroke.landscapeId);
       if (dirty) this.refreshLandscapeGeometry(stroke.landscapeIndex, dirty);
       this.select(selection);
       this.emitSceneObjectsChanged();
@@ -8878,7 +8844,7 @@ export class SceneApp {
     if (!dirty) return;
     stroke.changed = true;
     stroke.dirty = stroke.dirty ? mergeLandscapeDirtyBounds(stroke.dirty, dirty) : dirty;
-    this.landscapeDataDirty.add(actor.id);
+    this.markLandscapeDirty(actor.id);
     this.refreshLandscapeGeometry(index, dirty);
   }
 
@@ -9066,7 +9032,7 @@ export class SceneApp {
     const insertionIndex = clampIndex(index, this.layout.landscapes.length);
     this.layout.landscapes.splice(insertionIndex, 0, cloneLandscape(actor));
     this.landscapeData.set(actor.id, data);
-    this.landscapeDataDirty.add(actor.id);
+    this.markLandscapeDirty(actor.id);
     const object = createLandscapeObject(this.landscapeItem(actor));
     this.landscapeObjects.splice(insertionIndex, 0, object);
     this.scene.add(object);
@@ -9083,6 +9049,7 @@ export class SceneApp {
     }
     if (removed) {
       this.landscapeData.delete(removed.id);
+      this.editorSaves.landscapeSaveRevisions.delete(removed.id);
     }
     this.refreshLandscapeIndices();
     return removed ? cloneLandscape(removed) : null;
@@ -9112,7 +9079,9 @@ export class SceneApp {
         this.select({ kind: "landscape", index });
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
-        this.saveLandscapeData(actor.id).catch(() => {});
+        void this.saveLandscapeData(actor.id).catch((error) => {
+          this.onStatus?.(error instanceof Error ? error.message : String(error), "error");
+        });
       },
       undo: () => {
         this.removeLandscapeAt(index);
@@ -9583,7 +9552,7 @@ export class SceneApp {
       const current = this.landscapeData.get(actor.id);
       if (!current) return;
       current.heights = heights.slice();
-      this.landscapeDataDirty.add(actor.id);
+      this.markLandscapeDirty(actor.id);
       this.refreshLandscapeGeometry(index, dirty);
       this.select(selection);
       this.emitSceneObjectsChanged();
@@ -9617,7 +9586,7 @@ export class SceneApp {
       if (!current) return;
       current.layers = cloneLandscapeLayers(layers);
       ensureLandscapeLayers(current);
-      this.landscapeDataDirty.add(actor.id);
+      this.markLandscapeDirty(actor.id);
       this.refreshLandscapeGeometry(index, dirty);
       this.select(selection);
       this.emitSceneObjectsChanged();
@@ -9760,7 +9729,7 @@ export class SceneApp {
       const data = this.landscapeData.get(landscapeId);
       if (!data) return;
       data.splines = cloneLandscapeSplines(splines);
-      this.landscapeDataDirty.add(landscapeId);
+      this.markLandscapeDirty(landscapeId);
       this.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId, activeSplineSegmentId });
       void this.rebuildLandscapeSplineMeshes(index);
       // River Water Bodies reference the same sidecar spline, so an editor point,
@@ -9804,7 +9773,7 @@ export class SceneApp {
       if (!current) return;
       current.layers = cloneLandscapeLayers(layers);
       ensureLandscapeLayers(current);
-      this.landscapeDataDirty.add(actor.id);
+      this.markLandscapeDirty(actor.id);
       // A material change swaps the layer's texture, so the splat material itself
       // must be rebuilt (not just geometry); warming then reloads any new texture.
       this.rebuildLandscapeObject(index);
@@ -9840,7 +9809,7 @@ export class SceneApp {
       if (!current) return;
       current.layers = cloneLandscapeLayers(layers);
       ensureLandscapeLayers(current);
-      this.landscapeDataDirty.add(actor.id);
+      this.markLandscapeDirty(actor.id);
       this.refreshLandscapeGeometry(index, dirty);
       this.select(selection);
       this.emitSceneObjectsChanged();
@@ -9884,6 +9853,7 @@ export class SceneApp {
       await this.saveLandscapeData(actor.id);
     } catch (error) {
       this.onStatus?.(`Heightmap save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+      return;
     }
     this.onStatus?.(`Imported ${width} x ${height} heightmap.`, "info");
   }
@@ -9909,7 +9879,7 @@ export class SceneApp {
       const current = this.landscapeData.get(landscapeId);
       if (!current) return;
       current.heights = heights.slice();
-      this.landscapeDataDirty.add(landscapeId);
+      this.markLandscapeDirty(landscapeId);
       this.refreshLandscapeGeometry(index, dirty);
       this.select(selection);
       this.emitSceneObjectsChanged();
@@ -9970,7 +9940,7 @@ export class SceneApp {
       current.chunks = { ...snapshot.chunks };
       current.heights = [...snapshot.heights];
       current.layers = cloneLandscapeLayers(snapshot.layers);
-      this.landscapeDataDirty.add(actor.id);
+      this.markLandscapeDirty(actor.id);
       this.rebuildLandscapeObject(index);
       this.select(selection);
       this.emitSceneObjectsChanged();
@@ -10000,7 +9970,7 @@ export class SceneApp {
       const current = this.landscapeData.get(actor.id);
       if (!current) return;
       current.size = { ...size };
-      this.landscapeDataDirty.add(actor.id);
+      this.markLandscapeDirty(actor.id);
       this.rebuildLandscapeObject(index);
       this.select(selection);
       this.emitSceneObjectsChanged();
@@ -10010,22 +9980,12 @@ export class SceneApp {
     this.onStatus?.(`Landscape world size set to ${worldSize.toFixed(2)}.`, "info");
   }
 
-  /**
-   * Persists one landscape's in-memory sidecar data to disk via `/__save-landscape`.
-   * Called after `addLandscape()` and from `saveLayout()` for every dirty landscape,
-   * mirroring how the layout itself is saved through the dev-endpoint saver.
-   */
-  private async saveLandscapeData(landscapeId: string): Promise<void> {
-    const actor = this.layout?.landscapes?.find((entry) => entry.id === landscapeId);
-    const data = this.landscapeData.get(landscapeId);
-    if (!actor || !data) return;
-    const response = await fetch("/__save-landscape", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: actor.dataRef, landscape: data }),
-    });
-    if (!response.ok) throw new Error(`Landscape data save failed: HTTP ${response.status}`);
-    this.landscapeDataDirty.delete(landscapeId);
+  private markLandscapeDirty(landscapeId: string): void {
+    this.editorSaves.markLandscapeDirty(landscapeId);
+  }
+
+  private saveLandscapeData(landscapeId: string): Promise<void> {
+    return this.editorSaves.saveLandscapeData(landscapeId);
   }
 
   // --- Sphere Reflection Capture (probe) actors ----------------------------
@@ -11932,7 +11892,7 @@ export class SceneApp {
     if (!point) return;
     const local = new Vector3(...world).applyMatrix4(drag.objectMatrixInverse);
     point.position = [round(local.x), round(local.y), round(local.z)];
-    this.landscapeDataDirty.add(drag.landscapeId);
+    this.markLandscapeDirty(drag.landscapeId);
     this.refreshLandscapeSplineOverlay(drag.index);
     this.updateGizmo();
     this.emitSelectionChanged();

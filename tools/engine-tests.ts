@@ -779,10 +779,14 @@ import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { defaultForgeMaterialDef, normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
   normalizeAssetSkeleton,
-  resolveBlendSpaceWeights,
+  resolveBlendSpaceWeights as resolveSkeletonBlendSpaceWeights,
   skeletonSidecarPath,
-  type AssetSkeletonBlendSpaceDef,
 } from "../src/scene/assetSkeletonLoader";
+import {
+  resolveBlendSpaceWeights,
+  type AssetSkeletonBlendSpaceDef,
+} from "../engine/animation/blendSpace";
+import { resolveBlendSpaceWeights as resolveEditorBlendSpaceWeights } from "../src/editor/assetSkeletonStore";
 import {
   applyMaterialSlotOverrides,
   collectAssetMaterialElements,
@@ -1051,6 +1055,7 @@ import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegis
 import { registerDroppedFieldTests } from "../tests/engine/droppedFields.test";
 import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCoverage.test";
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
+import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerRuntimeParityLevelTests } from "../tests/engine/runtimeParityLevel.test";
 import { registerForgeGameModuleTests } from "../tests/engine/forgeGameModule.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
@@ -1167,6 +1172,7 @@ await registerCapabilityRegistryTests(check, checkAsync);
 registerDroppedFieldTests(check);
 registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
+await registerEditorSaveCoordinatorTests(checkAsync);
 registerRuntimeParityLevelTests(check);
 await registerForgeGameModuleTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
@@ -20488,6 +20494,11 @@ check("asset skeleton sidecar normalizes animation metadata", () => {
       { clip: "Walk", x: 0 },
     ],
   );
+});
+
+check("blend space engine resolver preserves skeleton loader and editor compatibility exports", () => {
+  assert.equal(resolveSkeletonBlendSpaceWeights, resolveBlendSpaceWeights);
+  assert.equal(resolveEditorBlendSpaceWeights, resolveBlendSpaceWeights);
 });
 
 check("blend space 1d resolver interpolates between bracketing samples", () => {

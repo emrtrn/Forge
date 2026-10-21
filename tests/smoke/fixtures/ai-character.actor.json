@@ -1,0 +1,11 @@
+{
+  "schema":1,"type":"actor","name":"Smoke AI Character","parentClass":"character",
+  "components":[
+    {"id":"root","component":"Transform","props":{}},
+    {"id":"collider","component":"Collider","parent":"root","props":{"shape":"capsule","capsuleRadius":1,"capsuleHalfHeight":3,"isStatic":false,"simulatePhysics":false,"hideInGame":true}},
+    {"id":"mesh","component":"MeshRenderer","parent":"collider","props":{"assetId":"ual1-standard-rm"}},
+    {"id":"movement","component":"CharacterMovement","parent":"root","props":{"maxWalkSpeed":5,"acceleration":30,"brakingDeceleration":24,"gravityScale":1,"orientRotationToMovement":true}},
+    {"id":"ai","component":"AIController","parent":"root","props":{"behaviorTree":"assets/__playwright-patrol.behavior.json","navAgent":{"radius":0.35,"height":1.8,"maxSpeed":3.2,"clearancePadding":0.1}}}
+  ],
+  "variables":[],"interfaces":[],"references":[],"dispatchers":[],"eventBindings":[],"messageBindings":[],"construction":null
+}

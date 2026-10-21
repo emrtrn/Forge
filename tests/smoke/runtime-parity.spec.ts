@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 /**
  * Phase H (D): the RuntimeParity level renders in a real browser.

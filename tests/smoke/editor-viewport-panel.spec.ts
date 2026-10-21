@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./test";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
@@ -187,10 +187,10 @@ async function viewportRects(locators: {
       width: element.clientWidth,
       height: element.clientHeight,
     })),
-    locators.canvas.evaluate((element) => ({
-      width: element.width,
-      height: element.height,
-    })),
+    locators.canvas.evaluate((element) => {
+      if (!(element instanceof HTMLCanvasElement)) throw new Error("Expected the viewport canvas");
+      return { width: element.width, height: element.height };
+    }),
   ]);
   return { host, canvas, canvasClient, canvasBuffer, stats, drawer, outliner, details };
 }
@@ -203,6 +203,7 @@ async function requiredBox(locator: Locator): Promise<Rect> {
 
 async function expectCanvasBufferAspect(canvas: Locator): Promise<void> {
   await expect.poll(() => canvas.evaluate((element) => {
+    if (!(element instanceof HTMLCanvasElement)) throw new Error("Expected the viewport canvas");
     const clientAspect = element.clientWidth / element.clientHeight;
     const bufferAspect = element.width / element.height;
     return Math.abs(bufferAspect - clientAspect) < 0.01;

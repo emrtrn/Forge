@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("editor authoring smoke: place, transform, undo, save, reload, play", async ({
   page,

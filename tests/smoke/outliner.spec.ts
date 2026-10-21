@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("scene outliner uses the extensible inspector tab shell", async ({ page }) => {
   await page.goto("/?editor");
@@ -68,7 +68,7 @@ test("scene outliner keeps filtered rows compact and reveals the selected actor"
   expect(
     await list.evaluate((element) => {
       const row = element.querySelector<HTMLElement>("[data-object-id]");
-      return Boolean(row) && row.getBoundingClientRect().height < element.getBoundingClientRect().height;
+      return row !== null && row.getBoundingClientRect().height < element.getBoundingClientRect().height;
     }),
   ).toBe(true);
 

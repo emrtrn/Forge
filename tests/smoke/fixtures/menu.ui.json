@@ -1,0 +1,334 @@
+{
+  "schema": 1,
+  "type": "ui",
+  "name": "Save / Load Menu",
+  "preview": {
+    "width": 1280,
+    "height": 720
+  },
+  "initialFocus": "resume",
+  "transition": {
+    "enter": "fade",
+    "exit": "fade",
+    "durationMs": 120
+  },
+  "root": {
+    "id": "root",
+    "widget": "Canvas",
+    "props": {
+      "align": "center",
+      "justify": "center",
+      "padding": 24,
+      "background": "rgba(4, 6, 10, 0.42)"
+    },
+    "children": [
+      {
+        "id": "panel",
+        "widget": "Panel",
+        "props": {
+          "width": 560,
+          "padding": 20,
+          "gap": 12,
+          "background": "rgba(16, 19, 26, 0.92)",
+          "radius": 6
+        },
+        "children": [
+          {
+            "id": "title",
+            "widget": "Text",
+            "props": {
+              "text": "Save / Load",
+              "fontSize": 24,
+              "fontWeight": "700"
+            }
+          },
+          {
+            "id": "slot-quick",
+            "widget": "Stack",
+            "props": {
+              "direction": "column",
+              "gap": 8,
+              "padding": 12,
+              "background": "rgba(255, 255, 255, 0.07)",
+              "radius": 6
+            },
+            "children": [
+              {
+                "id": "quick-label",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.quick.label"
+                  },
+                  "fontWeight": "700"
+                }
+              },
+              {
+                "id": "quick-status",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.quick.status"
+                  },
+                  "fontSize": 13,
+                  "color": "#d7deea"
+                }
+              },
+              {
+                "id": "quick-level",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.quick.level"
+                  },
+                  "fontSize": 12,
+                  "color": "#aab4c4"
+                }
+              },
+              {
+                "id": "quick-actions",
+                "widget": "Stack",
+                "props": {
+                  "direction": "row",
+                  "gap": 8
+                },
+                "children": [
+                  {
+                    "id": "quick-save",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Save",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:write:quick"
+                      }
+                    }
+                  },
+                  {
+                    "id": "quick-load",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Load",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:load:quick"
+                      }
+                    }
+                  },
+                  {
+                    "id": "quick-delete",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Delete",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:delete:quick"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "slot-1",
+            "widget": "Stack",
+            "props": {
+              "direction": "column",
+              "gap": 8,
+              "padding": 12,
+              "background": "rgba(255, 255, 255, 0.07)",
+              "radius": 6
+            },
+            "children": [
+              {
+                "id": "slot-1-label",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.slot-1.label"
+                  },
+                  "fontWeight": "700"
+                }
+              },
+              {
+                "id": "slot-1-status",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.slot-1.status"
+                  },
+                  "fontSize": 13,
+                  "color": "#d7deea"
+                }
+              },
+              {
+                "id": "slot-1-level",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.slot-1.level"
+                  },
+                  "fontSize": 12,
+                  "color": "#aab4c4"
+                }
+              },
+              {
+                "id": "slot-1-actions",
+                "widget": "Stack",
+                "props": {
+                  "direction": "row",
+                  "gap": 8
+                },
+                "children": [
+                  {
+                    "id": "slot-1-save",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Save",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:write:slot-1"
+                      }
+                    }
+                  },
+                  {
+                    "id": "slot-1-load",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Load",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:load:slot-1"
+                      }
+                    }
+                  },
+                  {
+                    "id": "slot-1-delete",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Delete",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:delete:slot-1"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "slot-2",
+            "widget": "Stack",
+            "props": {
+              "direction": "column",
+              "gap": 8,
+              "padding": 12,
+              "background": "rgba(255, 255, 255, 0.07)",
+              "radius": 6
+            },
+            "children": [
+              {
+                "id": "slot-2-label",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.slot-2.label"
+                  },
+                  "fontWeight": "700"
+                }
+              },
+              {
+                "id": "slot-2-status",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.slot-2.status"
+                  },
+                  "fontSize": 13,
+                  "color": "#d7deea"
+                }
+              },
+              {
+                "id": "slot-2-level",
+                "widget": "Text",
+                "props": {
+                  "text": {
+                    "bind": "save.slots.slot-2.level"
+                  },
+                  "fontSize": 12,
+                  "color": "#aab4c4"
+                }
+              },
+              {
+                "id": "slot-2-actions",
+                "widget": "Stack",
+                "props": {
+                  "direction": "row",
+                  "gap": 8
+                },
+                "children": [
+                  {
+                    "id": "slot-2-save",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Save",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:write:slot-2"
+                      }
+                    }
+                  },
+                  {
+                    "id": "slot-2-load",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Load",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:load:slot-2"
+                      }
+                    }
+                  },
+                  {
+                    "id": "slot-2-delete",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Delete",
+                      "onClick": {
+                        "type": "message",
+                        "message": "save:delete:slot-2"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "footer",
+            "widget": "Stack",
+            "props": {
+              "direction": "row",
+              "justify": "end",
+              "gap": 8
+            },
+            "children": [
+              {
+                "id": "resume",
+                "widget": "Button",
+                "props": {
+                  "text": "Resume",
+                  "onClick": {
+                    "type": "back"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -69,7 +69,34 @@ export class DebugPanel {
     this.controlSlot.className = "forge-debug-panel-control-slot";
     this.controls.appendChild(this.controlSlot);
     this.readout.className = "forge-debug-panel-readout";
+    this.readout.id = `${this.root.id || "forge-debug"}-readout`;
+    this.readout.tabIndex = -1;
+    this.readout.setAttribute("aria-label", "Performance diagnostics");
     this.root.replaceChildren(this.controls, this.readout);
+    // Passive diagnostics must not intercept game-menu clicks. Reading the
+    // scrollable/selectable text is an explicit mode, separate from controls.
+    const inspect = document.createElement("button");
+    inspect.type = "button";
+    inspect.className = "forge-debug-panel-button";
+    inspect.dataset.forgeDebugAction = "inspect-readout";
+    inspect.textContent = "Inspect text";
+    inspect.title = "Scroll and select diagnostic text. Turn off to click through it.";
+    inspect.setAttribute("aria-controls", this.readout.id);
+    inspect.setAttribute("aria-pressed", "false");
+    const setInspecting = (enabled: boolean): void => {
+      this.root.classList.toggle("is-inspecting", enabled);
+      inspect.classList.toggle("is-active", enabled);
+      inspect.setAttribute("aria-pressed", String(enabled));
+      this.readout.tabIndex = enabled ? 0 : -1;
+    };
+    inspect.addEventListener("click", () => setInspecting(inspect.getAttribute("aria-pressed") !== "true"));
+    this.readout.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setInspecting(false);
+      inspect.focus();
+    });
+    this.controls.appendChild(inspect);
     for (const action of options.actions ?? []) this.addAction(action);
     this.modal = new DebugTableModal({
       ...(options.modalHost ? { host: options.modalHost } : {}),
@@ -109,6 +136,7 @@ export class DebugPanel {
     this.modal.dispose();
     this.root.replaceChildren();
     this.root.classList.remove("forge-debug-panel");
+    this.root.classList.remove("is-inspecting");
   }
 }
 

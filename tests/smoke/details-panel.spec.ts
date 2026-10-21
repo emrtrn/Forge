@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("Details panel exposes redesigned transform and material controls", async ({ page }) => {
   const pageErrors: string[] = [];

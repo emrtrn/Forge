@@ -5437,6 +5437,10 @@
           ]
         }
       ]
+    },
+    {
+      "assetId": "mercedes-sls",
+      "placements": []
     }
   ],
   "characters": [],
@@ -5786,15 +5790,6 @@
   ],
   "actors": [
     {
-      "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
-      "position": [
-        -81.33,
-        1.2,
-        -36.11
-      ],
-      "rotationYDeg": 0
-    },
-    {
       "classRef": "assets/starter-content/Gameplay/Script_AiReferenceCar.actor.json",
       "position": [
         -81.39,
@@ -5811,6 +5806,16 @@
         "acceptanceRadius": 0.55,
         "lookAheadDistance": 1.2
       }
+    },
+    {
+      "classRef": "assets/vehicles/mercedes-sls/Script_MercedesSLS.actor.json",
+      "position": [
+        -80.36,
+        1.29,
+        -33.77
+      ],
+      "rotationYDeg": 0,
+      "scale": 1
     }
   ]
 }

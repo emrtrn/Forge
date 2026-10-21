@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("editor AI Navigation Volume smoke: add, inspect, show, save, reload", async ({ page }) => {
   const pageErrors: string[] = [];

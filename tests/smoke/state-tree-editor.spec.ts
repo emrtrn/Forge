@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 // Verifies the StateTree editor opens, derives its nested-state outline +
 // transition table + validation from the engine normalizer, and reacts to raw
@@ -17,7 +17,8 @@ test("state tree editor renders outline, transitions and validation", async ({ p
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
 
   await page.evaluate(async () => {
-    const mod = await import("/src/editor/StateTreeEditor.ts");
+    const url = "/src/editor/StateTreeEditor.ts";
+    const mod = await import(url) as typeof import("../../src/editor/StateTreeEditor");
     await mod.StateTreeEditor.open({
       path: "assets/AI/SmokeGuard.stateTree.json",
       label: "SmokeGuard",

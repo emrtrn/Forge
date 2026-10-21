@@ -106,11 +106,70 @@ Denetleyici mevcut katman kurallarına göre doğrudan, literal import yolların
 kontrol eder. Hesaplanan dinamik yolların veya transitif bağımlılıkların tamamı
 için doğrulama iddiası yoktur. Uzak CI koşumu ve canlı dağıtım yapılmadı.
 
-## 3. Sonraki dilimler
+## 3. F03 + F15 — Bağımsız browser verisi ve debug tıklamaları
 
-1. **F03 + F15:** Bağımsız browser fixture'ları ve debug panelinin Load
-   tıklamasını kesmesinin giderilmesi.
-2. **F04–F07:** Yayın içerik kümesi, asset kaynak kayıtları, browser CI,
+- Kod: uygulandı.
+- Otomatik doğrulama: tam Chromium paketi **49/49**, güncel tam `build:verify`
+  ve TypeScript kontrolleri geçti.
+- Kullanıcı/görsel kabulü: yapılmadı.
+
+### Uygulanan davranış
+
+- Her Playwright koşumu ayrı `.playwright-smoke/run-<uuid>` projesi alır.
+  `public/` dosyaları gerçek kopyadır; normal statik okumalar ve mevcut Vite
+  kayıt middleware'i bu kopyada çalışır. Geliştiricinin manifesti, demo level'ları
+  ve sidecar'ları test başlangıcında/sonunda değiştirilmez.
+- Kaynak kontrollü test base level'ı, karakter AI actor/behavior/kapalı rotası,
+  menü ve üç segmentlik yol tanımı [fixtures](../../tests/smoke/fixtures/)
+  altında. Varsayılan sahne seçimi veya kullanıcının arazi düzenlemesi bunları
+  belirlemez. Oyun starter'ları ve gerçek asset'ler bağımlılık olarak kopyalanır.
+- Bütün spec'ler [test fixture'ını](../../tests/smoke/test.ts) kullanır. Her case
+  öncesi üretilmiş level/manifest/menü/sidecar belgeleri başlangıca döner; önceki
+  case kaydetmiş veya başarısız olmuş olsa da sonraki aynı ön koşulla başlar.
+- Yol testi kendi level ve sidecar'ını açıkça seçer. Sculpt/paint farklı bir
+  sidecar'a yazar; testlerin kullanıcı arazisini yedekleyip geri yüklemesi kaldırıldı.
+- Teardown yalnız bu koşumun sunucusunu durdurur ve doğrulanmış run dizinini
+  siler. Sunucu başlangıcı başarısız olursa kendi geçici projesini temizler.
+- Debug readout varsayılan olarak tıklamaları geçirir. **Inspect text** kaydırma
+  ve metin seçimini açar; readout odaktayken Escape bu modu kapatır. Kontrol
+  düğmeleri her iki durumda da etkileşimlidir. Load testinde zorunlu tıklama yok.
+- Araç Load ve kamera sürükleme testlerindeki iki `pointer-events` CSS müdahalesi
+  kaldırıldı. İleri/fren/geri sürüş testi, engel senaryolarından ayrı düz test
+  şeridinde çalışır; hız beklentileri ve fizik kodu değiştirilmedi.
+- `tsconfig.smoke.json` bütün smoke TypeScript dosyalarını ve Playwright ayarını
+  denetler. `verify:smoke-fixtures`, bu tip kontrolü ile izolasyon testlerini
+  çalıştırır ve mevcut `build:verify` kapısına dahildir.
+
+### Doğrulama
+
+- Beş fixture kontrolü geçti: Terrain/Playground default'undan bağımsız sonuç,
+  dosya kopyasında save/delete/cleanup'ın kaynağı değiştirmemesi, başarısız case
+  sonrası reset, başarısız kurulumda kaynağın korunması ve dizin sınırları.
+- Sabit level fixture'larının save allowlist'inde alan kaybetmediği kontrol edildi.
+- Bütün smoke dosyaları, Playwright ayarı ve uygulama tip kontrolünden geçti.
+- `npm.cmd run build:verify`: **1.236 engine kontrolü + 10 import denetleyici
+  testi + 5 fixture testi** geçti. Uygulama/smoke TypeScript kontrolleri, production
+  build ve sıkı dist taraması başarılı.
+- Önceden başarısız AI patrol/clearance, üç segmentlik yol ve checkpoint
+  save→Load→restore akışları hedefli koşumlarda geçti. Debug testinde pasif/okuma
+  modu, Escape, frame table aç/kapa, Pause/Resume ve GPU düğmesine erişim doğrulandı.
+- Tam Chromium paketi **49/49 geçti (15,4 dakika)**. Editör authoring/save/Play,
+  runtime hareket/travel/checkpoint, AI, landscape, debug panel ve araç akışları
+  dahil. İlk tam koşum 48/49 idi; geri sürüş senaryosunu düz şeride ayırdıktan
+  sonra paketin tamamı yeniden çalıştırıldı ve geçti.
+- Başarılı ve başarısız tam koşumların geçici proje dizinleri teardown ile
+  temizlendi. Kaynak authoring dosyaları yedekten geri yazılmadı; koşum sırasında
+  çalışma ağacına eklenen ayrı Mercedes SLS asset/level düzenlemelerine dokunulmadı.
+
+Koşum başına izolasyon vardır; aynı koşumda hâlâ tek worker ortak projeyi kullanır.
+Worker paralelliği artırılmadı. Tamamen zorla sonlandırılan runner ignored
+geçici dosya bırakabilir; gerçek authoring dosyalarında geri yükleme gerektirmez.
+Uzak browser CI kurulumu F05 kapsamında bekliyor. Kullanım ayrıntıları:
+[smoke README](../../tests/smoke/README.md).
+
+## 4. Sonraki dilimler
+
+1. **F04–F07:** Yayın içerik kümesi, asset kaynak kayıtları, browser CI,
    root/subpath production HTTP kontrolü ve paket bütçeleri.
 
 Kayıt endpoint/validator güvenlik incelemesi ayrı öneridir. Bu uygulama diliminde

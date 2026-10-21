@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("editor exposes generic Spline Actor point editing controls", async ({ page }) => {
   const pageErrors: string[] = [];

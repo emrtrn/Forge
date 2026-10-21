@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 // Verifies the Behavior Tree editor opens a real `*.behavior.json` asset and
 // derives its outline + validation from the engine normalizer. It drives the
@@ -18,7 +18,8 @@ test("behavior tree editor renders outline and validation for a real asset", asy
   // Open the editor on the starter-content AI_Test behavior tree (selector root
   // with services + children) via the component's own dynamic-import entry point.
   await page.evaluate(async () => {
-    const mod = await import("/src/editor/BehaviorTreeEditor.ts");
+    const url = "/src/editor/BehaviorTreeEditor.ts";
+    const mod = await import(url) as typeof import("../../src/editor/BehaviorTreeEditor");
     await mod.BehaviorTreeEditor.open({
       path: "assets/starter-content/AI/AI_Test.behavior.json",
       label: "AI_Test",

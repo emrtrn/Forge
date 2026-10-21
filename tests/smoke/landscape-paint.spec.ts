@@ -1,10 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
-import { preserveLandscapeSidecar } from "./landscapeSidecar";
+import { expect, test, type Page } from "./test";
 
 test.setTimeout(210_000);
 
-// This spec saves a landscape, which rewrites the shared authored sidecar.
-preserveLandscapeSidecar();
+// Saves stay inside the per-run smoke project.
 
 async function deleteExistingLandscape(page: Page): Promise<void> {
   const landscapeRows = page.getByTestId("outliner-row").filter({ hasText: "Landscape" });

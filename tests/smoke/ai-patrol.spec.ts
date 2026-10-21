@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 const SMOKE_PATROL_SCENE_NAME = "__playwright-smoke-patrol";
 
@@ -17,7 +17,7 @@ async function waitForConsoleText(
   });
 }
 
-test("runtime AI spline smoke: travel to the Playground route, agent follows the closed spline", async ({
+test("runtime AI spline smoke: travel to the test route, agent follows the closed spline", async ({
   page,
   context,
 }) => {
@@ -33,8 +33,7 @@ test("runtime AI spline smoke: travel to the Playground route, agent follows the
     consoleMessages.push(message.text());
   });
 
-  // Boot the actor-stripped default smoke scene, then travel into the Playground
-  // fixture. It retains the AI_Character and closed `spline-1` actor.
+  // Travel from the corridor to the test-owned AI character and closed spline.
   await page.goto(`/?debug&aiPatrolSmoke=${Date.now()}`);
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator("#ui-overlay")).toBeVisible();

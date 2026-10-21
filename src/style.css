@@ -526,7 +526,7 @@ body {
   gap: 4px;
   align-items: center;
   margin-bottom: 4px;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 /* Reserved, and reserved even while empty: a persistent control (the speed
@@ -538,6 +538,7 @@ body {
 }
 
 .forge-debug-panel-button {
+  pointer-events: auto;
   appearance: none;
   cursor: pointer;
   padding: 2px 8px;
@@ -557,15 +558,23 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  /* Scrollable, so it takes the pointer over its own corner of the screen.
-     A worthwhile trade only because this whole surface exists behind `?debug`:
-     the alternative is ninety lines of readout that cannot be read past the
-     first forty. */
-  pointer-events: auto;
+  /* Passive text lets menu clicks through. Inspect text explicitly enables
+     scrolling/selection while the control buttons always remain interactive. */
+  pointer-events: none;
+  user-select: none;
   margin: 0;
   font: inherit;
   color: inherit;
   white-space: pre;
+}
+
+.forge-debug-panel.is-inspecting .forge-debug-panel-readout {
+  pointer-events: auto;
+  user-select: text;
+}
+
+.forge-debug-panel-readout:focus-visible {
+  outline: 1px solid #7fff7f;
 }
 
 /* The speed picker lives in the reserved slot; `is-active` marks the state the

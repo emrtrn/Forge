@@ -1,8 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { smokePublicPath } from "./smokeProject.mjs";
 
 /**
  * Vehicle plan Faz 1b: the starter Reference Car drives in a real browser.
@@ -107,7 +107,9 @@ async function openVehicleTest(
 
 test("vehicle smoke: the Reference Car is possessed and drives on W", async ({ page }) => {
   const assetResponse = page.waitForResponse((response) => response.url().endsWith(VEHICLE_ASSET));
-  const pageErrors = await openVehicleTest(page);
+  // This checks input/braking/reverse on a flat lane; ramps and props belong
+  // to the dedicated camera/collision scenarios rather than this timing gate.
+  const pageErrors = await openVehicleTest(page, "Vehicle", flatLane);
   expect((await assetResponse).ok()).toBe(true);
   // Parked: the car settled on its suspension and is not creeping.
   await expect.poll(async () => Math.abs((await readVehicleCamera(page)).kmh)).toBeLessThan(2);
@@ -199,8 +201,7 @@ test("vehicle save-game: a quick-save while driving loads back behind the wheel,
     .toBeGreaterThan(25);
   await page.keyboard.up("KeyW");
 
-  // The overlay keeps reporting, but must not sit over the menu's buttons.
-  await page.addStyleTag({ content: "#debug-stats, #debug-stats * { pointer-events: none !important; }" });
+  // The real passive debug readout must let the menu receive normal clicks.
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-ui-id="title"]')).toContainText("Save / Load");
   await page.locator('[data-ui-id="quick-save"]').click();
@@ -251,7 +252,6 @@ test("vehicle chase camera stops in front of a wall and orbits with a right-drag
   expect((await readChaseArm(page)).lookDeg).toBe(0);
 
   // Right-drag left: the view turns left, off the wall, and the arm grows back.
-  await page.addStyleTag({ content: "#debug-stats, #debug-stats * { pointer-events: none !important; }" });
   const canvas = page.locator("#game-canvas");
   const box = (await canvas.boundingBox()) ?? assert.fail("no canvas box");
   const x = box.x + box.width / 2;
@@ -351,14 +351,14 @@ test("vehicle AI driver laps the VehicleTrack loop on its own pedals", async ({ 
 test("vehicle asset save endpoint persists normalized data and reports dropped fields", async ({ request }) => {
   const path = `assets/__vehicle-smoke-${randomUUID()}.vehicle.json`;
   try {
-    const reference = JSON.parse(await readFile(resolve("public", VEHICLE_ASSET), "utf8"));
+    const reference = JSON.parse(await readFile(smokePublicPath(VEHICLE_ASSET), "utf8"));
     expect((await request.get("/__save-vehicle")).status()).toBe(405);
     const response = await request.post("/__save-vehicle", { data: {
       path, vehicle: { ...reference, massKg: 950, extra: true },
     } });
     expect(response.ok()).toBe(true);
     expect(await response.json()).toMatchObject({ ok: true, changed: true, dropped: ["vehicle.extra"] });
-    const saved = JSON.parse(await readFile(resolve("public", path), "utf8"));
+    const saved = JSON.parse(await readFile(smokePublicPath(path), "utf8"));
     expect(saved.massKg).toBe(950);
     expect(saved.wheels).toHaveLength(4);
     expect(saved.wheels.map((wheel: { visualNode: string }) => wheel.visualNode))
@@ -377,9 +377,9 @@ test("vehicle asset save endpoint persists normalized data and reports dropped f
     expect((await request.post("/__save-vehicle", { data: {
       path, vehicle: { schema: 99, type: "vehicle" },
     } })).status()).toBe(400);
-    expect(JSON.parse(await readFile(resolve("public", path), "utf8"))).toEqual(saved);
+    expect(JSON.parse(await readFile(smokePublicPath(path), "utf8"))).toEqual(saved);
   } finally {
-    await rm(resolve("public", path), { force: true });
+    await rm(smokePublicPath(path), { force: true });
   }
 });
 
@@ -532,10 +532,10 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
 });
 
 test("vehicle authoring: place a car from Add Actor, save, Play, and drive it", async ({ page, context }) => {
-  // The editor opens the shared smoke level (global setup copies it, teardown
-  // restores it). Serve it as a flat, car-free copy of VehicleTest in
+  // The editor opens this run's isolated smoke level. Serve it as a flat,
+  // car-free copy of VehicleTest in
   // forge.vehicle mode, so the placed car is the only vehicle to possess.
-  const flat = JSON.parse(await readFile(resolve("public", VEHICLE_LEVEL), "utf8")) as LevelJson;
+  const flat = JSON.parse(await readFile(smokePublicPath(VEHICLE_LEVEL), "utf8")) as LevelJson;
   flatLane(flat);
   flat.blockingVolumes[0].size = [1000, 1, 1000]; // the save allowlist's largest volume
   flat.actors = [];

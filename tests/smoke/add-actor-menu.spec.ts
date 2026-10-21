@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("Add Actor menu uses a flat hover-only category list", async ({ page }) => {
   await page.setViewportSize({ width: 1680, height: 900 });

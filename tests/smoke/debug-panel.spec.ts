@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 /**
  * F6 of the `?debug` performance-instrument plan: the panel driven in a real
@@ -83,6 +83,18 @@ test("debug panel: the control strip captures a frame, shows a table and closes 
     });
   }
 
+  // Reading is opt-in: the passive text cannot cover Load or other menu
+  // buttons, while scrolling and text selection remain available explicitly.
+  await expect(readout).toHaveCSS("pointer-events", "none");
+  const inspect = page.locator('[data-forge-debug-action="inspect-readout"]');
+  await inspect.click();
+  await expect(inspect).toHaveAttribute("aria-pressed", "true");
+  await expect(readout).toHaveCSS("pointer-events", "auto");
+  await readout.focus();
+  await page.keyboard.press("Escape");
+  await expect(inspect).toHaveAttribute("aria-pressed", "false");
+  await expect(readout).toHaveCSS("pointer-events", "none");
+
   // --- the frame capture ----------------------------------------------------
   const modal = page.locator(".forge-debug-table");
   await expect(modal).toBeHidden();
@@ -105,6 +117,7 @@ test("debug panel: the control strip captures a frame, shows a table and closes 
 
   await page.locator('[data-forge-debug-action="close-table"]').click();
   await expect(modal).toBeHidden();
+  await page.locator('[data-forge-debug-action="gpu-sweep"]').click({ trial: true });
 
   // --- the diagnostic pause -------------------------------------------------
   const pause = page.locator('[data-forge-debug-action="toggle-pause"]');

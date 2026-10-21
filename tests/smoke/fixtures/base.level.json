@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "name": "Smoke Base",
+  "loadGroups": [],
+  "instances": [],
+  "characters": [],
+  "actors": [],
+  "lights": [{"id":"sun","type":"directional","position":[4,8,4],"rotation":[-45,30,0],"color":"#ffffff","intensity":3,"castShadow":false}],
+  "worldSettings": {"backgroundColor":"#c9d8e8","killZ":-10}
+}

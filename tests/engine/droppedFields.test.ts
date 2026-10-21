@@ -24,6 +24,13 @@ function playgroundLayout(): Record<string, unknown> {
 }
 
 export function registerDroppedFieldTests(check: Check): void {
+  check("smoke scene fixtures survive the save allowlist without dropped fields", () => {
+    for (const name of ["base.level.json", "patrol.level.json"]) {
+      const layout: unknown = JSON.parse(readFileSync(`tests/smoke/fixtures/${name}`, "utf8"));
+      assert.deepEqual(collectDroppedFields(layout, validateLayout(layout), name, 100).paths, [], name);
+    }
+  });
+
   check("the template's own layout survives a save with nothing dropped", () => {
     const layout = playgroundLayout();
     const report = collectDroppedFields(layout, validateLayout(layout), "layout", 100);

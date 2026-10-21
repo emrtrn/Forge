@@ -1,6 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
+import { SMOKE_SPLINE_SCENE, SMOKE_ROAD_SIDECAR } from "./smokeProject.mjs";
 
 test("editor and Play render the authored asphalt spline chain without browser errors", async ({ page }, testInfo) => {
+  await page.route("**/project.3dgame.json", async (route) => {
+    const response = await route.fetch();
+    const manifest = await response.json();
+    manifest.editor.defaultScene = SMOKE_SPLINE_SCENE;
+    await route.fulfill({ response, json: manifest });
+  });
   let pageErrors: string[] = [];
   const consoleMessages: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -29,16 +36,14 @@ test("editor and Play render the authored asphalt spline chain without browser e
   // scene mesh count. The engine check covers the one-mesh chain invariant.
   await page.waitForTimeout(1_000);
 
-  const spline = await page.evaluate(async () => {
-    const response = await fetch(`/landscapes/landscape-1.landscape.json?splineChain=${Date.now()}`);
+  const spline = await page.evaluate(async (sidecar) => {
+    const response = await fetch(`/${sidecar}?splineChain=${Date.now()}`);
     if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
     return (await response.json()) as {
       splines?: Array<{ segments: Array<{ mesh?: { enabled?: boolean; assetId?: string; deform?: boolean } }> }>;
     };
-  });
-  // The authored chain in `public/landscapes/landscape-1.landscape.json`: three
-  // deforming segments on the asphalt road mesh. (`sm-asphalt` was renamed to
-  // `sm-road-asphalt`; this spec still asserted the old id and an old count.)
+  }, SMOKE_ROAD_SIDECAR);
+  // The test-owned road fixture has exactly three deforming asphalt segments.
   const segments = spline.splines?.[0]?.segments ?? [];
   expect(segments).toHaveLength(3);
   expect(

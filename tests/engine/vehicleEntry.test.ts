@@ -47,6 +47,7 @@ function stateWithContacts(contactYs: readonly (number | null)[]): VehicleState 
       steering: 0,
       rotation: 0,
       inContact: y !== null,
+      groundEntityId: y === null ? null : "ground",
       contactPoint: y === null ? null : [0, y, 0],
       hardPoint: null,
     })),

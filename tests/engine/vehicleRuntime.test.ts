@@ -66,6 +66,7 @@ function wheelState(position: [number, number, number], suspensionLength: number
     steering: 0,
     rotation: 0,
     inContact: true,
+    groundEntityId: null,
     contactPoint: null,
     hardPoint: null,
   };

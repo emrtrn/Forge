@@ -11,6 +11,7 @@ import { interactionGroupsInteract, type NavigationRole } from "../scene/collisi
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
 import { computeVehicleDrive } from "./vehicle/vehicleDrive";
+import { computeWheelSurfaceResponse, type VehicleSurfaceProvider } from "./surface/surfaceResponse";
 import { computeVehicleAerodynamics, initialVehicleDrivetrainState } from "./vehicle/vehicleDrivetrain";
 import {
   NEUTRAL_VEHICLE_INPUT,
@@ -192,6 +193,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   /** Dynamic poses before the latest slice, for render interpolation. */
   private previousPoses = new Map<EntityId, PreviousBodyPose>();
   private vehicles = new Map<EntityId, VehicleRecord>();
+  private vehicleSurfaceProvider: VehicleSurfaceProvider | null = null;
 
   constructor(options: PhysicsSubsystemOptions = {}) {
     this.backend = options.backend ?? "placeholder";
@@ -209,6 +211,16 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   /** How many fixed slices the latest `update()` simulated. */
   lastFrameStepCount(): number {
     return this.frameStepCount;
+  }
+
+  /** Installs optional wheel surface response; null restores authored behaviour. */
+  setVehicleSurfaceProvider(provider: VehicleSurfaceProvider | null): void {
+    this.vehicleSurfaceProvider = provider;
+  }
+
+  /** Live collider profile reference for generic surface-provider hosts. */
+  colliderPhysicalMaterialId(entityId: EntityId): string | undefined {
+    return this.bodies.find((body) => body.id === entityId)?.collider.physicalMaterialId;
   }
 
   /** Render blend (0..1) between the previous and latest simulated dynamic poses. */
@@ -379,6 +391,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           steering: controller.wheelSteering(index) ?? 0,
           rotation: controller.wheelRotation(index) ?? 0,
           inContact,
+          groundEntityId: inContact ? this.vehicleWheelGroundEntity(controller, index) : null,
           contactPoint: contact ? [contact.x, contact.y, contact.z] : null,
           hardPoint: hardPoint ? [hardPoint.x, hardPoint.y, hardPoint.z] : null,
         };
@@ -1095,6 +1108,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     return true;
   }
 
+  private vehicleWheelGroundEntity(controller: RapierVehicleController, index: number): EntityId | null {
+    const ground = controller.wheelGroundObject(index);
+    return ground ? this.rapierColliderToEntity.get(ground.handle) ?? null : null;
+  }
+
   /** Feeds each vehicle's drive commands and runs its wheel rays for one slice. */
   private updateVehicles(deltaSeconds: number): void {
     const RAPIER = this.rapierModule;
@@ -1104,10 +1122,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       const rapier = this.rapierBodies.get(record.entityId);
       if (!controller || !rapier) continue;
       if (this.suspendedDynamicBodies.has(record.entityId)) continue;
+      const forwardSpeed = chassisForwardSpeed(rapier.body);
       const drive = computeVehicleDrive(
         record.definition,
         record.input,
-        chassisForwardSpeed(rapier.body),
+        forwardSpeed,
         record.steer,
         deltaSeconds,
         record.drivetrain,
@@ -1116,11 +1135,24 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       record.drivetrain = drive.drivetrain;
       record.engineLoad = drive.engineLoad;
       drive.wheels.forEach((command, index) => {
+        const wheel = record.definition.wheels[index]!;
+        // Rapier exposes the previous slice's wheel rays/load until updateVehicle.
+        const contact = this.vehicleSurfaceProvider && controller.wheelIsInContact(index)
+          ? controller.wheelContactPoint(index) : null;
+        const sample = contact ? this.vehicleSurfaceProvider!(
+          record.entityId, index, this.vehicleWheelGroundEntity(controller, index),
+          [contact.x, contact.y, contact.z],
+        ) : null;
+        const surface = computeWheelSurfaceResponse(
+          { frictionSlip: wheel.frictionSlip, sideFrictionStiffness: command.sideFrictionStiffness },
+          sample, forwardSpeed, controller.wheelSuspensionForce(index) ?? 0,
+        );
         controller.setWheelEngineForce(index, command.engineForce);
         // The controller takes the brake as a per-slice impulse cap.
-        controller.setWheelBrake(index, command.brakeForce * deltaSeconds);
+        controller.setWheelBrake(index, (command.brakeForce + surface.rollingResistanceForce) * deltaSeconds);
         controller.setWheelSteering(index, command.steering);
-        controller.setWheelSideFrictionStiffness(index, command.sideFrictionStiffness);
+        controller.setWheelFrictionSlip(index, surface.frictionSlip);
+        controller.setWheelSideFrictionStiffness(index, surface.sideFrictionStiffness);
       });
       const velocity = rapier.body.linvel();
       const force = computeVehicleAerodynamics(record.definition, [velocity.x, velocity.y, velocity.z]);
@@ -1707,6 +1739,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
   if (collider.center) clone.center = [...collider.center];
   if (collider.primitives) clone.primitives = collider.primitives.map(clonePrimitive);
   if (collider.friction !== undefined) clone.friction = collider.friction;
+  if (collider.physicalMaterialId !== undefined) clone.physicalMaterialId = collider.physicalMaterialId;
   if (collider.restitution !== undefined) clone.restitution = collider.restitution;
   if (collider.navigationRole !== undefined) clone.navigationRole = collider.navigationRole;
   if (collider.generateOverlapEvents !== undefined) {

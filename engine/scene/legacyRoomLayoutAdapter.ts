@@ -605,6 +605,7 @@ function colliderComponent(
   const physicalMaterialId = source.physicalMaterialId ?? collisionDef?.physicalMaterialId;
   if (physicalMaterialId) {
     const material = resolvePhysicalMaterial(physicalMaterialId);
+    component.physicalMaterialId = physicalMaterialId;
     component.friction = material.friction;
     component.restitution = material.restitution;
   }

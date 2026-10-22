@@ -243,6 +243,8 @@ export interface ColliderComponent {
   hideInGame?: boolean;
   /** Surface friction (Rapier). Absent uses the backend default. */
   friction?: number;
+  /** Authored surface profile id, retained for ray-cast vehicle response. */
+  physicalMaterialId?: string;
   /** Surface restitution / bounciness (Rapier). Absent uses the backend default. */
   restitution?: number;
   /** AI navigation interpretation; affects nav generation only, not physics collision. */
@@ -867,6 +869,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   const primitives = readColliderPrimitives(data.primitives);
   if (primitives) component.primitives = primitives;
   if (typeof data.friction === "number") component.friction = data.friction;
+  if (typeof data.physicalMaterialId === "string") component.physicalMaterialId = data.physicalMaterialId;
   if (typeof data.restitution === "number") component.restitution = data.restitution;
   if (isNavigationRole(data.navigationRole)) component.navigationRole = data.navigationRole;
   if (typeof data.generateOverlapEvents === "boolean") {

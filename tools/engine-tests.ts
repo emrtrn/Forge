@@ -1044,6 +1044,7 @@ import { registerGpuSweepTests } from "../tests/engine/gpuSweep.test";
 import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.test";
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
+import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.test";
 
@@ -1163,6 +1164,7 @@ registerGpuSweepTests(check);
 registerGpuSweepSessionTests(check);
 registerPerfWitnessTests(check);
 registerTerrainTests(check);
+registerSurfaceResponseTests(check);
 registerTerrainLodTests(check);
 registerStreamingPolicyTests(check);
 registerTerrainDocumentTests(check);
@@ -6915,6 +6917,8 @@ async function createVehicleTestWorld(options: { slopeDeg?: number; groundSize?:
     physics.setVehicleInput("car", { ...NEUTRAL_VEHICLE_INPUT, ...patch });
   return { physics, entities, tick, position, drive };
 }
+
+await registerSurfaceResponseRapierTests(checkAsync, createVehicleTestWorld);
 
 await checkAsync("rapier vehicle only attaches to a live dynamic chassis", async () => {
   await withQuietRapierInit(async () => {

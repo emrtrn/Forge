@@ -8,6 +8,8 @@
  * Authored as `*.vehicle.json` assets or inline Vehicle component props.
  * Runtime loading and saving share {@link normalizeVehicleDefinition}.
  */
+import type { EntityId } from "../../scene/entity";
+
 export type VehicleVec3 = readonly [number, number, number];
 
 export interface VehicleWheelDefinition {
@@ -216,6 +218,8 @@ export interface VehicleWheelState {
   /** Accumulated spin about the axle in radians. */
   readonly rotation: number;
   readonly inContact: boolean;
+  /** Entity owning the contacted collider, or null when airborne/unmapped. */
+  readonly groundEntityId: EntityId | null;
   /** World-space ground hit, when in contact. */
   readonly contactPoint: VehicleVec3 | null;
   /** World-space ray start (the hard point). */

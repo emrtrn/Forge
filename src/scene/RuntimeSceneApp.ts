@@ -81,6 +81,7 @@ import {
 } from "@engine/behavior/behaviorSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
+import { createPhysicalMaterialSurfaceProvider } from "@engine/physics/surface/surfaceResponse";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { AudioBus, AudioPlaybackHandle } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
@@ -1199,6 +1200,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.addSubsystem("pre-physics", this.animationSubsystem);
     this.runtimeServices.addSubsystem("pre-physics", this.inputSubsystem);
     this.runtimeServices.addSubsystem("physics", this.physicsSubsystem);
+    this.physicsSubsystem.setVehicleSurfaceProvider(createPhysicalMaterialSurfaceProvider(
+      (entityId) => this.physicsSubsystem.colliderPhysicalMaterialId(entityId),
+    ));
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       this.createSceneBehaviorRegistry(),

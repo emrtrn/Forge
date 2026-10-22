@@ -89,6 +89,7 @@ import {
 } from "@engine/ai/behaviorAsset";
 import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
+import { createPhysicalMaterialSurfaceProvider } from "@engine/physics/surface/surfaceResponse";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
@@ -1657,6 +1658,9 @@ export class SceneApp {
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
+    this.physicsSubsystem.setVehicleSurfaceProvider(createPhysicalMaterialSurfaceProvider(
+      (entityId) => this.physicsSubsystem.colliderPhysicalMaterialId(entityId),
+    ));
     this.engineApp.registerSubsystem(this.aiSubsystem);
     // Registered after input so behaviors read current-tick action state.
     this.behaviorSubsystem = new BehaviorSubsystem(

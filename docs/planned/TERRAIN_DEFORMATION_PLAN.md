@@ -1,6 +1,6 @@
 # Terrain Deformasyonu Planı (Kar / Çamur İzleri)
 
-> Durum: **Planlandı, başlanmadı** (2026-10-22).
+> Durum: **Faz 1a tamamlandı; Faz 1b, OPEN_WORLD Faz 3'ü bekliyor** (2026-10-23).
 > Hedef: Araç (ve ileride karakter) Landscape üzerinde giderken kar, çamur ve
 > kum gibi yumuşak zeminlerde **iz bırakması, gömülmesi ve zorlanması**.
 > Referans his: SnowRunner / Expeditions. Hedef, o hissin web'de ulaşılabilir
@@ -209,21 +209,37 @@ Görsel değişiklik yok. Araç çamurda zorlanır, karda kayar.
 
 **1a — arazi dışı (açık dünya Faz 3'ü beklemez)**
 
-- [ ] `PhysicalMaterialDef.vehicle` / `.deformation` tipleri + `snow`, `mud`,
+- [x] `PhysicalMaterialDef.vehicle` / `.deformation` tipleri + `snow`, `mud`,
       `sand` presetleri; `resolvePhysicalMaterial` bozulmadan genişler.
-- [ ] `surfaceResponse.ts`: katman karışımı → `SurfaceSample`
+- [x] `surfaceResponse.ts`: katman karışımı → `SurfaceSample`
       (`frictionSlipScale`, `sideFrictionScale`, `rollingResistance`,
       `deformability`).
-- [ ] `PhysicsSubsystem.setVehicleSurfaceProvider()`. `updateVehicles()`
+- [x] `PhysicsSubsystem.setVehicleSurfaceProvider()`. `updateVehicles()`
       `computeVehicleDrive` sonrasında tekerlek başına çarpanları uygular.
       `frictionSlip` artık yalnız attach anında değil, her adımda set edilir.
       Provider yoksa çarpanlar 1 olur ve davranış bugünküyle aynı kalır.
-- [ ] `VehicleWheelState.groundEntityId` eklenir.
-- [ ] Landscape dışı zemin: provider, zemin collider'ının `physicalMaterialId`
-      değerini kullanır. Örneğin `slippery` mesh üstünde araç da kayar.
-- [ ] Testler: `tests/engine/surfaceResponse.test.ts` (karışım, sınır geçişi,
+- [x] `VehicleWheelState.groundEntityId` eklenir.
+- [x] Landscape dışı zemin: provider, zemin collider'ının `physicalMaterialId`
+      değerini kullanır. Örneğin `mud` mesh üstünde araç zorlanır.
+- [x] Testler: `tests/engine/surfaceResponse.test.ts` (karışım, sınır geçişi,
       provider yokken nötr), `vehicleRuntime` regresyonu (physical material yok →
       eski hız eğrisi).
+
+**1a notu (2026-10-23):** Varsayılan mesh provider `SceneApp` ve
+`RuntimeSceneApp` tarafından kurulur; doğrudan `PhysicsSubsystem` kullanımı
+providersızdır, `setVehicleSurfaceProvider(null)` ile kapatılır. Collider
+kimliği asset/placement adaptörü, component okuyucusu ve fizik kopyasında korunur.
+Eski presetler (`slippery` dahil) `vehicle` bloğu almadı ve nötr kaldı; dropdown
+ve save allowlist zaten ortak `PHYSICAL_MATERIAL_IDS` listesini kullanıyor.
+`deformability`, `maxDepth > 0` profillerin toplam katılım ağırlığıdır (0..1);
+derinlik/compaction hesabı sonraki fazlara aittir. Ek fren kuvveti
+`rollingResistance × suspensionLoad × min(|speed| / 1 m/s, 1)` olarak seçildi,
+Rapier'e `force × dt` fren impuls sınırı verilir. Temas/yük son tamamlanan
+fizik adımından okunur. Faz 0'ın gerçek sahnede fren–impuls karşılaştırması
+açık kalır. On iki yeni kontrol; providersız/nötr altı noktalı hız eğrisini
+değişiklik öncesi değerlerle birebir, çamur ivmelenmesini, provider'ın
+kapatılmasını, zemin entity eşlemesini ve preset id kayıt dönüşünü kapsar.
+Faz 1b terrain katmanı bağlantıları bu değişikliğe dahil değildir.
 
 **1b — terrain bağlantısı (açık dünya Faz 3'ten sonra)**
 

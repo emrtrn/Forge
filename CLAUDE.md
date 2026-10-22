@@ -95,6 +95,7 @@ engine/editor.
   live in `applyTransformFields`. (`LayoutCharacter` shares `applyTransformFields`
   plus explicit `assetId`/`position`/`animation`; all current fields are covered —
   character skeletal metadata is asset-level, not on the placement.)
+  Physical material `vehicle`/`deformation` blocks are preset-only; saves carry only `physicalMaterialId` from the shared `PHYSICAL_MATERIAL_IDS` catalog.
 - **Second allowlist surface — `*.skeleton.json` sidecar:** `/__save-skeleton`
   validates through `validateSaveSkeletonPayload` → `validateAssetSkeletonDef`
   (also in `tools/saveValidator.ts`, imported by `vite.config.ts`). Any new

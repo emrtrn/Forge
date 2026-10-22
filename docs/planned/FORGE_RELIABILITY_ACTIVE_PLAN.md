@@ -401,7 +401,53 @@ eklenmedi. Tam development browser paketi yeniden çalıştırılmadı. Hata
 senaryoları kontrollü browser/fetch enjeksiyonudur; gerçek ağ/disk kesintisi,
 güvenlik taraması, uzak CI veya canlı hosting kabulü anlamına gelmez.
 
-## 7. Sonraki dilimler
+## 7. F08 — UI framework test alanının ayrılması (ilk bakım dilimi)
+
+Tarih: 22 Ekim 2026.
+
+- Kod: test organizasyonu ve ayrılan testin tip kapısı uygulandı.
+- Otomatik doğrulama: tam engine, TypeScript ve `build:verify` geçti.
+- F08'in tamamı: açık; editör/runtime controller ve diğer test alanları kalır.
+
+### Uygulanan yapı
+
+- [UI framework testleri](../../tests/engine/uiFramework.test.ts), büyük
+  `tools/engine-tests.ts` dosyasından ayrıldı: **55 mevcut kontrol**. Widget
+  normalizasyonu, render-tree/Include, ViewModel/binding, tema, debug readout,
+  transition, locale, erişilebilirlik ve world-widget davranışları aynı kalır.
+- `registerUiFrameworkTests(check)` mevcut harness'i parametre olarak alır.
+  Çağrı eski test bloğunun yerindedir; ortak filtre/timing/sayaç ve bütün testlerin
+  yürütme sırası korunur. Modül import'unda test çalıştırılmaz.
+- Test verileri callback içinde yerel kalır; yeni global fixture, singleton
+  harness veya framework eklenmedi. Ortak kullanılan import'lar monolitte tutuldu,
+  yalnız ayrılan alana ait olanlar yeni dosyaya taşındı.
+- Büyük test dosyası **31.154 → 30.267 satır** oldu; yeni dosya 890 satır.
+  Sayılar boş satırlar dahil fiziksel satırlardır; son newline ayrı sayılmaz.
+- `verify:ui-test-types` ve `tsconfig.ui-tests.json` ayrılan dosyayı strict tip
+  denetimine alır; mevcut `build:verify` kapısına dahildir. Beş mevcut array
+  erişimine yalnız derlemede silinen non-null assertion eklendi.
+
+### Doğrulama ve sınırlar
+
+- Önce ve sonra tam engine: **1.248 kontrol geçti**. Log karşılaştırmasıyla
+  bütün 1.248 etiketin ve sırasının aynı olduğu doğrulandı.
+- Taşınan 55 `check` çağrısının üretilen JavaScript gövdeleri birebir aynı;
+  çıkarım dışında kalan doğrudan `check` gövdeleri de değişmedi.
+  Kanıt: `builds/reports/f08-extraction-check.json`, önce/sonra engine logları.
+- Uygulama TypeScript'i ve ayrılan testin strict TypeScript'i geçti.
+- Tam `build:verify` geçti: 1.248 engine, 10 import, 5 fixture ve 9 yayın/URL
+  kontrolü; Vite build ve sıkı runtime-only dist taraması dahil.
+- Bu turda browser paketi yeniden çalıştırılmadı; üretim UI davranışına ilişkin
+  yeni browser kabulü iddiası yoktur. Bakım gerekçesi hız değil sorumluluk ayrımıdır.
+- Başlangıçta çalışma ağacında bulunan public manifest/Terrain/araç dosyaları,
+  `RuntimeSceneApp.ts`, `SceneRuntimeCore.ts` ve ayrı planlar bu dilime ait
+  değildir; bu çıkarımda değiştirilmedi. Ortak çalışma ağacı üzerinde geçen tam
+  kapı, bu ayrı değişikliklerin kullanıcı/görsel kabulü olarak değerlendirilmez.
+
+Sonraki alanlar ve tarihsel plan:
+[ENGINE_TESTS_SPLIT_PLAN](ENGINE_TESTS_SPLIT_PLAN.md).
+
+## 8. Sonraki dilimler
 
 - F01'in sunucu/disk kesintisi ve farklı istemcilerde çakışan yazma sınırları.
 - F08 için davranışı koruyan dar controller/test bakım dilimleri.

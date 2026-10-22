@@ -403,7 +403,7 @@ export class CharacterMovementSubsystem implements Subsystem {
               movement.stepSmoothSpeed * engine.deltaSeconds,
             );
         vertical.state = groundedAt(vertical.floorY);
-      } else if (!this.hasGroundProbe()) {
+      } else if (!this.hasGroundProbe(runtime)) {
         vertical.state = groundedAt(vertical.floorY);
       } else {
         vertical.floorY = previousY;
@@ -429,7 +429,7 @@ export class CharacterMovementSubsystem implements Subsystem {
         vertical.floorY = landing.floorY;
         vertical.state = groundedAt(landing.floorY);
       } else if (
-        !this.hasGroundProbe() &&
+        !this.hasGroundProbe(runtime) &&
         previousY >= vertical.floorY &&
         vertical.state.y <= vertical.floorY
       ) {
@@ -524,7 +524,12 @@ export class CharacterMovementSubsystem implements Subsystem {
     // Filter both channels: a blocker whose top is within step height (the ground
     // you stand on, including the platform under your feet) is not a wall, so
     // carry along it isn't self-blocked; a taller side is.
-    const staticBlockers = filterWalkableBlockers(footY, this.physics.staticBlockerAabbs(), stepUp);
+    const half = this.physics.colliderHalfExtents(runtime.id);
+    if (!half) return planar;
+    // Cover the complete substepped sweep (input, carry, launch or slide), plus
+    // the larger of the collider/capsule footprint and a millimetre of skin.
+    const radius = Math.max(runtime.capsule.radius, half[0], half[2]) + Math.hypot(planar.dx, planar.dz) + 0.001;
+    const staticBlockers = filterWalkableBlockers(footY, this.blockersNear(runtime, radius), stepUp);
     const dynamicBlockers = this.dynamicBlockers?.(runtime.id, runtime.transform) ?? [];
     const blockers =
       platformAabbs.length > 0 || dynamicBlockers.length > 0
@@ -535,8 +540,6 @@ export class CharacterMovementSubsystem implements Subsystem {
           ]
         : staticBlockers;
     if (blockers.length === 0) return planar;
-    const half = this.physics.colliderHalfExtents(runtime.id);
-    if (!half) return planar;
     const centerPosition: [number, number, number] = [
       runtime.transform.position[0],
       runtime.transform.position[1] + half[1],
@@ -557,7 +560,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     platformAabbs: readonly Aabb3[],
     planarDistance: number,
   ) {
-    const blockers = this.groundBlockers(platformAabbs);
+    const blockers = this.groundBlockers(runtime, platformAabbs);
     const surfaces = this.groundSurfacesAt(runtime.transform.position);
     if (blockers.length === 0 && surfaces.length === 0) return null;
     return findGroundAt(
@@ -574,7 +577,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     platformAabbs: readonly Aabb3[],
     planarDistance: number,
   ) {
-    const blockers = this.groundBlockers(platformAabbs);
+    const blockers = this.groundBlockers(runtime, platformAabbs);
     const surfaces = this.groundSurfacesAt(runtime.transform.position);
     if (blockers.length === 0 && surfaces.length === 0) return null;
     return findLandingGround(
@@ -587,8 +590,9 @@ export class CharacterMovementSubsystem implements Subsystem {
   }
 
   /** Static blockers plus the current moving-platform AABBs (both are standable tops). */
-  private groundBlockers(platformAabbs: readonly Aabb3[]): readonly Aabb3[] {
-    const staticBlockers = this.physics?.staticBlockerAabbs() ?? [];
+  private groundBlockers(runtime: CharacterMovementRuntime, platformAabbs: readonly Aabb3[]): readonly Aabb3[] {
+    // Ground probes run at the resulting position; only footprint overlap plus skin is needed.
+    const staticBlockers = this.blockersNear(runtime, runtime.capsule.radius + 0.001);
     if (platformAabbs.length === 0) return staticBlockers;
     return [...staticBlockers, ...platformAabbs];
   }
@@ -661,12 +665,21 @@ export class CharacterMovementSubsystem implements Subsystem {
     return base + planarDistance * Math.tan((slopeDeg * Math.PI) / 180);
   }
 
-  private hasGroundProbe(): boolean {
-    const blockers = this.physics?.staticBlockerAabbs();
-    if (blockers && blockers.length > 0) return true;
-    const surfaces = this.physics?.staticSurfaceTriangles();
-    if (surfaces && surfaces.length > 0) return true;
-    return (this.platforms?.platforms().length ?? 0) > 0;
+  private blockersNear(runtime: CharacterMovementRuntime, radius: number): readonly Aabb3[] {
+    const [x, , z] = runtime.transform.position;
+    return this.physics?.staticBlockerAabbsNear?.(x, z, radius) ?? this.physics?.staticBlockerAabbs() ?? [];
+  }
+
+  private hasGroundProbe(runtime: CharacterMovementRuntime): boolean {
+    if (this.blockersNear(runtime, runtime.capsule.radius + 0.001).length > 0) return true;
+    if (this.groundSurfacesAt(runtime.transform.position).length > 0) return true;
+    // An empty local cell in a world with ground elsewhere is a ledge/void,
+    // not a probe-less scene's synthetic spawn-height floor. Keep that distinction
+    // in O(1) on indexed hosts; legacy hosts retain their full-list behaviour.
+    const hasStatic = this.physics?.hasStaticGround?.() ??
+      ((this.physics?.staticBlockerAabbs().length ?? 0) > 0 ||
+        (this.physics?.staticSurfaceTriangles().length ?? 0) > 0);
+    return hasStatic || (this.platforms?.platforms().length ?? 0) > 0;
   }
 
   private footprintHalf(runtime: CharacterMovementRuntime): [number, number] {

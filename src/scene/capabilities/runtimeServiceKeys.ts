@@ -539,6 +539,8 @@ export const splineFollowerDebugService =
 export interface AiNavigationQuery {
   /** Sight occluders for perception line-of-sight checks. */
   staticBlockerAabbs(): readonly PhysicsAabb[];
+  /** Optional indexed X/Z square query; fall back to the full list when absent. */
+  staticBlockerAabbsNear?(x: number, z: number, radius: number): readonly PhysicsAabb[];
   /** Static obstacles the nav grid is eroded from (`ignored` bodies omitted). */
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[];
   /** Walkable triangles the nav grid seeds floor layers from. */

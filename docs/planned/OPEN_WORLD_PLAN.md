@@ -681,8 +681,16 @@ Doğrulama (2026-10-22):
       Collider `HeightFieldFlags.FIX_INTERNAL_EDGES` ile kurulur (S4).
       *Şekil verisi hazır* (`terrainTileHeightfieldShape`, Rapier testiyle);
       PhysicsSubsystem bağlantısı açık.
-- [ ] `PhysicsSubsystem.addEntities` / `removeEntities` (toplu, tek
+- [x] `PhysicsSubsystem.addEntities` / `removeEntities` (toplu, tek
       invalidation); statik yüzey üçgen cache'i gövde başına artımlı.
+      *Tamam (2026-10-23, Faz 3 bölüm 1):* statik AABB/üçgen kayıtları gövde
+      başına bir kez üretilir; 4 m hücre index'leri ekleme/silme, transform ve
+      collision toggle ile artımlı güncellenir. Eski düz listeler tembel kurulur,
+      gövde/primitive sırası korunur; yüzey yakın sorgusu hücre + overflow
+      sırasını korur. Toplu API tek cache invalidation yapar; id → body map'i
+      duplicate kontrolünü ve physical material erişimini O(1) tutar. Sahne
+      başlangıcı zaten toplu `setEntities` kullanıyor; dönüştürülecek statik
+      `addEntity` döngüsü yok.
 - [ ] `staticSurfaceTrianglesNear` arazi üçgenlerini heightfield'dan anında
       üretir (karakter hareket kodu değişmez); nav yüzey tohumlama
       `TerrainHeightQuery`'yi kullanır. Merdiven/rampa düzeltmeleri
@@ -690,6 +698,18 @@ Doğrulama (2026-10-22):
 - [ ] `staticBlockerAabbsNear(x, z, radius)`; karakter hareketi, `hasGroundProbe`,
       TPS kamera ve AI çağrıları buna geçer. Test: 5000 statik AABB'li
       sahnede karakter adımı süresi sabit kalıyor.
+      *Kısmen tamam (2026-10-23, Faz 3 bölüm 1):* karakter çözümü, zemin/iniş
+      ve `hasGroundProbe`, behavior hareketi, TPS spring arm ve araçtan çıkış
+      yakın sorguya geçti (opsiyonel API + eski host için tam liste yedeği).
+      Yarıçaplar ilgili hareket/footprint/offset ve skin payını kapsıyor.
+      Global O(1) `hasStaticGround` boş hücrede düşmeyi, tamamen zeminsiz
+      sahnede eski spawn-height tabanını koruyor. 5000 AABB testinde tam liste
+      çağrısı yasak; bir karakter adımı en fazla 12 blocker adayı inceliyor
+      (duvar saati yerine sayaç). Yeni 8 kontrol: `static queries` filtresi.
+      AI'nin konum/yarıçap almayan toplu perception/query provider'ları
+      (`aiModule`, `SceneApp`) ve tüm nav grid bake/debug listeleri bilerek
+      tam listede; yerel AI sorgu sözleşmesi sonraki iş olduğundan bu madde
+      açık. Heightfield bağlantısı/anlık arazi üçgenleri bu bölümün dışında.
 - [ ] `createLandscapeColliderPrimitive` (trimesh) kaldırılır.
 - [ ] Araç: tile kenarında süspansiyon zıplaması yok (smoke: VehicleTest
       üzerinde 2×2 tile'lık arazide dikiş geçişi).

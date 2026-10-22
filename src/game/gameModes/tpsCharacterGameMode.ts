@@ -496,7 +496,11 @@ export class TpsCharacterSession implements GameModeSession {
       const ground = vehicleGroundHeight(this.scratchPosition, vehicles?.state(vehicleId) ?? null);
       const spot = chooseExitSpot(
         vehicleExitCandidates(this.scratchPosition, this.scratchQuaternion, ground, settings),
-        this.context.staticBlockerAabbs(),
+        // Covers all candidate doors/rear exits, their footprint, and skin.
+        this.context.staticBlockerAabbsNear?.(
+          this.scratchPosition.x, this.scratchPosition.z,
+          Math.max(Math.abs(settings.exitSideOffset), Math.abs(settings.exitRearOffset)) + settings.exitClearance.radius + 0.001,
+        ) ?? this.context.staticBlockerAabbs(),
         settings.exitClearance,
       );
       const heading = planarHeadingFromQuaternion(this.scratchQuaternion) ??
@@ -589,7 +593,12 @@ export class TpsCharacterSession implements GameModeSession {
         playerPosition: pos,
         springArm: authored.springArm,
         controlRotation: this.controller.getControlRotation(),
-        blockers: this.context.staticBlockerAabbs(),
+        // Bound the entire pivot-to-socket segment, including both authored offsets.
+        blockers: this.context.staticBlockerAabbsNear?.(
+          pos[0], pos[2],
+          Math.hypot(...authored.springArm.targetOffset) + Math.abs(authored.springArm.targetArmLength) +
+            Math.hypot(...authored.springArm.socketOffset) + 0.05,
+        ) ?? this.context.staticBlockerAabbs(),
       });
       const t = authored.springArm.enableCameraLag
         ? smoothingFactor(authored.springArm.cameraLagSpeed, deltaSeconds)

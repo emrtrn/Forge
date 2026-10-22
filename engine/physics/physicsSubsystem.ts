@@ -1,3 +1,4 @@
+import { StaticSpatialIndex, type StaticSpatialEntry } from "./staticSpatialIndex";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
   readColliderComponent,
@@ -91,15 +92,12 @@ interface Aabb {
   footprint?: readonly (readonly [number, number])[];
 }
 
-interface StaticSurfaceSpatialIndex {
-  readonly cells: ReadonlyMap<string, readonly PhysicsSurfaceTriangle[]>;
-  readonly overflow: readonly PhysicsSurfaceTriangle[];
+interface StaticBodyRecord {
+  readonly order: number;
+  readonly blockers: StaticSpatialEntry<Aabb>[];
+  readonly surfaces: StaticSpatialEntry<PhysicsSurfaceTriangle>[];
+  readonly navigationRole: NavigationRole | undefined;
 }
-
-/** Terrain cells are normally 1 unit wide; four-unit bins keep lookup compact. */
-const STATIC_SURFACE_GRID_CELL_SIZE = 4;
-/** Huge generic mesh triangles stay in an overflow list instead of bloating the grid. */
-const STATIC_SURFACE_GRID_MAX_CELLS_PER_TRIANGLE = 256;
 
 type RapierModule = typeof import("@dimforge/rapier3d-compat");
 type RapierWorld = InstanceType<RapierModule["World"]>;
@@ -156,6 +154,14 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   readonly id = PHYSICS_SUBSYSTEM_ID;
   private readonly backend: PhysicsBackend;
   private bodies: PhysicsBody[] = [];
+  private readonly bodiesById = new Map<EntityId, PhysicsBody>();
+  private readonly staticRecords = new Map<EntityId, StaticBodyRecord>();
+  private readonly staticBlockerIndex = new StaticSpatialIndex<Aabb>();
+  private readonly staticSurfaceIndex = new StaticSpatialIndex<PhysicsSurfaceTriangle>();
+  private nextStaticOrder = 0;
+  private staticInvalidations = 0;
+  private staticRecordBuilds = 0;
+  private blockerCandidatesInspected = 0;
   private contacts: PhysicsContact[] = [];
   /**
    * Entities whose collision is runtime-disabled (A6 SetActorEnableCollision).
@@ -169,8 +175,6 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private staticBlockerCache: Aabb[] | null = null;
   /** Cached walkable surface triangles (static trimesh); rebuilt lazily. */
   private staticSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
-  /** X/Z broad phase for ground probes over large landscape trimeshes. */
-  private staticSurfaceSpatialIndex: StaticSurfaceSpatialIndex | null = null;
   /** Cached AI-navigation blockers, filtered by Collider.navigationRole. */
   private staticNavigationBlockerCache: Aabb[] | null = null;
   /** Cached AI-navigation surfaces, filtered by Collider.navigationRole. */
@@ -220,7 +224,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
   /** Live collider profile reference for generic surface-provider hosts. */
   colliderPhysicalMaterialId(entityId: EntityId): string | undefined {
-    return this.bodies.find((body) => body.id === entityId)?.collider.physicalMaterialId;
+    return this.bodiesById.get(entityId)?.collider.physicalMaterialId;
   }
 
   /** Render blend (0..1) between the previous and latest simulated dynamic poses. */
@@ -347,7 +351,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * entity's own Transform component is stale because physics moves the body.
    */
   simulatedTransform(entityId: EntityId): TransformComponent | null {
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body?.collider.simulatePhysics || !this.rapierBodies.has(entityId)) return null;
     return cloneTransform(body.transform);
   }
@@ -449,21 +453,24 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   setEntities(entities: readonly Entity[]): void {
-    const bodies: PhysicsBody[] = [];
+    this.bodies = [];
+    this.bodiesById.clear();
     for (const entity of entities) {
+      if (this.bodiesById.has(entity.id)) continue;
       const body = bodyFromEntity(entity);
-      if (body) bodies.push(body);
+      if (!body) continue;
+      this.bodies.push(body);
+      this.bodiesById.set(body.id, body);
     }
-    this.bodies = bodies;
     this.contacts = [];
     this.collisionDisabled.clear();
     this.suspendedDynamicBodies.clear();
-    this.staticBlockerCache = null;
-    this.cameraIgnoredCache = null;
-    this.staticSurfaceCache = null;
-    this.staticSurfaceSpatialIndex = null;
-    this.staticNavigationBlockerCache = null;
-    this.staticNavigationSurfaceCache = null;
+    this.staticRecords.clear();
+    this.staticBlockerIndex.clear();
+    this.staticSurfaceIndex.clear();
+    this.nextStaticOrder = 0;
+    for (const body of this.bodies) this.recordStaticBody(body);
+    this.invalidateStaticCaches();
     // Component vehicles are rebuilt from the new entity set; API ones persist.
     for (const [entityId, vehicle] of this.vehicles) {
       if (vehicle.source === "component") this.removeVehicle(entityId);
@@ -473,35 +480,39 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
   /** Incrementally adds one entity's collider body for runtime SpawnActor. */
   addEntity(entity: Entity): boolean {
-    if (this.bodies.some((body) => body.id === entity.id)) return false;
-    const body = bodyFromEntity(entity);
-    if (!body) return false;
-    this.bodies.push(body);
-    this.contacts = [];
-    if (body.collider.isStatic) {
-      this.staticBlockerCache = null;
-      this.cameraIgnoredCache = null;
-      this.staticSurfaceCache = null;
-      this.staticSurfaceSpatialIndex = null;
-      this.staticNavigationBlockerCache = null;
-      this.staticNavigationSurfaceCache = null;
+    return this.addEntities([entity]) > 0;
+  }
+
+  /** Adds a batch in input order, invalidating legacy flat caches only once. */
+  addEntities(entities: readonly Entity[]): number {
+    let added = 0;
+    let addedStatic = false;
+    for (const entity of entities) {
+      if (this.bodiesById.has(entity.id)) continue;
+      const body = bodyFromEntity(entity);
+      if (!body) continue;
+      this.bodies.push(body);
+      this.bodiesById.set(body.id, body);
+      this.recordStaticBody(body);
+      addedStatic ||= body.collider.isStatic;
+      if (this.rapierWorld && this.rapierModule) this.addRapierBody(body);
+      added += 1;
     }
-    if (this.rapierWorld && this.rapierModule) this.addRapierBody(body);
-    return true;
+    if (added > 0) this.contacts = [];
+    if (addedStatic) this.invalidateStaticCaches();
+    else if (added > 0) this.cameraIgnoredCache = null;
+    return added;
   }
 
   setEntityTransform(entityId: EntityId, transform: TransformComponent): void {
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body) return;
     body.transform = cloneTransform(transform);
-    // A static body moving (editor drag) invalidates the cached blocker AABBs.
     if (body.collider.isStatic) {
-      this.staticBlockerCache = null;
-      this.cameraIgnoredCache = null;
-      this.staticSurfaceCache = null;
-      this.staticSurfaceSpatialIndex = null;
-      this.staticNavigationBlockerCache = null;
-      this.staticNavigationSurfaceCache = null;
+      const record = this.staticRecords.get(entityId);
+      if (record) this.indexStaticRecord(record, false);
+      this.recordStaticBody(body, record?.order);
+      this.invalidateStaticCaches();
     }
     const rapier = this.rapierBodies.get(entityId);
     if (!rapier) return;
@@ -527,34 +538,32 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * colliders go with it) and forgets its collider→entity handles.
    */
   removeEntity(entityId: EntityId): void {
-    const remaining = this.bodies.filter((body) => body.id !== entityId);
-    if (remaining.length !== this.bodies.length) {
-      const removedStatic = this.bodies.some(
-        (body) => body.id === entityId && body.collider.isStatic,
-      );
-      this.bodies = remaining;
-      if (removedStatic) {
-        this.staticBlockerCache = null;
-        this.cameraIgnoredCache = null;
-        this.staticSurfaceCache = null;
-        this.staticSurfaceSpatialIndex = null;
-        this.staticNavigationBlockerCache = null;
-        this.staticNavigationSurfaceCache = null;
+    this.removeEntities([entityId]);
+  }
+
+  /** Removes a batch with one body-list pass and one legacy-cache invalidation. */
+  removeEntities(entityIds: readonly EntityId[]): void {
+    const ids = new Set(entityIds);
+    let removedStatic = false;
+    for (const entityId of ids) {
+      removedStatic ||= this.bodiesById.get(entityId)?.collider.isStatic === true;
+      this.bodiesById.delete(entityId);
+      this.dropStaticRecord(entityId);
+      this.collisionDisabled.delete(entityId);
+      this.suspendedDynamicBodies.delete(entityId);
+      this.previousPoses.delete(entityId);
+      this.removeVehicle(entityId);
+      const record = this.rapierBodies.get(entityId);
+      if (record) {
+        for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
+        this.rapierWorld?.removeRigidBody(record.body);
+        this.rapierBodies.delete(entityId);
       }
     }
-    this.contacts = this.contacts.filter(
-      (contact) => contact.a !== entityId && contact.b !== entityId,
-    );
-    this.collisionDisabled.delete(entityId);
-    this.suspendedDynamicBodies.delete(entityId);
-    this.previousPoses.delete(entityId);
-    this.removeVehicle(entityId);
-    const record = this.rapierBodies.get(entityId);
-    if (record) {
-      for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
-      this.rapierWorld?.removeRigidBody(record.body);
-      this.rapierBodies.delete(entityId);
-    }
+    this.bodies = this.bodies.filter((body) => !ids.has(body.id));
+    this.contacts = this.contacts.filter((contact) => !ids.has(contact.a) && !ids.has(contact.b));
+    if (removedStatic) this.invalidateStaticCaches();
+    else this.cameraIgnoredCache = null;
   }
 
   /**
@@ -570,14 +579,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (enabled === !alreadyDisabled) return;
     if (enabled) this.collisionDisabled.delete(entityId);
     else this.collisionDisabled.add(entityId);
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (body?.collider.isStatic) {
-      this.staticBlockerCache = null;
-      this.cameraIgnoredCache = null;
-      this.staticSurfaceCache = null;
-      this.staticSurfaceSpatialIndex = null;
-      this.staticNavigationBlockerCache = null;
-      this.staticNavigationSurfaceCache = null;
+      const record = this.staticRecords.get(entityId);
+      if (record) this.indexStaticRecord(record, enabled);
+      this.invalidateStaticCaches();
     }
     // Clear any live contact for this entity so the next query already reads the
     // new state (mirrors removeEntity); the placeholder loop won't regenerate it.
@@ -610,10 +616,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticBlockerAabbs(): readonly PhysicsAabb[] {
     if (this.staticBlockerCache) return this.staticBlockerCache;
     const blockers: Aabb[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendBlockerAabbs(blockers, body);
+    for (const [id, record] of this.staticRecords) {
+      if (this.collisionDisabled.has(id)) continue;
+      for (const entry of record.blockers) blockers.push(entry.value);
     }
     this.staticBlockerCache = blockers;
     return blockers;
@@ -681,10 +686,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticSurfaceTriangles(): readonly PhysicsSurfaceTriangle[] {
     if (this.staticSurfaceCache) return this.staticSurfaceCache;
     const surfaces: PhysicsSurfaceTriangle[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendSurfaceTriangles(surfaces, body);
+    for (const [id, record] of this.staticRecords) {
+      if (this.collisionDisabled.has(id)) continue;
+      for (const entry of record.surfaces) surfaces.push(entry.value);
     }
     this.staticSurfaceCache = surfaces;
     return surfaces;
@@ -696,14 +700,82 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * can make the movement step skip its ground follow window.
    */
   staticSurfaceTrianglesNear(x: number, z: number): readonly PhysicsSurfaceTriangle[] {
-    const surfaces = this.staticSurfaceTriangles();
-    if (surfaces.length === 0) return surfaces;
-    const index = this.staticSurfaceSpatialIndex ?? buildStaticSurfaceSpatialIndex(surfaces);
-    this.staticSurfaceSpatialIndex = index;
-    const candidates = index.cells.get(staticSurfaceCellKey(x, z));
-    if (!candidates || candidates.length === 0) return index.overflow;
-    if (index.overflow.length === 0) return candidates;
-    return [...candidates, ...index.overflow];
+    return this.staticSurfaceIndex.atCell(x, z);
+  }
+
+  /** All blockers intersecting the inclusive X/Z square, in body/primitive order. */
+  staticBlockerAabbsNear(x: number, z: number, radius: number): readonly PhysicsAabb[] {
+    const blockers = this.staticBlockerIndex.near(x, z, radius);
+    this.blockerCandidatesInspected += this.staticBlockerIndex.lastCandidateCount;
+    return blockers;
+  }
+
+  /** Global availability without materializing flat arrays (preserves void/fallback-floor semantics). */
+  hasStaticGround(): boolean {
+    return this.staticBlockerIndex.size > 0 || this.staticSurfaceIndex.size > 0;
+  }
+
+  /** Cumulative work counters for deterministic streaming and movement performance checks. */
+  staticQueryDebug(): { invalidations: number; recordBuilds: number; blockerCandidatesInspected: number } {
+    return {
+      invalidations: this.staticInvalidations,
+      recordBuilds: this.staticRecordBuilds,
+      blockerCandidatesInspected: this.blockerCandidatesInspected,
+    };
+  }
+
+  private invalidateStaticCaches(): void {
+    this.staticInvalidations += 1;
+    this.staticBlockerCache = null;
+    this.staticSurfaceCache = null;
+    this.staticNavigationBlockerCache = null;
+    this.staticNavigationSurfaceCache = null;
+    this.cameraIgnoredCache = null;
+  }
+
+  private recordStaticBody(body: PhysicsBody, previousOrder?: number): void {
+    if (!body.collider.isStatic || body.collider.isSensor) return;
+    const order = previousOrder ?? this.nextStaticOrder++;
+    const blockers: Aabb[] = [];
+    const surfaces: PhysicsSurfaceTriangle[] = [];
+    appendBlockerAabbs(blockers, body);
+    appendSurfaceTriangles(surfaces, body);
+    const record: StaticBodyRecord = {
+      order,
+      navigationRole: body.collider.navigationRole,
+      blockers: blockers.map((value, itemOrder) => ({
+        value, bodyOrder: order, itemOrder,
+        minX: value.min[0], maxX: value.max[0], minZ: value.min[2], maxZ: value.max[2],
+      })),
+      surfaces: surfaces.map((value, itemOrder) => ({
+        value, bodyOrder: order, itemOrder,
+        minX: Math.min(value.a[0], value.b[0], value.c[0]),
+        maxX: Math.max(value.a[0], value.b[0], value.c[0]),
+        minZ: Math.min(value.a[2], value.b[2], value.c[2]),
+        maxZ: Math.max(value.a[2], value.b[2], value.c[2]),
+      })),
+    };
+    this.staticRecords.set(body.id, record);
+    this.staticRecordBuilds += 1;
+    if (!this.collisionDisabled.has(body.id)) this.indexStaticRecord(record, true);
+  }
+
+  private indexStaticRecord(record: StaticBodyRecord, enabled: boolean): void {
+    for (const entry of record.blockers) {
+      if (enabled) this.staticBlockerIndex.add(entry);
+      else this.staticBlockerIndex.remove(entry);
+    }
+    for (const entry of record.surfaces) {
+      if (enabled) this.staticSurfaceIndex.add(entry);
+      else this.staticSurfaceIndex.remove(entry);
+    }
+  }
+
+  private dropStaticRecord(entityId: EntityId): void {
+    const record = this.staticRecords.get(entityId);
+    if (!record) return;
+    this.indexStaticRecord(record, false);
+    this.staticRecords.delete(entityId);
   }
 
   /**
@@ -721,11 +793,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[] {
     if (this.staticNavigationBlockerCache) return this.staticNavigationBlockerCache;
     const blockers: Aabb[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (body.collider.navigationRole === "ignored") continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendBlockerAabbs(blockers, body);
+    for (const [id, record] of this.staticRecords) {
+      if (record.navigationRole === "ignored" || this.collisionDisabled.has(id)) continue;
+      for (const entry of record.blockers) blockers.push(entry.value);
     }
     this.staticNavigationBlockerCache = blockers;
     return blockers;
@@ -735,14 +805,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticNavigationSurfaceTriangles(): readonly PhysicsSurfaceTriangle[] {
     if (this.staticNavigationSurfaceCache) return this.staticNavigationSurfaceCache;
     const surfaces: PhysicsSurfaceTriangle[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (
-        body.collider.navigationRole === "ignored" ||
-        body.collider.navigationRole === "obstacleOnly"
-      ) continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendSurfaceTriangles(surfaces, body);
+    for (const [id, record] of this.staticRecords) {
+      if (record.navigationRole === "ignored" || record.navigationRole === "obstacleOnly" ||
+        this.collisionDisabled.has(id)) continue;
+      for (const entry of record.surfaces) surfaces.push(entry.value);
     }
     this.staticNavigationSurfaceCache = surfaces;
     return surfaces;
@@ -763,7 +829,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   colliderDebugBox(
     entityId: EntityId,
   ): { center: [number, number, number]; halfExtents: [number, number, number] } | null {
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body) return null;
     const center = body.collider.center ?? [0, 0, 0];
     return {
@@ -777,7 +843,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   colliderHalfExtents(entityId: EntityId): readonly [number, number, number] | null {
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body) return null;
     return [
       (body.collider.size[0] ?? 0) / 2,
@@ -795,7 +861,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   velocityOf(entityId: EntityId): readonly [number, number, number] | null {
     const record = this.rapierBodies.get(entityId);
     if (!record) return null;
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body?.collider.simulatePhysics) return null;
     const v = record.body.linvel();
     return [v.x, v.y, v.z];
@@ -811,7 +877,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   applyImpulse(entityId: EntityId, impulse: readonly [number, number, number]): void {
     const record = this.rapierBodies.get(entityId);
     if (!record) return;
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body?.collider.simulatePhysics) return;
     record.body.applyImpulse({ x: impulse[0], y: impulse[1], z: impulse[2] }, true);
   }
@@ -1013,6 +1079,12 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   clear(): void {
+    this.bodiesById.clear();
+    this.staticRecords.clear();
+    this.staticBlockerIndex.clear();
+    this.staticSurfaceIndex.clear();
+    this.nextStaticOrder = 0;
+    this.invalidateStaticCaches();
     this.bodies = [];
     this.contacts = [];
     this.collisionDisabled.clear();
@@ -1253,7 +1325,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (activeDistance === undefined) return;
 
     for (const [entityId, rapier] of this.rapierBodies) {
-      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      const body = this.bodiesById.get(entityId);
       if (!body?.collider.simulatePhysics) continue;
 
       const translation = rapier.body.translation();
@@ -1354,7 +1426,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!this.transformSink) return;
     for (const [entityId, rapier] of this.rapierBodies.entries()) {
       if (this.suspendedDynamicBodies.has(entityId)) continue;
-      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      const body = this.bodiesById.get(entityId);
       if (!body?.collider.simulatePhysics) continue;
       const translation = rapier.body.translation();
       const rotation = rapier.body.rotation();
@@ -1375,7 +1447,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!this.transformSink) return;
     const alpha = this.stepClock.alpha;
     for (const [entityId, rapier] of this.rapierBodies.entries()) {
-      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      const body = this.bodiesById.get(entityId);
       if (!body?.collider.simulatePhysics) continue;
       if (this.suspendedDynamicBodies.has(entityId)) continue;
       const translation = rapier.body.translation();
@@ -1651,49 +1723,6 @@ function appendSurfaceTriangles(out: PhysicsSurfaceTriangle[], body: PhysicsBody
       out.push({ a: wa, b: wb, c: wc, normalY });
     });
   }
-}
-
-/** A stable four-unit X/Z grid key for cached static surface broad-phase cells. */
-function staticSurfaceCellKey(x: number, z: number): string {
-  const cellX = Math.floor(x / STATIC_SURFACE_GRID_CELL_SIZE);
-  const cellZ = Math.floor(z / STATIC_SURFACE_GRID_CELL_SIZE);
-  return `${cellX},${cellZ}`;
-}
-
-/**
- * Bins each static surface into the X/Z cells its triangle projection touches.
- * Landscapes have compact one-cell triangles, while very large generic mesh faces
- * are held in a small overflow list so they cannot create an unbounded grid.
- */
-function buildStaticSurfaceSpatialIndex(
-  surfaces: readonly PhysicsSurfaceTriangle[],
-): StaticSurfaceSpatialIndex {
-  const cells = new Map<string, PhysicsSurfaceTriangle[]>();
-  const overflow: PhysicsSurfaceTriangle[] = [];
-  for (const surface of surfaces) {
-    const minX = Math.min(surface.a[0], surface.b[0], surface.c[0]);
-    const maxX = Math.max(surface.a[0], surface.b[0], surface.c[0]);
-    const minZ = Math.min(surface.a[2], surface.b[2], surface.c[2]);
-    const maxZ = Math.max(surface.a[2], surface.b[2], surface.c[2]);
-    const minCellX = Math.floor(minX / STATIC_SURFACE_GRID_CELL_SIZE);
-    const maxCellX = Math.floor(maxX / STATIC_SURFACE_GRID_CELL_SIZE);
-    const minCellZ = Math.floor(minZ / STATIC_SURFACE_GRID_CELL_SIZE);
-    const maxCellZ = Math.floor(maxZ / STATIC_SURFACE_GRID_CELL_SIZE);
-    const cellCount = (maxCellX - minCellX + 1) * (maxCellZ - minCellZ + 1);
-    if (cellCount > STATIC_SURFACE_GRID_MAX_CELLS_PER_TRIANGLE) {
-      overflow.push(surface);
-      continue;
-    }
-    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
-      for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-        const key = `${cellX},${cellZ}`;
-        const bucket = cells.get(key);
-        if (bucket) bucket.push(surface);
-        else cells.set(key, [surface]);
-      }
-    }
-  }
-  return { cells, overflow };
 }
 
 function aabbOverlaps(a: Aabb, b: Aabb): boolean {

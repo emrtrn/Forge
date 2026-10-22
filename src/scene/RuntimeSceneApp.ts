@@ -3564,6 +3564,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       characters: this.characterRefs,
       getLocomotion: (entityId) => this.locomotionReports.get(entityId),
       staticBlockerAabbs: () => this.physicsSubsystem.staticBlockerAabbs(),
+      staticBlockerAabbsNear: (x, z, radius) => this.physicsSubsystem.staticBlockerAabbsNear(x, z, radius),
       addMixer: (mixer) => this.animationSubsystem.add(mixer),
       emitAnimNotify: (entityId, name) =>
         this.behaviorSubsystem.emitScriptMessage("anim-notify", entityId, { name }, entityId),

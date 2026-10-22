@@ -188,6 +188,8 @@ export interface GameModeContext {
   getLocomotion(entityId: string): LocomotionInput | undefined;
   /** Static blocker AABBs derived by the physics subsystem for camera probes. */
   staticBlockerAabbs(): readonly Aabb3[];
+  /** Optional indexed X/Z square query; fall back to the full list when absent. */
+  staticBlockerAabbsNear?(x: number, z: number, radius: number): readonly Aabb3[];
   /** Registers a crossfade animator's mixer with the animation subsystem. */
   addMixer(mixer: AnimationMixer): void;
   /**

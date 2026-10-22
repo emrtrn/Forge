@@ -5792,5 +5792,15 @@
       "collision": true
     }
   ],
-  "actors": []
+  "actors": [
+    {
+      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
+      "position": [
+        -79.58,
+        1.2,
+        -26.92
+      ],
+      "rotationYDeg": 0
+    }
+  ]
 }

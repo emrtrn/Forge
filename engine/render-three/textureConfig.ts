@@ -2,7 +2,9 @@ import {
   NoColorSpace,
   RepeatWrapping,
   SRGBColorSpace,
-  type Texture,
+  Texture,
+  type Mesh,
+  type Object3D,
 } from "three";
 
 export interface ForgeTextureRepeat {
@@ -40,6 +42,31 @@ export function configureForgeTexture(
   texture.anisotropy = resolveTextureAnisotropy(config);
   texture.needsUpdate = true;
   return texture;
+}
+
+/**
+ * Raises every texture a loaded model's materials reference (glTF-embedded
+ * maps never pass through `configureForgeTexture`) to the same default
+ * anisotropy, so they don't fall back to three's 1x and smear at grazing angles.
+ */
+export function applyDefaultModelTextureAnisotropy(
+  root: Object3D,
+  maxAnisotropy: number | null | undefined,
+): void {
+  const anisotropy = resolveTextureAnisotropy({ maxAnisotropy });
+  if (anisotropy <= 1) return;
+  root.traverse((object) => {
+    const material = (object as Partial<Mesh>).material;
+    if (!material) return;
+    for (const entry of Array.isArray(material) ? material : [material]) {
+      for (const value of Object.values(entry)) {
+        if (value instanceof Texture && value.anisotropy < anisotropy) {
+          value.anisotropy = anisotropy;
+          value.needsUpdate = true;
+        }
+      }
+    }
+  });
 }
 
 function resolveTextureAnisotropy(config: ForgeTextureConfig): number {

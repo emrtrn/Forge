@@ -38,6 +38,9 @@ test("runtime AI spline smoke: travel to the test route, agent follows the close
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator("#ui-overlay")).toBeVisible();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
+  // The runtime chunk loads after boot, so the overlay can be absent before the
+  // level exists; the HUD proves input is wired before Escape is pressed.
+  await expect(page.locator('[data-ui-id="speed-label"]')).toContainText("Speed");
 
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-ui-id="title"]')).toContainText("Save / Load");

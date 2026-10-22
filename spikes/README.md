@@ -23,6 +23,9 @@ Press **B** for the 33 s scripted benchmark (low flight, high orbit, ground run,
 terrain-hidden baseline); the report opens bottom-right with a Copy button.
 Press **U** (S3) to evict every resident tile and upload them all again in one
 frame; the report lists per-tile main-thread cost.
-URL knobs: `tiles`, `patch`, `slots`, `range0`, `shadow`, `shadowExtent`, `dpr`,
-`uploadsPerFrame`, `layers` (`4` | `8`), `heightFormat` (`r16-norm` | `r32f` | `r16f`),
-`pose=x,agl,z,yaw,pitch`.
+Press **Z** (S5) for the z-fighting test: quad pairs 1 cm–10 m apart at
+250 m–5.8 km, read back to measure how often the back quad wins.
+URL knobs: `tiles`, `patch`, `slots`, `range0`, `shadow`, `shadowExtent`,
+`shadowBias`, `dpr`, `uploadsPerFrame`, `layers` (`4` | `8`), `heightFormat`
+(`r16-norm` | `r32f` | `r16f`), `depth` (`standard` | `reversed` | `log` |
+`reversed-float`), `near`, `pose=x,agl,z,yaw,pitch`.

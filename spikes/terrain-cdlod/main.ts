@@ -13,7 +13,18 @@ import {
   InstancedMesh,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
+  Group,
+  PCFShadowMap,
+  PlaneGeometry,
+  WebGLCoordinateSystem,
+  WebGLRenderer,
+  WebGLRenderTarget,
+  DepthTexture,
+  FloatType,
+  HalfFloatType,
+  OrthographicCamera,
   Object3D,
   PerspectiveCamera,
   RepeatWrapping,
@@ -27,7 +38,6 @@ import {
   type Texture,
 } from "three";
 
-import { createSceneRenderer } from "@engine/render-three/renderer";
 import { GpuFrameTimer } from "@engine/perf/gpuTimer";
 import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
 
@@ -47,7 +57,8 @@ import { encodedTileHeights, encodedTileWeights, generateSpikeWorld } from "./wo
  * OPEN_WORLD_PLAN Faz 0 / S1+S2 spike page — throwaway, never merged.
  * Open: npm run dev:smoke → http://127.0.0.1:5273/spikes/terrain-cdlod/index.html
  * URL knobs: tiles, patch, slots, range0, shadow, shadowExtent, dpr,
- * uploadsPerFrame, layers (4 | 8), heightFormat (r16-norm | r32f | r16f), pose=x,y,z,yaw,pitch
+ * uploadsPerFrame, layers (4 | 8), heightFormat (r16-norm | r32f | r16f),
+ * depth (standard | reversed | log | reversed-float), near, shadowBias, pose=x,y,z,yaw,pitch
  * (y is metres above ground).
  */
 
@@ -77,6 +88,13 @@ const UPLOADS_PER_FRAME = Math.round(param("uploadsPerFrame", 2, 1, 64));
 // 8 = the schema maximum: two RGBA8 weight blocks per tile (S3 measures this).
 const LAYERS = param("layers", 4, 4, 8) > 4 ? 8 : 4;
 const WEIGHT_BLOCKS = LAYERS / 4;
+// S5: depth precision at a 6 km far plane. Near defaults to Forge's camera (0.1 m).
+// reversed-float renders into a float32-depth target (as Forge's EffectComposer
+// path could) and blits; plain "reversed" keeps the canvas's 24-bit fixed depth.
+const DEPTH_MODES = ["standard", "reversed", "log", "reversed-float"] as const;
+const DEPTH_MODE = DEPTH_MODES.find((mode) => mode === params.get("depth")) ?? "standard";
+const NEAR = param("near", 0.1, 0.01, 10);
+const FAR = 6000;
 const TILE_SIZE = TILE_QUADS * SPACING;
 const WORLD_SIZE = TILES * TILE_SIZE;
 const LEVELS = Math.log2(WORLD_SIZE / LEAF) + 1;
@@ -105,7 +123,17 @@ closeButton.addEventListener("click", () => (reportPanel.hidden = true));
 
 // --- boot -------------------------------------------------------------------------
 
-const renderer = createSceneRenderer(canvas, DPR);
+// Same settings as engine/render-three/renderer.ts createSceneRenderer, plus the
+// S5 depth mode (PCFSoftShadowMap is mapped to PCFShadowMap by three r184).
+const renderer = new WebGLRenderer({
+  canvas,
+  antialias: true,
+  powerPreference: "high-performance",
+  reversedDepthBuffer: DEPTH_MODE === "reversed" || DEPTH_MODE === "reversed-float",
+  logarithmicDepthBuffer: DEPTH_MODE === "log",
+});
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFShadowMap;
 renderer.setPixelRatio(DPR);
 renderer.setSize(innerWidth, innerHeight, false);
 // three renders shadow maps before its per-frame info reset, so shadow draws
@@ -118,6 +146,43 @@ const gpuName = (() => {
   return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER));
 })();
 const heightFormat = pickHeightFormat(renderer);
+const clipControl = gl.getSupportedExtensions()?.includes("EXT_clip_control") ?? false;
+const depthLabel =
+  DEPTH_MODE.startsWith("reversed") && !renderer.capabilities.reversedDepthBuffer
+    ? `${DEPTH_MODE} requested, EXT_clip_control missing → not reversed`
+    : DEPTH_MODE;
+
+// Scene target for reversed-float: 4× MSAA, half-float colour like the composer,
+// DEPTH_COMPONENT32F depth. Blitted to the canvas with a fullscreen quad.
+const sceneTarget =
+  DEPTH_MODE === "reversed-float"
+    ? new WebGLRenderTarget(gl.drawingBufferWidth, gl.drawingBufferHeight, {
+        samples: 4,
+        type: HalfFloatType,
+        depthTexture: new DepthTexture(gl.drawingBufferWidth, gl.drawingBufferHeight, FloatType),
+      })
+    : null;
+const blitScene = new Scene();
+const blitCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
+if (sceneTarget) {
+  const blit = new Mesh(
+    new PlaneGeometry(2, 2),
+    new MeshBasicMaterial({ map: sceneTarget.texture, depthTest: false, depthWrite: false }),
+  );
+  blit.frustumCulled = false;
+  blitScene.add(blit);
+}
+
+function renderFrame(): void {
+  if (!sceneTarget) {
+    renderer.render(scene, camera);
+    return;
+  }
+  renderer.setRenderTarget(sceneTarget);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  renderer.render(blitScene, blitCamera);
+}
 
 status.textContent = "Generating world…";
 const world = await generateSpikeWorld(
@@ -251,11 +316,11 @@ if (SHADOW_MAP > 0) {
   cam.bottom = -SHADOW_EXTENT;
   cam.near = 1;
   cam.far = 4000;
-  sun.shadow.bias = -0.0004;
+  sun.shadow.bias = param("shadowBias", -0.0004, -0.01, 0.01);
 }
 scene.add(sun, sun.target);
 
-const camera = new PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 6000);
+const camera = new PerspectiveCamera(60, innerWidth / innerHeight, NEAR, FAR);
 scene.add(camera);
 
 function groundAt(x: number, z: number): number {
@@ -352,6 +417,108 @@ function uploadTile(tile: number): SlotUploadTiming | null {
 
 function pumpUploads(limit: number): void {
   for (let n = 0; n < limit && uploadQueue.length > 0; n += 1) uploadTile(uploadQueue.shift()!);
+}
+
+// --- S5 depth test ------------------------------------------------------------------------
+
+const DEPTH_DISTANCES = [250, 500, 1000, 2000, 4000, 5800];
+const DEPTH_GAPS = [0.01, 0.1, 1, 10];
+
+/**
+ * Z-fighting rig: at each distance a blue quad faces the camera with a red quad
+ * `gap` metres behind it. Any red pixel inside the pair's footprint is the back
+ * quad winning the depth test, i.e. the depth buffer cannot separate `gap` at
+ * that distance. Rendered once in open sky, read back with readPixels.
+ */
+function runDepthTest(): void {
+  const savedPosition = camera.position.clone();
+  const savedQuaternion = camera.quaternion.clone();
+  const terrainWasVisible = terrainMesh.visible;
+  camera.position.set(0, 1300, 0);
+  camera.quaternion.setFromEuler(new Euler(0, 0, 0, "YXZ"));
+  camera.updateMatrixWorld();
+  terrainMesh.visible = false;
+
+  const rig = new Group();
+  const front = new MeshBasicMaterial({ color: "#0000ff", fog: false });
+  const back = new MeshBasicMaterial({ color: "#ff0000", fog: false });
+  const quad = new PlaneGeometry(1, 1);
+  const width = gl.drawingBufferWidth;
+  const height = gl.drawingBufferHeight;
+  const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
+  const cells: Array<{ px: number; py: number; half: number }> = [];
+  DEPTH_GAPS.forEach((gap, row) => {
+    DEPTH_DISTANCES.forEach((distance, col) => {
+      const ndcX = -0.85 + (1.7 * col) / (DEPTH_DISTANCES.length - 1);
+      const ndcY = 0.15 + (0.7 * row) / (DEPTH_GAPS.length - 1);
+      const dir = new Vector3(ndcX, ndcY, 0.5).unproject(camera).sub(camera.position).normalize();
+      const size = distance * 0.05;
+      for (const [material, d] of [
+        [front, distance],
+        [back, distance + gap],
+      ] as const) {
+        const mesh = new Mesh(quad, material);
+        mesh.position.copy(camera.position).addScaledVector(dir, d);
+        mesh.scale.setScalar(size);
+        mesh.lookAt(camera.position);
+        mesh.frustumCulled = false;
+        rig.add(mesh);
+      }
+      // Half the back quad's on-axis pixel size: safely inside its footprint.
+      const half = (0.5 * (size / 2)) / (distance + gap) / tanHalf * (height / 2);
+      cells.push({ px: ((ndcX + 1) / 2) * width, py: ((ndcY + 1) / 2) * height, half });
+    });
+  });
+  scene.add(rig);
+  renderer.info.reset();
+  renderFrame();
+  const pixels = new Uint8Array(width * height * 4);
+  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  scene.remove(rig);
+  quad.dispose();
+  front.dispose();
+  back.dispose();
+  camera.position.copy(savedPosition);
+  camera.quaternion.copy(savedQuaternion);
+  terrainMesh.visible = terrainWasVisible;
+
+  const redShare = cells.map(({ px, py, half }) => {
+    let red = 0;
+    let total = 0;
+    const r = Math.max(1, Math.floor(half));
+    for (let y = Math.floor(py - r); y <= py + r; y += 1) {
+      for (let x = Math.floor(px - r); x <= px + r; x += 1) {
+        if (x < 0 || y < 0 || x >= width || y >= height) continue;
+        const o = (y * width + x) * 4;
+        const isRed = pixels[o]! > 150 && pixels[o + 2]! < 100;
+        const isBlue = pixels[o + 2]! > 150 && pixels[o]! < 100;
+        if (isRed) red += 1;
+        if (isRed || isBlue) total += 1;
+      }
+    }
+    return total > 0 ? (100 * red) / total : Number.NaN;
+  });
+  const pad = (text: string): string => text.padStart(8);
+  const lines = [
+    `Forge S5 depth precision — ${new Date().toISOString()}`,
+    `GPU: ${gpuName}`,
+    `UA: ${navigator.userAgent}`,
+    `depth ${depthLabel}, near ${NEAR} m, far ${FAR} m, EXT_clip_control ${clipControl ? "yes" : "no"}, ` +
+      `depth bits ${String(gl.getParameter(gl.DEPTH_BITS))}, canvas ${width}×${height}`,
+    "% of pixels where the quad `gap` m behind wins (0 = separated, ~50 = z-fighting):",
+    `${"gap \\ dist".padEnd(12)}${DEPTH_DISTANCES.map((d) => pad(`${d} m`)).join("")}`,
+    ...DEPTH_GAPS.map(
+      (gap, row) =>
+        `${`${gap} m`.padEnd(12)}${DEPTH_DISTANCES.map((_, col) => {
+          const value = redShare[row * DEPTH_DISTANCES.length + col]!;
+          return pad(Number.isFinite(value) ? `${value.toFixed(1)}%` : "n/a");
+        }).join("")}`,
+    ),
+    `24-bit standard depth resolves ≈ d²/(near·2²⁴): ${DEPTH_DISTANCES.map((d) => `${d} m → ${f((d * d) / (NEAR * 2 ** 24))} m`).join(", ")}`,
+  ];
+  report.value = lines.join("\n");
+  reportPanel.hidden = false;
+  console.info(report.value);
 }
 
 /** S3: evicts every resident tile and uploads them all again inside one frame. */
@@ -469,7 +636,7 @@ function selectNodes(): number {
   const t0 = performance.now();
   camera.updateMatrixWorld();
   projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-  mainFrustum.setFromProjectionMatrix(projScreen);
+  mainFrustum.setFromProjectionMatrix(projScreen, WebGLCoordinateSystem, camera.reversedDepth);
   if (sun.castShadow) {
     sun.updateMatrixWorld();
     sun.target.updateMatrixWorld();
@@ -509,6 +676,7 @@ addEventListener("keydown", (event) => {
   switch (event.code) {
     case "KeyB": if (!bench) startBench(); break;
     case "KeyU": if (!bench) runUploadStress(); break;
+    case "KeyZ": if (!bench) runDepthTest(); break;
     case "KeyF": frozen = !frozen; break;
     case "KeyG": walking = !walking; break;
     case "KeyV": terrain.material.wireframe = !terrain.material.wireframe; break;
@@ -541,6 +709,7 @@ canvas.addEventListener("wheel", (event) => {
 });
 addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight, false);
+  sceneTarget?.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 });
@@ -712,7 +881,8 @@ function finishBench(done: BenchState): void {
   lines.push(`UA: ${navigator.userAgent}`);
   lines.push(
     `Canvas: ${canvas.width}×${canvas.height} (dpr ${f(DPR, 2)}), height ${heightFormat}, slots ${SLOTS}, patch ${PATCH}, ` +
-      `range0 ${RANGE0} m, levels ${LEVELS}, shadow ${SHADOW_MAP > 0 ? `${SHADOW_MAP}² ±${SHADOW_EXTENT} m` : "off"}`,
+      `range0 ${RANGE0} m, levels ${LEVELS}, shadow ${SHADOW_MAP > 0 ? `${SHADOW_MAP}² ±${SHADOW_EXTENT} m` : "off"}, ` +
+      `depth ${depthLabel} (near ${NEAR}, far ${FAR})`,
   );
   lines.push(
     `World: ${TILES}×${TILES} tiles × ${TILE_SIZE} m = ${WORLD_SIZE} m; generate ${f(world.stats.generateMs / 1000, 1)} s, ` +
@@ -839,7 +1009,7 @@ function frame(now: number): void {
   renderer.info.reset();
   // GPU results land frames later; the tag carries the phase they belong to.
   const timed = gpuTimer?.begin(benchPhase + 1) ?? false;
-  renderer.render(scene, camera);
+  renderFrame();
   if (timed) gpuTimer?.end();
   for (const sample of gpuTimer?.poll() ?? []) {
     if (sample.tag > 0) lastBenchSamples?.[sample.tag - 1]?.gpuMs.push(sample.ms);
@@ -865,13 +1035,13 @@ function drawHud(): void {
     `nodes ${instanceCount}  per LOD [${perLevel.join(" ")}]   crack-risk ${fallbackNodes}   LOD gaps ${lodGapEdges}   tiles needed ${neededTileCount}/${SLOTS}`,
     `resident ${pool.resident}/${SLOTS} slots   queue ${uploadQueue.length}   boot upload ${f(bootUploadMs, 0)} ms`,
     `tile upload last ${lastUpload ? f(lastUpload.copyMs + lastUpload.uploadMs) : "-"} ms, avg ${f(uploadStats.avg)} / max ${f(uploadStats.max)} ms (${uploadLog.length})`,
-    `height ${heightFormat}${heightFormat === "r16f" ? " (LOSSY)" : ""}, ${LAYERS} layers   ${canvas.width}×${canvas.height} @${f(DPR, 2)}   reversed-depth support ${renderer.capabilities.reversedDepthBuffer ? "yes" : "no"}`,
+    `height ${heightFormat}${heightFormat === "r16f" ? " (LOSSY)" : ""}, ${LAYERS} layers   ${canvas.width}×${canvas.height} @${f(DPR, 2)}   depth ${depthLabel} (near ${NEAR}, far ${FAR}, EXT_clip_control ${clipControl ? "yes" : "no"})`,
     ...memoryLines(),
     `cam ${f(camera.position.x, 0)}, ${f(camera.position.y, 1)}, ${f(camera.position.z, 0)}   AGL ${f(camera.position.y - ground, 1)} m   speed ${f(baseSpeed, 0)} m/s`,
     `${walking ? "WALK" : "FLY"}${frozen ? "  FROZEN" : ""}${terrain.material.wireframe ? "  WIRE" : ""}  view ${["lit", "LOD", "residency"][terrain.uniforms.uTerrainDebug!.value as number]}${bench ? `  BENCH ${PHASES[bench.phase]?.name ?? ""}` : ""}`,
     "",
     "drag look · WASD move · Q/E down/up · Shift ×5 · wheel speed",
-    "B benchmark · U upload stress (S3) · C view (lit/LOD/residency) · V wireframe · F freeze LOD",
+    "B benchmark · U upload stress (S3) · Z depth test (S5) · C view (lit/LOD/residency) · V wireframe · F freeze LOD",
     "G walk · K shadows · T hide terrain",
   ].join("\n");
 }

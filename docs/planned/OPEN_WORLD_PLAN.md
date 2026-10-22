@@ -349,6 +349,49 @@ Far 4–6 km, near 0.1 m ile z-fighting üretir. Faz 0'da `reversedDepthBuffer`
 veya hıza/yüksekliğe göre dinamik near (0.1 → 0.5 m). Karar Faz 0 sonunda
 buraya yazılır.
 
+**Karar (2026-10-22, S5).** Açık dünya level'larında **reversed-Z + float32
+derinlik**, sahnenin çizildiği render target üzerinde. Forge zaten her kareyi
+`EffectComposer` ile bir target'a çiziyor (`PostProcessPipeline`, RenderPass →
+OutputPass); o target'a `DepthTexture(FloatType)` (DEPTH_COMPONENT32F) verilir
+ve renderer `reversedDepthBuffer: true` ile kurulur. `EXT_clip_control` yoksa
+yedek `logarithmicDepthBuffer`. Küçük level'lar (far 300 m) bugünkü standart
+derinlikte kalır: near 0.1 ile 300 m'de çözünürlük ~5 cm.
+
+Ölçüm (S1 sayfası **Z** testi, RTX 3060 / Chrome 149 headless, 1080p, near
+0.1 m, far 6 km). Değer: önündeki mavi düzlemin `gap` m arkasındaki kırmızı
+düzlemin kazandığı piksel yüzdesi; 0 = ayrılıyor, > 0 = z-fighting:
+
+| Mod | 1 m aralık | 10 m aralık | Arazi GPU (B, ort.) |
+|---|---|---|---|
+| Standart, 24-bit (bugünkü) | 2 km'de %32, 5.8 km'de %100 | 5.8 km'de %25 | 0.82–1.14 ms |
+| `reversedDepthBuffer`, tuval derinliği | 2 km'de %55, 4 km'den sonra %100 | 5.8 km'de %23 | — |
+| `logarithmicDepthBuffer` | her mesafede %0 (1 cm dahil) | %0 | 1.00–1.38 ms (+%20–40) |
+| reversed + float32 target | her mesafede %0 (1 cm dahil) | %0 | 1.00–1.26 ms (+ target/blit 0.5 ms*) |
+
+\* Denemede target + ekrana kopya ayrıca 0.5 ms tutuyor; Forge bu target'ı
+zaten kullandığı için gerçek ek maliyet yalnız derinlik formatı farkı
+(D24 → D32F). Ölçümler arası gürültü ±%20.
+
+Bulgular:
+
+- **Tuval üzerinde reversed-Z işe yaramaz.** Varsayılan WebGL framebuffer'ı
+  24-bit sabit noktalı derinlik veriyor; reversed-Z'nin kazancı float
+  derinlikten gelir. Bu yüzden yalnız `reversedDepthBuffer: true` demek
+  standarttan bile kötü sonuç verdi.
+- three'de `capabilities.reversedDepthBuffer`, uzantı desteğini değil
+  "istendi ve destekleniyor" bilgisini verir; destek
+  `getSupportedExtensions()` ile sorulmalı. (İlk ön veri notu bu yüzden
+  yanlıştı: Chrome/D3D11'de `EXT_clip_control` **var**.)
+- **Gölge bias'ının işareti ters döner.** Reversed derinlikte Forge'un negatif
+  bias'ı (`lights.ts`, −0.0005; denemede −0.0004) güneşe bakan yüzlerde
+  kendine gölge lekesi üretiyor; 0 ya da +0.0004 temiz. Faz 7'de bias
+  reversed modda otomatik ters çevrilmeli (ya da mod başına değer).
+- **Derinlik okuyan pass'ler denetlenmeli:** `GTAOPass` ve `BokehPass` (DOF)
+  kendi derinliklerini okuyor; reversed + float derinlikle doğrulanmaları
+  Faz 7'ye eklenir. Forge'un kendi kodunda derinlik okuyan shader yok.
+- Log derinlik `gl_FragDepth` yazdığı için erken derinlik testini kapatıyor;
+  maliyet arazi gibi çok pikselli yüzeylerde büyüyor. Bu yüzden yalnız yedek.
+
 ---
 
 ## İlkeler
@@ -454,11 +497,12 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       `vx·(nrows+1) + vz` ve tek köşesi yükseltilmiş hücrelerde `b–c`
       köşegeni doğrulandı; `terrainTileHeightfieldShape` bu düzeni üretiyor.
       Süre ölçümü ve karakter/araç davranışı açık.
-- [ ] **S5 Derinlik:** far 6 km'de `reversedDepthBuffer` desteği ve
+- [x] **S5 Derinlik:** far 6 km'de `reversedDepthBuffer` desteği ve
       z-fighting; yedek seçeneklerin maliyeti (K7).
-      *Ön veri:* S1 sayfası headless Chrome 149 / D3D11'de
-      `capabilities.reversedDepthBuffer = false` (EXT_clip_control yok)
-      gösterdi; normal tarayıcıda HUD'dan tekrar bakılmalı.
+      *Tamam (2026-10-22):* S1 sayfasına `?depth=standard|reversed|log|
+      reversed-float`, `?near=`, `?shadowBias=` ve **Z** z-fighting testi
+      eklendi. Chrome/D3D11'de `EXT_clip_control` var. Sonuç ve karar K7'de:
+      reversed-Z + float32 derinlikli sahne target'ı; yedek log derinlik.
 - [ ] **S6 Worker:** Vite'ta modül worker'ı build'e girip `verify:dist`'ten
       geçiyor mu; tile çözme süresi; `transfer` ile kopyasız aktarım.
 - [ ] Kararlar kaydedildi. S1/S2 başarısızsa K2 yedek planına (CPU

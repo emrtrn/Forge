@@ -3,6 +3,7 @@ import { captureTerrainSnapshot } from "../../engine/terrain/terrainLandscapeBri
 import { expect, test } from "./test";
 import { SMOKE_ROAD_SIDECAR, SMOKE_SPLINE_SCENE } from "./smokeProject.mjs";
 import { readSavedTerrain } from "./terrain";
+import { levelTerrainPath } from "../../engine/terrain/terrainTypes";
 
 test("terrain endpoints validate raw binaries, definitions and dropped fields", async ({ request }) => {
   const snapshot = captureTerrainSnapshot({ id: "validation", position: [0, 0, 0], dataRef: "landscapes/validation.landscape.json" }, createFlatLandscapeData("small"));
@@ -43,7 +44,7 @@ test("legacy terrain Save migrates files, preserves road/water IDs, reloads and 
   expect((await savedResponse).ok()).toBeTruthy();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 20_000 });
   const level = await (await request.get(`/${SMOKE_SPLINE_SCENE}`)).json();
-  expect(level.landscapes[0].dataRef).toBe("landscapes/smoke-road.terrain.json");
+  expect(level.landscapes[0].dataRef).toBe(levelTerrainPath(SMOKE_SPLINE_SCENE, before.landscapes[0].id));
   expect(level.landscapes[0].id).toBe(before.landscapes[0].id);
   expect(level.riverWaters).toEqual(before.riverWaters);
   expect(await (await request.get(`/${SMOKE_ROAD_SIDECAR}`)).body()).toEqual(oldBytes);

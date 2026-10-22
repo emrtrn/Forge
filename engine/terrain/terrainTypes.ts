@@ -96,6 +96,17 @@ export function isWorldTerrainPath(path: string): boolean {
   return path.endsWith(TERRAIN_DEF_SUFFIX);
 }
 
+/** Level-owned terrain: keep the full scene path so equal names in different folders cannot collide. */
+export function levelTerrainPath(scenePath: string, landscapeId: string): string {
+  const normalized = scenePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const base = normalized.replace(/(\.level|\.layout)?\.json$/i, "");
+  if (!base || !landscapeId) throw new Error("Terrain requires a level path and actor id");
+  // Escape rather than sanitize: distinct actor IDs must not collapse to one filename.
+  const id = Array.from(landscapeId, (char) => /^[a-z0-9_-]$/i.test(char)
+    ? char : `~${char.codePointAt(0)!.toString(16)}~`).join("");
+  return `${base}.landscapes/${id}${TERRAIN_DEF_SUFFIX}`;
+}
+
 /** Public-root-relative path of one tile binary, next to its definition. */
 export function terrainTilePath(defPath: string, key: string): string {
   if (!isWorldTerrainPath(defPath)) throw new Error(`terrain path must end with ${TERRAIN_DEF_SUFFIX}: ${defPath}`);

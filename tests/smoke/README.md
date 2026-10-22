@@ -23,8 +23,11 @@ isolated project/server per worker.
 
 Use `smokePublicPath()` for filesystem assertions about saved files. Browser
 requests keep their regular public-relative URLs. The spline-chain spec selects
-its own level and sidecar explicitly; sculpt/paint can overwrite their separate
-`landscape-1` fixture without affecting the chain or the user's terrain.
+its own level and sidecar explicitly; sculpt/paint save into a level-specific
+`.landscapes/` directory without affecting the chain or the user's terrain.
+`terrain-isolation.spec.ts` creates the same terrain actor ID in two levels,
+sculpts the second, then checks that the first level's definition and tile bytes
+are unchanged and that its original heights survive reload.
 
 Teardown stops only the server recorded by this run, then removes the validated
 run directory. Setup failure also cleans its run directory. A forcibly killed

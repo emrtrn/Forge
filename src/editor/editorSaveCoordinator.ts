@@ -4,7 +4,7 @@ import { meshPaintDataPath, type LayoutMeshPaintData } from "@engine/scene/meshP
 import type { LayoutSavePayload, LayoutSaver, LayoutSaveResult } from "@/scene/SceneApp";
 import { saveMeshPaintData } from "./meshPaintStore";
 import { captureTerrainWrite } from "./terrainStore";
-import { isWorldTerrainPath } from "@engine/terrain/terrainTypes";
+import { levelTerrainPath } from "@engine/terrain/terrainTypes";
 import { terrainTransformNeedsSave } from "@engine/terrain/terrainLandscapeBridge";
 
 /** In-memory edit revisions; these are never written into authored content. */
@@ -130,10 +130,13 @@ export class EditorSaveSession {
       const migrations: EditorSaveStep[] = [];
       const pendingReferences: { id: string; from: string; to: string; actor: object }[] = [];
       for (const actor of source.layout.landscapes ?? []) {
-        if (isWorldTerrainPath(actor.dataRef)) continue;
+        const path = levelTerrainPath(source.scenePath, actor.id);
+        if (actor.dataRef === path) continue;
         const data = source.landscapeData.get(actor.id);
         if (!data) throw new Error(`Cannot migrate missing landscape data: ${actor.id}`);
-        const write = captureTerrainWrite(actor, data);
+        // Fork legacy/shared/copied references before writing anything. Never
+        // overwrite another level's definition or its tile binaries.
+        const write = captureTerrainWrite({ ...actor, dataRef: path }, data);
         const revision = this.landscapeSaveRevisions.get(actor.id);
         migrations.push(revision ? revision.capture(write.path, write.write) : write);
         payload.layout.landscapes!.find((entry) => entry.id === actor.id)!.dataRef = write.path;
@@ -182,7 +185,7 @@ export class EditorSaveSession {
   saveLandscapeData(id: string): Promise<void> {
     const actor = this.source().layout.landscapes?.find((entry) => entry.id === id);
     // A direct first sidecar save must persist its new level reference as well.
-    if (actor && !isWorldTerrainPath(actor.dataRef)) return this.saveLayout();
+    if (actor && actor.dataRef !== levelTerrainPath(this.source().scenePath, actor.id)) return this.saveLayout();
     return this.queue.save(() => {
       const step = this.captureLandscapeSave(this.source(), id);
       return step ? [step] : [];
@@ -194,6 +197,9 @@ export class EditorSaveSession {
     const data = source.landscapeData.get(id);
     const revision = this.landscapeSaveRevisions.get(id);
     if (!actor || !data || (!revision?.dirty && !terrainTransformNeedsSave(actor, data))) return null;
+    if (actor.dataRef !== levelTerrainPath(source.scenePath, actor.id)) {
+      throw new Error(`Terrain reference changed; retry Save to isolate ${id}`);
+    }
     const write = captureTerrainWrite(actor, data);
     return revision ? revision.capture(write.path, write.write) : write;
   }

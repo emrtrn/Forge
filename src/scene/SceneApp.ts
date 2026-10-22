@@ -1,4 +1,5 @@
 import { fetchLandscapeDocument } from "./terrainDocument";
+import { levelTerrainPath } from "@engine/terrain/terrainTypes";
 ﻿/**
  * SceneApp - the single render-layer orchestrator (L11 boundary).
  *
@@ -175,7 +176,6 @@ import {
   disposeLandscapeObject,
   ensureLandscapeLayers,
   LANDSCAPE_DEFAULT_LAYERS,
-  landscapeDataPath,
   normalizeLandscapeLayerWeights,
   resampleLandscapeHeightmap,
   landscapeHeightsToGrayscale,
@@ -9052,7 +9052,7 @@ export class SceneApp {
 
   /** Adds a flat Medium (129x129) Landscape actor at the origin and selects it. */
   addLandscape(): void {
-    if (!this.layout) return;
+    if (!this.layout || !this.activeProject) return;
     const landscapes = this.layout.landscapes ?? [];
     if (landscapes.length > 0) {
       this.onStatus?.("Only one Landscape is supported per level in this build.", "error");
@@ -9063,7 +9063,9 @@ export class SceneApp {
       id,
       name: uniqueLandscapeName("Landscape", landscapes),
       position: [0, 0, 0],
-      dataRef: landscapeDataPath(id),
+      // Stage the first reference so Save commits the tile/definition before
+      // publishing this actor in the level, just like a legacy migration.
+      dataRef: levelTerrainPath(this.activeProject.manifest.editor.defaultScene, id).replace(/\.terrain\.json$/, ".landscape.json"),
     };
     const data = createFlatLandscapeData("medium");
     const index = landscapes.length;

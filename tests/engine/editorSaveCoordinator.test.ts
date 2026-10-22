@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import { createFlatLandscapeData, type ForgeLandscapeData } from "../../engine/scene/landscape";
 import { EditorSaveCoordinator, EditorSaveError, EditorSaveSession, SaveRevision, type EditorSaveSource } from "../../src/editor/editorSaveCoordinator";
 import type { LayoutSaver } from "../../src/scene/SceneApp";
+import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { validateTerrainPath } from "../../tools/terrainSaveValidator";
 
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 type Sidecar = "landscape" | "foliage" | "meshPaint";
 
 const LEVEL = "layouts/save-test.level.json";
-const PATHS = [LEVEL, "landscapes/save-test.terrain.json", "layouts/save-test.foliage.json", "layouts/save-test.meshpaint.json"];
+const PATHS = [LEVEL, "layouts/save-test.landscapes/terrain.terrain.json", "layouts/save-test.foliage.json", "layouts/save-test.meshpaint.json"];
 
 function deferred() {
   let resolve!: () => void;
@@ -28,15 +30,15 @@ interface SaveHost extends EditorSaveSource {
   meshPaintSaveRevision: SaveRevision;
 }
 
-function fixture() {
+function fixture(scenePath = LEVEL) {
   const writes: { path: string; value: unknown }[] = [];
   const statuses: { message: string; tone: string }[] = [];
   const documents: EditorSaveSource = {
-    scenePath: LEVEL,
+    scenePath,
     editor: { gridSize: 1, gridEnabled: true, snapRotationDeg: 15, snapRotationEnabled: true, snapScale: 0.1, snapScaleEnabled: true },
     layout: {
       schema: 1, name: "before", loadGroups: [], instances: [], characters: [],
-      landscapes: [{ id: "terrain", name: "Terrain", position: [0, 0, 0], dataRef: PATHS[1]! }],
+      landscapes: [{ id: "terrain", name: "Terrain", position: [0, 0, 0], dataRef: levelTerrainPath(scenePath, "terrain") }],
     },
     landscapeData: new Map([["terrain", createFlatLandscapeData("small")]]),
     foliageData: {
@@ -51,8 +53,8 @@ function fixture() {
       placements: [{ target: { assetId: "mesh", placementIndex: 0, meshName: "mesh", primitiveIndex: 0 }, vertexCount: 1, colors: [1, 0, 0, 1] }],
     },
     layoutSaver: async (payload: Parameters<LayoutSaver>[0]) => {
-      writes.push({ path: LEVEL, value: payload.layout.name });
-      return { path: LEVEL };
+      writes.push({ path: scenePath, value: payload.layout.name });
+      return { path: scenePath };
     },
   };
   const session = new EditorSaveSession(() => documents, (message, tone) => { statuses.push({ message, tone }); });
@@ -101,6 +103,57 @@ async function withFetch(fetch: typeof globalThis.fetch, run: () => Promise<void
 }
 
 export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain ownership: full level paths and escaped actor IDs cannot alias definitions or tiles", async () => {
+    const paths = [
+      levelTerrainPath("levels/A/Terrain.level.json", "landscape-1"),
+      levelTerrainPath("levels/B/Terrain.level.json", "landscape-1"),
+      levelTerrainPath("levels/A/Terrain.level.json", "a/b"),
+      levelTerrainPath("levels/A/Terrain.level.json", "a~2f~b"),
+      levelTerrainPath("levels/A/Terrain.level.json", "../terrain:*"),
+    ];
+    assert.equal(new Set(paths).size, paths.length);
+    assert.equal(new Set(paths.map((path) => terrainTilePath(path, "0_0"))).size, paths.length);
+    for (const path of paths) assert.equal(validateTerrainPath(path), path);
+    assert.equal(levelTerrainPath("/levels/A/Terrain.level.json", "landscape-1"), paths[0]);
+  });
+
+  for (const shared of ["landscapes/landscape-1.landscape.json", "landscapes/landscape-1.terrain.json",
+    levelTerrainPath("levels/A/Terrain.level.json", "terrain")]) {
+    await checkAsync(`terrain ownership: two levels sharing ${shared} save independently without overwriting the source`, async () => {
+      const first = fixture("levels/A/Terrain.level.json");
+      const second = fixture("levels/B/Terrain.level.json");
+      first.host.layout.landscapes![0]!.dataRef = shared;
+      second.host.layout.landscapes![0]!.dataRef = shared;
+      const tiles = new Map<string, number>();
+      // A copied level must leave its original owner's terrain untouched, even
+      // on a clean manual Save (without a sculpt revision).
+      if (shared.endsWith(".terrain.json")) tiles.set(shared, 11);
+      await withFetch(async (input, init) => {
+        if (String(input).startsWith("/__save-terrain-tile")) {
+          const path = new URL(String(input), "http://localhost").searchParams.get("path")!;
+          tiles.set(path, decodeTerrainTile(new Uint8Array(init!.body as ArrayBuffer)).heights[0]!);
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }, async () => {
+        await second.host.saveLayout();
+        const secondPath = levelTerrainPath(second.host.scenePath, "terrain");
+        assert.equal(second.host.layout.landscapes![0]!.dataRef, secondPath);
+        assert.equal(tiles.get(secondPath), 0);
+        if (shared.endsWith(".terrain.json")) assert.equal(tiles.get(shared), 11);
+        first.edit("landscape", 7);
+        await first.host.saveLandscapeData("terrain");
+        const firstPath = levelTerrainPath(first.host.scenePath, "terrain");
+        assert.equal(first.host.layout.landscapes![0]!.dataRef, firstPath);
+        second.edit("landscape", 3);
+        await second.host.saveLandscapeData("terrain");
+        assert.equal(tiles.get(firstPath), 7);
+        assert.equal(tiles.get(secondPath), 3);
+        if (shared.startsWith("landscapes/") && shared.endsWith(".terrain.json")) assert.equal(tiles.get(shared), 11);
+        assert.ok(!tiles.has("landscapes/landscape-1.landscape.json"));
+      });
+    });
+  }
+
   for (const failure of ["tile", "definition", "layout", "none"]) {
     await checkAsync(`terrain migration: ${failure} failure preserves legacy reference until the complete snapshot is saved`, async () => {
       const f = fixture();

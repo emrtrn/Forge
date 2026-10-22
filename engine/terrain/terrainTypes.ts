@@ -1,0 +1,209 @@
+import type { Vec3 } from "../scene/layout";
+
+/**
+ * Render-agnostic World Terrain model (docs/planned/OPEN_WORLD_PLAN.md, K1): a
+ * square grid of square tiles, each tile a `(tileQuads + 1)²` heightfield with
+ * its own paint weights. A tile is the streaming unit (Unreal's Landscape
+ * Streaming Proxy). Edge vertices are duplicated in both neighbours rather than
+ * shared, so one tile renders, collides and samples on its own; editor tools
+ * keep the copies equal.
+ *
+ * The terrain is axis-aligned and unrotated — the World Partition grid is
+ * world-aligned, and a rotated heightfield would break every cell lookup. A
+ * legacy single Landscape becomes a 1×1 terrain (`terrainLegacy.ts`).
+ *
+ * Kept free of three.js and Rapier so the save validator, the editor core and
+ * the engine tests can read it.
+ */
+
+export const TERRAIN_SCHEMA = 1;
+
+/** Quads per tile edge must be a power of two in this range (CDLOD patch fit). */
+export const TERRAIN_MIN_TILE_QUADS = 32;
+export const TERRAIN_MAX_TILE_QUADS = 512;
+export const TERRAIN_DEFAULT_TILE_QUADS = 256;
+
+/** Hard grid bound: 32 × 256 m = 8 km, the largest world the schema admits. */
+export const TERRAIN_MAX_TILES_PER_AXIS = 32;
+
+/** Two RGBA8 weight blocks per vertex. */
+export const TERRAIN_MAX_LAYERS = 8;
+export const TERRAIN_LAYERS_PER_WEIGHT_BLOCK = 4;
+
+/**
+ * Default `Uint16` height range, Unreal's ±256 m (≈7.8 mm per step). A world
+ * with taller relief widens the range at creation time and trades precision.
+ */
+export const TERRAIN_DEFAULT_HEIGHT_MIN = -256;
+export const TERRAIN_DEFAULT_HEIGHT_MAX = 256;
+
+export interface WorldTerrainLayerDef {
+  id: string;
+  name: string;
+  /** Fallback tint when no material/texture is assigned. */
+  color: string;
+  /** Assigned material asset id; `null`/absent uses the preset look. */
+  material?: string | null;
+}
+
+/** Per-tile index entry kept in `terrain.json`, readable without fetching the tile. */
+export interface WorldTerrainTileSummary {
+  /** `tileKey(x, z)`. */
+  key: string;
+  /** Height bounds (relative to `origin[1]`) for culling, LOD and raycast early-outs. */
+  minHeight: number;
+  maxHeight: number;
+}
+
+export interface WorldTerrainDef {
+  schema: typeof TERRAIN_SCHEMA;
+  type: "worldTerrain";
+  name: string;
+  /** Quads per tile edge; a tile has `tileQuads + 1` vertices per side. */
+  tileQuads: number;
+  /** World units between neighbouring vertices. */
+  spacing: number;
+  tilesX: number;
+  tilesZ: number;
+  /** World position of tile (0, 0)'s min-X/min-Z corner; Y is the height datum. */
+  origin: Vec3;
+  /** Encoding range of `Uint16` tile heights, relative to `origin[1]`. */
+  heightMin: number;
+  heightMax: number;
+  layers: WorldTerrainLayerDef[];
+  /** Tiles that exist on disk. A grid slot without an entry is a hole. */
+  tiles: WorldTerrainTileSummary[];
+  collision: boolean;
+}
+
+/**
+ * One decoded tile. Heights are metres relative to `origin[1]`; weights are
+ * `ceil(layerCount / 4)` RGBA8 blocks laid out back to back, each `size² × 4`
+ * bytes, vertex-major — the exact upload shape of a `DataArrayTexture` layer.
+ * Layer `i` lives in block `floor(i / 4)`, channel `i % 4`.
+ */
+export interface TerrainTileData {
+  x: number;
+  z: number;
+  /** Vertices per side (`tileQuads + 1`). */
+  size: number;
+  heights: Float32Array;
+  layerCount: number;
+  weights: Uint8Array;
+}
+
+export function tileKey(x: number, z: number): string {
+  return `${x}_${z}`;
+}
+
+export function parseTileKey(key: string): { x: number; z: number } | null {
+  const match = /^(-?\d+)_(-?\d+)$/.exec(key);
+  if (!match) return null;
+  return { x: Number(match[1]), z: Number(match[2]) };
+}
+
+export function isValidTileQuads(value: number): boolean {
+  return (
+    Number.isInteger(value) &&
+    value >= TERRAIN_MIN_TILE_QUADS &&
+    value <= TERRAIN_MAX_TILE_QUADS &&
+    (value & (value - 1)) === 0
+  );
+}
+
+export function terrainTileVertexCount(def: Pick<WorldTerrainDef, "tileQuads">): number {
+  return def.tileQuads + 1;
+}
+
+export function terrainWeightBlockCount(layerCount: number): number {
+  return Math.ceil(Math.max(0, layerCount) / TERRAIN_LAYERS_PER_WEIGHT_BLOCK);
+}
+
+/** World edge length of one tile. */
+export function terrainTileWorldSize(def: Pick<WorldTerrainDef, "tileQuads" | "spacing">): number {
+  return def.tileQuads * def.spacing;
+}
+
+export interface TerrainWorldBounds {
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+}
+
+export function terrainWorldBounds(
+  def: Pick<WorldTerrainDef, "tileQuads" | "spacing" | "tilesX" | "tilesZ" | "origin">,
+): TerrainWorldBounds {
+  const tileSize = terrainTileWorldSize(def);
+  return {
+    minX: def.origin[0],
+    minZ: def.origin[2],
+    maxX: def.origin[0] + def.tilesX * tileSize,
+    maxZ: def.origin[2] + def.tilesZ * tileSize,
+  };
+}
+
+export function terrainTileWorldBounds(
+  def: Pick<WorldTerrainDef, "tileQuads" | "spacing" | "origin">,
+  x: number,
+  z: number,
+): TerrainWorldBounds {
+  const tileSize = terrainTileWorldSize(def);
+  const minX = def.origin[0] + x * tileSize;
+  const minZ = def.origin[2] + z * tileSize;
+  return { minX, minZ, maxX: minX + tileSize, maxZ: minZ + tileSize };
+}
+
+/**
+ * World X/Z → global vertex-grid coordinates (fractional). Global grid index
+ * `g` belongs to tile `floor(g / tileQuads)`; the shared edge `g = k·tileQuads`
+ * is owned by tile `k` (its min edge), except the far edge of the world, which
+ * the last tile owns.
+ */
+export function terrainGridCoord(
+  def: Pick<WorldTerrainDef, "spacing" | "origin">,
+  worldX: number,
+  worldZ: number,
+): { gx: number; gz: number } {
+  return {
+    gx: (worldX - def.origin[0]) / def.spacing,
+    gz: (worldZ - def.origin[2]) / def.spacing,
+  };
+}
+
+/** A blank tile: flat at height 0, layer 0 fully weighted (the base layer). */
+export function createFlatTerrainTile(
+  def: Pick<WorldTerrainDef, "tileQuads" | "layers">,
+  x: number,
+  z: number,
+  height = 0,
+): TerrainTileData {
+  const size = def.tileQuads + 1;
+  const count = size * size;
+  const layerCount = Math.min(def.layers.length, TERRAIN_MAX_LAYERS);
+  const weights = new Uint8Array(terrainWeightBlockCount(layerCount) * count * 4);
+  if (layerCount > 0) {
+    for (let index = 0; index < count; index += 1) weights[index * 4] = 255;
+  }
+  return { x, z, size, heights: new Float32Array(count).fill(height), layerCount, weights };
+}
+
+/** Reads layer `layer`'s weight (`0..1`) at vertex `index` of a tile. */
+export function terrainTileLayerWeight(tile: TerrainTileData, layer: number, index: number): number {
+  if (layer < 0 || layer >= tile.layerCount) return 0;
+  const block = Math.floor(layer / TERRAIN_LAYERS_PER_WEIGHT_BLOCK);
+  const channel = layer % TERRAIN_LAYERS_PER_WEIGHT_BLOCK;
+  const offset = block * tile.size * tile.size * 4 + index * 4 + channel;
+  return (tile.weights[offset] ?? 0) / 255;
+}
+
+/** Height bounds of a tile's samples; `{0, 0}` for an empty array. */
+export function terrainTileHeightRange(tile: Pick<TerrainTileData, "heights">): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const height of tile.heights) {
+    if (height < min) min = height;
+    if (height > max) max = height;
+  }
+  return Number.isFinite(min) ? { min, max } : { min: 0, max: 0 };
+}

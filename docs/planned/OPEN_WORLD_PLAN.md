@@ -1,6 +1,10 @@
 # Açık Dünya Planı (World Partition + Terrain LOD)
 
-> Durum: **Planlandı, başlanmadı** (2026-10-22).
+> Durum: **Başladı** (2026-10-22, dal `feat/open-world`). Faz 1'in saf
+> çekirdeği hazır: veri tipleri, ikili tile kodeki, yükseklik sorgusu +
+> raycast, legacy dönüşüm, heightfield şekli, World Partition hücre
+> matematiği (`tests/engine/terrain.test.ts`). Henüz hiçbir runtime/editör
+> yoluna bağlı değil; Faz 0 spike'ları açık.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -147,6 +151,62 @@ Reddedilenler:
   ile askıya alınır. Ayrıca altındaki tile'ın çarpışması yoksa **asla
   simüle edilmez** (zeminden düşme önlenir).
 
+### K3a — Yükseklik sorgusu collider ile birebir aynı olmalı (not, 2026-10-22)
+
+> Bu not [TERRAIN_DEFORMATION_PLAN.md](TERRAIN_DEFORMATION_PLAN.md) ile birlikte
+> değerlendirilirken çıktı. İki planı da etkiliyor; Faz 1'de `heightAt`
+> yazılırken uygulanmalı.
+
+**Sorun.** Faz 1'de `heightAt` **bilinear** olarak tanımlı. Rapier heightfield
+ve render mesh ise her hücreyi **iki düz üçgen** olarak işler. Bilinear yüzey
+bu üçgenlerden sapar. En büyük sapma hücre ortasındadır ve
+`|h00 + h11 − h10 − h01| / 4` kadardır. Örnek: 1 m'lik bir hücrede köşeler
+arasında 40 cm burulma varsa sapma 10 cm olur.
+
+Bugün bu fark görünmüyor, çünkü karakter zemini statik üçgen listesinden
+(`staticSurfaceTriangles`) geliyor. K3 karakter probunu `TerrainHeightQuery`'ye
+taşıdığında **yeni bir regresyon** ortaya çıkar:
+
+- Karakterin ayağı yerden kalkar ya da zemine gömülür.
+- Foliage ve çim havada kalır ya da zemine gömülür.
+- CPU heightfield raycast (seçim, brush hover) görünen yüzeyden farklı bir
+  noktaya vurur.
+- Deformasyon planında tekerleğin temas noktası ile iz alanı hizasız kalır.
+
+**Doğrulanan** (2026-10-22, `@dimforge/rapier3d-compat` 0.19.3, 1×1 hücrelik
+heightfield'a aşağı doğru ışın atılarak):
+
+- Ardışık yükseklik indeksleri Z boyunca ilerler (sütun-öncelikli):
+  0 = (−X,−Z), 1 = (−X,+Z), 2 = (+X,−Z), 3 = (+X,+Z).
+- Hücre köşegeni (−X,+Z)–(+X,−Z) yönünde. Bu, bugünkü landscape render
+  mesh'i ve trimesh collider'ı (`a,c,b / b,c,d` indeksleri; köşegen
+  `(x+1,z)–(x,z+1)`) ile **aynı yön**. Köşegen için çevirme gerekmiyor;
+  sorun yalnız bilinear örneklemede.
+- 1×1 hücrede satır ve sütun eksenleri ayırt edilemiyor. Bu yüzden S4'te
+  X ≠ Z boyutlu bir tile ile tekrar doğrulanmalı.
+
+**Karar.**
+
+- `heightAt` **üçgen-birebir** hesaplanır. Hücre içindeki kesirli konum
+  `tx, tz` ile:
+  - `tx + tz ≤ 1` ise `h = h00 + (h10 − h00)·tx + (h01 − h00)·tz`
+  - aksi halde `h = h11 + (h01 − h11)·(1 − tx) + (h10 − h11)·(1 − tz)`
+- Fizik ve hareket için `normalAt`, o üçgenin yüzey normalini döndürür.
+  Render'daki yumuşak normal ayrı kalabilir, çünkü yalnız görseldir.
+- CDLOD'un en ince seviyesinde (patch quad'ı = 1 texel) patch mesh'i aynı
+  köşegenle üçgenlenir. Morph'lu kaba seviyelerdeki fark yalnız görseldir ve
+  fiziği etkilemez.
+- Yumuşak yüzey isteyen görsel kullanımlar için ayrı ve açıkça adlandırılmış
+  bir `heightAtSmooth` (bilinear) tutulur.
+- Bugünkü bilinear `landscapeHeightAtLocal` (`engine/scene/landscape.ts:1461`)
+  yalnız görsel yerlerde kullanılıyor: spline normali
+  (`src/scene/SceneRuntimeCore.ts:799`) ve River Water derinliği
+  (`engine/render-three/riverWater.ts:183`). Taşıma sırasında bunların
+  `heightAtSmooth`'a mı yoksa birebir sürüme mi bağlanacağı tek tek seçilir.
+- **Test:** rastgele noktalarda `heightAt` sonucu, Rapier heightfield'a atılan
+  ışınla aynı çıkmalı (tolerans 1e-4). Test kapsamında X ≠ Z boyutlu tile,
+  tile kenarı ve tile köşesi bulunur.
+
 ### K4 — Akış: World Partition tarzı otomatik grid
 
 Unreal World Partition'daki gibi yazar sublevel yönetmez. Editör actor'leri
@@ -292,7 +352,12 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       (`addLayerUpdate`) süresi. Kapı: tile başına < 2 ms ana thread.
 - [ ] **S4 Rapier heightfield:** 257² tile collider oluşturma/silme süresi ve
       karakter + araç davranışı (kenar geçişi, iki tile arası dikiş).
-      Kapı: oluşturma < 3 ms.
+      X ≠ Z boyutlu tile'da indeks sırası ve köşegen yönü tekrar
+      doğrulanır (K3a). Kapı: oluşturma < 3 ms.
+      *Kısmen (2026-10-22):* 3×2 quad'lık alanda indeks
+      `vx·(nrows+1) + vz` ve tek köşesi yükseltilmiş hücrelerde `b–c`
+      köşegeni doğrulandı; `terrainTileHeightfieldShape` bu düzeni üretiyor.
+      Süre ölçümü ve karakter/araç davranışı açık.
 - [ ] **S5 Derinlik:** far 6 km'de `reversedDepthBuffer` desteği ve
       z-fighting; yedek seçeneklerin maliyeti (K7).
 - [ ] **S6 Worker:** Vite'ta modül worker'ı build'e girip `verify:dist`'ten
@@ -304,15 +369,25 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
 
 Bütün tile'lar hâlâ açılışta yükleniyor. Amaç formatı oturtmak.
 
-- [ ] `engine/terrain/terrainTypes.ts`: `WorldTerrainDef` (`tileQuads`,
-      `spacing`, `tilesX`, `tilesZ`, `origin`, `heightMin`/`heightMax`,
-      `layers[]` (≤ 8, material id), tile özeti `{key, minH, maxH, bytes}`).
-- [ ] `terrainTileCodec.ts`: sürümlü başlık, Uint16 height, 1–2 RGBA8 weight
-      bloğu; round-trip testleri, bozuk/eksik dosyada açık hata.
-- [ ] `terrainHeightQuery.ts`: bilinear `heightAt`, `normalAt`,
-      `layerWeightsAt`, tile sınırında süreklilik testleri.
+- [x] `engine/terrain/terrainTypes.ts`: `WorldTerrainDef` (`tileQuads`,
+      `spacing`, `tilesX`, `tilesZ`, `origin` (min köşe, Y = datum),
+      `heightMin`/`heightMax`, `layers[]` (≤ 8, material id), `collision`),
+      tile özeti `{key, minHeight, maxHeight}`. Bayt boyu özetten çıkarıldı:
+      sabit, `terrainTileByteLength` ile hesaplanıyor. (2026-10-22)
+- [x] `terrainTileCodec.ts`: 32 baytlık sürümlü başlık (`FTIL` v1), Uint16
+      ya da f32 height, 0–2 RGBA8 weight bloğu; round-trip, aralık dışı
+      clamp, bozuk/eksik dosyada `TerrainTileCodecError`. (2026-10-22)
+- [x] `terrainHeightQuery.ts`: **üçgen-birebir** `terrainHeightAt` ve
+      `terrainFaceNormalAt` (K3a), görsel için `terrainHeightAtSmooth` ve
+      `terrainSmoothNormalAt`, `terrainLayerWeightsAt`, heightfield
+      `raycastTerrain` (tile min/max atlamalı DDA, yalnız ön yüz). Kenar
+      vertex'i sahibi tile yüklü değilse komşu kopyadan okunur. Rapier
+      heightfield ışınıyla eşitlik testi: 400 rastgele nokta + dikiş ve
+      köşe, tolerans 1e-3; aynı noktalarda bilinear > 5 cm sapıyor. (2026-10-22)
 - [ ] Legacy dönüşüm: `LayoutLandscape` + `*.landscape.json` → 1×1 terrain
       (bellekte, okuma sırasında). Splines ve River Water referansları korunur.
+      **Saf dönüşüm hazır** (`terrainLegacy.ts`, `runtime-parity` fixture'ında
+      her collider vertex'i birebir); okuma yoluna bağlanması açık.
 - [ ] Kayıt: `/__save-terrain` (`terrain.json`, JSON) ve
       `/__save-terrain-tile` (ham ikili gövde, boyut ve başlık doğrulamalı).
       `saveValidator`'a 5. yüzey; `droppedFields` kapsamı.
@@ -349,6 +424,8 @@ Bütün tile'lar hâlâ açılışta yükleniyor. Amaç formatı oturtmak.
 
 - [ ] `terrainCollider.ts`: tile → Rapier heightfield, `landscape:<id>:<tile>`
       entity id'leri, collision preset / physical material korunur.
+      *Şekil verisi hazır* (`terrainTileHeightfieldShape`, Rapier testiyle);
+      PhysicsSubsystem bağlantısı açık.
 - [ ] `PhysicsSubsystem.addEntities` / `removeEntities` (toplu, tek
       invalidation); statik yüzey üçgen cache'i gövde başına artımlı.
 - [ ] `staticSurfaceTrianglesNear` arazi üçgenlerini heightfield'dan anında
@@ -366,7 +443,9 @@ Bütün tile'lar hâlâ açılışta yükleniyor. Amaç formatı oturtmak.
 ## Faz 4 — Akış çekirdeği (yalnız arazi)
 
 - [ ] `worldGrid.ts`, `streamingPolicy.ts`: saf, tablo testli (menzil,
-      histerezis, öncelik, hız yönü).
+      histerezis, öncelik, hız yönü). *`worldGrid.ts` hazır* (hücre/sınır,
+      yakından uzağa sıralı menzil sorgusu, actor → hücre); `streamingPolicy`
+      açık.
 - [ ] `worldStreamingSubsystem.ts`: durum makinesi, fetch sınırı, kare
       bütçesi, LRU bellek bütçesi, iptal (menzilden çıkan fetch), hata
       (eksik tile → düz tile + `[world]` uyarısı, CONTENT_LOADING_CONTRACT
@@ -514,6 +593,7 @@ Faz 8: Faz 2'den sonra parça parça (her faz kendi editör minimumunu getirir)
 |---|---|---|
 | GPU displacement three.js gölge/malzeme hattıyla çakışır | Faz 2 gecikir | Faz 0 S1/S2; yedek CPU geomipmapping |
 | Karakter hareketi üçgen listesine sıkı bağlı | Faz 3'te regresyon (merdiven/rampa) | `TerrainHeightQuery` önce, trimesh sonra; mevcut nav/merdiven testleri kapı |
+| Bilinear `heightAt` ile collider üçgenleri arasındaki sapma (hücre başına en fazla burulma/4) | Ayak, foliage, raycast ve deformasyon izi birkaç cm hizasız | K3a: üçgen-birebir örnekleme + Rapier ışınıyla eşitlik testi |
 | Akış takılmaları (hitch) | Oyun hissi bozulur | Worker, kare bütçesi, önceden yükleme (Loaded/Activated), `?debug` ölçümü |
 | BeginPlay/EndPlay semantiği script'leri bozar | Fork'larda sürpriz | Yalnız `world.partition` açık level'larda; belge + test |
 | Hücre dosyası çakışmaları (git) | Merge zorluğu | Hücre başına dosya, deterministik sıralı JSON |

@@ -1042,6 +1042,7 @@ import { registerTimeControlTests } from "../tests/engine/timeControl.test";
 import { registerGpuSweepTests } from "../tests/engine/gpuSweep.test";
 import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.test";
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
+import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
 
 /**
  * The three entry points every check in this suite goes through.
@@ -1158,6 +1159,8 @@ registerTimeControlTests(check);
 registerGpuSweepTests(check);
 registerGpuSweepSessionTests(check);
 registerPerfWitnessTests(check);
+registerTerrainTests(check);
+await registerTerrainRapierTests(checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

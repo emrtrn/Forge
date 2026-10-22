@@ -14,6 +14,15 @@
 > tile başına Rapier heightfield'a ve tek Landscape'i tile grid'ine çeviriyor.
 > Bu planın Faz 1'i, o planın Faz 3'ünden sonra `TerrainHeightQuery`
 > üzerinden yazılmalı.
+>
+> **Ortak not (2026-10-22):** iz alanı ve gömülme, zemin yüksekliğinin
+> collider ile birebir aynı örneklenmesine dayanıyor. Bilinear örnekleme
+> collider üçgenlerinden hücre başına en fazla `burulma / 4` kadar sapar.
+> Karar ve doğrulama sonucu OPEN_WORLD_PLAN.md **K3a**'da: `heightAt`
+> üçgen-birebir olacak. Rapier heightfield'ın köşegeni bugünkü mesh ile aynı
+> yönde; köşegen için çevirme gerekmiyor. Bu plandaki tüm yükseklik
+> örneklemeleri (iz basma, Faz 3 gömülme ve mesh) birebir sürümü kullanır,
+> asla `heightAtSmooth`'u kullanmaz.
 
 ## Karar: Yüzey profili + CPU-otoriter iz alanı + yerel yoğun mesh
 
@@ -314,6 +323,7 @@ Displacement yok. İzler normal map, albedo ve roughness ile görünür.
 |---|---|
 | Rest length değişimi süspansiyonu titretir | Faz 0 kapısı; değişim hızına sınır; ret durumunda görsel gömülme + direnç |
 | Patch ile terrain arasında dikiş ya da z-fighting | Üçgen-birebir yükseklik örneği + kapsanan alanda `discard`; test ile sabitlenir |
+| Yükseklik sorgusu bilinear kalırsa tekerlek ile iz hizasız olur | OPEN_WORLD_PLAN K3a: `heightAt` üçgen-birebir; Rapier ışınıyla eşitlik testi arazi planında |
 | Shader yalnız ilk 4 katmanı görüyor (`vec4 landscapeWeight`) | Fizik 8 katmanın tamamını kullanır; görsel tint ilk 4 katmanla sınırlı kalır, belgelenir |
 | Döndürülmüş ya da birden çok landscape | Alan dünya ekseninde tutulur; örnekleme her landscape'in ters dönüşümüyle yapılır |
 | Düşük donanım / mobil | Kalite profili: hücre boyutu büyür, patch kapanır, gerekirse yalnız Faz 1 kalır |

@@ -29,3 +29,21 @@ URL knobs: `tiles`, `patch`, `slots`, `range0`, `shadow`, `shadowExtent`,
 `shadowBias`, `dpr`, `uploadsPerFrame`, `layers` (`4` | `8`), `heightFormat`
 (`r16-norm` | `r32f` | `r16f`), `depth` (`standard` | `reversed` | `log` |
 `reversed-float`), `near`, `pose=x,agl,z,yaw,pitch`.
+
+## terrain-worker (S6)
+
+Tile decode on the main thread vs a module worker (`transfer`, 1/2/4 workers)
+for 64 real 8-layer tiles; the page prints its report and needs no input.
+
+```
+npm run dev:smoke
+http://127.0.0.1:5273/spikes/terrain-worker/index.html
+```
+
+Production check with the project's own Vite config, outside `dist/`:
+
+```
+SPIKE_OUT_DIR=<dir> npx vite build --config spikes/terrain-worker/vite.build.config.ts
+node builder/web/verify-dist.mjs --dist <dir> --strict
+SPIKE_OUT_DIR=<dir> npx vite preview --config spikes/terrain-worker/vite.build.config.ts --port 4373
+```

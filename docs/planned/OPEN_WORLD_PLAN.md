@@ -316,6 +316,12 @@ Unreal World Partition'daki gibi yazar sublevel yönetmez. Editör actor'leri
 - **Worker:** tile ikilisini çözme, Float32'ye açma, min/max ve global harita
   güncellemesi, çim örnekleme bir **Web Worker**'da. Ana thread yalnız doku
   yüklemesi, collider oluşturma ve sahne ekleme yapar.
+  *S6 ile doğrulandı (2026-10-22):* `new Worker(new URL(…, import.meta.url),
+  { type: "module" })` projenin kendi Vite ayarlarıyla ayrı bir chunk'a
+  derleniyor (`@engine` importları içine paketleniyor, `manualChunks` worker'a
+  uygulanmıyor), `verify:dist --strict` geçiyor ve production önizlemesinde
+  çalışıyor. Varsayılan `worker.format` IIFE; worker kodu ileride dinamik
+  import kullanırsa `vite.config.ts`'e `worker: { format: "es" }` eklenmeli.
 
 Reddedilenler:
 
@@ -503,8 +509,24 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       reversed-float`, `?near=`, `?shadowBias=` ve **Z** z-fighting testi
       eklendi. Chrome/D3D11'de `EXT_clip_control` var. Sonuç ve karar K7'de:
       reversed-Z + float32 derinlikli sahne target'ı; yedek log derinlik.
-- [ ] **S6 Worker:** Vite'ta modül worker'ı build'e girip `verify:dist`'ten
+- [x] **S6 Worker:** Vite'ta modül worker'ı build'e girip `verify:dist`'ten
       geçiyor mu; tile çözme süresi; `transfer` ile kopyasız aktarım.
+      *Tamam (2026-10-22):* `spikes/terrain-worker` (sayfa + worker +
+      `vite.build.config.ts`: ana config'i miras alan, `dist/` dışına yazan
+      ayrı build). Build: worker 2 KB'lık ayrı chunk, `verify:dist --strict`
+      PASS, production önizlemede çalışıyor. Ölçüm (headless Chromium, 12
+      çekirdek, 64 tile × 0.63 MB, 8 katman; dev ve prod aynı):
+      ana thread'de çözme tile başına ort. 0.39–0.43 ms (en kötü 1.5 ms);
+      `postMessage` transfer'le ort. 0.01–0.08 ms, structured clone ile
+      0.15–0.18 ms; transfer sonrası gönderenin buffer'ı boşalıyor (kopya
+      yok); ana thread'in sonucu teslim alması ort. 0.01–0.02 ms; sonuç ana
+      thread çözmesiyle birebir aynı. Throughput: 1 worker 1.4 ms/tile,
+      4 worker 0.73 ms/tile (64 tile 46 ms). Worker içinde çözme ilk
+      tile'larda 1.3 ms (yeni isolate'te JIT soğuk). Sonuç: K4'ün worker
+      planı geçerli; çözme zaten ucuz olduğu için worker'ın asıl kazancı
+      fetch + çözme + global harita + çim örneklemenin hepsini ana
+      thread'den almak. Kodek çözmesi `DataView` yerine hizalı
+      `Uint16Array` görünümüyle ayrıca hızlandırılabilir (küçük iş).
 - [ ] Kararlar kaydedildi. S1/S2 başarısızsa K2 yedek planına (CPU
       geomipmapping) geçildiği yazıldı.
 

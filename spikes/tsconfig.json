@@ -6,5 +6,5 @@
   "compilerOptions": {
     "baseUrl": ".."
   },
-  "include": ["."]
+  "include": [".", "../src/vite-env.d.ts"]
 }

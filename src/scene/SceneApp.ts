@@ -1,3 +1,9 @@
+import {
+  editLandscapeBrushWeights,
+  landscapeBrushAverage,
+  landscapeBrushFalloff,
+  nextLandscapeBrushHeight,
+} from "@engine/scene/landscapeBrush";
 import { fetchLandscapeDocument } from "./terrainDocument";
 import { levelTerrainPath } from "@engine/terrain/terrainTypes";
 ﻿/**
@@ -177,7 +183,6 @@ import {
   disposeLandscapeObject,
   ensureLandscapeLayers,
   LANDSCAPE_DEFAULT_LAYERS,
-  normalizeLandscapeLayerWeights,
   resampleLandscapeHeightmap,
   landscapeHeightsToGrayscale,
   landscapeSizeForPreset,
@@ -8867,7 +8872,7 @@ export class SceneApp {
         const worldZ = z * spacing - originZ;
         const distance = Math.hypot(worldX - localHit.x, worldZ - localHit.z);
         if (distance > radius) continue;
-        const falloff = Math.pow(clamp(1 - distance / radius, 0, 1), this.landscapeSculptSettings.falloff);
+        const falloff = landscapeBrushFalloff(distance, radius, this.landscapeSculptSettings.falloff);
         if (falloff <= 0) continue;
         const index = z * verticesX + x;
         const before = data.heights[index] ?? 0;
@@ -8915,7 +8920,7 @@ export class SceneApp {
         const worldZ = z * spacing - originZ;
         const distance = Math.hypot(worldX - localHit.x, worldZ - localHit.z);
         if (distance > radius) continue;
-        const falloff = Math.pow(clamp(1 - distance / radius, 0, 1), this.landscapeSculptSettings.falloff);
+        const falloff = landscapeBrushFalloff(distance, radius, this.landscapeSculptSettings.falloff);
         if (falloff <= 0) continue;
         const vertexIndex = z * verticesX + x;
         if (this.applyLandscapeWeightEdit(data, sourceLayers, vertexIndex, x, z, activeIndex, falloff)) {
@@ -8936,59 +8941,21 @@ export class SceneApp {
     activeIndex: number,
     falloff: number,
   ): boolean {
-    const amount = clamp(this.landscapeSculptSettings.strength * falloff, 0, 1);
-    const before = data.layers.map((layer) => layer.weights[vertexIndex] ?? 0);
-
-    if (this.landscapeSculptSettings.paintTool === "smoothWeights") {
-      for (const [layerIndex, layer] of data.layers.entries()) {
-        let total = 0;
-        let count = 0;
-        for (let dz = -1; dz <= 1; dz += 1) {
-          for (let dx = -1; dx <= 1; dx += 1) {
-            const sx = x + dx;
-            const sz = z + dz;
-            if (sx < 0 || sx >= data.size.verticesX || sz < 0 || sz >= data.size.verticesZ) continue;
-            total += sourceLayers[layerIndex]?.weights[sz * data.size.verticesX + sx] ?? 0;
-            count += 1;
-          }
-        }
-        const average = count > 0 ? total / count : before[layerIndex] ?? 0;
-        layer.weights[vertexIndex] = (before[layerIndex] ?? 0) + (average - (before[layerIndex] ?? 0)) * amount;
-      }
-      normalizeLandscapeLayerWeights(data, vertexIndex);
-      return data.layers.some(
-        (layer, index) => Math.abs((layer.weights[vertexIndex] ?? 0) - (before[index] ?? 0)) > 0.0001,
-      );
-    }
-
-    const activeLayer = data.layers[activeIndex];
-    if (!activeLayer) return false;
-    if (this.landscapeSculptSettings.paintTool === "erase") {
-      const removed = Math.min(activeLayer.weights[vertexIndex] ?? 0, amount);
-      if (removed <= 0.0001) return false;
-      activeLayer.weights[vertexIndex] = (activeLayer.weights[vertexIndex] ?? 0) - removed;
-      const baseLayer = data.layers[0]!;
-      if (activeIndex !== 0) baseLayer.weights[vertexIndex] = (baseLayer.weights[vertexIndex] ?? 0) + removed;
-      normalizeLandscapeLayerWeights(data, vertexIndex);
-      return true;
-    }
-
-    const target = Math.min(1, (activeLayer.weights[vertexIndex] ?? 0) + amount);
-    const remaining = 1 - target;
-    const otherTotal = data.layers.reduce(
-      (total, layer, index) => total + (index === activeIndex ? 0 : layer.weights[vertexIndex] ?? 0),
-      0,
+    const weights = data.layers.map((layer) => layer.weights[vertexIndex] ?? 0);
+    const changed = editLandscapeBrushWeights(
+      weights,
+      this.landscapeSculptSettings.paintTool,
+      activeIndex,
+      this.landscapeSculptSettings.strength * falloff,
+      (layer) => landscapeBrushAverage((dx, dz) => {
+        const sx = x + dx;
+        const sz = z + dz;
+        if (sx < 0 || sx >= data.size.verticesX || sz < 0 || sz >= data.size.verticesZ) return undefined;
+        return sourceLayers[layer]?.weights[sz * data.size.verticesX + sx] ?? 0;
+      }, weights[layer] ?? 0),
     );
-    activeLayer.weights[vertexIndex] = target;
-    for (const [layerIndex, layer] of data.layers.entries()) {
-      if (layerIndex === activeIndex) continue;
-      const current = layer.weights[vertexIndex] ?? 0;
-      layer.weights[vertexIndex] = otherTotal > 0 ? (current / otherTotal) * remaining : 0;
-    }
-    normalizeLandscapeLayerWeights(data, vertexIndex);
-    return data.layers.some(
-      (layer, index) => Math.abs((layer.weights[vertexIndex] ?? 0) - (before[index] ?? 0)) > 0.0001,
-    );
+    data.layers.forEach((layer, i) => { layer.weights[vertexIndex] = weights[i]!; });
+    return changed;
   }
 
   private nextLandscapeHeight(
@@ -9001,28 +8968,20 @@ export class SceneApp {
     hitHeight: number,
     falloff: number,
   ): number {
-    const amount = this.landscapeSculptSettings.strength * falloff;
-    if (this.landscapeSculptSettings.tool === "raise") return current + amount;
-    if (this.landscapeSculptSettings.tool === "lower") return current - amount;
-    if (this.landscapeSculptSettings.tool === "flatten") {
-      const target = Number.isFinite(this.landscapeSculptSettings.flattenTargetHeight)
-        ? this.landscapeSculptSettings.flattenTargetHeight
-        : hitHeight;
-      return current + (target - current) * clamp(amount, 0, 1);
-    }
-    let total = 0;
-    let count = 0;
-    for (let dz = -1; dz <= 1; dz += 1) {
-      for (let dx = -1; dx <= 1; dx += 1) {
+    const target = Number.isFinite(this.landscapeSculptSettings.flattenTargetHeight)
+      ? this.landscapeSculptSettings.flattenTargetHeight : hitHeight;
+    return nextLandscapeBrushHeight(
+      this.landscapeSculptSettings.tool,
+      current,
+      target,
+      this.landscapeSculptSettings.strength * falloff,
+      () => landscapeBrushAverage((dx, dz) => {
         const sx = x + dx;
         const sz = z + dz;
-        if (sx < 0 || sx >= verticesX || sz < 0 || sz >= verticesZ) continue;
-        total += sourceHeights[sz * verticesX + sx] ?? 0;
-        count += 1;
-      }
-    }
-    const average = count > 0 ? total / count : current;
-    return current + (average - current) * clamp(amount, 0, 1);
+        if (sx < 0 || sx >= verticesX || sz < 0 || sz >= verticesZ) return undefined;
+        return sourceHeights[sz * verticesX + sx] ?? 0;
+      }, current),
+    );
   }
 
   private insertLandscape(index: number, actor: LayoutLandscape, data: ForgeLandscapeData): void {

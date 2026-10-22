@@ -656,7 +656,11 @@ Doğrulama (2026-10-22):
       çözünürlüklü harita.
       *Saf slot ayırıcı `engine/terrain/terrainSlotPool.ts` hazır (2026-10-23):
       varsayılan 80 slot, serbest bırakılan veriyi önbellekte tutma ve en önce
-      serbest bırakılanı tahliye etme testli; GPU yüklemesi ve global harita açık.*
+      serbest bırakılanı tahliye etme testli; GPU yüklemesi açık.*
+      *Global harita saf çekirdeği hazır (2026-10-23): `terrainGlobalMap.ts`
+      tüm dünya için tile'ın bir üst LOD gridinde (`2 · tileQuads / patchQuads`
+      vertex stride) nokta örnekler; kirli tile dikdörtgenleri ve tile yükleme
+      için artımlı güncelleme testli. GPU yüklemeleri ve editör bağlantısı açık.*
 - [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
       splat, `sampler2DArray` katmanlar, uzak tekrar kırma, view mode'lar,
       gölge alma, kalite profiline bağlı kendine gölge.
@@ -667,6 +671,11 @@ Doğrulama (2026-10-22):
 - [ ] Sculpt/paint: `terrainEdit.ts` ile çok-tile'lı brush, kenar vertex
       senkronu, kirli dikdörtgen doku yüklemesi. Undo artık tüm diziyi değil,
       tile başına kirli dikdörtgenin önce/sonra yamasını saklar.
+      *Saf düzenleme çekirdeği hazır (2026-10-23): `terrainEdit.ts` Float32
+      çalışma kopyası, ortak legacy fırça matematiğiyle çok-tile sculpt/paint,
+      kenar/köşe senkronu, 8 katman RGBA8 normalizasyonu, dar kirli dikdörtgen,
+      alanla orantılı undo/redo ve min/max güncellemesi testli. Kalan: editör
+      bağlantısı, GPU yüklemeleri ve heightmap import/export.*
 - [ ] Heightmap import/export: 16-bit PNG ve RAW, dünya boyunda; tile'lara
       bölme `terrainImport.ts`'de (büyük import worker'da, Faz 4'ten sonra).
 - [ ] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,

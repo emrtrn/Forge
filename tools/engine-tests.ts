@@ -1048,6 +1048,7 @@ import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engin
 import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
 import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
+import { registerTerrainEditTests } from "../tests/engine/terrainEdit.test";
 import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.test";
 import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
 
@@ -1171,6 +1172,7 @@ registerStaticQueriesTests(check);
 registerSurfaceResponseTests(check);
 registerDeformationFieldTests(check);
 registerTerrainLodTests(check);
+registerTerrainEditTests(check);
 registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);
 registerTerrainDocumentTests(check);

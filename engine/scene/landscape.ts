@@ -1,3 +1,4 @@
+import { normalizeLandscapeBrushWeights } from "./landscapeBrush";
 import type { ColliderPrimitive } from "./components";
 import type { LayoutLandscape, Vec3 } from "./layout";
 import { buildLandscapeSplineAdjacency, landscapeSplineSegmentSampler } from "./landscapeSplineAdapter";
@@ -663,22 +664,9 @@ export function normalizeLandscapeLayerWeights(
   if (!base) return;
 
   for (let index = start; index < end; index += 1) {
-    let total = 0;
-    for (const layer of data.layers) {
-      const weight = Math.min(1, Math.max(0, layer.weights[index] ?? 0));
-      layer.weights[index] = weight;
-      total += weight;
-    }
-    if (total <= 0.000001) {
-      base.weights[index] = 1;
-      for (let layerIndex = 1; layerIndex < data.layers.length; layerIndex += 1) {
-        data.layers[layerIndex]!.weights[index] = 0;
-      }
-      continue;
-    }
-    for (const layer of data.layers) {
-      layer.weights[index] = Math.round((layer.weights[index]! / total) * 10_000) / 10_000;
-    }
+    const weights = data.layers.map((layer) => layer.weights[index] ?? 0);
+    normalizeLandscapeBrushWeights(weights);
+    data.layers.forEach((layer, i) => { layer.weights[index] = weights[i]!; });
   }
 }
 

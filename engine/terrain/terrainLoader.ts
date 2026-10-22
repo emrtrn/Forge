@@ -9,9 +9,13 @@ export interface WorldTerrainDocument {
 
 /** Cross-check binary header and samples against the JSON definition, on load and save. */
 export function validateTerrainTile(def: WorldTerrainDef, key: string, bytes: Uint8Array): DecodedTerrainTile {
+  return validateDecodedTerrainTile(def, key, decodeTerrainTile(bytes));
+}
+
+/** Shared by eager IO and worker decoding without decoding the binary twice. */
+export function validateDecodedTerrainTile(def: WorldTerrainDef, key: string, tile: DecodedTerrainTile): DecodedTerrainTile {
   const summary = def.tiles.find((entry) => entry.key === key);
   if (!summary) throw new Error(`terrain has no tile ${key}`);
-  const tile = decodeTerrainTile(bytes);
   if (tileKey(tile.x, tile.z) !== key || tile.size !== def.tileQuads + 1 || tile.layerCount !== def.layers.length ||
       tile.heightMin !== Math.fround(def.heightMin) || tile.heightMax !== Math.fround(def.heightMax)) {
     throw new Error(`terrain tile ${key} header does not match definition`);

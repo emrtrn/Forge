@@ -1049,6 +1049,7 @@ import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from
 import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.test";
+import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
 
 /**
  * The three entry points every check in this suite goes through.
@@ -1171,6 +1172,7 @@ registerSurfaceResponseTests(check);
 registerDeformationFieldTests(check);
 registerTerrainLodTests(check);
 registerStreamingPolicyTests(check);
+await registerWorldStreamingTests(check, checkAsync);
 registerTerrainDocumentTests(check);
 await registerTerrainDocumentAsyncTests(checkAsync);
 await registerTerrainRapierTests(checkAsync);

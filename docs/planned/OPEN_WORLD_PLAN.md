@@ -726,7 +726,22 @@ Doğrulama (2026-10-22):
       bütçesi, LRU bellek bütçesi, iptal (menzilden çıkan fetch), hata
       (eksik tile → düz tile + `[world]` uyarısı, CONTENT_LOADING_CONTRACT
       sınıflandırmasıyla).
+      *Saf çekirdek hazır (2026-10-23):* enjekte loader/saat ile yaşam döngüsü,
+      6 eşzamanlı fetch, 4 ms aktivasyon dilimi, iptal/geç sonuç temizliği,
+      byte bütçeli pasif LRU, sınıflandırılmış tekil uyarı/fallback,
+      `isAreaReady`/`waitForArea` ve `stats()` API'si testli. Menzil dışı pasif
+      veri bütçe dolana kadar tutulur; aktif veri bu bütçenin dışındadır.
+      Aktivasyon atomiktir: başlayan tek hücre dilimi aşabilir, sonraki iş
+      sonraki kareye kalır. Runtime capability bağlantısı, gerçek loader'lar,
+      renderer/fizik aktivasyonu ve `?debug` overlay'i açık.
 - [ ] `terrainWorker.ts`: çözme + Float32 açma + min/max, transferable.
+      *Saf çekirdek hazır (2026-10-23):* `terrainTileStreaming.ts` eager loader
+      ile aynı tanım doğrulamasını kullanır; metre cinsinden Float32 yükseklik,
+      RGBA8 ağırlık blokları, min/max ve benzersiz transfer buffer'ları üretir.
+      İnce module worker önce `{ type: "init", def }`, sonra `{ key, bytes }`
+      alır; sonucu transfer listesiyle, hatayı yapılandırılmış mesajla yollar.
+      Runtime bağlantısı, gerçek loader'lar ve worker pool henüz yapılmadı;
+      `?debug` sayıları yalnız subsystem `stats()` API'sinde, overlay açık.
 - [ ] Render menzili ve fizik menzili ayrı; global harita menzil dışını
       kapatır.
 - [ ] Bloklayan yükleme: boot, travel, save-game yükleme ve ışınlanma

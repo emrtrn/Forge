@@ -2,7 +2,14 @@
 ## LevelRuntime · Capability Modülleri · Game Modülü
 
 > Tarih: 2026-08-09
-> Durum: **Uygulanıyor.** Faz A–D tamamlandı (browser kabulleri dahil).
+> Durum (22 Ekim 2026): **Faz A–I kod uygulaması tamamlandı.**
+> Otomatik kabul: aşağıdaki tarihli faz kayıtlarında; bunlar tarihsel koşumlardır.
+> Açık kabul: §7 madde 1 için ikiz metotların kaynak denetimi yapılmadı;
+> parity testi tek başına bu maddeyi kapatmaz. Kullanıcı/görsel/donanım kabulü
+> otomatik testlerle tamamlanmış sayılmaz.
+> Güncel iş sırası: [güvenilirlik aktif planı](../planned/FORGE_RELIABILITY_ACTIVE_PLAN.md).
+> Aşağıdaki faz görevleri ve uygulama kayıtları tarihçedir; yeniden açılmaz.
+> Faz A–D tamamlandı (browser kabulleri dahil).
 > **Faz E tamamlandı** (E/1 bağlanma mekanizması + moving-platform +
 > spline-follower, E/2 dialogue, E/3 save-game, E/4 runtime-UI, E/5 skeletal,
 > E/6 character-movement, E/7 AI, E/8 audio, E/9 vfx).
@@ -23,7 +30,7 @@
 
 ---
 
-## 0. Neden bu plan var
+## 0. Planın başlangıcındaki sorunlar (tarihsel)
 
 Sınır Krallıkları (RTS) geliştirilirken Forge Editör'ü verimli kullanamadık.
 Kök neden (denetimle doğrulandı):
@@ -1103,10 +1110,8 @@ A (ölçüm) ──▶ B (shell) ──▶ C (LevelRuntime, tek pipeline) ──
                               G (serialization) ──▶ H (parity test + starter) ──▶ I (RTS vaka)
 ```
 
-- A ve B düşük riskli; ilk oturumda güvenle yapılır.
-- C en ağır faz; alt-adımlara bölünmeli, her adımda A testi drift'i yakalar.
-- E modül modül ilerler; her modül ayrı commit.
-- G, C/E'den bağımsız ilerleyebilir (paralelleştirilebilir).
+Bu sıra tamamlanan uygulamanın bağımlılık haritasıdır. Yeni oturumda A/B/C
+fazlarını yeniden başlatma talimatı değildir; güncel sıra aktif plandadır.
 
 ---
 
@@ -1148,18 +1153,20 @@ A (ölçüm) ──▶ B (shell) ──▶ C (LevelRuntime, tek pipeline) ──
    `verify:dist --strict`) + `check:assets` + `smoke:browser` (2026-08-28:
    1023/1023 engine check, 34/34 browser smoke).
 
-> **Açık kalan tek madde: 1.** Faz I kapsamında doğrulanmadı — ikiz
-> `build*`/`apply*` metotlarının gerçekten kalmadığını Faz A parity testi
-> koruyor, ama bu oturumda ayrıca denetlenmedi.
+> **Açık kalan tek madde: 1.** Faz I kapsamında ayrıca kaynak denetimi
+> yapılmadı. Faz A parity testi ortak pipeline'ın adımlarını/sırasını korur;
+> kaynakta bütün ikiz `build*`/`apply*` metotlarının kaldırıldığını kanıtlamaz.
 
 ---
 
-## 8. Açık Kararlar (uygulama oturumunda netleşecek)
+## 8. Uygulamada alınan kararlar
 
 - **`LevelRuntime` yeni sınıf mı, yoksa `SceneRuntimeCore`'un genişletilmişi mi?**
-  Öneri: yeni sınıf; `SceneRuntimeCore` saf yardımcılar olarak altında kalır.
-- **`RuntimeSceneApp` korunacak mı, `ForgeRuntime` fabrikası mı sarar?** Öneri:
-  önce fabrika `RuntimeSceneApp`'i sarar (Faz F), sonra gerekiyorsa içi boşaltılır.
+  Ayrı `src/scene/LevelRuntime.ts` sınıfı kullanılır; `SceneRuntimeCore`
+  ortak yardımcılar olarak kalır.
+- **`RuntimeSceneApp` korunacak mı, `ForgeRuntime` fabrikası mı sarar?**
+  `createForgeRuntime` mevcut kabuğu sarar; oyun ve capability modüllerini
+  ilk level kurulmadan önce bağlar (Faz F).
 - **Capability ↔ Game modülü sınırı:** behavior/AI çekirdeği Katman 2; kurallar
   Katman 3. Kesişimler `RuntimeContext` ile gevşek bağlanır.
 - **Editör authoring modülleri:** Katman 2 modülleri editör viewport'ta preview
@@ -1167,14 +1174,10 @@ A (ölçüm) ──▶ B (shell) ──▶ C (LevelRuntime, tek pipeline) ──
 
 ---
 
-## 9. İlk Oturum İçin Başlangıç Noktası
+## 9. Devam eden çalışma için başlangıç noktası
 
-Yeni oturumda sırayla:
-1. Bu planı ve `AUDIT.md`'yi oku.
-2. **Faz A**'yı uygula (build manifest + parity test) — düşük risk, sonraki her
-   şeyin güvenlik ağı.
-3. **Faz B** (SceneShell) — küçük, izole.
-4. **Faz C**'ye alt-adımlarla gir (env/render grubu ilk).
-
-> Her adımda gate yeşil tut; demo + editör bootlamaya devam etsin; büyük tek
-> seferlik rewrite yapma.
+Güncel işleri [FORGE_RELIABILITY_ACTIVE_PLAN](../planned/FORGE_RELIABILITY_ACTIVE_PLAN.md)
+üzerinden seç. Bu belgenin A–I uygulama kayıtları ve tarihli test sayıları
+geçmiş kanıtlardır. §7 madde 1 açık kalır; bu belge güncellemesinde ayrıca
+kaynak denetimi yapılmadı. Yeni kod değişikliğinde güncel kapılar ve ilgili
+browser akışları yeniden çalıştırılır.

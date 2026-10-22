@@ -29,7 +29,7 @@
     "test:engine": "node tools/run-engine-tests.mjs",
     "test:engine:slow": "node tools/run-engine-tests.mjs --slow",
     "smoke:browser": "playwright test",
-    "smoke:critical": "playwright test editor-authoring.spec.ts runtime-playflow.spec.ts runtime-checkpoint.spec.ts",
+    "smoke:critical": "playwright test boot-errors.spec.ts editor-authoring.spec.ts runtime-playflow.spec.ts runtime-checkpoint.spec.ts",
     "smoke:production": "playwright test --config playwright.production.config.ts",
     "build:verify": "npm run verify:imports && npm run verify:smoke-fixtures && npm run verify:release-tools && npm run build && npm run test:engine:slow && npm run verify:dist -- --strict",
     "preview": "vite preview",

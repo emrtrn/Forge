@@ -1,6 +1,6 @@
 # Forge güvenilirlik — aktif iş listesi
 
-Tarih: 21 Ekim 2026.
+Tarih: 21 Ekim 2026. Son güncelleme: 22 Ekim 2026.
 Kaynak: [kapsamlı inceleme](../reports/FORGE_KAPSAMLI_INCELEME_2026-10-21.md).
 
 Bu dosya seçilen uygulama dilimlerini izler. Kaynak rapor, inceleme anının
@@ -248,10 +248,81 @@ kanıttır; bu dilimdeki hedefli kontrollerle karıştırılmamalıdır.
 Kullanım ve profile yeni içerik ekleme sözleşmesi:
 [RELEASE_WORKFLOW](../RELEASE_WORKFLOW.md).
 
-## 5. Sonraki dilimler
+## 5. F10 + F13 — Erken açılış hatası ve güncel sözleşmeler
+
+Tarih: 22 Ekim 2026.
+
+- Kod/belge: uygulandı.
+- Otomatik doğrulama: tam `build:verify`, kritik Chromium paketi ve
+  root/subpath production paketi geçti; ayrıntılar aşağıda.
+- Görsel kontrol: hata ekranı 1280×720 ve 390×844 görünümde incelendi.
+- Kullanıcı kabulü, gerçek desteklenmeyen cihaz ve uzak CI: yapılmadı.
+
+### Uygulanan davranış
+
+- [Boot hata ekranı](../../src/bootError.ts) Three.js, renderer, project
+  veya oyun modülüne bağımlı değildir. `main()` rejection'ı görünür bir açıklama,
+  açılabilir hata ayrıntısı ve **Reload page** düğmesiyle karşılanır.
+- WebGL2 yokluğu için donanım hızlandırma/tarayıcı desteği açıklaması vardır.
+  Diğer renderer ve kritik modül yükleme hatalarında bağlantı ve yeniden
+  yükleme önerisi gösterilir. Ayrıntılar düz metindir; asıl hata konsola yazılır.
+- Runtime/capability/game import'ları `main()` içindeki dinamik yüklemeye
+  taşındı; kritik runtime chunk'ı indirilemediğinde de hata ekranı çalışır.
+  Editör import'ları aynı catch sınırındadır. Debug chunk'ının paketlenip yalnız
+  `?debug` ile yüklendiğini açıklayan eski yorum düzeltildi.
+- Hata paneli odak alır, kısmen kurulmuş arayüz `inert` olur. Ayrıntılar ve
+  Reload klavyeyle kullanılabilir. Reload yeni sayfa yüklemesidir; yarım kalan
+  runtime üzerinde tekrar kurulum denenmez.
+- Renderer kurulduktan sonraki project/level hatalarının mevcut LoadingOverlay
+  **Retry** akışı korunur.
+- [Save sözleşmesi](../architecture/SAVE_GAME_CONTRACT.md) engine payload,
+  capability ve host sahipliğiyle güncellendi. Araç pose/hız/drivetrain,
+  `drivingVehicleId`, eski save uyumu ve gerçek restore sırası belgelendi.
+  Aynı origin'deki fork'ların farklı manifest adı kullanması gerektiği açıklandı.
+- [Katmanlı runtime planında](../architecture/FORGE_LAYERED_RUNTIME_PLAN.md)
+  tamamlanan A–I kod fazları, tarihsel otomatik kanıtlar ve açık kaynak denetimi
+  ayrıldı; eski ilk-oturum uygulama talimatı aktif plana yönlendirildi.
+- Eski yeterlilik analizi tarihsel/kısmi olarak işaretlendi. Skeletal-facing
+  backlog'undaki movement/AI yolları güncellendi; aktivasyon koşulu korunur.
+  Smoke README artık mevcut CI kritik/production komutlarını açıklar.
+  Araç planındaki 60/144 Hz kullanıcı kabulü açık kalır.
+
+### Doğrulama
+
+- `npx.cmd tsc --noEmit` ve `tsconfig.smoke.json` geçti; yeni development ve
+  production testleri tip kapsamına dahil.
+- `npm.cmd run build:verify`: **1.236 engine kontrolü**, 10 import denetleyici,
+  5 fixture ve 9 yayın/URL testi geçti. Production build ve sıkı dist taraması
+  geçti; 368 kaynak dosyasında yasak doğrudan import yok.
+- `npm.cmd run smoke:critical`: **9/9 geçti (43,8 s)**. Altı yeni
+  [boot regresyonu](../../tests/smoke/boot-errors.spec.ts): runtime/editör
+  WebGL2 yokluğu ve klavyeyle reload sonrası toparlanma, iki modda kritik
+  modül hatası, beklenmeyen renderer hatası, project hatasında mevcut Retry
+  ve başarılı reload. Normal authoring/save/Play, checkpoint ve save/load/travel
+  üç akışı da geçti. Yeni boot testleri CI kritik komutuna dahil edildi.
+- [Production boot testleri](../../tests/production/boot-errors.spec.ts)
+  derlenmiş root ve `/oyunlar/demo/` paketlerinde WebGL2 hatası/reload ve gerçek
+  runtime chunk HTTP 503 durumunu kapsar. `npm.cmd run smoke:production`:
+  normal/debug içerik ve menü akışlarıyla birlikte **8/8 geçti (57,1 s)**.
+  Yeni root paket 35 dosya / **3.938.250 bayt**; tüm yayın bütçeleri geçti.
+- Desktop ve dar görünüm ekran görüntüleri `test-results/boot-errors-*/`
+  altında üretildi; runtime hata ekranında taşma görülmedi. Klavye odağı,
+  ayrıntı açma ve Reload düğmesine erişim browser kontrolünde doğrulandı.
+
+İlk sandbox koşumu esbuild üst dizin erişim hatasında durdu; genişletilmiş
+yerel izinle aynı browser ve build komutları çalıştı. Bu ortam engeli uygulama
+hatası olarak sınıflandırılmadı. Hata senaryoları kontrollü browser enjeksiyonudur.
+İlk HTML/entry script'in hiç indirilememesi veya JavaScript'in kapalı olması
+bu catch sınırına girmez; context-loss sonrası çalışma zamanı kurtarma bu dilime
+dahil değildir. Tam development browser paketi yeniden çalıştırılmadı; önceki
+49/49 kanıtı tarihsel kalır. Belge değişiklikleri yeni kullanıcı/donanım kabulü
+anlamına gelmez. Kaynak inceleme raporu tarihsel kanıt olarak değiştirilmedi.
+
+## 6. Sonraki dilimler
 
 - F01'in sunucu/disk kesintisi ve farklı istemcilerde çakışan yazma sınırları.
-- F08/F09/F10/F13 bakım, veri tanılama, erken boot hatası ve belge güncelliği.
+- F09 runtime veri kabulü ve eksik/bozuk sidecar tanılaması; ardından dar
+  F08 controller/test bakım dilimleri. F10 ve F13'ün bu turdaki kapsamı yukarıda.
 - Gerçek oyun ihtiyacına göre F11/F12/F14 yaşam döngüsü, klavye ve donanım kabulü.
 
 Kayıt endpoint/validator/asset yükleme güvenlik incelemesi ayrı öneridir.

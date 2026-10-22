@@ -8,9 +8,7 @@
  *              (the editor bundle is a separate chunk, never loaded in game mode).
  *   ?debug     attaches the perf overlay in any mode.
  */
-import { createForgeRuntime } from "@/scene/ForgeRuntime";
-import { createDefaultRuntimeModules } from "@/scene/capabilities/defaultRuntimeModules";
-import { createGameModule } from "@/game/gameModule";
+import { showBootError } from "./bootError";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -58,6 +56,13 @@ async function main(): Promise<void> {
   // Inversion of control, runtime side: the composition root chooses which Layer 2
   // capabilities this build ships with, then plugs in the Layer 3 game module.
   // A fork edits this composition — never the shell (plan I4).
+  // Import inside the boot boundary so a failed critical chunk also gets UI.
+  const [{ createForgeRuntime }, { createDefaultRuntimeModules }, { createGameModule }] =
+    await Promise.all([
+      import("@/scene/ForgeRuntime"),
+      import("@/scene/capabilities/defaultRuntimeModules"),
+      import("@/game/gameModule"),
+    ]);
   const forge = await createForgeRuntime({
     canvas,
     scriptMessageTraceLimit,
@@ -71,8 +76,7 @@ async function main(): Promise<void> {
   });
 
   // Perf panel (readout + control strip + table modal) behind ?debug.
-  // Dynamically imported for the same reason the editor is: it is a
-  // diagnostic surface, and a shipped game should not carry a byte of it.
+  // Emitted as a separate diagnostic chunk; normal gameplay never loads it.
   if (params.has("debug")) {
     const { attachDebugPanel } = await import("@/scene/debugPanel");
     attachDebugPanel(forge.app, requireElement("debug-stats"));
@@ -84,4 +88,4 @@ async function main(): Promise<void> {
   forge.start();
 }
 
-void main();
+void main().catch(showBootError);

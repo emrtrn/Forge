@@ -4,9 +4,9 @@
 > çekirdeği hazır: veri tipleri, ikili tile kodeki, yükseklik sorgusu +
 > raycast, legacy dönüşüm, heightfield şekli, World Partition hücre
 > matematiği (`tests/engine/terrain.test.ts`). Henüz hiçbir runtime/editör
-> yoluna bağlı değil. Faz 0: S1+S2 deneme sayfası hazır
-> (`spikes/terrain-cdlod`, merge edilmez); ön ölçüm iyi, kullanıcının
-> tarayıcı ölçümleri bekleniyor. Diğer spike'lar açık.
+> yoluna bağlı değil. Faz 0: S1 masaüstünde geçti (arazi GPU < 1 ms, çatlak
+> yok; `spikes/terrain-cdlod`, merge edilmez), K2'nin GPU yolu masaüstü için
+> onaylandı. Laptop ölçümü ve S1/S2 görsel onayı açık. Diğer spike'lar açık.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -119,9 +119,30 @@ Reddedilenler:
 | Voxel / marching cubes arazi | Mağara/overhang verir ama render, fizik, editör maliyeti çok yüksek. Mağara gerekirse "Açık sorular"daki delik maskesi + mesh yolu. |
 | WebGPU'ya geçmek | Forge WebGL2 `WebGLRenderer` üzerinde; bu plan renderer değiştirmez. |
 
-**S1/S2 ara bulguları (2026-10-22, `spikes/terrain-cdlod`).** Karar değil;
-K2'nin kesinleşmesi kullanıcının tarayıcı ölçümlerini bekliyor. Bunlar
-denemenin ortaya çıkardığı tasarım gerçekleri:
+**S1 sonucu — masaüstü (2026-10-22).** GPU CDLOD yolu masaüstünde
+**onaylandı**; yedek plan (CPU geomipmapping) gerekmiyor. Ölçüm: kullanıcının
+Chrome 155'i, RTX 3060 / D3D11, 1920×1080, dpr 1, 80 slot `R16`, patch 32,
+`range0` 128 m, gölge 2048² ±160 m:
+
+| Faz (B ölçümü) | Arazi GPU ort. | Arazi GPU p95 | Düğüm (ort./en çok) | Üçgen (en çok) |
+|---|---|---|---|---|
+| Alçak uçuş, 25 m, ~300 m/s | 0.77 ms | 1.02 ms | 181 / 206 | 0.84 M |
+| Yüksek yörünge, 450 m | 0.68 ms | 1.08 ms | 90 / 182 | 0.75 M |
+| Yer koşusu, 2 m, ~100 km/sa | 0.90 ms | 1.00 ms | 177 / 186 | 0.76 M |
+
+Arazi GPU = faz GPU − arazisiz taban (0.07 ms); tüm kare GPU'su en çok
+1.49 ms. Arazi 2 draw call (renk + gölge). Düğüm seçimi 0.14–0.19 ms CPU.
+Arazi GPU belleği ≈ 35 MB (80 slot; height 10.1 + weight 20.2 + global 0.4 +
+katman dokuları 4.0 MB), gölge haritası 16 MB. Komşu LOD farkı ≥ 2 olan kenar
+her karede 0. Yörüngede (~430 m/s) 1 düğüm bir anlığına slotu yüklenmemiş
+tile'a düştü (yükleme kuyruğu kare başına 2 tile); Faz 4'te önceden yükleme
+halkası bunu kapatır. Kapı (< 3 ms, çatlak yok) yaklaşık 3 kat payla geçti.
+Açık kalanlar: orta seviye laptop ölçümü ve görsel onay (dikiş, pop, gölge).
+Laptop kapıyı geçemezse karar yalnız düşük kalite profili için yeniden ele
+alınır (patch/range0/slot ayarı), GPU yolu değişmez.
+
+**S1/S2 bulguları (2026-10-22, `spikes/terrain-cdlod`).** Denemenin ortaya
+çıkardığı tasarım gerçekleri; Faz 2'de uygulanır:
 
 - **Residency yarıçapı LOD menzillerinden çıkar.** `range0 = 4 × leaf`
   seçilince tile boyundaki düğümlerin menzili her zaman **4 tile** olur
@@ -396,12 +417,11 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       80 slot `R16` havuzu, 32 quad'lık patch, `range0` 128 m, 8 LOD, tek
       instanced draw + gölge pass'i. **B** tuşu 33 s'lik betikli ölçüm yapar
       (alçak uçuş, yüksek yörünge, yer koşusu, arazisiz taban) ve rapor verir.
-      *Ön ölçüm* (headless Chromium, bu makine, RTX 3060 / D3D11, 1920×1080,
-      dpr 1): arazi GPU ≈ faz − taban = ort. 0.68–0.91 ms, p95 ≤ 1.16 ms;
-      0.75–0.84 M üçgen (renk + gölge); arazi 2 draw call; düğüm seçimi
-      0.13–0.18 ms CPU; komşu LOD farkı ≥ 2 olan kenar 0; arazi GPU belleği
-      ≈ 35 MB (80 slot). Kapıyı geçiyor ama asıl ölçüm kullanıcının gerçek
-      tarayıcısı ve laptop'u; sonuç geldiğinde buraya ve K2'ye yazılacak.
+      *Masaüstü geçti (2026-10-22, kullanıcının Chrome 155'i, RTX 3060,
+      1080p):* arazi GPU ort. 0.68–0.90 ms, p95 ≤ 1.08 ms; arazi 2 draw
+      call; en çok 0.84 M üçgen; arazi GPU belleği ≈ 35 MB; komşu LOD farkı
+      ≥ 2 olan kenar 0. Ayrıntılı tablo K2'de. Kutu, laptop ölçümü ve görsel
+      onay (dikiş/pop) gelince işaretlenir.
 - [ ] **S2 Malzeme uyumu:** displacement + mevcut splat `onBeforeCompile` +
       gölge alma + `customDepthMaterial` ile kendine gölge, three r184'te.
       *Teknik olarak çalışıyor (2026-10-22, aynı sayfa):* Landscape splat
@@ -414,9 +434,10 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       onayı bekleniyor (dikiş, pop, gölge kalitesi).
 - [ ] **S3 Doku yükleme:** 257² Uint16 + 2× RGBA8 slot güncellemesi
       (`addLayerUpdate`) süresi. Kapı: tile başına < 2 ms ana thread.
-      *Ön veri (S1 sayfası, 1 ağırlık bloğu):* kopya ort. 0.06 ms + GPU
-      yükleme (`initTexture`) ort. 0.10 ms, en kötü ~1.8 ms; 2× RGBA8 ve
-      laptop ölçümü açık.
+      *Ön veri (S1 sayfası, 1 ağırlık bloğu, masaüstü):* 381 yükleme;
+      kopya ort. 0.04 ms + GPU yükleme (`initTexture`) ort. 0.07 ms, en kötü
+      0.2 ms (headless koşuda tek sefer ~1.8 ms). 2× RGBA8 ve laptop
+      ölçümü açık.
 - [ ] **S4 Rapier heightfield:** 257² tile collider oluşturma/silme süresi ve
       karakter + araç davranışı (kenar geçişi, iki tile arası dikiş).
       X ≠ Z boyutlu tile'da indeks sırası ve köşegen yönü tekrar

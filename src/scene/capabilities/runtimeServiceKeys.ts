@@ -308,17 +308,32 @@ export interface VfxHost {
 
 export const vfxHostService = runtimeServiceKey<VfxHost>("vfx-host");
 
+export interface VfxSpawnOptions {
+  position: [number, number, number];
+  /** World-space central velocity direction; normalized, preserving authored speed and spread.
+   * Omitted at spawn keeps the authored direction; omitted on setTransform keeps the current one.
+   * Zero/non-finite directions are ignored. */
+  direction?: [number, number, number];
+  scale?: number;
+}
+
+/** Level-owned control; all methods become no-ops after unload or disposal. */
+export interface VfxEffectHandle {
+  setTransform(position: [number, number, number], direction?: [number, number, number]): void;
+  /** Multiplies authored rate and burst count on top of quality density, within fixed capacity.
+   * 0 idles, negatives clamp to 0, non-finite values use 1. Bursts fire once at their delay;
+   * suppressed bursts are consumed, never replayed when the rate increases. */
+  setEmissionRate(multiplier: number): void;
+  /** Default: stop emitting and let live particles age out. False removes immediately. */
+  stop(fadeOut?: boolean): void;
+  dispose(): void;
+}
+
 /**
- * What the runtime asks of whichever capability owns particles. As with audio,
- * the shell drives the steps only it knows the timing of — resolving this
- * level's effect + texture assets before anything can spawn, and starting the
- * built level's `autoPlay` emitters — while the two entity triggers cover a
- * runtime-spawned actor and a script's explicit `playParticleEffect`.
- *
- * `undefined` means the module is off: emitter actors still exist and still run
- * their scripts, the triggers become no-ops and `?debug` reports an empty VFX
- * runtime. Nothing else changes.
- * Provided by: `vfxModule`.
+ * What the runtime asks of whichever capability owns particles. The shell
+ * prepares the level's manifest and starts authored autoPlay emitters; scripts
+ * can trigger entities or spawn effects at arbitrary world-space anchors.
+ * Provided by vfxModule; undefined means the capability is off.
  */
 export interface VfxCommands {
   /** Maps this level's manifest `effect` + `texture` assets to fetchable URLs. */
@@ -329,6 +344,10 @@ export interface VfxCommands {
   playAutoPlayEntity(entity: Entity): Promise<void>;
   /** Spawns an entity's effect on demand, `autoPlay` or not (a script trigger). */
   triggerEntityEffect(entity: Entity): Promise<void>;
+  /** Asset id or public-root-relative .effect.json path; forces one-shot playback. */
+  spawnEffectAt(effectIdOrPath: string, options: VfxSpawnOptions): Promise<VfxEffectHandle | null>;
+  /** Forces looping until stopped; shares the loader/cache and particle budgets. */
+  createEffectEmitter(effectIdOrPath: string, options: VfxSpawnOptions): Promise<VfxEffectHandle | null>;
   /** Particle-count scale from the active quality profile. */
   setGlobalDensity(scale: number): void;
   debugSnapshot(): VfxDebugSnapshot;

@@ -30,6 +30,7 @@ export type VfxInstanceId = number;
 export interface VfxPlayOptions extends ParticleEffectOverrides {
   /** World-space origin the emitter spawns from (default `[0, 0, 0]`). */
   position?: Vec3;
+  direction?: Vec3;
 }
 
 export interface VfxInstanceDebug {
@@ -82,11 +83,13 @@ interface VfxInstance {
   readonly effectId: string;
   readonly effect: LiveParticleEffect;
   enabled: boolean;
+  emissionRate: number;
 }
 
 async function fetchDefinition(url: string): Promise<RuntimeParticleEffect | null> {
   try {
     const response = await fetch(url);
+    if (!response.ok) return null;
     return parseRuntimeParticleEffect((await response.json()) as unknown);
   } catch {
     return null;
@@ -175,9 +178,10 @@ export class VfxSubsystem implements Subsystem {
     if (!effect) return null;
     const p = options.position;
     effect.setOrigin(p ? p[0] : 0, p ? p[1] : 0, p ? p[2] : 0);
+    if (options.direction) effect.setDirection(options.direction);
     this.root.add(effect.object3D);
     const id = this.nextId++;
-    this.instances.set(id, { id, effectId, effect, enabled: true });
+    this.instances.set(id, { id, effectId, effect, enabled: true, emissionRate: 1 });
     return id;
   }
 
@@ -187,6 +191,26 @@ export class VfxSubsystem implements Subsystem {
     if (!instance) return;
     this.instances.delete(instanceId);
     this.recycle(instance);
+  }
+
+  /** Moves only the emission anchor; already emitted particles stay in world space. */
+  setTransform(instanceId: VfxInstanceId, position: Vec3, direction?: Vec3): void {
+    const effect = this.instances.get(instanceId)?.effect;
+    if (!effect) return;
+    effect.setOrigin(position[0], position[1], position[2]);
+    if (direction) effect.setDirection(direction);
+  }
+
+  setEmissionRate(instanceId: VfxInstanceId, multiplier: number): void {
+    const instance = this.instances.get(instanceId);
+    if (!instance) return;
+    instance.emissionRate = Number.isFinite(multiplier) ? Math.max(0, multiplier) : 1;
+    instance.effect.setDensityScale(this.globalDensity * instance.emissionRate);
+  }
+
+  /** Stops emission without freezing the simulation; advance recycles the tail. */
+  stopEmission(instanceId: VfxInstanceId): void {
+    this.instances.get(instanceId)?.effect.stopEmission();
   }
 
   /** Freezes/thaws an instance's simulation and visibility (Unreal SetActive). */
@@ -206,7 +230,7 @@ export class VfxSubsystem implements Subsystem {
   setGlobalDensity(scale: number): void {
     this.globalDensity = Number.isFinite(scale) && scale >= 0 ? scale : 1;
     for (const instance of this.instances.values()) {
-      instance.effect.setDensityScale(this.globalDensity);
+      instance.effect.setDensityScale(this.globalDensity * instance.emissionRate);
     }
     for (const bucket of this.pool.values()) {
       for (const effect of bucket) effect.setDensityScale(this.globalDensity);

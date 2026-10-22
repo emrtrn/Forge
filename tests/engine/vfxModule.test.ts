@@ -7,7 +7,8 @@
  * scene to render into, nothing registers at all.
  */
 import assert from "node:assert/strict";
-import { Scene } from "three";
+import { BoxGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, Points, Scene, type InstancedMesh } from "three";
+import type { Subsystem } from "../../engine/core/Subsystem";
 
 import {
   PARTICLE_EMITTER_COMPONENT,
@@ -46,20 +47,33 @@ const MANIFEST = {
   ],
 };
 
+const RUNTIME_EFFECT = {
+  schema: 2,
+  system: { loop: true, seed: 123, maxParticles: 128 },
+  spawn: { mode: "rate", rate: 10 },
+  initialize: { lifetime: [2, 2], direction: [0, 1, 0], speed: [2, 2], spreadAngleDeg: 0, startSize: [1, 1] },
+  update: { gravityScale: 0 },
+};
+
 /** Serves the effect above; anything else 404s, as in a real project. */
-async function withStubbedFetch(run: (requested: string[]) => Promise<void>): Promise<void> {
+async function withStubbedFetch(run: (requested: string[]) => Promise<void>, effect: unknown = EFFECT): Promise<void> {
   const original = globalThis.fetch;
+  // The flat particle runtime uses Math.random; pin it for reproducible steps.
+  const originalRandom = Math.random;
+  let seed = 123;
+  Math.random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 0x100000000);
   const requested: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
     requested.push(url);
     if (!url.includes("FX_Test")) return { ok: false, json: async () => ({}) } as unknown as Response;
-    return { ok: true, json: async () => EFFECT } as unknown as Response;
+    return { ok: true, json: async () => effect } as unknown as Response;
   }) as typeof globalThis.fetch;
   try {
     await run(requested);
   } finally {
     globalThis.fetch = original;
+    Math.random = originalRandom;
   }
 }
 
@@ -79,21 +93,319 @@ function documentOf(entities: readonly Entity[]): SceneDocument {
   return { schema: 1, name: "test", entities } as unknown as SceneDocument;
 }
 
-function startedHost(scene: Scene | null): {
+function startedHost(scene: Scene | null, models?: readonly Group[]): {
   host: RuntimeServiceHost;
   installed: string[];
   registry: ReturnType<typeof createCapabilityRegistry>;
+  advance: (deltaSeconds: number, steps?: number) => void;
 } {
   const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
-  if (scene) host.provide(vfxHostService, { scene });
+  if (scene) host.provide(vfxHostService, { scene, ...(models ? { loadModels: async () => models } : {}) });
   const registry = createCapabilityRegistry([createVfxModule()]);
   registry.runtimeStart(host);
   const installed: string[] = [];
-  host.installSubsystems((subsystem) => installed.push(subsystem.id));
-  return { host, installed, registry };
+  const subsystems: Subsystem[] = [];
+  host.installSubsystems((subsystem) => { installed.push(subsystem.id); subsystems.push(subsystem); });
+  return {
+    host, installed, registry,
+    advance(deltaSeconds, steps = 1) {
+      for (let frame = 0; frame < steps; frame += 1) {
+        for (const subsystem of subsystems) subsystem.update?.({ deltaSeconds, elapsedSeconds: 0, frame });
+      }
+    },
+  };
 }
 
 export async function registerVfxModuleTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("vfx module runtime spawn accepts relative effect paths and snapshots loading transforms", async () => {
+    await withStubbedFetch(async (requested) => {
+      const scene = new Scene();
+      const { host, registry, advance } = startedHost(scene);
+      const commands = host.resolve(vfxCommandsService)!;
+      const position: [number, number, number] = [1, 2, 3];
+      const direction: [number, number, number] = [1, 0, 0];
+      const pending = commands.spawnEffectAt("Effects/FX_Test_unregistered.effect.json", { position, direction });
+      position[0] = 99;
+      direction[0] = 0;
+      direction[1] = 1;
+      const handle = await pending;
+      assert.ok(handle);
+      assert.deepEqual(requested, ["/Effects/FX_Test_unregistered.effect.json"]);
+      advance(0.1);
+      handle.setEmissionRate(0);
+      advance(0.1);
+      const positions = (scene.children[0]!.children[0] as Points).geometry.getAttribute("position");
+      assert.ok(Math.abs(positions.getX(0) - 1.2) < 1e-5);
+      assert.equal(positions.getY(0), 2);
+      const disposing = commands.createEffectEmitter("Effects/FX_Test_disposing.effect.json", { position });
+      registry.dispose();
+      assert.equal(await disposing, null, "runtime teardown also cancels pending spawns");
+    }, RUNTIME_EFFECT);
+  });
+
+  await checkAsync("vfx module runtime spawn rejects malformed assets and non-relative paths once", async () => {
+    await withStubbedFetch(async (requested) => {
+      const { host, registry } = startedHost(new Scene());
+      const commands = host.resolve(vfxCommandsService)!;
+      const originalWarn = console.warn;
+      const warnings: string[] = [];
+      console.warn = (message: unknown) => warnings.push(String(message));
+      const refs = ["Effects/FX_Test_invalid.effect.json", "../FX_Test.effect.json", "https://example.com/FX_Test.effect.json"];
+      try {
+        for (const ref of refs) {
+          assert.equal(await commands.spawnEffectAt(ref, { position: [0, 0, 0] }), null);
+          assert.equal(await commands.createEffectEmitter(ref, { position: [0, 0, 0] }), null);
+        }
+        assert.equal(warnings.length, refs.length);
+        assert.deepEqual(requested, ["/Effects/FX_Test_invalid.effect.json"]);
+      } finally {
+        console.warn = originalWarn;
+        registry.dispose();
+      }
+    }, { schema: 999 });
+  });
+
+  await checkAsync("vfx module runtime spawn one-shot auto-recycles and shares the asset path cache", async () => {
+    await withStubbedFetch(async (requested) => {
+      const scene = new Scene();
+      const { host, registry, advance } = startedHost(scene);
+      const commands = host.resolve(vfxCommandsService)!;
+      commands.prepareLevel(MANIFEST as never);
+      const handle = await commands.spawnEffectAt("Effects/FX_Test.effect.json", {
+        position: [1, 2, 3], direction: [2, 0, 0], scale: 2,
+      });
+      assert.ok(handle);
+      const points = scene.children[0]!.children[0] as Points;
+      advance(0.1);
+      assert.equal(points.geometry.getAttribute("aSize").getX(0), 2);
+      handle.setEmissionRate(0);
+      advance(0.1);
+      assert.ok(Math.abs(points.geometry.getAttribute("position").getX(0) - 1.4) < 1e-5);
+      advance(0.1, 50);
+      assert.equal(commands.debugSnapshot().activeInstances, 0);
+      assert.equal(commands.debugSnapshot().pooledInstances, 1);
+      assert.equal(scene.children[0]!.children.length, 0);
+      const next = await commands.spawnEffectAt("FX_Test", { position: [0, 0, 0] });
+      assert.ok(next);
+      assert.equal(requested.length, 1, "manifest id and path warm the same definition");
+      handle.dispose();
+      handle.stop(false);
+      handle.setTransform([99, 99, 99]);
+      handle.setEmissionRate(0);
+      advance(0.1);
+      assert.equal(commands.debugSnapshot().aliveParticles, 1, "retired handle cannot control a pooled reuse");
+      const reused = scene.children[0]!.children[0] as Points;
+      advance(0.1);
+      assert.ok(Math.abs(reused.geometry.getAttribute("position").getY(0) - 0.2) < 1e-5,
+        "pool reset restores authored direction and scale");
+      next.dispose();
+      registry.dispose();
+    }, RUNTIME_EFFECT);
+  });
+
+  await checkAsync("vfx module runtime spawn emitter follows transform without moving its live trail", async () => {
+    await withStubbedFetch(async () => {
+      const scene = new Scene();
+      const { host, registry, advance } = startedHost(scene);
+      const commands = host.resolve(vfxCommandsService)!;
+      commands.prepareLevel(MANIFEST as never);
+      const handle = await commands.createEffectEmitter("FX_Test", { position: [1, 2, 3] });
+      assert.ok(handle);
+      const points = scene.children[0]!.children[0] as Points;
+      advance(0.1);
+      handle.setTransform([7, 8, 9], [2, 0, 0]);
+      advance(0.1);
+      const positions = points.geometry.getAttribute("position");
+      assert.ok(Math.abs(positions.getY(0) - 2.2) < 1e-5);
+      assert.equal(positions.getX(0), 1);
+      assert.deepEqual([positions.getX(1), positions.getY(1), positions.getZ(1)], [7, 8, 9]);
+      handle.setEmissionRate(0);
+      advance(0.1);
+      assert.ok(Math.abs(positions.getX(1) - 7.2) < 1e-5);
+      assert.equal(positions.getY(1), 8);
+      registry.dispose();
+    }, RUNTIME_EFFECT);
+  });
+
+  await checkAsync("vfx module runtime spawn rate zero idles and rate two doubles deterministic emission", async () => {
+    await withStubbedFetch(async () => {
+      const { host, registry, advance } = startedHost(new Scene());
+      const commands = host.resolve(vfxCommandsService)!;
+      commands.prepareLevel(MANIFEST as never);
+      const idle = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      const full = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      const double = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      assert.ok(idle && full && double);
+      idle.setEmissionRate(0);
+      double.setEmissionRate(2);
+      advance(0.1, 5);
+      assert.deepEqual(commands.debugSnapshot().instances.map((i) => i.aliveParticles), [0, 5, 10]);
+      commands.setGlobalDensity(0.5);
+      advance(0.1, 4);
+      assert.deepEqual(commands.debugSnapshot().instances.map((i) => i.aliveParticles), [0, 7, 14],
+        "quality density composes with each live rate");
+      idle.setEmissionRate(1);
+      commands.setGlobalDensity(1);
+      advance(0.1);
+      assert.equal(commands.debugSnapshot().instances[0]!.aliveParticles, 1, "idle resumes without catch-up");
+      idle.setEmissionRate(-1);
+      advance(0.1);
+      assert.equal(commands.debugSnapshot().instances[0]!.aliveParticles, 1, "negative rate clamps to zero");
+      commands.setGlobalDensity(0);
+      advance(0.1, 30);
+      assert.equal(commands.debugSnapshot().activeInstances, 3, "persistent emitters survive idle past lifetime");
+      assert.equal(commands.debugSnapshot().aliveParticles, 0);
+      registry.dispose();
+    }, { ...RUNTIME_EFFECT, system: { ...RUNTIME_EFFECT.system, loop: false } });
+  });
+
+  await checkAsync("vfx module runtime spawn bursts respect rate and quality at their scheduled tick", async () => {
+    await withStubbedFetch(async () => {
+      const { host, registry, advance } = startedHost(new Scene());
+      const commands = host.resolve(vfxCommandsService)!;
+      commands.prepareLevel(MANIFEST as never);
+      const handles = await Promise.all([0, 1, 2].map(async (rate) => {
+        const handle = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+        assert.ok(handle);
+        handle.setEmissionRate(rate);
+        return handle;
+      }));
+      commands.setGlobalDensity(0.5);
+      advance(0.1);
+      assert.deepEqual(commands.debugSnapshot().instances.map((i) => i.aliveParticles), [0, 2, 4]);
+      handles[0]!.setEmissionRate(2);
+      advance(0.1);
+      assert.equal(commands.debugSnapshot().instances[0]!.aliveParticles, 0, "suppressed bursts are consumed");
+      registry.dispose();
+    }, { ...RUNTIME_EFFECT, spawn: { mode: "burst", count: 4 } });
+  });
+
+  await checkAsync("vfx module runtime spawn stop and dispose are idempotent and drain live particles", async () => {
+    await withStubbedFetch(async () => {
+      const { host, registry, advance } = startedHost(new Scene());
+      const commands = host.resolve(vfxCommandsService)!;
+      commands.prepareLevel(MANIFEST as never);
+      const handle = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      assert.ok(handle);
+      advance(0.1, 5);
+      handle.stop();
+      handle.stop();
+      handle.setEmissionRate(2);
+      advance(0.1);
+      assert.equal(commands.debugSnapshot().aliveParticles, 5, "fade stop preserves the live tail");
+      advance(0.1, 30);
+      assert.equal(commands.debugSnapshot().activeInstances, 0);
+      const immediate = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      assert.ok(immediate);
+      advance(0.1);
+      assert.equal(commands.debugSnapshot().aliveParticles, 1, "pooled stopped effect emits again");
+      immediate.stop(false);
+      immediate.stop(false);
+      immediate.dispose();
+      immediate.dispose();
+      handle.dispose();
+      assert.equal(commands.debugSnapshot().activeInstances, 0);
+      const empty = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      assert.ok(empty);
+      empty.stop();
+      advance(0.01);
+      assert.equal(commands.debugSnapshot().activeInstances, 0, "an empty stopped emitter retires immediately");
+      registry.dispose();
+    }, RUNTIME_EFFECT);
+  });
+
+  await checkAsync("vfx module runtime spawn unload invalidates handles and pending loads", async () => {
+    await withStubbedFetch(async () => {
+      const { host, registry, advance } = startedHost(new Scene());
+      const commands = host.resolve(vfxCommandsService)!;
+      commands.prepareLevel(MANIFEST as never);
+      const old = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      assert.ok(old);
+      registry.levelUnloaded();
+      commands.prepareLevel(MANIFEST as never);
+      const next = await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] });
+      assert.ok(next);
+      old.setTransform([99, 99, 99]);
+      old.setEmissionRate(0);
+      old.stop();
+      old.dispose();
+      advance(0.1);
+      assert.equal(commands.debugSnapshot().aliveParticles, 1);
+      const pending = commands.spawnEffectAt("Effects/FX_Test_pending.effect.json", { position: [0, 0, 0] });
+      const pendingEntity = commands.triggerEntityEffect(emitter("pending", { effectId: "Effects/FX_Test_entity.effect.json" }));
+      registry.levelUnloaded();
+      assert.equal(await pending, null);
+      await pendingEntity;
+      assert.equal(commands.debugSnapshot().activeInstances, 0);
+      registry.dispose();
+      next.setEmissionRate(2);
+      next.dispose();
+      assert.equal(await commands.createEffectEmitter("FX_Test", { position: [0, 0, 0] }), null);
+    }, RUNTIME_EFFECT);
+  });
+
+  await checkAsync("vfx module runtime spawn missing assets return null with one warning per reference", async () => {
+    await withStubbedFetch(async (requested) => {
+      const { host, registry } = startedHost(new Scene());
+      const commands = host.resolve(vfxCommandsService)!;
+      const originalWarn = console.warn;
+      const warnings: string[] = [];
+      console.warn = (message: unknown) => warnings.push(String(message));
+      try {
+        for (const ref of ["FX_Missing", "Effects/Missing.effect.json"]) {
+          const results = await Promise.all([
+            commands.spawnEffectAt(ref, { position: [0, 0, 0] }),
+            commands.createEffectEmitter(ref, { position: [0, 0, 0] }),
+          ]);
+          assert.deepEqual(results, [null, null]);
+        }
+        assert.equal(warnings.length, 2);
+        assert.ok(warnings.every((w) => w.startsWith("[vfx]") && w.includes("ignoring")));
+        assert.equal(requested.length, 1, "unknown id does not fetch; missing path is cached");
+        registry.levelUnloaded();
+        assert.equal(await commands.spawnEffectAt("FX_Missing", { position: [0, 0, 0] }), null);
+        assert.equal(warnings.length, 2, "cached failure stays deduplicated across rebuilds");
+      } finally {
+        console.warn = originalWarn;
+        registry.dispose();
+      }
+    });
+  });
+
+  await checkAsync("vfx module runtime spawn mesh emitter follows direction and honours particle caps", async () => {
+    await withStubbedFetch(async () => {
+      const scene = new Scene();
+      const model = new Group();
+      const geometry = new BoxGeometry();
+      const material = new MeshBasicMaterial();
+      model.add(new Mesh(geometry, material));
+      const { host, registry, advance } = startedHost(scene, [model]);
+      const commands = host.resolve(vfxCommandsService)!;
+      commands.prepareLevel(MANIFEST as never);
+      const handle = await commands.createEffectEmitter("FX_Test", { position: [1, 2, 3] });
+      assert.ok(handle);
+      handle.setTransform([4, 5, 6], [1, 0, 0]);
+      advance(0.1);
+      handle.setEmissionRate(0);
+      advance(0.1);
+      const mesh = scene.children[0]!.children[0]!.children[0] as InstancedMesh;
+      const matrix = new Matrix4();
+      mesh.getMatrixAt(0, matrix);
+      assert.ok(Math.abs(matrix.elements[12]! - 4.2) < 1e-5);
+      assert.equal(matrix.elements[13], 5);
+      assert.equal(matrix.elements[14], 6);
+      handle.setEmissionRate(1e12);
+      advance(0.1, 4);
+      assert.equal(commands.debugSnapshot().aliveParticles, 3, "authored mesh cap wins over rate multiplier");
+      handle.stop();
+      advance(0.1, 30);
+      assert.equal(commands.debugSnapshot().activeInstances, 0);
+      registry.dispose();
+      geometry.dispose();
+      material.dispose();
+    }, { ...RUNTIME_EFFECT, renderer: { type: "mesh", modelIds: ["SM_Rock"], maxModelParticles: 3 } });
+  });
+
   await checkAsync("vfx module parents its container and spawns the level's autoPlay emitters", async () => {
     await withStubbedFetch(async (requested) => {
       const scene = new Scene();

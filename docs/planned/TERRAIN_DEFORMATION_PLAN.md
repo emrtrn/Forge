@@ -380,9 +380,17 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
 
 ## Faz 4 — Efekt ve ses
 
-- [ ] **VFX runtime spawn API'si:** bugün yalnız `triggerEntityEffect(entity)`
-      var. `VfxCommands`'a konum ve yönle tetikleme ya da tekerleğe bağlı,
-      emisyon hızı runtime'da ayarlanabilen bir efekt eklenir.
+- [x] **VFX runtime spawn API'si (2026-10-23):** `VfxCommands.spawnEffectAt`
+      konum/yön/ölçekle tek seferlik efekt, `createEffectEmitter` kalıcı emitter
+      oluşturur; ikisi de asset id veya public köküne göre `.effect.json` yolu
+      alıp `Promise<VfxEffectHandle | null>` döndürür. Handle'ın `setTransform`,
+      `setEmissionRate`, `stop(fadeOut = true)` ve `dispose` metotları vardır;
+      seviye kapanınca etkisizleşir. Emisyon çarpanı kalite yoğunluğuyla birlikte
+      authored rate/burst sayısına uygulanır, sabit partikül kapasitesini aşmaz.
+      Burst mevcut runtime gibi yalnız ilk delay'de bir kez çıkar; 0 çarpanla
+      bastırılan burst daha sonra tekrarlanmaz. `stop()` yeni emisyonu keser,
+      canlı partiküllerin ömrünü tamamlamasını bekler. Araç/yüzey bağlantısı bu
+      maddeden ayrıdır.
 - [ ] Physical material'a isteğe bağlı `wheelEffect` (effect asset id) eklenir;
       emisyon hızı patinaj ve hızla ölçeklenir. Çamur sıçraması ve kar tozu
       birer `*.effect.json` örnek asset olarak gelir.

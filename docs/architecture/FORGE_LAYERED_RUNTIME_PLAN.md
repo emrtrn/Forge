@@ -758,6 +758,17 @@ Gate = `npx tsc --noEmit` + `npm run test:engine` (+ yapısal fazlarda
 > `setGlobalDensity` ve `debugSnapshot`. Kabuk `onActorParticleEffect`'te entity
 > aramasını kendi yapıp entity'yi veriyor; `actorEntityById` kabuğun.
 >
+> **2026-10-23:** `vfx-commands` ayrıca `spawnEffectAt(effectIdOrPath, options)`
+> (tek seferlik) ve `createEffectEmitter(effectIdOrPath, options)` (kalıcı)
+> yayımlar. İkisi de `Promise<VfxEffectHandle | null>` döndürür; `options`
+> dünya konumu, isteğe bağlı yön ve ölçek taşır. Handle `setTransform`,
+> `setEmissionRate`, `stop(fadeOut = true)` ve `dispose` sunar. Emisyon çarpanı
+> authored rate ve ilk burst sayısını kalite yoğunluğuyla birlikte ölçekler;
+> 0 idle'dır, bastırılan burst tüketilir. `stop()` canlı kuyruğu doğal ömrüne
+> bırakır; `stop(false)`/`dispose()` hemen kaldırır. Tek seferlikler mevcut
+> instance havuzuna otomatik döner; seviye kapanınca handle'lar ve bekleyen
+> spawn'lar etkisizleşir. API araç veya yüzey bilgisi içermez.
+>
 > Audio ile aynı zamanlama gerekçesi: URL çözümü ve auto-play eski çağrı
 > yerlerinde kaldı (`populateAssetUrls` içinde `prepareLevel`, sahne kurulumunda
 > `playAutoPlay`), çünkü `onLevelLoaded` bunlar için fazla geç.

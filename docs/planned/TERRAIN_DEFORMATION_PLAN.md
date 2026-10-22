@@ -317,16 +317,27 @@ Faz 1b terrain katmanı bağlantıları bu değişikliğe dahil değildir.
 
 Displacement yok. İzler normal map, albedo ve roughness ile görünür.
 
-- [ ] `deformationField.ts`: toroidal pencere (boyut ve hücre ayarlanabilir),
+- [x] `deformationField.ts`: toroidal pencere (boyut ve hücre ayarlanabilir),
       kanal 0 = derinlik, kanal 1 = bozulma (renk/ıslaklık için).
       `stamp` (tekerlek ayak izi: genişlik × temas uzunluğu, yöne göre döndürülür),
       `sample`, `recenter`, `decay` (aktif hücre listesi ya da 0,5 s'de bir
       tarama), kirli dikdörtgen.
-- [ ] İz basma modeli: temas eden tekerlek başına, her fizik adımında hedef
+- [x] İz basma modeli: temas eden tekerlek başına, her fizik adımında hedef
       derinlik = `maxDepth × deformability × yük oranı`
       (`wheelSuspensionForce` / nominal yük).
       `hücre = max(hücre, lerp(hücre, hedef, compaction))`. Hızlı giden araçta
       iz boşluk bırakmasın diye iki temas noktası arası çizgi olarak basılır.
+
+**Faz 2 çekirdek notu (2026-10-23):** Saf toroidal alan, süpürülmüş tekerlek/disk
+izi, max-lerp, bilinear örnekleme, aktif hücre recovery ve en fazla dört kirli
+doku dikdörtgeni tamamlandı. Derinlik 0,1 mm adımlı `Uint16` (en çok 6,5535 m),
+bozulma 0..255 `Uint8`: kanal belleği 768 KiB + aktif hücre kümesi, yaklaşık
+0,5 MB hedefinden yüksek. 17 engine kontrolü; 4 tekerlek × 600 adım için zaman
+yerine ziyaret edilen hücre bütçesi. Shader/modül/debug/runtime recovery sonraya ait.
+GPU kopyası Faz 0'da ölçülen R8 yoluna uyar: kısmi yüklemenin paketleme adımı
+kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
+~1,2 mm adım) indirir; CPU alanı fizik için `Uint16` kalır.
+
 - [ ] Pencere merkezi: oyuncunun aracı. Pencere içindeki AI araçları da iz basar.
 - [ ] `terrainDeformation.ts` shader parçası açık dünya Faz 2'nin CDLOD
       `terrainMaterial`'ına eklenir (eski splat/vertex-color landscape

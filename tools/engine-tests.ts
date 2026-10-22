@@ -1046,6 +1046,7 @@ import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 import { registerStaticQueriesTests } from "../tests/engine/staticQueries.test";
 import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
 import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
+import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.test";
 
@@ -1167,6 +1168,7 @@ registerPerfWitnessTests(check);
 registerTerrainTests(check);
 registerStaticQueriesTests(check);
 registerSurfaceResponseTests(check);
+registerDeformationFieldTests(check);
 registerTerrainLodTests(check);
 registerStreamingPolicyTests(check);
 registerTerrainDocumentTests(check);

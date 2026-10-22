@@ -65,9 +65,11 @@ export function computeVehicleDrive(
   const coasting = throttle === 0 && brake === 0;
 
   const dt = Math.max(0, finiteOr(deltaSeconds, 0));
-  const steer = approach(previousSteer, targetSteer, definition.steerSpeed * dt);
+  const riseSpeed = definition.steerSpeed * sampleSteeringCurve(definition.steerRateCurve, forwardSpeed);
+  const returnSpeed = definition.steerReturnSpeed > 0 ? definition.steerReturnSpeed : definition.steerSpeed;
+  const steer = stepSteer(previousSteer, targetSteer, riseSpeed * dt, returnSpeed * dt);
   // +steer is the car's right (-X), which is a negative yaw about +Y.
-  const steering = -steer * (definition.maxSteerAngleDeg * Math.PI) / 180
+  const steering = -steerResponse(steer, definition.steerGamma) * (definition.maxSteerAngleDeg * Math.PI) / 180
     * sampleSteeringCurve(definition.steeringSpeedCurve, forwardSpeed);
   const drivetrain = definition.drivetrain ? computeDrivetrainDrive(
     definition, forwardPedal - reversePedal, forwardSpeed, previousDrivetrain, dt,
@@ -101,6 +103,30 @@ export function computeVehicleDrive(
       };
     }),
   };
+}
+
+/**
+ * Moves the smoothed steer toward the key's target: away from centre at the
+ * (speed-scaled) rise rate, back toward it at the return rate. A counter-steer
+ * returns through centre first and spends what is left of the slice rising.
+ */
+function stepSteer(current: number, target: number, riseDelta: number, returnDelta: number): number {
+  if (current !== 0 && Math.sign(target) !== Math.sign(current)) {
+    const toCentre = Math.abs(current);
+    if (toCentre >= returnDelta) return current - Math.sign(current) * returnDelta;
+    return approach(0, target, riseDelta * (1 - toCentre / returnDelta));
+  }
+  return approach(current, target, Math.abs(target) < Math.abs(current) ? returnDelta : riseDelta);
+}
+
+/** Smoothed steer (-1..1) → fraction of the speed-limited lock. */
+export function steerResponse(steer: number, gamma: number): number {
+  return Math.sign(steer) * Math.abs(steer) ** gamma;
+}
+
+/** Inverse of {@link steerResponse}: the steer input that yields a lock fraction. */
+export function steerForLockFraction(fraction: number, gamma: number): number {
+  return Math.sign(fraction) * Math.abs(fraction) ** (1 / gamma);
 }
 
 function approach(current: number, target: number, maxDelta: number): number {

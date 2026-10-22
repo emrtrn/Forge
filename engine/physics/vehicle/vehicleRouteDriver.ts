@@ -19,6 +19,7 @@
  *
  * Pure (no Rapier, no Three.js): unit-testable against an analytic route.
  */
+import { steerForLockFraction } from "./vehicleDrive";
 import { sampleSteeringCurve } from "./vehicleDrivetrain";
 import type { VehicleDefinition, VehicleInput, VehicleVec3 } from "./vehicleTypes";
 
@@ -173,7 +174,7 @@ function pursuitSteer(
   const lock = (definition.maxSteerAngleDeg * Math.PI) / 180
     * sampleSteeringCurve(definition.steeringSpeedCurve, speed);
   if (!(lock > 1e-6)) return 0;
-  return clamp(wheelAngle / lock, -1, 1);
+  return steerForLockFraction(clamp(wheelAngle / lock, -1, 1), definition.steerGamma);
 }
 
 /** Front-to-rear axle distance from the wheel layout (2.5 m when it is degenerate). */

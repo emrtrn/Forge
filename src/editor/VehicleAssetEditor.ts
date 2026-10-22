@@ -21,6 +21,7 @@
  */
 import {
   normalizeVehicleDefinition,
+  STEER_GAMMA_RANGE,
   type VehicleDefinition,
   type VehicleWheelDefinition,
 } from "@engine/physics/vehicle/vehicleTypes";
@@ -344,6 +345,8 @@ export class VehicleAssetEditor {
     html.push(this.groupOpen("steering", "Steering"));
     html.push(this.numRow("Max Steer (°)", "maxSteerAngleDeg", d.maxSteerAngleDeg, 0, 80, 1));
     html.push(this.numRow("Steer Speed", "steerSpeed", d.steerSpeed, 0.1, 50, 0.1));
+    html.push(this.numRow("Return Speed (0 = Steer)", "steerReturnSpeed", d.steerReturnSpeed, 0, 50, 0.1));
+    html.push(this.numRow("Steer Gamma", "steerGamma", d.steerGamma, STEER_GAMMA_RANGE[0], STEER_GAMMA_RANGE[1], 0.1));
     html.push(this.numRow("Handbrake Grip ×", "handbrakeSideFrictionMultiplier", d.handbrakeSideFrictionMultiplier, 0, 1, 0.05));
     html.push(this.tableBlock(
       "Lock over speed",
@@ -353,6 +356,15 @@ export class VehicleAssetEditor {
         this.cellNum(`steeringSpeedCurve.${index}.scale`, point.scale, 0, 1, 0.05),
       ]),
       "steer",
+    ));
+    html.push(this.tableBlock(
+      "Steer speed over speed",
+      ["Speed (m/s)", "Rate ×"],
+      d.steerRateCurve.map((point, index) => [
+        this.cellNum(`steerRateCurve.${index}.speedMps`, point.speedMps, 0, 500, 1),
+        this.cellNum(`steerRateCurve.${index}.scale`, point.scale, 0.01, 4, 0.05),
+      ]),
+      "steer-rate",
     ));
     html.push(this.groupClose());
 
@@ -658,6 +670,15 @@ export class VehicleAssetEditor {
       }
       case "remove-steer":
         draft.steeringSpeedCurve.splice(index, 1);
+        break;
+      case "add-steer-rate": {
+        const curve = draft.steerRateCurve;
+        const last = curve[curve.length - 1];
+        curve.push({ speedMps: (last?.speedMps ?? 0) + 10, scale: last?.scale ?? 1 });
+        break;
+      }
+      case "remove-steer-rate":
+        draft.steerRateCurve.splice(index, 1);
         break;
       case "add-torque": {
         const curve = drivetrain?.engine.torqueCurve;

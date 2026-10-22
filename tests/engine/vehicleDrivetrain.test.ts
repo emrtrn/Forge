@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { computeVehicleDrive } from "../../engine/physics/vehicle/vehicleDrive";
+import { computeVehicleDrive, steerForLockFraction, steerResponse } from "../../engine/physics/vehicle/vehicleDrive";
 import {
   computeVehicleAerodynamics, initialVehicleDrivetrainState, sampleTorqueCurve,
   sampleSteeringCurve, selectAutomaticGear,
@@ -185,6 +185,59 @@ export function registerVehicleDrivetrainTests(check: Check): void {
     close(fast.wheels[2]!.sideFrictionStiffness, 0.25);
     const released = computeVehicleDrive(def, fullThrottle, 20, 1, 1 / 60);
     close(released.wheels[2]!.sideFrictionStiffness, 1);
+  });
+
+  check("vehicle steering rate slows with speed, returns at its own rate and counter-steers through centre", () => {
+    const def = normalizeVehicleDefinition({
+      steerSpeed: 2,
+      steerRateCurve: [{ speedMps: 0, scale: 1 }, { speedMps: 20, scale: 0.25 }],
+      steerReturnSpeed: 4,
+    })!;
+    const right = { ...NEUTRAL_VEHICLE_INPUT, steer: 1 };
+    const left = { ...NEUTRAL_VEHICLE_INPUT, steer: -1 };
+    close(computeVehicleDrive(def, right, 0, 0, 0.1).steer, 0.2);
+    close(computeVehicleDrive(def, right, 20, 0, 0.1).steer, 0.05);
+    close(computeVehicleDrive(def, right, -20, 0, 0.1).steer, 0.05);
+    // Release and a smaller same-side target both move toward centre at the return rate.
+    close(computeVehicleDrive(def, NEUTRAL_VEHICLE_INPUT, 20, 1, 0.1).steer, 0.6);
+    close(computeVehicleDrive(def, { ...right, steer: 0.5 }, 20, 1, 0.1).steer, 0.6);
+    // 0.2 → centre takes half the slice at 4/s; the other half rises at 2/s.
+    close(computeVehicleDrive(def, left, 0, 0.2, 0.1).steer, -0.1);
+    close(computeVehicleDrive(def, left, 0, 0.6, 0.1).steer, 0.2);
+    // 0 = follow steerSpeed, the pre-existing symmetric behavior.
+    const symmetric = normalizeVehicleDefinition({ steerSpeed: 2 })!;
+    assert.equal(symmetric.steerReturnSpeed, 0);
+    close(computeVehicleDrive(symmetric, NEUTRAL_VEHICLE_INPUT, 20, 1, 0.1).steer, 0.8);
+    close(computeVehicleDrive(symmetric, left, 0, 0.1, 0.1).steer, -0.1);
+  });
+
+  check("vehicle steer gamma bends the wheel angle response and the AI inverse undoes it", () => {
+    const linear = normalizeVehicleDefinition({ steerGamma: 1 })!;
+    const curved = normalizeVehicleDefinition({ steerGamma: 2 })!;
+    const right = { ...NEUTRAL_VEHICLE_INPUT, steer: 1 };
+    const linearHalf = computeVehicleDrive(linear, right, 0, 0.5, 0);
+    const curvedHalf = computeVehicleDrive(curved, right, 0, 0.5, 0);
+    close(curvedHalf.steer, 0.5);
+    close(curvedHalf.wheels[0]!.steering, linearHalf.wheels[0]!.steering * 0.5);
+    close(computeVehicleDrive(curved, right, 0, 1, 0).wheels[0]!.steering,
+      computeVehicleDrive(linear, right, 0, 1, 0).wheels[0]!.steering);
+    for (const fraction of [-0.8, -0.25, 0, 0.3, 1]) close(steerResponse(steerForLockFraction(fraction, 1.6), 1.6), fraction);
+    assert.equal(normalizeVehicleDefinition({ steerGamma: 99 })!.steerGamma, 4);
+    assert.equal(normalizeVehicleDefinition({ steerGamma: -1 })!.steerGamma, 0.25);
+    assert.deepEqual(normalizeVehicleDefinition({ steerRateCurve: [{ speedMps: 5, scale: 0 }] })!.steerRateCurve,
+      [{ speedMps: 5, scale: 0.01 }], "a zero rate would freeze the wheels");
+  });
+
+  check("vehicle steering response fields survive saves", () => {
+    const def = normalizeVehicleDefinition({
+      steerRateCurve: [{ speedMps: 0, scale: 1 }, { speedMps: 15, scale: 0.3 }],
+      steerReturnSpeed: 3.5,
+      steerGamma: 1.6,
+    })!;
+    const shape = { schema: 1, type: "vehicle", ...def };
+    const saved = validateSaveVehiclePayload({ path: PATH, vehicle: shape });
+    assert.deepEqual(saved.vehicle, shape);
+    assert.deepEqual(collectDroppedFields(shape, saved.vehicle).paths, []);
   });
 
   check("vehicle aerodynamics are quadratic drag opposes velocity and downforce is downward", () => {

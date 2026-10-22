@@ -9,7 +9,15 @@
   "handbrakeForce": 8000,
   "rollingResistanceForce": 600,
   "maxSteerAngleDeg": 32,
-  "steerSpeed": 2.2,
+  "steerSpeed": 2,
+  "steerRateCurve": [
+    { "speedMps": 0, "scale": 1 },
+    { "speedMps": 5, "scale": 0.6 },
+    { "speedMps": 10, "scale": 0.35 },
+    { "speedMps": 20, "scale": 0.225 }
+  ],
+  "steerReturnSpeed": 3,
+  "steerGamma": 1.6,
   "drivetrain": {
     "engine": {
       "idleRpm": 600,

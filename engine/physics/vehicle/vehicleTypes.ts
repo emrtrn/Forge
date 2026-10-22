@@ -67,6 +67,19 @@ export interface VehicleDefinition {
   readonly maxSteerAngleDeg: number;
   /** Steering input travel per second (1 = centre to full lock in one second). */
   readonly steerSpeed: number;
+  /**
+   * Scales `steerSpeed` by forward speed, so a key press turns the wheels
+   * quickly while manoeuvring and gently at cruising speed. Applies only while
+   * the wheels move away from centre; `steerReturnSpeed` brings them back.
+   */
+  readonly steerRateCurve: readonly VehicleSteeringPoint[];
+  /** Input travel per second back toward centre (release, counter-steer); 0 = `steerSpeed`. */
+  readonly steerReturnSpeed: number;
+  /**
+   * Response curve from smoothed input to wheel angle: `|s|^gamma`. Above 1 a
+   * short tap gives a small angle, so a digital key can hold a gentle bend.
+   */
+  readonly steerGamma: number;
   /** Below this forward speed (m/s) the brake input reverses instead of braking. */
   readonly reverseSpeedThreshold: number;
   /** Null preserves the Faz 1 flat-force behavior for existing assets. */
@@ -242,6 +255,9 @@ const DEFAULT_VEHICLE: Omit<VehicleDefinition, "wheels"> = {
   rollingResistanceForce: 300,
   maxSteerAngleDeg: 35,
   steerSpeed: 3,
+  steerRateCurve: [{ speedMps: 0, scale: 1 }],
+  steerReturnSpeed: 0,
+  steerGamma: 1,
   reverseSpeedThreshold: 0.5,
   drivetrain: null,
   steeringSpeedCurve: [{ speedMps: 0, scale: 1 }],
@@ -317,6 +333,9 @@ export function normalizeVehicleDefinition(
     ),
     maxSteerAngleDeg: Math.min(80, nonNegative(input.maxSteerAngleDeg, base.maxSteerAngleDeg)),
     steerSpeed: positive(input.steerSpeed, base.steerSpeed),
+    steerRateCurve: normalizeSteeringCurve(input.steerRateCurve, base.steerRateCurve, STEER_RATE_SCALE_RANGE),
+    steerReturnSpeed: bounded(input.steerReturnSpeed, base.steerReturnSpeed, 0, 50),
+    steerGamma: bounded(input.steerGamma, base.steerGamma, STEER_GAMMA_RANGE[0], STEER_GAMMA_RANGE[1]),
     reverseSpeedThreshold: nonNegative(
       input.reverseSpeedThreshold,
       base.reverseSpeedThreshold,
@@ -402,12 +421,20 @@ function normalizeDrivetrain(value: unknown, base: VehicleDrivetrainDefinition |
   };
 }
 
-function normalizeSteeringCurve(value: unknown, fallback: readonly VehicleSteeringPoint[]): VehicleSteeringPoint[] {
+/** A zero rate would freeze the wheels, so the rate curve keeps a small floor. */
+const STEER_RATE_SCALE_RANGE: readonly [number, number] = [0.01, 4];
+export const STEER_GAMMA_RANGE: readonly [number, number] = [0.25, 4];
+
+function normalizeSteeringCurve(
+  value: unknown,
+  fallback: readonly VehicleSteeringPoint[],
+  [min, max]: readonly [number, number] = [0, 1],
+): VehicleSteeringPoint[] {
   const points = Array.isArray(value) ? value
     .filter((point): point is Record<string, unknown> => isRecord(point))
     .filter((point) => typeof point.speedMps === "number" && Number.isFinite(point.speedMps) && point.speedMps >= 0
       && typeof point.scale === "number" && Number.isFinite(point.scale))
-    .map((point) => ({ speedMps: point.speedMps as number, scale: unit(point.scale, 1) })) : [];
+    .map((point) => ({ speedMps: point.speedMps as number, scale: bounded(point.scale, 1, min, max) })) : [];
   return uniqueSortedPoints(points.length ? points : fallback, (point) => point.speedMps);
 }
 
@@ -484,6 +511,7 @@ function referenceCarDefaults(): VehicleDefinition {
     centerOfMassOffset: [...DEFAULT_VEHICLE.centerOfMassOffset],
     aerodynamics: { ...DEFAULT_VEHICLE.aerodynamics },
     steeringSpeedCurve: DEFAULT_VEHICLE.steeringSpeedCurve.map((point) => ({ ...point })),
+    steerRateCurve: DEFAULT_VEHICLE.steerRateCurve.map((point) => ({ ...point })),
     wheels: ([
       { position: [halfTrack, hardPointY, frontZ], steer: true },
       { position: [-halfTrack, hardPointY, frontZ], steer: true },

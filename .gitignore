@@ -6,6 +6,8 @@ builds/
 .playwright-smoke/
 playwright-report/
 test-results/
+playwright-production-report/
+test-results-production/
 *.local
 
 # Claude Code local settings (machine-specific permissions)

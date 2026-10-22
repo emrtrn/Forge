@@ -167,10 +167,92 @@ geçici dosya bırakabilir; gerçek authoring dosyalarında geri yükleme gerekt
 Uzak browser CI kurulumu F05 kapsamında bekliyor. Kullanım ayrıntıları:
 [smoke README](../../tests/smoke/README.md).
 
-## 4. Sonraki dilimler
+## 4. F04–F07 — Küçük starter yayın profili
 
-1. **F04–F07:** Yayın içerik kümesi, asset kaynak kayıtları, browser CI,
-   root/subpath production HTTP kontrolü ve paket bütçeleri.
+Tarih: 22 Ekim 2026. Kullanıcı ayrı, küçük starter profilini seçti.
 
-Kayıt endpoint/validator güvenlik incelemesi ayrı öneridir. Bu uygulama diliminde
-Codex Security taraması başlatılmadı.
+- Kod: uygulandı; son kontroller aşağıda ayrıca kaydedilir.
+- Kullanıcı/görsel kabulü ve canlı dağıtım: yapılmadı.
+- Uzak CI koşumu: yapılmadı; workflow yapılandırıldı.
+
+### Uygulanan davranış
+
+- `npm.cmd run build:release`, [starter profilini](../../builder/web/profiles/starter.json)
+  `builds/release/starter/` altında oluşturur. Normal `build` mevcut demo
+  projesinin runtime çıktısını üretmeye devam eder; Terrain, araçlar ve kaynak
+  authoring dosyaları değiştirilmez.
+- Starter'ın küp geometrisi, checker PNG'si, material, düz arazisi, iki level'ı
+  ve HUD/menü JSON'u [proje içindeki üreticide](../../builder/web/starter-content.mjs)
+  oluşturulur. Bu özgün içerik için üretim kaydı vardır; mevcut Unknown veya
+  placeholder asset'lere yeni lisans atanmamıştır. Dağıtım kararı proje sahibindedir.
+- Paketleyici manifest ID'lerini, JSON dosya referanslarını, level loadGroups,
+  travel mesajlarını, mevcut model/level sidecar'larını ve glTF/GLB dış
+  buffer/image bağımlılıklarını toplar. Game kodunda hesaplanan dinamik
+  bağımlılıklar profile açık include listeleriyle eklenmelidir.
+- Seçili içerikte eksik kaynak kaydı, Unknown/placeholder lisansı, eksik dosya,
+  bozuk JSON veya çözümlenemeyen asset referansı build'i durdurur. Üçüncü taraf
+  kayıtları kaynak URL'si, paketlenmiş lisans dosyası ve attribution gerektirir.
+  Kayıtların doğruluğunun bağımsız hukuki incelemesi yapılmış sayılmaz.
+- Manifest, layout ve landscape URL'leri aynı base yardımcısını kullanır.
+  Asset/material/texture ve diğer sidecar yükleyicileri de mevcut
+  `projectFileUrl` üzerinden build base'ini kullanır. Node araçlarında base `/` olur.
+- Toplam paket, en büyük dosya, en büyük içerik dosyası, ana JS, toplam JS ve
+  dosya sayısı için profile ait zorunlu bütçeler vardır. Aşım build'i düşürür.
+  Bağımlılık nedenleri/kaynak kayıtları ve boyutlar ayrı JSON raporuna yazılır;
+  asset bildirimleri pakete de eklenir. Sıkı dist sınır taraması korunur.
+- CI'a kritik Chromium akışları ve gerçek production root/subpath testleri
+  eklendi. Rapor, trace/ekran görüntüleri ve paket raporları artifact olarak saklanır.
+  Production testi Vite dev server yerine derlenmiş paketleri sunar; alt dizin
+  origin'inde kök kopya yoktur, eksik dosyalar HTML fallback yerine 404 döner.
+- Production testleri normal/debug modlarında model, harici buffer, texture,
+  material, landscape, menü, save/load ve iki yönlü level travel'ı kapsar.
+
+### Doğrulama ve kalan kapsam
+
+- `npm.cmd run build:verify`: geçti; **1.236 engine kontrolü**, 10 import
+  denetleyici testi, 5 smoke fixture testi ve **9 yeni yayın/URL testi** başarılı.
+  Uygulama/smoke TypeScript, normal build ve sıkı dist taraması dahil.
+- `npm.cmd run build:release`: geçti. Nihai root starter **5 manifest asset'i,
+  27 dosya, 3.931.498 bayt** (yaklaşık 3,93 MB; sıkıştırılmamış disk boyutu).
+  Bütün profile ait boyut bütçeleri geçti. Subpath paket **3.931.576 bayt**.
+- `npm.cmd run smoke:critical`: **3/3 geçti (39,9 s)**; editör authoring,
+  transform/undo/save/reload/Play; runtime save/load/travel; yürüyerek checkpoint
+  autosave ve restore.
+- `npm.cmd run smoke:production`: son koşum **4/4 geçti (55,4 s)**; root ve
+  `/oyunlar/demo/`, normal/debug, Resume dahil menü kontrolleri, save/load ve
+  gidiş-dönüş travel. Model/buffer/texture/material/terrain istekleri başarılı,
+  base dışına istek ve browser hatası yok; eksik JSON 404. Sahne ve menü
+  ekran görüntüleri üretildi; root normal ve subpath debug sahneleri ile root
+  normal menü ayrıca görsel olarak incelendi.
+- İlk production koşumunda subpath geçti; root'ta anlık Escape down/up çifti
+  kare örneklemesi arasında kaçtı. Tuş basışı 150 ms tutulacak şekilde test
+  düzeltildi; zorunlu click veya oyun kodunu atlayan çağrı kullanılmadı. Ardından
+  normal/debug dört senaryo iki tam koşumda da geçti.
+- `npm.cmd run check:assets`: **879 asset, 47 placeable, 0 hata / 879 uyarı**.
+  Uyarılar 877 thumbnail ve iki mevcut kayıtsız sidecar/UI dosyasıdır. Mevcut
+  public/ dosyaları ve kaynak manifest değiştirilmedi.
+
+Yeni URL yardımcısının Node engine araçlarında Vite env olmadan da çalışması
+tam kapıda yakalanıp düzeltildi. Son tam kapı başarılıdır. Windows sandbox'ının
+esbuild üst dizin erişim hatası genişletilmiş yerel çalıştırmayla aşıldı; uygulama
+kusuru olarak değerlendirilmedi. Uzak CI, commit/push veya deploy yapılmadı.
+
+F04 seçili starter içeriği için ele alındı; genel kütüphanedeki **813 Unknown**
+kaydı açık kalır. F05'in uzak CI kabulü ve gerçek hosting dağıtımı yapılmadı.
+F07'nin boyut bütçeleri disk baytlarını ölçer; FPS, GPU bellek veya ilk açılış
+transferi kabulü değildir. Bütün oyun kodunun dinamik bağımlılıklarını otomatik
+çıkarma, tüm tarayıcı/donanım matrisi ve bütün demo içeriğini optimize etme
+iddiası yoktur. Tam geliştirme browser paketinin önceki 49/49 kaydı tarihsel
+kanıttır; bu dilimdeki hedefli kontrollerle karıştırılmamalıdır.
+
+Kullanım ve profile yeni içerik ekleme sözleşmesi:
+[RELEASE_WORKFLOW](../RELEASE_WORKFLOW.md).
+
+## 5. Sonraki dilimler
+
+- F01'in sunucu/disk kesintisi ve farklı istemcilerde çakışan yazma sınırları.
+- F08/F09/F10/F13 bakım, veri tanılama, erken boot hatası ve belge güncelliği.
+- Gerçek oyun ihtiyacına göre F11/F12/F14 yaşam döngüsü, klavye ve donanım kabulü.
+
+Kayıt endpoint/validator/asset yükleme güvenlik incelemesi ayrı öneridir.
+Bu uygulama diliminde Codex Security taraması başlatılmadı.

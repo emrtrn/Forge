@@ -1,3 +1,5 @@
+import { publicFileUrl } from "./publicUrl";
+
 export interface ProjectManifest {
   schema: 1;
   name: string;
@@ -44,7 +46,7 @@ let activeProjectPromise: Promise<ActiveProject> | null = null;
  * packaged game) — no external-project dev middleware involved.
  */
 export async function loadActiveProject(): Promise<ActiveProject> {
-  activeProjectPromise ??= fetch("/project.3dgame.json").then(async (response) => {
+  activeProjectPromise ??= fetch(projectFileUrl("project.3dgame.json")).then(async (response) => {
     if (!response.ok) {
       throw new Error(`Project manifest failed: ${response.status} ${response.statusText}`);
     }
@@ -59,12 +61,12 @@ export async function loadActiveProject(): Promise<ActiveProject> {
 }
 
 /**
- * URL for a path relative to the project's public root. Vite serves `public/`
- * at `/` in both dev and the packaged build, so these are plain static URLs.
+ * Authored paths stay relative to public/. The deployment base belongs to the
+ * build, so the same project data works at / and at a configured subpath.
  */
 export function projectFileUrl(publicRelativePath: string): string {
-  const normalized = publicRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-  return `/${normalized}`;
+  // Node-side engine tools also use the loaders, without Vite's env injection.
+  return publicFileUrl(publicRelativePath, import.meta.env?.BASE_URL ?? "/");
 }
 
 export function projectPublicFileUrl(

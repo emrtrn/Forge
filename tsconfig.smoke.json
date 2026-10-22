@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node", "vite/client"]
   },
-  "include": ["tests/smoke", "playwright.config.ts"]
+  "include": ["tests/smoke", "tests/production", "playwright.config.ts", "playwright.production.config.ts"]
 }

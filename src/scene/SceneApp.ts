@@ -8268,7 +8268,7 @@ export class SceneApp {
   /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
   private async fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
     try {
-      const response = await fetch(`/${dataRef}`);
+      const response = await fetch(projectFileUrl(dataRef));
       if (!response.ok) return createFlatLandscapeData("medium");
       return (await response.json()) as ForgeLandscapeData;
     } catch {

@@ -20715,7 +20715,9 @@
       "assetType": "vehicle",
       "category": "Gameplay",
       "path": "assets/starter-content/Gameplay/ReferenceCar.vehicle.json",
-      "tags": ["vehicle"],
+      "tags": [
+        "vehicle"
+      ],
       "placeable": false,
       "placement": {
         "surface": "floor",
@@ -20739,11 +20741,30 @@
       "category": "Vehicles",
       "path": "assets/kenney-car-kit/sedan-sports.glb",
       "thumbnail": "assets/kenney-car-kit/sedan-sports.png",
-      "tags": ["vehicle", "car", "Kenney"],
+      "tags": [
+        "vehicle",
+        "car",
+        "Kenney"
+      ],
       "placeable": true,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": true },
-      "runtime": { "loadGroup": "Vehicles", "castShadow": true, "receiveShadow": true, "collision": true, "bytes": 177676 },
-      "source": { "origin": "Kenney", "pack": "Car Kit", "packVersion": "3.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 177676
+      },
+      "source": {
+        "origin": "Kenney",
+        "pack": "Car Kit",
+        "packVersion": "3.1"
+      },
       "license": "CC0"
     },
     {
@@ -20753,11 +20774,28 @@
       "category": "Vehicles",
       "path": "assets/kenney-car-kit/Textures/colormap.png",
       "thumbnail": "assets/kenney-car-kit/Textures/colormap.png",
-      "tags": ["Kenney"],
+      "tags": [
+        "Kenney"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "Vehicles", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 12371 },
-      "source": { "origin": "Kenney", "pack": "Car Kit", "packVersion": "3.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 12371
+      },
+      "source": {
+        "origin": "Kenney",
+        "pack": "Car Kit",
+        "packVersion": "3.1"
+      },
       "license": "CC0"
     },
     {
@@ -20835,11 +20873,28 @@
       "assetType": "staticMesh",
       "category": "Vehicles",
       "path": "assets/vehicles/mercedes-sls/MercedesSLS.glb",
-      "tags": ["vehicle", "car"],
+      "tags": [
+        "vehicle",
+        "car"
+      ],
       "placeable": true,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": true },
-      "runtime": { "loadGroup": "Vehicles", "castShadow": true, "receiveShadow": true, "collision": true, "bytes": 4534228 },
-      "source": { "origin": "Sketchfab", "pack": "2010 Mercedes SLS AMG" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4534228
+      },
+      "source": {
+        "origin": "Sketchfab",
+        "pack": "2010 Mercedes SLS AMG"
+      },
       "license": "Unknown"
     },
     {
@@ -20848,10 +20903,23 @@
       "assetType": "vehicle",
       "category": "Vehicles",
       "path": "assets/vehicles/mercedes-sls/MercedesSLS.vehicle.json",
-      "tags": ["vehicle"],
+      "tags": [
+        "vehicle"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "Vehicles", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1889 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1889
+      },
       "license": "Unknown"
     },
     {
@@ -20862,9 +20930,98 @@
       "path": "assets/vehicles/mercedes-sls/Script_MercedesSLS.actor.json",
       "tags": [],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "Vehicles", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1077 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1077
+      },
       "license": "Unknown"
+    },
+    {
+      "id": "gaz-52-base",
+      "name": "GAZ-52",
+      "assetType": "staticMesh",
+      "category": "Vehicles",
+      "path": "assets/vehicles/gaz52/gaz-52_base.glb",
+      "tags": [
+        "vehicle",
+        "truck"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1522756
+      },
+      "source": {
+        "origin": "Sketchfab",
+        "pack": "Gaz-52 Base by Vebis_V_stolb_GT (https://sketchfab.com/3d-models/gaz-52-base-67e1d6c4ebb64c25ab8f34cf17697a49)"
+      },
+      "license": "CC-BY-4.0"
+    },
+    {
+      "id": "gaz-52-vehicle",
+      "name": "GAZ-52",
+      "assetType": "vehicle",
+      "category": "Vehicles",
+      "path": "assets/vehicles/gaz52/Gaz52.vehicle.json",
+      "tags": [
+        "vehicle"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2152
+      },
+      "license": "CC-BY-4.0"
+    },
+    {
+      "id": "script-gaz52-actor",
+      "name": "Script GAZ-52.Actor",
+      "assetType": "prefab",
+      "category": "Vehicles",
+      "path": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1061
+      },
+      "license": "CC-BY-4.0"
     }
   ]
 }

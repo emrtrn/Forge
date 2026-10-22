@@ -5441,6 +5441,10 @@
     {
       "assetId": "mercedes-sls",
       "placements": []
+    },
+    {
+      "assetId": "gaz-52-base",
+      "placements": []
     }
   ],
   "characters": [],
@@ -5788,34 +5792,5 @@
       "collision": true
     }
   ],
-  "actors": [
-    {
-      "classRef": "assets/starter-content/Gameplay/Script_AiReferenceCar.actor.json",
-      "position": [
-        -81.39,
-        1.2,
-        -26.24
-      ],
-      "rotationYDeg": 0,
-      "patrolRoute": {
-        "source": "spline",
-        "splineId": "spline-1",
-        "entry": "nearest",
-        "wrapMode": "loop",
-        "speed": 20,
-        "acceptanceRadius": 0.55,
-        "lookAheadDistance": 1.2
-      }
-    },
-    {
-      "classRef": "assets/vehicles/mercedes-sls/Script_MercedesSLS.actor.json",
-      "position": [
-        -80.36,
-        1.29,
-        -33.77
-      ],
-      "rotationYDeg": 0,
-      "scale": 1
-    }
-  ]
+  "actors": []
 }

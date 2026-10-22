@@ -203,6 +203,11 @@ export const DEFAULT_COLLISION_COMPLEXITY: CollisionComplexity = "projectDefault
 export interface PhysicalMaterialDef {
   friction: number;
   restitution: number;
+  /** Preset-only effect asset id or public-root-relative .effect.json path.
+   * Built-in presets leave wheel presentation unset; saves carry only the preset id. */
+  wheelEffect?: string;
+  /** Preset-only sound/soundCue id for a spatial tyre loop. */
+  wheelSound?: string;
   /** Optional ray-cast wheel response. Absent keeps the authored wheel values. */
   vehicle?: {
     /** Multiplier on the wheel's longitudinal friction slip. */

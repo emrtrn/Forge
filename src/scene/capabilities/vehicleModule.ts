@@ -15,6 +15,11 @@
  * and fades out when they leave it; without the audio capability the car is
  * simply silent.
  *
+ * Physical materials may opt into per-wheel effects and tyre loops. Contact
+ * points anchor them, slip/speed steer their levels, and the physics active
+ * radius limits nearby cars while driven/possessed vehicles always qualify.
+ * Materials without wheel presentation create no VFX or audio handles.
+ *
  * Rigs are built lazily, the first frame a vehicle id shows up with a render
  * object, so the module does not depend on whether physics initialised before
  * or after the level hooks, and a runtime-spawned vehicle gets wheels too.
@@ -46,6 +51,7 @@ import type { RuntimeServices } from "./RuntimeServices";
 import {
   audioCommandsService,
   vehicleHostService,
+  vfxCommandsService,
   type AudioCommands,
   type VehicleHost,
 } from "./runtimeServiceKeys";
@@ -54,6 +60,7 @@ import {
   disposeVehicleSuspensionWire,
   updateVehicleSuspensionWire,
 } from "./vehicleSuspensionWire";
+import { WheelSurfacePresentation } from "./wheelSurfacePresentation";
 
 export const VEHICLE_MODULE_ID = "vehicle";
 
@@ -128,6 +135,7 @@ export function createVehicleModule(): CapabilityModule {
   let services: RuntimeServices | null = null;
   const rigs = new Map<string, WheelRig>();
   const engines = new Map<string, EngineVoice>();
+  const surfaces = new Map<string, WheelSurfacePresentation>();
   const scratch = new Vector3();
 
   const stopEngine = (entityId: string, fadeSeconds = ENGINE_STOP_FADE_SECONDS): void => {
@@ -137,6 +145,11 @@ export function createVehicleModule(): CapabilityModule {
 
   const stopEngines = (fadeSeconds = 0): void => {
     for (const entityId of [...engines.keys()]) stopEngine(entityId, fadeSeconds);
+  };
+
+  const clearSurfaces = (): void => {
+    for (const surface of surfaces.values()) surface.dispose();
+    surfaces.clear();
   };
 
   /**
@@ -233,7 +246,11 @@ export function createVehicleModule(): CapabilityModule {
     const existing = rigs.get(entityId);
     const object = host.actorObject(entityId);
     if (existing && existing.host === object) return existing;
-    if (existing) releaseRig(existing);
+    if (existing) {
+      releaseRig(existing);
+      surfaces.get(entityId)?.dispose();
+      surfaces.delete(entityId);
+    }
     rigs.delete(entityId);
     const state = host.vehicleState(entityId);
     if (!object || !state) return null;
@@ -276,13 +293,22 @@ export function createVehicleModule(): CapabilityModule {
     onLevelUnloaded() {
       clearRigs();
       stopEngines();
+      clearSurfaces();
     },
 
-    update() {
+    update(deltaSeconds) {
       const host = services?.resolve(vehicleHostService);
       if (!host) return;
       const audio = services?.resolve(audioCommandsService);
+      const vfx = services?.resolve(vfxCommandsService);
       const live = host.vehicleIds();
+      for (const entityId of surfaces.keys()) {
+        if (!live.includes(entityId) ||
+            (!host.isDriven(entityId) && host.possessedEntityId() !== entityId && host.isSurfaceFxActive?.(entityId) === false)) {
+          surfaces.get(entityId)!.dispose();
+          surfaces.delete(entityId);
+        }
+      }
       for (const entityId of rigs.keys()) {
         if (!live.includes(entityId)) {
           releaseRig(rigs.get(entityId)!);
@@ -295,7 +321,11 @@ export function createVehicleModule(): CapabilityModule {
       for (const entityId of live) {
         const rig = ensureRig(host, entityId);
         const state = host.vehicleState(entityId);
-        if (!rig || !state) continue;
+        if (!rig || !state) {
+          surfaces.get(entityId)?.dispose();
+          surfaces.delete(entityId);
+          continue;
+        }
         const scale = rig.host.scale;
         rig.container.scale.set(inverse(scale.x), inverse(scale.y), inverse(scale.z));
         state.wheels.forEach((wheel, index) => {
@@ -304,12 +334,22 @@ export function createVehicleModule(): CapabilityModule {
         });
         if (host.debug) updateDebugWire(host, entityId, rig, state);
         updateEngine(host, audio, entityId, state, rig.host);
+        if (host.surfaceMaterialForWheel && (host.isDriven(entityId) || host.possessedEntityId() === entityId ||
+            host.isSurfaceFxActive?.(entityId) !== false)) {
+          let surface = surfaces.get(entityId);
+          if (!surface) {
+            surface = new WheelSurfacePresentation();
+            surfaces.set(entityId, surface);
+          }
+          surface.update(host, entityId, state, deltaSeconds, vfx, audio);
+        }
       }
     },
 
     dispose() {
       clearRigs();
       stopEngines();
+      clearSurfaces();
       tyreMaterial.dispose();
       hubMaterial.dispose();
       services = null;

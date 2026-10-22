@@ -391,11 +391,29 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
       bastırılan burst daha sonra tekrarlanmaz. `stop()` yeni emisyonu keser,
       canlı partiküllerin ömrünü tamamlamasını bekler. Araç/yüzey bağlantısı bu
       maddeden ayrıdır.
-- [ ] Physical material'a isteğe bağlı `wheelEffect` (effect asset id) eklenir;
+- [x] Physical material'a isteğe bağlı `wheelEffect` (effect asset id veya public-root `.effect.json` yolu) eklenir;
       emisyon hızı patinaj ve hızla ölçeklenir. Çamur sıçraması ve kar tozu
       birer `*.effect.json` örnek asset olarak gelir.
-- [ ] İsteğe bağlı `wheelSound` (soundCue): yüzeye göre lastik sesi döngüsü,
+- [x] İsteğe bağlı `wheelSound` (sound / soundCue id): yüzeye göre lastik sesi döngüsü,
       `vehicleModule`'deki motor sesi deseniyle.
+
+**Faz 4, maddeler 2–3 (2026-10-23):** `wheelEffect` / `wheelSound`, diğer
+physical material blokları gibi yalnız preset verisidir; kayıtlar yalnız
+`physicalMaterialId` taşır. Yerleşik presetlerde ikisi de boş bırakıldı; bu
+yüzeylerde efekt veya ses çağrısı yapılmaz. Çamur sıçraması (mud-splash) ve kar
+tozu (snow-dust) örnek assetleri **henüz yazılmadı**, ayrı içerik işidir.
+Araç host'unun enjekte edilebilir `surfaceMaterialForWheel` sorgusu bugün
+temas edilen mesh collider'ın materyalini çözer; terrain katmanları Faz 1b'ye
+aittir. Sürülen/possess edilen araçlar ve mevcut dinamik fizik aktif yarıçapı
+içindeki diğer araçlar tekerlek başına bir emitter ve bir mekânsal ses döngüsü
+kullanır; aktif yarıçap kapalıysa tüm araçlar uygundur. Saf `wheelSurfaceFx`
+eğrileri dönüş farkından hesaplanan patinaj ve hızla emisyon/ses düzeyini
+ölçekler; duruşta ve havada sıfırlanır (yerinde dönen lastik patinaj sayılır).
+Yüzey değişimi eski parçacıkları/sesi sönümleyerek durdurur; parçacıkları VFX
+runtime kendi havuzuna geri alır. Araç/seviye/modül kapanışı mevcut handle'ları
+ve geç yüklenen emitter'ları temizler. Yeni yol sabit durumda konum, girdi ve
+sonuç nesnelerini tekrar kullanır. Fake servis testleri yaşam döngüsünü ve
+opt-out davranışını kapsar; tarayıcı ve örnek asset kabulü sonraya aittir.
 
 ## Faz 5 — Kalıcılık
 

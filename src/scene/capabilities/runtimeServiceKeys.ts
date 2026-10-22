@@ -54,7 +54,8 @@ import type {
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
-import type { VehicleDefinition, VehicleInput, VehicleState } from "@engine/physics/vehicle/vehicleTypes";
+import type { VehicleDefinition, VehicleInput, VehicleState, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
+import type { PhysicalMaterialDef } from "@engine/scene/collision";
 import type { AiNavAgentClearanceView } from "@engine/render-three/aiNavigationView";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
@@ -184,6 +185,10 @@ export interface VehicleHost {
   possessedEntityId(): string | null;
   /** Driver intent the vehicle follows until the next call (an AI driver's pedals). */
   setVehicleInput(entityId: string, input: VehicleInput): void;
+  /** Mesh collider material today; a terrain provider may sample the contact later. */
+  surfaceMaterialForWheel?(entityId: string, wheel: VehicleWheelState): PhysicalMaterialDef | null;
+  /** Shares the dynamic-physics active radius; driven/possessed vehicles always qualify. */
+  isSurfaceFxActive?(entityId: string): boolean;
 }
 
 export const vehicleHostService = runtimeServiceKey<VehicleHost>("vehicle-host");

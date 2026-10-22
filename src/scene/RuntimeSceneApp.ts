@@ -355,6 +355,7 @@ import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
   complexAsSimpleAssetIds,
+  resolvePhysicalMaterial,
 } from "@engine/scene/collision";
 import {
   COLLIDER_COMPONENT,
@@ -1169,6 +1170,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.runtimeServices.resolve(vehicleAiService)?.isDriving(entityId) === true,
       possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
       setVehicleInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
+      surfaceMaterialForWheel: (_entityId, wheel) => wheel.groundEntityId === null ? null
+        : resolvePhysicalMaterial(this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId)),
+      isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
     });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,

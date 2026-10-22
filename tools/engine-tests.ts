@@ -1029,6 +1029,7 @@ import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAn
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
 import { registerVehicleRuntimeTests } from "../tests/engine/vehicleRuntime.test";
+import { registerWheelSurfaceFxTests } from "../tests/engine/wheelSurfaceFx.test";
 import { registerVehicleEntryTests } from "../tests/engine/vehicleEntry.test";
 import { registerVehicleAiTests } from "../tests/engine/vehicleAi.test";
 import { registerVehicleDrivetrainTests } from "../tests/engine/vehicleDrivetrain.test";
@@ -1157,6 +1158,7 @@ await registerSkeletalAnimationModuleTests(check, checkAsync);
 registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
 registerVehicleRuntimeTests(check);
+await registerWheelSurfaceFxTests(check, checkAsync);
 registerVehicleEntryTests(check);
 registerVehicleAiTests(check);
 registerVehicleDrivetrainTests(check);
@@ -6414,11 +6416,13 @@ await checkAsync("rapier active area suspends distant dynamics and resumes them 
     await app.init();
     for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
     assert.equal(synced.length, 0, "distant dynamic body should not synchronize while suspended");
+    assert.equal(physics.isDynamicBodyActive("distant-crate"), false);
 
     focus = [100, 5, 0];
     for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
     const last = synced.at(-1) ?? assert.fail("resumed dynamic body should synchronize");
     assert.ok(last.position[1] < 5, `resumed body should fall, y=${last.position[1]}`);
+    assert.equal(physics.isDynamicBodyActive("distant-crate"), true);
     await app.dispose();
   } finally {
     console.warn = warn;

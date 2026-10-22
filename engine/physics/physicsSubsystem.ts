@@ -452,6 +452,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!this.hasDynamicActiveArea()) this.resumeSuspendedDynamicBodies();
   }
 
+  /** Presentation shares the last physics step's active-radius decision. */
+  isDynamicBodyActive(entityId: EntityId): boolean {
+    return !this.suspendedDynamicBodies.has(entityId);
+  }
+
   setEntities(entities: readonly Entity[]): void {
     this.bodies = [];
     this.bodiesById.clear();

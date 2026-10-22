@@ -4,9 +4,9 @@
 > çekirdeği hazır: veri tipleri, ikili tile kodeki, yükseklik sorgusu +
 > raycast, legacy dönüşüm, heightfield şekli, World Partition hücre
 > matematiği (`tests/engine/terrain.test.ts`). Henüz hiçbir runtime/editör
-> yoluna bağlı değil. Faz 0: S1 ve S2 tamam (arazi GPU < 1 ms, çatlak yok,
-> malzeme/gölge uyumlu; `spikes/terrain-cdlod`, merge edilmez); K2'nin GPU
-> yolu onaylandı. Diğer spike'lar açık.
+> yoluna bağlı değil. **Faz 0 tamam** (2026-10-22): S1–S6 ölçüldü, K2'nin GPU
+> CDLOD yolu onaylandı (yedek plana gerek yok), K7 kararı verildi (reversed-Z
+> + float derinlik). Spike sayfaları `spikes/` altında, merge edilmez.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -191,6 +191,12 @@ yolu değişmez.
   bellek ve kurulum maliyeti çok küçüktür. Fizik yalnız **fizik menzili**
   (varsayılan 384 m) içindeki tile'lar için kurulur; render menzili çok daha
   geniştir.
+  *S4 ile ölçüldü:* 257² tile kurulumu ~0.5 ms (şekil 0.25 + collider
+  0.22 ms), silme ~0.01 ms; aynı tile'ın trimesh'i 74 ms. Collider'lar
+  **`HeightFieldFlags.FIX_INTERNAL_EDGES`** ile kurulmalı: bayraksız
+  heightfield'da yuvarlanan top iç kenarlarda 6 m/s'ye varan dikey sıçrama
+  yapıyor; bayrakla 2×2 tile, tek parça heightfield'la dikişte ve köşede
+  birebir aynı davranıyor (fark 0.0 cm).
 - **`TerrainHeightQuery`** servisi: `heightAt(x, z)`, `normalAt(x, z)`,
   `raycast(...)`, `layerWeightsAt(x, z)`. Yüklü tile verisini doğrudan okur.
   AI nav yüzey tohumlama ve foliage yerleştirme bu servisi kullanır.
@@ -495,14 +501,29 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       (2) Faz 2'de ayna kopyası, `texSubImage3D`'yi tile baytlarından
       doğrudan çağıran küçük bir yükleyiciyle kaldırılabilir (three'nin
       `layerUpdates` yolu tüm diziyi CPU'da ister). Laptop ölçümü yok.
-- [ ] **S4 Rapier heightfield:** 257² tile collider oluşturma/silme süresi ve
+- [x] **S4 Rapier heightfield:** 257² tile collider oluşturma/silme süresi ve
       karakter + araç davranışı (kenar geçişi, iki tile arası dikiş).
       X ≠ Z boyutlu tile'da indeks sırası ve köşegen yönü tekrar
       doğrulanır (K3a). Kapı: oluşturma < 3 ms.
       *Kısmen (2026-10-22):* 3×2 quad'lık alanda indeks
       `vx·(nrows+1) + vz` ve tek köşesi yükseltilmiş hücrelerde `b–c`
       köşegeni doğrulandı; `terrainTileHeightfieldShape` bu düzeni üretiyor.
-      Süre ölçümü ve karakter/araç davranışı açık.
+      *Tamam (2026-10-22, `spikes/terrain-physics`, Rapier 0.19.3, headless
+      Chromium):* (A) gerçek kodek tile'larıyla şekil kurma ort. 0.25 ms +
+      `createRigidBody`/`createCollider` ort. 0.22 ms (en kötü 0.5 ms),
+      silme 0.01 ms; 16 tile ekledikten sonraki ilk `step` 0.2 ms. Aynı
+      tile'ın trimesh'i (bugünkü Landscape collider) 74 ms. (B) 4×4 tile
+      üzerinde 53 173 aşağı ışın (dikiş çizgileri 0.25 m arayla, dikişin
+      ±0.1 mm yanı, iç köşeler, 4000 rastgele): **kaçırma 0**, en büyük
+      `terrainHeightAt` farkı 0.2 mm. (C) dikiş ve köşeden geçen top ve
+      Forge'un referans aracı, tek parça 512 q heightfield'lı kontrol
+      dünyasıyla adım adım kıyaslandı: araç (ışınlı tekerlek) dikişte hiç
+      etkilenmiyor (fark 0.00 cm, süspansiyon değişimi 0.02 cm); top
+      `FIX_INTERNAL_EDGES` ile kontrolle birebir aynı, bayraksız iki dünya
+      da iç kenarlarda zıplıyor (bkz. K3). Karakter: Forge karakteri Rapier
+      temasını değil kendi üçgen probunu kullanıyor (K3); heightfield'dan
+      üretilecek üçgenlerin dikiş davranışı Faz 3'ün merdiven/rampa
+      testleriyle doğrulanır, (B) bunun veri tarafını kapsıyor.
 - [x] **S5 Derinlik:** far 6 km'de `reversedDepthBuffer` desteği ve
       z-fighting; yedek seçeneklerin maliyeti (K7).
       *Tamam (2026-10-22):* S1 sayfasına `?depth=standard|reversed|log|
@@ -527,8 +548,18 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       fetch + çözme + global harita + çim örneklemenin hepsini ana
       thread'den almak. Kodek çözmesi `DataView` yerine hizalı
       `Uint16Array` görünümüyle ayrıca hızlandırılabilir (küçük iş).
-- [ ] Kararlar kaydedildi. S1/S2 başarısızsa K2 yedek planına (CPU
-      geomipmapping) geçildiği yazıldı.
+- [x] Kararlar kaydedildi. S1/S2 başarısızsa K2 yedek planına (CPU
+      geomipmapping) geçildiği yazıldı. *(2026-10-22: S1/S2 geçti, yedek
+      plana geçilmedi. K2 sonuç tablosu ve bulgular, K3'e S4 notu, K4'e
+      worker notu, K7 kararı yazıldı.)*
+
+**Faz 0 yan bulgusu (main'i ilgilendiriyor):** Forge'un bugünkü trimesh
+collider'ları (`physicsSubsystem.ts`, `ColliderDesc.trimesh(vertices,
+indices)`) hiçbir bayrak kullanmıyor. S4'teki ölçüme göre bu, Landscape ve
+trimesh yüzeylerde yuvarlanan dinamik cisimlerin (top, sahne objesi) iç
+kenarlarda zıplaması demek. `TriMeshFlags.FIX_INTERNAL_EDGES` ayrı ve genel
+bir düzeltme olarak main'de değerlendirilmeli (minigolf gibi fork'ları
+etkiler); bu plan kapsamında değiştirilmedi.
 
 ## Faz 1 — Veri modeli, ikili tile'lar, migrasyon (akış yok)
 
@@ -589,6 +620,7 @@ Bütün tile'lar hâlâ açılışta yükleniyor. Amaç formatı oturtmak.
 
 - [ ] `terrainCollider.ts`: tile → Rapier heightfield, `landscape:<id>:<tile>`
       entity id'leri, collision preset / physical material korunur.
+      Collider `HeightFieldFlags.FIX_INTERNAL_EDGES` ile kurulur (S4).
       *Şekil verisi hazır* (`terrainTileHeightfieldShape`, Rapier testiyle);
       PhysicsSubsystem bağlantısı açık.
 - [ ] `PhysicsSubsystem.addEntities` / `removeEntities` (toplu, tek

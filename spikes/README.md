@@ -47,3 +47,15 @@ SPIKE_OUT_DIR=<dir> npx vite build --config spikes/terrain-worker/vite.build.con
 node builder/web/verify-dist.mjs --dist <dir> --strict
 SPIKE_OUT_DIR=<dir> npx vite preview --config spikes/terrain-worker/vite.build.config.ts --port 4373
 ```
+
+## terrain-physics (S4)
+
+Rapier heightfield create/remove cost from real codec tiles (vs a trimesh),
+down-ray continuity on tile seams and corners, and a ball plus Forge's
+reference car crossing a seam and a corner compared with one seamless
+heightfield (with and without `FIX_INTERNAL_EDGES`). Prints its report.
+
+```
+npm run dev:smoke
+http://127.0.0.1:5273/spikes/terrain-physics/index.html
+```

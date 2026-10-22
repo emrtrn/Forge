@@ -390,6 +390,7 @@ import {
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
   isSceneSunLight,
+  beginSceneRuntimeFrameStats,
   readSceneRuntimeStats,
   registerSceneShapeModels,
   resolveSceneWorldSettings,
@@ -1720,6 +1721,7 @@ export class SceneApp {
       const deltaMs = Math.min(now - this.lastTime, 100);
       this.lastTime = now;
       const deltaSeconds = deltaMs / 1000;
+      beginSceneRuntimeFrameStats(this.renderer);
 
       // Engine-core tick: fans out to registered subsystems. The
       // AnimationSubsystem advances character mixers here â€” that work no longer

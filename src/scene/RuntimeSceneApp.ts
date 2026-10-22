@@ -125,6 +125,7 @@ import {
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
   isSceneSunLight,
+  beginSceneRuntimeFrameStats,
   readSceneRuntimeStats,
   readSceneRuntimeMemory,
   registerSceneShapeModels,
@@ -1423,6 +1424,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // between it and them is the `unmeasured` row, and that row is the
       // reason the account can be trusted at all.
       const frameMark = this.perfMark();
+      beginSceneRuntimeFrameStats(this.renderer);
       // Gamepad is poll-only: feed it before the input subsystem advances.
       this.gamepadInput.poll();
       // Look/aim on real time (see above); everything that moves the world on

@@ -31,9 +31,21 @@ export function createSceneRenderer(
   renderer.setPixelRatio(Math.min(devicePixelRatio, maxPixelRatio));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
+  // Draw statistics are per frame, not per `render()` call: the frame owner
+  // resets them with `beginRenderStatsFrame`. three's automatic reset runs at
+  // the start of every `render()` and after its shadow pass, so a composer
+  // frame (RenderPass + OutputPass) or a nested reflection render left only the
+  // last call in `renderer.info` and shadow draws were never counted.
+  renderer.info.autoReset = false;
   return renderer;
 }
 
+/** Starts a frame's draw statistics; call once per frame before anything renders. */
+export function beginRenderStatsFrame(renderer: WebGLRenderer): void {
+  renderer.info.reset();
+}
+
+/** Draw calls and triangles of every render since `beginRenderStatsFrame`. */
 export function readRenderStats(renderer: WebGLRenderer): RenderStats {
   const { calls, triangles } = renderer.info.render;
   return { drawCalls: calls, triangles };

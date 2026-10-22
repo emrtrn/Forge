@@ -25,6 +25,7 @@ import { applyRootMotionToClip, type RootMotionClipSetting } from "@engine/rende
 
 import { SceneShell, resizeSceneShellViewport } from "./SceneShell";
 import {
+  beginRenderStatsFrame,
   readRenderStats,
   readRenderMemory,
   type RenderMemoryStats,
@@ -120,6 +121,11 @@ export function applyEditorMatchedPlayLook(renderer: WebGLRenderer): void {
   // sRGB transfer is applied — without it the image is rendered linear and looks
   // dark. (SRGBColorSpace is the renderer default; set explicitly to document it.)
   renderer.outputColorSpace = SRGBColorSpace;
+}
+
+/** Opens the frame whose draws `readSceneRuntimeStats` reports (shadow + post passes included). */
+export function beginSceneRuntimeFrameStats(renderer: WebGLRenderer): void {
+  beginRenderStatsFrame(renderer);
 }
 
 export function readSceneRuntimeStats(

@@ -1,7 +1,7 @@
-import { readdir, readFile, stat } from "node:fs/promises";
-import { resolve, relative } from "node:path";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve, relative } from "node:path";
 
-import { validateAssetManifest } from "../engine/assets/manifest";
+import { compareAssetHealthWarnings, validateAssetManifest } from "../engine/assets/manifest";
 
 interface ProjectManifestForAssets {
   publicDir?: string;
@@ -55,24 +55,46 @@ async function main(): Promise<void> {
     walkFiles(resolve(publicRoot, "assets"), publicDir),
   ]);
   const report = validateAssetManifest(manifest, { publicFiles });
+  const baselineIndex = process.argv.indexOf("--baseline");
+  let baseline: string[] | null = null;
+  if (baselineIndex !== -1) {
+    const path = process.argv[baselineIndex + 1];
+    if (!path) throw new Error("--baseline requires a JSON file path");
+    const raw = await readJson(resolve(projectRoot, path)) as { schema?: unknown; warnings?: unknown } | null;
+    if (!raw || raw.schema !== 1 || !Array.isArray(raw.warnings) || !raw.warnings.every((key) => typeof key === "string")) {
+      throw new Error(`Invalid asset-health baseline: ${path}`);
+    }
+    baseline = raw.warnings as string[];
+  }
+  const comparison = compareAssetHealthWarnings(report, baseline ?? []);
+  const reportPath = resolve(projectRoot, "builds/reports/asset-health.json");
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, JSON.stringify({ schema: 1, ...report, baseline: baseline === null ? null : comparison }, null, 2) + "\n");
 
   console.log(
     `[asset-health] assets=${report.assetCount} placeable=${report.placeableCount} ` +
-      `errors=${report.errorCount} warnings=${report.warningCount}`,
+      `errors=${report.errorCount} warnings=${report.warningCount} info=${report.infoCount}`,
   );
 
   for (const issue of report.issues) {
+    if (issue.level === "info") continue;
     const target = issue.assetId ?? issue.path ?? "manifest";
     const prefix = issue.level === "error" ? "ERROR" : "WARN";
     console.log(`[asset-health] ${prefix} ${issue.code} ${target}: ${issue.message}`);
   }
+  if (report.infoCount) console.log(`[asset-health] INFO ${report.infoCount} assets use generated previews (no manifest thumbnail).`);
+  console.log("[asset-health] JSON report: builds/reports/asset-health.json");
+  if (baseline !== null) {
+    for (const key of comparison.added) console.error(`[asset-health] NEW warning: ${key}`);
+    for (const key of comparison.resolved) console.log(`[asset-health] Resolved warning: ${key}`);
+  }
 
-  if (report.valid) {
+  if (report.valid && (baseline === null || comparison.added.length === 0)) {
     console.log("[asset-health] PASS manifest is valid.");
     return;
   }
 
-  console.error("[asset-health] FAIL manifest has blocking errors.");
+  console.error("[asset-health] FAIL manifest has blocking errors or new warnings outside the reviewed baseline.");
   process.exitCode = 1;
 }
 

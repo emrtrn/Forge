@@ -15,7 +15,8 @@ import type {
   BlendSpaceSampleDef,
   BlendSpaceType,
 } from "@engine/animation/blendSpace";
-import { projectFileUrl } from "@/project/ProjectSystem";
+import { readOptionalSidecar } from "@/project/contentLoader";
+import { requireSidecar } from "@engine/assets/contentValidation";
 
 export { ROOT_MOTION_MODES, ROOT_MOTION_UP_AXES };
 export type { RootMotionMode, RootMotionUpAxis };
@@ -241,14 +242,10 @@ export function defaultAssetSkeleton(): AssetSkeletonDef {
 }
 
 export async function loadAssetSkeleton(modelPath: string): Promise<AssetSkeletonDef> {
-  const url = projectFileUrl(skeletonSidecarPath(modelPath));
-  try {
-    const response = await fetch(url, { cache: "no-cache" });
-    if (!response.ok) return defaultAssetSkeleton();
-    return normalizeAssetSkeleton(await response.json());
-  } catch {
-    return defaultAssetSkeleton();
-  }
+  return readOptionalSidecar(skeletonSidecarPath(modelPath), normalizeAssetSkeleton,
+    defaultAssetSkeleton, (raw, path) => requireSidecar(raw, path,
+      ["sockets", "blendSpaces", "notifies", "montages", "rootMotion", "physicsBodies", "physicsConstraints"],
+      ["animationSet", "preview"]));
 }
 
 export function normalizeAssetSkeleton(value: unknown): AssetSkeletonDef {

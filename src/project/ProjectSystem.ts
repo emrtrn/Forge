@@ -1,4 +1,6 @@
 import { publicFileUrl } from "./publicUrl";
+import { readContentJson } from "./contentLoader";
+import { requireRecord, requireString, requireVersion } from "@engine/assets/contentValidation";
 
 export interface ProjectManifest {
   schema: 1;
@@ -46,18 +48,32 @@ let activeProjectPromise: Promise<ActiveProject> | null = null;
  * packaged game) — no external-project dev middleware involved.
  */
 export async function loadActiveProject(): Promise<ActiveProject> {
-  activeProjectPromise ??= fetch(projectFileUrl("project.3dgame.json")).then(async (response) => {
-    if (!response.ok) {
-      throw new Error(`Project manifest failed: ${response.status} ${response.statusText}`);
-    }
-    const manifest = (await response.json()) as ProjectManifest;
+  activeProjectPromise ??= readContentJson("project.3dgame.json").then((raw) => {
+    const manifest = readProjectManifest(raw);
     return {
       manifest,
       manifestPath: "project.3dgame.json",
       rootName: manifest.name,
     };
+  }).catch((error: unknown) => {
+    activeProjectPromise = null;
+    throw error;
   });
   return activeProjectPromise;
+}
+
+export function readProjectManifest(value: unknown, path = "project.3dgame.json"): ProjectManifest {
+  const input = requireRecord(value, path);
+  requireVersion(input.schema, 1, `${path}.schema`);
+  for (const key of ["name", "type", "version", "entry", "publicDir"]) requireString(input[key], `${path}.${key}`);
+  const editor = requireRecord(input.editor, `${path}.editor`);
+  for (const key of ["defaultScene", "assetManifest"]) requireString(editor[key], `${path}.editor.${key}`);
+  for (const key of ["assetCatalog", "metadataSchema", "previewUrl"]) {
+    if (editor[key] !== undefined) requireString(editor[key], `${path}.editor.${key}`);
+  }
+  requireRecord(input.scripts, `${path}.scripts`);
+  requireString(requireRecord(input.output, `${path}.output`).distDir, `${path}.output.distDir`);
+  return input as unknown as ProjectManifest;
 }
 
 /**

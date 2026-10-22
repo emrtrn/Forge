@@ -1050,6 +1050,7 @@ import {
 import { getGameEditorCatalog, setGameEditorCatalog } from "../src/editor/gameEditorRegistry";
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 import { registerBuildManifestParityTests } from "../tests/engine/buildManifestParity.test";
+import { registerContentLoadingTests } from "../tests/engine/contentLoading.test";
 import { registerLevelRuntimeTests } from "../tests/engine/levelRuntime.test";
 import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegistry.test";
 import { registerDroppedFieldTests } from "../tests/engine/droppedFields.test";
@@ -1167,6 +1168,7 @@ void checkSlow;
 void checkSlowAsync;
 
 registerBuildManifestParityTests(check);
+await registerContentLoadingTests(check, checkAsync);
 await registerLevelRuntimeTests(check, checkAsync);
 await registerCapabilityRegistryTests(check, checkAsync);
 registerDroppedFieldTests(check);

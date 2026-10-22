@@ -35,12 +35,17 @@ while another run might own a child project.
 `npm.cmd run verify:smoke-fixtures` type-checks the smoke tests and Playwright
 config, then runs fixture isolation/reset/failure tests. It is included in
 `build:verify`. The full browser suite remains a separate local command.
-`npm.cmd run smoke:critical` runs the CI subset: boot error/recovery checks,
+`npm.cmd run smoke:critical` runs the CI subset: boot and content error/recovery checks,
 editor authoring/save/Play, runtime save/load/travel, and checkpoint autosave.
 `npm.cmd run smoke:production` builds and serves the starter package at root and
 subpath; it covers packaged content, menus, save/load/travel, and boot failures.
 Both commands are configured in `.github/workflows/ci.yml`; a local pass is not
 evidence of a remote CI run.
+
+`content-loading.spec.ts` injects malformed project/manifest/level responses,
+verifies file-specific boot/travel errors and Retry, and checks nonfatal collision
+sidecar diagnostics. It intercepts HTTP responses without modifying authoring
+files. See [content read contracts](../../docs/architecture/CONTENT_LOADING_CONTRACT.md).
 
 The debug readout is passive by default. **Inspect text** enables scrolling and
 selection; Escape from the readout turns that mode off. Buttons remain usable

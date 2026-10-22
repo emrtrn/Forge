@@ -19,7 +19,8 @@ import {
 import type { BufferGeometry, Material, Object3D } from "three";
 
 import type { Vec3 } from "@engine/scene/layout";
-import { projectFileUrl } from "@/project/ProjectSystem";
+import { readOptionalSidecar } from "@/project/contentLoader";
+import { ContentLoadError, requireSidecar, requireVec3 } from "@engine/assets/contentValidation";
 
 export const UVW_MAP_TYPES = ["planar", "box", "sphere", "cylinder"] as const;
 export type UvwMapType = (typeof UVW_MAP_TYPES)[number];
@@ -59,14 +60,15 @@ export function defaultAssetUvw(): AssetUvwDef {
 }
 
 export async function loadAssetUvw(modelPath: string): Promise<AssetUvwDef> {
-  const url = projectFileUrl(uvwSidecarPath(modelPath));
-  try {
-    const response = await fetch(url, { cache: "no-cache" });
-    if (!response.ok) return defaultAssetUvw();
-    return normalizeAssetUvw(await response.json());
-  } catch {
-    return defaultAssetUvw();
-  }
+  return readOptionalSidecar(uvwSidecarPath(modelPath), normalizeAssetUvw, defaultAssetUvw, (raw, path) => {
+    const input = requireSidecar(raw, path);
+    if (input.mapType !== undefined && input.mapType !== null && !UVW_MAP_TYPES.includes(input.mapType as UvwMapType)) {
+      throw new ContentLoadError(`${path}.mapType`, "invalid-data", "unknown UVW map type");
+    }
+    for (const key of ["position", "rotation", "scale"]) {
+      if (input[key] !== undefined) requireVec3(input[key], `${path}.${key}`);
+    }
+  });
 }
 
 export function normalizeAssetUvw(value: unknown): AssetUvwDef {

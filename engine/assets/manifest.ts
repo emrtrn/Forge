@@ -1,3 +1,5 @@
+import { ContentLoadError, requireRecord, requireVersion } from "./contentValidation";
+
 export type AssetType =
   | "staticMesh"
   | "skeletalMesh"
@@ -102,7 +104,7 @@ export interface EditableAsset extends AssetRecord {
   tags: string[];
 }
 
-export type AssetManifestIssueLevel = "error" | "warning";
+export type AssetManifestIssueLevel = "error" | "warning" | "info";
 
 export interface AssetManifestIssue {
   level: AssetManifestIssueLevel;
@@ -118,6 +120,7 @@ export interface AssetManifestHealthReport {
   placeableCount: number;
   errorCount: number;
   warningCount: number;
+  infoCount: number;
   issues: AssetManifestIssue[];
 }
 
@@ -318,6 +321,20 @@ export function defaultPlacementForAsset(type: AssetType): AssetPlacementRules {
   };
 }
 
+/** Runtime read boundary; disk/provenance checks remain offline concerns. */
+export function readAssetManifest(value: unknown, path: string): AssetManifest {
+  const input = requireRecord(value, path);
+  requireVersion(input.version, 1, `${path}.version`);
+  const report = validateAssetManifest(value);
+  const errors = report.issues.filter((issue) => issue.level === "error");
+  if (errors.length) {
+    const details = errors.slice(0, 5).map((issue) =>
+      `${issue.assetId ? `[${issue.assetId}] ` : ""}${issue.message}`).join("; ");
+    throw new ContentLoadError(path, "invalid-data", `${details}${errors.length > 5 ? ` (${errors.length} errors)` : ""}`);
+  }
+  return value as AssetManifest;
+}
+
 export function validateAssetManifest(
   value: unknown,
   options: AssetManifestValidationOptions = {},
@@ -337,11 +354,11 @@ export function validateAssetManifest(
   }
 
   const manifest = value as Record<string, unknown>;
-  if (typeof manifest.version !== "number") {
+  if (manifest.version !== 1) {
     addIssue({
       level: "error",
       code: "manifest-version",
-      message: "Asset manifest `version` must be a number.",
+      message: "Asset manifest `version` must be 1.",
     });
   }
   if (typeof manifest.generated !== "string") {
@@ -484,7 +501,7 @@ export function validateAssetManifest(
       }
     } else {
       addIssue({
-        level: "warning",
+        level: "info",
         code: "asset-thumbnail-missing",
         assetId,
         message: "Asset has no manifest thumbnail; editor will fall back to generated preview.",
@@ -526,6 +543,10 @@ export function validateAssetManifest(
   for (const path of publicFiles) {
     if (!isHealthCheckAssetFile(path)) continue;
     if (manifestPaths.has(path) || manifestThumbs.has(path)) continue;
+    // Automatic model companions need no separate asset record. An orphan
+    // companion remains visible instead of being hidden by its suffix alone.
+    const companion = path.replace(/\.(collision|materials|uvw|vertexcolors|skeleton)\.json$/i, "");
+    if (companion !== path && [".glb", ".gltf"].some((ext) => manifestPaths.has(companion + ext))) continue;
     addIssue({
       level: "warning",
       code: "asset-file-unregistered",
@@ -659,10 +680,6 @@ function isHealthCheckAssetFile(path: string): boolean {
   if (!lower.startsWith("assets/")) return false;
   if (lower.endsWith("/manifest.json") || lower.endsWith("/catalog.json")) return false;
   if (lower.endsWith("/metadata-schema.json")) return false;
-  if (lower.endsWith(".collision.json")) return false;
-  if (lower.endsWith(".materials.json")) return false;
-  if (lower.endsWith(".uvw.json")) return false;
-  if (lower.endsWith(".vertexcolors.json")) return false;
   return ASSET_FILE_EXTENSIONS.has(extensionOf(lower));
 }
 
@@ -698,12 +715,28 @@ function finalize(
 ): AssetManifestHealthReport {
   const errorCount = issues.filter((issue) => issue.level === "error").length;
   const warningCount = issues.filter((issue) => issue.level === "warning").length;
+  const infoCount = issues.filter((issue) => issue.level === "info").length;
   return {
     valid: errorCount === 0,
     assetCount,
     placeableCount,
     errorCount,
     warningCount,
+    infoCount,
     issues,
+  };
+}
+
+/** Stable identities let CI compare actionable warnings, without preview noise. */
+export function compareAssetHealthWarnings(report: AssetManifestHealthReport, baseline: readonly string[]): {
+  warnings: string[]; added: string[]; resolved: string[];
+} {
+  const warnings = [...new Set(report.issues.filter((issue) => issue.level === "warning")
+    .map((issue) => `${issue.code}:${issue.assetId ?? issue.path ?? "manifest"}`))].sort();
+  const current = new Set(warnings), previous = new Set(baseline);
+  return {
+    warnings,
+    added: warnings.filter((key) => !previous.has(key)),
+    resolved: [...previous].filter((key) => !current.has(key)).sort(),
   };
 }

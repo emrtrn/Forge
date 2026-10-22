@@ -33,3 +33,17 @@ test("packaged boot: an unavailable runtime chunk shows the boot fallback", asyn
   await expect(page.getByRole("button", { name: "Reload page" })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
+
+test("packaged content: unsupported level version names the file and Retry recovers", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const pattern = "**/layouts/starter.level.json";
+  await page.route(pattern, (route) => route.fulfill({ json: { schema: 99 } }));
+  await page.goto("./");
+  await expect(page.locator(".forge-loading-error")).toContainText("layouts/starter.level.json.schema: unsupported version 99");
+  await page.unroute(pattern);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.locator('[data-ui-id="instructions"]')).toContainText("Forge Starter");
+  await expect(page.locator(".forge-loading")).toBeHidden();
+  expect(pageErrors).toEqual([]);
+});

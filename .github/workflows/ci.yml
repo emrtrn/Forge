@@ -48,6 +48,14 @@ jobs:
       - name: Asset manifest health
         run: npm run check:assets
 
+      - name: Upload asset health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-health
+          path: builds/reports/asset-health.json
+          retention-days: 7
+
       # P0.3 — proof that packaging works; short retention keeps storage light.
       - name: Upload dist artifact
         if: success()

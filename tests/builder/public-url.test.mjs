@@ -12,7 +12,10 @@ for (const base of ["/", "/oyunlar/demo/"]) {
     const requests = [], previous = globalThis.fetch;
     globalThis.fetch = async (url) => {
       requests.push(url);
-      return { ok: true, json: async () => url.endsWith("project.3dgame.json") ? { name: "test" } : { name: "test", instances: [] } };
+      return { ok: true, json: async () => url.endsWith("project.3dgame.json")
+        ? { schema: 1, name: "test", type: "three-game", version: "0.1.0", entry: "src/main.ts", publicDir: "public",
+            editor: { defaultScene: "layouts/test.json", assetManifest: "assets/manifest.json" }, scripts: {}, output: { distDir: "dist" } }
+        : { schema: 1, name: "test", loadGroups: [], instances: [], characters: [] } };
     };
     try {
       await module.loadActiveProject();

@@ -23,7 +23,8 @@ import {
   type NavigationRole,
 } from "@engine/scene/collision";
 import type { Vec3 } from "@engine/scene/layout";
-import { projectFileUrl } from "@/project/ProjectSystem";
+import { readOptionalSidecar } from "@/project/contentLoader";
+import { ContentLoadError, requireSidecar, requireVec3 } from "@engine/assets/contentValidation";
 
 /** Maps a model file path to its collision sidecar path. */
 export function collisionSidecarPath(modelPath: string): string {
@@ -33,20 +34,30 @@ export function collisionSidecarPath(modelPath: string): string {
 }
 
 /**
- * Fetches and parses an asset's collision sidecar. A missing sidecar (404) or a
- * malformed one resolves to a fresh default definition, so callers always get a
- * usable def.
+ * Missing optional sidecars use defaults silently; damaged/unreachable content
+ * uses defaults with a classified, deduplicated warning containing its path.
  */
 export async function loadAssetCollision(modelPath: string): Promise<AssetCollisionDef> {
-  const url = projectFileUrl(collisionSidecarPath(modelPath));
-  try {
-    const response = await fetch(url, { cache: "no-cache" });
-    if (!response.ok) return defaultAssetCollisionDef();
-    const raw = (await response.json()) as unknown;
-    return normalizeAssetCollisionDef(raw);
-  } catch {
-    return defaultAssetCollisionDef();
-  }
+  return readOptionalSidecar(collisionSidecarPath(modelPath), normalizeAssetCollisionDef,
+    defaultAssetCollisionDef, (raw, path) => {
+      const input = requireSidecar(raw, path, ["primitives"], ["responses"]);
+      for (const [key, values] of [
+        ["complexity", COLLISION_COMPLEXITY_VALUES], ["preset", COLLISION_PRESET_IDS],
+        ["navigationRole", NAVIGATION_ROLE_VALUES],
+      ] as const) {
+        if (input[key] !== undefined && !(values as readonly unknown[]).includes(input[key])) {
+          throw new ContentLoadError(`${path}.${key}`, "invalid-data", `unknown ${key}`);
+        }
+      }
+      (input.primitives as Record<string, unknown>[] | undefined)?.forEach((primitive, i) => {
+        const at = `${path}.primitives[${i}]`;
+        if (!COLLISION_PRIMITIVE_SHAPES.includes(primitive.shape as CollisionPrimitiveShape)) {
+          throw new ContentLoadError(`${at}.shape`, "invalid-data", "unknown collision shape");
+        }
+        requireVec3(primitive.size, `${at}.size`);
+        for (const key of ["center", "rotation"]) if (primitive[key] !== undefined) requireVec3(primitive[key], `${at}.${key}`);
+      });
+    });
 }
 
 function asVec3(value: unknown): Vec3 | undefined {

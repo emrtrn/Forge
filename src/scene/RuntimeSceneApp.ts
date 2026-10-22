@@ -64,6 +64,7 @@ import {
   type SaveGameCommands,
 } from "./capabilities/runtimeServiceKeys";
 import { LoadingOverlay } from "./loadingOverlay";
+import { ContentLoadError } from "@engine/assets/contentValidation";
 import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgress";
 import { loadRoomLayout } from "./roomLayout";
 import { EngineApp } from "@engine/core/EngineApp";
@@ -1066,7 +1067,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         // Losing pointer lock during play (Escape / alt-tab) opens the pause menu.
         // This covers browsers that swallow the Escape keydown under pointer lock,
         // where the `menu` action edge would otherwise never fire.
-        if (mode === "ui" && wasGame) this.uiPresenter()?.openPauseMenu();
+        if (mode === "ui" && wasGame && !this.loadingOverlay?.isVisible) this.uiPresenter()?.openPauseMenu();
       },
     });
     this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
@@ -2160,7 +2161,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // the safe recovery from a half-built boot).
       console.error("[runtime] boot failed:", error);
       this.loadingOverlay?.showError(
-        "Failed to load the game. Check your connection and try again.",
+        error instanceof ContentLoadError
+          ? `Failed to load the game. ${error.message}`
+          : "Failed to load the game. Check your connection and try again.",
         () => {
           if (typeof location !== "undefined") location.reload();
         },
@@ -2175,6 +2178,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.loadingOverlay?.setProgress(0, "");
     this.setLoadingStatus(status);
     this.loadingOverlay?.show();
+    this.inputMode = "ui";
+    this.pointerLook.release();
+    this.pointerLook.setMouseCursorVisible(true);
   }
 
   /** Hides the loading overlay after one painted frame (so the built scene shows first). */
@@ -3021,7 +3027,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Hide the on-screen touch controls behind any open menu/outcome screen so
     // the stick/buttons can't be hit through it (and held input is released).
     this.touchInput?.setVisible(depth === 0);
-    if (depth > 0) {
+    // Travel clears the menu stack while the loading overlay still owns input.
+    // Re-locking here strands a failed travel's Retry button under a locked cursor.
+    if (depth > 0 || this.loadingOverlay?.isVisible) {
       this.inputMode = "ui";
       this.pointerLook.release();
       this.pointerLook.setMouseCursorVisible(true);

@@ -1,3 +1,4 @@
+import { ContentLoadError } from "@engine/assets/contentValidation";
 import {
   beginLoading,
   finishTravel,
@@ -101,7 +102,9 @@ export class RuntimeTravelCoordinator {
       } catch (error) {
         console.error("[runtime] level travel failed:", request.layoutPath, error);
         failed = true;
-        this.deps.showLoadError("Failed to load the level.");
+        this.deps.showLoadError(error instanceof ContentLoadError
+          ? `Failed to load the level. ${error.message}`
+          : "Failed to load the level.");
       }
       this.travelState = finishTravel(this.travelState).state;
       // Hold + hide only once no further travel is queued (a queued request re-shows

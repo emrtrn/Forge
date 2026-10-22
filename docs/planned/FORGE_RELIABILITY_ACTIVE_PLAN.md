@@ -318,11 +318,94 @@ dahil değildir. Tam development browser paketi yeniden çalıştırılmadı; ö
 49/49 kanıtı tarihsel kalır. Belge değişiklikleri yeni kullanıcı/donanım kabulü
 anlamına gelmez. Kaynak inceleme raporu tarihsel kanıt olarak değiştirilmedi.
 
-## 6. Sonraki dilimler
+## 6. F09 — Runtime okuma sözleşmeleri ve içerik tanılaması
+
+Tarih: 22 Ekim 2026.
+
+- Kod: project/asset manifest, level ve dört model sidecar türü için uygulandı.
+- Asset health: preview bilgisi, model companion sınıflandırması ve yeni uyarı
+  baseline kapısı uygulandı. Kaynak public dosyaları değiştirilmedi.
+- Kullanıcı kabulü, uzak CI ve gerçek cihaz/ağ arızası kabulü: yapılmadı.
+
+### Uygulanan davranış
+
+- [Ortak okuma katmanı](../../src/project/contentLoader.ts), authored dosya yolu
+  ve `network`, `http`, `invalid-json`, `invalid-data`, `unsupported-version`
+  nedenleriyle `ContentLoadError` üretir. Yanıt gövdesinin bağlantı hatasıyla
+  okunamaması, JSON sözdizimi hatasından ayrılır.
+- Project manifest schema 1 ve runtime'ın kullandığı temel blok/yollar;
+  asset manifest version 1, kayıt alanları ve benzersiz asset ID'leri denetlenir.
+  Asset manifest'in mevcut engine doğrulayıcısı kullanılır; Node/save validator
+  runtime'a taşınmaz. Başarısız manifest promise'leri sonraki okumayı engellemez.
+- [Level okuma kontrolü](../../engine/scene/layoutValidation.ts), schema 1,
+  zorunlu koleksiyonlar, yerleşim transform'ları, koleksiyon kimlikleri ve temel
+  actor/light/spline yapısını doğrular. Legacy scalar scale/rotationYDeg,
+  extension alanları ve eski reflection dönüşümü korunur.
+- Collision, UVW, skeleton ve material-slot sidecar'larında opsiyonel 404
+  sessizce taze default döndürür. Diğer HTTP/ağ, JSON, üst yapı ve sürüm
+  hataları dosya yolu/neden/default seçimiyle bir kez uyarılır. Aynı hatanın
+  eşzamanlı tekrarları log yağmuru oluşturmaz; başarı/404 tanılamayı yeniden kurar.
+  Schema 1 ve versionless legacy sidecar'lar desteklenir.
+- Runtime boot ve travel hata ekranları artık sorunlu dosya/alanı gösterir;
+  mevcut Retry sayfayı yeniden yükler. Editor aynı read sözleşmelerini kullanır.
+- Yeni travel testi gerçek bir pointer-lock sorunu yakaladı: loading sırasında
+  menü stack'i temizlenince fare yeniden kilitleniyor ve Retry normal tıklamayı
+  alamıyordu. Loading sırasında kilit serbest bırakılır ve stack kapanışı kilidi
+  geri alamaz; kilit kaybı loading üstüne pause menüsü açmaz.
+- Eksik thumbnail kayıtları `info` olarak tek satırda özetlenir. Kayıtlı modele
+  bağlı skeleton/collision/material/UVW/vertex-color sidecar'ları ayrı manifest
+  asset'i gerektirmez; gerçek orphan companion dosyaları uyarı olarak kalır.
+- `check:assets`, tam JSON raporunu `builds/reports/asset-health.json` içine
+  yazar. Yeni actionable uyarılar [baseline](../../tools/baselines/asset-health.json)
+  dışındaysa komut başarısız olur. Mevcut kayıt dışı `SaveLoadMenu.ui.json`
+  bilinen tek uyarıdır; dosya/manifest değiştirilmedi. CI rapor artifact'i eklenmiştir.
+
+### Doğrulama
+
+- Yeni [12 engine regresyonu](../../tests/engine/contentLoading.test.ts):
+  bozuk/future project/manifest/level, güncel public/starter/smoke level'larının
+  uyumu, legacy dönüşümler, HTTP/ağ/yarım yanıt/JSON ayrımı, manifest retry/cache,
+  dört sidecar türünde sessiz 404, taze defaults, eşzamanlı uyarı dedup ve re-arm,
+  preview/companion/orphan sınıflandırması ve baseline karşılaştırması.
+- `npx.cmd tsc --noEmit` geçti. `verify:content-types`, bu test dosyasını ve
+  asset-health aracını ayrıca tip denetimine alır; tam kapıya dahildir.
+- `build:verify`: **1.248 engine kontrolü**, 10 import, 5 fixture ve 9 yayın/URL
+  kontrolü geçti. 371 kaynak dosyasında yasak doğrudan import yok; production
+  build ve sıkı dist taraması geçti.
+- `smoke:critical`: **16/16 geçti (yaklaşık 1,1 dakika)**. Yedi yeni content
+  browser senaryosu, önceki boot hataları ve normal editor/runtime akışları dahil.
+  İlk koşumda yalnız travel Retry başarısızdı (15/16); pointer-lock düzeltmesiyle
+  hedefli senaryo ve ardından kritik paketin tamamı geçti. Forced click yoktur.
+- Pointer/input değişikliği için mevcut locomotion ve yürüyerek portal
+  round-trip testleri ayrıca **2/2 geçti (22,5 s)**.
+- `smoke:production`: derlenmiş root ve `/oyunlar/demo/` starter paketlerinde
+  **10/10 geçti (yaklaşık 1 dakika)**. Desteklenmeyen level sürümünde dosya
+  açıklaması ve normal Retry; önceki WebGL/chunk hataları, normal/debug içerik,
+  menü, save/load ve iki yönlü travel dahil. Yayın bütçeleri geçti.
+- `check:assets`: **879 asset / 47 placeable / 0 hata / 1 uyarı / 877 bilgi**.
+  Boş geçici baseline ile bilinen uyarının exit code `1` ürettiği doğrulandı;
+  normal baseline ile komut tekrar geçti. Baseline otomatik genişletilmedi.
+- Dosya yolu içeren hata ekranı 1280×720 ve 390×844 görünümde incelendi;
+  yatay taşma yok, Retry erişilebilir. Görseller `builds/evidence/f09/` altında.
+
+Sözleşme ve kullanım ayrıntıları:
+[CONTENT_LOADING_CONTRACT](../architecture/CONTENT_LOADING_CONTRACT.md).
+
+### Kalan sınırlar
+
+Bu, bütün nested feature parametrelerini doğrulayan eksiksiz JSON şeması
+değildir. Mevcut feature normalizer'ları enum/default ve bazı bozuk nested
+değerleri işlemeye devam eder. Diğer asset/landscape/foliage/VFX yükleyicileri
+bu ortak tanılama katmanına taşınmadı. Yeni editor-specific hata diyaloğu
+eklenmedi. Tam development browser paketi yeniden çalıştırılmadı. Hata
+senaryoları kontrollü browser/fetch enjeksiyonudur; gerçek ağ/disk kesintisi,
+güvenlik taraması, uzak CI veya canlı hosting kabulü anlamına gelmez.
+
+## 7. Sonraki dilimler
 
 - F01'in sunucu/disk kesintisi ve farklı istemcilerde çakışan yazma sınırları.
-- F09 runtime veri kabulü ve eksik/bozuk sidecar tanılaması; ardından dar
-  F08 controller/test bakım dilimleri. F10 ve F13'ün bu turdaki kapsamı yukarıda.
+- F08 için davranışı koruyan dar controller/test bakım dilimleri.
+- Gerçek ihtiyaç oluşursa F09'un diğer loader/nested değer tanılama kapsamı.
 - Gerçek oyun ihtiyacına göre F11/F12/F14 yaşam döngüsü, klavye ve donanım kabulü.
 
 Kayıt endpoint/validator/asset yükleme güvenlik incelemesi ayrı öneridir.

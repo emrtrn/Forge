@@ -4,7 +4,9 @@
 > çekirdeği hazır: veri tipleri, ikili tile kodeki, yükseklik sorgusu +
 > raycast, legacy dönüşüm, heightfield şekli, World Partition hücre
 > matematiği (`tests/engine/terrain.test.ts`). Henüz hiçbir runtime/editör
-> yoluna bağlı değil; Faz 0 spike'ları açık.
+> yoluna bağlı değil. Faz 0: S1+S2 deneme sayfası hazır
+> (`spikes/terrain-cdlod`, merge edilmez); ön ölçüm iyi, kullanıcının
+> tarayıcı ölçümleri bekleniyor. Diğer spike'lar açık.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -116,6 +118,49 @@ Reddedilenler:
 | Geometry clipmap (kameraya bağlı halkalar) | Çok büyük tek heightmap için ideal ama tile tabanlı akış ve tile başına slot havuzuyla CDLOD kadar doğal eşleşmiyor; düzensiz yüklenmiş tile'larda karmaşık. |
 | Voxel / marching cubes arazi | Mağara/overhang verir ama render, fizik, editör maliyeti çok yüksek. Mağara gerekirse "Açık sorular"daki delik maskesi + mesh yolu. |
 | WebGPU'ya geçmek | Forge WebGL2 `WebGLRenderer` üzerinde; bu plan renderer değiştirmez. |
+
+**S1/S2 ara bulguları (2026-10-22, `spikes/terrain-cdlod`).** Karar değil;
+K2'nin kesinleşmesi kullanıcının tarayıcı ölçümlerini bekliyor. Bunlar
+denemenin ortaya çıkardığı tasarım gerçekleri:
+
+- **Residency yarıçapı LOD menzillerinden çıkar.** `range0 = 4 × leaf`
+  seçilince tile boyundaki düğümlerin menzili her zaman **4 tile** olur
+  (`range[tileLevel] = 4 × tileSize`, patch boyundan bağımsız). Bu menzil
+  içindeki her tile yüklü olmalı, yoksa o düğümler global haritaya düşer ve
+  komşusuyla çatlar. Kare çevresinde kutu mesafesi < r olan tile sayısı
+  `1 + 4r + πr²` → r = 4 için **67 tile**. Bu yüzden 64 slot yetmiyor;
+  histerezis payıyla **80 slot** (≈ 30 MB height + weight) varsayılan oldu.
+  Bütçe tablosundaki "≤ 64 slot (~25 MB)" buna göre güncellenmeli ya da
+  ağırlık dokusu yarım çözünürlüğe inmeli.
+- **`range0` alt sınırı 3B düğüm köşegeninden gelir.** LOD farkının ≤ 1
+  kalması için `range[k] − range[k−1]`, k seviyesindeki düğümün 3B
+  köşegeninden büyük olmalı: `range0/leaf > 2·√(2 + (H/boy)²)` (H: düğüm
+  içindeki yükseklik farkı). Oran 3 yalnız alçak rölyefte güvenli; oran 4,
+  H/boy ≤ 1.41'e kadar dik dağları taşıyor. `terrainLod.ts` bunu doğrulamalı
+  ve test etmeli. Denemede dağlık 4 km dünyada komşu LOD farkı ≥ 2 olan kenar
+  sayısı her karede 0.
+- **Global harita nokta örneklemeli ve tile'ın bir üst seviyesinin gridinde
+  olmalı** (stride = `2 · tileQuads / patchQuads` vertex; 32'lik patch'te
+  16 m). Böylece tamamen morph olmuş tile-boyu düğüm, global haritayı okuyan
+  komşusuyla aynı yükseklikleri görür. Aynı seviyedeki düğümler yükseklik
+  kaynağını karıştıramaz (morph mesafesi örneklenen yüksekliğe bağlı).
+- **Yükseklik dokusu formatı:** Chrome/D3D11'de `EXT_texture_norm16` var;
+  `R16` normalized doku filtrelenebiliyor ve tile dosyasındaki Uint16 veri
+  **dönüştürülmeden** yükleniyor (2 B/texel). Yoksa `R32F` (+
+  `OES_texture_float_linear`), en son `R16F` (1 km aralıkta ~0.5 m adım,
+  kayıplı). SwiftShader'da norm16 yok, `R32F` yolu çalıştı.
+- **Dik yüzlerde düzlemsel UV dokuyu geriyor** (kaya katmanında belirgin
+  çizgiler). K2'deki "isteğe bağlı triplanar" kaya katmanı için varsayılan
+  olmalı.
+- **Normal:** fragment'ta yükseklik dokusundan merkezi fark çalışıyor. Tile
+  kenarında tek taraflı farka geçiliyor (hafif ışık dikişi olabilir); tile'dan
+  büyük düğümler 16 m'lik global haritanın normalini kullanıyor (uzakta daha
+  yumuşak). Faz 2'de tile'a 1 texel'lik apron ya da komşu slot örneklemesi
+  değerlendirilecek.
+- **three r184 gölge haritasını `info.reset()`'ten önce çiziyor**, bu yüzden
+  `renderer.info.render.calls` gölge pass'ini saymıyor. Forge'un `?debug`
+  draw call sayısı (`readRenderStats`) da gölge çizimlerini eksik gösteriyor.
+  Denemede `info.autoReset = false` + kare başında elle `reset()`.
 
 ### K3 — Fizik: tile başına Rapier heightfield + analitik zemin sorgusu
 
@@ -346,10 +391,32 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
 - [ ] **S1 GPU CDLOD:** 16×16 tile (4 km), `DataArrayTexture` havuzu, tek
       instanced draw, morph. Ölçüm: orta laptop ve masaüstünde kare süresi,
       draw call, GPU belleği. Kapı: < 3 ms GPU (arazi), çatlak/pop yok.
+      *Deneme hazır (2026-10-22):* `spikes/terrain-cdlod` (açılış ve URL
+      ayarları `spikes/README.md`'de). Tile'lar Faz 1 kodekinden geçiyor,
+      80 slot `R16` havuzu, 32 quad'lık patch, `range0` 128 m, 8 LOD, tek
+      instanced draw + gölge pass'i. **B** tuşu 33 s'lik betikli ölçüm yapar
+      (alçak uçuş, yüksek yörünge, yer koşusu, arazisiz taban) ve rapor verir.
+      *Ön ölçüm* (headless Chromium, bu makine, RTX 3060 / D3D11, 1920×1080,
+      dpr 1): arazi GPU ≈ faz − taban = ort. 0.68–0.91 ms, p95 ≤ 1.16 ms;
+      0.75–0.84 M üçgen (renk + gölge); arazi 2 draw call; düğüm seçimi
+      0.13–0.18 ms CPU; komşu LOD farkı ≥ 2 olan kenar 0; arazi GPU belleği
+      ≈ 35 MB (80 slot). Kapıyı geçiyor ama asıl ölçüm kullanıcının gerçek
+      tarayıcısı ve laptop'u; sonuç geldiğinde buraya ve K2'ye yazılacak.
 - [ ] **S2 Malzeme uyumu:** displacement + mevcut splat `onBeforeCompile` +
       gölge alma + `customDepthMaterial` ile kendine gölge, three r184'te.
+      *Teknik olarak çalışıyor (2026-10-22, aynı sayfa):* Landscape splat
+      bloğu (4 `sampler2D` katman + renk yedeği) ağırlıkları slot dokusundan,
+      UV'yi dünya metresinden alıyor; uzak tekrar kırma ve piksel başına
+      normal var. Kutuların gölgesi displaced araziye doğru düşüyor ve kutular
+      `terrainHeightAt` ile tam yüzeyde duruyor. Arazinin kendine gölgesi
+      `customDepthMaterial` ile açılıp kapanıyor (LOD kamerası uniform'u
+      sayesinde gölge pass'i aynı geometriyi çiziyor). Kullanıcının görsel
+      onayı bekleniyor (dikiş, pop, gölge kalitesi).
 - [ ] **S3 Doku yükleme:** 257² Uint16 + 2× RGBA8 slot güncellemesi
       (`addLayerUpdate`) süresi. Kapı: tile başına < 2 ms ana thread.
+      *Ön veri (S1 sayfası, 1 ağırlık bloğu):* kopya ort. 0.06 ms + GPU
+      yükleme (`initTexture`) ort. 0.10 ms, en kötü ~1.8 ms; 2× RGBA8 ve
+      laptop ölçümü açık.
 - [ ] **S4 Rapier heightfield:** 257² tile collider oluşturma/silme süresi ve
       karakter + araç davranışı (kenar geçişi, iki tile arası dikiş).
       X ≠ Z boyutlu tile'da indeks sırası ve köşegen yönü tekrar
@@ -360,6 +427,9 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       Süre ölçümü ve karakter/araç davranışı açık.
 - [ ] **S5 Derinlik:** far 6 km'de `reversedDepthBuffer` desteği ve
       z-fighting; yedek seçeneklerin maliyeti (K7).
+      *Ön veri:* S1 sayfası headless Chrome 149 / D3D11'de
+      `capabilities.reversedDepthBuffer = false` (EXT_clip_control yok)
+      gösterdi; normal tarayıcıda HUD'dan tekrar bakılmalı.
 - [ ] **S6 Worker:** Vite'ta modül worker'ı build'e girip `verify:dist`'ten
       geçiyor mu; tile çözme süresi; `transfer` ile kopyasız aktarım.
 - [ ] Kararlar kaydedildi. S1/S2 başarısızsa K2 yedek planına (CPU

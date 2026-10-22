@@ -47,7 +47,7 @@ import { encodedTileHeights, encodedTileWeights, generateSpikeWorld } from "./wo
  * OPEN_WORLD_PLAN Faz 0 / S1+S2 spike page — throwaway, never merged.
  * Open: npm run dev:smoke → http://127.0.0.1:5273/spikes/terrain-cdlod/index.html
  * URL knobs: tiles, patch, slots, range0, shadow, shadowExtent, dpr,
- * uploadsPerFrame, heightFormat (r16-norm | r32f | r16f), pose=x,y,z,yaw,pitch
+ * uploadsPerFrame, layers (4 | 8), heightFormat (r16-norm | r32f | r16f), pose=x,y,z,yaw,pitch
  * (y is metres above ground).
  */
 
@@ -74,6 +74,9 @@ const SHADOW_MAP = Math.round(param("shadow", 2048, 0, 8192));
 const SHADOW_EXTENT = param("shadowExtent", 160, 20, 2000);
 const DPR = param("dpr", Math.min(devicePixelRatio, 2), 0.5, 3);
 const UPLOADS_PER_FRAME = Math.round(param("uploadsPerFrame", 2, 1, 64));
+// 8 = the schema maximum: two RGBA8 weight blocks per tile (S3 measures this).
+const LAYERS = param("layers", 4, 4, 8) > 4 ? 8 : 4;
+const WEIGHT_BLOCKS = LAYERS / 4;
 const TILE_SIZE = TILE_QUADS * SPACING;
 const WORLD_SIZE = TILES * TILE_SIZE;
 const LEVELS = Math.log2(WORLD_SIZE / LEAF) + 1;
@@ -118,7 +121,7 @@ const heightFormat = pickHeightFormat(renderer);
 
 status.textContent = "Generating world…";
 const world = await generateSpikeWorld(
-  { tiles: TILES, tileQuads: TILE_QUADS, spacing: SPACING, leafQuads: PATCH, globalStride: GLOBAL_STRIDE, seed: 1337 },
+  { tiles: TILES, tileQuads: TILE_QUADS, spacing: SPACING, leafQuads: PATCH, globalStride: GLOBAL_STRIDE, seed: 1337, layerCount: LAYERS },
   (done, total) => (status.textContent = `Generating world… ${done}/${total} tiles`),
 );
 const def = world.def;
@@ -148,7 +151,7 @@ const [grassTex, dirtTex, rockTex] = await Promise.all([
 
 // --- terrain GPU resources -----------------------------------------------------------
 
-const pool = new TerrainTexturePool(heightFormat, SLOTS, world.size);
+const pool = new TerrainTexturePool(heightFormat, SLOTS, world.size, WEIGHT_BLOCKS);
 renderer.initTexture(pool.heights);
 renderer.initTexture(pool.weights);
 const globalHeight = createGlobalHeightTexture(heightFormat, world.global.size, world.global.heights);
@@ -168,6 +171,7 @@ const terrain = createTerrainMaterials({
   heightRange: new Vector2(def.heightMin, def.heightMax - def.heightMin),
   morph: cdlodMorphRanges(cdlodSettings),
   patchQuads: PATCH,
+  weightBlocks: WEIGHT_BLOCKS,
   layers: [
     { texture: grassTex ?? null, color: "#5d7f3a", repeatMetres: 6 },
     { texture: dirtTex ?? null, color: "#7a6146", repeatMetres: 4 },
@@ -334,13 +338,48 @@ function updateResidency(localX: number, localZ: number): void {
   uploadQueue = all.slice(0, SLOTS).filter((tile) => pool.slot(tile) < 0);
 }
 
+function uploadTile(tile: number): SlotUploadTiming | null {
+  const bytes = world.encoded[tile]!;
+  const timing = pool.upload(
+    renderer,
+    tile,
+    encodedTileHeights(bytes, world.size),
+    encodedTileWeights(bytes, world.size, WEIGHT_BLOCKS),
+  );
+  if (timing) uploadLog.push(timing);
+  return timing;
+}
+
 function pumpUploads(limit: number): void {
-  for (let n = 0; n < limit && uploadQueue.length > 0; n += 1) {
-    const tile = uploadQueue.shift()!;
-    const bytes = world.encoded[tile]!;
-    const timing = pool.upload(renderer, tile, encodedTileHeights(bytes, world.size), encodedTileWeights(bytes, world.size));
-    if (timing) uploadLog.push(timing);
+  for (let n = 0; n < limit && uploadQueue.length > 0; n += 1) uploadTile(uploadQueue.shift()!);
+}
+
+/** S3: evicts every resident tile and uploads them all again inside one frame. */
+function runUploadStress(): void {
+  const tiles = Array.from(pool.residentTiles());
+  for (const tile of tiles) pool.release(tile);
+  const timings: SlotUploadTiming[] = [];
+  const t0 = performance.now();
+  for (const tile of tiles) {
+    const timing = uploadTile(tile);
+    if (timing) timings.push(timing);
   }
+  const totalMs = performance.now() - t0;
+  const perTile = stats(timings.map((t) => t.copyMs + t.uploadMs));
+  const copy = stats(timings.map((t) => t.copyMs));
+  const upload = stats(timings.map((t) => t.uploadMs));
+  const bytesPerTile = world.size ** 2 * (heightBytesPerTexel(heightFormat) + 4 * WEIGHT_BLOCKS);
+  report.value = [
+    `Forge S3 tile upload stress — ${new Date().toISOString()}`,
+    `GPU: ${gpuName}`,
+    `UA: ${navigator.userAgent}`,
+    `Tile ${world.size}², height ${heightFormat}, ${LAYERS} layers (${WEIGHT_BLOCKS} RGBA8 block${WEIGHT_BLOCKS > 1 ? "s" : ""}), ` +
+      `${mb(bytesPerTile)} per tile; ${timings.length} tiles in one frame, ${f(totalMs, 1)} ms total`,
+    `per tile (main thread) avg ${f(perTile.avg)} p50 ${f(perTile.p50)} p95 ${f(perTile.p95)} max ${f(perTile.max)} ms`,
+    `  copy into slot mirror avg ${f(copy.avg)} max ${f(copy.max)} ms; initTexture (texSubImage3D) avg ${f(upload.avg)} p95 ${f(upload.p95)} max ${f(upload.max)} ms`,
+  ].join("\n");
+  reportPanel.hidden = false;
+  console.info(report.value);
 }
 
 // --- node selection ----------------------------------------------------------------------
@@ -469,6 +508,7 @@ addEventListener("keydown", (event) => {
   keys.add(event.code);
   switch (event.code) {
     case "KeyB": if (!bench) startBench(); break;
+    case "KeyU": if (!bench) runUploadStress(); break;
     case "KeyF": frozen = !frozen; break;
     case "KeyG": walking = !walking; break;
     case "KeyV": terrain.material.wireframe = !terrain.material.wireframe; break;
@@ -825,13 +865,13 @@ function drawHud(): void {
     `nodes ${instanceCount}  per LOD [${perLevel.join(" ")}]   crack-risk ${fallbackNodes}   LOD gaps ${lodGapEdges}   tiles needed ${neededTileCount}/${SLOTS}`,
     `resident ${pool.resident}/${SLOTS} slots   queue ${uploadQueue.length}   boot upload ${f(bootUploadMs, 0)} ms`,
     `tile upload last ${lastUpload ? f(lastUpload.copyMs + lastUpload.uploadMs) : "-"} ms, avg ${f(uploadStats.avg)} / max ${f(uploadStats.max)} ms (${uploadLog.length})`,
-    `height ${heightFormat}${heightFormat === "r16f" ? " (LOSSY)" : ""}   ${canvas.width}×${canvas.height} @${f(DPR, 2)}   reversed-depth support ${renderer.capabilities.reversedDepthBuffer ? "yes" : "no"}`,
+    `height ${heightFormat}${heightFormat === "r16f" ? " (LOSSY)" : ""}, ${LAYERS} layers   ${canvas.width}×${canvas.height} @${f(DPR, 2)}   reversed-depth support ${renderer.capabilities.reversedDepthBuffer ? "yes" : "no"}`,
     ...memoryLines(),
     `cam ${f(camera.position.x, 0)}, ${f(camera.position.y, 1)}, ${f(camera.position.z, 0)}   AGL ${f(camera.position.y - ground, 1)} m   speed ${f(baseSpeed, 0)} m/s`,
     `${walking ? "WALK" : "FLY"}${frozen ? "  FROZEN" : ""}${terrain.material.wireframe ? "  WIRE" : ""}  view ${["lit", "LOD", "residency"][terrain.uniforms.uTerrainDebug!.value as number]}${bench ? `  BENCH ${PHASES[bench.phase]?.name ?? ""}` : ""}`,
     "",
     "drag look · WASD move · Q/E down/up · Shift ×5 · wheel speed",
-    "B benchmark · C view (lit/LOD/residency) · V wireframe · F freeze LOD",
+    "B benchmark · U upload stress (S3) · C view (lit/LOD/residency) · V wireframe · F freeze LOD",
     "G walk · K shadows · T hide terrain",
   ].join("\n");
 }

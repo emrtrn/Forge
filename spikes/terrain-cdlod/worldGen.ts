@@ -1,5 +1,6 @@
 import {
   TERRAIN_SCHEMA,
+  terrainWeightBlockCount,
   tileKey,
   type TerrainTileData,
   type WorldTerrainDef,
@@ -29,6 +30,8 @@ export interface SpikeWorldOptions {
   /** Global low-res map stride in vertices (16 → 16 m/texel at 1 m spacing). */
   globalStride: number;
   seed: number;
+  /** 4 or 8 paint layers (1 or 2 RGBA8 weight blocks); layers 5–8 stay empty. */
+  layerCount: number;
 }
 
 export interface MinMaxLevel {
@@ -199,9 +202,10 @@ export function encodedTileHeights(bytes: Uint8Array, size: number): Uint16Array
   return new Uint16Array(bytes.buffer, bytes.byteOffset + TERRAIN_TILE_HEADER_BYTES, size * size);
 }
 
-export function encodedTileWeights(bytes: Uint8Array, size: number): Uint8Array {
+/** All weight blocks back to back (`blocks × size² × 4` bytes). */
+export function encodedTileWeights(bytes: Uint8Array, size: number, blocks = 1): Uint8Array {
   const offset = TERRAIN_TILE_HEADER_BYTES + size * size * 2;
-  return bytes.subarray(offset, offset + size * size * 4);
+  return bytes.subarray(offset, offset + size * size * 4 * blocks);
 }
 
 // --- generation -----------------------------------------------------------------
@@ -210,7 +214,8 @@ export async function generateSpikeWorld(
   options: SpikeWorldOptions,
   onProgress: (done: number, total: number) => void,
 ): Promise<SpikeWorld> {
-  const { tiles, tileQuads: q, spacing, leafQuads, globalStride, seed } = options;
+  const { tiles, tileQuads: q, spacing, leafQuads, globalStride, seed, layerCount } = options;
+  const weightBlocks = terrainWeightBlockCount(layerCount);
   const size = q + 1;
   const worldSize = tiles * q * spacing;
   const { height, patch } = createHeightField(seed);
@@ -243,7 +248,7 @@ export async function generateSpikeWorld(
       }
       const count = size * size;
       const heights = new Float32Array(count);
-      const weights = new Uint8Array(count * 4);
+      const weights = new Uint8Array(count * 4 * weightBlocks);
       for (let z = 0; z < size; z += 1) {
         for (let x = 0; x < size; x += 1) {
           const ai = (z + 1) * apron + x + 1;
@@ -269,7 +274,7 @@ export async function generateSpikeWorld(
       }
       const t1 = performance.now();
       const bytes = encodeTerrainTile(
-        { x: tx, z: tz, size, heights, layerCount: 4, weights },
+        { x: tx, z: tz, size, heights, layerCount, weights },
         { heightMin: SPIKE_HEIGHT_MIN, heightMax: SPIKE_HEIGHT_MAX },
       );
       const t2 = performance.now();
@@ -356,7 +361,10 @@ export async function generateSpikeWorld(
     origin: [-worldSize / 2, 0, -worldSize / 2],
     heightMin: SPIKE_HEIGHT_MIN,
     heightMax: SPIKE_HEIGHT_MAX,
-    layers: LAYER_DEFS.map((layer) => ({ ...layer })),
+    layers: Array.from({ length: layerCount }, (_, i) => {
+      const preset = LAYER_DEFS[i];
+      return preset ? { ...preset } : { id: `layer${i}`, name: `Layer ${i}`, color: "#808080" };
+    }),
     tiles: summaries,
     collision: false,
   };

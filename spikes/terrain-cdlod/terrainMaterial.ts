@@ -57,6 +57,8 @@ export interface TerrainMaterialInputs {
   heightRange: Vector2;
   morph: Array<[number, number]>;
   patchQuads: number;
+  /** Weight array layers per slot (1 or 2); the splat reads block 0. */
+  weightBlocks: number;
   layers: TerrainLayerInput[];
 }
 
@@ -125,6 +127,7 @@ vTerrainInfo = vec3(forgeSlot, terrainNodeA.w, forgeMorph);
 const FRAGMENT_PARS = /* glsl */ `
 uniform highp sampler2DArray uTerrainWeightArray;
 uniform sampler2D uTerrainGlobalWeight;
+uniform float uTerrainWeightBlocks;
 uniform float uTerrainDebug;
 uniform sampler2D uLayerTex0;
 uniform sampler2D uLayerTex1;
@@ -150,7 +153,7 @@ vec4 forgeTerrainWeights(vec2 local, float slot) {
   vec4 w;
   if (slot >= 0.0) {
     vec2 uv = (local / uTerrainTexel.x + 0.5) / uTerrainTexels.x;
-    w = textureLod(uTerrainWeightArray, vec3(uv, slot), 0.0);
+    w = textureLod(uTerrainWeightArray, vec3(uv, slot * uTerrainWeightBlocks), 0.0);
   } else {
     vec2 uv = (local / uTerrainTexel.y + 0.5) / uTerrainTexels.y;
     w = textureLod(uTerrainGlobalWeight, uv, 0.0);
@@ -248,6 +251,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainMorph: { value: inputs.morph.map(([start, end]) => new Vector2(start, end)) },
     uTerrainPatchQuads: { value: inputs.patchQuads },
     uTerrainDebug: { value: 0 },
+    uTerrainWeightBlocks: { value: inputs.weightBlocks },
   };
   for (let index = 0; index < 4; index += 1) {
     const entry = layer(index);

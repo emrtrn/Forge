@@ -4,9 +4,9 @@
 > çekirdeği hazır: veri tipleri, ikili tile kodeki, yükseklik sorgusu +
 > raycast, legacy dönüşüm, heightfield şekli, World Partition hücre
 > matematiği (`tests/engine/terrain.test.ts`). Henüz hiçbir runtime/editör
-> yoluna bağlı değil. Faz 0: S1 masaüstünde geçti (arazi GPU < 1 ms, çatlak
-> yok; `spikes/terrain-cdlod`, merge edilmez), K2'nin GPU yolu masaüstü için
-> onaylandı. Laptop ölçümü ve S1/S2 görsel onayı açık. Diğer spike'lar açık.
+> yoluna bağlı değil. Faz 0: S1 ve S2 tamam (arazi GPU < 1 ms, çatlak yok,
+> malzeme/gölge uyumlu; `spikes/terrain-cdlod`, merge edilmez); K2'nin GPU
+> yolu onaylandı. Diğer spike'lar açık.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -137,9 +137,10 @@ katman dokuları 4.0 MB), gölge haritası 16 MB. Komşu LOD farkı ≥ 2 olan k
 her karede 0. Yörüngede (~430 m/s) 1 düğüm bir anlığına slotu yüklenmemiş
 tile'a düştü (yükleme kuyruğu kare başına 2 tile); Faz 4'te önceden yükleme
 halkası bunu kapatır. Kapı (< 3 ms, çatlak yok) yaklaşık 3 kat payla geçti.
-Açık kalanlar: orta seviye laptop ölçümü ve görsel onay (dikiş, pop, gölge).
-Laptop kapıyı geçemezse karar yalnız düşük kalite profili için yeniden ele
-alınır (patch/range0/slot ayarı), GPU yolu değişmez.
+Kullanıcı görsel olarak dikiş, pop ya da gölge sorunu görmedi. Laptop
+ölçümü yapılamadı (cihaz yok); düşük kalite profili için ilk gerçek
+laptop/mobil ölçümünde patch, `range0` ve slot sayısı yeniden ayarlanır, GPU
+yolu değişmez.
 
 **S1/S2 bulguları (2026-10-22, `spikes/terrain-cdlod`).** Denemenin ortaya
 çıkardığı tasarım gerçekleri; Faz 2'de uygulanır:
@@ -409,7 +410,7 @@ Amaç: riskli varsayımları kod yazmadan önce ölçmek. Her spike tek bir
 throwaway sayfada (`templates/` altında değil, `spikes/`; merge edilmez).
 Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
 
-- [ ] **S1 GPU CDLOD:** 16×16 tile (4 km), `DataArrayTexture` havuzu, tek
+- [x] **S1 GPU CDLOD:** 16×16 tile (4 km), `DataArrayTexture` havuzu, tek
       instanced draw, morph. Ölçüm: orta laptop ve masaüstünde kare süresi,
       draw call, GPU belleği. Kapı: < 3 ms GPU (arazi), çatlak/pop yok.
       *Deneme hazır (2026-10-22):* `spikes/terrain-cdlod` (açılış ve URL
@@ -420,9 +421,9 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       *Masaüstü geçti (2026-10-22, kullanıcının Chrome 155'i, RTX 3060,
       1080p):* arazi GPU ort. 0.68–0.90 ms, p95 ≤ 1.08 ms; arazi 2 draw
       call; en çok 0.84 M üçgen; arazi GPU belleği ≈ 35 MB; komşu LOD farkı
-      ≥ 2 olan kenar 0. Ayrıntılı tablo K2'de. Kutu, laptop ölçümü ve görsel
-      onay (dikiş/pop) gelince işaretlenir.
-- [ ] **S2 Malzeme uyumu:** displacement + mevcut splat `onBeforeCompile` +
+      ≥ 2 olan kenar 0. Ayrıntılı tablo K2'de. Görsel onay verildi
+      (dikiş/pop yok). Laptop yok; düşük profil ölçümü ilk uygun cihazda.
+- [x] **S2 Malzeme uyumu:** displacement + mevcut splat `onBeforeCompile` +
       gölge alma + `customDepthMaterial` ile kendine gölge, three r184'te.
       *Teknik olarak çalışıyor (2026-10-22, aynı sayfa):* Landscape splat
       bloğu (4 `sampler2D` katman + renk yedeği) ağırlıkları slot dokusundan,
@@ -430,14 +431,21 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       normal var. Kutuların gölgesi displaced araziye doğru düşüyor ve kutular
       `terrainHeightAt` ile tam yüzeyde duruyor. Arazinin kendine gölgesi
       `customDepthMaterial` ile açılıp kapanıyor (LOD kamerası uniform'u
-      sayesinde gölge pass'i aynı geometriyi çiziyor). Kullanıcının görsel
-      onayı bekleniyor (dikiş, pop, gölge kalitesi).
-- [ ] **S3 Doku yükleme:** 257² Uint16 + 2× RGBA8 slot güncellemesi
+      sayesinde gölge pass'i aynı geometriyi çiziyor). Kullanıcı görsel
+      olarak onayladı (2026-10-22).
+- [x] **S3 Doku yükleme:** 257² Uint16 + 2× RGBA8 slot güncellemesi
       (`addLayerUpdate`) süresi. Kapı: tile başına < 2 ms ana thread.
-      *Ön veri (S1 sayfası, 1 ağırlık bloğu, masaüstü):* 381 yükleme;
-      kopya ort. 0.04 ms + GPU yükleme (`initTexture`) ort. 0.07 ms, en kötü
-      0.2 ms (headless koşuda tek sefer ~1.8 ms). 2× RGBA8 ve laptop
-      ölçümü açık.
+      *Geçti (2026-10-22, S1 sayfası `?layers=8` + **U** stres tuşu: 80
+      yüklü tile'ı tek karede yeniden yükler; headless Chromium, RTX 3060,
+      üç koşu):* 8 katman (Uint16 height + 2× RGBA8 = 0.6 MB/tile) tile
+      başına **ort. 0.34 ms, p95 ≤ 0.6 ms, en kötü 1.1 ms**; 4 katmanda
+      ort. 0.18 ms. Sürenin yarısı three'nin istediği CPU ayna dizisine
+      kopya (`DataArrayTexture.image.data`), yarısı `texSubImage3D`.
+      Sonuçlar: (1) akış bütçesinde kare başına ~8 tile yüklemesi ≈ 3 ms
+      (K4'teki 4 ms dilimine sığar; 80 tile'ı tek karede yüklemek 27 ms);
+      (2) Faz 2'de ayna kopyası, `texSubImage3D`'yi tile baytlarından
+      doğrudan çağıran küçük bir yükleyiciyle kaldırılabilir (three'nin
+      `layerUpdates` yolu tüm diziyi CPU'da ister). Laptop ölçümü yok.
 - [ ] **S4 Rapier heightfield:** 257² tile collider oluşturma/silme süresi ve
       karakter + araç davranışı (kenar geçişi, iki tile arası dikiş).
       X ≠ Z boyutlu tile'da indeks sırası ve köşegen yönü tekrar

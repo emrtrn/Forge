@@ -108,18 +108,20 @@ export class TerrainTexturePool {
   private readonly slotOf = new Map<number, number>();
   private readonly texelsPerLayer: number;
 
+  /** Weight blocks per slot: slot `s` owns weight layers `s·blocks … s·blocks + blocks − 1`. */
   constructor(
     readonly format: HeightTextureFormat,
     readonly slots: number,
     readonly size: number,
+    readonly weightBlocks = 1,
   ) {
     this.texelsPerLayer = size * size;
     this.heightData = allocHeights(format, this.texelsPerLayer * slots);
-    this.weightData = new Uint8Array(this.texelsPerLayer * 4 * slots);
+    this.weightData = new Uint8Array(this.texelsPerLayer * 4 * slots * weightBlocks);
     this.heights = new DataArrayTexture(this.heightData, size, size, slots);
     configureHeightTexture(this.heights, format);
     this.heights.needsUpdate = true;
-    this.weights = new DataArrayTexture(this.weightData, size, size, slots);
+    this.weights = new DataArrayTexture(this.weightData, size, size, slots * weightBlocks);
     this.weights.format = RGBAFormat;
     this.weights.type = UnsignedByteType;
     configureLinear(this.weights);
@@ -159,9 +161,11 @@ export class TerrainTexturePool {
     if (slot < 0) return null;
     const t0 = performance.now();
     writeHeights(this.format, this.heightData, slot * this.texelsPerLayer, heights);
-    this.weightData.set(weights, slot * this.texelsPerLayer * 4);
+    this.weightData.set(weights, slot * this.texelsPerLayer * 4 * this.weightBlocks);
     this.heights.addLayerUpdate(slot);
-    this.weights.addLayerUpdate(slot);
+    for (let block = 0; block < this.weightBlocks; block += 1) {
+      this.weights.addLayerUpdate(slot * this.weightBlocks + block);
+    }
     this.heights.needsUpdate = true;
     this.weights.needsUpdate = true;
     const t1 = performance.now();
@@ -176,7 +180,7 @@ export class TerrainTexturePool {
   gpuBytes(): { heights: number; weights: number } {
     return {
       heights: this.texelsPerLayer * this.slots * heightBytesPerTexel(this.format),
-      weights: this.texelsPerLayer * this.slots * 4,
+      weights: this.texelsPerLayer * this.slots * 4 * this.weightBlocks,
     };
   }
 

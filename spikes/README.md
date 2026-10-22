@@ -59,3 +59,35 @@ heightfield (with and without `FIX_INTERNAL_EDGES`). Prints its report.
 npm run dev:smoke
 http://127.0.0.1:5273/spikes/terrain-physics/index.html
 ```
+
+## terrain-deformation (TERRAIN_DEFORMATION_PLAN Faz 0)
+
+Automatic real `PhysicsSubsystem` reference-car measurements at fixed 60 Hz:
+one-wheel rest-length changes (+0.3 m and back, instant/3/1/0.3 m/s, parked
+and initially 10 m/s), sleep/wake probe, matched speed-proportional wheel-brake
+versus chassis-impulse coast-down and released-handbrake 8° ramp behaviour.
+Also measures the actual `mud` surface provider (not force-matched). Baseline
+rolling brake and body damping are disabled to isolate resistance. The rest
+length recommendation uses explicit exploratory comfort thresholds in the JSON.
+Rate comparisons keep the solver awake; the separate sleep probe reports
+automatic waking and the explicit `wakeUp` fallback. Motion metrics use pose
+differences to avoid sleeping-controller velocity artifacts.
+
+Texture measurements replay identical seeded rectangles over 300 frames each:
+512² R8 full upload versus packed `texSubImage2D` partial upload, CPU mean/p95
+and asynchronous GPU timers when available. Installed three r184's 2D update
+ranges assume RGBA, so they are unsuitable for R8. Reports include readback
+validation, GPU/disjoint availability and separate render/upload+render timing.
+Results appear in the DOM and `window.__spikeReport`; failures also produce a
+report. Terrain recognition remains out of scope until OPEN_WORLD Faz 3.
+
+```
+npm run dev:smoke
+http://127.0.0.1:5273/spikes/terrain-deformation/index.html
+```
+
+With that server running, print the JSON report (runner exits nonzero on failure):
+
+```
+node spikes/terrain-deformation/run.mjs
+```

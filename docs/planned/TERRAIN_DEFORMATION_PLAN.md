@@ -184,20 +184,80 @@ yazabilir; motorun içine araç dışında bir kural konmaz.
 Gerçek kod yazılmadan önce riskli varsayımlar ölçülür. Spike kodu atılabilir;
 çıkan sonuçlar bu dosyaya yazılır.
 
-- [ ] **Rest length tekniği:** `VehicleTest` seviyesinde 60 Hz sabit adımda bir
+- [x] **Rest length tekniği:** `VehicleTest` seviyesinde 60 Hz sabit adımda bir
       tekerleğin `suspensionRestLength` değeri her adımda 0 → +0,3 m değiştirilir.
       Ölçülecekler: zıplama, titreşim ve uyuyan gövdenin uyanması
       (`wakeUp`). Sonuç: kabul / sınır değerleri / ret.
+      *Koşullu kabul (2026-10-23), bkz. bulgular.*
 - [ ] **Zemin tanıma** (açık dünya Faz 3'ten sonra): `wheelGroundObject(i)` →
       `rapierColliderToEntity` → `landscape:<id>:<tile>` eşlemesinin tile
-      heightfield'ında çalıştığı doğrulanır. Mesh zeminde aynı eşleme şimdi
-      doğrulanabilir.
-- [ ] **Doku yükleme maliyeti:** 512² R8 `DataTexture`'ın her kare tam
+      heightfield'ında çalıştığı doğrulanır. *Mesh zeminde doğrulandı
+      (2026-10-23): Faz 1a'nın `groundEntityId` Rapier testi; heightfield
+      kısmı açık.*
+- [x] **Doku yükleme maliyeti:** 512² R8 `DataTexture`'ın her kare tam
       yüklenmesi `gpuTimer` ile ölçülür. three 0.184'te kısmi yükleme yoksa
       tam yükleme ya da N karede bir yükleme kararı verilir.
-- [ ] **Yuvarlanma direnci yöntemi:** Ek fren (`setWheelBrake`) ile şasiye ters
+      *Kısmi yükleme seçildi (2026-10-23), bkz. bulgular.*
+- [x] **Yuvarlanma direnci yöntemi:** Ek fren (`setWheelBrake`) ile şasiye ters
       impuls karşılaştırılır. Fren yöntemi rampada park halini bozuyor mu?
-- [ ] Sonuçlar ve seçilen yöntemler bu bölüme "Faz 0 bulguları" olarak eklenir.
+      *Fren yöntemi korunuyor (2026-10-23), bkz. bulgular.*
+- [x] Sonuçlar ve seçilen yöntemler bu bölüme "Faz 0 bulguları" olarak eklenir.
+
+### Faz 0 bulguları (2026-10-23)
+
+Ölçüm sayfası `spikes/terrain-deformation` (gerçek `PhysicsSubsystem` +
+referans araç, 60 Hz sabit adım, deterministik; doku testi three r184,
+headless Chromium 149, RTX 3060 / D3D11). Çalıştırma: `npm run dev:smoke` +
+`node spikes/terrain-deformation/run.mjs`.
+
+**Rest length — koşullu kabul, ama işaret ters çevrildi.**
+
+| Değişim hızı | Ek ivme tepe (taban 2,6 m/s²) | İvme RMS (taban 0,27) | Roll hızı tepe | Temas kaybı (0 / 10 m/s) |
+|---|---|---|---|---|
+| anlık | 5,55 | 0,90 | 0,63 rad/s | 29 / 39 |
+| 3 m/s | 5,34 | 0,85 | 0,62 rad/s | 27 / 37 |
+| 1 m/s | 3,94 | 0,65 | 0,55 rad/s | 30 / 38 |
+| 0,3 m/s | 2,92 | 0,30 | 0,10 rad/s | 13 / 23 |
+
+- 0,3 m/s'de gövde tepkisi tabana çok yakın (ivme RMS +%14, roll 0,1 rad/s);
+  hızlı değişim belirgin sarsıntı üretiyor. **Karar:** derinlikten gelen rest
+  length farkı tekerlek başına **≤ 0,3 m/s** ile slew-limit edilir.
+- Temas kayıplarının tamamı değişen tekerleğe (0) komşu iki tekerlekte (1, 2);
+  çapraz çift (0–3) yükü taşıyor. Bu, düz ve sert zeminde **tek köşenin**
+  0,3 m burulmasının geometrik sonucu, kararsızlık değil. Gerçek kullanımda
+  dört tekerlek benzer derinliğe gömülür; yine de Faz 3 smoke'unda tek
+  tekerleğin derin ize girdiği durum (temas kaybı sayısı) ayrıca izlenir.
+- Uyuyan gövde setter ile **uyanmıyor**; rest length değiştiğinde açık
+  `wakeUp()` gerekir.
+- **İşaret düzeltmesi:** Rapier süspansiyon kuvveti `k·(rest − mevcut boy)`.
+  Collider sabitken zemini `d` kadar alçalmış göstermek için mevcut boy `d`
+  uzamış gibi davranılmalı, yani **`rest − d`**. Planın önceki "restLength +
+  derinlik" ifadesi gövdeyi yukarı iterdi; Faz 3 maddesi buna göre
+  düzeltildi. Tekerlek görseli ayrıca `d` kadar aşağı indirilir.
+
+**Yuvarlanma direnci — fren yöntemi korunuyor.** Eşleştirilmiş kuvvette
+(15 m/s'den serbest yuvarlanma) fren ve şasi impulsu birebir aynı: 42,1 m,
+12,4 s'de duruş. 8° rampada el freni çekilmeden ikisi de aracı **haksız yere
+tutmuyor** (10 s'de 28,2 m kayıp yuvarlanıyor; dirençsiz 68,3 m); durağan
+halde titreme yok. Fren yolu Rapier'in tekerlek modelinde kaldığı için Faz
+1a'daki `rollingResistance × yük × min(|v|, 1)` fren formülü korunur. Not:
+`mud` profiliyle (tutuş çarpanları + direnç) araç 8° rampada 0,67 m kayıp
+duruyor ve 15 m/s'den 32,8 m / 4,7 s'de duruyor; çamurda bu beklenen his,
+ama Faz 6 smoke'unda rampa kalkışıyla birlikte değerlendirilmeli.
+
+**Doku yükleme — kısmi yükleme.** 512² R8, 300 kare, her karede rastgele
+kirli dikdörtgen:
+
+| Yöntem | Render CPU ort. / p95 | GPU (yükleme + çizim) ort. / p95 |
+|---|---|---|
+| Tam yükleme (`needsUpdate`) | 0,25 / 0,4 ms | 0,19 / 2,23 ms |
+| Kısmi `texSubImage2D` (kirli dikdörtgen) | 0,16 / 0,3 ms | 0,013 / 0,016 ms |
+
+Tam yükleme ortalamada bütçeye (< 0,3 ms) sığıyor ama GPU p95'i 2,2 ms'ye
+sıçrıyor. three r184'ün `addUpdateRange` yolu `componentStride = 4`'ü sabit
+kodluyor, R8 için kullanılamaz. **Karar:** Faz 2 alanın kirli
+dikdörtgenlerini (toroidal sarmada en çok 4) `renderer.state.bindTexture` +
+`gl.texSubImage2D` ile kendi küçük yükleyicisiyle gönderir.
 
 **Ret durumunda yedek yol:** Rest length kararsızsa gömülme yalnız görsel
 kalır (tekerlek modeli izin içine indirilir), fizik tarafı direnç + tutuş
@@ -285,9 +345,10 @@ Displacement yok. İzler normal map, albedo ve roughness ile görünür.
 
 ## Faz 3 — Gömülme (fizik + yerel yoğun mesh)
 
-- [ ] **Fizik:** tekerlek başına `restLength + alan derinliği` (Faz 0'da seçilen
-      yöntemle). Tekerlek ışını arazi collider'ına çarpar, uzayan süspansiyon
-      tekerleği izin tabanına indirir.
+- [ ] **Fizik:** tekerlek başına `restLength − alan derinliği` (Faz 0 işaret
+      düzeltmesi; değişim ≤ 0,3 m/s slew-limit, değişince `wakeUp()`).
+      Tekerlek ışını arazi collider'ına çarpar; kısalan rest length gövdeyi
+      derinlik kadar indirir, tekerlek görseli aynı miktarda aşağı kaydırılır.
 - [ ] **Patinajda kazma:** tekerlek dönüş hızı ile zemin hızı arasındaki fark
       (`wheelRotation` deltası) `digRate` ile çarpılıp derinliğe eklenir. Araç
       patinaj yaptıkça kendini gömer.

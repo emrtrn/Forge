@@ -111,6 +111,7 @@ import {
   applySceneBackgroundAndAmbient,
   applyEditorMatchedPlayLook,
   buildLandscapeSplineMeshGroup,
+  landscapeSplineMeshColliderPrimitive,
   buildSplineInstanceGeneratorGroup,
   disposeSplineGeneratedGroup,
   buildSceneCharacterObject,
@@ -4845,8 +4846,54 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           }
         },
       });
-      if (built) object.add(built.group);
+      if (!built) return;
+      object.add(built.group);
+      const actor = this.layout?.landscapes?.[index];
+      const colliderEntity = actor ? this.landscapeSplineColliderEntity(actor, data, built.group, manifest) : null;
+      if (colliderEntity) {
+        this.landscapeColliderEntities.push(colliderEntity);
+        this.addColliderDebugWire(colliderEntity);
+      }
     });
+  }
+
+  /**
+   * One static trimesh body for a collidable landscape's road/spline meshes, in
+   * the landscape collider's frame. Assets whose manifest turns `runtime.collision`
+   * off stay render-only.
+   */
+  private landscapeSplineColliderEntity(
+    actor: LayoutLandscape,
+    data: ForgeLandscapeData,
+    group: Group,
+    manifest: AssetManifest | null,
+  ): Entity | null {
+    const item = this.landscapeItem(actor, data);
+    if (!item.collision) return null;
+    const primitive = landscapeSplineMeshColliderPrimitive(group, (assetId) =>
+      manifest?.assets.find((entry) => entry.id === assetId)?.runtime.collision !== false);
+    if (!primitive) return null;
+    const collider: ColliderComponent = {
+      shape: "box",
+      size: primitive.size,
+      center: primitive.center,
+      isStatic: true,
+      isSensor: false,
+      navigationRole: "walkable",
+      primitives: [{ shape: "trimesh", ...primitive }],
+    };
+    return {
+      id: `landscape-splines:${actor.id}`,
+      name: `${item.name} Spline Mesh Collider`,
+      components: {
+        [TRANSFORM_COMPONENT]: {
+          position: [...actor.position] as [number, number, number],
+          rotation: [...item.rotation] as [number, number, number],
+          scale: [1, 1, 1],
+        },
+        [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
+      },
+    };
   }
 
   /**

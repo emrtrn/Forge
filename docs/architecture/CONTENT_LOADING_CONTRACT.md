@@ -3,6 +3,27 @@
 Checked against source on 22 October 2026. The runtime and editor share these
 static-read contracts; save allowlists remain in `tools/saveValidator.ts`.
 
+## World Terrain (Open World Phase 1)
+
+Editor and runtime use `src/scene/terrainDocument.ts`. Legacy `.landscape.json`
+reads convert through the pure 1×1 terrain model and the temporary mesh adapter;
+absent/unreadable legacy sidecars retain the old flat fallback. Adaptations
+(rotation, non-square/resampled grids) are reported and never silently persisted.
+
+New `.terrain.json` files use the strict shared `normalizeWorldTerrain` allowlist.
+`loadWorldTerrain` eagerly fetches each listed `<name>.tiles/x_z.tile.bin` through
+`projectFileUrl`, validating headers, sample bounds, coordinates, dimensions and
+layer count against the definition. Missing/corrupt new documents propagate an
+error instead of becoming flat terrain. The Phase 1 presentation adapter accepts
+only a complete 1×1 document; multi-tile rendering arrives in Phase 2. Tile holes
+remain holes in the engine document rather than synthesized heightfields.
+
+Editor Save writes binary tiles, then validates/publishes the definition, then
+updates the level reference for a first migration; the old sidecar is retained.
+Float32 heights preserve legacy vertex positions and RGBA8 weights are quantized.
+The save batch is retryable, not a cross-file transaction. The release collector
+includes implicit tile dependencies and requires provenance for every tile.
+
 ## Required documents
 
 `readContentJson` in `src/project/contentLoader.ts` reads through the shared

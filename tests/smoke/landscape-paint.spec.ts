@@ -1,3 +1,4 @@
+import { readSavedTerrain } from "./terrain";
 import { expect, test, type Page } from "./test";
 
 test.setTimeout(210_000);
@@ -90,13 +91,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
 
-  const landscapeData = await page.evaluate(async () => {
-    const response = await fetch(`/landscapes/landscape-1.landscape.json?smoke=${Date.now()}`);
-    if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
-    return (await response.json()) as {
-      layers: Array<{ id: string; material?: string; weights: number[] }>;
-    };
-  });
+  const landscapeData = await readSavedTerrain(page);
   const grass = landscapeData.layers.find((layer) => layer.id === "grass");
   const dirt = landscapeData.layers.find((layer) => layer.id === "dirt");
   expect(landscapeData.layers).toHaveLength(4);
@@ -113,13 +108,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   // Reload rebuilds the splat material from the sidecar's assigned material — wait
   // for it to settle so a load-time shader error would be caught below.
   await page.waitForTimeout(1500);
-  const reloadedData = await page.evaluate(async () => {
-    const response = await fetch(`/landscapes/landscape-1.landscape.json?reload=${Date.now()}`);
-    if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
-    return (await response.json()) as {
-      layers: Array<{ id: string; material?: string; weights: number[] }>;
-    };
-  });
+  const reloadedData = await readSavedTerrain(page);
   const reloadedDirt = reloadedData.layers.find((layer) => layer.id === "dirt");
   expect(reloadedDirt?.weights.some((weight) => weight > 0.05)).toBeTruthy();
   // A layer material persisted across reload (exact id can vary with the dev

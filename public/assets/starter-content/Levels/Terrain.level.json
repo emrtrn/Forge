@@ -5786,7 +5786,7 @@
         0,
         0
       ],
-      "dataRef": "landscapes/landscape-1.landscape.json",
+      "dataRef": "landscapes/landscape-1.terrain.json",
       "name": "Landscape",
       "locked": true,
       "collision": true

@@ -1,3 +1,4 @@
+import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 /** Production editor save session, without a renderer, timers or disk writes. */
 import assert from "node:assert/strict";
 import { createFlatLandscapeData, type ForgeLandscapeData } from "../../engine/scene/landscape";
@@ -8,7 +9,7 @@ type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 type Sidecar = "landscape" | "foliage" | "meshPaint";
 
 const LEVEL = "layouts/save-test.level.json";
-const PATHS = [LEVEL, "landscapes/save-test.landscape.json", "layouts/save-test.foliage.json", "layouts/save-test.meshpaint.json"];
+const PATHS = [LEVEL, "landscapes/save-test.terrain.json", "layouts/save-test.foliage.json", "layouts/save-test.meshpaint.json"];
 
 function deferred() {
   let resolve!: () => void;
@@ -79,9 +80,14 @@ function fixture() {
       host.meshPaintSaveRevision.markDirty();
     }
   };
+  let terrainValue = 0;
   const fetch: typeof globalThis.fetch = async (_input, init) => {
+    if (String(_input).startsWith("/__save-terrain-tile")) {
+      terrainValue = decodeTerrainTile(new Uint8Array(init!.body as ArrayBuffer)).heights[0]!;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
     const body = JSON.parse(String(init?.body));
-    const value = body.landscape?.heights[0] ?? body.foliage?.groups[0].instances[0].position[0] ?? body.meshPaint?.placements[0].colors[0];
+    const value = (body.terrain ? terrainValue : undefined) ?? body.landscape?.heights[0] ?? body.foliage?.groups[0].instances[0].position[0] ?? body.meshPaint?.placements[0].colors[0];
     writes.push({ path: body.path, value });
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   };
@@ -95,6 +101,43 @@ async function withFetch(fetch: typeof globalThis.fetch, run: () => Promise<void
 }
 
 export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync): Promise<void> {
+  for (const failure of ["tile", "definition", "layout", "none"]) {
+    await checkAsync(`terrain migration: ${failure} failure preserves legacy reference until the complete snapshot is saved`, async () => {
+      const f = fixture();
+      const actor = f.host.layout.landscapes![0]!;
+      const legacy = "landscapes/save-test.landscape.json";
+      actor.dataRef = legacy;
+      f.edit("landscape", 4);
+      const order: string[] = [];
+      let fail = failure !== "none";
+      const saver = f.host.layoutSaver;
+      f.host.layoutSaver = async (payload) => {
+        order.push("layout");
+        assert.equal(payload.layout.landscapes![0]!.dataRef, PATHS[1]);
+        assert.equal(actor.dataRef, legacy);
+        if (fail && failure === "layout") throw new Error("layout failed");
+        return saver(payload);
+      };
+      await withFetch(async (input, init) => {
+        const kind = String(input).startsWith("/__save-terrain-tile") ? "tile" : "definition";
+        order.push(kind);
+        assert.equal(actor.dataRef, legacy);
+        if (fail && failure === kind) return new Response("failed", { status: 400 });
+        return f.fetch(input, init);
+      }, async () => {
+        if (fail) {
+          await assert.rejects(f.host.saveLandscapeData("terrain"), /Save failed/);
+          assert.equal(actor.dataRef, legacy);
+          assert.equal(f.statuses.length, 0);
+          fail = false;
+        }
+        await f.host.saveLayout();
+        assert.equal(actor.dataRef, PATHS[1]);
+        assert.deepEqual(order.slice(-3), ["tile", "definition", "layout"]);
+      });
+    });
+  }
+
   for (const kind of ["landscape", "foliage", "meshPaint"] as const) {
     await checkAsync(`editor save: delayed ${kind} response preserves newer edits and next save writes them`, async () => {
       const f = fixture();
@@ -201,7 +244,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
         return saver(payload);
       };
       await withFetch(async (input, init) => {
-        if (fail && JSON.parse(String(init?.body)).path === PATHS[failedIndex]) {
+        if (fail && typeof init?.body === "string" && JSON.parse(init.body).path === PATHS[failedIndex]) {
           return new Response("failed", { status: 500 });
         }
         return f.fetch(input, init);

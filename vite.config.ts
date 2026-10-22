@@ -1,3 +1,6 @@
+import { validateTerrainTile } from "./engine/terrain/terrainLoader";
+import { terrainTilePath } from "./engine/terrain/terrainTypes";
+import { validateSaveTerrainPayload, validateSaveTerrainTile, TERRAIN_JSON_BODY_MAX_BYTES, TERRAIN_TILE_BODY_MAX_BYTES } from "./tools/terrainSaveValidator";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
@@ -882,6 +885,8 @@ const PRIVILEGED_URLS = new Set([
   "/__save-material-slots",
   "/__save-skeleton",
   "/__save-landscape",
+  "/__save-terrain",
+  "/__save-terrain-tile",
   "/__save-soundcue",
   "/__save-effect",
   "/__save-vehicle",
@@ -1145,6 +1150,46 @@ function layoutEditorPlugin(): Plugin {
         // Landscape editor save: writes a `<id>.landscape.json` height/layer
         // sidecar. Validated/normalized server-side (validateSaveLandscapePayload),
         // kept inside public/ by resolvePublicPath.
+        if (req.url?.split("?")[0] === "/__save-terrain-tile" || req.url === "/__save-terrain") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method Not Allowed");
+            return;
+          }
+          try {
+            let path: string;
+            let dropped: string[] = [];
+            if (req.url === "/__save-terrain") {
+              const submitted = await readJsonBody(req, TERRAIN_JSON_BODY_MAX_BYTES);
+              const payload = validateSaveTerrainPayload(submitted);
+              dropped = reportDroppedFields((submitted as Record<string, unknown>).terrain, payload.terrain, "terrain");
+              // Never publish a definition whose listed binaries are missing or inconsistent.
+              for (const { key } of payload.terrain.tiles) {
+                const bytes = await readFile(resolvePublicPath(terrainTilePath(payload.path, key)));
+                validateTerrainTile(payload.terrain, key, bytes);
+              }
+              path = payload.path;
+              const target = resolvePublicPath(path);
+              await mkdir(resolve(target, ".."), { recursive: true });
+              await writeFile(target, `${JSON.stringify(payload.terrain, null, 2)}\n`, "utf8");
+            } else {
+              const query = new URL(req.url!, "http://localhost").searchParams;
+              const bytes = await readRawBody(req, TERRAIN_TILE_BODY_MAX_BYTES);
+              path = validateSaveTerrainTile(query.get("path"), query.get("key") ?? "", bytes);
+              const target = resolvePublicPath(path);
+              await mkdir(resolve(target, ".."), { recursive: true });
+              await writeFile(target, bytes);
+            }
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path, dropped }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+          }
+          return;
+        }
+
         if (req.url === "/__save-landscape") {
           if (req.method !== "POST") {
             res.statusCode = 405;

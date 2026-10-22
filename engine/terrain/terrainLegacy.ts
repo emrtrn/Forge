@@ -120,6 +120,7 @@ export function legacyLandscapeToWorldTerrain(actor: LayoutLandscape, source: Fo
     })),
     tiles: [{ key: tileKey(0, 0), minHeight: range.min, maxHeight: range.max }],
     collision: actor.collision ?? true,
+    ...(data.splines === undefined ? {} : { splines: structuredClone(data.splines) }),
   };
   return { def, tile, splines: data.splines ?? [], warnings };
 }

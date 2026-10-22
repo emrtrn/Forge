@@ -1,3 +1,4 @@
+import type { ForgeLandscapeSpline } from "../scene/landscape";
 import type { Vec3 } from "../scene/layout";
 
 /**
@@ -74,6 +75,33 @@ export interface WorldTerrainDef {
   /** Tiles that exist on disk. A grid slot without an entry is a hole. */
   tiles: WorldTerrainTileSummary[];
   collision: boolean;
+  /**
+   * Road/spline data carried over from a legacy Landscape, still in that
+   * Landscape's local frame (relative to the terrain centre), until splines
+   * move to world space (OPEN_WORLD_PLAN Faz 8).
+   */
+  splines?: ForgeLandscapeSpline[];
+}
+
+/**
+ * On disk a terrain is `<name>.terrain.json` (this definition) plus one binary
+ * per tile in the sibling `<name>.tiles/` folder, `<x>_<z>.tile.bin` — typed
+ * suffixes like every other Forge sidecar, and a folder per terrain so two
+ * terrains in one directory never share tile names.
+ */
+export const TERRAIN_DEF_SUFFIX = ".terrain.json";
+export const TERRAIN_TILE_SUFFIX = ".tile.bin";
+
+export function isWorldTerrainPath(path: string): boolean {
+  return path.endsWith(TERRAIN_DEF_SUFFIX);
+}
+
+/** Public-root-relative path of one tile binary, next to its definition. */
+export function terrainTilePath(defPath: string, key: string): string {
+  if (!isWorldTerrainPath(defPath)) throw new Error(`terrain path must end with ${TERRAIN_DEF_SUFFIX}: ${defPath}`);
+  const coord = parseTileKey(key);
+  if (!coord || coord.x < 0 || coord.z < 0 || key !== tileKey(coord.x, coord.z)) throw new Error(`invalid terrain tile key: ${key}`);
+  return `${defPath.slice(0, -TERRAIN_DEF_SUFFIX.length)}.tiles/${key}${TERRAIN_TILE_SUFFIX}`;
 }
 
 /**

@@ -124,7 +124,20 @@ export async function collectReleaseContent({ publicDir, profile, provenance }) 
       }
       const stem = path.replace(/\.[^.]+$/, "");
       for (const suffix of ["collision", "uvw", "materials", "skeleton", "vertexcolors"]) await optional(`${stem}.${suffix}.json`, path);
-    } else if (json) visit(json, path);
+    } else if (json) {
+      visit(json, path);
+      if (path.endsWith(".terrain.json") && json.type === "worldTerrain") {
+        if (!Array.isArray(json.tiles)) throw new Error(`Invalid terrain tile list: ${path}`);
+        const seen = new Set();
+        for (const tile of json.tiles) {
+          if (typeof tile.key !== "string" || !/^(0|[1-9]\d*)_(0|[1-9]\d*)$/.test(tile.key) || seen.has(tile.key)) {
+            throw new Error(`Invalid terrain tile key: ${path}`);
+          }
+          seen.add(tile.key);
+          enqueue(`${path.slice(0, -".terrain.json".length)}.tiles/${tile.key}.tile.bin`, `terrain:${path}`);
+        }
+      }
+    }
     if (/\.(level|layout)\.json$/i.test(path)) {
       const stem = path.replace(/\.(level|layout)\.json$/i, "");
       for (const suffix of ["foliage", "meshpaint"]) await optional(`${stem}.${suffix}.json`, path);

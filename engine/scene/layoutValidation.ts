@@ -31,13 +31,18 @@ export function readRoomLayout(value: unknown, path: string): RoomLayout {
     const ids = new Set<string>();
     requireArray(input[key], `${path}.${key}`).forEach((value, i) => {
       const at = `${path}.${key}[${i}]`;
-      const item = readTransform(value, at);
+      // River bodies inherit their frame from a Landscape/spline; they have no position field.
+      const item = key === "riverWaters" ? requireRecord(value, at) : readTransform(value, at);
       const id = requireString(item[key === "actors" ? "classRef" : "id"], `${at}.${key === "actors" ? "classRef" : "id"}`);
       if (key !== "actors") {
         if (ids.has(id)) throw new ContentLoadError(at, "invalid-data", `duplicate id ${id}`);
         ids.add(id);
       }
       if (key === "landscapes") requireString(item.dataRef, `${at}.dataRef`);
+      if (key === "riverWaters") {
+        requireString(item.landscapeRef, `${at}.landscapeRef`);
+        requireString(item.splineRef, `${at}.splineRef`);
+      }
       if (key === "lights" && !["directional", "point", "spot"].includes(String(item.type))) {
         throw new ContentLoadError(`${at}.type`, "invalid-data", "unknown light type");
       }

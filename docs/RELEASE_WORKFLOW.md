@@ -54,7 +54,9 @@ unresolved asset references fail the build.
 
 The dependency closure follows manifest IDs in JSON, public file references,
 `travel:` UI messages, level `loadGroups`, existing model sidecars and level
-foliage/mesh-paint sidecars. glTF/GLB external buffer and image URIs resolve
+foliage/mesh-paint sidecars. World Terrain `.terrain.json` definitions also
+include their implicit `<name>.tiles/x_z.tile.bin` dependencies; each needs its
+own provenance record. glTF/GLB external buffer and image URIs resolve
 relative to the model and must stay within the content root. HTTP model
 resources need local copies; embedded data URIs stay in the model.
 
@@ -81,6 +83,11 @@ npm.cmd run check:assets
 npm.cmd run smoke:critical
 npm.cmd run smoke:production
 ```
+
+The dev smoke harness defaults to port 5273 and always owns a copied project.
+If a user server already occupies that port, set `$env:FORGE_SMOKE_PORT='5274'`
+for the test command, then remove it with `Remove-Item Env:FORGE_SMOKE_PORT`.
+The override retains strict port ownership and rejects authoring port 5173.
 
 The production smoke command builds the actual starter twice and serves it on
 loopback ports 5274 (`/`) and 5275 (`/oyunlar/demo/`). The subpath origin has no

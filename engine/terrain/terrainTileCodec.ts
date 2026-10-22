@@ -139,6 +139,9 @@ export function decodeTerrainTile(source: ArrayBuffer | Uint8Array): DecodedTerr
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const version = view.getUint16(4, true);
   if (version !== TERRAIN_TILE_VERSION) throw new TerrainTileCodecError(`unsupported version ${version}`);
+  if ((view.getUint16(6, true) & ~FLAG_FLOAT_HEIGHTS) !== 0 || view.getUint8(11) !== 0 || view.getUint32(28, true) !== 0) {
+    throw new TerrainTileCodecError("unsupported flags or nonzero reserved header bytes");
+  }
   const format: TerrainHeightFormat = (view.getUint16(6, true) & FLAG_FLOAT_HEIGHTS) !== 0 ? "f32" : "u16";
   const size = view.getUint16(8, true);
   const layerCount = view.getUint8(10);

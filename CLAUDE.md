@@ -144,6 +144,22 @@ engine/editor.
   restores it on unload, and leaves model geometry/material ownership with the
   asset loader. Omitted/unusable nodes use the procedural wheel fallback.
 
+- **Fifth allowlist surface — World Terrain:** `*.terrain.json` definitions
+  use `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`) on read
+  and through `validateSaveTerrainPayload` re-exported by `tools/saveValidator.ts`.
+  Spline fields share `engine/scene/landscapeSplineValidation.ts` with legacy
+  Landscape. `/__save-terrain-tile?path=<definition>&key=<x_z>` accepts a raw
+  binary body, validates its size/header/coordinates/finite heights, and derives
+  `<name>.tiles/<x_z>.tile.bin`; `/__save-terrain` cross-checks every listed
+  binary before writing the definition and returns `dropped[]` for unknown keys.
+  Both endpoints use the privileged local-only middleware. Add new definition
+  fields to the shared normalizer and terrain serialization-drift tests.
+  Editor saves migrate legacy sidecars tile → definition → level reference,
+  preserving the old file. Phase 1 bridges 1×1 terrain to the existing mesh/brush
+  path; multi-tile rendering is Phase 2 and currently rejects explicitly.
+  Rotation/non-square/resampling adaptations require explicit resolution rather
+  than silently changing an authored scene during Save.
+
 ## Codex Tooling Context
 
 - This repository may also be worked on from Codex. Codex-specific tool guidance
@@ -164,6 +180,7 @@ engine/editor.
   validator guarded where they write structured data:
   `/__save-collision`, `/__save-actor`, `/__new-behavior`,
   `/__save-material-slots`, `/__save-skeleton`, `/__save-material`,
+  `/__save-terrain`, `/__save-terrain-tile`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,

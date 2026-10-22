@@ -3,6 +3,9 @@ import { foliageDataPath, type LayoutFoliageData } from "@engine/scene/foliage";
 import { meshPaintDataPath, type LayoutMeshPaintData } from "@engine/scene/meshPaint";
 import type { LayoutSavePayload, LayoutSaver, LayoutSaveResult } from "@/scene/SceneApp";
 import { saveMeshPaintData } from "./meshPaintStore";
+import { captureTerrainWrite } from "./terrainStore";
+import { isWorldTerrainPath } from "@engine/terrain/terrainTypes";
+import { terrainTransformNeedsSave } from "@engine/terrain/terrainLandscapeBridge";
 
 /** In-memory edit revisions; these are never written into authored content. */
 export class SaveRevision {
@@ -124,13 +127,33 @@ export class EditorSaveSession {
       // Capture the whole batch before awaiting the first response. Later edits
       // belong to a later save, even for sidecars not written yet.
       const payload = structuredClone({ layout: source.layout, editor: source.editor });
-      const steps: EditorSaveStep[] = [{
+      const migrations: EditorSaveStep[] = [];
+      const pendingReferences: { id: string; from: string; to: string; actor: object }[] = [];
+      for (const actor of source.layout.landscapes ?? []) {
+        if (isWorldTerrainPath(actor.dataRef)) continue;
+        const data = source.landscapeData.get(actor.id);
+        if (!data) throw new Error(`Cannot migrate missing landscape data: ${actor.id}`);
+        const write = captureTerrainWrite(actor, data);
+        const revision = this.landscapeSaveRevisions.get(actor.id);
+        migrations.push(revision ? revision.capture(write.path, write.write) : write);
+        payload.layout.landscapes!.find((entry) => entry.id === actor.id)!.dataRef = write.path;
+        pendingReferences.push({ id: actor.id, from: actor.dataRef, to: write.path, actor });
+      }
+      const steps: EditorSaveStep[] = [...migrations, {
         path: source.scenePath,
-        write: async () => { result = await source.layoutSaver(payload); },
+        write: async () => {
+          result = await source.layoutSaver(payload);
+          // A reload/delete/recreate while saving must not mutate a replacement document.
+          if (this.source().layout !== source.layout) return;
+          for (const ref of pendingReferences) {
+            const actor = source.layout.landscapes?.find((entry) => entry.id === ref.id);
+            if (actor === ref.actor && actor.dataRef === ref.from) actor.dataRef = ref.to;
+          }
+        },
       }];
-      for (const [id, revision] of this.landscapeSaveRevisions) {
-        if (!revision.dirty) continue;
-        const step = this.captureLandscapeSave(source, id);
+      for (const actor of source.layout.landscapes ?? []) {
+        if (pendingReferences.some((entry) => entry.id === actor.id)) continue;
+        const step = this.captureLandscapeSave(source, actor.id);
         if (step) steps.push(step);
       }
       if (this.foliageSaveRevision.dirty) steps.push(this.captureFoliageSave(source));
@@ -157,6 +180,9 @@ export class EditorSaveSession {
   }
 
   saveLandscapeData(id: string): Promise<void> {
+    const actor = this.source().layout.landscapes?.find((entry) => entry.id === id);
+    // A direct first sidecar save must persist its new level reference as well.
+    if (actor && !isWorldTerrainPath(actor.dataRef)) return this.saveLayout();
     return this.queue.save(() => {
       const step = this.captureLandscapeSave(this.source(), id);
       return step ? [step] : [];
@@ -167,17 +193,9 @@ export class EditorSaveSession {
     const actor = source.layout.landscapes?.find((entry) => entry.id === id);
     const data = source.landscapeData.get(id);
     const revision = this.landscapeSaveRevisions.get(id);
-    if (!actor || !data || !revision?.dirty) return null;
-    const path = actor.dataRef;
-    const body = JSON.stringify({ path, landscape: data });
-    return revision.capture(path, async () => {
-      const response = await fetch("/__save-landscape", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      });
-      if (!response.ok) throw new Error(`Landscape data save failed: HTTP ${response.status}`);
-    });
+    if (!actor || !data || (!revision?.dirty && !terrainTransformNeedsSave(actor, data))) return null;
+    const write = captureTerrainWrite(actor, data);
+    return revision ? revision.capture(write.path, write.write) : write;
   }
 
   private captureFoliageSave(source: EditorSaveSource): EditorSaveStep {

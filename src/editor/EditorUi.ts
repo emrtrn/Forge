@@ -1945,6 +1945,8 @@ export class EditorUi {
       // Layout companions saved beside a level (`<layout>.foliage.json`, ...).
       // The `.foliagetype.json` asset stays listed — it is a real manifest asset.
       name.endsWith(".landscape.json") ||
+      name.endsWith(".terrain.json") ||
+      name.endsWith(".tile.bin") ||
       name.endsWith(".foliage.json") ||
       name.endsWith(".meshpaint.json")
     );

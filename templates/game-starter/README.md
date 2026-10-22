@@ -30,7 +30,7 @@ Open it in the template's dev server without installing anything:
 2. Replace `src/main.ts` with this `main.ts`.
 3. Copy `main.level.json` into `public/layouts/` and point
    `public/project.3dgame.json` → `editor.defaultScene` at it. The level's
-   terrain reads `landscapes/runtime-parity.landscape.json`, which the template
+   terrain reads `landscapes/runtime-parity.terrain.json`, which the template
    already ships; author your own terrain in the editor to replace it.
 
 ## Adding gameplay

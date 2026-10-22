@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const WORKSPACE = resolve(REPO_ROOT, ".playwright-smoke");
 const FIXTURES = resolve(REPO_ROOT, "tests/smoke/fixtures");
-export const SMOKE_PORT = 5273;
+// Keep the default stable; an explicitly chosen free port lets a user's dev:smoke stay open.
+export const SMOKE_PORT = Number(process.env.FORGE_SMOKE_PORT ?? 5273);
+if (!Number.isInteger(SMOKE_PORT) || SMOKE_PORT < 1024 || SMOKE_PORT > 65535 || SMOKE_PORT === 5173) {
+  throw new Error("FORGE_SMOKE_PORT must be an unprivileged port other than the authoring port 5173");
+}
 export const SMOKE_SCENE = "layouts/__playwright-smoke.level.json";
 export const SMOKE_TARGET_SCENE = "layouts/__playwright-smoke-target.level.json";
 export const SMOKE_PATROL_SCENE = "layouts/__playwright-smoke-patrol.level.json";

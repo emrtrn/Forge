@@ -58,6 +58,15 @@ export async function registerContentLoadingTests(check: Check, checkAsync: Chec
     for (const dir of ["public", "templates", "tests/smoke/fixtures"]) walk(dir);
   });
 
+  check("content: river bodies load by landscape/spline references without a transform", () => {
+    const water = { id: "river", landscapeRef: "land", splineRef: "spline", surfaceLevel: 1 };
+    const raw = { ...level(), riverWaters: [water] };
+    assert.equal(readRoomLayout(raw, "river.level.json"), raw);
+    for (const malformed of [{ ...water, landscapeRef: "" }, { ...water, splineRef: null }]) {
+      assert.throws(() => readRoomLayout({ ...level(), riverWaters: [malformed] }, "river.level.json"), ContentLoadError);
+    }
+  });
+
   check("content: asset manifest accepts legacy aliases and rejects bad version and duplicate ids", () => {
     const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
     assert.equal(readAssetManifest(manifest, "assets/manifest.json"), manifest);

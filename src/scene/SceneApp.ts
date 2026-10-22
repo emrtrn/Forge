@@ -1,3 +1,4 @@
+import { fetchLandscapeDocument } from "./terrainDocument";
 ﻿/**
  * SceneApp - the single render-layer orchestrator (L11 boundary).
  *
@@ -8265,15 +8266,9 @@ export class SceneApp {
     this.editorSaves.meshPaintSaveRevision.markDirty();
   }
 
-  /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
-  private async fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
-    try {
-      const response = await fetch(projectFileUrl(dataRef));
-      if (!response.ok) return createFlatLandscapeData("medium");
-      return (await response.json()) as ForgeLandscapeData;
-    } catch {
-      return createFlatLandscapeData("medium");
-    }
+  /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
+  private fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
+    return fetchLandscapeDocument(dataRef);
   }
 
   /** Cheap transform/visibility sync for one landscape (gizmo drag). */

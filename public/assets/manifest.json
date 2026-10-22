@@ -21022,6 +21022,29 @@
         "bytes": 1061
       },
       "license": "CC-BY-4.0"
+    },
+    {
+      "id": "largeterrain-level",
+      "name": "Large Terrain.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/starter-content/Levels/LargeTerrain.level.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 103
+      },
+      "license": "Unknown"
     }
   ]
 }

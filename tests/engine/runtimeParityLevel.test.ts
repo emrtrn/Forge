@@ -37,12 +37,12 @@ import { collectUnsupportedCapabilities } from "../../src/scene/capabilityCovera
 import { createDefaultRuntimeModules } from "../../src/scene/capabilities/defaultRuntimeModules";
 import { RTS_GAME_MODE_ID } from "../../src/game/gameModes/catalog";
 import { collectDroppedFields } from "../../tools/droppedFields";
-import { validateLandscapeData, validateLayout } from "../../tools/saveValidator";
+import { validateSaveTerrainPayload, validateLayout } from "../../tools/saveValidator";
 
 type Check = (label: string, fn: () => void) => void;
 
 export const RUNTIME_PARITY_LEVEL_PATH = "public/layouts/RuntimeParity.level.json";
-const RUNTIME_PARITY_LANDSCAPE_PATH = "public/landscapes/runtime-parity.landscape.json";
+const RUNTIME_PARITY_LANDSCAPE_PATH = "public/landscapes/runtime-parity.terrain.json";
 const PARITY_PROP_ACTOR_PATH = "public/assets/starter-content/Gameplay/Script_ParityProp.actor.json";
 const GAME_STARTER_LEVEL_PATH = "templates/game-starter/main.level.json";
 const GAME_STARTER_MAIN_PATH = "templates/game-starter/main.ts";
@@ -160,11 +160,10 @@ export function registerRuntimeParityLevelTests(check: Check): void {
 
   check("parity level: its landscape sidecar round-trips too", () => {
     const authored = readJson(RUNTIME_PARITY_LANDSCAPE_PATH);
-    const saved = validateLandscapeData(authored);
-    assert.deepEqual(collectDroppedFields(authored, saved, "landscape", 100).paths, []);
-    assert.deepEqual(validateLandscapeData(saved), saved);
-    const size = saved.size as { verticesX: number; verticesZ: number };
-    assert.equal((saved.heights as number[]).length, size.verticesX * size.verticesZ);
+    const saved = validateSaveTerrainPayload({ path: "landscapes/runtime-parity.terrain.json", terrain: authored }).terrain;
+    assert.deepEqual(collectDroppedFields(authored, saved, "terrain", 100).paths, []);
+    assert.deepEqual(validateSaveTerrainPayload({ path: "landscapes/runtime-parity.terrain.json", terrain: saved }).terrain, saved);
+    assert.equal(saved.tiles.length, 1);
   });
 
   // (B) instantiation counts.

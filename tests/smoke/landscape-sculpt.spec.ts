@@ -1,3 +1,5 @@
+import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
+import { readSavedTerrain } from "./terrain";
 import { expect, test, type Page } from "./test";
 
 test.setTimeout(210_000);
@@ -75,8 +77,8 @@ test("editor Landscape sculpt smoke: add, sculpt, edit during save, retry, reloa
   let firstSaveStarted = false;
   let holdFirstResponse = true;
   const landscapeWrites: number[][] = [];
-  await page.route("**/__save-landscape", async (route) => {
-    const heights = (route.request().postDataJSON() as { landscape: { heights: number[] } }).landscape.heights;
+  await page.route("**/__save-terrain-tile?**", async (route) => {
+    const heights = Array.from(decodeTerrainTile(route.request().postDataBuffer()!).heights);
     // An already queued autosave can still carry the earlier flat Undo
     // snapshot. Let it finish and hold the first sculpted snapshot explicitly.
     const hold = holdFirstResponse && heights.some((height) => Math.abs(height) > 0.001);
@@ -95,7 +97,7 @@ test("editor Landscape sculpt smoke: add, sculpt, edit during save, retry, reloa
     await page.getByTestId("editor-save").click();
     await expect.poll(() => firstSaveStarted).toBe(true);
     await page.getByTestId("editor-undo").click();
-    const firstResponse = page.waitForResponse((response) => response.url().endsWith("/__save-landscape"));
+    const firstResponse = page.waitForResponse((response) => response.url().includes("/__save-terrain-tile?"));
     releaseFirstSave();
     await firstResponse;
 
@@ -103,10 +105,7 @@ test("editor Landscape sculpt smoke: add, sculpt, edit during save, retry, reloa
     await expect.poll(() => landscapeWrites.length).toBeGreaterThanOrEqual(2);
     expect(landscapeWrites[0]!.some((height) => Math.abs(height) > 0.001)).toBeTruthy();
     expect(landscapeWrites[1]!.every((height) => Math.abs(height) < 0.001)).toBeTruthy();
-    const undoneHeights = await page.evaluate(async () => {
-      const response = await fetch(`/landscapes/landscape-1.landscape.json?undo=${Date.now()}`);
-      return ((await response.json()) as { heights: number[] }).heights;
-    });
+    const undoneHeights = (await readSavedTerrain(page)).heights;
     expect(undoneHeights).toEqual(landscapeWrites[1]);
 
     await page.getByTestId("editor-redo").click();
@@ -115,14 +114,10 @@ test("editor Landscape sculpt smoke: add, sculpt, edit during save, retry, reloa
     await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
   } finally {
     releaseFirstSave();
-    await page.unroute("**/__save-landscape");
+    await page.unroute("**/__save-terrain-tile?**");
   }
 
-  const landscapeData = await page.evaluate(async () => {
-    const response = await fetch(`/landscapes/landscape-1.landscape.json?smoke=${Date.now()}`);
-    if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
-    return (await response.json()) as { heights: number[] };
-  });
+  const landscapeData = await readSavedTerrain(page);
   expect(landscapeData.heights.some((height) => Math.abs(height) > 0.001)).toBeTruthy();
 
   await page.goto(`/?editor&landscapeSmokeReload=${Date.now()}`);
@@ -131,11 +126,7 @@ test("editor Landscape sculpt smoke: add, sculpt, edit during save, retry, reloa
   await expect(
     page.locator('[data-inspector-pane="details"] [data-landscape-tool="raise"]'),
   ).toBeVisible();
-  const reloadedData = await page.evaluate(async () => {
-    const response = await fetch(`/landscapes/landscape-1.landscape.json?reload=${Date.now()}`);
-    if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
-    return (await response.json()) as { heights: number[] };
-  });
+  const reloadedData = await readSavedTerrain(page);
   expect(reloadedData.heights.some((height) => Math.abs(height) > 0.001)).toBeTruthy();
 
   expect(pageErrors).toEqual([]);

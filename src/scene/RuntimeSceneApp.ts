@@ -1,3 +1,4 @@
+import { fetchLandscapeDocument } from "./terrainDocument";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
   AmbientLight,
@@ -214,7 +215,6 @@ import {
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
 import {
-  createFlatLandscapeData,
   createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
@@ -4616,15 +4616,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     };
   }
 
-  /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
-  private async fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
-    try {
-      const response = await fetch(projectFileUrl(dataRef));
-      if (!response.ok) return createFlatLandscapeData("medium");
-      return (await response.json()) as ForgeLandscapeData;
-    } catch {
-      return createFlatLandscapeData("medium");
-    }
+  /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
+  private fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
+    return fetchLandscapeDocument(dataRef);
   }
 
   /**

@@ -58,7 +58,7 @@ on the `camera:` line — `rts-top-down zoom:… selected:…`.
 2. Replace `src/main.ts` with this `main.ts`.
 3. Copy `main.level.json` into `public/layouts/` as `rts.level.json` and point
    `public/project.3dgame.json` → `editor.defaultScene` at it. The level's
-   terrain reads `landscapes/runtime-parity.landscape.json`, which the template
+   terrain reads `landscapes/runtime-parity.terrain.json`, which the template
    already ships; author your own terrain in the editor to replace it.
 
 ## Where a real RTS grows from here

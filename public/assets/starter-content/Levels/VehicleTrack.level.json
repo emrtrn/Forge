@@ -198,6 +198,7 @@
       }
     }
   ],
+  "landscapes": [],
   "actors": [
     {
       "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",

@@ -1,3 +1,4 @@
+import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 /**
  * Engine scene/adapter checks. Bundled with esbuild and run on node by
  * `tools/run-engine-tests.mjs` (npm run test:engine). No test framework; uses
@@ -1160,6 +1161,8 @@ registerGpuSweepTests(check);
 registerGpuSweepSessionTests(check);
 registerPerfWitnessTests(check);
 registerTerrainTests(check);
+registerTerrainDocumentTests(check);
+await registerTerrainDocumentAsyncTests(checkAsync);
 await registerTerrainRapierTests(checkAsync);
 
 function listPublicFiles(root: string): string[] {

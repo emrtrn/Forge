@@ -50,6 +50,23 @@ test("unused Unknown assets are excluded; explicit dynamic includes are checked"
   assert.equal((await collect({ profile: { ...profile, includeAssets: ["unused"] } })).manifest.assets.length, 6);
 }));
 
+test("terrain definitions close over implicit tile files and enforce their provenance", () => fixture(async ({ publicDir, collect, provenance }) => {
+  const path = "landscapes/starter.terrain.json";
+  const binary = "landscapes/starter.tiles/0_0.tile.bin";
+  const level = await readJson(resolve(publicDir, profile.defaultScene));
+  level.landscapes[0].dataRef = path;
+  await writeFile(resolve(publicDir, profile.defaultScene), JSON.stringify(level));
+  await writeFile(resolve(publicDir, path), JSON.stringify({ schema: 1, type: "worldTerrain", tiles: [{ key: "0_0" }] }));
+  provenance[path] = provenance["landscapes/starter.landscape.json"];
+  await mkdir(resolve(publicDir, "landscapes/starter.tiles"));
+  await writeFile(resolve(publicDir, binary), new Uint8Array([1, 2, 3]));
+  await assert.rejects(collect(), /Missing or unresolved provenance/);
+  provenance[binary] = provenance[path];
+  assert.ok((await collect()).files.some((entry) => entry.path === binary));
+  await writeFile(resolve(publicDir, path), JSON.stringify({ type: "worldTerrain", tiles: [{ key: "../0_0" }] }));
+  await assert.rejects(collect(), /Invalid terrain tile key/);
+}));
+
 test("missing provenance and placeholder status block a selected package", () => fixture(async ({ collect, provenance }) => {
   const path = "assets/release/checker.png";
   const original = provenance[path];

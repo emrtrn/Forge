@@ -1,12 +1,12 @@
 # Açık Dünya Planı (World Partition + Terrain LOD)
 
-> Durum: **Başladı** (2026-10-22, dal `feat/open-world`). Faz 1'in saf
-> çekirdeği hazır: veri tipleri, ikili tile kodeki, yükseklik sorgusu +
-> raycast, legacy dönüşüm, heightfield şekli, World Partition hücre
-> matematiği (`tests/engine/terrain.test.ts`). Henüz hiçbir runtime/editör
-> yoluna bağlı değil. **Faz 0 tamam** (2026-10-22): S1–S6 ölçüldü, K2'nin GPU
-> CDLOD yolu onaylandı (yedek plana gerek yok), K7 kararı verildi (reversed-Z
-> + float derinlik). Spike sayfaları `spikes/` altında, merge edilmez.
+> Durum: **Faz 1 tamam** (2026-10-22,
+> dal `feat/open-world`). Ortak tanım/ikili loader, legacy okuma dönüşümü,
+> kayıt uçları ve editör migrasyonu bağlı. RuntimeParity ve iki starter fixture
+> yeni formatta. **Faz 0 tamam:** S1–S6 ölçüldü, GPU CDLOD onaylandı,
+> K7 reversed-Z + float derinlik. Spike sayfaları `spikes/` altında,
+> merge edilmez. Sonraki iş Faz 2 renderer/editör geçişi; 1×1 adaptörü
+> o zamana kadar mevcut renderer'ı kullanır.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -69,9 +69,9 @@ görüntüyü vermek zorunda.
 - **Boya:** tile başına ağırlık haritası dokusu, `RGBA8` başına 4 katman, en
   fazla 2 doku (**8 katman**). Çözünürlük varsayılan olarak vertex grid'i
   ile aynı, ileride 2× seçeneği.
-- **Dosyalar:** `levels/<World>/terrain/terrain.json` (grid tanımı, katmanlar,
+- **Dosyalar:** `levels/<World>/terrain/<name>.terrain.json` (grid tanımı, katmanlar,
   tile listesi + tile başına min/max yükseklik ve bayt boyu) ve tile başına
-  bir ikili dosya `tiles/x_z.tile.bin` (başlık + height + weight blokları).
+  bir ikili dosya `<name>.tiles/x_z.tile.bin` (başlık + height + weight blokları).
   JSON değil, çünkü 4 km'lik dünya = 256 tile × ~400 KB ≈ 100 MB ham veri.
   Statik host'un gzip/brotli sıkıştırması ikili veride de çalışır.
 
@@ -580,18 +580,69 @@ Bütün tile'lar hâlâ açılışta yükleniyor. Amaç formatı oturtmak.
       vertex'i sahibi tile yüklü değilse komşu kopyadan okunur. Rapier
       heightfield ışınıyla eşitlik testi: 400 rastgele nokta + dikiş ve
       köşe, tolerans 1e-3; aynı noktalarda bilinear > 5 cm sapıyor. (2026-10-22)
-- [ ] Legacy dönüşüm: `LayoutLandscape` + `*.landscape.json` → 1×1 terrain
+- [x] Legacy dönüşüm: `LayoutLandscape` + `*.landscape.json` → 1×1 terrain
       (bellekte, okuma sırasında). Splines ve River Water referansları korunur.
-      **Saf dönüşüm hazır** (`terrainLegacy.ts`, `runtime-parity` fixture'ında
-      her collider vertex'i birebir); okuma yoluna bağlanması açık.
-- [ ] Kayıt: `/__save-terrain` (`terrain.json`, JSON) ve
+      `terrainDocument.ts` ortak okuma yolu `terrainLegacy.ts` dönüşümünü
+      1×1 adaptörüne bağlar; spline kimlikleri ve actor/river referansları korunur.
+- [x] Kayıt: `/__save-terrain` (`*.terrain.json`, JSON) ve
       `/__save-terrain-tile` (ham ikili gövde, boyut ve başlık doğrulamalı).
       `saveValidator`'a 5. yüzey; `droppedFields` kapsamı.
-- [ ] Editörde legacy Landscape kaydedildiğinde yeni formatta yazılır
+- [x] Editörde legacy Landscape kaydedildiğinde yeni formatta yazılır
       (tek yönlü migrasyon, eski dosya korunur). `public/` fixture'ları
       ve `RuntimeParity` güncellenir.
-- [ ] Engine testleri: kodek, örnekleme, dönüşüm, validator.
-- [ ] CLAUDE.md: 5. allowlist yüzeyi notu.
+- [x] Engine testleri: kodek, örnekleme, dönüşüm, validator.
+- [x] CLAUDE.md: 5. allowlist yüzeyi notu.
+
+**Uygulama notu (2026-10-22).** Dosya düzeni `<name>.terrain.json` +
+`<name>.tiles/x_z.tile.bin`. `terrainDefinition.ts` runtime/save ortak allowlist;
+spline allowlist'i engine'e çıkarıldı ve legacy validator da aynı işlevi kullanır.
+Binary uç ham gövdeyi boyut/başlık/koordinat/sonlu örnek bakımından denetler;
+tanım ucu listedeki tüm tile'ları diskten okuyup tanımla eşleştirir. Uçlar mevcut
+local-only ayrıcalık korumasındadır. Bilinmeyen alanlar `dropped[]` içinde
+raporlanır; editör bu yanıtı başarılı kayıt saymaz.
+
+Editör snapshot'ı ilk await'ten önce alır. İlk migrasyonda tile ve tanım
+başarılı olmadan level'ın yeni referansı yayımlanmaz; in-memory referans da level
+kaydı başarılı olunca değişir. Eski dosya korunur, kısmi hatada retry mümkündür.
+Sonraki sculpt/boya kayıtları ikili formata gider; actor konumu/çarpışması değişirse
+tanım da güncellenir. Float32 height kaydı mevcut collider vertex'lerini korur;
+boya RGBA8 olarak quantize edilir. Bu dosyalar arası/disk kesintilerine karşı
+transaction değildir (F01'in açık sınırı sürer).
+
+**Faz sınırı:** generic eager loader tüm listeli tile'ları okuyabilir; mevcut
+mesh/brush adaptörü yalnız 1×1 destekler. Çok-tile/hole içeren dünyayı render'a
+bağlamak Faz 2/3'tür; adaptör veriyi daraltmak yerine hata verir. Rotasyon,
+kare olmayan grid veya yeniden örnekleme gerektiren legacy veriler okuma sırasında
+eski görünümüyle korunur; otomatik Save migrasyonu bunlarda açık hata verir,
+sessiz geometri kaybına izin vermez. Doğrudan fixture migrasyonu yalnız Parity
+ve iki starter level referansına uygulandı; eski parity JSON'u korundu.
+Çalışma sırasında açık editör/başka oturum kaynaklı `LargeTerrain`, manifest,
+varsayılan level ve Terrain referans değişiklikleri de gözlendi; bunlar geri
+alınmadı. Başlangıçtaki `VehicleTrack.level.json` değişikliği korundu.
+
+Nehirli migrasyon smoke'u mevcut okuma korumasındaki bir hatayı ortaya çıkardı:
+`LayoutRiverWater` konumunu Landscape/spline'dan almasına rağmen `position`
+zorunlu tutuluyordu. `readRoomLayout` bu koleksiyonda iki referansı doğrular;
+başka actor'lerin zorunlu transform kontrolleri sürer. Engine regresyonu eklendi.
+
+Doğrulama (2026-10-22):
+
+- Tam `build:verify` geçti: **1.287 engine kontrolü**, 10 import, 5 fixture,
+  10 release/URL testi; uygulama, smoke, content ve UI-test TypeScript kapıları,
+  Vite production build ve sıkı runtime-only dist taraması dahil.
+- Chromium'da game-starter, sculpt (kayıt sürerken undo + retry dahil), boya
+  ve spline-chain smoke'ları geçti. Yeni terrain endpoint ve nehirli
+  migrasyon/kayıt/reload/Play senaryoları son hedefli çalışmada **2/2 geçti**
+  (46,4 s). İlk birleşik çalışmalardaki yanlış test level seçimi ve Outliner
+  hazır olma beklentisi düzeltildi; forced click veya uygulama hatası filtresi yok.
+- Editor/runtime ekran görüntüleri `test-results/terrain-migration-legacy-.../`
+  altında alındı ve görüntülendi. Bu, headless işlevsel kanıttır; GPU performans
+  kabulü değildir. Faz 0'daki kullanıcı GPU ölçümleri ayrı kanıt olarak korunur.
+- Mevcut 5273 sunucusuna dokunulmadan kopya smoke projesi **5274** portunda
+  çalıştırıldı. `FORGE_SMOKE_PORT` yalnız açık override; varsayılan 5273 kalır,
+  5173 reddedilir. Kaynak fixture izolasyonunun 5 testi de geçti.
+- `git diff --check` temiz. Bu oturum commit/push veya Codex Security taraması
+  yapmadı. Yeni kayıt uçları için dar security-diff-scan önerisi ayrı onay bekler.
 
 ## Faz 2 — Terrain renderer (CDLOD) + editör araçlarının taşınması
 

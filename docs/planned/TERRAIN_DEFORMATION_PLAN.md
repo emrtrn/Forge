@@ -391,6 +391,22 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
 
 ## Faz 5 — Kalıcılık
 
+> **2026-10-23 — Saf parçalar hazır:** `deformationPersistence.ts` dünya hizalı
+> 1 m / 32×32 seyrek kaba katmanı sağlar. `DeformationField` isteğe bağlı
+> `onEvictCell` callback'iyle yalnız çıkan aktif hücreleri temizlenmeden önce
+> aktarır; callback yokken davranış değişmez. `absorbWindow()` kayıt anında
+> max-pool yapar; kaba örnekleme hücre içinde sabittir (nearest).
+> `deformationStateCodec.ts` v1 JSON, 8-bit derinlik + RLE/base64, doğrulama ve
+> kimlik uyuşmazlığında yoksayma sağlar. Derinlik hatası en fazla
+> `maxDepth / 510 + 0,00005 m`; disturbance kayıpsızdır. Codec canlı pencereyi
+> kaba katmanın kopyasına da katar; 64 KiB aşılırsa pencereyi bırakır. Kaba
+> katman tek başına bütçeyi aşarsa veri silmeden `withinBudget: false` bildirir.
+> Saf engine testleri, 2 km dört tekerlekli sürüş boyut kontrolü dahil hazırdır.
+> **Kalan entegrasyon:** runtime/shader fallback bağlantısı,
+> `GameSaveState.terrainDeformation?`, save modülü toplama/geri yükleme,
+> `SAVE_GAME_CONTRACT.md` güncellemesi ve `saveGameModule.test.ts` kontrolleri.
+> Aşağıdaki uçtan uca maddeler bu nedenle açık kalır.
+
 - [ ] **Kaba kalıcı katman:** pencereden çıkan hücreler landscape
       çözünürlüğünde (1 m) bir alana max-pool ile aktarılır. Shader pencere
       dışında bu katmanı örnekler; uzaktaki eski izler kaba da olsa görünür.

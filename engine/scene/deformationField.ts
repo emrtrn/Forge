@@ -8,7 +8,11 @@ const MAX_DEPTH_UNITS = 65_535;
 export interface DeformationFieldOptions {
   readonly windowSize?: number;
   readonly cellSize?: number;
+  /** Called before active cells leave the window; world cell centres, depth in metres. */
+  readonly onEvictCell?: DeformationCellVisitor;
 }
+
+export type DeformationCellVisitor = (worldX: number, worldZ: number, depth: number, disturbance: number) => void;
 
 export interface DeformationSample {
   readonly depth: number;
@@ -71,8 +75,10 @@ export class DeformationField {
   private dirtyMaxZ = -Infinity;
   private depthRecoveryRemainder = 0;
   private disturbanceRecoveryRemainder = 0;
+  private readonly onEvictCell: DeformationCellVisitor | undefined;
 
   constructor(options: DeformationFieldOptions = {}) {
+    this.onEvictCell = options.onEvictCell;
     this.windowSize = options.windowSize ?? 64;
     this.cellSize = options.cellSize ?? 0.125;
     const size = this.windowSize / this.cellSize;
@@ -101,6 +107,16 @@ export class DeformationField {
     const dx = nextX - this.minX;
     const dz = nextZ - this.minZ;
     if (dx === 0 && dz === 0) return;
+    if (this.onEvictCell) {
+      for (const index of this.active) {
+        const cx = this.minX + mod(index % size - this.minX, size);
+        const cz = this.minZ + mod(Math.floor(index / size) - this.minZ, size);
+        if (cx < nextX || cx >= nextX + size || cz < nextZ || cz >= nextZ + size) {
+          this.onEvictCell((cx + 0.5) * this.cellSize, (cz + 0.5) * this.cellSize,
+            this.depth[index]! / DEFORMATION_DEPTH_SCALE, this.disturbance[index]!);
+        }
+      }
+    }
     if (Math.abs(dx) >= size || Math.abs(dz) >= size) {
       this.depth.fill(0);
       this.disturbance.fill(0);
@@ -258,6 +274,21 @@ export class DeformationField {
     let max = 0;
     for (const index of this.active) max = Math.max(max, this.depth[index]!);
     return { activeCellCount: this.active.size, maxDepth: max / DEFORMATION_DEPTH_SCALE };
+  }
+
+  /** World-cell origin; channel arrays retain their toroidal storage order. */
+  get originCell(): readonly [number, number] {
+    return [this.minX, this.minZ];
+  }
+
+  /** Visits nonzero cells only. Visitors must not mutate or recenter the field. */
+  forEachActiveCell(visit: DeformationCellVisitor): void {
+    for (const index of this.active) {
+      const x = this.minX + mod(index % this.cellsPerSide - this.minX, this.cellsPerSide);
+      const z = this.minZ + mod(Math.floor(index / this.cellsPerSide) - this.minZ, this.cellsPerSide);
+      visit((x + 0.5) * this.cellSize, (z + 0.5) * this.cellSize,
+        this.depth[index]! / DEFORMATION_DEPTH_SCALE, this.disturbance[index]!);
+    }
   }
 
   private index(x: number, z: number): number {

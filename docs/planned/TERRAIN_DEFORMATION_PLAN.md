@@ -10,10 +10,19 @@
 > raycast vehicle, Faz 0–5 tamam), [SAVE_GAME_CONTRACT.md](../architecture/SAVE_GAME_CONTRACT.md)
 > (Faz 5), adaptif kalite profilleri (`engine/perf/qualityProfiles.ts`).
 >
-> **Sıra notu:** [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) Landscape trimesh'ini
-> tile başına Rapier heightfield'a ve tek Landscape'i tile grid'ine çeviriyor.
-> Bu planın Faz 1'i, o planın Faz 3'ünden sonra `TerrainHeightQuery`
-> üzerinden yazılmalı.
+> **Sıra notu (2026-10-23 güncel):** [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md)
+> Landscape trimesh'ini tile başına Rapier heightfield'a ve tek Landscape'i
+> tile grid'ine çeviriyor. O planın Faz 1'i tamam: `WorldTerrainDef`
+> (`engine/terrain/terrainTypes.ts`), ortak normalizer `normalizeWorldTerrain`
+> (`engine/terrain/terrainDefinition.ts`, 5. allowlist yüzeyi) ve
+> `terrainHeightAt` / `terrainLayerWeightsAt`
+> (`engine/terrain/terrainHeightQuery.ts`) mevcut. Bu yüzden Faz 1 ikiye
+> bölündü: **1a** (arazi dışı: physical material blokları, `surfaceResponse`,
+> surface provider) şimdi yapılabilir; **1b** (terrain katmanı → physical
+> material bağlantısı, zemin tanıma) açık dünya Faz 3'ten sonra. Faz 0'ın
+> araç/render spike'ları da araziden bağımsızdır. Faz 2 shader'ı ve Faz 3
+> patch mesh'i açık dünya Faz 2'nin CDLOD `terrainMaterial`'ına yazılır,
+> eski iki landscape materyaline değil.
 >
 > **Ortak not (2026-10-22):** iz alanı ve gömülme, zemin yüksekliğinin
 > collider ile birebir aynı örneklenmesine dayanıyor. Bilinear örnekleme
@@ -47,8 +56,10 @@ engine testlerinde saf fonksiyon olarak test edilir.
 shader `RepeatWrapping` ile örnekler. Araç yer değiştirdiğinde dizi
 kaydırılmaz; yalnız pencereye yeni giren satır/sütunlar temizlenir.
 
-**Fizik çarpıştırıcısı runtime'da hiç yeniden kurulmaz.** Landscape trimesh'i
-(`createLandscapeColliderPrimitive`, `engine/scene/landscape.ts`) sabit kalır.
+**Fizik çarpıştırıcısı runtime'da hiç yeniden kurulmaz.** Arazi collider'ı
+sabit kalır: bugün Landscape trimesh'i (`createLandscapeColliderPrimitive`),
+açık dünya Faz 3'ten sonra tile başına Rapier heightfield
+(`engine/physics/terrainCollider.ts`).
 Gömülme hissi tekerlek süspansiyon boyu (Rapier `setWheelSuspensionRestLength`)
 ve ek kuvvetlerle verilir.
 
@@ -124,9 +135,11 @@ davranış korunur:
 açık tint), `mud` (sıfır recovery, yüksek `sinkResistance`, koyu ve ıslak),
 `sand` (orta değerler, düşük wetness).
 
-### Landscape katmanı → physical material
+### Terrain katmanı → physical material
 
-`LandscapeLayerWeights.physicalMaterial?: string`. Atanmamışsa katman
+`WorldTerrainLayerDef.physicalMaterial?: string | null` (`*.terrain.json`
+katman tanımı; legacy `LandscapeLayerWeights` okuma sırasında bu tanıma
+dönüştürüldüğü için ayrı bir legacy alanı açılmaz). Atanmamışsa katman
 deforme olmaz ve araç tepkisi değişmez. Bir noktanın yüzey tepkisi,
 katman ağırlıklarına göre karıştırılmış (ağırlıklı ortalama) profildir.
 Böylece kar/çim sınırında izler ve tutuş yumuşakça geçer.
@@ -140,7 +153,8 @@ Verilmezse varsayılan `radius * 0.7` kullanılır. İz basmanın enini belirler
 
 | Alan | Validator / normalizer |
 |---|---|
-| `LandscapeLayerWeights.physicalMaterial` | `validateLandscapeLayer` (`tools/saveValidator.ts`, `validateSaveLandscapePayload` içinden) + landscape loader normalizasyonu |
+| `WorldTerrainLayerDef.physicalMaterial` | `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`; `/__save-terrain` → `validateSaveTerrainPayload` bunu yeniden kullanır) + 1×1 adaptörün katmanı Landscape'e taşıması |
+| `PhysicalMaterialDef.vehicle` / `.deformation` | Yerleşik preset kütüphanesi (`engine/scene/collision.ts`); kayda girmez, yalnız preset id'si (`physicalMaterialId`) kaydedilir |
 | `VehicleWheelDefinition.width` | `normalizeVehicleDefinition` (`engine/physics/vehicle/vehicleTypes.ts`); `/__save-vehicle` bunu yeniden kullanır |
 | Fork'a özel physical material (Faz 6, isteğe bağlı) | Yeni `*.physmat.json` asset tipi + kendi `validate*` fonksiyonu |
 
@@ -153,8 +167,8 @@ allowlist notu güncellenir.
 |---|---|
 | `engine/physics/surface/surfaceResponse.ts` | Physical material → `SurfaceSample` çözümü, katman ağırlığı karışımı, tekerlek tepkisi matematiği (saf) |
 | `engine/scene/deformationField.ts` | Toroidal CPU alanı: `stamp`, `sample`, `recenter`, `decay`, kirli bölge takibi (saf) |
-| `engine/scene/landscape.ts` | `landscapeLayerWeightsAtLocal`, `landscapeSurfaceHeightAtLocal` (render ve collider üçgenleriyle **birebir** aynı yükseklik, bilinear değil) |
-| `engine/render-three/landscapeDeformation.ts` | Shader parçası (iki landscape materyaline de), `DataTexture` yükleme, Faz 3 patch mesh'i |
+| `engine/terrain/terrainHeightQuery.ts` (**mevcut**) | `terrainLayerWeightsAt`, `terrainHeightAt` (collider üçgenleriyle **birebir**, Rapier testli). Yeni landscape-local örnekleyici yazılmaz |
+| `engine/render-three/terrain/terrainDeformation.ts` | Shader parçası (açık dünya Faz 2'nin CDLOD `terrainMaterial`'ına), `DataTexture` yükleme, Faz 3 patch mesh'i |
 | `engine/physics/physicsSubsystem.ts` | `setVehicleSurfaceProvider()`; `vehicleState()` her tekerlekte `groundEntityId` döndürür (`wheelGroundObject` + `rapierColliderToEntity`) |
 | `src/scene/capabilities/terrainDeformationModule.ts` | Capability: alanın sahibi; tekerlek temaslarından iz basar, surface provider'ı sağlar, render uniform'larını günceller |
 | `src/scene/capabilities/runtimeServiceKeys.ts` | `landscapeHostService` (landscape data + dünya dönüşümü + render objesi) ve `terrainDeformationCommandsService` (`stamp`, `debugSnapshot`) |
@@ -174,8 +188,10 @@ Gerçek kod yazılmadan önce riskli varsayımlar ölçülür. Spike kodu atıla
       tekerleğin `suspensionRestLength` değeri her adımda 0 → +0,3 m değiştirilir.
       Ölçülecekler: zıplama, titreşim ve uyuyan gövdenin uyanması
       (`wakeUp`). Sonuç: kabul / sınır değerleri / ret.
-- [ ] **Zemin tanıma:** `wheelGroundObject(i)` → `rapierColliderToEntity` →
-      `landscape:<id>` eşlemesinin landscape trimesh'inde çalıştığı doğrulanır.
+- [ ] **Zemin tanıma** (açık dünya Faz 3'ten sonra): `wheelGroundObject(i)` →
+      `rapierColliderToEntity` → `landscape:<id>:<tile>` eşlemesinin tile
+      heightfield'ında çalıştığı doğrulanır. Mesh zeminde aynı eşleme şimdi
+      doğrulanabilir.
 - [ ] **Doku yükleme maliyeti:** 512² R8 `DataTexture`'ın her kare tam
       yüklenmesi `gpuTimer` ile ölçülür. three 0.184'te kısmi yükleme yoksa
       tam yükleme ya da N karede bir yükleme kararı verilir.
@@ -191,11 +207,10 @@ düşüşüyle sınırlanır. Faz 1 ve 2 bu karardan etkilenmez.
 
 Görsel değişiklik yok. Araç çamurda zorlanır, karda kayar.
 
+**1a — arazi dışı (açık dünya Faz 3'ü beklemez)**
+
 - [ ] `PhysicalMaterialDef.vehicle` / `.deformation` tipleri + `snow`, `mud`,
       `sand` presetleri; `resolvePhysicalMaterial` bozulmadan genişler.
-- [ ] `LandscapeLayerWeights.physicalMaterial` + allowlist + loader + drift testi.
-- [ ] `landscapeLayerWeightsAtLocal` (bilinear, landscape-local; döndürülmüş
-      landscape için ters dönüşüm) + test.
 - [ ] `surfaceResponse.ts`: katman karışımı → `SurfaceSample`
       (`frictionSlipScale`, `sideFrictionScale`, `rollingResistance`,
       `deformability`).
@@ -206,15 +221,21 @@ Görsel değişiklik yok. Araç çamurda zorlanır, karda kayar.
 - [ ] `VehicleWheelState.groundEntityId` eklenir.
 - [ ] Landscape dışı zemin: provider, zemin collider'ının `physicalMaterialId`
       değerini kullanır. Örneğin `slippery` mesh üstünde araç da kayar.
-- [ ] `terrainDeformationModule` iskeleti: `landscapeHostService` üzerinden
-      provider'ı kurar. Hiçbir katmanda physical material yoksa boşta bekler.
-- [ ] Editör (minimum): Landscape paint katmanı satırına Physical Material
-      dropdown'u eklenir.
-- [ ] Test seviyesi `public/layouts/OffroadTest.level.json`: çim/çamur/kar
-      boyanmış landscape, araç ve Player Start.
 - [ ] Testler: `tests/engine/surfaceResponse.test.ts` (karışım, sınır geçişi,
       provider yokken nötr), `vehicleRuntime` regresyonu (physical material yok →
       eski hız eğrisi).
+
+**1b — terrain bağlantısı (açık dünya Faz 3'ten sonra)**
+
+- [ ] `WorldTerrainLayerDef.physicalMaterial` + `normalizeWorldTerrain` +
+      1×1 adaptör + drift testi. Örnekleme mevcut `terrainLayerWeightsAt`
+      ile (dünya uzayı; ayrı landscape-local örnekleyici yok).
+- [ ] `terrainDeformationModule` iskeleti: terrain host servisi üzerinden
+      provider'ı kurar. Hiçbir katmanda physical material yoksa boşta bekler.
+- [ ] Editör (minimum): terrain paint katmanı satırına Physical Material
+      dropdown'u eklenir.
+- [ ] Test seviyesi `public/layouts/OffroadTest.level.json`: çim/çamur/kar
+      boyanmış terrain, araç ve Player Start.
 
 ## Faz 2 — İz alanı + görsel izler
 
@@ -231,9 +252,9 @@ Displacement yok. İzler normal map, albedo ve roughness ile görünür.
       `hücre = max(hücre, lerp(hücre, hedef, compaction))`. Hızlı giden araçta
       iz boşluk bırakmasın diye iki temas noktası arası çizgi olarak basılır.
 - [ ] Pencere merkezi: oyuncunun aracı. Pencere içindeki AI araçları da iz basar.
-- [ ] `landscapeDeformation.ts` shader parçası **iki landscape materyaline de**
-      eklenir (splat ve vertex-color; ikincisinde bugün `onBeforeCompile` yok).
-      Uniform'lar: `uDeformTex`, `uDeformOrigin`, `uDeformSize`, `uDeformTint`.
+- [ ] `terrainDeformation.ts` shader parçası açık dünya Faz 2'nin CDLOD
+      `terrainMaterial`'ına eklenir (eski splat/vertex-color landscape
+      materyalleri o fazda kalkıyor). Uniform'lar: `uDeformTex`, `uDeformOrigin`, `uDeformSize`, `uDeformTint`.
       Fragment tarafında komşu örneklerin farkından normal üretilir, tint ve
       wetness uygulanır, pencere kenarında etki sönümlenir.
       `customProgramCacheKey` deformasyon bayrağını içerir.
@@ -249,8 +270,8 @@ Displacement yok. İzler normal map, albedo ve roughness ile görünür.
 ## Faz 3 — Gömülme (fizik + yerel yoğun mesh)
 
 - [ ] **Fizik:** tekerlek başına `restLength + alan derinliği` (Faz 0'da seçilen
-      yöntemle). Tekerlek ışını trimesh'e çarpar, uzayan süspansiyon tekerleği
-      izin tabanına indirir.
+      yöntemle). Tekerlek ışını arazi collider'ına çarpar, uzayan süspansiyon
+      tekerleği izin tabanına indirir.
 - [ ] **Patinajda kazma:** tekerlek dönüş hızı ile zemin hızı arasındaki fark
       (`wheelRotation` deltası) `digRate` ile çarpılıp derinliğe eklenir. Araç
       patinaj yaptıkça kendini gömer.
@@ -258,15 +279,15 @@ Displacement yok. İzler normal map, albedo ve roughness ile görünür.
       şasiye hızla orantılı ters impuls uygulanır (`sinkResistance`).
 - [ ] **Yerel patch mesh:** aracın çevresinde yoğun bir grid (örneğin 256²,
       20 cm aralık; boyutu kalite profiline bağlı). Vertex yüksekliği
-      `landscapeSurfaceHeightAtLocal` (render üçgenleriyle birebir aynı
-      `a,c,b / b,c,d` köşegeni) − alan derinliği. Ana landscape fragment'i
+      `terrainHeightAt` (collider üçgenleriyle birebir aynı köşegen) − alan
+      derinliği. Ana terrain fragment'i
       patch'in kapladığı alanda `discard` edilir; kenarda derinlik 0 olduğu
       için patch, terrain ile dikişsiz birleşir.
 - [ ] İz kenarlarında kabarma (berm): ezilen malzeme izin iki yanında hafifçe
       yükselir. Yalnız görseldir, fiziğe etki etmez.
 - [ ] Kalite profili: düşük profilde patch kapanır, Faz 2 görünümüne düşülür.
-- [ ] Testler: `landscapeSurfaceHeightAtLocal` ile collider üçgeni yüksekliğinin
-      eşitliği (rastgele noktalar), patch kenarında sıfır fark, derin çamurda
+- [ ] Testler: patch vertex'lerinin `terrainHeightAt` ile eşitliği (collider
+      eşitliği açık dünya Faz 1'de zaten testli), patch kenarında sıfır fark, derin çamurda
       sabit gazla hızın düz zemine göre belirgin düşük kalması.
 
 ## Faz 4 — Efekt ve ses
@@ -323,8 +344,8 @@ Displacement yok. İzler normal map, albedo ve roughness ile görünür.
 |---|---|
 | Rest length değişimi süspansiyonu titretir | Faz 0 kapısı; değişim hızına sınır; ret durumunda görsel gömülme + direnç |
 | Patch ile terrain arasında dikiş ya da z-fighting | Üçgen-birebir yükseklik örneği + kapsanan alanda `discard`; test ile sabitlenir |
-| Yükseklik sorgusu bilinear kalırsa tekerlek ile iz hizasız olur | OPEN_WORLD_PLAN K3a: `heightAt` üçgen-birebir; Rapier ışınıyla eşitlik testi arazi planında |
-| Shader yalnız ilk 4 katmanı görüyor (`vec4 landscapeWeight`) | Fizik 8 katmanın tamamını kullanır; görsel tint ilk 4 katmanla sınırlı kalır, belgelenir |
+| Yükseklik sorgusu bilinear kalırsa tekerlek ile iz hizasız olur | **Kapandı:** `terrainHeightAt` üçgen-birebir, Rapier ışınıyla eşitlik testi var (açık dünya Faz 1, K3a) |
+| Eski landscape shader'ı yalnız ilk 4 katmanı görüyor (`vec4 landscapeWeight`) | CDLOD materyali 2 × RGBA8 ağırlık dokusuyla 8 katman taşır; fizik 8 katmanın tamamını kullanır |
 | Döndürülmüş ya da birden çok landscape | Alan dünya ekseninde tutulur; örnekleme her landscape'in ters dönüşümüyle yapılır |
 | Düşük donanım / mobil | Kalite profili: hücre boyutu büyür, patch kapanır, gerekirse yalnız Faz 1 kalır |
 | Hızlı araçta izler kesik kesik çıkar | Adımlar arası çizgi olarak basma (Faz 2) |

@@ -810,8 +810,9 @@ Doğrulama (2026-10-22):
 Faz 0 ──► Faz 1 ──► Faz 2 ──► Faz 3 ──► Faz 4 ──► Faz 5 ──► Faz 6
                                   │                  │
                                   │                  └──► Faz 7 ──► Faz 9
-                                  └──► TERRAIN_DEFORMATION Faz 1+
+                                  └──► TERRAIN_DEFORMATION Faz 1b+
 Faz 8: Faz 2'den sonra parça parça (her faz kendi editör minimumunu getirir)
+TERRAIN_DEFORMATION Faz 0 (araç/render spike'ları) + Faz 1a: bağımsız, şimdi
 ```
 
 - **Terrain Deformation planı** şu an tek trimesh'e ve tek Landscape'in

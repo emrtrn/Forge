@@ -697,10 +697,11 @@ Doğrulama (2026-10-22):
 
 ## Faz 4 — Akış çekirdeği (yalnız arazi)
 
-- [ ] `worldGrid.ts`, `streamingPolicy.ts`: saf, tablo testli (menzil,
+- [x] `worldGrid.ts`, `streamingPolicy.ts`: saf, tablo testli (menzil,
       histerezis, öncelik, hız yönü). *`worldGrid.ts` hazır* (hücre/sınır,
-      yakından uzağa sıralı menzil sorgusu, actor → hücre); `streamingPolicy`
-      açık.
+      yakından uzağa sıralı menzil sorgusu, actor → hücre); *`streamingPolicy`
+      hazır (2026-10-23):* yükleme/aktivasyon menzilleri, histerezis, hız yönlü
+      öncelik, çoklu kaynak, dünya sınırı, kalite çarpanı ve kare bütçesi.
 - [ ] `worldStreamingSubsystem.ts`: durum makinesi, fetch sınırı, kare
       bütçesi, LRU bellek bütçesi, iptal (menzilden çıkan fetch), hata
       (eksik tile → düz tile + `[world]` uyarısı, CONTENT_LOADING_CONTRACT

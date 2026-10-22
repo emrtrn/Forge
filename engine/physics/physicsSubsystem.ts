@@ -1284,7 +1284,10 @@ function primitiveColliderDesc(RAPIER: RapierModule, primitive: ColliderPrimitiv
       vertices[index * 3 + 2] = point[2];
     });
     const indices = new Uint32Array(primitive.indices);
-    return RAPIER.ColliderDesc.trimesh(vertices, indices);
+    // Without it, bodies rolling or sliding across the mesh catch on the shared
+    // edges of neighbouring triangles and get kicked upward. It also merges
+    // duplicate vertices (UV-seam splits) so those edges are recognised.
+    return RAPIER.ColliderDesc.trimesh(vertices, indices, RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES);
   }
   if (primitive.shape === "convex" && primitive.points && primitive.points.length >= 4) {
     const flat = new Float32Array(primitive.points.length * 3);

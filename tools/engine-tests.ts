@@ -6492,6 +6492,82 @@ await checkAsync("rapier builds a convex collider from hull points", async () =>
   }
 });
 
+await checkAsync("rapier trimesh colliders fix internal edges (a rolling ball does not bump)", async () => {
+  // A wavy downhill grid, triangulated like the Landscape collider. Without
+  // TriMeshFlags.FIX_INTERNAL_EDGES the ball's contacts with triangle edges
+  // kick it upward: worst per-frame vertical speed jump ~0.66 m/s here, ~0.05
+  // with the flag.
+  const quads = 48;
+  const vertices: Vec3[] = [];
+  const indices: number[] = [];
+  for (let z = 0; z <= quads; z += 1) {
+    for (let x = 0; x <= quads; x += 1) {
+      vertices.push([x, -0.35 * x + 0.5 * Math.sin(x / 7) * Math.cos(z / 9), z]);
+    }
+  }
+  for (let z = 0; z < quads; z += 1) {
+    for (let x = 0; x < quads; x += 1) {
+      const a = z * (quads + 1) + x;
+      const b = a + 1;
+      const c = a + quads + 1;
+      indices.push(a, c, b, b, c, c + 1);
+    }
+  }
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, -9.81, 0]);
+  const heights: number[] = [];
+  physics.setTransformSink((entityId, transform) => {
+    if (entityId === "ball") heights.push(transform.position[1]);
+  });
+  physics.setEntities([
+    {
+      id: "ground",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [quads, 20, quads],
+          isStatic: true,
+          isSensor: false,
+          primitives: [{ shape: "trimesh", size: [quads, 20, quads], vertices, indices }],
+        },
+      },
+    },
+    {
+      id: "ball",
+      components: {
+        Transform: { position: [4, 1, 24], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "sphere", size: [0.8, 0.8, 0.8], isStatic: false, isSensor: false, simulatePhysics: true },
+      },
+    },
+  ]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) return;
+    warn(...args);
+  };
+  try {
+    await app.init();
+    assert.equal(physics.usesRapier(), true);
+    for (let frame = 0; frame < 300; frame += 1) app.update(1 / 60);
+    // Skip the first second (the drop onto the slope), then compare per-frame
+    // vertical speeds: a smooth roll changes them by centimetres per second.
+    let worstJump = 0;
+    for (let i = 62; i < heights.length; i += 1) {
+      const vy = (heights[i]! - heights[i - 1]!) * 60;
+      const previous = (heights[i - 1]! - heights[i - 2]!) * 60;
+      worstJump = Math.max(worstJump, Math.abs(vy - previous));
+    }
+    assert.ok(heights.length > 250, `ball transform synced ${heights.length} times`);
+    assert.ok(worstJump < 0.25, `worst per-frame vertical speed jump ${worstJump.toFixed(3)} m/s`);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});
+
 await checkAsync("rapier simulatePhysics enableGravity false disables world gravity", async () => {
   const physics = new PhysicsSubsystem({ backend: "rapier" });
   physics.setGravity([0, -10, 0]);
@@ -6587,7 +6663,7 @@ await checkAsync("rapier simulatePhysics thin wall can topple after ground conta
   };
   try {
     await app.init();
-    for (let frame = 0; frame < 240; frame += 1) app.update(1 / 60);
+    for (let frame = 0; frame < 300; frame += 1) app.update(1 / 60);
     const last = synced.at(-1) ?? assert.fail("synced");
     assert.ok(last.position[1] < 2, `wall did not reach the floor: y=${last.position[1]}`);
     assert.ok(

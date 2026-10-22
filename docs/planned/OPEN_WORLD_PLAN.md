@@ -648,8 +648,15 @@ Doğrulama (2026-10-22):
 
 - [ ] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
       (saf, test edilir: komşu düğüm LOD farkı ≤ 1, menzil monotonluğu).
+      *Saf çekirdek hazır (2026-10-23): düğüm seçimi, 3B rölyef alt sınırı,
+      morph ve yakın→uzak residency listesi testli; renderer entegrasyonu açık.
+      Tam morph olmuş tile-seviyesi düğüm global haritayı kullanır; 67 tile
+      yaklaşık değerdir, kesin sayı kamera konumuna bağlıdır.*
 - [ ] `terrainTexturePool.ts`: slot ayırma/serbest bırakma, global düşük
       çözünürlüklü harita.
+      *Saf slot ayırıcı `engine/terrain/terrainSlotPool.ts` hazır (2026-10-23):
+      varsayılan 80 slot, serbest bırakılan veriyi önbellekte tutma ve en önce
+      serbest bırakılanı tahliye etme testli; GPU yüklemesi ve global harita açık.*
 - [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
       splat, `sampler2DArray` katmanlar, uzak tekrar kırma, view mode'lar,
       gölge alma, kalite profiline bağlı kendine gölge.

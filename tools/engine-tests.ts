@@ -1044,6 +1044,7 @@ import { registerGpuSweepTests } from "../tests/engine/gpuSweep.test";
 import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.test";
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
+import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 
 /**
  * The three entry points every check in this suite goes through.
@@ -1161,6 +1162,7 @@ registerGpuSweepTests(check);
 registerGpuSweepSessionTests(check);
 registerPerfWitnessTests(check);
 registerTerrainTests(check);
+registerTerrainLodTests(check);
 registerTerrainDocumentTests(check);
 await registerTerrainDocumentAsyncTests(checkAsync);
 await registerTerrainRapierTests(checkAsync);

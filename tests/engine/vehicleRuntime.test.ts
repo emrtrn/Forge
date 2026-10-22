@@ -52,6 +52,7 @@ import {
 import { createVehicleModule } from "../../src/scene/capabilities/vehicleModule";
 import { vehicleEngineSoundLevels } from "../../engine/physics/vehicle/vehicleEngineSound";
 import { normalizeVehicleDefinition } from "../../engine/physics/vehicle/vehicleTypes";
+import { computeVehicleDrive } from "../../engine/physics/vehicle/vehicleDrive";
 import type { AudioPlaybackHandle, AudioPlayOptions } from "../../engine/audio/audioSubsystem";
 import type { GameModeContext, GameModeVehicles, InputMode } from "../../src/scene/gameModeTypes";
 
@@ -188,6 +189,39 @@ export function registerVehicleRuntimeTests(check: Check): void {
     });
     // Both steer keys cancel instead of favouring one.
     assert.equal(vehicleInputFromActions(held("move-left", "move-right")).steer, 0);
+  });
+
+  check("vehicle mode steers directly with a stick and treats the triggers as analog pedals", () => {
+    const pad = (axes: Record<string, number>, ...names: string[]) => ({
+      held: (action: string) => names.includes(action),
+      axis: (name: string) => axes[name] ?? 0,
+    });
+    // The stick past its move threshold also holds move-right: its position wins.
+    assert.deepEqual(vehicleInputFromActions(pad({ "move-x": 0.6 }, "move-right")), {
+      throttle: 0, brake: 0, steer: 0.6, handbrake: false, steerAnalog: true,
+    });
+    // A centred stick leaves the keys digital, with no analog flag.
+    assert.deepEqual(vehicleInputFromActions(pad({}, "move-left", "move-forward")), {
+      throttle: 1, brake: 0, steer: -1, handbrake: false,
+    });
+    const triggers = vehicleInputFromActions(pad({ "trigger-right": 0.4, "trigger-left": 0.25 }));
+    assert.equal(triggers.throttle, 0.4);
+    assert.equal(triggers.brake, 0.25);
+    // Stick Y is a partial pedal instead of the key's full one (up = forward).
+    const stickUp = vehicleInputFromActions(pad({ "move-y": -0.55 }, "move-forward"));
+    assert.equal(stickUp.throttle, 0.55);
+    assert.equal(stickUp.brake, 0);
+    assert.equal(vehicleInputFromActions(pad({ "move-y": -0.55, "trigger-right": 0.9 })).throttle, 0.9);
+  });
+
+  check("an analog steer input skips the rate filter but keeps the gamma response", () => {
+    const def = normalizeVehicleDefinition({ steerSpeed: 1, steerGamma: 2, steeringSpeedCurve: [{ speedMps: 0, scale: 1 }] })!;
+    const stick = computeVehicleDrive(def, { ...NEUTRAL_VEHICLE_INPUT, steer: 0.5, steerAnalog: true }, 15, -0.3, 1 / 60);
+    assert.equal(stick.steer, 0.5);
+    const lock = (def.maxSteerAngleDeg * Math.PI) / 180;
+    assert.ok(Math.abs(stick.wheels[0]!.steering - (-0.25 * lock)) < 1e-12);
+    const key = computeVehicleDrive(def, { ...NEUTRAL_VEHICLE_INPUT, steer: 0.5 }, 15, -0.3, 1 / 60);
+    assert.ok(key.steer < -0.25, `the key path still eases: ${key.steer}`);
   });
 
   check("vehicle chase camera frames the car from behind along its planar heading", () => {

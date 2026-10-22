@@ -67,7 +67,9 @@ export function computeVehicleDrive(
   const dt = Math.max(0, finiteOr(deltaSeconds, 0));
   const riseSpeed = definition.steerSpeed * sampleSteeringCurve(definition.steerRateCurve, forwardSpeed);
   const returnSpeed = definition.steerReturnSpeed > 0 ? definition.steerReturnSpeed : definition.steerSpeed;
-  const steer = stepSteer(previousSteer, targetSteer, riseSpeed * dt, returnSpeed * dt);
+  const steer = input.steerAnalog
+    ? targetSteer
+    : stepSteer(previousSteer, targetSteer, riseSpeed * dt, returnSpeed * dt);
   // +steer is the car's right (-X), which is a negative yaw about +Y.
   const steering = -steerResponse(steer, definition.steerGamma) * (definition.maxSteerAngleDeg * Math.PI) / 180
     * sampleSteeringCurve(definition.steeringSpeedCurve, forwardSpeed);

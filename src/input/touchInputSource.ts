@@ -1,5 +1,5 @@
 import type { ActionMap } from "@engine/input/actionMap";
-import { GAMEPAD_AXIS_BINDINGS, PAD_LOOK_X, PAD_LOOK_Y } from "./gamepadInput";
+import { GAMEPAD_AXIS_BINDINGS, PAD_LOOK_X, PAD_LOOK_Y, PAD_MOVE_X, PAD_MOVE_Y } from "./gamepadInput";
 import { joystickMoveCodes, joystickVector } from "./virtualJoystick";
 
 /** Left-stick move codes the touch move pad emits (shared with the gamepad). */
@@ -130,6 +130,8 @@ export class TouchInputSource {
       MOVE_RADIUS,
     );
     this.applyMoveCodes(new Set(joystickMoveCodes(vec)));
+    this.actions.handleAxis(PAD_MOVE_X, vec.x);
+    this.actions.handleAxis(PAD_MOVE_Y, vec.y);
   }
 
   private applyMoveCodes(next: Set<string>): void {
@@ -147,6 +149,8 @@ export class TouchInputSource {
     this.moveTouchId = null;
     this.moveKnob.style.display = "none";
     this.applyMoveCodes(new Set());
+    this.actions.handleAxis(PAD_MOVE_X, 0);
+    this.actions.handleAxis(PAD_MOVE_Y, 0);
   }
 
   // --- look pad ------------------------------------------------------------

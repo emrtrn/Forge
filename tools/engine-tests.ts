@@ -2607,6 +2607,19 @@ check("action map resolves analog axes with deadzone scale invert and delta inpu
   assert.equal(actions.axis("look-y"), -0.5);
 });
 
+check("action map rescales a stick past its deadzone so the value starts from zero", () => {
+  const actions = new ActionMap({}, { StickX: { axis: "move-x", deadzone: 0.2, rescaleDeadzone: true } });
+  const at = (raw: number): number => {
+    actions.handleAxis("StickX", raw);
+    actions.advance();
+    return actions.axis("move-x");
+  };
+  assert.equal(at(0.2), 0);
+  assert.ok(Math.abs(at(0.3) - 0.125) < 1e-12);
+  assert.ok(Math.abs(at(-0.6) + 0.5) < 1e-12);
+  assert.equal(at(1), 1);
+});
+
 // 6.1.3 A layout placement/character carrying a behavior derives a readable
 // BehaviorComponent (authoring path: layout field -> adapter -> typed reader).
 check("layout behavior maps to a readable behavior component", () => {
@@ -26434,14 +26447,22 @@ check("readGamepadCodes maps buttons + left stick + dpad to codes", () => {
   assert.ok(!result.down.includes("Pad_LStickDown"));
 });
 
-check("readGamepadCodes exposes the right stick as analog look axes", () => {
-  const buttons = Array.from({ length: 16 }, () => ({ pressed: false }));
-  const result = readGamepadCodes({ axes: [0, 0, 0.7, -0.4], buttons });
+check("readGamepadCodes exposes the sticks and triggers as analog axes", () => {
+  const buttons = Array.from({ length: 16 }, (_, i) =>
+    i === 7 ? { pressed: true, value: 0.35 } : i === 6 ? { pressed: false, value: 0.02 } : { pressed: false });
+  const result = readGamepadCodes({ axes: [0.3, -0.2, 0.7, -0.4], buttons });
   assert.deepEqual(result.axes, [
     ["Pad_RStickX", 0.7],
     ["Pad_RStickY", -0.4],
+    ["Pad_LStickX", 0.3],
+    ["Pad_LStickY", -0.2],
+    ["Pad_LTValue", 0.02],
+    ["Pad_RTValue", 0.35],
   ]);
-  assert.equal(result.down.length, 0); // centered left stick, no buttons
+  assert.deepEqual(result.down, ["Pad_RT"]); // left stick below the move threshold
+  // A pad without trigger travel reads its trigger as all-or-nothing.
+  const digital = readGamepadCodes({ axes: [], buttons: buttons.map((_, i) => ({ pressed: i === 6 })) });
+  assert.deepEqual(digital.axes.slice(4), [["Pad_LTValue", 1], ["Pad_RTValue", 0]]);
 });
 
 check("firstConnectedGamepad returns the first non-null pad", () => {

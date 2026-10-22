@@ -12,12 +12,12 @@
   "steerSpeed": 2,
   "steerRateCurve": [
     { "speedMps": 0, "scale": 1 },
-    { "speedMps": 5, "scale": 0.6 },
-    { "speedMps": 10, "scale": 0.35 },
-    { "speedMps": 20, "scale": 0.225 }
+    { "speedMps": 5, "scale": 0.7 },
+    { "speedMps": 10, "scale": 0.45 },
+    { "speedMps": 20, "scale": 0.3 }
   ],
   "steerReturnSpeed": 3,
-  "steerGamma": 1.6,
+  "steerGamma": 1.15,
   "drivetrain": {
     "engine": {
       "idleRpm": 600,

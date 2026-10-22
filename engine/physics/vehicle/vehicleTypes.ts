@@ -187,6 +187,12 @@ export interface VehicleInput {
   readonly brake: number;
   /** -1 (left) .. 1 (right). */
   readonly steer: number;
+  /**
+   * `steer` is a stick position the player already eases by hand, not a key's
+   * full-lock request: the wheels follow it directly, skipping the steer rate
+   * filter (the gamma response still applies). Absent = a key / AI request.
+   */
+  readonly steerAnalog?: boolean;
   readonly handbrake: boolean;
 }
 

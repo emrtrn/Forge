@@ -16,10 +16,25 @@ import type { ActionBindings, AxisBindings } from "@engine/input/actionMap";
 export const PAD_LOOK_X = "Pad_RStickX";
 export const PAD_LOOK_Y = "Pad_RStickY";
 
-/** Right-stick (and touch look-pad) analog → look axes. Shared by gamepad + touch. */
+/**
+ * The left stick (and touch move-pad) as analog values, alongside its
+ * thresholded `Pad_LStick*` codes: what a vehicle steers with, where a digital
+ * move key would only say "full lock".
+ */
+export const PAD_MOVE_X = "Pad_LStickX";
+export const PAD_MOVE_Y = "Pad_LStickY";
+/** Trigger travel 0..1 (the `Pad_LT`/`Pad_RT` codes are its pressed state). */
+export const PAD_LT_VALUE = "Pad_LTValue";
+export const PAD_RT_VALUE = "Pad_RTValue";
+
+/** Analog sticks + triggers → axes. Shared by gamepad + touch. */
 export const GAMEPAD_AXIS_BINDINGS: AxisBindings = {
   [PAD_LOOK_X]: { axis: "look-x", deadzone: 0.16, scale: 1.25 },
   [PAD_LOOK_Y]: { axis: "look-y", deadzone: 0.16, scale: 1.25 },
+  [PAD_MOVE_X]: { axis: "move-x", deadzone: 0.12, rescaleDeadzone: true },
+  [PAD_MOVE_Y]: { axis: "move-y", deadzone: 0.12, rescaleDeadzone: true },
+  [PAD_LT_VALUE]: { axis: "trigger-left", deadzone: 0.04, rescaleDeadzone: true },
+  [PAD_RT_VALUE]: { axis: "trigger-right", deadzone: 0.04, rescaleDeadzone: true },
 };
 
 /**
@@ -68,7 +83,7 @@ const STANDARD_BUTTON_CODES: Readonly<Record<number, string>> = {
 /** Minimal structural view of a `Gamepad` so the mapper stays DOM/test-friendly. */
 export interface GamepadSnapshotLike {
   readonly axes: readonly number[];
-  readonly buttons: readonly { readonly pressed: boolean }[];
+  readonly buttons: readonly { readonly pressed: boolean; readonly value?: number }[];
 }
 
 export interface GamepadReadOptions {
@@ -79,7 +94,7 @@ export interface GamepadReadOptions {
 export interface GamepadReadResult {
   /** Synthetic codes currently active (pressed buttons + thresholded stick/D-pad). */
   readonly down: string[];
-  /** `[code, rawValue]` pairs for the analog look axes, fed via `handleAxis`. */
+  /** `[code, rawValue]` pairs for the analog stick + trigger axes, fed via `handleAxis`. */
   readonly axes: Array<[string, number]>;
 }
 
@@ -116,8 +131,20 @@ export function readGamepadCodes(
     axes: [
       [PAD_LOOK_X, axisAt(snapshot, 2)],
       [PAD_LOOK_Y, axisAt(snapshot, 3)],
+      [PAD_MOVE_X, lx],
+      [PAD_MOVE_Y, ly],
+      [PAD_LT_VALUE, triggerAt(snapshot, 6)],
+      [PAD_RT_VALUE, triggerAt(snapshot, 7)],
     ],
   };
+}
+
+/** A trigger's travel; a pad that reports no value is all-or-nothing. */
+function triggerAt(snapshot: GamepadSnapshotLike, index: number): number {
+  const button = snapshot.buttons[index];
+  if (!button) return 0;
+  const value = button.value;
+  return typeof value === "number" && Number.isFinite(value) ? value : button.pressed ? 1 : 0;
 }
 
 /** First connected gamepad from a `navigator.getGamepads()`-shaped list, or null. */

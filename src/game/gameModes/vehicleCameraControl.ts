@@ -61,19 +61,30 @@ export const CENTERED_CHASE_ORBIT: LookAngles = Object.freeze({ yaw: 0, pitch: 0
 
 export interface HeldActions {
   held(action: string): boolean;
+  /** Analog axis value, 0 when idle; absent = a keyboard-only source. */
+  axis?(axis: string): number;
 }
 
 /**
- * Keyboard driving on the engine's default action vocabulary: forward/back are
- * the pedals, left/right steer, `jump` (Space) is the handbrake.
+ * Driving on the engine's default action vocabulary: forward/back are the
+ * pedals, left/right steer, `jump` (Space) is the handbrake. A deflected stick
+ * (`move-x`/`move-y`) replaces the keys' all-or-nothing values and steers the
+ * wheels directly; the triggers (`trigger-right`/`trigger-left`) are analog
+ * throttle and brake pedals on top of them.
  */
 export function vehicleInputFromActions(actions: HeldActions): VehicleInput {
-  const right = (actions.held("move-right") ? 1 : 0) - (actions.held("move-left") ? 1 : 0);
+  const stickX = actions.axis?.("move-x") ?? 0;
+  const stickY = actions.axis?.("move-y") ?? 0;
+  // The stick's own thresholded move codes also hold move-*: its position wins.
+  const keySteer = (actions.held("move-right") ? 1 : 0) - (actions.held("move-left") ? 1 : 0);
+  const forward = stickY !== 0 ? Math.max(0, -stickY) : actions.held("move-forward") ? 1 : 0;
+  const back = stickY !== 0 ? Math.max(0, stickY) : actions.held("move-back") ? 1 : 0;
   return {
-    throttle: actions.held("move-forward") ? 1 : 0,
-    brake: actions.held("move-back") ? 1 : 0,
-    steer: right,
+    throttle: Math.max(forward, actions.axis?.("trigger-right") ?? 0),
+    brake: Math.max(back, actions.axis?.("trigger-left") ?? 0),
+    steer: stickX !== 0 ? stickX : keySteer,
     handbrake: actions.held("jump"),
+    ...(stickX !== 0 ? { steerAnalog: true } : {}),
   };
 }
 

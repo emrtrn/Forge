@@ -1050,6 +1050,7 @@ import { registerDeformationFieldTests } from "../tests/engine/deformationField.
 import { registerDeformationPersistenceTests } from "../tests/engine/deformationPersistence.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 import { registerTerrainEditTests } from "../tests/engine/terrainEdit.test";
+import { registerTerrainImportTests } from "../tests/engine/terrainImport.test";
 import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.test";
 import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
 
@@ -1175,6 +1176,7 @@ registerDeformationFieldTests(check);
 registerDeformationPersistenceTests(check);
 registerTerrainLodTests(check);
 registerTerrainEditTests(check);
+registerTerrainImportTests(check);
 registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);
 registerTerrainDocumentTests(check);

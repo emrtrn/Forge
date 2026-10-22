@@ -548,6 +548,9 @@ Sonuçlar bu dosyanın "Kararlar" bölümüne yazılır.
       fetch + çözme + global harita + çim örneklemenin hepsini ana
       thread'den almak. Kodek çözmesi `DataView` yerine hizalı
       `Uint16Array` görünümüyle ayrıca hızlandırılabilir (küçük iş).
+      *Tamam (2026-10-23): encode/decode hizalı `Uint16Array` yolunu kullanır;
+      hizasız girişte veya big-endian platformda `DataView` yedeği korunur.
+      İkili biçim değişmedi; rastgele tile'larda eski DataView yoluyla eşitlik testli.*
 - [x] Kararlar kaydedildi. S1/S2 başarısızsa K2 yedek planına (CPU
       geomipmapping) geçildiği yazıldı. *(2026-10-22: S1/S2 geçti, yedek
       plana geçilmedi. K2 sonuç tablosu ve bulgular, K3'e S4 notu, K4'e
@@ -678,6 +681,10 @@ Doğrulama (2026-10-22):
       bağlantısı, GPU yüklemeleri ve heightmap import/export.*
 - [ ] Heightmap import/export: 16-bit PNG ve RAW, dünya boyunda; tile'lara
       bölme `terrainImport.ts`'de (büyük import worker'da, Faz 4'ten sonra).
+      *Saf RAW import/export + tile bölme hazır (2026-10-23): little/big-endian
+      16-bit RAW okuma, little-endian export, kopyalı kenarlar ve min/max özetleri
+      testli. Tile başına generator ilerleme sayacıyla worker'a taşınmaya hazır;
+      PNG, editör UI ve worker bağlantısı açık.*
 - [ ] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
       `landscape-spline-chain`, `runtime-parity`, `game-starter` yeşil.
 - [ ] Ekran görüntüsü karşılaştırması: legacy landscape eski ve yeni

@@ -39,6 +39,7 @@ export const TERRAIN_TILE_MAGIC = "FTIL";
 export const TERRAIN_TILE_VERSION = 1;
 export const TERRAIN_TILE_HEADER_BYTES = 32;
 const FLAG_FLOAT_HEIGHTS = 1;
+const NATIVE_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
 export type TerrainHeightFormat = "u16" | "f32";
 
@@ -119,10 +120,13 @@ export function encodeTerrainTile(tile: TerrainTileData, options: TerrainTileEnc
     // Quantize against the f32-rounded range the decoder will read back.
     const min = Math.fround(heightMin);
     const range = Math.fround(heightMax) - min;
+    const samples = NATIVE_LITTLE_ENDIAN ? new Uint16Array(bytes.buffer, offset, count) : null;
     for (let index = 0; index < count; index += 1, offset += 2) {
       const height = tile.heights[index]!;
       const t = ((Number.isFinite(height) ? height : 0) - min) / range;
-      view.setUint16(offset, Math.round(Math.min(1, Math.max(0, t)) * 65535), true);
+      const sample = Math.round(Math.min(1, Math.max(0, t)) * 65535);
+      if (samples) samples[index] = sample;
+      else view.setUint16(offset, sample, true);
     }
   }
   bytes.set(tile.weights, offset);
@@ -163,8 +167,11 @@ export function decodeTerrainTile(source: ArrayBuffer | Uint8Array): DecodedTerr
     for (let index = 0; index < count; index += 1, offset += 4) heights[index] = view.getFloat32(offset, true);
   } else {
     const range = heightMax - heightMin;
+    const sampleOffset = bytes.byteOffset + offset;
+    const samples = NATIVE_LITTLE_ENDIAN && sampleOffset % 2 === 0
+      ? new Uint16Array(bytes.buffer, sampleOffset, count) : null;
     for (let index = 0; index < count; index += 1, offset += 2) {
-      heights[index] = heightMin + (view.getUint16(offset, true) / 65535) * range;
+      heights[index] = heightMin + ((samples ? samples[index]! : view.getUint16(offset, true)) / 65535) * range;
     }
   }
   const weights = bytes.slice(offset, offset + terrainWeightBlockCount(layerCount) * count * 4);

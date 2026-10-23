@@ -547,6 +547,10 @@ export function validateAssetManifest(
     // companion remains visible instead of being hidden by its suffix alone.
     const companion = path.replace(/\.(collision|materials|uvw|vertexcolors|skeleton)\.json$/i, "");
     if (companion !== path && [".glb", ".gltf"].some((ext) => manifestPaths.has(companion + ext))) continue;
+    // Level-owned terrain (`<level>.landscapes/<id>.terrain.json`) belongs to its
+    // registered level, the same way; a terrain folder without one stays visible.
+    const level = /^(.*)\.landscapes\/[^/]+\.terrain\.json$/i.exec(path)?.[1];
+    if (level && [".level.json", ".layout.json"].some((ext) => manifestPaths.has(level + ext))) continue;
     addIssue({
       level: "warning",
       code: "asset-file-unregistered",

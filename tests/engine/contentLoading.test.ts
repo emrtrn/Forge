@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ContentLoadError } from "../../engine/assets/contentValidation";
 import { readRoomLayout } from "../../engine/scene/layoutValidation";
 import { compareAssetHealthWarnings, readAssetManifest, validateAssetManifest } from "../../engine/assets/manifest";
+import { levelTerrainPath } from "../../engine/terrain/terrainTypes";
 import { loadActiveProject, readProjectManifest } from "../../src/project/ProjectSystem";
 import { readContentJson } from "../../src/project/contentLoader";
 import { loadRoomLayout } from "../../src/scene/roomLayout";
@@ -94,6 +95,18 @@ export async function registerContentLoadingTests(check: Check, checkAsync: Chec
     assert.deepEqual(compareAssetHealthWarnings(report, []).added, [key]);
     assert.deepEqual(compareAssetHealthWarnings(report, [key]).added, []);
     assert.deepEqual(compareAssetHealthWarnings(validateAssetManifest({ ...manifest, assets: [] }), [key]).resolved, [key]);
+  });
+
+  check("content: asset health treats level-owned terrain as a companion of its registered level", () => {
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
+    const levelAsset = manifest.assets.find((asset: { path: string }) => /\.level\.json$/i.test(asset.path));
+    const terrain = levelTerrainPath(levelAsset.path, "landscape-1");
+    const orphan = levelTerrainPath("assets/unregistered.level.json", "landscape-1");
+    const report = validateAssetManifest({ ...manifest, assets: [levelAsset] }, {
+      publicFiles: [levelAsset.path, terrain, orphan],
+    });
+    const unregistered = report.issues.filter((issue) => issue.code === "asset-file-unregistered").map((issue) => issue.path);
+    assert.deepEqual(unregistered, [orphan]);
   });
 
   await checkAsync("content: required reads distinguish network, HTTP, JSON and structural failures", async () => {

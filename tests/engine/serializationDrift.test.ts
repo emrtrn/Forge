@@ -19,11 +19,54 @@ import assert from "node:assert/strict";
 import { normalizeEffectDefinition } from "../../engine/vfx/particleEffectParser";
 import { normalizeAssetSkeleton } from "../../src/scene/assetSkeletonLoader";
 import { collectDroppedFields, formatDroppedFieldWarning } from "../../tools/droppedFields";
-import { validateAssetSkeletonDef, validateEffectAsset, validatePlacement, validateAssetCollisionDef } from "../../tools/saveValidator";
+import { validateAssetSkeletonDef, validateEffectAsset, validatePlacement, validateAssetCollisionDef, validateLayout } from "../../tools/saveValidator";
 import { PHYSICAL_MATERIAL_IDS } from "../../engine/scene/collision";
 import { normalizeAssetCollisionDef } from "../../src/scene/assetCollisionLoader";
+import type { RoomLayout } from "../../engine/scene/layout";
+import { normalizeWorldWidget } from "../../engine/ui/uiWorldWidget";
+import {
+  DEFAULT_WORLD_PARTITION,
+  mergeWorldCells,
+  normalizeWorldPartitionSettings,
+  partitionLayout,
+} from "../../engine/world/worldPartition";
+import {
+  cloneActorInstance,
+  cloneBlockingVolume,
+  cloneCharacter,
+  cloneLightActor,
+  clonePlacement,
+  cloneSphereReflectionCapture,
+  cloneTargetPoint,
+  cloneWorldWidget,
+} from "../../editor/core/layoutSnapshots";
 
 type Check = (label: string, fn: () => void) => void;
+
+/** Every element routed by partitionLayout must survive both Save and editor snapshots. */
+function partitionFixture(spatiallyLoaded?: boolean): RoomLayout {
+  const flags = spatiallyLoaded === undefined ? {} : { spatiallyLoaded };
+  return {
+    schema: 1, name: "Partition persistence", loadGroups: [],
+    worldSettings: { partition: normalizeWorldPartitionSettings({ enabled: true }) },
+    instances: [{ assetId: "mesh:rock", placements: [{ position: [0, 0, 0], ...flags }] }],
+    actors: [{ classRef: "actors/test.actor.json", position: [0, 0, 0], ...flags }],
+    characters: [{ assetId: "character:test", position: [0, 0, 0], ...flags }],
+    lights: [{ id: "light", type: "point", position: [0, 0, 0], ...flags }],
+    reflectionCaptures: [{ id: "capture", position: [0, 0, 0], ...flags }],
+    targetPoints: [{ id: "target", position: [0, 0, 0], ...flags }],
+    blockingVolumes: [{ id: "volume", position: [0, 0, 0], ...flags }],
+    worldWidgets: [{ widget: "ui:label", anchor: { worldPos: [0, 0, 0] }, ...flags }],
+  };
+}
+
+function partitionElements(layout: RoomLayout): Array<{ spatiallyLoaded?: boolean }> {
+  return [
+    layout.instances[0]!.placements[0]!, layout.actors![0]!, layout.characters[0]!,
+    layout.lights![0]!, layout.reflectionCaptures![0]!, layout.targetPoints![0]!,
+    layout.blockingVolumes![0]!, layout.worldWidgets![0]!,
+  ];
+}
 
 /**
  * An authored skeleton sidecar that exercises every field of `AssetSkeletonDef`.
@@ -127,6 +170,112 @@ function assertNoDrift(runtimeShape: unknown, savedShape: unknown, subject: stri
 }
 
 export function registerSerializationDriftTests(check: Check): void {
+  check("world partition persistence: every routed element and settings survive the save allowlist", () => {
+    const layout = partitionFixture(false);
+    const saved = validateLayout(layout) as RoomLayout;
+    assertNoDrift(layout, saved, "layout");
+    assert.deepEqual(saved, layout);
+    assert.deepEqual(validateLayout(saved), saved);
+  });
+
+  check("world partition persistence: true and absent spatiallyLoaded stay omitted for every kind", () => {
+    for (const flag of [undefined, true]) {
+      const saved = validateLayout(partitionFixture(flag)) as RoomLayout;
+      for (const element of partitionElements(saved)) {
+        assert.equal("spatiallyLoaded" in element, false);
+      }
+    }
+  });
+
+  check("world partition persistence: every kind rejects non-boolean spatiallyLoaded", () => {
+    const count = partitionElements(partitionFixture()).length;
+    for (let index = 0; index < count; index += 1) {
+      for (const value of ["false", 0, null, {}, []]) {
+        const layout = partitionFixture();
+        Object.assign(partitionElements(layout)[index]!, { spatiallyLoaded: value });
+        assert.throws(() => validateLayout(layout), /spatiallyLoaded must be boolean/);
+      }
+    }
+  });
+
+  check("world partition persistence: partial partition settings normalize only when authored", () => {
+    const layout = partitionFixture();
+    for (const partition of [{}, { enabled: true }, { grids: { main: { cellSize: 64 } } }]) {
+      const saved = validateLayout({ ...layout, worldSettings: { partition } }) as RoomLayout;
+      assert.deepEqual(saved.worldSettings?.partition, normalizeWorldPartitionSettings(partition));
+      assertNoDrift({ worldSettings: { partition } }, saved, "layout");
+    }
+    const saved = validateLayout({ ...layout, worldSettings: { ambientIntensity: 1 } }) as RoomLayout;
+    assert.equal("partition" in saved.worldSettings!, false);
+    const withoutSettings = validateLayout({ ...layout, worldSettings: undefined }) as RoomLayout;
+    assert.equal("worldSettings" in withoutSettings, false);
+    const defaults = validateLayout({ ...layout, worldSettings: { partition: {} } }) as RoomLayout;
+    assert.deepEqual(defaults.worldSettings?.partition, DEFAULT_WORLD_PARTITION);
+    defaults.worldSettings!.partition!.grids.main.cellSize = 1;
+    assert.equal(DEFAULT_WORLD_PARTITION.grids.main.cellSize, 128);
+  });
+
+  check("world partition persistence: invalid partition settings name the field and normalizer reason", () => {
+    const layout = partitionFixture();
+    for (const cellSize of [0, -1, NaN, Infinity, "128", null]) {
+      assert.throws(
+        () => validateLayout({ ...layout, worldSettings: { partition: { grids: { main: { cellSize } } } } }),
+        /worldSettings\.partition: grids\.main\.cellSize must be finite and positive/,
+      );
+    }
+    assert.throws(
+      () => validateLayout({ ...layout, worldSettings: { partition: null } }),
+      /worldSettings\.partition: worldPartition must be an object/,
+    );
+    assert.throws(
+      () => validateLayout({ ...layout, worldSettings: { partition: { enabled: "true" } } }),
+      /worldSettings\.partition: enabled must be a boolean/,
+    );
+  });
+
+  check("world partition persistence: explicit element clones preserve authored spatiallyLoaded", () => {
+    for (const flag of [undefined, true, false]) {
+      const layout = partitionFixture(flag);
+      const originals = partitionElements(layout);
+      const clones = [
+        clonePlacement(layout.instances[0]!.placements[0]!),
+        cloneActorInstance(layout.actors![0]!),
+        cloneCharacter(layout.characters[0]!),
+        cloneLightActor(layout.lights![0]!),
+        cloneSphereReflectionCapture(layout.reflectionCaptures![0]!),
+        cloneTargetPoint(layout.targetPoints![0]!),
+        cloneBlockingVolume(layout.blockingVolumes![0]!),
+        cloneWorldWidget(layout.worldWidgets![0]!),
+      ];
+      clones.forEach((clone, index) => {
+        assertNoDrift(originals[index], clone, `element[${index}]`);
+        assert.deepEqual(clone, originals[index]);
+        assert.notEqual(clone, originals[index]);
+      });
+    }
+  });
+
+  check("world partition persistence: split and merge preserve independent partition settings", () => {
+    const layout = partitionFixture();
+    const settings = layout.worldSettings!.partition!;
+    const { persistent, cells } = partitionLayout(layout, settings);
+    const merged = mergeWorldCells(persistent, cells.values());
+    assert.deepEqual(persistent.worldSettings?.partition, settings);
+    assert.deepEqual(merged.worldSettings?.partition, settings);
+    persistent.worldSettings!.partition!.grids.main.cellSize = 1;
+    merged.worldSettings!.partition!.grids.main.loadRange = 1;
+    assert.deepEqual(settings, normalizeWorldPartitionSettings({ enabled: true }));
+    assert.equal(merged.worldSettings!.partition!.grids.main.cellSize, 128);
+    assert.equal(persistent.worldSettings!.partition!.grids.main.loadRange, 384);
+  });
+
+  check("world partition persistence: normalized world widgets retain the persistent flag on save", () => {
+    const widget = normalizeWorldWidget(partitionFixture(false).worldWidgets![0]);
+    assert.equal(widget?.spatiallyLoaded, false);
+    const layout = { ...partitionFixture(false), worldWidgets: [widget] };
+    assertNoDrift(layout, validateLayout(layout), "layout");
+  });
+
   check("surface response: physical material preset ids round-trip placement and collision sidecar saves", () => {
     for (const physicalMaterialId of PHYSICAL_MATERIAL_IDS) {
       const placement = { position: [0, 0, 0], physicalMaterialId };

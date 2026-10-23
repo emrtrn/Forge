@@ -53,6 +53,7 @@ import {
 } from "../engine/scene/actorScript";
 import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget";
 import { normalizeWorldWidgets } from "../engine/ui/uiWorldWidget";
+import { normalizeWorldPartitionSettings } from "../engine/world/worldPartition";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
 import {
   normalizeVehicleAsset,
@@ -378,12 +379,21 @@ function validateInteraction(value: unknown, label: string): Record<string, unkn
   return interaction;
 }
 
+function validateSpatiallyLoaded(value: unknown, label: string): false | undefined {
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error(`${label} spatiallyLoaded must be boolean`);
+  }
+  return value === false ? false : undefined;
+}
+
 /** Copies the optional transform/authoring fields onto `target`, validating each. */
 export function applyTransformFields(
   entry: Record<string, unknown>,
   target: Record<string, unknown>,
   label: string,
 ): void {
+  const spatiallyLoaded = validateSpatiallyLoaded(entry.spatiallyLoaded, label);
+  if (spatiallyLoaded !== undefined) target.spatiallyLoaded = spatiallyLoaded;
   if (typeof entry.name === "string") target.name = entry.name;
   if (entry.hidden === true) target.hidden = true;
   if (entry.locked === true) target.locked = true;
@@ -527,6 +537,8 @@ export function validateActorInstance(value: unknown): Record<string, unknown> {
     position: entry.position.map((item) => Number(item.toFixed(3))),
   };
   if (typeof entry.name === "string") actor.name = entry.name;
+  const spatiallyLoaded = validateSpatiallyLoaded(entry.spatiallyLoaded, "actor instance");
+  if (spatiallyLoaded !== undefined) actor.spatiallyLoaded = spatiallyLoaded;
   if (entry.hidden === true) actor.hidden = true;
   if (entry.locked === true) actor.locked = true;
   if (entry.scaleLocked === true) actor.scaleLocked = true;
@@ -764,6 +776,14 @@ function validateWorldSettings(value: unknown): Record<string, unknown> | null {
   const input = value as Record<string, unknown>;
   const worldSettings: Record<string, unknown> = {};
 
+  if (input.partition !== undefined) {
+    try {
+      worldSettings.partition = normalizeWorldPartitionSettings(input.partition);
+    } catch (error) {
+      throw new Error(`worldSettings.partition: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   if (input.staticObjectsCastShadow !== undefined) {
     if (typeof input.staticObjectsCastShadow !== "boolean") {
       throw new Error("worldSettings.staticObjectsCastShadow must be boolean");
@@ -857,6 +877,8 @@ export function validateLightActor(value: unknown): Record<string, unknown> {
     position: input.position.map((number) => Number(number.toFixed(3))),
   };
   if (typeof input.name === "string") light.name = input.name;
+  const spatiallyLoaded = validateSpatiallyLoaded(input.spatiallyLoaded, "light");
+  if (spatiallyLoaded !== undefined) light.spatiallyLoaded = spatiallyLoaded;
   if (input.hidden === true) light.hidden = true;
   if (input.locked === true) light.locked = true;
   if (input.scaleLocked === true) light.scaleLocked = true;
@@ -1031,6 +1053,8 @@ export function validateSphereReflectionCapture(value: unknown): Record<string, 
     position: input.position.map((number) => Number(number.toFixed(3))),
   };
   if (typeof input.name === "string") capture.name = input.name;
+  const spatiallyLoaded = validateSpatiallyLoaded(input.spatiallyLoaded, "reflection capture");
+  if (spatiallyLoaded !== undefined) capture.spatiallyLoaded = spatiallyLoaded;
   if (input.hidden === true) capture.hidden = true;
   if (input.locked === true) capture.locked = true;
   if (input.scaleLocked === true) capture.scaleLocked = true;
@@ -1425,6 +1449,8 @@ export function validateBlockingVolume(value: unknown): Record<string, unknown> 
     position: input.position.map((number) => Number(number.toFixed(3))),
   };
   if (typeof input.name === "string") volume.name = input.name;
+  const spatiallyLoaded = validateSpatiallyLoaded(input.spatiallyLoaded, "blocking volume");
+  if (spatiallyLoaded !== undefined) volume.spatiallyLoaded = spatiallyLoaded;
   if (input.hidden === true) volume.hidden = true;
   if (input.locked === true) volume.locked = true;
   if (input.scaleLocked === true) volume.scaleLocked = true;
@@ -1548,6 +1574,8 @@ export function validateTargetPoint(value: unknown): Record<string, unknown> {
     position: input.position.map((number) => Number(number.toFixed(3))),
   };
   if (typeof input.name === "string") point.name = input.name;
+  const spatiallyLoaded = validateSpatiallyLoaded(input.spatiallyLoaded, "target point");
+  if (spatiallyLoaded !== undefined) point.spatiallyLoaded = spatiallyLoaded;
   if (input.hidden === true) point.hidden = true;
   if (input.locked === true) point.locked = true;
   if (input.scaleLocked === true) point.scaleLocked = true;
@@ -2151,6 +2179,11 @@ export function validateLayout(value: unknown): unknown {
   const worldWidgets = (() => {
     if (layout.worldWidgets === undefined) return null;
     if (!Array.isArray(layout.worldWidgets)) throw new Error("worldWidgets must be an array");
+    for (const item of layout.worldWidgets) {
+      if (item && typeof item === "object") {
+        validateSpatiallyLoaded((item as Record<string, unknown>).spatiallyLoaded, "world widget");
+      }
+    }
     const normalized = normalizeWorldWidgets(layout.worldWidgets);
     return normalized.length > 0 ? (normalized as unknown as Record<string, unknown>[]) : null;
   })();

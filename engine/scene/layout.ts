@@ -6,6 +6,7 @@ import type {
   NavigationRole,
 } from "./collision";
 import type { WorldUiWidget } from "../ui/uiWorldWidget";
+import type { WorldPartitionSettings } from "../world/worldPartition";
 
 export type Vec3 = [number, number, number];
 export type LayoutLightType = "directional" | "point" | "spot";
@@ -130,6 +131,8 @@ export interface LayoutPhysics {
 }
 
 export interface LayoutPlacement {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   name?: string;
   hidden?: boolean;
   locked?: boolean;
@@ -212,6 +215,8 @@ export interface LayoutModelInstances {
  * level, not to a reusable Actor Script class.
  */
 export interface LayoutActorInstance {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   /** Path to the `*.actor.json` class-asset, relative to the public root. */
   classRef: string;
   name?: string;
@@ -244,6 +249,8 @@ export interface LayoutActorInstance {
 }
 
 export interface LayoutCharacter {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   assetId: string;
   name?: string;
   hidden?: boolean;
@@ -336,6 +343,7 @@ export interface LayoutGameRules {
 }
 
 export interface LayoutWorldSettings {
+  partition?: WorldPartitionSettings;
   /** Central static/instanced shadow casting. Absent means false. */
   staticObjectsCastShadow?: boolean;
   /** Central static/instanced shadow receiving. Absent means true. */
@@ -564,6 +572,8 @@ export interface LayoutPostProcess {
 }
 
 export interface LayoutLightActor {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   id: string;
   type: LayoutLightType;
   name?: string;
@@ -663,6 +673,8 @@ export interface LayoutReflectiveSurface {
  * read defaults from `engine/scene/reflectionCapture.ts`.
  */
 export interface LayoutSphereReflectionCapture {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   id: string;
   name?: string;
   hidden?: boolean;
@@ -702,6 +714,8 @@ export interface LayoutSphereReflectionCapture {
  * `engine/scene/blockingVolume.ts`.
  */
 export interface LayoutBlockingVolume {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   id: string;
   name?: string;
   hidden?: boolean;
@@ -775,6 +789,8 @@ export interface LayoutAiNavigationVolume {
  * later index these points for patrol routes.
  */
 export interface LayoutTargetPoint {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   id: string;
   name?: string;
   hidden?: boolean;

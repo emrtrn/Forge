@@ -82,6 +82,7 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
     position: [...placement.position],
   };
   if (placement.name !== undefined) clone.name = placement.name;
+  if (placement.spatiallyLoaded !== undefined) clone.spatiallyLoaded = placement.spatiallyLoaded;
   if (placement.hidden !== undefined) clone.hidden = placement.hidden;
   if (placement.locked !== undefined) clone.locked = placement.locked;
   if (placement.groupId !== undefined) clone.groupId = placement.groupId;
@@ -136,6 +137,7 @@ export function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
     position: [...character.position],
   };
   if (character.name !== undefined) clone.name = character.name;
+  if (character.spatiallyLoaded !== undefined) clone.spatiallyLoaded = character.spatiallyLoaded;
   if (character.hidden !== undefined) clone.hidden = character.hidden;
   if (character.locked !== undefined) clone.locked = character.locked;
   if (character.groupId !== undefined) clone.groupId = character.groupId;
@@ -186,6 +188,7 @@ export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInsta
     position: [...actor.position],
   };
   if (actor.name !== undefined) clone.name = actor.name;
+  if (actor.spatiallyLoaded !== undefined) clone.spatiallyLoaded = actor.spatiallyLoaded;
   if (actor.hidden !== undefined) clone.hidden = actor.hidden;
   if (actor.locked !== undefined) clone.locked = actor.locked;
   if (actor.groupId !== undefined) clone.groupId = actor.groupId;
@@ -222,6 +225,7 @@ export function cloneLightActor(light: LayoutLightActor): LayoutLightActor {
     position: [...light.position],
   };
   if (light.name !== undefined) clone.name = light.name;
+  if (light.spatiallyLoaded !== undefined) clone.spatiallyLoaded = light.spatiallyLoaded;
   if (light.hidden !== undefined) clone.hidden = light.hidden;
   if (light.locked !== undefined) clone.locked = light.locked;
   if (light.scaleLocked !== undefined) clone.scaleLocked = light.scaleLocked;
@@ -298,6 +302,7 @@ export function cloneSphereReflectionCapture(
     position: [...capture.position],
   };
   if (capture.name !== undefined) clone.name = capture.name;
+  if (capture.spatiallyLoaded !== undefined) clone.spatiallyLoaded = capture.spatiallyLoaded;
   if (capture.hidden !== undefined) clone.hidden = capture.hidden;
   if (capture.locked !== undefined) clone.locked = capture.locked;
   if (capture.scaleLocked !== undefined) clone.scaleLocked = capture.scaleLocked;
@@ -340,6 +345,7 @@ export function cloneBlockingVolume(volume: LayoutBlockingVolume): LayoutBlockin
     position: [...volume.position],
   };
   if (volume.name !== undefined) clone.name = volume.name;
+  if (volume.spatiallyLoaded !== undefined) clone.spatiallyLoaded = volume.spatiallyLoaded;
   if (volume.hidden !== undefined) clone.hidden = volume.hidden;
   if (volume.locked !== undefined) clone.locked = volume.locked;
   if (volume.scaleLocked !== undefined) clone.scaleLocked = volume.scaleLocked;
@@ -384,6 +390,7 @@ export function cloneTargetPoint(point: LayoutTargetPoint): LayoutTargetPoint {
     position: [...point.position],
   };
   if (point.name !== undefined) clone.name = point.name;
+  if (point.spatiallyLoaded !== undefined) clone.spatiallyLoaded = point.spatiallyLoaded;
   if (point.hidden !== undefined) clone.hidden = point.hidden;
   if (point.locked !== undefined) clone.locked = point.locked;
   if (point.scaleLocked !== undefined) clone.scaleLocked = point.scaleLocked;
@@ -407,6 +414,7 @@ export function cloneWorldWidget(widget: WorldUiWidget): WorldUiWidget {
     widget: widget.widget,
     anchor: { worldPos: [...widget.anchor.worldPos] },
   };
+  if (widget.spatiallyLoaded !== undefined) clone.spatiallyLoaded = widget.spatiallyLoaded;
   if (widget.anchor.entityId !== undefined) clone.anchor.entityId = widget.anchor.entityId;
   if (widget.anchor.offset3d !== undefined) clone.anchor.offset3d = [...widget.anchor.offset3d];
   if (widget.space !== undefined) clone.space = widget.space;

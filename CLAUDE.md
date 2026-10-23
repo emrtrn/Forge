@@ -92,7 +92,11 @@ engine/editor.
   `vite.config.ts`) or it is silently dropped on save. Current placement collision overrides
   (`collisionPreset`, `collisionEnabled`, `objectType`, `responses`,
   `physicalMaterialId`, `generateOverlapEvents`, `simulationGeneratesHitEvents`)
-  live in `applyTransformFields`. (`LayoutCharacter` shares `applyTransformFields`
+  live in `applyTransformFields`. World Partition's `spatiallyLoaded` (only `false`
+  is persisted) is copied by `applyTransformFields` and the actor, light,
+  reflection-capture, blocking-volume, target-point and world-widget validators;
+  `worldSettings.partition` goes through `normalizeWorldPartitionSettings`.
+  (`LayoutCharacter` shares `applyTransformFields`
   plus explicit `assetId`/`position`/`animation`; all current fields are covered —
   character skeletal metadata is asset-level, not on the placement.)
   Physical material `vehicle`/`deformation` blocks are preset-only; saves carry only `physicalMaterialId` from the shared `PHYSICAL_MATERIAL_IDS` catalog.

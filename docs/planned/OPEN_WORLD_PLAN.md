@@ -1125,10 +1125,23 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
 
 ## Faz 5 — Actor bölümleme (hücre dosyaları)
 
-- [ ] World Settings: `world.partition { enabled, grids: {main, foliage, ...} }`
+- [x] World Settings: `world.partition { enabled, grids: {main, foliage, ...} }`
       + validator.
+      *Tamam (2026-10-23):* `worldSettings.partition` (v1 yalnız `main` grid,
+      varsayılan 128 m hücre / 384 m menzil, `normalizeWorldPartitionSettings`);
+      `spatiallyLoaded?: boolean` placement, actor, character, ışık, reflection
+      capture, blocking volume, target point ve world widget'ta; yalnız `false`
+      yazılır. Save validator + klon yardımcıları + serializasyon kayması
+      testleri kapsıyor. Editör UI'ı yok.
 - [ ] Hücre dosya formatı (`worldCell`, schema 1); validator mevcut layout
       validator'larını yeniden kullanır.
+      *Saf çekirdek hazır (2026-10-23):* `engine/world/worldPartition.ts` —
+      `WorldCellDocument`, `<Level>.cells/main/<x_z>.cell.json` yolu,
+      `partitionLayout` (konuma göre hücre; singleton'lar, landscape, spline,
+      nehir, nav volume, Player Start, directional ışık, `spatiallyLoaded:false`
+      ve hücreden geniş blocking volume persistent'te, uyarıyla) ve
+      `mergeWorldCells` (round-trip testli). Endpoint, eleman validator'larının
+      hücrede yeniden kullanımı ve editör kaydı açık.
 - [ ] Editör kaydı: konuma göre otomatik hücre ataması; hücre sınırı geçen
       actor dosya değiştirir; `spatiallyLoaded: false` persistent'e gider;
       hücreden büyük sınırlı actor'ler v1'de persistent'e gider (uyarıyla).

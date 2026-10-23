@@ -97,8 +97,8 @@ function compareCellKeys(a: string, b: string): number {
   return first.z - second.z || first.x - second.x;
 }
 
-function spatiallyLoaded(item: object): boolean {
-  return (item as { spatiallyLoaded?: unknown }).spatiallyLoaded !== false;
+function spatiallyLoaded(item: { spatiallyLoaded?: boolean } | LayoutModelInstances): boolean {
+  return !("spatiallyLoaded" in item) || item.spatiallyLoaded !== false;
 }
 
 export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSettings): {
@@ -113,7 +113,7 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
   if (!settings.enabled) return { persistent, cells, warnings };
   const grid = settings.grids.main;
 
-  function split<T extends object>(
+  function split<T extends { spatiallyLoaded?: boolean }>(
     items: T[],
     position: (item: T) => Vec3 | undefined,
     append: (cell: WorldCellDocument, item: T) => void,

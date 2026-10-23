@@ -24,6 +24,25 @@ function playgroundLayout(): Record<string, unknown> {
 }
 
 export function registerDroppedFieldTests(check: Check): void {
+  check("world partition persistence: partition and every spatiallyLoaded field produce no dropped-field warning", () => {
+    const layout = {
+      schema: 1, name: "Partition fields", loadGroups: [],
+      worldSettings: { partition: { enabled: true, grids: { main: { cellSize: 64, loadRange: 192 } } } },
+      instances: [{ assetId: "mesh:rock", placements: [{ position: [0, 0, 0], spatiallyLoaded: false }] }],
+      actors: [{ classRef: "actors/test.actor.json", position: [0, 0, 0], spatiallyLoaded: false }],
+      characters: [{ assetId: "character:test", position: [0, 0, 0], spatiallyLoaded: false }],
+      lights: [{ id: "light", type: "point", position: [0, 0, 0], spatiallyLoaded: false }],
+      reflectionCaptures: [{ id: "capture", position: [0, 0, 0], spatiallyLoaded: false }],
+      targetPoints: [{ id: "target", position: [0, 0, 0], spatiallyLoaded: false }],
+      blockingVolumes: [{ id: "volume", position: [0, 0, 0], spatiallyLoaded: false }],
+      worldWidgets: [{ widget: "ui:label", anchor: { worldPos: [0, 0, 0] }, spatiallyLoaded: false }],
+    };
+    const saved = validateSavePayload({ layout, editor: { gridSize: 1 } });
+    const report = collectDroppedFields(layout, saved.layout, "layout", 100);
+    assert.deepEqual(report.paths, []);
+    assert.equal(formatDroppedFieldWarning(report, "partition.level.json"), null);
+  });
+
   check("smoke scene fixtures survive the save allowlist without dropped fields", () => {
     for (const name of ["base.level.json", "patrol.level.json"]) {
       const layout: unknown = JSON.parse(readFileSync(`tests/smoke/fixtures/${name}`, "utf8"));

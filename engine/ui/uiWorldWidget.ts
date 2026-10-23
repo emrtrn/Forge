@@ -37,6 +37,8 @@ export interface WorldUiWidgetAnchor {
  * to `"screen"` for now (Option B "world" is deferred).
  */
 export interface WorldUiWidget {
+  /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
+  spatiallyLoaded?: boolean;
   /** UI Widget asset id (a manifest `ui` asset) rendered as the billboard. */
   widget: string;
   anchor: WorldUiWidgetAnchor;
@@ -95,6 +97,7 @@ export function normalizeWorldWidget(value: unknown): WorldUiWidget | null {
   if (!isPlainObject(value)) return null;
   if (typeof value.widget !== "string" || value.widget.length === 0) return null;
   const out: WorldUiWidget = { widget: value.widget, anchor: normalizeAnchor(value.anchor) };
+  if (value.spatiallyLoaded === false) out.spatiallyLoaded = false;
   const offset = normalizeOffset(value.offset);
   if (offset) out.offset = offset;
   if (typeof value.maxDistance === "number" && Number.isFinite(value.maxDistance) && value.maxDistance > 0) {

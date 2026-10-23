@@ -233,6 +233,7 @@ import {
 import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues } from "@engine/terrain/worldTerrainActor";
+import { forEachHeightfieldTriangle } from "@engine/physics/heightfieldStatic";
 import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
 import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
 import type { LayoutFoliageData, LayoutFoliageGroup } from "@engine/scene/foliage";
@@ -3878,7 +3879,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       new LineBasicMaterial({ color: 0x49e6a2, depthTest: false, transparent: true }),
     );
     wire.userData.colliderShape = collider.shape;
-    if (collider.primitives?.some((primitive) => primitive.shape === "trimesh")) {
+    if (collider.primitives?.some((primitive) => primitive.shape === "trimesh" || primitive.shape === "heightfield")) {
       wire.userData.colliderPrimitives = collider.primitives;
       wire.userData.colliderPrimitiveWire = true;
     }
@@ -4677,7 +4678,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.buildRuntimeLandscapeSplineMeshes(datas);
   }
 
-  /** One multi-tile World Terrain: drawn from its tiles, one static trimesh collider per tile. */
+  /** One multi-tile World Terrain: drawn from its tiles, one static heightfield collider per tile. */
   private async buildRuntimeWorldTerrain(actor: LayoutLandscape, document: WorldTerrainDocument): Promise<void> {
     const { def } = document;
     for (const issue of worldTerrainPlacementIssues(actor, def)) console.warn(`[terrain] ${actor.id}: ${issue}`);
@@ -5247,6 +5248,15 @@ function colliderTrimeshWireGeometry(primitives: readonly ColliderPrimitive[] | 
     positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
   };
   for (const primitive of primitives) {
+    if (primitive.shape === "heightfield" && primitive.heightfield) {
+      const field = primitive.heightfield;
+      forEachHeightfieldTriangle(field, 0, field.quadsX - 1, 0, field.quadsZ - 1, (a, b, c) => {
+        pushEdge(a, b);
+        pushEdge(b, c);
+        pushEdge(c, a);
+      });
+      continue;
+    }
     if (
       primitive.shape !== "trimesh" ||
       !primitive.vertices ||

@@ -1,4 +1,17 @@
-import { StaticSpatialIndex, type StaticSpatialEntry } from "./staticSpatialIndex";
+import {
+  StaticSpatialIndex,
+  compareStaticEntries,
+  staticCellOf,
+  staticEntryOverlapsSquare,
+  type StaticSpatialEntry,
+} from "./staticSpatialIndex";
+import {
+  HeightfieldStaticSource,
+  forEachHeightfieldTriangle,
+  heightfieldSupportsOnDemand,
+  type HeightfieldCellEntries,
+} from "./heightfieldStatic";
+import { classifyStaticTriangle } from "./staticTriangles";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
   readColliderComponent,
@@ -97,6 +110,8 @@ interface StaticBodyRecord {
   readonly blockers: StaticSpatialEntry<Aabb>[];
   readonly surfaces: StaticSpatialEntry<PhysicsSurfaceTriangle>[];
   readonly navigationRole: NavigationRole | undefined;
+  /** Heightfield primitives answered on demand instead of filed into the index; after the body's other items. */
+  readonly fields: HeightfieldStaticSource[];
 }
 
 type RapierModule = typeof import("@dimforge/rapier3d-compat");
@@ -158,6 +173,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private readonly staticRecords = new Map<EntityId, StaticBodyRecord>();
   private readonly staticBlockerIndex = new StaticSpatialIndex<Aabb>();
   private readonly staticSurfaceIndex = new StaticSpatialIndex<PhysicsSurfaceTriangle>();
+  /** Static records that carry on-demand heightfields, by entity id (a subset of `staticRecords`). */
+  private readonly heightfieldRecords = new Map<EntityId, StaticBodyRecord>();
   private nextStaticOrder = 0;
   private staticInvalidations = 0;
   private staticRecordBuilds = 0;
@@ -471,6 +488,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.collisionDisabled.clear();
     this.suspendedDynamicBodies.clear();
     this.staticRecords.clear();
+    this.heightfieldRecords.clear();
     this.staticBlockerIndex.clear();
     this.staticSurfaceIndex.clear();
     this.nextStaticOrder = 0;
@@ -624,6 +642,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     for (const [id, record] of this.staticRecords) {
       if (this.collisionDisabled.has(id)) continue;
       for (const entry of record.blockers) blockers.push(entry.value);
+      for (const field of record.fields) for (const blocker of field.all().blockers) blockers.push(blocker as Aabb);
     }
     this.staticBlockerCache = blockers;
     return blockers;
@@ -694,6 +713,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     for (const [id, record] of this.staticRecords) {
       if (this.collisionDisabled.has(id)) continue;
       for (const entry of record.surfaces) surfaces.push(entry.value);
+      for (const field of record.fields) for (const surface of field.all().surfaces) surfaces.push(surface);
     }
     this.staticSurfaceCache = surfaces;
     return surfaces;
@@ -705,19 +725,74 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * can make the movement step skip its ground follow window.
    */
   staticSurfaceTrianglesNear(x: number, z: number): readonly PhysicsSurfaceTriangle[] {
-    return this.staticSurfaceIndex.atCell(x, z);
+    if (this.heightfieldRecords.size === 0) return this.staticSurfaceIndex.atCell(x, z);
+    const at = staticCellOf(x, z);
+    const touched: HeightfieldCellEntries[] = [];
+    for (const [id, record] of this.heightfieldRecords) {
+      if (this.collisionDisabled.has(id)) continue;
+      for (const field of record.fields) {
+        if (!field.touchesCell(at.x, at.z)) continue;
+        const cell = field.cellEntries(at.x, at.z);
+        if (cell.surfaces.length > 0) touched.push(cell);
+      }
+    }
+    const { cell, overflow } = this.staticSurfaceIndex.atCellEntries(x, z);
+    // Inside one tile with nothing else nearby (the common case): already in order.
+    if (touched.length === 1 && cell.length === 0 && overflow.length === 0) return touched[0]!.surfaceValues;
+    let merged = cell;
+    for (const extra of touched) merged = merged.concat(extra.surfaces);
+    if (touched.length > 0) merged.sort(compareStaticEntries);
+    return merged.concat(overflow).map((entry) => entry.value);
   }
 
   /** All blockers intersecting the inclusive X/Z square, in body/primitive order. */
   staticBlockerAabbsNear(x: number, z: number, radius: number): readonly PhysicsAabb[] {
-    const blockers = this.staticBlockerIndex.near(x, z, radius);
+    if (this.heightfieldRecords.size === 0) {
+      const blockers = this.staticBlockerIndex.near(x, z, radius);
+      this.blockerCandidatesInspected += this.staticBlockerIndex.lastCandidateCount;
+      return blockers;
+    }
+    const entries: StaticSpatialEntry<Aabb>[] = this.staticBlockerIndex.nearEntries(x, z, radius);
     this.blockerCandidatesInspected += this.staticBlockerIndex.lastCandidateCount;
-    return blockers;
+    const r = Math.max(0, radius);
+    const from = staticCellOf(x - r, z - r);
+    const to = staticCellOf(x + r, z + r);
+    const multiCell = from.x !== to.x || from.z !== to.z;
+    let added = false;
+    for (const [id, record] of this.heightfieldRecords) {
+      if (this.collisionDisabled.has(id)) continue;
+      for (const field of record.fields) {
+        if (!field.overlapsSquare(x, z, r)) continue;
+        // A triangle filed under several cells is one item: keep it once.
+        let seen: Set<number> | null = null;
+        for (let cz = from.z; cz <= to.z; cz += 1) {
+          for (let cx = from.x; cx <= to.x; cx += 1) {
+            if (!field.touchesCell(cx, cz)) continue;
+            const blockers = field.cellEntries(cx, cz).blockers;
+            for (const entry of blockers) {
+              if (multiCell) {
+                seen ??= new Set();
+                if (seen.has(entry.itemOrder)) continue;
+                seen.add(entry.itemOrder);
+              }
+              this.blockerCandidatesInspected += 1;
+              if (!staticEntryOverlapsSquare(entry, x, z, radius)) continue;
+              entries.push(entry as StaticSpatialEntry<Aabb>);
+              added = true;
+            }
+          }
+        }
+      }
+    }
+    if (added) entries.sort(compareStaticEntries);
+    return entries.map((entry) => entry.value);
   }
 
   /** Global availability without materializing flat arrays (preserves void/fallback-floor semantics). */
   hasStaticGround(): boolean {
-    return this.staticBlockerIndex.size > 0 || this.staticSurfaceIndex.size > 0;
+    if (this.staticBlockerIndex.size > 0 || this.staticSurfaceIndex.size > 0) return true;
+    for (const id of this.heightfieldRecords.keys()) if (!this.collisionDisabled.has(id)) return true;
+    return false;
   }
 
   /** Cumulative work counters for deterministic streaming and movement performance checks. */
@@ -745,8 +820,32 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const surfaces: PhysicsSurfaceTriangle[] = [];
     appendBlockerAabbs(blockers, body);
     appendSurfaceTriangles(surfaces, body);
+    // Heightfields come after the body's other items; most answer on demand.
+    const fields: HeightfieldStaticSource[] = [];
+    const origin = body.transform.position as Vec3;
+    const rotation = body.transform.rotation as Vec3;
+    for (const primitive of body.collider.primitives ?? []) {
+      const field = primitive.shape === "heightfield" ? primitive.heightfield : undefined;
+      if (!field) continue;
+      if (heightfieldSupportsOnDemand(field, rotation)) {
+        fields.push(new HeightfieldStaticSource(origin, field, body.collider.navigationRole, order,
+          { blockers: blockers.length, surfaces: surfaces.length }));
+        continue;
+      }
+      forEachHeightfieldTriangle(field, 0, field.quadsX - 1, 0, field.quadsZ - 1, (a, b, c) => {
+        const classified = classifyStaticTriangle(
+          rotatePointAboutOrigin(origin, a, rotation),
+          rotatePointAboutOrigin(origin, b, rotation),
+          rotatePointAboutOrigin(origin, c, rotation),
+          body.collider.navigationRole,
+        );
+        if ("surface" in classified) surfaces.push(classified.surface);
+        else blockers.push(classified.blocker as Aabb);
+      });
+    }
     const record: StaticBodyRecord = {
       order,
+      fields,
       navigationRole: body.collider.navigationRole,
       blockers: blockers.map((value, itemOrder) => ({
         value, bodyOrder: order, itemOrder,
@@ -761,6 +860,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       })),
     };
     this.staticRecords.set(body.id, record);
+    if (fields.length > 0) this.heightfieldRecords.set(body.id, record);
+    else this.heightfieldRecords.delete(body.id);
     this.staticRecordBuilds += 1;
     if (!this.collisionDisabled.has(body.id)) this.indexStaticRecord(record, true);
   }
@@ -781,6 +882,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!record) return;
     this.indexStaticRecord(record, false);
     this.staticRecords.delete(entityId);
+    this.heightfieldRecords.delete(entityId);
   }
 
   /**
@@ -801,6 +903,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     for (const [id, record] of this.staticRecords) {
       if (record.navigationRole === "ignored" || this.collisionDisabled.has(id)) continue;
       for (const entry of record.blockers) blockers.push(entry.value);
+      for (const field of record.fields) for (const blocker of field.all().blockers) blockers.push(blocker as Aabb);
     }
     this.staticNavigationBlockerCache = blockers;
     return blockers;
@@ -814,6 +917,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       if (record.navigationRole === "ignored" || record.navigationRole === "obstacleOnly" ||
         this.collisionDisabled.has(id)) continue;
       for (const entry of record.surfaces) surfaces.push(entry.value);
+      for (const field of record.fields) for (const surface of field.all().surfaces) surfaces.push(surface);
     }
     this.staticNavigationSurfaceCache = surfaces;
     return surfaces;
@@ -1086,6 +1190,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   clear(): void {
     this.bodiesById.clear();
     this.staticRecords.clear();
+    this.heightfieldRecords.clear();
     this.staticBlockerIndex.clear();
     this.staticSurfaceIndex.clear();
     this.nextStaticOrder = 0;
@@ -1587,6 +1692,9 @@ function appendBlockerAabbs(out: Aabb[], body: PhysicsBody): void {
         primitive.indices,
         body.collider.navigationRole,
       );
+    } else if (primitive.shape === "heightfield" && primitive.heightfield) {
+      // Its triangles are added by `recordStaticBody`, after the other primitives.
+      continue;
     } else {
       out.push(primitiveAabb(origin, rotation, primitive, body.collider.navigationRole));
     }
@@ -1610,38 +1718,6 @@ function primitiveAabb(
   if (primitive.shape !== "box") return base;
   const footprint = rotatedBoxFootprintXZ(origin, center, half, bodyRotation, primitive.rotation);
   return footprint ? { ...base, footprint } : base;
-}
-
-/**
- * Every appreciably up-facing trimesh triangle is a support surface. The
- * character's authored slope limit decides whether it can walk or must slide;
- * turning a steep terrain triangle into an AABB wall makes it appear as a series
- * of false flat steps and lets a sprinting pawn fall between them. Only vertical
- * and downward-facing triangles remain movement blockers.
- */
-const SURFACE_MIN_SUPPORT_NORMAL_Y = 1e-4;
-
-/**
- * Signed upward component of a triangle's unit normal (+1 = up-facing floor,
- * 0 = vertical, -1 = down-facing underside); 0 if degenerate. Signed (not
- * `Math.abs`) so a solid `complexAsSimple` body's *downward* faces — a staircase's
- * flat bottom, a wedge underside — are never mistaken for walkable ground, which
- * would otherwise seed a phantom nav floor inside/under the solid body and route
- * paths straight through the steps. Assumes outward (CCW) triangle winding, the
- * glTF/Three.js convention the prototype collision meshes follow.
- */
-function triangleUpNormalY(a: Vec3, b: Vec3, c: Vec3): number {
-  const ux = b[0] - a[0];
-  const uy = b[1] - a[1];
-  const uz = b[2] - a[2];
-  const vx = c[0] - a[0];
-  const vy = c[1] - a[1];
-  const vz = c[2] - a[2];
-  const nx = uy * vz - uz * vy;
-  const ny = uz * vx - ux * vz;
-  const nz = ux * vy - uy * vx;
-  const len = Math.hypot(nx, ny, nz);
-  return len <= 1e-9 ? 0 : ny / len;
 }
 
 /** Invokes `visit` with each trimesh triangle's world-space vertices (rotation baked). */
@@ -1675,35 +1751,9 @@ function appendTriangleAabbs(
   navigationRole: NavigationRole | undefined,
 ): void {
   forEachWorldTriangle(origin, bodyRotation, vertices, indices, (wa, wb, wc) => {
-    if (triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_SUPPORT_NORMAL_Y) return; // support surface, not a wall
-    const blocker: Aabb = {
-      min: [
-        Math.min(wa[0], wb[0], wc[0]),
-        Math.min(wa[1], wb[1], wc[1]),
-        Math.min(wa[2], wb[2], wc[2]),
-      ],
-      max: [
-        Math.max(wa[0], wb[0], wc[0]),
-        Math.max(wa[1], wb[1], wc[1]),
-        Math.max(wa[2], wb[2], wc[2]),
-      ],
-    };
-    const footprint = triangleFootprintXZ(wa, wb, wc);
-    if (footprint) blocker.footprint = footprint;
-    if (navigationRole) blocker.navigationRole = navigationRole;
-    out.push(blocker);
+    const classified = classifyStaticTriangle(wa, wb, wc, navigationRole);
+    if ("blocker" in classified) out.push(classified.blocker as Aabb);
   });
-}
-
-function triangleFootprintXZ(a: Vec3, b: Vec3, c: Vec3): readonly (readonly [number, number])[] | undefined {
-  const unique: [number, number][] = [];
-  for (const point of [[a[0], a[2]], [b[0], b[2]], [c[0], c[2]]] as [number, number][]) {
-    if (unique.some((candidate) => Math.hypot(candidate[0] - point[0], candidate[1] - point[1]) <= 1e-9)) {
-      continue;
-    }
-    unique.push(point);
-  }
-  return unique.length >= 2 ? unique : undefined;
 }
 
 /** Appends walkable surface triangles for a body's trimesh primitives (world-space + normalY). */
@@ -1723,9 +1773,8 @@ function appendSurfaceTriangles(out: PhysicsSurfaceTriangle[], body: PhysicsBody
       continue;
     }
     forEachWorldTriangle(origin, rotation, primitive.vertices, primitive.indices, (wa, wb, wc) => {
-      const normalY = triangleUpNormalY(wa, wb, wc);
-      if (normalY < SURFACE_MIN_SUPPORT_NORMAL_Y) return; // vertical/downward → wall blocker
-      out.push({ a: wa, b: wb, c: wc, normalY });
+      const classified = classifyStaticTriangle(wa, wb, wc, undefined);
+      if ("surface" in classified) out.push(classified.surface);
     });
   }
 }
@@ -1803,6 +1852,8 @@ function clonePrimitive(primitive: ColliderPrimitive): ColliderPrimitive {
   // collider and the movement blockers both fall back to a box.
   if (primitive.vertices) copy.vertices = primitive.vertices.map((point) => [...point] as typeof point);
   if (primitive.indices) copy.indices = [...primitive.indices];
+  // Shared, never copied: a terrain tile's grid is large and immutable while the body lives.
+  if (primitive.heightfield) copy.heightfield = primitive.heightfield;
   return copy;
 }
 
@@ -1831,6 +1882,19 @@ function colliderDescsForBody(RAPIER: RapierModule, body: PhysicsBody) {
  * primitive's bounding box.
  */
 function primitiveColliderDesc(RAPIER: RapierModule, primitive: ColliderPrimitive) {
+  if (primitive.shape === "heightfield" && primitive.heightfield) {
+    const { quadsX, quadsZ, spacing, heights } = primitive.heightfield;
+    // Rapier's matrix is column-major (Z fastest within a column of constant X),
+    // with rows along Z and columns along X; it splits each cell along the same
+    // diagonal as the grid's triangles (OPEN_WORLD_PLAN K3a).
+    const columnMajor = new Float32Array(heights.length);
+    for (let x = 0; x <= quadsX; x += 1) {
+      for (let z = 0; z <= quadsZ; z += 1) columnMajor[x * (quadsZ + 1) + z] = heights[z * (quadsX + 1) + x]!;
+    }
+    // Same reason as the trimesh flag: no catching on internal edges (S4).
+    return RAPIER.ColliderDesc.heightfield(quadsZ, quadsX, columnMajor, { x: quadsX * spacing, y: 1, z: quadsZ * spacing },
+      RAPIER.HeightFieldFlags.FIX_INTERNAL_EDGES);
+  }
   if (
     primitive.shape === "trimesh" &&
     primitive.vertices &&

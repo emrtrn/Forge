@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Box3, Raycaster, Vector3 } from "three";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
+import { forEachHeightfieldTriangle } from "../../engine/physics/heightfieldStatic";
 import { createWorldTerrainObject } from "../../engine/render-three/landscape";
 import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type TransformComponent } from "../../engine/scene/components";
 import { createFlatLandscapeData } from "../../engine/scene/landscape";
@@ -68,22 +69,22 @@ function lookup({ tiles }: WorldTerrainDocument) {
 }
 
 /** Height of a trimesh entity's surface under world (x, z), from whichever triangle contains it. */
-function trimeshHeightAt(transform: TransformComponent, collider: ColliderComponent, x: number, z: number): number | null {
-  const primitive = collider.primitives![0]!;
-  const vertices = primitive.vertices!;
-  const indices = primitive.indices!;
+/** Height of a heightfield collider's triangles at world X/Z, or null outside it. */
+function heightfieldHeightAt(transform: TransformComponent, collider: ColliderComponent, x: number, z: number): number | null {
+  const field = collider.primitives![0]!.heightfield!;
   const px = x - transform.position[0];
   const pz = z - transform.position[2];
-  for (let index = 0; index < indices.length; index += 3) {
-    const [a, b, c] = [vertices[indices[index]!]!, vertices[indices[index + 1]!]!, vertices[indices[index + 2]!]!];
+  let found: number | null = null;
+  forEachHeightfieldTriangle(field, 0, field.quadsX - 1, 0, field.quadsZ - 1, (a, b, c) => {
+    if (found !== null) return;
     const det = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
     const wa = ((b[2] - c[2]) * (px - c[0]) + (c[0] - b[0]) * (pz - c[2])) / det;
     const wb = ((c[2] - a[2]) * (px - c[0]) + (a[0] - c[0]) * (pz - c[2])) / det;
     const wc = 1 - wa - wb;
-    if (wa < -1e-9 || wb < -1e-9 || wc < -1e-9) continue;
-    return transform.position[1] + wa * a[1] + wb * b[1] + wc * c[1];
-  }
-  return null;
+    if (wa < -1e-9 || wb < -1e-9 || wc < -1e-9) return;
+    found = transform.position[1] + wa * a[1] + wb * b[1] + wc * c[1];
+  });
+  return found;
 }
 
 export function registerWorldTerrainActorTests(check: Check): void {
@@ -130,7 +131,7 @@ export function registerWorldTerrainActorTests(check: Check): void {
     assert.equal(raycaster.intersectObject(object, true).length, 0);
   });
 
-  check("world terrain collision: one static trimesh entity per tile, ids landscape:<id>:<tile>, surface = terrainHeightAt", () => {
+  check("world terrain collision: one static heightfield entity per tile, ids landscape:<id>:<tile>, surface = terrainHeightAt", () => {
     const document = worldDocument();
     const entities = worldTerrainColliderEntities({ id: "big", name: "Big", collision: true }, document);
     assert.deepEqual(entities.map((entity) => entity.id).sort(),
@@ -146,13 +147,15 @@ export function registerWorldTerrainActorTests(check: Check): void {
       const key = entity.id.split(":")[2]!;
       const [tx, tz] = key.split("_").map(Number) as [number, number];
       const tile = document.tiles.get(key)!;
-      // Same frame as the future Rapier heightfield body: tile centre at the datum.
+      // Tile centre at the datum, the trimesh's frame too; the tile's heights are shared.
       assert.deepEqual(transform.position, terrainTileTrimesh(document.def, tile).translation);
+      assert.equal(collider.primitives![0]!.shape, "heightfield");
+      assert.equal(collider.primitives![0]!.heightfield!.heights, tile.heights);
       for (let sample = 0; sample < 12; sample += 1) {
         const x = 10 + (tx * Q + 0.37 + sample * 2.61) * SPACING;
         const z = -30 + (tz * Q + 0.73 + sample * 2.47) * SPACING;
         const expected = terrainHeightAt(document.def, lookup(document), x, z)!;
-        const actual = trimeshHeightAt(transform, collider, x, z);
+        const actual = heightfieldHeightAt(transform, collider, x, z);
         assert.ok(actual !== null && Math.abs(actual - expected) < 1e-4, `${key} ${x},${z}: ${actual} vs ${expected}`);
         checked += 1;
       }

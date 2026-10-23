@@ -1,4 +1,4 @@
-import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent } from "../scene/components";
+import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type ColliderPrimitive } from "../scene/components";
 import type { Entity, EntityComponentData } from "../scene/entity";
 import type { LandscapeColliderPrimitive } from "../scene/landscape";
 import type { LayoutLandscape, Vec3 } from "../scene/layout";
@@ -54,10 +54,11 @@ export function worldTerrainPlacementIssues(actor: Pick<LayoutLandscape, "positi
 
 /**
  * One tile as a static trimesh in a frame centred on the tile at the height
- * datum — the frame a Rapier heightfield body uses (`terrainTileHeightfieldShape`),
- * so switching the primitive later keeps the entity transform. Triangles split
- * each quad along the same b–c diagonal as the renderer and `terrainHeightAt`
- * (OPEN_WORLD_PLAN K3a).
+ * datum — the frame of its heightfield collider (`terrainTileHeightfield`).
+ * Triangles split each quad along the same b–c diagonal as the renderer and
+ * `terrainHeightAt` (OPEN_WORLD_PLAN K3a). The runtime collides with the
+ * heightfield; this stays for the editor's collision overlay and as the
+ * reference the heightfield's on-demand triangles are tested against.
  */
 export function terrainTileTrimesh(
   def: Pick<WorldTerrainDef, "tileQuads" | "spacing" | "origin">,
@@ -99,6 +100,36 @@ export function terrainTileTrimesh(
   };
 }
 
+/**
+ * One tile as a heightfield collider primitive (OPEN_WORLD_PLAN Faz 3), in the
+ * same tile-centred frame as {@link terrainTileTrimesh}. The tile's height
+ * array is shared, not copied, so the tile must not be edited while a body
+ * uses it (runtime tiles never are).
+ */
+export function terrainTileHeightfield(
+  def: Pick<WorldTerrainDef, "tileQuads" | "spacing" | "origin">,
+  tile: TerrainTileData,
+): { translation: Vec3; primitive: ColliderPrimitive & { center: Vec3 } } {
+  const quads = tile.size - 1;
+  const extent = quads * def.spacing;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const height of tile.heights) {
+    if (height < minY) minY = height;
+    if (height > maxY) maxY = height;
+  }
+  const bounds = terrainTileWorldBounds(def, tile.x, tile.z);
+  return {
+    translation: [(bounds.minX + bounds.maxX) / 2, def.origin[1], (bounds.minZ + bounds.maxZ) / 2],
+    primitive: {
+      shape: "heightfield",
+      size: [extent, maxY - minY, extent],
+      center: [0, (minY + maxY) / 2, 0],
+      heightfield: { quadsX: quads, quadsZ: quads, spacing: def.spacing, heights: tile.heights },
+    },
+  };
+}
+
 /** Entity id of one tile's collider: `landscape:<actor id>:<tile key>`. */
 export function worldTerrainColliderEntityId(actorId: string, key: string): string {
   return `landscape:${actorId}:${key}`;
@@ -118,11 +149,11 @@ export function worldTerrainColliderEntities(
   for (const { key } of def.tiles) {
     const tile = tiles.get(key);
     if (!tile || !parseTileKey(key)) continue;
-    const { translation, primitive } = terrainTileTrimesh(def, tile);
+    const { translation, primitive } = terrainTileHeightfield(def, tile);
     const collider: ColliderComponent = {
       shape: "box",
       size: [...primitive.size],
-      center: [...primitive.center!],
+      center: [...primitive.center],
       isStatic: true,
       isSensor: false,
       navigationRole: "walkable",

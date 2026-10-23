@@ -850,7 +850,7 @@ Doğrulama (2026-10-22):
 
 ## Faz 3 — Fizik, hareket, navigasyon zemini
 
-- [ ] `terrainCollider.ts`: tile → Rapier heightfield, `landscape:<id>:<tile>`
+- [x] `terrainCollider.ts`: tile → Rapier heightfield, `landscape:<id>:<tile>`
       entity id'leri, collision preset / physical material korunur.
       Collider `HeightFieldFlags.FIX_INTERNAL_EDGES` ile kurulur (S4).
       *Şekil verisi hazır* (`terrainTileHeightfieldShape`, Rapier testiyle);
@@ -870,6 +870,18 @@ Doğrulama (2026-10-22):
       257² tile başına ~74 ms kurulum (S4) ve tile başına ~131 bin üçgen; tile
       sayısı arttıkça boot uzar. Bu yüzden bu ara çözüm Faz 4 akışından önce
       heightfield ile değiştirilmeli.
+      *Heightfield'a geçildi (2026-10-23):* collider bileşeninde yeni
+      `"heightfield"` primitive şekli (`ColliderHeightfield`:
+      quadsX/quadsZ/spacing + satır-öncelikli `Float32Array`, tile'ın kendi
+      yükseklik dizisi kopyalanmadan paylaşılır). `worldTerrainColliderEntities`
+      artık `terrainTileHeightfield` üretiyor; entity id, transform (tile
+      merkezi, datum), `walkable` nav rolü ve delik kuralı aynı.
+      PhysicsSubsystem Rapier'de `ColliderDesc.heightfield(quadsZ, quadsX,
+      sütun-öncelikli, ölçek, FIX_INTERNAL_EDGES)` kuruyor; `traceCamera`
+      ışınları `terrainHeightAt` ile 2 mm içinde (testli). Ölçüm (16 tile ×
+      257², Node, aynı makine): `setEntities` + Rapier kurulumu ~4,3 s →
+      ~80 ms, heap ~1,7 GB → ~0,5 GB. 1×1 Landscape (döndürülebilir, kare
+      olmayan grid) bu dilimde trimesh'te kaldı.
 - [x] `PhysicsSubsystem.addEntities` / `removeEntities` (toplu, tek
       invalidation); statik yüzey üçgen cache'i gövde başına artımlı.
       *Tamam (2026-10-23, Faz 3 bölüm 1):* statik AABB/üçgen kayıtları gövde
@@ -884,6 +896,24 @@ Doğrulama (2026-10-22):
       üretir (karakter hareket kodu değişmez); nav yüzey tohumlama
       `TerrainHeightQuery`'yi kullanır. Merdiven/rampa düzeltmeleri
       (signedNormalY, headroom gate) korunur; ilgili testler yeşil.
+      *Anında üretim tamam (2026-10-23):* heightfield gövdeleri statik
+      indekse üçgen koymuyor; `HeightfieldStaticSource`
+      (`engine/physics/heightfieldStatic.ts`) bir 4 m indeks hücresinin
+      üçgenlerini ilk sorguda üretip önbelleğe alıyor (kaynak başına en çok
+      4096 hücre), tam listeleri (`staticBlockerAabbs`, `staticSurfaceTriangles`,
+      nav listeleri) yalnız istenince bir kez üretiyor. Üçgenler trimesh'le
+      aynı dünya köşeleri, aynı sınıflandırma (`engine/physics/staticTriangles.ts`,
+      trimesh yolu da bunu kullanıyor), aynı hücre üyeliği
+      (`staticCellRange`) ve aynı göreli sırayla üretildiği için her sorgu
+      trimesh'in cevabını birebir veriyor: `tests/engine/terrainHeightfieldPhysics.test.ts`
+      karışık gövde sırasında, dikişte, delikte, duvar üçgenli dik bir
+      çıkıntıda, collision kapat/aç, döndürme ve silme sonrası bütün yakın
+      sorguları ve tam/nav listelerini `deepEqual` ile karşılaştırıyor.
+      Döndürülmüş gövde ya da 32 m'den geniş quad'lar (overflow kuralı) eski
+      gibi yüklemede indekse açılıyor. Maliyet: yürüme benzeri sorgularda
+      yüzey + engelleyici çifti ~1,7 µs (trimesh ~0,8 µs); yeni bir hücreye
+      ilk girişte ~25 µs. **Açık:** nav tohumlamanın `TerrainHeightQuery`'ye
+      geçmesi — AI nav grid hâlâ tam listeleri okuyor (artık tembel).
 - [ ] `staticBlockerAabbsNear(x, z, radius)`; karakter hareketi, `hasGroundProbe`,
       TPS kamera ve AI çağrıları buna geçer. Test: 5000 statik AABB'li
       sahnede karakter adımı süresi sabit kalıyor.
@@ -902,7 +932,10 @@ Doğrulama (2026-10-22):
 - [ ] `createLandscapeColliderPrimitive` (trimesh) kaldırılır.
 - [ ] Araç: tile kenarında süspansiyon zıplaması yok (smoke: VehicleTest
       üzerinde 2×2 tile'lık arazide dikiş geçişi).
-- [ ] Collision debug wire'ı heightfield'ı çizer.
+- [x] Collision debug wire'ı heightfield'ı çizer.
+      *Tamam (2026-10-23):* runtime `?debug` collider wire'ı heightfield
+      üçgenlerini çiziyor; editörün Show > Collision katmanı aynı yüzeyi
+      `terrainTileTrimesh` ile çizmeye devam ediyor.
 
 ## Faz 4 — Akış çekirdeği (yalnız arazi)
 

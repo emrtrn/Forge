@@ -42,7 +42,8 @@ export type ColliderShape =
   | "cylinder"
   | "cone"
   | "convex"
-  | "trimesh";
+  | "trimesh"
+  | "heightfield";
 
 export interface TransformComponent {
   position: Vec3;
@@ -196,6 +197,22 @@ export interface ScriptDispatchersComponent {
 }
 
 /**
+ * A regular height grid for `shape === "heightfield"` (World Terrain tiles,
+ * OPEN_WORLD_PLAN Faz 3). Centred on the body origin in X/Z: sample (x, z) sits
+ * at body-local `[x · spacing − quadsX · spacing / 2, height, z · spacing − quadsZ · spacing / 2]`,
+ * and each quad splits into triangles (x,z)(x,z+1)(x+1,z) and (x+1,z)(x,z+1)(x+1,z+1),
+ * the same order and diagonal as the terrain trimesh it replaces. The array is
+ * shared, never copied: heights must not change while the body exists.
+ */
+export interface ColliderHeightfield {
+  quadsX: number;
+  quadsZ: number;
+  spacing: number;
+  /** `(quadsX + 1) · (quadsZ + 1)` body-local heights, row-major: `index = z · (quadsX + 1) + x`. */
+  heights: Float32Array;
+}
+
+/**
  * One simple-collision shape of a (possibly compound) collider. Sizes/centers
  * are world-scaled (placement scale baked in), like {@link ColliderComponent};
  * `rotation` is a local Euler rotation in degrees for oriented shapes.
@@ -211,6 +228,8 @@ export interface ColliderPrimitive {
   vertices?: Vec3[];
   /** Triangle index buffer into `vertices`, grouped by threes, for `shape === "trimesh"`. */
   indices?: number[];
+  /** Height grid for `shape === "heightfield"`; `size`/`center` describe its AABB, as for a trimesh. */
+  heightfield?: ColliderHeightfield;
 }
 
 export interface ColliderComponent {
@@ -785,7 +804,20 @@ const COLLIDER_SHAPES: readonly ColliderShape[] = [
   "cone",
   "convex",
   "trimesh",
+  "heightfield",
 ];
+
+/** A heightfield whose sample count matches its grid, or undefined. Keeps the array by reference. */
+function readColliderHeightfield(value: unknown): ColliderHeightfield | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const { quadsX, quadsZ, spacing, heights } = value as Record<string, unknown>;
+  if (typeof quadsX !== "number" || typeof quadsZ !== "number" || typeof spacing !== "number" ||
+    !Number.isInteger(quadsX) || !Number.isInteger(quadsZ) || quadsX < 1 || quadsZ < 1 || !(spacing > 0) ||
+    !(heights instanceof Float32Array) || heights.length !== (quadsX + 1) * (quadsZ + 1)) {
+    return undefined;
+  }
+  return { quadsX, quadsZ, spacing, heights };
+}
 
 /** Parses the optional compound-collider `primitives` array. */
 function readColliderPrimitives(
@@ -805,6 +837,12 @@ function readColliderPrimitives(
     const size = readVec3(record.size);
     if (!size) continue;
     const primitive: ColliderPrimitive = { shape: record.shape as ColliderShape, size };
+    if (primitive.shape === "heightfield") {
+      // Built in code (never authored JSON), so the grid is a typed array.
+      const heightfield = readColliderHeightfield(record.heightfield as unknown);
+      if (!heightfield) continue;
+      primitive.heightfield = heightfield;
+    }
     const center = readVec3(record.center);
     if (center) primitive.center = center;
     const rotation = readVec3(record.rotation);

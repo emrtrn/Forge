@@ -118,7 +118,8 @@ export function importRawHeightmap(options: RawHeightmapImportOptions): RawHeigh
  * Export a complete rectangular grid to little-endian row-major u16 RAW.
  * Matching u16 tile codes are preserved verbatim. f32 tiles clamp to the f32
  * definition range and round to the nearest of 65536 levels (half a step error
- * inside the range). Non-finite samples, holes and unequal edge copies fail;
+ * inside the range). Holes export as zero; resident edges keep their samples.
+ * Non-finite samples, missing declared tiles and unequal edge copies fail;
  * edges must agree before clamping/quantization, even if both would encode alike.
  * A worker can post progress after each stitched tile through onProgress.
  */
@@ -128,7 +129,7 @@ export function exportRawHeightmap(
   onProgress?: (progress: RawHeightmapProgress) => void,
 ): Uint8Array {
   const def = normalizeWorldTerrain(definition);
-  if (def.tiles.length !== def.tilesX * def.tilesZ) throw new Error("RAW export requires a complete rectangular terrain (no holes)");
+  const listed = new Set(def.tiles.map((entry) => entry.key));
   const width = def.tilesX * def.tileQuads + 1;
   const height = def.tilesZ * def.tileQuads + 1;
   const bytes = new Uint8Array(width * height * 2);
@@ -136,9 +137,11 @@ export function exportRawHeightmap(
   const boundaries = new Map<number, number>();
   const min = Math.fround(def.heightMin);
   const max = Math.fround(def.heightMax);
+  let completed = 0;
   for (let z = 0; z < def.tilesZ; z += 1) {
     for (let x = 0; x < def.tilesX; x += 1) {
       const key = tileKey(x, z);
+      if (!listed.has(key)) continue;
       const source = tiles.get(key);
       if (!source) throw new Error(`RAW export missing tile ${key}`);
       const tile = decodeTerrainTile(source);
@@ -157,7 +160,7 @@ export function exportRawHeightmap(
           const gx = x * def.tileQuads + vx;
           const gz = z * def.tileQuads + vz;
           const globalIndex = gz * width + gx;
-          const duplicate = (vx === 0 && x > 0) || (vz === 0 && z > 0);
+          const duplicate = boundaries.has(globalIndex);
           if (duplicate) {
             if (boundaries.get(globalIndex) !== value || output.getUint16(globalIndex * 2, true) !== sample) {
               throw new Error(`RAW duplicated edge mismatch at (${gx}, ${gz}) in tile ${key}`);
@@ -165,10 +168,10 @@ export function exportRawHeightmap(
           } else {
             output.setUint16(globalIndex * 2, sample, true);
           }
-          if (vx === def.tileQuads || vz === def.tileQuads) boundaries.set(globalIndex, value);
+          if (vx === 0 || vz === 0 || vx === def.tileQuads || vz === def.tileQuads) boundaries.set(globalIndex, value);
         }
       }
-      onProgress?.({ key, completed: z * def.tilesX + x + 1, total: def.tilesX * def.tilesZ });
+      onProgress?.({ key, completed: ++completed, total: listed.size });
     }
   }
   return bytes;

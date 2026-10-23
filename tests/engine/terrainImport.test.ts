@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import {
+  applyTerrainUndoPatches, createTerrainEditWorld, createTerrainHeightmapPatches, revertTerrainUndoPatches,
+} from "../../engine/terrain/terrainEdit";
+import {
   exportRawHeightmap, importRawHeightmap, iterateRawHeightmapTiles, type RawHeightmapImportOptions,
 } from "../../engine/terrain/terrainImport";
 import { validateTerrainTile } from "../../engine/terrain/terrainLoader";
@@ -9,6 +12,7 @@ import {
   type TerrainTileEncodeOptions,
 } from "../../engine/terrain/terrainTileCodec";
 import { createFlatTerrainTile, tileKey, type TerrainTileData } from "../../engine/terrain/terrainTypes";
+import { captureWorldTerrainSave } from "../../engine/terrain/worldTerrainSave";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -230,9 +234,130 @@ export function registerTerrainImportTests(check: Check): void {
     assert.throws(() => exportRawHeightmap(narrow.def, narrow.tiles), /duplicated edge mismatch/);
   });
 
-  check("terrain RAW: export rejects holes, missing tiles, malformed headers and non-finite samples", () => {
+  check("terrain RAW: 2x2 u16 round trip preserves covered samples exactly with a hole in any position", () => {
+    for (const hole of ["0_0", "1_0", "0_1", "1_1"]) {
+      for (const range of [{ heightMin: -100.1, heightMax: 300.2 }, { heightMin: 1e6, heightMax: 1e6 + 1 }]) {
+        const options = { ...fixture(2, 2), ...range };
+        const { def, tiles } = importRawHeightmap(options);
+        def.tiles = def.tiles.filter(({ key }) => key !== hole);
+        tiles.delete(hole);
+        const resident = [...tiles.values()].map(decodeTerrainTile);
+        const expected = (options.bytes as Uint8Array).slice();
+        const output = new DataView(expected.buffer);
+        for (let z = 0; z < options.height; z += 1) {
+          for (let x = 0; x < options.width; x += 1) {
+            const covered = resident.some((tile) => x >= tile.x * 32 && x <= (tile.x + 1) * 32
+              && z >= tile.z * 32 && z <= (tile.z + 1) * 32);
+            if (!covered) output.setUint16((z * options.width + x) * 2, 0, true);
+          }
+        }
+        const progress: number[] = [];
+        const raw = exportRawHeightmap(def, tiles, ({ completed, total }) => {
+          assert.equal(total, 3);
+          progress.push(completed);
+        });
+        assert.deepEqual(raw, expected);
+        assert.deepEqual(progress, [1, 2, 3]);
+        const restored = importRawHeightmap({ ...options, bytes: raw });
+        restored.def.tiles = restored.def.tiles.filter(({ key }) => key !== hole);
+        restored.tiles.delete(hole);
+        assert.deepEqual(exportRawHeightmap(restored.def, restored.tiles), raw);
+      }
+    }
+  });
+
+  check("terrain RAW editor: full-tile import preserves holes, paint and seams; undo restores exact heights and summaries", () => {
+    const options = fixture(2, 2);
+    const imported = importRawHeightmap(options);
+    const def = structuredClone(imported.def);
+    def.tiles = def.tiles.filter(({ key }) => key !== "0_0");
+    def.layers = [{ id: "base", name: "Base", color: "#ffffff" }, { id: "paint", name: "Paint", color: "#00ff00" }];
+    const previous = def.tiles.map(({ key }) => {
+      const decoded = decodeTerrainTile(imported.tiles.get(key)!);
+      const tile = createFlatTerrainTile(def, decoded.x, decoded.z);
+      tile.heights.forEach((_, index) => { tile.heights[index] = Math.fround(index / 117 - 3.2); });
+      tile.weights.forEach((_, index) => { tile.weights[index] = index % 256; });
+      return tile;
+    });
+    const world = createTerrainEditWorld(def, previous);
+    const before = structuredClone(world.def);
+    const originals = new Map([...world.tiles].map(([key, tile]) => [key, { heights: tile.heights.slice(), weights: tile.weights.slice() }]));
+    const heights = new Map([...imported.tiles].map(([key, bytes]) => [key, decodeTerrainTile(bytes).heights]));
+    const patches = createTerrainHeightmapPatches(world, heights);
+    assert.equal(patches.length, 3);
+    assert.deepEqual(world.def, before, "staging makes no changes");
+    for (const patch of patches) assert.deepEqual(patch.rect, { x0: 0, z0: 0, x1: 32, z1: 32 });
+    const dirty = applyTerrainUndoPatches(world, patches);
+    assert.equal(dirty.size, 3);
+    assert.equal(world.tiles.has("0_0"), false);
+    for (const [key, tile] of world.tiles) {
+      assert.deepEqual(tile.heights, heights.get(key));
+      assert.deepEqual(tile.weights, originals.get(key)!.weights);
+      const right = world.tile(tile.x + 1, tile.z);
+      const below = world.tile(tile.x, tile.z + 1);
+      for (let index = 0; index < tile.size; index += 1) {
+        if (right) assert.equal(tile.heights[index * 33 + 32], right.heights[index * 33]);
+        if (below) assert.equal(tile.heights[32 * 33 + index], below.heights[index]);
+      }
+      const summary = world.def.tiles.find((entry) => entry.key === key)!;
+      assert.equal(summary.minHeight, Math.min(...tile.heights));
+      assert.equal(summary.maxHeight, Math.max(...tile.heights));
+    }
+    const snapshot = captureWorldTerrainSave(world, dirty.keys(), new Map());
+    const exported = exportRawHeightmap(snapshot.def, new Map(snapshot.tiles.map(({ key, bytes }) => [key, bytes])));
+    const expectedDef = { ...imported.def, tiles: imported.def.tiles.filter(({ key }) => key !== "0_0") };
+    assert.deepEqual(exported, exportRawHeightmap(expectedDef, imported.tiles), "editable Float32 path preserves normal-range u16 codes");
+    revertTerrainUndoPatches(world, patches);
+    assert.deepEqual(world.def, before);
+    for (const [key, tile] of world.tiles) {
+      assert.deepEqual(tile.heights, originals.get(key)!.heights);
+      assert.deepEqual(tile.weights, originals.get(key)!.weights);
+    }
+    applyTerrainUndoPatches(world, patches);
+    for (const [key, tile] of world.tiles) assert.deepEqual(tile.heights, heights.get(key));
+  });
+
+  check("terrain RAW editor: wrong-size RAW and invalid tile patches reject before changing heights", () => {
+    const options = fixture(2, 2);
+    const imported = importRawHeightmap(options);
+    const world = createTerrainEditWorld(imported.def, [...imported.tiles.values()].map(decodeTerrainTile));
+    const before = structuredClone([...world.tiles]);
+    for (const length of [0, 2, options.width * options.height * 2 - 2, options.width * options.height * 2 + 2]) {
+      assert.throws(() => importRawHeightmap({ ...options, bytes: new Uint8Array(length) }), /expected 8450 bytes for 65x65/);
+    }
+    const heights = new Map([...world.tiles].map(([key, tile]) => [key, tile.heights.slice()]));
+    heights.get("1_1")![0] = NaN;
+    assert.throws(() => createTerrainHeightmapPatches(world, heights), /Invalid imported terrain heights/);
+    heights.delete("1_1");
+    assert.throws(() => createTerrainHeightmapPatches(world, heights), /Invalid imported terrain heights/);
+    assert.deepEqual([...world.tiles], before);
+  });
+
+  check("terrain RAW editor: imported relief outside encoding range is exported through a widened save snapshot", () => {
+    const imported = importRawHeightmap(fixture(2, 2));
+    const world = createTerrainEditWorld(imported.def, [...imported.tiles.values()].map(decodeTerrainTile));
+    const raised = importRawHeightmap({ ...fixture(2, 2), heightMin: -2000, heightMax: 3000 });
+    const heights = new Map([...raised.tiles].map(([key, bytes]) => [key, decodeTerrainTile(bytes).heights]));
+    const patches = createTerrainHeightmapPatches(world, heights);
+    applyTerrainUndoPatches(world, patches);
+    const snapshot = captureWorldTerrainSave(world, world.tiles.keys(), new Map());
+    assert.equal(snapshot.widened, true);
+    assert.ok(snapshot.def.heightMin < -1999);
+    assert.ok(snapshot.def.heightMax > 2999);
+    const raw = exportRawHeightmap(snapshot.def, new Map(snapshot.tiles.map(({ key, bytes }) => [key, bytes])));
+    const restored = importRawHeightmap({ ...fixture(2, 2), bytes: raw, heightMin: snapshot.def.heightMin, heightMax: snapshot.def.heightMax });
+    const halfStep = (snapshot.def.heightMax - snapshot.def.heightMin) / 65535 / 2;
+    for (const [key, bytes] of restored.tiles) {
+      const tile = decodeTerrainTile(bytes);
+      tile.heights.forEach((height, index) => assert.ok(Math.abs(height - world.tiles.get(key)!.heights[index]!) <= halfStep + 0.001));
+    }
+    assert.equal(world.def.heightMin, imported.def.heightMin, "export leaves the live definition unchanged");
+    revertTerrainUndoPatches(world, patches);
+    for (const [key, tile] of world.tiles) assert.deepEqual(tile.heights, decodeTerrainTile(imported.tiles.get(key)!).heights);
+  });
+
+  check("terrain RAW: export rejects missing declared tiles, malformed headers and non-finite samples", () => {
     const { def, tiles } = importRawHeightmap(fixture());
-    assert.throws(() => exportRawHeightmap({ ...def, tiles: def.tiles.slice(1) }, tiles), /no holes/);
     const missing = new Map(tiles);
     missing.delete("1_2");
     assert.throws(() => exportRawHeightmap(def, missing), /missing tile 1_2/);

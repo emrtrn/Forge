@@ -158,6 +158,21 @@ function readRect(tile: TerrainTileData, rect: TerrainDirtyRect): TerrainPatchVa
   return { heights, weights };
 }
 
+/** Stage a whole-grid height replacement without writing; holes and paint are preserved. */
+export function createTerrainHeightmapPatches(world: TerrainEditWorld, heights: ReadonlyMap<string, Float32Array>): TerrainUndoPatch[] {
+  return world.def.tiles.map(({ key }) => {
+    const tile = world.tiles.get(key);
+    const samples = heights.get(key);
+    if (!tile) throw new Error(`Terrain import tile is not resident: ${key}`);
+    if (!samples || samples.length !== tile.heights.length || !samples.every(Number.isFinite)) {
+      throw new Error(`Invalid imported terrain heights for tile ${key}`);
+    }
+    const rect = { x0: 0, z0: 0, x1: tile.size - 1, z1: tile.size - 1 };
+    const before = readRect(tile, rect);
+    return { key, rect, before, after: { heights: samples.slice(), weights: before.weights.slice() } };
+  });
+}
+
 function writeRect(tile: TerrainTileData, rect: TerrainDirtyRect, values: TerrainPatchValues): void {
   const width = rect.x1 - rect.x0 + 1;
   const count = width * (rect.z1 - rect.z0 + 1);

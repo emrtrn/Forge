@@ -830,7 +830,21 @@ Doğrulama (2026-10-22):
       *Saf RAW import/export + tile bölme hazır (2026-10-23): little/big-endian
       16-bit RAW okuma, little-endian export, kopyalı kenarlar ve min/max özetleri
       testli. Tile başına generator ilerleme sayacıyla worker'a taşınmaya hazır;
-      PNG, editör UI ve worker bağlantısı açık.*
+      16-bit PNG ve worker bağlantısı açık.*
+      *RAW editöre bağlandı (2026-10-23):* World Terrain Details → Heightmap
+      bölümünde `.raw`/`.r16` import, little/big-endian seçimi ve 0/65535'in
+      karşılığı olan metre cinsinden min/max var (terrain origin Y'ye göre).
+      Dosya tam `(tilesX × tileQuads + 1) × (tilesZ × tileQuads + 1)` u16
+      örnek içermeli; yanlış boyut beklenen örnek/byte sayısıyla reddedilir,
+      arazi değişmez. Import tek undo komutu: tile başına tam önce/sonra
+      yaması, özet yenileme, renderer güncellemesi, kirli tile kaydı ve autosave;
+      paint ağırlıkları korunur, delik tile'lar oluşturulmaz. Export tüm grid'i
+      terrain adıyla little-endian RAW indirir; deliklerin kapsanmayan örnekleri
+      0'dır, komşu tile kenarları korunur. Status satırı yeniden import için
+      yükseklik aralığını verir; kaydedilmemiş aralık dışı tepeler de export'a
+      girer. `tests/engine/terrainImport.test.ts`: delikli 2×2 u16 round-trip,
+      dikiş eşitliği, tam undo/redo, paint korunumu ve yanlış boyut reddi.
+      **Açık:** 16-bit PNG import/export ve büyük import'un worker'a taşınması.
 - [x] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
       `landscape-spline-chain`, `runtime-parity`, `game-starter` yeşil.
       *Tamam (2026-10-23):* yeni renderer varsayılanken bunlar ve

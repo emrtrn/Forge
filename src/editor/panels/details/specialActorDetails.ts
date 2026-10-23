@@ -112,6 +112,8 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   }) => void;
   setSelectedLandscape: (patch: { collision?: boolean }) => void;
   getSelectedWorldTerrain: () => WorldTerrainDetailsView | null;
+  importSelectedWorldTerrainHeightmap: (file: File, endianness: "little" | "big", heightMin: number, heightMax: number) => Promise<void>;
+  exportSelectedWorldTerrainHeightmap: () => { bytes: Uint8Array; name: string } | null;
   getSelectedLandscapeRiverWaters: () => RiverWaterDetailsView[];
   createSelectedLandscapeRiverWater: (splineId: string) => void;
   deleteSelectedLandscapeRiverWater: (waterId: string) => void;
@@ -863,9 +865,8 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
 
 /**
  * A Landscape that references a multi-tile World Terrain (OPEN_WORLD_PLAN Faz 2):
- * sculpt and paint work across tiles; splines, layer materials, resizing and
- * heightmap import are not ported to tiles yet, so the panel leaves them out
- * and says so. Placement comes from the terrain definition.
+ * Sculpt, paint and RAW heightmaps work across tiles. Placement comes from
+ * the terrain definition; unsupported tools are listed in the panel hint.
  */
 function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain: WorldTerrainDetailsView): void {
   const { body, selection } = options;
@@ -875,6 +876,8 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
   const layers = options.getSelectedLandscapeLayers();
   const metres = (value: number) => `${Number(value.toFixed(2))} m`;
   const holes = terrain.tilesX * terrain.tilesZ - terrain.tileCount;
+  const width = terrain.tilesX * terrain.tileQuads + 1;
+  const height = terrain.tilesZ * terrain.tileQuads + 1;
   const toolsMarkup = settings.editMode === "paint"
     ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
         ${LANDSCAPE_PAINT_TOOLS.map((tool) => `<button type="button" data-landscape-paint-tool="${tool}" class="${
@@ -922,7 +925,21 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, layer materials, resizing, heightmap import and Foliage painting are not available for multi-tile World Terrain yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, layer materials, resizing, PNG heightmaps and Foliage painting are not available for multi-tile World Terrain yet.</div>
+      </div>
+      <div class="detail-section" data-world-terrain-heightmap>
+        <div class="detail-section-title">Heightmap</div>
+        <div class="detail-hint">16-bit RAW: exactly ${width} × ${height} samples (${width * height * 2} bytes), rows along +Z. Heights are metres relative to terrain origin Y. Empty tiles are skipped; export fills uncovered samples with 0.</div>
+        <label class="detail-row"><span>Byte Order</span><select data-world-terrain-raw-order ${lockedAttr}>
+          <option value="little">Little-endian</option><option value="big">Big-endian</option>
+        </select></label>
+        <label class="detail-row"><span>Min Height (0), m</span><input data-world-terrain-raw-min type="number" step="any" value="${terrain.heightMin}" ${lockedAttr} /></label>
+        <label class="detail-row"><span>Max Height (65535), m</span><input data-world-terrain-raw-max type="number" step="any" value="${terrain.heightMax}" ${lockedAttr} /></label>
+        <div class="landscape-heightmap-actions">
+          <label class="detail-action-button">Import RAW<input data-world-terrain-raw-import type="file" accept=".raw,.r16" hidden ${lockedAttr} /></label>
+          <button type="button" class="detail-action-button" data-world-terrain-raw-export>Export RAW</button>
+        </div>
+        <div class="detail-hint">Export is little-endian; the status line reports the height range needed to re-import.</div>
       </div>
       <div class="detail-section" data-world-terrain-tools>
         <div class="detail-section-title">Landscape Mode</div>
@@ -970,6 +987,29 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
 
   bindNameAndLock(options);
   bindLandscapeBrushControls(options);
+  body.querySelector<HTMLInputElement>("[data-world-terrain-raw-import]")?.addEventListener("change", async (event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const order = body.querySelector<HTMLSelectElement>("[data-world-terrain-raw-order]")?.value === "big" ? "big" : "little";
+    const minInput = body.querySelector<HTMLInputElement>("[data-world-terrain-raw-min]")!;
+    const maxInput = body.querySelector<HTMLInputElement>("[data-world-terrain-raw-max]")!;
+    try {
+      await options.importSelectedWorldTerrainHeightmap(file, order, minInput.valueAsNumber, maxInput.valueAsNumber);
+    } finally {
+      input.value = "";
+    }
+  });
+  body.querySelector<HTMLButtonElement>("[data-world-terrain-raw-export]")?.addEventListener("click", () => {
+    const heightmap = options.exportSelectedWorldTerrainHeightmap();
+    if (!heightmap) return;
+    const url = URL.createObjectURL(new Blob([heightmap.bytes.slice().buffer], { type: "application/octet-stream" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = heightmap.name;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
   body.querySelector<HTMLInputElement>("[data-landscape-collision]")?.addEventListener("change", (event) => {
     options.setSelectedLandscape({ collision: (event.currentTarget as HTMLInputElement).checked });
   });

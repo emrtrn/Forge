@@ -1092,9 +1092,21 @@ Doğrulama (2026-10-22):
       (`TerrainRuntimeStreaming.debugGrid()`, çekirdekte `forEachCell`), akış
       kaynakları beyaz nokta. Birden çok akan arazide ilki çizilir. Smoke
       `data-tiles` sayımını okur.
-- [ ] **Test dünyası:** `tools/world/generate-test-world` → `Levels/OpenWorldTest`
+- [x] **Test dünyası:** `tools/world/generate-test-world` → `Levels/OpenWorldTest`
       (4×4 km, fBm gürültülü dağ-vadi, 4 boya katmanı). Smoke: spawn → 1 km
       yürü/sür → bellek ve hücre sayısı sınırda kalıyor, zemine düşme yok.
+      *Tamam (2026-10-23):* `npm run world:test` (`tools/world/testWorld.ts`
+      çekirdeği + `generate-test-world.mjs`) `public/layouts/OpenWorldTest.*`
+      yazar: 16×16 tile × 256 quad × 1 m, Z boyunca kıvrılan vadi + ridged fBm
+      dağlar, çimen/toprak yol/kaya/kar. ~97 MiB tile + 1,5 MiB global harita,
+      ~20 s; **gitignore'lu, commit edilmez**. `assets/` dışında olduğu için
+      manifest sağlık kontrolüne girmez, smoke kopyası da onu atlar. Tile
+      formatı standart u16 FTIL (512 m → ~7,8 mm); özetler ve global harita
+      çözülmüş tile'lardan, ortak kenarlar global örnek indeksinden üretilir
+      (dikişler birebir). `open-world.spec.ts` aynı dünyayı 128 quad × 2 m ile
+      smoke kopyasına üretir; pawn 1 km koşar. İlk koşu: zirve 29 yüklü /
+      25 aktif / 6 fizik tile (256'dan), 3,9 MB resident, düşme yok. Araçla
+      sürüş versiyonu yok.
 
 **Dilim 2 doğrulaması (2026-10-23):** `terrainRuntimeStreaming.test.ts`
 tanımlı/yüklü olmayan tile–delik ayrımını, sabit kamerada slot değişimini,

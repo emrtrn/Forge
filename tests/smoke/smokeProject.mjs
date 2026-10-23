@@ -300,7 +300,11 @@ export async function prepareSmokeProject(root = smokeRunRoot(), sourceRoot = RE
   root = assertSmokeRoot(root);
   await mkdir(root, { recursive: true });
   // A real copy, never a link: save/delete/rename endpoints cannot touch authoring files.
-  await cp(resolve(sourceRoot, "public"), smokePublicPath("", root), { recursive: true, dereference: true });
+  // The gitignored `npm run world:test` output (~100 MB) is local, not project content.
+  await cp(resolve(sourceRoot, "public"), smokePublicPath("", root), {
+    recursive: true, dereference: true,
+    filter: (path) => !/[\\/]public[\\/]layouts[\\/]OpenWorldTest\.(level\.json|landscapes)$/.test(path),
+  });
   await mkdir(resolve(root, "src/game/scripts"), { recursive: true });
   const manifest = await readJson(smokePublicPath("project.3dgame.json", root));
   const assets = await readJson(smokePublicPath("assets/manifest.json", root));

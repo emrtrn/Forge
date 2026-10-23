@@ -5,31 +5,11 @@
   "instances": [
     {
       "assetId": "floor-400x400",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "shape-cube",
-      "placements": [
-        {
-          "position": [
-            2,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     }
   ],
   "characters": [],
@@ -110,5 +90,16 @@
       "parallax": true
     }
   ],
-  "landscapes": []
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "assets/starter-content/Levels/LargeTerrain.landscapes/landscape-1.terrain.json",
+      "name": "World Terrain"
+    }
+  ]
 }

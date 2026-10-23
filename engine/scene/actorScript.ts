@@ -106,7 +106,7 @@ export const ACTOR_EVENT_DESCRIPTIONS: Record<ActorEventKind, string> = {
   overlap: "Runs on sensor overlap begin and end edges; context.event.phase identifies the edge.",
   hit: "Runs on blocking contact begin and end edges; context.event.otherEntityId identifies the other actor.",
   interact: "Runs when a host/runtime source emits an interact event for this actor.",
-  endPlay: "Runs once as the actor leaves play (destroyed or scene teardown); context.event.reason says which. Cleanup only — cross-actor messaging is best-effort here.",
+  endPlay: "Runs once as the actor leaves play (destroyed, scene teardown, or World Partition cell unloaded); context.event.reason says which. Unloaded actors may return as fresh instances. Cleanup only — cross-actor messaging is best-effort here.",
 };
 
 export function isActorEventKind(value: unknown): value is ActorEventKind {

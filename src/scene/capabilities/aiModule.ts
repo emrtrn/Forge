@@ -704,6 +704,19 @@ export function createAiModule(): CapabilityModule {
           entityById = new Map(entities.map((entity) => [entity.id, entity]));
           ai?.setEntities(entities);
         },
+        addEntity: (entity) => {
+          if (entityById.has(entity.id)) return;
+          entityById.set(entity.id, entity);
+          ai?.addEntity(entity);
+          // Nav grids are keyed by the host's live geometry revisions, not by
+          // this entity list. Existing paths retain their waypoints until the
+          // normal goal change / stuck replan; adding an actor does not reset them.
+        },
+        removeEntity: (entityId) => {
+          entityById.delete(entityId);
+          pathFollowing.delete(entityId);
+          ai?.removeEntity(entityId);
+        },
       });
 
       runtimeServices.provide(aiCommandsService, {

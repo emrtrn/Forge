@@ -16,6 +16,7 @@ import {
   TRANSFORM_COMPONENT,
 } from "../../engine/scene/components";
 import { ActionMap } from "../../engine/input/actionMap";
+import { CharacterMovementSubsystem } from "../../engine/movement/characterMovementSubsystem";
 import { createCapabilityRegistry } from "../../src/scene/capabilities/capabilityRegistry";
 import { createCharacterMovementModule } from "../../src/scene/capabilities/characterMovementModule";
 import { createMovingPlatformModule } from "../../src/scene/capabilities/movingPlatformModule";
@@ -72,6 +73,58 @@ function startedHost(host: CharacterMovementHost | null): {
 }
 
 export function registerCharacterMovementModuleTests(check: Check): void {
+  check("incremental characters move without resetting existing pose, velocity or launch state", () => {
+    const synced: string[] = [];
+    const createSolver = () => new CharacterMovementSubsystem(
+      new ActionMap({}), (id) => synced.push(id), undefined,
+      { isPlayerControlled: () => false, getMoveIntent: () => ({ direction: [1, 0], speed: 2 }) },
+    );
+    const solver = createSolver();
+    const control = createSolver();
+    const fresh = createSolver();
+    const tick = (target: CharacterMovementSubsystem) =>
+      target.update({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+    const existing = pawn("old", 0);
+    solver.setEntities([existing]);
+    control.setEntities([existing]);
+    for (const target of [solver, control]) {
+      target.launch("old", [3, 5, 0]);
+      tick(target);
+    }
+    const pose = solver.transformOf("old");
+    const velocity = solver.velocityOf("old");
+    assert.ok(pose && pose.position[1] > 0 && velocity, "the existing character is mid-launch");
+    const added = pawn("new", 10);
+    fresh.setEntities([added]);
+    solver.addEntity(added);
+    solver.addEntity(added);
+    assert.deepEqual(solver.transformOf("old"), pose);
+    assert.deepEqual(solver.velocityOf("old"), velocity);
+    assert.deepEqual(solver.transformOf("new"), fresh.transformOf("new"));
+    for (const target of [solver, control, fresh]) tick(target);
+    assert.deepEqual(solver.transformOf("old"), control.transformOf("old"));
+    assert.deepEqual(solver.velocityOf("old"), control.velocityOf("old"));
+    assert.deepEqual(solver.transformOf("new"), fresh.transformOf("new"));
+    assert.deepEqual(solver.velocityOf("new"), fresh.velocityOf("new"));
+    assert.ok(solver.transformOf("new")!.position[0] > 10);
+    solver.launch("new", [4, 8, 0]);
+    tick(solver);
+    solver.removeEntity("new");
+    solver.removeEntity("new");
+    solver.removeEntity("unknown");
+    assert.equal(solver.transformOf("new"), null);
+    assert.equal(solver.velocityOf("new"), null);
+    synced.length = 0;
+    tick(solver);
+    assert.deepEqual(synced, ["old"], "removed characters no longer write transforms");
+    solver.addEntity(added);
+    tick(solver);
+    const restarted = createSolver();
+    restarted.setEntities([added]);
+    tick(restarted);
+    assert.deepEqual(solver.transformOf("new"), restarted.transformOf("new"), "no removed launch/vertical state leaked");
+  });
+
   check("character movement module installs the solver and publishes both of its sides", () => {
     const { services, installed, sinkCount } = startedHost(testHost());
     assert.deepEqual(installed, ["characterMovement"], "ticks in the movement slot");

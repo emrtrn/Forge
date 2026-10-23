@@ -101,6 +101,88 @@ function followerEntity(id: string, splineId: string): Entity {
 }
 
 export function registerRuntimeCapabilityModuleTests(check: Check): void {
+  check("incremental entity fan-out visits optional sinks in registration order", () => {
+    const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+    const calls: string[] = [];
+    host.addEntitySink({ setEntities: () => assert.fail("must not reset entities") });
+    for (const id of ["first", "second"]) {
+      host.addEntitySink({
+        setEntities: () => assert.fail("must not reset entities"),
+        addEntity: (entity) => calls.push(`${id}:add:${entity.id}`),
+        removeEntity: (entityId) => calls.push(`${id}:remove:${entityId}`),
+      });
+    }
+    host.addEntity(platformEntity("lift"));
+    host.removeEntity("lift");
+    assert.deepEqual(calls, ["first:add:lift", "second:add:lift", "first:remove:lift", "second:remove:lift"]);
+  });
+
+  check("incremental platforms preserve existing pose, elapsed time and carry delta", () => {
+    const runtime = startTestRuntime([createMovingPlatformModule()]);
+    const baseline = startTestRuntime([createMovingPlatformModule()]);
+    const query = runtime.host.resolve(movingPlatformQueryService)!;
+    runtime.loadLevel([platformEntity("old")]);
+    runtime.tick(0.5);
+    const old = structuredClone(query.platforms()[0]);
+    const added = platformEntity("new");
+    added.components.MovingPlatform = { offset: [4, 0, 0], speed: 2, startPhase: 0.25 };
+    baseline.loadLevel([added]);
+    runtime.host.addEntity(added);
+    runtime.host.addEntity(added);
+    assert.deepEqual(query.platforms()[0], old, "adding must preserve the current frame's carry");
+    assert.deepEqual(query.platforms()[1], baseline.host.resolve(movingPlatformQueryService)!.platforms()[0]);
+    runtime.tick(0.5);
+    baseline.tick(0.5);
+    assert.deepEqual(query.platforms()[1], baseline.host.resolve(movingPlatformQueryService)!.platforms()[0]);
+    assert.equal(query.platforms()[0]?.aabb.min[0], 1, "old platform continued to x=2");
+    const survivor = structuredClone(query.platforms()[0]);
+    runtime.host.removeEntity("new");
+    runtime.host.removeEntity("new");
+    runtime.host.removeEntity("unknown");
+    assert.deepEqual(query.platforms(), [survivor]);
+    runtime.synced.length = 0;
+    runtime.tick(0.5);
+    assert.deepEqual(runtime.synced.map((entry) => entry.id), ["old"]);
+  });
+
+  check("incremental spline followers preserve progress and stop on removal", () => {
+    const runtime = startTestRuntime([createSplineFollowerModule()]);
+    const baseline = startTestRuntime([createSplineFollowerModule()]);
+    const rail = createDefaultSplineActor();
+    rail.id = "rail";
+    rail.spline.points[1]!.position = [0, 0, 8];
+    for (const world of [runtime, baseline]) {
+      world.host.provide(splineRegistrySourceService, () => createSplineRegistry([rail]));
+    }
+    const followers = runtime.host.resolve(splineFollowerDebugService)!;
+    runtime.loadLevel([followerEntity("old", "rail")]);
+    runtime.tick(0.5);
+    const before = followers.followers()[0];
+    const added = followerEntity("new", "rail");
+    added.components.SplinePathFollower = { splineId: "rail", speed: 4, startDistance: 1, wrapMode: "loop" };
+    baseline.loadLevel([added]);
+    runtime.host.addEntity(added);
+    runtime.host.addEntity(added);
+    assert.deepEqual(followers.followers()[0], before);
+    assert.equal(runtime.synced.length, 1, "registration does not move any existing actor");
+    const patrol = followerEntity("patrol", "rail");
+    patrol.components.AIController = { patrolRoute: { source: "spline", splineId: "rail" } };
+    runtime.host.addEntity(patrol);
+    assert.equal(followers.followers().length, 2, "AI patrol exclusion also applies to incremental adds");
+    runtime.tick(0.5);
+    baseline.tick(0.5);
+    assert.deepEqual(runtime.synced.at(-1), baseline.synced.at(-1));
+    assert.equal(followers.followers()[0]?.distance, 4, "existing progress continued");
+    const survivor = followers.followers()[0];
+    runtime.host.removeEntity("new");
+    runtime.host.removeEntity("new");
+    runtime.host.removeEntity("unknown");
+    assert.deepEqual(followers.followers(), [survivor]);
+    runtime.synced.length = 0;
+    runtime.tick(0.5);
+    assert.deepEqual(runtime.synced.map((entry) => entry.id), ["old"]);
+  });
+
   check("tick slots order subsystems by meaning, not by registration sequence", () => {
     const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
     const stub = (id: string): Subsystem => ({ id });

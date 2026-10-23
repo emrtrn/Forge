@@ -1,6 +1,7 @@
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
+import { registerBehaviorSubsystemTests } from "../tests/engine/behaviorSubsystem.test";
 import { registerWorldCellPersistenceTests } from "../tests/engine/worldCellPersistence.test";
 /**
  * Engine scene/adapter checks. Bundled with esbuild and run on node by
@@ -1209,6 +1210,7 @@ registerWorldTerrainSaveTests(check);
 registerWorldTerrainCreateTests(check);
 registerWorldTerrainExpandTests(check);
 registerWorldPartitionTests(check);
+registerBehaviorSubsystemTests(check);
 await registerWorldCellPersistenceTests(check, checkAsync);
 await registerWorldTerrainActorAsyncTests(checkAsync);
 await registerTerrainRapierTests(checkAsync);
@@ -30200,6 +30202,7 @@ await checkAsync("spawn coordinator drops the spawn silently before a layout loa
     addActorObject: () => assert.fail("must not add object when unlaid-out"),
     addEntityToPhysics: () => assert.fail("must not add physics when unlaid-out"),
     addEntityToBehavior: () => assert.fail("must not add behavior when unlaid-out"),
+    addEntityToModules: () => assert.fail("must not add modules when unlaid-out"),
     playAutoPlayAudio: () => assert.fail("must not play audio when unlaid-out"),
     playAutoPlayParticle: () => assert.fail("must not play particle when unlaid-out"),
   });
@@ -30231,6 +30234,10 @@ await checkAsync("spawn coordinator wires the actor in order and attributes its 
       order.push("behavior");
       behaviorOwner = owner;
     },
+    addEntityToModules: (entity) => {
+      assert.equal(entity.id, registeredId);
+      order.push("modules");
+    },
     playAutoPlayAudio: () => order.push("audio"),
     playAutoPlayParticle: () => order.push("particle"),
   });
@@ -30246,6 +30253,7 @@ await checkAsync("spawn coordinator wires the actor in order and attributes its 
     "addObject",
     "physics",
     "behavior",
+    "modules",
     "audio",
     "particle",
   ]);
@@ -30265,6 +30273,7 @@ await checkAsync("spawn coordinator skips an id that is already registered", asy
     addActorObject: () => {},
     addEntityToPhysics: () => {},
     addEntityToBehavior: () => {},
+    addEntityToModules: () => {},
     playAutoPlayAudio: () => {},
     playAutoPlayParticle: () => {},
   });
@@ -30293,6 +30302,7 @@ await checkAsync("spawn coordinator frame-budget queues requests and cancels old
     addActorObject: () => {},
     addEntityToPhysics: () => {},
     addEntityToBehavior: () => {},
+    addEntityToModules: () => {},
     playAutoPlayAudio: () => {},
     playAutoPlayParticle: () => {},
   }, { maxSpawnsPerFrame: 1 });
@@ -30325,6 +30335,7 @@ await checkAsync("spawn coordinator frame-budget queues requests and cancels old
     addActorObject: () => {},
     addEntityToPhysics: () => {},
     addEntityToBehavior: () => {},
+    addEntityToModules: () => {},
     playAutoPlayAudio: () => {},
     playAutoPlayParticle: () => {},
   });

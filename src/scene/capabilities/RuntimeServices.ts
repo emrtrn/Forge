@@ -13,6 +13,7 @@
  */
 import type { Subsystem } from "@engine/core/Subsystem";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
+import type { Entity } from "@engine/scene/entity";
 
 import type { SceneEntitySink } from "../SceneRuntimeCore";
 
@@ -79,6 +80,12 @@ export interface RuntimeServices {
    */
   addEntitySink(sink: SceneEntitySink): void;
 
+  /** Starts tracking an entity in every sink supporting incremental registration. */
+  addEntity(entity: Entity): void;
+
+  /** Releases an entity from every sink supporting incremental removal. */
+  removeEntity(entityId: string): void;
+
   /** Publishes a service other modules (or the shell) may resolve. */
   provide<T>(key: RuntimeServiceKey<T>, value: T): void;
 
@@ -127,6 +134,14 @@ export function createRuntimeServiceHost(init: RuntimeServiceHostInit): RuntimeS
 
     addEntitySink(sink) {
       sinks.push(sink);
+    },
+
+    addEntity(entity) {
+      for (const sink of sinks) sink.addEntity?.(entity);
+    },
+
+    removeEntity(entityId) {
+      for (const sink of sinks) sink.removeEntity?.(entityId);
     },
 
     provide(key, value) {

@@ -7,6 +7,7 @@ import {
   normalizeWorldPartitionSettings,
   partitionLayout,
   worldCellPath,
+  worldPartitionActorCells,
   type WorldCellDocument,
 } from "../../engine/world/worldPartition";
 
@@ -100,6 +101,58 @@ function canonicalize(layout: RoomLayout): RoomLayout {
 }
 
 export function registerWorldPartitionTests(check: Check): void {
+  check("world partition: actor routing agrees with partition cells and preserves merged indices", () => {
+    const settings = normalizeWorldPartitionSettings({ enabled: true, grids: { main: { cellSize: 64 } } });
+    const layout = fixture();
+    layout.actors!.push(
+      { name: "positive-boundary", classRef: "Actor_Test", position: [64, 0, 64] },
+      { name: "negative-boundary", classRef: "Actor_Test", position: [-64, 0, -64] },
+      { name: "just-negative", classRef: "Actor_Test", position: [-0.001, 500, -0.001] },
+      { name: "same-cell", classRef: "Actor_Test", position: [65, -500, 65], spatiallyLoaded: true },
+    );
+    const before = structuredClone(layout);
+    const settingsBefore = structuredClone(settings);
+    const routes = worldPartitionActorCells(layout, settings);
+    assert.deepEqual([...routes], [[0, "-2_0"], [2, "0_0"], [4, "1_1"], [5, "-1_-1"], [6, "-1_-1"], [7, "1_1"]]);
+    const split = partitionLayout(layout, settings);
+    const actualRoutes = new Map<number, string>();
+    for (const [key, cell] of split.cells) {
+      for (const actor of cell.actors ?? []) {
+        const index = layout.actors!.findIndex((entry) => entry.name === actor.name);
+        assert.ok(index >= 0);
+        assert.equal(routes.get(index), key);
+        actualRoutes.set(index, key);
+      }
+    }
+    assert.deepEqual(routes, actualRoutes);
+    for (const actor of split.persistent.actors ?? []) {
+      assert.equal(routes.has(layout.actors!.findIndex((entry) => entry.name === actor.name)), false);
+    }
+    // Runtime receives this merged order, not the original authored array order.
+    const merged = mergeWorldCells(split.persistent, [...split.cells.values()].reverse());
+    const mergedRoutes = worldPartitionActorCells(merged, settings);
+    assert.deepEqual(merged.actors?.map((actor) => actor.name), [
+      "actor-always-first", "actor-always-second", "negative-boundary", "just-negative",
+      "actor-negative", "actor-origin", "positive-boundary", "same-cell",
+    ]);
+    assert.deepEqual([...mergedRoutes], [[2, "-1_-1"], [3, "-1_-1"], [4, "-2_0"], [5, "0_0"], [6, "1_1"], [7, "1_1"]]);
+    const repartitioned = partitionLayout(merged, settings);
+    const remerged = mergeWorldCells(repartitioned.persistent, repartitioned.cells.values());
+    assert.deepEqual(remerged.actors, merged.actors);
+    assert.deepEqual(worldPartitionActorCells(remerged, settings), mergedRoutes);
+    for (const [index, key] of mergedRoutes) {
+      const actor: NonNullable<RoomLayout["actors"]>[number] = merged.actors![index]!;
+      assert.ok(repartitioned.cells.get(key)?.actors?.some((entry) => entry.name === actor.name));
+      assert.equal(remerged.actors!.findIndex((entry) => entry.name === actor.name), index);
+    }
+    assert.deepEqual(layout, before);
+    assert.deepEqual(settings, settingsBefore);
+    assert.deepEqual(worldPartitionActorCells(layout, DEFAULT_WORLD_PARTITION), new Map());
+    assert.deepEqual(worldPartitionActorCells({ ...layout, actors: [] }, settings), new Map());
+    delete layout.actors;
+    assert.deepEqual(worldPartitionActorCells(layout, settings), new Map());
+  });
+
   check("world partition: settings defaults and partial fields are independent copies", () => {
     assert.deepEqual(DEFAULT_WORLD_PARTITION, { enabled: false, grids: { main: { cellSize: 128, loadRange: 384 } } });
     for (const value of [undefined, {}, { grids: {} }, { grids: { main: {} } }]) {
@@ -144,7 +197,7 @@ export function registerWorldPartitionTests(check: Check): void {
     assert.deepEqual(normalized, { ...header, ...arrays });
     assert.deepEqual(input, before);
     assert.notEqual(normalized.actors, arrays.actors);
-    assert.notEqual(normalized.actors?.[1], arrays.actors[1]);
+    assert.notEqual(normalized.actors?.[1], arrays.actors![1]);
     for (const field of ARRAYS) {
       assert.deepEqual(normalizeWorldCellDocument({ ...header, [field]: [] }), header);
       for (const value of [null, undefined, {}, 4, "array"]) {

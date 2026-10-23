@@ -76,36 +76,52 @@ export class MovingPlatformSubsystem implements Subsystem, MovingPlatformQuery {
 
   setEntities(entities: readonly Entity[]): void {
     this.runtimes = [];
-    for (const entity of entities) {
-      const platform = readMovingPlatformComponent(entity);
-      const transform = readTransformComponent(entity);
-      const collider = readColliderComponent(entity);
-      if (!platform || !transform || !collider) continue;
-      const start: Vec3 = [...transform.position];
-      const params: MovingPlatformParams = {
-        offset: platform.offset,
-        speed: platform.speed,
-        startPhase: platform.startPhase,
-      };
-      const elapsed = initialElapsed(params);
-      const position = platformPositionAt(start, params, elapsed);
-      this.runtimes.push({
-        id: entity.id,
-        start,
-        rotation: [...transform.rotation],
-        half: halfExtents(collider),
-        center: [...(collider.center ?? [0, 0, 0])] as Vec3,
-        params,
-        transform: {
-          position: [...position],
-          rotation: [...transform.rotation],
-          scale: [...transform.scale],
-        },
-        elapsed,
-        lastPosition: [...position],
-      });
-    }
+    for (const entity of entities) this.trackEntity(entity);
     this.recomputeStates(true);
+  }
+
+  addEntity(entity: Entity): void {
+    if (this.runtimes.some((runtime) => runtime.id === entity.id)) return;
+    const runtime = this.trackEntity(entity);
+    // Append only the new setup-frame state: existing carry deltas stay intact.
+    if (runtime) this.states.push(this.stateFor(runtime, true));
+  }
+
+  removeEntity(entityId: EntityId): void {
+    this.runtimes = this.runtimes.filter((runtime) => runtime.id !== entityId);
+    this.states = this.states.filter((state) => state.id !== entityId);
+  }
+
+  private trackEntity(entity: Entity): PlatformRuntime | null {
+    const platform = readMovingPlatformComponent(entity);
+    const transform = readTransformComponent(entity);
+    const collider = readColliderComponent(entity);
+    if (!platform || !transform || !collider) return null;
+    const start: Vec3 = [...transform.position];
+    const params: MovingPlatformParams = {
+      offset: platform.offset,
+      speed: platform.speed,
+      startPhase: platform.startPhase,
+    };
+    const elapsed = initialElapsed(params);
+    const position = platformPositionAt(start, params, elapsed);
+    const runtime: PlatformRuntime = {
+      id: entity.id,
+      start,
+      rotation: [...transform.rotation],
+      half: halfExtents(collider),
+      center: [...(collider.center ?? [0, 0, 0])] as Vec3,
+      params,
+      transform: {
+        position: [...position],
+        rotation: [...transform.rotation],
+        scale: [...transform.scale],
+      },
+      elapsed,
+      lastPosition: [...position],
+    };
+    this.runtimes.push(runtime);
+    return runtime;
   }
 
   clear(): void {
@@ -137,18 +153,20 @@ export class MovingPlatformSubsystem implements Subsystem, MovingPlatformQuery {
 
   /** Rebuilds the published state list; `atRest` zeroes the delta (setup frame). */
   private recomputeStates(atRest: boolean): void {
-    this.states = this.runtimes.map((runtime) => {
-      const position = runtime.transform.position as Vec3;
-      const aabb = rotatedBoxAabb(position, runtime.center, runtime.half, runtime.rotation);
-      const delta: [number, number, number] = atRest
-        ? [0, 0, 0]
-        : [
-            position[0] - runtime.lastPosition[0],
-            position[1] - runtime.lastPosition[1],
-            position[2] - runtime.lastPosition[2],
-          ];
-      return { id: runtime.id, aabb, delta };
-    });
+    this.states = this.runtimes.map((runtime) => this.stateFor(runtime, atRest));
+  }
+
+  private stateFor(runtime: PlatformRuntime, atRest: boolean): PlatformState {
+    const position = runtime.transform.position as Vec3;
+    const aabb = rotatedBoxAabb(position, runtime.center, runtime.half, runtime.rotation);
+    const delta: [number, number, number] = atRest
+      ? [0, 0, 0]
+      : [
+          position[0] - runtime.lastPosition[0],
+          position[1] - runtime.lastPosition[1],
+          position[2] - runtime.lastPosition[2],
+        ];
+    return { id: runtime.id, aabb, delta };
   }
 }
 

@@ -101,6 +101,28 @@ function spatiallyLoaded(item: { spatiallyLoaded?: boolean } | LayoutModelInstan
   return !("spatiallyLoaded" in item) || item.spatiallyLoaded !== false;
 }
 
+/** Single actor routing rule for both saved cells and runtime activation. */
+function actorCellKey(actor: NonNullable<RoomLayout["actors"]>[number], grid: WorldPartitionGridSettings): string | null {
+  if (!spatiallyLoaded(actor) || !actor.position) return null;
+  const coord = worldCellForActor(grid, [actor.position[0], actor.position[2]]);
+  return coord ? worldCellKey(coord.x, coord.z) : null;
+}
+
+/**
+ * Maps streamed actors' input-array indices to their main-grid cell keys.
+ * Persistent actors are absent. Pass the merged level to preserve the runtime's
+ * `actor:<index>` identities; this helper never reorders or mutates the layout.
+ */
+export function worldPartitionActorCells(layout: RoomLayout, settings: WorldPartitionSettings): Map<number, string> {
+  const cells = new Map<number, string>();
+  if (!settings.enabled) return cells;
+  layout.actors?.forEach((actor, index) => {
+    const key = actorCellKey(actor, settings.grids.main);
+    if (key !== null) cells.set(index, key);
+  });
+  return cells;
+}
+
 export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSettings): {
   persistent: RoomLayout;
   cells: Map<string, WorldCellDocument>;
@@ -112,6 +134,15 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
   const warnings: string[] = [];
   if (!settings.enabled) return { persistent, cells, warnings };
   const grid = settings.grids.main;
+
+  function cellForKey(key: string): WorldCellDocument {
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = { schema: 1, type: "worldCell", grid: "main", key };
+      cells.set(key, cell);
+    }
+    return cell;
+  }
 
   function split<T extends { spatiallyLoaded?: boolean }>(
     items: T[],
@@ -130,12 +161,7 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
         return true;
       }
       const key = worldCellKey(coord.x, coord.z);
-      let cell = cells.get(key);
-      if (!cell) {
-        cell = { schema: 1, type: "worldCell", grid: "main", key };
-        cells.set(key, cell);
-      }
-      append(cell, item);
+      append(cellForKey(key), item);
       return false;
     });
   }
@@ -154,8 +180,12 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
     });
   }
   if (persistent.actors) {
-    persistent.actors = split(persistent.actors, (item) => item.position,
-      (cell, item) => (cell.actors ??= []).push(item));
+    persistent.actors = persistent.actors.filter((actor) => {
+      const key = actorCellKey(actor, grid);
+      if (key === null) return true;
+      (cellForKey(key).actors ??= []).push(actor);
+      return false;
+    });
   }
   persistent.characters = split(persistent.characters, (item) => item.position,
     (cell, item) => (cell.characters ??= []).push(item));

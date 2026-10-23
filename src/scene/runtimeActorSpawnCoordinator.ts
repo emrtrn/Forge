@@ -33,6 +33,8 @@ export interface RuntimeActorSpawnCoordinatorDeps {
   addEntityToPhysics(entity: Entity): void;
   /** Registers the spawned entity with the behavior subsystem, attributing its owner. */
   addEntityToBehavior(entity: Entity, owner: string): void;
+  /** Registers the spawned entity with incremental capability sinks. */
+  addEntityToModules(entity: Entity): void;
   /** Fires any autoplay AudioComponent on the spawned entity. */
   playAutoPlayAudio(entity: Entity): void;
   /** Fires any autoplay ParticleEmitter on the spawned entity (fire-and-forget). */
@@ -144,6 +146,7 @@ export class RuntimeActorSpawnCoordinator {
     this.deps.addActorObject(entity);
     this.deps.addEntityToPhysics(entity);
     this.deps.addEntityToBehavior(entity, request.sourceEntityId);
+    this.deps.addEntityToModules(entity);
     this.deps.playAutoPlayAudio(entity);
     this.deps.playAutoPlayParticle(entity);
   }

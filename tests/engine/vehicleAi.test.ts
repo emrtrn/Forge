@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Group } from "three";
 import type { EngineUpdateContext, Subsystem } from "../../engine/core/Subsystem";
-import { createReferenceCarDefinition, type VehicleInput } from "../../engine/physics/vehicle/vehicleTypes";
+import { createReferenceCarDefinition, NEUTRAL_VEHICLE_INPUT, type VehicleInput } from "../../engine/physics/vehicle/vehicleTypes";
 import { actorInstanceToEntity } from "../../engine/scene/actorInstance";
 import { normalizeActorScriptDef } from "../../engine/scene/actorScript";
 import { readVehicleAiDriverComponent, VEHICLE_AI_DRIVER_COMPONENT } from "../../engine/scene/components";
@@ -56,6 +56,7 @@ function driverEntity(id: string, props: Record<string, unknown>): Entity {
 
 /** The vehicle-ai module on a host with one car the test moves by hand. */
 function startedModule(entities: readonly Entity[]) {
+  const vehicleIds = new Set(entities.map((entity) => entity.id));
   const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
   const registry = createCapabilityRegistry([createVehicleAiModule()]);
   registry.runtimeStart(host);
@@ -68,7 +69,7 @@ function startedModule(entities: readonly Entity[]) {
   const splines = createSplineRegistry([LANE]);
   host.provide(splineRegistrySourceService, () => splines);
   host.provide(vehicleHostService, {
-    vehicleIds: () => entities.map((entity) => entity.id),
+    vehicleIds: () => [...vehicleIds],
     vehicleState: () => ({ forwardSpeed: speed, engineLoad: 0, wheels: [], drivetrain: null }),
     vehicleDefinition: () => createReferenceCarDefinition(),
     actorObject: () => car,
@@ -82,6 +83,8 @@ function startedModule(entities: readonly Entity[]) {
     for (const subsystem of subsystems) subsystem.update?.({ deltaSeconds: 1 / 60 } as EngineUpdateContext);
   };
   return {
+    host,
+    vehicleIds,
     registry,
     car,
     inputs,
@@ -98,6 +101,68 @@ function startedModule(entities: readonly Entity[]) {
 }
 
 export function registerVehicleAiTests(check: Check): void {
+  check("incremental vehicle AI preserves driver progress and releases only its own pedals", () => {
+    const old = driverEntity("old", { splineId: "lane" });
+    const added = driverEntity("new", { splineId: "lane", entry: "start", targetSpeed: 8 });
+    const world = startedModule([old]);
+    const fresh = startedModule([added]);
+    world.car.position.z = 10;
+    world.tick();
+    const before = world.ai().drivers()[0];
+    assert.ok((before?.distance ?? 0) > 0);
+    world.vehicleIds.add("new");
+    world.host.addEntity(added);
+    world.host.addEntity(added);
+    assert.deepEqual(world.ai().drivers()[0], before);
+    assert.equal(world.ai().drivers().length, 2);
+    fresh.car.position.z = 10;
+    world.tick();
+    fresh.tick();
+    assert.deepEqual(world.ai().drivers()[1], fresh.ai().drivers()[0]);
+    assert.deepEqual(world.inputs.at(-1), fresh.inputs.at(-1), "new driver produces the same steering and pedals");
+    assert.equal(world.ai().drivers()[0]?.distance, before?.distance);
+    const survivor = world.ai().drivers()[0];
+    world.host.removeEntity("new");
+    assert.deepEqual(world.inputs.at(-1), { id: "new", input: NEUTRAL_VEHICLE_INPUT });
+    const inputCount = world.inputs.length;
+    world.host.removeEntity("new");
+    world.host.removeEntity("unknown");
+    assert.equal(world.inputs.length, inputCount, "unknown removals do not write pedals");
+    assert.deepEqual(world.ai().drivers(), [survivor]);
+    world.tick();
+    assert.deepEqual(world.inputs.slice(inputCount).map((entry) => entry.id), ["old"]);
+    world.setPossessed("old");
+    world.tick();
+    const released = world.ai().drivers()[0];
+    world.host.addEntity(added);
+    assert.deepEqual(world.ai().drivers()[0], released, "a released controller stays released");
+    const possessedCount = world.inputs.length;
+    world.host.removeEntity("old");
+    assert.equal(world.inputs.length, possessedCount, "removal does not overwrite the player's input");
+    world.registry.dispose();
+    fresh.registry.dispose();
+  });
+
+  check("removing vehicle AI releases its parked handbrake and respects possession before the next tick", () => {
+    const entity = driverEntity("car", { splineId: "lane" });
+    const parked = startedModule([entity]);
+    parked.car.position.z = 40;
+    parked.tick();
+    assert.equal(parked.ai().drivers()[0]?.finished, true);
+    assert.equal(parked.inputs.at(-1)?.input.handbrake, true);
+    parked.host.removeEntity("car");
+    assert.deepEqual(parked.inputs.at(-1)?.input, NEUTRAL_VEHICLE_INPUT);
+    parked.registry.dispose();
+
+    const possessed = startedModule([entity]);
+    possessed.tick();
+    possessed.setPossessed("car");
+    const before = possessed.inputs.length;
+    possessed.host.removeEntity("car");
+    assert.equal(possessed.inputs.length, before, "the player took over between decision ticks");
+    possessed.registry.dispose();
+  });
+
   // (A) data.
   check("vehicle AI driver component reads tolerant props and needs a spline to drive", () => {
     assert.equal(readVehicleAiDriverComponent(driverEntity("car", {})), undefined);

@@ -1154,6 +1154,49 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       actor dosya değiştirir; `spatiallyLoaded: false` persistent'e gider;
       hücreden büyük sınırlı actor'ler v1'de persistent'e gider (uyarıyla).
       Yalnız kirli hücreler yazılır.
+- [ ] **Runtime v1 — yalnız Actor Script actor'leri akar (kullanıcı kararı
+      2026-10-23, seçenek 1).** Statik instance'lar, ışıklar, karakterler,
+      volume'ler ve diğerleri level başında tam yüklenmeye devam eder
+      (instanced batch'ler level başına kurulur; hücre başına bölmek ayrı iş).
+      Tasarım:
+      - **Hücre ataması runtime'da yeniden hesaplanır:** `loadRoomLayout`
+        birleşik level döndürür; `worldPartitionActorCells(layout, settings)`
+        (`partitionLayout` ile aynı yönlendirme kuralı, tek kaynak) her
+        akışlı actor'ün birleşik dizideki indeksini hücresine eşler.
+        Persistent actor'ler (`spatiallyLoaded:false`, ...) eskisi gibi boot'ta
+        kurulur.
+      - **Kimlik değişmez:** akan actor de `actor:<birleşik indeks>` alır; save-game
+        kalıcı durumu, mesaj hedefleri ve patrol referansları eager yüklemeyle
+        aynı kimliği görür.
+      - **Aktivasyon** (hücre menzile girer): sınıf (önbellekli) →
+        `actorInstanceToEntity` → kayıt → render nesnesi → fizik → behavior
+        `addEntity` (BeginPlay sonraki tick) → autoplay ses/parçacık; spawn
+        koordinatörünün bağımlılıkları yeniden kullanılır. Kalıcı "yok edildi"
+        işaretli actor hiç kurulmaz; gizli/çarpışmasız işaretleri eklenirken
+        uygulanır. Mesh modelleri v1'de boot'ta yüklenmeye devam eder (K5
+        AssetResidency ayrı dilim).
+      - **Deaktivasyon** (hücre histerezis halkasının dışında): behavior
+        `unloadEntity` → EndPlay `reason: "unloaded"` (yeni neden; Unreal
+        `RemovedFromWorld`), entity detach, **yalnız `persist` anahtarları
+        kalır**, geçici script durumu sıfırlanır; sonra host'un destroy
+        temizliği (fizik gövdesi, render nesnesi, kayıtlar). Sahiplenilmiş
+        pawn ve sürülen araç hücresi boşalsa da canlı kalır; hücre yeniden
+        aktive olunca canlı kimlik atlanır.
+      - **Save-game:** `applyPersistentStateSnapshot` canlı olmayan actor'lerin
+        kayıtlarını da saklar (bugün atlıyor); aktivasyon onları uygular.
+        Boşaltılmış hücredeki taşınmış dinamik cisim/araç pozu v1'de
+        saklanmaz (açık soru olarak kalır).
+      - **Akış:** `worldPartitionModule` (`worldStreamingModule` gibi), main
+        grid `cellSize/loadRange`, histerezis 1,25, kaynak = pawn'ın canlı
+        pozu (yoksa kamera), kare başına aktivasyon bütçesi.
+        `WorldStreamingSubsystem` çekirdeği yeniden kullanılır (fetch = anında
+        hücre anahtarı). Boot/travel/save yükleme: spawn ve pawn çevresindeki
+        hücreler loading ekranı arkasında aktive edilir (arazi bekleyişiyle
+        aynı adımlar). `?debug`: aktif/toplam hücre, canlı akan actor sayısı.
+      - **Bilinen sınırlar (v1):** AI nav, boot'taki entity'lerden kurulur;
+        sonradan gelen actor'ler nav engeli olmaz. Editör her şeyi yükler.
+      Dilimler: (A) saf yönlendirme + behavior `unloadEntity` / kalıcı durum
+      (engine testli), (B) runtime modülü + bağlantı + smoke.
 - [ ] Runtime: hücre aktivasyonu instances / actors / lights / volumes /
       characters'ı sahneye, fiziğe (toplu), behavior'a ekler; deaktivasyon
       tersini yapar. Actor Script'te **BeginPlay hücre aktivasyonunda, EndPlay

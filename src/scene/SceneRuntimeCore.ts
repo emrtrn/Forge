@@ -1050,9 +1050,13 @@ export function buildSceneEntities(
   }
 }
 
-/** Receives the derived entity set (physics + behavior subsystems). */
+/** Receives the derived entity set and optional incremental runtime changes. */
 export interface SceneEntitySink {
   setEntities(entities: readonly Entity[]): void;
+  /** Starts tracking one entity as setEntities would, without resetting any other entity's state. */
+  addEntity?(entity: Entity): void;
+  /** Stops tracking one entity and releases its held state; unknown ids are a no-op. */
+  removeEntity?(entityId: string): void;
 }
 
 /** Engine-core spine brought online once the scene is fully built. */

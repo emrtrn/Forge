@@ -42,14 +42,15 @@ export interface SmartObjectRuntime extends SmartObjectReservationQuery {
 export class SmartObjectReservationStore implements SmartObjectRuntime {
   private readonly reservations = new Map<string, SmartObjectReservation>();
   private validSlots = new Set<string>();
+  private slotKeysByEntity = new Map<EntityId, readonly string[]>();
 
   setEntities(entities: readonly Entity[]): void {
     const next = new Set<string>();
+    this.slotKeysByEntity.clear();
     for (const entity of entities) {
-      const smartObject = readSmartObjectComponent(entity);
-      if (!smartObject || smartObject.enabled === false) continue;
-      if (smartObject.slots.length === 0) next.add(reservationKey(entity.id, null));
-      for (const slot of smartObject.slots) next.add(reservationKey(entity.id, slot.id));
+      const keys = this.keysFor(entity);
+      this.slotKeysByEntity.set(entity.id, keys);
+      for (const key of keys) next.add(key);
     }
     this.validSlots = next;
     for (const key of [...this.reservations.keys()]) {
@@ -57,9 +58,33 @@ export class SmartObjectReservationStore implements SmartObjectRuntime {
     }
   }
 
+  addEntity(entity: Entity): void {
+    if (this.slotKeysByEntity.has(entity.id)) return;
+    const keys = this.keysFor(entity);
+    this.slotKeysByEntity.set(entity.id, keys);
+    for (const key of keys) this.validSlots.add(key);
+  }
+
+  removeEntity(entityId: EntityId): void {
+    for (const key of this.slotKeysByEntity.get(entityId) ?? []) this.validSlots.delete(key);
+    this.slotKeysByEntity.delete(entityId);
+    for (const [key, reservation] of this.reservations) {
+      if (reservation.entityId === entityId || reservation.reservedBy === entityId) this.reservations.delete(key);
+    }
+  }
+
+  private keysFor(entity: Entity): string[] {
+    const smartObject = readSmartObjectComponent(entity);
+    if (!smartObject || smartObject.enabled === false) return [];
+    return smartObject.slots.length === 0
+      ? [reservationKey(entity.id, null)]
+      : smartObject.slots.map((slot) => reservationKey(entity.id, slot.id));
+  }
+
   clear(): void {
     this.reservations.clear();
     this.validSlots.clear();
+    this.slotKeysByEntity.clear();
   }
 
   claim(input: SmartObjectClaimInput): boolean {

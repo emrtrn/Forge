@@ -10,6 +10,10 @@ import assert from "node:assert/strict";
 import { PerspectiveCamera, Scene } from "three";
 
 import { EngineApp } from "../../engine/core/EngineApp";
+import { AISubsystem } from "../../engine/ai/aiSubsystem";
+import { normalizeAiBehaviorTreeAsset } from "../../engine/ai/behaviorAsset";
+import { normalizeAiStateTreeAsset } from "../../engine/ai/stateTreeAsset";
+import { SmartObjectReservationStore } from "../../engine/ai/smartObjects";
 import type { ScriptMessageEnvelope } from "../../engine/behavior/scriptMessages";
 import { AI_CONTROLLER_COMPONENT, TRANSFORM_COMPONENT } from "../../engine/scene/components";
 import type { Entity } from "../../engine/scene/entity";
@@ -150,6 +154,125 @@ function levelContext(host: RuntimeServiceHost, layout: RoomLayout, entities: re
 }
 
 export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("incremental AI creates only new runners and preserves behavior and StateTree memory", async () => {
+    const moves: string[] = [];
+    const createAi = () => {
+      const ai = new AISubsystem({
+        taskRegistry: {
+          get: () => (context) => {
+            const ticks = Number(context.memory.get("ticks") ?? 0) + 1;
+            context.memory.set("ticks", ticks);
+            context.blackboard.set("ticks", ticks);
+            return context.moveTo!({ controller: context.controller, position: [10, 0, 0] });
+          },
+        },
+        moveTo: (request) => { moves.push(request.controller.pawnEntityId); return "running"; },
+      });
+      ai.setAssetLibrary({
+        blackboards: new Map([["BB", { schema: 1, type: "blackboard", keys: [{ key: "ticks", kind: "number", default: 0 }] }]]),
+        behaviors: new Map([["BT", normalizeAiBehaviorTreeAsset({
+          schema: 1, type: "behaviorTree", blackboard: "BB", root: { kind: "task", task: "count" },
+        })]]),
+        stateTrees: new Map([["ST", normalizeAiStateTreeAsset({
+          schema: 1, type: "stateTree", blackboard: "BB", states: [{ id: "active", tasks: [{ task: "count" }] }],
+        })]]),
+      });
+      return ai;
+    };
+    const actor = (id: string, stateTree: boolean): Entity => ({
+      ...npc(id),
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        AIController: {
+          behaviorTree: "BT", ...(stateTree ? { stateTree: "ST" } : {}),
+          perception: { sightRadius: 20, fieldOfViewDeg: 360 },
+        },
+      },
+    });
+    const tick = (ai: AISubsystem) => ai.update({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+    const ai = createAi();
+    const fresh = createAi();
+    ai.setEntities([actor("old-bt", false), actor("old-st", true)]);
+    tick(ai);
+    const oldController = ai.getControllerForPawn("old-bt")!;
+    oldController.setGoal("keep this goal");
+    ai.updateEntityTransform("old-bt", { ...TRANSFORM, position: [7, 0, 0] });
+    const before = structuredClone(ai.getDebugSnapshot());
+    const added = [actor("new-bt", false), actor("new-st", true)];
+    fresh.setEntities(added);
+    for (const entity of added) { ai.addEntity(entity); ai.addEntity(entity); }
+    assert.equal(ai.getControllerForPawn("old-bt"), oldController);
+    assert.deepEqual(ai.getDebugSnapshot().controllers.slice(0, 2), before.controllers);
+    assert.deepEqual(ai.getDebugSnapshot().controllers.slice(2), fresh.getDebugSnapshot().controllers);
+    tick(ai);
+    tick(fresh);
+    for (const id of ["old-bt", "old-st"]) {
+      assert.equal(ai.getControllerForPawn(id)!.blackboard.get("ticks"), 2, "existing runner task memory survives");
+    }
+    const newRunnerMemory = (target: AISubsystem, offset: number) =>
+      target.getDebugSnapshot().controllers.slice(offset).map((snapshot) => ({
+        behavior: snapshot.behavior, stateTree: snapshot.stateTree, blackboard: snapshot.blackboard,
+      }));
+    assert.deepEqual(newRunnerMemory(ai, 2), newRunnerMemory(fresh, 0), "both runner kinds tick like freshly loaded controllers");
+    const source: Entity = { id: "source", components: { Transform: { position: [0, 0, 4], rotation: [0, 0, 0], scale: [1, 1, 1] } } };
+    ai.addEntity(source);
+    tick(ai);
+    assert.ok(ai.getControllerForPawn("old-bt")!.getPerception().some((stimulus) => stimulus.sourceEntityId === "source"));
+    const survivor = structuredClone(ai.getDebugSnapshot().controllers[0]);
+    ai.removeEntity("new-bt");
+    ai.removeEntity("new-bt");
+    ai.removeEntity("new-st");
+    ai.removeEntity("source");
+    ai.removeEntity("unknown");
+    assert.deepEqual(ai.getDebugSnapshot().controllers[0], survivor);
+    assert.equal(ai.getControllerForPawn("new-bt"), undefined);
+    moves.length = 0;
+    tick(ai);
+    assert.deepEqual(moves, ["old-bt", "old-st"], "removed runners stop producing movement requests");
+    assert.ok(!oldController.getPerception().some((stimulus) => stimulus.sourceEntityId === "source"));
+    ai.dispose();
+    fresh.dispose();
+  });
+
+  await checkAsync("incremental smart objects preserve other reservations and release removed owners and slots", async () => {
+    const store = new SmartObjectReservationStore();
+    const object = (id: string): Entity => ({ id, components: { SmartObject: { tags: ["seat"], slots: [{ id: "seat" }] } } });
+    store.setEntities([object("old")]);
+    assert.equal(store.claim({ entityId: "old", slotId: "seat", reservedBy: "keeper" }), true);
+    const before = store.reservation("old", "seat");
+    store.addEntity(object("new"));
+    store.addEntity(object("new"));
+    assert.equal(store.reservation("old", "seat"), before);
+    assert.equal(store.claim({ entityId: "new", slotId: "seat", reservedBy: "npc" }), true);
+    store.removeEntity("npc");
+    assert.equal(store.reservation("new", "seat"), null, "removed NPC releases its claim on a surviving object");
+    assert.equal(store.claim({ entityId: "new", slotId: "seat", reservedBy: "keeper" }), true);
+    store.removeEntity("new");
+    store.removeEntity("new");
+    store.removeEntity("unknown");
+    assert.equal(store.reservation("new", "seat"), null);
+    assert.equal(store.claim({ entityId: "new", slotId: "seat", reservedBy: "npc" }), false);
+    assert.equal(store.reservation("old", "seat"), before);
+  });
+
+  await checkAsync("AI module forwards incremental entities without resetting an existing controller", async () => {
+    const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+    host.provide(aiHostService, testAiHost());
+    const registry = createCapabilityRegistry([createAiModule()]);
+    registry.runtimeStart(host);
+    host.entitySinks()[0]!.setEntities([npc("old")]);
+    host.resolve(aiCommandsService)!.updateEntityTransform("old", { ...TRANSFORM, position: [8, 0, 0] });
+    const debug = host.resolve(aiDebugService)!;
+    const before = structuredClone(debug.controllers().controllers[0]);
+    host.addEntity(npc("new"));
+    assert.equal(debug.controllers().controllerCount, 2);
+    assert.deepEqual(debug.controllers().controllers[0], before);
+    host.removeEntity("new");
+    host.removeEntity("new");
+    assert.deepEqual(debug.controllers().controllers, [before]);
+    registry.dispose();
+  });
+
   await checkAsync("ai module ticks in the decision slot and derives controllers from the level", async () => {
     await withStubbedFetch(async () => {
       const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });

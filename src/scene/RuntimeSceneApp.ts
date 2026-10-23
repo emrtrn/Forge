@@ -1330,6 +1330,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       addEntityToPhysics: (entity) => this.physicsSubsystem.addEntity(entity),
       addEntityToBehavior: (entity, owner) =>
         this.behaviorSubsystem.addEntity(entity, { owner }),
+      addEntityToModules: (entity) => this.runtimeServices.addEntity(entity),
       playAutoPlayAudio: (entity) => this.audioCommands()?.playEntityAudio(entity),
       playAutoPlayParticle: (entity) => {
         void this.vfxCommands()?.playAutoPlayEntity(entity);
@@ -4160,6 +4161,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * authored `actorEntities` list is left intact (rebuilt fresh on scene reload).
    */
   private destroyActorEntity = (entityId: string): void => {
+    this.runtimeServices.removeEntity(entityId);
     this.physicsSubsystem.removeEntity(entityId);
     if (this.actorEntityById.has(entityId)) {
       const object = this.actorObjects.get(entityId);

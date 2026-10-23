@@ -62,6 +62,8 @@ interface DriverRecord {
   finished: boolean;
   /** Pressing the pedals this tick (false while waiting, released or switched off). */
   driving: boolean;
+  /** Includes the parked handbrake at route end, until the player takes over. */
+  ownsInput: boolean;
 }
 
 /** Adapts a spline query to the route the driver follows (world space). */
@@ -82,22 +84,40 @@ export function createVehicleAiModule(): CapabilityModule {
   const quaternion = new Quaternion();
   const forward = new Vector3();
 
+  const trackEntity = (entity: Entity): void => {
+    const component = readVehicleAiDriverComponent(entity);
+    if (!component) return;
+    drivers.set(entity.id, {
+      entityId: entity.id,
+      component,
+      state: null,
+      released: false,
+      missingRoute: false,
+      speedLimit: 0,
+      finished: false,
+      driving: false,
+      ownsInput: false,
+    });
+  };
+
   const setEntities = (entities: readonly Entity[]): void => {
     drivers.clear();
-    for (const entity of entities) {
-      const component = readVehicleAiDriverComponent(entity);
-      if (!component) continue;
-      drivers.set(entity.id, {
-        entityId: entity.id,
-        component,
-        state: null,
-        released: false,
-        missingRoute: false,
-        speedLimit: 0,
-        finished: false,
-        driving: false,
-      });
+    for (const entity of entities) trackEntity(entity);
+  };
+
+  const addEntity = (entity: Entity): void => {
+    if (!drivers.has(entity.id)) trackEntity(entity);
+  };
+
+  const removeEntity = (entityId: string): void => {
+    const record = drivers.get(entityId);
+    if (!record) return;
+    // Release only pedals owned by this AI, leaving a possessed/released car alone.
+    const host = services?.resolve(vehicleHostService);
+    if (record.ownsInput && host?.possessedEntityId() !== entityId) {
+      host?.setVehicleInput(entityId, NEUTRAL_VEHICLE_INPUT);
     }
+    drivers.delete(entityId);
   };
 
   const drive = (record: DriverRecord): void => {
@@ -106,6 +126,7 @@ export function createVehicleAiModule(): CapabilityModule {
     if (!host || record.released || !record.component.enabled) return;
     if (host.possessedEntityId() === record.entityId) {
       record.released = true;
+      record.ownsInput = false;
       return;
     }
     if (!host.vehicleIds().includes(record.entityId)) return;
@@ -141,6 +162,7 @@ export function createVehicleAiModule(): CapabilityModule {
     record.finished = step.finished;
     record.driving = !step.finished;
     host.setVehicleInput(record.entityId, step.input);
+    record.ownsInput = true;
   };
 
   const subsystem: Subsystem = {
@@ -156,7 +178,7 @@ export function createVehicleAiModule(): CapabilityModule {
     onRuntimeStart(runtimeServices) {
       services = runtimeServices;
       runtimeServices.addSubsystem("decision", subsystem);
-      runtimeServices.addEntitySink({ setEntities });
+      runtimeServices.addEntitySink({ setEntities, addEntity, removeEntity });
       runtimeServices.provide(vehicleAiService, {
         isDriving: (entityId) => drivers.get(entityId)?.driving === true,
         drivers: (): VehicleAiDriverDebugState[] =>

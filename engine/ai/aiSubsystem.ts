@@ -222,31 +222,62 @@ export class AISubsystem implements Subsystem {
     this.runnerAccumulatedSeconds.clear();
     this.sightGrace.clear();
     this.smartObjects.setEntities(entities);
-    for (const entity of entities) {
-      const component = readAIControllerComponent(entity);
-      if (!component) continue;
-      const behaviorAsset = component.behaviorTree
-        ? this.behaviorAssets.get(component.behaviorTree)
-        : undefined;
-      const stateTreeAsset = component.stateTree
-        ? this.stateTreeAssets.get(component.stateTree)
-        : undefined;
-      const blackboardRef =
-        component.blackboard ?? stateTreeAsset?.blackboard ?? behaviorAsset?.blackboard;
-      const blackboardKeys = blackboardRef
-        ? this.blackboardAssets.get(blackboardRef)?.keys
-        : undefined;
-      const blackboard = new Blackboard(blackboardKeys ?? component.blackboardKeys ?? []);
-      const options: AIControllerOptions = {
-        ...(component.behaviorTree ? { behaviorTreeAsset: component.behaviorTree } : {}),
-        ...(component.stateTree ? { stateTreeAsset: component.stateTree } : {}),
-        ...(blackboardRef ? { blackboardAsset: blackboardRef } : {}),
-        ...(component.perception ? { perception: component.perception } : {}),
-        ...(component.patrolRoute ? { patrolRoute: component.patrolRoute } : {}),
-      };
-      this.controllers.set(entity.id, new AIController(`ai:${entity.id}`, entity.id, blackboard, options));
-    }
+    for (const entity of entities) this.trackController(entity);
     this.rebuildRunners();
+  }
+
+  /** Entity queries use the live list; perception refreshes on its next scheduled tick. */
+  addEntity(entity: Entity): void {
+    if (this.entities.some((candidate) => candidate.id === entity.id)) return;
+    this.entities = [...this.entities, entity];
+    this.smartObjects.addEntity(entity);
+    this.trackController(entity);
+    const controller = this.controllers.get(entity.id);
+    if (controller) this.createRunner(entity.id, controller);
+  }
+
+  removeEntity(entityId: EntityId): void {
+    this.controllers.delete(entityId);
+    this.runners.delete(entityId);
+    this.entities = this.entities.filter((entity) => entity.id !== entityId);
+    this.runnerAccumulatedSeconds.delete(entityId);
+    this.sightGrace.delete(entityId);
+    for (const [listenerId, memory] of this.sightGrace) {
+      if (memory.stimulus.sourceEntityId === entityId) this.sightGrace.delete(listenerId);
+    }
+    this.pendingNoises = this.pendingNoises.filter((noise) => noise.sourceEntityId !== entityId);
+    this.pendingScriptStimuli = this.pendingScriptStimuli.filter(
+      (stimulus) => stimulus.sourceEntityId !== entityId && stimulus.target !== entityId,
+    );
+    this.smartObjects.removeEntity(entityId);
+    // Other controllers keep blackboard/query memories until normal task/service
+    // refresh. Perception refreshes on their next scheduled tick; no runner restarts.
+  }
+
+  private trackController(entity: Entity): void {
+    const component = readAIControllerComponent(entity);
+    if (!component) return;
+    const behaviorAsset = component.behaviorTree
+      ? this.behaviorAssets.get(component.behaviorTree)
+      : undefined;
+    const stateTreeAsset = component.stateTree
+      ? this.stateTreeAssets.get(component.stateTree)
+      : undefined;
+    const blackboardRef =
+      component.blackboard ?? stateTreeAsset?.blackboard ?? behaviorAsset?.blackboard;
+    const blackboardKeys = blackboardRef
+      ? this.blackboardAssets.get(blackboardRef)?.keys
+      : undefined;
+    const blackboard = new Blackboard(blackboardKeys ?? component.blackboardKeys ?? []);
+    const options: AIControllerOptions = {
+      ...(component.behaviorTree ? { behaviorTreeAsset: component.behaviorTree } : {}),
+      ...(component.stateTree ? { stateTreeAsset: component.stateTree } : {}),
+      ...(blackboardRef ? { blackboardAsset: blackboardRef } : {}),
+      ...(component.perception ? { perception: component.perception } : {}),
+      ...(component.patrolRoute ? { patrolRoute: component.patrolRoute } : {}),
+    };
+    const controller = new AIController(`ai:${entity.id}`, entity.id, blackboard, options);
+    this.controllers.set(entity.id, controller);
   }
 
   updateEntityTransform(entityId: EntityId, transform: TransformComponent): void {
@@ -379,26 +410,28 @@ export class AISubsystem implements Subsystem {
 
   private rebuildRunners(): void {
     this.runners.clear();
-    for (const [pawnEntityId, controller] of this.controllers) {
-      // StateTree wins when a controller authors both — it is the richer
-      // long-lived state model, and the runners share the same task registry.
-      const stateTreeRef = controller.stateTreeAsset;
-      const stateTreeAsset = stateTreeRef ? this.stateTreeAssets.get(stateTreeRef) : undefined;
-      if (stateTreeAsset) {
-        this.runners.set(pawnEntityId, {
-          kind: "stateTree",
-          runner: new AiStateTreeRunner(controller, stateTreeAsset, this.runnerOptions()),
-        });
-        continue;
-      }
-      const behaviorTreeAsset = controller.behaviorTreeAsset;
-      const behaviorAsset = behaviorTreeAsset ? this.behaviorAssets.get(behaviorTreeAsset) : undefined;
-      if (!behaviorAsset) continue;
+    for (const [pawnEntityId, controller] of this.controllers) this.createRunner(pawnEntityId, controller);
+  }
+
+  private createRunner(pawnEntityId: EntityId, controller: AIController): void {
+    // StateTree wins when a controller authors both — it is the richer
+    // long-lived state model, and the runners share the same task registry.
+    const stateTreeRef = controller.stateTreeAsset;
+    const stateTreeAsset = stateTreeRef ? this.stateTreeAssets.get(stateTreeRef) : undefined;
+    if (stateTreeAsset) {
       this.runners.set(pawnEntityId, {
-        kind: "behavior",
-        runner: new AiBehaviorRunner(controller, behaviorAsset, this.runnerOptions()),
+        kind: "stateTree",
+        runner: new AiStateTreeRunner(controller, stateTreeAsset, this.runnerOptions()),
       });
+      return;
     }
+    const behaviorTreeAsset = controller.behaviorTreeAsset;
+    const behaviorAsset = behaviorTreeAsset ? this.behaviorAssets.get(behaviorTreeAsset) : undefined;
+    if (!behaviorAsset) return;
+    this.runners.set(pawnEntityId, {
+      kind: "behavior",
+      runner: new AiBehaviorRunner(controller, behaviorAsset, this.runnerOptions()),
+    });
   }
 
   private dueRunnerDeltas(deltaSeconds: number): Map<EntityId, number> {

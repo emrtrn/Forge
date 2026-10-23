@@ -111,21 +111,32 @@ export class SplinePathFollowerSubsystem implements Subsystem {
 
   setEntities(entities: readonly Entity[]): void {
     this.runtimes = [];
-    for (const entity of entities) {
-      const component = readSplinePathFollowerComponent(entity);
-      const transform = readTransformComponent(entity);
-      if (!component || !transform) continue;
-      // AI spline patrol owns movement through navigation + CharacterMovement;
-      // a direct follower here would overwrite that result after every frame.
-      if (readAIControllerComponent(entity)?.patrolRoute?.source === "spline") continue;
-      this.runtimes.push({
-        entityId: entity.id,
-        component,
-        transform: cloneTransform(transform),
-        state: { distance: component.startDistance },
-        missingSpline: false,
-      });
-    }
+    for (const entity of entities) this.trackEntity(entity);
+  }
+
+  addEntity(entity: Entity): void {
+    if (this.runtimes.some((runtime) => runtime.entityId === entity.id)) return;
+    this.trackEntity(entity);
+  }
+
+  removeEntity(entityId: EntityId): void {
+    this.runtimes = this.runtimes.filter((runtime) => runtime.entityId !== entityId);
+  }
+
+  private trackEntity(entity: Entity): void {
+    const component = readSplinePathFollowerComponent(entity);
+    const transform = readTransformComponent(entity);
+    if (!component || !transform) return;
+    // AI spline patrol owns movement through navigation + CharacterMovement;
+    // a direct follower here would overwrite that result after every frame.
+    if (readAIControllerComponent(entity)?.patrolRoute?.source === "spline") return;
+    this.runtimes.push({
+      entityId: entity.id,
+      component,
+      transform: cloneTransform(transform),
+      state: { distance: component.startDistance },
+      missingSpline: false,
+    });
   }
 
   clear(): void {

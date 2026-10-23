@@ -175,17 +175,32 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.launchXZ.clear();
     this.slideXZ.clear();
     this.runtimes = [];
-    for (const entity of entities) {
-      const transform = readTransformComponent(entity);
-      const movement = readCharacterMovementComponent(entity);
-      if (!transform || !movement) continue;
-      this.runtimes.push({
-        id: entity.id,
-        transform: cloneTransform(transform),
-        movement,
-        capsule: resolveCharacterCapsule(entity),
-      });
-    }
+    for (const entity of entities) this.trackEntity(entity);
+  }
+
+  addEntity(entity: Entity): void {
+    if (this.runtimes.some((runtime) => runtime.id === entity.id)) return;
+    this.trackEntity(entity);
+  }
+
+  removeEntity(entityId: EntityId): void {
+    this.runtimes = this.runtimes.filter((runtime) => runtime.id !== entityId);
+    this.vertical.delete(entityId);
+    this.velocity.delete(entityId);
+    this.launchXZ.delete(entityId);
+    this.slideXZ.delete(entityId);
+  }
+
+  private trackEntity(entity: Entity): void {
+    const transform = readTransformComponent(entity);
+    const movement = readCharacterMovementComponent(entity);
+    if (!transform || !movement) return;
+    this.runtimes.push({
+      id: entity.id,
+      transform: cloneTransform(transform),
+      movement,
+      capsule: resolveCharacterCapsule(entity),
+    });
   }
 
   clear(): void {

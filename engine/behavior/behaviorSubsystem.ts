@@ -115,10 +115,11 @@ export type ActorEventPhase = "begin" | "end";
 
 /**
  * Why an `endPlay` event fired: `destroyed` for an explicit `actor.destroy()` /
- * lifespan expiry, `teardown` for scene reload / disposal. Mirrors the useful
- * subset of Unreal's `EEndPlayReason`.
+ * lifespan expiry, `teardown` for scene reload / disposal, `unloaded` when the
+ * actor's World Partition cell unloads (Unreal `RemovedFromWorld`). An unloaded
+ * actor may return later as a fresh instance.
  */
-export type ActorEndPlayReason = "destroyed" | "teardown";
+export type ActorEndPlayReason = "destroyed" | "teardown" | "unloaded";
 
 export interface ActorEventEnvelope {
   readonly kind: ActorEventKind;
@@ -612,7 +613,10 @@ export class BehaviorSubsystem implements Subsystem {
    * Incrementally adds one entity to the live behavior world (runtime SpawnActor).
    * Unlike `setEntities`, this preserves timers, runtime state and message bus
    * subscriptions for existing actors. Returns false when the entity has no
-   * transform or its id already exists.
+   * transform or its id already exists. Persisted hidden/collision markers are
+   * applied immediately, before BeginPlay on the next tick. Hosts should check
+   * {@link isPersistedDestroyed} before constructing an actor; adding one anyway
+   * immediately applies its persisted destroy command.
    */
   addEntity(entity: Entity, options: { owner?: EntityId } = {}): boolean {
     if (this.runtimeEntities.has(entity.id)) return false;
@@ -621,7 +625,45 @@ export class BehaviorSubsystem implements Subsystem {
     if (options.owner !== undefined) this.owners.set(entity.id, options.owner);
     this.appendBehaviorInstances(entity, runtime, this.instances);
     this.subscribeEntityMessages(entity);
+    this.applyPersistedActorEffects([entity.id]);
     return true;
+  }
+
+  /**
+   * Unloads a live actor whose World Partition cell left the active range.
+   * Fires EndPlay with reason `unloaded` while its state/world are still intact,
+   * then detaches it and discards state keys that were not explicitly persisted.
+   * Persisted keys (including reserved actor-effect markers) survive for save-game
+   * snapshots and a fresh instance added under the same id later. The host owns
+   * render/physics cleanup; this never issues a host destroy command.
+   * Returns false, without firing EndPlay, when the entity is already non-live.
+   */
+  unloadEntity(entityId: EntityId): boolean {
+    if (!this.runtimeEntities.has(entityId)) return false;
+    this.dispatchEndPlayEvents(entityId, "unloaded");
+    this.detachEntity(entityId);
+    const store = this.runtimeState.get(entityId);
+    const persisted = this.persistentStateKeys.get(entityId);
+    if (store) {
+      for (const key of store.keys()) {
+        if (!persisted?.has(key)) store.delete(key);
+      }
+      if (store.size === 0) this.runtimeState.delete(entityId);
+    }
+    // EndPlay can enqueue commands; they belong to the outgoing instance and
+    // must not reach the host or affect a later instance under the same id.
+    this.commandQueue = this.commandQueue.filter((command) => command.entityId !== entityId);
+    return true;
+  }
+
+  /**
+   * Whether save-game/runtime state marks this actor as persistently destroyed,
+   * including when its cell is unloaded. Hosts should skip constructing such an
+   * actor before calling {@link addEntity}. Level rebuilds (`setEntities`/`clear`)
+   * reset this marker along with all other persisted script state.
+   */
+  isPersistedDestroyed(entityId: EntityId): boolean {
+    return this.runtimeState.get(entityId)?.get(RESERVED_DESTROYED_KEY) === true;
   }
 
   /** Drops all behavior instances (e.g. on scene teardown/reload). */
@@ -709,9 +751,13 @@ export class BehaviorSubsystem implements Subsystem {
     );
   }
 
+  /**
+   * Restores persisted keys for live and unloaded actors alike. Effects on live
+   * actors apply immediately; unloaded actors retain their state until addEntity
+   * applies the reserved markers as they enter play.
+   */
   applyPersistentStateSnapshot(entries: readonly PersistentScriptStateEntry[]): void {
     for (const entry of entries) {
-      if (!this.runtimeEntities.has(entry.entityId)) continue;
       let store = this.runtimeState.get(entry.entityId);
       if (!store) {
         store = new Map();
@@ -839,10 +885,10 @@ export class BehaviorSubsystem implements Subsystem {
 
   /**
    * Fires the `endPlay` one-shot for a single entity's endPlay bindings (Unreal
-   * `Event EndPlay`), each at most once. Called just before a destroyed entity is
+   * `Event EndPlay`), each at most once. Called just before a leaving entity is
    * detached, so its state/transform/world are still intact. `teardown` fans this
    * out over the whole live set. Uses the live engine context when firing mid-tick
-   * (destroy), else a synthesized one (scene teardown runs outside `update()`).
+   * (destroy), else a synthesized one (scene teardown or cell unload).
    */
   private dispatchEndPlayEvents(entityId: EntityId, reason: ActorEndPlayReason): void {
     if (!this.runtimeEntities.has(entityId)) return;
@@ -1355,10 +1401,11 @@ export class BehaviorSubsystem implements Subsystem {
   }
 
   /**
-   * Removes a destroyed entity from the live behavior set: its instance, world
+   * Removes a destroyed or unloaded entity from the live behavior set: its instance, world
    * indexes and message subscriptions. Its `runtimeState` is deliberately kept so
    * a persisted destroy/hide marker survives for a re-save ({@link getPersistentStateSnapshot});
-   * `setEntities`/`clear` wipe it on the next rebuild.
+   * unloadEntity prunes unpersisted keys; `setEntities`/`clear` wipe everything
+   * on the next rebuild.
    */
   private detachEntity(entityId: EntityId): void {
     const runtime = this.runtimeEntities.get(entityId);
@@ -1406,15 +1453,18 @@ export class BehaviorSubsystem implements Subsystem {
   }
 
   /**
-   * Re-applies persisted hide/destroy markers after a save-game restore (A1.3):
-   * a fresh scene rebuilt the entities, the snapshot repopulated their reserved
-   * keys, so an entity flagged destroyed/hidden in the save is brought back to
-   * that state via the host sink. Applied immediately (restore runs after the
-   * scene is fully built), not queued, so the effect lands before the first tick.
+   * Re-applies persisted hide/collision/destroy markers after save-game restore
+   * or incremental registration. Only live entities receive commands; unloaded
+   * actors keep their markers until addEntity. Applied immediately, not queued,
+   * so the effect lands before the first tick. An explicit id set limits an add
+   * to that entity without replaying effects on existing actors.
    */
-  private applyPersistedActorEffects(): void {
+  private applyPersistedActorEffects(entityIds: Iterable<EntityId> = this.runtimeState.keys()): void {
     const effects: ActorCommand[] = [];
-    for (const [entityId, store] of this.runtimeState) {
+    for (const entityId of entityIds) {
+      if (!this.runtimeEntities.has(entityId)) continue;
+      const store = this.runtimeState.get(entityId);
+      if (!store) continue;
       // A destroyed entity is gone; its render/physics teardown supersedes the
       // hide/collision markers, so skip them. Hide and collision-disable are
       // independent and can both apply to the same (surviving) entity.

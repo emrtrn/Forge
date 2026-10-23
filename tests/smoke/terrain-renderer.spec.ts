@@ -83,7 +83,7 @@ async function writeFixture(): Promise<void> {
 /** Editor camera poses (world space; the fixture is centred on the origin). */
 const VIEWS = {
   overview: { level: LEVEL, position: [-150, 100, 120], target: [0, 0, 0] },
-  grazing: { level: LEVEL, position: [-90, 14, -60], target: [50, 0, 30] },
+  grazing: { level: LEVEL, position: [-90, 40, -60], target: [50, 0, 30] },
   "ao-dof": { level: POST_LEVEL, position: [-150, 100, 120], target: [0, 0, 0] },
 } as const;
 

@@ -9,6 +9,7 @@ import {
   Vector3,
   Vector4,
   type DataArrayTexture,
+  type DataTexture,
   type Material,
   type Texture,
   type WebGLProgramParametersWithUniforms,
@@ -28,15 +29,21 @@ import { TERRAIN_RENDER_LAYERS, TERRAIN_WEIGHT_BLOCKS } from "@engine/terrain/te
  *    for the DOF depth pass — those passes override the scene material, which
  *    would otherwise draw the undisplaced patch (see `postProcess.ts`).
  *
- * Coordinates: "terrain-local" metres start at the grid's min corner; the mesh
- * frame adds `uTerrainOrigin` (the legacy Landscape centres its grid on the
- * actor). Heights are exact R32F texels read with `texelFetch`; morphing
- * vertices between grid points blend the four around them by hand, so no float
- * filtering extension is needed. Normals and weights are filtered textures
- * built at vertex resolution, which matches the legacy per-vertex attributes.
+ * Coordinates: "terrain-local" metres start at tile (0, 0)'s min corner; the
+ * mesh frame adds `uTerrainOrigin` (a Landscape centres its grid on the actor).
+ * Each instance names its source: a tile slot (`slot >= 0`, full resolution)
+ * or the global map (`slot < 0`, one sample per parent-of-tile grid vertex,
+ * for far nodes and tiles without a slot). Heights are exact R32F texels read
+ * with `texelFetch`; morphing vertices between grid points blend the four
+ * around them by hand, so no float filtering extension is needed. Normals and
+ * weights are filtered textures at vertex resolution. A global sample with no
+ * tile (a hole) is discarded in every material.
  */
 
 export type TerrainViewMode = "lit" | "height" | "slope" | "layer";
+
+/** Skirt depth as a share of the node's size (a 128 m node hangs a 6.4 m skirt). */
+export const TERRAIN_SKIRT_RATIO = 0.05;
 
 const VIEW_MODE_INDEX: Record<TerrainViewMode, number> = { lit: 0, height: 1, slope: 2, layer: 3 };
 
@@ -61,15 +68,24 @@ export interface TerrainLayerInput {
 }
 
 export interface TerrainMaterialInputs {
+  /** Tile slots: R32F heights, RG16F normal X/Z, two RGBA8 weight layers per slot. */
   heights: DataArrayTexture;
   normals: DataArrayTexture;
   weights: DataArrayTexture;
+  /** Global map: R32F heights, RGBA16F (normal X, normal Z, hole flag), two RGBA8 weight layers. */
+  globalHeights: DataTexture;
+  globalNormals: DataTexture;
+  globalWeights: DataArrayTexture;
+  /** Global map samples per axis. */
+  globalSize: Vector2;
+  /** Metres between global samples. */
+  globalSpacing: number;
   /** Mesh-frame position of terrain-local (0, 0, 0). */
   origin: Vector3;
   spacing: number;
   /** Vertices per side of one slot (tile). */
   tileVertices: number;
-  /** Terrain-local X/Z edge lengths of the authored grid; vertices past them clamp to the edge. */
+  /** Terrain-local X/Z edge lengths that are drawn; vertices past them clamp to the edge. */
   extent: Vector2;
   patchQuads: number;
   viewMode: TerrainViewMode;
@@ -92,14 +108,19 @@ export interface TerrainMaterials {
 
 const VERTEX_PARS = /* glsl */ `
 uniform highp sampler2DArray uTerrainHeights;
+uniform highp sampler2D uTerrainGlobalHeights;
+uniform vec2 uTerrainGlobalSize;
+uniform float uTerrainGlobalSpacing;
 uniform vec3 uTerrainOrigin;
 uniform float uTerrainSpacing;
 uniform float uTerrainTileVertices;
 uniform vec2 uTerrainExtent;
 uniform vec3 uTerrainLodCamera;
 uniform float uTerrainPatchQuads;
-attribute vec4 terrainNodeA; // terrain-local node origin x/z, node size, slot
+uniform float uTerrainSkirtRatio;
+attribute vec4 terrainNodeA; // terrain-local node origin x/z, node size, slot (-1: global map)
 attribute vec4 terrainNodeB; // terrain-local tile origin x/z, morph start/end
+attribute float terrainNodeC; // 1: hang the skirt (this node or its neighbour stands in from the global map)
 varying vec2 vTerrainLocal;
 varying vec4 vTerrainTile; // slot, tile origin x/z, height
 varying vec3 vTerrainAxisX;
@@ -111,21 +132,34 @@ float forgeTerrainTexel(ivec2 cell, int slot) {
   return texelFetch(uTerrainHeights, ivec3(clamp(cell, ivec2(0), last), slot), 0).r;
 }
 
+float forgeTerrainGlobalTexel(ivec2 cell) {
+  return texelFetch(uTerrainGlobalHeights, clamp(cell, ivec2(0), ivec2(uTerrainGlobalSize) - 1), 0).r;
+}
+
 float forgeTerrainHeight(vec2 local, vec2 tileOrigin, int slot) {
-  vec2 grid = (local - tileOrigin) / uTerrainSpacing;
+  vec2 grid = slot >= 0 ? (local - tileOrigin) / uTerrainSpacing : local / uTerrainGlobalSpacing;
   vec2 base = floor(grid);
   vec2 f = grid - base;
   ivec2 cell = ivec2(base);
-  float h00 = forgeTerrainTexel(cell, slot);
-  float h10 = forgeTerrainTexel(cell + ivec2(1, 0), slot);
-  float h01 = forgeTerrainTexel(cell + ivec2(0, 1), slot);
-  float h11 = forgeTerrainTexel(cell + ivec2(1, 1), slot);
+  float h00, h10, h01, h11;
+  if (slot >= 0) {
+    h00 = forgeTerrainTexel(cell, slot);
+    h10 = forgeTerrainTexel(cell + ivec2(1, 0), slot);
+    h01 = forgeTerrainTexel(cell + ivec2(0, 1), slot);
+    h11 = forgeTerrainTexel(cell + ivec2(1, 1), slot);
+  } else {
+    h00 = forgeTerrainGlobalTexel(cell);
+    h10 = forgeTerrainGlobalTexel(cell + ivec2(1, 0));
+    h01 = forgeTerrainGlobalTexel(cell + ivec2(0, 1));
+    h11 = forgeTerrainGlobalTexel(cell + ivec2(1, 1));
+  }
   return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
 }
 `;
 
 const VERTEX_BEGIN = /* glsl */ `
-int forgeSlot = int(terrainNodeA.w + 0.5);
+// floor, not int(): int() truncates toward zero and would turn slot -1 into 0.
+int forgeSlot = int(floor(terrainNodeA.w + 0.5));
 vec2 forgeGrid = position.xz;
 vec2 forgeLocal = terrainNodeA.xy + forgeGrid * terrainNodeA.z;
 vec2 forgeEdge = uTerrainExtent;
@@ -138,6 +172,10 @@ float forgeMorph = clamp(
 vec2 forgeFrac = fract(forgeGrid * uTerrainPatchQuads * 0.5) * 2.0 / uTerrainPatchQuads;
 forgeLocal = clamp(forgeLocal - forgeFrac * terrainNodeA.z * forgeMorph, vec2(0.0), forgeEdge);
 float forgeH = forgeTerrainHeight(forgeLocal, terrainNodeB.xy, forgeSlot);
+// Skirt vertices (position.y = 1) drop below the surface only on flagged nodes
+// and never on the terrain's outer border; otherwise they fold onto the edge.
+bool forgeBorder = forgeLocal.x <= 0.0 || forgeLocal.y <= 0.0 || forgeLocal.x >= forgeEdge.x || forgeLocal.y >= forgeEdge.y;
+if (position.y > 0.5 && terrainNodeC > 0.5 && !forgeBorder) forgeH -= terrainNodeA.z * uTerrainSkirtRatio;
 vec3 transformed = uTerrainOrigin + vec3(forgeLocal.x, forgeH, forgeLocal.y);
 vTerrainLocal = forgeLocal;
 vTerrainTile = vec4(terrainNodeA.w, terrainNodeB.xy, forgeH);
@@ -146,26 +184,39 @@ vTerrainAxisY = normalMatrix * vec3(0.0, 1.0, 0.0);
 vTerrainAxisZ = normalMatrix * vec3(0.0, 0.0, 1.0);
 `;
 
-const FRAGMENT_NORMAL_PARS = /* glsl */ `
+const FRAGMENT_TERRAIN_PARS = /* glsl */ `
 uniform highp sampler2DArray uTerrainNormals;
+uniform highp sampler2D uTerrainGlobalNormals;
 uniform float uTerrainSpacing;
 uniform float uTerrainTileVertices;
+uniform vec2 uTerrainGlobalSize;
+uniform float uTerrainGlobalSpacing;
 varying vec2 vTerrainLocal;
 varying vec4 vTerrainTile;
 varying vec3 vTerrainAxisX;
 varying vec3 vTerrainAxisY;
 varying vec3 vTerrainAxisZ;
 
-vec2 forgeTerrainUv() {
-  return ((vTerrainLocal - vTerrainTile.yz) / uTerrainSpacing + 0.5) / uTerrainTileVertices;
-}
-
 float forgeTerrainSlot() {
   return floor(vTerrainTile.x + 0.5);
 }
 
+// Slot texture UV (slot >= 0) or global map UV (slot < 0).
+vec2 forgeTerrainUv() {
+  return forgeTerrainSlot() >= 0.0
+    ? ((vTerrainLocal - vTerrainTile.yz) / uTerrainSpacing + 0.5) / uTerrainTileVertices
+    : (vTerrainLocal / uTerrainGlobalSpacing + 0.5) / uTerrainGlobalSize;
+}
+
+bool forgeTerrainHole() {
+  return forgeTerrainSlot() < 0.0 && texture(uTerrainGlobalNormals, forgeTerrainUv()).b > 0.5;
+}
+
 vec3 forgeTerrainLocalNormal() {
-  vec2 n = texture(uTerrainNormals, vec3(forgeTerrainUv(), forgeTerrainSlot())).rg;
+  float slot = forgeTerrainSlot();
+  vec2 n = slot >= 0.0
+    ? texture(uTerrainNormals, vec3(forgeTerrainUv(), slot)).rg
+    : texture(uTerrainGlobalNormals, forgeTerrainUv()).rg;
   return normalize(vec3(n.x, sqrt(max(0.0, 1.0 - dot(n, n))), n.y));
 }
 `;
@@ -181,6 +232,7 @@ const FRAGMENT_NORMAL = /* glsl */ `
 
 const FRAGMENT_COLOR_PARS = /* glsl */ `
 uniform highp sampler2DArray uTerrainWeights;
+uniform highp sampler2DArray uTerrainGlobalWeights;
 uniform float uTerrainView;
 uniform vec2 uTerrainHeightRange;
 uniform float uTerrainActiveLayer;
@@ -193,14 +245,19 @@ uniform vec4 uLayerHasTex;
 uniform vec4 uLayerScale;
 `;
 
-// Mirrors `landscapeVertexColor` in landscape.ts, per pixel instead of per vertex.
+// The Landscape look: weighted layer colours/textures, or a debug view.
 const FRAGMENT_COLOR = /* glsl */ `
 #include <color_fragment>
 {
   vec2 forgeUv = forgeTerrainUv();
-  float forgeWeightLayer = forgeTerrainSlot() * ${TERRAIN_WEIGHT_BLOCKS.toFixed(1)};
-  vec4 forgeW0 = texture(uTerrainWeights, vec3(forgeUv, forgeWeightLayer));
-  vec4 forgeW1 = texture(uTerrainWeights, vec3(forgeUv, forgeWeightLayer + 1.0));
+  float forgeSlotIndex = forgeTerrainSlot();
+  float forgeWeightLayer = forgeSlotIndex * ${TERRAIN_WEIGHT_BLOCKS.toFixed(1)};
+  vec4 forgeW0 = forgeSlotIndex >= 0.0
+    ? texture(uTerrainWeights, vec3(forgeUv, forgeWeightLayer))
+    : texture(uTerrainGlobalWeights, vec3(forgeUv, 0.0));
+  vec4 forgeW1 = forgeSlotIndex >= 0.0
+    ? texture(uTerrainWeights, vec3(forgeUv, forgeWeightLayer + 1.0))
+    : texture(uTerrainGlobalWeights, vec3(forgeUv, 1.0));
   vec3 forgeColor;
   if (uTerrainView < 0.5) {
     vec2 forgeP = vTerrainLocal;
@@ -240,10 +297,17 @@ function injectVertex(shader: WebGLProgramParametersWithUniforms): void {
  * fragment shader (`MeshNormalMaterial`'s) includes `<common>`. */
 const FRAGMENT_MAIN = "void main() {";
 
+/** Every terrain material discards holes, so the depth/normal passes agree with the lit one. */
+function injectFragmentBase(shader: WebGLProgramParametersWithUniforms): void {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    FRAGMENT_MAIN,
+    `${FRAGMENT_TERRAIN_PARS}\n${FRAGMENT_MAIN}\n  if (forgeTerrainHole()) discard;`,
+  );
+}
+
 function injectNormal(shader: WebGLProgramParametersWithUniforms): void {
-  shader.fragmentShader = shader.fragmentShader
-    .replace(FRAGMENT_MAIN, `${FRAGMENT_NORMAL_PARS}\n${FRAGMENT_MAIN}`)
-    .replace("#include <normal_fragment_begin>", FRAGMENT_NORMAL);
+  injectFragmentBase(shader);
+  shader.fragmentShader = shader.fragmentShader.replace("#include <normal_fragment_begin>", FRAGMENT_NORMAL);
 }
 
 function patch(material: Material, uniforms: TerrainUniforms, key: string, fragment?: (shader: WebGLProgramParametersWithUniforms) => void): void {
@@ -277,12 +341,18 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainHeights: { value: inputs.heights },
     uTerrainNormals: { value: inputs.normals },
     uTerrainWeights: { value: inputs.weights },
+    uTerrainGlobalHeights: { value: inputs.globalHeights },
+    uTerrainGlobalNormals: { value: inputs.globalNormals },
+    uTerrainGlobalWeights: { value: inputs.globalWeights },
+    uTerrainGlobalSize: { value: inputs.globalSize },
+    uTerrainGlobalSpacing: { value: inputs.globalSpacing },
     uTerrainOrigin: { value: inputs.origin },
     uTerrainSpacing: { value: inputs.spacing },
     uTerrainTileVertices: { value: inputs.tileVertices },
     uTerrainExtent: { value: inputs.extent },
     uTerrainLodCamera: { value: new Vector3() },
     uTerrainPatchQuads: { value: inputs.patchQuads },
+    uTerrainSkirtRatio: { value: TERRAIN_SKIRT_RATIO },
     uTerrainView: { value: VIEW_MODE_INDEX[inputs.viewMode] },
     uTerrainActiveLayer: { value: inputs.activeLayer },
     uTerrainHeightRange: { value: inputs.heightRange },
@@ -291,10 +361,9 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
   patch(material, uniforms, "forge-terrain-cdlod", (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(FRAGMENT_MAIN, `${FRAGMENT_COLOR_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
-    shader.fragmentShader = shader.fragmentShader
-      .replace(FRAGMENT_MAIN, `${FRAGMENT_COLOR_PARS}\n${FRAGMENT_MAIN}`)
-      .replace("#include <color_fragment>", FRAGMENT_COLOR);
+    shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>", FRAGMENT_COLOR);
   });
 
   const normalMaterial = new MeshNormalMaterial();
@@ -303,7 +372,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
 
   const depthMaterial = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
   depthMaterial.blending = NoBlending;
-  patch(depthMaterial, uniforms, "forge-terrain-cdlod-depth");
+  patch(depthMaterial, uniforms, "forge-terrain-cdlod-depth", injectFragmentBase);
 
   return { material, normalMaterial, depthMaterial, uniforms };
 }

@@ -8,6 +8,8 @@ import {
   type ResolvedLandscape,
 } from "@engine/scene/landscape";
 import { TERRAIN_RENDER_LAYERS } from "@engine/terrain/terrainRenderData";
+import { landscapeRenderSource, type LandscapeRenderSource } from "@engine/terrain/terrainRenderSource";
+import { tileKey } from "@engine/terrain/terrainTypes";
 import { TerrainRenderer, terrainRendererOf } from "./terrain/terrainRenderer";
 import type { TerrainLayerInput } from "./terrain/terrainMaterial";
 
@@ -127,19 +129,24 @@ function terrainActiveLayer(data: ForgeLandscapeData, activeLayerId: string): nu
   return index >= 0 && index < TERRAIN_RENDER_LAYERS ? index : 0;
 }
 
+/** Each Landscape's one-tile render source, re-read after sculpt/paint. */
+const landscapeSources = new WeakMap<TerrainRenderer, LandscapeRenderSource>();
+
 /** Builds a landscape's terrain group; rebuild required whenever `data` changes shape. */
 export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObject {
   const group = new Group();
   group.name = item.name;
   ensureLandscapeLayers(item.data);
   const { verticesX, verticesZ, spacing } = item.data.size;
-  const terrain = new TerrainRenderer(item.data, {
+  const source = landscapeRenderSource(item.data);
+  const terrain = new TerrainRenderer(source, {
     viewMode: item.viewMode ?? "lit",
     activeLayer: terrainActiveLayer(item.data, item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id),
     layers: terrainLayerInputs(item),
     // The grid is centred on the actor (the collider uses the same frame).
     origin: new Vector3(-((verticesX - 1) * spacing) / 2, 0, -((verticesZ - 1) * spacing) / 2),
   });
+  landscapeSources.set(terrain, source);
   group.add(terrain.mesh);
   applyLandscapeTransform(group, item);
   return group;
@@ -172,8 +179,9 @@ export function updateLandscapeObjectGeometry(
 ): void {
   ensureLandscapeLayers(data);
   const terrain = landscapeTerrain(object);
-  if (!terrain) return;
-  terrain.updateData(dirty);
+  const source = terrain ? landscapeSources.get(terrain) : undefined;
+  if (!terrain || !source) return;
+  terrain.updateTile(tileKey(0, 0), source.refresh(dirty));
   terrain.setAppearance(viewMode, terrainActiveLayer(data, activeLayerId), terrainLayerColors(data, colors));
 }
 

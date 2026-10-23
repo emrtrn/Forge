@@ -3,6 +3,7 @@ import {
   BufferAttribute,
   ClampToEdgeWrapping,
   DataArrayTexture,
+  DataTexture,
   DataUtils,
   DynamicDrawUsage,
   FloatType,
@@ -28,33 +29,26 @@ import {
   type Object3D,
   type PixelFormat,
   type Raycaster,
+  type Texture,
   type TextureDataType,
   type WebGLRenderer,
   type WebGLRenderTarget,
 } from "three";
 
-import type { ForgeLandscapeData } from "@engine/scene/landscape";
-import { TerrainLodSelector } from "@engine/terrain/terrainLod";
+import { TerrainLodSelector, terrainResidentTileKeys, type TerrainLodWorld } from "@engine/terrain/terrainLod";
+import { invalidateTerrainTileRange, raycastTerrain, type TerrainQueryDef } from "@engine/terrain/terrainHeightQuery";
+import { TERRAIN_PATCH_QUADS, TERRAIN_WEIGHT_BLOCKS, type TerrainVertexRect } from "@engine/terrain/terrainRenderData";
 import {
-  invalidateTerrainTileRange,
-  raycastTerrain,
-  type TerrainQueryDef,
-  type TerrainTileLookup,
-} from "@engine/terrain/terrainHeightQuery";
-import {
-  TERRAIN_PATCH_QUADS,
-  TERRAIN_WEIGHT_BLOCKS,
-  TerrainNodeHeightBounds,
-  clampTerrainRect,
-  computeTerrainNormals,
-  copyLandscapeHeights,
-  fullTerrainRect,
-  packTerrainWeights,
-  terrainRenderGrid,
-  type TerrainRenderGrid,
-  type TerrainVertexRect,
-} from "@engine/terrain/terrainRenderData";
-import type { TerrainTileData } from "@engine/terrain/terrainTypes";
+  TerrainWorldHeightBounds,
+  buildTerrainGlobalAttributes,
+  computeTileNormals,
+  terrainSourceQueryDef,
+  updateTerrainGlobalAttributes,
+  type TerrainGlobalAttributes,
+  type TerrainRenderSource,
+} from "@engine/terrain/terrainRenderSource";
+import { TerrainSlotPool } from "@engine/terrain/terrainSlotPool";
+import { parseTileKey, tileKey } from "@engine/terrain/terrainTypes";
 import {
   createTerrainMaterials,
   setTerrainAppearance,
@@ -64,40 +58,41 @@ import {
 } from "./terrainMaterial";
 
 /**
- * GPU CDLOD renderer for one Landscape grid (OPEN_WORLD_PLAN Faz 2, first slice:
- * the 1×1 Landscape). One instanced patch mesh is placed per selected quadtree
- * node; heights, normals and paint weights live in `DataArrayTexture` slots
- * (slot 0 only, until tiles stream). Any authored `verticesX × verticesZ` grid
- * is drawn inside a padded power-of-two square (see `terrainRenderData.ts`);
- * vertices and picking stop at the authored edge. The mesh has no CPU
- * vertices, so picking goes through the heightfield raycast and the passes that
- * override scene materials draw it with {@link renderSceneWithTerrainOverride}.
+ * GPU CDLOD renderer for one terrain grid of tiles (OPEN_WORLD_PLAN Faz 2). One
+ * instanced patch mesh is placed per selected quadtree node. Tiles near the
+ * camera are uploaded into `DataArrayTexture` slots (heights, normals, paint
+ * weights) under a per-frame budget; every other node — far ones, and those
+ * whose tile has no slot yet — reads the global map, one sample per vertex of
+ * the grid one level above a tile. A legacy Landscape is a one-tile source
+ * that always holds its slot.
  *
- * Frames: the mesh sits in its parent's (the Landscape actor's) frame; the grid
- * corner is at `origin`, so a centred grid has `origin = (-halfX, 0, -halfZ)`.
+ * The mesh has no CPU vertices, so picking goes through the heightfield
+ * raycast, and the passes that override scene materials draw it with
+ * {@link renderSceneWithTerrainOverride}.
+ *
+ * Frames: the mesh sits in its parent's frame; terrain-local (0, 0, 0) — tile
+ * (0, 0)'s min corner at the height datum — is at `origin`.
  */
 
 export interface TerrainRendererOptions {
   viewMode: TerrainViewMode;
   activeLayer: number;
   layers: TerrainLayerInput[];
-  /** Mesh-frame position of the grid's min corner. */
+  /** Mesh-frame position of terrain-local (0, 0, 0). */
   origin: Vector3;
+  /** Tile slots on the GPU (default: every tile, at most 64). */
+  slotCapacity?: number;
+  /** Tile uploads per `updateLod` call (default 4). */
+  uploadsPerFrame?: number;
 }
 
 export type TerrainOverrideKind = "normal" | "depth";
 
 const MESH_NAME = "landscape-terrain";
+const DEFAULT_SLOT_CAPACITY = 64;
+const DEFAULT_UPLOADS_PER_FRAME = 4;
 
-function arrayTexture(
-  data: Float32Array | Uint16Array | Uint8Array,
-  size: number,
-  depth: number,
-  format: PixelFormat,
-  type: TextureDataType,
-  filter: MagnificationTextureFilter,
-): DataArrayTexture {
-  const texture = new DataArrayTexture(data, size, size, depth);
+function configure<T extends Texture>(texture: T, format: PixelFormat, type: TextureDataType, filter: MagnificationTextureFilter): T {
   texture.format = format;
   texture.type = type;
   texture.minFilter = filter;
@@ -111,10 +106,20 @@ function arrayTexture(
   return texture;
 }
 
-/** Unit patch: `(P + 1)²` vertices over [0, 1]², split like the legacy mesh. */
+/**
+ * Unit patch: `(P + 1)²` vertices over [0, 1]², split along the collider's
+ * diagonal, plus a skirt — a copy of the border ring with `y = 1`. A node whose
+ * `terrainNodeC` flag is set drops it below the surface; any other node folds
+ * it onto its own edge (zero area). See {@link TerrainRenderer.select}.
+ */
 function createPatchGeometry(patchQuads: number, capacity: number): InstancedBufferGeometry {
   const verts = patchQuads + 1;
-  const positions = new Float32Array(verts * verts * 3);
+  const ring: [number, number][] = [];
+  for (let i = 0; i < patchQuads; i += 1) ring.push([i, 0]);
+  for (let i = 0; i < patchQuads; i += 1) ring.push([patchQuads, i]);
+  for (let i = patchQuads; i > 0; i -= 1) ring.push([i, patchQuads]);
+  for (let i = patchQuads; i > 0; i -= 1) ring.push([0, i]);
+  const positions = new Float32Array((verts * verts + ring.length) * 3);
   for (let z = 0; z < verts; z += 1) {
     for (let x = 0; x < verts; x += 1) {
       const index = (z * verts + x) * 3;
@@ -122,7 +127,8 @@ function createPatchGeometry(patchQuads: number, capacity: number): InstancedBuf
       positions[index + 2] = z / patchQuads;
     }
   }
-  const indices = new Uint16Array(patchQuads * patchQuads * 6);
+  ring.forEach(([x, z], index) => positions.set([x / patchQuads, 1, z / patchQuads], (verts * verts + index) * 3));
+  const indices = new Uint16Array(patchQuads * patchQuads * 6 + ring.length * 12);
   let cursor = 0;
   for (let z = 0; z < patchQuads; z += 1) {
     for (let x = 0; x < patchQuads; x += 1) {
@@ -134,16 +140,30 @@ function createPatchGeometry(patchQuads: number, capacity: number): InstancedBuf
       cursor += 6;
     }
   }
+  ring.forEach(([x, z], index) => {
+    const [nx, nz] = ring[(index + 1) % ring.length]!;
+    const top0 = z * verts + x;
+    const top1 = nz * verts + nx;
+    const bottom0 = verts * verts + index;
+    const bottom1 = verts * verts + ((index + 1) % ring.length);
+    // Both windings: the gap can be seen from either side of the edge.
+    indices.set([top0, bottom0, top1, top1, bottom0, bottom1, top0, top1, bottom0, top1, bottom1, bottom0], cursor);
+    cursor += 12;
+  });
   const geometry = new InstancedBufferGeometry();
   geometry.setAttribute("position", new BufferAttribute(positions, 3));
   geometry.setIndex(new BufferAttribute(indices, 1));
-  for (const name of ["terrainNodeA", "terrainNodeB"]) {
-    const attribute = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+  setInstanceCapacity(geometry, capacity);
+  geometry.instanceCount = 0;
+  return geometry;
+}
+
+function setInstanceCapacity(geometry: InstancedBufferGeometry, capacity: number): void {
+  for (const [name, size] of [["terrainNodeA", 4], ["terrainNodeB", 4], ["terrainNodeC", 1]] as const) {
+    const attribute = new InstancedBufferAttribute(new Float32Array(capacity * size), size);
     attribute.setUsage(DynamicDrawUsage);
     geometry.setAttribute(name, attribute);
   }
-  geometry.instanceCount = 0;
-  return geometry;
 }
 
 function isVisibleInHierarchy(object: Object3D): boolean {
@@ -153,63 +173,135 @@ function isVisibleInHierarchy(object: Object3D): boolean {
   return true;
 }
 
+/** Ray parameter interval where `start + dir·t` lies in `[lo, hi]` on one axis. */
+function slab(start: number, dir: number, lo: number, hi: number): [number, number] {
+  if (Math.abs(dir) < 1e-12) return start >= lo && start <= hi ? [-Infinity, Infinity] : [Infinity, -Infinity];
+  const t0 = (lo - start) / dir;
+  const t1 = (hi - start) / dir;
+  return t0 < t1 ? [t0, t1] : [t1, t0];
+}
+
+/**
+ * Global map heights for the GPU: a hole (NaN) takes its nearest valid
+ * neighbour's height, so triangles reaching into a discarded hole stay level
+ * instead of dropping to the datum where the cut is visible.
+ */
+function fillHoles(heights: Float32Array, width: number, height: number, fallback: number): Float32Array {
+  const out = Float32Array.from(heights);
+  for (let pass = 0; pass < width + height; pass += 1) {
+    let missing = 0;
+    const previous = Float32Array.from(out);
+    for (let z = 0; z < height; z += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = z * width + x;
+        if (!Number.isNaN(previous[index]!)) continue;
+        let sum = 0;
+        let count = 0;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx;
+          const nz = z + dz;
+          if (nx < 0 || nz < 0 || nx >= width || nz >= height) continue;
+          const value = previous[nz * width + nx]!;
+          if (Number.isNaN(value)) continue;
+          sum += value;
+          count += 1;
+        }
+        if (count > 0) out[index] = sum / count;
+        else missing += 1;
+      }
+    }
+    if (missing === 0) return out;
+  }
+  for (let index = 0; index < out.length; index += 1) if (Number.isNaN(out[index]!)) out[index] = fallback;
+  return out;
+}
+
 export class TerrainRenderer {
   readonly mesh: Mesh<InstancedBufferGeometry, Material>;
   private readonly materials: TerrainMaterials;
-  private readonly grid: TerrainRenderGrid;
-  private readonly spacing: number;
   private readonly origin: Vector3;
-  /** Terrain-local edge lengths of the authored grid. */
   private readonly extent: Vector2;
-  private readonly heights: Float32Array;
-  private readonly normals: Float32Array;
-  private readonly normalTexels: Uint16Array;
-  private readonly weights: Uint8Array;
+  private readonly tileVertices: number;
+  private readonly tileTexels: number;
+  private readonly world: TerrainLodWorld;
+  private readonly queryDef: TerrainQueryDef;
+  private readonly allKeys: ReadonlySet<string>;
+  /** Every tile fits in a slot, so residency never changes. */
+  private readonly allResident: boolean;
+  private readonly uploadsPerFrame: number;
+  private readonly heightSlots: Float32Array;
+  private readonly normalSlots: Uint16Array;
+  private readonly weightSlots: Uint8Array;
+  private readonly normalScratch: Float32Array;
   private readonly heightTexture: DataArrayTexture;
   private readonly normalTexture: DataArrayTexture;
   private readonly weightTexture: DataArrayTexture;
-  private readonly bounds: TerrainNodeHeightBounds;
+  private readonly global: TerrainGlobalAttributes;
+  private readonly globalHeightTexture: DataTexture;
+  private readonly globalNormalTexture: DataTexture;
+  private readonly globalWeightTexture: DataArrayTexture;
+  private readonly bounds: TerrainWorldHeightBounds;
   private readonly selector: TerrainLodSelector;
-  private readonly tile: TerrainTileData;
-  private readonly queryDef: TerrainQueryDef;
-  private readonly lookup: TerrainTileLookup;
+  private readonly pool: TerrainSlotPool;
+  /** Tiles that hold a slot and want it; the pool may still cache released ones. */
+  private readonly active = new Set<string>();
+  /** Tiles whose slot holds their current data. */
+  private readonly uploaded = new Set<string>();
   private readonly lastCamera = new Vector3(Number.NaN, Number.NaN, Number.NaN);
   private readonly cameraScratch = new Vector3();
   private selectionDirty = true;
 
-  constructor(private readonly data: ForgeLandscapeData, options: TerrainRendererOptions) {
-    this.grid = terrainRenderGrid(data.size);
-    const { stride } = this.grid;
-    this.spacing = data.size.spacing;
+  constructor(private readonly source: TerrainRenderSource, options: TerrainRendererOptions) {
     this.origin = options.origin.clone();
-    this.extent = new Vector2((this.grid.verticesX - 1) * this.spacing, (this.grid.verticesZ - 1) * this.spacing);
-    const texels = stride * stride;
-    this.heights = new Float32Array(texels);
-    this.normals = new Float32Array(texels * 2);
-    this.normalTexels = new Uint16Array(texels * 2);
-    this.weights = new Uint8Array(texels * 4 * TERRAIN_WEIGHT_BLOCKS);
-    this.heightTexture = arrayTexture(this.heights, stride, 1, RedFormat, FloatType, NearestFilter);
-    this.normalTexture = arrayTexture(this.normalTexels, stride, 1, RGFormat, HalfFloatType, LinearFilter);
-    this.weightTexture = arrayTexture(this.weights, stride, TERRAIN_WEIGHT_BLOCKS, RGBAFormat, UnsignedByteType, LinearFilter);
-    this.fill(fullTerrainRect(this.grid));
-    this.bounds = new TerrainNodeHeightBounds(this.heights, stride);
+    this.extent = new Vector2(source.extent[0], source.extent[1]);
+    this.tileVertices = source.tileQuads + 1;
+    this.tileTexels = this.tileVertices * this.tileVertices;
+    this.world = { tileQuads: source.tileQuads, spacing: source.spacing, tilesX: source.tilesX, tilesZ: source.tilesZ, origin: [0, 0, 0] };
+    this.queryDef = terrainSourceQueryDef(source);
+    this.allKeys = new Set(source.keys());
+    const capacity = Math.max(1, Math.min(this.allKeys.size, options.slotCapacity ?? DEFAULT_SLOT_CAPACITY));
+    this.allResident = this.allKeys.size <= capacity;
+    this.uploadsPerFrame = options.uploadsPerFrame ?? DEFAULT_UPLOADS_PER_FRAME;
+    this.pool = new TerrainSlotPool(capacity);
 
-    const quads = stride - 1;
-    const world = { tileQuads: quads, spacing: this.spacing, tilesX: 1, tilesZ: 1, origin: [0, 0, 0] as [number, number, number] };
-    this.selector = new TerrainLodSelector(world, (level, ix, iz) => this.bounds.node(level, ix, iz), {
+    const size = this.tileVertices;
+    this.heightSlots = new Float32Array(this.tileTexels * capacity);
+    this.normalSlots = new Uint16Array(this.tileTexels * 2 * capacity);
+    this.weightSlots = new Uint8Array(this.tileTexels * 4 * TERRAIN_WEIGHT_BLOCKS * capacity);
+    this.normalScratch = new Float32Array(this.tileTexels * 2);
+    this.heightTexture = configure(new DataArrayTexture(this.heightSlots, size, size, capacity), RedFormat, FloatType, NearestFilter);
+    this.normalTexture = configure(new DataArrayTexture(this.normalSlots, size, size, capacity), RGFormat, HalfFloatType, LinearFilter);
+    this.weightTexture = configure(
+      new DataArrayTexture(this.weightSlots, size, size, capacity * TERRAIN_WEIGHT_BLOCKS),
+      RGBAFormat, UnsignedByteType, LinearFilter,
+    );
+
+    this.bounds = new TerrainWorldHeightBounds(source);
+    this.global = buildTerrainGlobalAttributes(source);
+    const { width, height } = this.global.map;
+    this.globalHeightTexture = configure(new DataTexture(new Float32Array(width * height), width, height), RedFormat, FloatType, NearestFilter);
+    this.globalNormalTexture = configure(new DataTexture(new Uint16Array(width * height * 4), width, height), RGBAFormat, HalfFloatType, LinearFilter);
+    this.globalWeightTexture = configure(
+      new DataArrayTexture(this.global.weights, width, height, TERRAIN_WEIGHT_BLOCKS),
+      RGBAFormat, UnsignedByteType, LinearFilter,
+    );
+    this.writeGlobalTextures();
+
+    this.selector = new TerrainLodSelector(this.world, (level, ix, iz) => this.bounds.node(level, ix, iz), {
       patchQuads: TERRAIN_PATCH_QUADS,
     });
-    this.tile = { x: 0, z: 0, size: stride, heights: this.heights, layerCount: 0, weights: new Uint8Array(0) };
-    this.queryDef = { tileQuads: quads, spacing: this.spacing, tilesX: 1, tilesZ: 1, origin: [0, 0, 0] };
-    this.lookup = { tile: (x, z) => (x === 0 && z === 0 ? this.tile : undefined) };
-
     this.materials = createTerrainMaterials({
       heights: this.heightTexture,
       normals: this.normalTexture,
       weights: this.weightTexture,
+      globalHeights: this.globalHeightTexture,
+      globalNormals: this.globalNormalTexture,
+      globalWeights: this.globalWeightTexture,
+      globalSize: new Vector2(width, height),
+      globalSpacing: this.global.map.stride * source.spacing,
       origin: this.origin,
-      spacing: this.spacing,
-      tileVertices: stride,
+      spacing: source.spacing,
+      tileVertices: size,
       extent: this.extent,
       patchQuads: TERRAIN_PATCH_QUADS,
       viewMode: options.viewMode,
@@ -217,43 +309,62 @@ export class TerrainRenderer {
       heightRange: new Vector2(),
       layers: options.layers,
     });
-    this.updateHeightRange(this.bounds.range());
+    this.updateHeightRange();
 
-    const leaves = quads / TERRAIN_PATCH_QUADS;
-    this.mesh = new Mesh(createPatchGeometry(TERRAIN_PATCH_QUADS, leaves * leaves), this.materials.material);
+    const leaves = (source.tilesX * source.tilesZ * source.tileQuads * source.tileQuads) / (TERRAIN_PATCH_QUADS * TERRAIN_PATCH_QUADS);
+    this.mesh = new Mesh(createPatchGeometry(TERRAIN_PATCH_QUADS, Math.min(leaves, 1024)), this.materials.material);
     this.mesh.name = MESH_NAME;
     this.mesh.receiveShadow = true;
     this.mesh.castShadow = false;
     this.mesh.userData.forgeTerrain = this;
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
     this.updateBoundingVolumes();
+
+    if (this.allResident) {
+      for (const key of this.allKeys) this.makeResident(key);
+    }
     // Until the first camera update, draw the whole grid from a far viewpoint.
-    this.select(new Vector3(0, Number.MAX_SAFE_INTEGER / 4, 0));
+    this.select(new Vector3(this.extent.x / 2, Number.MAX_SAFE_INTEGER / 4, this.extent.y / 2));
   }
 
-  /** Re-selects the quadtree for `camera`; call once per frame before rendering. */
+  /** Tiles currently drawn from a slot at full resolution. */
+  get residentTileCount(): number {
+    return this.uploaded.size;
+  }
+
+  /** Re-selects the quadtree and streams tile slots for `camera`; call once per frame before rendering. */
   updateLod(camera: Camera): void {
     this.mesh.updateWorldMatrix(true, false);
     const local = this.mesh.worldToLocal(camera.getWorldPosition(this.cameraScratch)).sub(this.origin);
+    const residencyChanged = this.allResident ? false : this.updateResidency(local);
     const threshold = this.selector.settings.leafSize * 0.01;
-    if (!this.selectionDirty && local.distanceToSquared(this.lastCamera) < threshold * threshold) return;
+    if (!residencyChanged && !this.selectionDirty && local.distanceToSquared(this.lastCamera) < threshold * threshold) return;
     this.select(local);
   }
 
-  /** Re-reads heights/weights inside `rect` (inclusive vertex bounds) after an edit. */
-  updateData(rect: TerrainVertexRect): void {
-    const area = clampTerrainRect(rect, this.grid);
-    this.fill(area);
-    // An edit on the authored edge also rewrote the padding beyond it.
-    const last = this.grid.stride - 1;
-    this.bounds.update({
-      x0: area.x0,
-      z0: area.z0,
-      x1: area.x1 === this.grid.verticesX - 1 ? last : area.x1,
-      z1: area.z1 === this.grid.verticesZ - 1 ? last : area.z1,
-    });
-    invalidateTerrainTileRange(this.tile);
-    this.updateHeightRange(this.bounds.range());
+  /**
+   * Re-reads tile `key` inside `rect` (tile-local inclusive vertex bounds) after
+   * its source data changed: slot texels, normals on both sides of a seam, node
+   * bounds, the global map and picking.
+   */
+  updateTile(key: string, rect: TerrainVertexRect): void {
+    const coord = parseTileKey(key)!;
+    const tile = this.source.tile(coord.x, coord.z);
+    if (!tile) return;
+    invalidateTerrainTileRange(tile);
+    this.bounds.updateTile(key, rect);
+    if (this.uploaded.has(key)) this.uploadTile(key, this.pool.slotOf(key)!, rect);
+    // A height change on a tile edge moves the neighbour's seam normals too.
+    const last = this.source.tileQuads;
+    const neighbours: [number, number, boolean][] = [
+      [-1, 0, rect.x0 <= 1], [1, 0, rect.x1 >= last - 1], [0, -1, rect.z0 <= 1], [0, 1, rect.z1 >= last - 1],
+    ];
+    for (const [dx, dz, touches] of neighbours) {
+      const neighbour = tileKey(coord.x + dx, coord.z + dz);
+      if (touches && this.uploaded.has(neighbour)) this.uploadTile(neighbour, this.pool.slotOf(neighbour)!);
+    }
+    if (updateTerrainGlobalAttributes(this.global, this.source, key, rect)) this.writeGlobalTextures();
+    this.updateHeightRange();
     this.updateBoundingVolumes();
     this.selectionDirty = true;
   }
@@ -291,31 +402,105 @@ export class TerrainRenderer {
     this.materials.material.dispose();
     this.materials.normalMaterial.dispose();
     this.materials.depthMaterial.dispose();
-    this.heightTexture.dispose();
-    this.normalTexture.dispose();
-    this.weightTexture.dispose();
+    for (const texture of [
+      this.heightTexture, this.normalTexture, this.weightTexture,
+      this.globalHeightTexture, this.globalNormalTexture, this.globalWeightTexture,
+    ]) texture.dispose();
   }
 
-  private fill(rect: TerrainVertexRect): void {
-    const { stride } = this.grid;
-    copyLandscapeHeights(this.data, this.grid, this.heights, rect);
-    // A height change moves its neighbours' central-difference normals too.
-    const normalRect = clampTerrainRect(rect, this.grid, 1);
-    computeTerrainNormals(this.heights, stride, this.spacing, this.normals, normalRect);
-    for (let z = normalRect.z0; z <= normalRect.z1; z += 1) {
-      for (let x = normalRect.x0; x <= normalRect.x1; x += 1) {
-        const index = (z * stride + x) * 2;
-        this.normalTexels[index] = DataUtils.toHalfFloat(this.normals[index]!);
-        this.normalTexels[index + 1] = DataUtils.toHalfFloat(this.normals[index + 1]!);
+  /**
+   * Gives the nearest tiles a slot, at most `uploadsPerFrame` new uploads per
+   * call; tiles that left the wanted set release theirs (the pool keeps their
+   * data cached until another tile needs the slot). True if a slot changed.
+   */
+  private updateResidency(cameraLocal: Vector3): boolean {
+    const wanted = terrainResidentTileKeys(this.world, this.selector.settings, [cameraLocal.x, cameraLocal.y, cameraLocal.z])
+      .filter((key) => this.allKeys.has(key))
+      .slice(0, this.pool.capacity);
+    const wantedSet = new Set(wanted);
+    let changed = false;
+    for (const key of [...this.active]) {
+      if (wantedSet.has(key)) continue;
+      this.active.delete(key);
+      this.pool.release(key);
+    }
+    let uploads = 0;
+    for (const key of wanted) {
+      if (this.active.has(key)) continue;
+      if (uploads >= this.uploadsPerFrame) break;
+      const before = this.uploaded.has(key);
+      if (!this.makeResident(key)) break;
+      if (!before) uploads += 1;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Acquires a slot for `key` and uploads it unless the slot still holds it. */
+  private makeResident(key: string): boolean {
+    const acquired = this.pool.acquire(key);
+    if (!acquired) return false;
+    if (acquired.evictedKey) this.uploaded.delete(acquired.evictedKey);
+    this.active.add(key);
+    if (!acquired.cached || !this.uploaded.has(key)) this.uploadTile(key, acquired.slot);
+    return true;
+  }
+
+  /** Writes tile `key` into `slot` (whole tile, or `rect` grown by the one-vertex normal reach). */
+  private uploadTile(key: string, slot: number, rect?: TerrainVertexRect): void {
+    const { x, z } = parseTileKey(key)!;
+    const tile = this.source.tile(x, z)!;
+    const size = this.tileVertices;
+    const area = rect
+      ? {
+          x0: Math.max(0, rect.x0 - 1), x1: Math.min(size - 1, rect.x1 + 1),
+          z0: Math.max(0, rect.z0 - 1), z1: Math.min(size - 1, rect.z1 + 1),
+        }
+      : { x0: 0, x1: size - 1, z0: 0, z1: size - 1 };
+    this.heightSlots.set(tile.heights, slot * this.tileTexels);
+    computeTileNormals(this.source, key, this.normalScratch, area);
+    const normalBase = slot * this.tileTexels * 2;
+    for (let row = area.z0; row <= area.z1; row += 1) {
+      for (let column = area.x0; column <= area.x1; column += 1) {
+        const index = (row * size + column) * 2;
+        this.normalSlots[normalBase + index] = DataUtils.toHalfFloat(this.normalScratch[index]!);
+        this.normalSlots[normalBase + index + 1] = DataUtils.toHalfFloat(this.normalScratch[index + 1]!);
       }
     }
-    packTerrainWeights(this.data, this.grid, this.weights, rect);
+    const blockBytes = this.tileTexels * 4;
+    const blocks = Math.ceil(tile.layerCount / 4);
+    for (let block = 0; block < TERRAIN_WEIGHT_BLOCKS; block += 1) {
+      const target = (slot * TERRAIN_WEIGHT_BLOCKS + block) * blockBytes;
+      if (block < blocks) this.weightSlots.set(tile.weights.subarray(block * blockBytes, (block + 1) * blockBytes), target);
+      else this.weightSlots.fill(0, target, target + blockBytes);
+      this.weightTexture.addLayerUpdate(slot * TERRAIN_WEIGHT_BLOCKS + block);
+    }
+    this.heightTexture.addLayerUpdate(slot);
+    this.normalTexture.addLayerUpdate(slot);
     this.heightTexture.needsUpdate = true;
     this.normalTexture.needsUpdate = true;
     this.weightTexture.needsUpdate = true;
+    this.uploaded.add(key);
+    this.selectionDirty = true;
   }
 
-  private updateHeightRange(range: { min: number; max: number }): void {
+  private writeGlobalTextures(): void {
+    const { map, normals } = this.global;
+    const range = this.bounds.range();
+    (this.globalHeightTexture.image.data as Float32Array).set(fillHoles(map.heights, map.width, map.height, range.min));
+    const halves = this.globalNormalTexture.image.data as Uint16Array;
+    for (let sample = 0; sample < map.width * map.height; sample += 1) {
+      halves[sample * 4] = DataUtils.toHalfFloat(normals[sample * 3]!);
+      halves[sample * 4 + 1] = DataUtils.toHalfFloat(normals[sample * 3 + 1]!);
+      halves[sample * 4 + 2] = DataUtils.toHalfFloat(normals[sample * 3 + 2]!);
+    }
+    this.globalHeightTexture.needsUpdate = true;
+    this.globalNormalTexture.needsUpdate = true;
+    this.globalWeightTexture.needsUpdate = true;
+  }
+
+  private updateHeightRange(): void {
+    const range = this.bounds.range();
     // A flat terrain still gets a visible gradient range in the height view.
     const flat = Math.abs(range.max - range.min) < 0.0001;
     (this.materials.uniforms.uTerrainHeightRange!.value as Vector2).set(
@@ -339,33 +524,51 @@ export class TerrainRenderer {
     this.selectionDirty = false;
     (this.materials.uniforms.uTerrainLodCamera!.value as Vector3).copy(cameraLocal);
     const geometry = this.mesh.geometry;
+    const tileSize = this.source.tileQuads * this.source.spacing;
+    const nodes = this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z]).filter((node) =>
+      // Nodes wholly past the drawn extent (legacy padding) or on a missing tile draw nothing.
+      node.offsetX < this.extent.x && node.offsetZ < this.extent.y && (!node.tileKey || this.allKeys.has(node.tileKey)));
+    if (nodes.length > (geometry.getAttribute("terrainNodeA") as InstancedBufferAttribute).count) {
+      setInstanceCapacity(geometry, 2 ** Math.ceil(Math.log2(nodes.length)));
+    }
     const a = geometry.getAttribute("terrainNodeA") as InstancedBufferAttribute;
     const b = geometry.getAttribute("terrainNodeB") as InstancedBufferAttribute;
-    let count = 0;
-    for (const node of this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z])) {
-      // Nodes wholly in the padding would collapse onto the edge; skip them.
-      if (node.offsetX >= this.extent.x || node.offsetZ >= this.extent.y || count >= a.count) continue;
-      a.setXYZW(count, node.offsetX, node.offsetZ, node.size, 0);
-      b.setXYZW(count, 0, 0, node.morphRange[0], node.morphRange[1]);
-      count += 1;
-    }
+    const c = geometry.getAttribute("terrainNodeC") as InstancedBufferAttribute;
+    const slots = nodes.map((node) => (node.tileKey && this.uploaded.has(node.tileKey) ? this.pool.slotOf(node.tileKey)! : -1));
+    // A node that wants its tile's slot but has none yet stands in from the
+    // coarser global map; on an edge it shares with a slot node the two
+    // surfaces can part, so both sides hang a skirt. Everywhere else the two
+    // sides read the same samples and skirts stay folded.
+    const standIns = nodes.filter((node, index) => node.tileKey !== null && slots[index]! < 0);
+    const touches = (p: { box: { minX: number; maxX: number; minZ: number; maxZ: number } }, q: typeof p) =>
+      ((p.box.maxX === q.box.minX || q.box.maxX === p.box.minX) && p.box.minZ < q.box.maxZ && q.box.minZ < p.box.maxZ)
+      || ((p.box.maxZ === q.box.minZ || q.box.maxZ === p.box.minZ) && p.box.minX < q.box.maxX && q.box.minX < p.box.maxX);
+    nodes.forEach((node, index) => {
+      const slot = slots[index]!;
+      const tile = slot >= 0 ? parseTileKey(node.tileKey!)! : { x: 0, z: 0 };
+      const skirt = standIns.includes(node) || (slot >= 0 && standIns.some((standIn) => touches(node, standIn)));
+      a.setXYZW(index, node.offsetX, node.offsetZ, node.size, slot);
+      b.setXYZW(index, tile.x * tileSize, tile.z * tileSize, node.morphRange[0], node.morphRange[1]);
+      c.setX(index, skirt ? 1 : 0);
+    });
     a.needsUpdate = true;
     b.needsUpdate = true;
-    geometry.instanceCount = count;
+    c.needsUpdate = true;
+    geometry.instanceCount = nodes.length;
   }
 
   private raycast(raycaster: Raycaster, intersects: Intersection[]): void {
     const inverse = new Matrix4().copy(this.mesh.matrixWorld).invert();
     const ray = new Ray().copy(raycaster.ray).applyMatrix4(inverse);
     ray.origin.sub(this.origin);
-    // Clip to the authored rectangle so the padding's edge shelf is never hit.
+    // Clip to the drawn rectangle so a legacy grid's padding shelf is never hit.
     const [x0, x1] = slab(ray.origin.x, ray.direction.x, 0, this.extent.x);
     const [z0, z1] = slab(ray.origin.z, ray.direction.z, 0, this.extent.y);
     const enter = Math.max(0, x0, z0);
     const exit = Math.min(x1, z1);
     if (!(enter <= exit)) return;
     const start = ray.at(enter, new Vector3());
-    const hit = raycastTerrain(this.queryDef, this.lookup, start.toArray(), ray.direction.toArray(), exit - enter);
+    const hit = raycastTerrain(this.queryDef, this.source, start.toArray(), ray.direction.toArray(), exit - enter);
     if (!hit) return;
     const point = new Vector3(...hit.point).add(this.origin).applyMatrix4(this.mesh.matrixWorld);
     const distance = raycaster.ray.origin.distanceTo(point);
@@ -378,14 +581,6 @@ export class TerrainRenderer {
       faceIndex: 0,
     });
   }
-}
-
-/** Ray parameter interval where `start + dir·t` lies in `[lo, hi]` on one axis. */
-function slab(start: number, dir: number, lo: number, hi: number): [number, number] {
-  if (Math.abs(dir) < 1e-12) return start >= lo && start <= hi ? [-Infinity, Infinity] : [Infinity, -Infinity];
-  const t0 = (lo - start) / dir;
-  const t1 = (hi - start) / dir;
-  return t0 < t1 ? [t0, t1] : [t1, t0];
 }
 
 /** The terrain renderer behind an object, if it is a CDLOD terrain mesh. */

@@ -10,8 +10,11 @@
 > yolları o commit'e aittir. **Faz 2 renderer'ının ilk dilimi (2026-10-23, dal
 > `feat/terrain-renderer`):** 1×1 Landscape'ler GPU CDLOD renderer'ıyla çiziliyor;
 > görsel karşılaştırma kullanıcı tarafından onaylandı ve eski chunk mesh
-> renderer'ı kaldırıldı. Sonraki iş çok-tile çizimi (global harita + slot
-> havuzu bağlantısı).
+> renderer'ı kaldırıldı. **Çok-tile renderer çekirdeği tamam (2026-10-23):**
+> slot havuzu + kameraya göre yerleşim + global harita + delikler; 3×2 tile'lık
+> GPU smoke'unda dikiş çatlağı 0. Sonraki iş editör/runtime'ın çok-tile World
+> Terrain'i yüklemesi (gösterme, seçme, tile başına çarpışma), ardından editörde
+> çok-tile sculpt/paint.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -657,18 +660,28 @@ Doğrulama (2026-10-22):
 - [ ] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
       (saf, test edilir: komşu düğüm LOD farkı ≤ 1, menzil monotonluğu).
       *Saf çekirdek hazır (2026-10-23): düğüm seçimi, 3B rölyef alt sınırı,
-      morph ve yakın→uzak residency listesi testli; renderer entegrasyonu açık.
+      morph ve yakın→uzak residency listesi testli. *Renderer'a bağlandı
+      (2026-10-23):* seçim, `TerrainWorldHeightBounds` (tile başına piramit +
+      tile aralıklarının toplamı) ile besleniyor; yerleşim
+      `terrainResidentTileKeys` ile.
       Tam morph olmuş tile-seviyesi düğüm global haritayı kullanır; 67 tile
       yaklaşık değerdir, kesin sayı kamera konumuna bağlıdır.*
 - [ ] `terrainTexturePool.ts`: slot ayırma/serbest bırakma, global düşük
       çözünürlüklü harita.
       *Saf slot ayırıcı `engine/terrain/terrainSlotPool.ts` hazır (2026-10-23):
       varsayılan 80 slot, serbest bırakılan veriyi önbellekte tutma ve en önce
-      serbest bırakılanı tahliye etme testli; GPU yüklemesi açık.*
+      serbest bırakılanı tahliye etme testli.* *GPU tarafı bağlandı (2026-10-23,
+      `terrainRenderer.ts`):* slot başına `DataArrayTexture` katmanı
+      (`addLayerUpdate`), varsayılan 64 slot, kare başına 4 yükleme; bütün
+      tile'lar sığıyorsa yerleşim hiç değişmez (1×1 Landscape).
       *Global harita saf çekirdeği hazır (2026-10-23): `terrainGlobalMap.ts`
       tüm dünya için tile'ın bir üst LOD gridinde (`2 · tileQuads / patchQuads`
       vertex stride) nokta örnekler; kirli tile dikdörtgenleri ve tile yükleme
-      için artımlı güncelleme testli. GPU yüklemeleri ve editör bağlantısı açık.*
+      için artımlı güncelleme testli.* *GPU'ya bağlandı (2026-10-23):*
+      `terrainRenderSource.ts` haritaya normal, delik işareti ve ağırlık ekliyor
+      (tam çözünürlüklü vertex değerleri nokta örnekleniyor, slot↔harita
+      geçişinde ışık/boya kaymıyor). Delik yükseklikleri GPU'da komşudan
+      dolduruluyor, delik üç materyalde de `discard` ediliyor.
 - [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
       splat, `sampler2DArray` katmanlar, uzak tekrar kırma, view mode'lar,
       gölge alma, kalite profiline bağlı kendine gölge.
@@ -684,10 +697,25 @@ Doğrulama (2026-10-22):
       `MeshNormalMaterial`/`MeshDepthMaterial` kopyasıyla çiziliyor
       (`renderSceneWithTerrainOverride`). LOD seçimi iki uygulamada da çizimden
       hemen önce kameraya göre (`updateLandscapeLod`; runtime'da `terrain` perf
-      bölgesi). **Açık:** çok slot + global harita yolu, node frustum culling
-      (1×1'de gerekmiyor), uzak tekrar kırma ve kendine gölge (legacy de
-      gölge düşürmüyor; parite için kapalı), dirty-rect doku yüklemesi (şimdilik
-      tüm katman).
+      bölgesi).
+      *Çok-tile çekirdeği tamam (2026-10-23):* renderer bir
+      `TerrainRenderSource` çiziyor (World Terrain tile'ları ya da dolgulu tek
+      tile'lık Landscape). `slot < 0` düğümler global haritadan okuyor (uzak
+      düğümler ve slotu henüz olmayan tile'lar). Normaller tile dikişinde komşu
+      tile'dan okunuyor; düzenleme dikişe değerse komşunun normalleri de
+      yenileniyor. **Etek:** slot isteyip global haritadan çizilen bir düğüm
+      bir slot düğümüne komşuysa kenarları iki kaynaktan okunduğu için ayrışabilir
+      (tile akarken geçici); yalnız bu düğümler ve komşuları düğüm boyunun %5'i
+      kadar etek sarkıtıyor, dünya sınırında hiç. Kalıcı durumda (kapasite
+      yeterli) etek yok. Doğrulama: `tests/engine/terrainWorldRenderer.test.ts`
+      ve `tests/smoke/terrain-world.spec.ts` (smoke'a özel sayfa
+      `tests/smoke/pages/terrain-world.html`, oyun build'ine girmez; yukarıdan
+      bakışta macenta arka planın arazi içinden görünmesi = çatlak, ölçülen 0).
+      **Açık:** editör/runtime'ın çok-tile World Terrain yüklemesi (bkz. dilim
+      sırası yukarıda), node frustum culling, uzak tekrar kırma ve kendine gölge
+      (legacy de gölge düşürmüyor; parite için kapalı), dirty-rect doku
+      yüklemesi (şimdilik tüm katman), tile akışının Faz 4 alt sistemine
+      bağlanması (şimdilik bütün tile'lar CPU'da yüklü).
 - [x] Eski `engine/render-three/landscape.ts` chunk renderer'ı kaldırılır;
       `RuntimeSceneApp` ve `SceneApp` yeni renderer'ı kullanır.
       *Tamam (2026-10-23):* görsel onaydan sonra chunk mesh, splat materyali ve

@@ -41,6 +41,7 @@ function fixture(scenePath = LEVEL) {
       landscapes: [{ id: "terrain", name: "Terrain", position: [0, 0, 0], dataRef: levelTerrainPath(scenePath, "terrain") }],
     },
     landscapeData: new Map([["terrain", createFlatLandscapeData("small")]]),
+    worldTerrainIds: new Set<string>(),
     foliageData: {
       schema: 1, type: "foliage",
       groups: [{
@@ -368,5 +369,24 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     let wrote = false;
     await queue.save(() => [{ path: LEVEL, write: async () => { wrote = true; } }]);
     assert.equal(wrote, true);
+  });
+
+  await checkAsync("editor save: a multi-tile World Terrain reference is kept as authored, with no terrain write", async () => {
+    const f = fixture();
+    const shared = "worlds/big.terrain.json";
+    f.host.layout.landscapes!.push({ id: "world", name: "World", position: [96, 0, 48], dataRef: shared });
+    (f.host as { worldTerrainIds: ReadonlySet<string> }).worldTerrainIds = new Set(["world"]);
+    let saved: Parameters<LayoutSaver>[0] | null = null;
+    f.host.layoutSaver = async (payload) => { saved = structuredClone(payload); return { path: LEVEL }; };
+    const requests: string[] = [];
+    await withFetch(async (input, init) => { requests.push(String(input)); return f.fetch(input, init); }, async () => {
+      // Without the guard this threw "Cannot migrate missing landscape data: world".
+      await f.host.saveLayout();
+      await f.host.saveLandscapeData("world");
+    });
+    assert.equal(saved!.layout.landscapes!.find((entry) => entry.id === "world")!.dataRef, shared);
+    assert.equal(f.host.layout.landscapes!.find((entry) => entry.id === "world")!.dataRef, shared);
+    assert.ok(!requests.some((url) => url.includes("terrain")), requests.join(", "));
+    assert.equal(f.statuses.at(-1)?.tone, "success");
   });
 }

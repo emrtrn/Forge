@@ -12,9 +12,11 @@
 > görsel karşılaştırma kullanıcı tarafından onaylandı ve eski chunk mesh
 > renderer'ı kaldırıldı. **Çok-tile renderer çekirdeği tamam (2026-10-23):**
 > slot havuzu + kameraya göre yerleşim + global harita + delikler; 3×2 tile'lık
-> GPU smoke'unda dikiş çatlağı 0. Sonraki iş editör/runtime'ın çok-tile World
-> Terrain'i yüklemesi (gösterme, seçme, tile başına çarpışma), ardından editörde
-> çok-tile sculpt/paint.
+> GPU smoke'unda dikiş çatlağı 0. **Editör/runtime çok-tile yüklemesi tamam
+> (2026-10-23):** çok-tile World Terrain'e başvuran bir Landscape actor'ü iki
+> uygulamada da çiziliyor, editörde seçiliyor/odaklanıyor (görünüm-yalnız),
+> Save referansı olduğu gibi koruyor, runtime tile başına trimesh ile çarpışıyor.
+> Sonraki iş editörde çok-tile sculpt/paint.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -711,8 +713,36 @@ Doğrulama (2026-10-22):
       ve `tests/smoke/terrain-world.spec.ts` (smoke'a özel sayfa
       `tests/smoke/pages/terrain-world.html`, oyun build'ine girmez; yukarıdan
       bakışta macenta arka planın arazi içinden görünmesi = çatlak, ölçülen 0).
-      **Açık:** editör/runtime'ın çok-tile World Terrain yüklemesi (bkz. dilim
-      sırası yukarıda), node frustum culling, uzak tekrar kırma ve kendine gölge
+      *Editör/runtime çok-tile yüklemesi tamam (2026-10-23):* okuma yolu
+      `fetchTerrainActorDocument` (`src/scene/terrainDocument.ts`) tek (0, 0)
+      tile'lık belgeyi eskisi gibi 1×1 `ForgeLandscapeData` köprüsüne, gerisini
+      (`isMultiTileTerrain`) `{ kind: "world", document }` olarak döndürür;
+      köprü çok-tile'ı yine reddeder, düz araziye düşüş yok (`landscapeItem`
+      artık eksik veride hata atıyor). Çizim `createWorldTerrainObject`
+      (`engine/render-three/landscape.ts`): `worldTerrainRenderSource` →
+      `TerrainRenderer`. **Çerçeve:** `def.origin` tile (0, 0)'ın min köşesinin
+      dünya konumu, actor grid'in merkezinde
+      (`worldTerrainActorPosition` = origin + yarım genişlik; 1×1 köprüsündeki
+      `origin = position − yarım genişlik` ile aynı ilişki, testli). World
+      Terrain döndürülmez. Tanım kaynaktır: runtime actor transform'unu yok
+      sayar, editör uyuşmayan actor'ü tanıma oturtup uyarır
+      (`worldTerrainPlacementIssues`). Editör: arazi çizilir, seçilir, F ile
+      odaklanır; transform kilitli (gizmo yok, Details konum/dönüş pasif,
+      taşıma denemesi açık mesaj verir). Sculpt/paint/spline (seçili araziye
+      tıklama), foliage boyama ve Details'teki katman/spline panelleri kapalı ve
+      kullanıcıya durum mesajı/ipucu gösteriyor; Details yerine tile sayısı,
+      boyut, tanım dosyası, View ve Collision gösteren görünüm-yalnız panel.
+      Landscape foliage kuralları ve River Water çok-tile'da üretilmez
+      (konsol uyarısı); spline'lar çizilmez. Kayıt: `EditorSaveSource.worldTerrainIds`
+      bu actor'leri migrasyon ve terrain yazımından çıkarır, `dataRef` olduğu
+      gibi kalır (testli; smoke'ta tanım ve tile baytları Save sonrası aynı).
+      Doğrulama: `tests/engine/worldTerrainActor.test.ts` (çerçeve, render
+      raycast = `terrainHeightAt`, çarpışma entity'leri, PhysicsSubsystem zemini,
+      okuma yolu), `editorSaveCoordinator` kayıt koruması ve
+      `tests/smoke/terrain-multitile.spec.ts` (3×2 + delik, gökyüzüsüz fikstür;
+      editör görüntü + boş kare kontrolü, seçim/F/uyarı/Save, Play'de pawn
+      arazi yüksekliğinde duruyor: 5,70 m'ye karşı 5,698 m).
+      **Açık:** node frustum culling, uzak tekrar kırma ve kendine gölge
       (legacy de gölge düşürmüyor; parite için kapalı), dirty-rect doku
       yüklemesi (şimdilik tüm katman), tile akışının Faz 4 alt sistemine
       bağlanması (şimdilik bütün tile'lar CPU'da yüklü).
@@ -768,6 +798,21 @@ Doğrulama (2026-10-22):
       Collider `HeightFieldFlags.FIX_INTERNAL_EDGES` ile kurulur (S4).
       *Şekil verisi hazır* (`terrainTileHeightfieldShape`, Rapier testiyle);
       PhysicsSubsystem bağlantısı açık.
+      *Ara karar (2026-10-23, çok-tile yükleme dilimi):* çok-tile World Terrain
+      runtime'da şimdilik **tile başına statik trimesh** ile çarpışıyor
+      (`worldTerrainColliderEntities`, `engine/terrain/worldTerrainActor.ts`;
+      entity id `landscape:<actor id>:<tile key>`, deliklere entity yok).
+      Gerekçe: karakter hareketi zemini `staticSurfaceTrianglesNear` üçgen
+      listesinden okuyor ve nav/collision debug wire/araç da trimesh yolunu
+      kullanıyor; heightfield bağlamak bu maddenin ve "arazi üçgenlerini anında
+      üret" maddesinin birlikte yapılmasını gerektiriyor. Trimesh yolu bugün
+      hepsiyle çalışıyor ve 1×1 Landscape ile aynı. Entity transform'u tile
+      merkezinde, datum yüksekliğinde — `terrainTileHeightfieldShape`'in
+      gövde çerçevesiyle aynı — ve üçgenler aynı b–c köşegeniyle bölünüyor
+      (K3a, testli); heightfield'a geçişte yalnız primitive değişir. Bedel:
+      257² tile başına ~74 ms kurulum (S4) ve tile başına ~131 bin üçgen; tile
+      sayısı arttıkça boot uzar. Bu yüzden bu ara çözüm Faz 4 akışından önce
+      heightfield ile değiştirilmeli.
 - [x] `PhysicsSubsystem.addEntities` / `removeEntities` (toplu, tek
       invalidation); statik yüzey üçgen cache'i gövde başına artımlı.
       *Tamam (2026-10-23, Faz 3 bölüm 1):* statik AABB/üçgen kayıtları gövde

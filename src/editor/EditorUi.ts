@@ -4300,6 +4300,7 @@ export class EditorUi {
         this.app.importSelectedLandscapeHeightmap(rgba, width, height, heightRange),
       exportSelectedLandscapeHeightmap: () => this.app.exportSelectedLandscapeHeightmap(),
       getSelectedLandscapeResolution: () => this.app.getSelectedLandscapeResolution(),
+      getSelectedWorldTerrain: () => this.app.getSelectedWorldTerrain(),
       resampleSelectedLandscape: (preset) => this.app.resampleSelectedLandscape(preset),
       setSelectedLandscapeWorldSize: (worldSize) => this.app.setSelectedLandscapeWorldSize(worldSize),
       getSelectedLandscapeImportHeight: () => this.app.getSelectedLandscapeImportHeight(),

@@ -4,8 +4,15 @@ import {
   landscapeBrushFalloff,
   nextLandscapeBrushHeight,
 } from "@engine/scene/landscapeBrush";
-import { fetchLandscapeDocument } from "./terrainDocument";
-import { levelTerrainPath } from "@engine/terrain/terrainTypes";
+import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
+import { levelTerrainPath, terrainTileWorldSize } from "@engine/terrain/terrainTypes";
+import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
+import {
+  terrainTileTrimesh,
+  worldTerrainActorPosition,
+  worldTerrainExtent,
+  worldTerrainPlacementIssues,
+} from "@engine/terrain/worldTerrainActor";
 ﻿/**
  * SceneApp - the single render-layer orchestrator (L11 boundary).
  *
@@ -180,6 +187,7 @@ import {
   createFlatLandscapeData,
   createLandscapeColliderPrimitive,
   createLandscapeObject,
+  createWorldTerrainObject,
   disposeLandscapeObject,
   ensureLandscapeLayers,
   LANDSCAPE_DEFAULT_LAYERS,
@@ -205,6 +213,7 @@ import {
   type LandscapeObject,
   type LandscapeRenderItem,
   type LandscapeViewMode,
+  type WorldTerrainRenderItem,
 } from "@engine/render-three/landscape";
 import {
   createRiverWaterObject,
@@ -892,6 +901,20 @@ export interface LandscapeLayerView {
   material: string | null;
 }
 
+/** A landscape that references a multi-tile World Terrain, as the Details panel shows it (view-only). */
+export interface WorldTerrainDetailsView {
+  dataRef: string;
+  tilesX: number;
+  tilesZ: number;
+  /** Tiles present on disk; the rest of the grid is holes. */
+  tileCount: number;
+  /** World edge length of one tile. */
+  tileSize: number;
+  spacing: number;
+  /** World X/Z size of the whole tile grid. */
+  extent: [number, number];
+}
+
 interface LandscapeSculptStroke {
   pointerId: number;
   landscapeIndex: number;
@@ -1193,6 +1216,12 @@ export class SceneApp {
   private landscapeSplineOverlays: (Group | null)[] = [];
   /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
   private landscapeData = new Map<string, ForgeLandscapeData>();
+  /**
+   * Multi-tile World Terrains by landscape id (OPEN_WORLD_PLAN Faz 2). These
+   * actors have no `landscapeData` entry: they are drawn from their tiles, are
+   * view-only, and Save keeps their reference untouched.
+   */
+  private worldTerrains = new Map<string, WorldTerrainDocument>();
   /** Last height scale used for a heightmap import, echoed back into the Details input. */
   private lastLandscapeImportHeight = 20;
   private readonly editorSaves = new EditorSaveSession(
@@ -2507,8 +2536,9 @@ export class SceneApp {
       this.onStatus?.("No selected object to snap.", "warning");
       return;
     }
-    if (this.isSelectionLocked(this.selection)) {
-      this.onStatus?.("Selected object is locked.", "warning");
+    const blocked = this.transformBlockedReason(this.selection);
+    if (blocked) {
+      this.onStatus?.(blocked, "warning");
       return;
     }
 
@@ -2551,8 +2581,9 @@ export class SceneApp {
       this.onStatus?.("No selected object to snap.", "warning");
       return;
     }
-    if (this.isSelectionLocked(this.selection)) {
-      this.onStatus?.("Selected object is locked.", "warning");
+    const blocked = this.transformBlockedReason(this.selection);
+    if (blocked) {
+      this.onStatus?.(blocked, "warning");
       return;
     }
 
@@ -2600,8 +2631,9 @@ export class SceneApp {
 
   /** Slides and orients an instance flush against the nearest room wall. */
   private performWallSnap(selection: InstanceSelection): void {
-    if (this.isSelectionLocked(selection)) {
-      this.onStatus?.("Selected object is locked.", "warning");
+    const blocked = this.transformBlockedReason(selection);
+    if (blocked) {
+      this.onStatus?.(blocked, "warning");
       return;
     }
 
@@ -2900,8 +2932,9 @@ export class SceneApp {
     scale?: Vec3;
   }, options: { notifySelection?: boolean } = {}): void {
     if (!this.layout || !this.selection) return;
-    if (this.isSelectionLocked(this.selection)) {
-      this.onStatus?.("Selected object is locked.", "warning");
+    const blocked = this.transformBlockedReason(this.selection);
+    if (blocked) {
+      this.onStatus?.(blocked, "warning");
       return;
     }
     const transform = this.getMutableTransform(this.selection);
@@ -2927,9 +2960,9 @@ export class SceneApp {
     if (!this.layout || !this.selection) return;
 
     const selections = this.getSelectedSelections();
-    const editableSelections = selections.filter((selection) => !this.isSelectionLocked(selection));
+    const editableSelections = selections.filter((selection) => !this.transformBlockedReason(selection));
     if (editableSelections.length === 0) {
-      this.onStatus?.("Selected object is locked.", "warning");
+      this.onStatus?.(this.transformBlockedReason(selections[0] ?? this.selection) ?? "Selected object is locked.", "warning");
       return;
     }
 
@@ -3490,6 +3523,7 @@ export class SceneApp {
         snapScaleEnabled: this.snapSettings.scaleEnabled,
       },
       landscapeData: this.landscapeData,
+      worldTerrainIds: new Set(this.worldTerrains.keys()),
       foliageData: this.foliageData,
       meshPaintData: this.meshPaintData,
     };
@@ -6319,8 +6353,12 @@ export class SceneApp {
 
   /** Resolved settings + world transform + sidecar data for a landscape layout actor. */
   private landscapeItem(actor: LayoutLandscape): LandscapeRenderItem {
-    const data = this.landscapeData.get(actor.id) ?? createFlatLandscapeData("medium");
+    const data = this.landscapeData.get(actor.id);
+    // Never fall back to a flat grid: a missing grid is either a World Terrain
+    // (drawn by `worldTerrainItem`) or a bug that must not paint fake terrain.
+    if (!data) throw new Error(`Landscape ${actor.id} has no editable grid loaded`);
     ensureLandscapeLayers(data);
+    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
     return {
       ...resolveLandscape(actor),
       position: [...actor.position],
@@ -6328,14 +6366,63 @@ export class SceneApp {
       data,
       viewMode: this.landscapeSculptSettings.viewMode,
       activeLayerId: this.landscapeSculptSettings.activeLayerId,
-      layerColors: this.resolveLandscapeLayerColors(data),
-      layerTextures: this.resolveLandscapeLayerTextures(data),
+      layerColors: this.resolveLandscapeLayerColors(data.layers),
+      layerTextures: this.resolveLandscapeLayerTextures(data.layers, worldSize),
     };
   }
 
+  /** Render inputs of a multi-tile World Terrain actor; placement comes from its definition. */
+  private worldTerrainItem(actor: LayoutLandscape, document: WorldTerrainDocument): WorldTerrainRenderItem {
+    const layers = document.def.layers;
+    return {
+      ...resolveLandscape(actor),
+      document,
+      viewMode: this.landscapeSculptSettings.viewMode,
+      activeLayerId: this.landscapeSculptSettings.activeLayerId,
+      layerColors: this.resolveLandscapeLayerColors(layers),
+      layerTextures: this.resolveLandscapeLayerTextures(layers, worldTerrainExtent(document.def)[0]),
+    };
+  }
+
+  /** The scene object for a landscape actor: its editable grid, or its World Terrain tiles. */
+  private createLandscapeObjectFor(actor: LayoutLandscape): LandscapeObject {
+    const world = this.worldTerrains.get(actor.id);
+    return world ? createWorldTerrainObject(this.worldTerrainItem(actor, world)) : createLandscapeObject(this.landscapeItem(actor));
+  }
+
+  /** Whatever backs a landscape actor in memory, for delete/undo round trips. */
+  private terrainActorDocument(id: string): TerrainActorDocument | null {
+    const world = this.worldTerrains.get(id);
+    if (world) return { kind: "world", document: world };
+    const data = this.landscapeData.get(id);
+    return data ? { kind: "landscape", data } : null;
+  }
+
+  /** The multi-tile World Terrain behind a landscape index, if that is what it references. */
+  private worldTerrainAt(index: number): WorldTerrainDocument | null {
+    const actor = this.layout?.landscapes?.[index];
+    return actor ? this.worldTerrains.get(actor.id) ?? null : null;
+  }
+
+  private isWorldTerrainSelection(selection: Selection | null): boolean {
+    return selection?.kind === "landscape" && this.worldTerrainAt(selection.index) !== null;
+  }
+
+  /**
+   * Why the selection's transform cannot change right now, or null. A World
+   * Terrain is placed by its definition's origin and cannot rotate; moving it
+   * would need a definition save, which this build does not write.
+   */
+  private transformBlockedReason(selection: Selection): string | null {
+    if (this.isSelectionLocked(selection)) return "Selected object is locked.";
+    if (this.isWorldTerrainSelection(selection)) {
+      return "Multi-tile World Terrain is placed by its terrain definition; moving or rotating it is not supported yet.";
+    }
+    return null;
+  }
+
   /** UV repeat count so each layer texture tiles roughly every ~8 world units. */
-  private landscapeLayerTiling(data: ForgeLandscapeData): number {
-    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
+  private landscapeLayerTiling(worldSize: number): number {
     return Math.min(128, Math.max(1, Math.round(worldSize / 8)));
   }
 
@@ -6345,9 +6432,9 @@ export class SceneApp {
    * Layers with no material — or whose color hasn't loaded yet — are omitted so the
    * render binding falls back to the preset swatch.
    */
-  private resolveLandscapeLayerColors(data: ForgeLandscapeData): LandscapeLayerColors {
+  private resolveLandscapeLayerColors(layers: readonly { id: string; material?: string | null }[]): LandscapeLayerColors {
     const colors: LandscapeLayerColors = {};
-    for (const layer of data.layers) {
+    for (const layer of layers) {
       const materialId = layer.material;
       if (!materialId) continue;
       const color = this.landscapeLayerMaterialCache.get(materialId)?.baseColor;
@@ -6362,11 +6449,14 @@ export class SceneApp {
    * material — or whose material hasn't loaded yet — carry a `null` texture and
    * the preset color, so the render falls back to the flat vertex-color look.
    */
-  private resolveLandscapeLayerTextures(data: ForgeLandscapeData): LandscapeLayerTexture[] {
-    const tiling = this.landscapeLayerTiling(data);
+  private resolveLandscapeLayerTextures(
+    layers: readonly { id: string; color?: string; material?: string | null }[],
+    worldSize: number,
+  ): LandscapeLayerTexture[] {
+    const tiling = this.landscapeLayerTiling(worldSize);
     const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
-    return data.layers.map((layer) => {
-      const presetColor = presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
+    return layers.map((layer) => {
+      const presetColor = layer.color ?? presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
       const cached = layer.material ? this.landscapeLayerMaterialCache.get(layer.material) : undefined;
       return {
         id: layer.id,
@@ -6385,11 +6475,11 @@ export class SceneApp {
    */
   private async warmLandscapeLayerMaterials(index: number): Promise<void> {
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!actor || !data) return;
+    const layers = actor ? this.landscapeData.get(actor.id)?.layers ?? this.worldTerrains.get(actor.id)?.def.layers : null;
+    if (!actor || !layers) return;
     const manifest = this.manifest;
     if (!manifest) return;
-    const pending = data.layers
+    const pending = layers
       .map((layer) => layer.material)
       .filter((id): id is string => Boolean(id) && !this.landscapeLayerMaterialCache.has(id!));
     if (pending.length === 0) return;
@@ -6419,7 +6509,7 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[index];
     const previous = this.landscapeObjects[index];
     if (!actor || !previous) return;
-    const object = createLandscapeObject(this.landscapeItem(actor));
+    const object = this.createLandscapeObjectFor(actor);
     this.applyWireframeToLevelObject(object);
     object.userData.landscapeIndex = index;
     object.traverse((child) => {
@@ -6625,15 +6715,21 @@ export class SceneApp {
     this.landscapeSplineMeshGroups = [];
     this.landscapeSplineOverlays = [];
     this.landscapeData.clear();
+    this.worldTerrains.clear();
     this.editorSaves.landscapeSaveRevisions.clear();
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
-      const data = await this.fetchLandscapeData(actor.dataRef);
+      const loaded = await this.fetchLandscapeDocument(actor.dataRef);
+      if (loaded.kind === "world") {
+        this.adoptWorldTerrain(actor, loaded.document);
+        continue;
+      }
+      const data = loaded.data;
       if (ensureLandscapeLayers(data)) this.markLandscapeDirty(actor.id);
       this.landscapeData.set(actor.id, data);
     }
     landscapes.forEach((actor, index) => {
-      const object = createLandscapeObject(this.landscapeItem(actor));
+      const object = this.createLandscapeObjectFor(actor);
       this.applyWireframeToLevelObject(object);
       object.userData.landscapeIndex = index;
       object.traverse((child) => {
@@ -6921,7 +7017,8 @@ export class SceneApp {
   }
 
   getLandscapeFoliageLandscapeViews(): LandscapeFoliageLandscapeView[] {
-    return (this.layout?.landscapes ?? []).map((actor) => {
+    // Landscape foliage rules sample the editable grid; World Terrain has none yet.
+    return (this.layout?.landscapes ?? []).filter((actor) => !this.worldTerrains.has(actor.id)).map((actor) => {
       const data = this.landscapeData.get(actor.id);
       if (data) ensureLandscapeLayers(data);
       const layers = data?.layers ?? LANDSCAPE_DEFAULT_LAYERS.map((layer) => ({ id: layer.id, name: layer.name }));
@@ -7135,6 +7232,10 @@ export class SceneApp {
     const filters = this.foliageToolSettings.filters;
     if (pick.landscapeIndex !== null) {
       if (!filters.landscape) return null;
+      if (this.worldTerrainAt(pick.landscapeIndex)) {
+        this.onStatus?.("Foliage painting on multi-tile World Terrain is not supported yet.", "warning");
+        return null;
+      }
       const actor = this.layout?.landscapes?.[pick.landscapeIndex];
       return actor ? { kind: "landscape", id: actor.id } : null;
     }
@@ -8284,8 +8385,27 @@ export class SceneApp {
   }
 
   /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
-  private fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
-    return fetchLandscapeDocument(dataRef);
+  private fetchLandscapeDocument(dataRef: string): Promise<TerrainActorDocument> {
+    return fetchTerrainActorDocument(dataRef);
+  }
+
+  /**
+   * Registers a multi-tile World Terrain actor. The definition is the source of
+   * truth for placement, so a stale actor transform is snapped onto it (and
+   * reported) instead of drawing the terrain away from where it collides.
+   */
+  private adoptWorldTerrain(actor: LayoutLandscape, document: WorldTerrainDocument): void {
+    this.worldTerrains.set(actor.id, document);
+    const issues = worldTerrainPlacementIssues(actor, document.def);
+    if (issues.length > 0) {
+      console.warn(`[terrain] ${actor.id}: ${issues.join("; ")}`);
+      actor.position = worldTerrainActorPosition(document.def);
+      delete actor.rotation;
+      this.onStatus?.(`${actor.name ?? actor.id}: placement taken from its World Terrain definition.`, "warning");
+    }
+    if (document.def.splines?.length) {
+      console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
+    }
   }
 
   /** Cheap transform/visibility sync for one landscape (gizmo drag). */
@@ -8293,7 +8413,10 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[index];
     const object = this.landscapeObjects[index];
     if (!actor || !object) return;
-    applyLandscapeTransform(object, this.landscapeItem(actor));
+    const world = this.worldTerrains.get(actor.id);
+    applyLandscapeTransform(object, world
+      ? { position: worldTerrainActorPosition(world.def), rotation: [0, 0, 0], hidden: resolveLandscape(actor).hidden }
+      : this.landscapeItem(actor));
     this.syncRiverWaterTransformsForLandscape(actor);
   }
 
@@ -8397,6 +8520,18 @@ export class SceneApp {
   private beginLandscapeSculpt(event: PointerEvent): boolean {
     // Foliage Mode disables terrain sculpting entirely (its brush owns the pointer).
     if (this.foliageModeActive || this.meshPaintModeActive) return false;
+    if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)) {
+      // Clicking the selected World Terrain says why nothing is sculpted, painted
+      // or splined instead of silently selecting it again.
+      const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY);
+      if (hit?.index === this.selection.index) {
+        this.onStatus?.(
+          "Multi-tile World Terrain is view-only: sculpt, paint, splines and layers are not supported yet.",
+          "warning",
+        );
+      }
+      return false;
+    }
     if (this.landscapeSculptSettings.riverWaterRingFoamPlacementId) {
       return this.placeRiverWaterRingFoamAtPointer(event);
     }
@@ -8821,7 +8956,7 @@ export class SceneApp {
       dirty,
       this.landscapeSculptSettings.viewMode,
       this.landscapeSculptSettings.activeLayerId,
-      this.resolveLandscapeLayerColors(data),
+      this.resolveLandscapeLayerColors(data.layers),
     );
     this.scheduleLandscapeFoliageRebuild(actor.id);
   }
@@ -8992,14 +9127,19 @@ export class SceneApp {
     );
   }
 
-  private insertLandscape(index: number, actor: LayoutLandscape, data: ForgeLandscapeData): void {
+  private insertLandscape(index: number, actor: LayoutLandscape, document: TerrainActorDocument): void {
     if (!this.layout) return;
     this.layout.landscapes ??= [];
     const insertionIndex = clampIndex(index, this.layout.landscapes.length);
     this.layout.landscapes.splice(insertionIndex, 0, cloneLandscape(actor));
-    this.landscapeData.set(actor.id, data);
-    this.markLandscapeDirty(actor.id);
-    const object = createLandscapeObject(this.landscapeItem(actor));
+    if (document.kind === "world") {
+      // Restored as authored: its definition and tiles were never rewritten.
+      this.worldTerrains.set(actor.id, document.document);
+    } else {
+      this.landscapeData.set(actor.id, document.data);
+      this.markLandscapeDirty(actor.id);
+    }
+    const object = this.createLandscapeObjectFor(actor);
     this.applyWireframeToLevelObject(object);
     this.landscapeObjects.splice(insertionIndex, 0, object);
     this.scene.add(object);
@@ -9016,6 +9156,7 @@ export class SceneApp {
     }
     if (removed) {
       this.landscapeData.delete(removed.id);
+      this.worldTerrains.delete(removed.id);
       this.editorSaves.landscapeSaveRevisions.delete(removed.id);
     }
     this.refreshLandscapeIndices();
@@ -9044,7 +9185,7 @@ export class SceneApp {
     this.executeCommand({
       label: "Add Landscape",
       redo: () => {
-        this.insertLandscape(index, actor, data);
+        this.insertLandscape(index, actor, { kind: "landscape", data });
         this.select({ kind: "landscape", index });
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
@@ -9067,7 +9208,7 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[index];
     if (!actor) return;
     const snapshot = cloneLandscape(actor);
-    const data = this.landscapeData.get(actor.id);
+    const document = this.terrainActorDocument(actor.id);
     this.executeCommand({
       label: "Delete Landscape",
       redo: () => {
@@ -9077,7 +9218,7 @@ export class SceneApp {
         this.scheduleAutoSave();
       },
       undo: () => {
-        this.insertLandscape(index, snapshot, data ?? createFlatLandscapeData("medium"));
+        this.insertLandscape(index, snapshot, document ?? { kind: "landscape", data: createFlatLandscapeData("medium") });
         this.select({ kind: "landscape", index });
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
@@ -9867,6 +10008,24 @@ export class SceneApp {
       width: data.size.verticesX,
       height: data.size.verticesZ,
       pixels: landscapeHeightsToGrayscale(data),
+    };
+  }
+
+  /** Shape of the selected landscape's multi-tile World Terrain, or null for an editable grid. */
+  getSelectedWorldTerrain(): WorldTerrainDetailsView | null {
+    if (this.selection?.kind !== "landscape") return null;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const world = actor ? this.worldTerrains.get(actor.id) : undefined;
+    if (!actor || !world) return null;
+    const { def } = world;
+    return {
+      dataRef: actor.dataRef,
+      tilesX: def.tilesX,
+      tilesZ: def.tilesZ,
+      tileCount: def.tiles.length,
+      tileSize: terrainTileWorldSize(def),
+      spacing: def.spacing,
+      extent: worldTerrainExtent(def),
     };
   }
 
@@ -11552,8 +11711,9 @@ export class SceneApp {
 
   private startGizmoDrag(handle: GizmoHandle, event: PointerEvent): void {
     if (!this.selection) return;
-    if (this.isSelectionLocked(this.selection)) {
-      this.onStatus?.("Selected object is locked.", "warning");
+    const blocked = this.transformBlockedReason(this.selection);
+    if (blocked) {
+      this.onStatus?.(blocked, "warning");
       return;
     }
     // Landscape spline control point (Faz 6.1): drag its world position, mapped
@@ -12797,38 +12957,52 @@ export class SceneApp {
   private updateLandscapeCollisionWires(): void {
     if (!this.layout) return;
     for (const actor of this.layout.landscapes ?? []) {
+      if (!resolveLandscape(actor).collision) continue;
+      const world = this.worldTerrains.get(actor.id);
+      if (world) {
+        for (const tile of world.tiles.values()) {
+          const { translation, primitive } = terrainTileTrimesh(world.def, tile);
+          this.addLandscapeCollisionWire(primitive, translation, [0, 0, 0]);
+        }
+        continue;
+      }
       const item = this.landscapeItem(actor);
-      if (!item.collision) continue;
-      const data = this.landscapeData.get(actor.id);
-      if (!data) continue;
-      const primitive = createLandscapeColliderPrimitive(data);
-      const segments = trimeshWireSegments(primitive.vertices, primitive.indices);
-      if (segments.length === 0) continue;
-      const geometry = new BufferGeometry();
-      geometry.setAttribute(
-        "position",
-        new Float32BufferAttribute(segments.flatMap((point) => point), 3),
-      );
-      // Depth-tested (like the other editor collision wireboxes): the terrain
-      // occludes edges behind its surface, so the overlay stays readable and
-      // doesn't draw over the actors in front of it. The runtime's Play wire
-      // uses depthTest:false for an always-on-top debug look; the editor
-      // authoring overlay deliberately does not.
-      const helper = new LineSegments(
-        geometry,
-        new LineBasicMaterial({ color: 0x4cd07d }),
-      );
-      helper.name = "editor-collision-box";
-      helper.position.set(actor.position[0], actor.position[1], actor.position[2]);
-      helper.rotation.set(
-        (item.rotation[0] * Math.PI) / 180,
-        (item.rotation[1] * Math.PI) / 180,
-        (item.rotation[2] * Math.PI) / 180,
-        "XYZ",
-      );
-      this.collisionBoxes.push(helper);
-      this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
+      this.addLandscapeCollisionWire(createLandscapeColliderPrimitive(item.data), actor.position, item.rotation);
     }
+  }
+
+  /** One terrain trimesh wire for the "Show > Collision" overlay, placed like its collider body. */
+  private addLandscapeCollisionWire(
+    primitive: { vertices: Vec3[]; indices: number[] },
+    position: Vec3,
+    rotation: Vec3,
+  ): void {
+    const segments = trimeshWireSegments(primitive.vertices, primitive.indices);
+    if (segments.length === 0) return;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new Float32BufferAttribute(segments.flatMap((point) => point), 3),
+    );
+    // Depth-tested (like the other editor collision wireboxes): the terrain
+    // occludes edges behind its surface, so the overlay stays readable and
+    // doesn't draw over the actors in front of it. The runtime's Play wire
+    // uses depthTest:false for an always-on-top debug look; the editor
+    // authoring overlay deliberately does not.
+    const helper = new LineSegments(
+      geometry,
+      new LineBasicMaterial({ color: 0x4cd07d }),
+    );
+    helper.name = "editor-collision-box";
+    helper.position.set(position[0], position[1], position[2]);
+    helper.rotation.set(
+      (rotation[0] * Math.PI) / 180,
+      (rotation[1] * Math.PI) / 180,
+      (rotation[2] * Math.PI) / 180,
+      "XYZ",
+    );
+    this.collisionBoxes.push(helper);
+    this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
   }
 
   private updateAiNavigationView(): void {
@@ -13220,7 +13394,7 @@ export class SceneApp {
     // In pivot-edit mode the move gizmo is shown even under the Select tool.
     const pivotEditing = this.pivotEditMode && this.selection.kind !== "light";
     if (!selected || (this.activeTool === "select" && !pivotEditing)) return;
-    if (this.selection && this.isSelectionLocked(this.selection)) return;
+    if (this.selection && this.transformBlockedReason(this.selection)) return;
 
     this.gizmoGroup.visible = true;
     const pivotWorld = this.getSelectionPivotWorld(this.selection);

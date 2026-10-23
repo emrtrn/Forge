@@ -8,8 +8,10 @@ import {
   type ResolvedLandscape,
 } from "@engine/scene/landscape";
 import { TERRAIN_RENDER_LAYERS } from "@engine/terrain/terrainRenderData";
-import { landscapeRenderSource, type LandscapeRenderSource } from "@engine/terrain/terrainRenderSource";
+import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
+import { landscapeRenderSource, worldTerrainRenderSource, type LandscapeRenderSource } from "@engine/terrain/terrainRenderSource";
 import { tileKey } from "@engine/terrain/terrainTypes";
+import { worldTerrainActorPosition, worldTerrainExtent } from "@engine/terrain/worldTerrainActor";
 import { TerrainRenderer, terrainRendererOf } from "./terrain/terrainRenderer";
 import type { TerrainLayerInput } from "./terrain/terrainMaterial";
 
@@ -101,31 +103,46 @@ export interface LandscapeRenderItem extends ResolvedLandscape {
   layerTextures?: LandscapeLayerTexture[];
 }
 
-/** Per-layer colour: material override, then the preset swatch for that layer id. */
+/** A World Terrain actor's render inputs: the tiles are drawn as they are, with no editing adapter. */
+export interface WorldTerrainRenderItem extends ResolvedLandscape {
+  document: WorldTerrainDocument;
+  viewMode?: LandscapeViewMode;
+  activeLayerId?: string;
+  layerColors?: LandscapeLayerColors;
+  /** Aligned to `document.def.layers`; `tiling` repeats across the whole grid's X width. */
+  layerTextures?: LandscapeLayerTexture[];
+}
+
+/** Per-layer colour: material override, then the layer's own tint, then the preset swatch for that layer id. */
 function terrainLayerColors(
-  data: ForgeLandscapeData,
+  layers: readonly { id: string; color?: string }[],
   colors?: LandscapeLayerColors,
   layerTextures?: LandscapeLayerTexture[],
 ): string[] {
-  return data.layers.slice(0, TERRAIN_RENDER_LAYERS).map((layer, index) =>
+  return layers.slice(0, TERRAIN_RENDER_LAYERS).map((layer, index) =>
     colors?.[layer.id]
       ?? layerTextures?.[index]?.color
+      ?? layer.color
       ?? LANDSCAPE_DEFAULT_LAYERS.find((preset) => preset.id === layer.id)?.color
       ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color);
 }
 
-function terrainLayerInputs(item: LandscapeRenderItem): TerrainLayerInput[] {
-  const worldSize = (item.data.size.verticesX - 1) * item.data.size.spacing;
-  const colors = terrainLayerColors(item.data, item.layerColors, item.layerTextures);
+function terrainLayerInputs(
+  layers: readonly { id: string; color?: string }[],
+  worldSize: number,
+  layerColors?: LandscapeLayerColors,
+  layerTextures?: LandscapeLayerTexture[],
+): TerrainLayerInput[] {
+  const colors = terrainLayerColors(layers, layerColors, layerTextures);
   return colors.map((color, index) => {
-    const texture = item.layerTextures?.[index];
+    const texture = layerTextures?.[index];
     // `tiling` repeats across the grid's X width, from its min corner.
     return { texture: texture?.texture ?? null, color, scale: (texture?.tiling ?? 1) / worldSize };
   });
 }
 
-function terrainActiveLayer(data: ForgeLandscapeData, activeLayerId: string): number {
-  const index = data.layers.findIndex((layer) => layer.id === activeLayerId);
+function terrainActiveLayer(layers: readonly { id: string }[], activeLayerId: string): number {
+  const index = layers.findIndex((layer) => layer.id === activeLayerId);
   return index >= 0 && index < TERRAIN_RENDER_LAYERS ? index : 0;
 }
 
@@ -141,8 +158,8 @@ export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObjec
   const source = landscapeRenderSource(item.data);
   const terrain = new TerrainRenderer(source, {
     viewMode: item.viewMode ?? "lit",
-    activeLayer: terrainActiveLayer(item.data, item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id),
-    layers: terrainLayerInputs(item),
+    activeLayer: terrainActiveLayer(item.data.layers, item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id),
+    layers: terrainLayerInputs(item.data.layers, (verticesX - 1) * spacing, item.layerColors, item.layerTextures),
     // The grid is centred on the actor (the collider uses the same frame).
     origin: new Vector3(-((verticesX - 1) * spacing) / 2, 0, -((verticesZ - 1) * spacing) / 2),
   });
@@ -152,8 +169,33 @@ export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObjec
   return group;
 }
 
+/**
+ * Builds a multi-tile World Terrain's group, in the same frame as a 1×1
+ * Landscape: the group sits at the grid centre (`worldTerrainActorPosition`,
+ * so `def.origin` is the world position of tile (0, 0)'s min corner) and is
+ * never rotated. Rebuild it to change appearance; there is no editing path yet.
+ */
+export function createWorldTerrainObject(item: WorldTerrainRenderItem): LandscapeObject {
+  const { def, tiles } = item.document;
+  const group = new Group();
+  group.name = item.name;
+  const [width, depth] = worldTerrainExtent(def);
+  const terrain = new TerrainRenderer(worldTerrainRenderSource(def, tiles), {
+    viewMode: item.viewMode ?? "lit",
+    activeLayer: terrainActiveLayer(def.layers, item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id),
+    layers: terrainLayerInputs(def.layers, width, item.layerColors, item.layerTextures),
+    origin: new Vector3(-width / 2, 0, -depth / 2),
+  });
+  group.add(terrain.mesh);
+  applyLandscapeTransform(group, { position: worldTerrainActorPosition(def), rotation: [0, 0, 0], hidden: item.hidden });
+  return group;
+}
+
 /** Pushes the transform + visibility onto an existing landscape group (no geometry rebuild). */
-export function applyLandscapeTransform(object: LandscapeObject, item: LandscapeRenderItem): void {
+export function applyLandscapeTransform(
+  object: LandscapeObject,
+  item: Pick<LandscapeRenderItem, "position" | "rotation" | "hidden">,
+): void {
   object.position.set(item.position[0], item.position[1], item.position[2]);
   object.rotation.set(
     (item.rotation[0] * Math.PI) / 180,
@@ -182,7 +224,7 @@ export function updateLandscapeObjectGeometry(
   const source = terrain ? landscapeSources.get(terrain) : undefined;
   if (!terrain || !source) return;
   terrain.updateTile(tileKey(0, 0), source.refresh(dirty));
-  terrain.setAppearance(viewMode, terrainActiveLayer(data, activeLayerId), terrainLayerColors(data, colors));
+  terrain.setAppearance(viewMode, terrainActiveLayer(data.layers, activeLayerId), terrainLayerColors(data.layers, colors));
 }
 
 /** The GPU terrain drawing a landscape group. */

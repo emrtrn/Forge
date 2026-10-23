@@ -1048,6 +1048,7 @@ import { registerStaticQueriesTests } from "../tests/engine/staticQueries.test";
 import { registerTerrainOrphanTests } from "../tests/engine/terrainOrphans.test";
 import { registerTerrainRendererTests } from "../tests/engine/terrainRenderer.test";
 import { registerTerrainWorldRendererTests } from "../tests/engine/terrainWorldRenderer.test";
+import { registerWorldTerrainActorAsyncTests, registerWorldTerrainActorTests } from "../tests/engine/worldTerrainActor.test";
 import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
 import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
 import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
@@ -1189,6 +1190,8 @@ registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);
 registerTerrainDocumentTests(check);
 await registerTerrainDocumentAsyncTests(checkAsync);
+registerWorldTerrainActorTests(check);
+await registerWorldTerrainActorAsyncTests(checkAsync);
 await registerTerrainRapierTests(checkAsync);
 
 function listPublicFiles(root: string): string[] {

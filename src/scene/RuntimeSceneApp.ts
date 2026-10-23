@@ -1,4 +1,4 @@
-import { fetchLandscapeDocument } from "./terrainDocument";
+import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
   AmbientLight,
@@ -219,6 +219,7 @@ import {
 import {
   createLandscapeColliderPrimitive,
   createLandscapeObject,
+  createWorldTerrainObject,
   disposeLandscapeObject,
   landscapeSplineMeshAssetIds,
   LANDSCAPE_DEFAULT_LAYERS,
@@ -230,6 +231,8 @@ import {
   type LandscapeRenderItem,
 } from "@engine/render-three/landscape";
 import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
+import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
+import { worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues } from "@engine/terrain/worldTerrainActor";
 import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
 import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
 import type { LayoutFoliageData, LayoutFoliageGroup } from "@engine/scene/foliage";
@@ -4577,16 +4580,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * can't be read — carry a null texture and the preset color.
    */
   private async resolveRuntimeLandscapeLayerTextures(
-    data: ForgeLandscapeData,
+    layers: readonly { id: string; color?: string; material?: string | null }[],
+    worldSize: number,
   ): Promise<LandscapeLayerTexture[]> {
     const manifest = this.assetManifest;
-    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
     const tiling = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
     const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
     return Promise.all(
-      data.layers.map(async (layer) => {
-        const presetColor = presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
+      layers.map(async (layer) => {
+        const presetColor = layer.color ?? presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
         const resolved =
           manifest && layer.material
             ? await loadForgeMaterialLayer(manifest, layer.material, this.textureLoader, {
@@ -4634,26 +4637,33 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
-  private fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
-    return fetchLandscapeDocument(dataRef);
+  private fetchLandscapeDocument(dataRef: string): Promise<TerrainActorDocument> {
+    return fetchTerrainActorDocument(dataRef);
   }
 
   /**
    * Builds the Landscape terrain meshes (`layout.landscapes`) for Play. Collidable
    * landscapes also emit a hidden static trimesh entity so Play physics, character
-   * movement and debug collision wires rebuild from the latest saved sidecar.
+   * movement and debug collision wires rebuild from the latest saved sidecar. A
+   * multi-tile World Terrain emits one entity per tile and is placed by its
+   * definition, not the actor transform.
    */
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
     const datas: ForgeLandscapeData[] = [];
     this.landscapeDataById.clear();
     for (const actor of landscapes) {
-      const data = await this.fetchLandscapeData(actor.dataRef);
+      const loaded = await this.fetchLandscapeDocument(actor.dataRef);
+      if (loaded.kind === "world") {
+        await this.buildRuntimeWorldTerrain(actor, loaded.document);
+        continue;
+      }
+      const data = loaded.data;
       datas.push(data);
       // River Water resolves its shape from a Landscape spline, so the data has
       // to outlive this pass rather than being re-fetched per water body.
       this.landscapeDataById.set(actor.id, data);
-      const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data);
+      const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data.layers, (data.size.verticesX - 1) * data.size.spacing);
       const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
       this.landscapeObjects.push(object);
       this.scene.add(tagSceneSource(object, "landscape"));
@@ -4665,6 +4675,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
     }
     await this.buildRuntimeLandscapeSplineMeshes(datas);
+  }
+
+  /** One multi-tile World Terrain: drawn from its tiles, one static trimesh collider per tile. */
+  private async buildRuntimeWorldTerrain(actor: LayoutLandscape, document: WorldTerrainDocument): Promise<void> {
+    const { def } = document;
+    for (const issue of worldTerrainPlacementIssues(actor, def)) console.warn(`[terrain] ${actor.id}: ${issue}`);
+    if (def.splines?.length) console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
+    const resolved = resolveLandscape(actor);
+    const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(def.layers, worldTerrainExtent(def)[0]);
+    const object = createWorldTerrainObject({
+      ...resolved,
+      document,
+      layerTextures,
+      layerColors: Object.fromEntries(layerTextures.map((layer) => [layer.id, layer.color])),
+    });
+    this.landscapeObjects.push(object);
+    this.scene.add(tagSceneSource(object, "landscape"));
+    for (const entity of worldTerrainColliderEntities({ id: actor.id, ...resolved }, document)) {
+      this.landscapeColliderEntities.push(entity);
+      this.landscapeColliderObjects.set(entity.id, object);
+      this.addColliderDebugWire(entity);
+    }
   }
 
   /**
@@ -4780,7 +4812,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
       const type = types.get(rule.foliageTypeId);
       if (!actor || !type) continue;
-      const landscape = await this.fetchLandscapeData(actor.dataRef);
+      const loaded = await this.fetchLandscapeDocument(actor.dataRef);
+      if (loaded.kind === "world") {
+        console.warn(`[foliage] Skipped rule ${rule.id}: Landscape foliage rules do not support multi-tile World Terrain yet.`);
+        continue;
+      }
+      const landscape = loaded.data;
       const instances = generateLandscapeFoliageSamples(rule, {
         id: actor.id,
         position: [...actor.position],

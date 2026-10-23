@@ -4,6 +4,7 @@ import { legacyLandscapeToWorldTerrain } from "./terrainLegacy";
 import { type WorldTerrainDocument } from "./terrainLoader";
 import { encodeTerrainTile } from "./terrainTileCodec";
 import { isWorldTerrainPath, terrainTileLayerWeight, type WorldTerrainDef } from "./terrainTypes";
+import { isMultiTileTerrain } from "./worldTerrainActor";
 
 const sourceDefinitions = new WeakMap<ForgeLandscapeData, WorldTerrainDef>();
 
@@ -26,10 +27,14 @@ export function migratedTerrainPath(path: string): string {
   return path.slice(0, -".landscape.json".length) + ".terrain.json";
 }
 
-/** The old mesh/brush adapter is temporary until the Phase 2 renderer replaces it. */
+/**
+ * The 1×1 editing adapter. A multi-tile World Terrain never comes through here:
+ * it is drawn from its tiles (`worldTerrainActor.ts`) and stays view-only until
+ * multi-tile sculpt/paint, so this refuses rather than flattening or discarding tiles.
+ */
 export function terrainDocumentToLandscape({ def, tiles }: WorldTerrainDocument): ForgeLandscapeData {
-  if (def.tilesX !== 1 || def.tilesZ !== 1 || def.tiles.length !== 1 || !tiles.has("0_0")) {
-    throw new Error("Multi-tile terrain rendering requires OPEN_WORLD_PLAN Phase 2; refusing to flatten or discard tiles");
+  if (isMultiTileTerrain(def) || !tiles.has("0_0")) {
+    throw new Error("Multi-tile terrain cannot use the 1x1 Landscape editing adapter (OPEN_WORLD_PLAN Phase 2); refusing to flatten or discard tiles");
   }
   const tile = tiles.get("0_0")!;
   const data: ForgeLandscapeData = {

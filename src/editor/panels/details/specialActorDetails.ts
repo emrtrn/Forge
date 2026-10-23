@@ -21,6 +21,7 @@ import type {
   LandscapeSculptTool,
   LandscapeSplineTool,
   TargetPointReference,
+  WorldTerrainDetailsView,
 } from "@/scene/SceneApp";
 import { type LandscapeViewMode } from "@engine/render-three/landscape";
 import { axisField, scaleRow, vectorRow } from "./transformRows";
@@ -110,6 +111,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     priority?: number;
   }) => void;
   setSelectedLandscape: (patch: { collision?: boolean }) => void;
+  getSelectedWorldTerrain: () => WorldTerrainDetailsView | null;
   getSelectedLandscapeRiverWaters: () => RiverWaterDetailsView[];
   createSelectedLandscapeRiverWater: (splineId: string) => void;
   deleteSelectedLandscapeRiverWater: (waterId: string) => void;
@@ -169,6 +171,11 @@ const LANDSCAPE_EDIT_MODES: readonly LandscapeEditMode[] = ["sculpt", "paint", "
 const LANDSCAPE_SPLINE_TOOLS: readonly LandscapeSplineTool[] = ["draw", "edit"];
 
 export function renderLandscapeDetails(options: SpecialActorDetailsOptions): void {
+  const worldTerrain = options.getSelectedWorldTerrain();
+  if (worldTerrain) {
+    renderWorldTerrainDetails(options, worldTerrain);
+    return;
+  }
   const { body, selection, editableAssets } = options;
   options.setDetailsScale([1, 1, 1]);
   const lockedAttr = selection.locked ? "disabled" : "";
@@ -859,6 +866,73 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       anchor.click();
       URL.revokeObjectURL(url);
     }, "image/png");
+  });
+}
+
+/**
+ * A Landscape that references a multi-tile World Terrain (OPEN_WORLD_PLAN Faz 2):
+ * shown, picked and collided, but its tools are not ported to tiles yet, so the
+ * panel says so instead of offering sculpt/paint/spline/layer controls that
+ * would do nothing. Placement comes from the terrain definition.
+ */
+function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain: WorldTerrainDetailsView): void {
+  const { body, selection } = options;
+  options.setDetailsScale([1, 1, 1]);
+  const lockedAttr = selection.locked ? "disabled" : "";
+  const settings = options.getLandscapeSculptSettings();
+  const metres = (value: number) => `${Number(value.toFixed(2))} m`;
+  const holes = terrain.tilesX * terrain.tilesZ - terrain.tileCount;
+  body.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>terrain / world terrain</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="Landscape" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, true)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, true)}
+      <div class="detail-hint">Placed by the terrain definition: the location is the centre of the tile grid. World Terrain cannot be rotated.</div>
+      <div class="detail-section" data-world-terrain>
+        <div class="detail-section-title">World Terrain</div>
+        <div class="detail-row"><span>Tiles</span><span>${terrain.tilesX} × ${terrain.tilesZ}${holes > 0 ? ` (${holes} empty)` : ""}</span></div>
+        <div class="detail-row"><span>Tile Size</span><span>${metres(terrain.tileSize)}</span></div>
+        <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
+        <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
+        <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
+        <div class="detail-hint" data-world-terrain-view-only>View-only in this build: Sculpt, Paint, Splines, Layers and Foliage painting are not available for multi-tile World Terrain yet. Save keeps the terrain files unchanged.</div>
+        <label class="detail-row">
+          <span>View</span>
+          <select data-landscape-view>
+            ${LANDSCAPE_VIEW_MODES.map(
+              (mode) => `<option value="${mode}" ${
+                settings.viewMode === mode ? "selected" : ""
+              }>${formatLandscapeViewMode(mode)}</option>`,
+            ).join("")}
+          </select>
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Runtime</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-landscape-collision ${selection.collision ? "checked" : ""} ${lockedAttr} />
+          <span>Collision</span>
+        </label>
+      </div>
+      ${actorLockSection(selection)}
+    `;
+
+  bindNameAndLock(options);
+  body.querySelector<HTMLSelectElement>("[data-landscape-view]")?.addEventListener("change", (event) => {
+    const viewMode = (event.currentTarget as HTMLSelectElement).value as LandscapeViewMode;
+    if (!LANDSCAPE_VIEW_MODES.includes(viewMode)) return;
+    options.setLandscapeSculptSettings({ viewMode });
+    renderLandscapeDetails(options);
+  });
+  body.querySelector<HTMLInputElement>("[data-landscape-collision]")?.addEventListener("change", (event) => {
+    options.setSelectedLandscape({ collision: (event.currentTarget as HTMLInputElement).checked });
   });
 }
 

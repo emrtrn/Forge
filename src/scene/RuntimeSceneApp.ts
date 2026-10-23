@@ -220,11 +220,9 @@ import {
   createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
-  landscapeRendererModeFromQuery,
   landscapeSplineMeshAssetIds,
   LANDSCAPE_DEFAULT_LAYERS,
   resolveLandscape,
-  setLandscapeRendererMode,
   updateLandscapeLod,
   type ForgeLandscapeData,
   type LandscapeLayerTexture,
@@ -909,7 +907,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   constructor(canvas: HTMLCanvasElement, options: RuntimeSceneAppOptions = {}) {
     this.debug = options.debug ?? false;
-    setLandscapeRendererMode(landscapeRendererModeFromQuery(location.search));
     this.sceneShell = new SceneShell(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     });

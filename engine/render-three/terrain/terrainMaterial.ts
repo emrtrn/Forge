@@ -69,8 +69,8 @@ export interface TerrainMaterialInputs {
   spacing: number;
   /** Vertices per side of one slot (tile). */
   tileVertices: number;
-  /** Terrain-local edge length; vertices of larger root nodes clamp to it. */
-  extent: number;
+  /** Terrain-local X/Z edge lengths of the authored grid; vertices past them clamp to the edge. */
+  extent: Vector2;
   patchQuads: number;
   viewMode: TerrainViewMode;
   activeLayer: number;
@@ -95,7 +95,7 @@ uniform highp sampler2DArray uTerrainHeights;
 uniform vec3 uTerrainOrigin;
 uniform float uTerrainSpacing;
 uniform float uTerrainTileVertices;
-uniform float uTerrainExtent;
+uniform vec2 uTerrainExtent;
 uniform vec3 uTerrainLodCamera;
 uniform float uTerrainPatchQuads;
 attribute vec4 terrainNodeA; // terrain-local node origin x/z, node size, slot
@@ -128,7 +128,7 @@ const VERTEX_BEGIN = /* glsl */ `
 int forgeSlot = int(terrainNodeA.w + 0.5);
 vec2 forgeGrid = position.xz;
 vec2 forgeLocal = terrainNodeA.xy + forgeGrid * terrainNodeA.z;
-vec2 forgeEdge = vec2(uTerrainExtent);
+vec2 forgeEdge = uTerrainExtent;
 float forgeH0 = forgeTerrainHeight(clamp(forgeLocal, vec2(0.0), forgeEdge), terrainNodeB.xy, forgeSlot);
 float forgeMorph = clamp(
   (distance(vec3(forgeLocal.x, forgeH0, forgeLocal.y), uTerrainLodCamera) - terrainNodeB.z) /

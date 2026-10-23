@@ -50,6 +50,8 @@ import {
   copyLandscapeHeights,
   fullTerrainRect,
   packTerrainWeights,
+  terrainRenderGrid,
+  type TerrainRenderGrid,
   type TerrainVertexRect,
 } from "@engine/terrain/terrainRenderData";
 import type { TerrainTileData } from "@engine/terrain/terrainTypes";
@@ -62,15 +64,17 @@ import {
 } from "./terrainMaterial";
 
 /**
- * GPU CDLOD renderer for one square terrain grid (OPEN_WORLD_PLAN Faz 2, first
- * slice: the 1×1 Landscape). One instanced patch mesh is placed per selected
- * quadtree node; heights, normals and paint weights live in `DataArrayTexture`
- * slots (slot 0 only, until tiles stream). The mesh has no CPU vertices, so
- * picking goes through the heightfield raycast and the passes that override
- * scene materials draw it with {@link renderTerrainOverride}.
+ * GPU CDLOD renderer for one Landscape grid (OPEN_WORLD_PLAN Faz 2, first slice:
+ * the 1×1 Landscape). One instanced patch mesh is placed per selected quadtree
+ * node; heights, normals and paint weights live in `DataArrayTexture` slots
+ * (slot 0 only, until tiles stream). Any authored `verticesX × verticesZ` grid
+ * is drawn inside a padded power-of-two square (see `terrainRenderData.ts`);
+ * vertices and picking stop at the authored edge. The mesh has no CPU
+ * vertices, so picking goes through the heightfield raycast and the passes that
+ * override scene materials draw it with {@link renderSceneWithTerrainOverride}.
  *
  * Frames: the mesh sits in its parent's (the Landscape actor's) frame; the grid
- * corner is at `origin`, so a legacy centred grid has `origin = (-half, 0, -half)`.
+ * corner is at `origin`, so a centred grid has `origin = (-halfX, 0, -halfZ)`.
  */
 
 export interface TerrainRendererOptions {
@@ -152,9 +156,11 @@ function isVisibleInHierarchy(object: Object3D): boolean {
 export class TerrainRenderer {
   readonly mesh: Mesh<InstancedBufferGeometry, Material>;
   private readonly materials: TerrainMaterials;
-  private readonly size: number;
+  private readonly grid: TerrainRenderGrid;
   private readonly spacing: number;
   private readonly origin: Vector3;
+  /** Terrain-local edge lengths of the authored grid. */
+  private readonly extent: Vector2;
   private readonly heights: Float32Array;
   private readonly normals: Float32Array;
   private readonly normalTexels: Uint16Array;
@@ -172,45 +178,46 @@ export class TerrainRenderer {
   private selectionDirty = true;
 
   constructor(private readonly data: ForgeLandscapeData, options: TerrainRendererOptions) {
-    this.size = data.size.verticesX;
+    this.grid = terrainRenderGrid(data.size);
+    const { stride } = this.grid;
     this.spacing = data.size.spacing;
     this.origin = options.origin.clone();
-    const texels = this.size * this.size;
+    this.extent = new Vector2((this.grid.verticesX - 1) * this.spacing, (this.grid.verticesZ - 1) * this.spacing);
+    const texels = stride * stride;
     this.heights = new Float32Array(texels);
     this.normals = new Float32Array(texels * 2);
     this.normalTexels = new Uint16Array(texels * 2);
     this.weights = new Uint8Array(texels * 4 * TERRAIN_WEIGHT_BLOCKS);
-    this.heightTexture = arrayTexture(this.heights, this.size, 1, RedFormat, FloatType, NearestFilter);
-    this.normalTexture = arrayTexture(this.normalTexels, this.size, 1, RGFormat, HalfFloatType, LinearFilter);
-    this.weightTexture = arrayTexture(this.weights, this.size, TERRAIN_WEIGHT_BLOCKS, RGBAFormat, UnsignedByteType, LinearFilter);
-    this.fill(fullTerrainRect(this.size));
-    this.bounds = new TerrainNodeHeightBounds(this.heights, this.size);
+    this.heightTexture = arrayTexture(this.heights, stride, 1, RedFormat, FloatType, NearestFilter);
+    this.normalTexture = arrayTexture(this.normalTexels, stride, 1, RGFormat, HalfFloatType, LinearFilter);
+    this.weightTexture = arrayTexture(this.weights, stride, TERRAIN_WEIGHT_BLOCKS, RGBAFormat, UnsignedByteType, LinearFilter);
+    this.fill(fullTerrainRect(this.grid));
+    this.bounds = new TerrainNodeHeightBounds(this.heights, stride);
 
-    const quads = this.size - 1;
+    const quads = stride - 1;
     const world = { tileQuads: quads, spacing: this.spacing, tilesX: 1, tilesZ: 1, origin: [0, 0, 0] as [number, number, number] };
     this.selector = new TerrainLodSelector(world, (level, ix, iz) => this.bounds.node(level, ix, iz), {
       patchQuads: TERRAIN_PATCH_QUADS,
     });
-    this.tile = { x: 0, z: 0, size: this.size, heights: this.heights, layerCount: 0, weights: new Uint8Array(0) };
-    this.queryDef = { tileQuads: quads, spacing: this.spacing, tilesX: 1, tilesZ: 1, origin: this.origin.toArray() };
+    this.tile = { x: 0, z: 0, size: stride, heights: this.heights, layerCount: 0, weights: new Uint8Array(0) };
+    this.queryDef = { tileQuads: quads, spacing: this.spacing, tilesX: 1, tilesZ: 1, origin: [0, 0, 0] };
     this.lookup = { tile: (x, z) => (x === 0 && z === 0 ? this.tile : undefined) };
 
-    const range = this.bounds.range();
     this.materials = createTerrainMaterials({
       heights: this.heightTexture,
       normals: this.normalTexture,
       weights: this.weightTexture,
       origin: this.origin,
       spacing: this.spacing,
-      tileVertices: this.size,
-      extent: quads * this.spacing,
+      tileVertices: stride,
+      extent: this.extent,
       patchQuads: TERRAIN_PATCH_QUADS,
       viewMode: options.viewMode,
       activeLayer: options.activeLayer,
       heightRange: new Vector2(),
       layers: options.layers,
     });
-    this.updateHeightRange(range);
+    this.updateHeightRange(this.bounds.range());
 
     const leaves = quads / TERRAIN_PATCH_QUADS;
     this.mesh = new Mesh(createPatchGeometry(TERRAIN_PATCH_QUADS, leaves * leaves), this.materials.material);
@@ -235,9 +242,16 @@ export class TerrainRenderer {
 
   /** Re-reads heights/weights inside `rect` (inclusive vertex bounds) after an edit. */
   updateData(rect: TerrainVertexRect): void {
-    const area = clampTerrainRect(rect, this.size);
+    const area = clampTerrainRect(rect, this.grid);
     this.fill(area);
-    this.bounds.update(area);
+    // An edit on the authored edge also rewrote the padding beyond it.
+    const last = this.grid.stride - 1;
+    this.bounds.update({
+      x0: area.x0,
+      z0: area.z0,
+      x1: area.x1 === this.grid.verticesX - 1 ? last : area.x1,
+      z1: area.z1 === this.grid.verticesZ - 1 ? last : area.z1,
+    });
     invalidateTerrainTileRange(this.tile);
     this.updateHeightRange(this.bounds.range());
     this.updateBoundingVolumes();
@@ -283,25 +297,26 @@ export class TerrainRenderer {
   }
 
   private fill(rect: TerrainVertexRect): void {
-    copyLandscapeHeights(this.data, this.heights, rect);
+    const { stride } = this.grid;
+    copyLandscapeHeights(this.data, this.grid, this.heights, rect);
     // A height change moves its neighbours' central-difference normals too.
-    const normalRect = clampTerrainRect(rect, this.size, 1);
-    computeTerrainNormals(this.heights, this.size, this.spacing, this.normals, normalRect);
+    const normalRect = clampTerrainRect(rect, this.grid, 1);
+    computeTerrainNormals(this.heights, stride, this.spacing, this.normals, normalRect);
     for (let z = normalRect.z0; z <= normalRect.z1; z += 1) {
       for (let x = normalRect.x0; x <= normalRect.x1; x += 1) {
-        const index = (z * this.size + x) * 2;
+        const index = (z * stride + x) * 2;
         this.normalTexels[index] = DataUtils.toHalfFloat(this.normals[index]!);
         this.normalTexels[index + 1] = DataUtils.toHalfFloat(this.normals[index + 1]!);
       }
     }
-    packTerrainWeights(this.data, this.weights, rect);
+    packTerrainWeights(this.data, this.grid, this.weights, rect);
     this.heightTexture.needsUpdate = true;
     this.normalTexture.needsUpdate = true;
     this.weightTexture.needsUpdate = true;
   }
 
   private updateHeightRange(range: { min: number; max: number }): void {
-    // Same flat-terrain padding as the legacy height view.
+    // A flat terrain still gets a visible gradient range in the height view.
     const flat = Math.abs(range.max - range.min) < 0.0001;
     (this.materials.uniforms.uTerrainHeightRange!.value as Vector2).set(
       flat ? range.min - 0.5 : range.min,
@@ -311,11 +326,10 @@ export class TerrainRenderer {
 
   private updateBoundingVolumes(): void {
     const range = this.bounds.range();
-    const extent = (this.size - 1) * this.spacing;
     const geometry = this.mesh.geometry;
     geometry.boundingBox = new Box3(
       new Vector3(this.origin.x, this.origin.y + range.min, this.origin.z),
-      new Vector3(this.origin.x + extent, this.origin.y + range.max, this.origin.z + extent),
+      new Vector3(this.origin.x + this.extent.x, this.origin.y + range.max, this.origin.z + this.extent.y),
     );
     geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new Sphere());
   }
@@ -324,15 +338,16 @@ export class TerrainRenderer {
     this.lastCamera.copy(cameraLocal);
     this.selectionDirty = false;
     (this.materials.uniforms.uTerrainLodCamera!.value as Vector3).copy(cameraLocal);
-    const nodes = this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z]);
     const geometry = this.mesh.geometry;
     const a = geometry.getAttribute("terrainNodeA") as InstancedBufferAttribute;
     const b = geometry.getAttribute("terrainNodeB") as InstancedBufferAttribute;
-    const count = Math.min(nodes.length, a.count);
-    for (let index = 0; index < count; index += 1) {
-      const node = nodes[index]!;
-      a.setXYZW(index, node.offsetX, node.offsetZ, node.size, 0);
-      b.setXYZW(index, 0, 0, node.morphRange[0], node.morphRange[1]);
+    let count = 0;
+    for (const node of this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z])) {
+      // Nodes wholly in the padding would collapse onto the edge; skip them.
+      if (node.offsetX >= this.extent.x || node.offsetZ >= this.extent.y || count >= a.count) continue;
+      a.setXYZW(count, node.offsetX, node.offsetZ, node.size, 0);
+      b.setXYZW(count, 0, 0, node.morphRange[0], node.morphRange[1]);
+      count += 1;
     }
     a.needsUpdate = true;
     b.needsUpdate = true;
@@ -342,9 +357,17 @@ export class TerrainRenderer {
   private raycast(raycaster: Raycaster, intersects: Intersection[]): void {
     const inverse = new Matrix4().copy(this.mesh.matrixWorld).invert();
     const ray = new Ray().copy(raycaster.ray).applyMatrix4(inverse);
-    const hit = raycastTerrain(this.queryDef, this.lookup, ray.origin.toArray(), ray.direction.toArray());
+    ray.origin.sub(this.origin);
+    // Clip to the authored rectangle so the padding's edge shelf is never hit.
+    const [x0, x1] = slab(ray.origin.x, ray.direction.x, 0, this.extent.x);
+    const [z0, z1] = slab(ray.origin.z, ray.direction.z, 0, this.extent.y);
+    const enter = Math.max(0, x0, z0);
+    const exit = Math.min(x1, z1);
+    if (!(enter <= exit)) return;
+    const start = ray.at(enter, new Vector3());
+    const hit = raycastTerrain(this.queryDef, this.lookup, start.toArray(), ray.direction.toArray(), exit - enter);
     if (!hit) return;
-    const point = new Vector3(...hit.point).applyMatrix4(this.mesh.matrixWorld);
+    const point = new Vector3(...hit.point).add(this.origin).applyMatrix4(this.mesh.matrixWorld);
     const distance = raycaster.ray.origin.distanceTo(point);
     if (distance < raycaster.near || distance > raycaster.far) return;
     intersects.push({
@@ -355,6 +378,14 @@ export class TerrainRenderer {
       faceIndex: 0,
     });
   }
+}
+
+/** Ray parameter interval where `start + dir·t` lies in `[lo, hi]` on one axis. */
+function slab(start: number, dir: number, lo: number, hi: number): [number, number] {
+  if (Math.abs(dir) < 1e-12) return start >= lo && start <= hi ? [-Infinity, Infinity] : [Infinity, -Infinity];
+  const t0 = (lo - start) / dir;
+  const t1 = (hi - start) / dir;
+  return t0 < t1 ? [t0, t1] : [t1, t0];
 }
 
 /** The terrain renderer behind an object, if it is a CDLOD terrain mesh. */

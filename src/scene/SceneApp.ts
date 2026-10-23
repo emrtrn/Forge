@@ -194,8 +194,6 @@ import {
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
-  landscapeRendererModeFromQuery,
-  setLandscapeRendererMode,
   updateLandscapeLod,
   updateLandscapeObjectGeometry,
   type ForgeLandscapeData,
@@ -1456,7 +1454,6 @@ export class SceneApp {
   constructor(canvas: HTMLCanvasElement, options: EditorOptions = { enabled: false }) {
     this.canvas = canvas;
     this.editorEnabled = options.enabled;
-    setLandscapeRendererMode(landscapeRendererModeFromQuery(location.search));
 
     this.sceneShell = new SceneShell(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,

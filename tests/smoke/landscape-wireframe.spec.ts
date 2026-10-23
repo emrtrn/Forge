@@ -13,7 +13,7 @@ async function observeTerrain(page: Page): Promise<void> {
         app.landscapeObjects.flatMap((root) => {
           const materials: { id: string; wireframe: boolean }[] = [];
           root.traverse((object) => {
-            if (object.name !== "landscape-chunk" && object.name !== "landscape-terrain") return;
+            if (object.name !== "landscape-terrain") return;
             const mesh = object as import("three").Mesh;
             for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
               materials.push({ id: material.uuid, wireframe: (material as import("three").MeshStandardMaterial).wireframe });

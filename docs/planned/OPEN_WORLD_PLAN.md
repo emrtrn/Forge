@@ -9,8 +9,9 @@
 > `git checkout 035a659 -- spikes` ile geri gelir). Belgede geçen `spikes/…`
 > yolları o commit'e aittir. **Faz 2 renderer'ının ilk dilimi (2026-10-23, dal
 > `feat/terrain-renderer`):** 1×1 Landscape'ler GPU CDLOD renderer'ıyla çiziliyor;
-> eski chunk mesh `?terrainRenderer=legacy` bayrağı arkasında karşılaştırma için
-> duruyor. Sonraki iş çok-tile çizimi (global harita + slot havuzu bağlantısı).
+> görsel karşılaştırma kullanıcı tarafından onaylandı ve eski chunk mesh
+> renderer'ı kaldırıldı. Sonraki iş çok-tile çizimi (global harita + slot
+> havuzu bağlantısı).
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -687,12 +688,14 @@ Doğrulama (2026-10-22):
       (1×1'de gerekmiyor), uzak tekrar kırma ve kendine gölge (legacy de
       gölge düşürmüyor; parite için kapalı), dirty-rect doku yüklemesi (şimdilik
       tüm katman).
-- [ ] Eski `engine/render-three/landscape.ts` chunk renderer'ı kaldırılır;
+- [x] Eski `engine/render-three/landscape.ts` chunk renderer'ı kaldırılır;
       `RuntimeSceneApp` ve `SceneApp` yeni renderer'ı kullanır.
-      *Kısmen (2026-10-23):* iki uygulama da varsayılan olarak yeni renderer'ı
-      kullanıyor; kare olmayan / 2'nin kuvveti olmayan grid'ler ve
-      `?terrainRenderer=legacy` chunk mesh'e düşüyor. Kaldırma görsel onaydan
-      sonra.
+      *Tamam (2026-10-23):* görsel onaydan sonra chunk mesh, splat materyali ve
+      `?terrainRenderer` bayrağı silindi. Her legacy grid boyutu (her eksende
+      65–257, kare olmak zorunda değil) yeni renderer'la çiziliyor: dokular bir
+      sonraki 2'nin kuvvetine kenar tekrarıyla dolduruluyor, vertex'ler ve
+      raycast yazılmış X/Z sınırında kırpılıyor; yazılmış veri yeniden
+      örneklenmiyor.
 - [ ] Seçim ve brush hover: CPU heightfield raycast (`scenePicker`,
       foliage boyama, landscape brush cursor).
       *1×1 için tamam (2026-10-23):* terrain mesh'inin `raycast`'i
@@ -719,9 +722,11 @@ Doğrulama (2026-10-22):
       `landscape-wireframe`, `terrain-*` smoke'ları yeşil.
 - [x] Ekran görüntüsü karşılaştırması: legacy landscape eski ve yeni
       renderer'da görsel olarak eşdeğer (tolerans belgelenir).
-      *Tamam (2026-10-23):* `tests/smoke/terrain-renderer-compare.spec.ts`
-      tepeli 257² fikstürü üç açıdan + AO/DOF'lu bir seviyeden legacy, legacy
-      tekrar ve CDLOD olarak çekiyor. Tolerans: CDLOD/legacy farkı, sahnenin
+      *Tamam (2026-10-23, kullanıcı onayladı):* karşılaştırma smoke'u tepeli
+      257² fikstürü üç açıdan + AO/DOF'lu bir seviyeden legacy, legacy tekrar ve
+      CDLOD olarak çekti (chunk renderer silinince smoke
+      `tests/smoke/terrain-renderer.spec.ts` render/derleme kontrolüne
+      dönüştü; 201×137 fikstürle dolgu yolunu da çiziyor). Tolerans: CDLOD/legacy farkı, sahnenin
       kendi yükleme-yükleme gürültüsünün en fazla 2 seviye (ortalama kanal farkı)
       ve %2 değişen piksel üstünde. Ölçülen: ortalama 0,04–0,11 seviye, değişen
       piksel ≤ %0,03 (normal dokusunun half-float yuvarlaması ve silüet kenarı).

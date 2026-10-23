@@ -19,6 +19,7 @@ import type {
   NavigationRole,
 } from "@engine/scene/collision";
 import type { Selection } from "./selection";
+import type { WorldPartitionSettings } from "@engine/world/worldPartition";
 
 export interface EditableTransform {
   position: Vec3;
@@ -223,6 +224,8 @@ export interface EditablePostProcess {
 export interface EditableSelection {
   id: string;
   kind: Selection["kind"];
+  /** Resolved default-true flag, present only for partition-capable elements. */
+  spatiallyLoaded?: boolean;
   assetId: string;
   /** Asset catalog/manifest category, resolved for display. Empty when unknown. */
   category: string;
@@ -342,6 +345,7 @@ export interface EditorWorldSettings {
   killZ: number;
   /** Selected runtime Game Mode id (resolved to a default when unknown/absent). */
   gameMode: string;
+  partition?: WorldPartitionSettings;
 }
 
 export interface EditorProjectInfo {
@@ -386,6 +390,9 @@ export function worldSettingsEqual(
     left.ambientColor.toLowerCase() === right.ambientColor.toLowerCase() &&
     left.ambientIntensity === right.ambientIntensity &&
     left.killZ === right.killZ &&
-    left.gameMode === right.gameMode
+    left.gameMode === right.gameMode &&
+    left.partition?.enabled === right.partition?.enabled &&
+    left.partition?.grids.main.cellSize === right.partition?.grids.main.cellSize &&
+    left.partition?.grids.main.loadRange === right.partition?.grids.main.loadRange
   );
 }

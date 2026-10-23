@@ -5,6 +5,7 @@ import {
   nextLandscapeBrushHeight,
 } from "@engine/scene/landscapeBrush";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
+import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
 import { levelTerrainPath, terrainTilePath, terrainTileWorldSize } from "@engine/terrain/terrainTypes";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
@@ -2362,6 +2363,9 @@ export class SceneApp {
       ambientIntensity: this.ambientIntensity(),
       killZ: this.killZ(),
       gameMode: this.gameMode(),
+      ...(this.layout?.worldSettings?.partition
+        ? { partition: normalizeWorldPartitionSettings(this.layout.worldSettings.partition) }
+        : {}),
     };
   }
 
@@ -2376,12 +2380,14 @@ export class SceneApp {
         | "ambientIntensity"
         | "killZ"
         | "gameMode"
+        | "partition"
       >
     >,
   ): void {
     if (!this.layout) return;
     const previous = this.getWorldSettings();
     const next: EditorWorldSettings = { ...previous, ...values };
+    if (next.partition) next.partition = normalizeWorldPartitionSettings(next.partition);
     if (worldSettingsEqual(previous, next)) return;
 
     this.executeCommand({
@@ -11317,6 +11323,11 @@ export class SceneApp {
     this.editorSceneController.setSelectionCollision(value);
   }
 
+  /** Details "Spatially Loaded" toggle, using the default-true boolean command path. */
+  setSelectionSpatiallyLoaded(value: boolean): void {
+    this.editorSceneController.setSelectionSpatiallyLoaded(value);
+  }
+
   /** Details "Simulate Physics" toggle for the active selection (default off). */
   setSelectionSimulatePhysics(value: boolean): void {
     this.editorSceneController.setSelectionSimulatePhysics(value);
@@ -11502,6 +11513,12 @@ export class SceneApp {
       worldSettings.gameMode = settings.gameMode;
     }
 
+    if (settings.partition) {
+      worldSettings.partition = normalizeWorldPartitionSettings(settings.partition);
+    } else {
+      delete worldSettings.partition;
+    }
+
     if (Object.keys(worldSettings).length === 0) delete this.layout.worldSettings;
     else this.layout.worldSettings = worldSettings;
 
@@ -11509,6 +11526,8 @@ export class SceneApp {
     this.applyBackgroundAndAmbient();
     this.emitWorldSettingsChanged();
     this.emitSceneObjectsChanged();
+    // Details shows the Spatially Loaded row only while partition is enabled.
+    this.emitSelectionChanged();
     this.scheduleAutoSave();
   }
 

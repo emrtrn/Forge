@@ -77,6 +77,7 @@ type MutableHierarchyTransform = {
   scaleLocked?: boolean;
   castShadow?: boolean;
   collision?: boolean;
+  spatiallyLoaded?: boolean;
   collisionPreset?: CollisionPresetId;
   collisionEnabled?: CollisionEnabled;
   objectType?: CollisionObjectChannel;
@@ -880,6 +881,28 @@ export class EditorSceneController {
     );
   }
 
+  setSelectionSpatiallyLoaded(value: boolean): void {
+    const layout = this.host.getMutableLayout();
+    if (!layout?.worldSettings?.partition?.enabled) return;
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    const supportsSpatiallyLoaded = (selection: Selection): boolean => {
+      if (selection.kind === "light") {
+        const light = layout.lights?.[selection.index];
+        return !!light && light.type !== "directional";
+      }
+      return selection.kind === "instance" || selection.kind === "actor"
+        || selection.kind === "character" || selection.kind === "reflectionCapture"
+        || selection.kind === "blockingVolume" || selection.kind === "targetPoint";
+    };
+    if (!supportsSpatiallyLoaded(this.selection)) return;
+    this.setSelectionsDefaultTrueFlag(
+      this.getSelectedSelectionsWithTargets(supportsSpatiallyLoaded),
+      "spatiallyLoaded",
+      value,
+      value ? "Enable selected spatial loading" : "Disable selected spatial loading",
+    );
+  }
+
   setSelectionSimulatePhysics(value: boolean): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
@@ -1629,16 +1652,13 @@ export class EditorSceneController {
 
   private setSelectionsDefaultTrueFlag(
     selections: Selection[],
-    field: EditorDefaultTrueFlagCommand,
+    field: EditorDefaultTrueFlagCommand | "spatiallyLoaded",
     value: boolean,
     label: string,
   ): void {
     const entries = selections.flatMap((selection) => {
-      if (selection.kind === "light") return [];
-      const target = this.host.getMutableTransform(selection) as
-        | LayoutPlacement
-        | LayoutCharacter
-        | null;
+      if (selection.kind === "light" && field !== "spatiallyLoaded") return [];
+      const target = this.host.getMutableTransform(selection);
       if (!target) return [];
       const previous = target[field] ?? true;
       return previous === value ? [] : [{ selection: cloneSelection(selection), previous }];
@@ -1666,15 +1686,12 @@ export class EditorSceneController {
 
   private applyDefaultTrueFlag(
     selection: Selection,
-    field: EditorDefaultTrueFlagCommand,
+    field: EditorDefaultTrueFlagCommand | "spatiallyLoaded",
     value: boolean,
     options: { notify?: boolean } = {},
   ): void {
-    if (selection.kind === "light") return;
-    const target = this.host.getMutableTransform(selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
+    if (selection.kind === "light" && field !== "spatiallyLoaded") return;
+    const target = this.host.getMutableTransform(selection);
     if (!target) return;
     if (value) delete target[field];
     else target[field] = false;

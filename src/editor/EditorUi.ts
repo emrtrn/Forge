@@ -97,6 +97,7 @@ import {
   bindInstanceDetails,
   renderInstanceDetails,
 } from "./panels/details/instanceDetails";
+import { appendSpatiallyLoadedDetails } from "./panels/details/spatiallyLoadedDetails";
 import {
   bindCollisionOverrideInputs,
   renderCollisionSection,
@@ -4547,6 +4548,12 @@ export class EditorUi {
 
   /** Applies the shared Phase 4 Details chrome after a concrete panel has rendered. */
   private finalizeDetailsRender(selection: EditableSelection): void {
+    appendSpatiallyLoadedDetails(
+      this.detailsBody,
+      selection,
+      this.worldSettings?.partition?.enabled === true,
+      (toggle, checked) => this.handleDetailToggle(toggle, checked),
+    );
     this.detailsBody.querySelector(".detail-heading")?.remove();
     this.decorateDetailSections(selection);
     this.decorateDetailsSectionsToggle(selection);
@@ -4798,6 +4805,9 @@ export class EditorUi {
         break;
       case "collision":
         this.app.setSelectionCollision(checked);
+        break;
+      case "spatiallyLoaded":
+        this.app.setSelectionSpatiallyLoaded(checked);
         break;
       case "simulatePhysics":
         this.app.setSelectionSimulatePhysics(checked);

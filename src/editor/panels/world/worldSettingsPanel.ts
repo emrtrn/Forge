@@ -1,4 +1,5 @@
 import type { EditorWorldSettings } from "@editor/core/editableScene";
+import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
 import {
   getGameEditorCatalog,
   type EditorGameModeOption,
@@ -45,6 +46,8 @@ function renderWorldSettingsHtml(
     .join("");
   const gameModeDescription =
     modeOptions.find((option) => option.id === settings.gameMode)?.description ?? "";
+  const partition = normalizeWorldPartitionSettings(settings.partition);
+  const partitionDisabled = partition.enabled ? "" : "disabled";
 
   return `
       <div class="detail-heading">
@@ -63,6 +66,24 @@ function renderWorldSettingsHtml(
           <input type="number" data-world-number="killZ" step="0.5"
             value="${escapeHtml(String(settings.killZ))}" />
         </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">World Partition</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-world-partition-enabled ${partition.enabled ? "checked" : ""} />
+          <span>Enable World Partition</span>
+        </label>
+        <label class="detail-row">
+          <span>Cell Size (m)</span>
+          <input type="number" data-world-partition-cell-size min="0" step="any"
+            value="${partition.grids.main.cellSize}" ${partitionDisabled} />
+        </label>
+        <label class="detail-row">
+          <span>Loading Range (m)</span>
+          <input type="number" data-world-partition-range min="0" step="any"
+            value="${partition.grids.main.loadRange}" ${partitionDisabled} />
+        </label>
+        <div class="detail-hint">Saves actors into per-cell files by position. Persistent: singletons, landscapes, splines, Player Start, directional lights and actors with Spatially Loaded off.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Lighting</div>
@@ -115,6 +136,36 @@ function renderWorldSettingsHtml(
 }
 
 function bindWorldSettingsInputs(options: WorldSettingsPanelOptions): void {
+  const partition = normalizeWorldPartitionSettings(options.settings.partition);
+  options.body.querySelector<HTMLInputElement>("[data-world-partition-enabled]")
+    ?.addEventListener("change", (event) => {
+      options.setWorldSettings({
+        partition: normalizeWorldPartitionSettings({
+          ...partition,
+          enabled: (event.currentTarget as HTMLInputElement).checked,
+        }),
+      });
+    });
+  for (const [selector, key] of [
+    ["[data-world-partition-cell-size]", "cellSize"],
+    ["[data-world-partition-range]", "loadRange"],
+  ] as const) {
+    options.body.querySelector<HTMLInputElement>(selector)?.addEventListener("change", (event) => {
+      const input = event.currentTarget as HTMLInputElement;
+      const value = Number(input.value);
+      if (!Number.isFinite(value) || value <= 0) {
+        input.value = String(partition.grids.main[key]);
+        return;
+      }
+      options.setWorldSettings({
+        partition: normalizeWorldPartitionSettings({
+          ...partition,
+          grids: { main: { ...partition.grids.main, [key]: value } },
+        }),
+      });
+    });
+  }
+
   options.body.querySelectorAll<HTMLInputElement>("[data-world-toggle]").forEach((toggle) => {
     toggle.addEventListener("change", () => {
       const key = toggle.dataset.worldToggle;

@@ -18,6 +18,130 @@ async function writeJson(path: string, value: unknown) {
 const diskLevel = async () => JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")) as RoomLayout;
 const diskCell = async (key: string) => JSON.parse(await readFile(smokePublicPath(worldCellPath(LEVEL, "main", key)), "utf8")) as WorldCellDocument;
 
+test("World Settings enables partition and Spatially Loaded moves a placement between cells and the persistent level with undo", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const fixture: RoomLayout = {
+    schema: 1, name: "Partition UI", loadGroups: [], characters: [],
+    instances: [{ assetId: "shape:cube", placements: [
+      { name: "Partition UI Cube", position: [34, 1, 2] },
+      { name: "Partition UI Neighbor", position: [35, 1, 2] },
+    ] }],
+    lights: [{ id: "sun", name: "Partition UI Sun", type: "directional", position: [4, 8, 4], intensity: 1 }],
+  };
+  await writeJson(LEVEL, fixture);
+  expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.clear());
+  await page.setViewportSize({ width: 1440, height: 860 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  const selectCube = async () => {
+    await page.getByTestId("outliner-row").filter({ hasText: "Partition UI Cube" }).click();
+    await expect(page.getByTestId("detail-px")).toBeVisible();
+  };
+  const openWorldSettings = async () => {
+    await page.locator("[data-main-menu-button]").click();
+    await page.getByRole("button", { name: /^World Settings/ }).click();
+    await expect(page.locator("[data-world-settings-popover]")).toBeVisible();
+  };
+  const save = async () => {
+    const saved = page.waitForResponse((res) => res.url().endsWith("/__save-layout") && res.request().method() === "POST");
+    await page.getByTestId("editor-save").click();
+    expect((await saved).ok()).toBeTruthy();
+    await expect(page.getByTestId("editor-status")).toContainText("Saved");
+  };
+  const enabled = page.locator("[data-world-partition-enabled]");
+  const cellSize = page.locator("[data-world-partition-cell-size]");
+  const range = page.locator("[data-world-partition-range]");
+  const spatiallyLoaded = page.locator("[data-detail-spatially-loaded]");
+  await selectCube();
+  await expect(spatiallyLoaded).toHaveCount(0);
+  await openWorldSettings();
+  await expect(enabled).not.toBeChecked();
+  await expect(cellSize).toBeDisabled();
+  await expect(range).toBeDisabled();
+  await enabled.check();
+  await expect(cellSize).toBeEnabled();
+  await expect(range).toBeEnabled();
+  await cellSize.fill("32");
+  await cellSize.press("Tab");
+  await range.fill("96");
+  await range.press("Tab");
+  // Invalid edits leave the stored settings and command history unchanged.
+  for (const value of ["0", "-1", ""]) {
+    await cellSize.fill(value);
+    await cellSize.press("Tab");
+    await expect(cellSize).toHaveValue("32");
+  }
+  await range.fill("0");
+  await range.press("Tab");
+  await expect(range).toHaveValue("96");
+  await save();
+  expect((await diskLevel()).worldSettings?.partition).toEqual({
+    enabled: true, grids: { main: { cellSize: 32, loadRange: 96 } },
+  });
+  expect((await diskLevel()).worldCells).toEqual(["1_0"]);
+  expect((await diskCell("1_0")).instances?.[0]?.placements.map((item) => item.name))
+    .toEqual(["Partition UI Cube", "Partition UI Neighbor"]);
+
+  // Each numeric change is one command; invalid edits did not add any.
+  await page.getByTestId("editor-undo").click();
+  await openWorldSettings();
+  await expect(cellSize).toHaveValue("32");
+  await expect(range).toHaveValue("384");
+  await page.locator("[data-world-settings-close]").click();
+  await page.getByTestId("editor-undo").click();
+  await openWorldSettings();
+  await expect(cellSize).toHaveValue("128");
+  await page.locator("[data-world-settings-close]").click();
+  await page.getByTestId("editor-undo").click();
+  await expect(spatiallyLoaded).toHaveCount(0);
+  await save();
+  expect((await diskLevel()).worldSettings?.partition).toBeUndefined();
+  for (let index = 0; index < 3; index++) await page.getByTestId("editor-redo").click();
+
+  // Disabling retains the authored grid, including after Save and reload.
+  await openWorldSettings();
+  await enabled.uncheck();
+  await expect(cellSize).toBeDisabled();
+  await expect(range).toBeDisabled();
+  await save();
+  expect((await diskLevel()).worldSettings?.partition).toEqual({
+    enabled: false, grids: { main: { cellSize: 32, loadRange: 96 } },
+  });
+  await page.reload();
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await openWorldSettings();
+  await expect(cellSize).toHaveValue("32");
+  await expect(range).toHaveValue("96");
+  await enabled.check();
+  await save();
+  await page.getByTestId("outliner-row").filter({ hasText: "Partition UI Sun" }).click();
+  await expect(spatiallyLoaded).toBeDisabled();
+  await expect(spatiallyLoaded).toHaveAttribute("title", "Directional lights are always persistent");
+  await selectCube();
+  await expect(spatiallyLoaded).toBeChecked();
+  await spatiallyLoaded.uncheck();
+  await save();
+  const persistent = await diskLevel();
+  expect(persistent.instances.flatMap((group) => group.placements)).toEqual([
+    { name: "Partition UI Cube", position: [34, 1, 2], spatiallyLoaded: false },
+  ]);
+  for (const key of persistent.worldCells ?? []) {
+    expect((await diskCell(key)).instances?.flatMap((group) => group.placements)
+      .some((item) => item.name === "Partition UI Cube") ?? false).toBe(false);
+  }
+  await page.getByTestId("editor-undo").click();
+  await expect(spatiallyLoaded).toBeChecked();
+  await save();
+  expect((await diskLevel()).instances.flatMap((group) => group.placements)).toEqual([]);
+  const restored = (await diskCell("1_0")).instances?.flatMap((group) => group.placements)
+    .find((item) => item.name === "Partition UI Cube");
+  expect(restored).toEqual({ name: "Partition UI Cube", position: [34, 1, 2] });
+  expect(errors).toEqual([]);
+});
+
 test("world partition saves cells, rewrites only an edited cell and loads the merged level in editor and runtime", async ({ page, request }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];

@@ -2486,6 +2486,7 @@ export class SceneApp {
     for (const objects of this.instanceOverrideObjects.values()) roots.push(...objects);
     roots.push(...this.characterObjects);
     roots.push(...this.actorObjects);
+    roots.push(...this.landscapeObjects);
     return roots;
   }
 
@@ -6415,6 +6416,7 @@ export class SceneApp {
     const previous = this.landscapeObjects[index];
     if (!actor || !previous) return;
     const object = createLandscapeObject(this.landscapeItem(actor));
+    this.applyWireframeToLevelObject(object);
     object.userData.landscapeIndex = index;
     object.traverse((child) => {
       child.userData.landscapeIndex = index;
@@ -6476,6 +6478,7 @@ export class SceneApp {
       child.raycast = () => {};
     });
     object.add(built.group);
+    this.applyWireframeToLevelObject(built.group);
     this.landscapeSplineMeshGroups[index] = built.group;
   }
 
@@ -6627,6 +6630,7 @@ export class SceneApp {
     }
     landscapes.forEach((actor, index) => {
       const object = createLandscapeObject(this.landscapeItem(actor));
+      this.applyWireframeToLevelObject(object);
       object.userData.landscapeIndex = index;
       object.traverse((child) => {
         child.userData.landscapeIndex = index;
@@ -8992,6 +8996,7 @@ export class SceneApp {
     this.landscapeData.set(actor.id, data);
     this.markLandscapeDirty(actor.id);
     const object = createLandscapeObject(this.landscapeItem(actor));
+    this.applyWireframeToLevelObject(object);
     this.landscapeObjects.splice(insertionIndex, 0, object);
     this.scene.add(object);
     this.refreshLandscapeIndices();

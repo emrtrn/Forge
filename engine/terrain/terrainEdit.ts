@@ -74,26 +74,43 @@ function refreshSummary(world: TerrainEditWorld, key: string, tile: TerrainTileD
   invalidateTerrainTileRange(tile);
 }
 
+function checkEditableTile(def: WorldTerrainDef, tiles: ReadonlyMap<string, TerrainTileData>, source: TerrainTileData): string {
+  const key = tileKey(source.x, source.z);
+  const count = source.size * source.size;
+  if (!def.tiles.some((entry) => entry.key === key) || tiles.has(key)
+    || source.x < 0 || source.z < 0 || source.x >= def.tilesX || source.z >= def.tilesZ
+    || source.size !== def.tileQuads + 1 || source.layerCount !== def.layers.length
+    || source.heights.length !== count || !source.heights.every(Number.isFinite)
+    || source.weights.length !== terrainWeightBlockCount(source.layerCount) * count * 4) {
+    throw new Error(`Invalid editable terrain tile ${key}`);
+  }
+  return key;
+}
+
 /** Owns arrays and summaries; decoded inputs and their definition remain untouched. */
 export function createTerrainEditWorld(def: WorldTerrainDef, decoded: Iterable<TerrainTileData>): TerrainEditWorld {
   if (def.layers.length > TERRAIN_MAX_LAYERS) throw new Error("Editable terrain supports at most eight layers");
   const tiles = new Map<string, TerrainTileData>();
   const world: TerrainEditWorld = { def: structuredClone(def), tiles, tile: (x, z) => tiles.get(tileKey(x, z)) };
   for (const source of decoded) {
-    const key = tileKey(source.x, source.z);
-    const count = source.size * source.size;
-    if (!def.tiles.some((entry) => entry.key === key) || tiles.has(key)
-      || source.x < 0 || source.z < 0 || source.x >= def.tilesX || source.z >= def.tilesZ
-      || source.size !== def.tileQuads + 1 || source.layerCount !== def.layers.length
-      || source.heights.length !== count || !source.heights.every(Number.isFinite)
-      || source.weights.length !== terrainWeightBlockCount(source.layerCount) * count * 4) {
-      throw new Error(`Invalid editable terrain tile ${key}`);
-    }
+    const key = checkEditableTile(def, tiles, source);
     const tile: TerrainTileData = { ...source, heights: source.heights.slice(), weights: source.weights.slice() };
     tiles.set(key, tile);
     refreshSummary(world, key, tile);
   }
   return world;
+}
+
+/**
+ * Adds a tile the edit world does not hold yet (editor streaming). It takes
+ * the tile's arrays as they are: a streamed tile is freshly decoded and has
+ * no other owner.
+ */
+export function insertTerrainEditTile(world: TerrainEditWorld, tile: TerrainTileData): string {
+  const key = checkEditableTile(world.def, world.tiles, tile);
+  world.tiles.set(key, tile);
+  refreshSummary(world, key, tile);
+  return key;
 }
 
 interface VertexCopy { tile: TerrainTileData; index: number; x: number; z: number }

@@ -1063,6 +1063,7 @@ import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.te
 import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
 import { registerTerrainRuntimeStreamingTests } from "../tests/engine/terrainRuntimeStreaming.test";
 import { registerTestWorldTests } from "../tests/engine/testWorld.test";
+import { registerTerrainEditorStreamingTests } from "../tests/engine/terrainEditorStreaming.test";
 import { registerTerrainRepairTests } from "../tests/engine/terrainRepair.test";
 
 /**
@@ -1197,6 +1198,7 @@ registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);
 await registerTerrainRuntimeStreamingTests(check, checkAsync);
 registerTestWorldTests(check);
+await registerTerrainEditorStreamingTests(check, checkAsync);
 registerTerrainRepairTests(check);
 registerTerrainDocumentTests(check);
 await registerTerrainDocumentAsyncTests(checkAsync);

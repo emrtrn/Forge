@@ -2115,11 +2115,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const streaming = this.runtimeServices.resolve(worldStreamingService);
     if (!streaming?.hasTerrain()) return false;
     const pawnId = this.gameModeSession?.playerState.pawnEntityId;
-    // The live pose: a walking pawn's Transform component keeps its spawn pose,
-    // so streaming around it would never follow the player.
-    const pawn = pawnId
-      ? this.characterMovement()?.transformOf(pawnId) ?? this.physicsSubsystem.simulatedTransform(pawnId) ?? this.transformForEntity(pawnId)
-      : null;
+    const pawn = pawnId ? this.liveTransformForEntity(pawnId) : null;
     const position = pawn?.position ?? this.camera.position.toArray();
     const velocity = pawnId ? this.characterMovement()?.velocityOf(pawnId) ?? this.physicsSubsystem.velocityOf(pawnId) : null;
     const sources = [{ position: [position[0], position[2]] as const }];
@@ -3567,10 +3563,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return transform ? cloneTransform(transform) : null;
   }
 
+  /**
+   * The live pose: a walking pawn's Transform component keeps its spawn pose, so
+   * anything that follows the player (streaming, quality focus) reads the
+   * character controller first, then the physics body, then the component.
+   */
+  private liveTransformForEntity(entityId: string): TransformComponent | null {
+    return this.characterMovement()?.transformOf(entityId)
+      ?? this.physicsSubsystem.simulatedTransform(entityId)
+      ?? this.transformForEntity(entityId);
+  }
+
   /** Possessed pawn is the gameplay focus; camera position is the safe fallback during boot. */
   private qualityFocusPosition(): readonly [number, number, number] {
     const pawnEntityId = this.gameModeSession?.playerState.pawnEntityId;
-    const transform = pawnEntityId ? this.transformForEntity(pawnEntityId) : null;
+    const transform = pawnEntityId ? this.liveTransformForEntity(pawnEntityId) : null;
     return transform
       ? [transform.position[0], transform.position[1], transform.position[2]]
       : [this.camera.position.x, this.camera.position.y, this.camera.position.z];

@@ -943,9 +943,10 @@ Doğrulama (2026-10-22):
       duplicate kontrolünü ve physical material erişimini O(1) tutar. Sahne
       başlangıcı zaten toplu `setEntities` kullanıyor; dönüştürülecek statik
       `addEntity` döngüsü yok.
-- [ ] `staticSurfaceTrianglesNear` arazi üçgenlerini heightfield'dan anında
+- [x] `staticSurfaceTrianglesNear` arazi üçgenlerini heightfield'dan anında
       üretir (karakter hareket kodu değişmez); nav yüzey tohumlama
-      `TerrainHeightQuery`'yi kullanır. Merdiven/rampa düzeltmeleri
+      heightfield nokta sorgusunu kullanır (aynı b–c yüzeyi). Merdiven/rampa
+      düzeltmeleri
       (signedNormalY, headroom gate) korunur; ilgili testler yeşil.
       *Anında üretim tamam (2026-10-23):* heightfield gövdeleri statik
       indekse üçgen koymuyor; `HeightfieldStaticSource`
@@ -963,8 +964,14 @@ Doğrulama (2026-10-22):
       Döndürülmüş gövde ya da 32 m'den geniş quad'lar (overflow kuralı) eski
       gibi yüklemede indekse açılıyor. Maliyet: yürüme benzeri sorgularda
       yüzey + engelleyici çifti ~1,7 µs (trimesh ~0,8 µs); yeni bir hücreye
-      ilk girişte ~25 µs. **Açık:** nav tohumlamanın `TerrainHeightQuery`'ye
-      geçmesi — AI nav grid hâlâ tam listeleri okuyor (artık tembel).
+      ilk girişte ~25 µs.
+      *Nav tamam (2026-10-23):* `staticNavigationSurfaceSamplesAt` heightfield
+      grid'inden yalnız noktanın komşu quad'larını örnekler; üçgen sırası, sınır
+      toleransı, eğim, katman ve tavan kontrolü trimesh ile aynıdır. Nav yüzey
+      listesi heightfield'ları dışlar; engel/perception listesi yalnız duvarları
+      üretir. Ekle/sil/collision toggle nav cache'ini geçersiz kılar. Engine testi
+      çok-tile trimesh ile katmanları, pişmiş grid'i ve yolu `deepEqual` kıyaslar;
+      `HeightfieldStaticSource.all()` çağrısı yasaklanarak nav kurulur.
 - [ ] `staticBlockerAabbsNear(x, z, radius)`; karakter hareketi, `hasGroundProbe`,
       TPS kamera ve AI çağrıları buna geçer. Test: 5000 statik AABB'li
       sahnede karakter adımı süresi sabit kalıyor.
@@ -977,8 +984,9 @@ Doğrulama (2026-10-22):
       çağrısı yasak; bir karakter adımı en fazla 12 blocker adayı inceliyor
       (duvar saati yerine sayaç). Yeni 8 kontrol: `static queries` filtresi.
       AI'nin konum/yarıçap almayan toplu perception/query provider'ları
-      (`aiModule`, `SceneApp`) ve tüm nav grid bake/debug listeleri bilerek
-      tam listede; yerel AI sorgu sözleşmesi sonraki iş olduğundan bu madde
+      (`aiModule`, `SceneApp`) ve nav engel/debug listeleri tam listede
+      (heightfield yüzeyleri üretilmez); yerel AI sorgu sözleşmesi sonraki iş
+      olduğundan bu madde
       açık. Heightfield bağlantısı/anlık arazi üçgenleri bu bölümün dışında.
 - [ ] `createLandscapeColliderPrimitive` (trimesh) kaldırılır.
       *Açık:* runtime artık heightfield kullanıyor; editörün `SceneApp`

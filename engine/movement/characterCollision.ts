@@ -16,7 +16,7 @@
  * player stands inside (its collider AABB) from freezing horizontal movement,
  * and avoids snapping out of pre-existing overlaps.
  */
-import { sampleTriangleHeight, triangleNormal, type GroundTriangle } from "./slopeSurface";
+import { sampleTriangleHeight, triangleNormal, type GroundSurfaceSample, type GroundTriangle } from "./slopeSurface";
 import type { NavigationRole } from "../scene/collision";
 
 export interface Aabb3 {
@@ -58,10 +58,12 @@ export interface GroundProbeOptions {
    * true incline height. Absent/empty → flat AABB tops only (legacy behaviour).
    */
   readonly surfaces?: readonly GroundTriangle[];
+  /** Nav-only point samples, in surface order; also participate in headroom. */
+  readonly surfaceSamples?: readonly GroundSurfaceSample[];
   /**
    * A surface triangle is walkable when its `normalY >= maxSlopeCos`
    * (`cos(slopeLimit)`). Absent → every surface counts (no slope gate). Only
-   * gates the triangle `surfaces`; flat AABB tops are always walkable.
+   * gates `surfaces` / `surfaceSamples`; flat AABB tops are always walkable.
    */
   readonly maxSlopeCos?: number;
   /**
@@ -601,10 +603,20 @@ function collectWalkableSurfaces(
       pushGroundHit(hits, { floorY: top, blocker: null, walkable: true });
     }
   }
+  for (const sample of options.surfaceSamples ?? []) {
+    if (sample.normalY < (options.maxSlopeCos ?? 0) || !acceptsTop(sample.floorY)) continue;
+    pushGroundHit(hits, { floorY: sample.floorY, blocker: null, walkable: true });
+  }
   const requiredHeadroom = Math.max(0, options.requiredHeadroom ?? 0);
   if (requiredHeadroom > 0) {
     return hits.filter(
-      (hit) => nearestCeilingAbove(hit.floorY, px, pz, hx, hz, blockers, surfaces) - hit.floorY >= requiredHeadroom,
+      (hit) => {
+        let ceiling = nearestCeilingAbove(hit.floorY, px, pz, hx, hz, blockers, surfaces);
+        for (const sample of options.surfaceSamples ?? []) {
+          if (sample.floorY > hit.floorY + 1e-3) ceiling = Math.min(ceiling, sample.floorY);
+        }
+        return ceiling - hit.floorY >= requiredHeadroom;
+      },
     );
   }
   return hits;

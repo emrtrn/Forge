@@ -12,6 +12,12 @@
  * limit.
  */
 
+/** A triangle surface sampled at one X/Z point, including steep ceiling surfaces. */
+export interface GroundSurfaceSample {
+  readonly floorY: number;
+  readonly normalY: number;
+}
+
 export interface GroundTriangle {
   readonly a: readonly [number, number, number];
   readonly b: readonly [number, number, number];

@@ -44,9 +44,8 @@ import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/sta
 import { createTargetPointIndex, targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
 import { assetPath, assetType } from "@engine/assets/manifest";
 import type { PhysicsSurfaceTriangle } from "@engine/behavior/behaviorSubsystem";
-import { collapseCoincidentFloors, findGroundLayersAt } from "@engine/movement/characterCollision";
 import type { CharacterMoveIntent } from "@engine/movement/characterMovementSubsystem";
-import { slopeCosFromDegrees } from "@engine/movement/slopeSurface";
+import { navFloorSampler } from "@engine/navigation/navFloorSampler";
 import {
   advanceWaypoint,
   findGridPath,
@@ -107,7 +106,6 @@ export const AI_MODULE_ID = "ai";
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
 const AI_NAV_GRID_SAFETY_MARGIN = AI_NAV_CELL_SIZE * 0.5;
-const AI_NAV_MIN_TOP_SUPPORT_RADIUS = 0.15;
 /**
  * Acceptance radius for intermediate path waypoints. Kept tight (independent of
  * the authored final-goal acceptance) so a generous goal tolerance can't make
@@ -305,56 +303,6 @@ export function createAiModule(): CapabilityModule {
     return `${navBlockerRevision}|${navBoundsSignature(bounds)}`;
   }
 
-  function navFloorSampler(
-    blockers: readonly NavAabb[],
-    surfaces: readonly PhysicsSurfaceTriangle[],
-    bounds: readonly NavAabb[],
-    agent: NavAgent,
-    preferredFloorY: number,
-  ): (x: number, z: number) => readonly number[] | null {
-    const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
-    const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? 50);
-    return (x, z) => {
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (const bound of bounds) {
-        if (x < bound.min[0] || x > bound.max[0] || z < bound.min[2] || z > bound.max[2]) continue;
-        minY = Math.min(minY, bound.min[1]);
-        maxY = Math.max(maxY, bound.max[1]);
-      }
-      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY < minY) return null;
-      const hits = findGroundLayersAt([x, maxY, z], blockers, {
-        footprintHalf,
-        maxStepUp: 0,
-        maxStepDown: maxY - minY,
-        surfaces,
-        maxSlopeCos,
-        preferredFloorY,
-        requiredSupportRadius: Math.min(Math.max(0, agent.radius), AI_NAV_MIN_TOP_SUPPORT_RADIUS),
-        // Recast walkableHeight: reject floor cells with less than the agent's
-        // height of clearance above them, so no nav floor is baked under a
-        // ramp/stair (nor on a wedge's downward-facing underside).
-        requiredHeadroom: Math.max(0, agent.height),
-        respectNavigationRole: true,
-      });
-      // Collapse near-coincident walkable surfaces into a single navigable floor,
-      // keeping the highest of each cluster. A solid floor mesh (`complexAsSimple`)
-      // reports both its top face and its slab underside/thickness as walkable
-      // layers a few centimetres apart; CharacterMovement grounds the pawn on the
-      // highest one, but the multi-layer nav grid would otherwise keep the lower
-      // phantom layer and route the path through it — leaving interior waypoints
-      // below the walking pawn. The follower's tight vertical acceptance can't
-      // clear that gap, so the agent stalls a few steps in. Surfaces within the
-      // agent's step height are one floor it can freely traverse, so this matches
-      // movement while leaving genuinely distinct floors (upper platforms) intact.
-      const layers = collapseCoincidentFloors(
-        hits.map((hit) => hit.floorY),
-        Math.max(agent.stepHeight ?? 0, 1e-3),
-      );
-      return layers.length > 0 ? layers : null;
-    };
-  }
-
   function buildPath(entityId: string, start: Vec3, goal: Vec3) {
     const navigation = host()?.navigation;
     if (!navigation) return { status: "failure" as const, points: [], visited: 0 };
@@ -366,7 +314,7 @@ export function createAiModule(): CapabilityModule {
       // start/goal, so it is single-query only and can't be baked/reused.
       return findGridPath({ start, goal: [...goal], agent, blockers, cellSize: AI_NAV_CELL_SIZE });
     }
-    const surfaces = navigation.staticNavigationSurfaceTriangles();
+    const surfaces = navigation.staticNavigationSurfaceTriangles(!navigation.staticNavigationSurfaceSamplesAt);
     // Bounded case: bake once per agent profile and reuse across queries. The
     // grid rebuilds automatically when a static blocker moves or a nav volume is
     // edited (both fold into the revision token), so there is no manual build.
@@ -377,7 +325,8 @@ export function createAiModule(): CapabilityModule {
       bounds,
       footY: navFootY,
       cellSize: AI_NAV_CELL_SIZE,
-      sampleFloorYs: navFloorSampler(blockers, surfaces, bounds, agent, navFootY),
+      sampleFloorYs: navFloorSampler(blockers, surfaces, bounds, agent, navFootY,
+        navigation.staticNavigationSurfaceSamplesAt?.bind(navigation)),
     });
     if (!grid) return { status: "failure" as const, points: [], visited: 0 };
     return searchNavGrid(grid, start, goal);

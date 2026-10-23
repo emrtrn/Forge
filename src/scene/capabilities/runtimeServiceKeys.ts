@@ -18,6 +18,7 @@ import type { AnimationMixer, Object3D, Scene, Vector3 } from "three";
 
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
+import type { GroundSurfaceSample } from "@engine/movement/slopeSurface";
 import type { AssetManifest } from "@engine/assets/manifest";
 import type { AudioBus, AudioPlaybackHandle, AudioPlayOptions } from "@engine/audio/audioSubsystem";
 import type { AudioBusId } from "@engine/audio/audioBus";
@@ -568,7 +569,9 @@ export interface AiNavigationQuery {
   /** Static obstacles the nav grid is eroded from (`ignored` bodies omitted). */
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[];
   /** Walkable triangles the nav grid seeds floor layers from. */
-  staticNavigationSurfaceTriangles(): readonly PhysicsSurfaceTriangle[];
+  staticNavigationSurfaceTriangles(includeHeightfields?: boolean): readonly PhysicsSurfaceTriangle[];
+  /** Ordered point samples, including heightfields, for floor seeding and headroom. */
+  staticNavigationSurfaceSamplesAt?(x: number, z: number): readonly GroundSurfaceSample[];
   /** Collider size an agent profile falls back to when nothing is authored. */
   colliderHalfExtents(entityId: string): readonly [number, number, number] | null;
 }

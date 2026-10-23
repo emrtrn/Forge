@@ -12,6 +12,7 @@ import {
   type HeightfieldCellEntries,
 } from "./heightfieldStatic";
 import { classifyStaticTriangle } from "./staticTriangles";
+import { sampleTriangleHeight, type GroundSurfaceSample } from "../movement/slopeSurface";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
   readColliderComponent,
@@ -196,6 +197,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private staticNavigationBlockerCache: Aabb[] | null = null;
   /** Cached AI-navigation surfaces, filtered by Collider.navigationRole. */
   private staticNavigationSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
+  /** Identity changes even on terrain-only edits, so baked nav revisions still advance. */
+  private staticNavigationNonHeightfieldSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
   private rapierModule: RapierModule | null = null;
   private rapierWorld: RapierWorld | null = null;
   private rapierBodies = new Map<EntityId, RapierBodyRecord>();
@@ -642,7 +645,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     for (const [id, record] of this.staticRecords) {
       if (this.collisionDisabled.has(id)) continue;
       for (const entry of record.blockers) blockers.push(entry.value);
-      for (const field of record.fields) for (const blocker of field.all().blockers) blockers.push(blocker as Aabb);
+      for (const field of record.fields) for (const blocker of field.allBlockers()) blockers.push(blocker as Aabb);
     }
     this.staticBlockerCache = blockers;
     return blockers;
@@ -810,6 +813,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.staticSurfaceCache = null;
     this.staticNavigationBlockerCache = null;
     this.staticNavigationSurfaceCache = null;
+    this.staticNavigationNonHeightfieldSurfaceCache = null;
     this.cameraIgnoredCache = null;
   }
 
@@ -903,24 +907,43 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     for (const [id, record] of this.staticRecords) {
       if (record.navigationRole === "ignored" || this.collisionDisabled.has(id)) continue;
       for (const entry of record.blockers) blockers.push(entry.value);
-      for (const field of record.fields) for (const blocker of field.all().blockers) blockers.push(blocker as Aabb);
+      for (const field of record.fields) for (const blocker of field.allBlockers()) blockers.push(blocker as Aabb);
     }
     this.staticNavigationBlockerCache = blockers;
     return blockers;
   }
 
-  /** AI-navigation surfaces: obstacle-only/ignored bodies cannot seed floor layers. */
-  staticNavigationSurfaceTriangles(): readonly PhysicsSurfaceTriangle[] {
-    if (this.staticNavigationSurfaceCache) return this.staticNavigationSurfaceCache;
+  /** AI-nav surfaces; omit on-demand heightfields when using point samples. */
+  staticNavigationSurfaceTriangles(includeHeightfields = true): readonly PhysicsSurfaceTriangle[] {
+    const cached = includeHeightfields ? this.staticNavigationSurfaceCache : this.staticNavigationNonHeightfieldSurfaceCache;
+    if (cached) return cached;
     const surfaces: PhysicsSurfaceTriangle[] = [];
     for (const [id, record] of this.staticRecords) {
       if (record.navigationRole === "ignored" || record.navigationRole === "obstacleOnly" ||
         this.collisionDisabled.has(id)) continue;
       for (const entry of record.surfaces) surfaces.push(entry.value);
-      for (const field of record.fields) for (const surface of field.all().surfaces) surfaces.push(surface);
+      if (includeHeightfields) {
+        for (const field of record.fields) for (const surface of field.all().surfaces) surfaces.push(surface);
+      }
     }
-    this.staticNavigationSurfaceCache = surfaces;
+    if (includeHeightfields) this.staticNavigationSurfaceCache = surfaces;
+    else this.staticNavigationNonHeightfieldSurfaceCache = surfaces;
     return surfaces;
+  }
+
+  /** Point samples in the full surface list's order, without expanding heightfields. */
+  staticNavigationSurfaceSamplesAt(x: number, z: number): readonly GroundSurfaceSample[] {
+    const samples: GroundSurfaceSample[] = [];
+    for (const [id, record] of this.staticRecords) {
+      if (record.navigationRole === "ignored" || record.navigationRole === "obstacleOnly" ||
+        this.collisionDisabled.has(id)) continue;
+      for (const { value } of record.surfaces) {
+        const floorY = sampleTriangleHeight(value, x, z);
+        if (floorY !== null) samples.push({ floorY, normalY: value.normalY });
+      }
+      for (const field of record.fields) samples.push(...field.surfaceSamplesAt(x, z));
+    }
+    return samples;
   }
 
   /**

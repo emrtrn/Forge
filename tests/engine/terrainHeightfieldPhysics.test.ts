@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { forEachHeightfieldTriangle } from "../../engine/physics/heightfieldStatic";
+import { forEachHeightfieldTriangle, HeightfieldStaticSource } from "../../engine/physics/heightfieldStatic";
+import { buildNavGrid, searchNavGrid, type NavAgent } from "../../engine/navigation/gridNavigation";
+import { navFloorSampler } from "../../engine/navigation/navFloorSampler";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import { rotatePointAboutOrigin } from "../../engine/physics/rotatedBox";
 import { createReferenceCarDefinition, NEUTRAL_VEHICLE_INPUT } from "../../engine/physics/vehicle/vehicleTypes";
@@ -257,6 +259,123 @@ async function driveTerrainSeam(seamed: boolean, route: SeamDrive) {
 }
 
 export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
+  check("terrain heightfield navigation: 257x257 tile bakes without requesting the full triangle list", () => {
+    const def: WorldTerrainDef = { ...vehicleTerrain(false).def, tileQuads: 256, tilesX: 1, tilesZ: 1,
+      origin: [0, 0, 0], tiles: [{ key: "0_0", minHeight: 0, maxHeight: 0 }] };
+    const document = { def, tiles: new Map([["0_0", createFlatTerrainTile(def, 0, 0)]]) };
+    const physics = new PhysicsSubsystem();
+    const originalAll = HeightfieldStaticSource.prototype.all;
+    let fullCalls = 0;
+    HeightfieldStaticSource.prototype.all = function () {
+      fullCalls += 1;
+      throw new Error("nav bake must not allocate the tile's 131072 triangles");
+    };
+    try {
+      physics.setEntities(worldTerrainColliderEntities({ id: "large", name: "Large", collision: true }, document));
+      const surfaces = physics.staticNavigationSurfaceTriangles(false);
+      const blockers = physics.staticNavigationBlockerAabbs();
+      assert.deepEqual(surfaces, []);
+      assert.deepEqual(blockers, []);
+      assert.deepEqual(physics.staticBlockerAabbs(), [], "debug/perception must not generate surfaces either");
+      const bounds = [{ min: [0, -1, 0] as Vec3, max: [16, 10, 16] as Vec3 }];
+      const agent = { radius: 0.3, height: 1.8, stepHeight: 0.6 };
+      const sampleFloorYs = navFloorSampler(blockers, surfaces, bounds, agent, 0,
+        physics.staticNavigationSurfaceSamplesAt.bind(physics));
+      const grid = buildNavGrid({ agent, blockers, bounds, footY: 0, sampleFloorYs });
+      assert.ok(grid);
+      assert.equal(searchNavGrid(grid, [2, 0, 2], [12, 0, 12]).status, "success");
+      assert.equal(fullCalls, 0);
+    } finally {
+      HeightfieldStaticSource.prototype.all = originalAll;
+      physics.dispose();
+    }
+  });
+
+  check("terrain heightfield navigation: floor layers, baked grids and paths equal trimesh without full surface generation", () => {
+    const document = terrain(1, [0, 0, 0]);
+    const fields = worldTerrainColliderEntities({ id: "world", name: "World", collision: true }, document);
+    const ramp = staticBox("ramp", [6, 5, 6], [4, 2, 4]);
+    (ramp.components[COLLIDER_COMPONENT] as unknown as ColliderComponent).primitives = [{
+      shape: "trimesh", size: [4, 2, 4],
+      vertices: [[-2, 0, -2], [2, 2, -2], [-2, 0, 2], [2, 2, 2]],
+      indices: [0, 2, 1, 1, 2, 3],
+    }];
+    const extras = [ramp, staticBox("platform", [10, 6, 10], [5, 0.5, 5]),
+      staticBox("low-ceiling", [20, 3, 8], [4, 0.5, 4])];
+    const trimesh = new PhysicsSubsystem();
+    const heightfield = new PhysicsSubsystem();
+    trimesh.setEntities([...scene(trimeshEntities(fields, document)), ...extras]);
+    heightfield.setEntities([...scene(fields), ...extras]);
+    const originalAll = HeightfieldStaticSource.prototype.all;
+    let fullCalls = 0;
+    HeightfieldStaticSource.prototype.all = function () {
+      fullCalls += 1;
+      throw new Error("navigation must not materialise full heightfield surfaces");
+    };
+    const agent: NavAgent = { radius: 0.3, height: 1.8, stepHeight: 0.6, maxSlopeAngleDeg: 50 };
+    const bounds = [{ min: [-2, -10, -2] as Vec3, max: [66, 60_000, 66] as Vec3 }];
+    const points = samplePoints(document, 500);
+    // Grid vertices, diagonal, tile seams, and points within the barycentric edge tolerance.
+    for (const x of [0, 1, 31, 32, 64]) {
+      for (const z of [0, 1, 9, 32, 64]) {
+        for (const eps of [-5e-7, 0, 5e-7]) points.push([x + eps, z, 0], [x + 0.5, z + 0.5 + eps, 0]);
+      }
+    }
+    const compare = (label: string, bake = false): void => {
+      const oldSurfaces = trimesh.staticNavigationSurfaceTriangles();
+      const surfaces = heightfield.staticNavigationSurfaceTriangles(false);
+      assert.equal(surfaces.length, 2, "only the two non-heightfield ramp surfaces remain in the nav list");
+      assert.ok(surfaces.length <= oldSurfaces.length);
+      const blockers = heightfield.staticNavigationBlockerAabbs();
+      assert.deepEqual(blockers, trimesh.staticNavigationBlockerAabbs(), `${label}: exact nav blockers including cliff`);
+      assert.deepEqual(heightfield.staticBlockerAabbs(), trimesh.staticBlockerAabbs(), `${label}: perception blockers`);
+      const oldSampler = navFloorSampler(trimesh.staticNavigationBlockerAabbs(), oldSurfaces, bounds, agent, 0);
+      const sampler = navFloorSampler(blockers, surfaces, bounds, agent, 0,
+        heightfield.staticNavigationSurfaceSamplesAt.bind(heightfield));
+      for (const [x, z] of points) assert.deepEqual(sampler(x, z), oldSampler(x, z), `${label}: layers at ${x},${z}`);
+      if (!bake) return;
+      const request = { agent, bounds: [{ min: [1, -10, 1] as Vec3, max: [25, 20, 25] as Vec3 }], footY: 0, cellSize: 0.5 };
+      const grid = buildNavGrid({ ...request, blockers, sampleFloorYs: sampler });
+      const oldGrid = buildNavGrid({ ...request, blockers: trimesh.staticNavigationBlockerAabbs(), sampleFloorYs: oldSampler });
+      assert.ok(grid && oldGrid);
+      assert.deepEqual(grid, oldGrid, `${label}: baked multi-layer grid`);
+      const start: Vec3 = [3, sampler(3, 3)![0]!, 3];
+      const goal: Vec3 = [10, sampler(10, 3)![0]!, 3];
+      const path = searchNavGrid(grid, start, goal);
+      assert.equal(path.status, "success", "fixture exercises a reachable route");
+      assert.deepEqual(path, searchNavGrid(oldGrid, start, goal), `${label}: path`);
+    };
+    try {
+      compare("loaded", true);
+      const before = heightfield.staticNavigationSurfaceTriangles(false);
+      for (const physics of [trimesh, heightfield]) physics.setEntityCollisionEnabled(fields[0]!.id, false);
+      assert.notEqual(heightfield.staticNavigationSurfaceTriangles(false), before, "terrain-only toggle invalidates nav revision identity");
+      compare("disabled");
+      for (const physics of [trimesh, heightfield]) physics.setEntityCollisionEnabled(fields[0]!.id, true);
+      compare("re-enabled", true);
+      for (const role of ["ignored", "obstacleOnly", "auto", "walkable"] as const) {
+        const withRole = fields.map((entity) => ({ ...entity, components: { ...entity.components,
+          [COLLIDER_COMPONENT]: { ...entity.components[COLLIDER_COMPONENT], navigationRole: role },
+        } }));
+        heightfield.setEntities([...scene(withRole), ...extras]);
+        trimesh.setEntities([...scene(trimeshEntities(withRole, document)), ...extras]);
+        compare(role);
+      }
+      const beforeRemoval = heightfield.staticNavigationSurfaceTriangles(false);
+      for (const physics of [trimesh, heightfield]) physics.removeEntities([fields[0]!.id]);
+      assert.notEqual(heightfield.staticNavigationSurfaceTriangles(false), beforeRemoval, "terrain removal invalidates nav revision identity");
+      compare("removed");
+      heightfield.addEntities([fields[0]!]);
+      trimesh.addEntities(trimeshEntities([fields[0]!], document));
+      compare("added");
+      assert.equal(fullCalls, 0);
+    } finally {
+      HeightfieldStaticSource.prototype.all = originalAll;
+      trimesh.dispose();
+      heightfield.dispose();
+    }
+  });
+
   for (const { label, verticesX, verticesZ, heightScale, rotation } of [
     { label: "square", verticesX: 65, verticesZ: 65, heightScale: 1, rotation: [0, 0, 0] as Vec3 },
     { label: "rotated", verticesX: 65, verticesZ: 65, heightScale: 1, rotation: [0, 30, 0] as Vec3 },

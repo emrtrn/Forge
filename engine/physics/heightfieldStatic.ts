@@ -1,10 +1,11 @@
 import type { PhysicsAabb, PhysicsSurfaceTriangle } from "../behavior/behaviorSubsystem";
+import { sampleTriangleHeight, type GroundSurfaceSample } from "../movement/slopeSurface";
 import type { NavigationRole } from "../scene/collision";
 import type { ColliderHeightfield } from "../scene/components";
 import type { Vec3 } from "../scene/layout";
 import { rotatePointAboutOrigin } from "./rotatedBox";
 import { STATIC_INDEX_CELL_SIZE, staticCellRange, type StaticSpatialEntry } from "./staticSpatialIndex";
-import { classifyStaticTriangle } from "./staticTriangles";
+import { classifyStaticTriangle, SURFACE_MIN_SUPPORT_NORMAL_Y, triangleUpNormalY } from "./staticTriangles";
 
 /**
  * Static triangles of a heightfield collider, produced on demand (OPEN_WORLD_PLAN
@@ -12,8 +13,9 @@ import { classifyStaticTriangle } from "./staticTriangles";
  * them was classified, boxed and filed into the static index at load. A
  * heightfield body instead answers the same index queries from its grid: the
  * triangles of one 4 m index cell are built when first asked for (and cached),
- * and the full lists only when a consumer asks for every static triangle
- * (navigation). Each triangle carries the same world vertices, classification,
+ * and the full surface list only for legacy consumers that explicitly ask for
+ * it. Navigation samples heights directly; full blocker queries retain only
+ * walls. Each triangle carries the same world vertices, classification,
  * cell membership and relative order as the trimesh it replaces, so movement
  * and navigation see identical results (engine parity test).
  */
@@ -88,6 +90,7 @@ export class HeightfieldStaticSource {
   readonly maxZ: number;
   private readonly cells = new Map<string, HeightfieldCellEntries>();
   private everything: { blockers: PhysicsAabb[]; surfaces: PhysicsSurfaceTriangle[] } | null = null;
+  private blockers: PhysicsAabb[] | null = null;
 
   /**
    * `itemOffset` places this field after the body's other primitives in the
@@ -158,18 +161,49 @@ export class HeightfieldStaticSource {
     return everything;
   }
 
+  /** Full wall list without allocating/caching any support surfaces. */
+  allBlockers(): readonly PhysicsAabb[] {
+    if (this.everything) return this.everything.blockers;
+    if (this.blockers) return this.blockers;
+    const blockers: PhysicsAabb[] = [];
+    this.visit(0, this.field.quadsX - 1, 0, this.field.quadsZ - 1, (entry) => {
+      blockers.push(entry.value as PhysicsAabb);
+    }, true);
+    this.blockers = blockers;
+    return blockers;
+  }
+
+  /** Exact b–c triangle heights in grid order, including seam/edge tolerance. */
+  surfaceSamplesAt(x: number, z: number): GroundSurfaceSample[] {
+    const { spacing } = this.field;
+    const qx = Math.floor((x - this.minX) / spacing);
+    const qz = Math.floor((z - this.minZ) / spacing);
+    const samples: GroundSurfaceSample[] = [];
+    // Adjacent quads preserve sampleTriangleHeight's barycentric tolerance at
+    // grid edges (and both normals on the shared diagonal).
+    this.visit(qx - 1, qx + 1, qz - 1, qz + 1, (entry, kind) => {
+      if (kind !== "surface") return;
+      const surface = entry.value as PhysicsSurfaceTriangle;
+      const floorY = sampleTriangleHeight(surface, x, z);
+      if (floorY !== null) samples.push({ floorY, normalY: surface.normalY });
+    });
+    return samples;
+  }
+
   private visit(
     qx0: number,
     qx1: number,
     qz0: number,
     qz1: number,
     emit: (entry: Entry<PhysicsAabb | PhysicsSurfaceTriangle>, kind: "surface" | "blocker") => void,
+    blockersOnly = false,
   ): void {
     const rotation: Vec3 = [0, 0, 0];
     forEachHeightfieldTriangle(this.field, qx0, qx1, qz0, qz1, (la, lb, lc, index) => {
       const wa = rotatePointAboutOrigin(this.origin, la, rotation);
       const wb = rotatePointAboutOrigin(this.origin, lb, rotation);
       const wc = rotatePointAboutOrigin(this.origin, lc, rotation);
+      if (blockersOnly && triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_SUPPORT_NORMAL_Y) return;
       const classified = classifyStaticTriangle(wa, wb, wc, this.navigationRole);
       if ("surface" in classified) {
         const { a, b, c } = classified.surface;

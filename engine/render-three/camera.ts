@@ -8,7 +8,8 @@ export interface CameraViewportOptions {
 }
 
 export function createSceneCamera(): PerspectiveCamera {
-  return new PerspectiveCamera(44, 1, 0.1, 300);
+  // Leave room to frame a multi-tile terrain from outside its bounds.
+  return new PerspectiveCamera(44, 1, 0.1, 2000);
 }
 
 export function applyResponsiveCameraViewport(

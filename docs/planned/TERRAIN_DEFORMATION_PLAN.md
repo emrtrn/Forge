@@ -33,6 +33,17 @@
 > örneklemeleri (iz basma, Faz 3 gömülme ve mesh) birebir sürümü kullanır,
 > asla `heightAtSmooth`'u kullanmaz.
 
+> **Araştırma kararları (2026-10-23, kullanıcı onaylı):** ayrıntı ve gerekçe
+> [OFFROAD_ARAZI_DEFORMASYON_TEKNIKLERI_ARASTIRMA_v0.1.md](OFFROAD_ARAZI_DEFORMASYON_TEKNIKLERI_ARASTIRMA_v0.1.md).
+> (1) **Kalıcılık kademeli:** M2 kalıcılık olmadan biter; pencere dışı izler 1 m
+> kaba katmana (yalnız görsel) düşer; seyrek blok deposu ve save-game kalıcılığı
+> M2 oynama testinden sonra karara bağlanır. (2) **Malzeme modeli düzeltilmiş
+> preset:** `targetDepthForWheel`'in `min(yük/nominal, 1)` doygunluğu kaldırılır
+> (`nominal` = boş aracın tekerlek başına statik yükü); derinlik hesabı tek bir
+> `sinkage(...)` fonksiyonunda toplanır, Bekker ileride aynı arayüzün arkasına
+> konabilir. Rapor ayrıca Faz 3'ün "yerel patch mesh + discard" maddesi yerine
+> CDLOD alt-seviyelerini öneriyor; bu henüz **karar değil**, spike S-D1 bekliyor.
+
 ## Karar: Yüzey profili + CPU-otoriter iz alanı + yerel yoğun mesh
 
 Deformasyon dört katmana ayrılıyor. Her katman bir öncekinin üstüne kuruluyor

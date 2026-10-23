@@ -1154,7 +1154,7 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       actor dosya değiştirir; `spatiallyLoaded: false` persistent'e gider;
       hücreden büyük sınırlı actor'ler v1'de persistent'e gider (uyarıyla).
       Yalnız kirli hücreler yazılır.
-- [ ] **Runtime v1 — yalnız Actor Script actor'leri akar (kullanıcı kararı
+- [x] **Runtime v1 — yalnız Actor Script actor'leri akar (kullanıcı kararı
       2026-10-23, seçenek 1).** Statik instance'lar, ışıklar, karakterler,
       volume'ler ve diğerleri level başında tam yüklenmeye devam eder
       (instanced batch'ler level başına kurulur; hücre başına bölmek ayrı iş).
@@ -1197,6 +1197,15 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
         sonradan gelen actor'ler nav engeli olmaz. Editör her şeyi yükler.
       Dilimler: (A) saf yönlendirme + behavior `unloadEntity` / kalıcı durum
       (engine testli), (B) runtime modülü + bağlantı + smoke.
+      *Tamam (2026-10-23):* A + B1 `dea780b` (ek olarak modül sink'leri artımlı
+      `addEntity/removeEntity` aldı; runtime spawn edilen AI/hareketli actor
+      artık hareket ediyor), B2 runtime: `WorldPartitionStreaming`
+      (`engine/world/worldPartitionStreaming.ts`, kare başına ≤2 hücre,
+      histerezis 1,25, kalite çarpanı uygulanmaz) + `worldPartitionModule`;
+      boot'ta spawn menzilindeki hücreler toplu yoldan kurulur, uzak actor'lerin
+      mesh'leri yine boot'ta yüklenir. `?debug`: `world partition: cells a/t
+      actors n`. Smoke `world-partition-streaming.spec.ts`: 12 hücreli koridorda
+      yürürken öndeki hücre yüklenir, arkadaki boşalır, canlı actor ≤ 5.
 - [ ] Runtime: hücre aktivasyonu instances / actors / lights / volumes /
       characters'ı sahneye, fiziğe (toplu), behavior'a ekler; deaktivasyon
       tersini yapar. Actor Script'te **BeginPlay hücre aktivasyonunda, EndPlay

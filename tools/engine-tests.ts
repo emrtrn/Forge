@@ -1,6 +1,7 @@
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
+import { registerWorldPartitionStreamingTests } from "../tests/engine/worldPartitionStreaming.test";
 import { registerBehaviorSubsystemTests } from "../tests/engine/behaviorSubsystem.test";
 import { registerWorldCellPersistenceTests } from "../tests/engine/worldCellPersistence.test";
 /**
@@ -1210,6 +1211,7 @@ registerWorldTerrainSaveTests(check);
 registerWorldTerrainCreateTests(check);
 registerWorldTerrainExpandTests(check);
 registerWorldPartitionTests(check);
+registerWorldPartitionStreamingTests(check);
 registerBehaviorSubsystemTests(check);
 await registerWorldCellPersistenceTests(check, checkAsync);
 await registerWorldTerrainActorAsyncTests(checkAsync);

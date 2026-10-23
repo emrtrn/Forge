@@ -26,10 +26,12 @@ import { createVehicleAiModule } from "./vehicleAiModule";
 import { createVehicleModule } from "./vehicleModule";
 import { createVfxModule } from "./vfxModule";
 import { createWorldStreamingModule } from "./worldStreamingModule";
+import { createWorldPartitionModule } from "./worldPartitionModule";
 
 export function createDefaultRuntimeModules(): CapabilityModule[] {
   return [
     createWorldStreamingModule(),
+    createWorldPartitionModule(),
     createMovingPlatformModule(),
     createSplineFollowerModule(),
     // Wheel visuals and engine sound only: the `Vehicle` component drives

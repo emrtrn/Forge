@@ -69,6 +69,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       audioBudgetText(app) +
       vfxDebugText(app) +
       terrainStreamingText(app) +
+      worldPartitionText(app) +
       gameModeDebugText(app) +
       aiDebugText(app) +
       aiInspectorText(app) +
@@ -449,6 +450,11 @@ export function formatVfxDebug(snapshot: VfxDebugSnapshot, topN = 4): string[] {
 function gameModeDebugText(app: RuntimeStatsApp): string {
   if (!app.getGameModeDebugSnapshot) return "";
   return `\n${formatGameModeDebug(app.getGameModeDebugSnapshot()).join("\n")}`;
+}
+
+function worldPartitionText(app: RuntimeStatsApp): string {
+  const stats = app.getWorldPartitionSnapshot?.();
+  return stats ? `\nworld partition: cells ${stats.activeCells}/${stats.totalCells} actors ${stats.liveActors}` : "";
 }
 
 function terrainStreamingText(app: RuntimeStatsApp): string {

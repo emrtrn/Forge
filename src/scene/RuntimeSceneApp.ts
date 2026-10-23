@@ -1,5 +1,8 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
+import { worldPartitionService } from "./capabilities/worldPartitionModule";
+import { normalizeWorldPartitionSettings, worldPartitionActorCells } from "@engine/world/worldPartition";
+import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
@@ -300,7 +303,7 @@ import {
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
-import { actorInstanceToEntity } from "@engine/scene/actorInstance";
+import { actorInstanceEntityId, actorInstanceToEntity } from "@engine/scene/actorInstance";
 import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
@@ -496,6 +499,7 @@ export interface RuntimeStatsApp {
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   getTerrainStreamingSnapshot?(): TerrainStreamingSnapshot | null;
+  getWorldPartitionSnapshot?(): WorldPartitionSnapshot | null;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getUiDebugSnapshot?(): UiDebugSnapshot;
   /** Optional: windowed frame-time stats (avg / P95 / spikes) — always on in runtime. */
@@ -790,6 +794,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private lightObjects: LightObjectRecord[] = [];
   /** Entities flattened from placed Actor Script instances (`layout.actors`). */
   private actorEntities: Entity[] = [];
+  /** Boot-only model inputs include far actors without registering them as live. */
+  private placedActorModelEntities: Entity[] = [];
+  private placedActorClasses: ActorScriptDef[] = [];
+  private worldPartitionLive = false;
   /** Live actor entities keyed by entity id (`actor:<n>` and runtime `spawned:<n>`). */
   private readonly actorEntityById = new Map<string, Entity>();
   /** Rendered object per actor entity id (absent for mesh-less logic actors). */
@@ -1471,6 +1479,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // IO keeps advancing on real frames while an unloaded pawn footprint holds
       // the whole simulation at its current pose (including rigid-body pawns).
       const terrainHeld = this.updateTerrainStreaming(requestedMs / 1000);
+      this.updateWorldPartition();
       this.updateTerrainHoldOverlay(terrainHeld, now);
       const simulationMs = terrainHeld ? 0 : requestedMs;
       this.simulationClockMs += simulationMs;
@@ -2124,6 +2133,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.runtimeServices.resolve(worldStreamingService)?.snapshot() ?? null;
   }
 
+  getWorldPartitionSnapshot(): WorldPartitionSnapshot | null {
+    return this.runtimeServices.resolve(worldPartitionService)?.snapshot() ?? null;
+  }
+
+  private updateWorldPartition(): void {
+    if (!this.worldPartitionLive) return;
+    const pawnId = this.gameModeSession?.playerState.pawnEntityId;
+    const pawn = pawnId ? this.transformForEntity(pawnId) : null;
+    const position = pawn?.position ?? this.camera.position.toArray();
+    const velocity = pawnId ? this.characterMovement()?.velocityOf(pawnId) ?? this.physicsSubsystem.velocityOf(pawnId) : null;
+    this.runtimeServices.resolve(worldPartitionService)?.update([{
+      position: [position[0], position[2]],
+      ...(velocity ? { velocity: [velocity[0], velocity[2]] as const } : {}),
+    }]);
+  }
+
+  private prepareWorldPartitionAroundPawn(): void {
+    const pawnId = this.gameModeSession?.playerState.pawnEntityId;
+    const pawn = pawnId ? this.transformForEntity(pawnId) : null;
+    const position = pawn?.position ?? this.camera.position.toArray();
+    this.runtimeServices.resolve(worldPartitionService)?.prepare([position[0], position[2]]);
+  }
+
   private async prepareTerrainAroundPawn(): Promise<void> {
     const streaming = this.runtimeServices.resolve(worldStreamingService);
     const pawnId = this.gameModeSession?.playerState.pawnEntityId;
@@ -2316,7 +2348,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       for (const record of await this.assetLoader.recordsForGroup(group)) ids.add(record.id);
     }
     for (const id of sceneModelAssetIds(this.layout)) if (loadable.has(id)) ids.add(id);
-    for (const entity of this.actorEntities) {
+    for (const entity of [...this.actorEntities, ...this.placedActorModelEntities]) {
       const renderer = readRenderableMeshComponent(entity);
       if (renderer && loadable.has(renderer.assetId)) ids.add(renderer.assetId);
     }
@@ -2346,19 +2378,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.killZ = worldSettings.killZ;
     this.physicsSubsystem.setGravity(worldSettings.gravity);
     this.ensureDefaultLights();
-    // Resolve placed Actor Script classes -> entities before models load, so their
-    // mesh assets join the load list (loadActorMeshModels reads these entities).
+    // Resolve every placement before model loading; far actors contribute assets
+    // but only persistent actors and prepared spawn cells join the live world.
     await this.resolveActorClasses();
     await this.applyPlayerStartSpawn(spawnTag);
+    const partition = this.runtimeServices.resolve(worldPartitionService);
+    const partitionPosition = partition?.snapshot() ? this.streamingSpawnPosition(spawnTag) : null;
+    if (partitionPosition) partition?.prepare([partitionPosition[0], partitionPosition[2]]);
     // Declare every model this level will load up front (P4) so the loading bar's
     // total is right before the first GLB streams in; the loader marks each done.
     await this.levelRuntime.build();
     const streaming = this.runtimeServices.resolve(worldStreamingService);
     if (streaming?.hasTerrain()) {
-      const hasPawn = this.activeGameMode?.defaultPawn.kind === "character";
-      const spawn = hasPawn ? computePlayerStartSpawn(this.layout, spawnTag) : null;
-      const actor = hasPawn ? this.actorEntities.find((entity) => readCharacterMovementComponent(entity) && !readAIControllerComponent(entity)) : undefined;
-      const position = spawn?.position ?? (actor ? readTransformComponent(actor)?.position : undefined) ?? this.camera.position.toArray();
+      const position = partitionPosition ?? this.streamingSpawnPosition(spawnTag);
       this.setLoadingStatus("Loading terrain around spawn");
       await streaming.prepareSpawn([position[0], position[2]]);
     }
@@ -2422,6 +2454,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       engineApp: this.engineApp,
     });
     streaming?.startSimulation();
+    this.worldPartitionLive = partitionPosition !== null;
+    this.placedActorModelEntities = [];
     // Auto-play audio/particles must never abort scene start: a single bad cue or
     // emitter cannot be allowed to stop the game mode + UI (lines below) from
     // initialising, which would look like "Play won't start".
@@ -2477,6 +2511,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // A save restore (or a module) may have moved the pawn off the spawn area
     // prepared above; finish streaming there while the loading overlay is up.
     await this.prepareTerrainAroundPawn();
+    this.prepareWorldPartitionAroundPawn();
+    // Frame decisions begin only after possession and save-restore preparation.
+    partition?.startSimulation();
     await this.warmRuntimeShaders();
   }
 
@@ -2911,6 +2948,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * immediately so the engine loop ticks an empty world during the async load.
    */
   private teardownScene(): void {
+    this.worldPartitionLive = false;
     // Layer 3 first, then Layer 2: each layer drops its per-level state while
     // the world it observed is still intact, before Layer 1 content disappears.
     this.gameModules.levelUnloaded();
@@ -3018,6 +3056,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.actorMeshScales.clear();
     this.actorEntityById.clear();
     this.actorEntities = [];
+    this.placedActorModelEntities = [];
+    this.placedActorClasses = [];
     this.spawnCoordinator.reset();
 
     // Lights: remove root (+ target) and free the shadow map.
@@ -3399,7 +3439,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // An authored player Actor (character class with movement, not AI-controlled)
     // already is a pawn.
     if (
-      this.actorEntities.some(
+      [...this.actorEntities, ...this.placedActorModelEntities].some(
         (entity) => readCharacterMovementComponent(entity) && !readAIControllerComponent(entity),
       )
     ) {
@@ -3854,8 +3894,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async resolveActorClasses(): Promise<void> {
     const actors = this.layout?.actors ?? [];
-    const entities = await Promise.all(
-      actors.map(async (instance, index) => {
+    this.placedActorClasses = await Promise.all(
+      actors.map(async (instance) => {
         // A placement's vehicle overrides may name another asset, so they are
         // layered onto the raw class and resolved per placement.
         const def = instance.vehicleOverrides
@@ -3864,12 +3904,70 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             this.loadVehicleAsset,
           )
           : await this.loadActorClass(instance.classRef);
-        return actorInstanceToEntity(def, instance, index);
+        return def;
       }),
     );
+    const entities = actors.map((instance, index) => actorInstanceToEntity(this.placedActorClasses[index]!, instance, index));
     this.actorEntities = [];
     this.actorEntityById.clear();
-    for (const entity of entities) this.registerActorEntity(entity);
+    this.placedActorModelEntities = [];
+    this.worldPartitionLive = false;
+    const partition = this.runtimeServices.resolve(worldPartitionService);
+    const settings = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
+    if (!settings.enabled || !partition || !this.layout) {
+      for (const entity of entities) this.registerActorEntity(entity);
+      return;
+    }
+    this.placedActorModelEntities = entities;
+    const actorCells = worldPartitionActorCells(this.layout, settings);
+    const cells = new Map<string, number[]>();
+    for (const [index, key] of actorCells) {
+      const indices = cells.get(key) ?? [];
+      indices.push(index);
+      cells.set(key, indices);
+    }
+    entities.forEach((entity, index) => { if (!actorCells.has(index)) this.registerActorEntity(entity); });
+    partition.configure(settings.grids.main, cells, {
+      activate: (index) => this.activatePartitionActor(index),
+      deactivate: (index) => this.deactivatePartitionActor(index),
+      isLive: (index) => this.actorEntityById.has(actorInstanceEntityId(index)),
+    }, this.debug);
+  }
+
+  /** Shared by actor preparation and terrain's boot preparation. */
+  private streamingSpawnPosition(spawnTag?: string): readonly [number, number, number] {
+    const hasPawn = this.activeGameMode?.defaultPawn.kind === "character";
+    const spawn = hasPawn && this.layout ? computePlayerStartSpawn(this.layout, spawnTag) : null;
+    const actor = hasPawn ? [...this.placedActorModelEntities, ...this.actorEntities]
+      .find((entity) => readCharacterMovementComponent(entity) && !readAIControllerComponent(entity)) : undefined;
+    return spawn?.position ?? (actor ? readTransformComponent(actor)?.position : undefined) ?? this.camera.position.toArray();
+  }
+
+  private activatePartitionActor(index: number): void {
+    const id = actorInstanceEntityId(index);
+    if (this.actorEntityById.has(id) || this.behaviorSubsystem.isPersistedDestroyed(id)) return;
+    const instance = this.layout?.actors?.[index];
+    const def = this.placedActorClasses[index];
+    if (!instance || !def) return;
+    const entity = actorInstanceToEntity(def, instance, index);
+    this.registerActorEntity(entity);
+    // Boot entities take the ordinary batch path, including first-tick BeginPlay.
+    if (!this.worldPartitionLive) return;
+    this.addActorObject(entity);
+    this.physicsSubsystem.addEntity(entity);
+    this.behaviorSubsystem.addEntity(entity);
+    this.runtimeServices.addEntity(entity);
+    this.audioCommands()?.playEntityAudio(entity);
+    void this.vfxCommands()?.playAutoPlayEntity(entity);
+  }
+
+  private deactivatePartitionActor(index: number): void {
+    const id = actorInstanceEntityId(index);
+    if (!this.actorEntityById.has(id) || id === this.gameModeSession?.playerState.pawnEntityId
+      || id === this.gameModeSession?.drivingVehicleId) return;
+    this.behaviorSubsystem.unloadEntity(id);
+    // Shared destruction removes module sinks first, then physics/render/registries.
+    this.destroyActorEntity(id);
   }
 
   /** Fetches + normalizes an `*.actor.json` class with its vehicle asset resolved, cached by classRef (never throws). */
@@ -3909,7 +4007,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * can't abort the scene). Procedural `shape:<type>` meshes in actors are not
    * supported in this version (manifest assets only).
    */
-  private async loadActorMeshModels(entities: readonly Entity[] = this.actorEntities): Promise<void> {
+  private async loadActorMeshModels(entities: readonly Entity[] = [...this.actorEntities, ...this.placedActorModelEntities]): Promise<void> {
     if (!this.assetLoader) return;
     const needed = new Set<string>();
     for (const entity of entities) {
@@ -4158,12 +4256,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * physics body (so contact queries read empty next frame) and its rendered
    * object. The BehaviorSubsystem has already dropped the entity from its own
    * instance set / indexes / message subscriptions before calling this. The
-   * authored `actorEntities` list is left intact (rebuilt fresh on scene reload).
+   * Live actor registries are released as well, allowing a cell to activate again.
    */
   private destroyActorEntity = (entityId: string): void => {
     this.runtimeServices.removeEntity(entityId);
     this.physicsSubsystem.removeEntity(entityId);
     if (this.actorEntityById.has(entityId)) {
+      const wire = this.colliderDebugWires.get(entityId);
+      if (wire) {
+        this.scene.remove(wire);
+        wire.geometry.dispose();
+        (wire.material as LineBasicMaterial).dispose();
+        this.colliderDebugWires.delete(entityId);
+      }
       const object = this.actorObjects.get(entityId);
       if (object) {
         this.scene.remove(object);

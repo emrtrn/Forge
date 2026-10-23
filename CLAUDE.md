@@ -156,8 +156,11 @@ engine/editor.
   `validateLayout`, so cell elements share the layout allowlists above; it only
   writes the open level's cells. Save order is changed cells (no deletion) →
   level → cleanup with the full `keep` index, so a failed step never leaves the
-  level pointing at a deleted cell. `loadRoomLayout` merges the cells back, so
-  the editor and the runtime both work on the whole level (no cell streaming yet).
+  level pointing at a deleted cell. `loadRoomLayout` merges the cells back; the
+  editor works on the whole level, and the runtime streams only Actor Script
+  actors (`layout.actors`) by cell around the pawn (`worldPartitionModule`;
+  EndPlay reason `"unloaded"`, only `persist`ed state survives an unload) while
+  every other element is still built eagerly.
 - **Fifth allowlist surface — World Terrain:** `*.terrain.json` definitions
   use `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`) on read
   and through `validateSaveTerrainPayload` re-exported by `tools/saveValidator.ts`.

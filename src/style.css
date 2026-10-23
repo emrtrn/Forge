@@ -638,6 +638,20 @@ body {
   outline: 1px solid #7fff7f;
 }
 
+/* World Terrain streaming map: fixed size, never scrolls with the readout, and
+   passive like it so a menu click lands through. */
+.forge-debug-panel-map {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin: 4px 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.forge-debug-panel-map[hidden] {
+  display: none;
+}
+
 /* The speed picker lives in the reserved slot; `is-active` marks the state the
    world is actually in, which is not always the one this control asked for. */
 .forge-debug-speed {

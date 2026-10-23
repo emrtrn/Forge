@@ -1,6 +1,6 @@
 import { ContentLoadError } from "@engine/assets/contentValidation";
 import type { Entity } from "@engine/scene/entity";
-import { TerrainRuntimeStreaming, type TerrainStreamingHooks } from "@engine/terrain/terrainRuntimeStreaming";
+import { TerrainRuntimeStreaming, type TerrainStreamingDebugGrid, type TerrainStreamingHooks } from "@engine/terrain/terrainRuntimeStreaming";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { parseTileKey, terrainTilePath } from "@engine/terrain/terrainTypes";
 import type { StreamingSource } from "@engine/world/streamingPolicy";
@@ -19,6 +19,10 @@ export interface TerrainStreamingSnapshot {
   held: boolean;
   activeKeys: string[];
   colliderKeys: string[];
+  /** One per streamed terrain, for the `?debug` map. */
+  grids: TerrainStreamingDebugGrid[];
+  /** World X/Z of the last update's streaming sources. */
+  sources: (readonly [number, number])[];
 }
 
 interface WorldStreamingCommands {
@@ -40,15 +44,18 @@ export function createWorldStreamingModule(): CapabilityModule {
   const entries: { stream: TerrainRuntimeStreaming; pool: TerrainWorkerPool; addColliders: TerrainStreamingHooks["addColliders"] }[] = [];
   let live = false;
   let held = false;
+  let lastSources: readonly StreamingSource[] = [];
   const clear = () => {
     for (const { stream, pool } of entries) { stream.dispose(); pool.dispose(); }
     entries.length = 0;
     live = false;
     held = false;
+    lastSources = [];
   };
   const areaReady = (position: readonly [number, number]) => entries.every(({ stream }) => stream.canOccupy(position, 2));
   const update = (sources: readonly StreamingSource[], multiplier: number) => {
     for (const { stream } of entries) stream.update(sources, multiplier);
+    lastSources = sources;
     held = sources.some(({ position }) => !areaReady(position));
     return held;
   };
@@ -102,7 +109,10 @@ export function createWorldStreamingModule(): CapabilityModule {
         canOccupy: (position) => entries.every(({ stream }) => stream.canOccupy(position)),
         snapshot() {
           if (!entries.length) return null;
-          const result: TerrainStreamingSnapshot = { loaded: 0, active: 0, queued: 0, physics: 0, bytesResident: 0, lastFrameMs: 0, held, activeKeys: [], colliderKeys: [] };
+          const result: TerrainStreamingSnapshot = {
+            loaded: 0, active: 0, queued: 0, physics: 0, bytesResident: 0, lastFrameMs: 0, held, activeKeys: [], colliderKeys: [],
+            grids: [], sources: lastSources.map(({ position }) => position),
+          };
           for (const { stream } of entries) {
             const stats = stream.world.stats();
             result.loaded += stream.residentTiles.size;
@@ -113,6 +123,7 @@ export function createWorldStreamingModule(): CapabilityModule {
             result.lastFrameMs += stream.lastFrameMs;
             result.activeKeys.push(...stream.document.tiles.keys());
             result.colliderKeys.push(...stream.colliders.keys());
+            result.grids.push(stream.debugGrid());
           }
           return result;
         },

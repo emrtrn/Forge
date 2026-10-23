@@ -456,7 +456,8 @@ function terrainStreamingText(app: RuntimeStatsApp): string {
   if (!stats) return "";
   return `\nterrain streaming: loaded:${stats.loaded} active:${stats.active} queued:${stats.queued} physics:${stats.physics}`
     + `\nstreaming: ${stats.lastFrameMs.toFixed(2)} ms/frame ${formatByteSize(stats.bytesResident)}${stats.held ? " (holding pawn)" : ""}`
-    + `\nterrain active: ${stats.activeKeys.join(" ")}\nterrain physics: ${stats.colliderKeys.join(" ")}`;
+    + `\nterrain active: ${stats.activeKeys.join(" ")}\nterrain physics: ${stats.colliderKeys.join(" ")}`
+    + (stats.grids.length ? "\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed" : "");
 }
 
 /**

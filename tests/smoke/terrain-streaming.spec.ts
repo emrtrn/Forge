@@ -110,6 +110,14 @@ test("Play streams a bounded subset of 6x6 terrain, activates destination height
   expect(start.keys).toContain("0_5");
   expect(start.physics).toBeLessThan(start.active);
   expect(Math.abs(start.y - terrainHeightAt(world.def, lookup, start.x, start.z)!)).toBeLessThan(0.2);
+  // The ?debug map draws one square per tile: 36 here, the spawn corner with colliders.
+  const map = page.locator(".forge-debug-panel-map");
+  await expect(map).toBeVisible();
+  await expect(map).toHaveAttribute("data-tiles", /physics:\d+/);
+  const tally: Record<string, number> = Object.fromEntries((await map.getAttribute("data-tiles"))!.split(" ").map((entry) => [entry.split(":")[0], Number(entry.split(":")[1])]));
+  expect(Object.values(tally).reduce((sum, count) => sum + count, 0)).toBe(36);
+  expect(tally.unloaded).toBeGreaterThan(0);
+  expect((await map.boundingBox())!.width).toBeGreaterThan(100);
   await testInfo.attach("spawn.png", { body: await page.screenshot(), contentType: "image/png" });
 
   // Initial TPS control yaw faces -Z. W+D runs from (0,5) towards (5,0).

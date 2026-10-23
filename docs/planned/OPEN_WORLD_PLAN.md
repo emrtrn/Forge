@@ -1082,11 +1082,16 @@ Doğrulama (2026-10-22):
       var ve tutma yok. Oyun içi tutma ekranının smoke'u yok.
 - [x] `QualityExtensions.viewDistanceMultiplier` render menzilini ölçekler;
       fizik güvenlik halkası sabit, render çarpanı en az 0,5.
-- [ ] `?debug`: yüklü/aktif/kuyruk hücre sayısı, ms/kare, bellek; hücre grid
+- [x] `?debug`: yüklü/aktif/kuyruk hücre sayısı, ms/kare, bellek; hücre grid
       overlay'i (renk = durum).
       *Sayılar tamam (dilim 2):* yüklü/aktif/kuyruk, fizik tile sayısı,
       ms/kare, resident bayt ve pawn tutma durumu mevcut overlay'de.
-      Renkli hücre grid'i açık.
+      *Grid tamam (2026-10-23):* `?debug` panelinde readout'un üstünde kanvas
+      harita (`debugTerrainMap.ts`, yalnız debug chunk'ı): tile başına kare,
+      renk = bildirilmemiş/boşta/fetch/LRU'da/aktif/fizik/hata
+      (`TerrainRuntimeStreaming.debugGrid()`, çekirdekte `forEachCell`), akış
+      kaynakları beyaz nokta. Birden çok akan arazide ilki çizilir. Smoke
+      `data-tiles` sayımını okur.
 - [ ] **Test dünyası:** `tools/world/generate-test-world` → `Levels/OpenWorldTest`
       (4×4 km, fBm gürültülü dağ-vadi, 4 boya katmanı). Smoke: spawn → 1 km
       yürü/sür → bellek ve hücre sayısı sınırda kalıyor, zemine düşme yok.

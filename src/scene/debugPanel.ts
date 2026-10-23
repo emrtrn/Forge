@@ -28,6 +28,7 @@ import { buildFrameCapture, frameCaptureTableView } from "@engine/perf/frameCapt
 import { gpuSweepTableView, gpuSweepUnavailableView } from "@engine/perf/gpuSweep";
 
 import { attachDebugStats } from "./debugStats";
+import { DebugTerrainMap } from "./debugTerrainMap";
 import { DebugSpeedControl } from "./debugSpeedControl";
 import { DebugTableModal } from "./debugTableModal";
 import type { RuntimeStatsApp } from "./RuntimeSceneApp";
@@ -123,6 +124,11 @@ export class DebugPanel {
     this.controls.appendChild(button);
   }
 
+  /** Mounts a graphic view between the control strip and the readout. */
+  mountView(element: HTMLElement): void {
+    this.root.insertBefore(element, this.readout);
+  }
+
   /** Mounts a persistent control into the reserved slot (kept leftmost). */
   mountControl(control: { mount(parent: HTMLElement): void }): void {
     control.mount(this.controlSlot);
@@ -159,6 +165,20 @@ export function attachDebugPanel(
   // later. A state you leave set does not belong among buttons you fire.
   const time = app.getTimeControl?.();
   if (time) panel.mountControl(new DebugSpeedControl(time));
+  // A terrain that streams gets its tile map; it stays hidden for any other level.
+  if (app.getTerrainStreamingSnapshot) {
+    const map = new DebugTerrainMap();
+    panel.mountView(map.element);
+    const readoutFrame = app.onFrame;
+    let sinceMs = Infinity;
+    app.onFrame = (deltaMs) => {
+      readoutFrame?.(deltaMs);
+      sinceMs += deltaMs;
+      if (sinceMs < 250 || element.offsetParent === null) return;
+      sinceMs = 0;
+      map.update(app.getTerrainStreamingSnapshot?.() ?? null);
+    };
+  }
   // Offered only where something is actually profiling. A button that opens
   // an empty table teaches the reader that the instrument is broken, which is
   // worse than not offering it: the editor shell profiles nothing today, and

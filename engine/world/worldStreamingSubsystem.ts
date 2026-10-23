@@ -166,6 +166,16 @@ export class WorldStreamingSubsystem<T> {
     });
   }
 
+  /**
+   * Visits every tracked cell; an untracked cell is Unloaded. `failed` marks a
+   * fallback payload, or a failed fetch that left no payload at all.
+   */
+  forEachCell(visit: (key: string, state: WorldCellState, failed: boolean) => void): void {
+    for (const [key, cell] of this.cells) {
+      visit(key, cell.state, cell.state === "Unloaded" || ("failed" in cell && cell.failed));
+    }
+  }
+
   stats(): WorldStreamingStats {
     const counts: Record<WorldCellState, number> = {
       Unloaded: this.totalCells, Fetching: 0, Loaded: 0, Activated: 0, Deactivating: 0,

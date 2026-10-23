@@ -148,6 +148,36 @@ export async function registerTerrainRuntimeStreamingTests(check: Check, checkAs
     assert.equal(stream.residentTiles.size, 0);
   });
 
+  await checkAsync("terrain streaming debug grid reports every tile's state row-major for the ?debug map", async () => {
+    const full = fixture();
+    const doc: WorldTerrainDocument = { ...full, tiles: new Map() };
+    const warnings: string[] = [];
+    const stream = new TerrainRuntimeStreaming(doc, { id: "actor", name: "World", collision: true }, {
+      fetch: (key) => key === "1_2" ? new Promise(() => {})
+        : key === "2_0" ? Promise.reject(new Error("broken tile")) : Promise.resolve(full.tiles.get(key)!),
+      clock: () => 0, warn: (message) => warnings.push(message), changed: () => {}, addColliders: () => {}, removeColliders: () => {},
+    }, 1 << 30);
+    const tick = async (position: readonly [number, number]) => {
+      for (let i = 0; i < 20; i += 1) { stream.update([{ position }]); await Promise.resolve(); await Promise.resolve(); }
+    };
+    const at = (x: number, z: number) => stream.debugGrid().cells[z * 6 + x];
+    assert.ok(stream.debugGrid().cells.every((state, index) => state === (index === 3 * 6 + 3 ? "undeclared" : "unloaded")));
+    await tick([30, 0]);
+    const grid = stream.debugGrid();
+    assert.deepEqual([grid.tilesX, grid.tilesZ, grid.tileSize, ...grid.origin], [6, 6, 64, 10, -20]);
+    assert.equal(at(0, 0), "physics");
+    assert.equal(at(1, 1), "active", "inside the render range, outside the physics ring");
+    assert.equal(at(1, 2), "fetching");
+    assert.equal(at(2, 0), "failed");
+    assert.equal(at(3, 3), "undeclared");
+    assert.equal(at(5, 5), "unloaded");
+    assert.equal(warnings.length, 1);
+    await tick([360, 330]);
+    assert.equal(at(0, 0), "loaded", "released, still cached under the LRU budget");
+    assert.equal(at(1, 2), "unloaded", "an out-of-range fetch is cancelled");
+    stream.dispose();
+  });
+
   check("terrain streaming pawn hold prevents gravity on missing terrain and rejects a high speed step before publishing it", () => {
     let ready = false;
     let speed = 1000;

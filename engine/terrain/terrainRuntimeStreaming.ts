@@ -2,7 +2,7 @@ import type { Entity } from "../scene/entity";
 import { computeStreamingTargets, type GridStreamingSettings, type StreamingSource } from "../world/streamingPolicy";
 import { WorldStreamingSubsystem } from "../world/worldStreamingSubsystem";
 import type { WorldTerrainDocument } from "./terrainLoader";
-import { createFlatTerrainTile, parseTileKey, terrainTileWorldSize, type TerrainTileData } from "./terrainTypes";
+import { createFlatTerrainTile, parseTileKey, terrainTileWorldSize, tileKey, type TerrainTileData } from "./terrainTypes";
 import { worldTerrainColliderEntities, worldTerrainColliderEntityId } from "./worldTerrainActor";
 
 export interface TerrainStreamingHooks {
@@ -12,6 +12,19 @@ export interface TerrainStreamingHooks {
   removeColliders(ids: string[]): void;
   clock(): number;
   warn(message: string): void;
+}
+
+/** A tile's streaming state for the `?debug` map. `undeclared` is a grid gap, never fetched. */
+export type TerrainTileDebugState = "undeclared" | "unloaded" | "fetching" | "loaded" | "active" | "physics" | "failed";
+
+export interface TerrainStreamingDebugGrid {
+  tilesX: number;
+  tilesZ: number;
+  /** World X/Z of tile (0,0)'s corner, and one tile's world size. */
+  origin: readonly [number, number];
+  tileSize: number;
+  /** Row-major, `z * tilesX + x`. */
+  cells: TerrainTileDebugState[];
 }
 
 /** Terrain-only ownership adapter. The streaming core owns passive LRU payloads;
@@ -115,6 +128,24 @@ export class TerrainRuntimeStreaming {
   }
 
   dispose(): void { this.world.dispose(); }
+
+  debugGrid(): TerrainStreamingDebugGrid {
+    const { def } = this.document;
+    const cells: TerrainTileDebugState[] = [];
+    for (let z = 0; z < def.tilesZ; z += 1) {
+      for (let x = 0; x < def.tilesX; x += 1) cells.push(this.declared.has(tileKey(x, z)) ? "unloaded" : "undeclared");
+    }
+    this.world.forEachCell((key, state, failed) => {
+      const tile = parseTileKey(key);
+      if (!tile || !this.declared.has(key)) return;
+      const index = tile.z * def.tilesX + tile.x;
+      if (failed) cells[index] = "failed";
+      else if (state === "Fetching") cells[index] = "fetching";
+      else if (state === "Loaded") cells[index] = "loaded";
+      else if (state === "Activated") cells[index] = this.colliders.has(key) ? "physics" : "active";
+    });
+    return { tilesX: def.tilesX, tilesZ: def.tilesZ, origin: [def.origin[0], def.origin[2]], tileSize: terrainTileWorldSize(def), cells };
+  }
 
   private physicsTargets(): Set<string> {
     const targets = computeStreamingTargets({ loaded: new Set(this.document.tiles.keys()), active: new Set(this.colliders.keys()) }, this.sources, {

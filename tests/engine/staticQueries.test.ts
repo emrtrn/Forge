@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { PhysicsAabb, PhysicsQuery, PhysicsSurfaceTriangle } from "../../engine/behavior/behaviorSubsystem";
 import { ActionMap } from "../../engine/input/actionMap";
 import { CharacterMovementSubsystem } from "../../engine/movement/characterMovementSubsystem";
+import { findGridPath } from "../../engine/navigation/gridNavigation";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import type { Entity } from "../../engine/scene/entity";
 
@@ -245,6 +246,31 @@ export function registerStaticQueriesTests(check: Check): void {
       assert.deepEqual(indexed, run(legacyQuery(physics)));
       assert.equal(indexed[1]! < 0, hasDistantGround);
     }
+  });
+
+  check("static queries streamed colliders become nav blockers on add and stop on remove", () => {
+    // World Partition adds/removes actors at runtime; the AI nav cache keys on the
+    // blocker array identity, so each change must hand back a new, correct list.
+    const physics = new PhysicsSubsystem();
+    physics.setEntities([box("floor", 0, 0, 40)]);
+    const before = physics.staticNavigationBlockerAabbs();
+    const wall = box("streamed-wall", 5, 0, 1);
+    Object.assign(wall.components.Collider!, { size: [1, 4, 60] });
+    assert.equal(physics.addEntity(wall), true);
+    const withWall = physics.staticNavigationBlockerAabbs();
+    assert.notEqual(withWall, before);
+    assert.equal(withWall.length, before.length + 1);
+    const agent = { radius: 0.3, height: 1.8 };
+    const bounds = [{ min: [-15, -2, -15] as [number, number, number], max: [15, 6, 15] as [number, number, number] }];
+    const route = (blockers: readonly PhysicsAabb[]) =>
+      findGridPath({ start: [0, 0, 0], goal: [10, 0, 0], agent, blockers, bounds, cellSize: 0.5 });
+    assert.equal(route(before).status, "success");
+    assert.equal(route(withWall).status, "failure", "a wall spanning the volume cuts the route");
+    physics.removeEntities(["streamed-wall"]);
+    const afterRemove = physics.staticNavigationBlockerAabbs();
+    assert.notEqual(afterRemove, withWall);
+    assert.deepEqual(afterRemove, before);
+    assert.equal(route(afterRemove).status, "success");
   });
 
   check("static queries movement swept radius covers fast travel launch and platform carry", () => {

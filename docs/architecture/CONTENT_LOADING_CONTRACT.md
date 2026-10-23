@@ -14,15 +14,57 @@ New `.terrain.json` files use the strict shared `normalizeWorldTerrain` allowlis
 `loadWorldTerrain` eagerly fetches each listed `<name>.tiles/x_z.tile.bin` through
 `projectFileUrl`, validating headers, sample bounds, coordinates, dimensions and
 layer count against the definition. Missing/corrupt new documents propagate an
-error instead of becoming flat terrain. The Phase 1 presentation adapter accepts
-only a complete 1×1 document; multi-tile rendering arrives in Phase 2. Tile holes
-remain holes in the engine document rather than synthesized heightfields.
+error instead of becoming flat terrain. Tile holes remain holes in the engine
+document rather than synthesized heightfields.
 
 Editor Save writes binary tiles, then validates/publishes the definition, then
 updates the level reference for a first migration; the old sidecar is retained.
 Float32 heights preserve legacy vertex positions and RGBA8 weights are quantized.
 The save batch is retryable, not a cross-file transaction. The release collector
 includes implicit tile dependencies and requires provenance for every tile.
+
+Multi-tile World Terrain (Phase 2+) loads through the same normalizer and tile
+validation. A terrain over 6×6 tiles with a valid `<name>.global.bin` global map
+streams: the runtime reads tiles around the pawn (`worldStreamingModule`, blocking
+load behind the travel/loading overlay at boot, save-load and teleport) and the
+editor streams them around its camera (`TerrainEditorStreaming`). A level with no
+global map, or a small one, stays eager.
+
+## World Partition levels (Open World Phase 5)
+
+A level with `worldSettings.partition.enabled` is saved as a persistent level plus
+`<Level>.cells/main/<x_z>.cell.json` files and a `worldCells` index. `loadRoomLayout`
+fetches the indexed cell files and merges them back, so every consumer — editor,
+asset-health, content collection — still reads one whole `RoomLayout`; a missing or
+invalid cell file fails the level read like any other required document.
+
+At runtime the whole layout is **built** eagerly except for Actor Script actors
+(`layout.actors`) that are cell-assigned (`worldPartitionActorCells`, the same rule
+the saver used). Those are activated and unloaded with their cell around the pawn:
+
+- **What loads when.** Boot, level travel and save-load activate the cells in range
+  of the spawn/pawn behind the loading overlay; afterwards the streamer activates at
+  most two cells per frame and unloads cells past the 1.25× hysteresis ring.
+  `spatiallyLoaded: false` actors stay persistent. Static meshes, lights, volumes,
+  characters and splines are not cell-streamed; their instanced batches are built per
+  level.
+- **Assets.** Every mesh model any actor class references is loaded at boot (the
+  persistent level's `loadGroups` behave as before). Per-cell asset residency
+  (ref-counted load/unload) is not implemented, so streaming bounds simulation and
+  scene-graph cost, not model memory.
+- **Identity and lifecycle.** A streamed actor keeps its `actor:<layout index>` id,
+  so messages, patrol references and persisted script state address it the same
+  whether or not its cell is loaded. Activation runs BeginPlay on the next tick;
+  unloading runs EndPlay with reason `"unloaded"`, keeps only `persist`ed script
+  state and resets the rest. The possessed pawn and a driven vehicle are never
+  unloaded.
+- **Moved bodies.** A physics-simulated body or car that left its authored pose is
+  rebuilt where it was left (at rest) when its cell returns
+  (`StreamedActorStateCache`, in memory for the level's lifetime). A static or
+  script-moved actor returns at its authored pose.
+- **AI navigation.** Streamed colliders enter and leave the physics static indexes
+  incrementally; the nav grid cache keys on those lists, so a streamed wall blocks
+  paths and an unloaded one stops blocking them.
 
 ## Required documents
 

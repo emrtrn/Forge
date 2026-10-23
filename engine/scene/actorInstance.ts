@@ -106,6 +106,9 @@ function instanceTransform(instance: LayoutActorInstance): TransformComponent {
   };
 }
 
+/** The authored placement pose, for hosts that compare it with a live body. */
+export const actorInstanceTransform = instanceTransform;
+
 function readVec3Prop(value: SceneJsonValue | undefined): Vec3 | null {
   if (!Array.isArray(value) || value.length !== 3) return null;
   const [x, y, z] = value;

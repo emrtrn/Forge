@@ -1193,8 +1193,10 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
         hücre anahtarı). Boot/travel/save yükleme: spawn ve pawn çevresindeki
         hücreler loading ekranı arkasında aktive edilir (arazi bekleyişiyle
         aynı adımlar). `?debug`: aktif/toplam hücre, canlı akan actor sayısı.
-      - **Bilinen sınırlar (v1):** AI nav, boot'taki entity'lerden kurulur;
-        sonradan gelen actor'ler nav engeli olmaz. Editör her şeyi yükler.
+      - **Bilinen sınırlar (v1):** Editör her şeyi yükler. (AI nav: akan
+        collider'lar fizik statik indekslerine artımlı girip çıktığından nav
+        grid önbelleği dizi kimliğiyle yenilenir; bu kapandı, `staticQueries`
+        testi yol kesme/açmayı doğrular.)
       Dilimler: (A) saf yönlendirme + behavior `unloadEntity` / kalıcı durum
       (engine testli), (B) runtime modülü + bağlantı + smoke.
       *Tamam (2026-10-23):* A + B1 `dea780b` (ek olarak modül sink'leri artımlı
@@ -1212,11 +1214,21 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       boşaltmada** çağrılır (Unreal semantiği); belgelenir.
 - [ ] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
-- [ ] Save-game: P3.3 opt-in script state'i (destroyed/hidden işaretleri)
+- [x] Save-game: P3.3 opt-in script state'i (destroyed/hidden işaretleri)
       hücre **aktivasyonunda** uygulanır, yalnız level başında değil.
       Hücre boşalırken taşınmış dinamik cisimler ve araçlar için bellek içi
       "hücre durum önbelleği" + save-game'e yazılması (bkz. Açık sorular).
-- [ ] `SAVE_GAME_CONTRACT.md` ve `CONTENT_LOADING_CONTRACT.md` güncellenir.
+      *Tamam (2026-10-23):* script durumu dea780b'de. `StreamedActorStateCache`
+      (`engine/world/streamedActorState.ts`): hücre boşalırken fizikle
+      simüle edilen cisim/araç yetkili pozdan ayrıldıysa (0,05 m / 0,5°) son
+      pozu (dinlenmede) saklanır; hücre dönünce o pozda kurulur, araç el freni
+      ve vitesi korur. Save'de boşaltılmış hücredeki araçlar `vehicles`
+      listesine park halinde girer; restore'da canlı olmayan akan araç aynı
+      önbelleğe konur, hücre aktive olunca belirir; `drivingVehicleId` aracı
+      hücresinden önce canlandırılır (biner). Diğer dinamik cisimler yalnız
+      bellekte tutulur, save-game'e yazılmaz (P3.2 değişmedi). Smoke
+      `world-partition-streaming.spec.ts` (düşen kasa).
+- [x] `SAVE_GAME_CONTRACT.md` ve `CONTENT_LOADING_CONTRACT.md` güncellenir.
 - [ ] "Convert Level to World Partition" editör komutu: mevcut level →
       persistent + hücreler (geri alınabilir, yedek kopya).
 

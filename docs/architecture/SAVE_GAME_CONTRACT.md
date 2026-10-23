@@ -65,7 +65,7 @@ Defined in `engine/persistence/saveGameState.ts`, produced by `collectSaveState(
 | `activeLevelPath` | `string` | The live level path (`RuntimeSceneApp.activeLevelPath`). Load travels here first. |
 | `player` | `{ position: [x,y,z], facingYawDeg } \| null` | Possessed pawn transform: `position` + `rotation[1]` as yaw. `null` when nothing is possessed. |
 | `flags` | `PersistentScriptStateEntry[]` | Opt-in persistent script state (see P3.3), each `{ entityId, key, value }`, sorted deterministically by `entityId` then `key`. |
-| `vehicles` | `SavedVehicleState[]` (optional in older saves) | Every live ray-cast vehicle's entity ID, position, Euler rotation in degrees, world linear/angular velocity, handbrake, and drivetrain (`gear`, `engineRpm`, or `null`). |
+| `vehicles` | `SavedVehicleState[]` (optional in older saves) | Every live ray-cast vehicle's entity ID, position, Euler rotation in degrees, world linear/angular velocity, handbrake, and drivetrain (`gear`, `engineRpm`, or `null`). In a World Partition level it also lists cars parked in unloaded cells (at rest: zero velocities); see *World Partition levels* below. |
 | `drivingVehicleId` | `string \| null` (optional in older saves) | Vehicle occupied by an on-foot pawn. `null` on foot and when the Game Mode pawn is itself the vehicle. |
 
 Notes:
@@ -174,6 +174,30 @@ Checkpoint autosave shares the same collector: the save capability's
 `writeCheckpointSave(slot)` → `gameplaySaveStateService.capture()` →
 `collectCurrentSaveState()` → `store.writeSlot(slot, payload)`. It only writes;
 it has no restore side effect. Loading that slot later runs the sequence above.
+
+## World Partition levels
+
+With `worldSettings.partition.enabled`, Actor Script actors stream with their
+cells (see `CONTENT_LOADING_CONTRACT.md`). Streaming does not add a save field;
+it only has to keep the existing ones meaningful while an actor is not loaded:
+
+- **Script state.** `flags` entries are keyed by the stable `actor:<layout index>`
+  id and survive unload: `unloadEntity` keeps only `persist`ed keys, and a
+  restore stores entries for actors that are not live yet, applying them when the
+  cell activates (`applyPersistentStateSnapshot`). Destroyed/hidden/collision
+  markers set with `{ persist: true }` are honored at activation — a persisted
+  destroyed actor is never built.
+- **Vehicles.** A save lists live vehicles plus cars the streamer remembers from
+  unloaded cells, parked at the pose they were left in (`StreamedActorStateCache`).
+  A restore applies `vehicles` entries to live cars immediately and keeps the
+  entries for cars whose cell is not loaded; the car appears at its saved pose,
+  at rest, when the cell activates. The vehicle in `drivingVehicleId` is brought
+  live ahead of its cell so the pawn can board it.
+- **Other simulated bodies.** Crates and other physics bodies keep their moved pose
+  only in memory while the level is loaded (so an unloaded cell does not reset
+  them); like loaded ones they are not part of the save-game (P3.2).
+- **Not streamed, not saved.** Static meshes, lights, volumes and characters are
+  built with the level and unaffected.
 
 ## P3.5 — Validator relationship (and why saves bypass it)
 

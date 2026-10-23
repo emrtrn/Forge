@@ -3,6 +3,7 @@ import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabili
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
 import { normalizeWorldPartitionSettings, worldPartitionActorCells } from "@engine/world/worldPartition";
 import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
+import { StreamedActorStateCache } from "@engine/world/streamedActorState";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
@@ -303,7 +304,7 @@ import {
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
-import { actorInstanceEntityId, actorInstanceToEntity } from "@engine/scene/actorInstance";
+import { actorInstanceEntityId, actorInstanceToEntity, actorInstanceTransform } from "@engine/scene/actorInstance";
 import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
@@ -798,6 +799,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private placedActorModelEntities: Entity[] = [];
   private placedActorClasses: ActorScriptDef[] = [];
   private worldPartitionLive = false;
+  /** Entity id -> layout actor index of every cell-streamed actor in this level. */
+  private partitionActorIndexById = new Map<string, number>();
+  /** Where moved bodies/cars were left when their cell unloaded (in memory + save). */
+  private readonly streamedActorStates = new StreamedActorStateCache();
   /** Live actor entities keyed by entity id (`actor:<n>` and runtime `spawned:<n>`). */
   private readonly actorEntityById = new Map<string, Entity>();
   /** Rendered object per actor entity id (absent for mesh-less logic actors). */
@@ -988,6 +993,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       capture: () => this.collectCurrentSaveState(),
       restore: (request) => {
         this.behaviorSubsystem.applyPersistentStateSnapshot(request.persistentState);
+        // The car the player was driving must exist to be boarded, loaded cell or not.
+        if (request.drivingVehicleId) this.activateStreamedActor(request.drivingVehicleId);
         const restoredVehicles = this.applySavedVehicles(request.vehicles);
         if (request.player) this.applySavedPlayerTransform(request.player, restoredVehicles);
         if (request.drivingVehicleId) this.applySavedVehicleRide(request.drivingVehicleId);
@@ -3271,6 +3278,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         drivetrain: motion.drivetrain,
       });
     }
+    // Cars parked in unloaded cells are not live bodies, but they are still part
+    // of the world the player left.
+    for (const parked of this.streamedActorStates.savedVehicles()) {
+      if (!this.actorEntityById.has(parked.entityId)) vehicles.push(parked);
+    }
     return vehicles;
   }
 
@@ -3597,7 +3609,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const restored = new Set<string>();
     for (const saved of vehicles) {
       const current = this.transformForEntity(saved.entityId);
-      if (!current) continue;
+      if (!current) {
+        // A streamed car whose cell is not loaded comes back, parked, with it.
+        if (this.partitionActorIndexById.has(saved.entityId)) this.streamedActorStates.rememberSavedVehicle(saved);
+        continue;
+      }
       const ok = this.physicsSubsystem.restoreVehicle(
         saved.entityId,
         { position: [...saved.position], rotation: [...saved.rotation], scale: [...current.scale] },
@@ -3912,6 +3928,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.actorEntityById.clear();
     this.placedActorModelEntities = [];
     this.worldPartitionLive = false;
+    this.partitionActorIndexById = new Map();
+    this.streamedActorStates.clear();
     const partition = this.runtimeServices.resolve(worldPartitionService);
     const settings = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
     if (!settings.enabled || !partition || !this.layout) {
@@ -3922,6 +3940,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const actorCells = worldPartitionActorCells(this.layout, settings);
     const cells = new Map<string, number[]>();
     for (const [index, key] of actorCells) {
+      this.partitionActorIndexById.set(actorInstanceEntityId(index), index);
       const indices = cells.get(key) ?? [];
       indices.push(index);
       cells.set(key, indices);
@@ -3950,24 +3969,72 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const def = this.placedActorClasses[index];
     if (!instance || !def) return;
     const entity = actorInstanceToEntity(def, instance, index);
+    // A body or car moved before its cell unloaded comes back where it was left.
+    const remembered = this.streamedActorStates.take(id);
+    const authored = readTransformComponent(entity);
+    if (remembered && authored) {
+      entity.components[TRANSFORM_COMPONENT] = {
+        ...authored,
+        position: [...remembered.position],
+        rotation: [...remembered.rotation],
+      } as unknown as EntityComponentData;
+      if (this.debug) console.info(`[world-partition] restored ${id} y=${remembered.position[1].toFixed(2)}`);
+    }
     this.registerActorEntity(entity);
     // Boot entities take the ordinary batch path, including first-tick BeginPlay.
     if (!this.worldPartitionLive) return;
     this.addActorObject(entity);
     this.physicsSubsystem.addEntity(entity);
+    const placed = readTransformComponent(entity);
+    if (remembered?.vehicle && placed) {
+      this.physicsSubsystem.restoreVehicle(id, placed, {
+        linearVelocity: [0, 0, 0],
+        angularVelocity: [0, 0, 0],
+        handbrake: remembered.vehicle.handbrake,
+        drivetrain: remembered.vehicle.drivetrain,
+      });
+    }
     this.behaviorSubsystem.addEntity(entity);
     this.runtimeServices.addEntity(entity);
     this.audioCommands()?.playEntityAudio(entity);
     void this.vfxCommands()?.playAutoPlayEntity(entity);
   }
 
+  /** Brings a cell-streamed actor live ahead of its cell (it stays until its cell unloads). */
+  private activateStreamedActor(entityId: string): void {
+    const index = this.partitionActorIndexById.get(entityId);
+    if (index !== undefined) this.activatePartitionActor(index);
+  }
+
   private deactivatePartitionActor(index: number): void {
     const id = actorInstanceEntityId(index);
     if (!this.actorEntityById.has(id) || id === this.gameModeSession?.playerState.pawnEntityId
       || id === this.gameModeSession?.drivingVehicleId) return;
+    this.rememberStreamedActorState(id, index);
     this.behaviorSubsystem.unloadEntity(id);
     // Shared destruction removes module sinks first, then physics/render/registries.
     this.destroyActorEntity(id);
+  }
+
+  /**
+   * Keeps the pose a simulated body or car is leaving its cell with. Bodies that
+   * physics does not move (statics, scripted movers) are not remembered: their
+   * authored pose is already the truth when the cell returns.
+   */
+  private rememberStreamedActorState(id: string, index: number): void {
+    const instance = this.layout?.actors?.[index];
+    const simulated = this.physicsSubsystem.simulatedTransform(id);
+    if (!instance || !simulated) {
+      this.streamedActorStates.take(id);
+      return;
+    }
+    const motion = this.physicsSubsystem.vehicleMotion(id);
+    const kept = this.streamedActorStates.remember(id, {
+      position: simulated.position,
+      rotation: simulated.rotation,
+      ...(motion ? { vehicle: { handbrake: motion.handbrake, drivetrain: motion.drivetrain } } : {}),
+    }, actorInstanceTransform(instance));
+    if (this.debug && kept) console.info(`[world-partition] remembered ${id} y=${simulated.position[1].toFixed(2)}`);
   }
 
   /** Fetches + normalizes an `*.actor.json` class with its vehicle asset resolved, cached by classRef (never throws). */

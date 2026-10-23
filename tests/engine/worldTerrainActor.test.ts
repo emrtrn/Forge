@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { Box3, Raycaster, Vector3 } from "three";
+import { Box3, BoxGeometry, Group, Matrix4, Mesh, Raycaster, Vector3 } from "three";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import { forEachHeightfieldTriangle } from "../../engine/physics/heightfieldStatic";
 import { createWorldTerrainObject } from "../../engine/render-three/landscape";
 import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type TransformComponent } from "../../engine/scene/components";
 import { createFlatLandscapeData } from "../../engine/scene/landscape";
+import { normalizeFoliageData, normalizeFoliageType, resolveFoliageTarget } from "../../engine/scene/foliage";
+import { makeFoliageRng, rollFoliageInstance } from "../../engine/scene/foliagePaint";
+import { FoliageRenderBinding, foliageInstanceFromRoll } from "../../engine/render-three/foliage";
 import type { LayoutLandscape, Vec3 } from "../../engine/scene/layout";
-import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
+import { terrainFaceNormalAt, terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { captureTerrainSnapshot } from "../../engine/terrain/terrainLandscapeBridge";
 import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
 import { validateTerrainTile, type WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
@@ -88,6 +92,70 @@ function heightfieldHeightAt(transform: TransformComponent, collider: ColliderCo
 }
 
 export function registerWorldTerrainActorTests(check: Check): void {
+  check("world terrain foliage: targets resolve by actor id without landscapeData and respect filters", () => {
+    const actors = [{ id: "world", dataRef: "landscapes/world.terrain.json" }, { id: "legacy" }];
+    const pick = { landscapeIndex: 0, staticMeshAssetId: null };
+    const filters = { landscape: true, staticMesh: true };
+    assert.deepEqual(resolveFoliageTarget(pick, actors, filters), { kind: "landscape", id: "world" });
+    assert.deepEqual(resolveFoliageTarget({ ...pick, landscapeIndex: 1 }, actors, filters), { kind: "landscape", id: "legacy" });
+    assert.equal(resolveFoliageTarget(pick, actors, { ...filters, landscape: false }), null);
+    assert.equal(resolveFoliageTarget({ ...pick, landscapeIndex: 9 }, actors, filters), null);
+    const mesh = { landscapeIndex: null, staticMeshAssetId: "rock" };
+    assert.deepEqual(resolveFoliageTarget(mesh, actors, filters), { kind: "staticMesh", id: "rock" });
+    assert.equal(resolveFoliageTarget(mesh, actors, { ...filters, staticMesh: false }), null);
+    assert.equal(resolveFoliageTarget({ ...mesh, staticMeshAssetId: null }, actors, filters), null);
+  });
+
+  check("world terrain foliage: picked height and normal survive instance rolls and sidecar round trips across a seam", () => {
+    const document = worldDocument();
+    const object = createWorldTerrainObject({ name: "World", hidden: false, collision: true, document });
+    object.updateMatrixWorld(true);
+    const type = normalizeFoliageType({ meshAssetId: "grass", alignToNormal: true, zOffsetMin: 0, zOffsetMax: 0 });
+    const raycaster = new Raycaster();
+    const seam = document.def.origin[0] + Q * SPACING;
+    const instances = [-0.4, 0, 0.4].map((offset) => {
+      const x = seam + offset;
+      const z = -19.25;
+      raycaster.set(new Vector3(x, 500, z), new Vector3(0, -1, 0));
+      const hit = raycaster.intersectObject(object, true)[0]!;
+      assert.ok(hit?.face);
+      const instance = foliageInstanceFromRoll(type, rollFoliageInstance(type, {
+        position: hit.point.toArray(), normal: hit.face.normal.toArray(),
+      }, makeFoliageRng(42)));
+      assert.ok(Math.abs(instance.position[1] - terrainHeightAt(document.def, lookup(document), x, z)!) < 0.01);
+      const normal = terrainFaceNormalAt(document.def, lookup(document), x, z)!;
+      assert.ok(new Vector3(...instance.normal!).distanceTo(new Vector3(...normal)) < 1e-6);
+      return instance;
+    });
+    const target = resolveFoliageTarget({ landscapeIndex: 0, staticMeshAssetId: null }, [{ id: "world" }], { landscape: true, staticMesh: false });
+    const data = normalizeFoliageData(JSON.parse(JSON.stringify({
+      schema: 1, type: "foliage", groups: [{ id: "painted", foliageTypeId: "grass", target, instances }],
+    })));
+    assert.deepEqual(data.groups[0]!.target, { kind: "landscape", id: "world" });
+    assert.deepEqual(data.groups[0]!.instances, instances);
+    // The runtime binding consumes the saved world transforms without a legacy grid.
+    const model = new Group();
+    model.add(new Mesh(new BoxGeometry(1, 1, 1)));
+    const binding = new FoliageRenderBinding();
+    binding.rebuild(data, { getType: () => type, getModel: () => ({ scene: model } as unknown as GLTF) });
+    const spawned: number[][] = [];
+    const matrix = new Matrix4();
+    for (const mesh of binding.allMeshes()) {
+      for (let index = 0; index < mesh.count; index += 1) {
+        mesh.getMatrixAt(index, matrix);
+        spawned.push(new Vector3().setFromMatrixPosition(matrix).toArray());
+      }
+    }
+    assert.equal(spawned.length, instances.length);
+    for (const position of spawned) {
+      assert.ok(instances.some((instance) => new Vector3(...instance.position).distanceTo(new Vector3(...position)) < 1e-5));
+    }
+    binding.dispose();
+    // No surface exists over the missing tile: there is no plane to scatter onto.
+    raycaster.set(new Vector3(10 + 2.5 * Q * SPACING, 500, -30 + 1.5 * Q * SPACING), new Vector3(0, -1, 0));
+    assert.equal(raycaster.intersectObject(object, true).length, 0);
+  });
+
   check("world terrain frame: def.origin is the min corner, the actor is the grid centre, same relation as the 1x1 bridge", () => {
     const { def } = worldDocument();
     assert.deepEqual(worldTerrainExtent(def), [3 * Q * SPACING, 2 * Q * SPACING]);

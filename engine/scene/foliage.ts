@@ -180,6 +180,21 @@ export interface LayoutFoliageTarget {
   id: string;
 }
 
+/** Resolve painted targets by actor identity, independent of their terrain backing data. */
+export function resolveFoliageTarget(
+  pick: { landscapeIndex: number | null; staticMeshAssetId: string | null },
+  landscapes: readonly { id: string }[],
+  filters: { landscape: boolean; staticMesh: boolean },
+): LayoutFoliageTarget | null {
+  if (pick.landscapeIndex !== null) {
+    const actor = landscapes[pick.landscapeIndex];
+    return filters.landscape && actor ? { kind: "landscape", id: actor.id } : null;
+  }
+  return filters.staticMesh && pick.staticMeshAssetId
+    ? { kind: "staticMesh", id: pick.staticMeshAssetId }
+    : null;
+}
+
 /** One painted foliage instance (transform is fully resolved, not type-relative). */
 export interface LayoutFoliageInstance {
   position: Vec3;

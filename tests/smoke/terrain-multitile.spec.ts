@@ -1,7 +1,8 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { PerspectiveCamera } from "three";
-import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
+import { PerspectiveCamera, Vector3 } from "three";
+import { foliageDataPath, normalizeFoliageType, type LayoutFoliageData } from "../../engine/scene/foliage";
+import { terrainFaceNormalAt, terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { decodeTerrainTile, encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import {
   createFlatTerrainTile,
@@ -192,7 +193,8 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   const details = page.locator("[data-world-terrain]");
   await expect(details).toContainText("3 × 2 (1 empty)");
   await expect(details).toContainText("192 m × 128 m");
-  await expect(page.locator("[data-world-terrain-limits]")).toContainText("Splines, resizing, PNG heightmaps and Foliage");
+  await expect(page.locator("[data-world-terrain-limits]")).toContainText("Splines, resizing and PNG heightmaps");
+  await expect(page.locator("[data-world-terrain-limits]")).not.toContainText("Foliage painting");
   await expect(page.locator("[data-world-terrain-tools] [data-landscape-mode]")).toHaveCount(2);
   for (const input of await page.locator('input[data-detail="pr"]').all()) await expect(input).toBeDisabled();
   await page.keyboard.press("f");
@@ -285,4 +287,137 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   console.log(`[terrain-multitile] coverage ${JSON.stringify(report)}`);
   expect(report.editor).toBeGreaterThan(0.25);
   expect(report["editor-focused"]).toBeGreaterThan(0.25);
+});
+
+test("World Terrain foliage tools paint across a seam, save exact surface heights, reload and load in Play", async ({ page, request }, testInfo) => {
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  const messages: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    messages.push(message.text());
+    if (message.type() === "error") errors.push(message.text());
+  });
+  await writeFixture();
+  const typeId = "__playwright-world-foliage";
+  const typePath = `assets/${typeId}.foliagetype.json`;
+  const manifestPath = smokePublicPath("assets/manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const mesh = manifest.assets.find((asset: { id: string }) => asset.id === "shape-cube");
+  if (!mesh) throw new Error("smoke manifest has no shape-cube");
+  manifest.assets.push({ ...mesh, id: typeId, name: "World Foliage", assetType: "foliageType", path: typePath, placeable: false });
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await writeFile(smokePublicPath(typePath), JSON.stringify(normalizeFoliageType({
+    name: "World Foliage", meshAssetId: mesh.id, radius: 0.25,
+    scaleMin: [0.5, 0.5, 0.5], scaleMax: [0.5, 0.5, 0.5],
+    zOffsetMin: 0, zOffsetMax: 0, alignToNormal: true, randomYaw: false,
+  })));
+  // An empty referenced group makes the type available on the first editor load.
+  await writeFile(smokePublicPath(foliageDataPath(LEVEL)), JSON.stringify({
+    schema: 1, type: "foliage",
+    groups: [{ id: "painted-world", foliageTypeId: typeId, target: { kind: "landscape", id: "world" }, instances: [] }],
+    // Existing procedural rules must stay skipped, with their runtime warning.
+    landscapeRules: [{ id: "deferred-world-rule", landscapeId: "world", layerId: "grass", foliageTypeId: typeId, density: 1, minWeight: 0, seed: 1 }],
+  }));
+  expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 860 });
+  await page.addInitScript(({ key, pose }) => {
+    localStorage.clear();
+    localStorage.setItem(key, pose);
+  }, { key: `forge.editor.cameraPose.${encodeURIComponent(LEVEL)}`, pose: JSON.stringify(SEAM_POSE) });
+
+  const bootEditor = async () => {
+    await page.goto(`/?editor&foliage=${Date.now()}`);
+    await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("outliner-row").filter({ hasText: "World Terrain" }).first()).toBeVisible({ timeout: 60_000 });
+    await page.waitForLoadState("networkidle");
+    await page.locator('[data-inspector-tab="foliage"]').click();
+    await expect(page.locator(".foliage-type-name")).toHaveText("World Foliage");
+  };
+  await bootEditor();
+  const count = page.locator(".foliage-type-count");
+  const viewport = (await page.locator("[data-viewport-host]").boundingBox())!;
+  const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
+  const setNumber = async (selector: string, value: number) => {
+    await page.locator(selector).fill(String(value));
+    await page.locator(selector).press("Enter");
+  };
+  const tool = (name: string) => page.locator(`[data-foliage-tool="${name}"]`).click();
+  const save = async (): Promise<LayoutFoliageData> => {
+    const response = page.waitForResponse((res) => res.url().endsWith("/__save-layout") && res.request().method() === "POST");
+    const sidecar = page.waitForResponse((res) => res.url().endsWith("/__save-foliage") && res.request().method() === "POST");
+    await page.getByTestId("editor-save").click();
+    expect((await response).ok()).toBeTruthy();
+    expect((await sidecar).ok()).toBeTruthy();
+    await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 20_000 });
+    return JSON.parse(await readFile(smokePublicPath(foliageDataPath(LEVEL)), "utf8"));
+  };
+
+  // Single, Select and Erase use the same World Terrain surface as Paint.
+  await tool("single");
+  await page.mouse.click(centre.x, centre.y);
+  await expect(count).toHaveText("1");
+  const single = (await save()).groups[0]!.instances[0]!;
+  const camera = new PerspectiveCamera(44, viewport.width / viewport.height);
+  camera.position.fromArray(SEAM_POSE.position);
+  camera.quaternion.fromArray(SEAM_POSE.quaternion);
+  camera.updateMatrixWorld(true);
+  const projected = new Vector3(single.position[0], single.position[1] + 0.25, single.position[2]).project(camera);
+  await tool("select");
+  await page.mouse.click(viewport.x + (projected.x + 1) * viewport.width / 2, viewport.y + (1 - projected.y) * viewport.height / 2);
+  await expect(page.locator("[data-foliage-deselect]")).toBeEnabled();
+  await page.locator("[data-foliage-deselect]").click();
+  await setNumber("[data-foliage-brush-size]", 4);
+  await tool("erase");
+  await page.mouse.click(centre.x, centre.y);
+  await expect(count).toHaveText("0");
+
+  // A Paint dab straddles the seam; disabled Landscape filtering must reject it.
+  await tool("paint");
+  await page.locator('[data-foliage-filter="landscape"]').uncheck();
+  await page.mouse.click(centre.x, centre.y);
+  await expect(count).toHaveText("0");
+  await page.locator('[data-foliage-filter="landscape"]').check();
+  await page.mouse.click(centre.x, centre.y);
+  await expect.poll(async () => Number(await count.textContent())).toBeGreaterThan(3);
+  const painted = await save();
+  const instances = painted.groups.flatMap((group) => group.instances);
+  expect(instances.some(({ position }) => position[0] < SEAM[0])).toBeTruthy();
+  expect(instances.some(({ position }) => position[0] > SEAM[0])).toBeTruthy();
+  const checkSurface = (data: LayoutFoliageData) => {
+    expect(data.groups.length).toBeGreaterThan(0);
+    for (const group of data.groups) {
+      expect(group.target).toEqual({ kind: "landscape", id: "world" });
+      for (const instance of group.instances) {
+        const [x, y, z] = instance.position;
+        const ground = terrainHeightAt(world.def, lookup, x, z);
+        expect(ground, `no ground at ${x},${z}`).not.toBeNull();
+        expect(Math.abs(y - ground!)).toBeLessThan(0.01);
+        expect(new Vector3(...instance.normal!).distanceTo(new Vector3(...terrainFaceNormalAt(world.def, lookup, x, z)!))).toBeLessThan(1e-5);
+      }
+    }
+  };
+  checkSurface(painted);
+
+  // Fill covers multiple tiles and the hole; only real terrain may receive instances.
+  await setNumber("[data-foliage-paint-density]", 0.003);
+  await tool("fill");
+  await page.mouse.click(centre.x, centre.y);
+  await expect(page.getByTestId("editor-status")).toContainText("Filled");
+  const filled = await save();
+  checkSurface(filled);
+  const filledCount = filled.groups.reduce((total, group) => total + group.instances.length, 0);
+  expect(filledCount).toBeGreaterThan(instances.length);
+  await bootEditor();
+  await expect(count).toHaveText(String(filledCount));
+  await page.mouse.move(viewport.x + 8, viewport.y + 8);
+  await testInfo.attach("world-foliage.png", { body: await viewportShot(page), contentType: "image/png" });
+
+  const loadedSidecar = page.waitForResponse((res) => res.url().includes(foliageDataPath(LEVEL)) && res.ok());
+  await page.goto(`/?debug&foliagePlay=${Date.now()}`);
+  expect((await loadedSidecar).ok()).toBeTruthy();
+  await expect.poll(() => messages.some((message) => message.includes("[runtime] scene loaded")), { timeout: 60_000 }).toBeTruthy();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
+  expect(messages.some((message) => message.includes("Landscape foliage rules do not support multi-tile World Terrain yet."))).toBeTruthy();
+  expect(errors).toEqual([]);
 });

@@ -749,10 +749,10 @@ Doğrulama (2026-10-22):
       (`worldTerrainPlacementIssues`). Editör: arazi çizilir, seçilir, F ile
       odaklanır; transform kilitli (gizmo yok, Details konum/dönüş pasif,
       taşıma denemesi açık mesaj verir). Sculpt/paint/spline (seçili araziye
-      tıklama), foliage boyama ve Details'teki katman/spline panelleri kapalı ve
+      tıklama) ve Details'teki katman/spline panelleri kapalı ve
       kullanıcıya durum mesajı/ipucu gösteriyor; Details yerine tile sayısı,
       boyut, tanım dosyası, View ve Collision gösteren görünüm-yalnız panel.
-      *(Sculpt/paint sonradan açıldı; aşağıdaki Sculpt/paint maddesine bakın.)*
+      *(Sculpt/paint ve elle foliage boyama sonradan açıldı; aşağıdaki maddelere bakın.)*
       Landscape foliage kuralları ve River Water çok-tile'da üretilmez
       (konsol uyarısı); spline'lar çizilmez. Kayıt: `EditorSaveSource.worldTerrainIds`
       bu actor'leri migrasyon ve terrain yazımından çıkarır, `dataRef` olduğu
@@ -814,8 +814,12 @@ Doğrulama (2026-10-22):
       tanımı paylaşan iki seviye düzenlemeyi birlikte görür. Details paneli
       Sculpt/Paint araçlarını, katman listesini, fırça ayarlarını ve View'ı
       gösteriyor; katman materyali atama artık açık. **Hâlâ kapalı:** spline'lar (uyarı),
-      Fill Layer, yeniden boyutlandırma, heightmap import/export ve
-      foliage boyama. **Açık (perf):** GPU'ya dab başına tile katmanının
+      Fill Layer, yeniden boyutlandırma ve heightmap import/export.
+      Elle foliage Paint/Erase/Single/Fill/Select araçları çok-tile yüzeyinde çalışır;
+      yükseklik/normal raycast'ten gelir, boş tile'a düzlem fallback'i yapılmaz.
+      Aynı `landscape` hedefi ve foliage sidecar'ı Save/Load/Play'de kullanılır;
+      prosedürel Landscape foliage kuralları Faz 6'ya kadar kapalıdır.
+      **Açık (perf):** GPU'ya dab başına tile katmanının
       tamamı ve global haritanın tamamı yükleniyor (CPU normalleri
       dikdörtgenle sınırlı); dikişe değen dab komşu tile'ın normallerini
       baştan hesaplıyor. Doğrulama: `tests/engine/worldTerrainActor.test.ts`

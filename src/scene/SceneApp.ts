@@ -252,6 +252,7 @@ import {
   computeFoliageResourceUsage,
   createEmptyFoliageData,
   normalizeFoliageType,
+  resolveFoliageTarget,
   uniqueLandscapeFoliageRuleId,
   uniqueFoliageGroupId,
   type FoliageResourceUsage,
@@ -7274,21 +7275,7 @@ export class SceneApp {
   private foliageTargetAt(
     pick: FoliageSurfacePick,
   ): { kind: "landscape" | "staticMesh"; id: string } | null {
-    const filters = this.foliageToolSettings.filters;
-    if (pick.landscapeIndex !== null) {
-      if (!filters.landscape) return null;
-      if (this.worldTerrainAt(pick.landscapeIndex)) {
-        this.onStatus?.("Foliage painting on multi-tile World Terrain is not supported yet.", "warning");
-        return null;
-      }
-      const actor = this.layout?.landscapes?.[pick.landscapeIndex];
-      return actor ? { kind: "landscape", id: actor.id } : null;
-    }
-    if (pick.staticMeshAssetId) {
-      if (!filters.staticMesh) return null;
-      return { kind: "staticMesh", id: pick.staticMeshAssetId };
-    }
-    return null;
+    return resolveFoliageTarget(pick, this.layout?.landscapes ?? [], this.foliageToolSettings.filters);
   }
 
   private foliageGroupFor(
@@ -7385,11 +7372,8 @@ export class SceneApp {
           position: [surface.point.x, surface.point.y, surface.point.z],
           normal: [surface.normal.x, surface.normal.y, surface.normal.z],
         };
-      } else if (target.kind === "landscape") {
-        // Fallback for a missed/other-target down-cast on landscape: place on the
-        // cursor-hit plane so the brush always scatters (accurate on flat ground).
-        hit = { position: [sampleX, pick.point.y, sampleZ], normal: [pick.normal.x, pick.normal.y, pick.normal.z] };
       } else {
+        // Missing tiles, edges and other targets are not part of this surface.
         continue;
       }
       if (!passesFoliageFilters(active.type, hit)) continue;

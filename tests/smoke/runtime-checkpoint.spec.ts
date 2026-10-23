@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 const SOURCE_SCENE_NAME = "__playwright-smoke";
 
@@ -60,7 +60,7 @@ test("runtime checkpoint smoke: walking into the sensor autosaves + load respawn
 
   const stats = page.locator("#debug-stats");
   // Nothing saved at boot: the checkpoint sensor sits ahead on the walk line.
-  expect(await quickStatus(stats)).toBe("Empty");
+  await expect.poll(() => quickStatus(stats)).toBe("Empty");
 
   // Walk forward (-Z) until the checkpoint sensor overlap fires the autosave.
   await page.keyboard.down("KeyW");

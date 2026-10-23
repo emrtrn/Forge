@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 
-import { AudioSubsystem } from "../../engine/audio/audioSubsystem";
+import { AudioSubsystem, type AudioPlayRequest } from "../../engine/audio/audioSubsystem";
 import type { EngineUpdateContext } from "../../engine/core/Subsystem";
 import { AUDIO_COMPONENT, TRANSFORM_COMPONENT } from "../../engine/scene/components";
 import type { Entity } from "../../engine/scene/entity";
@@ -252,6 +252,54 @@ export async function registerAudioModuleTests(checkAsync: CheckAsync): Promise<
           drain(commands).map((request) => request.clipId),
           ["SFX_Chime"],
         );
+      });
+    });
+  });
+
+  await checkAsync("audio module loops a steered sound: a raw clip at once, a cue once loaded and scaled by it", async () => {
+    await withStubbedFetch(async () => {
+      await withMutedWarnings(async () => {
+        const { host } = startedHost();
+        const commands = host.resolve(audioCommandsService)!;
+        commands.prepareLevel(MANIFEST as never);
+        const last = () => drain(commands).at(-1) as AudioPlayRequest;
+
+        const raw = commands.playLoop("SFX_Chime", { volume: 0.4, pitch: 1.2, spatial: true, position: [1, 2, 3] });
+        raw.setPitch(1.5);
+        raw.setVolume(0.7);
+        raw.setPosition([4, 5, 6]);
+        assert.equal(raw.pitch, 1.5);
+        assert.equal(raw.volume, 0.7);
+        const played = last();
+        assert.equal(played.clipId, "SFX_Chime");
+        assert.equal(played.loop, true, "always looped");
+        assert.deepEqual(played.position, [1, 2, 3]);
+
+        // Steered before the cue has even loaded: it starts from the latest values,
+        // times the cue's own (source volume 0.5), on the cue's bus.
+        const cue = commands.playLoop("SC_Chime", { volume: 0.8, spatial: true, position: [0, 0, 0] });
+        cue.setPitch(2);
+        cue.setPosition([7, 8, 9]);
+        assert.equal(cue.stopped, false);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const looped = last();
+        assert.equal(looped.clipId, "SFX_Chime");
+        assert.equal(looped.loop, true);
+        assert.ok(Math.abs((looped.volume ?? 0) - 0.4) < 1e-9, `volume ${looped.volume}`);
+        assert.equal(looped.pitch, 2);
+        assert.deepEqual(looped.position, [7, 8, 9]);
+        assert.equal(looped.bus, "sfx");
+
+        // A cue that cannot play reads as stopped, so its caller does not retry it.
+        const broken = commands.playLoop("SC_Broken");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(broken.stopped, true);
+
+        // Stopped before its cue arrived: nothing starts.
+        const before = drain(commands).length;
+        commands.playLoop("SC_Chime").stop();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(drain(commands).length, before);
       });
     });
   });

@@ -3,7 +3,8 @@
  * Reads are plain static fetches from `public/`, so this is safe for runtime
  * and editor. Editor-only writes live in `assetMaterialSlotsStore`.
  */
-import { projectFileUrl } from "@/project/ProjectSystem";
+import { readOptionalSidecar } from "@/project/contentLoader";
+import { requireSidecar } from "@engine/assets/contentValidation";
 import { Mesh, type Material, type Object3D } from "three";
 
 export interface AssetMaterialSlotsDef {
@@ -28,14 +29,8 @@ export function defaultAssetMaterialSlots(): AssetMaterialSlotsDef {
 }
 
 export async function loadAssetMaterialSlots(modelPath: string): Promise<AssetMaterialSlotsDef> {
-  const url = projectFileUrl(materialSlotsSidecarPath(modelPath));
-  try {
-    const response = await fetch(url, { cache: "no-cache" });
-    if (!response.ok) return defaultAssetMaterialSlots();
-    return normalizeAssetMaterialSlots(await response.json());
-  } catch {
-    return defaultAssetMaterialSlots();
-  }
+  return readOptionalSidecar(materialSlotsSidecarPath(modelPath), normalizeAssetMaterialSlots,
+    defaultAssetMaterialSlots, (raw, path) => requireSidecar(raw, path, ["slots"]));
 }
 
 export function normalizeAssetMaterialSlots(value: unknown): AssetMaterialSlotsDef {

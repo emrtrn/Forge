@@ -19,7 +19,9 @@ import assert from "node:assert/strict";
 import { normalizeEffectDefinition } from "../../engine/vfx/particleEffectParser";
 import { normalizeAssetSkeleton } from "../../src/scene/assetSkeletonLoader";
 import { collectDroppedFields, formatDroppedFieldWarning } from "../../tools/droppedFields";
-import { validateAssetSkeletonDef, validateEffectAsset } from "../../tools/saveValidator";
+import { validateAssetSkeletonDef, validateEffectAsset, validatePlacement, validateAssetCollisionDef } from "../../tools/saveValidator";
+import { PHYSICAL_MATERIAL_IDS } from "../../engine/scene/collision";
+import { normalizeAssetCollisionDef } from "../../src/scene/assetCollisionLoader";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -125,6 +127,21 @@ function assertNoDrift(runtimeShape: unknown, savedShape: unknown, subject: stri
 }
 
 export function registerSerializationDriftTests(check: Check): void {
+  check("surface response: physical material preset ids round-trip placement and collision sidecar saves", () => {
+    for (const physicalMaterialId of PHYSICAL_MATERIAL_IDS) {
+      const placement = { position: [0, 0, 0], physicalMaterialId };
+      const saved = validatePlacement(placement);
+      assertNoDrift(placement, saved, "placement");
+      assert.equal(saved.physicalMaterialId, physicalMaterialId);
+      const runtime = normalizeAssetCollisionDef({
+        primitives: [], complexity: "projectDefault", preset: "blockAll", physicalMaterialId,
+      });
+      const sidecar = validateAssetCollisionDef(runtime);
+      assertNoDrift(runtime, sidecar, "collision");
+      assert.deepEqual(normalizeAssetCollisionDef(sidecar), runtime);
+    }
+  });
+
   check("skeleton sidecar: everything the runtime normalizer keeps survives a save", () => {
     const runtimeShape = normalizeAssetSkeleton(MAXIMAL_SKELETON);
     assertNoDrift(runtimeShape, validateAssetSkeletonDef(runtimeShape), "skeleton");

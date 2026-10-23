@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_Gaz52",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "chassis",
+      "component": "Collider",
+      "props": {
+        "shape": "box",
+        "isStatic": false,
+        "isSensor": false,
+        "size": [2.38, 2.14, 6.9],
+        "center": [0, 1.53, -1.19],
+        "simulatePhysics": true,
+        "linearDamping": 0.01,
+        "angularDamping": 0.6,
+        "hideInGame": true
+      },
+      "parent": "root"
+    },
+    {
+      "id": "body",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "gaz-52-base"
+      },
+      "parent": "chassis"
+    },
+    {
+      "id": "vehicle",
+      "component": "Vehicle",
+      "props": {
+        "asset": "assets/vehicles/gaz52/Gaz52.vehicle.json"
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

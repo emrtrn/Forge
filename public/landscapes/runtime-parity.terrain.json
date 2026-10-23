@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "type": "worldTerrain",
+  "name": "Parity Terrain",
+  "tileQuads": 64,
+  "spacing": 1,
+  "tilesX": 1,
+  "tilesZ": 1,
+  "origin": [
+    -64,
+    -0.6,
+    -64
+  ],
+  "heightMin": -256,
+  "heightMax": 256,
+  "layers": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "color": "#5f9449"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441"
+    }
+  ],
+  "tiles": [
+    {
+      "key": "0_0",
+      "minHeight": -1.1065000295639038,
+      "maxHeight": 1.1065000295639038
+    }
+  ],
+  "collision": true
+}

@@ -53,6 +53,22 @@ import {
   type AssetSkeletonMontageDef,
 } from "@/scene/assetSkeletonLoader";
 import { getGameEditorCatalog } from "@/editor/gameEditorRegistry";
+import {
+  setVehicleAiDriverChoice,
+  setVehicleAsset,
+  setVehicleEngineSound,
+  setVehicleScalarOverride,
+  vehicleAiDriverFields,
+  vehicleComponentFields,
+} from "@/editor/vehicleComponentFields";
+import { createVehicleAssetLoader } from "@/scene/vehicleAssetLoader";
+import { saveVehicleAsset } from "@/editor/vehicleAssetStore";
+import {
+  createReferenceCarDefinition,
+  normalizeVehicleAssetPath,
+  vehicleDefinitionFromComponent,
+  type VehicleDefinition,
+} from "@engine/physics/vehicle/vehicleTypes";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -114,6 +130,8 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   SpringArm: "⌐",
   Camera: "🎥",
   AIController: "🧠",
+  Vehicle: "🚗",
+  VehicleAiDriver: "AI🚗",
 };
 
 function escapeHtml(value: string): string {
@@ -164,6 +182,17 @@ export class ActorScriptEditor {
   private readonly clipsByAssetId = new Map<string, readonly string[]>();
   /** Asset ids whose skeleton sidecar load was already kicked off (avoid refetch). */
   private readonly skeletonLoadStarted = new Set<string>();
+  /** Vehicle assets read for the Vehicle form's inherited values (null = unreadable). */
+  private readonly vehicleAssets = new Map<string, VehicleDefinition | null>();
+  private readonly loadVehicleAsset = createVehicleAssetLoader();
+  /**
+   * Wheel hard points dragged in the viewport for a class whose Vehicle reads
+   * them from a shared asset: held here and written with the class on Save.
+   */
+  private vehicleAssetDraft: { path: string; definition: VehicleDefinition } | null = null;
+  /** The wheel whose hard point the viewport's Move gizmo drags (on the Vehicle node). */
+  private selectedWheel: number | null = null;
+  private lastVehicleSignature = "";
 
   private constructor(private readonly options: ActorScriptEditorOptions) {
     this.def = defaultActorScriptDef(options.label);
@@ -426,8 +455,11 @@ export class ActorScriptEditor {
           if (nodeId) this.select({ kind: "component", id: nodeId });
         },
         onTransformNode: (nodeId, transform) => this.applyNodeTransform(nodeId, transform),
+        onPickWheel: (index) => this.pickWheel(index),
+        onMoveWheel: (index, position) => this.moveWheel(index, position),
       });
       this.lastBuildSignature = "";
+      this.lastVehicleSignature = "";
     }
     this.syncViewport();
   }
@@ -440,7 +472,110 @@ export class ActorScriptEditor {
       this.lastBuildSignature = signature;
       this.viewport.setDef(this.def);
     }
+    const vehicleNode = this.vehicleNode();
+    // A wheel stays selected only while its Vehicle component is the selection.
+    if (this.selection.kind !== "component" || this.selection.id !== vehicleNode?.id) this.selectedWheel = null;
+    const wheels = this.resolvedVehicleWheels();
+    const vehicleSignature = JSON.stringify(wheels);
+    if (vehicleSignature !== this.lastVehicleSignature) {
+      this.lastVehicleSignature = vehicleSignature;
+      this.viewport.setVehicleWheels(wheels);
+    }
     this.viewport.setSelection(this.selection.kind === "component" ? this.selection.id : null);
+    this.viewport.setSelectedWheel(this.selectedWheel);
+  }
+
+  private vehicleNode(): ComponentTemplateNode | undefined {
+    return this.def.components.find((node) => node.component === "Vehicle");
+  }
+
+  /**
+   * The wheels the class drives on, as the runtime resolves them: inline wheels,
+   * else the referenced asset (its unsaved viewport draft first), else the
+   * reference car. Null without a Vehicle, or while the asset is loading.
+   */
+  private resolvedVehicleWheels(): VehicleDefinition["wheels"] | null {
+    const node = this.vehicleNode();
+    if (!node) return null;
+    const path = normalizeVehicleAssetPath(node.props.asset);
+    let asset: VehicleDefinition | undefined;
+    if (path) {
+      if (this.vehicleAssetDraft?.path === path) asset = this.vehicleAssetDraft.definition;
+      else if (this.vehicleAssets.has(path)) asset = this.vehicleAssets.get(path) ?? undefined;
+      else {
+        void this.ensureVehicleAssetLoaded(path, node.id);
+        return null;
+      }
+    }
+    return vehicleDefinitionFromComponent(node.props, asset)?.wheels ?? null;
+  }
+
+  /** Where a dragged hard point is written: the class's inline wheels, or a shared asset. */
+  private wheelEditTarget(): { kind: "inline" } | { kind: "asset"; path: string } | null {
+    const node = this.vehicleNode();
+    if (!node) return null;
+    // Mirrors the normalizer: one wheel with a valid position makes the list inline.
+    const inline = Array.isArray(node.props.wheels) && node.props.wheels.some((wheel) => {
+      const position = wheel && typeof wheel === "object" && !Array.isArray(wheel) ? wheel.position : undefined;
+      return Array.isArray(position) && position.length === 3 && position.every((n) => typeof n === "number");
+    });
+    if (inline) return { kind: "inline" };
+    const path = normalizeVehicleAssetPath(node.props.asset);
+    return path && this.vehicleAssets.get(path) ? { kind: "asset", path } : { kind: "inline" };
+  }
+
+  private pickWheel(index: number | null): void {
+    this.selectedWheel = index;
+    const node = this.vehicleNode();
+    if (index === null || !node) {
+      this.viewport?.setSelectedWheel(null);
+      return;
+    }
+    const target = this.wheelEditTarget();
+    this.setStatus(
+      target?.kind === "asset"
+        ? `Wheel ${index + 1}: drag to move its hard point. Saved into ${target.path} (shared by every class using it) with this class.`
+        : `Wheel ${index + 1}: drag to move its hard point (stored inline on this class).`,
+      "info",
+    );
+    if (this.selection.kind === "component" && this.selection.id === node.id) {
+      this.viewport?.setSelectedWheel(index);
+    } else {
+      this.select({ kind: "component", id: node.id });
+    }
+  }
+
+  /**
+   * Writes a dragged hard point. Inline wheels (or, with neither inline wheels
+   * nor a readable asset, the reference car's wheels made inline) change on the
+   * component; asset-backed wheels change in a draft of the asset that Save
+   * writes alongside the class.
+   */
+  private moveWheel(index: number, position: [number, number, number]): void {
+    const node = this.vehicleNode();
+    const target = this.wheelEditTarget();
+    if (!node || !target) return;
+    if (target.kind === "asset") {
+      if (this.vehicleAssetDraft?.path !== target.path) {
+        const loaded = this.vehicleAssets.get(target.path)!;
+        this.vehicleAssetDraft = { path: target.path, definition: JSON.parse(JSON.stringify(loaded)) as VehicleDefinition };
+      }
+      const wheel = this.vehicleAssetDraft.definition.wheels[index];
+      if (!wheel) return;
+      (wheel as unknown as { position: [number, number, number] }).position = position;
+    } else {
+      if (!Array.isArray(node.props.wheels) || node.props.wheels.length === 0) {
+        const wheels = this.resolvedVehicleWheels() ?? [];
+        node.props.wheels = JSON.parse(JSON.stringify(wheels)) as SceneJsonValue[];
+      }
+      const wheel = (node.props.wheels as Record<string, SceneJsonValue>[])[index];
+      if (!wheel) return;
+      wheel.position = position;
+      // The viewport already shows the edit; skip the component-tree rebuild.
+      this.lastBuildSignature = JSON.stringify(this.def.components);
+    }
+    this.lastVehicleSignature = JSON.stringify(this.resolvedVehicleWheels());
+    this.markDirty();
   }
 
   /** Debounced viewport sync for live prop edits (avoids rebuilding per keystroke). */
@@ -803,6 +938,8 @@ export class ActorScriptEditor {
     const cameraField = node.component === "Camera" ? cameraFields(node) : "";
     const springArmField = node.component === "SpringArm" ? springArmFields(node) : "";
     const aiControllerField = node.component === "AIController" ? this.aiControllerFields(node) : "";
+    const vehicleField = node.component === "Vehicle" ? this.vehicleFields(node) : "";
+    const vehicleAiField = node.component === "VehicleAiDriver" ? vehicleAiDriverFields(node.props) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -837,6 +974,8 @@ export class ActorScriptEditor {
       ${springArmField}
       ${cameraField}
       ${aiControllerField}
+      ${vehicleField}
+      ${vehicleAiField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${transformRows}
       <details class="as-advanced">
@@ -1057,6 +1196,39 @@ export class ActorScriptEditor {
         <select ${attr}>${options}</select>
       </label>
     `;
+  }
+
+  /**
+   * The Vehicle form: asset picker + per-class overrides whose placeholders show
+   * the inherited value. The asset is read lazily (like the skeleton sidecar)
+   * and the form re-renders once it lands.
+   */
+  private vehicleFields(node: ComponentTemplateNode): string {
+    const asset = typeof node.props.asset === "string" ? node.props.asset : "";
+    let inherited: VehicleDefinition | null | undefined = createReferenceCarDefinition();
+    if (asset) {
+      inherited = this.vehicleAssets.get(asset);
+      if (inherited === undefined && !this.vehicleAssets.has(asset)) void this.ensureVehicleAssetLoaded(asset, node.id);
+    }
+    return vehicleComponentFields(node.props, {
+      vehicleAssets: (this.options.assets ?? [])
+        .filter((entry) => entry.assetType === "vehicle")
+        .map((entry) => ({ path: entry.path, name: entry.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      soundAssets: [...this.soundAssets(), ...this.cueAssets()],
+      inherited,
+    });
+  }
+
+  private async ensureVehicleAssetLoaded(path: string, componentId: string): Promise<void> {
+    const definition = await this.loadVehicleAsset(path);
+    if (this.disposed) return;
+    this.vehicleAssets.set(path, definition);
+    const node = this.def.components.find((component) => component.id === componentId);
+    if (this.selection.kind === "component" && this.selection.id === componentId && node?.props.asset === path) {
+      this.renderDetails();
+    }
+    this.syncViewport(); // the wheels can be drawn now
   }
 
   /**
@@ -1341,6 +1513,7 @@ export class ActorScriptEditor {
     this.bindSpringArmDetails(node);
     this.bindCameraDetails(node);
     this.bindAIControllerDetails(node);
+    this.bindVehicleDetails(node);
     this.bindNumberProps(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
@@ -1755,6 +1928,60 @@ export class ActorScriptEditor {
       else node.props.doCollisionTest = false;
       this.markDirty();
       this.renderDetails();
+    });
+  }
+
+  /**
+   * Wires the Vehicle and VehicleAiDriver forms (no-op without one). Vehicle
+   * overrides are blank-means-inherit, so they bind here rather than through the
+   * generic `data-as-num`; the AI driver's numbers do use it.
+   */
+  private bindVehicleDetails(node: ComponentTemplateNode): void {
+    const commit = (): void => {
+      this.markDirty();
+      this.renderDetails();
+    };
+    const asset = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-vehicle-asset]");
+    asset?.addEventListener("change", () => {
+      setVehicleAsset(node.props, asset.value);
+      commit();
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-as-vehicle-num]").forEach((input) => {
+      const key = input.dataset.asVehicleNum;
+      if (!key) return;
+      input.addEventListener("input", () => {
+        if (setVehicleScalarOverride(node.props, key, input.value)) this.markDirty();
+      });
+      input.addEventListener("change", () => {
+        setVehicleScalarOverride(node.props, key, input.value);
+        commit();
+      });
+    });
+    const sound = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-vehicle-engine-sound]");
+    sound?.addEventListener("change", () => {
+      setVehicleEngineSound(node.props, sound.value);
+      commit();
+    });
+    const spline = this.detailsHost.querySelector<HTMLInputElement>("[data-as-vehicle-ai-spline]");
+    spline?.addEventListener("change", () => {
+      const value = spline.value.trim();
+      if (value) node.props.splineId = value;
+      else delete node.props.splineId;
+      commit();
+    });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-as-vehicle-ai-select]").forEach((select) => {
+      const key = select.dataset.asVehicleAiSelect;
+      if (key !== "entry" && key !== "wrapMode") return;
+      select.addEventListener("change", () => {
+        setVehicleAiDriverChoice(node.props, key, select.value);
+        commit();
+      });
+    });
+    const enabled = this.detailsHost.querySelector<HTMLInputElement>("[data-as-vehicle-ai-enabled]");
+    enabled?.addEventListener("change", () => {
+      if (enabled.checked) delete node.props.enabled;
+      else node.props.enabled = false;
+      commit();
     });
   }
 
@@ -2182,8 +2409,15 @@ export class ActorScriptEditor {
   private async save(): Promise<void> {
     try {
       const result = await saveActorScript(this.options.path, this.def);
+      const draft = this.vehicleAssetDraft;
+      if (draft) {
+        const saved = await saveVehicleAsset(draft.path, draft.definition);
+        this.vehicleAssets.set(draft.path, saved.definition);
+        this.vehicleAssetDraft = null;
+      }
       this.dirty = false;
-      this.setStatus(result.changed ? "Saved." : "Saved (no changes).", "success");
+      const asset = draft ? ` Wheel hard points saved to ${draft.path}.` : "";
+      this.setStatus(`${result.changed || draft ? "Saved." : "Saved (no changes)."}${asset}`, "success");
     } catch (error) {
       this.setStatus(`Save failed: ${describeError(error)}`, "error");
     }

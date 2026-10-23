@@ -1,0 +1,5806 @@
+{
+  "schema": 1,
+  "name": "Terrain",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            -75,
+            1.3,
+            -30
+          ],
+          "name": "Player Start",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "commontree",
+      "placements": [
+        {
+          "position": [
+            -101.777,
+            1.711,
+            -45.143
+          ],
+          "name": "Common Tree 001",
+          "collision": false,
+          "rotationYDeg": 98.7,
+          "scale": 1.434
+        },
+        {
+          "position": [
+            -65.178,
+            0.778,
+            -46.465
+          ],
+          "name": "Common Tree 002",
+          "collision": false,
+          "rotationYDeg": 351.3,
+          "scale": 1.276
+        },
+        {
+          "position": [
+            -105.447,
+            2.7,
+            -32.863
+          ],
+          "name": "Common Tree 003",
+          "collision": false,
+          "rotationYDeg": 185.6,
+          "scale": 0.974
+        },
+        {
+          "position": [
+            -61.438,
+            0.662,
+            -34.371
+          ],
+          "name": "Common Tree 004",
+          "collision": false,
+          "rotationYDeg": 75.6,
+          "scale": 1.06
+        },
+        {
+          "position": [
+            -103.276,
+            3.405,
+            -21.521
+          ],
+          "name": "Common Tree 005",
+          "collision": false,
+          "rotationYDeg": 182.6,
+          "scale": 1.202
+        },
+        {
+          "position": [
+            -63.955,
+            0.722,
+            -21.521
+          ],
+          "name": "Common Tree 006",
+          "collision": false,
+          "rotationYDeg": 338.9,
+          "scale": 1.012
+        },
+        {
+          "position": [
+            -99.274,
+            3.621,
+            -9.442
+          ],
+          "name": "Common Tree 007",
+          "collision": false,
+          "rotationYDeg": 29.8,
+          "scale": 0.932
+        },
+        {
+          "position": [
+            -58.622,
+            0.865,
+            -9.442
+          ],
+          "name": "Common Tree 008",
+          "collision": false,
+          "rotationYDeg": 235,
+          "scale": 1.093
+        },
+        {
+          "position": [
+            -101.272,
+            4.399,
+            2.403
+          ],
+          "name": "Common Tree 009",
+          "collision": false,
+          "rotationYDeg": 240.2,
+          "scale": 1.284
+        },
+        {
+          "position": [
+            -62.805,
+            1.047,
+            2.882
+          ],
+          "name": "Common Tree 010",
+          "collision": false,
+          "rotationYDeg": 334.3,
+          "scale": 1.207
+        },
+        {
+          "position": [
+            -106.289,
+            5.51,
+            14.418
+          ],
+          "name": "Common Tree 011",
+          "collision": false,
+          "rotationYDeg": 8.6,
+          "scale": 1.372
+        },
+        {
+          "position": [
+            -63.33,
+            1.068,
+            15.334
+          ],
+          "name": "Common Tree 012",
+          "collision": false,
+          "rotationYDeg": 93.9,
+          "scale": 1.305
+        },
+        {
+          "position": [
+            -104.746,
+            5.669,
+            28.453
+          ],
+          "name": "Common Tree 013",
+          "collision": false,
+          "rotationYDeg": 146.8,
+          "scale": 1.108
+        },
+        {
+          "position": [
+            -58.852,
+            0.896,
+            25.907
+          ],
+          "name": "Common Tree 014",
+          "collision": false,
+          "rotationYDeg": 356.8,
+          "scale": 1.421
+        },
+        {
+          "position": [
+            -100.497,
+            4.914,
+            42.301
+          ],
+          "name": "Common Tree 015",
+          "collision": false,
+          "rotationYDeg": 202.5,
+          "scale": 0.956
+        },
+        {
+          "position": [
+            -64.021,
+            0.792,
+            36.751
+          ],
+          "name": "Common Tree 016",
+          "collision": false,
+          "rotationYDeg": 284,
+          "scale": 1.326
+        },
+        {
+          "position": [
+            -100.05,
+            4.16,
+            57.928
+          ],
+          "name": "Common Tree 017",
+          "collision": false,
+          "rotationYDeg": 147.5,
+          "scale": 1.326
+        },
+        {
+          "position": [
+            -55.92,
+            0.926,
+            44.455
+          ],
+          "name": "Common Tree 018",
+          "collision": false,
+          "rotationYDeg": 242.1,
+          "scale": 1.245
+        },
+        {
+          "position": [
+            -90.004,
+            1.767,
+            70.872
+          ],
+          "name": "Common Tree 019",
+          "collision": false,
+          "rotationYDeg": 141.6,
+          "scale": 1.309
+        },
+        {
+          "position": [
+            -57.575,
+            0.931,
+            54.539
+          ],
+          "name": "Common Tree 020",
+          "collision": false,
+          "rotationYDeg": 34.9,
+          "scale": 1.391
+        },
+        {
+          "position": [
+            -80.345,
+            1.108,
+            84.406
+          ],
+          "name": "Common Tree 021",
+          "collision": false,
+          "rotationYDeg": 25.9,
+          "scale": 1.177
+        },
+        {
+          "position": [
+            -52.363,
+            1.248,
+            60.253
+          ],
+          "name": "Common Tree 022",
+          "collision": false,
+          "rotationYDeg": 54.7,
+          "scale": 1.244
+        },
+        {
+          "position": [
+            -67.106,
+            1.508,
+            95.055
+          ],
+          "name": "Common Tree 023",
+          "collision": false,
+          "rotationYDeg": 12.8,
+          "scale": 1.161
+        },
+        {
+          "position": [
+            -47.605,
+            1.477,
+            65.639
+          ],
+          "name": "Common Tree 024",
+          "collision": false,
+          "rotationYDeg": 354,
+          "scale": 1.178
+        },
+        {
+          "position": [
+            -54.998,
+            2.486,
+            103.841
+          ],
+          "name": "Common Tree 025",
+          "collision": false,
+          "rotationYDeg": 121.1,
+          "scale": 1.121
+        },
+        {
+          "position": [
+            -37.646,
+            2.041,
+            65.706
+          ],
+          "name": "Common Tree 026",
+          "collision": false,
+          "rotationYDeg": 87.2,
+          "scale": 1.141
+        },
+        {
+          "position": [
+            -40.992,
+            3.988,
+            108.933
+          ],
+          "name": "Common Tree 027",
+          "collision": false,
+          "rotationYDeg": 257.5,
+          "scale": 0.988
+        },
+        {
+          "position": [
+            -30.992,
+            1.943,
+            73.288
+          ],
+          "name": "Common Tree 028",
+          "collision": false,
+          "rotationYDeg": 83.8,
+          "scale": 0.998
+        },
+        {
+          "position": [
+            -27.282,
+            5.638,
+            113.271
+          ],
+          "name": "Common Tree 029",
+          "collision": false,
+          "rotationYDeg": 270,
+          "scale": 1.149
+        },
+        {
+          "position": [
+            -21.43,
+            2.091,
+            76.203
+          ],
+          "name": "Common Tree 030",
+          "collision": false,
+          "rotationYDeg": 193,
+          "scale": 0.971
+        },
+        {
+          "position": [
+            -13.33,
+            6.77,
+            115.463
+          ],
+          "name": "Common Tree 031",
+          "collision": false,
+          "rotationYDeg": 3.6,
+          "scale": 1.184
+        },
+        {
+          "position": [
+            -11.178,
+            2.239,
+            75.854
+          ],
+          "name": "Common Tree 032",
+          "collision": false,
+          "rotationYDeg": 292.2,
+          "scale": 1.276
+        },
+        {
+          "position": [
+            1.197,
+            7.444,
+            118.322
+          ],
+          "name": "Common Tree 033",
+          "collision": false,
+          "rotationYDeg": 44.9,
+          "scale": 1.255
+        },
+        {
+          "position": [
+            -1.214,
+            2.226,
+            71.818
+          ],
+          "name": "Common Tree 034",
+          "collision": false,
+          "rotationYDeg": 90.1,
+          "scale": 1.243
+        },
+        {
+          "position": [
+            15.454,
+            7.683,
+            114.532
+          ],
+          "name": "Common Tree 035",
+          "collision": false,
+          "rotationYDeg": 266.9,
+          "scale": 1.157
+        },
+        {
+          "position": [
+            8.225,
+            1.799,
+            69.982
+          ],
+          "name": "Common Tree 036",
+          "collision": false,
+          "rotationYDeg": 134,
+          "scale": 1.35
+        },
+        {
+          "position": [
+            30.23,
+            7.039,
+            111.341
+          ],
+          "name": "Common Tree 037",
+          "collision": false,
+          "rotationYDeg": 147.1,
+          "scale": 1.341
+        },
+        {
+          "position": [
+            18.532,
+            1.188,
+            72.778
+          ],
+          "name": "Common Tree 038",
+          "collision": false,
+          "rotationYDeg": 202.3,
+          "scale": 0.979
+        },
+        {
+          "position": [
+            44.371,
+            4.616,
+            103.316
+          ],
+          "name": "Common Tree 039",
+          "collision": false,
+          "rotationYDeg": 305.4,
+          "scale": 1.363
+        },
+        {
+          "position": [
+            25.343,
+            0.959,
+            67.02
+          ],
+          "name": "Common Tree 040",
+          "collision": false,
+          "rotationYDeg": 178.3,
+          "scale": 0.949
+        },
+        {
+          "position": [
+            58.031,
+            2.452,
+            94.973
+          ],
+          "name": "Common Tree 041",
+          "collision": false,
+          "rotationYDeg": 223.4,
+          "scale": 1.282
+        },
+        {
+          "position": [
+            32.738,
+            0.774,
+            63.895
+          ],
+          "name": "Common Tree 042",
+          "collision": false,
+          "rotationYDeg": 174.8,
+          "scale": 0.915
+        },
+        {
+          "position": [
+            68.078,
+            1.273,
+            80.677
+          ],
+          "name": "Common Tree 043",
+          "collision": false,
+          "rotationYDeg": 81.3,
+          "scale": 1.088
+        },
+        {
+          "position": [
+            38.928,
+            0.713,
+            60.584
+          ],
+          "name": "Common Tree 044",
+          "collision": false,
+          "rotationYDeg": 121.5,
+          "scale": 1.234
+        },
+        {
+          "position": [
+            77.45,
+            1.548,
+            66.318
+          ],
+          "name": "Common Tree 045",
+          "collision": false,
+          "rotationYDeg": 347.1,
+          "scale": 1.431
+        },
+        {
+          "position": [
+            38.744,
+            0.822,
+            52.982
+          ],
+          "name": "Common Tree 046",
+          "collision": false,
+          "rotationYDeg": 210.9,
+          "scale": 1.137
+        },
+        {
+          "position": [
+            79.641,
+            1.504,
+            42.813
+          ],
+          "name": "Common Tree 047",
+          "collision": false,
+          "rotationYDeg": 275.7,
+          "scale": 1.421
+        },
+        {
+          "position": [
+            71.108,
+            1.026,
+            22.266
+          ],
+          "name": "Common Tree 048",
+          "collision": false,
+          "rotationYDeg": 255.1,
+          "scale": 1.236
+        },
+        {
+          "position": [
+            58.908,
+            0.805,
+            14.321
+          ],
+          "name": "Common Tree 049",
+          "collision": false,
+          "rotationYDeg": 227.8,
+          "scale": 1.143
+        },
+        {
+          "position": [
+            33.248,
+            0.933,
+            42.176
+          ],
+          "name": "Common Tree 050",
+          "collision": false,
+          "rotationYDeg": 64.5,
+          "scale": 1.419
+        },
+        {
+          "position": [
+            52.076,
+            0.754,
+            10.178
+          ],
+          "name": "Common Tree 051",
+          "collision": false,
+          "rotationYDeg": 354.8,
+          "scale": 1.019
+        },
+        {
+          "position": [
+            22.929,
+            1.226,
+            29.488
+          ],
+          "name": "Common Tree 052",
+          "collision": false,
+          "rotationYDeg": 193.7,
+          "scale": 1.42
+        },
+        {
+          "position": [
+            12.768,
+            1.484,
+            6.925
+          ],
+          "name": "Common Tree 053",
+          "collision": false,
+          "rotationYDeg": 34,
+          "scale": 1.406
+        },
+        {
+          "position": [
+            19.677,
+            1.127,
+            -16.371
+          ],
+          "name": "Common Tree 054",
+          "collision": false,
+          "rotationYDeg": 80.7,
+          "scale": 1.253
+        },
+        {
+          "position": [
+            58.555,
+            0.68,
+            4.884
+          ],
+          "name": "Common Tree 055",
+          "collision": false,
+          "rotationYDeg": 90.2,
+          "scale": 1.373
+        },
+        {
+          "position": [
+            36.904,
+            1.375,
+            -24.495
+          ],
+          "name": "Common Tree 056",
+          "collision": false,
+          "rotationYDeg": 96,
+          "scale": 0.959
+        },
+        {
+          "position": [
+            66.339,
+            0.635,
+            -0.22
+          ],
+          "name": "Common Tree 057",
+          "collision": false,
+          "rotationYDeg": 130.2,
+          "scale": 1.017
+        },
+        {
+          "position": [
+            47.498,
+            1.785,
+            -35.563
+          ],
+          "name": "Common Tree 058",
+          "collision": false,
+          "rotationYDeg": 179.9,
+          "scale": 1.085
+        },
+        {
+          "position": [
+            79.62,
+            0.888,
+            -7.083
+          ],
+          "name": "Common Tree 059",
+          "collision": false,
+          "rotationYDeg": 84.4,
+          "scale": 1.244
+        },
+        {
+          "position": [
+            56.86,
+            1.736,
+            -38.094
+          ],
+          "name": "Common Tree 060",
+          "collision": false,
+          "rotationYDeg": 114.2,
+          "scale": 1.317
+        },
+        {
+          "position": [
+            93.186,
+            1.481,
+            -19.285
+          ],
+          "name": "Common Tree 061",
+          "collision": false,
+          "rotationYDeg": 185.3,
+          "scale": 1.154
+        },
+        {
+          "position": [
+            62.058,
+            1.776,
+            -42.118
+          ],
+          "name": "Common Tree 062",
+          "collision": false,
+          "rotationYDeg": 271.4,
+          "scale": 1.253
+        },
+        {
+          "position": [
+            100.924,
+            1.424,
+            -33.696
+          ],
+          "name": "Common Tree 063",
+          "collision": false,
+          "rotationYDeg": 320.2,
+          "scale": 1.399
+        },
+        {
+          "position": [
+            63.355,
+            2.035,
+            -50.737
+          ],
+          "name": "Common Tree 064",
+          "collision": false,
+          "rotationYDeg": 106.1,
+          "scale": 1.419
+        },
+        {
+          "position": [
+            105.352,
+            1.095,
+            -49.477
+          ],
+          "name": "Common Tree 065",
+          "collision": false,
+          "rotationYDeg": 80,
+          "scale": 1.141
+        },
+        {
+          "position": [
+            64.462,
+            2.017,
+            -58.457
+          ],
+          "name": "Common Tree 066",
+          "collision": false,
+          "rotationYDeg": 297.3,
+          "scale": 1.413
+        },
+        {
+          "position": [
+            104.83,
+            1.036,
+            -67.018
+          ],
+          "name": "Common Tree 067",
+          "collision": false,
+          "rotationYDeg": 356.8,
+          "scale": 1.122
+        },
+        {
+          "position": [
+            68.186,
+            1.775,
+            -64.476
+          ],
+          "name": "Common Tree 068",
+          "collision": false,
+          "rotationYDeg": 334.9,
+          "scale": 0.921
+        },
+        {
+          "position": [
+            101.675,
+            1.102,
+            -84.814
+          ],
+          "name": "Common Tree 069",
+          "collision": false,
+          "rotationYDeg": 218.1,
+          "scale": 1.047
+        },
+        {
+          "position": [
+            62.823,
+            1.712,
+            -68.537
+          ],
+          "name": "Common Tree 070",
+          "collision": false,
+          "rotationYDeg": 343.6,
+          "scale": 1.258
+        },
+        {
+          "position": [
+            94.479,
+            0.864,
+            -101.812
+          ],
+          "name": "Common Tree 071",
+          "collision": false,
+          "rotationYDeg": 154.7,
+          "scale": 1.049
+        },
+        {
+          "position": [
+            61.757,
+            1.429,
+            -74.481
+          ],
+          "name": "Common Tree 072",
+          "collision": false,
+          "rotationYDeg": 150.3,
+          "scale": 0.912
+        },
+        {
+          "position": [
+            77.915,
+            1.338,
+            -110.73
+          ],
+          "name": "Common Tree 073",
+          "collision": false,
+          "rotationYDeg": 30.2,
+          "scale": 1.172
+        },
+        {
+          "position": [
+            58.835,
+            1.21,
+            -80.158
+          ],
+          "name": "Common Tree 074",
+          "collision": false,
+          "rotationYDeg": 171.7,
+          "scale": 1.066
+        },
+        {
+          "position": [
+            63.838,
+            2.334,
+            -117.471
+          ],
+          "name": "Common Tree 075",
+          "collision": false,
+          "rotationYDeg": 77.3,
+          "scale": 1.019
+        },
+        {
+          "position": [
+            50.673,
+            1.292,
+            -81.533
+          ],
+          "name": "Common Tree 076",
+          "collision": false,
+          "rotationYDeg": 310.7,
+          "scale": 1.426
+        },
+        {
+          "position": [
+            42.245,
+            1.254,
+            -86.626
+          ],
+          "name": "Common Tree 077",
+          "collision": false,
+          "rotationYDeg": 297.1,
+          "scale": 0.987
+        },
+        {
+          "position": [
+            32.675,
+            1.202,
+            -89.254
+          ],
+          "name": "Common Tree 078",
+          "collision": false,
+          "rotationYDeg": 104.8,
+          "scale": 0.954
+        },
+        {
+          "position": [
+            21.543,
+            1.118,
+            -86.535
+          ],
+          "name": "Common Tree 079",
+          "collision": false,
+          "rotationYDeg": 208.3,
+          "scale": 1.373
+        },
+        {
+          "position": [
+            10.756,
+            0.955,
+            -84.905
+          ],
+          "name": "Common Tree 080",
+          "collision": false,
+          "rotationYDeg": 196.5,
+          "scale": 1.207
+        },
+        {
+          "position": [
+            -0.158,
+            0.807,
+            -86.695
+          ],
+          "name": "Common Tree 081",
+          "collision": false,
+          "rotationYDeg": 207,
+          "scale": 1.051
+        },
+        {
+          "position": [
+            -11.126,
+            0.875,
+            -87.052
+          ],
+          "name": "Common Tree 082",
+          "collision": false,
+          "rotationYDeg": 50.5,
+          "scale": 1.229
+        },
+        {
+          "position": [
+            -20.556,
+            0.98,
+            -83.316
+          ],
+          "name": "Common Tree 083",
+          "collision": false,
+          "rotationYDeg": 82.9,
+          "scale": 0.966
+        },
+        {
+          "position": [
+            -44.398,
+            2.664,
+            -114.89
+          ],
+          "name": "Common Tree 084",
+          "collision": false,
+          "rotationYDeg": 167.3,
+          "scale": 1.428
+        },
+        {
+          "position": [
+            -30.02,
+            1.093,
+            -81.747
+          ],
+          "name": "Common Tree 085",
+          "collision": false,
+          "rotationYDeg": 44,
+          "scale": 1.434
+        },
+        {
+          "position": [
+            -58.614,
+            2.194,
+            -111.752
+          ],
+          "name": "Common Tree 086",
+          "collision": false,
+          "rotationYDeg": 273.1,
+          "scale": 1.113
+        },
+        {
+          "position": [
+            -39.549,
+            1.119,
+            -77.265
+          ],
+          "name": "Common Tree 087",
+          "collision": false,
+          "rotationYDeg": 288.3,
+          "scale": 1.441
+        },
+        {
+          "position": [
+            -70.531,
+            1.516,
+            -105.648
+          ],
+          "name": "Common Tree 088",
+          "collision": false,
+          "rotationYDeg": 173.6,
+          "scale": 1.428
+        },
+        {
+          "position": [
+            -45.699,
+            1.023,
+            -66.411
+          ],
+          "name": "Common Tree 089",
+          "collision": false,
+          "rotationYDeg": 184,
+          "scale": 1.351
+        },
+        {
+          "position": [
+            -83.9,
+            0.983,
+            -97.368
+          ],
+          "name": "Common Tree 090",
+          "collision": false,
+          "rotationYDeg": 246.3,
+          "scale": 1.331
+        },
+        {
+          "position": [
+            -54.472,
+            0.946,
+            -63.379
+          ],
+          "name": "Common Tree 091",
+          "collision": false,
+          "rotationYDeg": 116.3,
+          "scale": 1.447
+        },
+        {
+          "position": [
+            -92.465,
+            0.632,
+            -81.557
+          ],
+          "name": "Common Tree 092",
+          "collision": false,
+          "rotationYDeg": 128.7,
+          "scale": 0.941
+        },
+        {
+          "position": [
+            -57.435,
+            0.867,
+            -56.966
+          ],
+          "name": "Common Tree 093",
+          "collision": false,
+          "rotationYDeg": 319.2,
+          "scale": 1.323
+        },
+        {
+          "position": [
+            -103.892,
+            1.023,
+            -65.137
+          ],
+          "name": "Common Tree 094",
+          "collision": false,
+          "rotationYDeg": 344.4,
+          "scale": 1.34
+        },
+        {
+          "position": [
+            -23.223,
+            0.784,
+            0.619
+          ],
+          "name": "Common Tree 095",
+          "collision": false,
+          "rotationYDeg": 163.4,
+          "scale": 1.415
+        },
+        {
+          "position": [
+            18.087,
+            1.828,
+            -70.179
+          ],
+          "name": "Common Tree 096",
+          "collision": false,
+          "rotationYDeg": 97.4,
+          "scale": 1.085
+        },
+        {
+          "position": [
+            -2.02,
+            3.751,
+            48.599
+          ],
+          "name": "Common Tree 097",
+          "collision": false,
+          "rotationYDeg": 99,
+          "scale": 1.021
+        },
+        {
+          "position": [
+            -10.071,
+            3.749,
+            57.606
+          ],
+          "name": "Common Tree 098",
+          "collision": false,
+          "rotationYDeg": 276.5,
+          "scale": 0.964
+        },
+        {
+          "position": [
+            -104.744,
+            5.703,
+            37.201
+          ],
+          "name": "Common Tree 099",
+          "collision": false,
+          "rotationYDeg": 307.5,
+          "scale": 1.369
+        },
+        {
+          "position": [
+            71.098,
+            2.637,
+            98.74
+          ],
+          "name": "Common Tree 100",
+          "collision": false,
+          "rotationYDeg": 100,
+          "scale": 1.17
+        },
+        {
+          "position": [
+            -88.186,
+            1.442,
+            -104.148
+          ],
+          "name": "Common Tree 101",
+          "collision": false,
+          "rotationYDeg": 261.2,
+          "scale": 1.443
+        },
+        {
+          "position": [
+            109.47,
+            2.91,
+            108.987
+          ],
+          "name": "Common Tree 102",
+          "collision": false,
+          "rotationYDeg": 54.9,
+          "scale": 0.903
+        },
+        {
+          "position": [
+            -52.993,
+            0.881,
+            -5.529
+          ],
+          "name": "Common Tree 103",
+          "collision": false,
+          "rotationYDeg": 150.7,
+          "scale": 1.278
+        },
+        {
+          "position": [
+            -115.519,
+            3.87,
+            -17.618
+          ],
+          "name": "Common Tree 104",
+          "collision": false,
+          "rotationYDeg": 254.3,
+          "scale": 1.229
+        },
+        {
+          "position": [
+            113.15,
+            3.204,
+            -4.213
+          ],
+          "name": "Common Tree 105",
+          "collision": false,
+          "rotationYDeg": 59.9,
+          "scale": 1.341
+        },
+        {
+          "position": [
+            51.4,
+            2.733,
+            96.017
+          ],
+          "name": "Common Tree 106",
+          "collision": false,
+          "rotationYDeg": 130.1,
+          "scale": 1.303
+        },
+        {
+          "position": [
+            117.427,
+            0.83,
+            -57.078
+          ],
+          "name": "Common Tree 107",
+          "collision": false,
+          "rotationYDeg": 124.5,
+          "scale": 1.089
+        },
+        {
+          "position": [
+            112.663,
+            1.025,
+            -102.484
+          ],
+          "name": "Common Tree 108",
+          "collision": false,
+          "rotationYDeg": 194.4,
+          "scale": 0.922
+        },
+        {
+          "position": [
+            -46.915,
+            0.851,
+            8.292
+          ],
+          "name": "Common Tree 109",
+          "collision": false,
+          "rotationYDeg": 11.7,
+          "scale": 1.119
+        },
+        {
+          "position": [
+            82.057,
+            1.834,
+            50.235
+          ],
+          "name": "Common Tree 110",
+          "collision": false,
+          "rotationYDeg": 356.2,
+          "scale": 1.145
+        },
+        {
+          "position": [
+            -97.757,
+            1.942,
+            -38.14
+          ],
+          "name": "Common Tree 111",
+          "collision": false,
+          "rotationYDeg": 213.7,
+          "scale": 1.379
+        },
+        {
+          "position": [
+            116.675,
+            3.514,
+            80.217
+          ],
+          "name": "Common Tree 112",
+          "collision": false,
+          "rotationYDeg": 313.1,
+          "scale": 1.39
+        },
+        {
+          "position": [
+            -22.486,
+            1.024,
+            -51.964
+          ],
+          "name": "Common Tree 113",
+          "collision": false,
+          "rotationYDeg": 215.9,
+          "scale": 0.931
+        },
+        {
+          "position": [
+            -17.223,
+            0.926,
+            -77.57
+          ],
+          "name": "Common Tree 114",
+          "collision": false,
+          "rotationYDeg": 263.2,
+          "scale": 1.35
+        },
+        {
+          "position": [
+            -78.978,
+            1.922,
+            -109.277
+          ],
+          "name": "Common Tree 115",
+          "collision": false,
+          "rotationYDeg": 77.4,
+          "scale": 1.199
+        }
+      ]
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": [
+        {
+          "position": [
+            -86.987,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -85.938,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -84.888,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -83.838,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -82.787,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -81.737,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -80.688,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -79.638,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -78.588,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -77.537,
+            1.317,
+            -22
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -86.463,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -85.412,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -84.362,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -83.313,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -82.263,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -81.213,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -80.162,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -79.112,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -78.063,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -77.013,
+            1.317,
+            -21.475
+          ],
+          "name": "Start Finish",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            0.525,
+            0.018,
+            0.525
+          ]
+        },
+        {
+          "position": [
+            -71.47,
+            1.821,
+            53.92
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 21.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -70.771,
+            1.863,
+            55.658
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 22.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -70.041,
+            1.907,
+            57.358
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 24,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -69.276,
+            1.951,
+            59.017
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 25.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -68.475,
+            1.997,
+            60.632
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 27.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -67.635,
+            2.045,
+            62.199
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 29.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -66.754,
+            2.093,
+            63.717
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 31.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -65.83,
+            2.144,
+            65.182
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 33.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -64.861,
+            2.197,
+            66.593
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 35.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -63.844,
+            2.252,
+            67.947
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 38.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -62.777,
+            2.309,
+            69.243
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 40.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -61.657,
+            2.369,
+            70.48
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 43.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.905
+          ]
+        },
+        {
+          "position": [
+            -60.526,
+            2.429,
+            71.612
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 46.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -59.361,
+            2.49,
+            72.672
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 48.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -58.116,
+            2.554,
+            73.712
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 51.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -56.795,
+            2.621,
+            74.729
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 53.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -55.406,
+            2.689,
+            75.721
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 55.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -53.956,
+            2.76,
+            76.684
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 57.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -52.453,
+            2.831,
+            77.618
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 59,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -50.903,
+            2.904,
+            78.521
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 60.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -49.314,
+            2.977,
+            79.391
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 62,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -47.694,
+            3.05,
+            80.226
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 63.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -46.049,
+            3.122,
+            81.027
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 64.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -44.388,
+            3.194,
+            81.792
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 65.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -42.718,
+            3.265,
+            82.52
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 67,
+          "scale": [
+            0.65,
+            0.045,
+            1.862
+          ]
+        },
+        {
+          "position": [
+            -41.07,
+            3.335,
+            83.198
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 68.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -39.413,
+            3.404,
+            83.825
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 70.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -37.712,
+            3.475,
+            84.415
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 71.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -35.971,
+            3.545,
+            84.967
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 73.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -34.196,
+            3.615,
+            85.482
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 74.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -32.391,
+            3.686,
+            85.962
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 75.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -30.561,
+            3.756,
+            86.406
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 77,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -28.709,
+            3.826,
+            86.815
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 78.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -26.841,
+            3.896,
+            87.19
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 79.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -24.961,
+            3.965,
+            87.533
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 80.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -23.074,
+            4.033,
+            87.844
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 81.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -21.183,
+            4.101,
+            88.124
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 82,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -19.294,
+            4.167,
+            88.374
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 82.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.938
+          ]
+        },
+        {
+          "position": [
+            -17.421,
+            4.233,
+            88.593
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 83.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -15.541,
+            4.299,
+            88.778
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 84.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -13.641,
+            4.366,
+            88.93
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 86,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -11.727,
+            4.433,
+            89.048
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 87,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -9.801,
+            4.5,
+            89.132
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 88,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -7.87,
+            4.566,
+            89.183
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 89,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -5.938,
+            4.631,
+            89.2
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 90,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -4.008,
+            4.695,
+            89.183
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 91,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -2.087,
+            4.757,
+            89.132
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 92,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            -0.178,
+            4.816,
+            89.048
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 93,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            1.714,
+            4.873,
+            88.93
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 94.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            3.584,
+            4.926,
+            88.779
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 95.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            5.428,
+            4.976,
+            88.594
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 96.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.96
+          ]
+        },
+        {
+          "position": [
+            29.582,
+            5.406,
+            82.552
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 114.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            31.224,
+            5.413,
+            81.772
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 116.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            32.849,
+            5.417,
+            80.944
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 117.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            34.447,
+            5.417,
+            80.07
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 119.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            36.011,
+            5.412,
+            79.155
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 121.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            37.533,
+            5.405,
+            78.2
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 123,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            39.006,
+            5.394,
+            77.208
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 124.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            40.422,
+            5.381,
+            76.184
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 126.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            41.773,
+            5.366,
+            75.13
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 129,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            43.051,
+            5.349,
+            74.051
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 131.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            44.251,
+            5.33,
+            72.951
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 133.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            45.365,
+            5.31,
+            71.835
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 136.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.88
+          ]
+        },
+        {
+          "position": [
+            46.444,
+            5.288,
+            70.642
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 139.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            47.55,
+            5.261,
+            69.287
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 142.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            48.628,
+            5.231,
+            67.829
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 144.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            49.661,
+            5.198,
+            66.295
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 147.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            50.633,
+            5.163,
+            64.709
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 149.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            51.529,
+            5.125,
+            63.096
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 152.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            52.336,
+            5.086,
+            61.485
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 154.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            53.039,
+            5.045,
+            59.902
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 157.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            53.626,
+            5.004,
+            58.378
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 160.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            54.088,
+            4.962,
+            56.947
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 163.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            54.417,
+            4.92,
+            55.648
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 167.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.913
+          ]
+        },
+        {
+          "position": [
+            54.627,
+            4.875,
+            54.39
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 173.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            54.709,
+            4.824,
+            53.082
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 179.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            54.656,
+            4.771,
+            51.797
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -174.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            54.472,
+            4.717,
+            50.51
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -169.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            54.16,
+            4.662,
+            49.201
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -164.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            53.721,
+            4.606,
+            47.859
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -159.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            53.157,
+            4.549,
+            46.478
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -155.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            52.473,
+            4.49,
+            45.057
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -152.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            51.678,
+            4.43,
+            43.599
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -150.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.796
+          ]
+        },
+        {
+          "position": [
+            50.954,
+            4.372,
+            42.412
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -145.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            50.165,
+            4.314,
+            41.397
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -139.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            49.112,
+            4.255,
+            40.258
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -135.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            47.84,
+            4.193,
+            39.034
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -132.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            46.4,
+            4.131,
+            37.748
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -131.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            44.843,
+            4.069,
+            36.408
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -130.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            43.218,
+            4.007,
+            35.013
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -130.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            41.572,
+            3.945,
+            33.553
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -132.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            39.945,
+            3.885,
+            32.004
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -135,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            38.38,
+            3.828,
+            30.33
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -139.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.94
+          ]
+        },
+        {
+          "position": [
+            45.758,
+            3.77,
+            21.799
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -141.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            44.583,
+            3.71,
+            20.287
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -142.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            43.478,
+            3.651,
+            18.821
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -143.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            42.47,
+            3.594,
+            17.408
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -145.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            41.581,
+            3.538,
+            16.058
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -148,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            40.834,
+            3.483,
+            14.786
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -151.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            40.246,
+            3.429,
+            13.61
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -155.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            39.825,
+            3.376,
+            12.55
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -161.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            39.567,
+            3.325,
+            11.625
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -168,
+          "scale": [
+            0.65,
+            0.045,
+            1.756
+          ]
+        },
+        {
+          "position": [
+            39.434,
+            3.272,
+            10.676
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -175.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            39.411,
+            3.219,
+            9.548
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 177.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            39.52,
+            3.168,
+            8.356
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 171.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            39.768,
+            3.118,
+            7.105
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 166.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            40.154,
+            3.07,
+            5.808
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 160.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            40.68,
+            3.022,
+            4.482
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 156,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            41.339,
+            2.974,
+            3.146
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 151.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            42.125,
+            2.925,
+            1.816
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 147.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.784
+          ]
+        },
+        {
+          "position": [
+            42.887,
+            2.88,
+            0.714
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 142.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            43.666,
+            2.84,
+            -0.229
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 138.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            44.613,
+            2.8,
+            -1.225
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 134.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            45.712,
+            2.76,
+            -2.26
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 132,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            46.945,
+            2.72,
+            -3.324
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 129.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            48.292,
+            2.68,
+            -4.409
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 128.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            49.733,
+            2.64,
+            -5.512
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 126.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            51.249,
+            2.6,
+            -6.629
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 126,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            52.82,
+            2.56,
+            -7.762
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 125.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            54.427,
+            2.52,
+            -8.911
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 125.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.807
+          ]
+        },
+        {
+          "position": [
+            49.646,
+            2.482,
+            -19.121
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 123.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            51.439,
+            2.446,
+            -20.259
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 121,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            53.244,
+            2.409,
+            -21.3
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 119.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            55.043,
+            2.373,
+            -22.273
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 117.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            56.816,
+            2.336,
+            -23.2
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 117.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            58.541,
+            2.3,
+            -24.099
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 117.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            60.198,
+            2.264,
+            -24.987
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 118.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            61.764,
+            2.227,
+            -25.874
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 120.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            63.216,
+            2.191,
+            -26.769
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 123,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            64.532,
+            2.155,
+            -27.675
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 126.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            65.694,
+            2.118,
+            -28.594
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 130.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.879
+          ]
+        },
+        {
+          "position": [
+            66.802,
+            2.082,
+            -29.619
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 134.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            67.961,
+            2.045,
+            -30.798
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 136.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            69.091,
+            2.007,
+            -32.044
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 138.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            70.186,
+            1.969,
+            -33.35
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 141.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            71.245,
+            1.931,
+            -34.709
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 143.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            72.261,
+            1.894,
+            -36.114
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 145.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            73.233,
+            1.857,
+            -37.557
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 147,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            74.155,
+            1.82,
+            -39.03
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 148.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            75.026,
+            1.784,
+            -40.527
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 150.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            75.842,
+            1.75,
+            -42.039
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 152.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            76.6,
+            1.716,
+            -43.558
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 154.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.854
+          ]
+        },
+        {
+          "position": [
+            77.299,
+            1.684,
+            -45.078
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 156.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            77.955,
+            1.653,
+            -46.648
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 158.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            78.572,
+            1.623,
+            -48.27
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 160.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            79.142,
+            1.594,
+            -49.929
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 162,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            79.66,
+            1.565,
+            -51.613
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 163.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            80.121,
+            1.538,
+            -53.307
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 165.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            80.521,
+            1.511,
+            -54.996
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 167.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            80.855,
+            1.485,
+            -56.667
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 169.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            81.118,
+            1.459,
+            -58.304
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 172,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            81.309,
+            1.435,
+            -59.892
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": 174.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            81.423,
+            1.411,
+            -61.415
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": 177.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.837
+          ]
+        },
+        {
+          "position": [
+            77.686,
+            1.193,
+            -78.177
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -151.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            76.866,
+            1.179,
+            -79.612
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -149,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            75.968,
+            1.166,
+            -81.035
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -146.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            74.992,
+            1.154,
+            -82.437
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -143.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            73.941,
+            1.143,
+            -83.808
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -141.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            72.815,
+            1.133,
+            -85.139
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -138.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            71.616,
+            1.124,
+            -86.422
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -135.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            70.345,
+            1.116,
+            -87.65
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -132.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            69.004,
+            1.109,
+            -88.813
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -129.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            67.593,
+            1.103,
+            -89.905
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -126.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.945
+          ]
+        },
+        {
+          "position": [
+            66.233,
+            1.098,
+            -90.842
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -123,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            64.895,
+            1.095,
+            -91.669
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -120.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            63.455,
+            1.093,
+            -92.476
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -118.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            61.923,
+            1.093,
+            -93.26
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -116.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            60.31,
+            1.093,
+            -94.016
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -114.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            58.626,
+            1.093,
+            -94.742
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -112.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            56.882,
+            1.094,
+            -95.436
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -110.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            55.087,
+            1.096,
+            -96.096
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -109.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            53.252,
+            1.097,
+            -96.721
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -108.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            51.387,
+            1.098,
+            -97.309
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -106.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            49.501,
+            1.099,
+            -97.86
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -105.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            47.604,
+            1.1,
+            -98.374
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -104.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.941
+          ]
+        },
+        {
+          "position": [
+            45.864,
+            1.1,
+            -98.807
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -103.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            44.252,
+            1.1,
+            -99.166
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -101.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            42.597,
+            1.1,
+            -99.493
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -100.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            40.904,
+            1.1,
+            -99.789
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -99.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            39.178,
+            1.1,
+            -100.056
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -98.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            37.421,
+            1.1,
+            -100.295
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -97.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            35.637,
+            1.1,
+            -100.508
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -96.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            33.831,
+            1.1,
+            -100.696
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -95.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            32.006,
+            1.1,
+            -100.862
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -94.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            30.166,
+            1.1,
+            -101.007
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -94.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            28.314,
+            1.1,
+            -101.133
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -93.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            26.454,
+            1.1,
+            -101.242
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -93.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            24.589,
+            1.1,
+            -101.336
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -92.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            22.723,
+            1.1,
+            -101.418
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -92.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.832
+          ]
+        },
+        {
+          "position": [
+            20.873,
+            1.1,
+            -101.486
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -91.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            19.022,
+            1.1,
+            -101.535
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -91.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            17.154,
+            1.1,
+            -101.565
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -90.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            15.273,
+            1.1,
+            -101.575
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -90,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            13.383,
+            1.1,
+            -101.565
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -89.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            11.487,
+            1.1,
+            -101.535
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -88.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            9.589,
+            1.1,
+            -101.486
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -88.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            7.692,
+            1.1,
+            -101.417
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -87.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            5.8,
+            1.1,
+            -101.328
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -87,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            3.916,
+            1.1,
+            -101.219
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -86.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            2.043,
+            1.1,
+            -101.09
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -85.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            0.187,
+            1.1,
+            -100.942
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -85.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            -1.651,
+            1.1,
+            -100.774
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -84.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            -3.466,
+            1.1,
+            -100.587
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -83.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.891
+          ]
+        },
+        {
+          "position": [
+            -29.101,
+            1.102,
+            -95.443
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -70.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -30.82,
+            1.107,
+            -94.822
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -69.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -32.545,
+            1.113,
+            -94.153
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -68.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -34.273,
+            1.12,
+            -93.441
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -67,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -36,
+            1.127,
+            -92.688
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -65.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -37.722,
+            1.135,
+            -91.898
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -64.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -39.436,
+            1.144,
+            -91.077
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -63.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -41.139,
+            1.153,
+            -90.228
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -63.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -42.827,
+            1.161,
+            -89.354
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -62.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -44.498,
+            1.17,
+            -88.46
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -61.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -46.148,
+            1.179,
+            -87.55
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -60.8,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -47.774,
+            1.188,
+            -86.628
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -60.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -49.373,
+            1.196,
+            -85.698
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -59.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.922
+          ]
+        },
+        {
+          "position": [
+            -51.025,
+            1.204,
+            -84.715
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -59.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -52.745,
+            1.213,
+            -83.679
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -58.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -54.444,
+            1.223,
+            -82.634
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -58.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -56.115,
+            1.232,
+            -81.581
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -57.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -57.748,
+            1.242,
+            -80.519
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -56.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -59.335,
+            1.252,
+            -79.446
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -55.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -60.867,
+            1.261,
+            -78.363
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -54.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -62.333,
+            1.27,
+            -77.271
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -52.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -63.725,
+            1.278,
+            -76.169
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -50.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -65.034,
+            1.286,
+            -75.061
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -48.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -66.251,
+            1.292,
+            -73.947
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -46.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -67.368,
+            1.298,
+            -72.831
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -43.7,
+          "scale": [
+            0.65,
+            0.045,
+            1.927
+          ]
+        },
+        {
+          "position": [
+            -68.499,
+            1.302,
+            -71.591
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -41.6,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -69.656,
+            1.305,
+            -70.255
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -40.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -70.722,
+            1.307,
+            -68.947
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -38.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -71.7,
+            1.307,
+            -67.655
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -35.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -72.591,
+            1.307,
+            -66.367
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -33.3,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -73.401,
+            1.306,
+            -65.066
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -30.4,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -74.134,
+            1.305,
+            -63.735
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -27.2,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -74.795,
+            1.304,
+            -62.355
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -23.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -75.388,
+            1.302,
+            -60.904
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -20.5,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -75.914,
+            1.301,
+            -59.36
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "red-material",
+          "rotationYDeg": -17.1,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        },
+        {
+          "position": [
+            -76.373,
+            1.3,
+            -57.7
+          ],
+          "name": "Apex Kerb",
+          "collision": false,
+          "materialSlot": "white-material",
+          "rotationYDeg": -13.9,
+          "scale": [
+            0.65,
+            0.045,
+            1.835
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "mercedes-sls",
+      "placements": []
+    },
+    {
+      "assetId": "gaz-52-base",
+      "placements": []
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "backgroundColor": "#a9c9df",
+    "ambientColor": "#cfdeed",
+    "ambientIntensity": 0.55,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1.4,
+    "turbidity": 3,
+    "mie": 0.003,
+    "mieDirectionalG": 0.8
+  },
+  "cloudLayer": {
+    "coverage": 0.22,
+    "density": 0.36,
+    "softness": 0.5,
+    "scale": 2,
+    "speed": 0.1
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -55,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true
+    }
+  ],
+  "targetPoints": [],
+  "splines": [
+    {
+      "id": "spline-1",
+      "position": [
+        0,
+        0.15,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": true,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 32,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              -82,
+              1.2,
+              -58
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              -82,
+              1.2,
+              -30
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              -82,
+              1.2,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              -82,
+              1.3,
+              30
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              -77,
+              1.7,
+              55
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-6",
+            "position": [
+              -65,
+              2.3,
+              75
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-7",
+            "position": [
+              -44,
+              3.2,
+              88
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-8",
+            "position": [
+              -19,
+              4.1,
+              94
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-9",
+            "position": [
+              7,
+              4.9,
+              94
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-10",
+            "position": [
+              31,
+              5.3,
+              88
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-11",
+            "position": [
+              50,
+              5.2,
+              75
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-12",
+            "position": [
+              60,
+              4.8,
+              56
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-13",
+            "position": [
+              56,
+              4.3,
+              40
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-14",
+            "position": [
+              42,
+              3.7,
+              26
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-15",
+            "position": [
+              34,
+              3.2,
+              12
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-16",
+            "position": [
+              38,
+              2.8,
+              -2
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-17",
+            "position": [
+              52,
+              2.4,
+              -14
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-18",
+            "position": [
+              70,
+              2,
+              -25
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-19",
+            "position": [
+              82,
+              1.6,
+              -42
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-20",
+            "position": [
+              87,
+              1.3,
+              -62
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-21",
+            "position": [
+              83,
+              1.1,
+              -80
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-22",
+            "position": [
+              70,
+              1,
+              -95
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-23",
+            "position": [
+              48,
+              1,
+              -104
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-24",
+            "position": [
+              22,
+              1,
+              -107
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-25",
+            "position": [
+              -5,
+              1,
+              -106
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-26",
+            "position": [
+              -30,
+              1,
+              -101
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-27",
+            "position": [
+              -53,
+              1.1,
+              -90
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-28",
+            "position": [
+              -72,
+              1.2,
+              -76
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Orman Pisti AI Güzergahı",
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "runtime": {
+        "tags": [
+          "vehicle-route"
+        ]
+      },
+      "debug": {
+        "visible": true,
+        "resolution": 32
+      }
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "assets/starter-content/Levels/Terrain.landscapes/landscape-1.terrain.json",
+      "name": "Landscape",
+      "locked": true,
+      "collision": true
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
+      "position": [
+        -79.58,
+        1.2,
+        -26.92
+      ],
+      "rotationYDeg": 0
+    }
+  ]
+}

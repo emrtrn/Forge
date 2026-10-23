@@ -1,3 +1,4 @@
+import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 /**
  * Engine scene/adapter checks. Bundled with esbuild and run on node by
  * `tools/run-engine-tests.mjs` (npm run test:engine). No test framework; uses
@@ -94,6 +95,7 @@ import {
   SCRIPT_REFERENCES_COMPONENT,
   AI_CONTROLLER_COMPONENT,
   SMART_OBJECT_COMPONENT,
+  VEHICLE_COMPONENT,
 } from "../engine/scene/components";
 import {
   advanceSplinePathFollower,
@@ -247,6 +249,23 @@ import {
   normalizeLodBias,
 } from "../engine/render-three/distanceLod";
 import { rotatedBoxAabb, rotatedBoxFootprintXZ } from "../engine/physics/rotatedBox";
+import { FixedStepClock, lerpPosition, nlerpQuaternion } from "../engine/physics/fixedStep";
+import { computeVehicleDrive } from "../engine/physics/vehicle/vehicleDrive";
+import {
+  DEFAULT_VEHICLE_ROUTE_DRIVER,
+  startVehicleRoute,
+  stepVehicleRouteDriver,
+  type VehicleRoute,
+} from "../engine/physics/vehicle/vehicleRouteDriver";
+import {
+  createReferenceCarDefinition,
+  NEUTRAL_VEHICLE_INPUT,
+  resolveVehicleDefinition,
+  vehicleDefinitionFromComponent,
+  type VehicleInput,
+  type VehicleMotionState,
+  type VehicleState,
+} from "../engine/physics/vehicle/vehicleTypes";
 import {
   initialElapsed,
   oneWaySeconds,
@@ -543,7 +562,6 @@ import {
   formatMemory,
   formatPerfBudget,
   formatFrameRegions,
-  formatUiDebug,
   formatVfxDebug,
   groupThousands,
 } from "../src/scene/debugStats";
@@ -672,7 +690,6 @@ import {
   validateSaveLandscapePayload,
   validatePostProcess,
   validateSaveActorPayload,
-  validateSaveUiPayload,
   validateNewBehaviorPayload,
   resolveBehaviorStub,
   validateSaveCollisionPayload,
@@ -761,10 +778,14 @@ import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { defaultForgeMaterialDef, normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
   normalizeAssetSkeleton,
-  resolveBlendSpaceWeights,
+  resolveBlendSpaceWeights as resolveSkeletonBlendSpaceWeights,
   skeletonSidecarPath,
-  type AssetSkeletonBlendSpaceDef,
 } from "../src/scene/assetSkeletonLoader";
+import {
+  resolveBlendSpaceWeights,
+  type AssetSkeletonBlendSpaceDef,
+} from "../engine/animation/blendSpace";
+import { resolveBlendSpaceWeights as resolveEditorBlendSpaceWeights } from "../src/editor/assetSkeletonStore";
 import {
   applyMaterialSlotOverrides,
   collectAssetMaterialElements,
@@ -794,6 +815,7 @@ import {
   type AssetManifest,
 } from "../engine/assets/manifest";
 import type {
+  LayoutActorInstance,
   LayoutCharacter,
   LayoutLightActor,
   LayoutPlacement,
@@ -864,6 +886,7 @@ import {
   blockingVolumeCollisionDef,
   createBlockingVolumeObject,
   createRuntimeBlockingVolumeObject,
+  disposeBlockingVolumeObject,
   resolveBlockingVolume,
   uniqueBlockingVolumeId,
   uniqueBlockingVolumeName,
@@ -978,59 +1001,20 @@ import {
   VectorKeyframeTrack,
 } from "three";
 import type { AnimationMixer } from "three";
-import {
-  createUiNode,
-  defaultUiWidgetDef,
-  findUiNode,
-  findUiNodeParent,
-  normalizeUiWidgetDef,
-  readUiAction,
-  readUiBindingPath,
-  readUiTextKey,
-  UI_WIDGET_KINDS,
-  type UiNode,
-} from "../engine/ui/uiWidget";
-import {
-  buildUiRenderTree,
-  buildUiRenderNode,
-  resolveInlineStyle,
-} from "../engine/ui/uiRenderer";
-import { UiViewModelStore } from "../engine/ui/uiViewModel";
-import { collectUiBindings, collectUiLocBindings, resolveUiBoundValue } from "../engine/ui/uiBinding";
-import { normalizeUiThemeDef, themeToCssVariables, tokenToCssVar } from "../engine/ui/uiTheme";
-import {
-  applyLocParams,
-  defaultUiLocaleTable,
-  LocaleRegistry,
-  normalizeUiLocaleTable,
-} from "../engine/ui/uiLocale";
-import {
-  normalizeUiTransition,
-  transitionClasses,
-  UI_TRANSITION_BASE_CLASS,
-} from "../engine/ui/uiTransition";
-import {
-  auditUiA11y,
-  collectFocusables,
-  isUiNodeFocusable,
-  nextFocusIndex,
-  normalizeUiA11y,
-  resolveUiA11yAttrs,
-} from "../engine/ui/uiA11y";
-import {
-  ndcToScreen,
-  normalizeWorldWidget,
-  normalizeWorldWidgets,
-  resolveWorldWidgetVisibility,
-} from "../engine/ui/uiWorldWidget";
+import { normalizeUiWidgetDef, readUiAction, type UiNode } from "../engine/ui/uiWidget";
+import { collectUiBindings } from "../engine/ui/uiBinding";
+import { defaultUiLocaleTable, LocaleRegistry, normalizeUiLocaleTable } from "../engine/ui/uiLocale";
 import { getGameEditorCatalog, setGameEditorCatalog } from "../src/editor/gameEditorRegistry";
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 import { registerBuildManifestParityTests } from "../tests/engine/buildManifestParity.test";
+import { registerUiFrameworkTests } from "../tests/engine/uiFramework.test";
+import { registerContentLoadingTests } from "../tests/engine/contentLoading.test";
 import { registerLevelRuntimeTests } from "../tests/engine/levelRuntime.test";
 import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegistry.test";
 import { registerDroppedFieldTests } from "../tests/engine/droppedFields.test";
 import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCoverage.test";
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
+import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerRuntimeParityLevelTests } from "../tests/engine/runtimeParityLevel.test";
 import { registerForgeGameModuleTests } from "../tests/engine/forgeGameModule.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
@@ -1044,6 +1028,15 @@ import { registerRuntimeUiModuleTests } from "../tests/engine/runtimeUiModule.te
 import { registerSkeletalAnimationModuleTests } from "../tests/engine/skeletalAnimationModule.test";
 import { registerCharacterMovementModuleTests } from "../tests/engine/characterMovementModule.test";
 import { registerRtsCameraGameModeTests } from "../tests/engine/rtsCameraGameMode.test";
+import { registerVehicleRuntimeTests } from "../tests/engine/vehicleRuntime.test";
+import { registerWheelSurfaceFxTests } from "../tests/engine/wheelSurfaceFx.test";
+import { registerVehicleEntryTests } from "../tests/engine/vehicleEntry.test";
+import { registerVehicleAiTests } from "../tests/engine/vehicleAi.test";
+import { registerVehicleDrivetrainTests } from "../tests/engine/vehicleDrivetrain.test";
+import { registerVehicleAssetTests } from "../tests/engine/vehicleAssets.test";
+import { registerVehicleEditorFieldsTests } from "../tests/engine/vehicleEditorFields.test";
+import { resolveActorVehicleAssets } from "../src/scene/vehicleAssetLoader";
+import { normalizeVehicleAsset } from "../engine/physics/vehicle/vehicleTypes";
 import { registerPerfReadoutTests } from "../tests/engine/perfReadout.test";
 import { registerFrameRegionTests } from "../tests/engine/frameRegions.test";
 import { registerFrameCaptureTests } from "../tests/engine/frameCapture.test";
@@ -1051,6 +1044,17 @@ import { registerTimeControlTests } from "../tests/engine/timeControl.test";
 import { registerGpuSweepTests } from "../tests/engine/gpuSweep.test";
 import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.test";
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
+import { registerStaticQueriesTests } from "../tests/engine/staticQueries.test";
+import { registerTerrainOrphanTests } from "../tests/engine/terrainOrphans.test";
+import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
+import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
+import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
+import { registerDeformationPersistenceTests } from "../tests/engine/deformationPersistence.test";
+import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
+import { registerTerrainEditTests } from "../tests/engine/terrainEdit.test";
+import { registerTerrainImportTests } from "../tests/engine/terrainImport.test";
+import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.test";
+import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
 
 /**
  * The three entry points every check in this suite goes through.
@@ -1134,11 +1138,13 @@ void checkSlow;
 void checkSlowAsync;
 
 registerBuildManifestParityTests(check);
+await registerContentLoadingTests(check, checkAsync);
 await registerLevelRuntimeTests(check, checkAsync);
 await registerCapabilityRegistryTests(check, checkAsync);
 registerDroppedFieldTests(check);
 registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
+await registerEditorSaveCoordinatorTests(checkAsync);
 registerRuntimeParityLevelTests(check);
 await registerForgeGameModuleTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
@@ -1152,6 +1158,13 @@ await registerRuntimeUiModuleTests(check, checkAsync);
 await registerSkeletalAnimationModuleTests(check, checkAsync);
 registerCharacterMovementModuleTests(check);
 registerRtsCameraGameModeTests(check);
+registerVehicleRuntimeTests(check);
+await registerWheelSurfaceFxTests(check, checkAsync);
+registerVehicleEntryTests(check);
+registerVehicleAiTests(check);
+registerVehicleDrivetrainTests(check);
+await registerVehicleAssetTests(check, checkAsync);
+registerVehicleEditorFieldsTests(check);
 registerPerfReadoutTests(check);
 registerFrameRegionTests(check);
 registerFrameCaptureTests(check);
@@ -1159,6 +1172,20 @@ registerTimeControlTests(check);
 registerGpuSweepTests(check);
 registerGpuSweepSessionTests(check);
 registerPerfWitnessTests(check);
+registerTerrainTests(check);
+registerStaticQueriesTests(check);
+registerTerrainOrphanTests(check);
+registerSurfaceResponseTests(check);
+registerDeformationFieldTests(check);
+registerDeformationPersistenceTests(check);
+registerTerrainLodTests(check);
+registerTerrainEditTests(check);
+registerTerrainImportTests(check);
+registerStreamingPolicyTests(check);
+await registerWorldStreamingTests(check, checkAsync);
+registerTerrainDocumentTests(check);
+await registerTerrainDocumentAsyncTests(checkAsync);
+await registerTerrainRapierTests(checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];
@@ -2603,6 +2630,19 @@ check("action map resolves analog axes with deadzone scale invert and delta inpu
   actions.advance();
   assert.equal(actions.axis("look-x"), 0);
   assert.equal(actions.axis("look-y"), -0.5);
+});
+
+check("action map rescales a stick past its deadzone so the value starts from zero", () => {
+  const actions = new ActionMap({}, { StickX: { axis: "move-x", deadzone: 0.2, rescaleDeadzone: true } });
+  const at = (raw: number): number => {
+    actions.handleAxis("StickX", raw);
+    actions.advance();
+    return actions.axis("move-x");
+  };
+  assert.equal(at(0.2), 0);
+  assert.ok(Math.abs(at(0.3) - 0.125) < 1e-12);
+  assert.ok(Math.abs(at(-0.6) + 0.5) < 1e-12);
+  assert.equal(at(1), 1);
 });
 
 // 6.1.3 A layout placement/character carrying a behavior derives a readable
@@ -4277,6 +4317,7 @@ interface AudioPlaybackHandleStub {
   stop(fadeSeconds?: number): void;
   setVolume(value: number, fadeSeconds?: number): void;
   setPitch(value: number): void;
+  setPosition(position: readonly [number, number, number]): void;
   setPaused(paused: boolean): void;
 }
 
@@ -4292,6 +4333,7 @@ const fakeAudioHandle = (): { handle: AudioPlaybackHandleStub; finish: () => voi
     },
     setVolume() {},
     setPitch() {},
+    setPosition() {},
     setPaused() {},
   };
   return { handle: stub, finish: () => stub.stop() };
@@ -4553,6 +4595,7 @@ const fakeMusicHandle = (clipId: string): MusicHandleStub => {
       stub.gain = value;
     },
     setPitch() {},
+    setPosition() {},
     setPaused(paused: boolean) {
       stub.paused = paused;
     },
@@ -6375,11 +6418,13 @@ await checkAsync("rapier active area suspends distant dynamics and resumes them 
     await app.init();
     for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
     assert.equal(synced.length, 0, "distant dynamic body should not synchronize while suspended");
+    assert.equal(physics.isDynamicBodyActive("distant-crate"), false);
 
     focus = [100, 5, 0];
     for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
     const last = synced.at(-1) ?? assert.fail("resumed dynamic body should synchronize");
     assert.ok(last.position[1] < 5, `resumed body should fall, y=${last.position[1]}`);
+    assert.equal(physics.isDynamicBodyActive("distant-crate"), true);
     await app.dispose();
   } finally {
     console.warn = warn;
@@ -6698,6 +6743,759 @@ await checkAsync("rapier backend stays on placeholder when the scene has no coll
   app.update(0.016);
   assert.deepEqual(physics.contactsForEntity("decor"), []);
   await app.dispose();
+});
+
+// Vehicle plan Faz 0: the Rapier world advances in fixed slices, so the frame
+// rate never changes the simulation; the leftover only drives render blending.
+check("fixed step clock takes the same slice count at 30, 60 and 144 Hz", () => {
+  for (const hz of [30, 60, 144]) {
+    const clock = new FixedStepClock({ step: 1 / 60 });
+    let steps = 0;
+    for (let frame = 0; frame < hz; frame += 1) steps += clock.advance(1 / hz);
+    assert.ok(Math.abs(steps - 60) <= 1, `${hz} Hz took ${steps} slices for one second`);
+  }
+});
+
+check("fixed step clock snaps jittery 60 Hz frames to one slice and caps the backlog", () => {
+  const clock = new FixedStepClock({ step: 1 / 60, maxSubsteps: 4 });
+  // Real vsync jitter: frames scatter around 1/60 but average exactly to it.
+  const jitter = [-0.0007, 0.0005, 0.0002, -0.0003, 0.0006, -0.0003].map((d) => 1 / 60 + d);
+  for (let frame = 0; frame < 120; frame += 1) {
+    assert.equal(clock.advance(jitter[frame % jitter.length] ?? 0), 1, `frame ${frame}`);
+  }
+  assert.equal(clock.advance(0), 0);
+  assert.equal(clock.advance(Number.NaN), 0);
+  assert.equal(clock.advance(1), 4); // a one-second hitch simulates at most 4 slices
+  assert.equal(clock.alpha, 0); // ...and drops the rest instead of spiralling
+  assert.equal(clock.advance(1 / 120), 0);
+  assert.ok(Math.abs(clock.alpha - 0.5) < 1e-9, `alpha=${clock.alpha}`);
+  clock.reset();
+  assert.equal(clock.alpha, 0);
+});
+
+check("pose interpolation lerps position and takes the short rotation path", () => {
+  assert.deepEqual(lerpPosition([0, 0, 0], [2, 4, -6], 0.5), [1, 2, -3]);
+  const identity = { x: 0, y: 0, z: 0, w: 1 };
+  const halfTurnY = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 }; // 90° about Y
+  const mid = nlerpQuaternion(identity, halfTurnY, 0.5);
+  assert.ok(Math.abs(Math.hypot(mid.x, mid.y, mid.z, mid.w) - 1) < 1e-9);
+  assert.ok(Math.abs(2 * Math.atan2(mid.y, mid.w) - Math.PI / 4) < 1e-9, "midpoint is 45°");
+  // The same rotation with a flipped sign must not blend the long way round.
+  const negated = { x: -halfTurnY.x, y: -halfTurnY.y, z: -halfTurnY.z, w: -halfTurnY.w };
+  const short = nlerpQuaternion(identity, negated, 0.5);
+  assert.ok(Math.abs(Math.abs(2 * Math.atan2(short.y, short.w)) - Math.PI / 4) < 1e-9);
+});
+
+function fallingCrateEntity(position: Vec3 = [0, 5, 0]): Entity {
+  return {
+    id: "crate",
+    components: {
+      Transform: { position, rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: {
+        shape: "box",
+        size: [1, 1, 1],
+        isStatic: false,
+        isSensor: false,
+        simulatePhysics: true,
+      },
+    },
+  };
+}
+
+async function withQuietRapierInit(run: () => Promise<void>): Promise<void> {
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await run();
+  } finally {
+    console.warn = warn;
+  }
+}
+
+await checkAsync("rapier fixed step simulates the same fall at 30 Hz and 144 Hz", async () => {
+  await withQuietRapierInit(async () => {
+    const finalHeights: number[] = [];
+    for (const hz of [30, 144]) {
+      const physics = new PhysicsSubsystem({ backend: "rapier" });
+      physics.setGravity([0, -10, 0]);
+      let y = Number.NaN;
+      physics.setTransformSink((_id, transform) => {
+        y = transform.position[1];
+      });
+      physics.setEntities([fallingCrateEntity()]);
+      const app = new EngineApp();
+      app.registerSubsystem(physics);
+      await app.init();
+      let steps = 0;
+      for (let frame = 0; frame < hz; frame += 1) {
+        app.update(1 / hz);
+        steps += physics.lastFrameStepCount();
+      }
+      assert.equal(physics.fixedTimestep(), 1 / 60);
+      assert.ok(Math.abs(steps - 60) <= 1, `${hz} Hz simulated ${steps} slices`);
+      finalHeights.push(y);
+      await app.dispose();
+    }
+    const [at30, at144] = finalHeights;
+    // ~5 m in one second at g=10; the render pose trails the last slice by one step.
+    assert.ok(at30 !== undefined && at144 !== undefined && at30 < 1, `fell to ${at30}`);
+    assert.ok(Math.abs(at30 - at144) < 1e-3, `30 Hz y=${at30} vs 144 Hz y=${at144}`);
+  });
+});
+
+await checkAsync("rapier render pose blends between slices and a teleport skips the blend", async () => {
+  await withQuietRapierInit(async () => {
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setGravity([0, -10, 0]);
+    let rendered: TransformComponent | null = null;
+    physics.setTransformSink((_id, transform) => {
+      rendered = transform;
+    });
+    physics.setEntities([fallingCrateEntity()]);
+    const app = new EngineApp();
+    app.registerSubsystem(physics);
+    await app.init();
+    const renderedY = (): number => (rendered as TransformComponent | null)?.position[1] ?? Number.NaN;
+
+    for (let frame = 0; frame < 10; frame += 1) app.update(1 / 60);
+    const beforeLastSlice = renderedY(); // alpha 0 renders the pose one slice back
+    app.update(1 / 120);
+    assert.equal(physics.lastFrameStepCount(), 0); // half a slice: nothing simulated...
+    assert.ok(Math.abs(physics.interpolationAlpha() - 0.5) < 1e-6);
+    const halfway = renderedY(); // ...but the render pose still moves on
+    app.update(1 / 120);
+    assert.equal(physics.lastFrameStepCount(), 1);
+    const latest = renderedY();
+    assert.ok(
+      beforeLastSlice > halfway && halfway > latest,
+      `expected ${beforeLastSlice} > ${halfway} > ${latest}`,
+    );
+
+    physics.setEntityTransform("crate", {
+      position: [10, 5, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+    });
+    app.update(1 / 120);
+    const teleported = (rendered as TransformComponent | null)?.position ?? assert.fail("rendered");
+    assert.deepEqual(teleported, [10, 5, 0]);
+    await app.dispose();
+  });
+});
+
+// Vehicle plan Faz 1: ray-cast vehicle on the Rapier world.
+check("resolveVehicleDefinition fills defaults and rejects unusable numbers", () => {
+  const definition = resolveVehicleDefinition({
+    massKg: -5,
+    maxEngineForce: Number.NaN,
+    maxSteerAngleDeg: 400,
+    wheels: [{ position: [1, 0, 2], radius: 0, drive: true }],
+  });
+  assert.equal(definition.massKg, 1200);
+  assert.equal(definition.maxEngineForce, 6000);
+  assert.equal(definition.maxSteerAngleDeg, 80);
+  const wheel = definition.wheels[0] ?? assert.fail("wheel");
+  assert.deepEqual(wheel.position, [1, 0, 2]);
+  assert.equal(wheel.radius, 0.35);
+  assert.equal(wheel.drive, true);
+  assert.equal(wheel.steer, false);
+  assert.equal(wheel.brake, true);
+});
+
+check("computeVehicleDrive splits pedals across drive, brake and handbrake wheels", () => {
+  const car = createReferenceCarDefinition(); // front: steer; rear: drive + handbrake
+  const input = (patch: Partial<VehicleInput>): VehicleInput => ({ ...NEUTRAL_VEHICLE_INPUT, ...patch });
+
+  const throttle = computeVehicleDrive(car, input({ throttle: 1 }), 5, 0, 1 / 60);
+  assert.deepEqual(throttle.wheels.map((w) => w.engineForce), [0, 0, 3000, 3000]);
+  assert.ok(throttle.wheels.every((w) => w.brakeForce === 0), "no rolling resistance under throttle");
+
+  const braking = computeVehicleDrive(car, input({ brake: 1 }), 10, 0, 1 / 60);
+  assert.ok(braking.wheels.every((w) => w.engineForce === 0));
+  assert.deepEqual(braking.wheels.map((w) => w.brakeForce), [2750, 2750, 2750, 2750]);
+
+  const reversing = computeVehicleDrive(car, input({ brake: 1 }), 0.2, 0, 1 / 60);
+  assert.deepEqual(reversing.wheels.map((w) => w.engineForce), [0, 0, -1500, -1500]);
+
+  // Throttle while still rolling backwards brakes first instead of fighting the roll.
+  const recovering = computeVehicleDrive(car, input({ throttle: 1 }), -3, 0, 1 / 60);
+  assert.ok(recovering.wheels.every((w) => w.engineForce === 0));
+  assert.ok(recovering.wheels.every((w) => w.brakeForce > 0));
+
+  const handbrake = computeVehicleDrive(car, input({ handbrake: true }), 5, 0, 1 / 60);
+  const [frontLeft, , rearLeft] = handbrake.wheels;
+  assert.equal(frontLeft?.brakeForce, 75); // coasting rolling resistance only
+  assert.equal(rearLeft?.brakeForce, 75 + 2500);
+});
+
+check("computeVehicleDrive reports the driving pedal as engine load, not a braking one or a shift cut", () => {
+  const car = createReferenceCarDefinition(); // reverse threshold 0.5 m/s
+  const input = (patch: Partial<VehicleInput>): VehicleInput => ({ ...NEUTRAL_VEHICLE_INPUT, ...patch });
+  assert.equal(computeVehicleDrive(car, input({ throttle: 0.6 }), 10, 0, 1 / 60).engineLoad, 0.6);
+  assert.equal(computeVehicleDrive(car, input({ brake: 1 }), 10, 0, 1 / 60).engineLoad, 0, "braking");
+  assert.equal(computeVehicleDrive(car, input({ brake: 0.8 }), 0, 0, 1 / 60).engineLoad, 0.8, "reversing");
+  assert.equal(computeVehicleDrive(car, input({ throttle: 1 }), -5, 0, 1 / 60).engineLoad, 0, "throttle as brake");
+  assert.equal(computeVehicleDrive(car, NEUTRAL_VEHICLE_INPUT, 10, 0, 1 / 60).engineLoad, 0, "coasting");
+  const geared = resolveVehicleDefinition({ wheels: car.wheels, drivetrain: {} });
+  const midShift = { engineRpm: 3000, gear: 2, shiftTimeRemaining: 0.15 };
+  assert.equal(computeVehicleDrive(geared, input({ throttle: 1 }), 15, 0, 1 / 60, midShift).engineLoad, 0,
+    "the power cut of a gear change");
+});
+
+check("computeVehicleDrive eases steering and turns right as a negative yaw", () => {
+  const car = createReferenceCarDefinition(); // steerSpeed 3/s, full lock 35°
+  const right: VehicleInput = { ...NEUTRAL_VEHICLE_INPUT, steer: 1 };
+  const first = computeVehicleDrive(car, right, 0, 0, 0.1);
+  assert.ok(Math.abs(first.steer - 0.3) < 1e-9, `steer=${first.steer}`);
+  const [front, , rear] = first.wheels;
+  assert.ok(Math.abs((front?.steering ?? 0) - (-0.3 * 35 * Math.PI) / 180) < 1e-9);
+  assert.equal(rear?.steering, 0);
+  const full = computeVehicleDrive(car, right, 0, first.steer, 1);
+  assert.equal(full.steer, 1); // clamps at the target, no overshoot
+  const back = computeVehicleDrive(car, NEUTRAL_VEHICLE_INPUT, 0, 1, 0.1);
+  assert.ok(Math.abs(back.steer - 0.7) < 1e-9);
+});
+
+const VEHICLE_SLICE = 1 / 60;
+
+async function createVehicleTestWorld(options: { slopeDeg?: number; groundSize?: number } = {}) {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, -9.81, 0]);
+  let pose: TransformComponent | null = null;
+  physics.setTransformSink((entityId, transform) => {
+    if (entityId === "car") pose = transform;
+  });
+  const slope = options.slopeDeg ?? 0;
+  const entities: Entity[] = [
+    {
+      id: "ground",
+      components: {
+        Transform: { position: [0, -0.5, 0], rotation: [-slope, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [options.groundSize ?? 400, 1, options.groundSize ?? 400], isStatic: true, isSensor: false },
+      },
+    },
+    {
+      id: "car",
+      components: {
+        Transform: { position: [0, 1, 0], rotation: [-slope, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1.8, 0.6, 4.2],
+          isStatic: false,
+          isSensor: false,
+          simulatePhysics: true,
+        },
+      },
+    },
+  ];
+  physics.setEntities(entities);
+  await physics.init();
+  let frame = 0;
+  const tick = (seconds: number): void => {
+    const frames = Math.round(seconds / VEHICLE_SLICE);
+    for (let index = 0; index < frames; index += 1) {
+      frame += 1;
+      physics.update({ deltaSeconds: VEHICLE_SLICE, elapsedSeconds: frame * VEHICLE_SLICE, frame });
+    }
+  };
+  const position = (): Vec3 => {
+    const current = pose as TransformComponent | null;
+    return current ? [...current.position] : assert.fail("car pose not synced");
+  };
+  const drive = (patch: Partial<VehicleInput>): void =>
+    physics.setVehicleInput("car", { ...NEUTRAL_VEHICLE_INPUT, ...patch });
+  return { physics, entities, tick, position, drive };
+}
+
+await registerSurfaceResponseRapierTests(checkAsync, createVehicleTestWorld);
+
+await checkAsync("rapier vehicle only attaches to a live dynamic chassis", async () => {
+  await withQuietRapierInit(async () => {
+    const placeholder = new PhysicsSubsystem();
+    placeholder.setEntities([fallingCrateEntity()]);
+    assert.equal(placeholder.createVehicle("crate", createReferenceCarDefinition()), false);
+
+    const world = await createVehicleTestWorld();
+    assert.equal(world.physics.createVehicle("ground", createReferenceCarDefinition()), false);
+    assert.equal(world.physics.createVehicle("missing", createReferenceCarDefinition()), false);
+    assert.equal(world.physics.createVehicle("car", createReferenceCarDefinition()), true);
+    assert.equal(world.physics.hasVehicle("car"), true);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle settles on its suspension with every wheel grounded", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.tick(3);
+    const state = world.physics.vehicleState("car") ?? assert.fail("vehicle state");
+    assert.equal(state.wheels.length, 4);
+    for (const wheel of state.wheels) {
+      assert.ok(wheel.inContact, "wheel off the ground at rest");
+      // ~7 cm static sag: g / (4 wheels × stiffness 30) below the 0.35 m rest length.
+      assert.ok(wheel.suspensionLength > 0.25 && wheel.suspensionLength < 0.34, `length=${wheel.suspensionLength}`);
+    }
+    // Ground top is y=0: hard point (-0.1) + spring + radius puts the body ~0.73 up.
+    const [, y] = world.position();
+    assert.ok(y > 0.68 && y < 0.78, `chassis y=${y}`);
+    assert.ok(Math.abs(state.forwardSpeed) < 0.05, `creeping at ${state.forwardSpeed}`);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle drives forward, steers right, brakes and reverses", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.tick(1);
+
+    world.drive({ throttle: 1 });
+    world.tick(3);
+    const afterThrottle = world.position();
+    const speed = world.physics.vehicleState("car")?.forwardSpeed ?? 0;
+    assert.ok(speed > 10 && speed < 15, `3 s of full throttle reached ${speed} m/s`);
+    assert.equal(world.physics.vehicleState("car")?.engineLoad, 1, "the engine pulls flat out");
+    assert.ok(afterThrottle[2] > 15, `forward is +Z: z=${afterThrottle[2]}`);
+    assert.ok(Math.abs(afterThrottle[0]) < 0.1, `drifted sideways: x=${afterThrottle[0]}`);
+    assert.ok(Math.abs(afterThrottle[1] - 0.73) < 0.08, `chassis y=${afterThrottle[1]}`);
+
+    world.drive({ throttle: 0.5, steer: 1 });
+    world.tick(1.5);
+    const afterTurn = world.position();
+    assert.ok(afterTurn[0] < afterThrottle[0] - 2, `right turn heads to -X: x=${afterTurn[0]}`);
+
+    world.drive({ brake: 1 });
+    world.tick(2.5);
+    const stopped = world.physics.vehicleState("car")?.forwardSpeed ?? Number.NaN;
+    assert.ok(stopped < 0, `holding brake past a stop reverses: ${stopped}`);
+    world.tick(1.5);
+    const reversing = world.physics.vehicleState("car")?.forwardSpeed ?? Number.NaN;
+    assert.ok(reversing < -2, `reverse speed ${reversing}`);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle handbrake holds on a slope and releasing it rolls downhill", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld({ slopeDeg: 8 });
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.drive({ handbrake: true });
+    world.tick(1);
+    const held = world.position();
+    world.tick(3);
+    const later = world.position();
+    assert.ok(Math.abs(later[2] - held[2]) < 0.15, `handbrake crept ${later[2] - held[2]} m`);
+
+    // The parked chassis is asleep by now; releasing must wake it.
+    world.drive({});
+    world.tick(2);
+    const rolled = world.position();
+    assert.ok(later[2] - rolled[2] > 1, `rolled ${later[2] - rolled[2]} m downhill`);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle survives a world rebuild and leaves with its entity", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    world.physics.createVehicle("car", createReferenceCarDefinition());
+    world.physics.setEntities(world.entities); // e.g. a level reload rebuilds the world
+    assert.equal(world.physics.hasVehicle("car"), true);
+    world.tick(1);
+    world.drive({ throttle: 1 });
+    world.tick(1);
+    assert.ok((world.physics.vehicleState("car")?.forwardSpeed ?? 0) > 3, "re-attached vehicle drives");
+
+    world.physics.removeEntity("car");
+    assert.equal(world.physics.hasVehicle("car"), false);
+    assert.equal(world.physics.vehicleState("car"), null);
+    world.tick(0.1); // stepping without the chassis must not touch a freed controller
+    world.physics.dispose();
+  });
+});
+
+check("vehicleDefinitionFromComponent overrides the reference car and replaces its wheels", () => {
+  assert.equal(vehicleDefinitionFromComponent(undefined), null);
+  assert.equal(vehicleDefinitionFromComponent([1, 2]), null);
+  const reference = createReferenceCarDefinition();
+  assert.deepEqual(vehicleDefinitionFromComponent({}), reference);
+  const tuned = vehicleDefinitionFromComponent({
+    massKg: 900,
+    maxEngineForce: "fast",
+    wheels: [
+      { position: [0, 0, 1], steer: true, drive: "yes" },
+      { radius: 0.4 }, // no position: dropped
+    ],
+  });
+  assert.equal(tuned?.massKg, 900);
+  assert.equal(tuned?.maxEngineForce, reference.maxEngineForce);
+  assert.equal(tuned?.wheels.length, 1);
+  assert.equal(tuned?.wheels[0]?.steer, true);
+  assert.equal(tuned?.wheels[0]?.drive, false); // non-boolean flag falls back
+});
+
+await checkAsync("a Vehicle component makes physics build the vehicle, and a rebuild re-reads it", async () => {
+  await withQuietRapierInit(async () => {
+    const world = await createVehicleTestWorld();
+    const car = world.entities[1] ?? assert.fail("car entity");
+    const withVehicle: Entity = {
+      ...car,
+      components: { ...car.components, [VEHICLE_COMPONENT]: { massKg: 900 } },
+    };
+    world.physics.setEntities([world.entities[0]!, withVehicle]);
+    assert.deepEqual(world.physics.vehicleEntityIds(), ["car"]);
+    world.tick(1);
+    assert.ok(world.physics.vehicleState("car")?.wheels.every((wheel) => wheel.inContact));
+    const simulated = world.physics.simulatedTransform("car") ?? assert.fail("simulated pose");
+    assert.ok(simulated.position[1] < 1, "the chassis pose reflects the simulation, not the spawn");
+    assert.equal(world.physics.simulatedTransform("ground"), null);
+
+    world.physics.setEntities(world.entities); // the component is gone in the new level
+    assert.deepEqual(world.physics.vehicleEntityIds(), []);
+    world.physics.dispose();
+  });
+});
+
+await checkAsync("the starter Reference Car actor drives in the VehicleTest level's physics", async () => {
+  await withQuietRapierInit(async () => {
+    const def =
+      normalizeActorScriptDef(
+        JSON.parse(readFileSync("public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")),
+      ) ?? assert.fail("Script_ReferenceCar did not normalize");
+    assert.ok(def.components.some((node) => node.component === VEHICLE_COMPONENT), "Vehicle node survives");
+    const level = JSON.parse(
+      readFileSync("public/assets/starter-content/Levels/VehicleTest.level.json", "utf8"),
+    ) as { worldSettings: { gameMode: string }; actors: LayoutActorInstance[] };
+    // Driven directly (`forge.vehicle`) or boarded on foot (the project TPS mode).
+    assert.ok(
+      ["forge.vehicle", "assets/starter-content/Gameplay/Script_GameMode.actor.json"].includes(
+        level.worldSettings.gameMode,
+      ),
+      `VehicleTest plays in a mode that reaches the car: ${level.worldSettings.gameMode}`,
+    );
+    const instance = level.actors[0] ?? assert.fail("car placement");
+    const resolved = await resolveActorVehicleAssets(def, async (path) =>
+      normalizeVehicleAsset(JSON.parse(readFileSync(`public/${path}`, "utf8"))));
+    const entity = actorInstanceToEntity(resolved, instance, 0);
+
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setGravity([0, -9.81, 0]);
+    physics.setEntities([
+      {
+        id: "ground",
+        components: {
+          Transform: { position: [0, -0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          Collider: { shape: "box", size: [160, 1, 160], isStatic: true, isSensor: false },
+        },
+      },
+      entity,
+    ]);
+    await physics.init();
+    assert.deepEqual(physics.vehicleEntityIds(), [entity.id]);
+    const step = (seconds: number) => {
+      for (let frame = 0; frame < Math.round(seconds * 60); frame += 1) {
+        physics.update({ deltaSeconds: 1 / 60, elapsedSeconds: 0, frame });
+      }
+    };
+    step(1.5);
+    physics.setVehicleInput(entity.id, { ...NEUTRAL_VEHICLE_INPUT, throttle: 1 });
+    step(2);
+    const speed = physics.vehicleState(entity.id)?.forwardSpeed ?? 0;
+    assert.ok(speed > 7, `starter car reached only ${speed} m/s`);
+    physics.dispose();
+  });
+});
+
+await checkAsync("rapier vehicle drivetrain reference car reaches 100 km/h consistently across frame rates", async () => {
+  await withQuietRapierInit(async () => {
+    const asset = normalizeVehicleAsset(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
+    const times: number[] = [];
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")));
+    const collider = actor.components.find((node) => node.component === "Collider")!.props;
+    for (const hz of [30, 60, 144]) {
+      const world = await createVehicleTestWorld({ groundSize: 2000 });
+      try {
+        // The measured reference uses its authored chassis origin/shape, which
+        // changes when a real car model replaces the proof slice's cube.
+        const car = world.entities[1]!;
+        world.physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
+        world.physics.createVehicle("car", asset);
+        world.tick(1);
+        world.drive({ throttle: 1 });
+        let reachedAt = 0;
+        const gears = new Set<number>();
+        for (let frame = 1; frame <= hz * 16; frame += 1) {
+          world.physics.update({ deltaSeconds: 1 / hz, elapsedSeconds: 1 + frame / hz, frame });
+          const state = world.physics.vehicleState("car")!;
+          gears.add(state.drivetrain!.gear);
+          assert.ok(state.drivetrain!.engineRpm >= asset.drivetrain!.engine.idleRpm);
+          assert.ok(state.drivetrain!.engineRpm <= asset.drivetrain!.engine.maxRpm);
+          if (state.forwardSpeed >= 100 / 3.6) {
+            assert.ok(state.wheels.every((wheel) => wheel.inContact), "0–100 finishes on grounded wheels");
+            reachedAt = frame / hz;
+            break;
+          }
+        }
+        assert.ok(reachedAt >= 6 && reachedAt <= 14, `${hz} Hz: 0–100 took ${reachedAt || ">16"} s`);
+        assert.ok(gears.has(1) && gears.has(2), "automatic upshift occurred");
+        times.push(reachedAt);
+        world.physics.resetVehicle("car", { position: [0, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+        assert.deepEqual(world.physics.vehicleState("car")!.drivetrain,
+          { engineRpm: asset.drivetrain!.engine.idleRpm, gear: 1, shiftTimeRemaining: 0 });
+        assert.equal(world.physics.vehicleState("car")!.forwardSpeed, 0);
+      } finally {
+        world.physics.dispose();
+      }
+    }
+    assert.ok(Math.max(...times) - Math.min(...times) < 0.05, `frame-rate drift: ${times}`);
+    console.info(`[vehicle] 0–100 km/h at 30/60/144 Hz: ${times.map((time) => time.toFixed(3)).join(" / ")} s`);
+  });
+});
+
+await checkAsync("rapier vehicle motion survives a save: speed, gear and handbrake restore into a fresh world", async () => {
+  await withQuietRapierInit(async () => {
+    const asset = normalizeVehicleAsset(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(
+      "public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")));
+    const collider = actor.components.find((node) => node.component === "Collider")!.props;
+    /** A flat world with the reference car on its authored chassis collider. */
+    const referenceCarWorld = async () => {
+      const world = await createVehicleTestWorld({ groundSize: 2000 });
+      const car = world.entities[1]!;
+      world.physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
+      world.physics.createVehicle("car", asset);
+      return world;
+    };
+    const source = await referenceCarWorld();
+    let saved: { transform: TransformComponent; motion: VehicleMotionState; state: VehicleState };
+    try {
+      source.tick(1);
+      source.drive({ throttle: 1 });
+      source.tick(6);
+      saved = {
+        transform: source.physics.simulatedTransform("car") ?? assert.fail("no simulated pose"),
+        motion: source.physics.vehicleMotion("car") ?? assert.fail("no vehicle motion"),
+        state: source.physics.vehicleState("car") ?? assert.fail("no vehicle state"),
+      };
+      assert.ok(saved.state.forwardSpeed > 15, `saved at ${saved.state.forwardSpeed} m/s`);
+      assert.ok(saved.state.drivetrain!.gear >= 2, "saved past first gear");
+      assert.deepEqual(saved.motion.drivetrain, {
+        gear: saved.state.drivetrain!.gear,
+        engineRpm: saved.state.drivetrain!.engineRpm,
+      });
+      assert.equal(saved.motion.handbrake, false);
+      assert.equal(source.physics.vehicleMotion("ground"), null);
+    } finally {
+      source.physics.dispose();
+    }
+
+    const target = await referenceCarWorld();
+    try {
+      target.tick(0.5);
+      assert.equal(target.physics.restoreVehicle("ground", saved.transform, saved.motion), false);
+      assert.equal(target.physics.restoreVehicle("car", saved.transform, saved.motion), true);
+      const restored = target.physics.vehicleState("car")!;
+      assert.ok(Math.abs(restored.forwardSpeed - saved.state.forwardSpeed) < 0.01,
+        `restored at ${restored.forwardSpeed} m/s, saved ${saved.state.forwardSpeed}`);
+      assert.deepEqual(restored.drivetrain, { ...saved.motion.drivetrain!, shiftTimeRemaining: 0 });
+      const pose = target.physics.simulatedTransform("car")!;
+      for (let axis = 0; axis < 3; axis += 1) {
+        assert.ok(Math.abs(pose.position[axis]! - saved.transform.position[axis]!) < 1e-4, `position ${axis}`);
+        assert.ok(Math.abs(pose.rotation[axis]! - saved.transform.rotation[axis]!) < 1e-3, `rotation ${axis}`);
+      }
+      // It carries on coasting from there instead of starting from rest.
+      const startZ = pose.position[2];
+      target.tick(0.5);
+      assert.ok(target.position()[2] - startZ > 6, `coasted ${target.position()[2] - startZ} m`);
+
+      // A gear the car does not have falls back to the reset gearbox; RPM is clamped.
+      const rest = { linearVelocity: [0, 0, 0], angularVelocity: [0, 0, 0] } as const;
+      target.physics.restoreVehicle("car", saved.transform, { ...rest, handbrake: true, drivetrain: { gear: 9, engineRpm: 3000 } });
+      assert.deepEqual(target.physics.vehicleState("car")!.drivetrain,
+        { gear: 1, engineRpm: asset.drivetrain!.engine.idleRpm, shiftTimeRemaining: 0 });
+      assert.equal(target.physics.vehicleMotion("car")!.handbrake, true, "parked on its handbrake");
+      target.physics.restoreVehicle("car", saved.transform, { ...rest, handbrake: false, drivetrain: { gear: -1, engineRpm: 99_999 } });
+      assert.deepEqual(target.physics.vehicleState("car")!.drivetrain,
+        { gear: -1, engineRpm: asset.drivetrain!.engine.maxRpm, shiftTimeRemaining: 0 });
+    } finally {
+      target.physics.dispose();
+    }
+  });
+});
+
+/** A circle of radius `r` through the origin, leaving it along +Z (a right-hand loop). */
+function circleVehicleRoute(r: number): VehicleRoute {
+  return {
+    length: 2 * Math.PI * r,
+    loop: true,
+    locationAt: (s) => [-r + r * Math.cos(s / r), 0, r * Math.sin(s / r)],
+    directionAt: (s) => [-Math.sin(s / r), 0, Math.cos(s / r)],
+    closestDistanceTo: (p) => {
+      const angle = Math.atan2(p[2], p[0] + r);
+      return (((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) * r;
+    },
+  };
+}
+
+/** A straight `length` m road from the origin along +Z that ends. */
+function straightVehicleRoute(length: number): VehicleRoute {
+  return {
+    length,
+    loop: false,
+    locationAt: (s) => [0, 0, Math.min(length, Math.max(0, s))],
+    directionAt: () => [0, 0, 1],
+    closestDistanceTo: (p) => Math.min(length, Math.max(0, p[2])),
+  };
+}
+
+/**
+ * Drives the reference car (its authored chassis collider) with the route
+ * driver for `seconds`, reading the simulated pose each frame like the runtime
+ * module does. Returns per-frame samples.
+ */
+async function driveReferenceCarOnRoute(route: VehicleRoute, seconds: number, settings = DEFAULT_VEHICLE_ROUTE_DRIVER) {
+  const asset = normalizeVehicleAsset(JSON.parse(readFileSync(
+    "public/assets/starter-content/Gameplay/ReferenceCar.vehicle.json", "utf8")))!;
+  const actor = normalizeActorScriptDef(JSON.parse(readFileSync(
+    "public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")));
+  const collider = actor.components.find((node) => node.component === "Collider")!.props;
+  const world = await createVehicleTestWorld({ groundSize: 2000 });
+  const samples: { position: Vec3; speed: number; distance: number; finished: boolean; input: VehicleInput }[] = [];
+  try {
+    const car = world.entities[1]!;
+    world.physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
+    world.physics.createVehicle("car", asset);
+    world.tick(0.5);
+    let state = startVehicleRoute(route, world.physics.simulatedTransform("car")!.position, "nearest");
+    const forward = new Vector3();
+    for (let frame = 1; frame <= seconds * 60; frame += 1) {
+      const pose = world.physics.simulatedTransform("car")!;
+      const toRad = Math.PI / 180;
+      forward.set(0, 0, 1).applyEuler(new Euler(pose.rotation[0] * toRad, pose.rotation[1] * toRad, pose.rotation[2] * toRad));
+      const flat = Math.hypot(forward.x, forward.z) || 1;
+      const speed = world.physics.vehicleState("car")!.forwardSpeed;
+      const step = stepVehicleRouteDriver(route, state, {
+        position: pose.position,
+        heading: { x: forward.x / flat, z: forward.z / flat },
+      }, speed, asset, settings);
+      state = step.state;
+      world.physics.setVehicleInput("car", step.input);
+      world.physics.update({ deltaSeconds: VEHICLE_SLICE, elapsedSeconds: 1 + frame * VEHICLE_SLICE, frame });
+      samples.push({ position: [...pose.position], speed, distance: state.distance, finished: step.finished, input: step.input });
+    }
+  } finally {
+    world.physics.dispose();
+  }
+  return samples;
+}
+
+await checkAsync("rapier vehicle route driver laps a circle on its own pedals, staying in its lane", async () => {
+  await withQuietRapierInit(async () => {
+    const r = 30;
+    const route = circleVehicleRoute(r);
+    const samples = await driveReferenceCarOnRoute(route, 40);
+    let travelled = 0;
+    let worstLane = 0;
+    for (let index = 1; index < samples.length; index += 1) {
+      const step = samples[index]!.distance - samples[index - 1]!.distance;
+      travelled += step < -route.length / 2 ? step + route.length : step; // across the lap seam
+      const [x, , z] = samples[index]!.position;
+      if (index > 120) worstLane = Math.max(worstLane, Math.abs(Math.hypot(x + r, z) - r));
+    }
+    const cruise = Math.max(...samples.slice(600).map((sample) => sample.speed));
+    console.info(`[vehicle-ai] circle r=${r}: ${(travelled / route.length).toFixed(2)} laps, worst lane error ${worstLane.toFixed(2)} m, top ${cruise.toFixed(1)} m/s`);
+    assert.ok(travelled > route.length * 1.2, `only ${(travelled / route.length).toFixed(2)} laps in 40 s`);
+    assert.ok(worstLane < 2, `wandered ${worstLane.toFixed(2)} m off the line`);
+    assert.ok(cruise < DEFAULT_VEHICLE_ROUTE_DRIVER.targetSpeed + 1.5, `overshot the target speed: ${cruise}`);
+  });
+});
+
+await checkAsync("rapier vehicle route driver stops at the end of a route that ends and parks", async () => {
+  await withQuietRapierInit(async () => {
+    const samples = await driveReferenceCarOnRoute(straightVehicleRoute(80), 25);
+    const last = samples.at(-1)!;
+    console.info(`[vehicle-ai] straight 80 m: stopped at z=${last.position[2].toFixed(2)}, top ${Math.max(...samples.map((s) => s.speed)).toFixed(1)} m/s`);
+    assert.ok(Math.max(...samples.map((sample) => sample.speed)) > DEFAULT_VEHICLE_ROUTE_DRIVER.targetSpeed - 1.5, "reached cruise");
+    assert.equal(last.finished, true);
+    assert.ok(Math.abs(last.speed) < 0.5, `still rolling at ${last.speed}`);
+    assert.ok(last.position[2] > 72 && last.position[2] < 82, `stopped at z=${last.position[2]}`);
+    assert.equal(last.input.handbrake, true, "parked on the handbrake");
+    assert.ok(samples.every((sample) => sample.speed > -0.5), "never reverses");
+  });
+});
+
+await checkAsync("rapier camera trace stops at static walls and passes moving, sensor and camera-ignoring bodies", async () => {
+  await withQuietRapierInit(async () => {
+    const box = (id: string, z: number, collider: Partial<ColliderComponent> = {}): Entity => ({
+      id,
+      components: {
+        Transform: { position: [0, 1, z], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [10, 4, 1], isStatic: true, isSensor: false, ...collider },
+      },
+    });
+    const entities = [
+      box("wall", 5),
+      box("glass", 10, { ignoreCameraTrace: true }),
+      box("crate", -5, { isStatic: false, simulatePhysics: true, enableGravity: false }),
+      box("trigger", -10, { isSensor: true }),
+    ];
+    const placeholder = new PhysicsSubsystem();
+    placeholder.setEntities(entities);
+    assert.equal(placeholder.traceCamera([0, 1, 0], [0, 1, 20]), null, "no exact shapes without Rapier");
+
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setEntities(entities);
+    await physics.init();
+    try {
+      physics.update({ deltaSeconds: VEHICLE_SLICE, elapsedSeconds: VEHICLE_SLICE, frame: 1 });
+      const wall = physics.traceCamera([0, 1, 0], [0, 1, 20]) ?? assert.fail("the wall was missed");
+      assert.ok(Math.abs(wall - 4.5 / 20) < 1e-4, `wall face at ${wall * 20} m`);
+      assert.equal(physics.traceCamera([0, 1, 6], [0, 1, 20]), null, "camera-ignoring glass");
+      assert.equal(physics.traceCamera([0, 1, 0], [0, 1, -20]), null, "a dynamic crate and a sensor");
+      assert.equal(physics.traceCamera([0, 1, 0], [0, 1, 0]), null, "a zero-length boom");
+      physics.setEntityCollisionEnabled("wall", false);
+      assert.equal(physics.traceCamera([0, 1, 0], [0, 1, 9]), null, "collision switched off at runtime");
+    } finally {
+      physics.dispose();
+    }
+  });
+});
+
+await checkAsync("rapier vehicle aerodynamics slow a coasting chassis and compress suspension with downforce", async () => {
+  await withQuietRapierInit(async () => {
+    const results: { speed: number; spring: number }[] = [];
+    for (const aerodynamics of [
+      { dragCoefficient: 0, downforceCoefficient: 0 },
+      { dragCoefficient: 4, downforceCoefficient: 0 },
+      { dragCoefficient: 0, downforceCoefficient: 12 },
+    ]) {
+      const world = await createVehicleTestWorld();
+      try {
+        const definition = vehicleDefinitionFromComponent({ aerodynamics })!;
+        world.physics.createVehicle("car", definition);
+        world.tick(2);
+        world.physics.applyImpulse("car", [0, 0, definition.massKg * 20]);
+        world.tick(1);
+        const state = world.physics.vehicleState("car")!;
+        assert.ok(state.wheels.every((wheel) => wheel.inContact));
+        results.push({ speed: state.forwardSpeed,
+          spring: state.wheels.reduce((sum, wheel) => sum + wheel.suspensionLength, 0) / state.wheels.length });
+      } finally {
+        world.physics.dispose();
+      }
+    }
+    assert.ok(results[1]!.speed < results[0]!.speed - 0.8, `drag: ${JSON.stringify(results)}`);
+    assert.ok(results[2]!.spring < results[0]!.spring - 0.01, `downforce: ${JSON.stringify(results)}`);
+  });
 });
 
 check("behavior can react to physics contacts from the engine tick", () => {
@@ -11018,6 +11816,33 @@ check("placement collision overrides beat asset collision defaults at runtime", 
     }),
   );
   assert.equal(collider?.collisionGroups, triggerGroups);
+});
+
+check("a placement that ignores the camera channel lets camera traces through it", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "camera-channel-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "crate",
+        placements: [{ position: [0, 0, 0], responses: { camera: "ignore" } }, { position: [3, 0, 0] }],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    ["crate", { primitives: [{ shape: "box", size: [1, 1, 1] }], complexity: "projectDefault", preset: "blockAll" }],
+  ]);
+  const doc = roomLayoutToSceneDocument(layout, { collisionDefs: defs });
+  const collider = (index: number) => {
+    const entity = doc.entities.find((e) => e.id === instanceEntityId("crate", index));
+    return entity ? readColliderComponent(entity) : undefined;
+  };
+  assert.equal(collider(0)?.ignoreCameraTrace, true);
+  assert.equal(collider(0)?.isStatic, true, "it still blocks movement");
+  assert.equal(collider(1)?.ignoreCameraTrace, undefined);
 });
 
 check("navigation role uses placement override before asset collision default", () => {
@@ -15663,6 +16488,8 @@ check("game save serializer: collects level, player facing, and persistent state
       { entityId: "coin", key: "collected", value: true },
       { entityId: "lamp", key: "enabled", value: false },
     ],
+    vehicles: [],
+    drivingVehicleId: null,
   });
   assert.deepEqual(applySaveState(state), {
     levelPath: "Levels/Playground.level.json",
@@ -15671,7 +16498,57 @@ check("game save serializer: collects level, player facing, and persistent state
       { entityId: "coin", key: "collected", value: true },
       { entityId: "lamp", key: "enabled", value: false },
     ],
+    vehicles: [],
+    drivingVehicleId: null,
   });
+});
+
+check("game save serializer: round-trips vehicles and the ride, dropping only bad vehicle entries", () => {
+  const car = {
+    entityId: "actor:0",
+    position: [12, 0.4, -30] as [number, number, number],
+    rotation: [2, 95, -1] as [number, number, number],
+    linearVelocity: [9, 0, -1] as [number, number, number],
+    angularVelocity: [0, 0.2, 0] as [number, number, number],
+    handbrake: false,
+    drivetrain: { gear: 2, engineRpm: 4100 },
+  };
+  const parked = { ...car, entityId: "actor:1", linearVelocity: [0, 0, 0] as [number, number, number],
+    angularVelocity: [0, 0, 0] as [number, number, number], handbrake: true, drivetrain: null };
+  const state = collectSaveState({
+    activeLevelPath: "Levels/VehicleTest.level.json",
+    playerTransform: { position: car.position, rotation: car.rotation },
+    vehicles: [car, parked],
+    drivingVehicleId: "actor:0",
+  });
+  assert.deepEqual(state.vehicles, [car, parked]);
+  assert.equal(state.drivingVehicleId, "actor:0");
+  const restore = applySaveState(JSON.parse(JSON.stringify(state)));
+  assert.deepEqual(restore?.vehicles, [car, parked]);
+  assert.equal(restore?.drivingVehicleId, "actor:0");
+
+  // A damaged entry loses that car its pose, not the whole load.
+  const damaged = applySaveState({
+    activeLevelPath: "Levels/VehicleTest.level.json",
+    player: null,
+    flags: [],
+    vehicles: [
+      { ...car, linearVelocity: [Number.NaN, 0, 0] },
+      { ...car, entityId: "" },
+      { ...car, entityId: "neutral-gear", drivetrain: { gear: 0, engineRpm: 900 } },
+      { ...car, entityId: "fractional-gear", drivetrain: { gear: 1.5, engineRpm: 900 } },
+      { ...parked, handbrake: "yes" },
+      { ...parked, handbrake: true, entityId: "actor:1" },
+    ],
+    drivingVehicleId: "",
+  });
+  assert.deepEqual(damaged?.vehicles, [{ ...parked, handbrake: false }], "first valid entry per id wins");
+  assert.equal(damaged?.drivingVehicleId, null);
+
+  // A save written before vehicles were captured still loads, on foot.
+  const legacy = applySaveState({ activeLevelPath: "Levels/A.level.json", player: null, flags: [] });
+  assert.deepEqual(legacy?.vehicles, []);
+  assert.equal(legacy?.drivingVehicleId, null);
 });
 
 check("game save serializer: rejects bad player transforms and drops non-json flags", () => {
@@ -15697,6 +16574,8 @@ check("game save serializer: rejects bad player transforms and drops non-json fl
       levelPath: "Levels/A.level.json",
       player: null,
       persistentState: [{ entityId: "ok", key: "enabled", value: true }],
+      vehicles: [],
+      drivingVehicleId: null,
     },
   );
 });
@@ -19695,6 +20574,11 @@ check("asset skeleton sidecar normalizes animation metadata", () => {
       { clip: "Walk", x: 0 },
     ],
   );
+});
+
+check("blend space engine resolver preserves skeleton loader and editor compatibility exports", () => {
+  assert.equal(resolveSkeletonBlendSpaceWeights, resolveBlendSpaceWeights);
+  assert.equal(resolveEditorBlendSpaceWeights, resolveBlendSpaceWeights);
 });
 
 check("blend space 1d resolver interpolates between bracketing samples", () => {
@@ -23897,6 +24781,23 @@ check("createBlockingVolumeObject builds an oriented brush; runtime variant is a
   // The runtime variant is a single grey-box group (no wireframe handle).
   const runtime = createRuntimeBlockingVolumeObject(item);
   assert.equal(runtime.children.length, 1);
+  const runtimeFill = runtime.children[0] as Mesh<BoxGeometry, MeshStandardMaterial>;
+  assert.equal(runtimeFill.material.color.getHexString(), "9aa0a6");
+  // An explicitly authored colour reaches Play, including the editor's default
+  // orange when deliberately chosen; an absent colour must still stay grey.
+  for (const color of ["#7b4b1e", "#ff8c1a"]) {
+    const actor = { id: "ground", position: item.position, color };
+    const tinted = createRuntimeBlockingVolumeObject(
+      { ...item, ...resolveBlockingVolume(actor) },
+      actor.color,
+    );
+    const fill = tinted.children[0] as Mesh<BoxGeometry, MeshStandardMaterial>;
+    assert.equal(fill.material.color.getHexString(), color.slice(1));
+    assert.equal(fill.material.transparent, false);
+    disposeBlockingVolumeObject(tinted);
+  }
+  disposeBlockingVolumeObject(runtime);
+  disposeBlockingVolumeObject(brush);
 });
 
 check("createBlockingVolumeObject: translucent fill is not pickable, only the edges are", () => {
@@ -25471,851 +26372,7 @@ check("imported GLTF content with skins or animations registers as skeletal mesh
   );
 });
 
-// --- UI Widget (UMG Lite): schema normalization + render-tree builder ---
-
-check("normalizeUiWidgetDef upgrades the legacy empty-root stub to a Canvas", () => {
-  const def = normalizeUiWidgetDef({ schema: 1, type: "ui", name: "Menu", root: {} });
-  assert.equal(def.type, "ui");
-  assert.equal(def.name, "Menu");
-  assert.equal(def.root.widget, "Canvas");
-  assert.deepEqual(def.root.children, []);
-  assert.deepEqual(def.preview, { width: 1280, height: 720 });
-});
-
-check("normalizeUiWidgetDef coerces garbage into a valid Canvas-rooted def", () => {
-  const def = normalizeUiWidgetDef(null, "Fallback");
-  assert.equal(def.name, "Fallback");
-  assert.equal(def.root.widget, "Canvas");
-});
-
-check("normalizeUiWidgetDef maps unknown kinds to Panel and drops leaf children", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [
-        { id: "weird", widget: "Hologram", children: [{ widget: "Text" }] },
-        { id: "label", widget: "Text", props: { text: "hi" }, children: [{ widget: "Text" }] },
-      ],
-    },
-  });
-  const weird = def.root.children[0]!;
-  const label = def.root.children[1]!;
-  assert.equal(weird.widget, "Panel"); // unknown -> safe container, keeps its child
-  assert.equal(weird.children.length, 1);
-  assert.equal(label.widget, "Text"); // leaf drops authored children
-  assert.equal(label.children.length, 0);
-});
-
-check("normalizeUiWidgetDef mints unique ids and dedupes collisions", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      id: "dup",
-      widget: "Stack",
-      children: [{ id: "dup", widget: "Text" }, { widget: "Text" }],
-    },
-  });
-  const ids: string[] = [];
-  const walk = (node: UiNode): void => {
-    ids.push(node.id);
-    node.children.forEach(walk);
-  };
-  walk(def.root);
-  assert.equal(ids.length, 3);
-  assert.equal(new Set(ids).size, 3);
-});
-
-check("defaultUiWidgetDef is a minimal empty Canvas asset", () => {
-  const def = defaultUiWidgetDef("HUD");
-  assert.equal(def.schema, 1);
-  assert.equal(def.type, "ui");
-  assert.equal(def.name, "HUD");
-  assert.equal(def.root.id, "root");
-  assert.equal(def.root.widget, "Canvas");
-  assert.equal(UI_WIDGET_KINDS.includes(def.root.widget), true);
-});
-
-check("readUiAction parses message + back actions and rejects malformed ones", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      widget: "Canvas",
-      children: [
-        { id: "ok", widget: "Button", props: { onClick: { type: "message", message: "Go" } } },
-        { id: "back", widget: "Button", props: { onClick: { type: "back" } } },
-        { id: "bad", widget: "Button", props: { onClick: { type: "nope" } } },
-      ],
-    },
-  });
-  assert.deepEqual(readUiAction(def.root.children[0]!), { type: "message", message: "Go" });
-  assert.deepEqual(readUiAction(def.root.children[1]!), { type: "back" });
-  assert.equal(readUiAction(def.root.children[2]!), null);
-});
-
-check("readUiBindingPath extracts a binding path but not a literal", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      widget: "Canvas",
-      children: [
-        { id: "hp", widget: "ProgressBar", props: { value: { bind: "player.health" }, max: 100 } },
-      ],
-    },
-  });
-  const bar = def.root.children[0]!;
-  assert.equal(readUiBindingPath(bar, "value"), "player.health");
-  assert.equal(readUiBindingPath(bar, "max"), undefined); // literal, not a binding
-});
-
-check("buildUiRenderTree maps the menu widget set to tags/classes/actions", () => {
-  const def = normalizeUiWidgetDef({
-    name: "Menu",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      props: { align: "center", justify: "center" },
-      children: [
-        { id: "title", widget: "Text", props: { text: "Forge" } },
-        {
-          id: "start",
-          widget: "Button",
-          props: { text: "Start", onClick: { type: "message", message: "Go" } },
-        },
-      ],
-    },
-  });
-  const tree = buildUiRenderTree(def);
-  assert.equal(tree.tag, "div");
-  assert.match(tree.className, /forge-ui-canvas/);
-  assert.equal(tree.style["align-items"], "center");
-  assert.equal(tree.style["justify-content"], "center");
-  const title = tree.children[0]!;
-  const start = tree.children[1]!;
-  assert.equal(title.tag, "div");
-  assert.match(title.className, /forge-ui-text/);
-  assert.equal(title.text, "Forge");
-  assert.equal(start.tag, "button");
-  assert.match(start.className, /ui-interactive/);
-  assert.equal(start.text, "Start");
-  assert.deepEqual(start.action, { type: "message", message: "Go" });
-});
-
-check("resolveInlineStyle allowlists tokens (px, flex aliases, passthrough)", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      widget: "Stack",
-      props: { gap: 16, padding: 8, align: "between", background: "#101010", grow: 1 },
-    },
-  });
-  const style = resolveInlineStyle(def.root);
-  assert.equal(style["gap"], "16px");
-  assert.equal(style["padding"], "8px");
-  assert.equal(style["align-items"], "space-between");
-  assert.equal(style["background"], "#101010");
-  assert.equal(style["flex-grow"], "1");
-});
-
-check("ProgressBar renders a clamped inline-width fill child", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      widget: "Canvas",
-      children: [
-        { id: "a", widget: "ProgressBar", props: { value: 30, max: 100 } },
-        { id: "b", widget: "ProgressBar", props: { value: 999, max: 100 } },
-      ],
-    },
-  });
-  const tree = buildUiRenderTree(def);
-  const a = tree.children[0]!;
-  const b = tree.children[1]!;
-  assert.equal(a.children.length, 1);
-  assert.equal(a.children[0]!.synthetic, true);
-  assert.equal(a.children[0]!.style["width"], "30.00%");
-  assert.equal(b.children[0]!.style["width"], "100.00%"); // clamped to max
-});
-
-check("Stack direction sets the modifier class; default is column", () => {
-  const row = buildUiRenderNode(
-    normalizeUiWidgetDef({ name: "X", root: { widget: "Stack", props: { direction: "row" } } }).root,
-  );
-  const col = buildUiRenderNode(
-    normalizeUiWidgetDef({ name: "X", root: { widget: "Stack" } }).root,
-  );
-  assert.match(row.className, /forge-ui-stack--row/);
-  assert.match(col.className, /forge-ui-stack--column/);
-});
-
-check("createUiNode seeds default props per kind; containers start empty", () => {
-  assert.deepEqual(createUiNode("Text", "t1"), { id: "t1", widget: "Text", props: { text: "Text" }, children: [] });
-  assert.deepEqual(createUiNode("ProgressBar", "p1").props, { value: 50, max: 100 });
-  assert.deepEqual(createUiNode("Stack", "s1").props, { direction: "column", gap: 8 });
-  assert.deepEqual(createUiNode("Panel", "c1").props, {});
-});
-
-check("findUiNode + findUiNodeParent walk the widget tree", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [
-        { id: "stack", widget: "Stack", children: [{ id: "label", widget: "Text" }] },
-      ],
-    },
-  });
-  assert.equal(findUiNode(def.root, "label")?.widget, "Text");
-  assert.equal(findUiNode(def.root, "missing"), null);
-  assert.equal(findUiNodeParent(def.root, "label")?.id, "stack");
-  assert.equal(findUiNodeParent(def.root, "stack")?.id, "root");
-  assert.equal(findUiNodeParent(def.root, "root"), null);
-});
-
-check("validateSaveUiPayload requires a .ui.json path and normalizes the body", () => {
-  const payload = validateSaveUiPayload({
-    path: "assets/ui/Main.ui.json",
-    ui: { name: "Main", root: {} },
-  });
-  assert.equal(payload.path, "assets/ui/Main.ui.json");
-  assert.equal((payload.ui as { type: string }).type, "ui");
-  assert.equal((payload.ui as { root: { widget: string } }).root.widget, "Canvas");
-  assert.throws(() => validateSaveUiPayload({ path: "assets/ui/Main.json", ui: {} }));
-  assert.throws(() => validateSaveUiPayload({ path: "../secret.ui.json", ui: {} }));
-});
-
-check("UiViewModelStore notifies only changed fields and dedups unchanged writes", () => {
-  const store = new UiViewModelStore();
-  let health = 0;
-  let gold = 0;
-  store.subscribe("player.health", () => { health += 1; });
-  store.subscribe("player.gold", () => { gold += 1; });
-  store.setField("player.health", 100);
-  store.setField("player.gold", 5);
-  store.flush();
-  assert.equal(health, 1);
-  assert.equal(gold, 1);
-  assert.equal(store.getField("player.health"), 100);
-  store.setField("player.health", 100); // unchanged -> not dirty
-  store.flush();
-  assert.equal(health, 1);
-});
-
-check("UiViewModelStore fires a multi-path listener once per flush (batched)", () => {
-  const store = new UiViewModelStore();
-  let calls = 0;
-  const apply = (): void => { calls += 1; };
-  store.subscribe("a", apply);
-  store.subscribe("b", apply);
-  store.setField("a", 1);
-  store.setField("b", 2);
-  store.flush();
-  assert.equal(calls, 1);
-});
-
-check("UiViewModelStore unsubscribe stops notifications", () => {
-  const store = new UiViewModelStore();
-  let calls = 0;
-  const off = store.subscribe("x", () => { calls += 1; });
-  store.setField("x", 1);
-  store.flush();
-  off();
-  store.setField("x", 2);
-  store.flush();
-  assert.equal(calls, 1);
-});
-
-check("collectUiBindings + resolveUiBoundValue resolve bound vs static props", () => {
-  const def = normalizeUiWidgetDef({
-    name: "HUD",
-    root: {
-      widget: "Canvas",
-      children: [
-        { id: "bar", widget: "ProgressBar", props: { value: { bind: "player.hp" }, max: 100 } },
-        { id: "label", widget: "Text", props: { text: { bind: "player.hpLabel" } } },
-        { id: "plain", widget: "Text", props: { text: "Static" } },
-      ],
-    },
-  });
-  const bindings = collectUiBindings(def);
-  assert.equal(bindings.length, 2); // bar + label (plain has no binding)
-  const bar = findUiNode(def.root, "bar")!;
-  const store = new UiViewModelStore();
-  store.setField("player.hp", 42);
-  assert.equal(resolveUiBoundValue(bar, "value", store), 42); // bound -> store field
-  assert.equal(resolveUiBoundValue(bar, "max", store), 100); // static literal kept
-  assert.equal(resolveUiBoundValue(bar, "value", new UiViewModelStore()), undefined);
-});
-
-check("normalizeUiThemeDef keeps scalar tokens and drops the rest", () => {
-  const theme = normalizeUiThemeDef({
-    name: "T",
-    tokens: { "color.text": "#fff", "radius.lg": 12, bad: { x: 1 }, nan: Number.NaN },
-  });
-  assert.equal(theme.type, "uiTheme");
-  assert.equal(theme.tokens["color.text"], "#fff");
-  assert.equal(theme.tokens["radius.lg"], 12);
-  assert.equal("bad" in theme.tokens, false);
-  assert.equal("nan" in theme.tokens, false);
-});
-
-check("themeToCssVariables maps tokens to --forge-ui vars (px for numbers)", () => {
-  const vars = themeToCssVariables(
-    normalizeUiThemeDef({ name: "T", tokens: { "color.surface": "#101010", "space.md": 12 } }),
-  );
-  assert.equal(vars["--forge-ui-color-surface"], "#101010");
-  assert.equal(vars["--forge-ui-space-md"], "12px");
-  assert.equal(tokenToCssVar("radius.lg"), "--forge-ui-radius-lg");
-});
-
-check("resolveInlineStyle resolves $token refs to CSS variables", () => {
-  const def = normalizeUiWidgetDef({
-    name: "X",
-    root: {
-      widget: "Stack",
-      props: { background: "$color.surface", padding: "$space.lg", gap: 8 },
-    },
-  });
-  const style = resolveInlineStyle(def.root);
-  assert.equal(style["background"], "var(--forge-ui-color-surface)");
-  assert.equal(style["padding"], "var(--forge-ui-space-lg)"); // token wins over px
-  assert.equal(style["gap"], "8px"); // literal still px
-});
-
-check("Include node normalizes to a valid UiNode (not a container)", () => {
-  const node = createUiNode("Include", "inc1");
-  assert.equal(node.widget, "Include");
-  assert.equal(node.props.src, "");
-  assert.deepEqual(node.children, []);
-});
-
-check("buildUiRenderNode renders Include placeholder when resolveWidget is absent", () => {
-  const def = normalizeUiWidgetDef({
-    name: "Test",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [{ id: "inc", widget: "Include", props: { src: "some-widget" }, children: [] }],
-    },
-  });
-  const tree = buildUiRenderTree(def);
-  const incNode = tree.children[0];
-  assert.ok(incNode, "Include child should exist");
-  assert.equal(incNode.widget, "Include");
-  assert.equal(incNode.text, "[some-widget]");
-  assert.equal(incNode.children.length, 0);
-});
-
-check("buildUiRenderNode inlines referenced widget when resolveWidget returns a def", () => {
-  const buttonDef = normalizeUiWidgetDef({
-    name: "Button",
-    root: { id: "btn-root", widget: "Button", props: { text: "Click" }, children: [] },
-  });
-  const parentDef = normalizeUiWidgetDef({
-    name: "Parent",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [{ id: "inc", widget: "Include", props: { src: "my-button" }, children: [] }],
-    },
-  });
-  const tree = buildUiRenderTree(parentDef, { resolveWidget: (src) => src === "my-button" ? buttonDef : null });
-  const wrapper = tree.children[0];
-  assert.ok(wrapper, "Include wrapper should exist");
-  assert.equal(wrapper.widget, "Include");
-  assert.equal(wrapper.style["display"], "contents");
-  assert.equal(wrapper.children.length, 1);
-  assert.equal(wrapper.children[0].widget, "Button");
-  assert.equal(wrapper.children[0].text, "Click");
-});
-
-check("buildUiRenderNode guards against Include cycles (depth limit)", () => {
-  let callCount = 0;
-  const cyclicResolver = (): ReturnType<typeof normalizeUiWidgetDef> => {
-    callCount += 1;
-    return normalizeUiWidgetDef({
-      name: "Cyclic",
-      root: { id: "self", widget: "Include", props: { src: "self" }, children: [] },
-    });
-  };
-  const def = normalizeUiWidgetDef({
-    name: "Root",
-    root: { id: "root", widget: "Include", props: { src: "self" }, children: [] },
-  });
-  // Should not throw or recurse infinitely; stops at MAX_INCLUDE_DEPTH (5)
-  const tree = buildUiRenderTree(def, { resolveWidget: cyclicResolver });
-  assert.ok(callCount <= 6, `resolver called ${callCount} times (expected ≤ 6)`);
-  assert.ok(tree, "tree should be non-null after depth-limited recursion");
-});
-
-check("UiViewModelStore.snapshot returns path-sorted [path, value] pairs", () => {
-  const store = new UiViewModelStore();
-  store.setField("player.speed", 2.5);
-  store.setField("inventory.gold", 10);
-  store.setField("player.healthLabel", "100/100");
-  assert.deepEqual(store.snapshot(), [
-    ["inventory.gold", 10],
-    ["player.healthLabel", "100/100"],
-    ["player.speed", 2.5],
-  ]);
-});
-
-check("formatUiDebug renders the HUD, screen stack, locale and bound fields", () => {
-  const lines = formatUiDebug({
-    hud: "Hud",
-    screens: ["Menu", "Options"],
-    locale: "tr",
-    fields: [
-      ["player.speed", 2.5],
-      ["player.speedLabel", "Speed 2.5 m/s"],
-    ],
-    audit: [],
-    world: { count: 2, visible: 1 },
-  });
-  assert.deepEqual(lines, [
-    "ui",
-    "hud: Hud",
-    "screens(2): Menu > Options",
-    "locale: tr",
-    "world: 1/2",
-    "fields(2):",
-    '  player.speed = 2.5',
-    '  player.speedLabel = "Speed 2.5 m/s"',
-  ]);
-});
-
-check("formatUiDebug shows placeholders when nothing is mounted", () => {
-  const lines = formatUiDebug({
-    hud: null,
-    screens: [],
-    locale: null,
-    fields: [],
-    audit: [],
-    world: { count: 0, visible: 0 },
-  });
-  assert.deepEqual(lines, [
-    "ui",
-    "hud: none",
-    "screens: none",
-    "locale: none",
-    "world: 0/0",
-    "fields: none",
-  ]);
-});
-
-check("formatUiDebug clips long string values", () => {
-  const long = "x".repeat(40);
-  const lines = formatUiDebug({
-    hud: null,
-    screens: [],
-    locale: null,
-    fields: [["msg", long]],
-    audit: [],
-    world: { count: 0, visible: 0 },
-  });
-  assert.equal(lines.at(-1), `  msg = "${"x".repeat(29)}..."`);
-});
-
-check("formatUiDebug lists accessibility audit findings", () => {
-  const lines = formatUiDebug({
-    hud: null,
-    screens: ["Menu"],
-    locale: null,
-    fields: [],
-    audit: ['Menu: Button "go" — Button has no text or label'],
-    world: { count: 0, visible: 0 },
-  });
-  assert.deepEqual(lines.slice(-2), [
-    "a11y(1):",
-    '  Menu: Button "go" — Button has no text or label',
-  ]);
-});
-
-check("normalizeUiTransition: shorthand string expands to enter+exit", () => {
-  assert.deepEqual(normalizeUiTransition("fade"), {
-    enter: "fade",
-    exit: "fade",
-    durationMs: 160,
-  });
-});
-
-check("normalizeUiTransition: object form keeps valid presets, clamps duration", () => {
-  assert.deepEqual(normalizeUiTransition({ enter: "slide-up", exit: "scale", durationMs: 9999 }), {
-    enter: "slide-up",
-    exit: "scale",
-    durationMs: 2000,
-  });
-});
-
-check("normalizeUiTransition: invalid preset falls back to none on that end", () => {
-  assert.deepEqual(normalizeUiTransition({ enter: "spin", exit: "fade", durationMs: 100 }), {
-    enter: "none",
-    exit: "fade",
-    durationMs: 100,
-  });
-});
-
-check("normalizeUiTransition: both ends none (or junk) → null (no-op)", () => {
-  assert.equal(normalizeUiTransition({ enter: "none", exit: "none" }), null);
-  assert.equal(normalizeUiTransition("none"), null);
-  assert.equal(normalizeUiTransition(undefined), null);
-  assert.equal(normalizeUiTransition(42), null);
-});
-
-check("transitionClasses: preset maps to base + offset, none/reduced → null", () => {
-  assert.deepEqual(transitionClasses("slide-left"), {
-    base: UI_TRANSITION_BASE_CLASS,
-    offset: `${UI_TRANSITION_BASE_CLASS}-slide-left`,
-  });
-  assert.equal(transitionClasses("none"), null);
-  assert.equal(transitionClasses("fade", true), null); // reduced motion
-});
-
-check("normalizeUiWidgetDef carries a valid transition and drops a no-op one", () => {
-  const withTx = normalizeUiWidgetDef({
-    name: "T",
-    transition: { enter: "fade", exit: "fade", durationMs: 200 },
-    root: { id: "root", widget: "Canvas", children: [] },
-  });
-  assert.deepEqual(withTx.transition, { enter: "fade", exit: "fade", durationMs: 200 });
-  const noTx = normalizeUiWidgetDef({
-    name: "T",
-    transition: { enter: "none", exit: "none" },
-    root: { id: "root", widget: "Canvas", children: [] },
-  });
-  assert.equal(noTx.transition, undefined);
-});
-
-check("normalizeUiLocaleTable keeps string entries and drops the rest", () => {
-  const table = normalizeUiLocaleTable({
-    locale: "tr",
-    strings: { "menu.title": "Duraklatıldı", bad: 12, nested: { a: 1 }, ok: "Tamam" },
-  });
-  assert.equal(table.type, "uiLoc");
-  assert.equal(table.locale, "tr");
-  assert.equal(table.strings["menu.title"], "Duraklatıldı");
-  assert.equal(table.strings.ok, "Tamam");
-  assert.equal("bad" in table.strings, false);
-  assert.equal("nested" in table.strings, false);
-  // Garbage / missing locale falls back to the default "en".
-  assert.equal(normalizeUiLocaleTable(null).locale, "en");
-});
-
-check("applyLocParams substitutes {name} and leaves unknown placeholders intact", () => {
-  assert.equal(applyLocParams("build {version}", { version: "0.1" }), "build 0.1");
-  assert.equal(applyLocParams("hi {name}", {}), "hi {name}"); // unknown param kept
-  assert.equal(applyLocParams("plain text"), "plain text"); // no params
-});
-
-check("LocaleRegistry.resolve uses the active locale, params, and key fallback", () => {
-  const registry = new LocaleRegistry();
-  registry.register(normalizeUiLocaleTable({ locale: "en", strings: { "menu.resume": "Resume" } }));
-  registry.register(normalizeUiLocaleTable({ locale: "tr", strings: { "menu.resume": "Devam Et" } }));
-  assert.equal(registry.activeLocale, "en"); // first registered is active
-  assert.equal(registry.resolve("menu.resume"), "Resume");
-  registry.setActiveLocale("tr");
-  assert.equal(registry.resolve("menu.resume"), "Devam Et");
-  // Missing key falls back to the key itself (or a supplied default).
-  assert.equal(registry.resolve("menu.missing"), "menu.missing");
-  assert.equal(registry.resolve("menu.missing", undefined, "—"), "—");
-  // Unknown locale is ignored (keeps the current one, never blanks).
-  registry.setActiveLocale("fr");
-  assert.equal(registry.activeLocale, "tr");
-});
-
-check("LocaleRegistry notifies subscribers only on a real locale change", () => {
-  const registry = new LocaleRegistry();
-  registry.register(normalizeUiLocaleTable({ locale: "en", strings: {} }));
-  registry.register(normalizeUiLocaleTable({ locale: "tr", strings: {} }));
-  let calls = 0;
-  const off = registry.subscribe(() => {
-    calls += 1;
-  });
-  registry.setActiveLocale("en"); // already active -> no notify
-  registry.setActiveLocale("tr"); // change -> notify
-  registry.setActiveLocale("zz"); // unknown -> no notify
-  off();
-  registry.setActiveLocale("en"); // unsubscribed -> not counted
-  assert.equal(calls, 1);
-});
-
-check("readUiTextKey reads a localized text prop and sanitizes params", () => {
-  const def = normalizeUiWidgetDef({
-    name: "M",
-    root: {
-      widget: "Canvas",
-      children: [
-        { id: "t", widget: "Text", props: { text: { key: "menu.build", params: { version: 1, junk: { x: 1 } } } } },
-        { id: "lit", widget: "Text", props: { text: "Static" } },
-        { id: "bound", widget: "Text", props: { text: { bind: "player.label" } } },
-      ],
-    },
-  });
-  const textKey = readUiTextKey(findUiNode(def.root, "t")!, "text");
-  assert.equal(textKey?.key, "menu.build");
-  assert.deepEqual(textKey?.params, { version: "1" }); // number coerced, object dropped
-  assert.equal(readUiTextKey(findUiNode(def.root, "lit")!, "text"), undefined);
-  assert.equal(readUiTextKey(findUiNode(def.root, "bound")!, "text"), undefined);
-});
-
-check("buildUiRenderTree resolves localized text via resolveLoc (key fallback)", () => {
-  const def = normalizeUiWidgetDef({
-    name: "M",
-    root: {
-      widget: "Canvas",
-      children: [
-        { id: "t", widget: "Text", props: { text: { key: "menu.build", params: { version: "0.1" } } } },
-        { id: "b", widget: "Button", props: { text: { key: "menu.resume" } } },
-      ],
-    },
-  });
-  const registry = new LocaleRegistry();
-  registry.register(
-    normalizeUiLocaleTable({
-      locale: "en",
-      strings: { "menu.build": "Build {version}", "menu.resume": "Resume" },
-    }),
-  );
-  const tree = buildUiRenderTree(def, { resolveLoc: (key, params) => registry.resolve(key, params) });
-  const text = tree.children[0];
-  const button = tree.children[1];
-  assert.equal(text.text, "Build 0.1");
-  assert.equal(button.text, "Resume");
-  // Without a resolver the raw key is shown (editor preview without a table).
-  assert.equal(buildUiRenderTree(def).children[0].text, "menu.build");
-});
-
-check("collectUiLocBindings finds only Text/Button nodes with localized text", () => {
-  const def = normalizeUiWidgetDef({
-    name: "M",
-    root: {
-      widget: "Canvas",
-      children: [
-        { id: "t", widget: "Text", props: { text: { key: "a" } } },
-        { id: "b", widget: "Button", props: { text: { key: "b" } } },
-        { id: "lit", widget: "Text", props: { text: "Static" } },
-        { id: "bar", widget: "ProgressBar", props: { value: { bind: "x" } } },
-      ],
-    },
-  });
-  const locNodes = collectUiLocBindings(def);
-  assert.equal(locNodes.length, 2);
-  assert.deepEqual(
-    locNodes.map((entry) => entry.node.id).sort(),
-    ["b", "t"],
-  );
-});
-
-// --- U7c accessibility -----------------------------------------------------
-
-check("normalizeUiA11y keeps valid fields and drops empty/garbage", () => {
-  assert.deepEqual(normalizeUiA11y({ label: "Go", role: "button", focusable: true }), {
-    label: "Go",
-    role: "button",
-    focusable: true,
-  });
-  assert.deepEqual(normalizeUiA11y({ focusable: false }), { focusable: false });
-  // Empty strings + wrong types are dropped; an all-empty object → undefined.
-  assert.equal(normalizeUiA11y({ label: "", role: 5 }), undefined);
-  assert.equal(normalizeUiA11y(null), undefined);
-});
-
-check("normalizeUiWidgetDef round-trips node a11y + initialFocus, dropping no-ops", () => {
-  const def = normalizeUiWidgetDef({
-    name: "M",
-    initialFocus: "go",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [
-        { id: "img", widget: "Image", a11y: { label: "Logo" } },
-        { id: "go", widget: "Button", a11y: { focusable: false }, props: { text: "Go" } },
-        { id: "plain", widget: "Text", a11y: { label: "" }, props: { text: "x" } },
-      ],
-    },
-  });
-  assert.equal(def.initialFocus, "go");
-  assert.deepEqual(findUiNode(def.root, "img")!.a11y, { label: "Logo" });
-  assert.deepEqual(findUiNode(def.root, "go")!.a11y, { focusable: false });
-  // An a11y that normalizes to nothing leaves the node without the field.
-  assert.equal(findUiNode(def.root, "plain")!.a11y, undefined);
-  // initialFocus pointing at nothing useful is dropped (empty string).
-  assert.equal(normalizeUiWidgetDef({ name: "M", initialFocus: "", root: {} }).initialFocus, undefined);
-});
-
-check("resolveUiA11yAttrs maps widget kinds + a11y overrides to ARIA", () => {
-  const def = normalizeUiWidgetDef({
-    name: "M",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [
-        { id: "bar", widget: "ProgressBar", props: { value: 30, max: 60 } },
-        { id: "img", widget: "Image", a11y: { label: "Logo" } },
-        { id: "btn", widget: "Button", a11y: { label: "Start", focusable: false }, props: { text: "x" } },
-        { id: "box", widget: "Panel", a11y: { focusable: true, role: "menu" } },
-      ],
-    },
-  });
-  assert.deepEqual(resolveUiA11yAttrs(findUiNode(def.root, "bar")!), {
-    role: "progressbar",
-    "aria-valuemin": "0",
-    "aria-valuemax": "60",
-    "aria-valuenow": "30",
-  });
-  assert.deepEqual(resolveUiA11yAttrs(findUiNode(def.root, "img")!), {
-    role: "img",
-    "aria-label": "Logo",
-  });
-  // Button: native focus, label override, focusable:false → tabindex -1.
-  assert.deepEqual(resolveUiA11yAttrs(findUiNode(def.root, "btn")!), {
-    "aria-label": "Start",
-    tabindex: "-1",
-  });
-  // Focusable non-Button gets tabindex 0 + the role override.
-  assert.deepEqual(resolveUiA11yAttrs(findUiNode(def.root, "box")!), {
-    role: "menu",
-    tabindex: "0",
-  });
-});
-
-check("collectFocusables + isUiNodeFocusable follow the focusable rules", () => {
-  const def = normalizeUiWidgetDef({
-    name: "M",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [
-        { id: "a", widget: "Button", props: { text: "A" } },
-        { id: "b", widget: "Button", a11y: { focusable: false }, props: { text: "B" } },
-        { id: "c", widget: "Panel", a11y: { focusable: true } },
-        { id: "d", widget: "Text", props: { text: "D" } },
-      ],
-    },
-  });
-  assert.deepEqual(collectFocusables(def.root), ["a", "c"]);
-  assert.equal(isUiNodeFocusable(findUiNode(def.root, "a")!), true);
-  assert.equal(isUiNodeFocusable(findUiNode(def.root, "b")!), false);
-  assert.equal(isUiNodeFocusable(findUiNode(def.root, "d")!), false);
-});
-
-check("nextFocusIndex wraps both ways and seeds from an empty selection", () => {
-  assert.equal(nextFocusIndex(0, 3, 1), 1);
-  assert.equal(nextFocusIndex(2, 3, 1), 0); // wrap forward
-  assert.equal(nextFocusIndex(0, 3, -1), 2); // wrap back
-  assert.equal(nextFocusIndex(-1, 3, 1), 0); // none focused, forward → first
-  assert.equal(nextFocusIndex(-1, 3, -1), 2); // none focused, back → last
-  assert.equal(nextFocusIndex(0, 0, 1), -1); // nothing to focus
-});
-
-check("buildUiRenderTree attaches ARIA attrs to render nodes", () => {
-  const def = normalizeUiWidgetDef({
-    name: "M",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [{ id: "bar", widget: "ProgressBar", props: { value: 1, max: 4 } }],
-    },
-  });
-  const tree = buildUiRenderTree(def);
-  assert.equal(tree.children[0]!.attrs?.role, "progressbar");
-  assert.equal(tree.children[0]!.attrs?.["aria-valuenow"], "1");
-  // A bare container with no a11y carries no attrs.
-  assert.equal(tree.attrs, undefined);
-});
-
-check("auditUiA11y flags nameless Button + Image, passes named ones", () => {
-  const def = normalizeUiWidgetDef({
-    name: "Menu",
-    root: {
-      id: "root",
-      widget: "Canvas",
-      children: [
-        { id: "blank", widget: "Button", props: {} },
-        { id: "named", widget: "Button", props: { text: "Go" } },
-        { id: "keyed", widget: "Button", props: { text: { key: "menu.go" } } },
-        { id: "logo", widget: "Image", props: {} },
-        { id: "alt", widget: "Image", a11y: { label: "Logo" } },
-      ],
-    },
-  });
-  const issues = auditUiA11y(def);
-  assert.deepEqual(
-    issues.map((issue) => issue.nodeId).sort(),
-    ["blank", "logo"],
-  );
-});
-
-// --- U7d world-space widgets -----------------------------------------------
-
-check("normalizeWorldWidget keeps valid fields, defaults the anchor, drops junk", () => {
-  assert.deepEqual(
-    normalizeWorldWidget({ widget: "label", anchor: { worldPos: [1, 2, 3] }, offset: [0, -8], maxDistance: 30 }),
-    { widget: "label", anchor: { worldPos: [1, 2, 3] }, offset: [0, -8], maxDistance: 30 },
-  );
-  // Missing/garbage anchor → origin; bad offset/maxDistance dropped.
-  assert.deepEqual(normalizeWorldWidget({ widget: "label", offset: [1], maxDistance: -5 }), {
-    widget: "label",
-    anchor: { worldPos: [0, 0, 0] },
-  });
-  // No widget id → unusable.
-  assert.equal(normalizeWorldWidget({ anchor: { worldPos: [0, 0, 0] } }), null);
-  assert.equal(normalizeWorldWidget(null), null);
-});
-
-check("normalizeWorldWidget reads an entity anchor + world offset", () => {
-  assert.deepEqual(
-    normalizeWorldWidget({ widget: "tag", anchor: { entityId: "actor:0", offset3d: [0, 1.5, 0] } }),
-    { widget: "tag", anchor: { worldPos: [0, 0, 0], entityId: "actor:0", offset3d: [0, 1.5, 0] } },
-  );
-  // worldPos coexists as the fallback; an empty entityId is dropped.
-  assert.deepEqual(
-    normalizeWorldWidget({ widget: "tag", anchor: { worldPos: [1, 1, 1], entityId: "" } }),
-    { widget: "tag", anchor: { worldPos: [1, 1, 1] } },
-  );
-});
-
-check("normalizeWorldWidgets drops unusable entries", () => {
-  const list = normalizeWorldWidgets([
-    { widget: "a", anchor: { worldPos: [0, 1, 0] } },
-    { anchor: { worldPos: [0, 0, 0] } },
-    "junk",
-  ]);
-  assert.equal(list.length, 1);
-  assert.equal(list[0]!.widget, "a");
-  assert.deepEqual(normalizeWorldWidgets("nope"), []);
-});
-
-check("resolveWorldWidgetVisibility fades + scales by distance", () => {
-  // No maxDistance → never culled, perspective scale shrinks with distance.
-  const near = resolveWorldWidgetVisibility(4);
-  assert.equal(near.visible, true);
-  assert.equal(near.opacity, 1);
-  assert.equal(near.scale, 1.6); // 8/4 = 2, clamped to maxScale 1.6
-  const far = resolveWorldWidgetVisibility(16);
-  assert.equal(far.scale, 0.5); // 8/16
-  // maxDistance: full opacity until the last 20% (fadeStart=80), then linear to 0.
-  assert.equal(resolveWorldWidgetVisibility(50, { maxDistance: 100 }).opacity, 1);
-  assert.equal(resolveWorldWidgetVisibility(80, { maxDistance: 100 }).opacity, 1);
-  assert.equal(resolveWorldWidgetVisibility(90, { maxDistance: 100 }).opacity, 0.5);
-  assert.equal(resolveWorldWidgetVisibility(95, { maxDistance: 100 }).opacity, 0.25);
-  const culled = resolveWorldWidgetVisibility(100, { maxDistance: 100 });
-  assert.equal(culled.visible, false);
-  assert.equal(culled.opacity, 0);
-});
-
-check("ndcToScreen maps clip space to viewport pixels + front/back", () => {
-  // Center of clip space → center of the viewport.
-  assert.deepEqual(ndcToScreen(0, 0, 0.5, 800, 600), { x: 400, y: 300, inFront: true });
-  // Top-right NDC (1, 1) → top-right pixel (y axis flips).
-  assert.deepEqual(ndcToScreen(1, 1, 0, 800, 600), { x: 800, y: 0, inFront: true });
-  // Bottom-left NDC (-1, -1) → bottom-left pixel.
-  assert.deepEqual(ndcToScreen(-1, -1, 0, 800, 600), { x: 0, y: 600, inFront: true });
-  // NDC z > 1 means behind the camera.
-  assert.equal(ndcToScreen(0, 0, 1.2, 800, 600).inFront, false);
-});
+registerUiFrameworkTests(check);
 
 // --- Game Framework (rules layer) ---------------------------------------
 
@@ -26495,14 +26552,22 @@ check("readGamepadCodes maps buttons + left stick + dpad to codes", () => {
   assert.ok(!result.down.includes("Pad_LStickDown"));
 });
 
-check("readGamepadCodes exposes the right stick as analog look axes", () => {
-  const buttons = Array.from({ length: 16 }, () => ({ pressed: false }));
-  const result = readGamepadCodes({ axes: [0, 0, 0.7, -0.4], buttons });
+check("readGamepadCodes exposes the sticks and triggers as analog axes", () => {
+  const buttons = Array.from({ length: 16 }, (_, i) =>
+    i === 7 ? { pressed: true, value: 0.35 } : i === 6 ? { pressed: false, value: 0.02 } : { pressed: false });
+  const result = readGamepadCodes({ axes: [0.3, -0.2, 0.7, -0.4], buttons });
   assert.deepEqual(result.axes, [
     ["Pad_RStickX", 0.7],
     ["Pad_RStickY", -0.4],
+    ["Pad_LStickX", 0.3],
+    ["Pad_LStickY", -0.2],
+    ["Pad_LTValue", 0.02],
+    ["Pad_RTValue", 0.35],
   ]);
-  assert.equal(result.down.length, 0); // centered left stick, no buttons
+  assert.deepEqual(result.down, ["Pad_RT"]); // left stick below the move threshold
+  // A pad without trigger travel reads its trigger as all-or-nothing.
+  const digital = readGamepadCodes({ axes: [], buttons: buttons.map((_, i) => ({ pressed: i === 6 })) });
+  assert.deepEqual(digital.axes.slice(4), [["Pad_LTValue", 1], ["Pad_RTValue", 0]]);
 });
 
 check("firstConnectedGamepad returns the first non-null pad", () => {

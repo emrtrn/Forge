@@ -48,6 +48,14 @@ jobs:
       - name: Asset manifest health
         run: npm run check:assets
 
+      - name: Upload asset health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-health
+          path: builds/reports/asset-health.json
+          retention-days: 7
+
       # P0.3 — proof that packaging works; short retention keeps storage light.
       - name: Upload dist artifact
         if: success()
@@ -57,3 +65,33 @@ jobs:
           path: dist
           retention-days: 7
           if-no-files-found: error
+
+  browser:
+    name: critical browser flows · root/subpath production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Critical editor and runtime flows
+        run: npm run smoke:critical
+      - name: Packaged starter at root and subpath
+        run: npm run smoke:production
+      - name: Browser evidence and release reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-evidence
+          path: |
+            playwright-report/
+            playwright-production-report/
+            test-results/
+            test-results-production/
+            builds/release/*.report.json
+            builds/release/*.attribution.txt
+          retention-days: 7

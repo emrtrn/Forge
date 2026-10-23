@@ -9,6 +9,12 @@
  * box until ready; colliders draw wireframes; lights add a light + gizmo; other
  * components render a small icon marker.
  *
+ * A class with a `Vehicle` component also gets its wheels drawn over the model
+ * (vehicle plan Faz 5, {@link setVehicleWheels}): per wheel a hard-point handle,
+ * the spring range and the tyre circle, in the actor-root (chassis) frame the
+ * runtime wheel rig uses. Clicking a handle selects that wheel and the Move
+ * gizmo drags its hard point ({@link ActorScriptViewportOptions.onMoveWheel}).
+ *
  * Editor-only: lives under `src/editor/`, behind the dynamic `?editor` import,
  * so it never ships in the game build. The whole viewport disposes cleanly when
  * the editor closes.
@@ -70,6 +76,7 @@ import {
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { applyEulerDegrees } from "@engine/render-three/transforms";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import { wheelWireSegments, type VehicleWheelPreview } from "@/editor/vehicleAssetEditorModel";
 
 export interface ActorScriptViewportOptions {
   /** The element the canvas mounts into (the editor's `[data-as-viewport]`). */
@@ -80,6 +87,10 @@ export interface ActorScriptViewportOptions {
   onPickNode?: (nodeId: string | null) => void;
   /** Notified (live, during drag) when a transform gizmo edits a node's local transform. */
   onTransformNode?: (nodeId: string, transform: NodeTransform) => void;
+  /** A wheel's hard-point handle was clicked (null: a click elsewhere cleared it). */
+  onPickWheel?: (index: number | null) => void;
+  /** Live, during drag: the selected wheel's new hard point (chassis frame, metres). */
+  onMoveWheel?: (index: number, position: [number, number, number]) => void;
 }
 
 /** A node's local transform written back from the viewport gizmo (rotation in degrees). */
@@ -104,6 +115,10 @@ const SENSOR_COLOR = 0xffb648;
 // Matches the main scene's selection outline (editorSelectionOutline.ts).
 // Keep the asset viewport selection look aligned with the editor UI accent.
 const SELECT_OUTLINE_COLOR = 0x2f6fed;
+const WHEEL_WIRE_COLOR = 0xffd166;
+// Cyan: stands out on the warm car bodies the yellow wire and orange sensors share.
+const WHEEL_HANDLE_COLOR = 0x22d3ee;
+const WHEEL_SELECTED_COLOR = 0xffffff;
 const MARKER_GLYPHS: Record<string, string> = {
   Audio: "♪",
   ParticleEmitter: "✺",
@@ -147,6 +162,14 @@ export class ActorScriptViewport {
   private readonly buildTextures: Texture[] = [];
   private readonly buildLightGizmos: Object3D[] = [];
 
+  /** Vehicle wheel wires (scene-level, identity = actor root); rebuilt by setVehicleWheels. */
+  private readonly vehicleGroup = new Group();
+  private wheelGroups: Group[] = [];
+  private readonly wheelHandles: Mesh[] = [];
+  private readonly vehicleGeometries: BufferGeometry[] = [];
+  private readonly vehicleMaterials: Material[] = [];
+  private selectedWheel: number | null = null;
+
   private rafId = 0;
   private disposed = false;
 
@@ -189,6 +212,8 @@ export class ActorScriptViewport {
     const grid = new GridHelper(20, 40, 0x55585c, 0x33373d);
     this.scene.add(grid);
     this.scene.add(this.modelGroup);
+    this.vehicleGroup.name = "as-vehicle-wheels";
+    this.scene.add(this.vehicleGroup);
 
     const controls = new TransformControls(this.camera, this.renderer.domElement);
     controls.setSize(0.8);
@@ -249,10 +274,19 @@ export class ActorScriptViewport {
     this.attachGizmo();
   }
 
-  /** Attaches the gizmo to the selected node's group (detaches in Select mode / none). */
+  /**
+   * Attaches the gizmo to the selected wheel (always Move: a hard point is a
+   * position) or else the selected node's group (detached in Select mode / none).
+   */
   private attachGizmo(): void {
     const controls = this.transformControls;
     if (!controls) return;
+    const wheel = this.selectedWheel !== null ? this.wheelGroups[this.selectedWheel] : undefined;
+    if (wheel) {
+      controls.setMode("translate");
+      controls.attach(wheel);
+      return;
+    }
     const group = this.selectedNodeId ? this.nodeObjects.get(this.selectedNodeId) : undefined;
     if (!group || this.gizmoMode === "select") {
       controls.detach();
@@ -264,6 +298,15 @@ export class ActorScriptViewport {
 
   /** Live write-back: the dragged group's local transform → the node's props. */
   private onGizmoChange(): void {
+    const wheel = this.selectedWheel !== null ? this.wheelGroups[this.selectedWheel] : undefined;
+    if (wheel && this.transformControls?.object === wheel) {
+      this.options.onMoveWheel?.(this.selectedWheel!, [
+        round(wheel.position.x),
+        round(wheel.position.y),
+        round(wheel.position.z),
+      ]);
+      return;
+    }
     if (!this.selectedNodeId || !this.options.onTransformNode) return;
     const group = this.nodeObjects.get(this.selectedNodeId);
     if (!group) return;
@@ -566,13 +609,20 @@ export class ActorScriptViewport {
   }
 
   private pickAt(event: PointerEvent): void {
-    if (!this.options.onPickNode) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
+    // Wheel handles sit on top (drawn without depth test), so they pick first.
+    const wheelHit = this.raycaster.intersectObjects(this.wheelHandles, false)[0];
+    if (wheelHit && this.options.onPickWheel) {
+      this.options.onPickWheel(wheelHit.object.userData.wheelIndex as number);
+      return;
+    }
+    if (this.selectedWheel !== null) this.options.onPickWheel?.(null);
+    if (!this.options.onPickNode) return;
     const hits = this.raycaster.intersectObject(this.modelGroup, true);
     for (const hit of hits) {
       const nodeId = findNodeId(hit.object);
@@ -582,6 +632,70 @@ export class ActorScriptViewport {
       }
     }
     this.options.onPickNode(null);
+  }
+
+  // --- vehicle wheels -----------------------------------------------------
+
+  /**
+   * Draws (or with null, clears) the class's wheels. Skipped mid-drag: the
+   * dragged wheel group already shows the edit and must keep its gizmo.
+   */
+  setVehicleWheels(wheels: readonly VehicleWheelPreview[] | null): void {
+    if (this.disposed || this.gizmoDragging) return;
+    const attachedToWheel = this.wheelGroups.includes(this.transformControls?.object as Group);
+    if (attachedToWheel) this.transformControls?.detach();
+    this.clearVehicleWheels();
+    (wheels ?? []).forEach((wheel, index) => {
+      const group = new Group();
+      group.name = `as-wheel-${index}`;
+      group.position.set(...wheel.position);
+      const geometry = new BufferGeometry();
+      geometry.setAttribute("position", new Float32BufferAttribute(wheelWireSegments(wheel), 3));
+      const lineMaterial = new LineBasicMaterial({ color: WHEEL_WIRE_COLOR, transparent: true, depthTest: false });
+      const wire = new LineSegments(geometry, lineMaterial);
+      wire.renderOrder = 4;
+      const handleGeometry = new SphereGeometry(0.06, 12, 8);
+      const handleMaterial = new MeshStandardMaterial({ color: WHEEL_HANDLE_COLOR, depthTest: false, transparent: true });
+      const handle = new Mesh(handleGeometry, handleMaterial);
+      handle.renderOrder = 5;
+      handle.userData.wheelIndex = index;
+      group.add(wire, handle);
+      this.vehicleGeometries.push(geometry, handleGeometry);
+      this.vehicleMaterials.push(lineMaterial, handleMaterial);
+      this.wheelHandles.push(handle);
+      this.wheelGroups.push(group);
+      this.vehicleGroup.add(group);
+    });
+    if (this.selectedWheel !== null && this.selectedWheel >= this.wheelGroups.length) this.selectedWheel = null;
+    this.refreshWheelHighlight();
+    this.attachGizmo();
+  }
+
+  /** Selects a wheel for the Move gizmo (null: back to node selection). */
+  setSelectedWheel(index: number | null): void {
+    if (this.selectedWheel === index) return;
+    this.selectedWheel = index;
+    this.refreshWheelHighlight();
+    this.attachGizmo();
+  }
+
+  private refreshWheelHighlight(): void {
+    this.wheelHandles.forEach((handle, index) => {
+      (handle.material as MeshStandardMaterial).color.setHex(
+        index === this.selectedWheel ? WHEEL_SELECTED_COLOR : WHEEL_HANDLE_COLOR,
+      );
+      handle.scale.setScalar(index === this.selectedWheel ? 1.5 : 1);
+    });
+  }
+
+  private clearVehicleWheels(): void {
+    for (const group of this.wheelGroups) group.removeFromParent();
+    this.wheelGroups = [];
+    this.wheelHandles.length = 0;
+    for (const geometry of this.vehicleGeometries) geometry.dispose();
+    for (const material of this.vehicleMaterials) material.dispose();
+    this.vehicleGeometries.length = 0;
+    this.vehicleMaterials.length = 0;
   }
 
   // --- framing ------------------------------------------------------------
@@ -632,6 +746,7 @@ export class ActorScriptViewport {
     cancelAnimationFrame(this.rafId);
     this.resizeObserver.disconnect();
     this.clearBuild();
+    this.clearVehicleWheels();
     if (this.transformControls) {
       this.transformControls.detach();
       this.transformControls.dispose();

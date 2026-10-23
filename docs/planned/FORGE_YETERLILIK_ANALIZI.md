@@ -2,10 +2,13 @@
 
 Olusturulma tarihi: 2026-07-03
 
-Bu dokuman Forge projesinin yeniden kullanilabilir Three.js oyun platformu
-olarak yeterlilik durumunu baslik baslik degerlendirmek icin canli analiz
-iskeletidir. Analiz ilerledikce her baslik altina kanit, karar, eksik ve
-aksiyon notlari eklenecek.
+> Durum (22 Ekim 2026): Tarihsel, kısmi analiz. Aşağıdaki eski sayılar ve
+> "incelenmedi" başlıkları güncel eksik listesi değildir. Güncel değerlendirme:
+> [21 Ekim kapsamlı inceleme](../reports/FORGE_KAPSAMLI_INCELEME_2026-10-21.md).
+> Uygulama durumu: [güvenilirlik aktif planı](FORGE_RELIABILITY_ACTIVE_PLAN.md).
+
+Bu belge ilk dört alanın eski kanıtlarını ve sonraki alanların doldurulmamış
+analiz iskeletini korur. Kapsamlı incelemenin veya aktif planın yerine geçmez.
 
 ## Degerlendirme Lejanti
 

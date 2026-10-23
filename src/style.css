@@ -25,6 +25,67 @@ body {
   user-select: none;
 }
 
+/* Boot errors must work before a renderer or the runtime UI exists. */
+.forge-boot-error {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 24px;
+  background: #1a1a2e;
+  color: #f5f7fb;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.forge-boot-error-panel {
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  margin: auto;
+  line-height: 1.6;
+}
+
+.forge-boot-error h1 {
+  margin-bottom: 12px;
+  font-size: 1.6rem;
+}
+
+.forge-boot-error details {
+  margin: 20px 0;
+}
+
+.forge-boot-error summary {
+  cursor: pointer;
+}
+
+.forge-boot-error pre {
+  margin-top: 8px;
+  padding: 12px;
+  background: #10131a;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+
+.forge-boot-error button {
+  padding: 10px 18px;
+  border: 1px solid #709cff;
+  border-radius: 6px;
+  background: #315fb4;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.forge-boot-error button:focus-visible,
+.forge-boot-error summary:focus-visible {
+  outline: 3px solid #b6ceff;
+  outline-offset: 4px;
+}
+
 /* Scene layer: single fullscreen WebGL canvas. */
 #game-canvas {
   position: fixed;
@@ -526,7 +587,7 @@ body {
   gap: 4px;
   align-items: center;
   margin-bottom: 4px;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 /* Reserved, and reserved even while empty: a persistent control (the speed
@@ -538,6 +599,7 @@ body {
 }
 
 .forge-debug-panel-button {
+  pointer-events: auto;
   appearance: none;
   cursor: pointer;
   padding: 2px 8px;
@@ -557,15 +619,23 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  /* Scrollable, so it takes the pointer over its own corner of the screen.
-     A worthwhile trade only because this whole surface exists behind `?debug`:
-     the alternative is ninety lines of readout that cannot be read past the
-     first forty. */
-  pointer-events: auto;
+  /* Passive text lets menu clicks through. Inspect text explicitly enables
+     scrolling/selection while the control buttons always remain interactive. */
+  pointer-events: none;
+  user-select: none;
   margin: 0;
   font: inherit;
   color: inherit;
   white-space: pre;
+}
+
+.forge-debug-panel.is-inspecting .forge-debug-panel-readout {
+  pointer-events: auto;
+  user-select: text;
+}
+
+.forge-debug-panel-readout:focus-visible {
+  outline: 1px solid #7fff7f;
 }
 
 /* The speed picker lives in the reserved slot; `is-active` marks the state the
@@ -743,6 +813,10 @@ body {
 }
 
 /* Lightweight perf readout (qa-poki measurement standard). Debug-only. */
+#debug-stats[hidden] {
+  display: none;
+}
+
 #debug-stats {
   position: absolute;
   top: calc(env(safe-area-inset-top) + 4px);

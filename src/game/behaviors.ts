@@ -122,10 +122,13 @@ function resolvePlanarAgainstBlockers(
 ): PlanarDelta {
   const { physics, entityId, transform } = context;
   if (!physics) return planar;
-  const blockers = physics.staticBlockerAabbs();
-  if (blockers.length === 0) return planar;
   const half = physics.colliderHalfExtents(entityId);
   if (!half) return planar;
+  // Entire proposed sweep plus collider footprint and a millimetre of skin.
+  const radius = Math.max(half[0], half[2]) + Math.hypot(planar.dx, planar.dz) + 0.001;
+  const blockers = physics.staticBlockerAabbsNear?.(transform.position[0], transform.position[2], radius) ??
+    physics.staticBlockerAabbs();
+  if (blockers.length === 0) return planar;
   return resolvePlanarMovement(transform.position, planar, half, blockers);
 }
 

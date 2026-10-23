@@ -19,7 +19,7 @@ import type { AnimationMixer, Object3D, Scene, Vector3 } from "three";
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
 import type { AssetManifest } from "@engine/assets/manifest";
-import type { AudioBus } from "@engine/audio/audioSubsystem";
+import type { AudioBus, AudioPlaybackHandle, AudioPlayOptions } from "@engine/audio/audioSubsystem";
 import type { AudioBusId } from "@engine/audio/audioBus";
 import type { AudioVoiceStats } from "@engine/audio/audioSubsystem";
 import type {
@@ -54,6 +54,8 @@ import type {
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
+import type { VehicleDefinition, VehicleInput, VehicleState, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
+import type { PhysicalMaterialDef } from "@engine/scene/collision";
 import type { AiNavAgentClearanceView } from "@engine/render-three/aiNavigationView";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
@@ -160,6 +162,67 @@ export const characterMovementHostService =
   runtimeServiceKey<CharacterMovementHost>("character-movement-host");
 
 /**
+ * What the shell gives the vehicle capability: the physics vehicles' live
+ * readback and the actor objects they render on. Provided by the shell
+ * because both the physics world and the actor objects are shell-owned.
+ */
+export interface VehicleHost {
+  /** `?debug`: draw each vehicle's suspension rays and ground contacts. */
+  readonly debug?: boolean;
+  /** Entity ids of every live vehicle, in level order. */
+  vehicleIds(): readonly string[];
+  vehicleState(entityId: string): VehicleState | null;
+  /** The resolved definition the vehicle was built from (its engine sound lives there). */
+  vehicleDefinition(entityId: string): VehicleDefinition | null;
+  /** The actor's root render object (scaled by placement × mesh scale). */
+  actorObject(entityId: string): Object3D | null;
+  /**
+   * Whether someone is driving the vehicle — the player's possessed pawn or an
+   * AI driver at the wheel. A parked car's engine is off.
+   */
+  isDriven(entityId: string): boolean;
+  /** The player's possessed pawn, or null (an AI driver yields to the player). */
+  possessedEntityId(): string | null;
+  /** Driver intent the vehicle follows until the next call (an AI driver's pedals). */
+  setVehicleInput(entityId: string, input: VehicleInput): void;
+  /** Mesh collider material today; a terrain provider may sample the contact later. */
+  surfaceMaterialForWheel?(entityId: string, wheel: VehicleWheelState): PhysicalMaterialDef | null;
+  /** Shares the dynamic-physics active radius; driven/possessed vehicles always qualify. */
+  isSurfaceFxActive?(entityId: string): boolean;
+}
+
+export const vehicleHostService = runtimeServiceKey<VehicleHost>("vehicle-host");
+
+/** One AI driver's state, for `?debug` and browser smokes. */
+export interface VehicleAiDriverDebugState {
+  readonly entityId: string;
+  readonly splineId: string;
+  /** Progress along its route (m). */
+  readonly distance: number;
+  /** The speed it is aiming for (m/s). */
+  readonly speedLimit: number;
+  /** At the wheel, pressing the pedals this tick. */
+  readonly driving: boolean;
+  /** Reached the end of a route that ends, and parked. */
+  readonly finished: boolean;
+  /** The player took this car over; the AI no longer drives it. */
+  readonly released: boolean;
+  readonly missingRoute: boolean;
+}
+
+/**
+ * The vehicle AI drivers (`VehicleAiDriver` components). The shell asks it
+ * whether a car has an AI at the wheel (its engine runs) and reads its debug
+ * snapshot. Provided by: `vehicleAiModule`.
+ */
+export interface VehicleAiCommands {
+  isDriving(entityId: string): boolean;
+  drivers(): readonly VehicleAiDriverDebugState[];
+}
+
+export const vehicleAiService = runtimeServiceKey<VehicleAiCommands>("vehicle-ai");
+
+/**
  * The script-message bus: how gameplay triggers a capability ("play-dialogue")
  * and how a capability reports back onto the bus ("conversation" events).
  * Provided by: the runtime shell (the behavior subsystem owns the bus).
@@ -205,6 +268,15 @@ export interface AudioCommands {
   playAutoPlay(document: SceneDocument): void;
   /** Starts one runtime-spawned entity's `autoPlay` Audio component. */
   playEntityAudio(entity: Entity): void;
+  /**
+   * Starts a looping sound the caller keeps steering — a car's engine: its
+   * volume, pitch and (spatial) position change every frame. `sourceId` is a
+   * manifest `sound`, or a `soundCue` whose first play event is looped with the
+   * cue's own volume/pitch as multipliers and on the cue's bus. The handle works
+   * at once even while a cue is still loading; a source that cannot play hands
+   * back a handle that reads as stopped.
+   */
+  playLoop(sourceId: string, options?: AudioPlayOptions): AudioPlaybackHandle;
   /** Spatial listener pose; pushed from the frame loop, after the camera moves. */
   setListenerPose(
     position: readonly [number, number, number],
@@ -241,17 +313,32 @@ export interface VfxHost {
 
 export const vfxHostService = runtimeServiceKey<VfxHost>("vfx-host");
 
+export interface VfxSpawnOptions {
+  position: [number, number, number];
+  /** World-space central velocity direction; normalized, preserving authored speed and spread.
+   * Omitted at spawn keeps the authored direction; omitted on setTransform keeps the current one.
+   * Zero/non-finite directions are ignored. */
+  direction?: [number, number, number];
+  scale?: number;
+}
+
+/** Level-owned control; all methods become no-ops after unload or disposal. */
+export interface VfxEffectHandle {
+  setTransform(position: [number, number, number], direction?: [number, number, number]): void;
+  /** Multiplies authored rate and burst count on top of quality density, within fixed capacity.
+   * 0 idles, negatives clamp to 0, non-finite values use 1. Bursts fire once at their delay;
+   * suppressed bursts are consumed, never replayed when the rate increases. */
+  setEmissionRate(multiplier: number): void;
+  /** Default: stop emitting and let live particles age out. False removes immediately. */
+  stop(fadeOut?: boolean): void;
+  dispose(): void;
+}
+
 /**
- * What the runtime asks of whichever capability owns particles. As with audio,
- * the shell drives the steps only it knows the timing of — resolving this
- * level's effect + texture assets before anything can spawn, and starting the
- * built level's `autoPlay` emitters — while the two entity triggers cover a
- * runtime-spawned actor and a script's explicit `playParticleEffect`.
- *
- * `undefined` means the module is off: emitter actors still exist and still run
- * their scripts, the triggers become no-ops and `?debug` reports an empty VFX
- * runtime. Nothing else changes.
- * Provided by: `vfxModule`.
+ * What the runtime asks of whichever capability owns particles. The shell
+ * prepares the level's manifest and starts authored autoPlay emitters; scripts
+ * can trigger entities or spawn effects at arbitrary world-space anchors.
+ * Provided by vfxModule; undefined means the capability is off.
  */
 export interface VfxCommands {
   /** Maps this level's manifest `effect` + `texture` assets to fetchable URLs. */
@@ -262,6 +349,10 @@ export interface VfxCommands {
   playAutoPlayEntity(entity: Entity): Promise<void>;
   /** Spawns an entity's effect on demand, `autoPlay` or not (a script trigger). */
   triggerEntityEffect(entity: Entity): Promise<void>;
+  /** Asset id or public-root-relative .effect.json path; forces one-shot playback. */
+  spawnEffectAt(effectIdOrPath: string, options: VfxSpawnOptions): Promise<VfxEffectHandle | null>;
+  /** Forces looping until stopped; shares the loader/cache and particle budgets. */
+  createEffectEmitter(effectIdOrPath: string, options: VfxSpawnOptions): Promise<VfxEffectHandle | null>;
   /** Particle-count scale from the active quality profile. */
   setGlobalDensity(scale: number): void;
   debugSnapshot(): VfxDebugSnapshot;
@@ -472,6 +563,8 @@ export const splineFollowerDebugService =
 export interface AiNavigationQuery {
   /** Sight occluders for perception line-of-sight checks. */
   staticBlockerAabbs(): readonly PhysicsAabb[];
+  /** Optional indexed X/Z square query; fall back to the full list when absent. */
+  staticBlockerAabbsNear?(x: number, z: number, radius: number): readonly PhysicsAabb[];
   /** Static obstacles the nav grid is eroded from (`ignored` bodies omitted). */
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[];
   /** Walkable triangles the nav grid seeds floor layers from. */

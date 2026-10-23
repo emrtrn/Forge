@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "type": "vehicle",
+  "massKg": 1200,
+  "centerOfMassOffset": [0, 0.45, 0],
+  "maxEngineForce": 12000,
+  "maxReverseForce": 4000,
+  "drivetrain": {
+    "engine": {
+      "idleRpm": 900,
+      "maxRpm": 6500,
+      "engineBrakeTorqueNm": 40,
+      "torqueCurve": [
+        { "rpm": 900, "torqueNm": 160 },
+        { "rpm": 2500, "torqueNm": 260 },
+        { "rpm": 4500, "torqueNm": 300 },
+        { "rpm": 6500, "torqueNm": 200 }
+      ]
+    },
+    "transmission": {
+      "forwardRatios": [3.4, 2.1, 1.4, 1, 0.8],
+      "reverseRatio": 3.2,
+      "finalDriveRatio": 4.690285714,
+      "efficiency": 0.9,
+      "upshiftRpm": 5500,
+      "downshiftRpm": 1800,
+      "shiftDurationSeconds": 0.2
+    },
+    "differential": { "driveType": "RWD", "frontTorqueShare": 0.5 }
+  },
+  "steeringSpeedCurve": [
+    { "speedMps": 0, "scale": 1 },
+    { "speedMps": 10, "scale": 0.8 },
+    { "speedMps": 30, "scale": 0.35 },
+    { "speedMps": 60, "scale": 0.2 }
+  ],
+  "handbrakeSideFrictionMultiplier": 0.3,
+  "aerodynamics": { "dragCoefficient": 0.42, "downforceCoefficient": 1.2 },
+  "wheels": [
+    { "position": [0.68, 0.83, 1.056], "radius": 0.48, "steer": true, "visualNode": "wheel-front-left" },
+    { "position": [-0.68, 0.83, 1.056], "radius": 0.48, "steer": true, "visualNode": "wheel-front-right" },
+    { "position": [0.68, 0.83, -1.056], "radius": 0.48, "drive": true, "handbrake": true, "visualNode": "wheel-back-left" },
+    { "position": [-0.68, 0.83, -1.056], "radius": 0.48, "drive": true, "handbrake": true, "visualNode": "wheel-back-right" }
+  ],
+  "engineSound": {
+    "sound": "starter-snd-engine-loop",
+    "idlePitch": 1,
+    "maxPitch": 2.2,
+    "idleVolume": 0.35,
+    "loadVolume": 0.9,
+    "refDistance": 6,
+    "maxDistance": 80
+  }
+}

@@ -24,7 +24,12 @@
  * behind. And the persisted volume preference stays in the shell's user-settings
  * store — the module owns the live mix, not the player's saved choice.
  */
-import { AudioSubsystem, type AudioPlayOptions } from "@engine/audio/audioSubsystem";
+import {
+  AudioSubsystem,
+  type AudioPlaybackHandle,
+  type AudioPlayOptions,
+  type AudioVec3,
+} from "@engine/audio/audioSubsystem";
 import type { AudioBusId } from "@engine/audio/audioBus";
 import {
   evaluateSoundCue,
@@ -47,6 +52,80 @@ import type { RuntimeServices } from "./RuntimeServices";
 import { audioCommandsService, dialogueAudioService } from "./runtimeServiceKeys";
 
 export const AUDIO_MODULE_ID = "audio";
+
+/**
+ * A looped play its caller steers from the first frame (see
+ * `AudioCommands.playLoop`). A raw sound binds at once; a sound cue binds once
+ * it has loaded, picking up whatever volume, pitch and position were set in the
+ * meantime, scaled by the cue's own event. A source that cannot play leaves the
+ * loop reading as stopped, so the caller does not retry it every frame.
+ */
+class SteeredLoop implements AudioPlaybackHandle {
+  private inner: AudioPlaybackHandle | null = null;
+  private volumeScale = 1;
+  private pitchScale = 1;
+  private volumeValue: number;
+  private pitchValue: number;
+  private positionValue: AudioVec3 | null;
+  private stoppedValue = false;
+
+  constructor(readonly clipId: string, options: AudioPlayOptions) {
+    this.volumeValue = options.volume ?? 1;
+    this.pitchValue = options.pitch ?? 1;
+    this.positionValue = options.position ?? null;
+  }
+
+  get stopped(): boolean {
+    return this.stoppedValue || (this.inner?.stopped ?? false);
+  }
+
+  get volume(): number {
+    return this.volumeValue;
+  }
+
+  get pitch(): number {
+    return this.pitchValue;
+  }
+
+  get position(): AudioVec3 | null {
+    return this.positionValue;
+  }
+
+  /** Hands over the real play; `volumeScale`/`pitchScale` are the cue event's own. */
+  bind(inner: AudioPlaybackHandle, volumeScale = 1, pitchScale = 1): void {
+    if (this.stoppedValue) {
+      inner.stop();
+      return;
+    }
+    this.inner = inner;
+    this.volumeScale = volumeScale;
+    this.pitchScale = pitchScale;
+  }
+
+  stop(fadeSeconds = 0): void {
+    this.stoppedValue = true;
+    this.inner?.stop(fadeSeconds);
+  }
+
+  setVolume(value: number, fadeSeconds = 0): void {
+    this.volumeValue = value;
+    this.inner?.setVolume(value * this.volumeScale, fadeSeconds);
+  }
+
+  setPitch(value: number): void {
+    this.pitchValue = value;
+    this.inner?.setPitch(value * this.pitchScale);
+  }
+
+  setPosition(position: AudioVec3): void {
+    this.positionValue = [position[0], position[1], position[2]];
+    this.inner?.setPosition(position);
+  }
+
+  setPaused(paused: boolean): void {
+    this.inner?.setPaused(paused);
+  }
+}
 
 export function createAudioModule(): CapabilityModule {
   /** Manifest sound asset id -> fetchable file URL, filled when a level prepares. */
@@ -156,6 +235,50 @@ export function createAudioModule(): CapabilityModule {
     return { stop: () => handle.stop() };
   }
 
+  /**
+   * A steered loop of a raw sound, or of a cue's first play event (a looped
+   * engine is one layer; a cue's random/mix graph has no meaning for it).
+   */
+  function playLoop(sourceId: string, options: AudioPlayOptions = {}): AudioPlaybackHandle {
+    const loop = new SteeredLoop(sourceId, options);
+    const looped: AudioPlayOptions = { ...options, loop: true };
+    if (!soundCueUrlById.has(sourceId)) {
+      loop.bind(audio.play(sourceId, looped));
+      return loop;
+    }
+    void loadSoundCue(sourceId)
+      .then((cue) => {
+        if (loop.stopped) return;
+        let event: ResolvedPlayEvent | undefined;
+        try {
+          event = cue ? evaluateSoundCue(cue)[0] : undefined;
+        } catch (error) {
+          console.warn(`[audio] sound cue "${sourceId}" could not be evaluated:`, error);
+        }
+        if (!cue || !event) {
+          loop.stop();
+          return;
+        }
+        const position = loop.position;
+        loop.bind(
+          audio.play(event.clipId, {
+            ...looped,
+            volume: loop.volume * event.volume,
+            pitch: loop.pitch * event.pitch,
+            ...(position ? { position } : {}),
+            ...(cue.output.bus ? { bus: cue.output.bus } : {}),
+          }),
+          event.volume,
+          event.pitch,
+        );
+      })
+      .catch((error) => {
+        console.warn(`[audio] sound cue "${sourceId}" failed to loop:`, error);
+        loop.stop();
+      });
+    return loop;
+  }
+
   function playEntityAudio(entity: Entity): void {
     const component = readAudioComponent(entity);
     if (!component?.autoPlay) return;
@@ -244,6 +367,7 @@ export function createAudioModule(): CapabilityModule {
           }
         },
         playEntityAudio,
+        playLoop,
         setListenerPose: (position, forward) => audio.setListenerPose(position, forward),
         setBusVolume: (bus: AudioBusId, volume: number) => audio.setBusVolume(bus, volume),
         getBusVolume: (bus: AudioBusId) => audio.getBusVolume(bus),

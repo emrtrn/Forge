@@ -8,7 +8,7 @@ export interface CameraViewportOptions {
 }
 
 export function createSceneCamera(): PerspectiveCamera {
-  return new PerspectiveCamera(44, 1, 0.1, 100);
+  return new PerspectiveCamera(44, 1, 0.1, 300);
 }
 
 export function applyResponsiveCameraViewport(

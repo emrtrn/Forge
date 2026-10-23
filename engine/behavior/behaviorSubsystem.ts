@@ -416,6 +416,10 @@ export interface PhysicsQuery {
   contactsForEntity(entityId: EntityId): readonly PhysicsContact[];
   /** World-space AABBs of every static, non-sensor collider (movement blockers). */
   staticBlockerAabbs(): readonly PhysicsAabb[];
+  /** Inclusive X/Z square candidates; hosts without the index use the full list. */
+  staticBlockerAabbsNear?(x: number, z: number, radius: number): readonly PhysicsAabb[];
+  /** Whether any static ground/blocker exists globally, without building flat arrays. */
+  hasStaticGround?(): boolean;
   /** World-space walkable surface triangles (static trimesh) for the ground probe. */
   staticSurfaceTriangles(): readonly PhysicsSurfaceTriangle[];
   /**

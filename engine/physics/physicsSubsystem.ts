@@ -1,13 +1,29 @@
+import { StaticSpatialIndex, type StaticSpatialEntry } from "./staticSpatialIndex";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
   readColliderComponent,
   readTransformComponent,
+  VEHICLE_COMPONENT,
   type ColliderComponent,
   type ColliderPrimitive,
   type TransformComponent,
 } from "../scene/components";
 import { interactionGroupsInteract, type NavigationRole } from "../scene/collision";
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
+import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
+import { computeVehicleDrive } from "./vehicle/vehicleDrive";
+import { computeWheelSurfaceResponse, type VehicleSurfaceProvider } from "./surface/surfaceResponse";
+import { computeVehicleAerodynamics, initialVehicleDrivetrainState } from "./vehicle/vehicleDrivetrain";
+import {
+  NEUTRAL_VEHICLE_INPUT,
+  vehicleDefinitionFromComponent,
+  type VehicleDefinition,
+  type VehicleDrivetrainState,
+  type VehicleInput,
+  type VehicleMotionState,
+  type VehicleState,
+  type VehicleVec3,
+} from "./vehicle/vehicleTypes";
 import type { Entity, EntityId } from "../scene/entity";
 import type {
   PhysicsAabb,
@@ -46,6 +62,10 @@ export type PhysicsTransformSink = (entityId: EntityId, transform: TransformComp
 
 export interface PhysicsSubsystemOptions {
   backend?: PhysicsBackend;
+  /** Rapier simulation slice in seconds (default 1/60); see {@link FixedStepClock}. */
+  fixedTimestep?: number;
+  /** Max Rapier slices per frame (default 4); a longer frame drops its backlog. */
+  maxSubstepsPerFrame?: number;
 }
 
 /** Optional Phase 7 policy for dynamically simulated bodies in large worlds. */
@@ -60,6 +80,8 @@ interface PhysicsBody {
   id: EntityId;
   transform: TransformComponent;
   collider: ColliderComponent;
+  /** From the entity's `Vehicle` component: the body becomes a vehicle chassis. */
+  vehicle?: VehicleDefinition;
 }
 
 interface Aabb {
@@ -70,21 +92,38 @@ interface Aabb {
   footprint?: readonly (readonly [number, number])[];
 }
 
-interface StaticSurfaceSpatialIndex {
-  readonly cells: ReadonlyMap<string, readonly PhysicsSurfaceTriangle[]>;
-  readonly overflow: readonly PhysicsSurfaceTriangle[];
+interface StaticBodyRecord {
+  readonly order: number;
+  readonly blockers: StaticSpatialEntry<Aabb>[];
+  readonly surfaces: StaticSpatialEntry<PhysicsSurfaceTriangle>[];
+  readonly navigationRole: NavigationRole | undefined;
 }
-
-/** Terrain cells are normally 1 unit wide; four-unit bins keep lookup compact. */
-const STATIC_SURFACE_GRID_CELL_SIZE = 4;
-/** Huge generic mesh triangles stay in an overflow list instead of bloating the grid. */
-const STATIC_SURFACE_GRID_MAX_CELLS_PER_TRIANGLE = 256;
 
 type RapierModule = typeof import("@dimforge/rapier3d-compat");
 type RapierWorld = InstanceType<RapierModule["World"]>;
 type RapierRigidBody = ReturnType<RapierWorld["createRigidBody"]>;
 type RapierCollider = ReturnType<RapierWorld["createCollider"]>;
 type RapierImpulseJoint = ReturnType<RapierWorld["createImpulseJoint"]>;
+type RapierVehicleController = ReturnType<RapierWorld["createVehicleController"]>;
+
+/**
+ * A ray-cast vehicle bound to a dynamic chassis entity. The definition and the
+ * driver state outlive a world rebuild; the controller is re-created on the
+ * new world's chassis body.
+ */
+interface VehicleRecord {
+  readonly entityId: EntityId;
+  readonly definition: VehicleDefinition;
+  /** `component`: built from the entity's `Vehicle` component; `api`: `createVehicle`. */
+  readonly source: "component" | "api";
+  controller: RapierVehicleController | null;
+  input: VehicleInput;
+  /** Smoothed steering input (-1..1). */
+  steer: number;
+  drivetrain: VehicleDrivetrainState | null;
+  /** The driving pedal of the latest slice (0..1); see `VehicleDriveResult.engineLoad`. */
+  engineLoad: number;
+}
 
 interface RapierBodyRecord {
   id: EntityId;
@@ -92,6 +131,12 @@ interface RapierBodyRecord {
   /** One or more colliders (compound when the entity has authored primitives). */
   colliders: RapierCollider[];
   isSensor: boolean;
+}
+
+/** A dynamic body's simulated pose one fixed step back, the render blend's start. */
+interface PreviousBodyPose {
+  position: Vec3;
+  rotation: PoseQuat;
 }
 
 interface SuspendedDynamicBody {
@@ -109,6 +154,14 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   readonly id = PHYSICS_SUBSYSTEM_ID;
   private readonly backend: PhysicsBackend;
   private bodies: PhysicsBody[] = [];
+  private readonly bodiesById = new Map<EntityId, PhysicsBody>();
+  private readonly staticRecords = new Map<EntityId, StaticBodyRecord>();
+  private readonly staticBlockerIndex = new StaticSpatialIndex<Aabb>();
+  private readonly staticSurfaceIndex = new StaticSpatialIndex<PhysicsSurfaceTriangle>();
+  private nextStaticOrder = 0;
+  private staticInvalidations = 0;
+  private staticRecordBuilds = 0;
+  private blockerCandidatesInspected = 0;
   private contacts: PhysicsContact[] = [];
   /**
    * Entities whose collision is runtime-disabled (A6 SetActorEnableCollision).
@@ -116,12 +169,12 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * collectors; with Rapier their colliders are also `setEnabled(false)`.
    */
   private collisionDisabled = new Set<EntityId>();
+  /** Entities whose collider ignores the camera trace channel; rebuilt lazily. */
+  private cameraIgnoredCache: Set<EntityId> | null = null;
   /** Cached movement blockers (static colliders don't move); rebuilt lazily. */
   private staticBlockerCache: Aabb[] | null = null;
   /** Cached walkable surface triangles (static trimesh); rebuilt lazily. */
   private staticSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
-  /** X/Z broad phase for ground probes over large landscape trimeshes. */
-  private staticSurfaceSpatialIndex: StaticSurfaceSpatialIndex | null = null;
   /** Cached AI-navigation blockers, filtered by Collider.navigationRole. */
   private staticNavigationBlockerCache: Aabb[] | null = null;
   /** Cached AI-navigation surfaces, filtered by Collider.navigationRole. */
@@ -138,9 +191,216 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private gravity: Vec3 = [0, -9.81, 0];
   private transformSink: PhysicsTransformSink | null = null;
   private enabled = true;
+  private readonly stepClock: FixedStepClock;
+  /** Rapier slices taken by the latest `update()` (0 on a frame shorter than a step). */
+  private frameStepCount = 0;
+  /** Dynamic poses before the latest slice, for render interpolation. */
+  private previousPoses = new Map<EntityId, PreviousBodyPose>();
+  private vehicles = new Map<EntityId, VehicleRecord>();
+  private vehicleSurfaceProvider: VehicleSurfaceProvider | null = null;
 
   constructor(options: PhysicsSubsystemOptions = {}) {
     this.backend = options.backend ?? "placeholder";
+    this.stepClock = new FixedStepClock({
+      step: options.fixedTimestep,
+      maxSubsteps: options.maxSubstepsPerFrame,
+    });
+  }
+
+  /** The fixed Rapier slice length in seconds. */
+  fixedTimestep(): number {
+    return this.stepClock.step;
+  }
+
+  /** How many fixed slices the latest `update()` simulated. */
+  lastFrameStepCount(): number {
+    return this.frameStepCount;
+  }
+
+  /** Installs optional wheel surface response; null restores authored behaviour. */
+  setVehicleSurfaceProvider(provider: VehicleSurfaceProvider | null): void {
+    this.vehicleSurfaceProvider = provider;
+  }
+
+  /** Live collider profile reference for generic surface-provider hosts. */
+  colliderPhysicalMaterialId(entityId: EntityId): string | undefined {
+    return this.bodiesById.get(entityId)?.collider.physicalMaterialId;
+  }
+
+  /** Render blend (0..1) between the previous and latest simulated dynamic poses. */
+  interpolationAlpha(): number {
+    return this.stepClock.alpha;
+  }
+
+  /**
+   * Turns a dynamic (`simulatePhysics`) entity into a ray-cast vehicle chassis:
+   * its mass and centre of mass come from the definition, and each wheel is a
+   * suspension ray. Returns false — leaving the body untouched — when Rapier is
+   * not live or the entity is not a dynamic body. Replaces an existing vehicle
+   * on the same entity.
+   */
+  createVehicle(entityId: EntityId, definition: VehicleDefinition): boolean {
+    this.removeVehicle(entityId);
+    const record: VehicleRecord = {
+      entityId,
+      definition,
+      source: "api",
+      controller: null,
+      input: NEUTRAL_VEHICLE_INPUT,
+      steer: 0,
+      drivetrain: initialVehicleDrivetrainState(definition),
+      engineLoad: 0,
+    };
+    if (!this.attachVehicleController(record)) return false;
+    this.vehicles.set(entityId, record);
+    return true;
+  }
+
+  /** Detaches the vehicle controller; the chassis stays a plain dynamic body. */
+  removeVehicle(entityId: EntityId): void {
+    const record = this.vehicles.get(entityId);
+    if (!record) return;
+    if (record.controller) this.rapierWorld?.removeVehicleController(record.controller);
+    this.vehicles.delete(entityId);
+  }
+
+  hasVehicle(entityId: EntityId): boolean {
+    return this.vehicles.has(entityId);
+  }
+
+  /**
+   * Teleports a vehicle to `transform` at rest — the "flip back onto the
+   * wheels" reset every driving game needs. Velocities and steering are zeroed.
+   */
+  resetVehicle(entityId: EntityId, transform: TransformComponent): void {
+    const record = this.vehicles.get(entityId);
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !rapier) return;
+    this.setEntityTransform(entityId, transform);
+    rapier.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    record.steer = 0;
+    record.drivetrain = initialVehicleDrivetrainState(record.definition);
+    record.engineLoad = 0;
+  }
+
+  /** The resolved definition a vehicle was built from, or null when not a vehicle. */
+  vehicleDefinition(entityId: EntityId): VehicleDefinition | null {
+    return this.vehicles.get(entityId)?.definition ?? null;
+  }
+
+  /**
+   * The vehicle's velocities, handbrake and gearbox position, or null when the
+   * id is not a live vehicle — the half of a save its pose does not cover.
+   */
+  vehicleMotion(entityId: EntityId): VehicleMotionState | null {
+    const record = this.vehicles.get(entityId);
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !rapier) return null;
+    const linear = rapier.body.linvel();
+    const angular = rapier.body.angvel();
+    return {
+      linearVelocity: [linear.x, linear.y, linear.z],
+      angularVelocity: [angular.x, angular.y, angular.z],
+      handbrake: record.input.handbrake,
+      drivetrain: record.drivetrain
+        ? { gear: record.drivetrain.gear, engineRpm: record.drivetrain.engineRpm }
+        : null,
+    };
+  }
+
+  /**
+   * Puts a vehicle back where and how a save found it: teleported to
+   * `transform`, moving at the saved velocities, on (or off) its handbrake and
+   * in the saved gear. A gear the definition does not have, or a drivetrain on
+   * a car that has none, falls back to the reset state; RPM is clamped to the
+   * engine's range. Returns false when the id is not a live vehicle.
+   */
+  restoreVehicle(entityId: EntityId, transform: TransformComponent, motion: VehicleMotionState): boolean {
+    const record = this.vehicles.get(entityId);
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !rapier) return false;
+    this.resetVehicle(entityId, transform);
+    const [vx, vy, vz] = motion.linearVelocity;
+    const [wx, wy, wz] = motion.angularVelocity;
+    rapier.body.setLinvel({ x: vx, y: vy, z: vz }, true);
+    rapier.body.setAngvel({ x: wx, y: wy, z: wz }, true);
+    record.input = { ...NEUTRAL_VEHICLE_INPUT, handbrake: motion.handbrake };
+    const drivetrain = record.definition.drivetrain;
+    const gear = motion.drivetrain?.gear ?? 0;
+    const gearExists = gear === -1 || (gear >= 1 && gear <= (drivetrain?.transmission.forwardRatios.length ?? 0));
+    if (drivetrain && motion.drivetrain && gearExists) {
+      const { idleRpm, maxRpm } = drivetrain.engine;
+      record.drivetrain = {
+        gear,
+        engineRpm: Math.min(maxRpm, Math.max(idleRpm, motion.drivetrain.engineRpm)),
+        shiftTimeRemaining: 0,
+      };
+    }
+    return true;
+  }
+
+  /** Every entity currently driven as a vehicle, in creation order. */
+  vehicleEntityIds(): EntityId[] {
+    return [...this.vehicles.keys()];
+  }
+
+  /**
+   * The latest *simulated* pose of a dynamic body (not the render blend), or
+   * null for static/kinematic/unknown entities. Hosts read it where the
+   * entity's own Transform component is stale because physics moves the body.
+   */
+  simulatedTransform(entityId: EntityId): TransformComponent | null {
+    const body = this.bodiesById.get(entityId);
+    if (!body?.collider.simulatePhysics || !this.rapierBodies.has(entityId)) return null;
+    return cloneTransform(body.transform);
+  }
+
+  /** Sets the driver intent the vehicle follows until the next call. */
+  setVehicleInput(entityId: EntityId, input: VehicleInput): void {
+    const record = this.vehicles.get(entityId);
+    if (!record) return;
+    const previous = record.input;
+    record.input = { ...input };
+    const active = input.throttle !== 0 || input.brake !== 0 || input.steer !== 0 || input.handbrake;
+    const changed =
+      input.throttle !== previous.throttle ||
+      input.brake !== previous.brake ||
+      input.steer !== previous.steer ||
+      input.handbrake !== previous.handbrake;
+    // A parked car sleeps and the ray-cast controller does not wake it on its
+    // own — including a handbrake release on a slope, which must let it roll.
+    if (active || changed) this.rapierBodies.get(entityId)?.body.wakeUp();
+  }
+
+  /** Live speed and per-wheel suspension readback, or null when not a vehicle. */
+  vehicleState(entityId: EntityId): VehicleState | null {
+    const record = this.vehicles.get(entityId);
+    const controller = record?.controller;
+    const rapier = this.rapierBodies.get(entityId);
+    if (!record || !controller || !rapier) return null;
+    return {
+      forwardSpeed: chassisForwardSpeed(rapier.body),
+      engineLoad: record.engineLoad,
+      drivetrain: record.drivetrain ? { ...record.drivetrain } : null,
+      wheels: record.definition.wheels.map((wheel, index) => {
+        const inContact = controller.wheelIsInContact(index);
+        const contact = inContact ? controller.wheelContactPoint(index) : null;
+        const hardPoint = controller.wheelHardPoint(index);
+        return {
+          position: wheel.position,
+          radius: wheel.radius,
+          ...(wheel.visualNode ? { visualNode: wheel.visualNode } : {}),
+          suspensionLength: controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength,
+          steering: controller.wheelSteering(index) ?? 0,
+          rotation: controller.wheelRotation(index) ?? 0,
+          inContact,
+          groundEntityId: inContact ? this.vehicleWheelGroundEntity(controller, index) : null,
+          contactPoint: contact ? [contact.x, contact.y, contact.z] : null,
+          hardPoint: hardPoint ? [hardPoint.x, hardPoint.y, hardPoint.z] : null,
+        };
+      }),
+    };
   }
 
   /**
@@ -192,56 +452,77 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!this.hasDynamicActiveArea()) this.resumeSuspendedDynamicBodies();
   }
 
+  /** Presentation shares the last physics step's active-radius decision. */
+  isDynamicBodyActive(entityId: EntityId): boolean {
+    return !this.suspendedDynamicBodies.has(entityId);
+  }
+
   setEntities(entities: readonly Entity[]): void {
-    const bodies: PhysicsBody[] = [];
+    this.bodies = [];
+    this.bodiesById.clear();
     for (const entity of entities) {
+      if (this.bodiesById.has(entity.id)) continue;
       const body = bodyFromEntity(entity);
-      if (body) bodies.push(body);
+      if (!body) continue;
+      this.bodies.push(body);
+      this.bodiesById.set(body.id, body);
     }
-    this.bodies = bodies;
     this.contacts = [];
     this.collisionDisabled.clear();
     this.suspendedDynamicBodies.clear();
-    this.staticBlockerCache = null;
-    this.staticSurfaceCache = null;
-    this.staticSurfaceSpatialIndex = null;
-    this.staticNavigationBlockerCache = null;
-    this.staticNavigationSurfaceCache = null;
+    this.staticRecords.clear();
+    this.staticBlockerIndex.clear();
+    this.staticSurfaceIndex.clear();
+    this.nextStaticOrder = 0;
+    for (const body of this.bodies) this.recordStaticBody(body);
+    this.invalidateStaticCaches();
+    // Component vehicles are rebuilt from the new entity set; API ones persist.
+    for (const [entityId, vehicle] of this.vehicles) {
+      if (vehicle.source === "component") this.removeVehicle(entityId);
+    }
     if (this.rapierModule) this.rebuildRapierWorld();
   }
 
   /** Incrementally adds one entity's collider body for runtime SpawnActor. */
   addEntity(entity: Entity): boolean {
-    if (this.bodies.some((body) => body.id === entity.id)) return false;
-    const body = bodyFromEntity(entity);
-    if (!body) return false;
-    this.bodies.push(body);
-    this.contacts = [];
-    if (body.collider.isStatic) {
-      this.staticBlockerCache = null;
-      this.staticSurfaceCache = null;
-      this.staticSurfaceSpatialIndex = null;
-      this.staticNavigationBlockerCache = null;
-      this.staticNavigationSurfaceCache = null;
+    return this.addEntities([entity]) > 0;
+  }
+
+  /** Adds a batch in input order, invalidating legacy flat caches only once. */
+  addEntities(entities: readonly Entity[]): number {
+    let added = 0;
+    let addedStatic = false;
+    for (const entity of entities) {
+      if (this.bodiesById.has(entity.id)) continue;
+      const body = bodyFromEntity(entity);
+      if (!body) continue;
+      this.bodies.push(body);
+      this.bodiesById.set(body.id, body);
+      this.recordStaticBody(body);
+      addedStatic ||= body.collider.isStatic;
+      if (this.rapierWorld && this.rapierModule) this.addRapierBody(body);
+      added += 1;
     }
-    if (this.rapierWorld && this.rapierModule) this.addRapierBody(body);
-    return true;
+    if (added > 0) this.contacts = [];
+    if (addedStatic) this.invalidateStaticCaches();
+    else if (added > 0) this.cameraIgnoredCache = null;
+    return added;
   }
 
   setEntityTransform(entityId: EntityId, transform: TransformComponent): void {
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body) return;
     body.transform = cloneTransform(transform);
-    // A static body moving (editor drag) invalidates the cached blocker AABBs.
     if (body.collider.isStatic) {
-      this.staticBlockerCache = null;
-      this.staticSurfaceCache = null;
-      this.staticSurfaceSpatialIndex = null;
-      this.staticNavigationBlockerCache = null;
-      this.staticNavigationSurfaceCache = null;
+      const record = this.staticRecords.get(entityId);
+      if (record) this.indexStaticRecord(record, false);
+      this.recordStaticBody(body, record?.order);
+      this.invalidateStaticCaches();
     }
     const rapier = this.rapierBodies.get(entityId);
     if (!rapier) return;
+    // A teleport must not render as a one-step slide from the old pose.
+    this.previousPoses.delete(entityId);
     const translation = vectorFromTransform(transform);
     const rotation = quaternionFromEulerDegrees(transform.rotation);
     if (rapier.body.isKinematic()) {
@@ -262,31 +543,32 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * colliders go with it) and forgets its collider→entity handles.
    */
   removeEntity(entityId: EntityId): void {
-    const remaining = this.bodies.filter((body) => body.id !== entityId);
-    if (remaining.length !== this.bodies.length) {
-      const removedStatic = this.bodies.some(
-        (body) => body.id === entityId && body.collider.isStatic,
-      );
-      this.bodies = remaining;
-      if (removedStatic) {
-        this.staticBlockerCache = null;
-        this.staticSurfaceCache = null;
-        this.staticSurfaceSpatialIndex = null;
-        this.staticNavigationBlockerCache = null;
-        this.staticNavigationSurfaceCache = null;
+    this.removeEntities([entityId]);
+  }
+
+  /** Removes a batch with one body-list pass and one legacy-cache invalidation. */
+  removeEntities(entityIds: readonly EntityId[]): void {
+    const ids = new Set(entityIds);
+    let removedStatic = false;
+    for (const entityId of ids) {
+      removedStatic ||= this.bodiesById.get(entityId)?.collider.isStatic === true;
+      this.bodiesById.delete(entityId);
+      this.dropStaticRecord(entityId);
+      this.collisionDisabled.delete(entityId);
+      this.suspendedDynamicBodies.delete(entityId);
+      this.previousPoses.delete(entityId);
+      this.removeVehicle(entityId);
+      const record = this.rapierBodies.get(entityId);
+      if (record) {
+        for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
+        this.rapierWorld?.removeRigidBody(record.body);
+        this.rapierBodies.delete(entityId);
       }
     }
-    this.contacts = this.contacts.filter(
-      (contact) => contact.a !== entityId && contact.b !== entityId,
-    );
-    this.collisionDisabled.delete(entityId);
-    this.suspendedDynamicBodies.delete(entityId);
-    const record = this.rapierBodies.get(entityId);
-    if (record) {
-      for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
-      this.rapierWorld?.removeRigidBody(record.body);
-      this.rapierBodies.delete(entityId);
-    }
+    this.bodies = this.bodies.filter((body) => !ids.has(body.id));
+    this.contacts = this.contacts.filter((contact) => !ids.has(contact.a) && !ids.has(contact.b));
+    if (removedStatic) this.invalidateStaticCaches();
+    else this.cameraIgnoredCache = null;
   }
 
   /**
@@ -302,13 +584,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (enabled === !alreadyDisabled) return;
     if (enabled) this.collisionDisabled.delete(entityId);
     else this.collisionDisabled.add(entityId);
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (body?.collider.isStatic) {
-      this.staticBlockerCache = null;
-      this.staticSurfaceCache = null;
-      this.staticSurfaceSpatialIndex = null;
-      this.staticNavigationBlockerCache = null;
-      this.staticNavigationSurfaceCache = null;
+      const record = this.staticRecords.get(entityId);
+      if (record) this.indexStaticRecord(record, enabled);
+      this.invalidateStaticCaches();
     }
     // Clear any live contact for this entity so the next query already reads the
     // new state (mirrors removeEntity); the placeholder loop won't regenerate it.
@@ -319,6 +599,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (record) {
       for (const collider of record.colliders) collider.setEnabled(enabled);
     }
+  }
+
+  /** False while {@link setEntityCollisionEnabled} has the entity switched off. */
+  isEntityCollisionEnabled(entityId: EntityId): boolean {
+    return !this.collisionDisabled.has(entityId);
   }
 
   contactsForEntity(entityId: EntityId): readonly PhysicsContact[] {
@@ -336,13 +621,65 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticBlockerAabbs(): readonly PhysicsAabb[] {
     if (this.staticBlockerCache) return this.staticBlockerCache;
     const blockers: Aabb[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendBlockerAabbs(blockers, body);
+    for (const [id, record] of this.staticRecords) {
+      if (this.collisionDisabled.has(id)) continue;
+      for (const entry of record.blockers) blockers.push(entry.value);
     }
     this.staticBlockerCache = blockers;
     return blockers;
+  }
+
+  /**
+   * Camera trace along `from → to` against the static world — Unreal's Camera
+   * channel: fixed, non-sensor colliders whose profile does not ignore the
+   * camera. Returns the fraction (0..1) of the segment at which the first one is
+   * hit, or null when the view is clear. Moving bodies (dynamic, kinematic) never
+   * block, so a car's own chassis or a passing crate does not yank the view;
+   * neither does a collider switched off with `setEntityCollisionEnabled`.
+   * Null without a Rapier world: the exact shapes live there, and the AABB
+   * blockers would pull the camera in at every rotated ramp.
+   */
+  traceCamera(from: Vec3, to: Vec3): number | null {
+    const RAPIER = this.rapierModule;
+    const world = this.rapierWorld;
+    if (!RAPIER || !world) return null;
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const dz = to[2] - from[2];
+    const length = Math.hypot(dx, dy, dz);
+    if (!(length > 1e-6)) return null;
+    const ray = new RAPIER.Ray(
+      { x: from[0], y: from[1], z: from[2] },
+      { x: dx / length, y: dy / length, z: dz / length },
+    );
+    const ignored = this.cameraIgnoredEntities();
+    const hit = world.castRay(
+      ray,
+      length,
+      true,
+      RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC |
+        RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC |
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+      undefined,
+      undefined,
+      undefined,
+      ignored.size === 0 && this.collisionDisabled.size === 0
+        ? undefined
+        : (collider) => {
+            // A disabled collider still answers scene queries until the next step.
+            const entityId = this.rapierColliderToEntity.get(collider.handle) ?? "";
+            return !ignored.has(entityId) && !this.collisionDisabled.has(entityId);
+          },
+    );
+    return hit ? Math.min(1, Math.max(0, hit.timeOfImpact / length)) : null;
+  }
+
+  private cameraIgnoredEntities(): Set<EntityId> {
+    if (this.cameraIgnoredCache) return this.cameraIgnoredCache;
+    const ignored = new Set<EntityId>();
+    for (const body of this.bodies) if (body.collider.ignoreCameraTrace) ignored.add(body.id);
+    this.cameraIgnoredCache = ignored;
+    return ignored;
   }
 
   /**
@@ -354,10 +691,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticSurfaceTriangles(): readonly PhysicsSurfaceTriangle[] {
     if (this.staticSurfaceCache) return this.staticSurfaceCache;
     const surfaces: PhysicsSurfaceTriangle[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendSurfaceTriangles(surfaces, body);
+    for (const [id, record] of this.staticRecords) {
+      if (this.collisionDisabled.has(id)) continue;
+      for (const entry of record.surfaces) surfaces.push(entry.value);
     }
     this.staticSurfaceCache = surfaces;
     return surfaces;
@@ -369,14 +705,82 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * can make the movement step skip its ground follow window.
    */
   staticSurfaceTrianglesNear(x: number, z: number): readonly PhysicsSurfaceTriangle[] {
-    const surfaces = this.staticSurfaceTriangles();
-    if (surfaces.length === 0) return surfaces;
-    const index = this.staticSurfaceSpatialIndex ?? buildStaticSurfaceSpatialIndex(surfaces);
-    this.staticSurfaceSpatialIndex = index;
-    const candidates = index.cells.get(staticSurfaceCellKey(x, z));
-    if (!candidates || candidates.length === 0) return index.overflow;
-    if (index.overflow.length === 0) return candidates;
-    return [...candidates, ...index.overflow];
+    return this.staticSurfaceIndex.atCell(x, z);
+  }
+
+  /** All blockers intersecting the inclusive X/Z square, in body/primitive order. */
+  staticBlockerAabbsNear(x: number, z: number, radius: number): readonly PhysicsAabb[] {
+    const blockers = this.staticBlockerIndex.near(x, z, radius);
+    this.blockerCandidatesInspected += this.staticBlockerIndex.lastCandidateCount;
+    return blockers;
+  }
+
+  /** Global availability without materializing flat arrays (preserves void/fallback-floor semantics). */
+  hasStaticGround(): boolean {
+    return this.staticBlockerIndex.size > 0 || this.staticSurfaceIndex.size > 0;
+  }
+
+  /** Cumulative work counters for deterministic streaming and movement performance checks. */
+  staticQueryDebug(): { invalidations: number; recordBuilds: number; blockerCandidatesInspected: number } {
+    return {
+      invalidations: this.staticInvalidations,
+      recordBuilds: this.staticRecordBuilds,
+      blockerCandidatesInspected: this.blockerCandidatesInspected,
+    };
+  }
+
+  private invalidateStaticCaches(): void {
+    this.staticInvalidations += 1;
+    this.staticBlockerCache = null;
+    this.staticSurfaceCache = null;
+    this.staticNavigationBlockerCache = null;
+    this.staticNavigationSurfaceCache = null;
+    this.cameraIgnoredCache = null;
+  }
+
+  private recordStaticBody(body: PhysicsBody, previousOrder?: number): void {
+    if (!body.collider.isStatic || body.collider.isSensor) return;
+    const order = previousOrder ?? this.nextStaticOrder++;
+    const blockers: Aabb[] = [];
+    const surfaces: PhysicsSurfaceTriangle[] = [];
+    appendBlockerAabbs(blockers, body);
+    appendSurfaceTriangles(surfaces, body);
+    const record: StaticBodyRecord = {
+      order,
+      navigationRole: body.collider.navigationRole,
+      blockers: blockers.map((value, itemOrder) => ({
+        value, bodyOrder: order, itemOrder,
+        minX: value.min[0], maxX: value.max[0], minZ: value.min[2], maxZ: value.max[2],
+      })),
+      surfaces: surfaces.map((value, itemOrder) => ({
+        value, bodyOrder: order, itemOrder,
+        minX: Math.min(value.a[0], value.b[0], value.c[0]),
+        maxX: Math.max(value.a[0], value.b[0], value.c[0]),
+        minZ: Math.min(value.a[2], value.b[2], value.c[2]),
+        maxZ: Math.max(value.a[2], value.b[2], value.c[2]),
+      })),
+    };
+    this.staticRecords.set(body.id, record);
+    this.staticRecordBuilds += 1;
+    if (!this.collisionDisabled.has(body.id)) this.indexStaticRecord(record, true);
+  }
+
+  private indexStaticRecord(record: StaticBodyRecord, enabled: boolean): void {
+    for (const entry of record.blockers) {
+      if (enabled) this.staticBlockerIndex.add(entry);
+      else this.staticBlockerIndex.remove(entry);
+    }
+    for (const entry of record.surfaces) {
+      if (enabled) this.staticSurfaceIndex.add(entry);
+      else this.staticSurfaceIndex.remove(entry);
+    }
+  }
+
+  private dropStaticRecord(entityId: EntityId): void {
+    const record = this.staticRecords.get(entityId);
+    if (!record) return;
+    this.indexStaticRecord(record, false);
+    this.staticRecords.delete(entityId);
   }
 
   /**
@@ -394,11 +798,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[] {
     if (this.staticNavigationBlockerCache) return this.staticNavigationBlockerCache;
     const blockers: Aabb[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (body.collider.navigationRole === "ignored") continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendBlockerAabbs(blockers, body);
+    for (const [id, record] of this.staticRecords) {
+      if (record.navigationRole === "ignored" || this.collisionDisabled.has(id)) continue;
+      for (const entry of record.blockers) blockers.push(entry.value);
     }
     this.staticNavigationBlockerCache = blockers;
     return blockers;
@@ -408,14 +810,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   staticNavigationSurfaceTriangles(): readonly PhysicsSurfaceTriangle[] {
     if (this.staticNavigationSurfaceCache) return this.staticNavigationSurfaceCache;
     const surfaces: PhysicsSurfaceTriangle[] = [];
-    for (const body of this.bodies) {
-      if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (
-        body.collider.navigationRole === "ignored" ||
-        body.collider.navigationRole === "obstacleOnly"
-      ) continue;
-      if (this.collisionDisabled.has(body.id)) continue;
-      appendSurfaceTriangles(surfaces, body);
+    for (const [id, record] of this.staticRecords) {
+      if (record.navigationRole === "ignored" || record.navigationRole === "obstacleOnly" ||
+        this.collisionDisabled.has(id)) continue;
+      for (const entry of record.surfaces) surfaces.push(entry.value);
     }
     this.staticNavigationSurfaceCache = surfaces;
     return surfaces;
@@ -436,7 +834,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   colliderDebugBox(
     entityId: EntityId,
   ): { center: [number, number, number]; halfExtents: [number, number, number] } | null {
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body) return null;
     const center = body.collider.center ?? [0, 0, 0];
     return {
@@ -450,7 +848,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   colliderHalfExtents(entityId: EntityId): readonly [number, number, number] | null {
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body) return null;
     return [
       (body.collider.size[0] ?? 0) / 2,
@@ -468,7 +866,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   velocityOf(entityId: EntityId): readonly [number, number, number] | null {
     const record = this.rapierBodies.get(entityId);
     if (!record) return null;
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body?.collider.simulatePhysics) return null;
     const v = record.body.linvel();
     return [v.x, v.y, v.z];
@@ -484,7 +882,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   applyImpulse(entityId: EntityId, impulse: readonly [number, number, number]): void {
     const record = this.rapierBodies.get(entityId);
     if (!record) return;
-    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    const body = this.bodiesById.get(entityId);
     if (!body?.collider.simulatePhysics) return;
     record.body.applyImpulse({ x: impulse[0], y: impulse[1], z: impulse[2] }, true);
   }
@@ -620,14 +1018,25 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       return;
     }
     if (this.rapierWorld) {
-      const deltaSeconds = Math.max(0, Math.min(_context.deltaSeconds, 1 / 20));
-      if (deltaSeconds > 0) this.rapierWorld.timestep = deltaSeconds;
-      this.updateDynamicActiveArea();
-      this.rapierWorld.step();
-      this.updateRapierContacts();
+      // Fixed slices, not one frame-sized step: the result must not depend on
+      // the frame rate. A frame shorter than a slice simulates nothing and only
+      // advances the render blend below.
+      const steps = this.stepClock.advance(_context.deltaSeconds);
+      this.frameStepCount = steps;
+      if (steps > 0) {
+        this.updateDynamicActiveArea();
+        for (let index = 0; index < steps; index += 1) {
+          if (index === steps - 1) this.capturePreviousPoses();
+          // Vehicles push velocity into their chassis right before each slice.
+          this.updateVehicles(this.stepClock.step);
+          this.rapierWorld.step();
+        }
+        this.updateRapierContacts();
+      }
       this.syncRapierDynamicTransforms();
       return;
     }
+    this.frameStepCount = 0;
     const contacts: PhysicsContact[] = [];
     for (let i = 0; i < this.bodies.length; i += 1) {
       for (let j = i + 1; j < this.bodies.length; j += 1) {
@@ -675,6 +1084,12 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   clear(): void {
+    this.bodiesById.clear();
+    this.staticRecords.clear();
+    this.staticBlockerIndex.clear();
+    this.staticSurfaceIndex.clear();
+    this.nextStaticOrder = 0;
+    this.invalidateStaticCaches();
     this.bodies = [];
     this.contacts = [];
     this.collisionDisabled.clear();
@@ -689,13 +1104,19 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.suspendedDynamicBodies.clear();
     this.rapierColliderToEntity.clear();
     this.ragdollGroups.clear();
+    this.vehicles.clear();
   }
 
   private rebuildRapierWorld(): void {
     const RAPIER = this.rapierModule;
     if (!RAPIER) return;
+    // Controllers die with the old world; the records re-attach below.
+    for (const vehicle of this.vehicles.values()) vehicle.controller = null;
     this.rapierWorld?.free();
     this.rapierWorld = new RAPIER.World(vectorFromVec3(this.gravity));
+    this.rapierWorld.timestep = this.stepClock.step;
+    this.stepClock.reset();
+    this.previousPoses.clear();
     this.rapierBodies.clear();
     this.suspendedDynamicBodies.clear();
     this.rapierColliderToEntity.clear();
@@ -703,6 +1124,126 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.ragdollGroups.clear();
 
     for (const body of this.bodies) this.addRapierBody(body);
+    for (const [entityId, vehicle] of this.vehicles) {
+      if (vehicle.controller) continue; // a component vehicle addRapierBody just built
+      if (!this.attachVehicleController(vehicle)) this.vehicles.delete(entityId);
+    }
+  }
+
+  /**
+   * Builds the Rapier controller for a vehicle record on its chassis body. Mass
+   * comes from the definition instead of the colliders (density 0), with a box
+   * inertia from the chassis collider size and the authored centre of mass.
+   */
+  private attachVehicleController(record: VehicleRecord): boolean {
+    const world = this.rapierWorld;
+    const rapier = this.rapierBodies.get(record.entityId);
+    const body = this.bodies.find((candidate) => candidate.id === record.entityId);
+    if (!world || !rapier || !body?.collider.simulatePhysics || !rapier.body.isDynamic()) return false;
+
+    const { definition } = record;
+    for (const collider of rapier.colliders) collider.setDensity(0);
+    const [width, height, length] = [
+      body.collider.size[0] ?? 1,
+      body.collider.size[1] ?? 1,
+      body.collider.size[2] ?? 1,
+    ];
+    const mass = definition.massKg;
+    rapier.body.setAdditionalMassProperties(
+      mass,
+      vectorFromVec3([...definition.centerOfMassOffset]),
+      {
+        x: (mass / 12) * (height * height + length * length),
+        y: (mass / 12) * (width * width + length * length),
+        z: (mass / 12) * (width * width + height * height),
+      },
+      { x: 0, y: 0, z: 0, w: 1 },
+      true,
+    );
+    rapier.body.recomputeMassPropertiesFromColliders();
+
+    const controller = world.createVehicleController(rapier.body);
+    controller.indexUpAxis = 1;
+    controller.setIndexForwardAxis = 2;
+    definition.wheels.forEach((wheel, index) => {
+      controller.addWheel(
+        vectorFromVec3([...wheel.position]),
+        { x: 0, y: -1, z: 0 },
+        { x: -1, y: 0, z: 0 },
+        wheel.suspensionRestLength,
+        wheel.radius,
+      );
+      controller.setWheelMaxSuspensionTravel(index, wheel.suspensionMaxTravel);
+      controller.setWheelSuspensionStiffness(index, wheel.suspensionStiffness);
+      controller.setWheelSuspensionCompression(index, wheel.suspensionCompression);
+      controller.setWheelSuspensionRelaxation(index, wheel.suspensionRelaxation);
+      controller.setWheelMaxSuspensionForce(index, wheel.maxSuspensionForce);
+      controller.setWheelFrictionSlip(index, wheel.frictionSlip);
+      controller.setWheelSideFrictionStiffness(index, wheel.sideFrictionStiffness);
+    });
+    record.controller = controller;
+    return true;
+  }
+
+  private vehicleWheelGroundEntity(controller: RapierVehicleController, index: number): EntityId | null {
+    const ground = controller.wheelGroundObject(index);
+    return ground ? this.rapierColliderToEntity.get(ground.handle) ?? null : null;
+  }
+
+  /** Feeds each vehicle's drive commands and runs its wheel rays for one slice. */
+  private updateVehicles(deltaSeconds: number): void {
+    const RAPIER = this.rapierModule;
+    if (!RAPIER) return;
+    for (const record of this.vehicles.values()) {
+      const controller = record.controller;
+      const rapier = this.rapierBodies.get(record.entityId);
+      if (!controller || !rapier) continue;
+      if (this.suspendedDynamicBodies.has(record.entityId)) continue;
+      const forwardSpeed = chassisForwardSpeed(rapier.body);
+      const drive = computeVehicleDrive(
+        record.definition,
+        record.input,
+        forwardSpeed,
+        record.steer,
+        deltaSeconds,
+        record.drivetrain,
+      );
+      record.steer = drive.steer;
+      record.drivetrain = drive.drivetrain;
+      record.engineLoad = drive.engineLoad;
+      drive.wheels.forEach((command, index) => {
+        const wheel = record.definition.wheels[index]!;
+        // Rapier exposes the previous slice's wheel rays/load until updateVehicle.
+        const contact = this.vehicleSurfaceProvider && controller.wheelIsInContact(index)
+          ? controller.wheelContactPoint(index) : null;
+        const sample = contact ? this.vehicleSurfaceProvider!(
+          record.entityId, index, this.vehicleWheelGroundEntity(controller, index),
+          [contact.x, contact.y, contact.z],
+        ) : null;
+        const surface = computeWheelSurfaceResponse(
+          { frictionSlip: wheel.frictionSlip, sideFrictionStiffness: command.sideFrictionStiffness },
+          sample, forwardSpeed, controller.wheelSuspensionForce(index) ?? 0,
+        );
+        controller.setWheelEngineForce(index, command.engineForce);
+        // The controller takes the brake as a per-slice impulse cap.
+        controller.setWheelBrake(index, (command.brakeForce + surface.rollingResistanceForce) * deltaSeconds);
+        controller.setWheelSteering(index, command.steering);
+        controller.setWheelFrictionSlip(index, surface.frictionSlip);
+        controller.setWheelSideFrictionStiffness(index, surface.sideFrictionStiffness);
+      });
+      const velocity = rapier.body.linvel();
+      const force = computeVehicleAerodynamics(record.definition, [velocity.x, velocity.y, velocity.z]);
+      if (force.some((component) => component !== 0)) {
+        // Impulses apply this slice only; addForce would accumulate between slices.
+        rapier.body.applyImpulse({ x: force[0] * deltaSeconds, y: force[1] * deltaSeconds, z: force[2] * deltaSeconds }, false);
+      }
+      const body = this.bodies.find((candidate) => candidate.id === record.entityId);
+      controller.updateVehicle(
+        deltaSeconds,
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        body?.collider.collisionGroups,
+      );
+    }
   }
 
   private addRapierBody(body: PhysicsBody): void {
@@ -729,6 +1270,19 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: body.collider.isSensor,
     });
     for (const collider of colliders) this.rapierColliderToEntity.set(collider.handle, body.id);
+    if (body.vehicle && !this.vehicles.has(body.id)) {
+      const record: VehicleRecord = {
+        entityId: body.id,
+        definition: body.vehicle,
+        source: "component",
+        controller: null,
+        input: NEUTRAL_VEHICLE_INPUT,
+        steer: 0,
+        drivetrain: initialVehicleDrivetrainState(body.vehicle),
+        engineLoad: 0,
+      };
+      if (this.attachVehicleController(record)) this.vehicles.set(body.id, record);
+    }
   }
 
   private updateRapierContacts(): void {
@@ -776,7 +1330,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (activeDistance === undefined) return;
 
     for (const [entityId, rapier] of this.rapierBodies) {
-      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      const body = this.bodiesById.get(entityId);
       if (!body?.collider.simulatePhysics) continue;
 
       const translation = rapier.body.translation();
@@ -797,6 +1351,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         rapier.body.setLinvel({ x: 0, y: 0, z: 0 }, false);
         rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, false);
         rapier.body.sleep();
+        this.previousPoses.delete(entityId);
       } else if (!outsideActiveArea && suspended) {
         rapier.body.setLinvel(
           {
@@ -871,20 +1426,51 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
   }
 
-  private syncRapierDynamicTransforms(): void {
+  /** Records every live dynamic body's pose right before the frame's last slice. */
+  private capturePreviousPoses(): void {
     if (!this.transformSink) return;
     for (const [entityId, rapier] of this.rapierBodies.entries()) {
-      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      if (this.suspendedDynamicBodies.has(entityId)) continue;
+      const body = this.bodiesById.get(entityId);
+      if (!body?.collider.simulatePhysics) continue;
+      const translation = rapier.body.translation();
+      const rotation = rapier.body.rotation();
+      this.previousPoses.set(entityId, {
+        position: [translation.x, translation.y, translation.z],
+        rotation: { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w },
+      });
+    }
+  }
+
+  /**
+   * Sends each dynamic body's render pose to the sink, blended between the
+   * previous and latest slice by the step clock's leftover. The sink only feeds
+   * rendering, so the blend never leaks into the simulation; `body.transform`
+   * (sensor AABBs) keeps the true simulated pose.
+   */
+  private syncRapierDynamicTransforms(): void {
+    if (!this.transformSink) return;
+    const alpha = this.stepClock.alpha;
+    for (const [entityId, rapier] of this.rapierBodies.entries()) {
+      const body = this.bodiesById.get(entityId);
       if (!body?.collider.simulatePhysics) continue;
       if (this.suspendedDynamicBodies.has(entityId)) continue;
       const translation = rapier.body.translation();
-      const rotation = eulerDegreesFromQuaternion(rapier.body.rotation());
-      const transform: TransformComponent = {
-        position: [translation.x, translation.y, translation.z],
-        rotation,
+      const rotation = rapier.body.rotation();
+      const position: Vec3 = [translation.x, translation.y, translation.z];
+      body.transform = {
+        position,
+        rotation: eulerDegreesFromQuaternion(rotation),
         scale: [...body.transform.scale],
       };
-      body.transform = cloneTransform(transform);
+      const previous = this.previousPoses.get(entityId);
+      const transform: TransformComponent = previous
+        ? {
+            position: lerpPosition(previous.position, position, alpha),
+            rotation: eulerDegreesFromQuaternion(nlerpQuaternion(previous.rotation, rotation, alpha)),
+            scale: [...body.transform.scale],
+          }
+        : cloneTransform(body.transform);
       this.transformSink(entityId, transform);
     }
   }
@@ -910,6 +1496,19 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: left.isSensor || right.isSensor,
     });
   }
+}
+
+/** Signed linear speed along the body's local +Z (Forge's model forward). */
+function chassisForwardSpeed(body: RapierRigidBody): number {
+  const q = body.rotation();
+  // Local +Z rotated into world space (third column of the rotation matrix).
+  const forward: VehicleVec3 = [
+    2 * (q.x * q.z + q.w * q.y),
+    2 * (q.y * q.z - q.w * q.x),
+    1 - 2 * (q.x * q.x + q.y * q.y),
+  ];
+  const v = body.linvel();
+  return v.x * forward[0] + v.y * forward[1] + v.z * forward[2];
 }
 
 function contactKey(a: EntityId, b: EntityId): string {
@@ -1131,49 +1730,6 @@ function appendSurfaceTriangles(out: PhysicsSurfaceTriangle[], body: PhysicsBody
   }
 }
 
-/** A stable four-unit X/Z grid key for cached static surface broad-phase cells. */
-function staticSurfaceCellKey(x: number, z: number): string {
-  const cellX = Math.floor(x / STATIC_SURFACE_GRID_CELL_SIZE);
-  const cellZ = Math.floor(z / STATIC_SURFACE_GRID_CELL_SIZE);
-  return `${cellX},${cellZ}`;
-}
-
-/**
- * Bins each static surface into the X/Z cells its triangle projection touches.
- * Landscapes have compact one-cell triangles, while very large generic mesh faces
- * are held in a small overflow list so they cannot create an unbounded grid.
- */
-function buildStaticSurfaceSpatialIndex(
-  surfaces: readonly PhysicsSurfaceTriangle[],
-): StaticSurfaceSpatialIndex {
-  const cells = new Map<string, PhysicsSurfaceTriangle[]>();
-  const overflow: PhysicsSurfaceTriangle[] = [];
-  for (const surface of surfaces) {
-    const minX = Math.min(surface.a[0], surface.b[0], surface.c[0]);
-    const maxX = Math.max(surface.a[0], surface.b[0], surface.c[0]);
-    const minZ = Math.min(surface.a[2], surface.b[2], surface.c[2]);
-    const maxZ = Math.max(surface.a[2], surface.b[2], surface.c[2]);
-    const minCellX = Math.floor(minX / STATIC_SURFACE_GRID_CELL_SIZE);
-    const maxCellX = Math.floor(maxX / STATIC_SURFACE_GRID_CELL_SIZE);
-    const minCellZ = Math.floor(minZ / STATIC_SURFACE_GRID_CELL_SIZE);
-    const maxCellZ = Math.floor(maxZ / STATIC_SURFACE_GRID_CELL_SIZE);
-    const cellCount = (maxCellX - minCellX + 1) * (maxCellZ - minCellZ + 1);
-    if (cellCount > STATIC_SURFACE_GRID_MAX_CELLS_PER_TRIANGLE) {
-      overflow.push(surface);
-      continue;
-    }
-    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
-      for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-        const key = `${cellX},${cellZ}`;
-        const bucket = cells.get(key);
-        if (bucket) bucket.push(surface);
-        else cells.set(key, [surface]);
-      }
-    }
-  }
-  return { cells, overflow };
-}
-
 function aabbOverlaps(a: Aabb, b: Aabb): boolean {
   return (
     a.min[0] <= b.max[0] &&
@@ -1197,11 +1753,14 @@ function bodyFromEntity(entity: Entity): PhysicsBody | null {
   const transform = readTransformComponent(entity);
   const collider = readColliderComponent(entity);
   if (!transform || !collider) return null;
-  return {
+  const body: PhysicsBody = {
     id: entity.id,
     transform: cloneTransform(transform),
     collider: cloneCollider(collider),
   };
+  const vehicle = vehicleDefinitionFromComponent(entity.components[VEHICLE_COMPONENT]);
+  if (vehicle) body.vehicle = vehicle;
+  return body;
 }
 
 function cloneCollider(collider: ColliderComponent): ColliderComponent {
@@ -1214,6 +1773,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
   if (collider.center) clone.center = [...collider.center];
   if (collider.primitives) clone.primitives = collider.primitives.map(clonePrimitive);
   if (collider.friction !== undefined) clone.friction = collider.friction;
+  if (collider.physicalMaterialId !== undefined) clone.physicalMaterialId = collider.physicalMaterialId;
   if (collider.restitution !== undefined) clone.restitution = collider.restitution;
   if (collider.navigationRole !== undefined) clone.navigationRole = collider.navigationRole;
   if (collider.generateOverlapEvents !== undefined) {
@@ -1223,6 +1783,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
     clone.simulationGeneratesHitEvents = collider.simulationGeneratesHitEvents;
   }
   if (collider.collisionGroups !== undefined) clone.collisionGroups = collider.collisionGroups;
+  if (collider.ignoreCameraTrace !== undefined) clone.ignoreCameraTrace = collider.ignoreCameraTrace;
   if (collider.simulatePhysics !== undefined) clone.simulatePhysics = collider.simulatePhysics;
   if (collider.massKg !== undefined) clone.massKg = collider.massKg;
   if (collider.linearDamping !== undefined) clone.linearDamping = collider.linearDamping;

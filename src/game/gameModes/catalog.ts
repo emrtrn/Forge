@@ -26,6 +26,9 @@ export const TPS_GAME_MODE_ID = "forge.tpsCharacter";
 /** Characterless top-down strategy Game Mode: edge-pan, wheel zoom, click select. */
 export const RTS_GAME_MODE_ID = "forge.rtsCamera";
 
+/** Drives the level's first `Vehicle` actor with a chase camera. */
+export const VEHICLE_GAME_MODE_ID = "forge.vehicle";
+
 /**
  * The selectable Game Modes, in dropdown order. The first entry is the default
  * camera mode and must keep `DEFAULT_GAME_MODE_ID`.
@@ -46,6 +49,11 @@ export const GAME_MODE_OPTIONS: readonly GameModeOption[] = [
     displayName: "RTS Camera",
     description:
       "Characterless top-down camera: edge-pan + WASD, wheel zoom, click to select a unit.",
+  },
+  {
+    id: VEHICLE_GAME_MODE_ID,
+    displayName: "Vehicle",
+    description: "Drives the level's first Vehicle actor with a chase camera.",
   },
 ];
 

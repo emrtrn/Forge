@@ -8,7 +8,7 @@
 ## Mevcut Sozlesme
 
 Forge'un karakter-facing matematigi, meshlerin local **`+z`** eksenine baktigini
-kabul eder. `src/game/playerMovement.ts` icindeki `facingYawFromMove(dx, dz)` bu
+kabul eder. `engine/movement/planarMovement.ts` icindeki `facingYawFromMove(dx, dz)` bu
 kabule gore yaw uretir; hem player hem AI tarafindan kullanilan
 `CharacterMovementSubsystem` hareket sonucunda ayni yaw'i uygular.
 
@@ -26,8 +26,9 @@ AI/NPC hareketi artik bu backlog'u bloklamaz:
   karakterler icin ajan-basina world-space `{ direction, speed, jump? }`
   girisi alir; mevcut collision, step, gravity ve locomotion hattini yeniden
   kullanir.
-- `RuntimeSceneApp`, `AISubsystem`i CharacterMovement'ten once tick eder ve
-  `aiMoveIntentForEntity(...)` ile path-following sonucunu ayni frame'de
+- `src/scene/capabilities/aiModule.ts`, `AISubsystem`i `decision` asamasinda,
+  CharacterMovement'in `movement` asamasindan once tick eder.
+  `aiCommandsService.moveIntentFor(...)` path-following sonucunu ayni frame'de
   hareket resolver'ina verir.
 - Tamamlanmis AI plani arsivdedir; aktif AI feature planini yeniden acmak bu
   backlog'un amaci degildir.

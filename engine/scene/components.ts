@@ -29,6 +29,10 @@ export const SCRIPT_REFERENCES_COMPONENT = "ScriptReferences";
 export const SCRIPT_DISPATCHERS_COMPONENT = "ScriptDispatchers";
 export const AI_CONTROLLER_COMPONENT = "AIController";
 export const SMART_OBJECT_COMPONENT = "SmartObject";
+/** Ray-cast wheeled vehicle on a dynamic chassis (`engine/physics/vehicle`). */
+export const VEHICLE_COMPONENT = "Vehicle";
+/** A simple AI driver steering a `Vehicle` along a Generic Spline (vehicle plan Faz 4). */
+export const VEHICLE_AI_DRIVER_COMPONENT = "VehicleAiDriver";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape =
@@ -239,6 +243,8 @@ export interface ColliderComponent {
   hideInGame?: boolean;
   /** Surface friction (Rapier). Absent uses the backend default. */
   friction?: number;
+  /** Authored surface profile id, retained for ray-cast vehicle response. */
+  physicalMaterialId?: string;
   /** Surface restitution / bounciness (Rapier). Absent uses the backend default. */
   restitution?: number;
   /** AI navigation interpretation; affects nav generation only, not physics collision. */
@@ -249,6 +255,12 @@ export interface ColliderComponent {
   simulationGeneratesHitEvents?: boolean;
   /** Packed Rapier interaction groups (membership<<16 | filter). Absent = interact with all. */
   collisionGroups?: number;
+  /**
+   * The profile ignores the `camera` trace channel: a spring-arm camera passes
+   * through this collider instead of being pulled in by it. Derived from the
+   * collision preset/responses, like {@link collisionGroups}.
+   */
+  ignoreCameraTrace?: boolean;
   simulatePhysics?: boolean;
   massKg?: number;
   linearDamping?: number;
@@ -857,6 +869,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   const primitives = readColliderPrimitives(data.primitives);
   if (primitives) component.primitives = primitives;
   if (typeof data.friction === "number") component.friction = data.friction;
+  if (typeof data.physicalMaterialId === "string") component.physicalMaterialId = data.physicalMaterialId;
   if (typeof data.restitution === "number") component.restitution = data.restitution;
   if (isNavigationRole(data.navigationRole)) component.navigationRole = data.navigationRole;
   if (typeof data.generateOverlapEvents === "boolean") {
@@ -866,6 +879,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
     component.simulationGeneratesHitEvents = data.simulationGeneratesHitEvents;
   }
   if (typeof data.collisionGroups === "number") component.collisionGroups = data.collisionGroups;
+  if (data.ignoreCameraTrace === true) component.ignoreCameraTrace = true;
   if (typeof data.simulatePhysics === "boolean") component.simulatePhysics = data.simulatePhysics;
   if (typeof data.massKg === "number") component.massKg = data.massKg;
   if (typeof data.linearDamping === "number") component.linearDamping = data.linearDamping;
@@ -892,6 +906,39 @@ export function readMovingPlatformComponent(entity: Entity): MovingPlatformCompo
   const speed = Math.max(0, readFiniteNumber(data.speed, 0, undefined));
   const startPhase = Math.min(Math.max(readFiniteNumber(data.startPhase, 0, undefined), 0), 1);
   return { offset, speed, startPhase };
+}
+
+/**
+ * An AI driver for a `Vehicle` actor: it drives the car along a Generic Spline
+ * with the same pedals and steering a player uses — physics still moves the
+ * car. The spline id is level-owned, so a reusable actor class usually leaves
+ * it empty and each placement's `patrolRoute` (spline source) supplies it.
+ */
+export interface VehicleAiDriverComponent {
+  splineId: string;
+  /** Join the route at the point nearest the car, or drive to its start. */
+  entry: AiSplinePatrolEntry;
+  /** Lap a route forever or stop at its end; absent = loop a closed spline, stop on an open one. */
+  wrapMode?: "loop" | "clamp";
+  /** Cruising speed on straights (m/s). */
+  targetSpeed: number;
+  /** Pure-pursuit look-ahead at rest (m); it grows with speed. */
+  lookAheadDistance: number;
+  enabled: boolean;
+}
+
+/** Reads a VehicleAiDriver; one without a spline id drives nothing (undefined). */
+export function readVehicleAiDriverComponent(entity: Entity): VehicleAiDriverComponent | undefined {
+  const data = entity.components[VEHICLE_AI_DRIVER_COMPONENT];
+  if (!data || typeof data.splineId !== "string" || data.splineId.trim().length === 0) return undefined;
+  return {
+    splineId: data.splineId.trim(),
+    entry: data.entry === "start" ? "start" : "nearest",
+    ...(data.wrapMode === "loop" || data.wrapMode === "clamp" ? { wrapMode: data.wrapMode } : {}),
+    targetSpeed: Math.min(100, Math.max(0, readFiniteNumber(data.targetSpeed, 12, undefined))),
+    lookAheadDistance: Math.min(50, Math.max(1, readFiniteNumber(data.lookAheadDistance, 5, undefined))),
+    enabled: data.enabled !== false,
+  };
 }
 
 /** Reads a tolerant path-follower component; malformed data simply does not move. */

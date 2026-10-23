@@ -539,6 +539,63 @@ export function buildLandscapeSplineMeshGroup(options: {
   return { group, meshes };
 }
 
+/**
+ * Landscape-local triangles of a built spline mesh group, for a static trimesh
+ * collider. Without it a road is render-only: wheels and feet land on the
+ * flattened heightfield below it and sink by the road mesh's offset +
+ * thickness. The render geometry is the single source of truth, so collision
+ * matches what is drawn. `collidable` filters by asset (the manifest's
+ * `runtime.collision`); returns null when nothing collidable was built.
+ */
+export function landscapeSplineMeshColliderPrimitive(
+  group: Group,
+  collidable: (assetId: string) => boolean,
+): { vertices: Vec3[]; indices: number[]; size: Vec3; center: Vec3 } | null {
+  const vertices: Vec3[] = [];
+  const indices: number[] = [];
+  const min: Vec3 = [Infinity, Infinity, Infinity];
+  const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  const point = new Vector3();
+  const instanceMatrix = new Matrix4();
+  const pushGeometry = (geometry: BufferGeometry, matrix: Matrix4 | null): void => {
+    const position = geometry.getAttribute("position");
+    if (!position) return;
+    const offset = vertices.length;
+    for (let index = 0; index < position.count; index += 1) {
+      point.fromBufferAttribute(position, index);
+      if (matrix) point.applyMatrix4(matrix);
+      vertices.push([point.x, point.y, point.z]);
+      min[0] = Math.min(min[0], point.x); min[1] = Math.min(min[1], point.y); min[2] = Math.min(min[2], point.z);
+      max[0] = Math.max(max[0], point.x); max[1] = Math.max(max[1], point.y); max[2] = Math.max(max[2], point.z);
+    }
+    const source = geometry.index;
+    const count = source ? source.count : position.count;
+    for (let index = 0; index < count; index += 1) indices.push(offset + (source ? source.getX(index) : index));
+  };
+  group.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    const assetId = child.userData.assetId;
+    if (typeof assetId !== "string" || !collidable(assetId)) return;
+    const instanced = child as Mesh & Partial<InstancedMesh>;
+    if (instanced.isInstancedMesh) {
+      for (let index = 0; index < instanced.count!; index += 1) {
+        instanced.getMatrixAt!(index, instanceMatrix);
+        pushGeometry(child.geometry, instanceMatrix);
+      }
+      return;
+    }
+    // Deformed chains are already baked in landscape-local space.
+    pushGeometry(child.geometry, null);
+  });
+  if (indices.length < 3) return null;
+  return {
+    vertices,
+    indices,
+    size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
+    center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
+  };
+}
+
 export interface LandscapeSplineMeshDeformPath {
   assetId: string;
   points: readonly Vec3[];

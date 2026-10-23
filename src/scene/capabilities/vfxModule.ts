@@ -33,7 +33,12 @@ import { projectFileUrl } from "@/project/ProjectSystem";
 
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeServices } from "./RuntimeServices";
-import { vfxCommandsService, vfxHostService } from "./runtimeServiceKeys";
+import {
+  vfxCommandsService,
+  vfxHostService,
+  type VfxEffectHandle,
+  type VfxSpawnOptions,
+} from "./runtimeServiceKeys";
 
 export const VFX_MODULE_ID = "vfx";
 
@@ -51,7 +56,65 @@ export function createVfxModule(): CapabilityModule {
   const effectUrlById = new Map<string, string>();
   /** Manifest texture asset id -> fetchable image URL (particle sprite textures). */
   const textureUrlById = new Map<string, string>();
+  const effectIdByPath = new Map<string, string>();
+  const warnedEffects = new Set<string>();
   let vfx: VfxSubsystem | null = null;
+  let levelGeneration = 0;
+
+  async function spawnEffect(
+    effectIdOrPath: string,
+    options: VfxSpawnOptions,
+    loop: boolean,
+  ): Promise<VfxEffectHandle | null> {
+    const runtime = vfx;
+    const generation = levelGeneration;
+    if (!runtime) return null;
+    const effectId = effectIdByPath.get(effectIdOrPath) ?? effectIdOrPath;
+    // Copy call-time values before loading: callers often reuse contact vectors.
+    const position: [number, number, number] = [...options.position];
+    const direction: [number, number, number] | undefined = options.direction ? [...options.direction] : undefined;
+    const scale = options.scale;
+    const definition = await runtime.warm(effectId);
+    if (generation !== levelGeneration || runtime !== vfx) return null;
+    if (!definition) {
+      if (!warnedEffects.has(effectId)) {
+        warnedEffects.add(effectId);
+        console.warn(`[vfx] "${effectIdOrPath}" is unknown or could not be loaded; ignoring it.`);
+      }
+      return null;
+    }
+    const id = runtime.play(effectId, {
+      position,
+      loop,
+      ...(direction ? { direction } : {}),
+      ...(scale !== undefined ? { scale } : {}),
+    });
+    if (id === null) return null;
+    let disposed = false;
+    let stopped = false;
+    const active = (): boolean => !disposed && generation === levelGeneration && runtime === vfx;
+    const dispose = (): void => {
+      if (active()) runtime.stop(id);
+      disposed = true;
+    };
+    return {
+      setTransform(position, direction) {
+        if (active() && !stopped) runtime.setTransform(id, position, direction);
+      },
+      setEmissionRate(multiplier) {
+        if (active() && !stopped) runtime.setEmissionRate(id, multiplier);
+      },
+      stop(fadeOut = true) {
+        if (!fadeOut) {
+          dispose();
+          return;
+        }
+        if (active() && !stopped) runtime.stopEmission(id);
+        stopped = true;
+      },
+      dispose,
+    };
+  }
 
   /**
    * Spawns an entity's effect at its authored position. The definition is warmed
@@ -59,14 +122,17 @@ export function createVfxModule(): CapabilityModule {
    * scale/tint/loop fields are the per-instance overrides.
    */
   async function playEntityEffect(entity: Entity, requireAutoPlay: boolean): Promise<void> {
-    if (!vfx) return;
+    const runtime = vfx;
+    const generation = levelGeneration;
+    if (!runtime) return;
     const particle = readParticleEmitterComponent(entity);
     if (!particle || particle.enabled === false) return;
     if (requireAutoPlay && !particle.autoPlay) return;
     const transform = readTransformComponent(entity);
     if (!transform) return;
-    await vfx.warm(particle.effectId);
-    vfx.play(particle.effectId, { ...particle, position: transform.position });
+    await runtime.warm(particle.effectId);
+    if (generation !== levelGeneration || runtime !== vfx) return;
+    runtime.play(particle.effectId, { ...particle, position: transform.position });
   }
 
   return {
@@ -79,7 +145,15 @@ export function createVfxModule(): CapabilityModule {
       if (!host) return;
 
       vfx = new VfxSubsystem({
-        resolveEffectUrl: (effectId) => effectUrlById.get(effectId) ?? null,
+        resolveEffectUrl: (effectId) => {
+          const url = effectUrlById.get(effectId);
+          if (url) return url;
+          // Direct references stay within public-root-relative effect files.
+          if (!effectId.endsWith(".effect.json") || /[\\:#?]/.test(effectId)) return null;
+          const parts = effectId.split("/");
+          if (parts.some((part) => !part || part === "." || part === ".." || part.includes("%"))) return null;
+          return projectFileUrl(effectId);
+        },
         resolveTextureUrl: (textureId) => textureUrlById.get(textureId) ?? null,
         // Mesh emitters draw manifest models. A host that cannot load them leaves
         // those emitters sourceless, which renders nothing — the module still
@@ -101,6 +175,7 @@ export function createVfxModule(): CapabilityModule {
             // resolving.
             if (assetType(asset) === "effect" || path.endsWith(".effect.json")) {
               effectUrlById.set(asset.id, projectFileUrl(path));
+              effectIdByPath.set(path, asset.id);
             }
           }
         },
@@ -109,26 +184,33 @@ export function createVfxModule(): CapabilityModule {
         },
         playAutoPlayEntity: (entity) => playEntityEffect(entity, true),
         triggerEntityEffect: (entity) => playEntityEffect(entity, false),
+        spawnEffectAt: (effectId, options) => spawnEffect(effectId, options, false),
+        createEffectEmitter: (effectId, options) => spawnEffect(effectId, options, true),
         setGlobalDensity: (scale) => vfx?.setGlobalDensity(scale),
         debugSnapshot: (): VfxDebugSnapshot => vfx?.getDebugSnapshot() ?? EMPTY_VFX_SNAPSHOT,
       });
     },
 
     onLevelUnloaded() {
+      levelGeneration += 1;
       // Stop live instances; the definition cache + pool stay warm for the
       // rebuild, which re-spawns the same project's effects. The URL maps are
       // re-filled by the next `prepareLevel`, so a re-authored asset is picked up.
       vfx?.clear();
       effectUrlById.clear();
       textureUrlById.clear();
+      effectIdByPath.clear();
     },
 
     dispose() {
+      levelGeneration += 1;
       vfx?.root.removeFromParent();
       vfx?.dispose();
       vfx = null;
       effectUrlById.clear();
       textureUrlById.clear();
+      effectIdByPath.clear();
+      warnedEffects.clear();
     },
   };
 }

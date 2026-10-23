@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 // The target scene name contains the source name as a prefix, so match the
 // scene-loaded log's exact `"layout":"…"` field to tell the two levels apart.

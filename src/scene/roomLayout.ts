@@ -20,6 +20,8 @@ export {
 } from "@engine/scene/transform";
 
 import type { RoomLayout } from "@engine/scene/layout";
+import { readContentJson } from "@/project/contentLoader";
+import { readRoomLayout } from "@engine/scene/layoutValidation";
 
 type LegacyReflection = {
   hidden?: boolean;
@@ -30,23 +32,13 @@ type LegacyReflectionLayout = RoomLayout & {
   reflection?: LegacyReflection;
 };
 
-const BASE_URL = import.meta.env.BASE_URL.endsWith("/")
-  ? import.meta.env.BASE_URL
-  : `${import.meta.env.BASE_URL}/`;
-
 export async function loadRoomLayout(pathOrName: string): Promise<RoomLayout> {
   // A ".json" value is a public-relative path (served by Vite from public/);
   // a bare name resolves to the bundled layouts/ folder.
-  const url = pathOrName.endsWith(".json")
-    ? `/${pathOrName.replace(/\\/g, "/").replace(/^\/+/, "")}`
-    : `${BASE_URL}layouts/${pathOrName}.json`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(
-      `Room layout failed: ${response.status} ${response.statusText}`,
-    );
-  }
-  return normalizeLoadedRoomLayout((await response.json()) as RoomLayout);
+  const path = pathOrName.endsWith(".json")
+    ? pathOrName
+    : `layouts/${pathOrName}.json`;
+  return normalizeLoadedRoomLayout(readRoomLayout(await readContentJson(path), path));
 }
 
 /**

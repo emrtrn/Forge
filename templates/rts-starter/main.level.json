@@ -208,7 +208,7 @@
         -0.6,
         -32
       ],
-      "dataRef": "landscapes/runtime-parity.landscape.json",
+      "dataRef": "landscapes/runtime-parity.terrain.json",
       "name": "Parity Terrain",
       "collision": true
     }

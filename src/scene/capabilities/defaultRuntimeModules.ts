@@ -22,12 +22,19 @@ import { createRuntimeUiModule } from "./runtimeUiModule";
 import { createSaveGameModule } from "./saveGameModule";
 import { createSkeletalAnimationModule } from "./skeletalAnimationModule";
 import { createSplineFollowerModule } from "./splineFollowerModule";
+import { createVehicleAiModule } from "./vehicleAiModule";
+import { createVehicleModule } from "./vehicleModule";
 import { createVfxModule } from "./vfxModule";
 
 export function createDefaultRuntimeModules(): CapabilityModule[] {
   return [
     createMovingPlatformModule(),
     createSplineFollowerModule(),
+    // Wheel visuals and engine sound only: the `Vehicle` component drives
+    // through physics even with this module off.
+    createVehicleModule(),
+    // AI drivers steer `VehicleAiDriver` cars along splines; off, they park.
+    createVehicleAiModule(),
     // Registered after the platform module purely for readability — the solver
     // resolves platforms per call, and its tick comes from the `movement` slot.
     createCharacterMovementModule(),

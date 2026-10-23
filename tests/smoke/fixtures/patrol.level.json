@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "name": "Smoke Patrol",
+  "loadGroups": [],
+  "instances": [],
+  "characters": [],
+  "actors": [{
+    "name":"Smoke AI", "classRef":"assets/__playwright-ai-character.actor.json",
+    "position":[-3,0,-3], "scale":0.4,
+    "patrolRoute":{"source":"spline","splineId":"spline-1","entry":"nearest","wrapMode":"loop","speed":2,"acceptanceRadius":0.35,"lookAheadDistance":2.2}
+  }],
+  "splines": [{"id":"spline-1","name":"Smoke Route","position":[0,0,0],"spline":{
+    "schema":1,"closed":true,"defaultUp":[0,1,0],"reparamStepsPerSegment":8,
+    "points":[
+      {"id":"p1","position":[-3,0,-3],"pointType":"linear"},
+      {"id":"p2","position":[3,0,-3],"pointType":"linear"},
+      {"id":"p3","position":[3,0,-9],"pointType":"linear"},
+      {"id":"p4","position":[-3,0,-9],"pointType":"linear"}
+    ]
+  }}],
+  "aiNavigationVolumes":[{"id":"smoke-nav","name":"Smoke Navigation","position":[0,2,-6],"size":[16,6,16],"agentRadius":0.35,"clearancePadding":0.1}],
+  "worldSettings":{"gameMode":"assets/starter-content/Gameplay/Script_GameMode.actor.json","killZ":-10}
+}

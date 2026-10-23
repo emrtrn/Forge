@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "warnings": [
+    "asset-file-unregistered:assets/starter-content/UI/SaveLoadMenu.ui.json"
+  ]
+}

@@ -1,0 +1,13 @@
+export const REPO_ROOT: string;
+export const SMOKE_PORT: number;
+export const SMOKE_SCENE: string;
+export const SMOKE_TARGET_SCENE: string;
+export const SMOKE_PATROL_SCENE: string;
+export const SMOKE_SPLINE_SCENE: string;
+export const SMOKE_ROAD_SIDECAR: string;
+export function assertSmokeRoot(root: string): string;
+export function smokeRunRoot(): string;
+export function smokePublicPath(path: string, root?: string): string;
+export function prepareSmokeProject(root?: string, sourceRoot?: string): Promise<void>;
+export function resetSmokeDocuments(root?: string): Promise<void>;
+export function cleanupSmokeProject(root?: string): Promise<void>;

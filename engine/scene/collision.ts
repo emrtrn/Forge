@@ -199,10 +199,43 @@ export interface AssetCollisionDef {
 export const DEFAULT_COLLISION_PRESET: CollisionPresetId = "blockAll";
 export const DEFAULT_COLLISION_COMPLEXITY: CollisionComplexity = "projectDefault";
 
-/** Surface response of a physical material: Rapier friction + restitution. */
+/** Physical surface response, with optional wheel and soft-surface profiles. */
 export interface PhysicalMaterialDef {
   friction: number;
   restitution: number;
+  /** Preset-only effect asset id or public-root-relative .effect.json path.
+   * Built-in presets leave wheel presentation unset; saves carry only the preset id. */
+  wheelEffect?: string;
+  /** Preset-only sound/soundCue id for a spatial tyre loop. */
+  wheelSound?: string;
+  /** Optional ray-cast wheel response. Absent keeps the authored wheel values. */
+  vehicle?: {
+    /** Multiplier on the wheel's longitudinal friction slip. */
+    frictionSlipScale: number;
+    /** Multiplier on the wheel's lateral friction stiffness. */
+    sideFrictionScale: number;
+    /** Load-relative rolling drag coefficient; ramps up over the first 1 m/s. */
+    rollingResistance: number;
+  };
+  /** Soft-surface profile for runtime tracks; never written into level data. */
+  deformation?: {
+    /** Maximum single-pass depth at full load (m). */
+    maxDepth: number;
+    /** Fraction of target depth reached per pass (0..1). */
+    compaction: number;
+    /** Additional digging while slipping (m/s). */
+    digRate: number;
+    /** Track refill rate (m/s); zero keeps tracks indefinitely. */
+    recoveryRate: number;
+    /** Extra resistance multiplier as the wheel sinks. */
+    sinkResistance: number;
+    /** Track albedo blend colour (RGB, 0..1). */
+    tint: Vec3;
+    /** Track albedo blend strength (0..1). */
+    tintStrength: number;
+    /** Track roughness reduction (0..1). */
+    wetness: number;
+  };
 }
 
 export const DEFAULT_PHYSICAL_MATERIAL: PhysicalMaterialDef = { friction: 0.8, restitution: 0 };
@@ -215,6 +248,30 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
   metal: { friction: 0.4, restitution: 0.1 },
   wood: { friction: 0.6, restitution: 0 },
   stone: { friction: 0.7, restitution: 0.05 },
+  snow: {
+    friction: 0.3, restitution: 0,
+    vehicle: { frictionSlipScale: 0.6, sideFrictionScale: 0.5, rollingResistance: 0.2 },
+    deformation: {
+      maxDepth: 0.3, compaction: 0.25, digRate: 0.05, recoveryRate: 0.01,
+      sinkResistance: 0.4, tint: [0.85, 0.9, 0.95], tintStrength: 0.3, wetness: 0.1,
+    },
+  },
+  mud: {
+    friction: 0.6, restitution: 0,
+    vehicle: { frictionSlipScale: 0.55, sideFrictionScale: 0.7, rollingResistance: 0.35 },
+    deformation: {
+      maxDepth: 0.22, compaction: 0.5, digRate: 0.08, recoveryRate: 0,
+      sinkResistance: 0.6, tint: [0.35, 0.27, 0.2], tintStrength: 0.6, wetness: 0.5,
+    },
+  },
+  sand: {
+    friction: 0.5, restitution: 0,
+    vehicle: { frictionSlipScale: 0.75, sideFrictionScale: 0.8, rollingResistance: 0.25 },
+    deformation: {
+      maxDepth: 0.15, compaction: 0.4, digRate: 0.06, recoveryRate: 0.002,
+      sinkResistance: 0.45, tint: [0.65, 0.5, 0.3], tintStrength: 0.4, wetness: 0.05,
+    },
+  },
 };
 
 export const PHYSICAL_MATERIAL_IDS: readonly string[] = Object.keys(PHYSICAL_MATERIALS);

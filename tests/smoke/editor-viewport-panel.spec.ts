@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./test";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
@@ -10,11 +10,54 @@ function bottom(rect: Rect): number {
   return rect.y + rect.height;
 }
 
+test("Stats starts closed and Show controls the whole panel, including with debug", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1440, height: 820 });
+  await page.goto("/?editor&debug");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  const stats = page.locator("#debug-stats");
+  const toggle = page.locator('[data-show-flag="stats"]');
+  const show = page.locator("[data-show-button]");
+  await expect(stats).toBeHidden();
+  await expect(stats).toHaveAttribute("aria-hidden", "true");
+  await show.hover();
+  await expect(toggle).not.toHaveClass(/active/);
+  await toggle.click();
+  await expect(stats).toBeVisible();
+  await expect(stats).toHaveAttribute("aria-hidden", "false");
+  await expect(stats).toContainText(/draw calls/, { timeout: 30_000 });
+  await expect(stats.getByRole("button", { name: "Inspect text" })).toBeVisible();
+  await expect(stats.getByRole("button", { name: "GPU sweep" })).toBeVisible();
+  await expect(toggle).toHaveClass(/active/);
+  await page.screenshot({ path: testInfo.outputPath("stats-open.png") });
+
+  await show.hover();
+  await toggle.click();
+  await expect(stats).toBeHidden();
+  await expect(stats.getByRole("button", { name: "Inspect text" })).toBeHidden();
+  await expect(stats.getByRole("button", { name: "GPU sweep" })).toBeHidden();
+  await expect(toggle).not.toHaveClass(/active/);
+  await page.screenshot({ path: testInfo.outputPath("stats-closed.png") });
+  await toggle.click();
+  await expect(stats).toBeVisible();
+  await expect(stats.locator(".forge-debug-panel-controls")).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await expect(stats).toBeHidden();
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await expect(stats).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test("editor viewport panel owns the canvas and Stats across layout resizes", async ({ page }) => {
   await page.setViewportSize({ width: 1680, height: 900 });
   await page.goto("/?editor&debug");
 
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-show-button]").hover();
+  await page.locator('[data-show-flag="stats"]').click();
 
   const host = page.locator("[data-viewport-host]");
   const canvas = page.locator("#game-canvas");
@@ -187,10 +230,10 @@ async function viewportRects(locators: {
       width: element.clientWidth,
       height: element.clientHeight,
     })),
-    locators.canvas.evaluate((element) => ({
-      width: element.width,
-      height: element.height,
-    })),
+    locators.canvas.evaluate((element) => {
+      if (!(element instanceof HTMLCanvasElement)) throw new Error("Expected the viewport canvas");
+      return { width: element.width, height: element.height };
+    }),
   ]);
   return { host, canvas, canvasClient, canvasBuffer, stats, drawer, outliner, details };
 }
@@ -203,6 +246,7 @@ async function requiredBox(locator: Locator): Promise<Rect> {
 
 async function expectCanvasBufferAspect(canvas: Locator): Promise<void> {
   await expect.poll(() => canvas.evaluate((element) => {
+    if (!(element instanceof HTMLCanvasElement)) throw new Error("Expected the viewport canvas");
     const clientAspect = element.clientWidth / element.clientHeight;
     const bufferAspect = element.width / element.height;
     return Math.abs(bufferAspect - clientAspect) < 0.01;

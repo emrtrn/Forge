@@ -13,6 +13,7 @@ import {
   editableAssetsFromManifest,
   isModelAssetType,
   recordsForGroup,
+  readAssetManifest,
   totalBytesForGroups,
 } from "@engine/assets/manifest";
 import type {
@@ -23,6 +24,7 @@ import type {
 } from "@engine/assets/manifest";
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import { GltfModelLoader } from "@engine/render-three/gltfModelLoader";
+import { readContentJson } from "@/project/contentLoader";
 
 export type {
   AssetCatalog,
@@ -65,16 +67,11 @@ export class AssetLoader {
   }
 
   loadManifest(): Promise<AssetManifest> {
-    this.manifestPromise ??= fetch(projectFileUrl(this.project.editor.assetManifest)).then(
-      async (response) => {
-        if (!response.ok) {
-          throw new Error(
-            `Asset manifest failed: ${response.status} ${response.statusText}`,
-          );
-        }
-        return (await response.json()) as AssetManifest;
-      },
-    );
+    const path = this.project.editor.assetManifest;
+    this.manifestPromise ??= readContentJson(path).then((raw) => readAssetManifest(raw, path)).catch((error: unknown) => {
+      this.manifestPromise = null;
+      throw error;
+    });
     return this.manifestPromise;
   }
 

@@ -95,6 +95,7 @@ engine/editor.
   live in `applyTransformFields`. (`LayoutCharacter` shares `applyTransformFields`
   plus explicit `assetId`/`position`/`animation`; all current fields are covered —
   character skeletal metadata is asset-level, not on the placement.)
+  Physical material `vehicle`/`deformation` blocks are preset-only; saves carry only `physicalMaterialId` from the shared `PHYSICAL_MATERIAL_IDS` catalog.
 - **Second allowlist surface — `*.skeleton.json` sidecar:** `/__save-skeleton`
   validates through `validateSaveSkeletonPayload` → `validateAssetSkeletonDef`
   (also in `tools/saveValidator.ts`, imported by `vite.config.ts`). Any new
@@ -115,6 +116,50 @@ engine/editor.
   block in the parser, or it is silently dropped on save. Effect assets carry
   `assetType: "effect"` in the manifest (`engine/assets/manifest.ts`); the runtime
   still falls back to the `.effect.json` suffix for older `prefab`-typed manifests.
+- **Fourth allowlist surface — `*.vehicle.json` vehicle asset (schema 1):**
+  `/__save-vehicle` validates through `validateSaveVehiclePayload`, reusing
+  `normalizeVehicleAsset` / `normalizeVehicleDefinition`
+  (`engine/physics/vehicle/vehicleTypes.ts`) as the runtime/save field allowlist.
+  New vehicle or wheel fields must be added there or saving drops them (and
+  reports them in `dropped[]`). Assets carry `assetType: "vehicle"`; a `Vehicle`
+  component's `asset` is a public-root-relative `.vehicle.json` path. Inline
+  scalar props override that asset; a valid inline wheels list replaces its
+  whole wheel list. Missing/malformed assets fall back to inline/reference-car
+  settings with a warning. Asset expansion is runtime-only; actor saves preserve
+  the authored reference and inline props.
+  A placed actor may carry level-owned `vehicleOverrides` (`asset`, the
+  `VEHICLE_OVERRIDE_SCALAR_KEYS` scalars, `engineSound` loop or `null`), layered
+  onto the class's Vehicle props before the asset resolves; new override keys go
+  in `validateActorVehicleOverrides` (`tools/saveValidator.ts`) and
+  `cloneActorInstance` too.
+  The optional `drivetrain` block enables torque/RPM/gearing; missing/null keeps
+  legacy flat-force behavior. Engine/transmission/differential inline objects
+  merge field-by-field; authored curves/gear lists replace their base lists.
+  Wheel `axle`, `steeringSpeedCurve`, `handbrakeSideFrictionMultiplier`,
+  `aerodynamics` and `engineSound` use the same normalizer and must round-trip
+  too. `engineSound` (a `sound`/`soundCue` id + pitch/volume/distance tuning)
+  is presentation data the `vehicle` capability plays while the car is driven;
+  inline fields override the asset's one by one and `null` silences the car.
+  Wheel `visualNode` optionally names a mesh/group in the vehicle model. The
+  vehicle capability animates that node around its centred physical axle,
+  restores it on unload, and leaves model geometry/material ownership with the
+  asset loader. Omitted/unusable nodes use the procedural wheel fallback.
+
+- **Fifth allowlist surface — World Terrain:** `*.terrain.json` definitions
+  use `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`) on read
+  and through `validateSaveTerrainPayload` re-exported by `tools/saveValidator.ts`.
+  Spline fields share `engine/scene/landscapeSplineValidation.ts` with legacy
+  Landscape. `/__save-terrain-tile?path=<definition>&key=<x_z>` accepts a raw
+  binary body, validates its size/header/coordinates/finite heights, and derives
+  `<name>.tiles/<x_z>.tile.bin`; `/__save-terrain` cross-checks every listed
+  binary before writing the definition and returns `dropped[]` for unknown keys.
+  Both endpoints use the privileged local-only middleware. Add new definition
+  fields to the shared normalizer and terrain serialization-drift tests.
+  Editor saves migrate legacy sidecars tile → definition → level reference,
+  preserving the old file. Phase 1 bridges 1×1 terrain to the existing mesh/brush
+  path; multi-tile rendering is Phase 2 and currently rejects explicitly.
+  Rotation/non-square/resampling adaptations require explicit resolution rather
+  than silently changing an authored scene during Save.
 
 ## Codex Tooling Context
 
@@ -136,7 +181,8 @@ engine/editor.
   validator guarded where they write structured data:
   `/__save-collision`, `/__save-actor`, `/__new-behavior`,
   `/__save-material-slots`, `/__save-skeleton`, `/__save-material`,
-  `/__save-ui`, `/__save-soundcue`, `/__save-effect`,
+  `/__save-terrain`, `/__save-terrain-tile`,
+  `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,
   `/__import-asset`, and `/__open-level`.

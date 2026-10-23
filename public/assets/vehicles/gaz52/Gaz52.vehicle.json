@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "type": "vehicle",
+  "massKg": 2500,
+  "centerOfMassOffset": [0, 0.7, -0.65],
+  "maxEngineForce": 14000,
+  "maxReverseForce": 8000,
+  "maxBrakeForce": 18000,
+  "handbrakeForce": 8000,
+  "rollingResistanceForce": 600,
+  "maxSteerAngleDeg": 32,
+  "steerSpeed": 2,
+  "steerRateCurve": [
+    { "speedMps": 0, "scale": 1 },
+    { "speedMps": 5, "scale": 0.7 },
+    { "speedMps": 10, "scale": 0.45 },
+    { "speedMps": 20, "scale": 0.3 }
+  ],
+  "steerReturnSpeed": 3,
+  "steerGamma": 1.15,
+  "drivetrain": {
+    "engine": {
+      "idleRpm": 600,
+      "maxRpm": 3000,
+      "engineBrakeTorqueNm": 50,
+      "torqueCurve": [
+        { "rpm": 600, "torqueNm": 150 },
+        { "rpm": 1200, "torqueNm": 195 },
+        { "rpm": 1700, "torqueNm": 205 },
+        { "rpm": 2500, "torqueNm": 190 },
+        { "rpm": 2800, "torqueNm": 180 },
+        { "rpm": 3000, "torqueNm": 160 }
+      ]
+    },
+    "transmission": {
+      "forwardRatios": [6.48, 3.09, 1.71, 1],
+      "reverseRatio": 7.9,
+      "finalDriveRatio": 6.67,
+      "efficiency": 0.85,
+      "upshiftRpm": 2700,
+      "downshiftRpm": 1100,
+      "shiftDurationSeconds": 0.5
+    },
+    "differential": { "driveType": "RWD", "frontTorqueShare": 0.5 }
+  },
+  "steeringSpeedCurve": [
+    { "speedMps": 0, "scale": 1 },
+    { "speedMps": 8, "scale": 0.7 },
+    { "speedMps": 20, "scale": 0.4 }
+  ],
+  "handbrakeSideFrictionMultiplier": 0.5,
+  "aerodynamics": { "dragCoefficient": 3.5, "downforceCoefficient": 0 },
+  "wheels": [
+    { "position": [1.04, 0.83, 1.19], "radius": 0.537, "steer": true, "suspensionStiffness": 40, "maxSuspensionForce": 30000, "visualNode": "Front_Wheel_L" },
+    { "position": [-1.04, 0.83, 1.19], "radius": 0.537, "steer": true, "suspensionStiffness": 40, "maxSuspensionForce": 30000, "visualNode": "Front_Wheel_R" },
+    { "position": [0.856, 0.83, -2.917], "radius": 0.537, "drive": true, "handbrake": true, "suspensionStiffness": 40, "maxSuspensionForce": 30000, "visualNode": "Back_Wheel_L" },
+    { "position": [-0.856, 0.83, -2.917], "radius": 0.537, "drive": true, "handbrake": true, "suspensionStiffness": 40, "maxSuspensionForce": 30000, "visualNode": "Back_Wheel_R" }
+  ],
+  "engineSound": {
+    "sound": "starter-snd-engine-loop",
+    "idlePitch": 0.6,
+    "maxPitch": 1.35,
+    "idleVolume": 0.45,
+    "loadVolume": 1,
+    "refDistance": 8,
+    "maxDistance": 110
+  }
+}

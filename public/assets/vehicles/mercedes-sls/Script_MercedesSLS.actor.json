@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_MercedesSLS",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "chassis",
+      "component": "Collider",
+      "props": {
+        "shape": "box",
+        "isStatic": false,
+        "isSensor": false,
+        "size": [1.94, 0.98, 4.5],
+        "center": [0, 0.71, 0],
+        "simulatePhysics": true,
+        "linearDamping": 0.05,
+        "angularDamping": 0.6,
+        "hideInGame": true
+      },
+      "parent": "root"
+    },
+    {
+      "id": "body",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "mercedes-sls"
+      },
+      "parent": "chassis"
+    },
+    {
+      "id": "vehicle",
+      "component": "Vehicle",
+      "props": {
+        "asset": "assets/vehicles/mercedes-sls/MercedesSLS.vehicle.json"
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

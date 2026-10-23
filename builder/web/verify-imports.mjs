@@ -26,10 +26,11 @@
  *                          (Layer 2 capability modules stay generic: game rules
  *                           belong to Layer 3, authoring to the editor shell)
  *
- * Heuristic like verify-dist: it matches import/export/dynamic-import specifiers
- * with line-anchored patterns (so JSDoc `* import ...` and `// import ...` lines
- * do not false-positive), not a full TS parse. Zero dependencies (Node built-ins
- * only); standalone, not part of the tsc graph or the app bundle.
+ * Uses the project's TypeScript parser for imports, re-exports, import types,
+ * import-equals declarations and literal dynamic imports, regardless of line
+ * breaks. Comments and ordinary strings are not dependencies. Computed module
+ * paths and transitive dependencies are outside this direct-edge guard.
+ * Standalone build tooling; TypeScript is not added to the app bundle.
  *
  * Usage:   node builder/web/verify-imports.mjs
  * Exit:    0 = clean, 1 = a forbidden import (or a scan error).
@@ -38,6 +39,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDir, "..", "..");
@@ -98,41 +100,68 @@ function classifyPath(relPath) {
 }
 
 /** The boundary an import specifier targets (alias, @/ subtree, or relative). */
-function targetLayer(spec, fileDir) {
-  if (spec.startsWith("@engine/")) return "engine";
-  if (spec.startsWith("@editor/")) return "editor";
-  if (spec.startsWith("@builder/")) return "builder";
-  if (spec.startsWith("@game/")) return "game";
-  if (spec.startsWith("@project/")) return "project";
-  if (spec.startsWith("@/")) {
-    const rest = spec.slice(2);
-    if (rest.startsWith("editor/")) return "editor";
-    if (rest.startsWith("game/")) return "game";
-    if (rest.startsWith("project/")) return "project";
-    return "src";
+function targetLayer(spec, fileDir, root = projectRoot) {
+  const aliases = {
+    "@engine/": "engine",
+    "@editor/": "editor",
+    "@builder/": "builder",
+    "@game/": "game",
+    "@project/": "project",
+    "@/": "src",
+  };
+  for (const [prefix, directory] of Object.entries(aliases)) {
+    if (spec.startsWith(prefix)) {
+      return classifyPath(toPosix(relative(root, resolve(root, directory, spec.slice(prefix.length)))));
+    }
   }
   if (spec.startsWith(".")) {
-    const resolved = toPosix(relative(projectRoot, resolve(fileDir, spec)));
+    const resolved = toPosix(relative(root, resolve(fileDir, spec)));
     return classifyPath(resolved);
   }
   return "external"; // bare module: three, @dimforge/*, node:*, etc.
 }
 
-const SPEC_PATTERNS = [
-  /^\s*import\s[^\n]*?\sfrom\s*["']([^"']+)["']/gm, // import ... from "X"
-  /^\s*export\s[^\n]*?\sfrom\s*["']([^"']+)["']/gm, // export ... from "X"
-  /^\s*import\s*["']([^"']+)["']/gm, //                 import "X" (side effect)
-  /import\s*\(\s*["']([^"']+)["']\s*\)/g, //            import("X") (dynamic)
-];
-
-function extractSpecifiers(source) {
-  const specs = [];
-  for (const re of SPEC_PATTERNS) {
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(source)) !== null) specs.push(m[1]);
+export function extractSpecifiers(source, fileName = "source.ts") {
+  const parsed = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  if (parsed.parseDiagnostics.length > 0) {
+    const diagnostic = parsed.parseDiagnostics[0];
+    const { line, character } = parsed.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
+    throw new Error(`${fileName}:${line + 1}:${character + 1}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`);
   }
+  const specs = [];
+  const addLiteral = (node) => {
+    if (node && ts.isStringLiteralLike(node)) specs.push(node.text);
+  };
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      addLiteral(node.moduleSpecifier);
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      addLiteral(node.moduleReference.expression);
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+      addLiteral(node.argument.literal);
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      addLiteral(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
   return specs;
+}
+
+export function findImportViolations(relPath, source, root = projectRoot) {
+  const normalizedPath = toPosix(relPath);
+  const layer = fileLayer(normalizedPath);
+  const forbidden = FORBIDDEN[layer];
+  if (!forbidden) return [];
+  const fileDir = dirname(resolve(root, normalizedPath));
+  const violations = [];
+  for (const spec of extractSpecifiers(source, normalizedPath)) {
+    const target = targetLayer(spec, fileDir, root);
+    if (forbidden.has(target)) {
+      violations.push({ file: normalizedPath, spec, rule: `${layer}->${target}` });
+    }
+  }
+  return violations;
 }
 
 async function walk(dir) {
@@ -140,8 +169,9 @@ async function walk(dir) {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return out;
+  } catch (error) {
+    if (error.code === "ENOENT") return out;
+    throw error;
   }
   for (const entry of entries) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
@@ -154,29 +184,25 @@ async function walk(dir) {
   return out;
 }
 
-async function main() {
+export async function scanImportBoundaries(root = projectRoot) {
   const files = [];
-  for (const root of SCAN_ROOTS) files.push(...(await walk(join(projectRoot, root))));
+  for (const sourceRoot of SCAN_ROOTS) files.push(...(await walk(join(root, sourceRoot))));
 
   const violations = [];
   for (const file of files) {
-    const relPath = toPosix(relative(projectRoot, file));
-    const layer = fileLayer(relPath);
-    const forbidden = FORBIDDEN[layer];
-    if (!forbidden) continue;
-
+    const relPath = toPosix(relative(root, file));
+    if (!FORBIDDEN[fileLayer(relPath)]) continue;
     const source = await readFile(file, "utf8");
-    const fileDir = dirname(file);
-    for (const spec of extractSpecifiers(source)) {
-      const target = targetLayer(spec, fileDir);
-      if (forbidden.has(target)) {
-        violations.push({ file: relPath, spec, rule: `${layer}->${target}` });
-      }
-    }
+    violations.push(...findImportViolations(relPath, source, root));
   }
+  return { fileCount: files.length, violations };
+}
+
+export async function main(root = projectRoot) {
+  const { fileCount, violations } = await scanImportBoundaries(root);
 
   console.log(
-    `[verify-imports] scanned ${files.length} source file(s) across ${SCAN_ROOTS.join(", ")}/`,
+    `[verify-imports] scanned ${fileCount} source file(s) across ${SCAN_ROOTS.join(", ")}/`,
   );
 
   if (violations.length > 0) {
@@ -192,7 +218,9 @@ async function main() {
   console.log("[PASS] module boundaries hold — no forbidden cross-layer imports.");
 }
 
-main().catch((error) => {
-  console.error("[verify-imports] scan error:", error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error("[verify-imports] scan error:", error);
+    process.exitCode = 1;
+  });
+}

@@ -34,6 +34,12 @@ export type ActionBindings = Readonly<Record<RawInputCode, ActionName>>;
 export interface AxisModifiers {
   /** Values with an absolute magnitude at or below this threshold become zero. */
   readonly deadzone?: number;
+  /**
+   * Stretches the range past the deadzone back over 0..1, so the value starts
+   * from 0 at the deadzone's edge instead of jumping to it (a stick that steers
+   * or a trigger that is a pedal).
+   */
+  readonly rescaleDeadzone?: boolean;
   /** Multiplies the post-deadzone value. */
   readonly scale?: number;
   /** Flips the post-scale value. */
@@ -173,7 +179,10 @@ function applyAxisModifiers(value: number, modifiers: AxisModifiers): number {
   if (!Number.isFinite(value)) return 0;
   const deadzone = Math.max(0, modifiers.deadzone ?? 0);
   if (Math.abs(value) <= deadzone) return 0;
-  const scaled = value * (modifiers.scale ?? 1);
+  const live = modifiers.rescaleDeadzone && deadzone < 1
+    ? Math.sign(value) * (Math.abs(value) - deadzone) / (1 - deadzone)
+    : value;
+  const scaled = live * (modifiers.scale ?? 1);
   return modifiers.invert ? -scaled : scaled;
 }
 

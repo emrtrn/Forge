@@ -28,7 +28,7 @@ export interface ResolvedBlockingVolume {
   brushSides: number;
   /** Draw as a solid grey-box in Play (off = invisible-but-blocking). */
   renderInGame: boolean;
-  /** Editor brush tint (hex `#rrggbb`). */
+  /** Brush tint (hex `#rrggbb`); Play uses it only when explicitly authored. */
   color: string;
   /** AI navigation interpretation; `walkable` makes a horizontal box a deck. */
   navigationRole: NavigationRole;

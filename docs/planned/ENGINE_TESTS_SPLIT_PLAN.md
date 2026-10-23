@@ -2,7 +2,41 @@
 
 > Oluşturma: 2026-08-28 (ThreeAges backport, Katman 3.9)
 > Durum: **Ölçüm aracı (Faz 0) Forge'a taşındı. Faz 1 şu an gereksiz — aşağıda
-> gerekçesi. Faz 2–5 planlı, başlanmadı.**
+> gerekçesi. Faz 4'ün ilk UI alanı 22 Ekim 2026'da ayrıldı; genel fixture/harness
+> çıkarımı ve diğer alanlar açık. Aşağıdaki ilk ölçümler tarihsel kayıttır.**
+
+## Güncel uygulama kaydı — 22 Ekim 2026
+
+- UI widget/schema, render-tree, binding/ViewModel, tema, debug readout,
+  transition, locale, erişilebilirlik ve world-widget alanındaki **55 kontrol**
+  [uiFramework.test.ts](../../tests/engine/uiFramework.test.ts) dosyasına taşındı.
+- Mevcut `register*Tests(check)` deseni kullanılır. Çağrı, monolitte eski bloğun
+  yerindedir; bütün paketin yürütme sırası korunur. Yeni dosya import edildiğinde
+  kontrol çalıştırmaz; filtre, sayaç ve timing mevcut harness'ta kalır.
+- Bu alanın test verileri kendi callback'lerinde yereldir. Alan dışındaki
+  değişebilir fixture'lara bağımlılık olmadığı için ortak fixture modülü veya
+  yeni singleton harness çıkarımı gerekmedi. Sonraki alanlar için bağımlılıklar
+  ayrıca değerlendirilmelidir; Faz 2–3 topluca tamamlandı sayılmaz.
+- `tools/engine-tests.ts` **31.154 → 30.267 satır**; yeni alan dosyası 890 satır.
+  Fiziksel satır sayısına boş satırlar dahildir, son newline ayrı satır sayılmaz.
+  Bu bir hız optimizasyonu veya test framework değişimi değildir.
+- Ayrılan dosya `tsconfig.ui-tests.json` ile strict tip denetimine alındı.
+  `verify:ui-test-types`, `build:verify` içine eklendi. Daha önce ayrı denetlenmeyen
+  beş array-element erişimine yalnız TypeScript non-null assertion'ı eklendi;
+  üretilen JavaScript ve test beklentileri değişmez.
+- Önce/sonra tam engine: **1.248 → 1.248 kontrol**. Çalıştırılan bütün etiketler
+  ve sıraları birebir aynı. Taşınan 55 `check` çağrısının JavaScript gövdeleri
+  karşılaştırıldı; çıkarım dışındaki `check` gövdeleri de korunur.
+- Uygulama ve ayrılan testin TypeScript kontrolü, tam `build:verify`, 10 import,
+  5 fixture, 9 yayın/URL kontrolü ve sıkı production dist taraması geçti.
+  Ham koşum ve karşılaştırma kayıtları `builds/reports/f08-*` altında.
+- Bu dilim test organizasyonuyla sınırlıdır; browser paketi yeniden koşulmadı.
+  Çalışma ağacında önceden bulunan Terrain/araç/runtime değişiklikleri bu
+  çıkarımın parçası değildir. Commit/push yapılmadı.
+
+Kalan iş: diğer doğal test alanlarını kendi fixture sınırlarıyla ayırmak;
+editör/runtime controller çıkarımları ayrı F08 dilimleridir. Güncel sıra ve
+doğrulama sınırları [aktif güvenilirlik planında](FORGE_RELIABILITY_ACTIVE_PLAN.md).
 
 Bu plan tek bir dosyanın (`tools/engine-tests.ts`, 30 118 satır) bölünmesini
 tarif eder. Ama planın en önemli çıktısı bölme değil, **ölçümdür** — ve Forge

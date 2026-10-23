@@ -43,7 +43,7 @@ import {
 } from "@/game/animationNotifies";
 import { createRagdollDriver, type RagdollDriver } from "@/game/ragdollDriver";
 import { GetUpBlender, type RestPose } from "@/game/getUpBlender";
-import type { Object3D } from "three";
+import { Quaternion, Vector3, type Object3D } from "three";
 import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
@@ -52,6 +52,19 @@ import {
 import type { CameraProjection, CameraPose } from "@/game/playerCameraManager";
 import { RuntimePlayerController } from "@/game/playerController";
 import { DEFAULT_LOOK_AXIS_RATE, lookAnglesFromForward } from "./cameraControl";
+import { DEFAULT_VEHICLE_CHASE_CAMERA, planarHeadingFromQuaternion } from "./vehicleCameraControl";
+import { VehicleDriver } from "./vehicleDriver";
+import {
+  chooseExitSpot,
+  DEFAULT_VEHICLE_ENTRY,
+  findEnterableVehicle,
+  PARKED_VEHICLE_INPUT,
+  stoppingInput,
+  vehicleExitCandidates,
+  vehicleGroundHeight,
+  type VehicleCandidate,
+  type VehicleEntrySettings,
+} from "./vehicleEntry";
 import type {
   GameModeContext,
   GameModeDefinition,
@@ -88,6 +101,17 @@ const ANIMATION_CROSSFADE_SECONDS = 0.18;
 
 /** Crossfade (seconds) used when the animator resumes after a get-up blend. */
 const GET_UP_SETTLE_SECONDS = 0.2;
+
+/** Optional TPS session behaviour beyond the controller definition. */
+export interface TpsCharacterSessionOptions {
+  /**
+   * Getting in and out of the level's `Vehicle` actors with `interact` (E):
+   * the character hides inside, the controller possesses the car, and the
+   * chase camera takes over until E again stops the car and steps out. Null
+   * turns it off; absent uses {@link DEFAULT_VEHICLE_ENTRY}.
+   */
+  readonly vehicleEntry?: VehicleEntrySettings | null;
+}
 
 /** Resolves the explicit player character a TPS session should possess. */
 export function resolvePlayerCharacter(
@@ -143,15 +167,39 @@ export class TpsCharacterSession implements GameModeSession {
   private getUpRequested = false;
   /** Unsubscribe handles for the death/ragdoll/getup event subscriptions. */
   private messageUnsubscribers: Array<() => void> = [];
+  /** Enter/exit rules, or null when this session never boards vehicles. */
+  private readonly vehicleEntry: VehicleEntrySettings | null;
+  /** Drives the car the character is sitting in (input + chase camera). */
+  private readonly driver: VehicleDriver;
+  /** The vehicle the character is riding in, or null while on foot. */
+  private ridingVehicleId: string | null = null;
+  /** E was pressed while driving: brake to a stop, then step out. */
+  private exitRequested = false;
+  private readonly scratchPosition = new Vector3();
+  private readonly scratchQuaternion = new Quaternion();
 
   constructor(
     private readonly context: GameModeContext,
     controllerDefinition: PlayerControllerDefinition = TPS_PLAYER_CONTROLLER,
+    options: TpsCharacterSessionOptions = {},
   ) {
     this.controller = new RuntimePlayerController(controllerDefinition, context, {
       initialControlRotation: INITIAL_CONTROL_ROTATION,
     });
     this.playerState = this.controller.playerState;
+    this.vehicleEntry =
+      options.vehicleEntry === undefined ? DEFAULT_VEHICLE_ENTRY : options.vehicleEntry;
+    this.driver = new VehicleDriver(
+      context,
+      this.controller,
+      DEFAULT_VEHICLE_CHASE_CAMERA,
+      CAMERA_SOURCE_BLEND_SECONDS,
+    );
+  }
+
+  /** Entity id of the vehicle the player is driving, or null while on foot. */
+  get drivingVehicleId(): string | null {
+    return this.ridingVehicleId;
   }
 
   spawnDefaultPawn(): void {
@@ -220,6 +268,13 @@ export class TpsCharacterSession implements GameModeSession {
     this.gameState.elapsedSeconds += deltaSeconds;
     const player = this.player;
     if (!player) return;
+
+    // Driving: the car is the pawn and the chase camera frames it. Ragdoll
+    // requests raised meanwhile stay pending until the character is back out.
+    if (this.ridingVehicleId) {
+      this.driver.updateCamera(this.ridingVehicleId, deltaSeconds);
+      return;
+    }
 
     // Recovering: ease the bones from the ragdoll pose back to the (now un-frozen)
     // locomotion animation, then hand movement/animation control back.
@@ -347,7 +402,134 @@ export class TpsCharacterSession implements GameModeSession {
   }
 
   beforeEngineUpdate(deltaSeconds: number): void {
-    this.controller.updateControlRotation(deltaSeconds);
+    // Behind the wheel the look input orbits the chase camera instead: the
+    // driver consumes it, and the on-foot view waits where it was.
+    if (!this.ridingVehicleId) this.controller.updateControlRotation(deltaSeconds);
+    if (this.ridingVehicleId) this.updateDriving(this.ridingVehicleId);
+    else this.tryEnterVehicle();
+  }
+
+  /** On foot: E within reach of a vehicle climbs in and possesses it. */
+  private tryEnterVehicle(): void {
+    const player = this.player;
+    const vehicles = this.context.vehicles;
+    if (!this.vehicleEntry || !player || !vehicles) return;
+    if (this.context.getInputMode() === "ui" || !this.context.actions.pressed("interact")) return;
+    // A ragdolled or recovering body is not in control of itself.
+    if (this.ragdoll || this.getup || this.playerState.pawnControlSuspended) return;
+    const candidates: VehicleCandidate[] = [];
+    for (const id of vehicles.ids()) {
+      const object = vehicles.object(id);
+      if (!object) continue;
+      const position = object.getWorldPosition(new Vector3());
+      candidates.push({ id, position });
+    }
+    const target = findEnterableVehicle(player.object.position, candidates, this.vehicleEntry);
+    if (target) this.enterVehicle(player, target);
+  }
+
+  boardVehicle(vehicleEntityId: string): boolean {
+    const player = this.player;
+    if (!this.vehicleEntry || !player || this.ridingVehicleId) return false;
+    if (this.ragdoll || this.getup || this.playerState.pawnControlSuspended) return false;
+    if (!this.context.vehicles?.ids().includes(vehicleEntityId)) return false;
+    this.enterVehicle(player, vehicleEntityId);
+    return true;
+  }
+
+  private enterVehicle(player: RuntimeCharacterRef, vehicleId: string): void {
+    this.ridingVehicleId = vehicleId;
+    this.exitRequested = false;
+    this.context.setEntityHidden?.(player.entityId, true);
+    this.context.setEntityCollisionEnabled?.(player.entityId, false);
+    this.playIdle(player);
+    this.controller.possess(vehicleId);
+    this.controller.cameraManager.setGameplayEffects({});
+    this.driver.restart();
+  }
+
+  /**
+   * Behind the wheel: forward the pedals, or, once E asked to get out, brake
+   * the car to a crawl and step out beside it.
+   */
+  private updateDriving(vehicleId: string): void {
+    const vehicles = this.context.vehicles;
+    // The car went away under the driver (destroyed, level torn down).
+    if (!vehicles || !vehicles.ids().includes(vehicleId)) {
+      this.exitVehicle(vehicleId);
+      return;
+    }
+    if (this.context.getInputMode() !== "ui" && this.context.actions.pressed("interact")) {
+      this.exitRequested = true;
+    }
+    if (!this.exitRequested) {
+      this.driver.drive(vehicleId);
+      return;
+    }
+    const speed = this.driver.speed(vehicleId);
+    const maxExitSpeed = this.vehicleEntry?.maxExitSpeed ?? DEFAULT_VEHICLE_ENTRY.maxExitSpeed;
+    if (Math.abs(speed) <= maxExitSpeed) this.exitVehicle(vehicleId);
+    else this.driver.setInput(vehicleId, stoppingInput(speed));
+  }
+
+  /**
+   * Parks the car on its handbrake and puts the character back on its feet at
+   * the first clear door (driver's, passenger's, then behind), facing the way
+   * the car faces with the camera behind it. A car that has vanished leaves the
+   * character where it was hidden.
+   */
+  private exitVehicle(vehicleId: string): void {
+    const player = this.player;
+    this.ridingVehicleId = null;
+    this.exitRequested = false;
+    const vehicles = this.context.vehicles;
+    const object = vehicles?.ids().includes(vehicleId) ? vehicles.object(vehicleId) : null;
+    vehicles?.setInput(vehicleId, PARKED_VEHICLE_INPUT);
+    if (!player) {
+      this.controller.possess(null);
+      return;
+    }
+    if (object) {
+      const settings = this.vehicleEntry ?? DEFAULT_VEHICLE_ENTRY;
+      object.getWorldPosition(this.scratchPosition);
+      object.getWorldQuaternion(this.scratchQuaternion);
+      const ground = vehicleGroundHeight(this.scratchPosition, vehicles?.state(vehicleId) ?? null);
+      const spot = chooseExitSpot(
+        vehicleExitCandidates(this.scratchPosition, this.scratchQuaternion, ground, settings),
+        // Covers all candidate doors/rear exits, their footprint, and skin.
+        this.context.staticBlockerAabbsNear?.(
+          this.scratchPosition.x, this.scratchPosition.z,
+          Math.max(Math.abs(settings.exitSideOffset), Math.abs(settings.exitRearOffset)) + settings.exitClearance.radius + 0.001,
+        ) ?? this.context.staticBlockerAabbs(),
+        settings.exitClearance,
+      );
+      const heading = planarHeadingFromQuaternion(this.scratchQuaternion) ??
+        this.driver.currentHeading() ?? { x: 0, z: 1 };
+      if (spot) {
+        const yawDeg = (Math.atan2(heading.x, heading.z) * 180) / Math.PI;
+        this.context.teleportCharacter?.(player.entityId, [spot.x, spot.y, spot.z], yawDeg);
+      }
+      // Look the way the car was facing, keeping the player's pitch.
+      const look = lookAnglesFromForward(heading.x, 0, heading.z);
+      this.controller.setControlRotation({
+        yaw: look.yaw,
+        pitch: this.controller.getControlRotation().pitch,
+      });
+    }
+    this.context.setEntityCollisionEnabled?.(player.entityId, true);
+    this.context.setEntityHidden?.(player.entityId, false);
+    this.playIdle(player);
+    this.controller.possess(player.entityId);
+    // Re-seat the follow camera at the new spot; the view-target blend eases
+    // the hand-over from the chase view.
+    this.followPose = null;
+  }
+
+  /** Snaps the animator back to the idle clip (the character stopped moving). */
+  private playIdle(player: RuntimeCharacterRef): void {
+    const idle = player.placement.animation ?? "idle";
+    if (this.layered) this.layered.playLocomotion(idle, ANIMATION_CROSSFADE_SECONDS);
+    else this.animator?.play(idle, ANIMATION_CROSSFADE_SECONDS);
   }
 
   controlYawForEntity(entityId: string): number | null {
@@ -359,6 +541,13 @@ export class TpsCharacterSession implements GameModeSession {
     readonly controlPitchDeg: number | null;
     readonly cameraSource: string | null;
   } {
+    if (this.ridingVehicleId) {
+      return {
+        controlYawDeg: this.driver.debugYawDeg(),
+        controlPitchDeg: null,
+        cameraSource: this.driver.debugSource(this.ridingVehicleId),
+      };
+    }
     const controlRotation = this.controller.getControlRotation();
     return {
       controlYawDeg: controlRotation.yaw * RAD_TO_DEG,
@@ -370,6 +559,14 @@ export class TpsCharacterSession implements GameModeSession {
   dispose(): void {
     for (const unsubscribe of this.messageUnsubscribers) unsubscribe();
     this.messageUnsubscribers = [];
+    if (this.ridingVehicleId) {
+      this.context.vehicles?.setInput(this.ridingVehicleId, PARKED_VEHICLE_INPUT);
+      this.ridingVehicleId = null;
+      if (this.player) {
+        this.context.setEntityCollisionEnabled?.(this.player.entityId, true);
+        this.context.setEntityHidden?.(this.player.entityId, false);
+      }
+    }
     this.controller.unpossess();
     // Release the ragdoll's physics bodies/joints; the animator's mixer is owned
     // by the AnimationSubsystem (disposed by the EngineApp).
@@ -396,7 +593,12 @@ export class TpsCharacterSession implements GameModeSession {
         playerPosition: pos,
         springArm: authored.springArm,
         controlRotation: this.controller.getControlRotation(),
-        blockers: this.context.staticBlockerAabbs(),
+        // Bound the entire pivot-to-socket segment, including both authored offsets.
+        blockers: this.context.staticBlockerAabbsNear?.(
+          pos[0], pos[2],
+          Math.hypot(...authored.springArm.targetOffset) + Math.abs(authored.springArm.targetArmLength) +
+            Math.hypot(...authored.springArm.socketOffset) + 0.05,
+        ) ?? this.context.staticBlockerAabbs(),
       });
       const t = authored.springArm.enableCameraLag
         ? smoothingFactor(authored.springArm.cameraLagSpeed, deltaSeconds)
@@ -550,6 +752,7 @@ export const TPS_PLAYER_CONTROLLER: PlayerControllerDefinition = {
     "sprint",
     "look-x",
     "look-y",
+    "interact",
   ],
   inputMode: "game",
   pointerLookMode: "pointer-lock",

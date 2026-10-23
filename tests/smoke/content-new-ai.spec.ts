@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 // Verifies the Content Browser "new content" menu exposes the AI asset kinds
 // (Blackboard / Behavior Tree / EQS Query) wired to the `/__content-new` backend.

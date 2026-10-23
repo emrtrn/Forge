@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 /**
  * Phase H, Definition of Done: the zero-gameplay `templates/game-starter` app

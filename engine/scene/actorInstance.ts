@@ -32,6 +32,7 @@ import {
   SCRIPT_INTERFACES_COMPONENT,
   SCRIPT_REFERENCES_COMPONENT,
   TRANSFORM_COMPONENT,
+  VEHICLE_AI_DRIVER_COMPONENT,
   type TransformComponent,
 } from "./components";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
@@ -206,6 +207,18 @@ export function actorInstanceToEntity(
     components.AIController = {
       ...components.AIController,
       patrolRoute: { ...instance.patrolRoute },
+    };
+  }
+  // The same level-owned route steers a vehicle's AI driver: a spline patrol
+  // names the spline (and optionally entry, wrap and speed) for this one car.
+  const route = instance.patrolRoute;
+  if (route?.source === "spline" && route.splineId && components[VEHICLE_AI_DRIVER_COMPONENT]) {
+    components[VEHICLE_AI_DRIVER_COMPONENT] = {
+      ...components[VEHICLE_AI_DRIVER_COMPONENT],
+      splineId: route.splineId,
+      entry: route.entry,
+      ...(route.wrapMode === "loop" || route.wrapMode === "clamp" ? { wrapMode: route.wrapMode } : {}),
+      ...(route.speed !== undefined ? { targetSpeed: route.speed } : {}),
     };
   }
 

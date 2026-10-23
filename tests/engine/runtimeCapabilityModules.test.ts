@@ -151,6 +151,8 @@ export function registerRuntimeCapabilityModuleTests(check: Check): void {
     const runtime = startTestRuntime(createDefaultRuntimeModules());
     assert.deepEqual(runtime.tickOrder, [
       "movingPlatform",
+      // Vehicle AI decides in the same slot as character AI, before movement.
+      "vehicleAi",
       "splinePathFollower",
       "audio",
       "dialogue",

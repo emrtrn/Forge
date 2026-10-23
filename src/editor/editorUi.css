@@ -5416,6 +5416,106 @@
 .pfx-status[data-tone="warning"] { color: var(--forge-warning-text); }
 .pfx-status[data-tone="info"]    { color: #c7cdd6; }
 
+/* ─── Vehicle asset editor (pfx shell + vhe parts) ─────────────────────── */
+
+.vhe-window .pfx-body { grid-template-columns: 190px 1fr 360px; }
+.vhe-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  background: #141619;
+  min-width: 0;
+}
+.vhe-card {
+  border: 1px solid var(--forge-border-soft);
+  border-radius: 6px;
+  background: #181b1f;
+  padding: 8px 10px 10px;
+}
+.vhe-card-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #e6ebee; }
+.vhe-card-title small { font-weight: 400; color: #8b98a2; margin-left: 6px; }
+.vhe-note { font-size: 12px; color: #8b98a2; line-height: 1.5; margin: 0; }
+
+.vhe-topview { display: block; width: 100%; max-width: 220px; height: auto; margin: 0 auto; }
+.vhe-chassis { fill: rgba(255, 255, 255, 0.04); stroke: #4a545c; stroke-width: 1.5; }
+.vhe-nose { fill: none; stroke: #6a7880; stroke-width: 1.5; }
+.vhe-wheel { cursor: pointer; }
+.vhe-wheel rect { fill: #24282e; stroke: #7f8b94; stroke-width: 1.2; }
+.vhe-wheel.is-driven rect { fill: #3d6f8f; }
+.vhe-wheel.is-steer rect { stroke: var(--forge-warning); stroke-width: 2; }
+.vhe-wheel.is-selected rect { stroke: #ffffff; stroke-width: 2.5; }
+.vhe-wheel text { fill: #aeb7bf; font-size: 10px; text-anchor: middle; }
+.vhe-handbrake { stroke: #ff7a7a; stroke-width: 2; }
+.vhe-com circle { fill: none; stroke: #6fd0a4; stroke-width: 1.5; }
+.vhe-com path { stroke: #6fd0a4; stroke-width: 1.2; }
+
+.vhe-graph { display: block; width: 100%; max-width: 560px; height: auto; margin: 0 auto; }
+.vhe-axis { stroke: #4a545c; }
+.vhe-torque { fill: none; stroke: var(--forge-warning); stroke-width: 2; }
+.vhe-power { fill: none; stroke: #5fb4e6; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.vhe-curve-dot { fill: var(--forge-warning); }
+.vhe-shift-up { stroke: #6fd0a4; stroke-dasharray: 2 3; }
+.vhe-shift-down { stroke: #ff7a7a; stroke-dasharray: 2 3; }
+.vhe-label { fill: #8b98a2; font-size: 14px; }
+.vhe-torque-label { fill: var(--forge-warning); }
+.vhe-power-label { fill: #5fb4e6; }
+
+.vhe-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; font-size: 10px; color: #8b98a2; }
+.vhe-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+  background: currentColor;
+}
+.vhe-key-torque, .vhe-key-steer { color: var(--forge-warning); }
+.vhe-key-power, .vhe-key-driven { color: #5fb4e6; }
+.vhe-key-up, .vhe-key-com { color: #6fd0a4; }
+.vhe-key-down, .vhe-key-hb { color: #ff7a7a; }
+
+.vhe-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.vhe-table th { text-align: left; font-weight: 500; color: #8b98a2; padding: 2px 4px; }
+.vhe-table td { padding: 2px 4px; color: #c7cdd6; font-variant-numeric: tabular-nums; }
+.vhe-table .pfx-input { height: 22px; }
+.vhe-table-block { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.vhe-table-title { font-size: 11px; color: #aeb7bf; }
+.vhe-cell-label { color: #8b98a2; }
+.vhe-row-remove {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--forge-border-mid);
+  border-radius: 4px;
+  background: transparent;
+  color: #aeb7bf;
+  cursor: pointer;
+}
+.vhe-row-remove:hover { color: #ff8a8a; border-color: #ff8a8a; }
+.vhe-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+.vhe-wheel-card {
+  border: 1px solid var(--forge-border-soft);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.vhe-wheel-card.is-selected { border-color: var(--forge-warning); }
+.vhe-wheel-card summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.vhe-wheel-card summary span { color: #8b98a2; font-size: 11px; }
+.vhe-wheel-body { display: flex; flex-direction: column; gap: 5px; padding: 4px 8px 8px; }
+.vhe-flags { display: grid; grid-template-columns: repeat(4, auto); gap: 6px; }
+.vhe-flag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #aeb7bf; }
+
 /* ─── Behavior Tree editor ─────────────────────────────────────────────── */
 
 .bte-overlay {

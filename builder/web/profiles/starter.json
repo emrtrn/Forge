@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "starter",
+  "content": "generated-starter",
+  "defaultScene": "layouts/starter.level.json",
+  "levels": ["layouts/starter.level.json", "layouts/destination.level.json"],
+  "includeAssets": [],
+  "includeFiles": [],
+  "budgets": {
+    "totalBytes": 6500000,
+    "fileBytes": 2500000,
+    "assetBytes": 1000000,
+    "entryJsBytes": 850000,
+    "jsBytes": 4200000,
+    "fileCount": 80
+  }
+}

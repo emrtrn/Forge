@@ -1,0 +1,5 @@
+{
+  "schema":1,
+  "type":"behaviorTree",
+  "root":{"id":"smoke-patrol","kind":"task","task":"forge.moveAlongPatrolRoute"}
+}

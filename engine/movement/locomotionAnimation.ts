@@ -17,7 +17,7 @@ import {
   type AnimationSetRole,
   type AssetSkeletonBlendSpaceDef,
   type BlendSampleWeight,
-} from "@/scene/assetSkeletonLoader";
+} from "../animation/blendSpace";
 
 /** Per-frame movement snapshot the player behavior reports to the shell. */
 export interface LocomotionInput {

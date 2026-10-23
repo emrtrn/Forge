@@ -1,3 +1,7 @@
+import { validateTerrainTile } from "./engine/terrain/terrainLoader";
+import { levelTerrainDir, terrainTilePath } from "./engine/terrain/terrainTypes";
+import { collectJsonStrings, findOrphanedLevelTerrain } from "./tools/terrainOrphans";
+import { validateSaveTerrainPayload, validateSaveTerrainTile, TERRAIN_JSON_BODY_MAX_BYTES, TERRAIN_TILE_BODY_MAX_BYTES } from "./tools/terrainSaveValidator";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
@@ -34,6 +38,7 @@ import {
   validateGameDataPath,
   validateSaveSoundCuePayload,
   validateSaveEffectPayload,
+  validateSaveVehiclePayload,
   validateSaveFoliagePayload,
   validateSaveMeshPaintPayload,
   validateSaveAssetVertexColorsPayload,
@@ -657,6 +662,44 @@ async function rewriteJsonPathReferences(fromFolder: string, toFolder: string): 
   return changedFiles;
 }
 
+/**
+ * Deleting a Landscape only drops it from the layout, so after a level save remove
+ * the level-owned terrain it no longer references. Returns the removed definitions.
+ */
+async function pruneOrphanedLevelTerrain(scenePath: string, layout: unknown): Promise<string[]> {
+  const dir = levelTerrainDir(scenePath);
+  const names = await readdir(resolvePublicPath(dir)).catch(() => null);
+  if (!names) return [];
+  const landscapes = (layout as { landscapes?: unknown } | null)?.landscapes;
+  const dataRefs = (Array.isArray(landscapes) ? landscapes : [])
+    .map((actor) => (actor as { dataRef?: unknown } | null)?.dataRef)
+    .filter((ref): ref is string => typeof ref === "string");
+  const orphans = findOrphanedLevelTerrain(scenePath, dataRefs, names);
+  if (orphans.length === 0) return [];
+  // A copied level keeps its source's terrain references until its own first
+  // save migrates them; never pull terrain out from under another document.
+  const layoutRel = normalizePublicRelativePath(scenePath);
+  const external = new Set<string>();
+  for (const rel of await listFilesRecursive(PUBLIC_DIR, "")) {
+    if (!rel.toLowerCase().endsWith(".json") || rel === layoutRel || isPathInFolder(rel, dir)) continue;
+    const raw = await readFile(resolvePublicPath(rel), "utf8").catch(() => null);
+    if (!raw) continue;
+    try {
+      collectJsonStrings(JSON.parse(raw), external);
+    } catch {
+      continue;
+    }
+  }
+  const removed: string[] = [];
+  for (const orphan of orphans) {
+    if (external.has(orphan.definition)) continue;
+    for (const entry of orphan.entries) await rm(resolvePublicPath(entry), { recursive: true, force: true });
+    removed.push(orphan.definition);
+  }
+  if ((await readdir(resolvePublicPath(dir))).length === 0) await rm(resolvePublicPath(dir), { recursive: true });
+  return removed;
+}
+
 function replaceJsonExactPath(value: unknown, from: string, to: string): { value: unknown; changed: boolean } {
   if (typeof value === "string") {
     return value === from ? { value: to, changed: true } : { value, changed: false };
@@ -881,8 +924,11 @@ const PRIVILEGED_URLS = new Set([
   "/__save-material-slots",
   "/__save-skeleton",
   "/__save-landscape",
+  "/__save-terrain",
+  "/__save-terrain-tile",
   "/__save-soundcue",
   "/__save-effect",
+  "/__save-vehicle",
   "/__save-foliage",
   "/__save-foliage-type",
   "/__save-dialogue-voice",
@@ -1143,6 +1189,46 @@ function layoutEditorPlugin(): Plugin {
         // Landscape editor save: writes a `<id>.landscape.json` height/layer
         // sidecar. Validated/normalized server-side (validateSaveLandscapePayload),
         // kept inside public/ by resolvePublicPath.
+        if (req.url?.split("?")[0] === "/__save-terrain-tile" || req.url === "/__save-terrain") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method Not Allowed");
+            return;
+          }
+          try {
+            let path: string;
+            let dropped: string[] = [];
+            if (req.url === "/__save-terrain") {
+              const submitted = await readJsonBody(req, TERRAIN_JSON_BODY_MAX_BYTES);
+              const payload = validateSaveTerrainPayload(submitted);
+              dropped = reportDroppedFields((submitted as Record<string, unknown>).terrain, payload.terrain, "terrain");
+              // Never publish a definition whose listed binaries are missing or inconsistent.
+              for (const { key } of payload.terrain.tiles) {
+                const bytes = await readFile(resolvePublicPath(terrainTilePath(payload.path, key)));
+                validateTerrainTile(payload.terrain, key, bytes);
+              }
+              path = payload.path;
+              const target = resolvePublicPath(path);
+              await mkdir(resolve(target, ".."), { recursive: true });
+              await writeFile(target, `${JSON.stringify(payload.terrain, null, 2)}\n`, "utf8");
+            } else {
+              const query = new URL(req.url!, "http://localhost").searchParams;
+              const bytes = await readRawBody(req, TERRAIN_TILE_BODY_MAX_BYTES);
+              path = validateSaveTerrainTile(query.get("path"), query.get("key") ?? "", bytes);
+              const target = resolvePublicPath(path);
+              await mkdir(resolve(target, ".."), { recursive: true });
+              await writeFile(target, bytes);
+            }
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path, dropped }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+          }
+          return;
+        }
+
         if (req.url === "/__save-landscape") {
           if (req.method !== "POST") {
             res.statusCode = 405;
@@ -1319,6 +1405,37 @@ function layoutEditorPlugin(): Plugin {
             res.end(
               JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
             );
+          }
+          return;
+        }
+
+        // Vehicle assets use the same public-root fence and dropped-field
+        // reporting as effect saves. This route is loopback-only and dev-only.
+        if (req.url === "/__save-vehicle") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const payload = validateSaveVehiclePayload(body);
+            const dropped = reportDroppedFields(
+              (body as { vehicle?: unknown } | null)?.vehicle,
+              payload.vehicle,
+              "vehicle",
+            );
+            const filePath = resolvePublicPath(payload.path);
+            await mkdir(resolve(filePath, ".."), { recursive: true });
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.vehicle, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, dropped }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
           }
           return;
         }
@@ -2139,6 +2256,14 @@ function layoutEditorPlugin(): Plugin {
           const previous = await readFile(layoutPath, "utf8").catch(() => null);
           const nextLayout = `${JSON.stringify(payload.layout, null, 2)}\n`;
           await writeFile(layoutPath, nextLayout, "utf8");
+          // Cleanup is best effort: the layout is already saved and stays valid
+          // with stale terrain files beside it.
+          const removedTerrain = await pruneOrphanedLevelTerrain(manifest.editor.defaultScene, payload.layout)
+            .catch((error: unknown) => {
+              console.warn(`[save] terrain cleanup skipped: ${error instanceof Error ? error.message : String(error)}`);
+              return [];
+            });
+          if (removedTerrain.length > 0) console.info(`[save] removed unreferenced terrain: ${removedTerrain.join(", ")}`);
           let manifestChanged = false;
           if (payload.editor) {
             const previousManifest = `${JSON.stringify(manifest, null, 2)}\n`;
@@ -2152,8 +2277,9 @@ function layoutEditorPlugin(): Plugin {
             JSON.stringify({
               ok: true,
               path: layoutPath,
-              changed: previous !== nextLayout || manifestChanged,
+              changed: previous !== nextLayout || manifestChanged || removedTerrain.length > 0,
               dropped,
+              removedTerrain,
             }),
           );
         } catch (error) {

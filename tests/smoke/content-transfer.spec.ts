@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 
 test("Content Drawer exposes file Cut/Copy and enables Paste after copying", async ({ page }) => {
   const sourceDir = "assets/starter-content/Materials";

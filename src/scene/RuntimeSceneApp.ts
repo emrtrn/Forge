@@ -1,3 +1,4 @@
+import { fetchLandscapeDocument } from "./terrainDocument";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
   AmbientLight,
@@ -29,6 +30,7 @@ import {
   behaviorRegistryFactoryService,
   characterAnimationCommandsService,
   characterAnimationHostService,
+  vehicleHostService,
   gameUiMessageService,
   gameModeProviderService,
   gameplaySaveStateService,
@@ -48,6 +50,8 @@ import {
   vfxHostService,
   skeletonLibraryService,
   splineFollowerDebugService,
+  vehicleAiService,
+  type VehicleAiDriverDebugState,
   splineRegistrySourceService,
   uiDebugService,
   uiHostService,
@@ -61,6 +65,7 @@ import {
   type SaveGameCommands,
 } from "./capabilities/runtimeServiceKeys";
 import { LoadingOverlay } from "./loadingOverlay";
+import { ContentLoadError } from "@engine/assets/contentValidation";
 import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgress";
 import { loadRoomLayout } from "./roomLayout";
 import { EngineApp } from "@engine/core/EngineApp";
@@ -76,6 +81,7 @@ import {
 } from "@engine/behavior/behaviorSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
+import { createPhysicalMaterialSurfaceProvider } from "@engine/physics/surface/surfaceResponse";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { AudioBus, AudioPlaybackHandle } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
@@ -107,6 +113,7 @@ import {
   applySceneBackgroundAndAmbient,
   applyEditorMatchedPlayLook,
   buildLandscapeSplineMeshGroup,
+  landscapeSplineMeshColliderPrimitive,
   buildSplineInstanceGeneratorGroup,
   disposeSplineGeneratedGroup,
   buildSceneCharacterObject,
@@ -210,7 +217,6 @@ import {
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
 import {
-  createFlatLandscapeData,
   createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
@@ -292,6 +298,7 @@ import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/acto
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
+import { createVehicleAssetLoader, resolveActorVehicleAssets, withVehicleOverrides } from "@/scene/vehicleAssetLoader";
 import {
   applyAssetUvwMapping,
   loadAssetUvw,
@@ -321,6 +328,7 @@ import {
   collectSaveState,
   type GameSaveState,
   type SavedPlayerTransform,
+  type SavedVehicleState,
 } from "@engine/persistence/saveGameState";
 import { createLocalStorageAdapter } from "@engine/persistence/saveGameStore";
 import {
@@ -348,6 +356,7 @@ import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
   complexAsSimpleAssetIds,
+  resolvePhysicalMaterial,
 } from "@engine/scene/collision";
 import {
   COLLIDER_COMPONENT,
@@ -476,6 +485,7 @@ export interface RuntimeStatsApp {
   getAiNavigationDebugSnapshot?(): AiNavigationDebugSnapshot;
   /** Optional: runtime Generic Spline followers for the `?debug` overlay. */
   getSplinePathFollowerDebugSnapshot?(): readonly SplinePathFollowerDebugState[];
+  getVehicleAiDebugSnapshot?(): readonly VehicleAiDriverDebugState[];
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
@@ -783,6 +793,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly actorMeshScales = new Map<string, Vec3>();
   /** Resolved `*.actor.json` classes, cached by classRef across instances. */
   private readonly actorClassCache = new Map<string, ActorScriptDef>();
+  private readonly rawActorClassCache = new Map<string, ActorScriptDef>();
+  private readonly loadVehicleAsset = createVehicleAssetLoader();
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
@@ -948,7 +960,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       capture: () => this.collectCurrentSaveState(),
       restore: (request) => {
         this.behaviorSubsystem.applyPersistentStateSnapshot(request.persistentState);
-        if (request.player) this.applySavedPlayerTransform(request.player);
+        const restoredVehicles = this.applySavedVehicles(request.vehicles);
+        if (request.player) this.applySavedPlayerTransform(request.player, restoredVehicles);
+        if (request.drivingVehicleId) this.applySavedVehicleRide(request.drivingVehicleId);
       },
     });
     this.runtimeServices.provide(levelTravelService, (levelPath) =>
@@ -1057,7 +1071,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         // Losing pointer lock during play (Escape / alt-tab) opens the pause menu.
         // This covers browsers that swallow the Escape keydown under pointer lock,
         // where the `menu` action edge would otherwise never fire.
-        if (mode === "ui" && wasGame) this.uiPresenter()?.openPauseMenu();
+        if (mode === "ui" && wasGame && !this.loadingOverlay?.isVisible) this.uiPresenter()?.openPauseMenu();
       },
     });
     this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
@@ -1146,6 +1160,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       locomotion: (entityId) => this.locomotionReports.get(entityId),
       possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
     });
+    this.runtimeServices.provide(vehicleHostService, {
+      debug: this.debug,
+      vehicleIds: () => this.physicsSubsystem.vehicleEntityIds(),
+      vehicleState: (entityId) => this.physicsSubsystem.vehicleState(entityId),
+      vehicleDefinition: (entityId) => this.physicsSubsystem.vehicleDefinition(entityId),
+      actorObject: (entityId) => this.actorObjects.get(entityId) ?? null,
+      isDriven: (entityId) =>
+        this.gameModeSession?.playerState.pawnEntityId === entityId ||
+        this.runtimeServices.resolve(vehicleAiService)?.isDriving(entityId) === true,
+      possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
+      setVehicleInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
+      surfaceMaterialForWheel: (_entityId, wheel) => wheel.groundEntityId === null ? null
+        : resolvePhysicalMaterial(this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId)),
+      isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
+    });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,
       // Resolved when the AI capability starts, so the game module (registered
@@ -1176,6 +1205,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.addSubsystem("pre-physics", this.animationSubsystem);
     this.runtimeServices.addSubsystem("pre-physics", this.inputSubsystem);
     this.runtimeServices.addSubsystem("physics", this.physicsSubsystem);
+    this.physicsSubsystem.setVehicleSurfaceProvider(createPhysicalMaterialSurfaceProvider(
+      (entityId) => this.physicsSubsystem.colliderPhysicalMaterialId(entityId),
+    ));
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       this.createSceneBehaviorRegistry(),
@@ -1971,6 +2003,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
+   * Snapshots the vehicle AI drivers for `?debug` and browser smoke checks.
+   * Empty when the vehicle-ai module is not part of this runtime.
+   */
+  getVehicleAiDebugSnapshot(): readonly VehicleAiDriverDebugState[] {
+    return this.runtimeServices.resolve(vehicleAiService)?.drivers() ?? [];
+  }
+
+  /**
    * Snapshots AI path following (waypoints, stuck recovery) for `?debug`. Empty
    * when no AI capability is registered: nothing is planning a path, so there is
    * no nav world to describe either.
@@ -2006,6 +2046,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const blockers: Aabb3[] = [];
     this.characterMovement()?.forEachCharacter((entityId, transform) => {
       if (entityId === excludeEntityId) return;
+      // A switched-off character (a driver riding inside a vehicle) blocks nobody.
+      if (!this.physicsSubsystem.isEntityCollisionEnabled(entityId)) return;
       const half = this.physicsSubsystem.colliderHalfExtents(entityId);
       if (!half) return;
       blockers.push({
@@ -2130,7 +2172,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // the safe recovery from a half-built boot).
       console.error("[runtime] boot failed:", error);
       this.loadingOverlay?.showError(
-        "Failed to load the game. Check your connection and try again.",
+        error instanceof ContentLoadError
+          ? `Failed to load the game. ${error.message}`
+          : "Failed to load the game. Check your connection and try again.",
         () => {
           if (typeof location !== "undefined") location.reload();
         },
@@ -2145,6 +2189,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.loadingOverlay?.setProgress(0, "");
     this.setLoadingStatus(status);
     this.loadingOverlay?.show();
+    this.inputMode = "ui";
+    this.pointerLook.release();
+    this.pointerLook.setMouseCursorVisible(true);
   }
 
   /** Hides the loading overlay after one painted frame (so the built scene shows first). */
@@ -2991,7 +3038,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Hide the on-screen touch controls behind any open menu/outcome screen so
     // the stick/buttons can't be hit through it (and held input is released).
     this.touchInput?.setVisible(depth === 0);
-    if (depth > 0) {
+    // Travel clears the menu stack while the loading overlay still owns input.
+    // Re-locking here strands a failed travel's Retry button under a locked cursor.
+    if (depth > 0 || this.loadingOverlay?.isVisible) {
       this.inputMode = "ui";
       this.pointerLook.release();
       this.pointerLook.setMouseCursorVisible(true);
@@ -3057,7 +3106,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       activeLevelPath: this.activeLevelPath,
       playerTransform,
       persistentState: this.behaviorSubsystem.getPersistentStateSnapshot(),
+      vehicles: this.collectSavedVehicles(),
+      drivingVehicleId: this.gameModeSession?.drivingVehicleId ?? null,
     });
+  }
+
+  /** Every live vehicle's simulated pose and motion, for the save payload. */
+  private collectSavedVehicles(): SavedVehicleState[] {
+    const vehicles: SavedVehicleState[] = [];
+    for (const entityId of this.physicsSubsystem.vehicleEntityIds()) {
+      const transform = this.transformForEntity(entityId);
+      const motion = this.physicsSubsystem.vehicleMotion(entityId);
+      if (!transform || !motion) continue;
+      vehicles.push({
+        entityId,
+        position: [...transform.position],
+        rotation: [...transform.rotation],
+        linearVelocity: [...motion.linearVelocity],
+        angularVelocity: [...motion.angularVelocity],
+        handbrake: motion.handbrake,
+        drivetrain: motion.drivetrain,
+      });
+    }
+    return vehicles;
   }
 
   /**
@@ -3351,20 +3422,88 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.resetCharacterTransform(entityId, reset);
   }
 
-  private applySavedPlayerTransform(player: SavedPlayerTransform): void {
+  private applySavedPlayerTransform(
+    player: SavedPlayerTransform,
+    restoredVehicles: ReadonlySet<string>,
+  ): void {
     const entityId = this.gameModeSession?.playerState.pawnEntityId;
     if (!entityId) return;
+    // A pawn that is itself a vehicle (`forge.vehicle`) came back with its
+    // motion from the vehicle list; a save from before that list existed still
+    // puts it at the saved spot, at rest.
+    if (this.physicsSubsystem.hasVehicle(entityId)) {
+      if (restoredVehicles.has(entityId)) return;
+      const current = this.transformForEntity(entityId);
+      if (!current) return;
+      this.physicsSubsystem.resetVehicle(entityId, {
+        position: [...player.position],
+        rotation: [0, player.facingYawDeg, 0],
+        scale: [...current.scale],
+      });
+      return;
+    }
+    const restored = this.teleportCharacterPawn(entityId, player.position, player.facingYawDeg);
+    if (restored) this.pawnRespawnTransforms.set(entityId, cloneTransform(restored));
+  }
+
+  /**
+   * Puts each saved vehicle that still exists in this level back at its saved
+   * pose and motion (keeping its current scale). Returns the ids restored.
+   */
+  private applySavedVehicles(vehicles: readonly SavedVehicleState[]): Set<string> {
+    const restored = new Set<string>();
+    for (const saved of vehicles) {
+      const current = this.transformForEntity(saved.entityId);
+      if (!current) continue;
+      const ok = this.physicsSubsystem.restoreVehicle(
+        saved.entityId,
+        { position: [...saved.position], rotation: [...saved.rotation], scale: [...current.scale] },
+        saved,
+      );
+      if (ok) restored.add(saved.entityId);
+      else console.warn("[runtime] saved vehicle is not a vehicle in this level", saved.entityId);
+    }
+    return restored;
+  }
+
+  /**
+   * Seats the player back in the vehicle they were driving. When that cannot
+   * happen (the car is gone, or the Game Mode does not board vehicles) the
+   * on-foot pawn simply stays where the player transform put it.
+   */
+  private applySavedVehicleRide(vehicleEntityId: string): void {
+    if (this.gameModeSession?.boardVehicle?.(vehicleEntityId)) return;
+    console.warn("[runtime] saved vehicle ride could not be restored", vehicleEntityId);
+  }
+
+  /**
+   * Moves a character to `position` facing `yawDeg`, keeping its scale and tilt:
+   * through the movement solver and the behavior layer, so neither writes its
+   * stale copy back next frame. Returns the applied transform.
+   */
+  private teleportCharacterPawn(
+    entityId: string,
+    position: readonly [number, number, number],
+    yawDeg: number,
+  ): TransformComponent | null {
     const current = this.transformForEntity(entityId);
-    if (!current) return;
-    const restored: TransformComponent = {
-      position: [player.position[0], player.position[1], player.position[2]],
-      rotation: [current.rotation[0], player.facingYawDeg, current.rotation[2]],
+    if (!current) return null;
+    const moved: TransformComponent = {
+      position: [position[0], position[1], position[2]],
+      rotation: [current.rotation[0], yawDeg, current.rotation[2]],
       scale: [...current.scale],
     };
     this.locomotionReports.delete(entityId);
-    this.behaviorSubsystem.resetEntityTransform(entityId, restored);
-    this.resetCharacterTransform(entityId, restored);
-    this.pawnRespawnTransforms.set(entityId, cloneTransform(restored));
+    this.behaviorSubsystem.resetEntityTransform(entityId, moved);
+    this.resetCharacterTransform(entityId, moved);
+    return moved;
+  }
+
+  /** Shows/hides a character's or actor's rendered object (Game Mode bridge). */
+  private setEntityHidden(entityId: string, hidden: boolean): void {
+    const character = this.characterRefs.find((ref) => ref.entityId === entityId);
+    if (character) character.object.visible = !hidden;
+    else this.setActorObjectVisible(entityId, !hidden);
   }
 
   private transformForEntity(entityId: string): TransformComponent | null {
@@ -3372,6 +3511,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (character) return character;
     const entity = this.actorEntityById.get(entityId);
     if (!entity) return null;
+    // A simulated actor (a crate, a vehicle pawn) is moved by physics, not by its
+    // Transform component, so the component would still read its spawn pose.
+    const simulated = this.physicsSubsystem.simulatedTransform(entityId);
+    if (simulated) return simulated;
     const transform = readTransformComponent(entity);
     return transform ? cloneTransform(transform) : null;
   }
@@ -3427,12 +3570,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       characters: this.characterRefs,
       getLocomotion: (entityId) => this.locomotionReports.get(entityId),
       staticBlockerAabbs: () => this.physicsSubsystem.staticBlockerAabbs(),
+      staticBlockerAabbsNear: (x, z, radius) => this.physicsSubsystem.staticBlockerAabbsNear(x, z, radius),
       addMixer: (mixer) => this.animationSubsystem.add(mixer),
       emitAnimNotify: (entityId, name) =>
         this.behaviorSubsystem.emitScriptMessage("anim-notify", entityId, { name }, entityId),
       spawnRagdoll: (desc, options) => this.physicsSubsystem.spawnRagdoll(desc, options),
       sampleRagdoll: (id) => this.physicsSubsystem.sampleRagdoll(id),
       despawnRagdoll: (id) => this.physicsSubsystem.despawnRagdoll(id),
+      vehicles: {
+        ids: () => this.physicsSubsystem.vehicleEntityIds(),
+        setInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
+        state: (entityId) => this.physicsSubsystem.vehicleState(entityId),
+        object: (entityId) => this.actorObjects.get(entityId) ?? null,
+        reset: (entityId, transform) => this.physicsSubsystem.resetVehicle(entityId, transform),
+      },
+      setEntityHidden: (entityId, hidden) => this.setEntityHidden(entityId, hidden),
+      setEntityCollisionEnabled: (entityId, enabled) =>
+        this.physicsSubsystem.setEntityCollisionEnabled(entityId, enabled),
+      teleportCharacter: (entityId, position, yawDeg) => {
+        this.teleportCharacterPawn(entityId, position, yawDeg);
+      },
+      traceCamera: (from, to) => this.physicsSubsystem.traceCamera(from, to),
       onScriptMessage: (type, handler, options) =>
         this.behaviorSubsystem.subscribeScriptMessage(
           type,
@@ -3590,7 +3748,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const actors = this.layout?.actors ?? [];
     const entities = await Promise.all(
       actors.map(async (instance, index) => {
-        const def = await this.loadActorClass(instance.classRef);
+        // A placement's vehicle overrides may name another asset, so they are
+        // layered onto the raw class and resolved per placement.
+        const def = instance.vehicleOverrides
+          ? await resolveActorVehicleAssets(
+            withVehicleOverrides(await this.loadRawActorClass(instance.classRef), instance.vehicleOverrides),
+            this.loadVehicleAsset,
+          )
+          : await this.loadActorClass(instance.classRef);
         return actorInstanceToEntity(def, instance, index);
       }),
     );
@@ -3599,9 +3764,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const entity of entities) this.registerActorEntity(entity);
   }
 
-  /** Fetches + normalizes an `*.actor.json` class, caching by classRef (never throws). */
+  /** Fetches + normalizes an `*.actor.json` class with its vehicle asset resolved, cached by classRef (never throws). */
   private async loadActorClass(classRef: string): Promise<ActorScriptDef> {
     const cached = this.actorClassCache.get(classRef);
+    if (cached) return cached;
+    const def = await resolveActorVehicleAssets(await this.loadRawActorClass(classRef), this.loadVehicleAsset);
+    this.actorClassCache.set(classRef, def);
+    return def;
+  }
+
+  /** The class as authored — vehicle asset references unexpanded — cached by classRef. */
+  private async loadRawActorClass(classRef: string): Promise<ActorScriptDef> {
+    const cached = this.rawActorClassCache.get(classRef);
     if (cached) return cached;
     let def: ActorScriptDef;
     try {
@@ -3610,7 +3784,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     } catch {
       def = normalizeActorScriptDef({}, classRef);
     }
-    this.actorClassCache.set(classRef, def);
+    this.rawActorClassCache.set(classRef, def);
     return def;
   }
 
@@ -3761,7 +3935,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private addActorCharacterRef(entity: Entity, object: Object3D): void {
     const actor = readScriptActorComponent(entity);
     if (!actor) return;
-    const def = this.actorClassCache.get(actor.classRef);
+    // An overridden vehicle placement may only have filled the raw cache; parentClass is the same.
+    const def = this.actorClassCache.get(actor.classRef) ?? this.rawActorClassCache.get(actor.classRef);
     if (def?.parentClass !== "character") return;
     const renderer = readRenderableMeshComponent(entity);
     const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
@@ -4283,7 +4458,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const volumes = this.layout?.blockingVolumes ?? [];
     volumes.forEach((actor) => {
       const item = this.blockingVolumeItem(actor);
-      const object = createRuntimeBlockingVolumeObject(item);
+      const object = createRuntimeBlockingVolumeObject(item, actor.color);
       object.visible = item.renderInGame && !item.hidden;
       this.blockingVolumeObjects.push(object);
       this.scene.add(tagSceneSource(object, "blocking-volume"));
@@ -4452,15 +4627,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     };
   }
 
-  /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
-  private async fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
-    try {
-      const response = await fetch(`/${dataRef}`);
-      if (!response.ok) return createFlatLandscapeData("medium");
-      return (await response.json()) as ForgeLandscapeData;
-    } catch {
-      return createFlatLandscapeData("medium");
-    }
+  /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
+  private fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
+    return fetchLandscapeDocument(dataRef);
   }
 
   /**
@@ -4682,8 +4851,54 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           }
         },
       });
-      if (built) object.add(built.group);
+      if (!built) return;
+      object.add(built.group);
+      const actor = this.layout?.landscapes?.[index];
+      const colliderEntity = actor ? this.landscapeSplineColliderEntity(actor, data, built.group, manifest) : null;
+      if (colliderEntity) {
+        this.landscapeColliderEntities.push(colliderEntity);
+        this.addColliderDebugWire(colliderEntity);
+      }
     });
+  }
+
+  /**
+   * One static trimesh body for a collidable landscape's road/spline meshes, in
+   * the landscape collider's frame. Assets whose manifest turns `runtime.collision`
+   * off stay render-only.
+   */
+  private landscapeSplineColliderEntity(
+    actor: LayoutLandscape,
+    data: ForgeLandscapeData,
+    group: Group,
+    manifest: AssetManifest | null,
+  ): Entity | null {
+    const item = this.landscapeItem(actor, data);
+    if (!item.collision) return null;
+    const primitive = landscapeSplineMeshColliderPrimitive(group, (assetId) =>
+      manifest?.assets.find((entry) => entry.id === assetId)?.runtime.collision !== false);
+    if (!primitive) return null;
+    const collider: ColliderComponent = {
+      shape: "box",
+      size: primitive.size,
+      center: primitive.center,
+      isStatic: true,
+      isSensor: false,
+      navigationRole: "walkable",
+      primitives: [{ shape: "trimesh", ...primitive }],
+    };
+    return {
+      id: `landscape-splines:${actor.id}`,
+      name: `${item.name} Spline Mesh Collider`,
+      components: {
+        [TRANSFORM_COMPONENT]: {
+          position: [...actor.position] as [number, number, number],
+          rotation: [...item.rotation] as [number, number, number],
+          scale: [1, 1, 1],
+        },
+        [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
+      },
+    };
   }
 
   /**
@@ -5141,6 +5356,7 @@ function silentAudioPlayback(clipId: string): AudioPlaybackHandle {
     stop: () => undefined,
     setVolume: () => undefined,
     setPitch: () => undefined,
+    setPosition: () => undefined,
     setPaused: () => undefined,
   };
 }

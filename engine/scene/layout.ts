@@ -239,6 +239,8 @@ export interface LayoutActorInstance {
   variableOverrides?: LayoutMetadata;
   /** Optional level-owned override merged into this actor's AIController at spawn. */
   patrolRoute?: AiPatrolRoute;
+  /** Optional level-owned overrides on the class's `Vehicle` component (asset, quick scalars, engine sound). */
+  vehicleOverrides?: VehicleOverrides;
 }
 
 export interface LayoutCharacter {
@@ -730,7 +732,7 @@ export interface LayoutBlockingVolume {
   brushSides?: number;
   /** Draw as a solid grey-box in Play. Absent/false means invisible-but-blocking. */
   renderInGame?: boolean;
-  /** Editor brush tint (hex `#rrggbb`). */
+  /** Editor brush tint and Play surface colour (hex `#rrggbb`); absent stays grey in Play. */
   color?: string;
   /**
    * AI navigation interpretation. `walkable` turns a horizontal box into a
@@ -854,7 +856,7 @@ export interface LayoutLandscape {
   position: Vec3;
   /** Full Euler rotation (XYZ order) in degrees. */
   rotation?: Vec3;
-  /** Public-root-relative path to this landscape's `*.landscape.json` height/layer sidecar. */
+  /** Public-root-relative `*.terrain.json`, or a legacy `*.landscape.json` sidecar. */
   dataRef: string;
   /** Landscape material asset id, unused until Faz 3 (layer paint + landscape material). */
   material?: string;
@@ -1004,3 +1006,4 @@ export interface RoomLayout {
   worldWidgets?: WorldUiWidget[];
 }
 import type { AiPatrolRoute } from "./components";
+import type { VehicleOverrides } from "../physics/vehicle/vehicleTypes";

@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import { REPO_ROOT, SMOKE_PORT } from "./tests/smoke/smokeProject.mjs";
 
 /**
  * Smoke runs own a dedicated port and always start their own server.
@@ -13,8 +16,9 @@ import { defineConfig, devices } from "@playwright/test";
  * `--strictPort` plus `reuseExistingServer: false` turns that into a loud
  * "port is already in use" instead of a silent wrong-repo run.
  */
-export const SMOKE_PORT = 5273;
+export { SMOKE_PORT };
 export const SMOKE_BASE_URL = `http://127.0.0.1:${SMOKE_PORT}`;
+process.env.FORGE_SMOKE_PROJECT_ROOT ??= resolve(REPO_ROOT, ".playwright-smoke", `run-${randomUUID()}`);
 
 export default defineConfig({
   testDir: "./tests/smoke",
@@ -33,10 +37,11 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm run dev:smoke",
+    command: "node tests/smoke/start-server.mjs",
     url: SMOKE_BASE_URL,
     reuseExistingServer: false,
     timeout: 120_000,
+    env: { FORGE_SMOKE_PROJECT_ROOT: process.env.FORGE_SMOKE_PROJECT_ROOT },
   },
   projects: [
     {

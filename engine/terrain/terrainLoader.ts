@@ -1,8 +1,12 @@
 import { normalizeWorldTerrain } from "./terrainDefinition";
+import { isMultiTileTerrain } from "./worldTerrainActor";
+import { validateTerrainGlobalMap } from "./terrainGlobalMapFile";
+import { buildTerrainGlobalAttributes, worldTerrainRenderSource, type TerrainGlobalAttributes } from "./terrainRenderSource";
 import { decodeTerrainTile, type DecodedTerrainTile } from "./terrainTileCodec";
-import { terrainTileHeightRange, terrainTilePath, tileKey, type WorldTerrainDef, type TerrainTileData } from "./terrainTypes";
+import { terrainGlobalMapPath, terrainTileHeightRange, terrainTilePath, tileKey, type WorldTerrainDef, type TerrainTileData } from "./terrainTypes";
 
 export interface WorldTerrainDocument {
+  globalAttributes?: TerrainGlobalAttributes | undefined;
   def: WorldTerrainDef;
   tiles: Map<string, TerrainTileData>;
 }
@@ -37,6 +41,19 @@ export async function loadWorldTerrain(
 ): Promise<WorldTerrainDocument> {
   const def = normalizeWorldTerrain(value);
   const tiles = new Map<string, DecodedTerrainTile>();
+  // A single (0, 0) tile is drawn through the 1x1 Landscape adapter, which
+  // builds its own far map; only multi-tile terrains read the sidecar.
+  if (!isMultiTileTerrain(def)) {
+    for (const { key } of def.tiles) tiles.set(key, validateTerrainTile(def, key, await readBinary(terrainTilePath(path, key))));
+    return { def, tiles };
+  }
+  let globalAttributes: TerrainGlobalAttributes | undefined;
+  try {
+    globalAttributes = validateTerrainGlobalMap(def, await readBinary(terrainGlobalMapPath(path)));
+  } catch (error) {
+    console.warn(`[terrain] ${path}: global map missing or invalid; computing from tiles`, error);
+  }
   for (const { key } of def.tiles) tiles.set(key, validateTerrainTile(def, key, await readBinary(terrainTilePath(path, key))));
-  return { def, tiles };
+  globalAttributes ??= buildTerrainGlobalAttributes(worldTerrainRenderSource(def, tiles));
+  return { def, tiles, globalAttributes };
 }

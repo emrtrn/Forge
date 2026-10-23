@@ -1,3 +1,4 @@
+import { decodeTerrainGlobalMap, validateTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 /** Production editor save session, without a renderer, timers or disk writes. */
 import assert from "node:assert/strict";
@@ -93,6 +94,10 @@ function fixture(scenePath = LEVEL) {
       terrainValue = decodeTerrainTile(new Uint8Array(init!.body as ArrayBuffer)).heights[0]!;
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
+    if (String(_input).startsWith("/__save-terrain-global")) {
+      decodeTerrainGlobalMap(new Uint8Array(init!.body as ArrayBuffer));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
     const body = JSON.parse(String(init?.body));
     const value = (body.terrain ? terrainValue : undefined) ?? body.landscape?.heights[0] ?? body.foliage?.groups[0].instances[0].position[0] ?? body.meshPaint?.placements[0].colors[0];
     writes.push({ path: body.path, value });
@@ -170,7 +175,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     });
   }
 
-  for (const failure of ["tile", "definition", "layout", "none"]) {
+  for (const failure of ["tile", "global", "definition", "layout", "none"]) {
     await checkAsync(`terrain migration: ${failure} failure preserves legacy reference until the complete snapshot is saved`, async () => {
       const f = fixture();
       const actor = f.host.layout.landscapes![0]!;
@@ -188,7 +193,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
         return saver(payload);
       };
       await withFetch(async (input, init) => {
-        const kind = String(input).startsWith("/__save-terrain-tile") ? "tile" : "definition";
+        const kind = String(input).startsWith("/__save-terrain-tile") ? "tile" : String(input).startsWith("/__save-terrain-global") ? "global" : "definition";
         order.push(kind);
         assert.equal(actor.dataRef, legacy);
         if (fail && failure === kind) return new Response("failed", { status: 400 });
@@ -202,7 +207,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
         }
         await f.host.saveLayout();
         assert.equal(actor.dataRef, PATHS[1]);
-        assert.deepEqual(order.slice(-3), ["tile", "definition", "layout"]);
+        assert.deepEqual(order.slice(-4), ["tile", "global", "definition", "layout"]);
       });
     });
   }
@@ -405,7 +410,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     assert.equal(f.statuses.at(-1)?.tone, "success");
   });
 
-  await checkAsync("editor save: an edited World Terrain writes only its dirty tiles, then its definition, in place", async () => {
+  await checkAsync("editor save: an edited World Terrain writes its dirty tiles, global map and definition in place", async () => {
     const f = fixture();
     const shared = "worlds/big.terrain.json";
     const def: WorldTerrainDef = {
@@ -426,7 +431,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     await withFetch(async (input, init) => {
       const url = String(input);
       if (url.startsWith("/__save-terrain")) {
-        requests.push({ url, body: url.includes("-tile") ? decodeTerrainTile(new Uint8Array(init!.body as ArrayBuffer)) : JSON.parse(String(init!.body)) });
+        requests.push({ url, body: url.includes("-tile") ? decodeTerrainTile(new Uint8Array(init!.body as ArrayBuffer)) : url.includes("-global") ? validateTerrainGlobalMap(world.def, new Uint8Array(init!.body as ArrayBuffer)) : JSON.parse(String(init!.body)) });
         if (url.includes("-tile") && editWhileWriting) session.markTiles(["1_0"]);
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
@@ -440,11 +445,13 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
       await f.host.saveLandscapeData("world");
     });
     assert.equal(session.dirty, false);
-    assert.equal(requests.length, 4);
-    const [tileRequest, defRequest] = requests as [{ url: string; body: ReturnType<typeof decodeTerrainTile> }, { url: string; body: { path: string; terrain: WorldTerrainDef } }];
+    assert.equal(requests.length, 6);
+    const [tileRequest, globalRequest, defRequest] = requests as [{ url: string; body: ReturnType<typeof decodeTerrainTile> }, { url: string; body: ReturnType<typeof validateTerrainGlobalMap> }, { url: string; body: { path: string; terrain: WorldTerrainDef } }];
     assert.equal(tileRequest.url, `/__save-terrain-tile?path=${encodeURIComponent(shared)}&key=1_0`);
     assert.equal(tileRequest.body.heightFormat, "u16");
     assert.ok(Math.abs(Math.max(...tileRequest.body.heights) - 2) < 16 / 65535, "the raised peak survives u16 encoding");
+    assert.equal(globalRequest.url, `/__save-terrain-global?path=${encodeURIComponent(shared)}`);
+    assert.equal(Math.max(...globalRequest.body.map.heights), 2);
     assert.equal(defRequest.url, "/__save-terrain");
     assert.equal(defRequest.body.path, shared);
     assert.equal(defRequest.body.terrain.tiles.find((tile) => tile.key === "1_0")!.maxHeight, 2);
@@ -452,14 +459,15 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     assert.equal(f.host.layout.landscapes!.find((entry) => entry.id === "world")!.dataRef, shared);
   });
 
-  await checkAsync("editor save: World Terrain material assignment and clearing write only the definition before the level", async () => {
+  await checkAsync("editor save: World Terrain material assignment and clearing refresh the global map before definition and level", async () => {
     const f = worldTerrainFixture();
-    const requests: { url: string; body: { path: string; terrain: WorldTerrainDef } }[] = [];
+    const requests: { url: string; body: { path: string; terrain: WorldTerrainDef } | null }[] = [];
     const order: string[] = [];
     f.host.layoutSaver = async () => { order.push("level"); return { path: LEVEL }; };
     await withFetch(async (input, init) => {
       const url = String(input);
-      requests.push({ url, body: JSON.parse(String(init!.body)) });
+      if (url.includes("-global")) validateTerrainGlobalMap(f.world.def, new Uint8Array(init!.body as ArrayBuffer));
+      requests.push({ url, body: url.includes("-global") ? null : JSON.parse(String(init!.body)) });
       order.push(url);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }, async () => {
@@ -472,10 +480,10 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
         assert.equal(f.session.dirty, true);
         assert.deepEqual(f.session.dirtyKeys(), []);
         await f.host.saveLayout();
-        assert.deepEqual(requests.map((request) => request.url), ["/__save-terrain"]);
-        assert.equal(requests[0]!.body.path, f.path);
-        assert.equal(requests[0]!.body.terrain.layers[0]!.material, material);
-        assert.deepEqual(order, ["/__save-terrain", "level"]);
+        assert.deepEqual(requests.map((request) => request.url), [`/__save-terrain-global?path=${encodeURIComponent(f.path)}`, "/__save-terrain"]);
+        assert.equal(requests[1]!.body!.path, f.path);
+        assert.equal(requests[1]!.body!.terrain.layers[0]!.material, material);
+        assert.deepEqual(order, [`/__save-terrain-global?path=${encodeURIComponent(f.path)}`, "/__save-terrain", "level"]);
         assert.equal(f.session.dirty, false);
         assert.equal(f.session.capture(), null);
         assert.equal(f.statuses.at(-1)?.tone, "success");
@@ -489,9 +497,11 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     f.session.markDefinitionDirty();
     const started = deferred();
     const release = deferred();
-    const requests: { url: string; body: { terrain: WorldTerrainDef } }[] = [];
+    const requests: { url: string; body: { terrain: WorldTerrainDef } | null }[] = [];
     await withFetch(async (input, init) => {
-      requests.push({ url: String(input), body: JSON.parse(String(init!.body)) });
+      const url = String(input);
+      if (url.includes("-global")) validateTerrainGlobalMap(f.world.def, new Uint8Array(init!.body as ArrayBuffer));
+      requests.push({ url, body: url.includes("-global") ? null : JSON.parse(String(init!.body)) });
       if (requests.length === 1) {
         started.resolve();
         await release.promise;
@@ -509,8 +519,8 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
       assert.equal(f.statuses.at(-1)?.tone, "warning");
       await f.host.saveLandscapeData("world");
     });
-    assert.deepEqual(requests.map((request) => request.url), ["/__save-terrain", "/__save-terrain"]);
-    assert.deepEqual(requests.map((request) => request.body.terrain.layers[0]!.material), ["rock-material", "sand-material"]);
+    assert.deepEqual(requests.map((request) => request.url), [`/__save-terrain-global?path=${encodeURIComponent(f.path)}`, "/__save-terrain", `/__save-terrain-global?path=${encodeURIComponent(f.path)}`, "/__save-terrain"]);
+    assert.deepEqual(requests.filter((request) => request.url === "/__save-terrain").map((request) => request.body!.terrain.layers[0]!.material), ["rock-material", "sand-material"]);
     assert.equal(f.session.dirty, false);
     assert.equal(f.session.capture(), null);
   });
@@ -522,7 +532,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     const requests: string[] = [];
     await withFetch(async (input) => {
       requests.push(String(input));
-      return requests.length === 1
+      return requests.length === 2
         ? new Response("disk full", { status: 500 })
         : new Response(JSON.stringify({ ok: true }), { status: 200 });
     }, async () => {
@@ -531,7 +541,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
       assert.equal(f.writes.length, 0, "a failed definition must not write the level");
       await f.host.saveLayout();
     });
-    assert.deepEqual(requests, ["/__save-terrain", "/__save-terrain"]);
+    assert.deepEqual(requests, [`/__save-terrain-global?path=${encodeURIComponent(f.path)}`, "/__save-terrain", `/__save-terrain-global?path=${encodeURIComponent(f.path)}`, "/__save-terrain"]);
     assert.equal(f.session.dirty, false);
     assert.equal(f.writes[0]!.path, LEVEL);
   });
@@ -550,12 +560,12 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     await withFetch(async (input, init) => {
       const url = String(input);
       if (url.startsWith("/__save-terrain")) {
-        order.push(url.includes("-tile") ? `tile ${new URL(url, "http://x").searchParams.get("key")}` : "definition");
+        order.push(url.includes("-tile") ? `tile ${new URL(url, "http://x").searchParams.get("key")}` : url.includes("-global") ? "global" : "definition");
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return f.fetch(input, init);
     }, () => f.host.saveLayout());
-    assert.deepEqual(order.slice(0, 4), ["tile 0_0", "tile 1_0", "definition", "level"]);
+    assert.deepEqual(order, ["tile 0_0", "tile 1_0", "global", "definition", "level"]);
     assert.equal(session.dirty, false);
   });
 }

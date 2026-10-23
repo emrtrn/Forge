@@ -1,7 +1,8 @@
 import { validateTerrainTile } from "./engine/terrain/terrainLoader";
-import { levelTerrainDir, terrainTilePath } from "./engine/terrain/terrainTypes";
+import { validateTerrainGlobalMap } from "./engine/terrain/terrainGlobalMapFile";
+import { levelTerrainDir, terrainGlobalMapPath, terrainTilePath } from "./engine/terrain/terrainTypes";
 import { collectJsonStrings, findOrphanedLevelTerrain } from "./tools/terrainOrphans";
-import { validateSaveTerrainPayload, validateSaveTerrainTile, TERRAIN_JSON_BODY_MAX_BYTES, TERRAIN_TILE_BODY_MAX_BYTES } from "./tools/terrainSaveValidator";
+import { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal, TERRAIN_JSON_BODY_MAX_BYTES, TERRAIN_TILE_BODY_MAX_BYTES, TERRAIN_GLOBAL_BODY_MAX_BYTES } from "./tools/terrainSaveValidator";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
@@ -926,6 +927,7 @@ const PRIVILEGED_URLS = new Set([
   "/__save-landscape",
   "/__save-terrain",
   "/__save-terrain-tile",
+  "/__save-terrain-global",
   "/__save-soundcue",
   "/__save-effect",
   "/__save-vehicle",
@@ -1189,7 +1191,7 @@ function layoutEditorPlugin(): Plugin {
         // Landscape editor save: writes a `<id>.landscape.json` height/layer
         // sidecar. Validated/normalized server-side (validateSaveLandscapePayload),
         // kept inside public/ by resolvePublicPath.
-        if (req.url?.split("?")[0] === "/__save-terrain-tile" || req.url === "/__save-terrain") {
+        if (["/__save-terrain-tile", "/__save-terrain-global"].includes(req.url?.split("?")[0] ?? "") || req.url === "/__save-terrain") {
           if (req.method !== "POST") {
             res.statusCode = 405;
             res.end("Method Not Allowed");
@@ -1207,14 +1209,21 @@ function layoutEditorPlugin(): Plugin {
                 const bytes = await readFile(resolvePublicPath(terrainTilePath(payload.path, key)));
                 validateTerrainTile(payload.terrain, key, bytes);
               }
+              const global = await readFile(resolvePublicPath(terrainGlobalMapPath(payload.path))).catch((error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return null;
+                throw error;
+              });
+              if (global) validateTerrainGlobalMap(payload.terrain, global);
               path = payload.path;
               const target = resolvePublicPath(path);
               await mkdir(resolve(target, ".."), { recursive: true });
               await writeFile(target, `${JSON.stringify(payload.terrain, null, 2)}\n`, "utf8");
             } else {
               const query = new URL(req.url!, "http://localhost").searchParams;
-              const bytes = await readRawBody(req, TERRAIN_TILE_BODY_MAX_BYTES);
-              path = validateSaveTerrainTile(query.get("path"), query.get("key") ?? "", bytes);
+              const isGlobal = req.url!.split("?")[0] === "/__save-terrain-global";
+              const bytes = await readRawBody(req, isGlobal ? TERRAIN_GLOBAL_BODY_MAX_BYTES : TERRAIN_TILE_BODY_MAX_BYTES);
+              path = isGlobal ? validateSaveTerrainGlobal(query.get("path"), bytes)
+                : validateSaveTerrainTile(query.get("path"), query.get("key") ?? "", bytes);
               const target = resolvePublicPath(path);
               await mkdir(resolve(target, ".."), { recursive: true });
               await writeFile(target, bytes);

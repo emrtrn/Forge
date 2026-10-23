@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
-import { levelTerrainDir, terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { levelTerrainDir, terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { expect, test, type Page } from "./test";
 import { SMOKE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
@@ -25,21 +25,22 @@ test("saving a level removes a deleted landscape's terrain files unless another 
   const dataRef = (await (await request.get(`/${SMOKE_SCENE}`)).json()).landscapes[0].dataRef as string;
   const definition = smokePublicPath(dataRef);
   const tile = smokePublicPath(terrainTilePath(dataRef, "0_0"));
+  const global = smokePublicPath(terrainGlobalMapPath(dataRef));
   const folder = smokePublicPath(levelTerrainDir(SMOKE_SCENE));
-  expect(existsSync(definition) && existsSync(tile)).toBeTruthy();
+  expect(existsSync(definition) && existsSync(tile) && existsSync(global)).toBeTruthy();
 
   const landscapeRow = page.getByTestId("outliner-row").filter({ hasText: "Landscape" });
   await landscapeRow.first().click();
   await page.keyboard.press("Delete");
   await expect(landscapeRow).toHaveCount(0);
   await save(page);
-  expect(existsSync(definition) || existsSync(tile) || existsSync(folder)).toBeFalsy();
+  expect(existsSync(definition) || existsSync(tile) || existsSync(global) || existsSync(folder)).toBeFalsy();
 
   // Undo after the cleanup brings the actor back; the next save rewrites its terrain.
   await page.getByTestId("editor-undo").click();
   await expect(landscapeRow).toHaveCount(1);
   await save(page);
-  expect(existsSync(definition) && existsSync(tile)).toBeTruthy();
+  expect(existsSync(definition) && existsSync(tile) && existsSync(global)).toBeTruthy();
 
   // A copied level still points at this terrain until its own first save: keep it.
   const copy = smokePublicPath("layouts/__playwright-orphan-copy.level.json");
@@ -49,7 +50,7 @@ test("saving a level removes a deleted landscape's terrain files unless another 
     await page.keyboard.press("Delete");
     await expect(landscapeRow).toHaveCount(0);
     await save(page);
-    expect(existsSync(definition) && existsSync(tile)).toBeTruthy();
+    expect(existsSync(definition) && existsSync(tile) && existsSync(global)).toBeTruthy();
   } finally {
     await rm(copy, { force: true });
   }

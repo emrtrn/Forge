@@ -1948,6 +1948,7 @@ export class EditorUi {
       name.endsWith(".landscape.json") ||
       name.endsWith(".terrain.json") ||
       name.endsWith(".tile.bin") ||
+      name.endsWith(".global.bin") ||
       name.endsWith(".foliage.json") ||
       name.endsWith(".meshpaint.json")
     );

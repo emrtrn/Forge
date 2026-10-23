@@ -1047,6 +1047,7 @@ import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.te
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 import { registerStaticQueriesTests } from "../tests/engine/staticQueries.test";
 import { registerTerrainOrphanTests } from "../tests/engine/terrainOrphans.test";
+import { registerTerrainGlobalMapFileTests } from "../tests/engine/terrainGlobalMapFile.test";
 import { registerTerrainRendererTests } from "../tests/engine/terrainRenderer.test";
 import { registerTerrainWorldRendererTests } from "../tests/engine/terrainWorldRenderer.test";
 import { registerWorldTerrainActorAsyncTests, registerWorldTerrainActorTests, registerWorldTerrainCreateTests, registerWorldTerrainSaveTests } from "../tests/engine/worldTerrainActor.test";
@@ -1180,6 +1181,7 @@ registerPerfWitnessTests(check);
 registerTerrainTests(check);
 registerStaticQueriesTests(check);
 registerTerrainOrphanTests(check);
+registerTerrainGlobalMapFileTests(check);
 registerTerrainRendererTests(check);
 registerTerrainWorldRendererTests(check);
 registerSurfaceResponseTests(check);

@@ -8451,7 +8451,7 @@ export class SceneApp {
       const format = (tile as Partial<DecodedTerrainTile>).heightFormat ?? newTileFormat;
       if (format) formats.set(key, format);
     }
-    const document: WorldTerrainDocument = { def: world.def, tiles: world.tiles };
+    const document: WorldTerrainDocument = { def: world.def, tiles: world.tiles, globalAttributes: loaded.globalAttributes };
     this.worldTerrainSessions.set(document, new WorldTerrainEditSession(path, world, formats));
     return document;
   }

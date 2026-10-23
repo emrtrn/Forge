@@ -15,6 +15,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { TerrainRenderer } from "../../engine/render-three/terrain/terrainRenderer";
+import { encodeTerrainGlobalMap, validateTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import {
   TerrainWorldHeightBounds,
   buildTerrainGlobalAttributes,
@@ -24,7 +25,7 @@ import {
   type TerrainRenderSource,
 } from "../../engine/terrain/terrainRenderSource";
 import type { TerrainVertexRect } from "../../engine/terrain/terrainRenderData";
-import { tileKey, type TerrainTileData } from "../../engine/terrain/terrainTypes";
+import { tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -197,6 +198,39 @@ function copyRegions(terrain: TerrainRenderer, uploads: ReturnType<typeof upload
 }
 
 export function registerTerrainWorldRendererTests(check: Check): void {
+  check("terrain world: decoded global attributes produce identical renderer textures with a missing tile", () => {
+    const tiles = worldTiles();
+    const source = worldSource();
+    const expected = buildTerrainGlobalAttributes(source);
+    const def: WorldTerrainDef = {
+      schema: 1, type: "worldTerrain", name: "World", tileQuads: Q, spacing: SPACING, tilesX: TILES_X, tilesZ: TILES_Z,
+      origin: [0, 0, 0], heightMin: -100, heightMax: 100, collision: true,
+      layers: Array.from({ length: 4 }, (_, i) => ({ id: `l${i}`, name: `Layer ${i}`, color: "#ffffff" })),
+      tiles: [...tiles.keys()].map((key) => ({ key, minHeight: -100, maxHeight: 100 })),
+    };
+    const decoded = validateTerrainGlobalMap(def, encodeTerrainGlobalMap(def, expected));
+    assert.deepEqual(decoded, expected);
+    assert.ok(decoded.map.heights.some(Number.isNaN));
+    const computed = renderer(source);
+    const fromFile = renderer(worldTerrainRenderSource(def, tiles, decoded));
+    const fromOption = new TerrainRenderer(source, {
+      viewMode: "lit", activeLayer: 0, layers: [], origin: new Vector3(-10, 2, 5), globalAttributes: decoded,
+    });
+    try {
+      const a = textures(computed);
+      for (const terrain of [fromFile, fromOption]) {
+        const b = textures(terrain);
+        assert.equal(b.GlobalWeights!.image.data, decoded.weights, "precomputed attributes are used directly");
+        for (const name of ["GlobalHeights", "GlobalNormals", "GlobalWeights"]) {
+          assert.deepEqual(b[name]!.image, a[name]!.image, name);
+        }
+        terrain.updateLod(cameraAt(300, 200, 200));
+        computed.updateLod(cameraAt(300, 200, 200));
+        assert.deepEqual(nodes(terrain), nodes(computed));
+      }
+    } finally { computed.dispose(); fromFile.dispose(); fromOption.dispose(); }
+  });
+
   check("terrain uploads: 257 squared interior dab copies only dirty regions and matches a rebuild", () => {
     const source = dabWorld();
     const terrain = renderer(source);

@@ -27,6 +27,7 @@ import { parseTileKey, tileKey, type TerrainTileData, type WorldTerrainDef } fro
  * engine tests cover it without a GL context.
  */
 export interface TerrainRenderSource extends TerrainTileLookup {
+  readonly globalAttributes?: TerrainGlobalAttributes | undefined;
   /** Quads per tile edge, a power of two of at least one patch. */
   readonly tileQuads: number;
   readonly spacing: number;
@@ -41,9 +42,10 @@ export interface TerrainRenderSource extends TerrainTileLookup {
 export type TerrainWorldShape = Pick<WorldTerrainDef, "tileQuads" | "spacing" | "tilesX" | "tilesZ">;
 
 /** A World Terrain's tiles as a render source. */
-export function worldTerrainRenderSource(def: TerrainWorldShape, tiles: ReadonlyMap<string, TerrainTileData>): TerrainRenderSource {
+export function worldTerrainRenderSource(def: TerrainWorldShape, tiles: ReadonlyMap<string, TerrainTileData>, globalAttributes?: TerrainGlobalAttributes): TerrainRenderSource {
   const size = def.tileQuads * def.spacing;
   return {
+    globalAttributes,
     tileQuads: def.tileQuads,
     spacing: def.spacing,
     tilesX: def.tilesX,

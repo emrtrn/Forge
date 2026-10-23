@@ -1,11 +1,11 @@
-import { levelTerrainDir, TERRAIN_DEF_SUFFIX } from "../engine/terrain/terrainTypes";
+import { levelTerrainDir, TERRAIN_DEF_SUFFIX, TERRAIN_GLOBAL_SUFFIX } from "../engine/terrain/terrainTypes";
 
 const TILES_DIR_SUFFIX = ".tiles";
 
 export interface TerrainOrphan {
   /** Public-relative definition path the files belong to (may already be missing on disk). */
   definition: string;
-  /** Public-relative entries of the level terrain folder to remove: the definition and/or its `.tiles` folder. */
+  /** Public-relative definition, global map and/or tile folder to remove. */
   entries: string[];
 }
 
@@ -13,7 +13,7 @@ export interface TerrainOrphan {
  * Level-owned terrain the saved layout no longer references. A deleted Landscape
  * only leaves the layout; its `<level>.landscapes/<id>.terrain.json` and tiles stay
  * on disk until this runs after the level is saved. `entryNames` is the folder's
- * listing; anything that is not a definition or tile folder is left alone.
+ * listing; anything that is not a definition, global map or tile folder is left alone.
  */
 export function findOrphanedLevelTerrain(
   scenePath: string,
@@ -26,7 +26,8 @@ export function findOrphanedLevelTerrain(
   for (const name of entryNames) {
     const id = name.endsWith(TERRAIN_DEF_SUFFIX)
       ? name.slice(0, -TERRAIN_DEF_SUFFIX.length)
-      : name.endsWith(TILES_DIR_SUFFIX) ? name.slice(0, -TILES_DIR_SUFFIX.length) : "";
+      : name.endsWith(TILES_DIR_SUFFIX) ? name.slice(0, -TILES_DIR_SUFFIX.length)
+        : name.endsWith(TERRAIN_GLOBAL_SUFFIX) ? name.slice(0, -TERRAIN_GLOBAL_SUFFIX.length) : "";
     if (!id) continue;
     const definition = `${dir}/${id}${TERRAIN_DEF_SUFFIX}`;
     if (referenced.has(definition)) continue;

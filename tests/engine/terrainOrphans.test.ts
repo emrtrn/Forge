@@ -17,18 +17,20 @@ export function registerTerrainOrphanTests(check: Check): void {
   check("terrain orphans: a deleted landscape's definition and tiles are found, referenced ones kept", () => {
     const kept = levelTerrainPath(LEVEL, "kept");
     const orphans = findOrphanedLevelTerrain(LEVEL, [kept], [
-      "kept.terrain.json", "kept.tiles",
-      "gone.terrain.json", "gone.tiles",
+      "kept.terrain.json", "kept.tiles", "kept.global.bin",
+      "gone.terrain.json", "gone.tiles", "gone.global.bin",
       "half~2f~.tiles",
+      "lonely.global.bin",
       "notes.txt",
     ]);
     assert.deepEqual(orphans, [
       {
         definition: "assets/Levels/Big.landscapes/gone.terrain.json",
-        entries: ["assets/Levels/Big.landscapes/gone.terrain.json", "assets/Levels/Big.landscapes/gone.tiles"],
+        entries: ["assets/Levels/Big.landscapes/gone.global.bin", "assets/Levels/Big.landscapes/gone.terrain.json", "assets/Levels/Big.landscapes/gone.tiles"],
       },
       // A tile folder whose definition was never committed is unreferenced too.
       { definition: "assets/Levels/Big.landscapes/half~2f~.terrain.json", entries: ["assets/Levels/Big.landscapes/half~2f~.tiles"] },
+      { definition: "assets/Levels/Big.landscapes/lonely.terrain.json", entries: ["assets/Levels/Big.landscapes/lonely.global.bin"] },
     ]);
   });
 

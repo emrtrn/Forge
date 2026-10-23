@@ -5,7 +5,9 @@ import type { LayoutLandscape } from "../../engine/scene/layout";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { captureTerrainSnapshot, terrainDocumentToLandscape, terrainTransformNeedsSave } from "../../engine/terrain/terrainLandscapeBridge";
 import { loadWorldTerrain, validateTerrainTile } from "../../engine/terrain/terrainLoader";
-import { terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
+import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { collectDroppedFields } from "../../tools/droppedFields";
 import { validateSaveTerrainPayload, validateSaveTerrainTile } from "../../tools/saveValidator";
 import { fetchLandscapeDocument } from "../../src/scene/terrainDocument";
@@ -101,11 +103,53 @@ export function registerTerrainDocumentTests(check: Check): void {
 }
 
 export async function registerTerrainDocumentAsyncTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain loader: uses saved global map, or computes with one warning when missing, corrupt or stale", async () => {
+    const { def: single, bytes, path } = fixture();
+    // Two tiles wide with (1, 0) a hole: only multi-tile terrains read the sidecar.
+    const def = normalizeWorldTerrain({ ...single, tilesX: 2 });
+    const tile = validateTerrainTile(def, "0_0", bytes);
+    const expected = buildTerrainGlobalAttributes(worldTerrainRenderSource(def, new Map([["0_0", tile]])));
+    const global = encodeTerrainGlobalMap(def, expected);
+    const saved = global.slice();
+    saved[saved.length - 1] = 17;
+    const original = console.warn;
+    const warnings: unknown[][] = [];
+    console.warn = (...args: unknown[]) => { warnings.push(args); };
+    try {
+      for (const kind of ["valid", "missing", "corrupt", "stale"] as const) {
+        warnings.length = 0;
+        const shape = kind === "stale" ? { ...def, tilesX: 3 } : def;
+        const document = await loadWorldTerrain(path, shape, async (p) => {
+          if (p === terrainGlobalMapPath(path)) {
+            if (kind === "missing") throw new Error("HTTP 404");
+            return kind === "corrupt" ? global.subarray(0, 35) : kind === "valid" ? saved : global;
+          }
+          assert.equal(p, terrainTilePath(path, "0_0"));
+          return bytes;
+        });
+        assert.equal(warnings.length, kind === "valid" ? 0 : 1);
+        if (warnings.length) assert.match(String(warnings[0]![0]), /^\[terrain\].*computing from tiles/);
+        const expectedAttributes = kind === "stale"
+          ? buildTerrainGlobalAttributes(worldTerrainRenderSource(document.def, document.tiles)) : structuredClone(expected);
+        if (kind === "valid") expectedAttributes.weights[expectedAttributes.weights.length - 1] = 17;
+        assert.deepEqual(document.globalAttributes, expectedAttributes);
+        assert.equal(document.tiles.size, 1, "tiles still load eagerly");
+      }
+      // A single (0, 0) tile goes through the 1x1 adapter: no sidecar request, no warning.
+      warnings.length = 0;
+      const read: string[] = [];
+      const document = await loadWorldTerrain(path, single, async (p) => { read.push(p); return bytes; });
+      assert.deepEqual(read, [terrainTilePath(path, "0_0")]);
+      assert.equal(document.globalAttributes, undefined);
+      assert.equal(warnings.length, 0);
+    } finally { console.warn = original; }
+  });
+
   await checkAsync("terrain loader: eagerly reads listed tiles, keeps holes and rejects missing/mismatched binaries", async () => {
     const { def, bytes, path } = fixture();
     const read: string[] = [];
     const document = await loadWorldTerrain(path, { ...def, tilesX: 2 }, async (p) => { read.push(p); return bytes; });
-    assert.deepEqual(read, [terrainTilePath(path, "0_0")]);
+    assert.deepEqual(read, [terrainGlobalMapPath(path), terrainTilePath(path, "0_0")]);
     assert.equal(document.tiles.size, 1);
     assert.throws(() => terrainDocumentToLandscape(document), /Phase 2/);
     await assert.rejects(loadWorldTerrain(path, def, async () => { throw new Error("missing tile"); }), /missing tile/);

@@ -76,6 +76,7 @@ import { TerrainTextureUpdates } from "./terrainTextureUpdates";
  */
 
 export interface TerrainRendererOptions {
+  globalAttributes?: TerrainGlobalAttributes;
   viewMode: TerrainViewMode;
   activeLayer: number;
   layers: TerrainLayerInput[];
@@ -280,7 +281,7 @@ export class TerrainRenderer {
     );
 
     this.bounds = new TerrainWorldHeightBounds(source);
-    this.global = buildTerrainGlobalAttributes(source);
+    this.global = options.globalAttributes ?? source.globalAttributes ?? buildTerrainGlobalAttributes(source);
     const { width, height } = this.global.map;
     this.globalHeightTexture = configure(new DataTexture(new Float32Array(width * height), width, height), RedFormat, FloatType, NearestFilter);
     this.globalNormalTexture = configure(new DataTexture(new Uint16Array(width * height * 4), width, height), RGBAFormat, HalfFloatType, LinearFilter);

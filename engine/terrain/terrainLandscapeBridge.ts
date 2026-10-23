@@ -1,6 +1,8 @@
 import { LANDSCAPE_QUADS_PER_CHUNK, type ForgeLandscapeData } from "../scene/landscape";
 import type { LayoutLandscape } from "../scene/layout";
 import { legacyLandscapeToWorldTerrain } from "./terrainLegacy";
+import { encodeTerrainGlobalMap } from "./terrainGlobalMapFile";
+import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "./terrainRenderSource";
 import { type WorldTerrainDocument } from "./terrainLoader";
 import { encodeTerrainTile } from "./terrainTileCodec";
 import { isWorldTerrainPath, terrainTileLayerWeight, type WorldTerrainDef } from "./terrainTypes";
@@ -56,6 +58,7 @@ export interface TerrainSaveSnapshot {
   path: string;
   def: WorldTerrainDef;
   bytes: Uint8Array;
+  global: Uint8Array;
 }
 
 /** Capture before the first await. Float heights preserve existing collider vertex positions. */
@@ -74,5 +77,6 @@ export function captureTerrainSnapshot(actor: LayoutLandscape, data: ForgeLandsc
   return {
     path: migratedTerrainPath(actor.dataRef), def,
     bytes: encodeTerrainTile(converted.tile, { heightMin: def.heightMin, heightMax: def.heightMax, heightFormat: "f32" }),
+    global: encodeTerrainGlobalMap(def, buildTerrainGlobalAttributes(worldTerrainRenderSource(def, new Map([["0_0", converted.tile]])))),
   };
 }

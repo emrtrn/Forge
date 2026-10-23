@@ -127,6 +127,7 @@ export async function collectReleaseContent({ publicDir, profile, provenance }) 
     } else if (json) {
       visit(json, path);
       if (path.endsWith(".terrain.json") && json.type === "worldTerrain") {
+        await optional(`${path.slice(0, -".terrain.json".length)}.global.bin`, `terrain:${path}`);
         if (!Array.isArray(json.tiles)) throw new Error(`Invalid terrain tile list: ${path}`);
         const seen = new Set();
         for (const tile of json.tiles) {

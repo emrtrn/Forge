@@ -109,6 +109,19 @@ export async function registerContentLoadingTests(check: Check, checkAsync: Chec
     assert.deepEqual(unregistered, [orphan]);
   });
 
+  check("content: terrain global maps and tiles are companions; binaries without a definition stay visible", () => {
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
+    const level = manifest.assets.find((asset: { path: string }) => /\.level\.json$/i.test(asset.path));
+    const terrain = levelTerrainPath(level.path, "landscape-1");
+    const stem = terrain.replace(/\.terrain\.json$/, "");
+    const report = validateAssetManifest({ ...manifest, assets: [level] }, {
+      publicFiles: [level.path, terrain, `${stem}.global.bin`, `${stem}.tiles/0_0.tile.bin`,
+        "assets/orphan.global.bin", "assets/orphan.tiles/0_0.tile.bin"],
+    });
+    assert.deepEqual(report.issues.filter((issue) => issue.code === "asset-file-unregistered").map((issue) => issue.path),
+      ["assets/orphan.global.bin", "assets/orphan.tiles/0_0.tile.bin"]);
+  });
+
   await checkAsync("content: required reads distinguish network, HTTP, JSON and structural failures", async () => {
     await withFetch(() => { throw new TypeError("offline"); }, async () => {
       await assert.rejects(readContentJson("offline.json"), isFailure("network", "offline.json"));

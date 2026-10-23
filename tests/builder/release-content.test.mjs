@@ -63,6 +63,11 @@ test("terrain definitions close over implicit tile files and enforce their prove
   await assert.rejects(collect(), /Missing or unresolved provenance/);
   provenance[binary] = provenance[path];
   assert.ok((await collect()).files.some((entry) => entry.path === binary));
+  const global = "landscapes/starter.global.bin";
+  await writeFile(resolve(publicDir, global), new Uint8Array([4, 5, 6]));
+  await assert.rejects(collect(), /Missing or unresolved provenance/);
+  provenance[global] = provenance[path];
+  assert.ok((await collect()).files.some((entry) => entry.path === global));
   await writeFile(resolve(publicDir, path), JSON.stringify({ type: "worldTerrain", tiles: [{ key: "../0_0" }] }));
   await assert.rejects(collect(), /Invalid terrain tile key/);
 }));

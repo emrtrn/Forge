@@ -180,7 +180,7 @@ export function createWorldTerrainObject(item: WorldTerrainRenderItem): Landscap
   const group = new Group();
   group.name = item.name;
   const [width, depth] = worldTerrainExtent(def);
-  const terrain = new TerrainRenderer(worldTerrainRenderSource(def, tiles), {
+  const terrain = new TerrainRenderer(worldTerrainRenderSource(def, tiles, item.document.globalAttributes), {
     viewMode: item.viewMode ?? "lit",
     activeLayer: terrainActiveLayer(def.layers, item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id),
     layers: terrainLayerInputs(def.layers, width, item.layerColors, item.layerTextures),

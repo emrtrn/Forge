@@ -1,5 +1,5 @@
 import { validateLandscapeSplines } from "../engine/scene/landscapeSplineValidation";
-export { validateSaveTerrainPayload, validateSaveTerrainTile } from "./terrainSaveValidator";
+export { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal } from "./terrainSaveValidator";
 ﻿/**
  * Save-payload validator for the `/__save-layout` dev endpoint.
  *

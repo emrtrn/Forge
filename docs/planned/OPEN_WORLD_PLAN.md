@@ -1016,6 +1016,14 @@ Doğrulama (2026-10-22):
 
 ## Faz 4 — Akış çekirdeği (yalnız arazi)
 
+- [x] Global harita kalıcı (2026-10-23, dilim 1): `<ad>.global.bin`
+      (`FGLB` v1, little-endian) yükseklikleri, normal X/Z + delik işaretini
+      ve iki RGBA8 ağırlık bloğunu kayıpsız saklar. Her World Terrain kaydı
+      tile → global harita → tanım sırasındadır; yerel ayrıcalıklı endpoint
+      başlık/boyut kontrolü, tanım commit'i şekil eşleştirmesi yapar.
+      Editör/runtime dosyayı renderer'a geçirir; eksik/geçersiz eski dosyada
+      tek `[terrain]` uyarısıyla tile'lardan hesaplanır. **Tile akışı açık:**
+      bu dilimde bütün tile'lar hâlâ eager yüklenir.
 - [x] `worldGrid.ts`, `streamingPolicy.ts`: saf, tablo testli (menzil,
       histerezis, öncelik, hız yönü). *`worldGrid.ts` hazır* (hücre/sınır,
       yakından uzağa sıralı menzil sorgusu, actor → hücre); *`streamingPolicy`

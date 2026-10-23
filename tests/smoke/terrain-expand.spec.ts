@@ -2,8 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createFlatLandscapeData } from "../../engine/scene/landscape";
 import { legacyLandscapeToWorldTerrain } from "../../engine/terrain/terrainLegacy";
+import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
+import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { encodeTerrainTile, decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
-import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { levelTerrainPath, terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { expect, test, type Page } from "./test";
 import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
@@ -28,6 +30,8 @@ async function fixture(rotation = 0) {
   await mkdir(dirname(tilePath), { recursive: true });
   await writeFile(definitionPath, JSON.stringify(def));
   await writeFile(tilePath, encodeTerrainTile(tile, { ...def, heightFormat: "f32" }));
+  await writeFile(smokePublicPath(terrainGlobalMapPath(actor.dataRef)), encodeTerrainGlobalMap(def,
+    buildTerrainGlobalAttributes(worldTerrainRenderSource(def, new Map([["0_0", tile]])))));
   await writeFile(smokePublicPath(LEVEL), JSON.stringify(level));
   return { actor, tile, data };
 }

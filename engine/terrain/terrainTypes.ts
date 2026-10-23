@@ -91,6 +91,7 @@ export interface WorldTerrainDef {
  */
 export const TERRAIN_DEF_SUFFIX = ".terrain.json";
 export const TERRAIN_TILE_SUFFIX = ".tile.bin";
+export const TERRAIN_GLOBAL_SUFFIX = ".global.bin";
 
 export function isWorldTerrainPath(path: string): boolean {
   return path.endsWith(TERRAIN_DEF_SUFFIX);
@@ -120,6 +121,12 @@ export function terrainTilePath(defPath: string, key: string): string {
   const coord = parseTileKey(key);
   if (!coord || coord.x < 0 || coord.z < 0 || key !== tileKey(coord.x, coord.z)) throw new Error(`invalid terrain tile key: ${key}`);
   return `${defPath.slice(0, -TERRAIN_DEF_SUFFIX.length)}.tiles/${key}${TERRAIN_TILE_SUFFIX}`;
+}
+
+/** Always-resident far-terrain samples, beside the definition. */
+export function terrainGlobalMapPath(defPath: string): string {
+  if (!isWorldTerrainPath(defPath)) throw new Error(`terrain path must end with ${TERRAIN_DEF_SUFFIX}: ${defPath}`);
+  return `${defPath.slice(0, -TERRAIN_DEF_SUFFIX.length)}${TERRAIN_GLOBAL_SUFFIX}`;
 }
 
 /**

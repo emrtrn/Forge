@@ -13,8 +13,8 @@ const withinPublic = (path) => {
   if (!absolute.startsWith(root + sep)) throw new Error("Path escapes public");
   return absolute;
 };
-const bundled = await build({ tsconfig: "tsconfig.json", stdin: { contents: 'export { captureTerrainSnapshot } from "./engine/terrain/terrainLandscapeBridge"; export { terrainTilePath } from "./engine/terrain/terrainTypes";', resolveDir: process.cwd() }, bundle: true, format: "esm", platform: "node", write: false });
-const { captureTerrainSnapshot, terrainTilePath } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const bundled = await build({ tsconfig: "tsconfig.json", stdin: { contents: 'export { captureTerrainSnapshot } from "./engine/terrain/terrainLandscapeBridge"; export { terrainTilePath, terrainGlobalMapPath } from "./engine/terrain/terrainTypes";', resolveDir: process.cwd() }, bundle: true, format: "esm", platform: "node", write: false });
+const { captureTerrainSnapshot, terrainTilePath, terrainGlobalMapPath } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 const level = JSON.parse(await readFile(withinPublic(levelPath), "utf8"));
 for (const actor of level.landscapes ?? []) {
   if (actor.dataRef.endsWith(".terrain.json")) continue;
@@ -23,6 +23,7 @@ for (const actor of level.landscapes ?? []) {
   const tile = withinPublic(terrainTilePath(snapshot.path, "0_0"));
   await mkdir(dirname(tile), { recursive: true });
   await writeFile(tile, snapshot.bytes);
+  await writeFile(withinPublic(terrainGlobalMapPath(snapshot.path)), snapshot.global);
   await writeFile(withinPublic(snapshot.path), JSON.stringify(snapshot.def, null, 2) + "\n");
   actor.dataRef = snapshot.path;
   console.log(`${actor.id}: ${snapshot.path}`);

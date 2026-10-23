@@ -153,9 +153,10 @@ engine/editor.
   binary body, validates its size/header/coordinates/finite heights, and derives
   `<name>.tiles/<x_z>.tile.bin`; `/__save-terrain` cross-checks every listed
   binary before writing the definition and returns `dropped[]` for unknown keys.
-  Both endpoints use the privileged local-only middleware. Add new definition
+  `/__save-terrain-global?path=<definition>` validates the binary global map and derives its sibling `<name>.global.bin` path; it uses the same privileged local-only middleware, and definition commits cross-check its shape when present.
+  These endpoints use the privileged local-only middleware. Add new definition
   fields to the shared normalizer and terrain serialization-drift tests.
-  Editor saves migrate legacy sidecars tile → definition → level reference,
+  Editor saves migrate legacy sidecars tile → global map → definition → level reference,
   preserving the old file. Phase 1 bridges 1×1 terrain to the existing mesh/brush
   path; multi-tile rendering is Phase 2 and currently rejects explicitly.
   Rotation/non-square/resampling adaptations require explicit resolution rather
@@ -181,7 +182,7 @@ engine/editor.
   validator guarded where they write structured data:
   `/__save-collision`, `/__save-actor`, `/__new-behavior`,
   `/__save-material-slots`, `/__save-skeleton`, `/__save-material`,
-  `/__save-terrain`, `/__save-terrain-tile`,
+  `/__save-terrain`, `/__save-terrain-tile`, `/__save-terrain-global`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,

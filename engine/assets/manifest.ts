@@ -543,6 +543,9 @@ export function validateAssetManifest(
   for (const path of publicFiles) {
     if (!isHealthCheckAssetFile(path)) continue;
     if (manifestPaths.has(path) || manifestThumbs.has(path)) continue;
+    const terrain = path.replace(/\.global\.bin$/i, ".terrain.json")
+      .replace(/\.tiles\/[^/]+\.tile\.bin$/i, ".terrain.json");
+    if (terrain !== path && publicFiles.has(terrain)) continue;
     // Automatic model companions need no separate asset record. An orphan
     // companion remains visible instead of being hidden by its suffix alone.
     const companion = path.replace(/\.(collision|materials|uvw|vertexcolors|skeleton)\.json$/i, "");
@@ -684,7 +687,7 @@ function isHealthCheckAssetFile(path: string): boolean {
   if (!lower.startsWith("assets/")) return false;
   if (lower.endsWith("/manifest.json") || lower.endsWith("/catalog.json")) return false;
   if (lower.endsWith("/metadata-schema.json")) return false;
-  return ASSET_FILE_EXTENSIONS.has(extensionOf(lower));
+  return /\.(global|tile)\.bin$/.test(lower) || ASSET_FILE_EXTENSIONS.has(extensionOf(lower));
 }
 
 function isDevelopmentContentVariantParentTexture(path: string): boolean {

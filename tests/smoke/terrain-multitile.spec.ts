@@ -3,10 +3,13 @@ import { dirname } from "node:path";
 import { PerspectiveCamera, Vector3 } from "three";
 import { foliageDataPath, normalizeFoliageType, type LayoutFoliageData } from "../../engine/scene/foliage";
 import { terrainFaceNormalAt, terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
+import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
+import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { decodeTerrainTile, encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import {
   createFlatTerrainTile,
   terrainTileHeightRange,
+  terrainGlobalMapPath,
   terrainTilePath,
   tileKey,
   type TerrainTileData,
@@ -88,6 +91,8 @@ async function writeFixture(): Promise<void> {
       heightMin: world.def.heightMin, heightMax: world.def.heightMax, heightFormat: "f32",
     }));
   }
+  await write(terrainGlobalMapPath(TERRAIN), encodeTerrainGlobalMap(world.def,
+    buildTerrainGlobalAttributes(worldTerrainRenderSource(world.def, world.tiles))));
   await write(TERRAIN, JSON.stringify(world.def, null, 2));
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
   level.name = "__playwright-terrain-multitile";

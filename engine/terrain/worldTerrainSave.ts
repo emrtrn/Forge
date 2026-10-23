@@ -1,4 +1,6 @@
 import type { TerrainEditWorld } from "./terrainEdit";
+import { encodeTerrainGlobalMap } from "./terrainGlobalMapFile";
+import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "./terrainRenderSource";
 import { encodeTerrainTile, type TerrainHeightFormat } from "./terrainTileCodec";
 import type { WorldTerrainDef } from "./terrainTypes";
 
@@ -8,9 +10,10 @@ export interface WorldTerrainTileWrite {
 }
 
 export interface WorldTerrainSaveSnapshot {
-  /** Definition to commit after every tile in `tiles` is written. */
+  /** Definition to commit after the tiles and global map are written. */
   def: WorldTerrainDef;
   tiles: WorldTerrainTileWrite[];
+  global: Uint8Array;
   /** The height range grew, so every tile header changed and every tile is in `tiles`. */
   widened: boolean;
 }
@@ -22,6 +25,7 @@ export interface WorldTerrainSaveSnapshot {
  * dab. If an edit left the definition's `heightMin..heightMax` encoding range,
  * the range grows to whole metres with one metre of headroom and every tile is
  * re-encoded, since tile headers must match the definition's range.
+ * Every snapshot includes global attributes sampled from the entire edit world.
  */
 export function captureWorldTerrainSave(
   world: TerrainEditWorld,
@@ -50,5 +54,6 @@ export function captureWorldTerrainSave(
       bytes: encodeTerrainTile(tile, { heightMin: def.heightMin, heightMax: def.heightMax, heightFormat: formats.get(key) ?? "f32" }),
     };
   });
-  return { def, tiles, widened };
+  const global = encodeTerrainGlobalMap(def, buildTerrainGlobalAttributes(worldTerrainRenderSource(def, world.tiles)));
+  return { def, tiles, global, widened };
 }

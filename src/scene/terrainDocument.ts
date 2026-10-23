@@ -20,10 +20,10 @@ export async function fetchTerrainActorDocument(path: string): Promise<TerrainAc
   if (isWorldTerrainPath(path)) {
     const response = await fetch(projectFileUrl(path));
     if (!response.ok) throw new Error(`Terrain definition ${path}: HTTP ${response.status}`);
-    const document = await loadWorldTerrain(path, await response.json(), async (tilePath) => {
-      const tile = await fetch(projectFileUrl(tilePath));
-      if (!tile.ok) throw new Error(`Terrain tile ${tilePath}: HTTP ${tile.status}`);
-      return new Uint8Array(await tile.arrayBuffer());
+    const document = await loadWorldTerrain(path, await response.json(), async (binaryPath) => {
+      const binary = await fetch(projectFileUrl(binaryPath));
+      if (!binary.ok) throw new Error(`Terrain binary ${binaryPath}: HTTP ${binary.status}`);
+      return new Uint8Array(await binary.arrayBuffer());
     });
     if (isMultiTileTerrain(document.def)) return { kind: "world", document };
     return { kind: "landscape", data: terrainDocumentToLandscape(document) };

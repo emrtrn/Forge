@@ -48,7 +48,7 @@ export class WorldTerrainEditSession {
     return this.definitionRevision !== this.savedDefinitionRevision || this.dirtyKeys().length > 0;
   }
 
-  /** Snapshot now (before any await); tiles first, then the definition that cross-checks them. */
+  /** Snapshot now (before any await); tiles, global map, then the definition. */
   capture(): EditorSaveStep | null {
     const keys = this.dirtyKeys();
     if (keys.length === 0 && this.definitionRevision === this.savedDefinitionRevision) return null;
@@ -65,6 +65,10 @@ export class WorldTerrainEditSession {
             body: tile.bytes.slice().buffer,
           }));
         }
+        await checkSave(await fetch(`/__save-terrain-global?path=${encodeURIComponent(this.path)}`, {
+          method: "POST", headers: { "Content-Type": "application/octet-stream" },
+          body: snapshot.global.slice().buffer,
+        }));
         await checkSave(await fetch("/__save-terrain", { method: "POST", headers: { "Content-Type": "application/json" }, body }));
         // Later tile headers must use the range now on disk.
         this.world.def.heightMin = snapshot.def.heightMin;
@@ -78,7 +82,7 @@ export class WorldTerrainEditSession {
   }
 }
 
-/** Definition is committed after its tile; a failed migration leaves the legacy reference usable. */
+/** Definition follows tile and global map; a failed migration leaves the legacy reference usable. */
 export function captureTerrainWrite(actor: LayoutLandscape, data: ForgeLandscapeData) {
   const snapshot = captureTerrainSnapshot(actor, data);
   const body = JSON.stringify({ path: snapshot.path, terrain: snapshot.def });
@@ -89,6 +93,10 @@ export function captureTerrainWrite(actor: LayoutLandscape, data: ForgeLandscape
       await checkSave(await fetch(`/__save-terrain-tile?path=${encodeURIComponent(snapshot.path)}&key=0_0`, {
         method: "POST", headers: { "Content-Type": "application/octet-stream" },
         body: snapshot.bytes.slice().buffer,
+      }));
+      await checkSave(await fetch(`/__save-terrain-global?path=${encodeURIComponent(snapshot.path)}`, {
+        method: "POST", headers: { "Content-Type": "application/octet-stream" },
+        body: snapshot.global.slice().buffer,
       }));
       await checkSave(await fetch("/__save-terrain", { method: "POST", headers: { "Content-Type": "application/json" }, body }));
       acknowledgeTerrainSnapshot(data, snapshot.def);

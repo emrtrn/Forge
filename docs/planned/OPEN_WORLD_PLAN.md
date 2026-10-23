@@ -880,8 +880,18 @@ Doğrulama (2026-10-22):
       sütun-öncelikli, ölçek, FIX_INTERNAL_EDGES)` kuruyor; `traceCamera`
       ışınları `terrainHeightAt` ile 2 mm içinde (testli). Ölçüm (16 tile ×
       257², Node, aynı makine): `setEntities` + Rapier kurulumu ~4,3 s →
-      ~80 ms, heap ~1,7 GB → ~0,5 GB. 1×1 Landscape (döndürülebilir, kare
-      olmayan grid) bu dilimde trimesh'te kaldı.
+      ~80 ms, heap ~1,7 GB → ~0,5 GB.
+      *1×1 Landscape de geçti (2026-10-23):*
+      `createLandscapeHeightfieldPrimitive` actor merkezli, `heightScale`
+      uygulanmış, kare olmayan grid'i de destekleyen heightfield üretir;
+      runtime `landscape:<actor id>` kimliğini ve actor dönüşünü korur.
+      Trimesh ile aynı b–c diyagonali ve `(a,c,b), (b,c,d)` üçgen sırası
+      doğrulandı. Kare, döndürülmüş, 129×65 ve `heightScale = 2,5`
+      fixture'larında yakın sorgular, tam/nav listeleri ve `hasStaticGround`
+      sıra dahil `deepEqual` ile testli (Float32'de tam temsil edilen örnekler).
+      Ondalıklı yükseklikler Float32'ye yuvarlanır (Rapier trimesh ile aynı
+      hassasiyet); döndürülmüş 129×65 grid'de Rapier ışınları eski trimesh
+      yüzeyi ve collider ışınlarıyla 2 mm içinde testli.
 - [x] `PhysicsSubsystem.addEntities` / `removeEntities` (toplu, tek
       invalidation); statik yüzey üçgen cache'i gövde başına artımlı.
       *Tamam (2026-10-23, Faz 3 bölüm 1):* statik AABB/üçgen kayıtları gövde
@@ -930,6 +940,9 @@ Doğrulama (2026-10-22):
       tam listede; yerel AI sorgu sözleşmesi sonraki iş olduğundan bu madde
       açık. Heightfield bağlantısı/anlık arazi üçgenleri bu bölümün dışında.
 - [ ] `createLandscapeColliderPrimitive` (trimesh) kaldırılır.
+      *Açık:* runtime artık heightfield kullanıyor; editörün `SceneApp`
+      collision overlay'i ve parity testinin referansı hâlâ bu trimesh'i
+      kullandığı için yardımcı korunuyor.
 - [ ] Araç: tile kenarında süspansiyon zıplaması yok (smoke: VehicleTest
       üzerinde 2×2 tile'lık arazide dikiş geçişi).
 - [x] Collision debug wire'ı heightfield'ı çizer.

@@ -216,8 +216,8 @@ import {
   type ReflectionPlaneObject,
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
+import { createLandscapeHeightfieldPrimitive } from "@engine/scene/landscape";
 import {
-  createLandscapeColliderPrimitive,
   createLandscapeObject,
   createWorldTerrainObject,
   disposeLandscapeObject,
@@ -4611,7 +4611,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private landscapeColliderEntity(actor: LayoutLandscape, data: ForgeLandscapeData): Entity | null {
     const item = this.landscapeItem(actor, data);
     if (!item.collision) return null;
-    const primitive = createLandscapeColliderPrimitive(data);
+    const primitive = createLandscapeHeightfieldPrimitive(data);
     const collider: ColliderComponent = {
       shape: "box",
       size: [...primitive.size] as [number, number, number],

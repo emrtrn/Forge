@@ -1494,7 +1494,8 @@ function landscapePointAabb(points: readonly Vec3[]): { size: Vec3; center: Vec3
 }
 
 /**
- * Builds the static runtime collider primitive for a Landscape heightfield.
+ * Builds the trimesh used by the editor collision overlay and as a reference
+ * for the runtime heightfield.
  * Vertices are body-local (centered exactly like the render mesh); the actor's
  * Transform component supplies world position/rotation when physics bakes it.
  */
@@ -1533,5 +1534,29 @@ export function createLandscapeColliderPrimitive(data: ForgeLandscapeData): Land
     center: aabb.center,
     vertices,
     indices,
+  };
+}
+
+/** Same actor-centred grid and b-c diagonal as the trimesh, at Rapier's Float32 precision. */
+export function createLandscapeHeightfieldPrimitive(data: ForgeLandscapeData): ColliderPrimitive & { center: Vec3 } {
+  const { spacing, heightScale, verticesX, verticesZ } = data.size;
+  const quadsX = verticesX - 1;
+  const quadsZ = verticesZ - 1;
+  const heights = new Float32Array(verticesX * verticesZ);
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let z = 0; z < verticesZ; z += 1) {
+    for (let x = 0; x < verticesX; x += 1) {
+      const height = landscapeHeightAt(data, x, z) * heightScale;
+      heights[z * verticesX + x] = height;
+      minY = Math.min(minY, height);
+      maxY = Math.max(maxY, height);
+    }
+  }
+  return {
+    shape: "heightfield",
+    size: [quadsX * spacing, maxY - minY, quadsZ * spacing],
+    center: [0, (minY + maxY) / 2, 0],
+    heightfield: { quadsX, quadsZ, spacing, heights },
   };
 }

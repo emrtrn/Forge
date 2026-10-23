@@ -135,7 +135,7 @@ export class EditorSaveSession {
       const source = this.source();
       // Capture the whole batch before awaiting the first response. Later edits
       // belong to a later save, even for sidecars not written yet.
-      const payload = structuredClone({ layout: source.layout, editor: source.editor });
+      const payload = structuredClone({ layout: source.layout, editor: source.editor, scenePath: source.scenePath });
       const migrations: EditorSaveStep[] = [];
       const pendingReferences: { id: string; from: string; to: string; actor: object }[] = [];
       for (const actor of source.layout.landscapes ?? []) {
@@ -180,12 +180,18 @@ export class EditorSaveSession {
       return steps;
     });
     const dropped = result.dropped ?? [];
+    const warnings = result.warnings ?? [];
+    if (warnings.length) console.warn("[save]", warnings.join("; "));
     if (dropped.length > 0) {
       console.warn("[save] dropped by the save validator:", dropped.join(", "));
       this.onStatus(
-        `Saved ${result.path ?? "layout"} — ${dropped.length} unsupported field(s) dropped: ${dropped.slice(0, 3).join(", ")}${dropped.length > 3 ? ", …" : ""}`,
+        `Saved ${result.path ?? "layout"} — ${dropped.length} unsupported field(s) dropped: ${dropped.slice(0, 3).join(", ")}${dropped.length > 3 ? ", …" : ""}${warnings.length ? `; ${warnings.join("; ")}` : ""}`,
         "warning",
       );
+      return;
+    }
+    if (warnings.length) {
+      this.onStatus(`Saved ${result.path ?? "layout"} — ${warnings.join("; ")}`, "warning");
       return;
     }
     const pending = this.foliageSaveRevision.dirty || this.meshPaintSaveRevision.dirty ||

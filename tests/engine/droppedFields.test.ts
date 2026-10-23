@@ -27,6 +27,7 @@ export function registerDroppedFieldTests(check: Check): void {
   check("world partition persistence: partition and every spatiallyLoaded field produce no dropped-field warning", () => {
     const layout = {
       schema: 1, name: "Partition fields", loadGroups: [],
+      worldCells: ["-2_-1", "0_0", "2_0", "10_0"],
       worldSettings: { partition: { enabled: true, grids: { main: { cellSize: 64, loadRange: 192 } } } },
       instances: [{ assetId: "mesh:rock", placements: [{ position: [0, 0, 0], spatiallyLoaded: false }] }],
       actors: [{ classRef: "actors/test.actor.json", position: [0, 0, 0], spatiallyLoaded: false }],

@@ -1,6 +1,7 @@
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
+import { registerWorldCellPersistenceTests } from "../tests/engine/worldCellPersistence.test";
 /**
  * Engine scene/adapter checks. Bundled with esbuild and run on node by
  * `tools/run-engine-tests.mjs` (npm run test:engine). No test framework; uses
@@ -1208,6 +1209,7 @@ registerWorldTerrainSaveTests(check);
 registerWorldTerrainCreateTests(check);
 registerWorldTerrainExpandTests(check);
 registerWorldPartitionTests(check);
+await registerWorldCellPersistenceTests(check, checkAsync);
 await registerWorldTerrainActorAsyncTests(checkAsync);
 await registerTerrainRapierTests(checkAsync);
 registerTerrainHeightfieldPhysicsTests(check);

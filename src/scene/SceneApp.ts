@@ -1122,6 +1122,7 @@ interface EditorOptions {
 }
 
 export interface LayoutSavePayload {
+  scenePath?: string;
   layout: RoomLayout;
   editor: {
     gridSize: number;
@@ -1135,6 +1136,7 @@ export interface LayoutSavePayload {
 
 export interface LayoutSaveResult {
   path?: string;
+  warnings?: readonly string[];
   /**
    * Fields the save validator did not copy through (plan I5). Empty/absent on a
    * clean save; anything listed here was silently lost before this report

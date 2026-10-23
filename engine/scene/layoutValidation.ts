@@ -1,4 +1,5 @@
 import type { RoomLayout } from "./layout";
+import { parseWorldCellKey } from "../world/worldGrid";
 import {
   ContentLoadError, isFiniteNumber, requireArray, requireRecord,
   requireString, requireVec3, requireVersion,
@@ -7,6 +8,16 @@ import {
 /** Structural read guard; retains extension fields and legacy transform forms. */
 export function readRoomLayout(value: unknown, path: string): RoomLayout {
   const input = requireRecord(value, path);
+  if (input.worldCells !== undefined) {
+    const keys = requireArray(input.worldCells, `${path}.worldCells`);
+    const seen = new Set<string>();
+    for (const key of keys) {
+      if (typeof key !== "string" || !parseWorldCellKey(key) || seen.has(key)) {
+        throw new ContentLoadError(path, "invalid-data", "worldCells must contain unique valid cell keys");
+      }
+      seen.add(key);
+    }
+  }
   requireVersion(input.schema, 1, `${path}.schema`);
   requireString(input.name, `${path}.name`);
   requireArray(input.loadGroups, `${path}.loadGroups`).forEach((group, i) =>

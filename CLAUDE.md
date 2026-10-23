@@ -149,6 +149,15 @@ engine/editor.
   restores it on unload, and leaves model geometry/material ownership with the
   asset loader. Omitted/unusable nodes use the procedural wheel fallback.
 
+- **World Partition cell files:** with `worldSettings.partition.enabled`, the
+  editor saves a level as a persistent level (`worldCells` index) plus
+  `<Level>.cells/main/<x_z>.cell.json` (`engine/world/worldPartition.ts`).
+  `/__save-world-cells` validates each cell by running its arrays through
+  `validateLayout`, so cell elements share the layout allowlists above; it only
+  writes the open level's cells. Save order is changed cells (no deletion) →
+  level → cleanup with the full `keep` index, so a failed step never leaves the
+  level pointing at a deleted cell. `loadRoomLayout` merges the cells back, so
+  the editor and the runtime both work on the whole level (no cell streaming yet).
 - **Fifth allowlist surface — World Terrain:** `*.terrain.json` definitions
   use `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`) on read
   and through `validateSaveTerrainPayload` re-exported by `tools/saveValidator.ts`.
@@ -198,6 +207,7 @@ engine/editor.
   `/__save-collision`, `/__save-actor`, `/__new-behavior`,
   `/__save-material-slots`, `/__save-skeleton`, `/__save-material`,
   `/__save-terrain`, `/__save-terrain-tile`, `/__save-terrain-global`,
+  `/__save-world-cells`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,

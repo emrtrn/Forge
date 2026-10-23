@@ -22,6 +22,8 @@ export {
 import type { RoomLayout } from "@engine/scene/layout";
 import { readContentJson } from "@/project/contentLoader";
 import { readRoomLayout } from "@engine/scene/layoutValidation";
+import { ContentLoadError } from "@engine/assets/contentValidation";
+import { mergeWorldCells, normalizeWorldCellDocument, worldCellPath } from "@engine/world/worldPartition";
 
 type LegacyReflection = {
   hidden?: boolean;
@@ -38,7 +40,22 @@ export async function loadRoomLayout(pathOrName: string): Promise<RoomLayout> {
   const path = pathOrName.endsWith(".json")
     ? pathOrName
     : `layouts/${pathOrName}.json`;
-  return normalizeLoadedRoomLayout(readRoomLayout(await readContentJson(path), path));
+  const level = readRoomLayout(await readContentJson(path), path);
+  const cells = await Promise.all((level.worldCells ?? []).map(async (key) => {
+    const cellPath = worldCellPath(path, "main", key);
+    const raw = await readContentJson(cellPath);
+    try {
+      const cell = normalizeWorldCellDocument(raw);
+      if (cell.key !== key) throw new Error(`expected cell key ${key}, got ${cell.key}`);
+      readRoomLayout({ ...cell, name: "cell", loadGroups: [], instances: cell.instances ?? [], characters: cell.characters ?? [] }, cellPath);
+      return cell;
+    } catch (cause) {
+      throw new ContentLoadError(cellPath, "invalid-data", cause instanceof Error ? cause.message : String(cause), { cause });
+    }
+  }));
+  const merged = cells.length ? mergeWorldCells(level, cells) : level;
+  delete merged.worldCells;
+  return normalizeLoadedRoomLayout(merged);
 }
 
 /**

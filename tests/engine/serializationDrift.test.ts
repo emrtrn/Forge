@@ -48,6 +48,7 @@ function partitionFixture(spatiallyLoaded?: boolean): RoomLayout {
   const flags = spatiallyLoaded === undefined ? {} : { spatiallyLoaded };
   return {
     schema: 1, name: "Partition persistence", loadGroups: [],
+    worldCells: ["-2_-1", "0_0", "2_0", "10_0"],
     worldSettings: { partition: normalizeWorldPartitionSettings({ enabled: true }) },
     instances: [{ assetId: "mesh:rock", placements: [{ position: [0, 0, 0], ...flags }] }],
     actors: [{ classRef: "actors/test.actor.json", position: [0, 0, 0], ...flags }],

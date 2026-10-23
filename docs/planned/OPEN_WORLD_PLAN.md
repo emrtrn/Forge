@@ -1140,9 +1140,17 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       `partitionLayout` (konuma göre hücre; singleton'lar, landscape, spline,
       nehir, nav volume, Player Start, directional ışık, `spatiallyLoaded:false`
       ve hücreden geniş blocking volume persistent'te, uyarıyla) ve
-      `mergeWorldCells` (round-trip testli). Endpoint, eleman validator'larının
-      hücrede yeniden kullanımı ve editör kaydı açık.
-- [ ] Editör kaydı: konuma göre otomatik hücre ataması; hücre sınırı geçen
+      `mergeWorldCells` (round-trip testli).
+      *Dosyalar tamam (2026-10-23):* partition açık level Save'de persistent
+      level (`worldCells` dizini) + hücre dosyaları olarak yazılır; yalnız
+      değişen hücreler gönderilir. Sıra: hücreler (silmeden) → level → `keep`
+      ile eskiyen hücrelerin silinmesi; partition kapatılınca birleşik level
+      önce yazılır, sonra hücreler silinir. `/__save-world-cells` yalnız açık
+      level'a yazar, elemanları `validateLayout` ile doğrular (dropped[]
+      raporlu). `loadRoomLayout` hücreleri birleştirir: editör ve runtime aynı
+      tam level'ı görür, hücre akışı henüz yok. Smoke
+      `world-partition-persistence.spec.ts`.
+- [x] Editör kaydı: konuma göre otomatik hücre ataması; hücre sınırı geçen
       actor dosya değiştirir; `spatiallyLoaded: false` persistent'e gider;
       hücreden büyük sınırlı actor'ler v1'de persistent'e gider (uyarıyla).
       Yalnız kirli hücreler yazılır.

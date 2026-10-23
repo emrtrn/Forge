@@ -1,11 +1,12 @@
 import { validateTerrainTile } from "./engine/terrain/terrainLoader";
+import { worldCellPath } from "./engine/world/worldPartition";
 import { validateTerrainGlobalMap } from "./engine/terrain/terrainGlobalMapFile";
 import { levelTerrainDir, terrainGlobalMapPath, terrainTilePath } from "./engine/terrain/terrainTypes";
 import { collectJsonStrings, findOrphanedLevelTerrain } from "./tools/terrainOrphans";
 import { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal, TERRAIN_JSON_BODY_MAX_BYTES, TERRAIN_TILE_BODY_MAX_BYTES, TERRAIN_GLOBAL_BODY_MAX_BYTES } from "./tools/terrainSaveValidator";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
-import { copyFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
@@ -31,6 +32,7 @@ import {
   validateSaveMaterialPayload,
   validateSaveMaterialSlotsPayload,
   validateSavePayload,
+  validateSaveWorldCellsPayload,
   validateSaveSkeletonPayload,
   validateSaveLandscapePayload,
   validateSaveUiPayload,
@@ -921,6 +923,7 @@ async function ensureDefaultSceneSurvivesFolderDelete(folder: string): Promise<v
 // stays open so real-device (LAN) testing can still render scenes.
 const PRIVILEGED_URLS = new Set([
   "/__save-layout",
+  "/__save-world-cells",
   "/__save-collision",
   "/__save-material-slots",
   "/__save-skeleton",
@@ -1184,6 +1187,56 @@ function layoutEditorPlugin(): Plugin {
             res.end(
               JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
             );
+          }
+          return;
+        }
+
+        if (req.url === "/__save-world-cells") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method Not Allowed");
+            return;
+          }
+          try {
+            const submitted = await readJsonBody(req);
+            const payload = validateSaveWorldCellsPayload(submitted);
+            // Like /__save-layout, only the level the editor has open.
+            const manifest = await readProjectManifest();
+            if (normalizePublicRelativePath(payload.level) !== normalizePublicRelativePath(manifest.editor.defaultScene)) {
+              throw new Error(`world cells can only be saved for the open level (${manifest.editor.defaultScene})`);
+            }
+            const dropped = reportDroppedFields((submitted as Record<string, unknown>).cells, payload.cells, "cells");
+            const mainDir = resolvePublicPath(worldCellPath(payload.level, "main", "0_0").replace(/\/[^/]+$/, ""));
+            for (const cell of payload.cells) {
+              const target = resolvePublicPath(worldCellPath(payload.level, "main", cell.key));
+              await mkdir(mainDir, { recursive: true });
+              const next = `${JSON.stringify(cell, null, 2)}\n`;
+              const previous = await readFile(target, "utf8").catch((error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return null;
+                throw error;
+              });
+              if (previous !== next) await writeFile(target, next, "utf8");
+            }
+            const entries = payload.keep === null ? [] : await readdir(mainDir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+              if (error.code === "ENOENT") return [];
+              throw error;
+            });
+            for (const entry of entries) {
+              if (entry.isFile() && entry.name.endsWith(".cell.json") && !payload.keep!.includes(entry.name.slice(0, -".cell.json".length))) {
+                await unlink(resolve(mainDir, entry.name));
+              }
+            }
+            for (const directory of [mainDir, resolve(mainDir, "..")]) {
+              await rmdir(directory).catch((error: NodeJS.ErrnoException) => {
+                if (error.code !== "ENOENT" && error.code !== "ENOTEMPTY") throw error;
+              });
+            }
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, dropped }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
           }
           return;
         }

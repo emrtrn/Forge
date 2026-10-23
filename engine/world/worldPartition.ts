@@ -91,7 +91,7 @@ export function worldCellPath(levelPath: string, grid: "main", key: string): str
   return `${terrainDir.slice(0, -".landscapes".length)}.cells/${grid}/${key}.cell.json`;
 }
 
-function compareCellKeys(a: string, b: string): number {
+export function compareWorldCellKeys(a: string, b: string): number {
   const first = parseWorldCellKey(a)!;
   const second = parseWorldCellKey(b)!;
   return first.z - second.z || first.x - second.x;
@@ -188,12 +188,12 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
     persistent.worldWidgets = split(persistent.worldWidgets, (item) => item.anchor?.worldPos,
       (cell, item) => (cell.worldWidgets ??= []).push(item));
   }
-  return { persistent, cells: new Map([...cells].sort(([a], [b]) => compareCellKeys(a, b))), warnings };
+  return { persistent, cells: new Map([...cells].sort(([a], [b]) => compareWorldCellKeys(a, b))), warnings };
 }
 
 export function mergeWorldCells(persistent: RoomLayout, cells: Iterable<WorldCellDocument>): RoomLayout {
   const merged = structuredClone(persistent);
-  const ordered = [...cells].sort((a, b) => compareCellKeys(a.key, b.key));
+  const ordered = [...cells].sort((a, b) => compareWorldCellKeys(a.key, b.key));
   for (const source of ordered) {
     const cell = structuredClone(source);
     for (const group of cell.instances ?? []) {

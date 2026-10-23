@@ -273,6 +273,14 @@ export function registerWorldPartitionTests(check: Check): void {
     assert.deepEqual(layout, before);
   });
 
+  check("world partition: persistent and cell JSON round trip preserves every element modulo array order", () => {
+    const original = fixture();
+    const { persistent, cells } = partitionLayout(original, ENABLED);
+    const parsedLevel = JSON.parse(JSON.stringify(persistent)) as RoomLayout;
+    const parsedCells = [...cells.values()].map((cell) => normalizeWorldCellDocument(JSON.parse(JSON.stringify(cell))));
+    assert.deepEqual(canonicalize(mergeWorldCells(parsedLevel, parsedCells)), canonicalize(original));
+  });
+
   check("world partition: merge appends cells in numeric order and creates missing instance groups", () => {
     const persistent: RoomLayout = {
       schema: 1, name: "append", loadGroups: [], characters: [],

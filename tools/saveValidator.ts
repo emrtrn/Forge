@@ -53,7 +53,8 @@ import {
 } from "../engine/scene/actorScript";
 import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget";
 import { normalizeWorldWidgets } from "../engine/ui/uiWorldWidget";
-import { normalizeWorldPartitionSettings } from "../engine/world/worldPartition";
+import { compareWorldCellKeys, normalizeWorldCellDocument, normalizeWorldPartitionSettings, worldCellPath, type WorldCellDocument } from "../engine/world/worldPartition";
+import { parseWorldCellKey } from "../engine/world/worldGrid";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
 import {
   normalizeVehicleAsset,
@@ -2039,9 +2040,59 @@ function validatePostProcessAo(value: unknown): Record<string, unknown> | undefi
   return Object.keys(ao).length > 0 ? ao : undefined;
 }
 
+function validateWorldCellKeys(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  const seen = new Set<string>();
+  for (const key of value) {
+    if (typeof key !== "string" || !parseWorldCellKey(key)) throw new Error(`${field}: invalid cell key`);
+    if (seen.has(key)) throw new Error(`${field}: duplicate cell key ${key}`);
+    seen.add(key);
+  }
+  return [...seen].sort(compareWorldCellKeys);
+}
+
+/**
+ * `keep`, when given, is the level's complete cell index: every other cell
+ * file is deleted. Omit it to write cells without deleting any, which is how
+ * a save writes cells before the level that references them.
+ */
+export function validateSaveWorldCellsPayload(value: unknown): {
+  level: string;
+  cells: WorldCellDocument[];
+  keep: string[] | null;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("world cells payload must be an object");
+  const input = value as Record<string, unknown>;
+  const level = validateOpenLevelPayload({ path: input.level }).path;
+  worldCellPath(level, "main", "0_0");
+  const keep = input.keep === undefined ? null : validateWorldCellKeys(input.keep, "keep");
+  if (!Array.isArray(input.cells)) throw new Error("cells must be an array");
+  const seen = new Set<string>();
+  const cells = input.cells.map((value): WorldCellDocument => {
+    const cell = normalizeWorldCellDocument(value);
+    if (keep && !keep.includes(cell.key)) throw new Error(`cell key ${cell.key} is not in keep`);
+    if (seen.has(cell.key)) throw new Error(`duplicate cell key ${cell.key}`);
+    seen.add(cell.key);
+    // Reuse the level element allowlists, including transform and widget normalization.
+    const validated = validateLayout({
+      ...cell, schema: 1, name: "cell", loadGroups: [],
+      instances: cell.instances ?? [], characters: cell.characters ?? [],
+    }) as Record<string, unknown>;
+    const result: WorldCellDocument = { schema: 1, type: "worldCell", grid: "main", key: cell.key };
+    for (const field of ["instances", "characters", "actors", "lights", "reflectionCaptures", "targetPoints", "blockingVolumes", "worldWidgets"] as const) {
+      if (cell[field] !== undefined && validated[field] !== undefined) {
+        Object.assign(result, { [field]: validated[field] });
+      }
+    }
+    return result;
+  });
+  return { level, cells, keep };
+}
+
 export function validateLayout(value: unknown): unknown {
   if (!value || typeof value !== "object") throw new Error("layout must be an object");
   const layout = value as Record<string, unknown>;
+  const worldCells = layout.worldCells === undefined ? [] : validateWorldCellKeys(layout.worldCells, "worldCells");
 
   if (layout.schema !== 1) throw new Error("layout schema must be 1");
   if (typeof layout.name !== "string") throw new Error("layout name must be a string");
@@ -2196,6 +2247,7 @@ export function validateLayout(value: unknown): unknown {
     characters,
   };
   if (worldSettings) output.worldSettings = worldSettings;
+  if (worldCells.length) output.worldCells = worldCells;
   if (skyAtmosphere) {
     if (
       reflection?.hidden !== true &&

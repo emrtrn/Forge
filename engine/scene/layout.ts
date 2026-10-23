@@ -985,6 +985,8 @@ export interface RoomLayout {
   name: string;
   loadGroups: string[];
   worldSettings?: LayoutWorldSettings;
+  /** Cell keys of this level's main-grid cell files, written by the editor when World Partition is enabled (OPEN_WORLD_PLAN Faz 5). */
+  worldCells?: string[];
   /** Optional singleton sky/atmosphere environment actor. */
   skyAtmosphere?: LayoutSkyAtmosphere;
   /** Optional singleton Exponential Height Fog environment actor. */

@@ -1,4 +1,5 @@
 import type { Vec3 } from "../scene/layout";
+import type { TerrainGlobalMap } from "./terrainGlobalMap";
 import {
   terrainTileHeightRange,
   terrainTileLayerWeight,
@@ -18,7 +19,8 @@ import {
  * b–c diagonal into triangles (a,c,b) and (b,c,d), so a sampled height is the
  * height of the surface that is drawn and collided with, not a bilinear blend.
  *
- * A query over a missing (hole or unloaded) tile returns `null`.
+ * A query over a missing (hole or unloaded) tile returns `null`, unless a
+ * raycast is given a coarse global map for unloaded tiles.
  */
 
 export type TerrainQueryDef = Pick<WorldTerrainDef, "tileQuads" | "spacing" | "tilesX" | "tilesZ" | "origin">;
@@ -204,6 +206,7 @@ export interface TerrainRayHit {
   normal: Vec3;
   tileX: number;
   tileZ: number;
+  approximate?: boolean;
 }
 
 const tileRangeCache = new WeakMap<TerrainTileData, { min: number; max: number }>();
@@ -264,7 +267,8 @@ function slab(start: number, dir: number, lo: number, hi: number): [number, numb
 }
 
 /**
- * First front-face hit of a ray on the loaded terrain within `maxDistance`.
+ * First front-face hit within `maxDistance`, optionally using a coarse global
+ * map for unloaded terrain tiles.
  * Walks tiles along the ray, skipping any tile the ray passes entirely above
  * (its cached height range), then walks that tile's cells with a 2D DDA and
  * tests only cells whose corner heights the ray's height span overlaps.
@@ -275,6 +279,7 @@ export function raycastTerrain(
   origin: Vec3,
   direction: Vec3,
   maxDistance = Infinity,
+  coarse?: TerrainGlobalMap,
 ): TerrainRayHit | null {
   const dir = normalizeVec(direction[0], direction[1], direction[2]);
   if (!Number.isFinite(dir[0] + dir[1] + dir[2]) || (dir[0] === 0 && dir[1] === 0 && dir[2] === 0)) return null;
@@ -311,11 +316,71 @@ export function raycastTerrain(
         const hit = marchTileCells(tile, tx, tz, t, segEnd);
         if (hit) return hit;
       }
+    } else if (coarse) {
+      const hit = marchCoarseCells(coarse, tx, tz, t, segEnd);
+      if (hit) return hit;
     }
     if (segEnd >= tEnd) break;
     t = segEnd;
   }
   return null;
+
+  function marchCoarseCells(map: TerrainGlobalMap, tx: number, tz: number, tStart: number, tStop: number): TerrainRayHit | null {
+    const spacing = map.stride * s;
+    const gx = (ox + dir[0] * (tStart + nudge)) / spacing;
+    const gz = (oz + dir[2] * (tStart + nudge)) / spacing;
+    let cx = Math.min(Math.max(Math.floor(gx), 0), map.width - 2);
+    let cz = Math.min(Math.max(Math.floor(gz), 0), map.height - 2);
+    const dgx = dir[0] / spacing;
+    const dgz = dir[2] / spacing;
+    const stepX = dgx > 0 ? 1 : -1;
+    const stepZ = dgz > 0 ? 1 : -1;
+    const deltaX = Math.abs(dgx) < 1e-12 ? Infinity : 1 / Math.abs(dgx);
+    const deltaZ = Math.abs(dgz) < 1e-12 ? Infinity : 1 / Math.abs(dgz);
+    let nextX = Math.abs(dgx) < 1e-12 ? Infinity : tStart + nudge + ((dgx > 0 ? cx + 1 - gx : gx - cx) * deltaX);
+    let nextZ = Math.abs(dgz) < 1e-12 ? Infinity : tStart + nudge + ((dgz > 0 ? cz + 1 - gz : gz - cz) * deltaZ);
+    let cellStart = tStart;
+    while (cellStart <= tStop && cx >= 0 && cz >= 0 && cx < map.width - 1 && cz < map.height - 1) {
+      const cellEnd = Math.min(nextX, nextZ, tStop);
+      const row = cz * map.width + cx;
+      const [ha, hb, hc, hd] = [map.heights[row]!, map.heights[row + 1]!, map.heights[row + map.width]!, map.heights[row + map.width + 1]!];
+      const rayLow = origin[1] + dir[1] * (dir[1] < 0 ? cellEnd : cellStart);
+      if (![ha, hb, hc, hd].some(Number.isNaN) && rayLow <= Math.max(ha, hb, hc, hd) + 1e-6) {
+        // Global samples already include the terrain's Y datum.
+        const x = def.origin[0] + cx * spacing;
+        const z = def.origin[2] + cz * spacing;
+        const a: Vec3 = [x, ha, z];
+        const b: Vec3 = [x + spacing, hb, z];
+        const c: Vec3 = [x, hc, z + spacing];
+        const d: Vec3 = [x + spacing, hd, z + spacing];
+        let best: { t: number; tri: [Vec3, Vec3, Vec3] } | null = null;
+        for (const tri of [[a, c, b], [b, c, d]] as [Vec3, Vec3, Vec3][]) {
+          const hitT = intersectTriangle(origin, dir, tri[0], tri[1], tri[2]);
+          if (hitT !== null && hitT >= tStart && hitT <= tStop && hitT <= maxDistance && (!best || hitT < best.t)) best = { t: hitT, tri };
+        }
+        if (best) {
+          return {
+            distance: best.t,
+            point: [origin[0] + dir[0] * best.t, origin[1] + dir[1] * best.t, origin[2] + dir[2] * best.t],
+            normal: faceNormal(best.tri[0], best.tri[1], best.tri[2]),
+            tileX: tx,
+            tileZ: tz,
+            approximate: true,
+          };
+        }
+      }
+      if (cellEnd >= tStop) break;
+      cellStart = cellEnd;
+      if (nextX < nextZ) {
+        cx += stepX;
+        nextX += deltaX;
+      } else {
+        cz += stepZ;
+        nextZ += deltaZ;
+      }
+    }
+    return null;
+  }
 
   function marchTileCells(tile: TerrainTileData, tx: number, tz: number, tStart: number, tStop: number): TerrainRayHit | null {
     // Cell coordinates local to this tile, in grid units.

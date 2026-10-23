@@ -644,7 +644,15 @@ export class TerrainRenderer {
     const exit = Math.min(x1, z1);
     if (!(enter <= exit)) return;
     const start = ray.at(enter, new Vector3());
-    const hit = raycastTerrain(this.queryDef, this.source, start.toArray(), ray.direction.toArray(), exit - enter);
+    let coarse: TerrainGlobalAttributes["map"] | undefined;
+    for (const key of this.allKeys) {
+      const { x, z } = parseTileKey(key)!;
+      if (!this.source.tile(x, z)) {
+        coarse = this.global.map;
+        break;
+      }
+    }
+    const hit = raycastTerrain(this.queryDef, this.source, start.toArray(), ray.direction.toArray(), exit - enter, coarse);
     if (!hit) return;
     const point = new Vector3(...hit.point).add(this.origin).applyMatrix4(this.mesh.matrixWorld);
     const distance = raycaster.ray.origin.distanceTo(point);

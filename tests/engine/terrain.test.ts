@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { terrainTileHeightfieldShape } from "../../engine/physics/terrainCollider";
 import { createFlatLandscapeData, createLandscapeColliderPrimitive, type ForgeLandscapeData } from "../../engine/scene/landscape";
 import type { LayoutLandscape, Vec3 } from "../../engine/scene/layout";
+import { buildTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMap";
 import {
   TerrainTileMap,
   raycastTerrain,
@@ -257,6 +258,90 @@ export function registerTerrainTests(check: Check): void {
     const hit = raycastTerrain(def, tiles, [-10, 11, 20], [1, -1, 0])!;
     close(hit.point[1], 1);
     close(hit.point[0], 0);
+  });
+
+  check("terrain raycast: unloaded tiles use the coarse surface at the world datum", () => {
+    const { def, tiles } = buildTerrain(2, 1, 32, 1.5, (gx, gz) => gx * 0.25 + gz * 0.125, [10, 7, -20]);
+    const coarse = buildTerrainGlobalMap(def, tiles, 16);
+    const rays: [Vec3, Vec3][] = [
+      [[70, 100, -8], [0, -1, 0]],
+      [[60, 60, -8], [1, -1, 0]],
+      [[115, 60, -8], [-1, -1, 0]],
+      [[70, 60, -30], [0, -1, 1]],
+    ];
+    const expected = rays.map(([origin, direction]) => raycastTerrain(def, tiles, origin, direction));
+    tiles.delete(1, 0);
+    rays.forEach(([origin, direction], index) => {
+      assert.equal(raycastTerrain(def, tiles, origin, direction), null);
+      const hit = raycastTerrain(def, tiles, origin, direction, Infinity, coarse);
+      const exact = expected[index];
+      assert.ok(hit && exact);
+      assert.equal(hit.approximate, true);
+      assert.equal(hit.tileX, 1);
+      assert.equal(hit.tileZ, 0);
+      assert.ok(Math.hypot(...hit.point.map((value, axis) => value - exact.point[axis]!)) <= coarse.stride * def.spacing);
+      close(hit.point[1], exact.point[1]);
+      assert.equal(raycastTerrain(def, tiles, origin, direction, hit.distance - 0.01, coarse), null);
+    });
+    close(raycastTerrain(def, tiles, [70, 100, -8], [0, -1, 0], Infinity, coarse)?.point[1], 18);
+    assert.equal(raycastTerrain(def, tiles, [70, 0, -8], [0, 1, 0], Infinity, coarse), null);
+  });
+
+  check("terrain raycast: coarse cells use the same b-c diagonal", () => {
+    const { def, tiles } = buildTerrain(1, 1, 32, 2, (gx, gz) => gx === 4 && gz === 4 ? 8 : 0, [10, 3, -4]);
+    const coarse = buildTerrainGlobalMap(def, tiles, 16);
+    tiles.delete(0, 0);
+    for (const [x, z, height] of [[12, -2, 3], [16, 2, 7], [14, 0, 3]] as const) {
+      const hit = raycastTerrain(def, tiles, [x, 100, z], [0, -1, 0], Infinity, coarse);
+      assert.ok(hit);
+      assert.equal(hit.approximate, true);
+      close(hit.point[1], height);
+    }
+  });
+
+  check("terrain raycast: a NaN at any coarse cell corner preserves the hole", () => {
+    const { def, tiles } = buildTerrain(1, 1, 32, 1, () => 5);
+    const coarse = buildTerrainGlobalMap(def, tiles, 16);
+    tiles.delete(0, 0);
+    const row = 2 * coarse.width + 2;
+    for (const index of [row, row + 1, row + coarse.width, row + coarse.width + 1]) {
+      coarse.heights[index] = NaN;
+      assert.equal(raycastTerrain(def, tiles, [9, 100, 9], [0, -1, 0], Infinity, coarse), null);
+      coarse.heights[index] = 5;
+    }
+    assert.ok(raycastTerrain(def, tiles, [9, 100, 9], [0, -1, 0], Infinity, coarse));
+  });
+
+  check("terrain raycast: a coarse map leaves resident hits identical, including seams", () => {
+    const { def, tiles } = buildTerrain(2, 2, 32, 1.5, (gx, gz) => Math.sin(gx * 0.3) * 3 + Math.cos(gz * 0.2) * 2, [-48, 5, -48]);
+    const coarse = buildTerrainGlobalMap(def, tiles, 16);
+    const rays: [Vec3, Vec3][] = [
+      [[-30.3, 100, -20.7], [0, -1, 0]],
+      [[0, 100, -20], [0, -1, 0]],
+      [[-20, 100, 0], [0, -1, 0]],
+      [[0, 100, 0], [0, -1, 0]],
+      [[48, 100, 48], [0, -1, 0]],
+      [[-45, 30, -40], [1, -0.4, 0.8]],
+    ];
+    for (const [origin, direction] of rays) {
+      const exact = raycastTerrain(def, tiles, origin, direction);
+      assert.ok(exact);
+      assert.equal(exact.approximate, undefined);
+      assert.deepEqual(raycastTerrain(def, tiles, origin, direction, Infinity, coarse), exact);
+    }
+  });
+
+  check("terrain raycast: passes above an unloaded tile before hitting a resident tile", () => {
+    const { def, tiles } = buildTerrain(2, 1, 32, 1, (gx) => Math.max(0, gx - 40), [10, 7, -20]);
+    const coarse = buildTerrainGlobalMap(def, tiles, 16);
+    tiles.delete(0, 0);
+    const exact = raycastTerrain(def, tiles, [10.5, 17, -8], [1, 0, 0]);
+    const hit = raycastTerrain(def, tiles, [10.5, 17, -8], [1, 0, 0], Infinity, coarse);
+    assert.ok(hit);
+    assert.equal(hit.tileX, 1);
+    assert.equal(hit.approximate, undefined);
+    close(hit.point[0], 60);
+    assert.deepEqual(hit, exact);
   });
 
   check("terrain legacy: the runtime-parity Landscape converts to a matching 1×1 terrain", () => {

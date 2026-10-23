@@ -113,7 +113,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   setSelectedLandscape: (patch: { collision?: boolean }) => void;
   getSelectedWorldTerrain: () => WorldTerrainDetailsView | null;
   importSelectedWorldTerrainHeightmap: (file: File, endianness: "little" | "big", heightMin: number, heightMax: number) => Promise<void>;
-  exportSelectedWorldTerrainHeightmap: () => { bytes: Uint8Array; name: string } | null;
+  exportSelectedWorldTerrainHeightmap: () => Promise<{ bytes: Uint8Array; name: string } | null>;
   getSelectedLandscapeRiverWaters: () => RiverWaterDetailsView[];
   createSelectedLandscapeRiverWater: (splineId: string) => void;
   deleteSelectedLandscapeRiverWater: (waterId: string) => void;
@@ -1044,8 +1044,8 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       input.value = "";
     }
   });
-  body.querySelector<HTMLButtonElement>("[data-world-terrain-raw-export]")?.addEventListener("click", () => {
-    const heightmap = options.exportSelectedWorldTerrainHeightmap();
+  body.querySelector<HTMLButtonElement>("[data-world-terrain-raw-export]")?.addEventListener("click", async () => {
+    const heightmap = await options.exportSelectedWorldTerrainHeightmap();
     if (!heightmap) return;
     const url = URL.createObjectURL(new Blob([heightmap.bytes.slice().buffer], { type: "application/octet-stream" }));
     const anchor = document.createElement("a");

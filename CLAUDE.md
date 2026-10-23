@@ -165,6 +165,11 @@ engine/editor.
   `npm run terrain:repair -- <path under public/>` reports it; add `--write` to
   recompute the summaries (and rebuild the global map) from the tiles, which stay
   as authored, or `--check` for a non-zero exit in scripts.
+  A World Terrain over 6×6 tiles with a valid global map streams in the editor
+  (`TerrainEditorStreaming`): Save then writes the renderer's live global map
+  instead of rebuilding it, and a widened height range re-encodes unloaded
+  tiles from disk; tiles edited this session stay resident until the level
+  closes.
   Rotation/non-square/resampling adaptations require explicit resolution rather
   than silently changing an authored scene during Save.
 

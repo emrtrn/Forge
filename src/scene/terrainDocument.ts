@@ -2,7 +2,7 @@ import { createFlatLandscapeData, type ForgeLandscapeData } from "@engine/scene/
 import { legacyLandscapeToWorldTerrain } from "@engine/terrain/terrainLegacy";
 import { terrainDocumentToLandscape } from "@engine/terrain/terrainLandscapeBridge";
 import { loadWorldTerrain, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
-import { isWorldTerrainPath } from "@engine/terrain/terrainTypes";
+import { isWorldTerrainPath, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
 import { isMultiTileTerrain } from "@engine/terrain/worldTerrainActor";
 import { projectFileUrl } from "@/project/ProjectSystem";
 
@@ -16,7 +16,9 @@ export type TerrainActorDocument =
   | { kind: "world"; document: WorldTerrainDocument };
 
 /** Shared editor/runtime read path. The legacy fallback only applies to absent legacy sidecars. */
-export async function fetchTerrainActorDocument(path: string, streamTiles = false): Promise<TerrainActorDocument> {
+export async function fetchTerrainActorDocument(
+  path: string, streamTiles: boolean | ((def: WorldTerrainDef) => boolean) = false,
+): Promise<TerrainActorDocument> {
   if (isWorldTerrainPath(path)) {
     const response = await fetch(projectFileUrl(path));
     if (!response.ok) throw new Error(`Terrain definition ${path}: HTTP ${response.status}`);

@@ -1190,6 +1190,31 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
 - [ ] Landscape splines ve River Water dünya uzayına taşınır (`landscapeRef`
       yerine terrain'e bağlı dünya spline'ı); deform/paint birden çok tile'a
       uygulanır.
+- [x] **Editör tile akışı (2026-10-23, ilk dilim):** 6×6'dan büyük
+      (`editorStreamsTerrain`, >36 tile) ve geçerli global haritası olan
+      World Terrain editörde yalnız tanım + global harita ile açılır;
+      `TerrainEditorStreaming` editör kamerası çevresinde 3 tile yarıçapında
+      tile'ları edit world'e yükler (6 eşzamanlı okuma, 1,25 histerezis,
+      menzilden çıkan okuma iptal). Bu oturumda düzenlenen tile sabitlenir
+      (kaydedilmemiş veri + undo geçmişi); disk okuması bellekteki tile'ın
+      üzerine asla yazmaz. Brush'ın izi + yumuşatma payı yüklü değilse o dab
+      atlanır, tile'lar istenir ve vuruş bitene kadar tutulur. Save:
+      `captureWorldTerrainSave` kısmi dünyada renderer'ın her dab'de
+      güncellediği canlı global haritayı yazar; aralık genişlerse yüklü
+      olmayan (düzenlenmemiş) tile'lar diskten okunup yeni aralıkla yeniden
+      kodlanır (`reencodeTerrainTileRange`, u16/f32 korunur). RAW import/export
+      ve silme önce bütün tile'ları yükler (silme: undo budanmış dosyaları
+      geri yazabilsin diye). Küçük dünyalar ve global haritası olmayan eski
+      dosyalar eager kalır. Smoke `terrain-editor-streaming.spec.ts`: 12×12
+      dünyada seam kamerası 42/144 tile okur, seam vuruşu yalnız iki tile +
+      global haritayı yazar; kaydedilen global harita diskteki tüm
+      tile'lardan yeniden kurulana u16 nicelemesi dışında (9/37249 örnek,
+      ≤ yarım adım) eşittir; uzak kamera kendi bölgesini okur.
+      Açık: kamera menzili dışındaki tile'a tıklama isabet etmez (ışın yalnız
+      yüklü tile'ları görür; global haritaya düşmüyor), brush'ın tile
+      yüklediği yol tarayıcıda denenmedi (engine testli), panel/minimap yok,
+      Show > Collision tel kafesi yalnız açıldığı andaki yüklü tile'ları
+      çizer.
 - [ ] Brush'lar tile sınırında kesintisiz; brush birden çok yüklü olmayan
       tile'a uzanıyorsa onları yükler.
 - [ ] Kirli tile/hücre göstergesi, Save yalnız kirlileri yazar.

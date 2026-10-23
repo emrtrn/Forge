@@ -56,10 +56,16 @@ function formatRange(range: { min: number; max: number }): string {
   return `${Number(range.min.toFixed(4))}..${Number(range.max.toFixed(4))}`;
 }
 
-/** Eager by default; runtime streaming reads only the multi-tile definition/global map. */
+/**
+ * Eager by default; streaming reads only the multi-tile definition/global map.
+ * `true` (runtime) requires a valid global map. A predicate (the editor's
+ * size rule) streams only when it holds and a valid global map exists, and
+ * otherwise loads every tile, so a legacy terrain stays editable until a Save
+ * writes its global map.
+ */
 export async function loadWorldTerrain(
   path: string, value: unknown, readBinary: (path: string) => Promise<Uint8Array>,
-  streamTiles = false,
+  streamTiles: boolean | ((def: WorldTerrainDef) => boolean) = false,
 ): Promise<WorldTerrainDocument> {
   const def = normalizeWorldTerrain(value);
   const tiles = new Map<string, DecodedTerrainTile>();
@@ -73,10 +79,11 @@ export async function loadWorldTerrain(
   try {
     globalAttributes = validateTerrainGlobalMap(def, await readBinary(terrainGlobalMapPath(path)));
   } catch (error) {
-    if (streamTiles) throw new Error(`[terrain] ${path}: streaming requires a valid global map; save the terrain in the editor`, { cause: error });
+    if (streamTiles === true) throw new Error(`[terrain] ${path}: streaming requires a valid global map; save the terrain in the editor`, { cause: error });
     console.warn(`[terrain] ${path}: global map missing or invalid; computing from tiles`, error);
   }
-  if (streamTiles) return { def, tiles, globalAttributes };
+  const stream = typeof streamTiles === "function" ? streamTiles(def) && globalAttributes !== undefined : streamTiles;
+  if (stream) return { def, tiles, globalAttributes };
   for (const { key } of def.tiles) tiles.set(key, validateTerrainTile(def, key, await readBinary(terrainTilePath(path, key))));
   globalAttributes ??= buildTerrainGlobalAttributes(worldTerrainRenderSource(def, tiles));
   return { def, tiles, globalAttributes };

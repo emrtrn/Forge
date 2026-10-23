@@ -238,6 +238,11 @@ export function updateWorldTerrainObjectTiles(object: LandscapeObject, dirty: Re
   for (const [key, rect] of dirty) terrain.updateTile(key, rect);
 }
 
+/** A World Terrain tile entered or left the edit world (editor streaming). */
+export function refreshWorldTerrainObjectTile(object: LandscapeObject, key: string): void {
+  landscapeTerrain(object)?.refreshTile(key);
+}
+
 /** Debug view, active layer and layer colours of a World Terrain group; no texture work. */
 export function updateWorldTerrainAppearance(
   object: LandscapeObject,

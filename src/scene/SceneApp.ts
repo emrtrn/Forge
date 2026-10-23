@@ -5,8 +5,9 @@ import {
   nextLandscapeBrushHeight,
 } from "@engine/scene/landscapeBrush";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
-import { levelTerrainPath, terrainTileWorldSize } from "@engine/terrain/terrainTypes";
-import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
+import { levelTerrainPath, terrainTilePath, terrainTileWorldSize } from "@engine/terrain/terrainTypes";
+import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
+import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
 import {
   applyTerrainBrush,
   applyTerrainUndoPatches,
@@ -220,6 +221,7 @@ import {
   updateLandscapeLod,
   updateLandscapeObjectGeometry,
   updateWorldTerrainAppearance,
+  refreshWorldTerrainObjectTile,
   updateWorldTerrainObjectTiles,
   type ForgeLandscapeData,
   type ForgeLandscapeSpline,
@@ -957,6 +959,8 @@ interface WorldTerrainStroke {
   mode: "sculpt" | "paint";
   /** Dab patches in application order. */
   patches: TerrainUndoPatch[];
+  /** Tiles this stroke asked a streaming terrain to load; held until it ends. */
+  demanded: Set<string>;
 }
 
 function cloneLandscapeLayers(layers: readonly LandscapeLayerWeights[]): LandscapeLayerWeights[] {
@@ -1261,6 +1265,12 @@ export class SceneApp {
    * and their save state, while a reload starts clean.
    */
   private worldTerrainSessions = new WeakMap<WorldTerrainDocument, WorldTerrainEditSession>();
+  /**
+   * Tile residency of World Terrains too large to hold whole (Faz 8). Keyed
+   * like the sessions, so delete + undo keeps streaming; disposed when the
+   * level's landscapes are rebuilt.
+   */
+  private worldTerrainStreams = new Map<WorldTerrainDocument, TerrainEditorStreaming>();
   /** Last height scale used for a heightmap import, echoed back into the Details input. */
   private lastLandscapeImportHeight = 20;
   private readonly editorSaves = new EditorSaveSession(
@@ -1816,6 +1826,7 @@ export class SceneApp {
       this.updateGizmoScreenScale();
       this.environment.update(deltaSeconds);
       this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
+      this.updateWorldTerrainStreaming();
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera());
       advanceForgeMaterialAnimations(now / 1000);
 
@@ -6762,6 +6773,8 @@ export class SceneApp {
     this.landscapeSplineOverlays = [];
     this.landscapeData.clear();
     this.worldTerrains.clear();
+    for (const streaming of this.worldTerrainStreams.values()) streaming.dispose();
+    this.worldTerrainStreams.clear();
     this.editorSaves.landscapeSaveRevisions.clear();
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
@@ -8415,7 +8428,7 @@ export class SceneApp {
 
   /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
   private fetchLandscapeDocument(dataRef: string): Promise<TerrainActorDocument> {
-    return fetchTerrainActorDocument(dataRef);
+    return fetchTerrainActorDocument(dataRef, editorStreamsTerrain);
   }
 
   /**
@@ -8452,8 +8465,51 @@ export class SceneApp {
       if (format) formats.set(key, format);
     }
     const document: WorldTerrainDocument = { def: world.def, tiles: world.tiles, globalAttributes: loaded.globalAttributes };
-    this.worldTerrainSessions.set(document, new WorldTerrainEditSession(path, world, formats));
+    const session = new WorldTerrainEditSession(path, world, formats, () => document.globalAttributes);
+    this.worldTerrainSessions.set(document, session);
+    // The loader left tiles out: this terrain is too large to hold whole.
+    if (loaded.tiles.size < loaded.def.tiles.length) {
+      this.worldTerrainStreams.set(document, new TerrainEditorStreaming(world, {
+        fetch: async (key, signal) => {
+          const tilePath = terrainTilePath(path, key);
+          const response = await fetch(projectFileUrl(tilePath), { signal, cache: "no-cache" });
+          if (!response.ok) throw new Error(`${tilePath}: HTTP ${response.status}`);
+          // Against the live definition: a Save may have widened its range since load.
+          const tile = validateTerrainTile(world.def, key, new Uint8Array(await response.arrayBuffer()));
+          session.recordFormat(key, tile.heightFormat);
+          return tile;
+        },
+        changed: (key) => {
+          const index = this.layout?.landscapes?.findIndex((actor) => this.worldTerrains.get(actor.id) === document) ?? -1;
+          const object = this.landscapeObjects[index];
+          if (object) refreshWorldTerrainObjectTile(object, key);
+        },
+        pinned: (key) => session.touched(key),
+        warn: (message) => {
+          console.warn(message);
+          this.onStatus?.(message, "warning");
+        },
+      }));
+    }
     return document;
+  }
+
+  /** Streams each large World Terrain around the editor camera; called every frame. */
+  private updateWorldTerrainStreaming(): void {
+    if (this.worldTerrainStreams.size === 0) return;
+    const { x, z } = this.editorViewportCamera().position;
+    for (const document of this.worldTerrains.values()) this.worldTerrainStreams.get(document)?.update([{ position: [x, z] }]);
+  }
+
+  /**
+   * Loads every tile of a streaming World Terrain and holds them, for
+   * operations that read or replace the whole grid. No-op for an eager one.
+   */
+  private async loadWholeWorldTerrain(document: WorldTerrainDocument, purpose: string): Promise<void> {
+    const streaming = this.worldTerrainStreams.get(document);
+    if (!streaming || streaming.allResident) return;
+    this.onStatus?.(`Loading all ${document.def.tiles.length} terrain tiles to ${purpose}…`, "info");
+    await streaming.demandAll();
   }
 
   /** Cheap transform/visibility sync for one landscape (gizmo drag). */
@@ -8956,7 +9012,7 @@ export class SceneApp {
       this.onStatus?.("The active paint layer is not one of this World Terrain's layers.", "warning");
       return false;
     }
-    this.worldTerrainStroke = { pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, mode, patches: [] };
+    this.worldTerrainStroke = { pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, mode, patches: [], demanded: new Set() };
     this.canvas.setPointerCapture(event.pointerId);
     this.applyWorldTerrainDab(this.worldTerrainStroke, hit.point);
     return true;
@@ -8971,6 +9027,20 @@ export class SceneApp {
     const object = this.landscapeObjects[stroke.landscapeIndex];
     if (!session || !object) return;
     const settings = this.landscapeSculptSettings;
+    const streaming = this.worldTerrainStreams.get(stroke.document);
+    if (streaming) {
+      // A dab needs every tile under it; load the missing ones and skip this
+      // dab rather than reject it. They stay held until the stroke ends.
+      const keys = terrainBrushTileKeys(stroke.document.def, point.x, point.z, settings.brushSize);
+      const missing = keys.filter((key) => !session.world.tiles.has(key));
+      for (const key of keys) stroke.demanded.add(key);
+      if (missing.length > 0) {
+        if (stroke.patches.length === 0) this.onStatus?.(`Loading ${missing.length} terrain tile(s) under the brush…`, "info");
+        streaming.demand(keys).catch(() => {});
+        return;
+      }
+      streaming.demand(keys).catch(() => {});
+    }
     const base = { x: point.x, z: point.z, radius: settings.brushSize, strength: settings.strength, falloff: settings.falloff };
     const brush: TerrainBrush = stroke.mode === "paint"
       ? { ...base, mode: settings.paintTool, layer: this.worldTerrainActiveLayer(stroke.document) }
@@ -9013,6 +9083,8 @@ export class SceneApp {
     } catch {
       // Pointer capture may already be gone after pointercancel.
     }
+    // Edited tiles are pinned by the session; the rest may stream out again.
+    this.worldTerrainStreams.get(stroke.document)?.release(stroke.demanded);
     if (stroke.patches.length === 0) return true;
     const { landscapeId, document, patches } = stroke;
     const restore = (apply: typeof applyTerrainUndoPatches): void => {
@@ -9454,6 +9526,24 @@ export class SceneApp {
 
   /** Removes a Landscape actor (undoable). */
   removeLandscape(index: number): void {
+    const actor = this.layout?.landscapes?.[index];
+    const world = actor ? this.worldTerrains.get(actor.id) : undefined;
+    const streaming = world ? this.worldTerrainStreams.get(world) : undefined;
+    if (!actor || !world || !streaming || streaming.allResident) {
+      this.commitRemoveLandscape(index);
+      return;
+    }
+    // Save prunes a deleted level terrain's files, and undo restores only what
+    // memory holds: hold every tile first so undo can write the whole grid.
+    void this.loadWholeWorldTerrain(world, "delete it").then(() => {
+      const current = this.layout?.landscapes?.findIndex((entry) => entry.id === actor.id) ?? -1;
+      if (current >= 0 && this.worldTerrains.get(actor.id) === world) this.commitRemoveLandscape(current);
+    }, (error: unknown) => {
+      this.onStatus?.(`Landscape not deleted: ${error instanceof Error ? error.message : String(error)}`, "error");
+    });
+  }
+
+  private commitRemoveLandscape(index: number): void {
     const actor = this.layout?.landscapes?.[index];
     if (!actor) return;
     const snapshot = cloneLandscape(actor);
@@ -10285,6 +10375,8 @@ export class SceneApp {
       if (file.size !== width * height * 2) {
         throw new Error(`RAW expected ${width * height * 2} bytes for ${width} x ${height} samples (16-bit), got ${file.size}.`);
       }
+      // Replacing every tile pins every tile (undo needs them all).
+      await this.loadWholeWorldTerrain(document, "import the heightmap");
       const bytes = await file.arrayBuffer();
       if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
         || this.worldTerrains.get(actor.id) !== document || this.isSelectionLocked(this.selection)) {
@@ -10310,16 +10402,19 @@ export class SceneApp {
       this.onStatus?.(`Imported ${width} x ${height} RAW heightmap (${patches.length} tiles).`, "info");
     } catch (error) {
       this.onStatus?.(`Heightmap import failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      this.worldTerrainStreams.get(document)?.release();
     }
   }
 
-  exportSelectedWorldTerrainHeightmap(): { bytes: Uint8Array; name: string } | null {
+  async exportSelectedWorldTerrainHeightmap(): Promise<{ bytes: Uint8Array; name: string } | null> {
     if (this.selection?.kind !== "landscape") return null;
     const actor = this.layout?.landscapes?.[this.selection.index];
     const document = actor ? this.worldTerrains.get(actor.id) : undefined;
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
     if (!actor || !document || !session) return null;
     try {
+      await this.loadWholeWorldTerrain(document, "export the heightmap");
       // The save snapshot includes unsaved relief outside the old encoding range.
       const snapshot = captureWorldTerrainSave(session.world, document.tiles.keys(), new Map());
       const bytes = exportRawHeightmap(snapshot.def, new Map(snapshot.tiles.map((tile) => [tile.key, tile.bytes])));
@@ -10329,6 +10424,8 @@ export class SceneApp {
     } catch (error) {
       this.onStatus?.(`Heightmap export failed: ${error instanceof Error ? error.message : String(error)}`, "error");
       return null;
+    } finally {
+      this.worldTerrainStreams.get(document)?.release();
     }
   }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
-import { editorStreamsTerrain, TerrainEditorStreaming } from "../../engine/terrain/terrainEditorStreaming";
+import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "../../engine/terrain/terrainEditorStreaming";
 import { decodeTerrainGlobalMap, encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { decodeTerrainTile, encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
@@ -35,6 +35,20 @@ export async function registerTerrainEditorStreamingTests(check: Check, checkAsy
   check("editor terrain streaming starts above 6x6 tiles", () => {
     assert.equal(editorStreamsTerrain({ tiles: Array.from({ length: 36 }, () => ({ key: "", minHeight: 0, maxHeight: 0 })) }), false);
     assert.equal(editorStreamsTerrain({ tiles: Array.from({ length: 37 }, () => ({ key: "", minHeight: 0, maxHeight: 0 })) }), true);
+  });
+
+  check("editor terrain streaming brush keys cover the footprint, the smoothing halo and both seam sides, never holes", () => {
+    const { def, disk, copy } = fixture();
+    assert.deepEqual(terrainBrushTileKeys(def, 16, 16, 4), ["0_0"]);
+    // On the x = 32 seam: both tiles, and every dab tile must be resident for applyTerrainBrush.
+    const seam = terrainBrushTileKeys(def, 32, 16, 1);
+    assert.deepEqual(seam, ["0_0", "1_0"]);
+    const world = createTerrainEditWorld(def, seam.map((key) => copy(disk.get(key)!)));
+    assert.ok(applyTerrainBrush(world, { mode: "smooth", x: 32, z: 16, radius: 1, strength: 1, falloff: 0, hitHeight: 2 }));
+    // 1.5 m from the seam the halo still reaches across it.
+    assert.deepEqual(terrainBrushTileKeys(def, 30.5, 16, 0), ["0_0", "1_0"]);
+    assert.ok(!terrainBrushTileKeys(def, 112, 112, 20).includes("3_3"), "the hole is never demanded");
+    assert.deepEqual(terrainBrushTileKeys(def, -50, -50, 4), [], "outside the grid");
   });
 
   await checkAsync("editor terrain streaming loads around the camera, drops past hysteresis, keeps pinned tiles and never re-reads over an edit", async () => {

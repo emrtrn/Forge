@@ -2,8 +2,11 @@ import type { LayoutLandscape } from "@engine/scene/layout";
 import type { ForgeLandscapeData } from "@engine/scene/landscape";
 import { acknowledgeTerrainSnapshot, captureTerrainSnapshot } from "@engine/terrain/terrainLandscapeBridge";
 import type { TerrainEditWorld } from "@engine/terrain/terrainEdit";
+import type { TerrainGlobalAttributes } from "@engine/terrain/terrainRenderSource";
 import type { TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
-import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
+import { terrainTilePath } from "@engine/terrain/terrainTypes";
+import { captureWorldTerrainSave, reencodeTerrainTileRange } from "@engine/terrain/worldTerrainSave";
+import { projectFileUrl } from "@/project/ProjectSystem";
 import type { EditorSaveStep } from "./editorSaveCoordinator";
 
 async function checkSave(response: Response): Promise<void> {
@@ -19,6 +22,10 @@ async function checkSave(response: Response): Promise<void> {
  * not edited again while it was writing. Saves write in place to the actor's
  * `dataRef`: forking a whole tile grid into the level folder is not worth
  * copying every tile.
+ *
+ * A streaming editor (OPEN_WORLD_PLAN Faz 8) holds only part of the world:
+ * `liveGlobal` then supplies the global map the renderer keeps current, and a
+ * widened range re-encodes the unloaded tiles from disk.
  */
 export class WorldTerrainEditSession {
   private readonly revisions = new Map<string, number>();
@@ -29,8 +36,19 @@ export class WorldTerrainEditSession {
   constructor(
     readonly path: string,
     readonly world: TerrainEditWorld,
-    private readonly formats: ReadonlyMap<string, TerrainHeightFormat>,
+    private readonly formats: Map<string, TerrainHeightFormat>,
+    private readonly liveGlobal: () => TerrainGlobalAttributes | undefined = () => undefined,
   ) {}
+
+  /** A streamed tile keeps the height format it has on disk. */
+  recordFormat(key: string, format: TerrainHeightFormat): void {
+    this.formats.set(key, format);
+  }
+
+  /** Edited this session (saved or not): its data lives only here or in the undo history. */
+  touched(key: string): boolean {
+    return this.revisions.has(key);
+  }
 
   markTiles(keys: Iterable<string>): void {
     for (const key of keys) this.revisions.set(key, (this.revisions.get(key) ?? 0) + 1);
@@ -52,7 +70,7 @@ export class WorldTerrainEditSession {
   capture(): EditorSaveStep | null {
     const keys = this.dirtyKeys();
     if (keys.length === 0 && this.definitionRevision === this.savedDefinitionRevision) return null;
-    const snapshot = captureWorldTerrainSave(this.world, keys, this.formats);
+    const snapshot = captureWorldTerrainSave(this.world, keys, this.formats, this.liveGlobal());
     const definitionRevision = this.definitionRevision;
     const captured = new Map(keys.map((key) => [key, this.revisions.get(key)!] as const));
     const body = JSON.stringify({ path: this.path, terrain: snapshot.def });
@@ -63,6 +81,17 @@ export class WorldTerrainEditSession {
           await checkSave(await fetch(`/__save-terrain-tile?path=${encodeURIComponent(this.path)}&key=${tile.key}`, {
             method: "POST", headers: { "Content-Type": "application/octet-stream" },
             body: tile.bytes.slice().buffer,
+          }));
+        }
+        // Unloaded, never-edited tiles: the disk copy is current; only its header range changes.
+        for (const key of snapshot.reencode) {
+          const tilePath = terrainTilePath(this.path, key);
+          const response = await fetch(projectFileUrl(tilePath), { cache: "no-cache" });
+          if (!response.ok) throw new Error(`Terrain save: cannot read ${tilePath} to widen its range (HTTP ${response.status})`);
+          const bytes = reencodeTerrainTileRange(key, new Uint8Array(await response.arrayBuffer()), snapshot.def.heightMin, snapshot.def.heightMax);
+          await checkSave(await fetch(`/__save-terrain-tile?path=${encodeURIComponent(this.path)}&key=${key}`, {
+            method: "POST", headers: { "Content-Type": "application/octet-stream" },
+            body: bytes.slice().buffer,
           }));
         }
         await checkSave(await fetch(`/__save-terrain-global?path=${encodeURIComponent(this.path)}`, {

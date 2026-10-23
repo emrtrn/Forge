@@ -1,6 +1,6 @@
 import { computeStreamingTargets, type GridStreamingSettings, type StreamingSource } from "../world/streamingPolicy";
 import { insertTerrainEditTile, type TerrainEditWorld } from "./terrainEdit";
-import { terrainTileWorldSize, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
+import { terrainTileWorldSize, tileKey, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
 
 /**
  * A World Terrain with more tiles than this streams in the editor (more than
@@ -10,6 +10,30 @@ export const EDITOR_TERRAIN_STREAMING_MAX_EAGER_TILES = 36;
 
 export function editorStreamsTerrain(def: Pick<WorldTerrainDef, "tiles">): boolean {
   return def.tiles.length > EDITOR_TERRAIN_STREAMING_MAX_EAGER_TILES;
+}
+
+/**
+ * Declared tiles a brush dab at (`x`, `z`) can read or write: its footprint
+ * plus the one-vertex smoothing halo, with seam copies on both sides.
+ */
+export function terrainBrushTileKeys(
+  def: Pick<WorldTerrainDef, "origin" | "spacing" | "tileQuads" | "tilesX" | "tilesZ" | "tiles">,
+  x: number, z: number, radius: number,
+): string[] {
+  const size = terrainTileWorldSize(def);
+  const reach = radius + 2 * def.spacing;
+  const range = (centre: number, origin: number, count: number) => [
+    Math.max(0, Math.floor((centre - reach - origin) / size)),
+    Math.min(count - 1, Math.floor((centre + reach - origin) / size)),
+  ] as const;
+  const [x0, x1] = range(x, def.origin[0], def.tilesX);
+  const [z0, z1] = range(z, def.origin[2], def.tilesZ);
+  const declared = new Set(def.tiles.map(({ key }) => key));
+  const keys: string[] = [];
+  for (let tz = z0; tz <= z1; tz += 1) {
+    for (let tx = x0; tx <= x1; tx += 1) if (declared.has(tileKey(tx, tz))) keys.push(tileKey(tx, tz));
+  }
+  return keys;
 }
 
 export interface TerrainEditorStreamingHooks {

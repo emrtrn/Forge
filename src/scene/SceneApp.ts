@@ -17,6 +17,7 @@ import {
   type TerrainUndoPatch,
 } from "@engine/terrain/terrainEdit";
 import type { DecodedTerrainTile, TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
+import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
 import {
   terrainTileTrimesh,
   worldTerrainActorPosition,
@@ -8432,16 +8433,7 @@ export class SceneApp {
    * reported) instead of drawing the terrain away from where it collides.
    */
   private adoptWorldTerrain(actor: LayoutLandscape, loaded: WorldTerrainDocument): void {
-    // The editor draws and edits one copy of the tiles; the render source reads
-    // the same tile objects the brush writes, so a dab needs no data copy.
-    const world = createTerrainEditWorld(loaded.def, loaded.tiles.values());
-    const formats = new Map<string, TerrainHeightFormat>();
-    for (const [key, tile] of loaded.tiles) {
-      const format = (tile as Partial<DecodedTerrainTile>).heightFormat;
-      if (format) formats.set(key, format);
-    }
-    const document: WorldTerrainDocument = { def: world.def, tiles: world.tiles };
-    this.worldTerrainSessions.set(document, new WorldTerrainEditSession(actor.dataRef, world, formats));
+    const document = this.editableWorldTerrain(actor.dataRef, loaded);
     this.worldTerrains.set(actor.id, document);
     const issues = worldTerrainPlacementIssues(actor, document.def);
     if (issues.length > 0) {
@@ -8453,6 +8445,24 @@ export class SceneApp {
     if (document.def.splines?.length) {
       console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
     }
+  }
+
+  /**
+   * The editor's one editable copy of a World Terrain, registered with its
+   * save session. The render source reads the same tile objects the brush
+   * writes, so a dab needs no data copy. Tiles keep the height format they were
+   * loaded with; tiles that never came from disk use `newTileFormat`.
+   */
+  private editableWorldTerrain(path: string, loaded: WorldTerrainDocument, newTileFormat?: TerrainHeightFormat): WorldTerrainDocument {
+    const world = createTerrainEditWorld(loaded.def, loaded.tiles.values());
+    const formats = new Map<string, TerrainHeightFormat>();
+    for (const [key, tile] of loaded.tiles) {
+      const format = (tile as Partial<DecodedTerrainTile>).heightFormat ?? newTileFormat;
+      if (format) formats.set(key, format);
+    }
+    const document: WorldTerrainDocument = { def: world.def, tiles: world.tiles };
+    this.worldTerrainSessions.set(document, new WorldTerrainEditSession(path, world, formats));
+    return document;
   }
 
   /** Cheap transform/visibility sync for one landscape (gizmo drag). */
@@ -9286,8 +9296,11 @@ export class SceneApp {
     const insertionIndex = clampIndex(index, this.layout.landscapes.length);
     this.layout.landscapes.splice(insertionIndex, 0, cloneLandscape(actor));
     if (document.kind === "world") {
-      // Restored as authored: its definition and tiles were never rewritten.
       this.worldTerrains.set(actor.id, document.document);
+      // New, or back after a delete whose Save pruned its level-owned files:
+      // either way the next Save writes every tile, as a Landscape does.
+      const session = this.worldTerrainSessions.get(document.document);
+      session?.markTiles(document.document.tiles.keys());
     } else {
       this.landscapeData.set(actor.id, document.data);
       this.markLandscapeDirty(actor.id);
@@ -9354,6 +9367,54 @@ export class SceneApp {
       },
     });
     this.onStatus?.("Added Landscape.", "info");
+  }
+
+  /**
+   * Adds a flat multi-tile World Terrain centred on the world origin and selects
+   * it (undoable). Its tiles and definition are written to the level's terrain
+   * folder by the next Save, before the level that references them.
+   */
+  addWorldTerrain(options: WorldTerrainCreateOptions): void {
+    if (!this.layout || !this.activeProject) return;
+    const landscapes = this.layout.landscapes ?? [];
+    if (landscapes.length > 0) {
+      this.onStatus?.("Only one Landscape is supported per level in this build; delete the current one first.", "error");
+      return;
+    }
+    let loaded: WorldTerrainDocument;
+    try {
+      loaded = createFlatWorldTerrain(options);
+    } catch (error) {
+      this.onStatus?.(error instanceof Error ? error.message : String(error), "error");
+      return;
+    }
+    const id = uniqueLandscapeId(landscapes);
+    const actor: LayoutLandscape = {
+      id,
+      name: uniqueLandscapeName(loaded.def.name, landscapes),
+      position: worldTerrainActorPosition(loaded.def),
+      dataRef: levelTerrainPath(this.activeProject.manifest.editor.defaultScene, id),
+    };
+    // New tiles use compact u16 heights (OPEN_WORLD_PLAN K1).
+    const document = this.editableWorldTerrain(actor.dataRef, loaded, "u16");
+    const index = landscapes.length;
+    this.executeCommand({
+      label: "Add World Terrain",
+      redo: () => {
+        this.insertLandscape(index, actor, { kind: "world", document });
+        this.select({ kind: "landscape", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeLandscapeAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    const [width, depth] = worldTerrainExtent(loaded.def);
+    this.onStatus?.(`Added World Terrain: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m.`, "info");
   }
 
   /** Removes a Landscape actor (undoable). */

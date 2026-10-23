@@ -806,6 +806,25 @@ Doğrulama (2026-10-22):
       autosave yalnız (0,0) ve (1,0)'ı yazar, dikiş satırları eşit; undo iki
       tile'ın baytlarını birebir geri getirir; redo sonrası Play'de pawn
       arazide).
+- [x] Editörde çok-tile World Terrain oluşturma (2026-10-23): Add Actor →
+      Terrain → **World Terrain** bir diyalog açar (ad, Tiles X/Z, tile
+      çözünürlüğü 64/128/256 quad, vertex aralığı 0,25–8 m, taban yüksekliği);
+      dünya boyu, tile/vertex sayısı, disk ve editör belleği canlı gösterilir,
+      geçersiz seçenekte Create pasif. `createFlatWorldTerrain`
+      (`engine/terrain/worldTerrainCreate.ts`) düz, deliksiz, dünya merkezli
+      grid kurar (varsayılan dört katman, ±256 m aralık, yeni tile'lar `u16`).
+      Sınırlar: en az 2 tile (tek tile Landscape'tir; 1×1 tanım okumada köprüye
+      gider) ve en fazla 64 × 257² vertex — Faz 4 akışı gelene kadar editör
+      bütün tile'ları bellekte tutuyor ve runtime tile başına trimesh kuruyor.
+      Seviye başına tek Landscape kuralı World Terrain için de geçerli. Kayıt
+      sırası değişti: World Terrain tile'ları ve tanımı artık **layout'tan
+      önce** yazılıyor, seviye diskte olmayan araziyi hiç göstermiyor. Silme
+      sonrası Save seviye-sahipli terrain'i budadığı için actor geri eklenince
+      (undo/redo) bütün tile'ları kirli sayılıyor. Doğrulama: engine
+      (geçerli tanım + tile doğrulaması, ret nedenleri, layout'tan önce yazım)
+      ve `tests/smoke/terrain-create.spec.ts` (diyalog ret/kabul, u16 tile'lar
+      ve tanım seviye klasöründe, undo budar / redo yeniden yazar, yeniden
+      yükleme, Play'de pawn 2 m taban yüksekliğinde).
 - [ ] Heightmap import/export: 16-bit PNG ve RAW, dünya boyunda; tile'lara
       bölme `terrainImport.ts`'de (büyük import worker'da, Faz 4'ten sonra).
       *Saf RAW import/export + tile bölme hazır (2026-10-23): little/big-endian

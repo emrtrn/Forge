@@ -9,6 +9,7 @@ import { validateTerrainPath } from "../../tools/terrainSaveValidator";
 import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
 import { createFlatTerrainTile, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { WorldTerrainEditSession } from "../../src/editor/terrainStore";
+import { WORLD_TERRAIN_CREATE_DEFAULTS, createFlatWorldTerrain } from "../../engine/terrain/worldTerrainCreate";
 
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 type Sidecar = "landscape" | "foliage" | "meshPaint";
@@ -438,5 +439,28 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     assert.equal(defRequest.body.terrain.tiles.find((tile) => tile.key === "1_0")!.maxHeight, 2);
     assert.equal(defRequest.body.terrain.tiles.find((tile) => tile.key === "0_0")!.maxHeight, 0);
     assert.equal(f.host.layout.landscapes!.find((entry) => entry.id === "world")!.dataRef, shared);
+  });
+
+  await checkAsync("editor save: a new World Terrain's tiles and definition are written before the level that references it", async () => {
+    const f = fixture();
+    const created = createFlatWorldTerrain({ ...WORLD_TERRAIN_CREATE_DEFAULTS, tileQuads: 64, tilesX: 2, tilesZ: 1 });
+    const path = levelTerrainPath(LEVEL, "world");
+    const world = createTerrainEditWorld(created.def, created.tiles.values());
+    const session = new WorldTerrainEditSession(path, world, new Map([...created.tiles.keys()].map((key) => [key, "u16" as const])));
+    session.markTiles(world.tiles.keys());
+    f.host.layout.landscapes = [{ id: "world", name: "World", position: [0, 0, 0], dataRef: path }];
+    Object.assign(f.host, { worldTerrainIds: new Set(["world"]), worldTerrainSessions: new Map([["world", session]]) });
+    const order: string[] = [];
+    f.host.layoutSaver = async () => { order.push("level"); return { path: LEVEL }; };
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("/__save-terrain")) {
+        order.push(url.includes("-tile") ? `tile ${new URL(url, "http://x").searchParams.get("key")}` : "definition");
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return f.fetch(input, init);
+    }, () => f.host.saveLayout());
+    assert.deepEqual(order.slice(0, 4), ["tile 0_0", "tile 1_0", "definition", "level"]);
+    assert.equal(session.dirty, false);
   });
 }

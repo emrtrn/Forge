@@ -10,7 +10,7 @@ import { captureTerrainSnapshot } from "../../engine/terrain/terrainLandscapeBri
 import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
 import { validateTerrainTile, type WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
 import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
-import { createFlatTerrainTile, terrainTileHeightRange, tileKey, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
+import { createFlatTerrainTile, terrainTileHeightRange, terrainTileLayerWeight, tileKey, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import {
   isMultiTileTerrain,
   terrainTileTrimesh,
@@ -20,6 +20,13 @@ import {
   worldTerrainPlacementIssues,
 } from "../../engine/terrain/worldTerrainActor";
 import { captureWorldTerrainSave } from "../../engine/terrain/worldTerrainSave";
+import {
+  WORLD_TERRAIN_CREATE_DEFAULTS,
+  createFlatWorldTerrain,
+  estimateWorldTerrain,
+  worldTerrainCreateProblems,
+} from "../../engine/terrain/worldTerrainCreate";
+import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { fetchLandscapeDocument, fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
 
 type Check = (label: string, fn: () => void) => void;
@@ -223,6 +230,43 @@ export function registerWorldTerrainSaveTests(check: Check): void {
     for (const { key, bytes } of snapshot.tiles) assert.equal(validateTerrainTile(snapshot.def, key, bytes).heightFormat, "f32");
     // The edit world keeps its range until the save is acknowledged.
     assert.equal(world.def.heightMax, document.def.heightMax);
+  });
+}
+
+export function registerWorldTerrainCreateTests(check: Check): void {
+  check("world terrain create: a flat grid centred on the origin that the save allowlist and tile validation accept", () => {
+    const options = { ...WORLD_TERRAIN_CREATE_DEFAULTS, tilesX: 3, tilesZ: 2, tileQuads: 64 as const, spacing: 2, baseHeight: 4.5 };
+    const { def, tiles } = createFlatWorldTerrain(options);
+    assert.deepEqual(normalizeWorldTerrain(structuredClone(def)), def);
+    assert.equal(isMultiTileTerrain(def), true);
+    assert.deepEqual(worldTerrainExtent(def), [3 * 64 * 2, 2 * 64 * 2]);
+    assert.deepEqual(worldTerrainActorPosition(def), [0, 4.5, 0]);
+    assert.deepEqual([...tiles.keys()], ["0_0", "1_0", "2_0", "0_1", "1_1", "2_1"]);
+    assert.deepEqual(def.layers.map((layer) => layer.id), ["grass", "dirt", "rock", "snow"]);
+    for (const [key, tile] of tiles) {
+      const decoded = validateTerrainTile(def, key, encodeTerrainTile(tile, { heightMin: def.heightMin, heightMax: def.heightMax }));
+      assert.equal(decoded.heightFormat, "u16");
+      assert.ok(decoded.heights.every((height) => Math.abs(height) < 0.005), key);
+      assert.equal(terrainTileLayerWeight(decoded, 0, 0), 1);
+    }
+    const estimate = estimateWorldTerrain(options);
+    assert.equal(estimate.tileCount, 6);
+    assert.equal(estimate.vertices, 6 * 65 * 65);
+    assert.equal(estimate.diskBytes, 6 * (32 + 65 * 65 * 2 + 65 * 65 * 4));
+  });
+
+  check("world terrain create: one tile, out-of-range spacing and oversized grids are refused with a reason", () => {
+    const base = WORLD_TERRAIN_CREATE_DEFAULTS;
+    assert.deepEqual(worldTerrainCreateProblems(base), []);
+    assert.match(worldTerrainCreateProblems({ ...base, tilesX: 1, tilesZ: 1 }).join(" "), /use Landscape/);
+    assert.match(worldTerrainCreateProblems({ ...base, spacing: 0.1 }).join(" "), /spacing/);
+    assert.match(worldTerrainCreateProblems({ ...base, tilesX: 33 }).join(" "), /Tiles X/);
+    assert.match(worldTerrainCreateProblems({ ...base, name: "  " }).join(" "), /name/);
+    // 64 tiles of 256 quads is the ceiling; 65 is not, but 16 × 16 small tiles fit.
+    assert.deepEqual(worldTerrainCreateProblems({ ...base, tilesX: 8, tilesZ: 8 }), []);
+    assert.match(worldTerrainCreateProblems({ ...base, tilesX: 13, tilesZ: 5 }).join(" "), /Too large/);
+    assert.deepEqual(worldTerrainCreateProblems({ ...base, tilesX: 16, tilesZ: 16, tileQuads: 64 }), []);
+    assert.throws(() => createFlatWorldTerrain({ ...base, tilesX: 1, tilesZ: 1 }), /use Landscape/);
   });
 }
 

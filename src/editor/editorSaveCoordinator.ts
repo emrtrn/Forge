@@ -139,7 +139,13 @@ export class EditorSaveSession {
       const migrations: EditorSaveStep[] = [];
       const pendingReferences: { id: string; from: string; to: string; actor: object }[] = [];
       for (const actor of source.layout.landscapes ?? []) {
-        if (source.worldTerrainIds.has(actor.id)) continue;
+        if (source.worldTerrainIds.has(actor.id)) {
+          // Tiles and definition before the level, so the level never names a
+          // terrain that is not on disk yet (a new World Terrain).
+          const step = this.captureLandscapeSave(source, actor.id);
+          if (step) migrations.push(step);
+          continue;
+        }
         const path = levelTerrainPath(source.scenePath, actor.id);
         if (actor.dataRef === path) continue;
         const data = source.landscapeData.get(actor.id);
@@ -165,7 +171,7 @@ export class EditorSaveSession {
         },
       }];
       for (const actor of source.layout.landscapes ?? []) {
-        if (pendingReferences.some((entry) => entry.id === actor.id)) continue;
+        if (source.worldTerrainIds.has(actor.id) || pendingReferences.some((entry) => entry.id === actor.id)) continue;
         const step = this.captureLandscapeSave(source, actor.id);
         if (step) steps.push(step);
       }

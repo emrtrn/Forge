@@ -2145,6 +2145,7 @@ export class EditorUi {
     );
 
     singleton("landscape", "Landscape", "Terrain", "terrain", () => this.app.addLandscape());
+    singleton("worldTerrain", "World Terrain", "Terrain", "terrain", () => void this.addWorldTerrain());
 
     entries.push({
       key: "ambientSound",
@@ -3740,6 +3741,13 @@ export class EditorUi {
         if (option) finish(option.dataset.parentClass as ParentClass);
       });
     });
+  }
+
+  /** Add Actor → World Terrain: grid options first, then an undoable add. */
+  private async addWorldTerrain(): Promise<void> {
+    const { pickWorldTerrainOptions } = await import("@/editor/worldTerrainDialog");
+    const options = await pickWorldTerrainOptions();
+    if (options) this.app.addWorldTerrain(options);
   }
 
   /**

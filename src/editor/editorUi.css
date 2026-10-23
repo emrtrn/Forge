@@ -3828,6 +3828,26 @@
 }
 .parent-class-cancel:hover { background: var(--forge-surface-raise); }
 
+/* New World Terrain (Add Actor → World Terrain) reuses the modal shell above. */
+.world-terrain-dialog { width: 460px; }
+.world-terrain-form { display: grid; gap: 8px; padding: 12px 16px; overflow-y: auto; }
+.world-terrain-form label { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 10px; }
+.world-terrain-form label > span { color: #97a0a6; font-size: 12px; }
+.world-terrain-form input,
+.world-terrain-form select {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--forge-border-mid);
+  background: var(--forge-bg-1);
+  color: var(--forge-text);
+}
+.world-terrain-summary { color: #c9d1d6; font-size: 12px; line-height: 1.5; }
+.world-terrain-problems { margin: 0; padding-left: 18px; color: #f0a07a; font-size: 12px; }
+.world-terrain-problems:empty { display: none; }
+.parent-class-foot .world-terrain-create { margin-left: 8px; border-color: rgba(91, 214, 160, 0.5); }
+.parent-class-foot .world-terrain-create:disabled { opacity: 0.5; cursor: default; }
+
 .asset-card.is-actor-script .asset-thumb { color: var(--forge-success-text); }
 
 /* Particle effects: a sprite emitter and a 3D-model (mesh) one are different

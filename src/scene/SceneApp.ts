@@ -939,6 +939,14 @@ export interface WorldTerrainDetailsView {
   extent: [number, number];
 }
 
+export interface WorldTerrainResidencyView {
+  streaming: boolean;
+  resident: number;
+  loading: number;
+  unsaved: number;
+  total: number;
+}
+
 interface LandscapeSculptStroke {
   pointerId: number;
   landscapeIndex: number;
@@ -1477,6 +1485,8 @@ export class SceneApp {
   /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
   private readonly collisionBoxes: LineSegments[] = [];
   private showCollision = false;
+  /** Coalesces streamed tile arrivals/departures into one overlay rebuild per frame. */
+  private worldTerrainCollisionWiresDirty = false;
   /** "Show > AI Navigation" overlay: nav grid + blocking footprints, off by default. */
   private aiNavigationView: Group | null = null;
   private showAiNavigation = false;
@@ -1827,6 +1837,10 @@ export class SceneApp {
       this.environment.update(deltaSeconds);
       this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
       this.updateWorldTerrainStreaming();
+      if (this.worldTerrainCollisionWiresDirty) {
+        this.worldTerrainCollisionWiresDirty = false;
+        this.updateCollisionBoxes();
+      }
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera());
       advanceForgeMaterialAnimations(now / 1000);
 
@@ -8482,7 +8496,10 @@ export class SceneApp {
         changed: (key) => {
           const index = this.layout?.landscapes?.findIndex((actor) => this.worldTerrains.get(actor.id) === document) ?? -1;
           const object = this.landscapeObjects[index];
-          if (object) refreshWorldTerrainObjectTile(object, key);
+          if (object) {
+            refreshWorldTerrainObjectTile(object, key);
+            if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
+          }
         },
         pinned: (key) => session.touched(key),
         warn: (message) => {
@@ -10460,6 +10477,22 @@ export class SceneApp {
       tileSize: terrainTileWorldSize(def),
       spacing: def.spacing,
       extent: worldTerrainExtent(def),
+    };
+  }
+
+  /** Current residency and unsaved tile count of the selected World Terrain. */
+  getSelectedWorldTerrainResidency(): WorldTerrainResidencyView | null {
+    if (this.selection?.kind !== "landscape") return null;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    if (!document) return null;
+    const streaming = this.worldTerrainStreams.get(document);
+    return {
+      streaming: streaming !== undefined,
+      resident: document.tiles.size,
+      loading: streaming?.loading ?? 0,
+      unsaved: this.worldTerrainSessions.get(document)?.dirtyKeys().length ?? 0,
+      total: document.def.tiles.length,
     };
   }
 

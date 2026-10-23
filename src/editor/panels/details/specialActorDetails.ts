@@ -22,6 +22,7 @@ import type {
   LandscapeSplineTool,
   TargetPointReference,
   WorldTerrainDetailsView,
+  WorldTerrainResidencyView,
 } from "@/scene/SceneApp";
 import { type LandscapeViewMode } from "@engine/render-three/landscape";
 import { axisField, scaleRow, vectorRow } from "./transformRows";
@@ -112,6 +113,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   }) => void;
   setSelectedLandscape: (patch: { collision?: boolean }) => void;
   getSelectedWorldTerrain: () => WorldTerrainDetailsView | null;
+  getSelectedWorldTerrainResidency: () => WorldTerrainResidencyView | null;
   importSelectedWorldTerrainHeightmap: (file: File, endianness: "little" | "big", heightMin: number, heightMax: number) => Promise<void>;
   exportSelectedWorldTerrainHeightmap: () => Promise<{ bytes: Uint8Array; name: string } | null>;
   getSelectedLandscapeRiverWaters: () => RiverWaterDetailsView[];
@@ -954,6 +956,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       <div class="detail-hint">Placed by the terrain definition: the location is the centre of the tile grid. World Terrain cannot be rotated.</div>
       <div class="detail-section" data-world-terrain>
         <div class="detail-section-title">World Terrain</div>
+        <div class="detail-row"><span>Tiles in memory</span><span data-world-terrain-residency></span></div>
         <div class="detail-row"><span>Tiles</span><span>${terrain.tilesX} × ${terrain.tilesZ}${holes > 0 ? ` (${holes} empty)` : ""}</span></div>
         <div class="detail-row"><span>Tile Size</span><span>${metres(terrain.tileSize)}</span></div>
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
@@ -1018,6 +1021,23 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       </div>
       ${actorLockSection(selection)}
     `;
+
+  const residencyElement = body.querySelector<HTMLElement>("[data-world-terrain-residency]")!;
+  const updateResidency = (): void => {
+    const residency = options.getSelectedWorldTerrainResidency();
+    if (!residency) return;
+    const resident = residency.streaming ? `${residency.resident} / ${residency.total}` : `all ${residency.total}`;
+    const loading = residency.loading > 0 ? ` · ${residency.loading} loading` : "";
+    residencyElement.textContent = `${resident}${loading} · ${residency.unsaved} unsaved`;
+  };
+  updateResidency();
+  const residencyTimer = window.setInterval(() => {
+    if (!residencyElement.isConnected) {
+      window.clearInterval(residencyTimer);
+      return;
+    }
+    updateResidency();
+  }, 500);
 
   bindNameAndLock(options);
   bindLandscapeBrushControls(options);

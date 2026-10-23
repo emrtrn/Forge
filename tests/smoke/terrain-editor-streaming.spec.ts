@@ -84,6 +84,9 @@ test("editor streams a large World Terrain around the camera and a seam stroke s
 
   // Raise on the seam at the viewport centre; autosave writes the terrain.
   await row.click();
+  const residency = page.locator("[data-world-terrain-residency]");
+  await expect(residency).toContainText("/ 144");
+  await expect(residency).toContainText("unsaved");
   await page.locator('[data-world-terrain-tools] [data-landscape-mode="sculpt"]').click();
   await page.locator('[data-world-terrain-tools] [data-landscape-tool="raise"]').click();
   await page.locator('[data-landscape-number="brushSize"]').fill("6");
@@ -98,6 +101,7 @@ test("editor streams a large World Terrain around the camera and a seam stroke s
   await page.mouse.move(centre.x + 3, centre.y + 1, { steps: 3 });
   await page.mouse.up();
   expect((await saved).ok()).toBeTruthy();
+  await expect(residency).toContainText("0 unsaved");
   expect([...new Set(written)].sort()).toEqual(SEAM_TILES);
   const disk = new Map<string, TerrainTileData>();
   for (const { key } of world.def.tiles) {

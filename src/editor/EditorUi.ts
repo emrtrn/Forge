@@ -4330,6 +4330,7 @@ export class EditorUi {
       exportSelectedLandscapeHeightmap: () => this.app.exportSelectedLandscapeHeightmap(),
       getSelectedLandscapeResolution: () => this.app.getSelectedLandscapeResolution(),
       getSelectedWorldTerrain: () => this.app.getSelectedWorldTerrain(),
+      getSelectedWorldTerrainResidency: () => this.app.getSelectedWorldTerrainResidency(),
       importSelectedWorldTerrainHeightmap: (file, endianness, heightMin, heightMax) =>
         this.app.importSelectedWorldTerrainHeightmap(file, endianness, heightMin, heightMax),
       exportSelectedWorldTerrainHeightmap: () => this.app.exportSelectedWorldTerrainHeightmap(),

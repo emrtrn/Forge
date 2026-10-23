@@ -29,8 +29,8 @@ export function migratedTerrainPath(path: string): string {
 
 /**
  * The 1×1 editing adapter. A multi-tile World Terrain never comes through here:
- * it is drawn from its tiles (`worldTerrainActor.ts`) and stays view-only until
- * multi-tile sculpt/paint, so this refuses rather than flattening or discarding tiles.
+ * it is drawn from and edited on its tiles (`worldTerrainActor.ts`,
+ * `terrainEdit.ts`), so this refuses rather than flattening or discarding tiles.
  */
 export function terrainDocumentToLandscape({ def, tiles }: WorldTerrainDocument): ForgeLandscapeData {
   if (isMultiTileTerrain(def) || !tiles.has("0_0")) {

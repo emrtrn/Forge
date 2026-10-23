@@ -485,48 +485,13 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
 
   bindPositionRotation(options);
   bindNameAndLock(options);
-
-  body.querySelectorAll<HTMLButtonElement>("[data-landscape-mode]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const editMode = button.dataset.landscapeMode as LandscapeEditMode | undefined;
-      if (!editMode || !LANDSCAPE_EDIT_MODES.includes(editMode)) return;
-      options.setLandscapeSculptSettings({ editMode });
-      renderLandscapeDetails(options);
-    });
-  });
-
-  body.querySelectorAll<HTMLButtonElement>("[data-landscape-tool]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const tool = button.dataset.landscapeTool as LandscapeSculptTool | undefined;
-      if (!tool || !LANDSCAPE_SCULPT_TOOLS.includes(tool)) return;
-      options.setLandscapeSculptSettings({ tool });
-      renderLandscapeDetails(options);
-    });
-  });
+  bindLandscapeBrushControls(options);
 
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-tool]").forEach((button) => {
     button.addEventListener("click", () => {
       const splineTool = button.dataset.landscapeSplineTool as LandscapeSplineTool | undefined;
       if (!splineTool || !LANDSCAPE_SPLINE_TOOLS.includes(splineTool)) return;
       options.setLandscapeSculptSettings({ splineTool });
-      renderLandscapeDetails(options);
-    });
-  });
-
-  body.querySelectorAll<HTMLButtonElement>("[data-landscape-paint-tool]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const paintTool = button.dataset.landscapePaintTool as LandscapePaintTool | undefined;
-      if (!paintTool || !LANDSCAPE_PAINT_TOOLS.includes(paintTool)) return;
-      options.setLandscapeSculptSettings({ paintTool });
-      renderLandscapeDetails(options);
-    });
-  });
-
-  body.querySelectorAll<HTMLButtonElement>("[data-landscape-layer]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const activeLayerId = button.dataset.landscapeLayer;
-      if (!activeLayerId) return;
-      options.setLandscapeSculptSettings({ activeLayerId });
       renderLandscapeDetails(options);
     });
   });
@@ -658,16 +623,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     renderLandscapeDetails(options);
   });
 
-  body.querySelector<HTMLSelectElement>("[data-landscape-view]")?.addEventListener(
-    "change",
-    (event) => {
-      const viewMode = (event.currentTarget as HTMLSelectElement).value as LandscapeViewMode;
-      if (!LANDSCAPE_VIEW_MODES.includes(viewMode)) return;
-      options.setLandscapeSculptSettings({ viewMode });
-      renderLandscapeDetails(options);
-    },
-  );
-
   body
     .querySelector<HTMLSelectElement>("[data-landscape-layer-material]")
     ?.addEventListener("change", (event) => {
@@ -682,16 +637,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   body.querySelector<HTMLButtonElement>("[data-landscape-fill]")?.addEventListener("click", () => {
     options.fillSelectedLandscapeLayer(options.getLandscapeSculptSettings().activeLayerId);
     renderLandscapeDetails(options);
-  });
-
-  body.querySelectorAll<HTMLInputElement>("[data-landscape-number]").forEach((input) => {
-    input.addEventListener("change", () => {
-      const key = input.dataset.landscapeNumber as keyof LandscapeSculptSettings | undefined;
-      const value = Number(input.value);
-      if (!key || !Number.isFinite(value)) return;
-      options.setLandscapeSculptSettings({ [key]: value } as Partial<LandscapeSculptSettings>);
-      renderLandscapeDetails(options);
-    });
   });
 
   body.querySelector<HTMLButtonElement>("[data-river-water-create]")?.addEventListener("click", () => {
@@ -870,18 +815,93 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
 }
 
 /**
+ * Mode, tool, layer, brush and view controls shared by the Landscape and World
+ * Terrain panels; every change re-renders whichever panel is showing.
+ */
+function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
+  const { body } = options;
+  const update = (patch: Partial<LandscapeSculptSettings>): void => {
+    options.setLandscapeSculptSettings(patch);
+    renderLandscapeDetails(options);
+  };
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const editMode = button.dataset.landscapeMode as LandscapeEditMode | undefined;
+      if (editMode && LANDSCAPE_EDIT_MODES.includes(editMode)) update({ editMode });
+    });
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-tool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tool = button.dataset.landscapeTool as LandscapeSculptTool | undefined;
+      if (tool && LANDSCAPE_SCULPT_TOOLS.includes(tool)) update({ tool });
+    });
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-paint-tool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const paintTool = button.dataset.landscapePaintTool as LandscapePaintTool | undefined;
+      if (paintTool && LANDSCAPE_PAINT_TOOLS.includes(paintTool)) update({ paintTool });
+    });
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-layer]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const activeLayerId = button.dataset.landscapeLayer;
+      if (activeLayerId) update({ activeLayerId });
+    });
+  });
+  body.querySelector<HTMLSelectElement>("[data-landscape-view]")?.addEventListener("change", (event) => {
+    const viewMode = (event.currentTarget as HTMLSelectElement).value as LandscapeViewMode;
+    if (LANDSCAPE_VIEW_MODES.includes(viewMode)) update({ viewMode });
+  });
+  body.querySelectorAll<HTMLInputElement>("[data-landscape-number]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.landscapeNumber as keyof LandscapeSculptSettings | undefined;
+      const value = Number(input.value);
+      if (key && Number.isFinite(value)) update({ [key]: value } as Partial<LandscapeSculptSettings>);
+    });
+  });
+}
+
+/**
  * A Landscape that references a multi-tile World Terrain (OPEN_WORLD_PLAN Faz 2):
- * shown, picked and collided, but its tools are not ported to tiles yet, so the
- * panel says so instead of offering sculpt/paint/spline/layer controls that
- * would do nothing. Placement comes from the terrain definition.
+ * sculpt and paint work across tiles; splines, layer materials, resizing and
+ * heightmap import are not ported to tiles yet, so the panel leaves them out
+ * and says so. Placement comes from the terrain definition.
  */
 function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain: WorldTerrainDetailsView): void {
   const { body, selection } = options;
   options.setDetailsScale([1, 1, 1]);
   const lockedAttr = selection.locked ? "disabled" : "";
   const settings = options.getLandscapeSculptSettings();
+  const layers = options.getSelectedLandscapeLayers();
   const metres = (value: number) => `${Number(value.toFixed(2))} m`;
   const holes = terrain.tilesX * terrain.tilesZ - terrain.tileCount;
+  const toolsMarkup = settings.editMode === "paint"
+    ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
+        ${LANDSCAPE_PAINT_TOOLS.map((tool) => `<button type="button" data-landscape-paint-tool="${tool}" class="${
+          settings.paintTool === tool ? "active" : ""
+        }" ${lockedAttr}>${formatLandscapePaintTool(tool)}</button>`).join("")}
+      </div>
+      <div class="detail-subsection-title">Layer</div>
+      <div class="landscape-layer-list">
+        ${layers.map((layer) => `<button type="button" data-landscape-layer="${escapeHtml(layer.id)}" class="${
+          settings.activeLayerId === layer.id ? "active" : ""
+        }" ${lockedAttr}>
+          <span class="landscape-layer-swatch" style="background:${escapeHtml(layer.color)}"></span>
+          <span>${escapeHtml(layer.baseName)}</span>
+        </button>`).join("")}
+      </div>`
+    : settings.editMode === "sculpt"
+    ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
+        ${LANDSCAPE_SCULPT_TOOLS.map((tool) => `<button type="button" data-landscape-tool="${tool}" class="${
+          settings.tool === tool ? "active" : ""
+        }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`).join("")}
+      </div>
+      <label class="detail-row">
+        <span>Flatten Target</span>
+        <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
+          value="${settings.flattenTargetHeight}" ${lockedAttr} />
+      </label>`
+    : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on multi-tile World Terrain yet.</div>`;
   body.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
@@ -902,7 +922,31 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-view-only>View-only in this build: Sculpt, Paint, Splines, Layers and Foliage painting are not available for multi-tile World Terrain yet. Save keeps the terrain files unchanged.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, layer materials, resizing, heightmap import and Foliage painting are not available for multi-tile World Terrain yet.</div>
+      </div>
+      <div class="detail-section" data-world-terrain-tools>
+        <div class="detail-section-title">Landscape Mode</div>
+        <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape edit mode">
+          ${(["sculpt", "paint"] as const).map((mode) => `<button type="button" data-landscape-mode="${mode}" class="${
+            settings.editMode === mode ? "active" : ""
+          }" ${lockedAttr}>${mode === "sculpt" ? "Sculpt" : "Paint"}</button>`).join("")}
+        </div>
+        ${toolsMarkup}
+        <label class="detail-row">
+          <span>Brush Size</span>
+          <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
+            value="${settings.brushSize}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Strength</span>
+          <input data-landscape-number="strength" type="number" min="0.01" max="2" step="0.01"
+            value="${settings.strength}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Falloff</span>
+          <input data-landscape-number="falloff" type="number" min="0.25" max="8" step="0.25"
+            value="${settings.falloff}" ${lockedAttr} />
+        </label>
         <label class="detail-row">
           <span>View</span>
           <select data-landscape-view>
@@ -925,12 +969,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
     `;
 
   bindNameAndLock(options);
-  body.querySelector<HTMLSelectElement>("[data-landscape-view]")?.addEventListener("change", (event) => {
-    const viewMode = (event.currentTarget as HTMLSelectElement).value as LandscapeViewMode;
-    if (!LANDSCAPE_VIEW_MODES.includes(viewMode)) return;
-    options.setLandscapeSculptSettings({ viewMode });
-    renderLandscapeDetails(options);
-  });
+  bindLandscapeBrushControls(options);
   body.querySelector<HTMLInputElement>("[data-landscape-collision]")?.addEventListener("change", (event) => {
     options.setSelectedLandscape({ collision: (event.currentTarget as HTMLInputElement).checked });
   });

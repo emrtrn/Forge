@@ -7,7 +7,8 @@ import { createFlatLandscapeData } from "../../engine/scene/landscape";
 import type { LayoutLandscape, Vec3 } from "../../engine/scene/layout";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { captureTerrainSnapshot } from "../../engine/terrain/terrainLandscapeBridge";
-import type { WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
+import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
+import { validateTerrainTile, type WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
 import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { createFlatTerrainTile, terrainTileHeightRange, tileKey, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import {
@@ -18,6 +19,7 @@ import {
   worldTerrainExtent,
   worldTerrainPlacementIssues,
 } from "../../engine/terrain/worldTerrainActor";
+import { captureWorldTerrainSave } from "../../engine/terrain/worldTerrainSave";
 import { fetchLandscapeDocument, fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
 
 type Check = (label: string, fn: () => void) => void;
@@ -174,6 +176,53 @@ export function registerWorldTerrainActorTests(check: Check): void {
       assert.ok(actual !== null && Math.abs(actual - expected) < 1e-4, `${x},${z}: ${actual} vs ${expected}`);
     }
     assert.equal(surfaceAt(10 + 2.5 * Q * SPACING, -30 + 1.5 * Q * SPACING), null);
+  });
+}
+
+export function registerWorldTerrainSaveTests(check: Check): void {
+  check("world terrain save: a dab across a seam saves just the touched tiles, each in its loaded format, and they validate", () => {
+    const document = worldDocument();
+    const world = createTerrainEditWorld(document.def, document.tiles.values());
+    // On the x seam between tiles (0, 0) and (1, 0), well inside z of row 0.
+    const seamX = document.def.origin[0] + Q * SPACING;
+    const { dirty } = applyTerrainBrush(world, { x: seamX, z: -30 + 10 * SPACING, radius: 4, strength: 0.5, falloff: 1, mode: "raise" });
+    assert.deepEqual([...dirty.keys()].sort(), ["0_0", "1_0"]);
+    const formats = new Map([["0_0", "u16" as const], ["1_0", "f32" as const]]);
+    const snapshot = captureWorldTerrainSave(world, dirty.keys(), formats);
+    assert.equal(snapshot.widened, false);
+    assert.deepEqual(snapshot.tiles.map((tile) => tile.key), ["0_0", "1_0"]);
+    assert.equal(snapshot.def.heightMin, document.def.heightMin);
+    for (const { key, bytes } of snapshot.tiles) {
+      const decoded = validateTerrainTile(snapshot.def, key, bytes);
+      assert.equal(decoded.heightFormat, formats.get(key));
+      const edited = world.tiles.get(key)!.heights;
+      const step = decoded.heightFormat === "u16" ? (snapshot.def.heightMax - snapshot.def.heightMin) / 65535 : 0;
+      decoded.heights.forEach((height, index) => assert.ok(Math.abs(height - edited[index]!) <= step / 2 + 1e-6, `${key}[${index}]`));
+    }
+    // Seam copies agree, so the terrain stays watertight after a reload.
+    const left = world.tiles.get("0_0")!;
+    const right = world.tiles.get("1_0")!;
+    for (let z = 0; z <= Q; z += 1) assert.equal(left.heights[z * (Q + 1) + Q], right.heights[z * (Q + 1)]);
+    // The caller's definition is not touched; the snapshot carries the refreshed summaries.
+    assert.notEqual(snapshot.def, world.def);
+    assert.ok(snapshot.def.tiles.find((tile) => tile.key === "0_0")!.maxHeight >= document.def.tiles.find((tile) => tile.key === "0_0")!.maxHeight);
+  });
+
+  check("world terrain save: leaving the encoding range widens it to whole metres and re-encodes every tile", () => {
+    const document = worldDocument();
+    const world = createTerrainEditWorld(document.def, document.tiles.values());
+    const centre = { x: 10 + 1.5 * Q * SPACING, z: -30 + 0.5 * Q * SPACING };
+    for (let dab = 0; dab < 40; dab += 1) applyTerrainBrush(world, { ...centre, radius: 3, strength: 2, falloff: 1, mode: "raise" });
+    const peak = Math.max(...world.tiles.get("1_0")!.heights);
+    assert.ok(peak > document.def.heightMax, `peak ${peak}`);
+    const snapshot = captureWorldTerrainSave(world, ["1_0"], new Map());
+    assert.equal(snapshot.widened, true);
+    assert.equal(snapshot.def.heightMax, Math.ceil(peak) + 1);
+    assert.equal(snapshot.def.heightMin, document.def.heightMin);
+    assert.deepEqual(snapshot.tiles.map((tile) => tile.key), [...document.tiles.keys()].sort());
+    for (const { key, bytes } of snapshot.tiles) assert.equal(validateTerrainTile(snapshot.def, key, bytes).heightFormat, "f32");
+    // The edit world keeps its range until the save is acknowledged.
+    assert.equal(world.def.heightMax, document.def.heightMax);
   });
 }
 

@@ -173,7 +173,7 @@ export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObjec
  * Builds a multi-tile World Terrain's group, in the same frame as a 1×1
  * Landscape: the group sits at the grid centre (`worldTerrainActorPosition`,
  * so `def.origin` is the world position of tile (0, 0)'s min corner) and is
- * never rotated. Rebuild it to change appearance; there is no editing path yet.
+ * never rotated. Edits go through `updateWorldTerrainObjectTiles`.
  */
 export function createWorldTerrainObject(item: WorldTerrainRenderItem): LandscapeObject {
   const { def, tiles } = item.document;
@@ -225,6 +225,28 @@ export function updateLandscapeObjectGeometry(
   if (!terrain || !source) return;
   terrain.updateTile(tileKey(0, 0), source.refresh(dirty));
   terrain.setAppearance(viewMode, terrainActiveLayer(data.layers, activeLayerId), terrainLayerColors(data.layers, colors));
+}
+
+/**
+ * Re-reads edited World Terrain tiles (tile-local inclusive vertex rectangles,
+ * as `applyTerrainBrush` reports them). The group draws the same tile objects
+ * the editor edits, so this only refreshes textures, bounds and picking.
+ */
+export function updateWorldTerrainObjectTiles(object: LandscapeObject, dirty: ReadonlyMap<string, LandscapeDirtyBounds>): void {
+  const terrain = landscapeTerrain(object);
+  if (!terrain) return;
+  for (const [key, rect] of dirty) terrain.updateTile(key, rect);
+}
+
+/** Debug view, active layer and layer colours of a World Terrain group; no texture work. */
+export function updateWorldTerrainAppearance(
+  object: LandscapeObject,
+  layers: readonly { id: string; color?: string }[],
+  viewMode: LandscapeViewMode = "lit",
+  activeLayerId: string = LANDSCAPE_DEFAULT_LAYERS[0]!.id,
+  colors?: LandscapeLayerColors,
+): void {
+  landscapeTerrain(object)?.setAppearance(viewMode, terrainActiveLayer(layers, activeLayerId), terrainLayerColors(layers, colors));
 }
 
 /** The GPU terrain drawing a landscape group. */

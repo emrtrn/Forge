@@ -3,7 +3,7 @@ import { foliageDataPath, type LayoutFoliageData } from "@engine/scene/foliage";
 import { meshPaintDataPath, type LayoutMeshPaintData } from "@engine/scene/meshPaint";
 import type { LayoutSavePayload, LayoutSaver, LayoutSaveResult } from "@/scene/SceneApp";
 import { saveMeshPaintData } from "./meshPaintStore";
-import { captureTerrainWrite } from "./terrainStore";
+import { captureTerrainWrite, type WorldTerrainEditSession } from "./terrainStore";
 import { levelTerrainPath } from "@engine/terrain/terrainTypes";
 import { terrainTransformNeedsSave } from "@engine/terrain/terrainLandscapeBridge";
 
@@ -96,11 +96,14 @@ export interface EditorSaveSource {
   readonly scenePath: string;
   readonly landscapeData: ReadonlyMap<string, ForgeLandscapeData>;
   /**
-   * Landscape actors referencing a multi-tile World Terrain. They are view-only
-   * in this build, so Save keeps their `dataRef` exactly as authored: no fork
-   * into the level folder and no definition/tile write.
+   * Landscape actors referencing a multi-tile World Terrain. Save keeps their
+   * `dataRef` exactly as authored (no fork into the level folder) and writes
+   * only their edited tiles plus the definition, in place, through
+   * `worldTerrainSessions`.
    */
   readonly worldTerrainIds: ReadonlySet<string>;
+  /** Edit sessions of the World Terrain actors, by actor id; absent when nothing can be edited. */
+  readonly worldTerrainSessions?: ReadonlyMap<string, WorldTerrainEditSession>;
   readonly foliageData: LayoutFoliageData;
   readonly meshPaintData: LayoutMeshPaintData;
 }
@@ -180,7 +183,8 @@ export class EditorSaveSession {
       return;
     }
     const pending = this.foliageSaveRevision.dirty || this.meshPaintSaveRevision.dirty ||
-      [...this.landscapeSaveRevisions.values()].some((revision) => revision.dirty);
+      [...this.landscapeSaveRevisions.values()].some((revision) => revision.dirty) ||
+      [...this.source().worldTerrainSessions?.values() ?? []].some((session) => session.dirty);
     this.onStatus(
       pending
         ? `Saved ${result.path ?? "layout"} snapshot; newer sidecar edits are still pending. Save again to finish.`
@@ -190,7 +194,12 @@ export class EditorSaveSession {
   }
 
   saveLandscapeData(id: string): Promise<void> {
-    if (this.source().worldTerrainIds.has(id)) return Promise.resolve();
+    if (this.source().worldTerrainIds.has(id)) {
+      return this.queue.save(() => {
+        const step = this.captureLandscapeSave(this.source(), id);
+        return step ? [step] : [];
+      });
+    }
     const actor = this.source().layout.landscapes?.find((entry) => entry.id === id);
     // A direct first sidecar save must persist its new level reference as well.
     if (actor && actor.dataRef !== levelTerrainPath(this.source().scenePath, actor.id)) return this.saveLayout();
@@ -201,7 +210,7 @@ export class EditorSaveSession {
   }
 
   private captureLandscapeSave(source: EditorSaveSource, id: string): EditorSaveStep | null {
-    if (source.worldTerrainIds.has(id)) return null;
+    if (source.worldTerrainIds.has(id)) return source.worldTerrainSessions?.get(id)?.capture() ?? null;
     const actor = source.layout.landscapes?.find((entry) => entry.id === id);
     const data = source.landscapeData.get(id);
     const revision = this.landscapeSaveRevisions.get(id);

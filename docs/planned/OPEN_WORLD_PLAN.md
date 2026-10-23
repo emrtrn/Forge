@@ -732,6 +732,7 @@ Doğrulama (2026-10-22):
       tıklama), foliage boyama ve Details'teki katman/spline panelleri kapalı ve
       kullanıcıya durum mesajı/ipucu gösteriyor; Details yerine tile sayısı,
       boyut, tanım dosyası, View ve Collision gösteren görünüm-yalnız panel.
+      *(Sculpt/paint sonradan açıldı; aşağıdaki Sculpt/paint maddesine bakın.)*
       Landscape foliage kuralları ve River Water çok-tile'da üretilmez
       (konsol uyarısı); spline'lar çizilmez. Kayıt: `EditorSaveSource.worldTerrainIds`
       bu actor'leri migrasyon ve terrain yazımından çıkarır, `dataRef` olduğu
@@ -768,6 +769,43 @@ Doğrulama (2026-10-22):
       kenar/köşe senkronu, 8 katman RGBA8 normalizasyonu, dar kirli dikdörtgen,
       alanla orantılı undo/redo ve min/max güncellemesi testli. Kalan: editör
       bağlantısı, GPU yüklemeleri ve heightmap import/export.*
+      *Editöre bağlandı (2026-10-23):* çok-tile World Terrain'de Sculpt
+      (raise/lower/smooth/flatten) ve Paint (paint/erase/smooth weights)
+      çalışıyor. Editör yüklemede tile'ları `createTerrainEditWorld` ile tek
+      kopyaya alıyor; renderer aynı tile nesnelerini çizdiği için dab veri
+      kopyalamıyor, yalnız `applyTerrainBrush`'ın kirli tile dikdörtgenleri
+      `TerrainRenderer.updateTile`'a gidiyor (komşu dikiş normalleri, düğüm
+      sınırları, global harita ve picking dahil). Fırça yüksekliği ve Flatten
+      hedefi datum'a (`origin[1]`) göre, 1×1'deki actor-yerel Y ile aynı anlam.
+      Undo bir stroke'un dab yamalarını (`TerrainUndoPatch`) saklıyor; belge
+      nesnesine bağlı olduğu için silme + undo kaydedilmemiş düzenlemeleri
+      koruyor, yeniden yükleme sonrası eski komut hiçbir şey yapmıyor.
+      **Kayıt:** `WorldTerrainEditSession` (`src/editor/terrainStore.ts`) tile
+      başına revizyon tutar; Save yalnız kirli tile'ları, her birini yüklendiği
+      yükseklik formatında (`u16`/`f32`), sonra tanımı yazar
+      (`captureWorldTerrainSave`, `engine/terrain/worldTerrainSave.ts`). Yazım
+      sırasında yeniden düzenlenen tile kirli kalır. Düzenleme tanımın
+      `heightMin..heightMax` aralığından çıkarsa aralık tam metreye ve 1 m
+      payla genişler ve **bütün** tile'lar yeniden yazılır (tile başlıkları
+      tanımla eşleşmek zorunda); `u16` tile'lar bu durumda yeni adımla yeniden
+      nicemlenir (yarım adım ≈ 4 mm/512 m aralık). **Karar:** çok-tile arazi
+      `dataRef`'inde yerinde yazılır, 1×1'deki gibi seviye klasörüne
+      çatallanmaz — bütün tile grid'ini kopyalamak büyük dünyada pahalı; aynı
+      tanımı paylaşan iki seviye düzenlemeyi birlikte görür. Details paneli
+      Sculpt/Paint araçlarını, katman listesini, fırça ayarlarını ve View'ı
+      gösteriyor. **Hâlâ kapalı:** spline'lar (uyarı), katman materyali
+      atama, Fill Layer, yeniden boyutlandırma, heightmap import/export ve
+      foliage boyama. **Açık (perf):** GPU'ya dab başına tile katmanının
+      tamamı ve global haritanın tamamı yükleniyor (CPU normalleri
+      dikdörtgenle sınırlı); dikişe değen dab komşu tile'ın normallerini
+      baştan hesaplıyor. Doğrulama: `tests/engine/worldTerrainActor.test.ts`
+      (dikiş üstü dab yalnız iki tile'ı, formatıyla ve doğrulanarak kaydeder;
+      aralık genişlemesi), `editorSaveCoordinator` (yalnız kirli tile + tanım,
+      yerinde; yazım sırasında yeni düzenleme kirli kalır) ve
+      `tests/smoke/terrain-multitile.spec.ts` (dikiş üstünde Raise stroke →
+      autosave yalnız (0,0) ve (1,0)'ı yazar, dikiş satırları eşit; undo iki
+      tile'ın baytlarını birebir geri getirir; redo sonrası Play'de pawn
+      arazide).
 - [ ] Heightmap import/export: 16-bit PNG ve RAW, dünya boyunda; tile'lara
       bölme `terrainImport.ts`'de (büyük import worker'da, Faz 4'ten sonra).
       *Saf RAW import/export + tile bölme hazır (2026-10-23): little/big-endian

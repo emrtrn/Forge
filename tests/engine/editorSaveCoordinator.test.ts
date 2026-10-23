@@ -6,6 +6,9 @@ import { EditorSaveCoordinator, EditorSaveError, EditorSaveSession, SaveRevision
 import type { LayoutSaver } from "../../src/scene/SceneApp";
 import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { validateTerrainPath } from "../../tools/terrainSaveValidator";
+import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
+import { createFlatTerrainTile, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
+import { WorldTerrainEditSession } from "../../src/editor/terrainStore";
 
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 type Sidecar = "landscape" | "foliage" | "meshPaint";
@@ -388,5 +391,52 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     assert.equal(f.host.layout.landscapes!.find((entry) => entry.id === "world")!.dataRef, shared);
     assert.ok(!requests.some((url) => url.includes("terrain")), requests.join(", "));
     assert.equal(f.statuses.at(-1)?.tone, "success");
+  });
+
+  await checkAsync("editor save: an edited World Terrain writes only its dirty tiles, then its definition, in place", async () => {
+    const f = fixture();
+    const shared = "worlds/big.terrain.json";
+    const def: WorldTerrainDef = {
+      schema: 1, type: "worldTerrain", name: "Big", tileQuads: 32, spacing: 1, tilesX: 2, tilesZ: 1, origin: [0, 0, 0],
+      heightMin: -8, heightMax: 8, layers: [{ id: "grass", name: "Grass", color: "#4a7a3a" }],
+      tiles: [{ key: "0_0", minHeight: 0, maxHeight: 0 }, { key: "1_0", minHeight: 0, maxHeight: 0 }], collision: true,
+    };
+    const world = createTerrainEditWorld(def, [createFlatTerrainTile(def, 0, 0), createFlatTerrainTile(def, 1, 0)]);
+    const session = new WorldTerrainEditSession(shared, world, new Map([["1_0", "u16"]]));
+    f.host.layout.landscapes!.push({ id: "world", name: "World", position: [32, 0, 16], dataRef: shared });
+    Object.assign(f.host, { worldTerrainIds: new Set(["world"]), worldTerrainSessions: new Map([["world", session]]) });
+    // Inside tile 1_0 only, clear of the x = 32 seam.
+    const { dirty } = applyTerrainBrush(world, { x: 48, z: 16, radius: 3, strength: 2, falloff: 1, mode: "raise" });
+    assert.deepEqual([...dirty.keys()], ["1_0"]);
+    session.markTiles(dirty.keys());
+    const requests: { url: string; body: unknown }[] = [];
+    let editWhileWriting = true;
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("/__save-terrain")) {
+        requests.push({ url, body: url.includes("-tile") ? decodeTerrainTile(new Uint8Array(init!.body as ArrayBuffer)) : JSON.parse(String(init!.body)) });
+        if (url.includes("-tile") && editWhileWriting) session.markTiles(["1_0"]);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return f.fetch(input, init);
+    }, async () => {
+      await f.host.saveLayout();
+      // The tile was edited again while it was being written: still dirty.
+      assert.equal(session.dirty, true);
+      assert.equal(f.statuses.at(-1)?.tone, "warning");
+      editWhileWriting = false;
+      await f.host.saveLandscapeData("world");
+    });
+    assert.equal(session.dirty, false);
+    assert.equal(requests.length, 4);
+    const [tileRequest, defRequest] = requests as [{ url: string; body: ReturnType<typeof decodeTerrainTile> }, { url: string; body: { path: string; terrain: WorldTerrainDef } }];
+    assert.equal(tileRequest.url, `/__save-terrain-tile?path=${encodeURIComponent(shared)}&key=1_0`);
+    assert.equal(tileRequest.body.heightFormat, "u16");
+    assert.ok(Math.abs(Math.max(...tileRequest.body.heights) - 2) < 16 / 65535, "the raised peak survives u16 encoding");
+    assert.equal(defRequest.url, "/__save-terrain");
+    assert.equal(defRequest.body.path, shared);
+    assert.equal(defRequest.body.terrain.tiles.find((tile) => tile.key === "1_0")!.maxHeight, 2);
+    assert.equal(defRequest.body.terrain.tiles.find((tile) => tile.key === "0_0")!.maxHeight, 0);
+    assert.equal(f.host.layout.landscapes!.find((entry) => entry.id === "world")!.dataRef, shared);
   });
 }

@@ -9,7 +9,7 @@ import { parseTileKey, terrainTileWorldBounds, terrainTileWorldSize, type Terrai
  * A Landscape actor that references a multi-tile World Terrain
  * (OPEN_WORLD_PLAN Faz 2). Such a terrain skips the legacy
  * `ForgeLandscapeData` adapter: it is drawn straight from its tiles, collides
- * per tile and is view-only in the editor until multi-tile sculpt/paint lands.
+ * per tile and is sculpted/painted in the editor through `terrainEdit.ts`.
  *
  * Frame: `def.origin` is the world position of tile (0, 0)'s min corner at the
  * height datum, and the actor sits at the centre of the whole tile grid — the

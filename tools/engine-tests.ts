@@ -1063,6 +1063,7 @@ import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.te
 import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
 import { registerTerrainRuntimeStreamingTests } from "../tests/engine/terrainRuntimeStreaming.test";
 import { registerTestWorldTests } from "../tests/engine/testWorld.test";
+import { registerTerrainRepairTests } from "../tests/engine/terrainRepair.test";
 
 /**
  * The three entry points every check in this suite goes through.
@@ -1196,6 +1197,7 @@ registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);
 await registerTerrainRuntimeStreamingTests(check, checkAsync);
 registerTestWorldTests(check);
+registerTerrainRepairTests(check);
 registerTerrainDocumentTests(check);
 await registerTerrainDocumentAsyncTests(checkAsync);
 registerWorldTerrainActorTests(check);

@@ -159,6 +159,12 @@ engine/editor.
   Editor saves migrate legacy sidecars tile → global map → definition → level reference,
   preserving the old file. Phase 1 bridges 1×1 terrain to the existing mesh/brush
   path; multi-tile rendering is Phase 2 and currently rejects explicitly.
+  A tile rewritten after its definition was committed (overlapping saves) leaves
+  the `minHeight..maxHeight` summary stale and the editor refuses to load the level
+  (`terrain tile K samples … exceed declared bounds`, shown as an editor toast).
+  `npm run terrain:repair -- <path under public/>` reports it; add `--write` to
+  recompute the summaries (and rebuild the global map) from the tiles, which stay
+  as authored, or `--check` for a non-zero exit in scripts.
   Rotation/non-square/resampling adaptations require explicit resolution rather
   than silently changing an authored scene during Save.
 

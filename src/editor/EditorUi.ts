@@ -191,6 +191,7 @@ const CONTENT_NEW_AI_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string 
 
 /** Project-scoped browser storage key prefix for Content Drawer navigation state. */
 const CONTENT_DRAWER_LAST_FOLDER_STORAGE_PREFIX = "forge.editor.content-drawer.last-folder.v1:";
+const STATUS_TOAST_WARNING_MS = 10_000;
 
 const MATERIAL_PRESET_LABELS: Record<ForgeMaterialPreset, string> = {
   standard: "Standard Surface",
@@ -378,6 +379,9 @@ export class EditorUi {
   private foliageBody!: HTMLDivElement;
   private inspectorTab: InspectorTab = "details";
   private statusText: HTMLElement;
+  private statusToast: HTMLElement;
+  private statusToastText: HTMLElement;
+  private statusToastTimer = 0;
   private undoButton: HTMLButtonElement;
   private redoButton: HTMLButtonElement;
   private toolButtons = new Map<EditorTool, HTMLButtonElement>();
@@ -682,6 +686,10 @@ export class EditorUi {
       <footer class="editor-status" hidden>
         <span data-status data-testid="editor-status">Ready</span>
       </footer>
+      <div class="editor-toast" data-status-toast role="alert" hidden>
+        <span class="editor-toast-text" data-status-toast-text data-testid="editor-toast"></span>
+        <button type="button" class="editor-toast-close" data-status-toast-close aria-label="Dismiss">✕</button>
+      </div>
     `;
 
     const overlay = document.getElementById("ui-overlay");
@@ -724,6 +732,9 @@ export class EditorUi {
     this.foliageBody = requireElement(this.root, "[data-foliage-body]");
     this.statusText = requireElement(this.root, "[data-status]");
     this.contentStatus = this.statusText;
+    this.statusToast = requireElement(this.root, "[data-status-toast]");
+    this.statusToastText = requireElement(this.root, "[data-status-toast-text]");
+    requireElement(this.root, "[data-status-toast-close]").addEventListener("click", () => this.hideStatusToast());
     this.undoButton = requireElement(this.root, '[data-action="undo"]');
     this.redoButton = requireElement(this.root, '[data-action="redo"]');
     const projectName = requireElement(this.root, "[data-project-name]");
@@ -1421,8 +1432,9 @@ export class EditorUi {
       await this.refreshAssetTree({ quiet: true });
       this.resetContentNavigationHistory(this.selectedFolder);
     } catch (error) {
-      this.contentStatus.textContent = error instanceof Error ? error.message : String(error);
-      this.setStatus(this.contentStatus.textContent, "error");
+      const message = error instanceof Error ? error.message : String(error);
+      projectName.textContent = "level failed to load";
+      this.setStatus(`Level failed to load: ${message}`, "error");
     }
   }
 
@@ -4950,6 +4962,26 @@ export class EditorUi {
   ): void {
     this.statusText.textContent = message;
     this.statusText.dataset.tone = tone;
+    // The status bar is hidden, so errors and warnings would otherwise vanish.
+    // Errors stay until dismissed; warnings fade on their own.
+    if (tone === "error" || tone === "warning") this.showStatusToast(message, tone);
+  }
+
+  private showStatusToast(message: string, tone: "warning" | "error"): void {
+    window.clearTimeout(this.statusToastTimer);
+    this.statusToastTimer = 0;
+    this.statusToastText.textContent = message;
+    this.statusToast.dataset.tone = tone;
+    this.statusToast.hidden = false;
+    if (tone === "warning") {
+      this.statusToastTimer = window.setTimeout(() => this.hideStatusToast(), STATUS_TOAST_WARNING_MS);
+    }
+  }
+
+  private hideStatusToast(): void {
+    window.clearTimeout(this.statusToastTimer);
+    this.statusToastTimer = 0;
+    this.statusToast.hidden = true;
   }
 }
 

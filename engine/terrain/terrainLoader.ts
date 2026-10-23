@@ -26,13 +26,34 @@ export function validateDecodedTerrainTile(def: WorldTerrainDef, key: string, ti
   }
   if (!tile.heights.every(Number.isFinite)) throw new Error(`terrain tile ${key} has non-finite heights`);
   const range = terrainTileHeightRange(tile);
-  // Uint16 quantization can expand the authored bounds by half a step.
-  const tolerance = tile.heightFormat === "u16" ? (tile.heightMax - tile.heightMin) / 65535 + 1e-4 : 1e-4;
-  if (range.min < summary.minHeight - tolerance || range.max > summary.maxHeight + tolerance ||
-      range.min < def.heightMin - tolerance || range.max > def.heightMax + tolerance) {
-    throw new Error(`terrain tile ${key} samples exceed declared bounds`);
+  const tolerance = terrainTileBoundsTolerance(tile);
+  if (range.min < def.heightMin - tolerance || range.max > def.heightMax + tolerance) {
+    throw new Error(`terrain tile ${key} samples ${formatRange(range)} exceed the definition's encoding range ${def.heightMin}..${def.heightMax}`);
+  }
+  if (terrainTileSummaryDrifted(summary, range, tolerance)) {
+    // A tile rewritten after the definition was committed (overlapping saves) leaves the summary stale.
+    throw new Error(
+      `terrain tile ${key} samples ${formatRange(range)} exceed declared bounds ${formatRange({ min: summary.minHeight, max: summary.maxHeight })}; `
+      + `the summary is stale. Fix it with: npm run terrain:repair -- <terrain.json> --write`,
+    );
   }
   return tile;
+}
+
+/** Uint16 quantization can expand the authored bounds by half a step. */
+export function terrainTileBoundsTolerance(tile: Pick<DecodedTerrainTile, "heightFormat" | "heightMin" | "heightMax">): number {
+  return tile.heightFormat === "u16" ? (tile.heightMax - tile.heightMin) / 65535 + 1e-4 : 1e-4;
+}
+
+/** True when the tile's real samples reach outside the definition's `minHeight..maxHeight` summary. */
+export function terrainTileSummaryDrifted(
+  summary: { minHeight: number; maxHeight: number }, range: { min: number; max: number }, tolerance: number,
+): boolean {
+  return range.min < summary.minHeight - tolerance || range.max > summary.maxHeight + tolerance;
+}
+
+function formatRange(range: { min: number; max: number }): string {
+  return `${Number(range.min.toFixed(4))}..${Number(range.max.toFixed(4))}`;
 }
 
 /** Eager by default; runtime streaming reads only the multi-tile definition/global map. */

@@ -10,6 +10,10 @@
     {
       "assetId": "shape-cube",
       "placements": []
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": []
     }
   ],
   "characters": [],
@@ -90,16 +94,5 @@
       "parallax": true
     }
   ],
-  "landscapes": [
-    {
-      "id": "landscape-1",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "dataRef": "assets/starter-content/Levels/LargeTerrain.landscapes/landscape-1.terrain.json",
-      "name": "World Terrain"
-    }
-  ]
+  "landscapes": []
 }

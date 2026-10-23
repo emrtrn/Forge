@@ -2345,6 +2345,60 @@
   display: none;
 }
 
+/* Errors/warnings from setStatus() surface here, since the status bar above is hidden. */
+.editor-toast {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(720px, calc(100vw - 48px));
+  padding: 10px 12px 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: #1b2128;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.editor-toast[hidden] {
+  display: none;
+}
+
+.editor-toast[data-tone="error"] {
+  border-left-color: #ff6b5e;
+  color: #ffb3ab;
+}
+
+.editor-toast[data-tone="warning"] {
+  border-left-color: #f1c36b;
+  color: #f1d9a0;
+}
+
+.editor-toast-text {
+  overflow-wrap: anywhere;
+}
+
+.editor-toast-close {
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.editor-toast-close:hover {
+  opacity: 1;
+}
+
 /* The drawer stays docked at the bottom and collapses to just its header
    strip; that header is the toggle. Height (not a slide) animates open/close so
    the collapsed strip is always present and clickable (no separate footer). */

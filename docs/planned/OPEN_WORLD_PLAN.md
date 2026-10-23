@@ -1,5 +1,25 @@
 # Açık Dünya Planı (World Partition + Terrain LOD)
 
+**2026-10-23 — Landscape genişletme:** Details → World Terrain → **Expand to
+World Terrain…**, mevcut 65/129/257 vertex'li kare ve rotasyonsuz Landscape'i
+seçilen tile konumunda koruyarak en az iki tile'a genişletir. Vertex üst sınırı
+yeni World Terrain oluşturma ile aynıdır. Spline veya bağlı River Water varsa
+işlem gerekçesiyle engellenir; resample yapılmaz. Yeni yükseklikler en yakın
+kenar/köşeden uzatılır; yeni boya katman 0'dır, ortak sınır vertex'leri özgün
+boyayı da korur. Origin eski tile'ın dünya konumunu ve Y datumunu korur;
+katmanlar/materyaller taşınır, dünya koordinatlı foliage yerleşimleri değişmez.
+Tek undo/redo komutu actor kimliğini korur; level'a ait terrain yolu kullanılır
+ve tüm tile'lar kayıt için kirli işaretlenir. Özgün tile doğrudan mevcut
+`legacyLandscapeToWorldTerrain` dönüşümünden alınır: “tam koruma”, aynı
+Landscape'in 1×1 kaydındaki Float32 yükseklikleri ve RGBA8 boya baytlarıyla
+birebir eşitliktir. Yeni tile'lar da Float32/RGBA8 kullanır; kayıt sonrası
+dikişleri aynı tutmak için tüm tile'lar mevcut `f32` biçiminde kaydedilir.
+FTIL biçimi değişmez. Dönüşüm eşitliği, kayıt/okuma, dikiş, konum ve fırça
+undo davranışı engine testlerinde, editör akışı `tests/smoke/terrain-expand.spec.ts`
+ile denetlenir. Bilinen yan etki: genişletip Save sonrası undo yapılırsa 1×1
+tanım yeniden yazılır, eklenen tile dosyaları `.tiles/` altında sahipsiz kalır
+(zararsız; budama yalnız referanssız tanımları siler).
+
 > Durum: **Faz 1 tamam** (2026-10-22,
 > dal `feat/open-world`). Ortak tanım/ikili loader, legacy okuma dönüşümü,
 > kayıt uçları ve editör migrasyonu bağlı. RuntimeParity ve iki starter fixture

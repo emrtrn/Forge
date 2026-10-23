@@ -146,6 +146,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   getSelectedLandscapeResolution: () => { verticesX: number; verticesZ: number; worldSize: number } | null;
   resampleSelectedLandscape: (preset: "small" | "medium" | "large") => void;
   setSelectedLandscapeWorldSize: (worldSize: number) => void;
+  expandLandscapeToWorldTerrain: () => void;
   getSelectedLandscapeImportHeight: () => number;
   setSelectedWorldWidget: (patch: {
     widget?: string;
@@ -336,6 +337,11 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       <div class="detail-section">
+        <div class="detail-section-title">World Terrain</div>
+        <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand to World Terrain…</button>
+        <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
+      </div>
+      <div class="detail-section">
         <div class="detail-section-title">Landscape Mode</div>
         <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape edit mode">
           ${LANDSCAPE_EDIT_MODES.map(
@@ -488,6 +494,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   bindPositionRotation(options);
   bindNameAndLock(options);
   bindLandscapeBrushControls(options);
+
+  body.querySelector<HTMLButtonElement>("[data-landscape-expand-world]")?.addEventListener("click", options.expandLandscapeToWorldTerrain);
 
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-tool]").forEach((button) => {
     button.addEventListener("click", () => {

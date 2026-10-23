@@ -21,6 +21,7 @@ import { decodeTerrainTile, type DecodedTerrainTile, type TerrainHeightFormat } 
 import { exportRawHeightmap, importRawHeightmap } from "@engine/terrain/terrainImport";
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
+import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@engine/terrain/worldTerrainExpand";
 import {
   terrainTileTrimesh,
   worldTerrainActorPosition,
@@ -9421,6 +9422,50 @@ export class SceneApp {
     });
     const [width, depth] = worldTerrainExtent(loaded.def);
     this.onStatus?.(`Added World Terrain: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m.`, "info");
+  }
+
+  /** The selected 1x1 source, for the editor-only expansion dialog. */
+  getSelectedLandscapeExpansionSource() {
+    if (this.selection?.kind !== "landscape") return null;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const data = actor ? this.landscapeData.get(actor.id) : undefined;
+    if (!actor || !data || this.worldTerrains.has(actor.id)) return null;
+    return { actor: cloneLandscape(actor), data, rivers: this.layout?.riverWaters ?? [] };
+  }
+
+  /** Replaces one authored grid in a single undo step; foliage is already world-space. */
+  expandSelectedLandscapeToWorldTerrain(id: string, options: WorldTerrainExpandOptions): void {
+    if (!this.activeProject || this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
+    const index = this.selection.index;
+    const source = this.getSelectedLandscapeExpansionSource();
+    if (!source || source.actor.id !== id) {
+      this.onStatus?.("Landscape selection changed; expansion cancelled.", "warning");
+      return;
+    }
+    const result = expandLandscapeToWorldTerrain(source.actor, source.data, options, source.rivers);
+    if (!result.ok) {
+      this.onStatus?.(result.reasons.join(" "), "error");
+      return;
+    }
+    const actor = cloneLandscape(source.actor);
+    actor.dataRef = levelTerrainPath(this.activeProject.manifest.editor.defaultScene, id);
+    actor.position = worldTerrainActorPosition(result.document.def);
+    delete actor.rotation;
+    // Match the 1x1 save and preserve identical shared heights after reload.
+    const document = this.editableWorldTerrain(actor.dataRef, result.document, "f32");
+    const replace = (next: LayoutLandscape, terrain: TerrainActorDocument): void => {
+      this.removeLandscapeAt(index);
+      this.insertLandscape(index, next, terrain);
+      this.select({ kind: "landscape", index });
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Expand to World Terrain",
+      redo: () => replace(actor, { kind: "world", document }),
+      undo: () => replace(source.actor, { kind: "landscape", data: source.data }),
+    });
+    this.onStatus?.(`Expanded Landscape to ${options.tilesX} × ${options.tilesZ} tiles.`, "info");
   }
 
   /** Removes a Landscape actor (undoable). */

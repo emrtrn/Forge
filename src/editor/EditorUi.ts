@@ -3750,6 +3750,14 @@ export class EditorUi {
     if (options) this.app.addWorldTerrain(options);
   }
 
+  private async expandLandscapeToWorldTerrain(): Promise<void> {
+    const source = this.app.getSelectedLandscapeExpansionSource();
+    if (!source) return;
+    const { pickWorldTerrainExpansion } = await import("@/editor/worldTerrainExpandDialog");
+    const options = await pickWorldTerrainExpansion(source.actor, source.data, source.rivers);
+    if (options) this.app.expandSelectedLandscapeToWorldTerrain(source.actor.id, options);
+  }
+
   /**
    * Material creation starts with a small preset picker. The preset only seeds
    * the JSON defaults; the upcoming Material Editor remains free to change them.
@@ -4314,6 +4322,7 @@ export class EditorUi {
       exportSelectedWorldTerrainHeightmap: () => this.app.exportSelectedWorldTerrainHeightmap(),
       resampleSelectedLandscape: (preset) => this.app.resampleSelectedLandscape(preset),
       setSelectedLandscapeWorldSize: (worldSize) => this.app.setSelectedLandscapeWorldSize(worldSize),
+      expandLandscapeToWorldTerrain: () => void this.expandLandscapeToWorldTerrain(),
       getSelectedLandscapeImportHeight: () => this.app.getSelectedLandscapeImportHeight(),
       setSelectedWorldWidget: (patch) => this.app.setSelectedWorldWidget(patch),
       isSelectedReflectionCaptureBakeStale: () =>

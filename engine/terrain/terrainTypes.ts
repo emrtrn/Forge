@@ -96,15 +96,22 @@ export function isWorldTerrainPath(path: string): boolean {
   return path.endsWith(TERRAIN_DEF_SUFFIX);
 }
 
-/** Level-owned terrain: keep the full scene path so equal names in different folders cannot collide. */
-export function levelTerrainPath(scenePath: string, landscapeId: string): string {
+/** Folder holding every terrain definition (and its `.tiles/`) owned by one level. */
+export function levelTerrainDir(scenePath: string): string {
   const normalized = scenePath.replace(/\\/g, "/").replace(/^\/+/, "");
   const base = normalized.replace(/(\.level|\.layout)?\.json$/i, "");
-  if (!base || !landscapeId) throw new Error("Terrain requires a level path and actor id");
+  if (!base) throw new Error("Terrain requires a level path");
+  return `${base}.landscapes`;
+}
+
+/** Level-owned terrain: keep the full scene path so equal names in different folders cannot collide. */
+export function levelTerrainPath(scenePath: string, landscapeId: string): string {
+  if (!landscapeId) throw new Error("Terrain requires a level path and actor id");
+  const dir = levelTerrainDir(scenePath);
   // Escape rather than sanitize: distinct actor IDs must not collapse to one filename.
   const id = Array.from(landscapeId, (char) => /^[a-z0-9_-]$/i.test(char)
     ? char : `~${char.codePointAt(0)!.toString(16)}~`).join("");
-  return `${base}.landscapes/${id}${TERRAIN_DEF_SUFFIX}`;
+  return `${dir}/${id}${TERRAIN_DEF_SUFFIX}`;
 }
 
 /** Public-root-relative path of one tile binary, next to its definition. */

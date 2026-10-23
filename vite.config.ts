@@ -1,5 +1,6 @@
 import { validateTerrainTile } from "./engine/terrain/terrainLoader";
-import { terrainTilePath } from "./engine/terrain/terrainTypes";
+import { levelTerrainDir, terrainTilePath } from "./engine/terrain/terrainTypes";
+import { collectJsonStrings, findOrphanedLevelTerrain } from "./tools/terrainOrphans";
 import { validateSaveTerrainPayload, validateSaveTerrainTile, TERRAIN_JSON_BODY_MAX_BYTES, TERRAIN_TILE_BODY_MAX_BYTES } from "./tools/terrainSaveValidator";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
@@ -659,6 +660,44 @@ async function rewriteJsonPathReferences(fromFolder: string, toFolder: string): 
     changedFiles += 1;
   }
   return changedFiles;
+}
+
+/**
+ * Deleting a Landscape only drops it from the layout, so after a level save remove
+ * the level-owned terrain it no longer references. Returns the removed definitions.
+ */
+async function pruneOrphanedLevelTerrain(scenePath: string, layout: unknown): Promise<string[]> {
+  const dir = levelTerrainDir(scenePath);
+  const names = await readdir(resolvePublicPath(dir)).catch(() => null);
+  if (!names) return [];
+  const landscapes = (layout as { landscapes?: unknown } | null)?.landscapes;
+  const dataRefs = (Array.isArray(landscapes) ? landscapes : [])
+    .map((actor) => (actor as { dataRef?: unknown } | null)?.dataRef)
+    .filter((ref): ref is string => typeof ref === "string");
+  const orphans = findOrphanedLevelTerrain(scenePath, dataRefs, names);
+  if (orphans.length === 0) return [];
+  // A copied level keeps its source's terrain references until its own first
+  // save migrates them; never pull terrain out from under another document.
+  const layoutRel = normalizePublicRelativePath(scenePath);
+  const external = new Set<string>();
+  for (const rel of await listFilesRecursive(PUBLIC_DIR, "")) {
+    if (!rel.toLowerCase().endsWith(".json") || rel === layoutRel || isPathInFolder(rel, dir)) continue;
+    const raw = await readFile(resolvePublicPath(rel), "utf8").catch(() => null);
+    if (!raw) continue;
+    try {
+      collectJsonStrings(JSON.parse(raw), external);
+    } catch {
+      continue;
+    }
+  }
+  const removed: string[] = [];
+  for (const orphan of orphans) {
+    if (external.has(orphan.definition)) continue;
+    for (const entry of orphan.entries) await rm(resolvePublicPath(entry), { recursive: true, force: true });
+    removed.push(orphan.definition);
+  }
+  if ((await readdir(resolvePublicPath(dir))).length === 0) await rm(resolvePublicPath(dir), { recursive: true });
+  return removed;
 }
 
 function replaceJsonExactPath(value: unknown, from: string, to: string): { value: unknown; changed: boolean } {
@@ -2217,6 +2256,14 @@ function layoutEditorPlugin(): Plugin {
           const previous = await readFile(layoutPath, "utf8").catch(() => null);
           const nextLayout = `${JSON.stringify(payload.layout, null, 2)}\n`;
           await writeFile(layoutPath, nextLayout, "utf8");
+          // Cleanup is best effort: the layout is already saved and stays valid
+          // with stale terrain files beside it.
+          const removedTerrain = await pruneOrphanedLevelTerrain(manifest.editor.defaultScene, payload.layout)
+            .catch((error: unknown) => {
+              console.warn(`[save] terrain cleanup skipped: ${error instanceof Error ? error.message : String(error)}`);
+              return [];
+            });
+          if (removedTerrain.length > 0) console.info(`[save] removed unreferenced terrain: ${removedTerrain.join(", ")}`);
           let manifestChanged = false;
           if (payload.editor) {
             const previousManifest = `${JSON.stringify(manifest, null, 2)}\n`;
@@ -2230,8 +2277,9 @@ function layoutEditorPlugin(): Plugin {
             JSON.stringify({
               ok: true,
               path: layoutPath,
-              changed: previous !== nextLayout || manifestChanged,
+              changed: previous !== nextLayout || manifestChanged || removedTerrain.length > 0,
               dropped,
+              removedTerrain,
             }),
           );
         } catch (error) {

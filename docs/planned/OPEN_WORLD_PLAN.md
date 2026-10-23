@@ -943,8 +943,23 @@ Doğrulama (2026-10-22):
       *Açık:* runtime artık heightfield kullanıyor; editörün `SceneApp`
       collision overlay'i ve parity testinin referansı hâlâ bu trimesh'i
       kullandığı için yardımcı korunuyor.
-- [ ] Araç: tile kenarında süspansiyon zıplaması yok (smoke: VehicleTest
-      üzerinde 2×2 tile'lık arazide dikiş geçişi).
+- [x] Araç: tile kenarında süspansiyon zıplaması yok (2×2 tile'lık arazide
+      gerçek araçla dikiş geçişi).
+      *Tamam (2026-10-23, deterministik motor testi):*
+      `tests/engine/terrainHeightfieldPhysics.test.ts`, `worldTerrainColliderEntities`
+      ile düz 64×64 m zemini 2×2 adet 32 quad tile ve tek 64 quad kontrol tile'ı
+      olarak kurar; iki koşuda da gerçek Rapier referans aracı `createVehicle` /
+      `setVehicleInput` ile sürülür. 3 s yerleşmeden sonra 60 Hz sabit adımlarla
+      X, Z dikişleri ve ortak köşe geçilir; tekerlekler sürekli temas eder,
+      hedef tile kimliklerine ulaşır (köşede dört collider da temas alır).
+      Dikişin ±4 m çevresinde X/Z/köşe için 50/50/42 adım ölçüldü:
+      en büyük `|vy|` sırasıyla **0,06119130 / 0,06119109 / 0,06119118 m/s**;
+      her biri tek-tile kontrolüyle aynı, en büyük adımlık `|ΔY|` hepsinde **0 m**.
+      Kontrole ek tolerans `|vy|` için 0,005 m/s, `|ΔY|` için 0,0001 m;
+      mutlak üst sınırlar 0,07 m/s ve 0,001 m. Test gerçek araç fizik yoluna
+      ulaştığından tarayıcı smoke'u atlandı; test ~0,2 s sürüyor ve tam
+      `test:engine` paketinde koşuyor. Zemin düz: dikişin kendi etkisini
+      ölçüyor, eğimli arazide normal sürekliliği ayrıca test edilmedi.
 - [x] Collision debug wire'ı heightfield'ı çizer.
       *Tamam (2026-10-23):* runtime `?debug` collider wire'ı heightfield
       üçgenlerini çiziyor; editörün Show > Collision katmanı aynı yüzeyi

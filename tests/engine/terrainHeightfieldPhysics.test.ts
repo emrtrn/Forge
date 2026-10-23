@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { forEachHeightfieldTriangle } from "../../engine/physics/heightfieldStatic";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import { rotatePointAboutOrigin } from "../../engine/physics/rotatedBox";
+import { createReferenceCarDefinition, NEUTRAL_VEHICLE_INPUT } from "../../engine/physics/vehicle/vehicleTypes";
 import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type ColliderPrimitive, type TransformComponent } from "../../engine/scene/components";
 import type { Entity, EntityComponentData } from "../../engine/scene/entity";
 import { createLandscapeColliderPrimitive, createLandscapeHeightfieldPrimitive, type ForgeLandscapeData } from "../../engine/scene/landscape";
@@ -149,6 +150,112 @@ function landscapeEntity(primitive: ColliderPrimitive, rotation: Vec3): Entity {
   };
 }
 
+/** Same 64 m square and 1 m samples: four 32-quad tiles or one 64-quad control. */
+function vehicleTerrain(seamed: boolean): ReturnType<typeof terrain> {
+  const def: WorldTerrainDef = {
+    schema: 1, type: "worldTerrain", name: "Vehicle seams", tileQuads: seamed ? Q : 2 * Q,
+    spacing: 1, tilesX: seamed ? 2 : 1, tilesZ: seamed ? 2 : 1, origin: [-Q, 0, -Q],
+    heightMin: -1, heightMax: 1, layers: [{ id: "grass", name: "Grass", color: "#4a7a3a" }],
+    tiles: [], collision: true,
+  };
+  const tiles = new Map<string, TerrainTileData>();
+  for (let z = 0; z < def.tilesZ; z += 1) {
+    for (let x = 0; x < def.tilesX; x += 1) {
+      const key = tileKey(x, z);
+      tiles.set(key, createFlatTerrainTile(def, x, z));
+      def.tiles.push({ key, minHeight: 0, maxHeight: 0 });
+    }
+  }
+  return { def, tiles };
+}
+
+interface SeamDrive {
+  label: string;
+  yaw: number;
+  start: Vec3;
+  endTile: string;
+  touchedTiles: string[];
+}
+
+async function driveTerrainSeam(seamed: boolean, route: SeamDrive) {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  const ground = worldTerrainColliderEntities({ id: "seams", name: "Seams", collision: true }, vehicleTerrain(seamed));
+  assert.equal(ground.length, seamed ? 4 : 1);
+  assert.ok(ground.every((entity) => (entity.components[COLLIDER_COMPONENT] as unknown as ColliderComponent).primitives![0]!.shape === "heightfield"));
+  // Same chassis and reference-car API as createVehicleTestWorld in tools/engine-tests.ts.
+  physics.setGravity([0, -9.81, 0]);
+  // Enable runtime pose synchronization; read simulatedTransform below, not the
+  // sink's interpolated presentation pose (one slice behind at alpha = 0).
+  physics.setTransformSink(() => {});
+  physics.setEntities([...ground, {
+    id: "car",
+    components: {
+      Transform: { position: route.start, rotation: [0, route.yaw, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1.8, 0.6, 4.2], isStatic: false, isSensor: false, simulatePhysics: true },
+    },
+  }]);
+  try {
+    await physics.init();
+    assert.equal(physics.usesRapier(), true);
+    assert.equal(physics.createVehicle("car", createReferenceCarDefinition()), true);
+    const dt = 1 / 60;
+    let frame = 0;
+    const tick = (): void => {
+      frame += 1;
+      physics.update({ deltaSeconds: dt, elapsedSeconds: frame * dt, frame });
+      assert.equal(physics.lastFrameStepCount(), 1);
+    };
+    const wheels = () => physics.vehicleState("car")!.wheels;
+    const tileId = (key: string) => `landscape:seams:${seamed ? key : "0_0"}`;
+    // Exclude spawn drop/spring settling; the subsequent motion is driven only by throttle.
+    for (let index = 0; index < 180; index += 1) tick();
+    assert.ok(wheels().every((wheel) => wheel.inContact && wheel.groundEntityId === tileId("0_0")));
+    physics.setVehicleInput("car", { ...NEUTRAL_VEHICLE_INPUT, throttle: 1 });
+    const yaw = route.yaw * Math.PI / 180;
+    const forwardX = Math.sin(yaw);
+    const forwardZ = Math.cos(yaw);
+    const progressAt = (position: Vec3) => route.label === "X" ? position[0]
+      : route.label === "Z" ? position[2] : (position[0] + position[2]) / Math.SQRT2;
+    let previous = physics.simulatedTransform("car")!.position;
+    const nearSeam: { vy: number; dy: number }[] = [];
+    const touched = new Set<string>();
+    let crossed = false;
+    for (let index = 0; index < 360; index += 1) {
+      tick();
+      const position = physics.simulatedTransform("car")!.position;
+      const progress = progressAt(position);
+      const state = physics.vehicleState("car")!;
+      for (const wheel of state.wheels) {
+        assert.ok(wheel.inContact && wheel.groundEntityId, `${route.label} (${seamed ? "2x2" : "control"}): grounded at frame ${frame}, position ${position}, speed ${state.forwardSpeed}`);
+        touched.add(wheel.groundEntityId);
+      }
+      const lateral = (position[0] - route.start[0]) * forwardZ - (position[2] - route.start[2]) * forwardX;
+      assert.ok(Math.abs(lateral) < 0.1, `${route.label}: stayed straight (${lateral} m)`);
+      // ±4 m covers the complete wheelbase before/after each seam, including a straddling step.
+      if (Math.min(progress, progressAt(previous)) <= 4 && Math.max(progress, progressAt(previous)) >= -4) {
+        assert.ok(state.forwardSpeed > 1, `${route.label}: actually driving at the seam`);
+        nearSeam.push({ vy: physics.velocityOf("car")![1], dy: position[1] - previous[1] });
+      }
+      previous = position;
+      if (progress >= 10) {
+        assert.ok(state.wheels.every((wheel) => wheel.groundEntityId === tileId(route.endTile)), `${route.label}: every wheel reached the far tile`);
+        crossed = true;
+        break;
+      }
+    }
+    assert.ok(crossed, `${route.label}: crossed the seam under engine force within 6 s`);
+    assert.ok(nearSeam.length >= 20, `${route.label}: enough seam samples (${nearSeam.length})`);
+    assert.deepEqual([...touched].sort(), [...new Set(route.touchedTiles.map(tileId))].sort(), `${route.label}: real wheel rays reached the expected tile colliders`);
+    return {
+      samples: nearSeam,
+      maxVy: Math.max(...nearSeam.map((sample) => Math.abs(sample.vy))),
+      maxDy: Math.max(...nearSeam.map((sample) => Math.abs(sample.dy))),
+    };
+  } finally {
+    physics.dispose();
+  }
+}
+
 export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
   for (const { label, verticesX, verticesZ, heightScale, rotation } of [
     { label: "square", verticesX: 65, verticesZ: 65, heightScale: 1, rotation: [0, 0, 0] as Vec3 },
@@ -257,6 +364,24 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
 }
 
 export async function registerTerrainHeightfieldRapierTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain heightfield physics: Rapier vehicle drives X/Z seams and the shared corner without a suspension kick against a single-tile control", async () => {
+    for (const route of [
+      { label: "X", yaw: 90, start: [-12, 1, -16], endTile: "1_0", touchedTiles: ["0_0", "1_0"] },
+      { label: "Z", yaw: 0, start: [-16, 1, -12], endTile: "0_1", touchedTiles: ["0_0", "0_1"] },
+      { label: "corner", yaw: 45, start: [-12, 1, -12], endTile: "1_1", touchedTiles: ["0_0", "1_0", "0_1", "1_1"] },
+    ] satisfies SeamDrive[]) {
+      const control = await driveTerrainSeam(false, route);
+      const seam = await driveTerrainSeam(true, route);
+      console.info(`[terrain vehicle seam] ${route.label}: control / 2x2 max |vy| ${control.maxVy.toExponential(6)} / ${seam.maxVy.toExponential(6)} m/s; max |deltaY| ${control.maxDy.toExponential(6)} / ${seam.maxDy.toExponential(6)} m (${seam.samples.length} seam steps)`);
+      // The flat control reads ~0.0612 m/s at slice end while Y stays constant.
+      // Allow at most +5 mm/s and +0.1 mm/step over that control, with absolute
+      // caps so a regression common to both fixtures cannot make the test pass.
+      assert.ok(control.maxVy < 0.07 && control.maxDy < 0.001, `${route.label}: smooth control`);
+      assert.ok(seam.maxVy < Math.min(0.07, control.maxVy + 0.005), `${route.label}: seam vertical velocity ${seam.maxVy} vs ${control.maxVy}`);
+      assert.ok(seam.maxDy < Math.min(0.001, control.maxDy + 0.0001), `${route.label}: seam step delta Y ${seam.maxDy} vs ${control.maxDy}`);
+    }
+  });
+
   await checkAsync("landscape heightfield physics: rotated non-square Rapier rays match the legacy trimesh surface", async () => {
     const data = landscape(129, 65, 1.7);
     // Non-dyadic heights also exercise Float32 conversion at the Rapier boundary.

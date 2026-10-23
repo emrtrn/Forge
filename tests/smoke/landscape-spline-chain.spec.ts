@@ -20,6 +20,8 @@ test("editor and Play render the authored asphalt spline chain without browser e
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   const canvas = page.locator("#game-canvas");
   await expect(canvas).toBeVisible();
+  await page.locator("[data-show-button]").hover();
+  await page.locator('[data-show-flag="stats"]').click();
   await expect(page.locator("#debug-stats")).toContainText(/\d+ draw calls\n\d+ tris/, { timeout: 20_000 });
 
   const landscape = page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first();

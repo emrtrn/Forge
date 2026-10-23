@@ -1019,6 +1019,7 @@ export class EditorUi {
     // the editor's counterpart of the runtime's `?debug` gate.
     this.app.setGpuProfilingEnabled(on);
     element.hidden = !on;
+    element.setAttribute("aria-hidden", String(!on));
     this.statsVisible = on;
   }
 
@@ -1105,9 +1106,9 @@ export class EditorUi {
       this.app.setShowAiNavigation(on),
     );
     // The perf overlay (FPS / draw calls / …) is a DOM element, not a runtime
-    // flag, so its get/set drive visibility of #debug-stats. Default on when the
-    // URL carried ?debug, preserving that launch flag's meaning.
-    this.setStatsVisible(new URLSearchParams(location.search).has("debug"));
+    // flag, so its get/set drive visibility of #debug-stats. Always start closed;
+    // diagnostic launch flags must not override the editor's Show > Stats toggle.
+    this.setStatsVisible(false);
     this.bindShowFlag("stats", () => this.statsVisible, (on) => this.setStatsVisible(on));
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       void this.save();

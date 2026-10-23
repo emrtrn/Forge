@@ -813,6 +813,10 @@ body {
 }
 
 /* Lightweight perf readout (qa-poki measurement standard). Debug-only. */
+#debug-stats[hidden] {
+  display: none;
+}
+
 #debug-stats {
   position: absolute;
   top: calc(env(safe-area-inset-top) + 4px);

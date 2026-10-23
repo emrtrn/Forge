@@ -6,7 +6,7 @@
  *   (default)  game mode — runtime render, no editor UI.
  *   ?editor    editor mode — same SceneApp + dynamically-imported EditorUi overlay
  *              (the editor bundle is a separate chunk, never loaded in game mode).
- *   ?debug     attaches the perf overlay in any mode.
+ *   ?debug     attaches the perf overlay in game mode; editor uses Show > Stats.
  */
 import { showBootError } from "./bootError";
 
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     const app = new SceneApp(canvas, { enabled: true, scriptMessageTraceLimit });
     app.setLayoutSaver(saveLayoutViaDevEndpoint);
     // EditorUi owns the perf overlay in editor mode: it exposes a Show > Stats
-    // toggle and defaults the overlay on when the URL carried ?debug.
+    // toggle and starts with the overlay closed, including when ?debug is set.
     new EditorUi(app);
     app.start();
     return;

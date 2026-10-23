@@ -15,13 +15,16 @@ async function checkSave(response: Response): Promise<void> {
 /**
  * Edit state of one multi-tile World Terrain in the editor. Owns the editable
  * tiles (`world`), remembers each tile's on-disk height format, and keeps a
- * revision per tile so a save acknowledges only tiles not edited again while
- * it was writing. Saves write in place to the actor's `dataRef`: forking a
- * whole tile grid into the level folder is not worth copying every tile.
+ * revision per tile and for the definition so a save acknowledges only data
+ * not edited again while it was writing. Saves write in place to the actor's
+ * `dataRef`: forking a whole tile grid into the level folder is not worth
+ * copying every tile.
  */
 export class WorldTerrainEditSession {
   private readonly revisions = new Map<string, number>();
   private readonly saved = new Map<string, number>();
+  private definitionRevision = 0;
+  private savedDefinitionRevision = 0;
 
   constructor(
     readonly path: string,
@@ -33,19 +36,24 @@ export class WorldTerrainEditSession {
     for (const key of keys) this.revisions.set(key, (this.revisions.get(key) ?? 0) + 1);
   }
 
+  markDefinitionDirty(): void {
+    this.definitionRevision += 1;
+  }
+
   dirtyKeys(): string[] {
     return [...this.revisions].filter(([key, revision]) => this.saved.get(key) !== revision).map(([key]) => key);
   }
 
   get dirty(): boolean {
-    return this.dirtyKeys().length > 0;
+    return this.definitionRevision !== this.savedDefinitionRevision || this.dirtyKeys().length > 0;
   }
 
   /** Snapshot now (before any await); tiles first, then the definition that cross-checks them. */
   capture(): EditorSaveStep | null {
     const keys = this.dirtyKeys();
-    if (keys.length === 0) return null;
+    if (keys.length === 0 && this.definitionRevision === this.savedDefinitionRevision) return null;
     const snapshot = captureWorldTerrainSave(this.world, keys, this.formats);
+    const definitionRevision = this.definitionRevision;
     const captured = new Map(keys.map((key) => [key, this.revisions.get(key)!] as const));
     const body = JSON.stringify({ path: this.path, terrain: snapshot.def });
     return {
@@ -61,6 +69,7 @@ export class WorldTerrainEditSession {
         // Later tile headers must use the range now on disk.
         this.world.def.heightMin = snapshot.def.heightMin;
         this.world.def.heightMax = snapshot.def.heightMax;
+        if (this.definitionRevision === definitionRevision) this.savedDefinitionRevision = definitionRevision;
         for (const [key, revision] of captured) {
           if (this.revisions.get(key) === revision) this.saved.set(key, revision);
         }

@@ -10080,6 +10080,33 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape") return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
+    const document = actor ? this.worldTerrains.get(actor.id) : null;
+    if (actor && document) {
+      const session = this.worldTerrainSessions.get(document);
+      const layer = session?.world.def.layers.find((entry) => entry.id === layerId);
+      if (!session || !layer || this.isSelectionLocked(this.selection)) return;
+      const nextMaterial = materialId && materialId.length > 0 ? materialId : null;
+      if ((layer.material ?? null) === nextMaterial) return;
+      const before = layer.material;
+      const applyMaterial = (material: string | null | undefined): void => {
+        const currentIndex = this.layout?.landscapes?.findIndex((entry) => entry.id === actor.id) ?? -1;
+        if (currentIndex < 0 || this.worldTerrains.get(actor.id) !== document) return;
+        if (material === undefined) delete layer.material;
+        else layer.material = material;
+        session.markDefinitionDirty();
+        this.rebuildLandscapeObject(currentIndex);
+        void this.warmLandscapeLayerMaterials(currentIndex);
+        this.select({ kind: "landscape", index: currentIndex });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      };
+      this.executeCommand({
+        label: nextMaterial ? "Assign World Terrain Layer Material" : "Clear World Terrain Layer Material",
+        redo: () => applyMaterial(nextMaterial),
+        undo: () => applyMaterial(before),
+      });
+      return;
+    }
     const data = actor ? this.landscapeData.get(actor.id) : null;
     if (!actor || !data) return;
     ensureLandscapeLayers(data);

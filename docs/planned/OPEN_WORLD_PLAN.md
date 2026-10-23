@@ -793,8 +793,8 @@ Doğrulama (2026-10-22):
       çatallanmaz — bütün tile grid'ini kopyalamak büyük dünyada pahalı; aynı
       tanımı paylaşan iki seviye düzenlemeyi birlikte görür. Details paneli
       Sculpt/Paint araçlarını, katman listesini, fırça ayarlarını ve View'ı
-      gösteriyor. **Hâlâ kapalı:** spline'lar (uyarı), katman materyali
-      atama, Fill Layer, yeniden boyutlandırma, heightmap import/export ve
+      gösteriyor; katman materyali atama artık açık. **Hâlâ kapalı:** spline'lar (uyarı),
+      Fill Layer, yeniden boyutlandırma, heightmap import/export ve
       foliage boyama. **Açık (perf):** GPU'ya dab başına tile katmanının
       tamamı ve global haritanın tamamı yükleniyor (CPU normalleri
       dikdörtgenle sınırlı); dikişe değen dab komşu tile'ın normallerini

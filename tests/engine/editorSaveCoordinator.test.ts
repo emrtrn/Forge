@@ -107,6 +107,17 @@ async function withFetch(fetch: typeof globalThis.fetch, run: () => Promise<void
   try { await run(); } finally { globalThis.fetch = original; }
 }
 
+function worldTerrainFixture() {
+  const f = fixture();
+  const created = createFlatWorldTerrain({ ...WORLD_TERRAIN_CREATE_DEFAULTS, tileQuads: 64, tilesX: 2, tilesZ: 1 });
+  const path = "worlds/material.terrain.json";
+  const world = createTerrainEditWorld(created.def, created.tiles.values());
+  const session = new WorldTerrainEditSession(path, world, new Map());
+  f.host.layout.landscapes = [{ id: "world", name: "World", position: [0, 0, 0], dataRef: path }];
+  Object.assign(f.host, { worldTerrainIds: new Set(["world"]), worldTerrainSessions: new Map([["world", session]]) });
+  return { ...f, path, world, session };
+}
+
 export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync): Promise<void> {
   await checkAsync("terrain ownership: full level paths and escaped actor IDs cannot alias definitions or tiles", async () => {
     const paths = [
@@ -439,6 +450,90 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     assert.equal(defRequest.body.terrain.tiles.find((tile) => tile.key === "1_0")!.maxHeight, 2);
     assert.equal(defRequest.body.terrain.tiles.find((tile) => tile.key === "0_0")!.maxHeight, 0);
     assert.equal(f.host.layout.landscapes!.find((entry) => entry.id === "world")!.dataRef, shared);
+  });
+
+  await checkAsync("editor save: World Terrain material assignment and clearing write only the definition before the level", async () => {
+    const f = worldTerrainFixture();
+    const requests: { url: string; body: { path: string; terrain: WorldTerrainDef } }[] = [];
+    const order: string[] = [];
+    f.host.layoutSaver = async () => { order.push("level"); return { path: LEVEL }; };
+    await withFetch(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, body: JSON.parse(String(init!.body)) });
+      order.push(url);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }, async () => {
+      assert.equal(f.session.capture(), null);
+      for (const material of ["rock-material", null]) {
+        requests.length = 0;
+        order.length = 0;
+        f.world.def.layers[0]!.material = material;
+        f.session.markDefinitionDirty();
+        assert.equal(f.session.dirty, true);
+        assert.deepEqual(f.session.dirtyKeys(), []);
+        await f.host.saveLayout();
+        assert.deepEqual(requests.map((request) => request.url), ["/__save-terrain"]);
+        assert.equal(requests[0]!.body.path, f.path);
+        assert.equal(requests[0]!.body.terrain.layers[0]!.material, material);
+        assert.deepEqual(order, ["/__save-terrain", "level"]);
+        assert.equal(f.session.dirty, false);
+        assert.equal(f.session.capture(), null);
+        assert.equal(f.statuses.at(-1)?.tone, "success");
+      }
+    });
+  });
+
+  await checkAsync("editor save: a World Terrain definition edit during a write stays dirty until the next save", async () => {
+    const f = worldTerrainFixture();
+    f.world.def.layers[0]!.material = "rock-material";
+    f.session.markDefinitionDirty();
+    const started = deferred();
+    const release = deferred();
+    const requests: { url: string; body: { terrain: WorldTerrainDef } }[] = [];
+    await withFetch(async (input, init) => {
+      requests.push({ url: String(input), body: JSON.parse(String(init!.body)) });
+      if (requests.length === 1) {
+        started.resolve();
+        await release.promise;
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }, async () => {
+      const pending = f.host.saveLayout();
+      await started.promise;
+      f.world.def.layers[0]!.material = "sand-material";
+      f.session.markDefinitionDirty();
+      release.resolve();
+      await pending;
+      assert.equal(f.session.dirty, true);
+      assert.equal(f.world.def.layers[0]!.material, "sand-material");
+      assert.equal(f.statuses.at(-1)?.tone, "warning");
+      await f.host.saveLandscapeData("world");
+    });
+    assert.deepEqual(requests.map((request) => request.url), ["/__save-terrain", "/__save-terrain"]);
+    assert.deepEqual(requests.map((request) => request.body.terrain.layers[0]!.material), ["rock-material", "sand-material"]);
+    assert.equal(f.session.dirty, false);
+    assert.equal(f.session.capture(), null);
+  });
+
+  await checkAsync("editor save: a failed World Terrain definition write stays dirty and can be retried", async () => {
+    const f = worldTerrainFixture();
+    f.world.def.layers[0]!.material = "rock-material";
+    f.session.markDefinitionDirty();
+    const requests: string[] = [];
+    await withFetch(async (input) => {
+      requests.push(String(input));
+      return requests.length === 1
+        ? new Response("disk full", { status: 500 })
+        : new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }, async () => {
+      await assert.rejects(f.host.saveLayout(), /disk full/);
+      assert.equal(f.session.dirty, true);
+      assert.equal(f.writes.length, 0, "a failed definition must not write the level");
+      await f.host.saveLayout();
+    });
+    assert.deepEqual(requests, ["/__save-terrain", "/__save-terrain"]);
+    assert.equal(f.session.dirty, false);
+    assert.equal(f.writes[0]!.path, LEVEL);
   });
 
   await checkAsync("editor save: a new World Terrain's tiles and definition are written before the level that references it", async () => {

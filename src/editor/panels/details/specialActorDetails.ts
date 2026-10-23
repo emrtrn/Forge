@@ -869,11 +869,32 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
  * the terrain definition; unsupported tools are listed in the panel hint.
  */
 function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain: WorldTerrainDetailsView): void {
-  const { body, selection } = options;
+  const { body, selection, editableAssets } = options;
   options.setDetailsScale([1, 1, 1]);
   const lockedAttr = selection.locked ? "disabled" : "";
   const settings = options.getLandscapeSculptSettings();
   const layers = options.getSelectedLandscapeLayers();
+  const materialAssets = editableAssets.filter((asset) => assetType(asset) === "material");
+  const materialNameById = new Map(
+    materialAssets.map((asset) => [asset.id, asset.displayName ?? asset.name] as const),
+  );
+  const layerDisplayName = (layer: LandscapeLayerView): string =>
+    layer.material ? materialNameById.get(layer.material) ?? layer.baseName : layer.baseName;
+  const activeLayer = layers.find((layer) => layer.id === settings.activeLayerId) ?? layers[0];
+  const layerMaterialOptions = [
+    `<option value="" ${activeLayer?.material ? "" : "selected"}>None (preset ${escapeHtml(
+      activeLayer?.baseName ?? "",
+    )})</option>`,
+  ]
+    .concat(
+      materialAssets.map(
+        (asset) =>
+          `<option value="${escapeHtml(asset.id)}" ${
+            activeLayer?.material === asset.id ? "selected" : ""
+          }>${escapeHtml(asset.displayName ?? asset.name)}</option>`,
+      ),
+    )
+    .join("");
   const metres = (value: number) => `${Number(value.toFixed(2))} m`;
   const holes = terrain.tilesX * terrain.tilesZ - terrain.tileCount;
   const width = terrain.tilesX * terrain.tileQuads + 1;
@@ -890,9 +911,14 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
           settings.activeLayerId === layer.id ? "active" : ""
         }" ${lockedAttr}>
           <span class="landscape-layer-swatch" style="background:${escapeHtml(layer.color)}"></span>
-          <span>${escapeHtml(layer.baseName)}</span>
+          <span>${escapeHtml(layerDisplayName(layer))}</span>
         </button>`).join("")}
-      </div>`
+      </div>
+      <label class="detail-row">
+        <span>Material</span>
+        <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
+      </label>
+      <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>`
     : settings.editMode === "sculpt"
     ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
         ${LANDSCAPE_SCULPT_TOOLS.map((tool) => `<button type="button" data-landscape-tool="${tool}" class="${
@@ -925,7 +951,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, layer materials, resizing, PNG heightmaps and Foliage painting are not available for multi-tile World Terrain yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, resizing, PNG heightmaps and Foliage painting are not available for multi-tile World Terrain yet.</div>
       </div>
       <div class="detail-section" data-world-terrain-heightmap>
         <div class="detail-section-title">Heightmap</div>
@@ -987,6 +1013,16 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
 
   bindNameAndLock(options);
   bindLandscapeBrushControls(options);
+  body
+    .querySelector<HTMLSelectElement>("[data-landscape-layer-material]")
+    ?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value;
+      options.setSelectedLandscapeLayerMaterial(
+        options.getLandscapeSculptSettings().activeLayerId,
+        value || null,
+      );
+      renderLandscapeDetails(options);
+    });
   body.querySelector<HTMLInputElement>("[data-world-terrain-raw-import]")?.addEventListener("change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];

@@ -5,6 +5,8 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  Vector3,
+  type Camera,
   type Texture,
 } from "three";
 
@@ -16,6 +18,9 @@ import {
   type ForgeLandscapeData,
   type ResolvedLandscape,
 } from "@engine/scene/landscape";
+import { TERRAIN_RENDER_LAYERS, isCdlodRenderableSize } from "@engine/terrain/terrainRenderData";
+import { TerrainRenderer, terrainRendererOf } from "./terrain/terrainRenderer";
+import type { TerrainLayerInput } from "./terrain/terrainMaterial";
 
 export {
   DEFAULT_LANDSCAPE_MATERIAL,
@@ -396,12 +401,73 @@ function buildLandscapeChunkMeshes(
   return meshes;
 }
 
+/**
+ * Which renderer draws Landscapes. `"cdlod"` (default) uses the GPU terrain
+ * renderer for grids it supports and falls back to the chunk mesh otherwise;
+ * `"legacy"` forces the chunk mesh (`?terrainRenderer=legacy`, for comparison
+ * until the chunk renderer is removed).
+ */
+export type LandscapeRendererMode = "cdlod" | "legacy";
+
+let rendererMode: LandscapeRendererMode = "cdlod";
+
+export function setLandscapeRendererMode(mode: LandscapeRendererMode): void {
+  rendererMode = mode;
+}
+
+/** Reads `?terrainRenderer=legacy` from a URL query string. */
+export function landscapeRendererModeFromQuery(search: string): LandscapeRendererMode {
+  return new URLSearchParams(search).get("terrainRenderer") === "legacy" ? "legacy" : "cdlod";
+}
+
+/** Per-layer colour, the legacy vertex-colour rule: override, preset, default. */
+function terrainLayerColors(
+  data: ForgeLandscapeData,
+  colors?: LandscapeLayerColors,
+  layerTextures?: LandscapeLayerTexture[],
+): string[] {
+  return data.layers.slice(0, TERRAIN_RENDER_LAYERS).map((layer, index) =>
+    colors?.[layer.id]
+      ?? layerTextures?.[index]?.color
+      ?? LANDSCAPE_DEFAULT_LAYERS.find((preset) => preset.id === layer.id)?.color
+      ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color);
+}
+
+function terrainLayerInputs(item: LandscapeRenderItem): TerrainLayerInput[] {
+  const worldSize = (item.data.size.verticesX - 1) * item.data.size.spacing;
+  const colors = terrainLayerColors(item.data, item.layerColors, item.layerTextures);
+  return colors.map((color, index) => {
+    const texture = item.layerTextures?.[index];
+    // Same repeat as the chunk mesh's `vUv * tiling` over the whole grid.
+    return { texture: texture?.texture ?? null, color, scale: (texture?.tiling ?? 1) / worldSize };
+  });
+}
+
+function terrainActiveLayer(data: ForgeLandscapeData, activeLayerId: string): number {
+  const index = data.layers.findIndex((layer) => layer.id === activeLayerId);
+  return index >= 0 && index < TERRAIN_RENDER_LAYERS ? index : 0;
+}
+
 /** Builds a landscape's chunked mesh group; rebuild required whenever `data` changes shape. */
 export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObject {
   const group = new Group();
   group.name = item.name;
   const viewMode = item.viewMode ?? "lit";
   const activeLayerId = item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id;
+  if (rendererMode === "cdlod" && isCdlodRenderableSize(item.data.size)) {
+    ensureLandscapeLayers(item.data);
+    const { verticesX, verticesZ, spacing } = item.data.size;
+    const terrain = new TerrainRenderer(item.data, {
+      viewMode,
+      activeLayer: terrainActiveLayer(item.data, activeLayerId),
+      layers: terrainLayerInputs(item),
+      // The chunk mesh centres the grid on the actor; keep that frame.
+      origin: new Vector3(-((verticesX - 1) * spacing) / 2, 0, -((verticesZ - 1) * spacing) / 2),
+    });
+    group.add(terrain.mesh);
+    applyLandscapeTransform(group, item);
+    return group;
+  }
   for (const mesh of buildLandscapeChunkMeshes(
     item.data,
     viewMode,
@@ -451,6 +517,12 @@ export function updateLandscapeObjectGeometry(
   colors?: LandscapeLayerColors,
 ): void {
   ensureLandscapeLayers(data);
+  const terrain = landscapeTerrain(object);
+  if (terrain) {
+    terrain.updateData(dirty);
+    terrain.setAppearance(viewMode, terrainActiveLayer(data, activeLayerId), terrainLayerColors(data, colors));
+    return;
+  }
   object.traverse((child) => {
     if (!(child instanceof Mesh)) return;
     const chunk = child.userData.landscapeChunk as LandscapeDirtyBounds | undefined;
@@ -469,10 +541,26 @@ export function updateLandscapeObjectGeometry(
   });
 }
 
+/** The GPU terrain drawing a landscape group, or null for the chunk mesh. */
+function landscapeTerrain(object: LandscapeObject): TerrainRenderer | null {
+  for (const child of object.children) {
+    const terrain = terrainRendererOf(child);
+    if (terrain) return terrain;
+  }
+  return null;
+}
+
+/** Re-selects a GPU terrain's LOD for `camera`; a no-op for the chunk mesh. Call once per frame before rendering. */
+export function updateLandscapeLod(object: LandscapeObject, camera: Camera): void {
+  landscapeTerrain(object)?.updateLod(camera);
+}
+
 /** Frees every chunk's geometry + (shared) material under a landscape group. */
 export function disposeLandscapeObject(object: LandscapeObject): void {
   const disposedMaterials = new Set<MeshStandardMaterial>();
+  landscapeTerrain(object)?.dispose();
   object.traverse((child) => {
+    if (terrainRendererOf(child)) return;
     if (child instanceof Mesh) {
       child.geometry.dispose();
       const material = child.material as MeshStandardMaterial;

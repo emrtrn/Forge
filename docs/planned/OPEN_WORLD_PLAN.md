@@ -7,8 +7,10 @@
 > K7 reversed-Z + float derinlik. Spike sayfaları merge öncesi silindi;
 > son halleri `035a659` commit'inde (`git show 035a659:spikes/terrain-cdlod/terrainMaterial.ts`,
 > `git checkout 035a659 -- spikes` ile geri gelir). Belgede geçen `spikes/…`
-> yolları o commit'e aittir. Sonraki iş Faz 2 renderer/editör geçişi; 1×1 adaptörü
-> o zamana kadar mevcut renderer'ı kullanır.
+> yolları o commit'e aittir. **Faz 2 renderer'ının ilk dilimi (2026-10-23, dal
+> `feat/terrain-renderer`):** 1×1 Landscape'ler GPU CDLOD renderer'ıyla çiziliyor;
+> eski chunk mesh `?terrainRenderer=legacy` bayrağı arkasında karşılaştırma için
+> duruyor. Sonraki iş çok-tile çizimi (global harita + slot havuzu bağlantısı).
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -669,10 +671,34 @@ Doğrulama (2026-10-22):
 - [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
       splat, `sampler2DArray` katmanlar, uzak tekrar kırma, view mode'lar,
       gölge alma, kalite profiline bağlı kendine gölge.
+      *İlk dilim tamam (2026-10-23, `engine/render-three/terrain/`):* tek slot
+      (1×1 Landscape) için instanced patch + morph, R32F yükseklik (`texelFetch`,
+      morph ara noktalarında elle bilineer — float filtre eklentisi gerekmiyor),
+      RG16F normal ve 2 blok RGBA8 ağırlık dokusu vertex çözünürlüğünde (legacy
+      vertex attribute'larıyla aynı sonuç), 8 katman, lit/height/slope/layer
+      view mode'ları, wireframe, gölge alma. CPU tarafı saf ve testli:
+      `engine/terrain/terrainRenderData.ts` (normal formülü legacy ile birebir,
+      node min/max piramidi). GTAO normal ve DOF derinlik geçişleri sahneyi
+      override materyalle çizdiği için arazi o geçişlerde kendi
+      `MeshNormalMaterial`/`MeshDepthMaterial` kopyasıyla çiziliyor
+      (`renderSceneWithTerrainOverride`). LOD seçimi iki uygulamada da çizimden
+      hemen önce kameraya göre (`updateLandscapeLod`; runtime'da `terrain` perf
+      bölgesi). **Açık:** çok slot + global harita yolu, node frustum culling
+      (1×1'de gerekmiyor), uzak tekrar kırma ve kendine gölge (legacy de
+      gölge düşürmüyor; parite için kapalı), dirty-rect doku yüklemesi (şimdilik
+      tüm katman).
 - [ ] Eski `engine/render-three/landscape.ts` chunk renderer'ı kaldırılır;
       `RuntimeSceneApp` ve `SceneApp` yeni renderer'ı kullanır.
+      *Kısmen (2026-10-23):* iki uygulama da varsayılan olarak yeni renderer'ı
+      kullanıyor; kare olmayan / 2'nin kuvveti olmayan grid'ler ve
+      `?terrainRenderer=legacy` chunk mesh'e düşüyor. Kaldırma görsel onaydan
+      sonra.
 - [ ] Seçim ve brush hover: CPU heightfield raycast (`scenePicker`,
       foliage boyama, landscape brush cursor).
+      *1×1 için tamam (2026-10-23):* terrain mesh'inin `raycast`'i
+      `raycastTerrain`'e gidiyor; picker, brush, foliage ve yüzeye yerleştirme
+      değişmeden çalışıyor. Engine testi rastgele ışınlarda (döndürülmüş arazi
+      dahil) legacy mesh ile aynı nokta/mesafe/normal'i doğruluyor.
 - [ ] Sculpt/paint: `terrainEdit.ts` ile çok-tile'lı brush, kenar vertex
       senkronu, kirli dikdörtgen doku yüklemesi. Undo artık tüm diziyi değil,
       tile başına kirli dikdörtgenin önce/sonra yamasını saklar.
@@ -687,10 +713,20 @@ Doğrulama (2026-10-22):
       16-bit RAW okuma, little-endian export, kopyalı kenarlar ve min/max özetleri
       testli. Tile başına generator ilerleme sayacıyla worker'a taşınmaya hazır;
       PNG, editör UI ve worker bağlantısı açık.*
-- [ ] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
+- [x] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
       `landscape-spline-chain`, `runtime-parity`, `game-starter` yeşil.
-- [ ] Ekran görüntüsü karşılaştırması: legacy landscape eski ve yeni
+      *Tamam (2026-10-23):* yeni renderer varsayılanken bunlar ve
+      `landscape-wireframe`, `terrain-*` smoke'ları yeşil.
+- [x] Ekran görüntüsü karşılaştırması: legacy landscape eski ve yeni
       renderer'da görsel olarak eşdeğer (tolerans belgelenir).
+      *Tamam (2026-10-23):* `tests/smoke/terrain-renderer-compare.spec.ts`
+      tepeli 257² fikstürü üç açıdan + AO/DOF'lu bir seviyeden legacy, legacy
+      tekrar ve CDLOD olarak çekiyor. Tolerans: CDLOD/legacy farkı, sahnenin
+      kendi yükleme-yükleme gürültüsünün en fazla 2 seviye (ortalama kanal farkı)
+      ve %2 değişen piksel üstünde. Ölçülen: ortalama 0,04–0,11 seviye, değişen
+      piksel ≤ %0,03 (normal dokusunun half-float yuvarlaması ve silüet kenarı).
+      Not: `Terrain.level.json` headless editörde main'de de siyah çiziliyor
+      (gökyüzü); karşılaştırma bu yüzden kendi fikstürünü kuruyor.
 
 ## Faz 3 — Fizik, hareket, navigasyon zemini
 

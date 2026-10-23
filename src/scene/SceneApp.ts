@@ -194,6 +194,9 @@ import {
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
+  landscapeRendererModeFromQuery,
+  setLandscapeRendererMode,
+  updateLandscapeLod,
   updateLandscapeObjectGeometry,
   type ForgeLandscapeData,
   type ForgeLandscapeSpline,
@@ -1453,6 +1456,7 @@ export class SceneApp {
   constructor(canvas: HTMLCanvasElement, options: EditorOptions = { enabled: false }) {
     this.canvas = canvas;
     this.editorEnabled = options.enabled;
+    setLandscapeRendererMode(landscapeRendererModeFromQuery(location.search));
 
     this.sceneShell = new SceneShell(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
@@ -1746,6 +1750,7 @@ export class SceneApp {
       this.updateGizmoScreenScale();
       this.environment.update(deltaSeconds);
       this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
+      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera());
       advanceForgeMaterialAnimations(now / 1000);
 
       // The sweep decides what this frame draws and tags the GPU query with the

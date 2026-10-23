@@ -9,6 +9,7 @@ import {
   type Object3D,
   type Scene,
   type WebGLRenderer,
+  type WebGLRenderTarget,
 } from "three";
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -24,6 +25,7 @@ import { RGBShiftShader } from "three/examples/jsm/shaders/RGBShiftShader.js";
 import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
 
 import type { ResolvedPostProcess } from "@engine/scene/postProcess";
+import { renderSceneWithTerrainOverride } from "./terrain/terrainRenderer";
 
 export {
   POST_PROCESS_DEFAULTS,
@@ -196,6 +198,26 @@ class ForgeGtaoPass extends GTAOPass {
       }
     });
   }
+
+  /**
+   * The normal pass overrides every material, so GPU-displaced terrain would
+   * draw its flat instanced patch; it is drawn with its own normal material.
+   */
+  _renderOverride(...args: [WebGLRenderer, Material, WebGLRenderTarget, ...unknown[]]): void {
+    const base = (GTAOPass.prototype as unknown as { _renderOverride: (...values: unknown[]) => void })._renderOverride;
+    if (args[1] !== this.normalMaterial) {
+      base.apply(this, args);
+      return;
+    }
+    renderSceneWithTerrainOverride(this.scene, "normal", () => base.apply(this, args));
+  }
+}
+
+/** BokehPass whose depth pass draws GPU-displaced terrain with its own depth material. */
+class ForgeBokehPass extends BokehPass {
+  override render(...args: Parameters<BokehPass["render"]>): void {
+    renderSceneWithTerrainOverride(this.scene, "depth", () => super.render(...args));
+  }
 }
 
 /** Returns true when the grading ShaderPass would change the image at all. */
@@ -275,7 +297,7 @@ export function createPostProcessEffectPasses(
     passes.push(gtaoPass);
   }
   if (resolved.dof.enabled) {
-    const bokehPass = new BokehPass(context.scene, context.camera, {
+    const bokehPass = new ForgeBokehPass(context.scene, context.camera, {
       focus: resolved.dof.focusDistance,
       aperture: resolved.dof.aperture * DOF_APERTURE_SCALE,
       maxblur: resolved.dof.maxBlur * DOF_MAXBLUR_SCALE,

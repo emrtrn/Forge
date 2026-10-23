@@ -220,9 +220,12 @@ import {
   createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
+  landscapeRendererModeFromQuery,
   landscapeSplineMeshAssetIds,
   LANDSCAPE_DEFAULT_LAYERS,
   resolveLandscape,
+  setLandscapeRendererMode,
+  updateLandscapeLod,
   type ForgeLandscapeData,
   type LandscapeLayerTexture,
   type LandscapeObject,
@@ -587,6 +590,7 @@ const FRAME_REGION_DEBUG_WIRES = "debugWires";
 const FRAME_REGION_WITNESS = "perfWitness";
 const FRAME_REGION_ENVIRONMENT = "environment";
 const FRAME_REGION_FOLIAGE = "foliage";
+const FRAME_REGION_TERRAIN = "terrain";
 const FRAME_REGION_MATERIALS = "materials";
 const FRAME_REGION_RENDER = "render";
 
@@ -905,6 +909,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   constructor(canvas: HTMLCanvasElement, options: RuntimeSceneAppOptions = {}) {
     this.debug = options.debug ?? false;
+    setLandscapeRendererMode(landscapeRendererModeFromQuery(location.search));
     this.sceneShell = new SceneShell(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     });
@@ -1508,6 +1513,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       );
       this.perfRegion(FRAME_REGION_FOLIAGE, mark);
       mark = this.perfMark();
+      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera);
+      this.perfRegion(FRAME_REGION_TERRAIN, mark);
+      mark = this.perfMark();
       // An absolute clock rather than a delta, so it gets a clock that has been
       // advancing by the scaled delta — otherwise a scrolling material would
       // keep sliding across a paused scene.
@@ -1663,6 +1671,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       FRAME_REGION_AUDIO_LISTENER,
       FRAME_REGION_ENVIRONMENT,
       FRAME_REGION_FOLIAGE,
+      FRAME_REGION_TERRAIN,
       FRAME_REGION_MATERIALS,
       FRAME_REGION_RENDER,
     ]) {

@@ -1046,6 +1046,7 @@ import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.te
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 import { registerStaticQueriesTests } from "../tests/engine/staticQueries.test";
 import { registerTerrainOrphanTests } from "../tests/engine/terrainOrphans.test";
+import { registerTerrainRendererTests } from "../tests/engine/terrainRenderer.test";
 import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
 import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
 import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
@@ -1175,6 +1176,7 @@ registerPerfWitnessTests(check);
 registerTerrainTests(check);
 registerStaticQueriesTests(check);
 registerTerrainOrphanTests(check);
+registerTerrainRendererTests(check);
 registerSurfaceResponseTests(check);
 registerDeformationFieldTests(check);
 registerDeformationPersistenceTests(check);
@@ -26043,7 +26045,7 @@ check("createPostProcessEffectPasses follows enabled-set ordering", () => {
     passes.map((pass) => pass.constructor.name.replace(/^_/, "")),
     [
       "ForgeGtaoPass",
-      "BokehPass",
+      "ForgeBokehPass", // draws GPU terrain into its depth pass
       "ScaledBloomPass", // quality-aware UnrealBloomPass subclass
       "ShaderPass",
       "ShaderPass",

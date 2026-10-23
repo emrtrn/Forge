@@ -208,7 +208,8 @@ Gerçek kod yazılmadan önce riskli varsayımlar ölçülür. Spike kodu atıla
 Ölçüm sayfası `spikes/terrain-deformation` (gerçek `PhysicsSubsystem` +
 referans araç, 60 Hz sabit adım, deterministik; doku testi three r184,
 headless Chromium 149, RTX 3060 / D3D11). Çalıştırma: `npm run dev:smoke` +
-`node spikes/terrain-deformation/run.mjs`.
+`node spikes/terrain-deformation/run.mjs`. (`spikes/` merge öncesi silindi;
+`git checkout 035a659 -- spikes` ile geri gelir.)
 
 **Rest length — koşullu kabul, ama işaret ters çevrildi.**
 

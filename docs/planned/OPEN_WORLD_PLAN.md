@@ -4,8 +4,10 @@
 > dal `feat/open-world`). Ortak tanım/ikili loader, legacy okuma dönüşümü,
 > kayıt uçları ve editör migrasyonu bağlı. RuntimeParity ve iki starter fixture
 > yeni formatta. **Faz 0 tamam:** S1–S6 ölçüldü, GPU CDLOD onaylandı,
-> K7 reversed-Z + float derinlik. Spike sayfaları `spikes/` altında,
-> merge edilmez. Sonraki iş Faz 2 renderer/editör geçişi; 1×1 adaptörü
+> K7 reversed-Z + float derinlik. Spike sayfaları merge öncesi silindi;
+> son halleri `035a659` commit'inde (`git show 035a659:spikes/terrain-cdlod/terrainMaterial.ts`,
+> `git checkout 035a659 -- spikes` ile geri gelir). Belgede geçen `spikes/…`
+> yolları o commit'e aittir. Sonraki iş Faz 2 renderer/editör geçişi; 1×1 adaptörü
 > o zamana kadar mevcut renderer'ı kullanır.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında

@@ -88,6 +88,8 @@ export interface CharacterMovementSubsystemOptions {
   ) => readonly Aabb3[];
   /** Live kinematic platforms the character can stand on, collide with, and ride. */
   platforms?: MovingPlatformQuery;
+  /** Optional residency gate; undefined disables it. A rejected move holds the previous pose at rest. */
+  canOccupy?: (position: readonly [number, number, number]) => boolean | undefined;
 }
 
 const DEFAULT_GRAVITY_Y = -9.81;
@@ -149,6 +151,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     | ((entityId: EntityId, transform: Readonly<TransformComponent>) => readonly Aabb3[])
     | undefined;
   private readonly platforms: MovingPlatformQuery | undefined;
+  private readonly canOccupy: CharacterMovementSubsystemOptions["canOccupy"];
 
   constructor(
     private readonly actions: ActionMap,
@@ -163,6 +166,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.reportLocomotion = options.reportLocomotion;
     this.dynamicBlockers = options.dynamicBlockers;
     this.platforms = options.platforms;
+    this.canOccupy = options.canOccupy;
   }
 
   setEntities(entities: readonly Entity[]): void {
@@ -209,10 +213,21 @@ export class CharacterMovementSubsystem implements Subsystem {
     for (const runtime of this.runtimes) {
       const input = this.movementInput(runtime, engine);
       if (!input) continue;
+      const available = this.canOccupy?.(runtime.transform.position);
+      if (available === false) {
+        this.resetEntityTransform(runtime.id, runtime.transform);
+        this.sink(runtime.id, runtime.transform);
+        continue;
+      }
+      const previous = available === undefined ? null : cloneTransform(runtime.transform);
       const prevX = runtime.transform.position[0];
       const prevY = runtime.transform.position[1];
       const prevZ = runtime.transform.position[2];
       this.updateRuntime(runtime, engine, input);
+      if (previous && this.canOccupy!(runtime.transform.position) === false) {
+        this.resetEntityTransform(runtime.id, previous);
+        this.reportLocomotion?.(runtime.id, { planarSpeed: 0, grounded: false, velocityY: 0 });
+      }
       if (engine.deltaSeconds > 0) {
         this.velocity.set(runtime.id, [
           (runtime.transform.position[0] - prevX) / engine.deltaSeconds,

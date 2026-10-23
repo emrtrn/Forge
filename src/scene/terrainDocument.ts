@@ -16,7 +16,7 @@ export type TerrainActorDocument =
   | { kind: "world"; document: WorldTerrainDocument };
 
 /** Shared editor/runtime read path. The legacy fallback only applies to absent legacy sidecars. */
-export async function fetchTerrainActorDocument(path: string): Promise<TerrainActorDocument> {
+export async function fetchTerrainActorDocument(path: string, streamTiles = false): Promise<TerrainActorDocument> {
   if (isWorldTerrainPath(path)) {
     const response = await fetch(projectFileUrl(path));
     if (!response.ok) throw new Error(`Terrain definition ${path}: HTTP ${response.status}`);
@@ -24,7 +24,7 @@ export async function fetchTerrainActorDocument(path: string): Promise<TerrainAc
       const binary = await fetch(projectFileUrl(binaryPath));
       if (!binary.ok) throw new Error(`Terrain binary ${binaryPath}: HTTP ${binary.status}`);
       return new Uint8Array(await binary.arrayBuffer());
-    });
+    }, streamTiles);
     if (isMultiTileTerrain(document.def)) return { kind: "world", document };
     return { kind: "landscape", data: terrainDocumentToLandscape(document) };
   }

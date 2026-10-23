@@ -1,4 +1,6 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
+import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
+import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
   AmbientLight,
@@ -493,6 +495,7 @@ export interface RuntimeStatsApp {
   getVehicleAiDebugSnapshot?(): readonly VehicleAiDriverDebugState[];
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
+  getTerrainStreamingSnapshot?(): TerrainStreamingSnapshot | null;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getUiDebugSnapshot?(): UiDebugSnapshot;
   /** Optional: windowed frame-time stats (avg / P95 / spikes) — always on in runtime. */
@@ -1452,7 +1455,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       //                     pause is for.
       //   simulationMs    — scaled, and exactly 0 while anything holds a pause.
       //                     The world's own clock.
-      const simulationMs = this.timeControl.simulationDelta(deltaMs);
+      const requestedMs = this.timeControl.simulationDelta(deltaMs);
+      // IO keeps advancing on real frames while an unloaded pawn footprint holds
+      // the whole simulation at its current pose (including rigid-body pawns).
+      const terrainHeld = this.updateTerrainStreaming(requestedMs / 1000);
+      const simulationMs = terrainHeld ? 0 : requestedMs;
       this.simulationClockMs += simulationMs;
       // Frame regions (F1). Every span below is bracketed by `perfMark` /
       // `perfRegion`, which cost one property read each while profiling is off.
@@ -1468,7 +1475,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // Look/aim on real time (see above); everything that moves the world on
       // simulation time.
       this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
-      this.engineApp.update(simulationMs / 1000);
+      if (!terrainHeld) this.engineApp.update(simulationMs / 1000);
       let mark = this.perfMark();
       this.spawnCoordinator.advance();
       this.perfRegion(FRAME_REGION_SPAWN, mark);
@@ -2100,6 +2107,26 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
   }
 
+  getTerrainStreamingSnapshot(): TerrainStreamingSnapshot | null {
+    return this.runtimeServices.resolve(worldStreamingService)?.snapshot() ?? null;
+  }
+
+  private updateTerrainStreaming(deltaSeconds: number): boolean {
+    const streaming = this.runtimeServices.resolve(worldStreamingService);
+    if (!streaming?.hasTerrain()) return false;
+    const pawnId = this.gameModeSession?.playerState.pawnEntityId;
+    // The live pose: a walking pawn's Transform component keeps its spawn pose,
+    // so streaming around it would never follow the player.
+    const pawn = pawnId
+      ? this.characterMovement()?.transformOf(pawnId) ?? this.physicsSubsystem.simulatedTransform(pawnId) ?? this.transformForEntity(pawnId)
+      : null;
+    const position = pawn?.position ?? this.camera.position.toArray();
+    const velocity = pawnId ? this.characterMovement()?.velocityOf(pawnId) ?? this.physicsSubsystem.velocityOf(pawnId) : null;
+    const sources = [{ position: [position[0], position[2]] as const }];
+    if (velocity) sources.push({ position: [position[0] + velocity[0] * deltaSeconds, position[2] + velocity[2] * deltaSeconds] });
+    return streaming.update(sources, this.qualityExtensions.viewDistanceMultiplier ?? 1);
+  }
+
   /**
    * Snapshots the runtime UI host for the `?debug` overlay: the mounted HUD, the
    * active screen stack and the ViewModel store fields the widgets bind to.
@@ -2277,6 +2304,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Declare every model this level will load up front (P4) so the loading bar's
     // total is right before the first GLB streams in; the loader marks each done.
     await this.levelRuntime.build();
+    const streaming = this.runtimeServices.resolve(worldStreamingService);
+    if (streaming?.hasTerrain()) {
+      const hasPawn = this.activeGameMode?.defaultPawn.kind === "character";
+      const spawn = hasPawn ? computePlayerStartSpawn(this.layout, spawnTag) : null;
+      const actor = hasPawn ? this.actorEntities.find((entity) => readCharacterMovementComponent(entity) && !readAIControllerComponent(entity)) : undefined;
+      const position = spawn?.position ?? (actor ? readTransformComponent(actor)?.position : undefined) ?? this.camera.position.toArray();
+      this.setLoadingStatus("Loading terrain around spawn");
+      await streaming.prepareSpawn([position[0], position[2]]);
+    }
     // Shape actors persist as `shape:<type>` instances whose synthetic models are
     // not in any loadGroup; register them before the scene is built, or the
     // instanced-model builder throws and aborts scene construction (the editor
@@ -2330,11 +2366,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     };
     await startSceneRuntime({
       sceneDocument,
+      additionalPhysicsEntities: streaming?.entities() ?? [],
       physics: this.physicsSubsystem,
       moduleSinks: this.runtimeServices.entitySinks(),
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+    streaming?.startSimulation();
     // Auto-play audio/particles must never abort scene start: a single bad cue or
     // emitter cannot be allowed to stop the game mode + UI (lines below) from
     // initialising, which would look like "Play won't start".
@@ -4639,7 +4677,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
   private fetchLandscapeDocument(dataRef: string): Promise<TerrainActorDocument> {
-    return fetchTerrainActorDocument(dataRef);
+    return fetchTerrainActorDocument(dataRef, this.runtimeServices.resolve(worldStreamingService) !== undefined);
   }
 
   /**
@@ -4693,6 +4731,32 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     this.landscapeObjects.push(object);
     this.scene.add(tagSceneSource(object, "landscape"));
+    const streaming = this.runtimeServices.resolve(worldStreamingService);
+    if (streaming) {
+      streaming.add(actor.dataRef, document, { id: actor.id, ...resolved }, {
+        changed: (key) => object.traverse((child) => terrainRendererOf(child)?.refreshTile(key)),
+        addColliders: (entities) => {
+          this.physicsSubsystem.addEntities(entities);
+          for (const entity of entities) {
+            this.landscapeColliderObjects.set(entity.id, object);
+            this.addColliderDebugWire(entity);
+          }
+        },
+        removeColliders: (ids) => {
+          this.physicsSubsystem.removeEntities(ids);
+          for (const id of ids) {
+            this.landscapeColliderObjects.delete(id);
+            const wire = this.colliderDebugWires.get(id);
+            if (!wire) continue;
+            this.scene.remove(wire);
+            wire.geometry.dispose();
+            (wire.material as LineBasicMaterial).dispose();
+            this.colliderDebugWires.delete(id);
+          }
+        },
+      });
+      return;
+    }
     for (const entity of worldTerrainColliderEntities({ id: actor.id, ...resolved }, document)) {
       this.landscapeColliderEntities.push(entity);
       this.landscapeColliderObjects.set(entity.id, object);

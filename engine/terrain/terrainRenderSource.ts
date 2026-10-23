@@ -37,13 +37,16 @@ export interface TerrainRenderSource extends TerrainTileLookup {
   readonly extent: readonly [number, number];
   /** Keys of the tiles that exist; a grid cell without one is a hole. */
   keys(): readonly string[];
+  /** Conservative authored bounds, including declared tiles whose data is not resident. */
+  tileRange?(key: string): { min: number; max: number } | undefined;
 }
 
-export type TerrainWorldShape = Pick<WorldTerrainDef, "tileQuads" | "spacing" | "tilesX" | "tilesZ">;
+export type TerrainWorldShape = Pick<WorldTerrainDef, "tileQuads" | "spacing" | "tilesX" | "tilesZ"> & Partial<Pick<WorldTerrainDef, "tiles">>;
 
 /** A World Terrain's tiles as a render source. */
 export function worldTerrainRenderSource(def: TerrainWorldShape, tiles: ReadonlyMap<string, TerrainTileData>, globalAttributes?: TerrainGlobalAttributes): TerrainRenderSource {
   const size = def.tileQuads * def.spacing;
+  const declared = def.tiles ? new Map(def.tiles.map((tile) => [tile.key, { min: tile.minHeight, max: tile.maxHeight }])) : undefined;
   return {
     globalAttributes,
     tileQuads: def.tileQuads,
@@ -51,7 +54,8 @@ export function worldTerrainRenderSource(def: TerrainWorldShape, tiles: Readonly
     tilesX: def.tilesX,
     tilesZ: def.tilesZ,
     extent: [def.tilesX * size, def.tilesZ * size],
-    keys: () => [...tiles.keys()],
+    keys: () => [...(declared?.keys() ?? tiles.keys())],
+    tileRange: (key) => declared?.get(key),
     tile: (x, z) => tiles.get(tileKey(x, z)),
   };
 }
@@ -183,12 +187,12 @@ export class TerrainWorldHeightBounds {
   private readonly tiles = new Map<string, TerrainNodeHeightBounds>();
   private upper: { nx: number; nz: number; min: Float32Array; max: Float32Array }[] = [];
 
-  constructor(private readonly source: TerrainRenderSource, patchQuads = TERRAIN_PATCH_QUADS) {
+  constructor(private readonly source: TerrainRenderSource, private readonly patchQuads = TERRAIN_PATCH_QUADS) {
     this.tileLevel = Math.log2(source.tileQuads / patchQuads);
     for (const key of source.keys()) {
       const { x, z } = parseTileKey(key)!;
-      const tile = source.tile(x, z)!;
-      this.tiles.set(key, new TerrainNodeHeightBounds(tile.heights, tile.size, patchQuads));
+      const tile = source.tile(x, z);
+      if (tile) this.tiles.set(key, new TerrainNodeHeightBounds(tile.heights, tile.size, patchQuads));
     }
     this.rebuildUpper();
   }
@@ -196,6 +200,15 @@ export class TerrainWorldHeightBounds {
   /** Re-reads `rect` (tile-local vertices) of tile `key` after an edit. */
   updateTile(key: string, rect: TerrainVertexRect): void {
     this.tiles.get(key)?.update(rect);
+    this.rebuildUpper();
+  }
+
+  /** Data residency changed; the authored far bounds remain available on release. */
+  refreshTile(key: string): void {
+    const { x, z } = parseTileKey(key)!;
+    const tile = this.source.tile(x, z);
+    if (tile) this.tiles.set(key, new TerrainNodeHeightBounds(tile.heights, tile.size, this.patchQuads));
+    else this.tiles.delete(key);
     this.rebuildUpper();
   }
 
@@ -221,6 +234,13 @@ export class TerrainWorldHeightBounds {
   private rebuildUpper(): void {
     const { tilesX, tilesZ } = this.source;
     const base = { nx: tilesX, nz: tilesZ, min: new Float32Array(tilesX * tilesZ).fill(Infinity), max: new Float32Array(tilesX * tilesZ).fill(-Infinity) };
+    for (const key of this.source.keys()) {
+      const range = this.source.tileRange?.(key);
+      if (!range) continue;
+      const { x, z } = parseTileKey(key)!;
+      base.min[z * tilesX + x] = range.min;
+      base.max[z * tilesX + x] = range.max;
+    }
     for (const [key, bounds] of this.tiles) {
       const { x, z } = parseTileKey(key)!;
       const range = bounds.range();

@@ -342,6 +342,26 @@ export class TerrainRenderer {
     return this.uploaded.size;
   }
 
+  /** Streaming changes residency, never the persisted global map or hole mask. */
+  refreshTile(key: string): void {
+    this.bounds.refreshTile(key);
+    this.active.delete(key);
+    this.uploaded.delete(key);
+    this.pool.release(key);
+    const { x, z } = parseTileKey(key)!;
+    if (this.allResident && this.source.tile(x, z)) this.makeResident(key);
+    // A neighbour arriving/leaving changes central differences along the seam.
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        const neighbour = tileKey(x + dx, z + dz);
+        if (neighbour !== key && this.uploaded.has(neighbour)) this.uploadTile(neighbour, this.pool.slotOf(neighbour)!);
+      }
+    }
+    this.updateHeightRange();
+    this.updateBoundingVolumes();
+    this.selectionDirty = true;
+  }
+
   /** Re-selects the quadtree and streams tile slots for `camera`; call once per frame before rendering. */
   updateLod(camera: Camera): void {
     this.mesh.updateWorldMatrix(true, false);
@@ -437,7 +457,10 @@ export class TerrainRenderer {
    */
   private updateResidency(cameraLocal: Vector3): boolean {
     const wanted = terrainResidentTileKeys(this.world, this.selector.settings, [cameraLocal.x, cameraLocal.y, cameraLocal.z])
-      .filter((key) => this.allKeys.has(key))
+      .filter((key) => {
+        const coord = parseTileKey(key)!;
+        return this.allKeys.has(key) && this.source.tile(coord.x, coord.z) !== undefined;
+      })
       .slice(0, this.pool.capacity);
     const wantedSet = new Set(wanted);
     let changed = false;
@@ -460,6 +483,8 @@ export class TerrainRenderer {
 
   /** Acquires a slot for `key` and uploads it unless the slot still holds it. */
   private makeResident(key: string): boolean {
+    const coord = parseTileKey(key)!;
+    if (!this.source.tile(coord.x, coord.z)) return false;
     const acquired = this.pool.acquire(key);
     if (!acquired) return false;
     if (acquired.evictedKey) this.uploaded.delete(acquired.evictedKey);

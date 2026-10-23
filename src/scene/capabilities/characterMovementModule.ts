@@ -27,6 +27,7 @@ import { CharacterMovementSubsystem } from "@engine/movement/characterMovementSu
 
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeServices } from "./RuntimeServices";
+import { worldStreamingService } from "./worldStreamingModule";
 import {
   characterMovementHostService,
   characterMovementQueryService,
@@ -56,6 +57,10 @@ export function createCharacterMovementModule(): CapabilityModule {
           host.getMoveIntent(entityId, transform, deltaSeconds),
         reportLocomotion: (entityId, report) => host.reportLocomotion(entityId, report),
         dynamicBlockers: (entityId, transform) => host.dynamicBlockers(entityId, transform),
+        canOccupy: (position) => {
+          const streaming = services.resolve(worldStreamingService);
+          return streaming?.hasTerrain() ? streaming.canOccupy([position[0], position[2]]) : undefined;
+        },
         // Resolved per call, so the solver sees no platforms when the
         // moving-platform module is switched off (I3) — and does not care
         // whether that module attached before or after it.

@@ -68,6 +68,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       budgetText(app, drawCalls, triangles) +
       audioBudgetText(app) +
       vfxDebugText(app) +
+      terrainStreamingText(app) +
       gameModeDebugText(app) +
       aiDebugText(app) +
       aiInspectorText(app) +
@@ -448,6 +449,14 @@ export function formatVfxDebug(snapshot: VfxDebugSnapshot, topN = 4): string[] {
 function gameModeDebugText(app: RuntimeStatsApp): string {
   if (!app.getGameModeDebugSnapshot) return "";
   return `\n${formatGameModeDebug(app.getGameModeDebugSnapshot()).join("\n")}`;
+}
+
+function terrainStreamingText(app: RuntimeStatsApp): string {
+  const stats = app.getTerrainStreamingSnapshot?.();
+  if (!stats) return "";
+  return `\nterrain streaming: loaded:${stats.loaded} active:${stats.active} queued:${stats.queued} physics:${stats.physics}`
+    + `\nstreaming: ${stats.lastFrameMs.toFixed(2)} ms/frame ${formatByteSize(stats.bytesResident)}${stats.held ? " (holding pawn)" : ""}`
+    + `\nterrain active: ${stats.activeKeys.join(" ")}\nterrain physics: ${stats.colliderKeys.join(" ")}`;
 }
 
 /**

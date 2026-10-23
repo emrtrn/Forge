@@ -35,9 +35,10 @@ export function validateDecodedTerrainTile(def: WorldTerrainDef, key: string, ti
   return tile;
 }
 
-/** Phase 1 eager loading, sequential to bound requests and transient allocation. */
+/** Eager by default; runtime streaming reads only the multi-tile definition/global map. */
 export async function loadWorldTerrain(
   path: string, value: unknown, readBinary: (path: string) => Promise<Uint8Array>,
+  streamTiles = false,
 ): Promise<WorldTerrainDocument> {
   const def = normalizeWorldTerrain(value);
   const tiles = new Map<string, DecodedTerrainTile>();
@@ -51,8 +52,10 @@ export async function loadWorldTerrain(
   try {
     globalAttributes = validateTerrainGlobalMap(def, await readBinary(terrainGlobalMapPath(path)));
   } catch (error) {
+    if (streamTiles) throw new Error(`[terrain] ${path}: streaming requires a valid global map; save the terrain in the editor`, { cause: error });
     console.warn(`[terrain] ${path}: global map missing or invalid; computing from tiles`, error);
   }
+  if (streamTiles) return { def, tiles, globalAttributes };
   for (const { key } of def.tiles) tiles.set(key, validateTerrainTile(def, key, await readBinary(terrainTilePath(path, key))));
   globalAttributes ??= buildTerrainGlobalAttributes(worldTerrainRenderSource(def, tiles));
   return { def, tiles, globalAttributes };

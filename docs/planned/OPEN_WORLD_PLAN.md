@@ -1022,14 +1022,14 @@ Doğrulama (2026-10-22):
       tile → global harita → tanım sırasındadır; yerel ayrıcalıklı endpoint
       başlık/boyut kontrolü, tanım commit'i şekil eşleştirmesi yapar.
       Editör/runtime dosyayı renderer'a geçirir; eksik/geçersiz eski dosyada
-      tek `[terrain]` uyarısıyla tile'lardan hesaplanır. **Tile akışı açık:**
-      bu dilimde bütün tile'lar hâlâ eager yüklenir.
+      tek `[terrain]` uyarısıyla tile'lardan hesaplanır. Dilim 1 eager yükler;
+      dilim 2 runtime akışı geçerli global harita ister (aşağıda).
 - [x] `worldGrid.ts`, `streamingPolicy.ts`: saf, tablo testli (menzil,
       histerezis, öncelik, hız yönü). *`worldGrid.ts` hazır* (hücre/sınır,
       yakından uzağa sıralı menzil sorgusu, actor → hücre); *`streamingPolicy`
       hazır (2026-10-23):* yükleme/aktivasyon menzilleri, histerezis, hız yönlü
       öncelik, çoklu kaynak, dünya sınırı, kalite çarpanı ve kare bütçesi.
-- [ ] `worldStreamingSubsystem.ts`: durum makinesi, fetch sınırı, kare
+- [x] `worldStreamingSubsystem.ts`: durum makinesi, fetch sınırı, kare
       bütçesi, LRU bellek bütçesi, iptal (menzilden çıkan fetch), hata
       (eksik tile → düz tile + `[world]` uyarısı, CONTENT_LOADING_CONTRACT
       sınıflandırmasıyla).
@@ -1039,27 +1039,64 @@ Doğrulama (2026-10-22):
       `isAreaReady`/`waitForArea` ve `stats()` API'si testli. Menzil dışı pasif
       veri bütçe dolana kadar tutulur; aktif veri bu bütçenin dışındadır.
       Aktivasyon atomiktir: başlayan tek hücre dilimi aşabilir, sonraki iş
-      sonraki kareye kalır. Runtime capability bağlantısı, gerçek loader'lar,
-      renderer/fizik aktivasyonu ve `?debug` overlay'i açık.
-- [ ] `terrainWorker.ts`: çözme + Float32 açma + min/max, transferable.
+      sonraki kareye kalır. *Runtime bağlantısı tamam (2026-10-23, dilim 2):*
+      `worldStreamingModule.ts` yalnız Play'de çok-tile araziyi bağlar;
+      tanım + global harita okunur, tile'lar pawn (yoksa kamera) çevresinde
+      akar. Eksik/geçersiz tile tek `[world]` uyarısıyla özetin min yüksekliğinde
+      düz tile olur. Editör eager, 1×1 Landscape yolu değişmedi.
+- [x] `terrainWorker.ts`: çözme + Float32 açma + min/max, transferable.
       *Saf çekirdek hazır (2026-10-23):* `terrainTileStreaming.ts` eager loader
       ile aynı tanım doğrulamasını kullanır; metre cinsinden Float32 yükseklik,
       RGBA8 ağırlık blokları, min/max ve benzersiz transfer buffer'ları üretir.
       İnce module worker önce `{ type: "init", def }`, sonra `{ key, bytes }`
       alır; sonucu transfer listesiyle, hatayı yapılandırılmış mesajla yollar.
-      Runtime bağlantısı, gerçek loader'lar ve worker pool henüz yapılmadı;
-      `?debug` sayıları yalnız subsystem `stats()` API'sinde, overlay açık.
-- [ ] Render menzili ve fizik menzili ayrı; global harita menzil dışını
+      *Bağlandı (2026-10-23):* iki module worker, altı eşzamanlı fetch;
+      kuyruk/aktif decode iptali geç sonuç yayımlamaz, level unload worker'ları
+      kapatır. Worker hataları aynı sınıflandırılmış tile fallback'ine gider.
+- [x] Render menzili ve fizik menzili ayrı; global harita menzil dışını
       kapatır.
+      *Tamam (dilim 2):* render 2 tile boyu (en az 8 m), fizik 0,75 tile
+      boyu (en az 4 m), histerezis 1,25. Pasif LRU bütçesi dört tile'ın
+      decode baytı; aktifler ayrı tutulur. Renderer tanımda bulunan ama henüz
+      yüklenmeyen tile'ı global haritadan çizer; delik maskesi değişmez.
+      Aktivasyon/serbest bırakma sabit kamerada bile slot/bounds/dikiş
+      normallerini yeniler; kalıcı global harita yeniden örneklenmez.
 - [ ] Bloklayan yükleme: boot, travel, save-game yükleme ve ışınlanma
       (`LevelRuntime` adımı + loading ekranı). Akıştan hızlı giden pawn'ı
       tutma kuralı.
-- [ ] `QualityExtensions.viewDistanceMultiplier` menzilleri ölçekler.
+      *Boot/level travel tamam (dilim 2):* `startSceneRuntime` öncesi spawn
+      çevresinde `waitForArea` ve heightfield hazır olma kontrolü loading
+      ekranı arkasında bekler. Pawn'ın mevcut/sonraki kare konumunun 2 m
+      çevresinde bildirilen arazi collider'ı yoksa bütün simülasyon tutulur;
+      streaming gerçek karelerde devam eder. Karakter çözücüsü hazır olmayan
+      konuma adımı geri alır ve hızını sıfırlar; delikler/dünya dışı tutulmaz.
+      Save-game/ışınlanma sonrası aynı tutma koruması var; bu işlemlere ayrı
+      bloklayan loading ekranı bağlamak açık.
+- [x] `QualityExtensions.viewDistanceMultiplier` render menzilini ölçekler;
+      fizik güvenlik halkası sabit, render çarpanı en az 0,5.
 - [ ] `?debug`: yüklü/aktif/kuyruk hücre sayısı, ms/kare, bellek; hücre grid
       overlay'i (renk = durum).
+      *Sayılar tamam (dilim 2):* yüklü/aktif/kuyruk, fizik tile sayısı,
+      ms/kare, resident bayt ve pawn tutma durumu mevcut overlay'de.
+      Renkli hücre grid'i açık.
 - [ ] **Test dünyası:** `tools/world/generate-test-world` → `Levels/OpenWorldTest`
       (4×4 km, fBm gürültülü dağ-vadi, 4 boya katmanı). Smoke: spawn → 1 km
       yürü/sür → bellek ve hücre sayısı sınırda kalıyor, zemine düşme yok.
+
+**Dilim 2 doğrulaması (2026-10-23):** `terrainRuntimeStreaming.test.ts`
+tanımlı/yüklü olmayan tile–delik ayrımını, sabit kamerada slot değişimini,
+global haritanın korunmasını, collider ekle/sil ve pawn tutmayı denetler.
+`terrain-streaming.spec.ts` kopya smoke projesinde 6×6 × 64 quad + encoder'la
+global harita üretir; köşede spawn, alt küme yükleme, normal input'la uzak
+köşeye koşma, eski tile/collider bırakma ve `terrainHeightAt` ile zemini ölçer.
+5274 koşumu sandbox esbuild dizin erişim engelinde sunucu başlamadan durdu;
+smoke TypeScript kapısı geçti, tarayıcı kabulü açık. Aynı engel standart
+engine runner'ını da durdurdu; geçici TypeScript loader'ıyla yeni ve mevcut
+renderer/streaming kontrolleri 36/36 geçti. Bu, tam build kapısı değildir;
+`build:verify` import/smoke fixture/content/UI tür kapılarını geçti, release
+araçlarındaki iki esbuild tabanlı URL kontrolünde aynı erişim engeline takıldı.
+Geçerli global haritası olmayan eski çok-tile arazi Play'de açık hata verir;
+editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i açık.
 
 ## Faz 5 — Actor bölümleme (hücre dosyaları)
 

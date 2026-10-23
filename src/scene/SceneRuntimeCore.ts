@@ -1069,6 +1069,8 @@ export interface SceneEngineSpine {
  */
 export async function startSceneRuntime(options: {
   sceneDocument: SceneDocument;
+  /** Streamed physics resources must not be retained by persistent module/behavior contexts. */
+  additionalPhysicsEntities?: readonly Entity[];
   physics: SceneEntitySink;
   behavior: SceneEntitySink;
   characterMovement?: SceneEntitySink;
@@ -1082,7 +1084,9 @@ export async function startSceneRuntime(options: {
   ai?: SceneEntitySink;
   engineApp: SceneEngineSpine;
 }): Promise<void> {
-  options.physics.setEntities(options.sceneDocument.entities);
+  options.physics.setEntities(options.additionalPhysicsEntities?.length
+    ? [...options.sceneDocument.entities, ...options.additionalPhysicsEntities]
+    : options.sceneDocument.entities);
   for (const sink of options.moduleSinks ?? []) sink.setEntities(options.sceneDocument.entities);
   options.characterMovement?.setEntities(options.sceneDocument.entities);
   options.ai?.setEntities(options.sceneDocument.entities);

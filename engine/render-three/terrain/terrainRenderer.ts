@@ -56,6 +56,7 @@ import {
   type TerrainMaterials,
   type TerrainViewMode,
 } from "./terrainMaterial";
+import { TerrainTextureUpdates } from "./terrainTextureUpdates";
 
 /**
  * GPU CDLOD renderer for one terrain grid of tiles (OPEN_WORLD_PLAN Faz 2). One
@@ -240,6 +241,8 @@ export class TerrainRenderer {
   private readonly globalHeightTexture: DataTexture;
   private readonly globalNormalTexture: DataTexture;
   private readonly globalWeightTexture: DataArrayTexture;
+  private readonly textureUpdates: TerrainTextureUpdates;
+  private readonly hasGlobalHoles: boolean;
   private readonly bounds: TerrainWorldHeightBounds;
   private readonly selector: TerrainLodSelector;
   private readonly pool: TerrainSlotPool;
@@ -285,6 +288,11 @@ export class TerrainRenderer {
       new DataArrayTexture(this.global.weights, width, height, TERRAIN_WEIGHT_BLOCKS),
       RGBAFormat, UnsignedByteType, LinearFilter,
     );
+    this.textureUpdates = new TerrainTextureUpdates([
+      this.heightTexture, this.normalTexture, this.weightTexture,
+      this.globalHeightTexture, this.globalNormalTexture, this.globalWeightTexture,
+    ]);
+    this.hasGlobalHoles = this.global.map.heights.some(Number.isNaN);
     this.writeGlobalTextures();
 
     this.selector = new TerrainLodSelector(this.world, (level, ix, iz) => this.bounds.node(level, ix, iz), {
@@ -318,6 +326,7 @@ export class TerrainRenderer {
     this.mesh.castShadow = false;
     this.mesh.userData.forgeTerrain = this;
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
+    this.mesh.onBeforeRender = (renderer) => this.textureUpdates.flush(renderer);
     this.updateBoundingVolumes();
 
     if (this.allResident) {
@@ -354,16 +363,27 @@ export class TerrainRenderer {
     invalidateTerrainTileRange(tile);
     this.bounds.updateTile(key, rect);
     if (this.uploaded.has(key)) this.uploadTile(key, this.pool.slotOf(key)!, rect);
-    // A height change on a tile edge moves the neighbour's seam normals too.
+    // Intersect the dirty vertices and their one-vertex normal reach with
+    // adjacent tiles, including corner copies of a shared seam vertex.
     const last = this.source.tileQuads;
-    const neighbours: [number, number, boolean][] = [
-      [-1, 0, rect.x0 <= 1], [1, 0, rect.x1 >= last - 1], [0, -1, rect.z0 <= 1], [0, 1, rect.z1 >= last - 1],
-    ];
-    for (const [dx, dz, touches] of neighbours) {
-      const neighbour = tileKey(coord.x + dx, coord.z + dz);
-      if (touches && this.uploaded.has(neighbour)) this.uploadTile(neighbour, this.pool.slotOf(neighbour)!);
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        if (dx === 0 && dz === 0) continue;
+        const neighbour = tileKey(coord.x + dx, coord.z + dz);
+        if (!this.uploaded.has(neighbour)) continue;
+        const overlap = (pad: number): TerrainVertexRect | null => {
+          const area = {
+            x0: Math.max(0, rect.x0 - pad - dx * last), x1: Math.min(last, rect.x1 + pad - dx * last),
+            z0: Math.max(0, rect.z0 - pad - dz * last), z1: Math.min(last, rect.z1 + pad - dz * last),
+          };
+          return area.x0 <= area.x1 && area.z0 <= area.z1 ? area : null;
+        };
+        const normals = overlap(1);
+        if (normals) this.uploadTile(neighbour, this.pool.slotOf(neighbour)!, overlap(0), normals);
+      }
     }
-    if (updateTerrainGlobalAttributes(this.global, this.source, key, rect)) this.writeGlobalTextures();
+    const globalRect = updateTerrainGlobalAttributes(this.global, this.source, key, rect);
+    if (globalRect) this.writeGlobalTextures(globalRect);
     this.updateHeightRange();
     this.updateBoundingVolumes();
     this.selectionDirty = true;
@@ -398,6 +418,7 @@ export class TerrainRenderer {
   }
 
   dispose(): void {
+    this.textureUpdates.dispose();
     this.mesh.geometry.dispose();
     this.materials.material.dispose();
     this.materials.normalMaterial.dispose();
@@ -446,18 +467,16 @@ export class TerrainRenderer {
     return true;
   }
 
-  /** Writes tile `key` into `slot` (whole tile, or `rect` grown by the one-vertex normal reach). */
-  private uploadTile(key: string, slot: number, rect?: TerrainVertexRect): void {
+  /** Writes dirty vertices and their normal reach; null vertices means normals only. */
+  private uploadTile(key: string, slot: number, rect?: TerrainVertexRect | null, normalRect?: TerrainVertexRect): void {
     const { x, z } = parseTileKey(key)!;
     const tile = this.source.tile(x, z)!;
     const size = this.tileVertices;
-    const area = rect
-      ? {
-          x0: Math.max(0, rect.x0 - 1), x1: Math.min(size - 1, rect.x1 + 1),
-          z0: Math.max(0, rect.z0 - 1), z1: Math.min(size - 1, rect.z1 + 1),
-        }
-      : { x0: 0, x1: size - 1, z0: 0, z1: size - 1 };
-    this.heightSlots.set(tile.heights, slot * this.tileTexels);
+    const vertices = rect === undefined ? { x0: 0, x1: size - 1, z0: 0, z1: size - 1 } : rect;
+    const area = normalRect ?? {
+      x0: Math.max(0, vertices!.x0 - 1), x1: Math.min(size - 1, vertices!.x1 + 1),
+      z0: Math.max(0, vertices!.z0 - 1), z1: Math.min(size - 1, vertices!.z1 + 1),
+    };
     computeTileNormals(this.source, key, this.normalScratch, area);
     const normalBase = slot * this.tileTexels * 2;
     for (let row = area.z0; row <= area.z1; row += 1) {
@@ -467,36 +486,67 @@ export class TerrainRenderer {
         this.normalSlots[normalBase + index + 1] = DataUtils.toHalfFloat(this.normalScratch[index + 1]!);
       }
     }
-    const blockBytes = this.tileTexels * 4;
-    const blocks = Math.ceil(tile.layerCount / 4);
-    for (let block = 0; block < TERRAIN_WEIGHT_BLOCKS; block += 1) {
-      const target = (slot * TERRAIN_WEIGHT_BLOCKS + block) * blockBytes;
-      if (block < blocks) this.weightSlots.set(tile.weights.subarray(block * blockBytes, (block + 1) * blockBytes), target);
-      else this.weightSlots.fill(0, target, target + blockBytes);
-      this.weightTexture.addLayerUpdate(slot * TERRAIN_WEIGHT_BLOCKS + block);
+    this.textureUpdates.add(this.normalTexture, slot, area);
+    if (vertices) {
+      const blockBytes = this.tileTexels * 4;
+      const blocks = Math.ceil(tile.layerCount / 4);
+      for (let row = vertices.z0; row <= vertices.z1; row += 1) {
+        const start = row * size + vertices.x0;
+        const end = row * size + vertices.x1 + 1;
+        this.heightSlots.set(tile.heights.subarray(start, end), slot * this.tileTexels + start);
+        for (let block = 0; block < TERRAIN_WEIGHT_BLOCKS; block += 1) {
+          const target = (slot * TERRAIN_WEIGHT_BLOCKS + block) * blockBytes;
+          if (block < blocks) this.weightSlots.set(tile.weights.subarray(block * blockBytes + start * 4, block * blockBytes + end * 4), target + start * 4);
+          else this.weightSlots.fill(0, target + start * 4, target + end * 4);
+        }
+      }
+      this.textureUpdates.add(this.heightTexture, slot, vertices);
+      for (let block = 0; block < TERRAIN_WEIGHT_BLOCKS; block += 1) {
+        this.textureUpdates.add(this.weightTexture, slot * TERRAIN_WEIGHT_BLOCKS + block, vertices);
+      }
     }
-    this.heightTexture.addLayerUpdate(slot);
-    this.normalTexture.addLayerUpdate(slot);
-    this.heightTexture.needsUpdate = true;
-    this.normalTexture.needsUpdate = true;
-    this.weightTexture.needsUpdate = true;
     this.uploaded.add(key);
     this.selectionDirty = true;
   }
 
-  private writeGlobalTextures(): void {
+  private writeGlobalTextures(rect?: TerrainVertexRect): void {
     const { map, normals } = this.global;
-    const range = this.bounds.range();
-    (this.globalHeightTexture.image.data as Float32Array).set(fillHoles(map.heights, map.width, map.height, range.min));
-    const halves = this.globalNormalTexture.image.data as Uint16Array;
-    for (let sample = 0; sample < map.width * map.height; sample += 1) {
-      halves[sample * 4] = DataUtils.toHalfFloat(normals[sample * 3]!);
-      halves[sample * 4 + 1] = DataUtils.toHalfFloat(normals[sample * 3 + 1]!);
-      halves[sample * 4 + 2] = DataUtils.toHalfFloat(normals[sample * 3 + 2]!);
+    const area = rect ?? { x0: 0, x1: map.width - 1, z0: 0, z1: map.height - 1 };
+    const heights = this.globalHeightTexture.image.data as Float32Array;
+    const filled = this.hasGlobalHoles ? fillHoles(map.heights, map.width, map.height, this.bounds.range().min) : map.heights;
+    const heightArea = { ...area };
+    // Hole filling can propagate a changed boundary sample beyond the dirty
+    // map rectangle. Include those changed texels to preserve the same surface.
+    if (this.hasGlobalHoles) {
+      for (let z = 0; z < map.height; z += 1) {
+        for (let x = 0; x < map.width; x += 1) {
+          const index = z * map.width + x;
+          if (heights[index] === filled[index]) continue;
+          heightArea.x0 = Math.min(heightArea.x0, x);
+          heightArea.x1 = Math.max(heightArea.x1, x);
+          heightArea.z0 = Math.min(heightArea.z0, z);
+          heightArea.z1 = Math.max(heightArea.z1, z);
+        }
+      }
     }
-    this.globalHeightTexture.needsUpdate = true;
-    this.globalNormalTexture.needsUpdate = true;
-    this.globalWeightTexture.needsUpdate = true;
+    for (let z = heightArea.z0; z <= heightArea.z1; z += 1) {
+      const start = z * map.width + heightArea.x0;
+      heights.set(filled.subarray(start, z * map.width + heightArea.x1 + 1), start);
+    }
+    const halves = this.globalNormalTexture.image.data as Uint16Array;
+    for (let z = area.z0; z <= area.z1; z += 1) {
+      for (let x = area.x0; x <= area.x1; x += 1) {
+        const sample = z * map.width + x;
+        halves[sample * 4] = DataUtils.toHalfFloat(normals[sample * 3]!);
+        halves[sample * 4 + 1] = DataUtils.toHalfFloat(normals[sample * 3 + 1]!);
+        halves[sample * 4 + 2] = DataUtils.toHalfFloat(normals[sample * 3 + 2]!);
+      }
+    }
+    this.textureUpdates.add(this.globalHeightTexture, 0, heightArea);
+    this.textureUpdates.add(this.globalNormalTexture, 0, area);
+    for (let block = 0; block < TERRAIN_WEIGHT_BLOCKS; block += 1) {
+      this.textureUpdates.add(this.globalWeightTexture, block, area);
+    }
   }
 
   private updateHeightRange(): void {

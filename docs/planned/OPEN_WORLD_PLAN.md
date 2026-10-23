@@ -764,9 +764,12 @@ Doğrulama (2026-10-22):
       editör görüntü + boş kare kontrolü, seçim/F/uyarı/Save, Play'de pawn
       arazi yüksekliğinde duruyor: 5,70 m'ye karşı 5,698 m).
       **Açık:** node frustum culling, uzak tekrar kırma ve kendine gölge
-      (legacy de gölge düşürmüyor; parite için kapalı), dirty-rect doku
-      yüklemesi (şimdilik tüm katman), tile akışının Faz 4 alt sistemine
-      bağlanması (şimdilik bütün tile'lar CPU'da yüklü).
+      (legacy de gölge düşürmüyor; parite için kapalı), tile akışının Faz 4
+      alt sistemine bağlanması (şimdilik bütün tile'lar CPU'da yüklü).
+      **Dirty-rect tamam (2026-10-23):** slot dokuları ve global haritalar
+      yalnız kirli bölgeyi yükler; seam normalleri komşuda ince şeritle
+      güncellenir. İlk yükleme/context yenileme tam CPU kopyasını kullanır;
+      boşluk doldurmanın etkilediği global yükseklik örnekleri de kapsanır.
 - [x] Eski `engine/render-three/landscape.ts` chunk renderer'ı kaldırılır;
       `RuntimeSceneApp` ve `SceneApp` yeni renderer'ı kullanır.
       *Tamam (2026-10-23):* görsel onaydan sonra chunk mesh, splat materyali ve

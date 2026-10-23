@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import {
   BufferAttribute,
   BufferGeometry,
+  Box3,
+  DataArrayTexture,
+  DataTexture,
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
   Raycaster,
   Vector3,
   type InstancedBufferGeometry,
+  type WebGLProgramParametersWithUniforms,
+  type WebGLRenderer,
 } from "three";
 import { TerrainRenderer } from "../../engine/render-three/terrain/terrainRenderer";
 import {
@@ -18,6 +23,7 @@ import {
   worldTerrainRenderSource,
   type TerrainRenderSource,
 } from "../../engine/terrain/terrainRenderSource";
+import type { TerrainVertexRect } from "../../engine/terrain/terrainRenderData";
 import { tileKey, type TerrainTileData } from "../../engine/terrain/terrainTypes";
 
 type Check = (label: string, fn: () => void) => void;
@@ -83,7 +89,255 @@ function cameraAt(x: number, y: number, z: number): PerspectiveCamera {
   return camera;
 }
 
+type Mirror = Float32Array | Uint16Array | Uint8Array;
+type TerrainTexture = DataTexture | DataArrayTexture;
+const TEXTURES = ["Heights", "Normals", "Weights", "GlobalHeights", "GlobalNormals", "GlobalWeights"] as const;
+
+function textures(terrain: TerrainRenderer): Record<string, TerrainTexture> {
+  const shader = { uniforms: {}, vertexShader: "", fragmentShader: "" } as WebGLProgramParametersWithUniforms;
+  terrain.mesh.material.onBeforeCompile(shader, undefined!);
+  const { uniforms } = shader;
+  return Object.fromEntries(TEXTURES.map((name) => [name, uniforms[`uTerrain${name}`]!.value as TerrainTexture]));
+}
+
+/** Records public copy requests and emulates their strided CPU data transfers. */
+function uploadRecorder() {
+  const properties = new Map<TerrainTexture, { __webglTexture: object; __version: number }>();
+  const gpu = new Map<TerrainTexture, Mirror>();
+  const copies: { texture: TerrainTexture; layer: number; rect: TerrainVertexRect; bytes: number }[] = [];
+  const initialized: TerrainTexture[] = [];
+  const fake = {
+    properties: { get: (texture: TerrainTexture) => properties.get(texture) ?? {} },
+    initTexture: (texture: TerrainTexture) => {
+      initialized.push(texture);
+      properties.set(texture, { __webglTexture: {}, __version: texture.version });
+      gpu.set(texture, (texture.image.data as Mirror).slice());
+    },
+    copyTextureToTexture: (source: DataTexture, texture: TerrainTexture, region: Box3, position: Vector3) => {
+      assert.ok(source.isDataTexture, "array destinations must use a CPU DataTexture source in r184");
+      assert.ok(!properties.has(source), "the source descriptor must never be initialized on the GPU");
+      assert.equal(source.format, texture.format);
+      assert.equal(source.type, texture.type);
+      const depth = texture instanceof DataArrayTexture ? texture.image.depth : 1;
+      const channels = texture.image.data!.length / (texture.image.width * texture.image.height * depth);
+      const width = region.max.x - region.min.x;
+      const height = region.max.y - region.min.y;
+      const data = source.image.data as Mirror;
+      copies.push({ texture, layer: position.z, rect: {
+        x0: position.x, x1: position.x + width - 1, z0: position.y, z1: position.y + height - 1,
+      }, bytes: width * height * channels * data.BYTES_PER_ELEMENT });
+      assert.equal(region.max.z - region.min.z, 1);
+      for (let row = 0; row < height; row += 1) {
+        const from = ((region.min.y + row) * source.image.width + region.min.x) * channels;
+        const to = ((position.z * texture.image.height + position.y + row) * texture.image.width + position.x) * channels;
+        gpu.get(texture)!.set(data.subarray(from, from + width * channels), to);
+      }
+    },
+  } as unknown as WebGLRenderer;
+  const flush = (terrain: TerrainRenderer) => terrain.mesh.onBeforeRender(fake, undefined!, undefined!, terrain.mesh.geometry, terrain.mesh.material, undefined!);
+  const reset = () => { copies.length = 0; initialized.length = 0; };
+  return { copies, initialized, properties, gpu, flush, reset };
+}
+
+function dabWorld(tilesX = 1, tilesZ = 1, hole = ""): TerrainRenderSource {
+  const size = 257;
+  const texels = size * size;
+  const tiles = new Map<string, TerrainTileData>();
+  for (let z = 0; z < tilesZ; z += 1) {
+    for (let x = 0; x < tilesX; x += 1) {
+      if (tileKey(x, z) === hole) continue;
+      const heights = new Float32Array(texels);
+      const weights = new Uint8Array(texels * 8);
+      for (let row = 0; row < size; row += 1) {
+        for (let column = 0; column < size; column += 1) {
+          const gx = x * 256 + column;
+          const gz = z * 256 + row;
+          const index = row * size + column;
+          heights[index] = heightAt(gx, gz);
+          weights.set([120, gx % 100, gz % 100, 5], index * 4);
+          weights.set([3, 4, 5, 6], (texels + index) * 4);
+        }
+      }
+      tiles.set(tileKey(x, z), { x, z, size, heights, layerCount: 8, weights });
+    }
+  }
+  return worldTerrainRenderSource({ tileQuads: 256, spacing: 1, tilesX, tilesZ }, tiles);
+}
+
+/** Edit the duplicated seam values too, as the world brush does before notifying renderers. */
+function dab(source: TerrainRenderSource, rect: TerrainVertexRect): void {
+  for (const key of source.keys()) {
+    const [tx, tz] = key.split("_").map(Number) as [number, number];
+    const tile = source.tile(tx, tz)!;
+    for (let z = Math.max(rect.z0, tz * 256); z <= Math.min(rect.z1, (tz + 1) * 256); z += 1) {
+      for (let x = Math.max(rect.x0, tx * 256); x <= Math.min(rect.x1, (tx + 1) * 256); x += 1) {
+        const index = (z - tz * 256) * tile.size + x - tx * 256;
+        tile.heights[index]! += 7;
+        tile.weights[index * 4] = 10;
+        tile.weights[(tile.size * tile.size + index) * 4] = 90;
+      }
+    }
+  }
+}
+
+function assertRebuilt(terrain: TerrainRenderer, source: TerrainRenderSource, uploads: ReturnType<typeof uploadRecorder>): void {
+  const rebuilt = renderer(source);
+  const actual = textures(terrain);
+  const expected = textures(rebuilt);
+  for (const name of TEXTURES) {
+    assert.deepEqual(actual[name]!.image.data, expected[name]!.image.data, `${name} CPU mirror matches full rebuild`);
+    assert.deepEqual(uploads.gpu.get(actual[name]!), expected[name]!.image.data, `${name} uploaded regions match full rebuild`);
+  }
+  rebuilt.dispose();
+}
+
+function copyRegions(terrain: TerrainRenderer, uploads: ReturnType<typeof uploadRecorder>) {
+  const names = new Map(Object.entries(textures(terrain)).map(([name, texture]) => [texture, name]));
+  return uploads.copies.map(({ texture, ...copy }) => ({ name: names.get(texture), ...copy }));
+}
+
 export function registerTerrainWorldRendererTests(check: Check): void {
+  check("terrain uploads: 257 squared interior dab copies only dirty regions and matches a rebuild", () => {
+    const source = dabWorld();
+    const terrain = renderer(source);
+    const uploads = uploadRecorder();
+    uploads.flush(terrain);
+    assert.equal(uploads.initialized.length, 6, "first upload initializes all CPU mirrors");
+    uploads.reset();
+    const rect = { x0: 126, x1: 130, z0: 126, z1: 130 };
+    dab(source, rect);
+    terrain.updateTile("0_0", rect);
+    assert.equal(uploads.copies.length, 0, "updates defer until rendering");
+    uploads.flush(terrain);
+    const normal = { x0: 125, x1: 131, z0: 125, z1: 131 };
+    const sample = { x0: 8, x1: 8, z0: 8, z1: 8 };
+    assert.deepEqual(copyRegions(terrain, uploads), [
+      { name: "Heights", layer: 0, rect, bytes: 100 },
+      { name: "Normals", layer: 0, rect: normal, bytes: 196 },
+      { name: "Weights", layer: 0, rect, bytes: 100 },
+      { name: "Weights", layer: 1, rect, bytes: 100 },
+      { name: "GlobalHeights", layer: 0, rect: sample, bytes: 4 },
+      { name: "GlobalNormals", layer: 0, rect: sample, bytes: 8 },
+      { name: "GlobalWeights", layer: 0, rect: sample, bytes: 4 },
+      { name: "GlobalWeights", layer: 1, rect: sample, bytes: 4 },
+    ]);
+    assert.equal(uploads.initialized.length, 0, "an editing dab never requests a full texture upload");
+    const before = Object.values(textures(terrain)).reduce((sum, texture) => sum + texture.image.data!.byteLength, 0);
+    const after = uploads.copies.reduce((sum, copy) => sum + copy.bytes, 0);
+    assert.equal(before, 1_062_564);
+    assert.equal(after, 516);
+    console.log(`[terrain uploads] 257x257, 5x5 interior dab: whole-layer reference ${before} B -> dirty regions ${after} B`);
+    assertRebuilt(terrain, source, uploads);
+    uploads.reset();
+    uploads.flush(terrain);
+    assert.equal(uploads.copies.length, 0, "additional render passes do not repeat copies");
+    terrain.dispose();
+  });
+
+  check("terrain uploads: seam dab copies the neighbour edge strip and matches a rebuild", () => {
+    const source = dabWorld(2);
+    const terrain = renderer(source);
+    const uploads = uploadRecorder();
+    uploads.flush(terrain);
+    uploads.reset();
+    const rect = { x0: 254, x1: 256, z0: 126, z1: 130 };
+    dab(source, rect);
+    terrain.updateTile("0_0", rect);
+    uploads.flush(terrain);
+    const copies = copyRegions(terrain, uploads);
+    assert.deepEqual(copies.filter((copy) => copy.name === "Normals"), [
+      { name: "Normals", layer: 0, rect: { x0: 253, x1: 256, z0: 125, z1: 131 }, bytes: 112 },
+      { name: "Normals", layer: 1, rect: { x0: 0, x1: 1, z0: 125, z1: 131 }, bytes: 56 },
+    ]);
+    assert.deepEqual(copies.filter((copy) => copy.name === "Heights"), [
+      { name: "Heights", layer: 0, rect, bytes: 60 },
+      { name: "Heights", layer: 1, rect: { x0: 0, x1: 0, z0: 126, z1: 130 }, bytes: 20 },
+    ]);
+    assert.deepEqual(copies.filter((copy) => copy.name === "Weights"), [
+      { name: "Weights", layer: 0, rect, bytes: 60 },
+      { name: "Weights", layer: 1, rect, bytes: 60 },
+      { name: "Weights", layer: 2, rect: { x0: 0, x1: 0, z0: 126, z1: 130 }, bytes: 20 },
+      { name: "Weights", layer: 3, rect: { x0: 0, x1: 0, z0: 126, z1: 130 }, bytes: 20 },
+    ]);
+    assert.deepEqual(copies.filter((copy) => copy.name!.startsWith("Global")), [
+      { name: "GlobalHeights", layer: 0, rect: { x0: 16, x1: 16, z0: 8, z1: 8 }, bytes: 4 },
+      { name: "GlobalNormals", layer: 0, rect: { x0: 16, x1: 16, z0: 8, z1: 8 }, bytes: 8 },
+      { name: "GlobalWeights", layer: 0, rect: { x0: 16, x1: 16, z0: 8, z1: 8 }, bytes: 4 },
+      { name: "GlobalWeights", layer: 1, rect: { x0: 16, x1: 16, z0: 8, z1: 8 }, bytes: 4 },
+    ]);
+    const after = uploads.copies.reduce((sum, copy) => sum + copy.bytes, 0);
+    const before = Object.values(textures(terrain)).reduce((sum, texture) => sum + texture.image.data!.byteLength, 0);
+    assert.equal(before, 2_124_788);
+    assert.equal(after, 428);
+    console.log(`[terrain uploads] 257x257, 3x5 seam dab: whole-layer reference ${before} B -> dirty regions ${after} B`);
+    assertRebuilt(terrain, source, uploads);
+    terrain.dispose();
+  });
+
+  check("terrain uploads: seam normal reach, corner copies, batching and context recovery", () => {
+    const source = dabWorld(2, 2);
+    const terrain = renderer(source);
+    const uploads = uploadRecorder();
+    // Changes before first render are included in initialization, without redundant subcopies.
+    const nearSeam = { x0: 255, x1: 255, z0: 128, z1: 128 };
+    dab(source, nearSeam);
+    terrain.updateTile("0_0", nearSeam);
+    uploads.flush(terrain);
+    assert.equal(uploads.copies.length, 0);
+    assertRebuilt(terrain, source, uploads);
+    uploads.reset();
+    dab(source, nearSeam);
+    terrain.updateTile("0_0", nearSeam);
+    uploads.flush(terrain);
+    assert.deepEqual(copyRegions(terrain, uploads).filter((copy) => copy.name === "Normals" && copy.layer === 1), [
+      { name: "Normals", layer: 1, rect: { x0: 0, x1: 0, z0: 127, z1: 129 }, bytes: 12 },
+    ]);
+    assert.ok(!uploads.copies.some((copy) => copy.texture === textures(terrain).Heights && copy.layer === 1));
+    assertRebuilt(terrain, source, uploads);
+    uploads.reset();
+    const corner = { x0: 255, x1: 256, z0: 255, z1: 256 };
+    dab(source, corner);
+    terrain.updateTile("0_0", corner);
+    // Two dabs before drawing merge per texture layer, reading the latest mirror.
+    dab(source, corner);
+    terrain.updateTile("0_0", corner);
+    uploads.flush(terrain);
+    assert.equal(uploads.copies.filter((copy) => copy.texture === textures(terrain).Normals).length, 4);
+    assertRebuilt(terrain, source, uploads);
+    uploads.reset();
+    dab(source, nearSeam);
+    terrain.updateTile("0_0", nearSeam);
+    uploads.properties.clear(); // Simulate WebGLRenderer's property reset on context restore.
+    uploads.flush(terrain);
+    assert.equal(uploads.initialized.length, 6);
+    assert.equal(uploads.copies.length, 0);
+    assertRebuilt(terrain, source, uploads);
+    terrain.dispose();
+  });
+
+  check("terrain uploads: edits without global samples skip maps; hole fill stays identical", () => {
+    const source = dabWorld(2, 2, "1_1");
+    const terrain = renderer(source);
+    const uploads = uploadRecorder();
+    uploads.flush(terrain);
+    uploads.reset();
+    const between = { x0: 120, x1: 121, z0: 120, z1: 121 };
+    dab(source, between);
+    terrain.updateTile("0_0", between);
+    uploads.flush(terrain);
+    assert.ok(copyRegions(terrain, uploads).every((copy) => !copy.name!.startsWith("Global")));
+    assertRebuilt(terrain, source, uploads);
+    uploads.reset();
+    const edge = { x0: 254, x1: 256, z0: 270, z1: 274 };
+    dab(source, edge);
+    terrain.updateTile("0_1", { x0: 254, x1: 256, z0: 14, z1: 18 });
+    uploads.flush(terrain);
+    const changedFill = copyRegions(terrain, uploads).find((copy) => copy.name === "GlobalHeights")!;
+    assert.ok(changedFill.rect.x1 > 16 && changedFill.rect.z1 > 16, "hole filling propagates changed boundary heights");
+    assertRebuilt(terrain, source, uploads);
+    terrain.dispose();
+  });
+
   check("terrain world: seam normals equal a single-grid reference, holes clamp", () => {
     const source = worldSource();
     const out = new Float32Array((Q + 1) * (Q + 1) * 2);

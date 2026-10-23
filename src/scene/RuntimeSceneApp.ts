@@ -621,6 +621,13 @@ const EMPTY_BEHAVIOR_REGISTRY: BehaviorRegistry = { get: () => undefined };
  */
 const SHADER_WARMUP_TIMEOUT_MS = 15_000;
 
+/**
+ * How long a mid-play terrain hold may last before the loading overlay covers
+ * it. Short holds (a fast car brushing the streaming edge) stay a brief freeze;
+ * a teleport into unloaded terrain shows "Loading terrain" instead.
+ */
+const TERRAIN_HOLD_OVERLAY_DELAY_MS = 200;
+
 /** Compact one-line reason for a failed asset load (for the load-progress detail). */
 function describeLoadError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -861,6 +868,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly loadProgress = new LoadProgressTracker();
   /** Full-screen loading overlay shown during boot + level travel; null with no DOM host. */
   private loadingOverlay: LoadingOverlay | null = null;
+  /** Frame time the current terrain hold began, or null while nothing is held. */
+  private terrainHoldSinceMs: number | null = null;
+  /** True while the loading overlay is shown by a mid-play terrain hold (not boot/travel). */
+  private terrainHoldOverlay = false;
   /** `?debug`: logs load timing + asset counts. */
   private readonly debug: boolean;
   /** performance.now() at the current load's start, for the `?debug` timing readout. */
@@ -1459,6 +1470,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // IO keeps advancing on real frames while an unloaded pawn footprint holds
       // the whole simulation at its current pose (including rigid-body pawns).
       const terrainHeld = this.updateTerrainStreaming(requestedMs / 1000);
+      this.updateTerrainHoldOverlay(terrainHeld, now);
       const simulationMs = terrainHeld ? 0 : requestedMs;
       this.simulationClockMs += simulationMs;
       // Frame regions (F1). Every span below is bracketed by `perfMark` /
@@ -2111,11 +2123,51 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.runtimeServices.resolve(worldStreamingService)?.snapshot() ?? null;
   }
 
+  private async prepareTerrainAroundPawn(): Promise<void> {
+    const streaming = this.runtimeServices.resolve(worldStreamingService);
+    const pawnId = this.gameModeSession?.playerState.pawnEntityId;
+    const pawn = pawnId ? this.transformForEntity(pawnId) : null;
+    if (!streaming?.hasTerrain() || !pawn) return;
+    const position = [pawn.position[0], pawn.position[2]] as const;
+    if (streaming.areaReady(position)) return;
+    this.setLoadingStatus("Loading terrain around player");
+    await streaming.prepareSpawn(position);
+  }
+
+  /**
+   * Covers a long mid-play terrain hold (teleport, script move, a vehicle
+   * outrunning streaming) with the loading overlay. Input mode is left alone:
+   * the hold freezes only the simulation, and the overlay clears on the
+   * release frame. A boot/travel overlay already on screen is never taken over.
+   */
+  private updateTerrainHoldOverlay(held: boolean, nowMs: number): void {
+    if (!held) {
+      this.terrainHoldSinceMs = null;
+      if (this.terrainHoldOverlay) {
+        this.terrainHoldOverlay = false;
+        this.loadingOverlay?.hide();
+      }
+      return;
+    }
+    if (this.terrainHoldSinceMs === null) this.terrainHoldSinceMs = nowMs;
+    const queued = this.getTerrainStreamingSnapshot()?.queued ?? 0;
+    if (this.terrainHoldOverlay) {
+      this.loadingOverlay?.setProgress(0, `${queued} tile(s) streaming`);
+      return;
+    }
+    if (nowMs - this.terrainHoldSinceMs < TERRAIN_HOLD_OVERLAY_DELAY_MS || !this.loadingOverlay || this.loadingOverlay.isVisible) return;
+    this.terrainHoldOverlay = true;
+    this.loadingOverlay.clearError();
+    this.loadingOverlay.setProgress(0, `${queued} tile(s) streaming`);
+    this.setLoadingStatus("Loading terrain");
+    this.loadingOverlay.show();
+  }
+
   private updateTerrainStreaming(deltaSeconds: number): boolean {
     const streaming = this.runtimeServices.resolve(worldStreamingService);
     if (!streaming?.hasTerrain()) return false;
     const pawnId = this.gameModeSession?.playerState.pawnEntityId;
-    const pawn = pawnId ? this.liveTransformForEntity(pawnId) : null;
+    const pawn = pawnId ? this.transformForEntity(pawnId) : null;
     const position = pawn?.position ?? this.camera.position.toArray();
     const velocity = pawnId ? this.characterMovement()?.velocityOf(pawnId) ?? this.physicsSubsystem.velocityOf(pawnId) : null;
     const sources = [{ position: [position[0], position[2]] as const }];
@@ -2421,6 +2473,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.capabilities.levelLoaded(runtimeContext);
     // Layer 3 sees the level last — after every capability it may build on.
     await this.gameModules.levelLoaded(runtimeContext);
+    // A save restore (or a module) may have moved the pawn off the spawn area
+    // prepared above; finish streaming there while the loading overlay is up.
+    await this.prepareTerrainAroundPawn();
     await this.warmRuntimeShaders();
   }
 
@@ -2859,6 +2914,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // the world it observed is still intact, before Layer 1 content disappears.
     this.gameModules.levelUnloaded();
     this.capabilities.levelUnloaded();
+    // Travel owns the overlay from here; a stale hold flag would hide it.
+    this.terrainHoldOverlay = false;
+    this.terrainHoldSinceMs = null;
     // Game Mode + UI hosts first: null them before emptying the world so the
     // frame(s) between teardown and rebuild skip their update paths.
     this.gameModeSession?.dispose();
@@ -3550,34 +3608,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     else this.setActorObjectVisible(entityId, !hidden);
   }
 
+  /**
+   * The live pose. A walking pawn's Transform component keeps its spawn pose, so
+   * the character solver is read first; a simulated actor (a crate, a vehicle
+   * pawn) is moved by physics, so its body comes before the component too.
+   */
   private transformForEntity(entityId: string): TransformComponent | null {
+    const solved = this.characterMovement()?.transformOf(entityId);
+    if (solved) return solved;
     const character = this.transformForCharacterEntity(entityId);
     if (character) return character;
     const entity = this.actorEntityById.get(entityId);
     if (!entity) return null;
-    // A simulated actor (a crate, a vehicle pawn) is moved by physics, not by its
-    // Transform component, so the component would still read its spawn pose.
     const simulated = this.physicsSubsystem.simulatedTransform(entityId);
     if (simulated) return simulated;
     const transform = readTransformComponent(entity);
     return transform ? cloneTransform(transform) : null;
   }
 
-  /**
-   * The live pose: a walking pawn's Transform component keeps its spawn pose, so
-   * anything that follows the player (streaming, quality focus) reads the
-   * character controller first, then the physics body, then the component.
-   */
-  private liveTransformForEntity(entityId: string): TransformComponent | null {
-    return this.characterMovement()?.transformOf(entityId)
-      ?? this.physicsSubsystem.simulatedTransform(entityId)
-      ?? this.transformForEntity(entityId);
-  }
-
   /** Possessed pawn is the gameplay focus; camera position is the safe fallback during boot. */
   private qualityFocusPosition(): readonly [number, number, number] {
     const pawnEntityId = this.gameModeSession?.playerState.pawnEntityId;
-    const transform = pawnEntityId ? this.liveTransformForEntity(pawnEntityId) : null;
+    const transform = pawnEntityId ? this.transformForEntity(pawnEntityId) : null;
     return transform
       ? [transform.position[0], transform.position[1], transform.position[2]]
       : [this.camera.position.x, this.camera.position.y, this.camera.position.z];

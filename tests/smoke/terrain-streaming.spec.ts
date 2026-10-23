@@ -85,7 +85,18 @@ test("Play streams a bounded subset of 6x6 terrain, activates destination height
   page.on("request", (req) => { if (req.url().includes("__playwright-streaming.tiles/")) requested.add(req.url()); });
   await writeFixture();
   expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    // Every loading-overlay status line, so a quick phase cannot slip between polls.
+    const statuses: string[] = [];
+    (window as unknown as { loadingStatuses: string[] }).loadingStatuses = statuses;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const target = record.target instanceof Element ? record.target : record.target.parentElement;
+        if (target?.classList.contains("forge-loading-status")) statuses.push(target.textContent ?? "");
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
   await page.goto(`/?debug&streaming=${Date.now()}`);
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
   const overlay = page.locator("#debug-stats");
@@ -133,5 +144,28 @@ test("Play streams a bounded subset of 6x6 terrain, activates destination height
   expect(requested.size).toBeGreaterThan(start.active);
   await testInfo.attach("destination.png", { body: await page.screenshot(), contentType: "image/png" });
   console.log(`[terrain-streaming] spawn ${JSON.stringify(start)}; destination ${JSON.stringify(end)}`);
+
+  // Save here, then load: the level rebuilds around the far spawn corner and the
+  // restore moves the pawn back here, so the load must block until this area is
+  // streamed instead of handing over a pawn held on unloaded terrain.
+  await page.keyboard.press("Escape");
+  await page.locator('[data-ui-id="quick-save"]').click();
+  await expect(page.locator('[data-ui-id="quick-load"]')).toBeEnabled();
+  await page.evaluate(() => { (window as unknown as { loadingStatuses: string[] }).loadingStatuses.length = 0; });
+  await page.locator('[data-ui-id="quick-load"]').click();
+  await expect(page.locator(".forge-loading")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  const statuses = await page.evaluate(() => (window as unknown as { loadingStatuses: string[] }).loadingStatuses);
+  expect(statuses).toContain("Loading terrain around spawn");
+  expect(statuses).toContain("Loading terrain around player");
+  await expect.poll(async () => {
+    const restored = readStats((await overlay.textContent())!);
+    return Math.hypot(restored.x - end.x, restored.z - end.z) < 1 && !restored.keys.includes("0_5");
+  }, { timeout: 15_000 }).toBe(true);
+  const restoredText = (await overlay.textContent())!;
+  expect(restoredText).not.toContain("(holding pawn)");
+  const restored = readStats(restoredText);
+  expect(restored.colliders).toContain(tileKey(Math.floor(restored.x / Q), Math.floor(restored.z / Q)));
+  expect(Math.abs(restored.y - terrainHeightAt(world.def, lookup, restored.x, restored.z)!)).toBeLessThan(0.2);
   expect(errors).toEqual([]);
 });

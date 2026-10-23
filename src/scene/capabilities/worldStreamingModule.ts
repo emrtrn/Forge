@@ -25,6 +25,8 @@ interface WorldStreamingCommands {
   hasTerrain(): boolean;
   add(path: string, document: WorldTerrainDocument, actor: { id: string; name: string; collision: boolean }, hooks: Pick<TerrainStreamingHooks, "changed" | "addColliders" | "removeColliders">): void;
   prepareSpawn(position: readonly [number, number]): Promise<void>;
+  /** True when a pawn at `position` would not be held (same footprint as the hold rule). */
+  areaReady(position: readonly [number, number]): boolean;
   startSimulation(): void;
   entities(): Entity[];
   update(sources: readonly StreamingSource[], multiplier: number): boolean;
@@ -44,9 +46,10 @@ export function createWorldStreamingModule(): CapabilityModule {
     live = false;
     held = false;
   };
+  const areaReady = (position: readonly [number, number]) => entries.every(({ stream }) => stream.canOccupy(position, 2));
   const update = (sources: readonly StreamingSource[], multiplier: number) => {
     for (const { stream } of entries) stream.update(sources, multiplier);
-    held = sources.some(({ position }) => entries.some(({ stream }) => !stream.canOccupy(position, 2)));
+    held = sources.some(({ position }) => !areaReady(position));
     return held;
   };
   return {
@@ -81,13 +84,14 @@ export function createWorldStreamingModule(): CapabilityModule {
           let ready = false;
           let failure: unknown;
           const waiting = Promise.all(waits).then(() => { ready = true; }, (error: unknown) => { failure = error; ready = true; });
-          while (!ready || (!failure && entries.some(({ stream }) => !stream.canOccupy(position, 2)))) {
+          while (!ready || (!failure && !areaReady(position))) {
             update([{ position }], 1);
             await new Promise<void>((resolve) => setTimeout(resolve, 8));
           }
           await waiting;
           if (failure) throw failure;
         },
+        areaReady,
         startSimulation() {
           if (live) return;
           live = true;

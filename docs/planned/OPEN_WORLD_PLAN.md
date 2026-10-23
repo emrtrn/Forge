@@ -1061,7 +1061,7 @@ Doğrulama (2026-10-22):
       yüklenmeyen tile'ı global haritadan çizer; delik maskesi değişmez.
       Aktivasyon/serbest bırakma sabit kamerada bile slot/bounds/dikiş
       normallerini yeniler; kalıcı global harita yeniden örneklenmez.
-- [ ] Bloklayan yükleme: boot, travel, save-game yükleme ve ışınlanma
+- [x] Bloklayan yükleme: boot, travel, save-game yükleme ve ışınlanma
       (`LevelRuntime` adımı + loading ekranı). Akıştan hızlı giden pawn'ı
       tutma kuralı.
       *Boot/level travel tamam (dilim 2):* `startSceneRuntime` öncesi spawn
@@ -1070,8 +1070,16 @@ Doğrulama (2026-10-22):
       çevresinde bildirilen arazi collider'ı yoksa bütün simülasyon tutulur;
       streaming gerçek karelerde devam eder. Karakter çözücüsü hazır olmayan
       konuma adımı geri alır ve hızını sıfırlar; delikler/dünya dışı tutulmaz.
-      Save-game/ışınlanma sonrası aynı tutma koruması var; bu işlemlere ayrı
-      bloklayan loading ekranı bağlamak açık.
+      *Save-game/ışınlanma tamam (2026-10-23):* seviye kurulumunda
+      `levelLoaded` kancalarından (save restore burada pawn'ı taşır) sonra pawn'ın
+      canlı konumu hazır değilse "Loading terrain around player" ile aynı
+      `prepareSpawn` beklemesi travel loading ekranı arkasında koşar. Oyun içi
+      tutma (ışınlanma, script taşıma, akıştan hızlı araç) 200 ms'yi aşarsa
+      loading ekranı input moduna dokunmadan açılır, bırakılan karede kapanır.
+      Aynı işte bulunan hata: save yürüyen pawn'ın spawn pozunu yazıyordu;
+      `transformForEntity` artık önce karakter çözücüsünü okur. Smoke: uzak
+      köşede quick-save → quick-load, yükleme bitince pawn tile'ında collider
+      var ve tutma yok. Oyun içi tutma ekranının smoke'u yok.
 - [x] `QualityExtensions.viewDistanceMultiplier` render menzilini ölçekler;
       fizik güvenlik halkası sabit, render çarpanı en az 0,5.
 - [ ] `?debug`: yüklü/aktif/kuyruk hücre sayısı, ms/kare, bellek; hücre grid

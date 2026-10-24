@@ -41,8 +41,11 @@ export function worldTerrainFoliageSurface(
   };
 }
 
-/** Exact triangle surface for an unrotated, square legacy Landscape. */
-export function landscapeFoliageSurface(input: LandscapeFoliageGenerationInput): FoliageSurface | null {
+/** A 1×1 legacy Landscape as one World Terrain tile (exact triangle heights); null when it cannot be (rotated, non-square, invalid). */
+export function landscapeTerrainView(input: LandscapeFoliageGenerationInput): {
+  def: TerrainQueryDef & { layers: readonly { id: string }[] };
+  tile: TerrainTileData;
+} | null {
   const { data, position } = input;
   const { verticesX, verticesZ, spacing, heightScale } = data.size;
   if (input.rotation?.some((value) => Math.abs(value) > 1e-9)
@@ -63,14 +66,21 @@ export function landscapeFoliageSurface(input: LandscapeFoliageGenerationInput):
     heights: Float32Array.from(data.heights, (height) => height * heightScale),
     layerCount, weights,
   };
-  const tiles = new TerrainTileMap();
-  tiles.set(tile);
   const width = (verticesX - 1) * spacing;
-  return worldTerrainFoliageSurface({
+  return { def: {
     tileQuads: verticesX - 1, spacing, tilesX: 1, tilesZ: 1,
     origin: [position[0] - width / 2, position[1], position[2] - width / 2],
     layers: data.layers,
-  }, tiles);
+  }, tile };
+}
+
+/** Exact triangle surface for an unrotated, square legacy Landscape. */
+export function landscapeFoliageSurface(input: LandscapeFoliageGenerationInput): FoliageSurface | null {
+  const view = landscapeTerrainView(input);
+  if (!view) return null;
+  const tiles = new TerrainTileMap();
+  tiles.set(view.tile);
+  return worldTerrainFoliageSurface(view.def, tiles);
 }
 
 export const MAX_FOLIAGE_CELL_INSTANCES = 4096;
@@ -101,6 +111,41 @@ export interface GeneratedFoliageCell {
   count: number;
   /** Exactly count * 16 floats, column-major per instance. */
   matrices: Float32Array;
+}
+
+/** Copied terrain state shared by worker and same-thread foliage generators. */
+export class FoliageTerrainStore {
+  private readonly terrains = new Map<string, {
+    def: TerrainQueryDef & { layers: readonly { id: string }[] };
+    tiles: TerrainTileMap;
+  }>();
+
+  setTerrain(terrainId: string, def: TerrainQueryDef & { layers: readonly { id: string }[] }): void {
+    this.terrains.set(terrainId, { def: {
+      ...def, origin: [...def.origin], layers: def.layers.map((layer) => ({ id: layer.id })),
+    }, tiles: new TerrainTileMap() });
+  }
+
+  setTile(terrainId: string, tile: TerrainTileData): void {
+    const terrain = this.terrains.get(terrainId);
+    if (!terrain) throw new Error(`Unknown foliage terrain: ${terrainId}`);
+    terrain.tiles.set({ ...tile, heights: tile.heights.slice(), weights: tile.weights.slice() });
+  }
+
+  removeTile(terrainId: string, x: number, z: number): void {
+    this.terrains.get(terrainId)?.tiles.delete(x, z);
+  }
+
+  removeTerrain(terrainId: string): void { this.terrains.delete(terrainId); }
+
+  generate(terrainId: string, rule: LandscapeFoliageRule, type: ForgeFoliageTypeDef,
+    request: FoliageCellRequest): GeneratedFoliageCell {
+    const terrain = this.terrains.get(terrainId);
+    if (!terrain) throw new Error(`Unknown foliage terrain: ${terrainId}`);
+    return generateFoliageCell(rule, type, worldTerrainFoliageSurface(terrain.def, terrain.tiles), request);
+  }
+
+  clear(): void { this.terrains.clear(); }
 }
 
 function writeMatrix(matrices: Float32Array, at: number, x: number, y: number, z: number,

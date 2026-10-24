@@ -1621,7 +1621,25 @@ halkası → F3 editör halkası + panel → smoke'lar (`foliage-fade`,
   Smoke `foliage-cells.spec.ts`: Save hücreleri yazar, bayat hücreyi
   budar, yeniden açılan editör 5 instance görür, ikinci Save foliage
   yazmaz, Play yalnız spawn çevresindeki 3 hücreyi okur (3 km'deki hücreyi
-  okumaz). Sırada F3: prosedürel çim halkası.
+  okumaz).
+- *F3 runtime tamam (2026-10-24):* `engine/world/foliageRing.ts` (saf
+  planlayıcı: 32 m hücre, yarıçap = tür `cullEnd` × `foliageCullDistanceScale`,
+  `cullEnd = 0` → bütün yüzey, 1024 m'den geniş yüzeyde 512 m tavan + uyarı;
+  bantlar 1 / 0,5 / 0,25 × `grassDensity`, çeyrek hücre bant histerezisi,
+  1,25× tutma). `src/scene/proceduralFoliageRing.ts`: kural başına plan,
+  altındaki tanımlı tile'ları yüklü hücre worker'da üretilir
+  (`foliageCellGenerator.ts` + `engine/world/workers/foliageWorker.ts`,
+  Codex; tile'lar worker'a bir kez kopyalanır, worker çökerse aynı veriyle
+  yerel yola düşer), sonuç `FoliageRenderBinding.setPackedGroup` ile paketli
+  matristen kurulur (kare başına 1 hücre, en çok 8 iş uçuşta). Boot/travel
+  hazırlığı loading ekranı arkasında. World Terrain'de renderer'ın kendi
+  belgesi (akan arazide canlı tile'lar) kullanılır; 1×1 Landscape tek tile
+  görünümüyle (`landscapeTerrainView`); döndürülmüş ya da kare olmayan eski
+  Landscape eski tek seferlik üretimde kalır. Kalite `grassDensity`
+  (1 / 0,8 / 0,55 / 0,3); adaptif kalitenin foliage-cull adımı halkayı da
+  küçültür. Smoke: `terrain-multitile` Play'de worker'ın kurduğu çim Node'da
+  aynı üreticiyle hesaplanan sayıya birebir eşit (35 hücre, 16315 instance).
+  Sırada F3c: editörde aynı halka + panelde çok-tile kuralları.
 
 **Kapsam dışı:** foliage collision'ın akması (bugün collision çizim dışı,
 `collision: true` türler yok sayılıyor — değişmiyor), editörde foliage

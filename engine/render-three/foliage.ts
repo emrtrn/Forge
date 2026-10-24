@@ -30,7 +30,7 @@ import {
 import type { FoliageInstanceRoll } from "@engine/scene/foliagePaint";
 import { makeFoliageRng } from "@engine/scene/foliagePaint";
 import { composeTransformMatrix } from "./transforms";
-import { createInstancedModelGroup, type InstanceRenderItem } from "./models";
+import { createInstancedModelGroup, createPackedInstancedModelGroup, type InstanceRenderItem } from "./models";
 import {
   createFoliageFadeMaterial,
   createFoliageFadeShadowMaterials,
@@ -346,6 +346,31 @@ function chunkObject(
   return { group, meshes, center, radius: Math.sqrt(maxDistSq) + meshRadius };
 }
 
+/** {@link chunkObject} for packed matrices: centre and radius from the translation columns. */
+function packedChunkObject(
+  group: Group,
+  meshes: InstancedMesh[],
+  matrices: Float32Array,
+  count: number,
+  meshRadius: number,
+): FoliageChunkObject {
+  const center = new Vector3();
+  for (let index = 0; index < count; index += 1) {
+    center.x += matrices[index * 16 + 12]!;
+    center.y += matrices[index * 16 + 13]!;
+    center.z += matrices[index * 16 + 14]!;
+  }
+  center.multiplyScalar(1 / Math.max(count, 1));
+  let maxDistSq = 0;
+  for (let index = 0; index < count; index += 1) {
+    const dx = matrices[index * 16 + 12]! - center.x;
+    const dy = matrices[index * 16 + 13]! - center.y;
+    const dz = matrices[index * 16 + 14]! - center.z;
+    maxDistSq = Math.max(maxDistSq, dx * dx + dy * dy + dz * dz);
+  }
+  return { group, meshes, center, radius: Math.sqrt(maxDistSq) + meshRadius };
+}
+
 export class FoliageRenderBinding {
   /** Scene-space container; add this once to the scene root. */
   readonly root = new Group();
@@ -360,6 +385,8 @@ export class FoliageRenderBinding {
   private cullDistanceScale = 1;
   /** Streamed cell → the object keys of its batches ({@link addCell}). */
   private readonly cellObjects = new Map<string, string[]>();
+  /** Keys of procedural batches ({@link setPackedGroup}). */
+  private readonly packedKeys = new Set<string>();
 
   constructor() {
     this.root.name = "Foliage";
@@ -430,7 +457,7 @@ export class FoliageRenderBinding {
     const wanted = new Set((data?.groups ?? []).map((group) => group.id));
     const streamed = new Set([...this.cellObjects.values()].flat());
     for (const id of [...this.objects.keys()]) {
-      if (!wanted.has(id) && !streamed.has(id)) this.removeGroup(id);
+      if (!wanted.has(id) && !streamed.has(id) && !this.packedKeys.has(id)) this.removeGroup(id);
     }
     for (const group of data?.groups ?? []) this.rebuildGroup(group, resolver);
   }
@@ -461,6 +488,62 @@ export class FoliageRenderBinding {
     }
     this.cellObjects.set(cellKey, keys);
     return built;
+  }
+
+  /**
+   * Procedural foliage (OPEN_WORLD_PLAN Faz 6 F3): one batch built from packed
+   * column-major instance matrices (as `generateFoliageCell` writes them) under
+   * `key`, replacing any batch with that key. Not pickable (no index map) and
+   * never touched by {@link rebuild}. Returns the instances built.
+   */
+  setPackedGroup(
+    key: string,
+    foliageTypeId: string,
+    matrices: Float32Array,
+    count: number,
+    resolver: FoliageRenderResolver,
+  ): number {
+    this.removeGroup(key);
+    this.packedKeys.delete(key);
+    const type = resolver.getType(foliageTypeId);
+    const gltf = type?.meshAssetId ? resolver.getModel(type.meshAssetId) : null;
+    if (!type || !gltf || count <= 0) return 0;
+    const built = createPackedInstancedModelGroup({
+      assetId: type.meshAssetId,
+      gltf,
+      matrices,
+      count,
+      castShadow: type.castShadow,
+      receiveShadow: type.receiveShadow,
+    });
+    built.group.name = `foliage-${key}`;
+    for (const mesh of built.meshes) {
+      mesh.frustumCulled = true;
+      mesh.computeBoundingSphere();
+    }
+    resolver.applyMaterialSlots?.(type.meshAssetId, built.group);
+    const root = new Group();
+    root.name = `foliage-${key}`;
+    root.add(built.group);
+    const chunk = packedChunkObject(built.group, built.meshes, matrices, count, this.meshBoundingRadius(type.meshAssetId, resolver));
+    this.root.add(root);
+    const object: FoliageGroupObject = {
+      root,
+      chunks: [chunk],
+      cullStart: type.cullStart,
+      cullEnd: type.cullEnd,
+      fade: type.cullEnd > 0 ? applyGroupFade([chunk], this.fadeOrigin) : null,
+    };
+    if (object.fade) this.setFadeWindow(object);
+    this.objects.set(key, object);
+    this.packedKeys.add(key);
+    return count;
+  }
+
+  /** Removes a {@link setPackedGroup} batch, if present. */
+  removePackedGroup(key: string): void {
+    this.removeGroup(key);
+    this.packedKeys.delete(key);
   }
 
   /** Removes and disposes a streamed cell's batches, if present. */
@@ -613,6 +696,7 @@ export class FoliageRenderBinding {
     for (const object of this.objects.values()) disposeGroupObject(object);
     this.objects.clear();
     this.cellObjects.clear();
+    this.packedKeys.clear();
     if (this.selectionMesh) {
       this.selectionMesh.removeFromParent();
       this.selectionMesh.dispose();

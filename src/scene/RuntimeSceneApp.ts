@@ -257,6 +257,11 @@ import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint"
 import type { LayoutFoliageData, LayoutFoliageGroup } from "@engine/scene/foliage";
 import { fetchFoliageCell, loadFoliageData, loadFoliageSidecar, loadFoliageTypesForData } from "./foliageLoader";
 import { FoliageCellStreaming } from "./foliageCellStreaming";
+import { ProceduralFoliageRing, type ProceduralFoliageRuleSource, type ProceduralFoliageTerrain } from "./proceduralFoliageRing";
+import { createFoliageCellGenerator, type FoliageCellGenerator } from "./foliageCellGenerator";
+import { landscapeTerrainView } from "@engine/scene/proceduralFoliage";
+import { TerrainTileMap } from "@engine/terrain/terrainHeightQuery";
+import { tileKey } from "@engine/terrain/terrainTypes";
 import {
   createEmptyMeshPaintData,
   type LayoutMeshPaintData,
@@ -870,6 +875,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private foliageBinding: FoliageRenderBinding | null = null;
   /** Partitioned level: painted foliage cells streamed around the camera. */
   private foliageCellStreaming: FoliageCellStreaming | null = null;
+  /** Landscape foliage rules grown in a ring around the camera (OPEN_WORLD_PLAN Faz 6 F3). */
+  private proceduralFoliageRing: ProceduralFoliageRing | null = null;
+  private foliageCellGenerator: FoliageCellGenerator | null = null;
+  /** The World Terrain documents the renderer draws (live tiles when streamed), by actor id. */
+  private readonly worldTerrainDocuments = new Map<string, WorldTerrainDocument>();
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
   /** Landscape sidecar data by actor id, kept for the River Water pass. */
@@ -1689,6 +1699,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.perfRegion(FRAME_REGION_ENVIRONMENT, mark);
       mark = this.perfMark();
       this.foliageCellStreaming?.update([this.camera.position.x, this.camera.position.z]);
+      this.proceduralFoliageRing?.update(
+        [this.camera.position.x, this.camera.position.z],
+        this.qualitySettings.foliageCullDistanceScale,
+        this.qualitySettings.grassDensity,
+      );
       this.foliageBinding?.updateCulling(
         this.camera.position,
         this.qualitySettings.foliageCullDistanceScale,
@@ -2328,6 +2343,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const at: [number, number] = [position[0]!, position[2]!];
     // Painted foliage in range is read and built before play resumes (no pop-in).
     await this.foliageCellStreaming?.prepare(at);
+    await this.proceduralFoliageRing?.prepare(at, this.qualitySettings.foliageCullDistanceScale, this.qualitySettings.grassDensity);
     const partition = this.runtimeServices.resolve(worldPartitionService);
     if (!partition) return;
     const keys = partition.prefetchAround(at);
@@ -3245,6 +3261,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.landscapeColliderObjects.clear();
     this.foliageCellStreaming?.dispose();
     this.foliageCellStreaming = null;
+    this.proceduralFoliageRing?.dispose();
+    this.proceduralFoliageRing = null;
+    this.foliageCellGenerator?.dispose();
+    this.foliageCellGenerator = null;
+    this.worldTerrainDocuments.clear();
     if (this.foliageBinding) {
       this.foliageBinding.dispose();
       this.foliageBinding = null;
@@ -5593,6 +5614,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** One multi-tile World Terrain: drawn from its tiles, one static heightfield collider per tile. */
   private async buildRuntimeWorldTerrain(actor: LayoutLandscape, document: WorldTerrainDocument): Promise<void> {
     const { def } = document;
+    this.worldTerrainDocuments.set(actor.id, document);
     for (const issue of worldTerrainPlacementIssues(actor, def)) console.warn(`[terrain] ${actor.id}: ${issue}`);
     if (def.splines?.length) console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
     const resolved = resolveLandscape(actor);
@@ -5753,16 +5775,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const binding = new FoliageRenderBinding();
     this.scene.add(tagSceneSource(binding.root, "foliage"));
     const generated: LayoutFoliageGroup[] = [];
+    const ringRules: ProceduralFoliageRuleSource[] = [];
     for (const rule of data.landscapeRules ?? []) {
       const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
       const type = types.get(rule.foliageTypeId);
       if (!actor || !type) continue;
-      const loaded = await this.fetchLandscapeDocument(actor.dataRef);
-      if (loaded.kind === "world") {
-        console.warn(`[foliage] Skipped rule ${rule.id}: Landscape foliage rules do not support multi-tile World Terrain yet.`);
+      const terrain = this.proceduralFoliageTerrain(actor);
+      if (terrain) {
+        ringRules.push({ rule, type, terrain });
         continue;
       }
-      const landscape = loaded.data;
+      // A rotated or non-square legacy Landscape keeps the one-shot whole-surface generation.
+      const landscape = this.landscapeDataById.get(actor.id);
+      if (!landscape) continue;
       const instances = generateLandscapeFoliageSamples(rule, {
         id: actor.id,
         position: [...actor.position],
@@ -5791,6 +5816,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     };
     binding.rebuild(renderData, resolver);
     this.foliageBinding = binding;
+    if (ringRules.length > 0) {
+      this.foliageCellGenerator = createFoliageCellGenerator();
+      this.proceduralFoliageRing = new ProceduralFoliageRing({
+        rules: ringRules, binding, resolver, generator: this.foliageCellGenerator, debug: this.debug,
+      });
+    }
     if (streamCells) {
       const grid = normalizeWorldPartitionSettings(partition).grids.foliage;
       this.foliageCellStreaming = new FoliageCellStreaming({
@@ -5803,6 +5834,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         debug: this.debug,
       });
     }
+  }
+
+  /**
+   * The terrain a Landscape foliage rule grows on: the World Terrain document the
+   * renderer draws (its live tiles), or a 1×1 Landscape as one tile; null for a
+   * Landscape the ring cannot express exactly (rotated, non-square).
+   */
+  private proceduralFoliageTerrain(actor: LayoutLandscape): ProceduralFoliageTerrain | null {
+    const document = this.worldTerrainDocuments.get(actor.id);
+    if (document) {
+      const { def } = document;
+      return {
+        id: actor.id,
+        def: { tileQuads: def.tileQuads, spacing: def.spacing, tilesX: def.tilesX, tilesZ: def.tilesZ,
+          origin: [...def.origin], layers: def.layers.map((layer) => ({ id: layer.id })) },
+        tiles: { tile: (x, z) => document.tiles.get(tileKey(x, z)) },
+        existingTiles: new Set(def.tiles.map((tile) => tile.key)),
+      };
+    }
+    const data = this.landscapeDataById.get(actor.id);
+    const view = data ? landscapeTerrainView({ id: actor.id, position: [...actor.position], rotation: readRotation(actor), data }) : null;
+    if (!view) return null;
+    const tiles = new TerrainTileMap();
+    tiles.set(view.tile);
+    return { id: actor.id, def: { ...view.def, layers: view.def.layers.map((layer) => ({ id: layer.id })) }, tiles, existingTiles: null };
   }
 
   /** Loads spline mesh assets (Faz 6) and parents their instanced groups under each landscape. */

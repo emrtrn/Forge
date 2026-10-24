@@ -1,7 +1,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { PerspectiveCamera, Vector3 } from "three";
-import { foliageDataPath, normalizeFoliageType, type LayoutFoliageData } from "../../engine/scene/foliage";
+import { foliageDataPath, normalizeFoliageType, type LandscapeFoliageRule, type LayoutFoliageData } from "../../engine/scene/foliage";
+import { generateFoliageCell, worldTerrainFoliageSurface } from "../../engine/scene/proceduralFoliage";
+import { planFoliageRing } from "../../engine/world/foliageRing";
 import { terrainFaceNormalAt, terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
@@ -312,23 +314,40 @@ test("World Terrain foliage tools paint across a seam, save exact surface height
   if (!mesh) throw new Error("smoke manifest has no shape-cube");
   manifest.assets.push({ ...mesh, id: typeId, name: "World Foliage", assetType: "foliageType", path: typePath, placeable: false });
   await writeFile(manifestPath, JSON.stringify(manifest));
-  await writeFile(smokePublicPath(typePath), JSON.stringify(normalizeFoliageType({
+  const foliageType = normalizeFoliageType({
     name: "World Foliage", meshAssetId: mesh.id, radius: 0.25,
     scaleMin: [0.5, 0.5, 0.5], scaleMax: [0.5, 0.5, 0.5],
     zOffsetMin: 0, zOffsetMax: 0, alignToNormal: true, randomYaw: false,
-  })));
+  });
+  await writeFile(smokePublicPath(typePath), JSON.stringify(foliageType));
+  // Play grows this rule over the whole multi-tile surface (the type never culls, the
+  // world is small) in the foliage worker (OPEN_WORLD_PLAN Faz 6 F3).
+  const rule: LandscapeFoliageRule = { id: "world-rule", landscapeId: "world", layerId: "grass", foliageTypeId: typeId, density: 1, minWeight: 0, seed: 1 };
   // An empty referenced group makes the type available on the first editor load.
   await writeFile(smokePublicPath(foliageDataPath(LEVEL)), JSON.stringify({
     schema: 1, type: "foliage",
     groups: [{ id: "painted-world", foliageTypeId: typeId, target: { kind: "landscape", id: "world" }, instances: [] }],
-    // Existing procedural rules must stay skipped, with their runtime warning.
-    landscapeRules: [{ id: "deferred-world-rule", landscapeId: "world", layerId: "grass", foliageTypeId: typeId, density: 1, minWeight: 0, seed: 1 }],
+    landscapeRules: [rule],
   }));
   expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
   await page.setViewportSize({ width: 1440, height: 860 });
   await page.addInitScript(({ key, pose }) => {
     localStorage.clear();
     localStorage.setItem(key, pose);
+    // A fixed profile (grassDensity 0.8): headless hardware hints would pick one at random.
+    localStorage.setItem("forge.userSettings", JSON.stringify({
+      schema: 1,
+      updatedAt: new Date().toISOString(),
+      payload: { graphics: { selectedQualityLevel: "high", manuallySelected: true, adaptiveOptimizationEnabled: false } },
+    }));
+    // three's devtools hook hands the live scenes over without test globals in the app.
+    const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __ringScenes: unknown[] };
+    w.__ringScenes = [];
+    w.__THREE_DEVTOOLS__ = new EventTarget();
+    w.__THREE_DEVTOOLS__.addEventListener("observe", (event) => {
+      const object = (event as CustomEvent).detail as { isScene?: boolean } | null;
+      if (object?.isScene) w.__ringScenes.push(object);
+    });
   }, { key: `forge.editor.cameraPose.${encodeURIComponent(LEVEL)}`, pose: JSON.stringify(SEAM_POSE) });
 
   const bootEditor = async () => {
@@ -423,6 +442,27 @@ test("World Terrain foliage tools paint across a seam, save exact surface height
   expect((await loadedSidecar).ok()).toBeTruthy();
   await expect.poll(() => messages.some((message) => message.includes("[runtime] scene loaded")), { timeout: 60_000 }).toBeTruthy();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
-  expect(messages.some((message) => message.includes("Landscape foliage rules do not support multi-tile World Terrain yet."))).toBeTruthy();
+  // The worker's ring equals the pure generator run here over every planned cell.
+  const surface = worldTerrainFoliageSurface(world.def, lookup);
+  const bounds = { minX: -80, maxX: -80 + 3 * Q, minZ: -50, maxZ: -50 + 2 * Q };
+  const cells = planFoliageRing({ center: SPAWN, radius: Infinity, density: 0.8, bounds, built: new Map() }).build;
+  const ringInstances = cells.reduce((sum, cell) => sum + generateFoliageCell(rule, foliageType, surface, {
+    cellX: cell.cellX, cellZ: cell.cellZ, cellSize: 32, keepFraction: cell.keepFraction,
+  }).count, 0);
+  expect(cells.length).toBe(35);
+  expect(ringInstances).toBeGreaterThan(10_000);
+  // Boot builds the cells over resident tiles; the rest grow as the terrain streams in.
+  expect(messages.some((message) => message.startsWith("[foliage-ring] ready: "))).toBe(true);
+  const ringCount = () => page.evaluate(() => {
+    let count = 0;
+    for (const scene of (window as unknown as { __ringScenes: any[] }).__ringScenes) {
+      scene.traverse((node: any) => {
+        if (node.isInstancedMesh && node.parent?.name?.startsWith("foliage-grass:world-rule:")) count += node.count;
+      });
+    }
+    return count;
+  });
+  await expect.poll(ringCount, { timeout: 30_000 }).toBe(ringInstances);
+  expect(messages.some((message) => message.includes("Foliage worker failed"))).toBe(false);
   expect(errors).toEqual([]);
 });

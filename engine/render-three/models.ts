@@ -10,6 +10,7 @@ import { isRenderableMesh } from "./materials";
 import { applyEulerDegrees, composePlacementMatrix, composeTransformMatrix } from "./transforms";
 
 const HIDDEN_INSTANCE_MATRIX = new Matrix4().makeScale(0, 0, 0);
+const IDENTITY_MATRIX = new Matrix4();
 
 /**
  * glTF primitives may ship without a NORMAL attribute. Per the spec GLTFLoader
@@ -112,6 +113,53 @@ export function createInstancedModelGroup(
     meshes.push(instanced);
   });
 
+  return { group, meshes };
+}
+
+export interface CreatePackedInstancedModelGroupOptions {
+  assetId: string;
+  gltf: GLTF;
+  /** `count * 16` column-major instance matrices (three's `Matrix4.elements` order). */
+  matrices: Float32Array;
+  count: number;
+  castShadow: boolean;
+  receiveShadow: boolean;
+}
+
+/**
+ * {@link createInstancedModelGroup} for packed instance matrices (procedural
+ * foliage): copied straight into each mesh's `instanceMatrix` when the GLTF node
+ * sits at the identity, otherwise multiplied by the node's world matrix.
+ */
+export function createPackedInstancedModelGroup(options: CreatePackedInstancedModelGroupOptions): InstancedModelGroup {
+  const { assetId, gltf, matrices, count, castShadow, receiveShadow } = options;
+  const group = new Group();
+  const meshes: InstancedMesh[] = [];
+  group.name = `instanced-${assetId}`;
+  ensureVertexNormals(gltf.scene);
+  gltf.scene.updateMatrixWorld(true);
+  const instance = new Matrix4();
+  gltf.scene.traverse((object) => {
+    if (!isRenderableMesh(object)) return;
+    const instanced = new InstancedMesh(object.geometry, object.material, count);
+    instanced.name = `${assetId}-${object.name || "mesh"}`;
+    instanced.frustumCulled = false;
+    instanced.castShadow = castShadow;
+    instanced.receiveShadow = receiveShadow;
+    instanced.userData.assetId = assetId;
+    instanced.userData.sourceMatrix = object.matrixWorld.clone();
+    const target = instanced.instanceMatrix.array as Float32Array;
+    if (object.matrixWorld.equals(IDENTITY_MATRIX)) {
+      target.set(matrices.subarray(0, count * 16));
+    } else {
+      for (let index = 0; index < count; index += 1) {
+        instance.fromArray(matrices, index * 16).multiply(object.matrixWorld).toArray(target, index * 16);
+      }
+    }
+    instanced.instanceMatrix.needsUpdate = true;
+    group.add(instanced);
+    meshes.push(instanced);
+  });
   return { group, meshes };
 }
 

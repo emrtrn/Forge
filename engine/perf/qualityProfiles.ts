@@ -65,6 +65,11 @@ export interface QualitySettings {
   particleDensity: number;
   /** Foliage cull-distance multiplier (smaller = cull nearer). */
   foliageCullDistanceScale: number;
+  /**
+   * Procedural grass/foliage ring density (`0..1` keep fraction of each rule's
+   * candidates, OPEN_WORLD_PLAN Faz 6). Painted foliage is unaffected.
+   */
+  grassDensity: number;
 }
 
 /**
@@ -103,6 +108,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowDistanceScale: 1.0,
     particleDensity: 1.0,
     foliageCullDistanceScale: 1.0,
+    grassDensity: 1.0,
   },
   high: {
     renderScale: 1.0,
@@ -117,6 +123,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowDistanceScale: 0.75,
     particleDensity: 0.8,
     foliageCullDistanceScale: 0.85,
+    grassDensity: 0.8,
   },
   medium: {
     renderScale: 0.85,
@@ -131,6 +138,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowDistanceScale: 0.5,
     particleDensity: 0.55,
     foliageCullDistanceScale: 0.65,
+    grassDensity: 0.55,
   },
   low: {
     renderScale: 0.7,
@@ -145,6 +153,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowDistanceScale: 0.35,
     particleDensity: 0.3,
     foliageCullDistanceScale: 0.45,
+    grassDensity: 0.3,
   },
 };
 
@@ -280,6 +289,7 @@ function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | nul
   num("shadowDistanceScale");
   num("particleDensity");
   num("foliageCullDistanceScale");
+  num("grassDensity");
   return Object.keys(out).length > 0 ? out : null;
 }
 

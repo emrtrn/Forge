@@ -49,6 +49,16 @@ const VERTEX_MAIN = [
   "  vFoliageFadeDistance = distance((modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz, uFoliageFadeOrigin);",
   "#endif",
 ].join("\n");
+// Size-scaled variant (static detail culling, Faz 7e): the window is authored for
+// an instance at scale 1, so a scaled-up instance fades proportionally farther.
+const VERTEX_MAIN_SCALED = [
+  VERTEX_MAIN,
+  "#ifdef USE_INSTANCING",
+  "  vFoliageFadeDistance /= max(max(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz)), max(length(instanceMatrix[2].xyz), 1e-4));",
+  "#else",
+  "  vFoliageFadeDistance /= max(max(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz)), max(length(modelMatrix[2].xyz), 1e-4));",
+  "#endif",
+].join("\n");
 const FRAGMENT_PARS = [
   "",
   "uniform vec2 uFoliageFadeRange;",
@@ -66,8 +76,15 @@ const FRAGMENT_MAIN = [
 ].join("\n");
 const MAIN = /void\s+main\s*\(\s*\)\s*\{/;
 
+/** How the fade measures an instance: plain distance, or distance ÷ instance scale. */
+export type FadeDistanceMode = "distance" | "instanceScaled";
+
 /** Splices the fade into a three.js shader; false when an anchor is missing (shader left as is). */
-export function patchFoliageFadeShader(shader: ShaderPatch, uniforms: FoliageFadeUniforms): boolean {
+export function patchFoliageFadeShader(
+  shader: ShaderPatch,
+  uniforms: FoliageFadeUniforms,
+  mode: FadeDistanceMode = "distance",
+): boolean {
   const { vertexShader, fragmentShader } = shader;
   if (
     !vertexShader.includes("#include <common>") ||
@@ -81,7 +98,7 @@ export function patchFoliageFadeShader(shader: ShaderPatch, uniforms: FoliageFad
   shader.uniforms.uFoliageFadeRange = uniforms.uFoliageFadeRange;
   shader.vertexShader = vertexShader
     .replace("#include <common>", `#include <common>${VERTEX_PARS}`)
-    .replace("#include <project_vertex>", `#include <project_vertex>${VERTEX_MAIN}`);
+    .replace("#include <project_vertex>", `#include <project_vertex>${mode === "instanceScaled" ? VERTEX_MAIN_SCALED : VERTEX_MAIN}`);
   shader.fragmentShader = fragmentShader
     .replace("#include <common>", `#include <common>${FRAGMENT_PARS}`)
     .replace(MAIN, (main) => `${main}${FRAGMENT_MAIN}`);
@@ -93,12 +110,14 @@ function installFade(
   uniforms: FoliageFadeUniforms,
   priorPatch: Material["onBeforeCompile"] | null,
   priorCacheKey: (() => string) | null,
+  mode: FadeDistanceMode,
 ): void {
   material.onBeforeCompile = (shader: ShaderPatch, renderer: WebGLRenderer) => {
     priorPatch?.call(material, shader, renderer);
-    patchFoliageFadeShader(shader, uniforms);
+    patchFoliageFadeShader(shader, uniforms, mode);
   };
-  material.customProgramCacheKey = () => `${priorCacheKey ? `${priorCacheKey.call(material)}|` : ""}forge-foliage-fade-v1`;
+  const key = mode === "instanceScaled" ? "forge-foliage-fade-scaled-v1" : "forge-foliage-fade-v1";
+  material.customProgramCacheKey = () => `${priorCacheKey ? `${priorCacheKey.call(material)}|` : ""}${key}`;
   material.needsUpdate = true;
 }
 
@@ -112,23 +131,27 @@ function ownOrNull<K extends "onBeforeCompile" | "customProgramCacheKey">(materi
  * resets `defines`, so all three are carried over and the source's own patch
  * (layer blend, normal motion, …) runs before the fade.
  */
-export function createFoliageFadeMaterial(source: Material, uniforms: FoliageFadeUniforms): Material {
+export function createFoliageFadeMaterial(
+  source: Material,
+  uniforms: FoliageFadeUniforms,
+  mode: FadeDistanceMode = "distance",
+): Material {
   const material = source.clone();
   const defines = (source as Material & { defines?: Record<string, unknown> }).defines;
   if (defines) (material as Material & { defines?: Record<string, unknown> }).defines = { ...defines };
-  installFade(material, uniforms, ownOrNull(source, "onBeforeCompile"), ownOrNull(source, "customProgramCacheKey"));
+  installFade(material, uniforms, ownOrNull(source, "onBeforeCompile"), ownOrNull(source, "customProgramCacheKey"), mode);
   return material;
 }
 
 /** Shadow-pass materials (directional/spot depth, point-light distance) applying the same fade. */
-export function createFoliageFadeShadowMaterials(uniforms: FoliageFadeUniforms): {
+export function createFoliageFadeShadowMaterials(uniforms: FoliageFadeUniforms, mode: FadeDistanceMode = "distance"): {
   depth: MeshDepthMaterial;
   distance: MeshDistanceMaterial;
 } {
   // Same construction as three's own shadow-pass materials (WebGLShadowMap).
   const depth = new MeshDepthMaterial();
   const distance = new MeshDistanceMaterial();
-  installFade(depth, uniforms, null, null);
-  installFade(distance, uniforms, null, null);
+  installFade(depth, uniforms, null, null, mode);
+  installFade(distance, uniforms, null, null, mode);
   return { depth, distance };
 }

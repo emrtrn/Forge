@@ -20,10 +20,11 @@ import {
 import { resolveHeightFog } from "@engine/scene/heightFog";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
+import { StaticDetailCulling } from "@engine/render-three/staticDetailCulling";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
-import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, Sphere, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import {
   InstancedMesh,
 } from "three";
@@ -1016,6 +1017,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private farViewMode = false;
   private warnedNoReversedDepth = false;
   private readonly followShadowForward = new Vector3();
+  /**
+   * Small-object distance culling of static placements (Faz 7e), only in open
+   * world levels (World Partition on or a view distance set); null elsewhere.
+   */
+  private staticDetailCulling: StaticDetailCulling | null = null;
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   /** Consumer for the next frame's CPU capture; see {@link armFrameCapture}. */
   private armedFrameCapture: FrameCaptureConsumer | null = null;
@@ -1749,6 +1755,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // rolling `gpu` readout is never fed a deliberately crippled frame.
       this.gpuSweepSession.beginFrame();
       this.updateFollowShadow();
+      this.staticDetailCulling?.update(this.camera.position, this.qualitySettings.foliageCullDistanceScale);
       // Simulation time, not real time: the frame is still drawn while the world
       // is held (the GPU sweep depends on exactly that), but an animated pass must
       // not keep advancing over a scene that has stopped.
@@ -2639,6 +2646,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.killZ = worldSettings.killZ;
     this.authoredViewDistance = worldSettings.viewDistance;
     this.applyViewDistance();
+    this.staticDetailCulling?.dispose();
+    this.staticDetailCulling = worldSettings.viewDistance !== null || this.layout.worldSettings?.partition?.enabled
+      ? new StaticDetailCulling()
+      : null;
     this.physicsSubsystem.setGravity(worldSettings.gravity);
     this.ensureDefaultLights();
     // Resolve every placement before model loading; far actors contribute assets
@@ -4429,6 +4440,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         mesh.computeBoundingSphere();
         mesh.frustumCulled = true;
       }
+      this.registerDetailCulling(assetId, batch.group, true);
       this.scene.add(tagSceneSource(batch.group, "static-mesh"));
       state.batches.push({
         group: batch.group,
@@ -4530,6 +4542,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private disposeStaticCellBatches(state: StaticCellState): void {
     for (const batch of state.batches) {
+      this.staticDetailCulling?.release(batch.group);
       disposeMeshPaintCloneGeometries(batch.group);
       this.scene.remove(batch.group);
       for (const mesh of batch.meshes) mesh.dispose();
@@ -5154,10 +5167,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     placementIndices?: readonly number[],
   ): Group {
     const { group, meshes, clonedMaterials } = this.buildInstancedBatch(assetId, placements, placementIndices);
+    // A level-wide InstancedMesh is not compact, so it only fades per instance.
+    this.registerDetailCulling(assetId, group, false);
     this.instanceGroups.set(assetId, group);
     this.instanceMeshes.set(assetId, meshes);
     this.instanceProbeMaterials.set(assetId, clonedMaterials);
     return group;
+  }
+
+  /**
+   * Puts a small asset's batch — its InstancedMesh and per-placement clones — on
+   * the distance-fade materials (Faz 7e), when the level culls.
+   */
+  private registerDetailCulling(assetId: string, group: Group, skipWholeInstanced: boolean): void {
+    const bounds = this.localBounds.get(assetId);
+    if (!this.staticDetailCulling || !bounds || bounds.isEmpty()) return;
+    this.staticDetailCulling.register(assetId, bounds.getBoundingSphere(new Sphere()).radius, group, { skipWholeInstanced });
   }
 
   /** The eager batch for an asset: every placement no World Partition cell streams. */
@@ -5358,6 +5383,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (isMarkerAssetId(instance.assetId)) continue;
       const previous = this.instanceGroups.get(instance.assetId);
       if (previous) {
+        this.staticDetailCulling?.release(previous);
         disposeMeshPaintCloneGeometries(previous);
         this.scene.remove(previous);
       }

@@ -1849,6 +1849,24 @@ yoğunluğu yardımcısı.
   ipucu sisi önerir. `heightFogOpacityAt` saf yardımcı. Smoke
   `fog-fit-view-distance.spec.ts`. Ertelendi: World Terrain diyaloğunun
   `viewDistance` + sis önermesi (Faz 8 New Open World sihirbazıyla birlikte).
+- *7e tamam (2026-10-24):* küçük nesne culling, yalnız runtime ve yalnız
+  açık dünya level'larında (World Partition açık ya da `viewDistance`
+  tanımlı). Saf kural `engine/world/detailCulling.ts`: cull mesafesi =
+  sınır yarıçapı × 200 (ekran boyutu), > 1000 m olan asset hiç cull
+  edilmez; solma %80'de başlar; kalite `foliageCullDistanceScale` (adaptif
+  kalite de küçültür). `engine/render-three/staticDetailCulling.ts` batch
+  grubunun altındaki her mesh'i (InstancedMesh + yerleşim başına clone'lar:
+  material slot / override / probe / mesh paint) asset başına paylaşılan,
+  ölçek duyarlı dither-fade klonlarına geçirir (`foliageFade`
+  `"instanceScaled"`: mesafe ÷ instance ya da dünya ölçeği; gölge de solar).
+  Kompakt mesh'ler (hücre InstancedMesh'i ve her clone) en yakın noktası
+  en büyük instance'ın mesafesini aşınca hiç çizilmez; level çapındaki
+  InstancedMesh yalnız instance başına solar. Bulgu: material slot'u atanmış
+  bir asset'in bütün yerleşimleri instanced batch yerine ayrı clone olarak
+  çiziliyor (mevcut davranış; instancing kaybı ayrı bir perf adayı) — bu
+  yüzden culling clone'ları da kapsıyor. Engine testi `detailCulling.test.ts`,
+  smoke `detail-culling.spec.ts` (600 m'deki karo atlanır, yakın ve 3×
+  karo çizilir, program derlenir).
 
 ## Faz 8 — Editör dünya araçları
 

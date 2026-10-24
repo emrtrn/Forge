@@ -28,6 +28,11 @@
       "threshold": 1,
       "intensity": 1,
       "radius": 1
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1,
+      "intensity": 1
     }
   },
   "lights": [
@@ -66,7 +71,7 @@
     {
       "classRef": "assets/vehicles/mercedes-sls/Script_MercedesSLS.actor.json",
       "position": [
-        1021.39,
+        8189.02,
         0,
         -66.96
       ],

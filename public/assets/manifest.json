@@ -21086,6 +21086,29 @@
         "packVersion": "2.1"
       },
       "license": "CC0"
+    },
+    {
+      "id": "foliage-type-foliagetype",
+      "name": "Foliage Type.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Foliage_Type.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 437
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -3,13 +3,13 @@
   "type": "worldTerrain",
   "name": "Landscape",
   "tileQuads": 256,
-  "spacing": 1,
+  "spacing": 8,
   "tilesX": 8,
   "tilesZ": 8,
   "origin": [
-    -1024,
+    -8192,
     0,
-    -1024
+    -8192
   ],
   "heightMin": -256,
   "heightMax": 256,
@@ -23,8 +23,7 @@
     {
       "id": "dirt",
       "name": "Dirt",
-      "color": "#8a6441",
-      "material": "m-gravel-material"
+      "color": "#8a6441"
     },
     {
       "id": "rock",
@@ -176,12 +175,12 @@
     {
       "key": "3_3",
       "minHeight": 0,
-      "maxHeight": 6.565100193023682
+      "maxHeight": 0
     },
     {
       "key": "4_3",
       "minHeight": 0,
-      "maxHeight": 6.535600185394287
+      "maxHeight": 0
     },
     {
       "key": "5_3",
@@ -216,12 +215,12 @@
     {
       "key": "3_4",
       "minHeight": 0,
-      "maxHeight": 6.290900230407715
+      "maxHeight": 0
     },
     {
       "key": "4_4",
       "minHeight": 0,
-      "maxHeight": 6.311800003051758
+      "maxHeight": 0
     },
     {
       "key": "5_4",

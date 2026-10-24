@@ -8,7 +8,12 @@ import {
 import {
   createReferenceCarDefinition, normalizeVehicleAsset, type VehicleInput,
 } from "../../engine/physics/vehicle/vehicleTypes";
+import { nominalWheelLoad, sinkage } from "../../engine/physics/surface/sinkage";
+import { wheelFootprintDepth } from "../../engine/physics/surface/wheelSink";
+import { WheelTrackStamper } from "../../engine/physics/surface/wheelTracks";
 import { PHYSICAL_MATERIALS } from "../../engine/scene/collision";
+import { DeformationField } from "../../engine/scene/deformationField";
+import type { SurfaceDeformationSample } from "../../engine/terrain/terrainSurface";
 import { normalizeActorScriptDef } from "../../engine/scene/actorScript";
 import { readColliderComponent } from "../../engine/scene/components";
 import type { Entity } from "../../engine/scene/entity";
@@ -361,6 +366,74 @@ export async function registerSurfaceResponseRapierTests(
       world.drive({});
       world.tick(0.5);
       assert.equal(driven(), 0, "coasting transfers no engine impulse to lose");
+    } finally {
+      physics.dispose();
+    }
+  });
+
+  await checkAsync("wheel sink rapier: a car on mud settles into its own ruts and drives out of them without shaking", async () => {
+    const world = await createWorld();
+    const { physics } = world;
+    const MUD = PHYSICAL_MATERIALS.mud!.deformation!;
+    const mud: SurfaceDeformationSample = {
+      deformability: 1, maxDepth: MUD.maxDepth, compaction: MUD.compaction, digRate: MUD.digRate,
+      recoveryRate: MUD.recoveryRate, sinkResistance: MUD.sinkResistance,
+    };
+    // The terrain deformation module's loop without its services: physics reads the field, the stamper writes it.
+    const field = new DeformationField();
+    const stamper = new WheelTrackStamper(field);
+    const definition = createReferenceCarDefinition();
+    try {
+      physics.setVehicleSurfaceProvider(() => resolveSurfaceSample("mud"));
+      physics.setVehicleGroundSinkProvider((query) => {
+        const depth = wheelFootprintDepth((x, z) => field.sample(x, z).depth,
+          query.contactPoint[0], query.contactPoint[2], query.heading, query.width);
+        return depth > 0 ? { depth, resistance: mud.sinkResistance } : null;
+      });
+      physics.createVehicle("car", definition);
+      const frame = (): void => {
+        world.tick(1 / 60);
+        stamper.stampVehicle("car", physics.vehicleState("car")!, definition, () => mud, 1 / 60);
+      };
+      // Settle on the collider first: the spawn drop's landing load would press a deeper rut.
+      world.tick(2);
+      const nominal = nominalWheelLoad(definition);
+      const expected = physics.vehicleState("car")!.wheels.map((wheel) =>
+        sinkage(mud, 1, { load: wheel.suspensionForce, nominalLoad: nominal, width: 0 }));
+      for (let index = 0; index < 60 * 5; index += 1) frame();
+      const parked = physics.vehicleState("car")!;
+      parked.wheels.forEach((wheel, index) => {
+        assert.ok(wheel.inContact, "parked wheels keep their contact");
+        // The tyre rests on its footprint's mean: across a 0.245 m tyre on a 0.125 m grid the
+        // side samples catch the rut's bilinear edge, so it sits a little above the rut's centre.
+        assert.ok(wheel.sinkDepth! <= expected[index]! + 0.005 && wheel.sinkDepth! > expected[index]! * 0.75,
+          `parked sink ${wheel.sinkDepth}, sinkage ${expected[index]}`);
+      });
+      const heights: number[] = [];
+      for (let index = 0; index < 60; index += 1) {
+        frame();
+        heights.push(world.position()[1]);
+      }
+      assert.ok(Math.max(...heights) - Math.min(...heights) < 0.003, "the settled loop does not pump the suspension");
+      world.drive({ throttle: 1 });
+      let contactLosses = 0;
+      let maxVerticalSpeed = 0;
+      let previousY = world.position()[1];
+      for (let index = 0; index < 60 * 4; index += 1) {
+        frame();
+        const state = physics.vehicleState("car")!;
+        contactLosses += state.wheels.filter((wheel) => !wheel.inContact).length;
+        const y = world.position()[1];
+        maxVerticalSpeed = Math.max(maxVerticalSpeed, Math.abs(y - previousY) * 60);
+        previousY = y;
+      }
+      const driving = physics.vehicleState("car")!;
+      assert.ok(driving.forwardSpeed > 2, `climbed out of its ruts: ${driving.forwardSpeed} m/s`);
+      assert.equal(contactLosses, 0, "leaving the ruts never lifts a wheel off the ground");
+      // Climbing out at <= 0.3 m/s per wheel keeps the chassis' vertical motion near that rate.
+      assert.ok(maxVerticalSpeed < 0.4, `vertical speed peaked at ${maxVerticalSpeed} m/s`);
+      console.info(`[deform] parked sink ${parked.wheels.map((wheel) => wheel.sinkDepth!.toFixed(3)).join("/")} m, `
+        + `driving sink ${driving.wheels.map((wheel) => wheel.sinkDepth!.toFixed(3)).join("/")} m at ${driving.forwardSpeed.toFixed(1)} m/s`);
     } finally {
       physics.dispose();
     }

@@ -1443,14 +1443,14 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
 
 ## Faz 6 — Foliage ve çim akışı
 
-- [ ] Boyanmış foliage sidecar'ı hücre başına (`foliage` grid'i); mevcut
+- [x] Boyanmış foliage sidecar'ı hücre başına (`foliage` grid'i); mevcut
       16 m chunk'lar InstancedMesh başına frustum culling + `cullStart`/
       `cullEnd` fade (Foliage Faz 2'nin açık maddesi burada kapanır).
-- [ ] Landscape foliage kuralları → **prosedürel çim**: kamera etrafında 32 m
+- [x] Landscape foliage kuralları → **prosedürel çim**: kamera etrafında 32 m
       hücre halkası, hücre başına deterministik seed, worker'da örnekleme,
       mesafeyle yoğunluk azalması, kural başına sınır hücre başına uygulanır.
-- [ ] Yerleştirme `TerrainHeightQuery` ile (eğim, yükseklik, katman ağırlığı).
-- [ ] Bütçe: çim instance sayısı kalite profiline bağlı.
+- [x] Yerleştirme `TerrainHeightQuery` ile (eğim, yükseklik, katman ağırlığı).
+- [x] Bütçe: çim instance sayısı kalite profiline bağlı.
 
 ### Faz 6 tasarımı (kullanıcı onaylı, 2026-10-24)
 
@@ -1639,7 +1639,21 @@ halkası → F3 editör halkası + panel → smoke'lar (`foliage-fade`,
   (1 / 0,8 / 0,55 / 0,3); adaptif kalitenin foliage-cull adımı halkayı da
   küçültür. Smoke: `terrain-multitile` Play'de worker'ın kurduğu çim Node'da
   aynı üreticiyle hesaplanan sayıya birebir eşit (35 hücre, 16315 instance).
-  Sırada F3c: editörde aynı halka + panelde çok-tile kuralları.
+- *F3c editör tamam (2026-10-24):* editör aynı halkayı editör kamerası
+  çevresinde tam yoğunlukta (çarpan 1) kurar; kural/tür/Landscape
+  değişince halka yeniden kurulur. Sculpt/paint (1×1 ve çok-tile dab,
+  undo/redo, RAW import) mevcut 120 ms birleştirmeyle o arazinin hücrelerini
+  `ProceduralFoliageRing.replaceTerrain` ile bayat işaretler: tile'lar
+  worker'a yeniden kopyalanır, eski batch'ler yenisi gelene kadar kalır.
+  Halka batch'leri seçilemez (viewport tıklaması geçer). Foliage panelinde
+  çok-tile Landscape'ler kural hedefi; kural satırı yarıçapı ("Cull End")
+  ya da "never culls" uyarısını ve gölge maliyeti notunu gösterir.
+  Döndürülmüş / kare olmayan eski Landscape'te eski tek seferlik üretim
+  sürer. Smoke `terrain-multitile`: editör halkası tam yoğunlukta, Play
+  0,8'de Node hesabına birebir eşit. **Faz 6 kapandı.** Kalanlar ve
+  kapsam dışılar: editörde boyanmış foliage akışı (Faz 8), foliage
+  collision (değişmedi), uzak ağaç impostor'ları (Faz 7), araç izinde çim
+  ezilmesi (Terrain Deformation; `replaceTerrain` kancası hazır).
 
 **Kapsam dışı:** foliage collision'ın akması (bugün collision çizim dışı,
 `collision: true` türler yok sayılıyor — değişmiyor), editörde foliage

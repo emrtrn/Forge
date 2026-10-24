@@ -6,7 +6,7 @@ import {
 } from "@engine/scene/landscapeBrush";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
-import { levelTerrainPath, terrainTilePath, terrainTileWorldSize } from "@engine/terrain/terrainTypes";
+import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey } from "@engine/terrain/terrainTypes";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
 import {
@@ -285,6 +285,10 @@ import {
   type FoliageSurfaceHit,
 } from "@engine/scene/foliagePaint";
 import { loadFoliageDocument, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
+import { ProceduralFoliageRing, type ProceduralFoliageRuleSource, type ProceduralFoliageTerrain } from "./proceduralFoliageRing";
+import { createFoliageCellGenerator, type FoliageCellGenerator } from "./foliageCellGenerator";
+import { landscapeTerrainView } from "@engine/scene/proceduralFoliage";
+import { TerrainTileMap } from "@engine/terrain/terrainHeightQuery";
 import {
   createEmptyMeshPaintData,
   fillMeshVertexColors,
@@ -786,6 +790,10 @@ export interface LandscapeFoliageRuleView extends LandscapeFoliageRule {
   landscapeName: string;
   layerName: string;
   foliageTypeName: string;
+  /** The type casts shadows (procedural grass shadows cost ~2.5× its draw). */
+  typeCastsShadow: boolean;
+  /** The type's cull distance; 0 grows the rule over the whole surface. */
+  typeCullEnd: number;
 }
 
 export interface LandscapeSplinePointView {
@@ -1238,6 +1246,9 @@ export class SceneApp {
   private foliageTypes = new Map<string, ForgeFoliageTypeDef>();
   /** Terrain ids whose generated foliage batches are waiting for a debounced rebuild. */
   private readonly dirtyGeneratedFoliageLandscapes = new Set<string>();
+  /** Landscape foliage rules grown around the editor camera (OPEN_WORLD_PLAN Faz 6 F3). */
+  private foliageRing: ProceduralFoliageRing | null = null;
+  private foliageCellGenerator: FoliageCellGenerator | null = null;
   private generatedFoliageRebuildTimer: number | null = null;
   /** Whether Foliage Mode is the active editor mode (its brush owns pointer input). */
   private foliageModeActive = false;
@@ -1847,7 +1858,9 @@ export class SceneApp {
       this.updateMeshPaintFlow(deltaSeconds);
       this.updateGizmoScreenScale();
       this.environment.update(deltaSeconds);
-      this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
+      const foliageCamera = this.editorViewportCamera().position;
+      this.foliageRing?.update([foliageCamera.x, foliageCamera.z], 1, 1, 2);
+      this.foliageBinding?.updateCulling(foliageCamera);
       this.updateWorldTerrainStreaming();
       if (this.worldTerrainCollisionWiresDirty) {
         this.worldTerrainCollisionWiresDirty = false;
@@ -6961,6 +6974,10 @@ export class SceneApp {
    * meshes are resident, and builds the InstancedMesh batches (used on scene load).
    */
   private async buildFoliage(): Promise<void> {
+    this.foliageRing?.dispose();
+    this.foliageRing = null;
+    this.foliageCellGenerator?.dispose();
+    this.foliageCellGenerator = null;
     if (this.foliageBinding) {
       this.foliageBinding.dispose();
       this.foliageBinding = null;
@@ -6980,6 +6997,7 @@ export class SceneApp {
     binding.rebuild(this.foliageRenderData(), this.foliageResolver());
     this.foliageBinding = binding;
     this.disableFoliagePicking();
+    this.rebuildFoliageRing();
     // Default the active type to the first referenced type (if any) for convenience.
     if (!this.foliageToolSettings.activeTypeId) {
       const first = this.foliageTypes.keys().next().value;
@@ -6994,12 +7012,59 @@ export class SceneApp {
     this.disableFoliagePicking();
   }
 
-  /** Generated foliage is transient render data; only its rules live in the sidecar. */
+  /**
+   * The terrain a Landscape foliage rule grows on in the ring: a World Terrain's
+   * edit tiles (resident ones when streamed), or a fresh one-tile view of a 1×1
+   * Landscape; null for one the ring cannot express (rotated, non-square).
+   */
+  private proceduralFoliageTerrain(landscapeId: string): ProceduralFoliageTerrain | null {
+    const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === landscapeId);
+    if (!actor) return null;
+    const document = this.worldTerrains.get(actor.id);
+    if (document) {
+      const { def } = document;
+      return {
+        id: actor.id,
+        def: { tileQuads: def.tileQuads, spacing: def.spacing, tilesX: def.tilesX, tilesZ: def.tilesZ,
+          origin: [...def.origin], layers: def.layers.map((layer) => ({ id: layer.id })) },
+        tiles: { tile: (x, z) => document.tiles.get(tileKey(x, z)) },
+        existingTiles: new Set(def.tiles.map((tile) => tile.key)),
+      };
+    }
+    const data = this.landscapeData.get(actor.id);
+    const view = data ? landscapeTerrainView({ id: actor.id, position: [...actor.position], rotation: readRotation(actor), data }) : null;
+    if (!view) return null;
+    const tiles = new TerrainTileMap();
+    tiles.set(view.tile);
+    return { id: actor.id, def: { ...view.def, layers: view.def.layers.map((layer) => ({ id: layer.id })) }, tiles, existingTiles: null };
+  }
+
+  /** Recreates the editor ring from the current rules, types and terrains (the generator is kept). */
+  private rebuildFoliageRing(): void {
+    this.foliageRing?.dispose();
+    this.foliageRing = null;
+    const binding = this.foliageBinding;
+    if (!binding) return;
+    const rules: ProceduralFoliageRuleSource[] = [];
+    for (const rule of this.foliageData.landscapeRules ?? []) {
+      const type = this.foliageTypes.get(rule.foliageTypeId);
+      const terrain = type ? this.proceduralFoliageTerrain(rule.landscapeId) : null;
+      if (type && terrain) rules.push({ rule, type, terrain });
+    }
+    if (rules.length === 0) return;
+    this.foliageCellGenerator ??= createFoliageCellGenerator();
+    this.foliageRing = new ProceduralFoliageRing({ rules, binding, resolver: this.foliageResolver(), generator: this.foliageCellGenerator });
+  }
+
+  /**
+   * Generated foliage is transient render data; only its rules live in the sidecar.
+   * Only for a Landscape the ring cannot express; every other rule grows in the ring.
+   */
   private generatedFoliageGroup(rule: LandscapeFoliageRule): LayoutFoliageGroup | null {
     const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
     const data = actor ? this.landscapeData.get(actor.id) : null;
     const type = this.foliageTypes.get(rule.foliageTypeId);
-    if (!actor || !data || !type) return null;
+    if (!actor || !data || !type || this.proceduralFoliageTerrain(actor.id)) return null;
     const instances = generateLandscapeFoliageSamples(rule, {
       id: actor.id,
       position: [...actor.position],
@@ -7025,6 +7090,8 @@ export class SceneApp {
 
   /** Rebuilds only the generated rule groups affected by a terrain change. */
   private rebuildGeneratedFoliageForLandscape(landscapeId: string): void {
+    const terrain = this.proceduralFoliageTerrain(landscapeId);
+    if (terrain) this.foliageRing?.replaceTerrain(terrain);
     for (const rule of this.foliageData.landscapeRules ?? []) {
       if (rule.landscapeId !== landscapeId) continue;
       const group = this.generatedFoliageGroup(rule);
@@ -7050,6 +7117,7 @@ export class SceneApp {
   private rebuildAllGeneratedFoliage(): void {
     this.foliageBinding?.rebuild(this.foliageRenderData(), this.foliageResolver());
     this.disableFoliagePicking();
+    this.rebuildFoliageRing();
   }
 
   private emitFoliageChanged(): void {
@@ -7109,8 +7177,11 @@ export class SceneApp {
   }
 
   getLandscapeFoliageLandscapeViews(): LandscapeFoliageLandscapeView[] {
-    // Landscape foliage rules sample the editable grid; World Terrain has none yet.
-    return (this.layout?.landscapes ?? []).filter((actor) => !this.worldTerrains.has(actor.id)).map((actor) => {
+    return (this.layout?.landscapes ?? []).map((actor) => {
+      const world = this.worldTerrains.get(actor.id);
+      if (world) {
+        return { id: actor.id, name: actor.name ?? actor.id, layers: world.def.layers.map((layer) => ({ id: layer.id, name: layer.name })) };
+      }
       const data = this.landscapeData.get(actor.id);
       if (data) ensureLandscapeLayers(data);
       const layers = data?.layers ?? LANDSCAPE_DEFAULT_LAYERS.map((layer) => ({ id: layer.id, name: layer.name }));
@@ -7131,6 +7202,8 @@ export class SceneApp {
         landscapeName: landscape?.name ?? rule.landscapeId,
         layerName: landscape?.layers.find((layer) => layer.id === rule.layerId)?.name ?? rule.layerId,
         foliageTypeName: this.foliageTypes.get(rule.foliageTypeId)?.name ?? rule.foliageTypeId,
+        typeCastsShadow: this.foliageTypes.get(rule.foliageTypeId)?.castShadow ?? false,
+        typeCullEnd: this.foliageTypes.get(rule.foliageTypeId)?.cullEnd ?? 0,
       };
     });
   }
@@ -7254,6 +7327,7 @@ export class SceneApp {
     if (this.foliageData.landscapeRules.length !== beforeRuleCount) {
       for (const ruleId of removedRuleIds) this.foliageBinding?.removeGroup(`generated-${ruleId}`);
       this.editorSaves.foliageSaveRevision.markDirty();
+      this.rebuildFoliageRing();
     }
     if (this.foliageToolSettings.activeTypeId === assetId) {
       this.foliageToolSettings.activeTypeId = this.foliageTypes.keys().next().value ?? null;
@@ -7306,6 +7380,7 @@ export class SceneApp {
     this.foliageData.landscapeRules = next;
     this.editorSaves.foliageSaveRevision.markDirty();
     this.foliageBinding?.removeGroup(`generated-${id}`);
+    this.rebuildFoliageRing();
     this.emitFoliageChanged();
     this.scheduleAutoSave();
   }
@@ -9123,6 +9198,8 @@ export class SceneApp {
     if (dirty.size === 0) return;
     session.markTiles(dirty.keys());
     updateWorldTerrainObjectTiles(object, dirty);
+    const strokeActor = this.layout?.landscapes?.[stroke.landscapeIndex];
+    if (strokeActor) this.scheduleLandscapeFoliageRebuild(strokeActor.id);
   }
 
   private updateWorldTerrainStroke(event: PointerEvent): boolean {
@@ -9156,6 +9233,7 @@ export class SceneApp {
       const dirty = apply(session.world, patches);
       session.markTiles(dirty.keys());
       updateWorldTerrainObjectTiles(object, dirty);
+      this.scheduleLandscapeFoliageRebuild(landscapeId);
       this.select({ kind: "landscape", index });
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
@@ -9439,6 +9517,7 @@ export class SceneApp {
     this.landscapeObjects.splice(insertionIndex, 0, object);
     this.scene.add(object);
     this.refreshLandscapeIndices();
+    this.rebuildFoliageRing();
   }
 
   private removeLandscapeAt(index: number): LayoutLandscape | null {
@@ -9455,6 +9534,7 @@ export class SceneApp {
       this.editorSaves.landscapeSaveRevisions.delete(removed.id);
     }
     this.refreshLandscapeIndices();
+    this.rebuildFoliageRing();
     return removed ? cloneLandscape(removed) : null;
   }
 
@@ -10427,6 +10507,7 @@ export class SceneApp {
         const dirty = apply(session.world, patches);
         session.markTiles(dirty.keys());
         updateWorldTerrainObjectTiles(object, dirty);
+        this.scheduleLandscapeFoliageRebuild(actor.id);
         this.select({ kind: "landscape", index });
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();

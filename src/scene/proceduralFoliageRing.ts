@@ -117,6 +117,25 @@ export class ProceduralFoliageRing {
     }
   }
 
+  /**
+   * The terrain changed (an edit, or a fresh 1×1 view): its tiles are mirrored
+   * again and its cells regenerated, the old batches staying until replaced.
+   */
+  replaceTerrain(terrain: ProceduralFoliageTerrain): void {
+    if (this.disposed || !this.terrains.has(terrain.id)) return;
+    this.terrains.set(terrain.id, terrain);
+    this.synced.set(terrain.id, new Map());
+    this.options.generator.setTerrain(terrain.id, terrain.def);
+    for (const state of this.rules) {
+      if (state.source.terrain.id !== terrain.id) continue;
+      state.bounds = terrainBounds(terrain.def);
+      // NaN matches no keep fraction, so the planner rebuilds every built cell.
+      for (const entry of state.built.values()) entry.keep = Number.NaN;
+      // In-flight answers read the old tiles; their tokens no longer match.
+      state.pending.clear();
+    }
+  }
+
   snapshot(): ProceduralFoliageRingSnapshot {
     let cells = 0;
     let instances = 0;
@@ -142,7 +161,8 @@ export class ProceduralFoliageRing {
 
   private plan(center: readonly [number, number], cullScale: number, density: number, maxInFlight: number): void {
     for (const [index, state] of this.rules.entries()) {
-      const { rule, type, terrain } = state.source;
+      const { rule, type } = state.source;
+      const terrain = this.terrains.get(state.source.terrain.id)!;
       const { radius, capped } = foliageRingRadius(type.cullEnd, cullScale, state.bounds);
       if (capped && !state.warnedCap) {
         state.warnedCap = true;

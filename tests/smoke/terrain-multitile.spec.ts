@@ -359,6 +359,29 @@ test("World Terrain foliage tools paint across a seam, save exact surface height
     await expect(page.locator(".foliage-type-name")).toHaveText("World Foliage");
   };
   await bootEditor();
+  // The ring (worker) equals the pure generator run here over every planned cell.
+  const surface = worldTerrainFoliageSurface(world.def, lookup);
+  const bounds = { minX: -80, maxX: -80 + 3 * Q, minZ: -50, maxZ: -50 + 2 * Q };
+  const expectedRing = (density: number) => {
+    const cells = planFoliageRing({ center: SPAWN, radius: Infinity, density, bounds, built: new Map() }).build;
+    expect(cells.length).toBe(35);
+    return cells.reduce((sum, cell) => sum + generateFoliageCell(rule, foliageType, surface, {
+      cellX: cell.cellX, cellZ: cell.cellZ, cellSize: 32, keepFraction: cell.keepFraction,
+    }).count, 0);
+  };
+  const ringCount = () => page.evaluate(() => {
+    let total = 0;
+    for (const scene of (window as unknown as { __ringScenes: any[] }).__ringScenes) {
+      scene.traverse((node: any) => {
+        if (node.isInstancedMesh && node.parent?.name?.startsWith("foliage-grass:world-rule:")) total += node.count;
+      });
+    }
+    return total;
+  });
+  // The editor grows the same rule around its camera at full density.
+  expect(expectedRing(1)).toBeGreaterThan(expectedRing(0.8));
+  await expect.poll(ringCount, { timeout: 30_000 }).toBe(expectedRing(1));
+  await expect(page.locator('[data-landscape-rule="world-rule"] [data-rule-notes]')).toContainText("never culls");
   const count = page.locator(".foliage-type-count");
   const viewport = (await page.locator("[data-viewport-host]").boundingBox())!;
   const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
@@ -442,27 +465,10 @@ test("World Terrain foliage tools paint across a seam, save exact surface height
   expect((await loadedSidecar).ok()).toBeTruthy();
   await expect.poll(() => messages.some((message) => message.includes("[runtime] scene loaded")), { timeout: 60_000 }).toBeTruthy();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
-  // The worker's ring equals the pure generator run here over every planned cell.
-  const surface = worldTerrainFoliageSurface(world.def, lookup);
-  const bounds = { minX: -80, maxX: -80 + 3 * Q, minZ: -50, maxZ: -50 + 2 * Q };
-  const cells = planFoliageRing({ center: SPAWN, radius: Infinity, density: 0.8, bounds, built: new Map() }).build;
-  const ringInstances = cells.reduce((sum, cell) => sum + generateFoliageCell(rule, foliageType, surface, {
-    cellX: cell.cellX, cellZ: cell.cellZ, cellSize: 32, keepFraction: cell.keepFraction,
-  }).count, 0);
-  expect(cells.length).toBe(35);
-  expect(ringInstances).toBeGreaterThan(10_000);
   // Boot builds the cells over resident tiles; the rest grow as the terrain streams in.
   expect(messages.some((message) => message.startsWith("[foliage-ring] ready: "))).toBe(true);
-  const ringCount = () => page.evaluate(() => {
-    let count = 0;
-    for (const scene of (window as unknown as { __ringScenes: any[] }).__ringScenes) {
-      scene.traverse((node: any) => {
-        if (node.isInstancedMesh && node.parent?.name?.startsWith("foliage-grass:world-rule:")) count += node.count;
-      });
-    }
-    return count;
-  });
-  await expect.poll(ringCount, { timeout: 30_000 }).toBe(ringInstances);
+  // Play thins the ring by the profile's grassDensity (high: 0.8).
+  await expect.poll(ringCount, { timeout: 30_000 }).toBe(expectedRing(0.8));
   expect(messages.some((message) => message.includes("Foliage worker failed"))).toBe(false);
   expect(errors).toEqual([]);
 });

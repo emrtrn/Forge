@@ -79,6 +79,26 @@ export async function registerProceduralFoliageRingTests(checkAsync: CheckAsync)
     f.ring.dispose();
   });
 
+  await checkAsync("procedural foliage ring: an edited terrain regrows on the new surface, keeping old batches until then", async () => {
+    const f = fixture();
+    await f.ring.prepare([20, 20], 1, 1);
+    const heights = () => f.binding.allMeshes().flatMap((mesh) => {
+      const array = mesh.instanceMatrix.array;
+      return Array.from({ length: mesh.count }, (_, index) => array[index * 16 + 13]!);
+    });
+    const before = heights();
+    assert.ok(before.length > 0 && before.every((y) => Math.abs(y) < 1e-6), "flat tile 0_0 at height 0");
+    // A sculpt raises tile 0_0 in place (same tile object, as the editor's edit world does).
+    f.all.get("0_0")!.heights.fill(5);
+    f.ring.replaceTerrain({ id: "ground", def: DEF, tiles: f.resident, existingTiles: new Set(f.all.keys()) });
+    assert.equal(f.instances(), before.length, "old batches stay until the regrown ones replace them");
+    await frames(f.ring, [20, 20], 1);
+    const after = heights();
+    assert.equal(after.length, before.length, "same candidates, same layer weights: same count");
+    assert.ok(after.every((y) => Math.abs(y - 5) < 1e-5), "every instance sits on the raised surface");
+    f.ring.dispose();
+  });
+
   await checkAsync("procedural foliage ring: a cell waits for its tiles and grows once they are resident", async () => {
     const f = fixture({ residentTiles: ["0_0"] });
     // Camera on the seam: cells over tile 1_0 (x >= 64) need it.

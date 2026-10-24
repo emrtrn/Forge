@@ -220,9 +220,16 @@ function renderGeneratedRules(options: FoliagePanelOptions): string {
     : options.landscapeRules.map((rule) => {
       const landscape = landscapes.find((entry) => entry.id === rule.landscapeId);
       const layers = landscape?.layers ?? [];
+      const notes = [
+        rule.typeCullEnd > 0
+          ? `Grows within ${rule.typeCullEnd} m of the camera (the type's Cull End).`
+          : "The type never culls: grows over the whole surface (512 m around the camera on large terrain). Set a Cull End.",
+        ...(rule.typeCastsShadow ? ["The type casts shadows: grass shadows cost about 2.5× its rendering."] : []),
+      ];
       return `
         <div class="detail-section foliage-generated-rule" data-landscape-rule="${escapeHtml(rule.id)}">
           <div class="detail-section-title">${escapeHtml(rule.landscapeName)} / ${escapeHtml(rule.layerName)}</div>
+          <div class="detail-hint" data-rule-notes>${notes.map(escapeHtml).join(" ")}</div>
           <label class="detail-row"><span>Landscape</span><select data-rule-landscape>${selectOptions(landscapes, rule.landscapeId)}</select></label>
           <label class="detail-row"><span>Layer</span><select data-rule-layer>${selectOptions(layers, rule.layerId)}</select></label>
           <label class="detail-row"><span>Foliage Type</span><select data-rule-type>${selectOptions(types, rule.foliageTypeId)}</select></label>
@@ -236,7 +243,7 @@ function renderGeneratedRules(options: FoliagePanelOptions): string {
   return `
     <div class="detail-section">
       <div class="detail-section-title">Generated Foliage</div>
-      <div class="detail-hint">Landscape layer weights generate foliage deterministically. Generated instances are not saved individually.</div>
+      <div class="detail-hint">Landscape layer weights generate foliage deterministically, in 32 m cells around the camera, thinning with distance. Generated instances are not saved individually.</div>
       ${rows}
       <div class="foliage-generated-add">
         <label class="detail-row"><span>Landscape</span><select data-rule-new-landscape ${canAdd ? "" : "disabled"}>${landscapeOptions}</select></label>

@@ -520,6 +520,8 @@ export class FoliageRenderBinding {
     for (const mesh of built.meshes) {
       mesh.frustumCulled = true;
       mesh.computeBoundingSphere();
+      // Procedural instances are not authored objects: viewport picks pass through them.
+      mesh.raycast = () => {};
     }
     resolver.applyMaterialSlots?.(type.meshAssetId, built.group);
     const root = new Group();

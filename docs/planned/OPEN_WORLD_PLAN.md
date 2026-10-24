@@ -1452,6 +1452,117 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
 - [ ] Yerleştirme `TerrainHeightQuery` ile (eğim, yükseklik, katman ağırlığı).
 - [ ] Bütçe: çim instance sayısı kalite profiline bağlı.
 
+### Faz 6 tasarımı (kullanıcı onaylı, 2026-10-24)
+
+Kararlar: dither fade; G0 spike önce; çim mesh'i Kenney nature-kit
+`grass.glb` + `grass_large.glb` (CC0) starter-content'e eklenir.
+
+**Bugünkü durum (kaynaktan):** `FoliageRenderBinding` her grubu 16 m
+chunk'lara bölüyor (`chunkFoliageInstances`), chunk başına frustum culling ve
+`cullEnd × foliageCullDistanceScale` ile sert gizleme var; `cullStart`
+kullanılmıyor (fade yok). Sidecar level başına tek `<Level>.foliage.json`,
+partition açık olsa da tamamı boot'ta okunur. `landscapeRules` editörde ve
+Play'de bütün arazi için bir kez üretiliyor (kural başına 20k sınırı);
+çok-tile World Terrain'de atlanıyor (uyarıyla). Foliage mesh'leri level için
+`pinModels` ile sabit.
+
+**İlkeler.**
+1. Partition kapalı level'lar bugünkü gibi çalışır (tek sidecar, 16 m
+   chunk'lar); fade her level'a gelir.
+2. Boyanmış foliage'ın runtime kimliği yok (script durumu, mesaj hedefi yok),
+   bu yüzden foliage hücre dosyaları — `main` hücrelerinin aksine —
+   **talep üzerine okunabilir**: GUID sorunu burada yok.
+3. Üretilen çim hiçbir zaman kaydedilmez; aynı kural + aynı arazi her
+   makinede aynı instance'ları verir (hücre başına deterministik seed).
+4. Kural başına `cullEnd = 0` ("hiç gizleme") bugünkü davranışı korur:
+   bütün yüzey üretilir (küçük 1×1 arazide değişiklik yok). Çok-tile
+   dünyada `cullEnd = 0` olan kural üst sınıra (512 m) kısılır ve editör
+   uyarır.
+
+**F1 — Cull fade (her level).** `cullStart..cullEnd` aralığında instance
+başına **dither (screen-door) fade**: tür başına klonlanmış malzemeye
+`onBeforeCompile` ile instance merkezinden kamera uzaklığı (vertex) +
+Bayer eşiğiyle `discard` (fragment); aynı kesme `customDepthMaterial` /
+`customDistanceMaterial`'a da eklenir ki gölge de solsun. Saydamlık yok,
+sıralama sorunu yok, malzeme sayısı tür başına bir (program anahtarı sabit).
+Kalite çarpanı uniform olarak gider; çarpan değişince yeniden derleme yok.
+Chunk gizleme `cullEnd`'de kalır (CPU tarafı erken çıkış). Foliage Mode
+Faz 2'nin açık "cull start/end fade" maddesi bununla kapanır.
+
+**F2 — Boyanmış foliage hücre dosyaları (partition açık level'lar).**
+- `foliage` grid'i: 64 m hücre, 256 m menzil (`worldSettings.partition.grids.foliage`,
+  `normalizeWorldPartitionSettings` + validator; yükleme menzili
+  `viewDistanceMultiplier` ile ölçeklenir). Menzil türlerin `cullEnd`'inden
+  kısaysa uzak instance'lar zaten görünmez; `cullEnd` menzilden uzun tür için
+  editör uyarısı (uzak görünüm Faz 7 HLOD/impostor işi).
+- Dosyalar: `<Level>.foliage.json` partition açıkken **dizin** olur (gruplar
+  `id/foliageTypeId/target` ile, `instances: []`; `landscapeRules`;
+  `foliageCells: ["x_z", ...]`) + `<Level>.cells/foliage/<x_z>.foliage.json`
+  (`{schema:1, type:"foliageCell", cell, groups:[{id, instances}]}`). Instance
+  konumuna göre hücreye düşer. Sıra Faz 5 ile aynı: değişen hücreler (silmeden)
+  → dizin → `keep` ile temizlik; yalnız kirli hücreler yazılır. Validator
+  mevcut `normalizeFoliageData` instance normalizer'ını yeniden kullanır
+  (yeni allowlist yüzeyi: `/__save-foliage-cells`, dropped[] raporlu).
+- Editör v1 bütün hücre dosyalarını okuyup birleştirir (bugünkü tam belgeyle
+  çalışır; seçim indeksleri birleşik grupta, birleştirme sırası hücre
+  anahtarına göre deterministik). Editörde foliage akışı Faz 8 işi.
+- Runtime `FoliageCellStreaming`: pawn/kamera çevresinde hücre dosyasını
+  ön-yükleme halkasında (1,5×) okur (Loaded), menzile girince batch'i kurar
+  (Activated), 1,25× histerezisle boşaltır; kare başına bütçe (instance
+  sayısına göre). Partition'lı level'da render batch'i **hücre × grup** (64 m)
+  olur: 256 m menzilde ~50 hücre × tür draw call; 16 m chunk ile ~800 olurdu.
+  Per-instance fade sayesinde büyük batch görünür bir sıçrama yaratmaz.
+  Boot/travel/save-load spawn menzilindeki hücreleri loading ekranının
+  arkasında bekler. Mesh'ler dizindeki türlerden bilindiği için level boyunca
+  sabit kalır (K5'e foliage sahipliği eklenmez — v1 sadeliği).
+
+**F3 — Prosedürel çim halkası.**
+- `grass` grid'i: 32 m hücre. Kural başına halka yarıçapı = tür `cullEnd`
+  (× `foliageCullDistanceScale`); `cullEnd = 0` → bütün yüzey (ilke 4).
+- Saf çekirdek `engine/scene/proceduralFoliage.ts`: `FoliageSurface`
+  arayüzü (`heightAt` = K3a üçgen-birebir `terrainHeightAt`, `normalAt`,
+  `layerWeightAt(layerId)`), iki uygulaması: World Terrain (`TerrainTileMap`,
+  kural `layerId` → `def.layers` indeksi) ve 1×1 `ForgeLandscapeData`
+  (bugünkü bilinear, rotasyonlu). `generateFoliageCell(rule, type, surface,
+  cell)` → seed = hash(rule.seed, cellX, cellZ); hücre içinde jitter'lı grid;
+  her örneğin sabit bir `r` değeri var.
+- **Mesafeyle yoğunluk:** hücre uzaklığına göre bant (ör. 1 / 0,5 / 0,25);
+  örnek yalnız `r < bantOranı × grassDensity` ise tutulur. Kümeler iç içe
+  olduğu için bant değişince instance'lar yer değiştirmez, yalnız eklenir ya
+  da düşer.
+- Kural başına hücre sınırı (hücre başına 4096) eski kural başına 20k'nın
+  yerine geçer. Yeni çekirdek kalite alanı `grassDensity`
+  (ultra 1 / high 0,8 / medium 0,55 / low 0,3; adaptif kalite ve user
+  settings normalizer'ına eklenir).
+- Üretim yeri spike'a bağlı (G0): hücre başına < 1 ms ise ana thread'de
+  kare bütçesiyle, değilse worker'da (hücrenin yükseklik + ağırlık dilimi
+  kopyalanıp gönderilir, ~10 KB). Tile'ı yüklü olmayan hücre bekler.
+- Hem 1×1 Landscape hem çok-tile World Terrain aynı yoldan; çok-tile atlama
+  uyarısı kalkar. Bu, Faz 8'deki 1×1 köprüsünü kaldırma maddesinin
+  önkoşulunu karşılar.
+- Editör: aynı halka editör kamerası çevresinde; sculpt/paint'in kirli
+  dikdörtgenine değen hücreler yeniden üretilir (bugünkü 120 ms birleştirme
+  korunur). Foliage panelinde kurallar çok-tile'da da açılır.
+
+**G0 — Ölçüm spike'ı (önce).** `spikes/grass-ring` (main'e merge'den önce
+silinir): (a) 32 m hücre üretim süresi, yoğunluk 2/4/8 m⁻² ×
+`terrainHeightAt` + ağırlık + roll + matris; (b) 50k/150k/300k çim
+instance'ının GPU kare süresi, dither'lı ve dither'sız, gölgeli ve
+gölgesiz; (c) hücre × grup batch'i kurma/yükleme süresi. Bütçe hedefleri ve
+worker kararı buradan çıkar.
+
+**Dilimler.** G0 spike → F1 fade → G1 saf çekirdekler (foliage hücre
+bölme/birleştirme + dosya formatı + validator; prosedürel hücre örnekleyici;
+Codex'e uygun) → F2 editör save/load + runtime hücre akışı → F3 runtime çim
+halkası → F3 editör halkası + panel → smoke'lar (`foliage-fade`,
+`foliage-cells`, `grass-ring`) + CONTENT_LOADING_CONTRACT'a foliage bölümü.
+
+**Kapsam dışı:** foliage collision'ın akması (bugün collision çizim dışı,
+`collision: true` türler yok sayılıyor — değişmiyor), editörde foliage
+akışı (Faz 8), uzak ağaç impostor'ları (Faz 7), araç izi altında çimin
+ezilmesi (Terrain Deformation planı; F3'ün hücre geçersizleme kancası onu
+taşır).
+
 ## Faz 7 — Uzak görünüm: gölge, görüş mesafesi, LOD, HLOD
 
 - [ ] Kamera far/near World Settings `viewDistance` × kalite çarpanı;

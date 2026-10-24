@@ -160,7 +160,7 @@ function bindWorldSettingsInputs(options: WorldSettingsPanelOptions): void {
       options.setWorldSettings({
         partition: normalizeWorldPartitionSettings({
           ...partition,
-          grids: { main: { ...partition.grids.main, [key]: value } },
+          grids: { ...partition.grids, main: { ...partition.grids.main, [key]: value } },
         }),
       });
     });

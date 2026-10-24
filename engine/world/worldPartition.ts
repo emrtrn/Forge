@@ -11,12 +11,12 @@ export interface WorldPartitionGridSettings {
 
 export interface WorldPartitionSettings {
   enabled: boolean;
-  grids: { main: WorldPartitionGridSettings };
+  grids: { main: WorldPartitionGridSettings; foliage: WorldPartitionGridSettings };
 }
 
 export const DEFAULT_WORLD_PARTITION: WorldPartitionSettings = {
   enabled: false,
-  grids: { main: { cellSize: 128, loadRange: 384 } },
+  grids: { main: { cellSize: 128, loadRange: 384 }, foliage: { cellSize: 64, loadRange: 256 } },
 };
 
 function record(value: unknown, field: string): Record<string, unknown> {
@@ -38,15 +38,20 @@ export function normalizeWorldPartitionSettings(value: unknown): WorldPartitionS
   if (typeof enabled !== "boolean") throw new Error("enabled must be a boolean");
   const grids = input.grids === undefined ? {} : record(input.grids, "grids");
   for (const name of Object.keys(grids)) {
-    if (name !== "main") throw new Error(`Unknown grid: grids.${name}`);
+    if (name !== "main" && name !== "foliage") throw new Error(`Unknown grid: grids.${name}`);
   }
   const main = grids.main === undefined ? {} : record(grids.main, "grids.main");
+  const foliage = grids.foliage === undefined ? {} : record(grids.foliage, "grids.foliage");
   const defaults = DEFAULT_WORLD_PARTITION.grids.main;
+  const foliageDefaults = DEFAULT_WORLD_PARTITION.grids.foliage;
   return {
     enabled,
     grids: { main: {
       cellSize: positive(main.cellSize, defaults.cellSize, "grids.main.cellSize"),
       loadRange: positive(main.loadRange, defaults.loadRange, "grids.main.loadRange"),
+    }, foliage: {
+      cellSize: positive(foliage.cellSize, foliageDefaults.cellSize, "grids.foliage.cellSize"),
+      loadRange: positive(foliage.loadRange, foliageDefaults.loadRange, "grids.foliage.loadRange"),
     } },
   };
 }

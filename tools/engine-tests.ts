@@ -3,6 +3,8 @@ import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from 
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
 import { registerFoliageFadeTests } from "../tests/engine/foliageFade.test";
+import { registerFoliageCellsTests } from "../tests/engine/foliageCells.test";
+import { registerProceduralFoliageTests } from "../tests/engine/proceduralFoliage.test";
 import { registerWorldPartitionStreamingTests } from "../tests/engine/worldPartitionStreaming.test";
 import { registerAssetResidencyTests } from "../tests/engine/assetResidency.test";
 import { registerPhysicsContactTests } from "../tests/engine/physicsContacts.test";
@@ -1215,6 +1217,8 @@ registerWorldTerrainCreateTests(check);
 registerWorldTerrainExpandTests(check);
 registerWorldPartitionTests(check);
 registerFoliageFadeTests(check);
+registerFoliageCellsTests(check);
+registerProceduralFoliageTests(check);
 registerWorldPartitionStreamingTests(check);
 await registerAssetResidencyTests(checkAsync);
 await registerPhysicsContactTests(checkAsync);

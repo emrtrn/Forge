@@ -34,6 +34,7 @@ import {
 } from "../engine/assets/manifest";
 import { isBrushShape } from "../engine/scene/blockingVolume";
 import { normalizeFoliageType, normalizeFoliageData } from "../engine/scene/foliage";
+import { foliageCellPath, normalizeFoliageCellDocument, type FoliageCellDocument } from "../engine/world/foliageCells";
 import { normalizeMeshPaintData } from "../engine/scene/meshPaint";
 import { normalizeAssetVertexColors } from "../engine/scene/assetVertexColors";
 import {
@@ -2065,6 +2066,29 @@ export function validateSaveWorldCellsPayload(value: unknown): {
       }
     }
     return result;
+  });
+  return { level, cells, keep };
+}
+
+/** Validates foliage cell writes and the optional complete cell index. */
+export function validateSaveFoliageCellsPayload(value: unknown): {
+  level: string;
+  cells: FoliageCellDocument[];
+  keep: string[] | null;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("foliage cells payload must be an object");
+  const input = value as Record<string, unknown>;
+  const level = validateOpenLevelPayload({ path: input.level }).path;
+  foliageCellPath(level, "0_0");
+  const keep = input.keep === undefined ? null : validateWorldCellKeys(input.keep, "keep");
+  if (!Array.isArray(input.cells)) throw new Error("cells must be an array");
+  const seen = new Set<string>();
+  const cells = input.cells.map((value): FoliageCellDocument => {
+    const cell = normalizeFoliageCellDocument(value);
+    if (keep && !keep.includes(cell.key)) throw new Error(`cell key ${cell.key} is not in keep`);
+    if (seen.has(cell.key)) throw new Error(`duplicate cell key ${cell.key}`);
+    seen.add(cell.key);
+    return cell;
   });
   return { level, cells, keep };
 }

@@ -33,7 +33,7 @@ async function writeFixture() {
     worldSettings: {
       gameMode: MODE,
       // Activation 24 m, prefetch ring 36 m (released beyond 45 m), cells 16 m.
-      partition: { enabled: true, grids: { main: { cellSize: 16, loadRange: 24 } } },
+      partition: { enabled: true, grids: { main: { cellSize: 16, loadRange: 24 }, foliage: { cellSize: 64, loadRange: 256 } } },
     },
     instances: [
       // floor-400x400 is a 4 m mesh with its origin at a corner: at scale 4 each

@@ -33,7 +33,7 @@ async function writeFixture() {
     schema: 1, name: "World Partition Streaming", loadGroups: [], characters: [],
     worldSettings: {
       gameMode: MODE,
-      partition: { enabled: true, grids: { main: { cellSize: 16, loadRange: 24 } } },
+      partition: { enabled: true, grids: { main: { cellSize: 16, loadRange: 24 }, foliage: { cellSize: 64, loadRange: 256 } } },
     },
     // The long static floor remains eager even with partition enabled.
     instances: [

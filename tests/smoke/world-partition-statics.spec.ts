@@ -28,7 +28,7 @@ async function writeFixture() {
     schema: 1, name: "World Partition Statics", loadGroups: [], characters: [],
     worldSettings: {
       gameMode: MODE,
-      partition: { enabled: true, grids: { main: { cellSize: 16, loadRange: 24 } } },
+      partition: { enabled: true, grids: { main: { cellSize: 16, loadRange: 24 }, foliage: { cellSize: 64, loadRange: 256 } } },
     },
     instances: [
       // Every floor tile streams with its cell. floor-400x400 is a 4 m mesh with

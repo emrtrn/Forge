@@ -79,7 +79,7 @@ test("World Settings enables partition and Spatially Loaded moves a placement be
   await expect(range).toHaveValue("96");
   await save();
   expect((await diskLevel()).worldSettings?.partition).toEqual({
-    enabled: true, grids: { main: { cellSize: 32, loadRange: 96 } },
+    enabled: true, grids: { main: { cellSize: 32, loadRange: 96 }, foliage: { cellSize: 64, loadRange: 256 } },
   });
   expect((await diskLevel()).worldCells).toEqual(["1_0"]);
   expect((await diskCell("1_0")).instances?.[0]?.placements.map((item) => item.name))
@@ -108,7 +108,7 @@ test("World Settings enables partition and Spatially Loaded moves a placement be
   await expect(range).toBeDisabled();
   await save();
   expect((await diskLevel()).worldSettings?.partition).toEqual({
-    enabled: false, grids: { main: { cellSize: 32, loadRange: 96 } },
+    enabled: false, grids: { main: { cellSize: 32, loadRange: 96 }, foliage: { cellSize: 64, loadRange: 256 } },
   });
   await page.reload();
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });

@@ -1,3 +1,4 @@
+import { parseWorldCellKey } from "../world/worldGrid";
 import type { Vec3 } from "./layout";
 
 /**
@@ -237,6 +238,8 @@ export interface LayoutFoliageData {
   groups: LayoutFoliageGroup[];
   /** Faz 3 Landscape layer → foliage mappings. Omitted by legacy sidecars. */
   landscapeRules?: LandscapeFoliageRule[];
+  /** Partitioned level (World Partition on): keys of `<Level>.cells/foliage/<x_z>.foliage.json` files holding the instances. */
+  foliageCells?: string[];
 }
 
 export const FOLIAGE_TARGET_KINDS: readonly FoliageTargetKind[] = ["landscape", "staticMesh"];
@@ -245,7 +248,8 @@ export function createEmptyFoliageData(): LayoutFoliageData {
   return { schema: 1, type: "foliage", groups: [], landscapeRules: [] };
 }
 
-function normalizeFoliageInstance(raw: unknown): LayoutFoliageInstance | null {
+/** Normalizes a painted transform, dropping instances without a valid position array. */
+export function normalizeFoliageInstance(raw: unknown): LayoutFoliageInstance | null {
   if (!raw || typeof raw !== "object") return null;
   const source = raw as Partial<LayoutFoliageInstance>;
   if (!Array.isArray(source.position) || source.position.length !== 3) return null;
@@ -327,7 +331,15 @@ export function normalizeFoliageData(raw: unknown): LayoutFoliageData {
     const rule = normalizeLandscapeFoliageRule(rawRule, landscapeRules);
     if (rule) landscapeRules.push(rule);
   }
-  return { schema: 1, type: "foliage", groups: normalizedGroups, landscapeRules };
+  const foliageCells = Array.isArray(source.foliageCells)
+    ? [...new Set(source.foliageCells.filter((key) => typeof key === "string" && parseWorldCellKey(key)))].sort((a, b) => {
+      const first = parseWorldCellKey(a)!;
+      const second = parseWorldCellKey(b)!;
+      return first.z - second.z || first.x - second.x;
+    })
+    : undefined;
+  return { schema: 1, type: "foliage", groups: normalizedGroups, landscapeRules,
+    ...(foliageCells !== undefined ? { foliageCells } : {}) };
 }
 
 /** A stable, collision-free id for a new foliage group (`foliage-group-<n>`). */

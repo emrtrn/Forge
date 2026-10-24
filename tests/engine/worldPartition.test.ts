@@ -352,20 +352,32 @@ export function registerWorldPartitionTests(check: Check): void {
   });
 
   check("world partition: settings defaults and partial fields are independent copies", () => {
-    assert.deepEqual(DEFAULT_WORLD_PARTITION, { enabled: false, grids: { main: { cellSize: 128, loadRange: 384 } } });
+    assert.deepEqual(DEFAULT_WORLD_PARTITION, { enabled: false, grids: { main: { cellSize: 128, loadRange: 384 }, foliage: { cellSize: 64, loadRange: 256 } } });
     for (const value of [undefined, {}, { grids: {} }, { grids: { main: {} } }]) {
       assert.deepEqual(normalizeWorldPartitionSettings(value), DEFAULT_WORLD_PARTITION);
     }
     const input = { enabled: true, grids: { main: { cellSize: 64 } } };
     const before = structuredClone(input);
     const normalized = normalizeWorldPartitionSettings(input);
-    assert.deepEqual(normalized, { enabled: true, grids: { main: { cellSize: 64, loadRange: 384 } } });
+    assert.deepEqual(normalized, { enabled: true, grids: { main: { cellSize: 64, loadRange: 384 }, foliage: { cellSize: 64, loadRange: 256 } } });
     assert.deepEqual(normalizeWorldPartitionSettings({ grids: { main: { loadRange: 256 } } }), {
-      enabled: false, grids: { main: { cellSize: 128, loadRange: 256 } },
+      enabled: false, grids: { main: { cellSize: 128, loadRange: 256 }, foliage: { cellSize: 64, loadRange: 256 } },
     });
     normalized.grids.main.cellSize = 1;
     assert.deepEqual(input, before);
     assert.equal(DEFAULT_WORLD_PARTITION.grids.main.cellSize, 128);
+  });
+
+  check("world partition: foliage defaults, custom settings and invalid grids", () => {
+    assert.deepEqual(normalizeWorldPartitionSettings({}).grids.foliage, { cellSize: 64, loadRange: 256 });
+    const custom = normalizeWorldPartitionSettings({ grids: { foliage: { cellSize: 32, loadRange: 160 } } });
+    assert.deepEqual(custom.grids.foliage, { cellSize: 32, loadRange: 160 });
+    assert.deepEqual(normalizeWorldPartitionSettings(JSON.parse(JSON.stringify(custom))), custom);
+    custom.grids.foliage.cellSize = 1;
+    assert.equal(DEFAULT_WORLD_PARTITION.grids.foliage.cellSize, 64);
+    assert.throws(() => normalizeWorldPartitionSettings({ grids: { foliage: { cellSize: 0 } } }),
+      /grids\.foliage\.cellSize must be finite and positive/);
+    assert.throws(() => normalizeWorldPartitionSettings({ grids: { unknown: {} } }), /Unknown grid/);
   });
 
   check("world partition: invalid settings name the offending field", () => {
@@ -377,7 +389,7 @@ export function registerWorldPartitionTests(check: Check): void {
     for (const enabled of [0, 1, "false", null, {}, []]) {
       assert.throws(() => normalizeWorldPartitionSettings({ enabled }), /enabled/);
     }
-    for (const name of ["terrain", "foliage", "typo"]) {
+    for (const name of ["terrain", "grass", "typo"]) {
       assert.throws(() => normalizeWorldPartitionSettings({ grids: { main: {}, [name]: {} } }), new RegExp(name));
     }
     for (const grids of [null, 5, []]) assert.throws(() => normalizeWorldPartitionSettings({ grids }), /grids/);

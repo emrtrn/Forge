@@ -70,6 +70,12 @@ export interface QualitySettings {
    * candidates, OPEN_WORLD_PLAN Faz 6). Painted foliage is unaffected.
    */
   grassDensity: number;
+  /**
+   * CDLOD levels finer than the terrain grid inside the runtime track window
+   * (TERRAIN_DEFORMATION Faz 3; each halves the vertex spacing, 0 = flat
+   * tracks drawn by shading only, the Faz 2 look).
+   */
+  terrainTrackDetailLevels: number;
 }
 
 /**
@@ -109,6 +115,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     particleDensity: 1.0,
     foliageCullDistanceScale: 1.0,
     grassDensity: 1.0,
+    terrainTrackDetailLevels: 2,
   },
   high: {
     renderScale: 1.0,
@@ -124,6 +131,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     particleDensity: 0.8,
     foliageCullDistanceScale: 0.85,
     grassDensity: 0.8,
+    terrainTrackDetailLevels: 2,
   },
   medium: {
     renderScale: 0.85,
@@ -139,6 +147,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     particleDensity: 0.55,
     foliageCullDistanceScale: 0.65,
     grassDensity: 0.55,
+    terrainTrackDetailLevels: 1,
   },
   low: {
     renderScale: 0.7,
@@ -154,6 +163,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     particleDensity: 0.3,
     foliageCullDistanceScale: 0.45,
     grassDensity: 0.3,
+    terrainTrackDetailLevels: 0,
   },
 };
 
@@ -290,6 +300,7 @@ function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | nul
   num("particleDensity");
   num("foliageCullDistanceScale");
   num("grassDensity");
+  num("terrainTrackDetailLevels");
   return Object.keys(out).length > 0 ? out : null;
 }
 

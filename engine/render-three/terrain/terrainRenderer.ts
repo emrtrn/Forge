@@ -96,13 +96,34 @@ export interface TerrainRendererOptions {
   deformation?: TerrainDeformationTexture;
   /**
    * CDLOD levels below the tile spacing inside the track window (TERRAIN_DEFORMATION
-   * Faz 3; default {@link DEFAULT_TRACK_DETAIL_LEVELS}, 0 = the Faz 2 look).
+   * Faz 3; default: the page's {@link setTerrainTrackDetailLevels}, initially
+   * {@link DEFAULT_TRACK_DETAIL_LEVELS}; 0 = the Faz 2 look).
    */
   trackDetailLevels?: number;
 }
 
 /** 1 m tiles → 0.5 m and 0.25 m vertices near the camera inside the track window. */
 export const DEFAULT_TRACK_DETAIL_LEVELS = 2;
+
+/** Renderers alive on this page, for the page-wide quality hook. */
+const liveRenderers = new Set<TerrainRenderer>();
+let pageTrackDetailLevels = DEFAULT_TRACK_DETAIL_LEVELS;
+
+/**
+ * Quality hook (`QualitySettings.terrainTrackDetailLevels`): detail levels for
+ * every live terrain renderer and every one created later on this page.
+ */
+export function setTerrainTrackDetailLevels(levels: number): void {
+  pageTrackDetailLevels = Number.isFinite(levels) ? Math.max(0, Math.floor(levels)) : 0;
+  for (const renderer of liveRenderers) renderer.setTrackDetailLevels(pageTrackDetailLevels);
+}
+
+/** Track-detail nodes drawn by every live terrain renderer (`?debug`). */
+export function terrainTrackDetailStats(): { nodes: number; levels: number } {
+  let nodes = 0;
+  for (const renderer of liveRenderers) nodes += renderer.trackDetailNodeCount;
+  return { nodes, levels: pageTrackDetailLevels };
+}
 
 export type TerrainOverrideKind = "normal" | "depth";
 
@@ -289,7 +310,7 @@ export class TerrainRenderer {
     this.allResident = this.allKeys.size <= capacity;
     this.uploadsPerFrame = options.uploadsPerFrame ?? DEFAULT_UPLOADS_PER_FRAME;
     this.deformation = options.deformation ?? sharedTerrainDeformation();
-    this.trackDetailLevels = options.trackDetailLevels ?? DEFAULT_TRACK_DETAIL_LEVELS;
+    this.trackDetailLevels = options.trackDetailLevels ?? pageTrackDetailLevels;
     this.pool = new TerrainSlotPool(capacity);
 
     const size = this.tileVertices;
@@ -354,6 +375,7 @@ export class TerrainRenderer {
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
     this.mesh.onBeforeRender = (renderer) => this.textureUpdates.flush(renderer);
     this.updateBoundingVolumes();
+    liveRenderers.add(this);
 
     if (this.allResident) {
       for (const key of this.allKeys) this.makeResident(key);
@@ -495,6 +517,7 @@ export class TerrainRenderer {
   }
 
   dispose(): void {
+    liveRenderers.delete(this);
     this.textureUpdates.dispose();
     this.mesh.geometry.dispose();
     this.materials.material.dispose();

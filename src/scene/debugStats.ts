@@ -26,6 +26,7 @@ import type {
   GameModeDebugSnapshot,
   PerfMemorySnapshot,
   RuntimeStatsApp,
+  TerrainTrackDetailSnapshot,
   UiDebugSnapshot,
   VehicleSurfaceDebugSnapshot,
 } from "./RuntimeSceneApp";
@@ -474,9 +475,16 @@ export function formatTerrainDeformationDebug(snapshot: TerrainDeformationSnapsh
     + ` wheels ${snapshot.stampedWheels} upload ${snapshot.uploadedTexels} texels ${snapshot.packMs.toFixed(2)} ms`;
 }
 
+/** `terrain detail: nodes 48 levels 2`: CDLOD nodes refined inside the track window (smoke tests parse it). */
+export function formatTerrainTrackDetailDebug(snapshot: TerrainTrackDetailSnapshot): string {
+  return `terrain detail: nodes ${snapshot.nodes} levels ${snapshot.levels}`;
+}
+
 function terrainDeformationText(app: RuntimeStatsApp): string {
   const snapshot = app.getTerrainDeformationSnapshot?.();
-  return snapshot ? `\n${formatTerrainDeformationDebug(snapshot)}` : "";
+  if (!snapshot) return "";
+  const detail = app.getTerrainTrackDetailSnapshot?.();
+  return `\n${formatTerrainDeformationDebug(snapshot)}${detail ? `\n${formatTerrainTrackDetailDebug(detail)}` : ""}`;
 }
 
 function vehicleSurfaceText(app: RuntimeStatsApp): string {

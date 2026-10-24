@@ -25,7 +25,7 @@ import { hlodCellPlacements, hlodCellSourceHash, type HlodIndex } from "@engine/
 import { fetchHlodIndex, HlodProxies, loadHlodGeometry } from "./hlodProxies";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
-import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
+import { setTerrainTrackDetailLevels, terrainRendererOf, terrainTrackDetailStats } from "@engine/render-three/terrain/terrainRenderer";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, Sphere, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import {
   InstancedMesh,
@@ -610,6 +610,11 @@ export interface VehicleSurfaceDebugWheel {
   tractionSlip: number;
 }
 
+export interface TerrainTrackDetailSnapshot {
+  nodes: number;
+  levels: number;
+}
+
 export interface VehicleSurfaceDebugSnapshot {
   vehicle: string;
   wheels: readonly VehicleSurfaceDebugWheel[];
@@ -633,6 +638,8 @@ export interface RuntimeStatsApp {
   getVehicleSurfaceSnapshot?(): VehicleSurfaceDebugSnapshot | null;
   /** Optional: the runtime track field; null while no deformable terrain is loaded. */
   getTerrainDeformationSnapshot?(): TerrainDeformationSnapshot | null;
+  /** Optional: terrain CDLOD nodes refined inside the track window, and the quality's detail levels. */
+  getTerrainTrackDetailSnapshot?(): TerrainTrackDetailSnapshot;
   getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & {
     models?: AssetResidencySnapshot;
     statics?: { cells: number; pending: number };
@@ -2209,6 +2216,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyRuntimeResolution();
     this.applyRuntimeShadowQuality();
     this.vfxCommands()?.setGlobalDensity(settings.particleDensity);
+    setTerrainTrackDetailLevels(settings.terrainTrackDetailLevels);
     this.applyRuntimePostProcess();
   }
 
@@ -2417,6 +2425,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getTerrainDeformationSnapshot(): TerrainDeformationSnapshot | null {
     return this.runtimeServices.resolve(terrainDeformationService)?.snapshot() ?? null;
+  }
+
+  getTerrainTrackDetailSnapshot(): TerrainTrackDetailSnapshot {
+    return terrainTrackDetailStats();
   }
 
   /** Ground under each wheel of the possessed vehicle, resolved the way its surface provider does. */

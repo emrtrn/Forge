@@ -7,11 +7,15 @@ import {
   TERRAIN_DEFORMATION_BERM_MAX,
 } from "../../engine/render-three/terrain/terrainDeformation";
 import { terrainSlotHeight } from "../../engine/render-three/terrain/terrainMaterial";
-import { DEFAULT_TRACK_DETAIL_LEVELS, TerrainRenderer } from "../../engine/render-three/terrain/terrainRenderer";
+import {
+  DEFAULT_TRACK_DETAIL_LEVELS, setTerrainTrackDetailLevels, TerrainRenderer, terrainTrackDetailStats,
+} from "../../engine/render-three/terrain/terrainRenderer";
+import { normalizeGraphicsPreferences, QUALITY_LEVELS, QUALITY_PROFILES } from "../../engine/perf/qualityProfiles";
 import { DeformationField } from "../../engine/scene/deformationField";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { tileKey, type TerrainTileData } from "../../engine/terrain/terrainTypes";
+import { formatTerrainTrackDetailDebug } from "../../src/scene/debugStats";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -170,6 +174,41 @@ export function registerTerrainTrackDetailTests(check: Check): void {
     terrain.updateLod(camera);
     assert.equal(terrain.trackDetailNodeCount, 0, "detach re-selects without the window");
     terrain.dispose();
+    texture.dispose();
+  });
+
+  check("terrain track detail: quality profiles step the levels down to the Faz 2 look on low, page-wide", () => {
+    const levels = QUALITY_LEVELS.map((level) => QUALITY_PROFILES[level].terrainTrackDetailLevels);
+    assert.deepEqual(levels, [2, 2, 1, 0]);
+    assert.equal(formatTerrainTrackDetailDebug({ nodes: 48, levels: 2 }), "terrain detail: nodes 48 levels 2");
+    const custom = normalizeGraphicsPreferences({ selectedQualityLevel: "custom", customSettings: { terrainTrackDetailLevels: 3 } });
+    assert.equal(custom.customSettings?.terrainTrackDetailLevels, 3, "a custom override keeps the key");
+    const texture = new TerrainDeformationTexture();
+    const field = new DeformationField();
+    field.recenter(130, 120);
+    texture.attach(field);
+    const source = () => worldTerrainRenderSource({ tileQuads: Q, spacing: 1, tilesX: TILES, tilesZ: TILES }, tiles());
+    const make = () => new TerrainRenderer(source(), { viewMode: "lit", activeLayer: 0, layers: [], origin: new Vector3(), deformation: texture });
+    const camera = cameraAt(130, gridHeight(130, 120) + 3, 120);
+    const live = make();
+    live.updateLod(camera);
+    assert.ok(terrainTrackDetailStats().nodes >= live.trackDetailNodeCount && live.trackDetailNodeCount > 0);
+    try {
+      setTerrainTrackDetailLevels(0);
+      live.updateLod(camera);
+      assert.equal(live.trackDetailNodeCount, 0, "the hook reaches a live renderer");
+      const later = make();
+      later.updateLod(camera);
+      assert.equal(later.trackDetailNodeCount, 0, "and one created afterwards");
+      assert.deepEqual(terrainTrackDetailStats(), { nodes: 0, levels: 0 });
+      later.dispose();
+    } finally {
+      setTerrainTrackDetailLevels(DEFAULT_TRACK_DETAIL_LEVELS);
+    }
+    live.updateLod(camera);
+    assert.ok(live.trackDetailNodeCount > 0);
+    live.dispose();
+    assert.equal(terrainTrackDetailStats().nodes, 0, "disposed renderers leave the page count");
     texture.dispose();
   });
 

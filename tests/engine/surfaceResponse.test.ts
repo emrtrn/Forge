@@ -493,4 +493,28 @@ export async function registerSurfaceResponseRapierTests(
       physics.dispose();
     }
   });
+  await checkAsync("wheel sink rapier: on deep mud a steady-throttle car stays clearly below its firm-ground speed", async () => {
+    const run = async (mudLoop: boolean): Promise<{ speed: number; sink: number }> => {
+      const world = await createWorld();
+      const { physics } = world;
+      try {
+        let frame = (): void => world.tick(1 / 60);
+        if (mudLoop) frame = rutLoop(world).frame;
+        else physics.createVehicle("car", createReferenceCarDefinition());
+        world.tick(2);
+        world.drive({ throttle: 1 });
+        for (let index = 0; index < 60 * 4; index += 1) frame();
+        const state = physics.vehicleState("car")!;
+        return { speed: state.forwardSpeed, sink: Math.max(...state.wheels.map((wheel) => wheel.sinkDepth ?? 0)) };
+      } finally {
+        physics.dispose();
+      }
+    };
+    const firm = await run(false);
+    const mud = await run(true);
+    assert.equal(firm.sink, 0);
+    assert.ok(mud.sink > 0.03, `the car drives in its own ruts: ${mud.sink} m`);
+    assert.ok(mud.speed > 1 && mud.speed < firm.speed * 0.8, `4 s of full throttle: mud ${mud.speed} vs firm ${firm.speed} m/s`);
+    console.info(`[deform] steady throttle 4 s: firm ${firm.speed.toFixed(2)} m/s, mud ${mud.speed.toFixed(2)} m/s (sink ${mud.sink.toFixed(3)} m)`);
+  });
 }

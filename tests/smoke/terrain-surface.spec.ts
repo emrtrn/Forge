@@ -13,7 +13,9 @@ import { expect, test, type Page } from "./test";
  * what every wheel stands on; headless frame rates make wall-clock speed
  * comparisons meaningless, so the dynamics stay with the Rapier engine tests
  * and this only checks that the car still drives. Faz 3: the `vehicle sink:`
- * line right after it shows each wheel's virtual sink into its own ruts.
+ * line right after it shows each wheel's virtual sink into its own ruts, and
+ * `terrain detail:` the CDLOD nodes refined inside the track window (a custom
+ * quality profile keeps the detail levels on; headless calibration picks low).
  */
 const LEVEL = "assets/starter-content/Levels/OffroadTest.level.json";
 const TERRAIN = "assets/starter-content/Levels/OffroadTest.landscapes/offroad.terrain.json";
@@ -40,14 +42,32 @@ function parseSinks(text: string): number[] {
 
 /** The possessed car settled on the start road: its wheels' surfaces, then a short drive. */
 async function driveOffroad(page: Page, roadMaterial: string | null): Promise<{
-  surfaces: string; sinks: number[]; kmh: number; tracks: number; errors: string[];
+  surfaces: string; sinks: number[]; kmh: number; tracks: number; detail: { nodes: number; levels: number } | null; errors: string[];
 }> {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
-  await page.context().addInitScript(() => localStorage.clear());
+  // Headless calibration would pick low, which turns the Faz 3 track detail off: hold a custom
+  // profile with low's cost (software GL renders on the CPU; a slow frame stretches physics time
+  // and the car may not reach speed in time) and two detail levels.
+  await page.context().addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem("forge.userSettings", JSON.stringify({
+      schema: 1,
+      updatedAt: new Date().toISOString(),
+      payload: { graphics: {
+        selectedQualityLevel: "custom",
+        customSettings: {
+          renderScale: 0.7, maxPixelRatio: 1, aoAllowed: false, dofAllowed: false, bloomAllowed: false, smaaAllowed: false,
+          shadowsEnabled: false, particleDensity: 0.3, foliageCullDistanceScale: 0.45, grassDensity: 0.3,
+          terrainTrackDetailLevels: 2,
+        },
+        manuallySelected: true, adaptiveOptimizationEnabled: false,
+      } },
+    }));
+  });
   await page.route("**/project.3dgame.json", async (route) => {
     const response = await route.fetch();
     const project = (await response.json()) as { editor: { defaultScene: string } };
@@ -79,8 +99,12 @@ async function driveOffroad(page: Page, roadMaterial: string | null): Promise<{
   const sinks = parseSinks((await stats.textContent()) ?? "");
   await page.keyboard.up("KeyW");
   // Faz 2: soft paint layers get a track field; its overlay line counts the stamped cells.
-  const tracks = Number(((await stats.textContent()) ?? "").match(/terrain deformation: cells (\d+)/)?.[1] ?? -1);
-  return { surfaces, sinks, kmh, tracks, errors };
+  const text = (await stats.textContent()) ?? "";
+  const tracks = Number(text.match(/terrain deformation: cells (\d+)/)?.[1] ?? -1);
+  // Faz 3: CDLOD nodes refined inside the track window around the car.
+  const detailMatch = text.match(/terrain detail: nodes (\d+) levels (\d+)/);
+  const detail = detailMatch ? { nodes: Number(detailMatch[1]), levels: Number(detailMatch[2]) } : null;
+  return { surfaces, sinks, kmh, tracks, detail, errors };
 }
 
 test("terrain surface smoke: OffroadTest paint layers reach the car's wheels on the World Terrain", async ({ browser }) => {
@@ -108,4 +132,9 @@ test("terrain surface smoke: OffroadTest paint layers reach the car's wheels on 
   expect(mud.tracks).toBeGreaterThan(100);
   // With no physical material anywhere the module never builds a field.
   expect(neutral.tracks).toBe(-1);
+  // Faz 3: the mud run's track window refines the CDLOD mesh around the car (the displaced
+  // shaders compiled: no console errors); without a field there is no detail line at all.
+  expect(mud.detail?.levels).toBe(2);
+  expect(mud.detail?.nodes).toBeGreaterThan(0);
+  expect(neutral.detail).toBeNull();
 });

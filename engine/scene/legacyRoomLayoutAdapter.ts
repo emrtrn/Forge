@@ -226,6 +226,11 @@ export function instanceEntityForPlacement(
   );
 }
 
+/** The entity roomLayoutToSceneDocument derives for one blocking volume (same id, components, tags). */
+export function blockingVolumeEntityForIndex(index: number, volume: LayoutBlockingVolume): Entity {
+  return buildEntity(blockingVolumeEntityId(index), volume.name, blockingVolumeComponents(volume), flagTags(volume));
+}
+
 export function roomLayoutToSceneDocument(
   layout: RoomLayout,
   options: RoomLayoutAdapterOptions = {},
@@ -280,7 +285,7 @@ export function roomLayoutToSceneDocument(
     const id = blockingVolumeEntityId(index);
     registerNode(id, volume.nodeId);
     pending.push({
-      entity: buildEntity(id, volume.name, blockingVolumeComponents(volume), flagTags(volume)),
+      entity: blockingVolumeEntityForIndex(index, volume),
       legacyParentId: volume.parentId,
     });
   });

@@ -7,7 +7,10 @@ import { smokePublicPath } from "./smokeProject.mjs";
 const LEVEL = "layouts/__playwright-world-partition-statics.level.json";
 const PLAYER = "assets/__playwright-statics-player.actor.json";
 const MODE = "assets/__playwright-statics-mode.actor.json";
-const WALL_Z = 40;
+// Spawn mid-corridor; each blocker starts ~95 m away, far outside the 36 m prefetch ring.
+const SPAWN_Z = 72;
+const VOLUME_Z = -20;
+const WALL_Z = 170;
 
 async function writeJson(path: string, value: unknown) {
   await mkdir(dirname(smokePublicPath(path)), { recursive: true });
@@ -34,13 +37,15 @@ async function writeFixture() {
         name: `Floor ${index}`,
         position: [0, 0, -56 + index * 16] as [number, number, number], rotationYDeg: 0, scale: 4, scaleLocked: true,
       })) },
-      // A streamed wall across the corridor, about 140 m ahead of the spawn.
+      // A streamed wall across the corridor behind the spawn (+Z).
       { assetId: "shape-cube", placements: [{
         name: "Streamed wall", position: [8, 0, WALL_Z], rotationYDeg: 0, scale: [16, 4, 1],
       }] },
-      { assetId: "marker:playerStart", placements: [{ name: "Player Start", position: [8, 2, 184] }] },
+      { assetId: "marker:playerStart", placements: [{ name: "Player Start", position: [8, 2, SPAWN_Z] }] },
     ],
     lights: [{ id: "sun", type: "directional", position: [4, 8, 4], intensity: 3, castShadow: false }],
+    // A streamed blocking volume across the corridor ahead of the spawn (-Z).
+    blockingVolumes: [{ id: "streamed-volume", name: "Streamed volume", position: [8, 2, VOLUME_Z], size: [16, 4, 1], renderInGame: true }],
   };
   await writeJson(LEVEL, layout);
 }
@@ -57,11 +62,15 @@ function readStats(text: string) {
   };
 }
 
-test("static placements stream by cell: the floor ahead is there in time and a streamed wall blocks", async ({ page, request }) => {
+test("static placements and volumes stream by cell: the floor ahead is there in time and streamed blockers block", async ({ page, request }) => {
   test.setTimeout(180_000);
   const errors: string[] = [];
+  const events: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+    if (message.type() === "info" && message.text().startsWith("[world-partition]")) events.push(message.text());
+  });
   await writeFixture();
   expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
   await page.addInitScript(() => localStorage.clear());
@@ -76,39 +85,41 @@ test("static placements stream by cell: the floor ahead is there in time and a s
   expect(start.staticCells).toBeLessThan(start.total);
   expect(start.pending).toBe(0);
 
-  // The starter TPS control yaw faces -Z. Run at the wall: the floor ahead keeps
-  // streaming in (the pawn never falls) and the streamed wall's collider stops it.
   let lowest = start.y;
   let maxCells = start.staticCells;
-  let previousZ = start.z;
-  let stillFrames = 0;
-  await page.keyboard.down("w");
-  try {
-    await expect.poll(async () => {
-      const current = await stats();
-      lowest = Math.min(lowest, current.y);
-      maxCells = Math.max(maxCells, current.staticCells);
-      stillFrames = Math.abs(current.z - previousZ) < 0.01 ? stillFrames + 1 : 0;
-      previousZ = current.z;
-      return current.z < 70 && stillFrames >= 10;
-    }, { timeout: 90_000, intervals: [100] }).toBe(true);
-  } finally {
-    await page.keyboard.up("w");
-  }
-  const blocked = await stats();
-  expect(blocked.z, "the streamed wall stopped the pawn").toBeGreaterThan(WALL_Z);
-  expect(blocked.z).toBeLessThan(WALL_Z + 3);
+  /** Holds a key until the pawn has stood still for a second beyond `beyond(z)`. */
+  const runUntilStopped = async (key: "w" | "s", beyond: (z: number) => boolean) => {
+    let previousZ = Number.NaN;
+    let stillFrames = 0;
+    await page.keyboard.down(key);
+    try {
+      await expect.poll(async () => {
+        const current = await stats();
+        lowest = Math.min(lowest, current.y);
+        maxCells = Math.max(maxCells, current.staticCells);
+        stillFrames = Math.abs(current.z - previousZ) < 0.01 ? stillFrames + 1 : 0;
+        previousZ = current.z;
+        return beyond(current.z) && stillFrames >= 10;
+      }, { timeout: 90_000, intervals: [100] }).toBe(true);
+    } finally {
+      await page.keyboard.up(key);
+    }
+    return stats();
+  };
+
+  // The starter TPS control yaw faces -Z. Run at the volume: the floor ahead keeps
+  // streaming in (the pawn never falls) and the streamed volume's collider stops it.
+  const atVolume = await runUntilStopped("w", (z) => z < SPAWN_Z - 40);
+  expect(atVolume.z, "the streamed volume stopped the pawn").toBeGreaterThan(VOLUME_Z);
+  expect(atVolume.z).toBeLessThan(VOLUME_Z + 3);
+
+  // Running back past the spawn, the streamed wall stops it, and the volume's cell is gone.
+  const atWall = await runUntilStopped("s", (z) => z > SPAWN_Z + 40);
+  expect(atWall.z, "the streamed wall stopped the pawn").toBeLessThan(WALL_Z);
+  expect(atWall.z).toBeGreaterThan(WALL_Z - 3);
+  expect(events).toContain("[world-partition] unloaded 0_-2");
   expect(lowest, "the pawn never fell through a missing floor").toBeGreaterThan(-0.5);
   expect(maxCells).toBeLessThanOrEqual(5);
-
-  // Back at the start the far cells are unloaded again.
-  await page.keyboard.down("s");
-  try {
-    await expect.poll(async () => (await stats()).z > 170, { timeout: 90_000, intervals: [100] }).toBe(true);
-  } finally {
-    await page.keyboard.up("s");
-  }
-  await expect.poll(async () => (await stats()).staticCells).toBeLessThanOrEqual(start.staticCells);
   await expect(overlay).toContainText("movement: walking (grounded)");
   expect(errors).toEqual([]);
 });

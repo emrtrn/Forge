@@ -39,17 +39,17 @@ asset-health, content collection — still reads one whole `RoomLayout`; a missi
 invalid cell file fails the level read like any other required document.
 
 At runtime the whole layout is **built** eagerly except for cell-assigned Actor
-Script actors (`layout.actors`) and static mesh placements (`layout.instances`),
+Script actors (`layout.actors`), static mesh placements (`layout.instances`) and
+blocking volumes (`layout.blockingVolumes`),
 routed by `worldPartitionCellContents` — the same rule the saver uses. Those are
 activated and unloaded with their cell around the pawn:
 
 - **What loads when.** Boot, level travel and save-load activate the cells in range
   of the spawn/pawn behind the loading overlay; afterwards the streamer activates at
   most two cells per frame and unloads cells past the 1.25× hysteresis ring.
-  `spatiallyLoaded: false` elements stay persistent. Lights, blocking volumes,
-  characters, reflection captures, target points, world widgets and splines are not
+  `spatiallyLoaded: false` elements stay persistent. Lights, characters, reflection captures, target points, world widgets and splines are not
   cell-streamed yet.
-- **Static placements.** A cell's placements render as one instanced batch per asset
+- **Static placements and blocking volumes.** A cell's placements render as one instanced batch per asset
   (culled per cell); persistent placements keep one batch per asset. Their colliders,
   behaviors and audio/particle components join physics and behavior through a
   per-frame budget (≈4 ms; a complex-as-simple trimesh weighs six simple colliders),

@@ -304,6 +304,7 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import {
+  blockingVolumeEntityForIndex,
   characterEntityId,
   instanceEntityForPlacement,
   instanceEntityId,
@@ -495,6 +496,7 @@ interface StaticCellBatch {
 
 interface StaticCellState {
   batches: StaticCellBatch[];
+  volumes: BlockingVolumeObject[];
   /** Entities still waiting for the per-frame budget, in activation order. */
   pending: Entity[];
   /** Entities in physics, behavior and modules. */
@@ -892,6 +894,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private streamedPlacementKeys = new Set<string>();
   /** Assets with at least one cell-streamed placement. */
   private streamedStaticAssetIds = new Set<string>();
+  /** Cell-streamed blocking volumes (indices into layout.blockingVolumes) per cell. */
+  private partitionVolumeCells = new Map<string, number[]>();
+  private streamedVolumeIndices = new Set<number>();
   /** Cells whose statics are built; boot cells wait in bootStaticCells for the scene document. */
   private readonly liveStaticCells = new Map<string, StaticCellState>();
   private bootStaticCells: string[] = [];
@@ -2571,7 +2576,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const sceneDocument: SceneDocument = {
       ...baseDocument,
       entities: [
-        ...baseDocument.entities.filter((entity) => !this.isStreamedPlacementEntity(entity.id)),
+        ...baseDocument.entities.filter((entity) => !this.isStreamedCellEntity(entity.id)),
         ...bootStaticEntities,
         ...this.actorEntities,
         ...this.landscapeColliderEntities,
@@ -3126,6 +3131,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.partitionStaticCells = new Map();
     this.streamedPlacementKeys = new Set();
     this.streamedStaticAssetIds = new Set();
+    this.partitionVolumeCells = new Map();
+    this.streamedVolumeIndices = new Set();
     this.assetUvwDefs.clear();
     this.instanceSlots.clear();
     this.instanceOverrideObjects.clear();
@@ -4076,6 +4083,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.partitionStaticCells = new Map();
     this.streamedPlacementKeys = new Set();
     this.streamedStaticAssetIds = new Set();
+    this.partitionVolumeCells = new Map();
+    this.streamedVolumeIndices = new Set();
     this.bootStaticCells = [];
     const partition = this.runtimeServices.resolve(worldPartitionService);
     const settings = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
@@ -4108,6 +4117,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.streamedModelActorIds.add(entity.id);
         addCellModel(key, assetId);
       }
+      if (content.blockingVolumes.length > 0) {
+        this.partitionVolumeCells.set(key, content.blockingVolumes);
+        for (const index of content.blockingVolumes) this.streamedVolumeIndices.add(index);
+      }
       if (content.instances.length === 0) continue;
       this.partitionStaticCells.set(key, content.instances);
       for (const { group, placement } of content.instances) {
@@ -4132,7 +4145,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         else this.modelResidency.releaseOwner(partitionCellOwner(key));
       },
       isReady: (key) => this.modelResidency.isOwnerReady(partitionCellOwner(key)),
-    }, this.debug, { occupiedCells: this.partitionStaticCells.keys() });
+    }, this.debug, { occupiedCells: [...this.partitionStaticCells.keys(), ...this.partitionVolumeCells.keys()] });
   }
 
   /** Whether any World Partition cell streams this asset's static placements. */
@@ -4165,7 +4178,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
   }
 
-  private isStreamedPlacementEntity(entityId: string): boolean {
+  /** Static placements and blocking volumes a cell owns join the world with that cell. */
+  private isStreamedCellEntity(entityId: string): boolean {
+    const volume = /^blockingVolume:(\d+)$/.exec(entityId);
+    if (volume) return this.streamedVolumeIndices.has(Number(volume[1]));
     if (this.streamedPlacementKeys.size === 0) return false;
     const instance = parseInstanceEntityId(entityId);
     return instance !== null && this.streamedPlacementKeys.has(overrideObjectKey(instance.assetId, instance.placementIndex));
@@ -4191,7 +4207,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the scene document so they take the batch path with collision sidecars loaded.
    */
   private activateStaticCell(key: string): void {
-    if (!this.partitionStaticCells.has(key) || this.liveStaticCells.has(key)) return;
+    if ((!this.partitionStaticCells.has(key) && !this.partitionVolumeCells.has(key)) || this.liveStaticCells.has(key)) return;
     if (!this.worldPartitionLive) {
       if (!this.bootStaticCells.includes(key)) this.bootStaticCells.push(key);
       return;
@@ -4219,7 +4235,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       indices.push(placement);
       byGroup.set(group, indices);
     }
-    const state: StaticCellState = { batches: [], pending: [], added: [], authored: new Map() };
+    const state: StaticCellState = { batches: [], volumes: [], pending: [], added: [], authored: new Map() };
     const adapter = {
       colliderBox: (assetId: string, source: ColliderTransformSource) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
@@ -4264,6 +4280,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         probeMaterials: batch.clonedMaterials,
         keys: indices.map((index) => overrideObjectKey(assetId, index)),
       });
+    }
+    for (const index of this.partitionVolumeCells.get(key) ?? []) {
+      const actor = layout.blockingVolumes![index]!;
+      const entity = blockingVolumeEntityForIndex(index, actor);
+      if (this.behaviorSubsystem.isPersistedDestroyed(entity.id)) continue;
+      state.pending.push(entity);
+      const item = this.blockingVolumeItem(actor);
+      const object = createRuntimeBlockingVolumeObject(item, actor.color);
+      object.visible = item.renderInGame && !item.hidden;
+      state.volumes.push(object);
+      this.scene.add(tagSceneSource(object, "blocking-volume"));
     }
     this.liveStaticCells.set(key, state);
     return state;
@@ -4318,6 +4345,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
     }
     state.batches = [];
+    for (const volume of state.volumes) {
+      this.scene.remove(volume);
+      disposeBlockingVolumeObject(volume);
+    }
+    state.volumes = [];
   }
 
   /** Like rememberStreamedActorState, for a cell-streamed static placement. */
@@ -5227,7 +5259,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private buildRuntimeBlockingVolumes(): void {
     const volumes = this.layout?.blockingVolumes ?? [];
-    volumes.forEach((actor) => {
+    volumes.forEach((actor, index) => {
+      if (this.streamedVolumeIndices.has(index)) return;
       const item = this.blockingVolumeItem(actor);
       const object = createRuntimeBlockingVolumeObject(item, actor.color);
       object.visible = item.renderInGame && !item.hidden;

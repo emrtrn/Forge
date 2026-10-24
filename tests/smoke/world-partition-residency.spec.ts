@@ -17,7 +17,9 @@ async function writeJson(path: string, value: unknown) {
 
 async function writeFixture() {
   const player = JSON.parse(await readFile(smokePublicPath("assets/starter-content/Gameplay/Script_PlayerCharacter.actor.json"), "utf8"));
-  player.components.find((component: { component: string }) => component.component === "CharacterMovement").props.maxWalkSpeed = 60;
+  // Fast enough to cross the corridor quickly, slow enough that a slow frame
+  // after the key is released cannot coast the pawn through a whole cell.
+  player.components.find((component: { component: string }) => component.component === "CharacterMovement").props.maxWalkSpeed = 20;
   await writeJson(PLAYER, player);
   const mode = JSON.parse(await readFile(smokePublicPath("assets/starter-content/Gameplay/Script_GameMode.actor.json"), "utf8"));
   mode.variables.find((variable: { key: string }) => variable.key === "defaultPawnClassRef").default = PLAYER;
@@ -88,7 +90,7 @@ test("a cell-owned model loads in the prefetch ring before its cell and is freed
 
   // The starter TPS control yaw faces -Z. Walking past the torus streams it in.
   await walk("w", (z) => z < 70);
-  await expect.poll(() => count(activated)).toBe(1);
+  await expect.poll(() => count(activated)).toBeGreaterThanOrEqual(1);
   expect(events.indexOf(loaded), "the model loads before its cell activates").toBeGreaterThanOrEqual(0);
   expect(events.indexOf(loaded)).toBeLessThan(events.indexOf(activated));
 
@@ -99,8 +101,12 @@ test("a cell-owned model loads in the prefetch ring before its cell and is freed
 
   // Coming back fetches it again and the cell activates with it.
   await walk("w", (z) => z < 90);
-  await expect.poll(() => count(activated)).toBe(2);
-  expect(count(loaded)).toBe(2);
-  expect(events.lastIndexOf(loaded)).toBeLessThan(events.lastIndexOf(activated));
+  // Count from the eviction on, so an extra unload/activate before it (a pawn
+  // coasting past a cell on a slow frame) cannot change the verdict.
+  const afterEviction = () => events.slice(events.indexOf(evicted) + 1);
+  await expect.poll(() => afterEviction().includes(activated)).toBe(true);
+  const reloaded = afterEviction();
+  expect(reloaded.filter((event) => event === loaded).length, events.join(" | ")).toBe(1);
+  expect(reloaded.indexOf(loaded), events.join(" | ")).toBeLessThan(reloaded.indexOf(activated));
   expect(errors).toEqual([]);
 });

@@ -1324,6 +1324,12 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       `world-partition-statics.spec.ts`: akan zemin hep zamanında, akan duvar
       pawn'ı durdurur, geride kalan hücreler boşalır. `world-partition-streaming`
       smoke'unun zemini artık `spatiallyLoaded: false` (actor testi).
+      *S3 tamam (2026-10-24):* blocking volume'ler hücreyle akar (aynı hücre
+      durumu ve bütçeli kuyruk; `blockingVolumeEntityForIndex`); hücreden geniş
+      volume'ler eskisi gibi kalıcı. Statics smoke'u akan volume'ü de doğrular.
+      Residency smoke'u pawn'ı 20 m/s'ye indirdi ve sayımları boşaltmadan
+      sonrası için yapar: batch'te yavaş karede 60 m/s pawn bir hücreyi aşıp
+      fazladan boşalt/canlandır üretiyordu (kod doğruydu).
 - [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*

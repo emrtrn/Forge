@@ -327,7 +327,8 @@ Faz 1b terrain katmanı bağlantıları bu değişikliğe dahil değildir.
       kurulmaz, davranış birebir aynı kalır.
 - [x] Editör (minimum): terrain paint katmanı satırına Physical Material
       dropdown'u eklenir.
-- [x] Test seviyesi `public/layouts/OffroadTest.level.json`: çim/çamur/kar/kum
+- [x] Test seviyesi `public/assets/starter-content/Levels/OffroadTest.level.json`
+      (manifest'e kayıtlı, Content Browser'dan açılır): çim/çamur/kar/kum
       boyanmış terrain ve araç (`forge.vehicle` modu; Player Start gerekmiyor).
 
 **Faz 1b notu (2026-10-24):** Katman alanı ortak normalizer'da sıkı

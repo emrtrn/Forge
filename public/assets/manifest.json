@@ -21001,6 +21001,29 @@
       "license": "Unknown"
     },
     {
+      "id": "offroadtest-level",
+      "name": "Offroad Test.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/starter-content/Levels/OffroadTest.level.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1166
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "kenney-grass",
       "name": "Grass",
       "assetType": "staticMesh",

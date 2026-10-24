@@ -3,7 +3,7 @@ import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 
 // Writes the off-road surface test level (tools/world/offroadTestWorld.ts) into
-// public/layouts. Small and deterministic: the output is committed.
+// public/assets/starter-content/Levels. Small and deterministic: the output is committed.
 const root = await realpath("public");
 const withinPublic = (path) => {
   const absolute = resolve(root, path);

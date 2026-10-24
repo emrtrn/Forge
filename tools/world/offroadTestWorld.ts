@@ -6,7 +6,7 @@
  *
  * Paint layers name built-in physical materials (grass and dirt stay neutral),
  * which is what the level exists to exercise. Small enough to commit: `npm run
- * world:offroad` rewrites it deterministically.
+ * world:offroad` rewrites it deterministically (the manifest record is kept by hand).
  */
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
@@ -18,8 +18,10 @@ import {
 } from "../../engine/terrain/terrainTypes";
 import { worldTerrainActorPosition } from "../../engine/terrain/worldTerrainActor";
 
-export const OFFROAD_TEST_LEVEL = "layouts/OffroadTest.level.json";
-export const OFFROAD_TEST_TERRAIN = "layouts/OffroadTest.landscapes/offroad.terrain.json";
+// Beside the other starter test levels, so the Content Browser can open it; the
+// level is registered in the manifest and owns its terrain folder.
+export const OFFROAD_TEST_LEVEL = "assets/starter-content/Levels/OffroadTest.level.json";
+export const OFFROAD_TEST_TERRAIN = "assets/starter-content/Levels/OffroadTest.landscapes/offroad.terrain.json";
 
 const TILES = 2;
 const TILE_QUADS = 128;

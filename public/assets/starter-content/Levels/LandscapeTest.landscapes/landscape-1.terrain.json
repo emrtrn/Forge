@@ -18,13 +18,15 @@
       "id": "grass",
       "name": "Alpine Meadow",
       "color": "#7d8953",
-      "material": "lt-meadow"
+      "material": "lt-meadow",
+      "physicalMaterial": "wood"
     },
     {
       "id": "dirt",
       "name": "Earth and Scree",
       "color": "#9b825d",
-      "material": "lt-earth"
+      "material": "lt-earth",
+      "physicalMaterial": "snow"
     },
     {
       "id": "rock",

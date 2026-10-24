@@ -14,8 +14,8 @@ import { expect, test, type Page } from "./test";
  * comparisons meaningless, so the dynamics stay with the Rapier engine tests
  * and this only checks that the car still drives.
  */
-const LEVEL = "layouts/OffroadTest.level.json";
-const TERRAIN = "layouts/OffroadTest.landscapes/offroad.terrain.json";
+const LEVEL = "assets/starter-content/Levels/OffroadTest.level.json";
+const TERRAIN = "assets/starter-content/Levels/OffroadTest.landscapes/offroad.terrain.json";
 
 test.setTimeout(180_000);
 

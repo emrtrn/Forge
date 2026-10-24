@@ -250,7 +250,7 @@ async function readChaseArm(page: Page): Promise<{ arm: number; lookDeg: number 
   return { arm: Number(match[1]), lookDeg: Number(match[2]) };
 }
 
-test("vehicle chase camera stops in front of a wall and orbits with a right-drag", async ({ page }) => {
+test("vehicle chase camera stops in front of a wall and orbits with locked mouse movement", async ({ page }) => {
   // A wall right behind the parked car, across the chase camera's boom.
   const pageErrors = await openVehicleTest(page, "Vehicle", (level) => {
     level.blockingVolumes.push({
@@ -266,17 +266,35 @@ test("vehicle chase camera stops in front of a wall and orbits with a right-drag
   expect((await readChaseArm(page)).arm).toBeGreaterThan(0.2);
   expect((await readChaseArm(page)).lookDeg).toBe(0);
 
-  // Right-drag left: the view turns left, off the wall, and the arm grows back.
+  // Click to lock, then move without holding a button: turn off the wall.
   const canvas = page.locator("#game-canvas");
   const box = (await canvas.boundingBox()) ?? assert.fail("no canvas box");
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);
-  await page.mouse.down({ button: "right" });
+  await canvas.click();
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe("game-canvas");
+  await expect(canvas).toHaveCSS("cursor", "none");
   await page.mouse.move(x - 300, y, { steps: 10 });
-  await page.mouse.up({ button: "right" });
   await expect.poll(async () => (await readChaseArm(page)).lookDeg, { timeout: 10_000 }).toBeGreaterThan(30);
   await expect.poll(async () => (await readChaseArm(page)).arm, { timeout: 10_000 }).toBeGreaterThan(0.95);
+
+  // Headless Chromium does not perform Escape's native browser unlock.
+  // Simulate that lock loss, then verify cursor restoration and re-entry.
+  await page.evaluate(() => document.exitPointerLock());
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
+  await expect(canvas).not.toHaveCSS("cursor", "none");
+  const releasedLook = (await readChaseArm(page)).lookDeg;
+  await page.mouse.move(x, y, { steps: 10 });
+  await page.waitForTimeout(250);
+  expect((await readChaseArm(page)).lookDeg).toBe(releasedLook);
+
+  // A new click restores free look without a right-button drag.
+  await canvas.click();
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe("game-canvas");
+  await expect(canvas).toHaveCSS("cursor", "none");
+  await page.mouse.move(x + 150, y, { steps: 10 });
+  await expect.poll(async () => (await readChaseArm(page)).lookDeg).toBeLessThan(releasedLook - 10);
   expect(pageErrors).toEqual([]);
 });
 

@@ -1,0 +1,191 @@
+{
+  "passed": true,
+  "publishedFiles": [
+    {
+      "path": "assets/LandscapeTest/Models/LT_Alpine_Pine.glb",
+      "sha256": "a757bf1bc9ce13d467a32a924dd462e70c370e658e731838ee40ae63f59843b7"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Alpine_Pine.collision.json",
+      "sha256": "bba8f66cd8f5914c8ab745f3061d0d42ac53b5bcb782f1f814811169eda46414"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Alpine_Pine.uvw.json",
+      "sha256": "cba69df16fb1a511eb954cb7ca8979266d952d43d1e0e9131b7a89017c88e1a0"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Alpine_Pine.materials.json",
+      "sha256": "05cc37a5e93e209e28baa1ff3ec9cb5cca947eb619c48948f52bfc46db7d2e7e"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Valley_Tree.glb",
+      "sha256": "d40b5eec59ee7a96ec448e3b84cb53566304c011d6a07d0f3cdfcb98d2fdc732"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Valley_Tree.collision.json",
+      "sha256": "5bc4b907793fc982f3d3327d9f8b033e4ca00436144a25c41ab94e4f46407301"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Valley_Tree.uvw.json",
+      "sha256": "cba69df16fb1a511eb954cb7ca8979266d952d43d1e0e9131b7a89017c88e1a0"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Valley_Tree.materials.json",
+      "sha256": "05cc37a5e93e209e28baa1ff3ec9cb5cca947eb619c48948f52bfc46db7d2e7e"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Meadow_Tuft.glb",
+      "sha256": "2f49722cc85e6ea50c63b3cea98fdbb4407fddbaadcebfbb33a715dc60d0c104"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Meadow_Tuft.collision.json",
+      "sha256": "06e266527d59101ee566e745df2c340d1dd9ba81b7d1a13b8916c16888f9ed8c"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Meadow_Tuft.uvw.json",
+      "sha256": "cba69df16fb1a511eb954cb7ca8979266d952d43d1e0e9131b7a89017c88e1a0"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Meadow_Tuft.materials.json",
+      "sha256": "05cc37a5e93e209e28baa1ff3ec9cb5cca947eb619c48948f52bfc46db7d2e7e"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_A.glb",
+      "sha256": "c211d00f5d271c1305e45c7a5f5105da90e07835d81ff6e378bf724f3c82273a"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_A.collision.json",
+      "sha256": "06e266527d59101ee566e745df2c340d1dd9ba81b7d1a13b8916c16888f9ed8c"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_A.uvw.json",
+      "sha256": "cba69df16fb1a511eb954cb7ca8979266d952d43d1e0e9131b7a89017c88e1a0"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_A.materials.json",
+      "sha256": "05cc37a5e93e209e28baa1ff3ec9cb5cca947eb619c48948f52bfc46db7d2e7e"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_B.glb",
+      "sha256": "76648ee5481311591f172805e95b1a86b8d0bcbc45244ff63b508421ddf236e3"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_B.collision.json",
+      "sha256": "06e266527d59101ee566e745df2c340d1dd9ba81b7d1a13b8916c16888f9ed8c"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_B.uvw.json",
+      "sha256": "cba69df16fb1a511eb954cb7ca8979266d952d43d1e0e9131b7a89017c88e1a0"
+    },
+    {
+      "path": "assets/LandscapeTest/Models/LT_Boulder_B.materials.json",
+      "sha256": "05cc37a5e93e209e28baa1ff3ec9cb5cca947eb619c48948f52bfc46db7d2e7e"
+    },
+    {
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Asphalt.uvw.json",
+      "sha256": "cba69df16fb1a511eb954cb7ca8979266d952d43d1e0e9131b7a89017c88e1a0"
+    },
+    {
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Asphalt.materials.json",
+      "sha256": "05cc37a5e93e209e28baa1ff3ec9cb5cca947eb619c48948f52bfc46db7d2e7e"
+    },
+    {
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Asphalt.collision.json",
+      "sha256": "06e266527d59101ee566e745df2c340d1dd9ba81b7d1a13b8916c16888f9ed8c"
+    },
+    {
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Dirty.uvw.json",
+      "sha256": "cba69df16fb1a511eb954cb7ca8979266d952d43d1e0e9131b7a89017c88e1a0"
+    },
+    {
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Dirty.materials.json",
+      "sha256": "05cc37a5e93e209e28baa1ff3ec9cb5cca947eb619c48948f52bfc46db7d2e7e"
+    },
+    {
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Dirty.collision.json",
+      "sha256": "06e266527d59101ee566e745df2c340d1dd9ba81b7d1a13b8916c16888f9ed8c"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.level.json",
+      "sha256": "62a6c18084e662d0fa11f3998086869464ff120531654b313c879cd7ddd948df"
+    },
+    {
+      "path": "assets/manifest.json",
+      "sha256": "208e9365e86d875606db04831c0b94d565af9c2534dae09c74e16dfaaa8ef402"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_0.tile.bin",
+      "sha256": "bc8138b913a899c39bfdcc4d8a8bd9e31cadaefd94943e0bba2d1ce51d97717c"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_0.tile.bin",
+      "sha256": "297525b0ed67a12808eceafd89337da02c6dcf11bfdf086d270c88b212667a9b"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_0.tile.bin",
+      "sha256": "5ffac6fc311c45b65d74b81bfc54a12a8f80b336db8af1f8d846633b90c7b7d4"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_0.tile.bin",
+      "sha256": "7464d6e2e21473eeec829b6b7f4a8e2d8aec286faf5421a52a7abde18da10952"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_1.tile.bin",
+      "sha256": "b0ff58b2ba26a628c59ff4ae9b6ac9ca767579148af83a124df0b19d935ec77e"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_1.tile.bin",
+      "sha256": "2594bb3739fd1d2fb065dcb77b4ba4659db5291dfd27842e8a927c422081ad89"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_1.tile.bin",
+      "sha256": "fd6db47b58cab93f0e5bd360a5c2b628783a1d1412141a9a4894d721f2ff05e3"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_1.tile.bin",
+      "sha256": "c78e73811d45ee71a646e2d379f172cfc90cf0e502ee72c98f8a1a6c210bb381"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_2.tile.bin",
+      "sha256": "b29506fe64da8d400af227d2d394e1d1c28f0eea6eebca222576d30d26912ee5"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_2.tile.bin",
+      "sha256": "4c471127a405da95b8943d2d12a397416530fb5896d9350fea6ff982184acfee"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_2.tile.bin",
+      "sha256": "691ece00bd5873de2c01a71b691abb3ac718daba68b7fd2b87041faf9762aa21"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_2.tile.bin",
+      "sha256": "50106e4cfa4fa31dc8a60561587a38da37ffbd6250256675e6c5db7cf55fb966"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_3.tile.bin",
+      "sha256": "e03e2a66cbefbf49ef9af69862150b554f46427a87f8b74bb80196152bff41d4"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_3.tile.bin",
+      "sha256": "a5bd4992917d42b7d7573e755660d80d78e867d025cebc0674e69382f5801378"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_3.tile.bin",
+      "sha256": "4720aa536db2b41f4efa1f2dc8bbc9bbcbd312eeff1fa884900068877cce68cb"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_3.tile.bin",
+      "sha256": "be55d1e36c6ee847c99d048a113c13b11a778fd5b8d28b596b6bbf1a38a804c9"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.global.bin",
+      "sha256": "dba344d52f8d5f848a87b47d15ef34e9bb70d8ee2cd98d104790747dab0fada9"
+    },
+    {
+      "path": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json",
+      "sha256": "5ffb6e83430f4df93f7d02bc3f96b09951d43c8d03109230fe7139fd5cbd7c5b"
+    }
+  ],
+  "actorsAndLightingUnchanged": true,
+  "killZ": -160
+}

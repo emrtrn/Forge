@@ -1,0 +1,103 @@
+{
+  "roads": [
+    {
+      "id": "lt-mesa-loop",
+      "name": "01 Mesa Loop - Asphalt",
+      "lengthMeters": 1026.7,
+      "widthMeters": 7.5,
+      "maxGradePercent": 15.31,
+      "minimumTurnRadiusMeters": 19.6,
+      "controlPoints": 79,
+      "closed": true,
+      "collision": true
+    },
+    {
+      "id": "lt-valley-trail",
+      "name": "02 Valley Trail - Dirt",
+      "lengthMeters": 1274,
+      "widthMeters": 6.5,
+      "maxGradePercent": 26.57,
+      "minimumTurnRadiusMeters": 14.75,
+      "controlPoints": 100,
+      "closed": false,
+      "collision": true
+    }
+  ],
+  "terrain": {
+    "modifiedSamples": 72772,
+    "modifiedPercent": 6.93,
+    "maxCut": 19.4,
+    "maxFill": 22.15,
+    "bedSamples": 2304,
+    "maxBedError": 0.03441835147039285,
+    "maxRoadBedMismatch": 0.08453788371300419,
+    "seamSamples": 6168
+  },
+  "environment": [
+    {
+      "assetId": "lt-alpine-pine",
+      "count": 628
+    },
+    {
+      "assetId": "lt-valley-tree",
+      "count": 138
+    },
+    {
+      "assetId": "lt-boulder-b",
+      "count": 169
+    },
+    {
+      "assetId": "lt-meadow-tuft",
+      "count": 695
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "count": 165
+    }
+  ],
+  "importedModels": [
+    {
+      "id": "lt-alpine-pine",
+      "source": "assets/ThreeAges/StaticMeshes/Resource_PineTree.glb",
+      "path": "assets/LandscapeTest/Models/LT_Alpine_Pine.glb",
+      "bytes": 72792
+    },
+    {
+      "id": "lt-valley-tree",
+      "source": "assets/ThreeAges/StaticMeshes/Resource_Tree1.glb",
+      "path": "assets/LandscapeTest/Models/LT_Valley_Tree.glb",
+      "bytes": 44948
+    },
+    {
+      "id": "lt-meadow-tuft",
+      "source": "assets/ThreeAges/NatureMega/Grass_Common_Tall.glb",
+      "path": "assets/LandscapeTest/Models/LT_Meadow_Tuft.glb",
+      "bytes": 16968
+    },
+    {
+      "id": "lt-boulder-a",
+      "source": "assets/ThreeAges/NatureMega/Rock_Medium_1.glb",
+      "path": "assets/LandscapeTest/Models/LT_Boulder_A.glb",
+      "bytes": 67024
+    },
+    {
+      "id": "lt-boulder-b",
+      "source": "assets/ThreeAges/NatureMega/Rock_Medium_2.glb",
+      "path": "assets/LandscapeTest/Models/LT_Boulder_B.glb",
+      "bytes": 63168
+    }
+  ],
+  "assetValidation": {
+    "before": {
+      "errors": 0,
+      "warnings": 3
+    },
+    "after": {
+      "errors": 0,
+      "warnings": 3
+    }
+  },
+  "actorsUnchanged": true,
+  "lightingUnchanged": true,
+  "backup": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-world\\backups\\2026-10-24T17-13-41-045Z"
+}

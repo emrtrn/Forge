@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "LT Alpine Snow",
+  "baseColor": "#f1f3f0",
+  "baseColorTexture": "lt-snow-bc",
+  "normalTexture": null,
+  "maskTexture": null,
+  "roughnessTexture": null,
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1.4,
+    "y": 1.4
+  },
+  "roughness": 0.95,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

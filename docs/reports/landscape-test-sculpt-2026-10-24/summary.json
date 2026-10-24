@@ -1,0 +1,339 @@
+{
+  "extent": [
+    1024,
+    1024
+  ],
+  "tiles": 16,
+  "uniqueVertices": 1050625,
+  "heightRange": [
+    -86.70481872558594,
+    149.10043334960938
+  ],
+  "datumShift": 14.709199905395508,
+  "coverage": [
+    {
+      "layer": "Alpine Meadow",
+      "percent": 49.18
+    },
+    {
+      "layer": "Earth and Scree",
+      "percent": 18.34
+    },
+    {
+      "layer": "Layered Rock",
+      "percent": 31.96
+    },
+    {
+      "layer": "Alpine Snow",
+      "percent": 0.51
+    }
+  ],
+  "erosionPasses": [
+    {
+      "mode": "Thermal",
+      "x": -420,
+      "z": -385,
+      "radius": 50,
+      "maxChange": 4.86
+    },
+    {
+      "mode": "Thermal",
+      "x": -360,
+      "z": -350,
+      "radius": 50,
+      "maxChange": 1.665
+    },
+    {
+      "mode": "Thermal",
+      "x": -305,
+      "z": -290,
+      "radius": 50,
+      "maxChange": 1.385
+    },
+    {
+      "mode": "Thermal",
+      "x": -440,
+      "z": -300,
+      "radius": 50,
+      "maxChange": 3.277
+    },
+    {
+      "mode": "Thermal",
+      "x": -345,
+      "z": -435,
+      "radius": 50,
+      "maxChange": 0.887
+    },
+    {
+      "mode": "Thermal",
+      "x": 225,
+      "z": -395,
+      "radius": 50,
+      "maxChange": 2.427
+    },
+    {
+      "mode": "Thermal",
+      "x": 290,
+      "z": -355,
+      "radius": 50,
+      "maxChange": 2.961
+    },
+    {
+      "mode": "Thermal",
+      "x": 355,
+      "z": -375,
+      "radius": 50,
+      "maxChange": 4.743
+    },
+    {
+      "mode": "Thermal",
+      "x": 415,
+      "z": -400,
+      "radius": 50,
+      "maxChange": 2.851
+    },
+    {
+      "mode": "Thermal",
+      "x": 370,
+      "z": -290,
+      "radius": 50,
+      "maxChange": 2.219
+    },
+    {
+      "mode": "Thermal",
+      "x": 425,
+      "z": -215,
+      "radius": 50,
+      "maxChange": 1.209
+    },
+    {
+      "mode": "Thermal",
+      "x": 420,
+      "z": -90,
+      "radius": 50,
+      "maxChange": 2.436
+    },
+    {
+      "mode": "Thermal",
+      "x": 415,
+      "z": 15,
+      "radius": 50,
+      "maxChange": 3.357
+    },
+    {
+      "mode": "Thermal",
+      "x": 345,
+      "z": 245,
+      "radius": 50,
+      "maxChange": 2.299
+    },
+    {
+      "mode": "Thermal",
+      "x": 310,
+      "z": 310,
+      "radius": 50,
+      "maxChange": 1.425
+    },
+    {
+      "mode": "Thermal",
+      "x": 390,
+      "z": 365,
+      "radius": 50,
+      "maxChange": 1.242
+    },
+    {
+      "mode": "Thermal",
+      "x": -405,
+      "z": -75,
+      "radius": 50,
+      "maxChange": 0.669
+    },
+    {
+      "mode": "Thermal",
+      "x": -360,
+      "z": 10,
+      "radius": 50,
+      "maxChange": 0.699
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -411,
+      "z": -363,
+      "radius": 50,
+      "maxChange": 12.299
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -351,
+      "z": -328,
+      "radius": 50,
+      "maxChange": 11.33
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -296,
+      "z": -268,
+      "radius": 50,
+      "maxChange": 10.793
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -431,
+      "z": -278,
+      "radius": 50,
+      "maxChange": 5.362
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -336,
+      "z": -413,
+      "radius": 50,
+      "maxChange": 11.189
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 234,
+      "z": -373,
+      "radius": 50,
+      "maxChange": 18.143
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 299,
+      "z": -333,
+      "radius": 50,
+      "maxChange": 21.321
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 364,
+      "z": -353,
+      "radius": 50,
+      "maxChange": 18.927
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 424,
+      "z": -378,
+      "radius": 50,
+      "maxChange": 14.94
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 379,
+      "z": -268,
+      "radius": 50,
+      "maxChange": 20.627
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 434,
+      "z": -193,
+      "radius": 50,
+      "maxChange": 10.463
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 429,
+      "z": -68,
+      "radius": 50,
+      "maxChange": 15.353
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 424,
+      "z": 37,
+      "radius": 50,
+      "maxChange": 10.954
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 354,
+      "z": 267,
+      "radius": 50,
+      "maxChange": 6.948
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 319,
+      "z": 332,
+      "radius": 50,
+      "maxChange": 8.037
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 399,
+      "z": 387,
+      "radius": 50,
+      "maxChange": 8.978
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -396,
+      "z": -53,
+      "radius": 50,
+      "maxChange": 5.654
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -351,
+      "z": 32,
+      "radius": 50,
+      "maxChange": 4.682
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 245,
+      "z": 55,
+      "radius": 48,
+      "maxChange": 3.975
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 220,
+      "z": 165,
+      "radius": 48,
+      "maxChange": 3.817
+    },
+    {
+      "mode": "Hydraulic",
+      "x": 115,
+      "z": 265,
+      "radius": 48,
+      "maxChange": 6.711
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -265,
+      "z": 190,
+      "radius": 48,
+      "maxChange": 9.157
+    },
+    {
+      "mode": "Hydraulic",
+      "x": -165,
+      "z": 280,
+      "radius": 48,
+      "maxChange": 5.324
+    }
+  ],
+  "seamSamples": 6168,
+  "truckPad": {
+    "centre": [
+      0,
+      0,
+      0
+    ],
+    "flatSize": [
+      36,
+      44
+    ]
+  },
+  "sceneObjectsAdded": 0,
+  "roadsPlaced": 0,
+  "materialsAdded": 4,
+  "texturesAdded": 3,
+  "reference": "docs/reference/Forge Offroad_ Büyük Sculpt Formları_1.png",
+  "terrainPath": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json",
+  "backup": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-sculpt\\backups\\2026-10-24T16-28-38-743Z"
+}

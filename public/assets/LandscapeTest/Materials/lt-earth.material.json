@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "LT Earth and Scree",
+  "baseColor": "#b7a48c",
+  "baseColorTexture": "lt-earth-bc",
+  "normalTexture": null,
+  "maskTexture": null,
+  "roughnessTexture": null,
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1.15,
+    "y": 1.15
+  },
+  "roughness": 0.95,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

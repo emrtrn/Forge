@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "roads": [
+    {
+      "id": "lt-mesa-loop",
+      "chunks": 79,
+      "triangles": 9480,
+      "rayHits": 618,
+      "missing": 0,
+      "minOffset": 0.08198456403011178,
+      "maxOffset": 0.10068334290629366
+    },
+    {
+      "id": "lt-valley-trail",
+      "chunks": 99,
+      "triangles": 11880,
+      "rayHits": 765,
+      "missing": 0,
+      "minOffset": 0.08762860403947315,
+      "maxOffset": 0.13897146849679132
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "before": {
+    "errors": 0,
+    "warnings": 3,
+    "warningKeys": [
+      "asset-file-unregistered:assets/starter-content/Levels/LandscapeTest.foliage.json",
+      "asset-file-unregistered:assets/starter-content/Levels/LargeTerrain.landscapes/offroad-world.terrain.json",
+      "asset-file-unregistered:assets/starter-content/UI/SaveLoadMenu.ui.json"
+    ]
+  },
+  "after": {
+    "errors": 0,
+    "warnings": 3,
+    "warningKeys": [
+      "asset-file-unregistered:assets/starter-content/Levels/LandscapeTest.foliage.json",
+      "asset-file-unregistered:assets/starter-content/Levels/LargeTerrain.landscapes/offroad-world.terrain.json",
+      "asset-file-unregistered:assets/starter-content/UI/SaveLoadMenu.ui.json"
+    ]
+  },
+  "newAssetIssues": [
+    {
+      "level": "info",
+      "code": "asset-thumbnail-missing",
+      "assetId": "lt-meadow",
+      "message": "Asset has no manifest thumbnail; editor will fall back to generated preview."
+    },
+    {
+      "level": "info",
+      "code": "asset-thumbnail-missing",
+      "assetId": "lt-earth",
+      "message": "Asset has no manifest thumbnail; editor will fall back to generated preview."
+    },
+    {
+      "level": "info",
+      "code": "asset-thumbnail-missing",
+      "assetId": "lt-rock",
+      "message": "Asset has no manifest thumbnail; editor will fall back to generated preview."
+    },
+    {
+      "level": "info",
+      "code": "asset-thumbnail-missing",
+      "assetId": "lt-snow",
+      "message": "Asset has no manifest thumbnail; editor will fall back to generated preview."
+    }
+  ]
+}

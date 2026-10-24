@@ -109,8 +109,8 @@ export const VEHICLE_PLAYER_CONTROLLER: PlayerControllerDefinition = {
     "look-y",
   ],
   inputMode: "game",
-  pointerLookMode: "right-drag",
-  mouseCursor: "show",
+  pointerLookMode: "pointer-lock",
+  mouseCursor: "hide",
   possess: "first-vehicle",
 };
 

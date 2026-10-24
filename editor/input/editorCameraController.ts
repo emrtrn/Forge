@@ -5,7 +5,7 @@ import { clamp } from "@editor/core/numeric";
 
 const CAMERA_MOVE_SPEED = 5.5;
 const CAMERA_MIN_MOVE_SPEED = 0.8;
-const CAMERA_MAX_MOVE_SPEED = 28;
+const CAMERA_MAX_MOVE_SPEED = 100;
 const CAMERA_LOOK_SENSITIVITY = 0.003;
 const CAMERA_PITCH_LIMIT = Math.PI * 0.47;
 const CAMERA_ORBIT_SENSITIVITY = 0.006;

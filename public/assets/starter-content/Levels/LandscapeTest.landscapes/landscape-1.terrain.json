@@ -16,106 +16,109 @@
   "layers": [
     {
       "id": "grass",
-      "name": "Grass",
-      "color": "#5f9449",
-      "material": "starter-mat-grass"
+      "name": "Alpine Meadow",
+      "color": "#7d8953",
+      "material": "lt-meadow"
     },
     {
       "id": "dirt",
-      "name": "Dirt",
-      "color": "#8a6441"
+      "name": "Earth and Scree",
+      "color": "#9b825d",
+      "material": "lt-earth"
     },
     {
       "id": "rock",
-      "name": "Rock",
-      "color": "#7f8485"
+      "name": "Layered Rock",
+      "color": "#827b70",
+      "material": "lt-rock"
     },
     {
       "id": "snow",
-      "name": "Snow",
-      "color": "#dce7ec"
+      "name": "Alpine Snow",
+      "color": "#e5e7e2",
+      "material": "lt-snow"
     }
   ],
   "tiles": [
     {
       "key": "0_0",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -35.123268127441406,
+      "maxHeight": 106.30690002441406
     },
     {
       "key": "1_0",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -35.2110481262207,
+      "maxHeight": 54.90605163574219
     },
     {
       "key": "2_0",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -35.15570068359375,
+      "maxHeight": 99.47730255126953
     },
     {
       "key": "3_0",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -35.11079406738281,
+      "maxHeight": 135.27450561523438
     },
     {
       "key": "0_1",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -30.661518096923828,
+      "maxHeight": 38.99482345581055
     },
     {
       "key": "1_1",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -35.03650665283203,
+      "maxHeight": 51.728172302246094
     },
     {
       "key": "2_1",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -35.146949768066406,
+      "maxHeight": 29.26695442199707
     },
     {
       "key": "3_1",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -39.316810607910156,
+      "maxHeight": 56.82259750366211
     },
     {
       "key": "0_2",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -64.4902114868164,
+      "maxHeight": 3.0543391704559326
     },
     {
       "key": "1_2",
-      "minHeight": 0,
+      "minHeight": -69.57432556152344,
       "maxHeight": 0
     },
     {
       "key": "2_2",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -72.09822845458984,
+      "maxHeight": 4.976526260375977
     },
     {
       "key": "3_2",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -53.59406280517578,
+      "maxHeight": 49.91484451293945
     },
     {
       "key": "0_3",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -63.969261169433594,
+      "maxHeight": -23.90200424194336
     },
     {
       "key": "1_3",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -86.70481872558594,
+      "maxHeight": -27.784786224365234
     },
     {
       "key": "2_3",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -81.64764404296875,
+      "maxHeight": -15.59986686706543
     },
     {
       "key": "3_3",
-      "minHeight": 0,
-      "maxHeight": 0
+      "minHeight": -35.17303466796875,
+      "maxHeight": 45.4082145690918
     }
   ],
   "collision": true

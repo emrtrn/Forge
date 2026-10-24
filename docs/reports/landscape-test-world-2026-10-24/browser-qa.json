@@ -1,0 +1,1054 @@
+{
+  "scene": {
+    "roadChunks": 178,
+    "roads": [
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-0",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-1",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-2",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-3",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-4",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-5",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-6",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-7",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-8",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-9",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-10",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-11",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-12",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-13",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-14",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-15",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-16",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-17",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-18",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-19",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-20",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-21",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-22",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-23",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-24",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-25",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-26",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-27",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-28",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-29",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-30",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-31",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-32",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-33",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-34",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-35",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-36",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-37",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-38",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-39",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-40",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-41",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-42",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-43",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-44",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-45",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-46",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-47",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-48",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-49",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-50",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-51",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-52",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-53",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-54",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-55",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-56",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-57",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-58",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-59",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-60",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-61",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-62",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-63",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-64",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-65",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-66",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-67",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-68",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-69",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-70",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-71",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-72",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-73",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-74",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-75",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-76",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-77",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-mesa-loop:lt-mesa-loop-surface:segment-78",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-0",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-1",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-2",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-3",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-4",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-5",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-6",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-7",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-8",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-9",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-10",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-11",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-12",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-13",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-14",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-15",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-16",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-17",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-18",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-19",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-20",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-21",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-22",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-23",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-24",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-25",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-26",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-27",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-28",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-29",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-30",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-31",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-32",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-33",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-34",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-35",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-36",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-37",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-38",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-39",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-40",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-41",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-42",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-43",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-44",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-45",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-46",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-47",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-48",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-49",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-50",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-51",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-52",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-53",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-54",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-55",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-56",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-57",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-58",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-59",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-60",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-61",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-62",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-63",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-64",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-65",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-66",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-67",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-68",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-69",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-70",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-71",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-72",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-73",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-74",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-75",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-76",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-77",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-78",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-79",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-80",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-81",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-82",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-83",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-84",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-85",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-86",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-87",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-88",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-89",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-90",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-91",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-92",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-93",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-94",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-95",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-96",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-97",
+        "children": 1,
+        "triangles": 120
+      },
+      {
+        "name": "SplineDeformMesh:lt-valley-trail:lt-valley-trail-surface:segment-98",
+        "children": 1,
+        "triangles": 120
+      }
+    ],
+    "render": {
+      "frame": 829,
+      "calls": 60,
+      "triangles": 3000088,
+      "points": 0,
+      "lines": 0
+    },
+    "contextLost": false,
+    "lights": [
+      {
+        "type": "AmbientLight",
+        "intensity": 0.8
+      }
+    ]
+  },
+  "driving": {
+    "before": {
+      "kmh": 0,
+      "text": "Pause1x2x4x8xInspect textFrame costGPU sweep12 fps\n123 draw calls\n1090757 tris\nframe 1861.0ms p95 1916.5 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 109.7ms (6% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 110.17ms (last 44.30 peak 458.30) measured 100% +0% diag\n  render             58.44 / 13.70 / 341.80 53%\n  engine             25.74 / 4.80 / 89.80 23%\n    ai               10.67 / 0.10 / 73.60 10%\n    audio            9.49 / 0.00 / 66.40 9%\n    physics          4.93 / 4.00 / 22.60 4%\n    behavior         0.44 / 0.50 / 1.00 0%\n    characterMovement 0.03 / 0.00 / 0.20 0%\n    input.action-map 0.03 / 0.00 / 0.20 0%\n    render-three.animation 0.01 / 0.10 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    vfx              0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n    splinePathFollower 0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.10 / 0.10 / 0.00 0%\n  capabilities       24.16 / 24.40 / 34.30 22%\n  terrain            0.61 / 0.40 / 1.60 1%\n  gameMode           0.54 / 0.50 / 1.70 0%\n* perfWitness        0.16 / 0.20 / 0.80 0%\n  quality            0.06 / 0.00 / 0.30 0%\n  ui                 0.04 / 0.00 / 0.10 0%\n  audioListener      0.04 / 0.00 / 0.20 0%\n* debugWires         0.04 / 0.00 / 0.10 0%\n  spawn              0.03 / 0.10 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.00 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.29 / 0.20 / 0.00 0%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:15 queued:1 physics:4\nstreaming: 27.10 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:0km/h gear:1 rpm:600 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+    },
+    "samples": [
+      {
+        "kmh": 0,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1938.8ms p95 2049.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 67.2ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 67.75ms (last 51.00 peak 458.30) measured 99% +0% diag\n  capabilities       30.62 / 34.00 / 80.30 45%\n  render             25.60 / 13.80 / 341.80 38%\n  engine             10.25 / 2.50 / 89.80 15%\n    ai               3.50 / 0.10 / 73.60 5%\n    physics          3.28 / 2.30 / 22.60 5%\n    audio            3.02 / 0.00 / 66.40 4%\n    behavior         0.32 / 0.10 / 1.00 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    input.action-map 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.06 / 0.00 / 0.00 0%\n  gameMode           0.38 / 0.20 / 1.70 1%\n  terrain            0.24 / 0.00 / 1.60 0%\n* perfWitness        0.09 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.02 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.10 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.46 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.40 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:0km/h gear:1 rpm:600 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 0,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1938.8ms p95 2049.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 67.2ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 67.75ms (last 51.00 peak 458.30) measured 99% +0% diag\n  capabilities       30.62 / 34.00 / 80.30 45%\n  render             25.60 / 13.80 / 341.80 38%\n  engine             10.25 / 2.50 / 89.80 15%\n    ai               3.50 / 0.10 / 73.60 5%\n    physics          3.28 / 2.30 / 22.60 5%\n    audio            3.02 / 0.00 / 66.40 4%\n    behavior         0.32 / 0.10 / 1.00 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    input.action-map 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.06 / 0.00 / 0.00 0%\n  gameMode           0.38 / 0.20 / 1.70 1%\n  terrain            0.24 / 0.00 / 1.60 0%\n* perfWitness        0.09 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.02 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.10 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.46 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.40 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:0km/h gear:1 rpm:600 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 0,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1938.8ms p95 2049.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 67.2ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 67.75ms (last 51.00 peak 458.30) measured 99% +0% diag\n  capabilities       30.62 / 34.00 / 80.30 45%\n  render             25.60 / 13.80 / 341.80 38%\n  engine             10.25 / 2.50 / 89.80 15%\n    ai               3.50 / 0.10 / 73.60 5%\n    physics          3.28 / 2.30 / 22.60 5%\n    audio            3.02 / 0.00 / 66.40 4%\n    behavior         0.32 / 0.10 / 1.00 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    input.action-map 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.06 / 0.00 / 0.00 0%\n  gameMode           0.38 / 0.20 / 1.70 1%\n  terrain            0.24 / 0.00 / 1.60 0%\n* perfWitness        0.09 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.02 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.10 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.46 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.40 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:0km/h gear:1 rpm:600 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 0,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1938.8ms p95 2049.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 67.2ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 67.75ms (last 51.00 peak 458.30) measured 99% +0% diag\n  capabilities       30.62 / 34.00 / 80.30 45%\n  render             25.60 / 13.80 / 341.80 38%\n  engine             10.25 / 2.50 / 89.80 15%\n    ai               3.50 / 0.10 / 73.60 5%\n    physics          3.28 / 2.30 / 22.60 5%\n    audio            3.02 / 0.00 / 66.40 4%\n    behavior         0.32 / 0.10 / 1.00 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    input.action-map 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.06 / 0.00 / 0.00 0%\n  gameMode           0.38 / 0.20 / 1.70 1%\n  terrain            0.24 / 0.00 / 1.60 0%\n* perfWitness        0.09 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.02 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.10 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.46 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.40 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:0km/h gear:1 rpm:600 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 0,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1938.8ms p95 2049.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 67.2ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 67.75ms (last 51.00 peak 458.30) measured 99% +0% diag\n  capabilities       30.62 / 34.00 / 80.30 45%\n  render             25.60 / 13.80 / 341.80 38%\n  engine             10.25 / 2.50 / 89.80 15%\n    ai               3.50 / 0.10 / 73.60 5%\n    physics          3.28 / 2.30 / 22.60 5%\n    audio            3.02 / 0.00 / 66.40 4%\n    behavior         0.32 / 0.10 / 1.00 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    input.action-map 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.06 / 0.00 / 0.00 0%\n  gameMode           0.38 / 0.20 / 1.70 1%\n  terrain            0.24 / 0.00 / 1.60 0%\n* perfWitness        0.09 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.02 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.10 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.46 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.40 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:0km/h gear:1 rpm:600 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 5,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1783.3ms p95 1816.7 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 61.7ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 62.29ms (last 29.20 peak 458.30) measured 99% +0% diag\n  capabilities       29.84 / 19.10 / 80.30 48%\n  render             22.32 / 7.70 / 341.80 36%\n  engine             8.89 / 1.70 / 89.80 14%\n    physics          3.12 / 1.30 / 22.60 5%\n    ai               2.88 / 0.10 / 73.60 5%\n    audio            2.46 / 0.00 / 66.40 4%\n    behavior         0.31 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.10 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.34 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.00 / 1.60 0%\n* perfWitness        0.08 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.10 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.50 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:5km/h gear:1 rpm:1089 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 5,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1783.3ms p95 1816.7 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 61.7ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 62.29ms (last 29.20 peak 458.30) measured 99% +0% diag\n  capabilities       29.84 / 19.10 / 80.30 48%\n  render             22.32 / 7.70 / 341.80 36%\n  engine             8.89 / 1.70 / 89.80 14%\n    physics          3.12 / 1.30 / 22.60 5%\n    ai               2.88 / 0.10 / 73.60 5%\n    audio            2.46 / 0.00 / 66.40 4%\n    behavior         0.31 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.10 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.34 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.00 / 1.60 0%\n* perfWitness        0.08 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.10 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.50 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:5km/h gear:1 rpm:1089 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 5,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1783.3ms p95 1816.7 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 61.7ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 62.29ms (last 29.20 peak 458.30) measured 99% +0% diag\n  capabilities       29.84 / 19.10 / 80.30 48%\n  render             22.32 / 7.70 / 341.80 36%\n  engine             8.89 / 1.70 / 89.80 14%\n    physics          3.12 / 1.30 / 22.60 5%\n    ai               2.88 / 0.10 / 73.60 5%\n    audio            2.46 / 0.00 / 66.40 4%\n    behavior         0.31 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.10 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.34 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.00 / 1.60 0%\n* perfWitness        0.08 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.10 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.50 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:5km/h gear:1 rpm:1089 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 5,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1783.3ms p95 1816.7 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 61.7ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 62.29ms (last 29.20 peak 458.30) measured 99% +0% diag\n  capabilities       29.84 / 19.10 / 80.30 48%\n  render             22.32 / 7.70 / 341.80 36%\n  engine             8.89 / 1.70 / 89.80 14%\n    physics          3.12 / 1.30 / 22.60 5%\n    ai               2.88 / 0.10 / 73.60 5%\n    audio            2.46 / 0.00 / 66.40 4%\n    behavior         0.31 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.10 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.34 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.00 / 1.60 0%\n* perfWitness        0.08 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.10 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.50 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:5km/h gear:1 rpm:1089 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 5,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1090757 tris\nframe 1783.3ms p95 1816.7 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 61.7ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 62.29ms (last 29.20 peak 458.30) measured 99% +0% diag\n  capabilities       29.84 / 19.10 / 80.30 48%\n  render             22.32 / 7.70 / 341.80 36%\n  engine             8.89 / 1.70 / 89.80 14%\n    physics          3.12 / 1.30 / 22.60 5%\n    ai               2.88 / 0.10 / 73.60 5%\n    audio            2.46 / 0.00 / 66.40 4%\n    behavior         0.31 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.10 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.34 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.00 / 1.60 0%\n* perfWitness        0.08 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.10 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  gameModules        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.50 / 0.20 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,090,757/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:5km/h gear:1 rpm:1089 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 12,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1877.7ms p95 1949.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 57.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 58.05ms (last 32.10 peak 458.30) measured 99% +0% diag\n  capabilities       29.06 / 21.10 / 80.30 50%\n  render             20.08 / 8.30 / 341.80 35%\n  engine             7.80 / 1.80 / 89.80 13%\n    physics          2.87 / 1.40 / 22.60 5%\n    ai               2.44 / 0.10 / 73.60 4%\n    audio            2.08 / 0.00 / 66.40 4%\n    behavior         0.29 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.10 / 0.00 0%\n  gameMode           0.31 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.40 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.43 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:12km/h gear:1 rpm:2507 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 12,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1877.7ms p95 1949.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 57.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 58.05ms (last 32.10 peak 458.30) measured 99% +0% diag\n  capabilities       29.06 / 21.10 / 80.30 50%\n  render             20.08 / 8.30 / 341.80 35%\n  engine             7.80 / 1.80 / 89.80 13%\n    physics          2.87 / 1.40 / 22.60 5%\n    ai               2.44 / 0.10 / 73.60 4%\n    audio            2.08 / 0.00 / 66.40 4%\n    behavior         0.29 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.10 / 0.00 0%\n  gameMode           0.31 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.40 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.43 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:12km/h gear:1 rpm:2507 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 12,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1877.7ms p95 1949.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 57.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 58.05ms (last 32.10 peak 458.30) measured 99% +0% diag\n  capabilities       29.06 / 21.10 / 80.30 50%\n  render             20.08 / 8.30 / 341.80 35%\n  engine             7.80 / 1.80 / 89.80 13%\n    physics          2.87 / 1.40 / 22.60 5%\n    ai               2.44 / 0.10 / 73.60 4%\n    audio            2.08 / 0.00 / 66.40 4%\n    behavior         0.29 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.10 / 0.00 0%\n  gameMode           0.31 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.40 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.43 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:12km/h gear:1 rpm:2507 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 12,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1877.7ms p95 1949.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 57.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 58.05ms (last 32.10 peak 458.30) measured 99% +0% diag\n  capabilities       29.06 / 21.10 / 80.30 50%\n  render             20.08 / 8.30 / 341.80 35%\n  engine             7.80 / 1.80 / 89.80 13%\n    physics          2.87 / 1.40 / 22.60 5%\n    ai               2.44 / 0.10 / 73.60 4%\n    audio            2.08 / 0.00 / 66.40 4%\n    behavior         0.29 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.10 / 0.00 0%\n  gameMode           0.31 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.40 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.43 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:12km/h gear:1 rpm:2507 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 12,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1877.7ms p95 1949.9 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 57.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 58.05ms (last 32.10 peak 458.30) measured 99% +0% diag\n  capabilities       29.06 / 21.10 / 80.30 50%\n  render             20.08 / 8.30 / 341.80 35%\n  engine             7.80 / 1.80 / 89.80 13%\n    physics          2.87 / 1.40 / 22.60 5%\n    ai               2.44 / 0.10 / 73.60 4%\n    audio            2.08 / 0.00 / 66.40 4%\n    behavior         0.29 / 0.20 / 1.00 0%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.10 / 0.00 0%\n  gameMode           0.31 / 0.20 / 1.70 1%\n  terrain            0.20 / 0.40 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.03 / 0.00 / 0.10 0%\n  ui                 0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.43 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.20 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:12km/h gear:1 rpm:2507 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 13,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1966.6ms p95 1983.2 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 55.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 55.99ms (last 32.20 peak 458.30) measured 99% +0% diag\n  capabilities       28.86 / 22.30 / 80.30 52%\n  render             18.89 / 7.70 / 341.80 34%\n  engine             7.18 / 1.80 / 89.80 13%\n    physics          2.86 / 1.50 / 22.60 5%\n    ai               2.14 / 0.10 / 73.60 4%\n    audio            1.80 / 0.00 / 66.40 3%\n    behavior         0.29 / 0.20 / 1.00 1%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.30 / 0.10 / 1.70 1%\n  terrain            0.21 / 0.00 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  ui                 0.01 / 0.00 / 0.10 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.39 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.10 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:-0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:13km/h gear:2 rpm:1302 shift:0.20s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 13,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1966.6ms p95 1983.2 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 55.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 55.99ms (last 32.20 peak 458.30) measured 99% +0% diag\n  capabilities       28.86 / 22.30 / 80.30 52%\n  render             18.89 / 7.70 / 341.80 34%\n  engine             7.18 / 1.80 / 89.80 13%\n    physics          2.86 / 1.50 / 22.60 5%\n    ai               2.14 / 0.10 / 73.60 4%\n    audio            1.80 / 0.00 / 66.40 3%\n    behavior         0.29 / 0.20 / 1.00 1%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.30 / 0.10 / 1.70 1%\n  terrain            0.21 / 0.00 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  ui                 0.01 / 0.00 / 0.10 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.39 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.10 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:-0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:13km/h gear:2 rpm:1302 shift:0.20s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 13,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1966.6ms p95 1983.2 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 55.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 55.99ms (last 32.20 peak 458.30) measured 99% +0% diag\n  capabilities       28.86 / 22.30 / 80.30 52%\n  render             18.89 / 7.70 / 341.80 34%\n  engine             7.18 / 1.80 / 89.80 13%\n    physics          2.86 / 1.50 / 22.60 5%\n    ai               2.14 / 0.10 / 73.60 4%\n    audio            1.80 / 0.00 / 66.40 3%\n    behavior         0.29 / 0.20 / 1.00 1%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.30 / 0.10 / 1.70 1%\n  terrain            0.21 / 0.00 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  ui                 0.01 / 0.00 / 0.10 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.39 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.10 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:-0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:13km/h gear:2 rpm:1302 shift:0.20s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 13,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1966.6ms p95 1983.2 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 55.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 55.99ms (last 32.20 peak 458.30) measured 99% +0% diag\n  capabilities       28.86 / 22.30 / 80.30 52%\n  render             18.89 / 7.70 / 341.80 34%\n  engine             7.18 / 1.80 / 89.80 13%\n    physics          2.86 / 1.50 / 22.60 5%\n    ai               2.14 / 0.10 / 73.60 4%\n    audio            1.80 / 0.00 / 66.40 3%\n    behavior         0.29 / 0.20 / 1.00 1%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.30 / 0.10 / 1.70 1%\n  terrain            0.21 / 0.00 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  ui                 0.01 / 0.00 / 0.10 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.39 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.10 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:-0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:13km/h gear:2 rpm:1302 shift:0.20s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      },
+      {
+        "kmh": 13,
+        "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n123 draw calls\n1083077 tris\nframe 1966.6ms p95 1983.2 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 55.5ms (3% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 55.99ms (last 32.20 peak 458.30) measured 99% +0% diag\n  capabilities       28.86 / 22.30 / 80.30 52%\n  render             18.89 / 7.70 / 341.80 34%\n  engine             7.18 / 1.80 / 89.80 13%\n    physics          2.86 / 1.50 / 22.60 5%\n    ai               2.14 / 0.10 / 73.60 4%\n    audio            1.80 / 0.00 / 66.40 3%\n    behavior         0.29 / 0.20 / 1.00 1%\n    input.action-map 0.02 / 0.00 / 0.20 0%\n    characterMovement 0.01 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    vehicleAi        0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.00 / 0.00 / 0.10 0%\n    vfx              0.00 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.05 / 0.00 / 0.00 0%\n  gameMode           0.30 / 0.10 / 1.70 1%\n  terrain            0.21 / 0.00 / 1.60 0%\n* perfWitness        0.07 / 0.20 / 0.80 0%\n  audioListener      0.03 / 0.00 / 0.20 0%\n* debugWires         0.02 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.30 0%\n  ui                 0.01 / 0.00 / 0.10 0%\n  spawn              0.01 / 0.00 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n  materials          0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.39 / 0.10 / 0.00 1%\nmemory\n  geo 178 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 123/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.10 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:-0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:13km/h gear:2 rpm:1302 shift:0.20s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+      }
+    ],
+    "peakKmh": 13,
+    "after": {
+      "kmh": 0,
+      "text": "Pause1x2x4x8xInspect textFrame costGPU sweep10 fps\n122 draw calls\n1083077 tris\nframe 1777.7ms p95 1833.2 spikes 3\nstalls >33ms 3 >50ms 3 >100ms 3\nbuffer 896x560 ratio 0.70 502K px\ngraph 509 nodes 265 meshes (walked per pass)\nshadow casters\n  actor 26 mesh 8,405 tris\nbottleneck: gpu (conf 0.55)\n  subsystem cpu 39.8ms (2% of frame) — rest off-CPU\nquality: low (adaptive on)\nframe 40.15ms (last 31.30 peak 85.80) measured 99% +0% diag\n  capabilities       27.00 / 21.80 / 66.10 67%\n  render             10.04 / 6.90 / 18.20 25%\n  engine             2.40 / 2.30 / 5.70 6%\n    physics          1.95 / 2.00 / 4.80 5%\n    behavior         0.22 / 0.30 / 0.50 1%\n    ai               0.12 / 0.00 / 0.30 0%\n    input.action-map 0.03 / 0.00 / 0.20 0%\n    splinePathFollower 0.01 / 0.00 / 0.10 0%\n    render-three.animation 0.01 / 0.00 / 0.10 0%\n    movingPlatform   0.01 / 0.00 / 0.10 0%\n    dialogue         0.00 / 0.00 / 0.10 0%\n    audio            0.00 / 0.00 / 0.00 0%\n    characterMovement 0.00 / 0.00 / 0.00 0%\n    vehicleAi        0.00 / 0.00 / 0.00 0%\n    vfx              0.00 / 0.00 / 0.00 0%\n~   engine (other)   0.06 / 0.00 / 0.00 0%\n  gameMode           0.23 / 0.10 / 0.50 1%\n  terrain            0.12 / 0.00 / 0.80 0%\n* perfWitness        0.05 / 0.10 / 0.40 0%\n  audioListener      0.03 / 0.00 / 0.10 0%\n* debugWires         0.02 / 0.10 / 0.10 0%\n  gameModules        0.01 / 0.00 / 0.10 0%\n  quality            0.01 / 0.00 / 0.10 0%\n  ui                 0.01 / 0.00 / 0.10 0%\n  spawn              0.00 / 0.00 / 0.10 0%\n  environment        0.00 / 0.00 / 0.10 0%\n  materials          0.00 / 0.00 / 0.10 0%\n  foliage            0.00 / 0.00 / 0.00 0%\n~ unmeasured         0.24 / 0.00 / 0.00 1%\nmemory\n  geo 177 tex 67 prog 17\n  heap 342.0 MB / 3.8 GB\nbudget (OVER)\n  draw calls 122/500\n! tris 1,083,077/1,000,000\n  textures 67/128\naudio 1/64 voices peak 1 refused budget 0\n  sfx 1/1\nvfx\nactive:0 alive:0 pool:0 defs:0\nterrain streaming: loaded:16 active:16 queued:0 physics:4\nstreaming: 0.10 ms/frame 8.5 MB\nterrain active: 2_2 1_1 2_1 2_3 0_1 1_0 2_0 1_2 1_3 3_1 3_2 3_0 3_3 0_2 0_3 0_0\nterrain physics: 2_2 1_1 2_1 1_2\nterrain map: grey idle, amber fetching, blue cached, green active, pale physics, red failed\ngame mode\nmode: Vehicle\npossessed: actor:0\nmovement: —\nvel y:— planar:—\npos: —\ncontrol yaw:0.00 pitch:—\ncamera: vehicle-chase pawn:actor:0 speed:0km/h gear:R rpm:600 shift:0.00s arm:1.00 look:0\ninput: game\nai\ncontrollers: 0\nui\nhud: none\nscreens: none\nlocale: en\nworld: 0/0\nfields(20):\n  graphics.adaptive = true\n  graphics.adaptiveLabel = \"Adaptive: On\"\n  graphics.quality = \"low\"\n  graphics.qualityLabel = \"Quality: Low\"\n  graphics.targetFps = 60\n  graphics.targetFpsLabel = \"Target: 60 FPS\"\n  loading.detail = \"9 / 9\"\n  loading.percent = 100\n  loading.status = \"Warming shaders\"\n  player.speed = 0\n  player.speedLabel = \"Speed 0.0 m/s\"\n  save.slots.quick.label = \"Quick Save\"\n  save.slots.quick.level = \"No saved level\"\n  save.slots.quick.status = \"Empty\"\n  save.slots.slot-1.label = \"Slot 1\"\n  save.slots.slot-1.level = \"No saved level\"\n  save.slots.slot-1.status = \"Empty\"\n  save.slots.slot-2.label = \"Slot 2\"\n  save.slots.slot-2.level = \"No saved level\"\n  save.slots.slot-2.status = \"Empty\"\n\nscript messages\nflush p:0 d:0 w:0\nsubscribers: 0"
+    },
+    "forwardMotionPassed": true,
+    "brakingPassed": true,
+    "reverseObserved": false,
+    "passed": true
+  },
+  "passed": true,
+  "neutralLightingPreview": true,
+  "editorHelpersHiddenInScreenshots": true,
+  "fullRouteDrivingAccepted": false,
+  "captured": [
+    {
+      "name": "overview",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-world\\overview.png"
+    },
+    {
+      "name": "top",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-world\\top.png"
+    },
+    {
+      "name": "start-road",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-world\\start-road.png"
+    },
+    {
+      "name": "forest-road",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-world\\forest-road.png"
+    },
+    {
+      "name": "junction",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-world\\junction.png"
+    },
+    {
+      "name": "valley-road",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-world\\valley-road.png"
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "[.WebGL-0x3afc001b8200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x3afc001b8200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x3afc001b8200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x3afc001b8200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+    "using deprecated parameters for the initialization function; pass a single object instead",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+    "using deprecated parameters for the initialization function; pass a single object instead"
+  ],
+  "failed": []
+}

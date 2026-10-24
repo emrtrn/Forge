@@ -1,0 +1,117 @@
+{
+  "passed": true,
+  "reviewMode": "neutral-lighting response override only; original level unchanged",
+  "productionSkyPostProcessAccepted": false,
+  "content": {
+    "actors": 1,
+    "landscapes": 1,
+    "splines": 0,
+    "layers": [
+      {
+        "id": "grass",
+        "name": "Alpine Meadow",
+        "color": "#7d8953",
+        "material": "lt-meadow"
+      },
+      {
+        "id": "dirt",
+        "name": "Earth and Scree",
+        "color": "#9b825d",
+        "material": "lt-earth"
+      },
+      {
+        "id": "rock",
+        "name": "Layered Rock",
+        "color": "#827b70",
+        "material": "lt-rock"
+      },
+      {
+        "id": "snow",
+        "name": "Alpine Snow",
+        "color": "#e5e7e2",
+        "material": "lt-snow"
+      }
+    ],
+    "tiles": 16,
+    "heightRange": [
+      -86.70481872558594,
+      149.10043334960938
+    ]
+  },
+  "captured": [
+    {
+      "name": "overview",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-sculpt\\overview.png",
+      "pixelStats": {
+        "colors": 79,
+        "brightShare": 1
+      }
+    },
+    {
+      "name": "top",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-sculpt\\top.png",
+      "pixelStats": {
+        "colors": 85,
+        "brightShare": 1
+      }
+    },
+    {
+      "name": "central-plateau",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-sculpt\\central-plateau.png",
+      "pixelStats": {
+        "colors": 80,
+        "brightShare": 0.9999912452724471
+      }
+    },
+    {
+      "name": "north-mountains",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-sculpt\\north-mountains.png",
+      "pixelStats": {
+        "colors": 93,
+        "brightShare": 0.9979426390250735
+      }
+    },
+    {
+      "name": "south-valley",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-sculpt\\south-valley.png",
+      "pixelStats": {
+        "colors": 88,
+        "brightShare": 1
+      }
+    },
+    {
+      "name": "truck-start",
+      "path": "C:\\Users\\emret\\Desktop\\Forge\\.dev-server\\landscape-test-sculpt\\truck-start.png",
+      "pixelStats": {
+        "colors": 162,
+        "brightShare": 0.9971284493626559
+      }
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "[.WebGL-0x630c001bca00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x630c001bca00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x630c001bca00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x630c001bca00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+    "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON"
+  ],
+  "failed": []
+}

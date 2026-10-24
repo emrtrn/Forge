@@ -21086,6 +21086,377 @@
         "bytes": 437
       },
       "license": "Unknown"
+    },
+    {
+      "id": "lt-meadow-bc",
+      "name": "LT Meadow Base Color",
+      "assetType": "texture",
+      "category": "LandscapeTest/Textures",
+      "path": "assets/LandscapeTest/Textures/LT_Meadow_BC.webp",
+      "thumbnail": "assets/LandscapeTest/Textures/LT_Meadow_BC.webp",
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 137462
+      },
+      "license": "Project-local Imagen candidate A, accepted by user 2026-08-07",
+      "source": {
+        "origin": "ThreeAges",
+        "path": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.webp"
+      }
+    },
+    {
+      "id": "lt-earth-bc",
+      "name": "LT Earth and Gravel Base Color",
+      "assetType": "texture",
+      "category": "LandscapeTest/Textures",
+      "path": "assets/LandscapeTest/Textures/LT_Earth_BC.webp",
+      "thumbnail": "assets/LandscapeTest/Textures/LT_Earth_BC.webp",
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 213354
+      },
+      "license": "Project-local Imagen candidate A, accepted by user 2026-08-07",
+      "source": {
+        "origin": "ThreeAges",
+        "path": "assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.webp"
+      }
+    },
+    {
+      "id": "lt-snow-bc",
+      "name": "LT Alpine Snow Base Color",
+      "assetType": "texture",
+      "category": "LandscapeTest/Textures",
+      "path": "assets/LandscapeTest/Textures/LT_Snow_BC.png",
+      "thumbnail": "assets/LandscapeTest/Textures/LT_Snow_BC.png",
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2700420
+      },
+      "license": "Project-local generated texture, 2026-10-24",
+      "source": {
+        "origin": "OpenAI imagegen",
+        "pack": "LandscapeTest alpine terrain",
+        "packVersion": "2026-10-24"
+      }
+    },
+    {
+      "id": "lt-meadow",
+      "name": "LT Alpine Meadow",
+      "assetType": "material",
+      "category": "LandscapeTest/Materials",
+      "path": "assets/LandscapeTest/Materials/lt-meadow.material.json",
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 624
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "LandscapeTest authored terrain"
+      },
+      "license": "Project-local material; texture source metadata retained"
+    },
+    {
+      "id": "lt-earth",
+      "name": "LT Earth and Scree",
+      "assetType": "material",
+      "category": "LandscapeTest/Materials",
+      "path": "assets/LandscapeTest/Materials/lt-earth.material.json",
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 627
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "LandscapeTest authored terrain"
+      },
+      "license": "Project-local material; texture source metadata retained"
+    },
+    {
+      "id": "lt-rock",
+      "name": "LT Weathered Mountain Rock",
+      "assetType": "material",
+      "category": "LandscapeTest/Materials",
+      "path": "assets/LandscapeTest/Materials/lt-rock.material.json",
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 637
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "LandscapeTest authored terrain"
+      },
+      "license": "Project-local material; texture source metadata retained"
+    },
+    {
+      "id": "lt-snow",
+      "name": "LT Alpine Snow",
+      "assetType": "material",
+      "category": "LandscapeTest/Materials",
+      "path": "assets/LandscapeTest/Materials/lt-snow.material.json",
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "material"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 620
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "LandscapeTest authored terrain"
+      },
+      "license": "Project-local material; texture source metadata retained"
+    },
+    {
+      "id": "lt-alpine-pine",
+      "name": "LT Alpine Pine",
+      "assetType": "staticMesh",
+      "category": "LandscapeTest/Environment",
+      "path": "assets/LandscapeTest/Models/LT_Alpine_Pine.glb",
+      "tags": [
+        "landscape-test",
+        "environment"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 72792
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "ThreeAges",
+        "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree.glb"
+      }
+    },
+    {
+      "id": "lt-valley-tree",
+      "name": "LT Valley Tree",
+      "assetType": "staticMesh",
+      "category": "LandscapeTest/Environment",
+      "path": "assets/LandscapeTest/Models/LT_Valley_Tree.glb",
+      "tags": [
+        "landscape-test",
+        "environment"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 44948
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "ThreeAges",
+        "path": "assets/ThreeAges/StaticMeshes/Resource_Tree1.glb"
+      }
+    },
+    {
+      "id": "lt-meadow-tuft",
+      "name": "LT Meadow Tuft",
+      "assetType": "staticMesh",
+      "category": "LandscapeTest/Environment",
+      "path": "assets/LandscapeTest/Models/LT_Meadow_Tuft.glb",
+      "tags": [
+        "landscape-test",
+        "environment"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": false,
+        "bytes": 16968
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "ThreeAges",
+        "path": "assets/ThreeAges/NatureMega/Grass_Common_Tall.glb"
+      }
+    },
+    {
+      "id": "lt-boulder-a",
+      "name": "LT Boulder A",
+      "assetType": "staticMesh",
+      "category": "LandscapeTest/Environment",
+      "path": "assets/LandscapeTest/Models/LT_Boulder_A.glb",
+      "tags": [
+        "landscape-test",
+        "environment"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 67024
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "ThreeAges",
+        "path": "assets/ThreeAges/NatureMega/Rock_Medium_1.glb"
+      }
+    },
+    {
+      "id": "lt-boulder-b",
+      "name": "LT Boulder B",
+      "assetType": "staticMesh",
+      "category": "LandscapeTest/Environment",
+      "path": "assets/LandscapeTest/Models/LT_Boulder_B.glb",
+      "tags": [
+        "landscape-test",
+        "environment"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 63168
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "ThreeAges",
+        "path": "assets/ThreeAges/NatureMega/Rock_Medium_2.glb"
+      }
     }
   ]
 }

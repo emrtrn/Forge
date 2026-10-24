@@ -181,17 +181,18 @@ export class EditorSaveSession {
     });
     const dropped = result.dropped ?? [];
     const warnings = result.warnings ?? [];
+    const saved = `Saved ${result.path ?? "layout"}${partitionSummary(result)}`;
     if (warnings.length) console.warn("[save]", warnings.join("; "));
     if (dropped.length > 0) {
       console.warn("[save] dropped by the save validator:", dropped.join(", "));
       this.onStatus(
-        `Saved ${result.path ?? "layout"} — ${dropped.length} unsupported field(s) dropped: ${dropped.slice(0, 3).join(", ")}${dropped.length > 3 ? ", …" : ""}${warnings.length ? `; ${warnings.join("; ")}` : ""}`,
+        `${saved} — ${dropped.length} unsupported field(s) dropped: ${dropped.slice(0, 3).join(", ")}${dropped.length > 3 ? ", …" : ""}${warnings.length ? `; ${warnings.join("; ")}` : ""}`,
         "warning",
       );
       return;
     }
     if (warnings.length) {
-      this.onStatus(`Saved ${result.path ?? "layout"} — ${warnings.join("; ")}`, "warning");
+      this.onStatus(`${saved} — ${warnings.join("; ")}`, "warning");
       return;
     }
     const pending = this.foliageSaveRevision.dirty || this.meshPaintSaveRevision.dirty ||
@@ -199,8 +200,8 @@ export class EditorSaveSession {
       [...this.source().worldTerrainSessions?.values() ?? []].some((session) => session.dirty);
     this.onStatus(
       pending
-        ? `Saved ${result.path ?? "layout"} snapshot; newer sidecar edits are still pending. Save again to finish.`
-        : `Saved ${result.path ?? "layout"}.`,
+        ? `${saved} snapshot; newer sidecar edits are still pending. Save again to finish.`
+        : `${saved}.`,
       pending ? "warning" : "success",
     );
   }
@@ -252,4 +253,11 @@ export class EditorSaveSession {
     const data = structuredClone(source.meshPaintData);
     return this.meshPaintSaveRevision.capture(path, () => saveMeshPaintData(path, data));
   }
+}
+
+function partitionSummary(result: LayoutSaveResult): string {
+  const partition = result.partition;
+  if (!partition) return "";
+  const cells = `${partition.cells} cell${partition.cells === 1 ? "" : "s"}`;
+  return ` (World Partition: ${cells}, ${partition.written} written; ${partition.streamed} streamed, ${partition.persistent} persistent)`;
 }

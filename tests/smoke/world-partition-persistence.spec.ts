@@ -190,6 +190,7 @@ test("world partition saves cells, rewrites only an edited cell and loads the me
     await expect(page.getByTestId("editor-status")).toContainText("Saved");
   };
   await save();
+  await expect(page.getByTestId("editor-status")).toContainText("World Partition: 5 cells, 5 written; 5 streamed, 3 persistent");
   const persistent = await diskLevel();
   expect(persistent.worldCells).toEqual(KEYS);
   expect(persistent.instances.flatMap((group) => group.placements).map((item) => item.name).sort()).toEqual(["Cell Ground", "Player Start"]);
@@ -217,6 +218,7 @@ test("world partition saves cells, rewrites only an edited cell and loads the me
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await save();
+  await expect(page.getByTestId("editor-status")).toContainText("World Partition: 5 cells, 1 written;");
   // A save writes changed cells (no deletion), then the level, then cleans up with the full index.
   const writes = batches.filter((batch) => batch.keep === undefined);
   expect(writes.at(-1)?.cells.map((cell) => cell.key)).toEqual(["0_0"]);

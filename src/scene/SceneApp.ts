@@ -1144,9 +1144,11 @@ export interface LayoutSaveResult {
    * existed, and is reported to the user instead of vanishing.
    */
   dropped?: readonly string[];
+  /** Present when the level saved as World Partition cells; element counts span the cell arrays. */
+  partition?: { cells: number; written: number; streamed: number; persistent: number };
 }
 
-export type LayoutSaver = (payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
+export type LayoutSaver =(payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
 
 const ORTHO_MIN_VIEW_HEIGHT = 3;
 const ORTHO_MAX_VIEW_HEIGHT = 80;

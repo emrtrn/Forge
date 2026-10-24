@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { RoomLayout, Vec3 } from "../../engine/scene/layout";
 import {
   DEFAULT_WORLD_PARTITION,
+  countWorldCellElements,
   mergeWorldCells,
   normalizeWorldCellDocument,
   normalizeWorldPartitionSettings,
@@ -101,6 +102,15 @@ function canonicalize(layout: RoomLayout): RoomLayout {
 }
 
 export function registerWorldPartitionTests(check: Check): void {
+  check("world partition: save summary counts every element exactly once", () => {
+    const layout = fixture();
+    const split = partitionLayout(layout, ENABLED);
+    const streamed = [...split.cells.values()].reduce((sum, cell) => sum + countWorldCellElements(cell), 0);
+    assert.ok(streamed > 0);
+    assert.ok(countWorldCellElements(split.persistent) > 0);
+    assert.equal(streamed + countWorldCellElements(split.persistent), countWorldCellElements(layout));
+    assert.equal(countWorldCellElements({ instances: [{ assetId: "a", placements: [] }] }), 0);
+  });
   check("world partition: actor routing agrees with partition cells and preserves merged indices", () => {
     const settings = normalizeWorldPartitionSettings({ enabled: true, grids: { main: { cellSize: 64 } } });
     const layout = fixture();

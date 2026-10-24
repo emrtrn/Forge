@@ -1229,8 +1229,17 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       bellekte tutulur, save-game'e yazılmaz (P3.2 değişmedi). Smoke
       `world-partition-streaming.spec.ts` (düşen kasa).
 - [x] `SAVE_GAME_CONTRACT.md` ve `CONTENT_LOADING_CONTRACT.md` güncellenir.
-- [ ] "Convert Level to World Partition" editör komutu: mevcut level →
+- [x] "Convert Level to World Partition" editör komutu: mevcut level →
       persistent + hücreler (geri alınabilir, yedek kopya).
+      *Toggle ile karşılandı (kullanıcı kararı 2026-10-24):* ayrı komut yok;
+      World Settings'teki "Enable World Partition" + Save dönüştürür, kapatıp
+      Save birleşik level'ı geri yazar (undo'lu). Yedek kopya yazılmaz: yedek
+      dosyası Content Browser'da ve asset health'te ikinci bir level gibi
+      görünürdü, yedeği Git tutuyor. Save durum satırı hücre özetini gösterir:
+      `World Partition: N cells, K written; S streamed, P persistent`
+      (`countWorldCellElements`, instance grupları yerleşim sayısıyla) ve
+      persistent'te kalan büyük volume uyarıları. Smoke
+      `world-partition-persistence.spec.ts` özeti doğrular.
 
 ## Faz 6 — Foliage ve çim akışı
 

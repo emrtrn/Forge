@@ -1,5 +1,11 @@
 import type { LayoutSavePayload, LayoutSaveResult } from "@/scene/SceneApp";
-import { compareWorldCellKeys, normalizeWorldPartitionSettings, partitionLayout, type WorldCellDocument } from "@engine/world/worldPartition";
+import {
+  compareWorldCellKeys,
+  countWorldCellElements,
+  normalizeWorldPartitionSettings,
+  partitionLayout,
+  type WorldCellDocument,
+} from "@engine/world/worldPartition";
 
 const lastWrittenCells = new Map<string, Map<string, string>>();
 
@@ -38,6 +44,12 @@ export async function saveLayoutViaDevEndpoint(
     ...(result.path === undefined ? {} : { path: result.path }),
     ...(dropped.length ? { dropped } : {}),
     ...(warnings.length ? { warnings } : {}),
+    ...(enabled ? { partition: {
+      cells: cells.length,
+      written: changed.length,
+      streamed: cells.reduce((sum, cell) => sum + countWorldCellElements(cell), 0),
+      persistent: countWorldCellElements(layout),
+    } } : {}),
   };
 }
 

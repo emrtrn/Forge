@@ -241,3 +241,16 @@ export function mergeWorldCells(persistent: RoomLayout, cells: Iterable<WorldCel
   }
   return merged;
 }
+
+/** Elements in the arrays a cell can own; instance groups count their placements. */
+export function countWorldCellElements(arrays: WorldCellArrays): number {
+  let count = 0;
+  for (const field of CELL_ARRAYS) {
+    const items = arrays[field];
+    if (!items) continue;
+    count += field === "instances"
+      ? (items as LayoutModelInstances[]).reduce((sum, group) => sum + group.placements.length, 0)
+      : items.length;
+  }
+  return count;
+}

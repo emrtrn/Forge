@@ -1311,6 +1311,19 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       gölge başına ayrı). Runtime'da parent zinciri kullanılmadığından
       (yerleşimler dünya koordinatında) hücreler arası hiyerarşi için özel
       yönlendirme gerekmedi.
+      *S2 tamam (2026-10-24):* S2a `261e396` (yerleşim → (batch, slot)
+      eşlemesi) + S2b: çekirdek `occupiedCells` (yalnız statik taşıyan hücre),
+      hücre × asset batch'leri (frustum culling açık), collider/behavior
+      eklemeleri kare bütçesiyle (130 birim, trimesh 6), boot/restore hazırlığı
+      bütçesiz; spawn hücreleri sahne belgesinden önce, collision sidecar'ları
+      yüklendikten sonra kurulur (reflection capture bake'i onları görmez).
+      Residency hücre statik modellerini de sahiplenir; yüklemede unlit
+      dönüşüm + instanced program ısıtması (`compileAsync`, canlı sahnenin
+      ışıklarıyla), benimsemede UVW + complex collision. Kalıcı (`spatiallyLoaded:
+      false`) yerleşimler asset başına tek batch'te. Smoke
+      `world-partition-statics.spec.ts`: akan zemin hep zamanında, akan duvar
+      pawn'ı durdurur, geride kalan hücreler boşalır. `world-partition-streaming`
+      smoke'unun zemini artık `spatiallyLoaded: false` (actor testi).
 - [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*

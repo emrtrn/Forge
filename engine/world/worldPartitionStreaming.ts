@@ -31,15 +31,19 @@ export class WorldPartitionStreaming {
   private bounds: WorldCellBounds | null = null;
 
   constructor(settings: WorldPartitionGridSettings, cells: ReadonlyMap<string, readonly number[]>, private readonly hooks: WorldPartitionHooks,
-    options: { prefetchRangeFactor?: number } = {}) {
+    /** `occupiedCells`: cells with host-owned content (statics) and possibly no actor indices. */
+    options: { prefetchRangeFactor?: number; occupiedCells?: Iterable<string> } = {}) {
     this.prefetchRangeFactor = options.prefetchRangeFactor ?? 1.5;
     if (!Number.isFinite(this.prefetchRangeFactor) || this.prefetchRangeFactor < 1) {
       throw new RangeError("prefetchRangeFactor must be finite and at least 1");
     }
     // Gameplay residency never inherits a graphics view-distance multiplier.
     this.settings = { cellSize: settings.cellSize, loadRange: settings.loadRange };
-    for (const [key, indices] of cells) {
-      if (!indices.length) continue;
+    const occupied = new Set(options.occupiedCells ?? []);
+    const entries = new Map<string, readonly number[]>(cells);
+    for (const key of occupied) if (!entries.has(key)) entries.set(key, []);
+    for (const [key, indices] of entries) {
+      if (!indices.length && !occupied.has(key)) continue;
       this.cells.set(key, [...indices]);
       const { x, z } = parseWorldCellKey(key)!;
       const box = worldCellBounds(this.settings, x, z);

@@ -5,7 +5,13 @@ import type { CapabilityModule } from "./CapabilityModule";
 import { runtimeServiceKey } from "./RuntimeServices";
 
 interface WorldPartitionCommands {
-  configure(settings: WorldPartitionGridSettings, cells: ReadonlyMap<string, readonly number[]>, hooks: WorldPartitionHooks, debug: boolean): void;
+  configure(
+    settings: WorldPartitionGridSettings,
+    cells: ReadonlyMap<string, readonly number[]>,
+    hooks: WorldPartitionHooks,
+    debug: boolean,
+    options?: { occupiedCells?: Iterable<string> },
+  ): void;
   prepare(position: readonly [number, number]): void;
   /** Prefetches the ring around a position; returns the cells `prepare` there would activate. */
   prefetchAround(position: readonly [number, number]): string[];
@@ -28,7 +34,7 @@ export function createWorldPartitionModule(): CapabilityModule {
     id: "world-partition",
     onRuntimeStart(services) {
       services.provide(worldPartitionService, {
-        configure(settings, cells, hooks, debug) {
+        configure(settings, cells, hooks, debug, options) {
           clear();
           stream = new WorldPartitionStreaming(settings, cells, {
             ...hooks,
@@ -36,7 +42,7 @@ export function createWorldPartitionModule(): CapabilityModule {
               hooks.cellChanged?.(key, active);
               if (debug) console.info(`[world-partition] ${active ? "activated" : "unloaded"} ${key}`);
             },
-          });
+          }, options);
         },
         prepare: (position) => stream?.prepare(position),
         prefetchAround: (position) => stream?.prefetchAround(position) ?? [],

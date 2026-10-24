@@ -459,7 +459,8 @@ function worldPartitionText(app: RuntimeStatsApp): string {
     ? ` models ${stats.models.resident}+${stats.models.pendingEvict} loading ${stats.models.loading}`
     : "";
   return `\nworld partition: cells ${stats.activeCells}/${stats.totalCells} actors ${stats.liveActors}`
-    + ` prefetch ${stats.prefetchedCells} wait ${stats.waitingCells}${models}`;
+    + ` prefetch ${stats.prefetchedCells} wait ${stats.waitingCells}${models}`
+    + (stats.statics ? ` statics ${stats.statics.cells} pending ${stats.statics.pending}` : "");
 }
 
 function terrainStreamingText(app: RuntimeStatsApp): string {

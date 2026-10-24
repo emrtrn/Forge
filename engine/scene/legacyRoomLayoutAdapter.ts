@@ -201,6 +201,31 @@ export function lightEntity(index: number, light: LayoutLightActor): Entity {
   );
 }
 
+/**
+ * The entity roomLayoutToSceneDocument derives for one static placement (same
+ * id, components and tags), for runtimes that build placements later, e.g. as
+ * their World Partition cell activates. Its legacy parent link is not resolved.
+ */
+export function instanceEntityForPlacement(
+  assetId: string,
+  placementIndex: number,
+  placement: LayoutPlacement,
+  options: RoomLayoutAdapterOptions = {},
+): Entity {
+  return buildEntity(
+    instanceEntityId(assetId, placementIndex),
+    placement.name,
+    instanceComponents(
+      assetId,
+      placement,
+      options.colliderBox,
+      options.collisionDefs?.get(assetId),
+      options.complexCollisionMeshes?.get(assetId),
+    ),
+    flagTags(placement),
+  );
+}
+
 export function roomLayoutToSceneDocument(
   layout: RoomLayout,
   options: RoomLayoutAdapterOptions = {},
@@ -217,18 +242,7 @@ export function roomLayoutToSceneDocument(
       const id = instanceEntityId(instance.assetId, index);
       registerNode(id, placement.nodeId);
       pending.push({
-        entity: buildEntity(
-          id,
-          placement.name,
-          instanceComponents(
-            instance.assetId,
-            placement,
-            options.colliderBox,
-            options.collisionDefs?.get(instance.assetId),
-            options.complexCollisionMeshes?.get(instance.assetId),
-          ),
-          flagTags(placement),
-        ),
+        entity: instanceEntityForPlacement(instance.assetId, index, placement, options),
         legacyParentId: placement.parentId,
       });
     });

@@ -292,4 +292,28 @@ export function registerWorldPartitionStreamingTests(check: Check): void {
     assert.deepEqual(stream.snapshot(), { activeCells: 0, totalCells: 0, liveActors: 0, prefetchedCells: 0, waitingCells: 0 });
     assert.deepEqual(events, ["0_0 true"]);
   });
+
+  check("world partition streaming: occupied static-only cells prefetch, activate and spend budget like actor cells", () => {
+    const events: string[] = [];
+    const stream = new WorldPartitionStreaming({ cellSize: 10, loadRange: 20 }, new Map([
+      ["0_0", [0]], ["1_0", []],
+    ]), {
+      activate: (index) => { events.push(`activate ${index}`); },
+      deactivate: (index) => { events.push(`deactivate ${index}`); },
+      isLive: () => false,
+      cellChanged: (key, active) => { events.push(`${key} ${active}`); },
+      prefetch: (key, wanted) => { events.push(`prefetch ${key} ${wanted}`); },
+    }, { occupiedCells: ["1_0", "2_0", "9_0"] });
+    // 1_0 has an (empty) actor entry, 2_0 none: both count once occupied; 9_0 is out of range.
+    stream.update([{ position: [5, 5] }]);
+    assert.deepEqual(events, [
+      "prefetch 0_0 true", "prefetch 1_0 true", "prefetch 2_0 true",
+      "activate 0", "0_0 true", "1_0 true",
+    ]);
+    stream.update([{ position: [5, 5] }]);
+    assert.deepEqual(events.slice(6), ["2_0 true"]);
+    assert.equal(stream.snapshot().totalCells, 4);
+    stream.update([{ position: [200, 5] }]);
+    assert.deepEqual(events.slice(7, 11), ["deactivate 0", "0_0 false", "1_0 false", "2_0 false"]);
+  });
 }

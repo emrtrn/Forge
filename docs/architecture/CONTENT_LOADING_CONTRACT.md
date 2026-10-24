@@ -38,16 +38,27 @@ fetches the indexed cell files and merges them back, so every consumer — edito
 asset-health, content collection — still reads one whole `RoomLayout`; a missing or
 invalid cell file fails the level read like any other required document.
 
-At runtime the whole layout is **built** eagerly except for Actor Script actors
-(`layout.actors`) that are cell-assigned (`worldPartitionActorCells`, the same rule
-the saver used). Those are activated and unloaded with their cell around the pawn:
+At runtime the whole layout is **built** eagerly except for cell-assigned Actor
+Script actors (`layout.actors`) and static mesh placements (`layout.instances`),
+routed by `worldPartitionCellContents` — the same rule the saver uses. Those are
+activated and unloaded with their cell around the pawn:
 
 - **What loads when.** Boot, level travel and save-load activate the cells in range
   of the spawn/pawn behind the loading overlay; afterwards the streamer activates at
   most two cells per frame and unloads cells past the 1.25× hysteresis ring.
-  `spatiallyLoaded: false` actors stay persistent. Static meshes, lights, volumes,
-  characters and splines are not cell-streamed; their instanced batches are built per
-  level.
+  `spatiallyLoaded: false` elements stay persistent. Lights, blocking volumes,
+  characters, reflection captures, target points, world widgets and splines are not
+  cell-streamed yet.
+- **Static placements.** A cell's placements render as one instanced batch per asset
+  (culled per cell); persistent placements keep one batch per asset. Their colliders,
+  behaviors and audio/particle components join physics and behavior through a
+  per-frame budget (≈4 ms; a complex-as-simple trimesh weighs six simple colliders),
+  and all at once during boot/travel/save-load preparation, so the ground under the
+  pawn always collides before play resumes. Entity ids stay
+  `instance:<asset>:<merged placement index>`, so mesh paint and persisted script
+  state address them as in an eager level; a placement destroyed by a persisted
+  script stays out. Spawn-range cells are built before the scene document, after
+  the reflection-capture bake, so those probes do not see them.
 - **Assets (`AssetResidency`).** The mesh of a cell-streamed plain actor
   (`parentClass: "actor"`, no `Vehicle` component) is owned by its cell: it is
   fetched asynchronously when the cell enters the prefetch ring (1.5× the load

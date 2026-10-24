@@ -1,16 +1,18 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
-import { normalizeWorldPartitionSettings, worldPartitionActorCells } from "@engine/world/worldPartition";
+import { normalizeWorldPartitionSettings, worldPartitionCellContents } from "@engine/world/worldPartition";
 import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
 import { StreamedActorStateCache } from "@engine/world/streamedActorState";
 import { AssetResidency, type AssetResidencySnapshot } from "@engine/world/assetResidency";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
+import {
+  InstancedMesh,
+} from "three";
 import type {
   AmbientLight,
-  InstancedMesh,
   Material,
   PerspectiveCamera,
   Scene,
@@ -303,6 +305,8 @@ import type {
 } from "@engine/scene/layout";
 import {
   characterEntityId,
+  instanceEntityForPlacement,
+  instanceEntityId,
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
@@ -315,6 +319,7 @@ import { createVehicleAssetLoader, resolveActorVehicleAssets, withVehicleOverrid
 import {
   applyAssetUvwMapping,
   loadAssetUvw,
+  type AssetUvwDef,
 } from "@/scene/assetUvwLoader";
 import { loadForgeMaterial, loadForgeMaterialLayer } from "@/scene/materialAssets";
 import {
@@ -471,6 +476,37 @@ const STARTUP_CALIBRATION_SECONDS = 12;
 /** K5: how long an unowned cell-streamed model stays loaded before it is freed. */
 const MODEL_EVICT_DELAY_MS = 30_000;
 const PERSISTENT_MODEL_OWNER = "persistent";
+/**
+ * Per-frame budget for adding a live cell's static placements to physics and
+ * behavior, in units: one simple collider ≈ 30 µs, a complex-as-simple trimesh
+ * ≈ 6 units (spike S0), so ≈ 4 ms a frame. Boot/restore preparation is unbudgeted.
+ */
+const STATIC_BUILD_BUDGET = 130;
+const STATIC_TRIMESH_WEIGHT = 6;
+
+/** A cell's static placements once built: render batches and the entities they own. */
+interface StaticCellBatch {
+  group: Group;
+  meshes: InstancedMesh[];
+  probeMaterials: Material[];
+  /** `overrideObjectKey` per placement in the batch. */
+  keys: string[];
+}
+
+interface StaticCellState {
+  batches: StaticCellBatch[];
+  /** Entities still waiting for the per-frame budget, in activation order. */
+  pending: Entity[];
+  /** Entities in physics, behavior and modules. */
+  added: Entity[];
+  /** Authored pose per entity, to tell a moved simulated body on unload. */
+  authored: Map<string, { position: Vec3; rotation: Vec3 }>;
+}
+
+function staticEntityWeight(entity: Entity): number {
+  const primitives = readColliderComponent(entity)?.primitives;
+  return primitives?.some((primitive) => primitive.shape === "trimesh") ? STATIC_TRIMESH_WEIGHT : 1;
+}
 
 function partitionCellOwner(key: string): string {
   return `cell:${key}`;
@@ -521,7 +557,10 @@ export interface RuntimeStatsApp {
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   getTerrainStreamingSnapshot?(): TerrainStreamingSnapshot | null;
-  getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & { models?: AssetResidencySnapshot }) | null;
+  getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & {
+    models?: AssetResidencySnapshot;
+    statics?: { cells: number; pending: number };
+  }) | null;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getUiDebugSnapshot?(): UiDebugSnapshot;
   /** Optional: windowed frame-time stats (avg / P95 / spikes) — always on in runtime. */
@@ -847,6 +886,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private streamedModelActorIds = new Set<string>();
   /** No eviction while a level builds: its loads may still be joining a pending model. */
   private modelEvictionPaused = true;
+  /** Cell-streamed static placements (`group`/`placement` into layout.instances) per cell. */
+  private partitionStaticCells = new Map<string, { group: number; placement: number }[]>();
+  /** `overrideObjectKey` of every cell-streamed placement: never part of the eager build. */
+  private streamedPlacementKeys = new Set<string>();
+  /** Assets with at least one cell-streamed placement. */
+  private streamedStaticAssetIds = new Set<string>();
+  /** Cells whose statics are built; boot cells wait in bootStaticCells for the scene document. */
+  private readonly liveStaticCells = new Map<string, StaticCellState>();
+  private bootStaticCells: string[] = [];
+  /** UVW sidecars by asset, applied again whenever a streamed model is (re)adopted. */
+  private readonly assetUvwDefs = new Map<string, AssetUvwDef>();
   /** Live actor entities keyed by entity id (`actor:<n>` and runtime `spawned:<n>`). */
   private readonly actorEntityById = new Map<string, Entity>();
   /** Rendered object per actor entity id (absent for mesh-less logic actors). */
@@ -1135,7 +1185,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             addInstance: (assetId, placements) => {
               if (isMarkerAssetId(assetId)) return;
               this.scene.add(
-                tagSceneSource(this.createInstancedModel(assetId, placements), "static-mesh"),
+                tagSceneSource(this.createPersistentInstancedModel(assetId, placements), "static-mesh"),
               );
             },
             addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
@@ -2189,9 +2239,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.runtimeServices.resolve(worldStreamingService)?.snapshot() ?? null;
   }
 
-  getWorldPartitionSnapshot(): (WorldPartitionSnapshot & { models: AssetResidencySnapshot }) | null {
+  getWorldPartitionSnapshot(): (WorldPartitionSnapshot & {
+    models: AssetResidencySnapshot;
+    statics: { cells: number; pending: number };
+  }) | null {
     const snapshot = this.runtimeServices.resolve(worldPartitionService)?.snapshot();
-    return snapshot ? { ...snapshot, models: this.modelResidency.snapshot() } : null;
+    if (!snapshot) return null;
+    let pending = 0;
+    for (const state of this.liveStaticCells.values()) pending += state.pending.length;
+    return { ...snapshot, models: this.modelResidency.snapshot(), statics: { cells: this.liveStaticCells.size, pending } };
   }
 
   private updateWorldPartition(): void {
@@ -2204,6 +2260,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       position: [position[0], position[2]],
       ...(velocity ? { velocity: [velocity[0], velocity[2]] as const } : {}),
     }]);
+    this.processStaticBuildQueue(STATIC_BUILD_BUDGET);
   }
 
   private async prepareWorldPartitionAroundPawn(): Promise<void> {
@@ -2224,6 +2281,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       await this.modelResidency.whenReady(owners);
     }
     partition.prepare(at);
+    // Ground the pawn stands on must collide before play resumes.
+    this.processStaticBuildQueue(Infinity);
   }
 
   private async prepareTerrainAroundPawn(): Promise<void> {
@@ -2417,7 +2476,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const group of this.layout.loadGroups) {
       for (const record of await this.assetLoader.recordsForGroup(group)) ids.add(record.id);
     }
-    for (const id of sceneModelAssetIds(this.layout)) if (loadable.has(id)) ids.add(id);
+    for (const id of this.eagerSceneModelAssetIds()) if (loadable.has(id)) ids.add(id);
     for (const entity of this.eagerActorModelEntities()) {
       const renderer = readRenderableMeshComponent(entity);
       if (renderer && loadable.has(renderer.assetId)) ids.add(renderer.assetId);
@@ -2506,10 +2565,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     // Append flattened actor-instance entities so physics + behavior derive them
     // alongside the legacy instances/characters/lights.
+    // Cell-streamed placements join with their cell; the spawn-range cells are
+    // built here, now that collision sidecars are loaded, and take the batch path.
+    const bootStaticEntities = this.buildBootStaticCells();
     const sceneDocument: SceneDocument = {
       ...baseDocument,
       entities: [
-        ...baseDocument.entities,
+        ...baseDocument.entities.filter((entity) => !this.isStreamedPlacementEntity(entity.id)),
+        ...bootStaticEntities,
         ...this.actorEntities,
         ...this.landscapeColliderEntities,
         ...this.splineColliderEntities,
@@ -3057,6 +3120,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.instanceGroups.clear();
     this.instanceMeshes.clear();
+    for (const state of this.liveStaticCells.values()) this.disposeStaticCellBatches(state);
+    this.liveStaticCells.clear();
+    this.bootStaticCells = [];
+    this.partitionStaticCells = new Map();
+    this.streamedPlacementKeys = new Set();
+    this.streamedStaticAssetIds = new Set();
+    this.assetUvwDefs.clear();
     this.instanceSlots.clear();
     this.instanceOverrideObjects.clear();
     this.collectedInstances.clear();
@@ -3953,7 +4023,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private async loadMissingSceneModels(): Promise<void> {
     if (!this.assetLoader) return;
-    const sceneIds = sceneModelAssetIds(this.layout);
+    const sceneIds = this.eagerSceneModelAssetIds();
     // A static may share a model a spawn-range streamed actor already adopted.
     this.pinModels(sceneIds.filter((assetId) => this.models.has(assetId)));
     const needed = sceneIds.filter((assetId) => !this.models.has(assetId));
@@ -4003,6 +4073,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.worldPartitionLive = false;
     this.partitionActorIndexById = new Map();
     this.streamedActorStates.clear();
+    this.partitionStaticCells = new Map();
+    this.streamedPlacementKeys = new Set();
+    this.streamedStaticAssetIds = new Set();
+    this.bootStaticCells = [];
     const partition = this.runtimeServices.resolve(worldPartitionService);
     const settings = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
     if (!settings.enabled || !partition || !this.layout) {
@@ -4010,23 +4084,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       return;
     }
     this.placedActorModelEntities = entities;
-    const actorCells = worldPartitionActorCells(this.layout, settings);
+    const contents = worldPartitionCellContents(this.layout, settings);
     const loadable = await this.loadableModelIds();
+    const actorCells = new Map<number, string>();
     const cells = new Map<string, number[]>();
     const cellModels = new Map<string, string[]>();
-    this.streamedModelActorIds = new Set();
-    for (const [index, key] of actorCells) {
-      this.partitionActorIndexById.set(actorInstanceEntityId(index), index);
-      const indices = cells.get(key) ?? [];
-      indices.push(index);
-      cells.set(key, indices);
-      const entity = entities[index]!;
-      const assetId = readRenderableMeshComponent(entity)?.assetId;
-      if (!assetId || !loadable.has(assetId) || !actorModelStreams(this.placedActorClasses[index]!, entity)) continue;
-      this.streamedModelActorIds.add(entity.id);
+    const addCellModel = (key: string, assetId: string) => {
       const ids = cellModels.get(key) ?? [];
       if (!ids.includes(assetId)) ids.push(assetId);
       cellModels.set(key, ids);
+    };
+    this.streamedModelActorIds = new Set();
+    for (const [key, content] of contents) {
+      for (const index of content.actors) {
+        actorCells.set(index, key);
+        this.partitionActorIndexById.set(actorInstanceEntityId(index), index);
+        const indices = cells.get(key) ?? [];
+        indices.push(index);
+        cells.set(key, indices);
+        const entity = entities[index]!;
+        const assetId = readRenderableMeshComponent(entity)?.assetId;
+        if (!assetId || !loadable.has(assetId) || !actorModelStreams(this.placedActorClasses[index]!, entity)) continue;
+        this.streamedModelActorIds.add(entity.id);
+        addCellModel(key, assetId);
+      }
+      if (content.instances.length === 0) continue;
+      this.partitionStaticCells.set(key, content.instances);
+      for (const { group, placement } of content.instances) {
+        const assetId = this.layout.instances[group]!.assetId;
+        this.streamedPlacementKeys.add(overrideObjectKey(assetId, placement));
+        this.streamedStaticAssetIds.add(assetId);
+        if (loadable.has(assetId)) addCellModel(key, assetId);
+      }
     }
     this.partitionCellModelIds = cellModels;
     entities.forEach((entity, index) => { if (!actorCells.has(index)) this.registerActorEntity(entity); });
@@ -4034,12 +4123,212 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       activate: (index) => this.activatePartitionActor(index),
       deactivate: (index) => this.deactivatePartitionActor(index),
       isLive: (index) => this.actorEntityById.has(actorInstanceEntityId(index)),
+      cellChanged: (key, active) => {
+        if (active) this.activateStaticCell(key);
+        else this.deactivateStaticCell(key);
+      },
       prefetch: (key, wanted) => {
         if (wanted) this.modelResidency.setOwner(partitionCellOwner(key), this.partitionCellModelIds.get(key) ?? []);
         else this.modelResidency.releaseOwner(partitionCellOwner(key));
       },
       isReady: (key) => this.modelResidency.isOwnerReady(partitionCellOwner(key)),
-    }, this.debug);
+    }, this.debug, { occupiedCells: this.partitionStaticCells.keys() });
+  }
+
+  /** Whether any World Partition cell streams this asset's static placements. */
+  private streamsAssetModel(assetId: string): boolean {
+    return this.streamedStaticAssetIds.has(assetId);
+  }
+
+  /**
+   * Compiles the instanced programs a cell batch of this model will use, against
+   * the live scene's lights, so the frame its cell activates does not stall on
+   * shader compilation (spike S0: 60–95 ms for a cold cell).
+   */
+  private async warmInstancedPrograms(gltf: GLTF): Promise<void> {
+    const probe = new Group();
+    const temporary: InstancedMesh[] = [];
+    gltf.scene.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      const instanced = new InstancedMesh(object.geometry, object.material, 1);
+      instanced.castShadow = this.staticObjectsCastShadow();
+      instanced.receiveShadow = this.staticObjectsReceiveShadow();
+      temporary.push(instanced);
+      probe.add(instanced);
+    });
+    try {
+      await this.renderer.compileAsync(probe, this.camera, this.scene);
+    } catch {
+      // Best effort: an uncompiled program still compiles on first draw.
+    } finally {
+      for (const mesh of temporary) mesh.dispose();
+    }
+  }
+
+  private isStreamedPlacementEntity(entityId: string): boolean {
+    if (this.streamedPlacementKeys.size === 0) return false;
+    const instance = parseInstanceEntityId(entityId);
+    return instance !== null && this.streamedPlacementKeys.has(overrideObjectKey(instance.assetId, instance.placementIndex));
+  }
+
+  /** Model ids the eager build needs: the layout's minus models only cell-streamed placements use. */
+  private eagerSceneModelAssetIds(): string[] {
+    if (!this.layout || this.streamedPlacementKeys.size === 0) return sceneModelAssetIds(this.layout);
+    return sceneModelAssetIds({
+      ...this.layout,
+      instances: this.layout.instances.map((group) => ({
+        ...group,
+        placements: group.placements.filter((_, index) =>
+          !this.streamedPlacementKeys.has(overrideObjectKey(group.assetId, index))),
+      })),
+    });
+  }
+
+  /**
+   * A cell's statics enter the world: render batches now; entities into physics,
+   * behavior and modules through the per-frame budget (all at once during
+   * boot/restore preparation). Before the level is live, boot cells wait for
+   * the scene document so they take the batch path with collision sidecars loaded.
+   */
+  private activateStaticCell(key: string): void {
+    if (!this.partitionStaticCells.has(key) || this.liveStaticCells.has(key)) return;
+    if (!this.worldPartitionLive) {
+      if (!this.bootStaticCells.includes(key)) this.bootStaticCells.push(key);
+      return;
+    }
+    this.buildStaticCell(key);
+  }
+
+  private buildBootStaticCells(): Entity[] {
+    const entities: Entity[] = [];
+    for (const key of this.bootStaticCells) {
+      const state = this.buildStaticCell(key);
+      state.added = state.pending;
+      state.pending = [];
+      entities.push(...state.added);
+    }
+    this.bootStaticCells = [];
+    return entities;
+  }
+
+  private buildStaticCell(key: string): StaticCellState {
+    const layout = this.layout!;
+    const byGroup = new Map<number, number[]>();
+    for (const { group, placement } of this.partitionStaticCells.get(key) ?? []) {
+      const indices = byGroup.get(group) ?? [];
+      indices.push(placement);
+      byGroup.set(group, indices);
+    }
+    const state: StaticCellState = { batches: [], pending: [], added: [], authored: new Map() };
+    const adapter = {
+      colliderBox: (assetId: string, source: ColliderTransformSource) => this.colliderBoxFor(assetId, source),
+      collisionDefs: this.collisionDefs,
+      complexCollisionMeshes: this.complexCollisionMeshes,
+    };
+    for (const [groupIndex, indices] of byGroup) {
+      const assetId = layout.instances[groupIndex]!.assetId;
+      // Bounds and complex collision come with the model, so adopt before deriving colliders.
+      this.adoptStreamedModel(assetId);
+      const placements: LayoutPlacement[] = [];
+      for (const index of indices) {
+        const placement = layout.instances[groupIndex]!.placements[index]!;
+        const id = instanceEntityId(assetId, index);
+        const destroyed = this.behaviorSubsystem.isPersistedDestroyed(id);
+        placements.push(destroyed ? { ...placement, hidden: true } : placement);
+        if (destroyed) continue;
+        const entity = instanceEntityForPlacement(assetId, index, placement, adapter);
+        const transform = readTransformComponent(entity);
+        if (transform) state.authored.set(id, { position: [...transform.position], rotation: [...transform.rotation] });
+        // A body moved before its cell unloaded comes back where it was left.
+        const remembered = this.streamedActorStates.take(id);
+        if (remembered && transform) {
+          entity.components[TRANSFORM_COMPONENT] = {
+            ...transform,
+            position: [...remembered.position],
+            rotation: [...remembered.rotation],
+          } as unknown as EntityComponentData;
+        }
+        state.pending.push(entity);
+      }
+      if (isMarkerAssetId(assetId)) continue;
+      const batch = this.buildInstancedBatch(assetId, placements, indices);
+      // Unlike the level-wide eager batches, a cell batch is compact enough to cull.
+      for (const mesh of batch.meshes) {
+        mesh.computeBoundingSphere();
+        mesh.frustumCulled = true;
+      }
+      this.scene.add(tagSceneSource(batch.group, "static-mesh"));
+      state.batches.push({
+        group: batch.group,
+        meshes: batch.meshes,
+        probeMaterials: batch.clonedMaterials,
+        keys: indices.map((index) => overrideObjectKey(assetId, index)),
+      });
+    }
+    this.liveStaticCells.set(key, state);
+    return state;
+  }
+
+  /** Adds queued cell statics nearest cell first until the frame's budget is spent. */
+  private processStaticBuildQueue(budget: number): void {
+    let left = budget;
+    for (const state of this.liveStaticCells.values()) {
+      if (left <= 0) break;
+      if (state.pending.length === 0) continue;
+      let count = 0;
+      while (count < state.pending.length && left > 0) left -= staticEntityWeight(state.pending[count++]!);
+      const chunk = state.pending.splice(0, count);
+      this.physicsSubsystem.addEntities(chunk);
+      for (const entity of chunk) {
+        this.behaviorSubsystem.addEntity(entity);
+        this.runtimeServices.addEntity(entity);
+        this.audioCommands()?.playEntityAudio(entity);
+        void this.vfxCommands()?.playAutoPlayEntity(entity);
+      }
+      state.added.push(...chunk);
+    }
+  }
+
+  private deactivateStaticCell(key: string): void {
+    this.bootStaticCells = this.bootStaticCells.filter((entry) => entry !== key);
+    const state = this.liveStaticCells.get(key);
+    if (!state) return;
+    this.liveStaticCells.delete(key);
+    const ids: string[] = [];
+    for (const entity of state.added) {
+      this.rememberStreamedStaticPose(entity.id, state.authored.get(entity.id));
+      this.behaviorSubsystem.unloadEntity(entity.id);
+      this.runtimeServices.removeEntity(entity.id);
+      ids.push(entity.id);
+    }
+    this.physicsSubsystem.removeEntities(ids);
+    this.disposeStaticCellBatches(state);
+  }
+
+  private disposeStaticCellBatches(state: StaticCellState): void {
+    for (const batch of state.batches) {
+      disposeMeshPaintCloneGeometries(batch.group);
+      this.scene.remove(batch.group);
+      for (const mesh of batch.meshes) mesh.dispose();
+      for (const material of batch.probeMaterials) material.dispose();
+      for (const key of batch.keys) {
+        this.instanceSlots.delete(key);
+        this.instanceOverrideObjects.delete(key);
+        this.collectedInstances.delete(key);
+      }
+    }
+    state.batches = [];
+  }
+
+  /** Like rememberStreamedActorState, for a cell-streamed static placement. */
+  private rememberStreamedStaticPose(id: string, authored: { position: Vec3; rotation: Vec3 } | undefined): void {
+    const simulated = this.physicsSubsystem.simulatedTransform(id);
+    if (!simulated || !authored) {
+      this.streamedActorStates.take(id);
+      return;
+    }
+    const kept = this.streamedActorStates.remember(id, { position: simulated.position, rotation: simulated.rotation }, authored);
+    if (this.debug && kept) console.info(`[world-partition] remembered ${id} y=${simulated.position[1].toFixed(2)}`);
   }
 
   private async loadableModelIds(): Promise<Set<string>> {
@@ -4065,7 +4354,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Residency load hook: fetches without touching the loading bar; the cell's actors adopt it on activation. */
   private async loadResidentModel(id: string): Promise<void> {
     if (!this.assetLoader) throw new Error("Runtime has no asset loader");
-    this.residentModels.set(id, await this.assetLoader.loadModel(id, { reportProgress: false }));
+    const gltf = await this.assetLoader.loadModel(id, { reportProgress: false });
+    this.residentModels.set(id, gltf);
+    if (this.streamsAssetModel(id)) {
+      // Final materials first (idempotent), so the warmed programs are the ones drawn.
+      convertUnlitModelMaterialsToLit(new Map([[id, gltf]]));
+      await this.warmInstancedPrograms(gltf);
+    }
     if (this.debug) console.info(`[world-partition] loaded model ${id}`);
   }
 
@@ -4078,6 +4373,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (this.models.get(id) === gltf) {
       this.models.delete(id);
       this.localBounds.delete(id);
+      this.complexCollisionMeshes.delete(id);
     }
     disposeGltfResources(gltf);
     if (this.debug) console.info(`[world-partition] evicted model ${id}`);
@@ -4091,8 +4387,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!gltf) return;
     const models = new Map([[assetId, gltf]]);
     convertUnlitModelMaterialsToLit(models);
+    const uvw = this.assetUvwDefs.get(assetId);
+    if (uvw) applyAssetUvwMapping(gltf.scene, uvw);
     const bounds = computeModelLocalBounds(models).get(assetId);
     if (bounds) this.localBounds.set(assetId, bounds);
+    const def = this.collisionDefs.get(assetId);
+    if (def && complexAsSimpleAssetIds(new Map([[assetId, def]])).size > 0) {
+      const mesh = computeComplexCollisionMeshes(models, new Set([assetId])).get(assetId);
+      if (mesh) this.complexCollisionMeshes.set(assetId, mesh);
+    }
     this.models.set(assetId, gltf);
   }
 
@@ -4525,8 +4828,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       assetIds.map(async (assetId) => {
         const asset = manifest.assets.find((entry) => entry.id === assetId);
         const gltf = this.models.get(assetId);
-        if (!asset || !gltf) return;
-        applyAssetUvwMapping(gltf.scene, await loadAssetUvw(assetPath(asset)));
+        // Cell-streamed models are not loaded yet; they apply the sidecar when adopted.
+        if (!asset || (!gltf && !this.streamsAssetModel(assetId))) return;
+        const def = await loadAssetUvw(assetPath(asset));
+        this.assetUvwDefs.set(assetId, def);
+        if (gltf) applyAssetUvwMapping(gltf.scene, def);
       }),
     );
   }
@@ -4535,17 +4841,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * `placementIndices[i]` is `placements[i]`'s index in the merged level's group
    * (identity when the batch holds the whole group); render slots follow `placements`.
    */
-  private createInstancedModel(
+  private buildInstancedBatch(
     assetId: string,
     placements: LayoutPlacement[],
     placementIndices: readonly number[] = placements.map((_, index) => index),
-  ): Group {
+  ): { group: Group; meshes: InstancedMesh[]; clonedMaterials: Material[] } {
     const gltf = this.models.get(assetId);
     // A dangling layout placement (asset removed from the manifest) renders
     // nothing rather than aborting the whole scene build.
     if (!gltf) {
       console.warn(`[runtime] skipping placement for unloaded asset: ${assetId}`);
-      return new Group();
+      return { group: new Group(), meshes: [], clonedMaterials: [] };
     }
     const clonedMaterials: Material[] = [];
     // Placements with a material override and/or a reflection-capture probe envMap
@@ -4605,10 +4911,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       group.add(object);
       this.instanceOverrideObjects.set(overrideObjectKey(assetId, placementIndex), object);
     });
+    return { group, meshes, clonedMaterials };
+  }
+
+  /** The level's own batch for an asset (one per asset), registered for probe rebuilds and teardown. */
+  private createInstancedModel(
+    assetId: string,
+    placements: LayoutPlacement[],
+    placementIndices?: readonly number[],
+  ): Group {
+    const { group, meshes, clonedMaterials } = this.buildInstancedBatch(assetId, placements, placementIndices);
     this.instanceGroups.set(assetId, group);
     this.instanceMeshes.set(assetId, meshes);
     this.instanceProbeMaterials.set(assetId, clonedMaterials);
     return group;
+  }
+
+  /** The eager batch for an asset: every placement no World Partition cell streams. */
+  private createPersistentInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {
+    if (this.streamedPlacementKeys.size === 0) return this.createInstancedModel(assetId, placements);
+    const indices = placements.map((_, index) => index)
+      .filter((index) => !this.streamedPlacementKeys.has(overrideObjectKey(assetId, index)));
+    return this.createInstancedModel(assetId, indices.map((index) => placements[index]!), indices);
   }
 
   /**
@@ -4805,7 +5129,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.scene.remove(previous);
       }
       this.scene.add(
-          tagSceneSource(this.createInstancedModel(instance.assetId, instance.placements), "static-mesh"),
+          tagSceneSource(this.createPersistentInstancedModel(instance.assetId, instance.placements), "static-mesh"),
         );
     }
     const globalEnv = this.scene.environment;

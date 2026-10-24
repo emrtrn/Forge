@@ -41,6 +41,8 @@ async function writeFixture() {
       // at scale 4 each tile covers x 0..16 and 16 m of z from its position.
       { assetId: "floor-400x400", placements: Array.from({ length: 16 }, (_, index) => ({
         position: [0, 0, -56 + index * 16] as [number, number, number], rotationYDeg: 0, scale: 4, scaleLocked: true,
+        // Statics stream too since option 2; this test is about actors over an eager floor.
+        spatiallyLoaded: false,
       })) },
       { assetId: "marker:playerStart", placements: [{ name: "Player Start", position: [8, 2, 184] }] },
     ],

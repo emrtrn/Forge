@@ -135,13 +135,14 @@ function validateOptionalNumber(
   label: string,
   min: number,
   max: number,
+  decimals = 3,
 ): number | undefined {
   if (value === undefined) return undefined;
   const number = Number(value);
   if (!Number.isFinite(number) || number < min || number > max) {
     throw new Error(`invalid ${label}: ${value}`);
   }
-  return Number(number.toFixed(3));
+  return Number(number.toFixed(decimals));
 }
 
 function validateBooleanTuple(value: unknown, label: string): [boolean, boolean, boolean] {
@@ -1779,13 +1780,15 @@ export function validateHeightFog(value: unknown): Record<string, unknown> | nul
     fog.color = input.color;
   }
 
-  const numeric: Array<[keyof typeof input, number, number]> = [
-    ["density", 0, 10],
-    ["start", 0, 100000],
-    ["end", 0, 100000],
+  // Density keeps 6 decimals: a fog fitted to a kilometre-range view distance
+  // is ~1e-4 (Faz 7d), which 3 decimals would round to nothing.
+  const numeric: Array<[keyof typeof input, number, number, number]> = [
+    ["density", 0, 10, 6],
+    ["start", 0, 100000, 3],
+    ["end", 0, 100000, 3],
   ];
-  for (const [key, min, max] of numeric) {
-    const resolved = validateOptionalNumber(input[key], `heightFog.${String(key)}`, min, max);
+  for (const [key, min, max, decimals] of numeric) {
+    const resolved = validateOptionalNumber(input[key], `heightFog.${String(key)}`, min, max, decimals);
     if (resolved !== undefined) fog[key as string] = resolved;
   }
 

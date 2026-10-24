@@ -105,7 +105,7 @@ function renderWorldSettingsHtml(
             placeholder="Camera default"
             value="${settings.viewDistance === undefined ? "" : escapeHtml(String(settings.viewDistance))}" />
         </label>
-        <div class="detail-hint">Camera far plane in Play (scaled by the game's quality setting). Empty keeps each camera's own Far Clip.</div>
+        <div class="detail-hint">Camera far plane in Play (scaled by the game's quality setting). Empty keeps each camera's own Far Clip. Past 1000 m pair it with a Height Fog (Details &gt; Fit to View Distance) so terrain does not end in a hard edge.</div>
         <label class="detail-row">
           <span>Background</span>
           <input type="color" data-world-color="backgroundColor"

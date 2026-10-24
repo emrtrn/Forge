@@ -235,6 +235,15 @@ export function registerSerializationDriftTests(check: Check): void {
     }
   });
 
+  check("serialization drift: a Height Fog fitted to a long view distance keeps its density", () => {
+    // Faz 7d: 1.98 / 10 km ≈ 0.000198 must not round to 0 (3 decimals) on save.
+    const layout = { ...partitionFixture(), heightFog: { mode: "exp", density: 0.000198 } };
+    const saved = validateLayout(layout) as RoomLayout;
+    assert.deepEqual(saved.heightFog, { mode: "exp", density: 0.000198 });
+    assert.equal((validateLayout({ ...layout, heightFog: { density: 0.0001234567 } }) as RoomLayout).heightFog?.density, 0.000123);
+    assertNoDrift(layout, saved, "layout");
+  });
+
   check("world partition persistence: invalid partition settings name the field and normalizer reason", () => {
     const layout = partitionFixture();
     for (const cellSize of [0, -1, NaN, Infinity, "128", null]) {

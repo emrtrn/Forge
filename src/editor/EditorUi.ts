@@ -4370,6 +4370,7 @@ export class EditorUi {
       setCloudLayer: (patch, label) => this.app.setCloudLayer(patch, label),
       setPostProcess: (patch, label) => this.app.setPostProcess(patch, label),
       recaptureSkyLightCapture: () => this.app.recaptureSkyLightCapture(),
+      viewDistance: this.app.getWorldSettings().viewDistance ?? null,
     };
   }
 

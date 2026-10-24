@@ -3,6 +3,7 @@ import {
   effectiveViewDistance,
   exponentialFogDensityFor,
   exponentialFogOpacityAt,
+  heightFogOpacityAt,
   isFarViewMode,
   linearFogOpacityAt,
   VIEW_DISTANCE_FOG_OPACITY,
@@ -13,6 +14,15 @@ import {
 type Check = (label: string, fn: () => void) => void;
 
 export function registerViewDistanceTests(check: Check): void {
+  check("view distance: Height Fog opacity follows its mode and hides when hidden or absent", () => {
+    const fog = { hidden: false, mode: "exp" as const, density: exponentialFogDensityFor(3000), start: 5, end: 60 };
+    assert.ok(Math.abs(heightFogOpacityAt(fog, 3000) - VIEW_DISTANCE_FOG_OPACITY) < 1e-12);
+    assert.equal(heightFogOpacityAt({ ...fog, mode: "linear" }, 3000), 1);
+    assert.equal(heightFogOpacityAt({ ...fog, mode: "linear" }, 32.5), 0.5);
+    assert.equal(heightFogOpacityAt({ ...fog, hidden: true }, 3000), 0);
+    assert.equal(heightFogOpacityAt(null, 3000), 0);
+  });
+
   check("view distance: quality multiplier scales the authored far plane", () => {
     assert.equal(effectiveViewDistance(3000, 0.5), 1500);
     for (const multiplier of [undefined, 0, -1, NaN, Infinity, -Infinity]) {

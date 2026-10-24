@@ -1839,6 +1839,16 @@ yoğunluğu yardımcısı.
   `far-view.spec.ts` high profilde −45 m frustum, far 300, hedef kameranın
   ~22,5 m önünde. Elle ekran görüntüsü: zemin + küpte gölge standart yolla
   aynı yerde, acne/peter-panning yok. Açık: gölge sınırı sert (solma 7c2).
+- *7d tamam (2026-10-24):* Height Fog Details'ında "View Distance"
+  bölümü: sisin level `viewDistance`'ındaki opaklığı, %90 altında uyarı ve
+  **Fit to View Distance** komutu (undo'lu; exp, yoğunluk = 1,98 / mesafe →
+  %98, 6 ondalık). Bulunan hata: save validator sis yoğunluğunu 3 ondalığa
+  yuvarlıyordu (3 km uydurması 0,00066 → 0,001, 10 km'de 0,0002 → 0, sis
+  Save'de kaybolurdu); yoğunluk artık 6 ondalık (drift testi). Runtime uzak
+  modda far'daki opaklık %90 altındaysa konsola uyarı yazar; World Settings
+  ipucu sisi önerir. `heightFogOpacityAt` saf yardımcı. Smoke
+  `fog-fit-view-distance.spec.ts`. Ertelendi: World Terrain diyaloğunun
+  `viewDistance` + sis önermesi (Faz 8 New Open World sihirbazıyla birlikte).
 
 ## Faz 8 — Editör dünya araçları
 

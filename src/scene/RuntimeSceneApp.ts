@@ -11,7 +11,13 @@ import { assignPooledLight, createPooledLightObject } from "@engine/render-three
 import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
 import { StreamedActorStateCache } from "@engine/world/streamedActorState";
 import { AssetResidency, type AssetResidencySnapshot } from "@engine/world/assetResidency";
-import { effectiveViewDistance, isFarViewMode } from "@engine/world/viewDistance";
+import {
+  effectiveViewDistance,
+  heightFogOpacityAt,
+  isFarViewMode,
+  VIEW_DISTANCE_FOG_WARN_OPACITY,
+} from "@engine/world/viewDistance";
+import { resolveHeightFog } from "@engine/scene/heightFog";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
 import { setCameraFarOverride } from "@engine/render-three/camera";
@@ -2110,6 +2116,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       );
     }
     setCameraFarOverride(this.camera, far, { nearMin });
+    if (farViewMode && far !== null && this.layout) {
+      const fog = this.layout.heightFog ? resolveHeightFog(this.layout.heightFog) : null;
+      const opacity = heightFogOpacityAt(fog, far);
+      if (opacity < VIEW_DISTANCE_FOG_WARN_OPACITY) {
+        console.warn(
+          `[view-distance] fog is ${Math.round(opacity * 100)}% opaque at the ${Math.round(far)} m far plane, so terrain ends in a hard edge; use Height Fog > Fit to View Distance`,
+        );
+      }
+    }
     if (farViewMode !== this.farViewMode) {
       this.farViewMode = farViewMode;
       // Far view mode always renders through the float-depth composer target.

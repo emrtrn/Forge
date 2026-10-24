@@ -6,6 +6,13 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import type { EditableSelection } from "@/scene/SceneApp";
+import { resolveHeightFog } from "@engine/scene/heightFog";
+import {
+  exponentialFogDensityFor,
+  heightFogOpacityAt,
+  VIEW_DISTANCE_FOG_OPACITY,
+  VIEW_DISTANCE_FOG_WARN_OPACITY,
+} from "@engine/world/viewDistance";
 
 export interface EnvironmentDetailsOptions {
   body: HTMLElement;
@@ -28,6 +35,8 @@ export interface EnvironmentDetailsOptions {
     label?: string,
   ) => void;
   recaptureSkyLightCapture: () => void;
+  /** The level's `worldSettings.viewDistance`, for the fog's Fit to View Distance. */
+  viewDistance: number | null;
 }
 
 export function renderSkyDetails(options: EnvironmentDetailsOptions): void {
@@ -169,7 +178,16 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
         ${fog.mode === "linear" ? linearRows : densityRow}
         <div class="detail-hint">Distance-based scene fog. Height falloff is a later phase.</div>
       </div>
+      ${fogViewDistanceSection(fog, options.viewDistance)}
     `;
+
+  body.querySelector<HTMLButtonElement>("[data-fog-fit-view]")?.addEventListener("click", () => {
+    if (options.viewDistance === null) return;
+    options.setHeightFog(
+      { mode: "exp", density: Number(exponentialFogDensityFor(options.viewDistance).toFixed(6)) },
+      "Fit Fog to View Distance",
+    );
+  });
 
   const nameInput = body.querySelector<HTMLInputElement>("[data-fog-name]");
   nameInput?.addEventListener("change", () => {
@@ -208,6 +226,36 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
       );
     });
   });
+}
+
+/**
+ * Faz 7d: how opaque the fog is at the level's view distance, and a command that
+ * fits an exponential fog to it (98% there), hiding the far plane's terrain edge.
+ */
+function fogViewDistanceSection(fog: LayoutHeightFog, viewDistance: number | null): string {
+  if (viewDistance === null) {
+    return `
+      <div class="detail-section">
+        <div class="detail-section-title">View Distance</div>
+        <div class="detail-hint">Set World Settings &gt; View Distance to fit the fog to it.</div>
+      </div>`;
+  }
+  const opacity = heightFogOpacityAt(resolveHeightFog(fog), viewDistance);
+  const percent = Math.round(opacity * 100);
+  const warning = opacity < VIEW_DISTANCE_FOG_WARN_OPACITY
+    ? `<div class="detail-hint" data-fog-view-warning>Terrain will end in a hard edge at the far plane.</div>`
+    : "";
+  return `
+      <div class="detail-section">
+        <div class="detail-section-title">View Distance</div>
+        <div class="detail-row">
+          <span>At ${viewDistance} m</span>
+          <span class="detail-value" data-fog-view-opacity>${percent}% fog</span>
+        </div>
+        ${warning}
+        <button type="button" class="detail-button" data-fog-fit-view>Fit to View Distance</button>
+        <div class="detail-hint">Exponential fog reaching ${Math.round(VIEW_DISTANCE_FOG_OPACITY * 100)}% at the view distance.</div>
+      </div>`;
 }
 
 export function renderCloudDetails(options: EnvironmentDetailsOptions): void {

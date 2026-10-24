@@ -37,6 +37,26 @@ export function exponentialFogOpacityAt(density: number, distance: number): numb
   return 1 - Math.exp(-((density * distance) ** 2));
 }
 
+/** The Height Fog fields that decide its opacity (see `ResolvedHeightFog`). */
+export interface FogOpacitySource {
+  readonly hidden: boolean;
+  readonly mode: "exp" | "linear";
+  readonly density: number;
+  readonly start: number;
+  readonly end: number;
+}
+
+/** How opaque a Height Fog is at `distance`; 0 without a (visible) fog. */
+export function heightFogOpacityAt(fog: FogOpacitySource | null, distance: number): number {
+  if (!fog || fog.hidden) return 0;
+  return fog.mode === "linear"
+    ? linearFogOpacityAt(fog.start, fog.end, distance)
+    : exponentialFogOpacityAt(fog.density, distance);
+}
+
+/** Fog opacity at the far plane below which a far view mode level shows a hard terrain edge. */
+export const VIEW_DISTANCE_FOG_WARN_OPACITY = 0.9;
+
 /** Linear fog opacity, clamped to [0, 1]; a collapsed range becomes a step at end. */
 export function linearFogOpacityAt(start: number, end: number, distance: number): number {
   if (end <= start) return distance >= end ? 1 : 0;

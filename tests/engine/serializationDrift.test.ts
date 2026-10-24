@@ -216,6 +216,25 @@ export function registerSerializationDriftTests(check: Check): void {
     assert.equal(DEFAULT_WORLD_PARTITION.grids.main.cellSize, 128);
   });
 
+  check("serialization drift: worldSettings.viewDistance round-trips", () => {
+    const layout = { ...partitionFixture(), worldSettings: { viewDistance: 3000 } };
+    const saved = validateLayout(layout) as RoomLayout;
+    assert.deepEqual(saved.worldSettings, { viewDistance: 3000 });
+    assertNoDrift(layout, saved, "layout");
+
+    const absent = { ...partitionFixture(), worldSettings: { ambientIntensity: 1 } };
+    const savedAbsent = validateLayout(absent) as RoomLayout;
+    assert.equal("viewDistance" in savedAbsent.worldSettings!, false);
+    assertNoDrift(absent, savedAbsent, "layout");
+
+    for (const viewDistance of [49, 20001, "far", NaN]) {
+      assert.throws(
+        () => validateLayout({ ...layout, worldSettings: { viewDistance } }),
+        /invalid worldSettings\.viewDistance/,
+      );
+    }
+  });
+
   check("world partition persistence: invalid partition settings name the field and normalizer reason", () => {
     const layout = partitionFixture();
     for (const cellSize of [0, -1, NaN, Infinity, "128", null]) {

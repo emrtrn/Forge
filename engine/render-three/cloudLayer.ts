@@ -37,6 +37,9 @@ export {
  */
 const CLOUD_DOME_RADIUS = 90;
 
+/** Fraction of the camera far plane the dome is scaled out to (see {@link followCameraWithClouds}). */
+const CLOUD_DOME_FAR_FRACTION = 0.9;
+
 /** Fixed wind heading (xz) the drift scrolls along; `speed` scales its length. */
 const WIND_DIRECTION = new Vector2(1, 0.35).normalize();
 /**
@@ -162,6 +165,10 @@ export function createCloudObject(): CloudDome {
 /** Keeps the dome centered on the camera so it always surrounds the view. */
 export function followCameraWithClouds(dome: CloudDome, camera: PerspectiveCamera): void {
   dome.position.copy(camera.position);
+  // Keep the dome just inside the far plane: geometry nearer than the dome hides
+  // the clouds, so a dome inside a long view distance would paint clouds over far
+  // terrain. The shader shades by view direction, so the radius never changes the look.
+  dome.scale.setScalar(Math.max(CLOUD_DOME_RADIUS, camera.far * CLOUD_DOME_FAR_FRACTION) / CLOUD_DOME_RADIUS);
 }
 
 /**

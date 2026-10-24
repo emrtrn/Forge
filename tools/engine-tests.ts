@@ -1028,6 +1028,9 @@ import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCo
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
 import { registerFoliageRingTests } from "../tests/engine/foliageRing.test";
+import { registerViewDistanceTests } from "../tests/engine/viewDistance.test";
+import { registerFollowShadowTests } from "../tests/engine/followShadow.test";
+import { registerCameraFarOverrideTests } from "../tests/engine/cameraFarOverride.test";
 import { registerProceduralFoliageRingTests } from "../tests/engine/proceduralFoliageRing.test";
 import { registerFoliageCellGeneratorTests } from "../tests/engine/foliageCellGenerator.test";
 import { registerRuntimeParityLevelTests } from "../tests/engine/runtimeParityLevel.test";
@@ -1229,6 +1232,9 @@ registerFoliageFadeTests(check);
 registerFoliageCellsTests(check);
 registerFoliageCellFootprintTests(check);
 registerFoliageRingTests(check);
+registerViewDistanceTests(check);
+registerFollowShadowTests(check);
+registerCameraFarOverrideTests(check);
 registerProceduralFoliageTests(check);
 registerWorldPartitionStreamingTests(check);
 await registerAssetResidencyTests(checkAsync);
@@ -1427,6 +1433,7 @@ check("scene runtime world settings resolve defaults and layout overrides", () =
     ambientIntensity: DEFAULT_SCENE_AMBIENT_INTENSITY,
     gravity: DEFAULT_SCENE_GRAVITY,
     killZ: DEFAULT_SCENE_KILL_Z,
+    viewDistance: null,
   });
 
   assert.deepEqual(
@@ -1444,6 +1451,7 @@ check("scene runtime world settings resolve defaults and layout overrides", () =
         ambientIntensity: 0.4,
         gravity: [0, -20, 0],
         killZ: -35,
+        viewDistance: 3000,
       },
     }),
     {
@@ -1454,6 +1462,7 @@ check("scene runtime world settings resolve defaults and layout overrides", () =
       ambientIntensity: 0.4,
       gravity: [0, -20, 0],
       killZ: -35,
+      viewDistance: 3000,
     },
   );
 });

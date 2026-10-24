@@ -9,6 +9,7 @@ export interface SceneWorldSettings {
   staticObjectsCastShadow?: boolean;
   staticObjectsReceiveShadow?: boolean;
   killZ?: number;
+  viewDistance?: number;
 }
 
 export interface SceneDocument {

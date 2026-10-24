@@ -346,6 +346,8 @@ export interface EditorWorldSettings {
   /** Selected runtime Game Mode id (resolved to a default when unknown/absent). */
   gameMode: string;
   partition?: WorldPartitionSettings;
+  /** Authored view distance in metres (camera far plane); absent keeps each camera's own far clip. */
+  viewDistance?: number | undefined;
 }
 
 export interface EditorProjectInfo {
@@ -391,6 +393,7 @@ export function worldSettingsEqual(
     left.ambientIntensity === right.ambientIntensity &&
     left.killZ === right.killZ &&
     left.gameMode === right.gameMode &&
+    left.viewDistance === right.viewDistance &&
     left.partition?.enabled === right.partition?.enabled &&
     left.partition?.grids.main.cellSize === right.partition?.grids.main.cellSize &&
     left.partition?.grids.main.loadRange === right.partition?.grids.main.loadRange

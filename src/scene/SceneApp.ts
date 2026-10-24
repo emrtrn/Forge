@@ -6,6 +6,7 @@ import {
 } from "@engine/scene/landscapeBrush";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
+import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
 import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey } from "@engine/terrain/terrainTypes";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
@@ -2386,6 +2387,9 @@ export class SceneApp {
       ambientIntensity: this.ambientIntensity(),
       killZ: this.killZ(),
       gameMode: this.gameMode(),
+      ...(this.layout?.worldSettings?.viewDistance !== undefined
+        ? { viewDistance: this.layout.worldSettings.viewDistance }
+        : {}),
       ...(this.layout?.worldSettings?.partition
         ? { partition: normalizeWorldPartitionSettings(this.layout.worldSettings.partition) }
         : {}),
@@ -2404,6 +2408,7 @@ export class SceneApp {
         | "killZ"
         | "gameMode"
         | "partition"
+        | "viewDistance"
       >
     >,
   ): void {
@@ -11603,6 +11608,12 @@ export class SceneApp {
       worldSettings.gameMode = settings.gameMode;
     }
 
+    if (settings.viewDistance === undefined) {
+      delete worldSettings.viewDistance;
+    } else {
+      worldSettings.viewDistance = settings.viewDistance;
+    }
+
     if (settings.partition) {
       worldSettings.partition = normalizeWorldPartitionSettings(settings.partition);
     } else {
@@ -11629,6 +11640,18 @@ export class SceneApp {
       settings: resolveSceneWorldSettings(this.layout),
       ambientName: "editor-ambient-light",
     });
+    this.applyEditorViewDistance();
+  }
+
+  /**
+   * The editor sees at least as far as the level's view distance (Faz 7a) and
+   * never less than {@link SCENE_CAMERA_FAR}; quality multipliers are runtime-only.
+   */
+  private applyEditorViewDistance(): void {
+    const viewDistance = resolveSceneWorldSettings(this.layout).viewDistance;
+    setCameraFarOverride(this.camera, viewDistance !== null && viewDistance > SCENE_CAMERA_FAR ? viewDistance : null);
+    this.orthoCamera.far = this.camera.far;
+    this.updateOrthoProjection();
   }
 
   /**

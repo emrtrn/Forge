@@ -834,6 +834,7 @@ function sceneWorldSettings(source: LayoutWorldSettings): SceneWorldSettings {
   if (source.ambientColor !== undefined) settings.ambientColor = source.ambientColor;
   if (source.ambientIntensity !== undefined) settings.ambientIntensity = source.ambientIntensity;
   if (source.killZ !== undefined) settings.killZ = source.killZ;
+  if (source.viewDistance !== undefined) settings.viewDistance = source.viewDistance;
   if (source.staticObjectsCastShadow !== undefined) {
     settings.staticObjectsCastShadow = source.staticObjectsCastShadow;
   }

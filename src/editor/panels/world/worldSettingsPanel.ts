@@ -1,5 +1,6 @@
 import type { EditorWorldSettings } from "@editor/core/editableScene";
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
+import { VIEW_DISTANCE_MAX, VIEW_DISTANCE_MIN } from "@engine/world/viewDistance";
 import {
   getGameEditorCatalog,
   type EditorGameModeOption,
@@ -99,6 +100,13 @@ function renderWorldSettingsHtml(
       <div class="detail-section">
         <div class="detail-section-title">Environment</div>
         <label class="detail-row">
+          <span>View Distance (m)</span>
+          <input type="number" data-world-view-distance min="${VIEW_DISTANCE_MIN}" max="${VIEW_DISTANCE_MAX}" step="50"
+            placeholder="Camera default"
+            value="${settings.viewDistance === undefined ? "" : escapeHtml(String(settings.viewDistance))}" />
+        </label>
+        <div class="detail-hint">Camera far plane in Play (scaled by the game's quality setting). Empty keeps each camera's own Far Clip.</div>
+        <label class="detail-row">
           <span>Background</span>
           <input type="color" data-world-color="backgroundColor"
             value="${escapeHtml(settings.backgroundColor)}" />
@@ -193,6 +201,21 @@ function bindWorldSettingsInputs(options: WorldSettingsPanelOptions): void {
       if (key === "killZ") options.setWorldSettings({ killZ: value });
     });
   });
+
+  options.body
+    .querySelector<HTMLInputElement>("[data-world-view-distance]")
+    ?.addEventListener("change", (event) => {
+      const input = event.currentTarget as HTMLInputElement;
+      if (input.value.trim() === "") {
+        options.setWorldSettings({ viewDistance: undefined });
+        return;
+      }
+      const value = Number(input.value);
+      if (!Number.isFinite(value)) return;
+      options.setWorldSettings({
+        viewDistance: Math.min(VIEW_DISTANCE_MAX, Math.max(VIEW_DISTANCE_MIN, value)),
+      });
+    });
 
   options.body
     .querySelector<HTMLSelectElement>("[data-world-game-mode]")

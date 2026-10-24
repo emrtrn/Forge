@@ -107,6 +107,8 @@ export interface ResolvedSceneWorldSettings {
   ambientIntensity: number;
   gravity: Vec3;
   killZ: number;
+  /** Authored view distance (m), or `null` to keep each camera's own far clip. */
+  viewDistance: number | null;
 }
 
 export function createSceneRuntimeCore(
@@ -164,6 +166,7 @@ export function resolveSceneWorldSettings(
     ambientIntensity: layout?.worldSettings?.ambientIntensity ?? DEFAULT_SCENE_AMBIENT_INTENSITY,
     gravity: layout?.worldSettings?.gravity ?? DEFAULT_SCENE_GRAVITY,
     killZ: layout?.worldSettings?.killZ ?? DEFAULT_SCENE_KILL_Z,
+    viewDistance: layout?.worldSettings?.viewDistance ?? null,
   };
 }
 

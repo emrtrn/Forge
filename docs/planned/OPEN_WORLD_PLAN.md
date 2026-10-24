@@ -1789,6 +1789,25 @@ verdiğine `lodBias` uygulanır.
 drift testleri; 7c1'in frustum/texel hizalama matematiği + testleri; sis
 yoğunluğu yardımcısı.
 
+**İlerleme:**
+- *Tasarım onaylı (2026-10-24):* kullanıcı beş kararı da onayladı (level
+  `viewDistance` far'ı ezer; çarpan yalnız `viewDistanceMultiplier`; uzak mod
+  > 1000 m; önce tek kaskad; sis yalnız editör komutu + uyarı).
+- *7a tamam (2026-10-24):* `worldSettings.viewDistance` (50–20000 m; layout,
+  scene document, saveValidator, drift testi). Saf çekirdek
+  `engine/world/viewDistance.ts` (`effectiveViewDistance`, `isFarViewMode`,
+  sis yoğunluğu/opaklık yardımcıları) ve 7c1'in matematiği
+  `engine/world/followShadow.ts` (`computeFollowShadowFrame`, three lookAt
+  tabanıyla birebir, texel'e hizalı) Codex'ten. Far geçersiz kılması
+  `engine/render-three/camera.ts` `setCameraFarOverride` (kamera başına;
+  `PlayerCameraManager` projeksiyonu uygularken okur, `null` kameranın eski
+  far'ını geri verir). Runtime level yüklenince ve kalite uzantıları
+  değişince uygular; editör kamerası max(2000, `viewDistance`). World
+  Settings → Environment'ta "View Distance (m)" alanı (boş = kameranın kendi
+  far'ı). Cloud Layer küresi far × 0,9'a ölçeklenir (shader yön tabanlı,
+  görünüm değişmez; uzak arazinin üstüne bulut çizilmesi düzeldi).
+  Açık: editör ve runtime uzak modda hâlâ 24-bit derinlik (7b).
+
 ## Faz 8 — Editör dünya araçları
 
 - [ ] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,

@@ -359,6 +359,11 @@ export interface LayoutWorldSettings {
   /** World Y threshold that kills/respawns the possessed pawn. Absent means the default. */
   killZ?: number;
   /**
+   * Authored view distance in metres, before the quality `viewDistanceMultiplier`.
+   * Absent keeps each camera's own far clip.
+   */
+  viewDistance?: number;
+  /**
    * Selected runtime Game Mode id (Unreal's GameMode analogue). Absent means the
    * built-in default camera mode; the runtime resolves unknown ids to that
    * default. Editor-authored; runtime-only behavior — never written back here by

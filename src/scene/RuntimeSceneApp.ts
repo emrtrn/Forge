@@ -11,6 +11,8 @@ import { assignPooledLight, createPooledLightObject } from "@engine/render-three
 import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
 import { StreamedActorStateCache } from "@engine/world/streamedActorState";
 import { AssetResidency, type AssetResidencySnapshot } from "@engine/world/assetResidency";
+import { effectiveViewDistance } from "@engine/world/viewDistance";
+import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
@@ -994,6 +996,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeGameMode: GameModeDefinition | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
   private killZ = DEFAULT_SCENE_KILL_Z;
+  /** Authored `worldSettings.viewDistance` of the open level (Faz 7), before the quality multiplier. */
+  private authoredViewDistance: number | null = null;
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   /** Consumer for the next frame's CPU capture; see {@link armFrameCapture}. */
   private armedFrameCapture: FrameCaptureConsumer | null = null;
@@ -2070,6 +2074,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         : {},
     );
     applyLodBias(this.scene, extensions.lodBias);
+    this.applyViewDistance();
+  }
+
+  /**
+   * Pins every gameplay camera's far plane to the level's view distance × the
+   * fork's `viewDistanceMultiplier` (OPEN_WORLD_PLAN Faz 7a). A level without
+   * `worldSettings.viewDistance` keeps each camera's own far clip.
+   */
+  private applyViewDistance(): void {
+    setCameraFarOverride(
+      this.camera,
+      effectiveViewDistance(this.authoredViewDistance ?? undefined, this.qualityExtensions.viewDistanceMultiplier),
+    );
   }
 
   getQualityExtensions(): Readonly<QualityExtensions> {
@@ -2577,6 +2594,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const worldSettings = resolveSceneWorldSettings(this.layout);
     this.gravityY = worldSettings.gravity[1];
     this.killZ = worldSettings.killZ;
+    this.authoredViewDistance = worldSettings.viewDistance;
+    this.applyViewDistance();
     this.physicsSubsystem.setGravity(worldSettings.gravity);
     this.ensureDefaultLights();
     // Resolve every placement before model loading; far actors contribute assets

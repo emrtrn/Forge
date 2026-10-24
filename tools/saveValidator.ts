@@ -56,6 +56,7 @@ import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget"
 import { normalizeWorldWidgets } from "../engine/ui/uiWorldWidget";
 import { compareWorldCellKeys, normalizeWorldCellDocument, normalizeWorldPartitionSettings, worldCellPath, type WorldCellDocument } from "../engine/world/worldPartition";
 import { parseWorldCellKey } from "../engine/world/worldGrid";
+import { VIEW_DISTANCE_MIN, VIEW_DISTANCE_MAX } from "../engine/world/viewDistance";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
 import {
   normalizeVehicleAsset,
@@ -819,6 +820,10 @@ function validateWorldSettings(value: unknown): Record<string, unknown> | null {
   if (input.killZ !== undefined) {
     const killZ = validateOptionalNumber(input.killZ, "worldSettings.killZ", -100000, 100000);
     if (killZ !== undefined) worldSettings.killZ = killZ;
+  }
+  if (input.viewDistance !== undefined) {
+    const viewDistance = validateOptionalNumber(input.viewDistance, "worldSettings.viewDistance", VIEW_DISTANCE_MIN, VIEW_DISTANCE_MAX);
+    if (viewDistance !== undefined) worldSettings.viewDistance = viewDistance;
   }
   if (input.gameMode !== undefined) {
     if (typeof input.gameMode !== "string" || input.gameMode.length === 0) {

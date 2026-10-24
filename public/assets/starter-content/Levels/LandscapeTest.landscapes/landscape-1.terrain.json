@@ -4,12 +4,12 @@
   "name": "Landscape",
   "tileQuads": 256,
   "spacing": 1,
-  "tilesX": 2,
-  "tilesZ": 2,
+  "tilesX": 4,
+  "tilesZ": 4,
   "origin": [
-    -256,
+    -512,
     0,
-    -256
+    -512
   ],
   "heightMin": -256,
   "heightMax": 256,
@@ -23,14 +23,12 @@
     {
       "id": "dirt",
       "name": "Dirt",
-      "color": "#8a6441",
-      "material": "m-gravel-material"
+      "color": "#8a6441"
     },
     {
       "id": "rock",
       "name": "Rock",
-      "color": "#7f8485",
-      "material": "m-gravel-material"
+      "color": "#7f8485"
     },
     {
       "id": "snow",
@@ -41,23 +39,83 @@
   "tiles": [
     {
       "key": "0_0",
-      "minHeight": 0.0038999998942017555,
-      "maxHeight": 20.39739990234375
+      "minHeight": 0,
+      "maxHeight": 0
     },
     {
       "key": "1_0",
-      "minHeight": 0.0038999998942017555,
-      "maxHeight": 26.677099227905273
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "2_0",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "3_0",
+      "minHeight": 0,
+      "maxHeight": 0
     },
     {
       "key": "0_1",
-      "minHeight": -0.006099999882280827,
-      "maxHeight": 1.1009000539779663
+      "minHeight": 0,
+      "maxHeight": 0
     },
     {
       "key": "1_1",
-      "minHeight": -0.017500000074505806,
-      "maxHeight": 27.068700790405273
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "2_1",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "3_1",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "0_2",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "1_2",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "2_2",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "3_2",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "0_3",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "1_3",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "2_3",
+      "minHeight": 0,
+      "maxHeight": 0
+    },
+    {
+      "key": "3_3",
+      "minHeight": 0,
+      "maxHeight": 0
     }
   ],
   "collision": true

@@ -11,7 +11,7 @@
     0,
     -256
   ],
-  "heightMin": -11,
+  "heightMin": -18,
   "heightMax": 128,
   "layers": [
     {
@@ -40,7 +40,7 @@
   "tiles": [
     {
       "key": "0_0",
-      "minHeight": 5.9892425537109375,
+      "minHeight": -16.272499084472656,
       "maxHeight": 86.55558013916016
     },
     {

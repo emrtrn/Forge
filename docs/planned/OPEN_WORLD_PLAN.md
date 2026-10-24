@@ -1590,6 +1590,24 @@ Codex'e uygun) → F2 editör save/load + runtime hücre akışı → F3 runtime
 halkası → F3 editör halkası + panel → smoke'lar (`foliage-fade`,
 `foliage-cells`, `grass-ring`) + CONTENT_LOADING_CONTRACT'a foliage bölümü.
 
+**İlerleme:**
+- *F1 tamam (2026-10-24, 1678f46):* `engine/render-three/foliageFade.ts`.
+  `cullEnd > 0` olan türün grubu, slot'u çözülmüş malzemelerinin grup başına
+  fade klonlarıyla çizilir: Bayer 4×4 dither, kamera uzaklığı, gölge
+  depth/distance malzemeleri de aynı testle solar. Pencere uniform
+  (kamera + kalite çarpanı), program yeniden derlenmez. `cullStart` boş
+  (0) ya da ≥ `cullEnd` ise `cullEnd`'de instance başına kesme olur;
+  eskiden yazılmış türler bu yüzden aynı görünür. Klon kaynağın `defines`'ını ve
+  `onBeforeCompile` yamasını taşır. Smoke `foliage-fade.spec.ts`: lit +
+  shadow programı GPU'da derlenir; pencere öncesi dolu, ortası ≈ yarı,
+  sonrası 0 piksel. Not: headless donanım ipucu gölgesiz profil seçer;
+  smoke elle "high" seçer.
+- *G1 tamam (2026-10-24, 3861e49, Codex):* `grids.foliage` (64/256),
+  `engine/world/foliageCells.ts`, `validateSaveFoliageCellsPayload` (uca
+  bağlı değil), `engine/scene/proceduralFoliage.ts` (`FoliageSurface`,
+  `generateFoliageCell`, paketli matris, iç içe küme). Sırada F2: editör
+  save/load + `/__save-foliage-cells` + runtime `FoliageCellStreaming`.
+
 **Kapsam dışı:** foliage collision'ın akması (bugün collision çizim dışı,
 `collision: true` türler yok sayılıyor — değişmiyor), editörde foliage
 akışı (Faz 8), uzak ağaç impostor'ları (Faz 7), araç izi altında çimin

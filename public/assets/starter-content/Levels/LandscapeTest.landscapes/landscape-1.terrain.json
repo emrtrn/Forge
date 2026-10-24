@@ -26,7 +26,7 @@
       "name": "Earth and Scree",
       "color": "#9b825d",
       "material": "lt-earth",
-      "physicalMaterial": "snow"
+      "physicalMaterial": "mud"
     },
     {
       "id": "rock",

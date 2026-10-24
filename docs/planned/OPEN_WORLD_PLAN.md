@@ -1212,6 +1212,67 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       characters'ı sahneye, fiziğe (toplu), behavior'a ekler; deaktivasyon
       tersini yapar. Actor Script'te **BeginPlay hücre aktivasyonunda, EndPlay
       boşaltmada** çağrılır (Unreal semantiği); belgelenir.
+      *Seçenek 2 tasarımı (kullanıcı onayı 2026-10-24: hücre × asset batch, ışık havuzu, karakterler eager, S0 spike ile başla):*
+      - **Kapsam.** Akar: statik mesh yerleşimleri (`instances`, kendi
+        collider/behavior/ses/parçacık bileşenleriyle), blocking volume'ler,
+        directional olmayan ışıklar. Kalıcı kalır: reflection capture'lar
+        (bake'leri boot'ta; yerleşimlere en yakın probe kurulumda atanır),
+        target point'ler (AI rotaları hücreler arası referans), world widget'lar,
+        spline/landscape/river/nav volume/Player Start, directional ışık.
+        Karakterler (`layout.characters`) bu planda eager kalır (animasyon,
+        AI controller, possession bağları); S2–S4 sonrası ayrıca karar.
+      - **Kimlik değişmez.** Runtime yine birleşik level'ı yükler;
+        `instance:<asset>:<birleşik yerleşim indeksi>`, `light:<n>`,
+        `blockingVolume:<n>` kimlikleri eager yüklemeyle aynı. Mesh paint ve
+        save-game kalıcı durumu bu indekslere bağlı kalır. Hücre JSON'larının
+        hepsi boot'ta okunmaya devam eder (talep üzerine hücre dosyası okumak
+        kararlı GUID kimlik ister; ayrı iş).
+      - **Tek yönlendirme kuralı.** `worldPartitionActorCells` genelleşir:
+        `worldPartitionCellContents(layout, settings)` her akışlı elemanı
+        (tür + birleşik indeks) hücresine eşler; `partitionLayout` ile aynı
+        kural, saf ve engine testli.
+      - **Statik batch'ler hücre × asset başına.** Bugün asset başına tek
+        InstancedMesh var; akışta her (hücre, asset) kendi batch'i olur ve
+        birleşik yerleşim indeksi → (batch, slot) eşlemesi tutulur
+        (transform senkronu, "destroyed" çöküşü, override klonları bu eşlemeyi
+        kullanır). Kalıcı yerleşimler asset başına tek batch'te kalır.
+        Bedel: görünür hücre sayısı kadar draw call (128 m hücre / 384 m
+        menzil ≈ en çok ~37 hücre); kazanç: hücre başına frustum culling ve
+        boşaltmada batch'in tümden silinmesi. (Alternatif: asset başına
+        büyüyen ortak havuz + swap-remove slot yönetimi; az draw call, karmaşık
+        ve culling'siz — önerilmiyor; HLOD Faz 7 uzak hücreleri zaten birleştirir.)
+      - **Asset paketi (K5 genişler).** Residency yükü yalnız GLTF değil
+        "asset paketi" olur: model + collision sidecar + UVW eşlemesi +
+        malzeme slotları + yerleşim malzeme override'ları. Hücre "hazır" =
+        paketler yerleşti **ve** yeni malzeme programları `compileAsync` ile
+        ısıtıldı (gizli bir sahnede), böylece aktivasyon karesinde shader
+        derleme takılması olmaz. Statik modeller de hücreyle boşalır;
+        malzeme override'ları (küçük) level boyunca tutulur.
+      - **Fizik ve nav.** Statik collider'lar `addEntities/removeEntities` ile
+        toplu girer/çıkar (statik indeksler artımlı; nav cache dizi
+        kimliğiyle yenilenir, actor akışında doğrulandı). Complex-as-simple
+        trimesh'ler paket yüklenince hesaplanır.
+      - **Işıklar: havuz.** Three.js'te sahnedeki ışık sayısı/türü shader
+        program anahtarının parçası; ışık eklemek/çıkarmak bütün lit
+        malzemeleri yeniden derletir (takılma). Bu yüzden level kurulurken
+        point / spot (gölgeli ve gölgesiz ayrı) havuzları açılır; boyut =
+        `worldPartitionCellContents`'ten hesaplanan, herhangi bir konumda
+        menzil içindeki en yüksek eşzamanlı ışık sayısı (üst sınırla; aşılırsa
+        uyarı + uzaktakiler atlanır). Aktivasyon havuzdaki ışığa parametre
+        yazar, boşaltma yoğunluğu 0 yapar; program anahtarı hiç değişmez.
+      - **Hareket eden cisimler.** `StreamedActorStateCache` simüle edilen
+        statik yerleşimleri de kapsar (aynı eşik ve save kuralları).
+      - **Bütçe.** Kare başına ≤2 hücre kuralı eleman sayısı bütçesiyle
+        değişir (ör. kare başına en çok N yerleşim + collider); büyük hücre
+        birkaç karede kurulur, tamamlanana kadar "aktif" sayılmaz.
+      - **Editör değişmez.**
+      Dilimler: **S0** ölçüm spike'ı — yoğun bir hücrenin (ör. 500 yerleşim,
+      karışık collider) kurulum/boşaltma süresi kullanıcının PC'sinde headless;
+      kare bütçesini ve collider'ların ön-bake gerekip gerekmediğini belirler.
+      **S1** saf yönlendirme + ışık havuzu tepe hesabı (engine testli).
+      **S2** statikler: hücre batch'leri, eşleme, fizik/behavior, asset
+      paketi + shader ısıtma, smoke. **S3** blocking volume'ler. **S4** ışık
+      havuzu. Karakterler sonra ayrı karar.
 - [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*

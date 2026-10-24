@@ -412,6 +412,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           radius: wheel.radius,
           ...(wheel.visualNode ? { visualNode: wheel.visualNode } : {}),
           suspensionLength: controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength,
+          suspensionForce: inContact ? Math.max(0, controller.wheelSuspensionForce(index) ?? 0) : 0,
           steering: controller.wheelSteering(index) ?? 0,
           rotation: controller.wheelRotation(index) ?? 0,
           inContact,

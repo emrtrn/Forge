@@ -60,6 +60,9 @@ import {
   characterAnimationCommandsService,
   characterAnimationHostService,
   vehicleHostService,
+  terrainDeformationService,
+  terrainSurfaceHostService,
+  type TerrainDeformationSnapshot,
   gameUiMessageService,
   gameModeProviderService,
   gameplaySaveStateService,
@@ -624,6 +627,8 @@ export interface RuntimeStatsApp {
   getTerrainStreamingSnapshot?(): TerrainStreamingSnapshot | null;
   /** Optional: the possessed vehicle's per-wheel ground response; null when not driving. */
   getVehicleSurfaceSnapshot?(): VehicleSurfaceDebugSnapshot | null;
+  /** Optional: the runtime track field; null while no deformable terrain is loaded. */
+  getTerrainDeformationSnapshot?(): TerrainDeformationSnapshot | null;
   getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & {
     models?: AssetResidencySnapshot;
     statics?: { cells: number; pending: number };
@@ -1417,6 +1422,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       setVehicleInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
       surfaceMaterialForWheel: (_entityId, wheel) => this.wheelSurfaceMaterial(wheel),
       isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
+    });
+    this.runtimeServices.provide(terrainSurfaceHostService, {
+      deformationAt: (groundEntityId, contactPoint) =>
+        this.terrainSurfaceSampler(groundEntityId)?.deformationAt(contactPoint) ?? null,
+      hasDeformableTerrain: () => {
+        for (const sampler of this.terrainSurfaceSamplers.values()) if (sampler.deformable) return true;
+        return false;
+      },
     });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,
@@ -2395,6 +2408,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getTerrainStreamingSnapshot(): TerrainStreamingSnapshot | null {
     return this.runtimeServices.resolve(worldStreamingService)?.snapshot() ?? null;
+  }
+
+  getTerrainDeformationSnapshot(): TerrainDeformationSnapshot | null {
+    return this.runtimeServices.resolve(terrainDeformationService)?.snapshot() ?? null;
   }
 
   /** Ground under each wheel of the possessed vehicle, resolved the way its surface provider does. */

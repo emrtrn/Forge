@@ -27,7 +27,7 @@ async function readKmh(page: Page): Promise<number> {
 }
 
 /** The possessed car settled on the start road: its wheels' surfaces, then a short drive. */
-async function driveOffroad(page: Page, roadMaterial: string | null): Promise<{ surfaces: string; kmh: number; errors: string[] }> {
+async function driveOffroad(page: Page, roadMaterial: string | null): Promise<{ surfaces: string; kmh: number; tracks: number; errors: string[] }> {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -62,7 +62,9 @@ async function driveOffroad(page: Page, roadMaterial: string | null): Promise<{ 
   await expect.poll(async () => readKmh(page), { timeout: 30_000 }).toBeGreaterThan(5);
   const kmh = await readKmh(page);
   await page.keyboard.up("KeyW");
-  return { surfaces, kmh, errors };
+  // Faz 2: soft paint layers get a track field; its overlay line counts the stamped cells.
+  const tracks = Number(((await stats.textContent()) ?? "").match(/terrain deformation: cells (\d+)/)?.[1] ?? -1);
+  return { surfaces, kmh, tracks, errors };
 }
 
 test("terrain surface smoke: OffroadTest paint layers reach the car's wheels on the World Terrain", async ({ browser }) => {
@@ -81,4 +83,8 @@ test("terrain surface smoke: OffroadTest paint layers reach the car's wheels on 
   expect(mud.errors).toEqual([]);
   expect(mud.surfaces).toBe("vehicle surface: actor:0 | " + Array(4).fill("mud fs:0.55 rr:0.35").join(" | "));
   expect(mud.kmh).toBeGreaterThan(5);
+  // The mud run's wheels pressed tracks; the terrain shader compiled with the track block (no console errors above).
+  expect(mud.tracks).toBeGreaterThan(100);
+  // With no physical material anywhere the module never builds a field.
+  expect(neutral.tracks).toBe(-1);
 });

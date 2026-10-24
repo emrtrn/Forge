@@ -6,6 +6,13 @@
 /** Channel 0: metres × 10,000 (0.1 mm steps, saturating at 6.5535 m). */
 export const DEFORMATION_DEPTH_SCALE = 10_000;
 const MAX_DEPTH_UNITS = 65_535;
+/**
+ * Per-cell refill ({@link DeformationField.recover}) runs in whole steps of this
+ * length, so a rate in mm/s always removes an integer number of depth units.
+ */
+export const DEFORMATION_RECOVERY_STEP_SECONDS = 0.4;
+/** At most this many recovery steps per call: a long pause never becomes one big refill spike. */
+const MAX_RECOVERY_STEPS_PER_CALL = 3;
 
 export interface DeformationFieldOptions {
   readonly windowSize?: number;
@@ -39,6 +46,8 @@ export interface WheelDeformationStamp {
   readonly targetDepth: number;
   readonly compaction: number;
   readonly disturbance: number;
+  /** Refill rate (m/s) the touched cells keep for {@link DeformationField.recover}; 0/absent never refills. */
+  readonly recoveryRate?: number;
 }
 
 const mod = (value: number, size: number): number => ((value % size) + size) % size;
@@ -48,7 +57,8 @@ const clamp = (value: number, max: number): number => Number.isFinite(value) ? M
  * Cell (cx, cz) occupies [cx*s, (cx+1)*s) × [cz*s, (cz+1)*s), sampled at its
  * centre and stored at mod(cz, N)*N + mod(cx, N). The window starts centred on
  * world zero and recentres in whole cells. Public channel arrays are upload
- * views: callers must not mutate them. Default channel storage is 768 KiB.
+ * views: callers must not mutate them. Default channel storage is 1 MiB
+ * (depth 512 KiB, disturbance and per-cell recovery rate 256 KiB each).
  */
 export class DeformationField {
   readonly windowSize: number;
@@ -56,6 +66,8 @@ export class DeformationField {
   readonly cellsPerSide: number;
   readonly depth: Uint16Array;
   readonly disturbance: Uint8Array;
+  /** Per-cell refill rate in mm/s (0..255), set by the stamp that last changed the cell. */
+  readonly recovery: Uint8Array;
   private minX: number;
   private minZ: number;
   private readonly active = new Set<number>();
@@ -65,6 +77,7 @@ export class DeformationField {
   private dirtyMaxZ = -Infinity;
   private depthRecoveryRemainder = 0;
   private disturbanceRecoveryRemainder = 0;
+  private recoverySeconds = 0;
   private readonly onEvictCell: DeformationCellVisitor | undefined;
 
   constructor(options: DeformationFieldOptions = {}) {
@@ -82,6 +95,7 @@ export class DeformationField {
     }
     this.depth = new Uint16Array(this.cellsPerSide ** 2);
     this.disturbance = new Uint8Array(this.cellsPerSide ** 2);
+    this.recovery = new Uint8Array(this.cellsPerSide ** 2);
     this.minX = this.minZ = -Math.floor(this.cellsPerSide / 2);
     this.markDirty(this.minX, this.minZ, this.cellsPerSide, this.cellsPerSide);
   }
@@ -169,7 +183,7 @@ export class DeformationField {
     return this.stampRegion(
       Math.min(fx, tx) - extentX, Math.min(fz, tz) - extentZ,
       Math.max(fx, tx) + extentX, Math.max(fz, tz) + extentZ,
-      stamp.targetDepth, stamp.compaction, stamp.disturbance,
+      stamp.targetDepth, stamp.compaction, stamp.disturbance, stamp.recoveryRate ?? 0,
       (x, z) => {
         const u = (x - fx) * cos - (z - fz) * sin;
         const v = (x - fx) * sin + (z - fz) * cos;
@@ -201,7 +215,7 @@ export class DeformationField {
   stampDisc(worldPos: readonly [number, number], radius: number, depth: number, compaction = 1, disturbance = 255): number {
     const [x, z] = worldPos;
     if (![x, z, radius].every(Number.isFinite) || radius <= 0) return 0;
-    return this.stampRegion(x - radius, z - radius, x + radius, z + radius, depth, compaction, disturbance,
+    return this.stampRegion(x - radius, z - radius, x + radius, z + radius, depth, compaction, disturbance, 0,
       (px, pz) => (px - x) ** 2 + (pz - z) ** 2 <= radius ** 2);
   }
 
@@ -235,6 +249,50 @@ export class DeformationField {
         this.markDirty(x, z, 1, 1);
       }
       if (depth === 0 && disturbance === 0) this.active.delete(index);
+    }
+    if (this.active.size === 0) this.resetRecovery();
+    return visited;
+  }
+
+  /**
+   * Refills each active cell at the rate its last stamp left (`recoveryRate`),
+   * in whole {@link DEFORMATION_RECOVERY_STEP_SECONDS} steps so mm/s rates stay
+   * exact; leftover time carries to the next call. A mud track (rate 0) stays
+   * while a snow track beside it fills. Tint clears with the depth; tint-only
+   * cells fade at 255 units per metre of refill, at least one unit a step.
+   * Returns the cells visited.
+   */
+  recover(dtSeconds: number): number {
+    if (!Number.isFinite(dtSeconds) || dtSeconds <= 0) return 0;
+    if (this.active.size === 0) {
+      this.recoverySeconds = 0;
+      return 0;
+    }
+    this.recoverySeconds += dtSeconds;
+    const steps = Math.min(MAX_RECOVERY_STEPS_PER_CALL, Math.floor(this.recoverySeconds / DEFORMATION_RECOVERY_STEP_SECONDS));
+    if (steps === 0) return 0;
+    this.recoverySeconds = Math.min(this.recoverySeconds - steps * DEFORMATION_RECOVERY_STEP_SECONDS, DEFORMATION_RECOVERY_STEP_SECONDS);
+    // mm/s × step seconds → metres → depth units: integral for the 0.4 s step.
+    const unitsPerRate = steps * DEFORMATION_RECOVERY_STEP_SECONDS * DEFORMATION_DEPTH_SCALE / 1000;
+    let visited = 0;
+    for (const index of this.active) {
+      visited += 1;
+      const rate = this.recovery[index]!;
+      if (rate === 0) continue;
+      const oldDepth = this.depth[index]!;
+      const depth = Math.max(0, oldDepth - Math.round(rate * unitsPerRate));
+      const fade = Math.max(1, Math.round(rate * unitsPerRate * 255 / DEFORMATION_DEPTH_SCALE));
+      const disturbance = oldDepth > 0 ? (depth === 0 ? 0 : this.disturbance[index]!)
+        : Math.max(0, this.disturbance[index]! - fade);
+      this.depth[index] = depth;
+      this.disturbance[index] = disturbance;
+      const x = this.minX + mod(index % this.cellsPerSide - this.minX, this.cellsPerSide);
+      const z = this.minZ + mod(Math.floor(index / this.cellsPerSide) - this.minZ, this.cellsPerSide);
+      this.markDirty(x, z, 1, 1);
+      if (depth === 0 && disturbance === 0) {
+        this.recovery[index] = 0;
+        this.active.delete(index);
+      }
     }
     if (this.active.size === 0) this.resetRecovery();
     return visited;
@@ -296,7 +354,7 @@ export class DeformationField {
     for (let cz = z; cz < z + height; cz += 1) {
       for (let cx = x; cx < x + width; cx += 1) {
         const index = this.index(cx, cz);
-        this.depth[index] = this.disturbance[index] = 0;
+        this.depth[index] = this.disturbance[index] = this.recovery[index] = 0;
         this.active.delete(index);
       }
     }
@@ -304,16 +362,17 @@ export class DeformationField {
   }
 
   private resetRecovery(): void {
-    this.depthRecoveryRemainder = this.disturbanceRecoveryRemainder = 0;
+    this.depthRecoveryRemainder = this.disturbanceRecoveryRemainder = this.recoverySeconds = 0;
   }
 
   private stampRegion(
     minX: number, minZ: number, maxX: number, maxZ: number,
-    depth: number, compaction: number, disturbance: number,
+    depth: number, compaction: number, disturbance: number, recoveryRate: number,
     contains: (x: number, z: number) => boolean,
   ): number {
     const target = Math.floor(clamp(depth, MAX_DEPTH_UNITS / DEFORMATION_DEPTH_SCALE) * DEFORMATION_DEPTH_SCALE);
     const tint = Math.floor(clamp(disturbance, 255));
+    const recovery = Math.round(clamp(recoveryRate * 1000, 255));
     const amount = clamp(compaction, 1);
     if (amount === 0 || (target === 0 && tint === 0)) return 0;
     const x0 = Math.max(this.minX, Math.ceil(minX / this.cellSize - 0.5));
@@ -334,6 +393,7 @@ export class DeformationField {
         if (nextDepth === oldDepth && nextTint === oldTint) continue;
         this.depth[index] = nextDepth;
         this.disturbance[index] = nextTint;
+        this.recovery[index] = recovery;
         this.active.add(index);
         this.markDirty(x, z, 1, 1);
       }

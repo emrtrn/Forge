@@ -128,7 +128,7 @@ function terrainLayerColors(
 }
 
 function terrainLayerInputs(
-  layers: readonly { id: string; color?: string }[],
+  layers: readonly { id: string; color?: string; physicalMaterial?: string | null }[],
   worldSize: number,
   layerColors?: LandscapeLayerColors,
   layerTextures?: LandscapeLayerTexture[],
@@ -137,7 +137,10 @@ function terrainLayerInputs(
   return colors.map((color, index) => {
     const texture = layerTextures?.[index];
     // `tiling` repeats across the grid's X width, from its min corner.
-    return { texture: texture?.texture ?? null, color, scale: (texture?.tiling ?? 1) / worldSize };
+    return {
+      texture: texture?.texture ?? null, color, scale: (texture?.tiling ?? 1) / worldSize,
+      physicalMaterial: layers[index]?.physicalMaterial ?? null,
+    };
   });
 }
 

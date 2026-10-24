@@ -215,6 +215,8 @@ export interface VehicleWheelState {
   readonly radius: number;
   /** Current spring length; the wheel centre is this far below `position`. */
   readonly suspensionLength: number;
+  /** Spring force on the wheel from the last step (N): its load on the ground; 0 airborne. */
+  readonly suspensionForce: number;
   /** Wheel yaw in radians (positive turns toward the car's left, +X). */
   readonly steering: number;
   /** Accumulated spin about the axle in radians. */

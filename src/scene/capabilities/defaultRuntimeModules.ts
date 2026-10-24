@@ -22,6 +22,7 @@ import { createRuntimeUiModule } from "./runtimeUiModule";
 import { createSaveGameModule } from "./saveGameModule";
 import { createSkeletalAnimationModule } from "./skeletalAnimationModule";
 import { createSplineFollowerModule } from "./splineFollowerModule";
+import { createTerrainDeformationModule } from "./terrainDeformationModule";
 import { createVehicleAiModule } from "./vehicleAiModule";
 import { createVehicleModule } from "./vehicleModule";
 import { createVfxModule } from "./vfxModule";
@@ -39,6 +40,9 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     createVehicleModule(),
     // AI drivers steer `VehicleAiDriver` cars along splines; off, they park.
     createVehicleAiModule(),
+    // Wheel tracks in soft paint layers; off, the terrain keeps its grip/drag
+    // response (the shell's surface provider) but shows no tracks.
+    createTerrainDeformationModule(),
     // Registered after the platform module purely for readability — the solver
     // resolves platforms per call, and its tick comes from the `movement` slot.
     createCharacterMovementModule(),

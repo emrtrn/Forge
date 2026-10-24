@@ -13,6 +13,7 @@ import {
   type SurfaceSample, type VehicleSurfaceProvider,
 } from "../physics/surface/surfaceResponse";
 import type { VehicleVec3 } from "../physics/vehicle/vehicleTypes";
+import { resolvePhysicalMaterial, type PhysicalMaterialDef } from "../scene/collision";
 import type { EntityId } from "../scene/entity";
 import type { ForgeLandscapeData } from "../scene/landscape";
 import type { Vec3 } from "../scene/layout";
@@ -26,6 +27,20 @@ export interface TerrainSurfaceSource {
   /** Writes the layer weights under a world point into `out`; false off the terrain. */
   weightsAt(point: VehicleVec3, out: number[]): boolean;
 }
+
+/**
+ * The soft-surface profile under a point, blended over the deformable layers
+ * (TERRAIN_DEFORMATION Faz 2): `deformability` is their share of the paint
+ * weight, the other fields their weight-averaged profile values.
+ */
+export interface SurfaceDeformationSample {
+  readonly deformability: number;
+  readonly maxDepth: number;
+  readonly compaction: number;
+  readonly recoveryRate: number;
+}
+
+type DeformationProfile = NonNullable<PhysicalMaterialDef["deformation"]>;
 
 /** Per-layer physical material ids, or `null` when no layer has one. */
 export function terrainLayerPhysicalMaterials(
@@ -93,10 +108,47 @@ export function landscapeSurfaceSource(
  */
 export class TerrainSurfaceSampler {
   private readonly layerSamples: readonly SurfaceSample[];
+  private readonly layerProfiles: readonly (DeformationProfile | null)[];
   private readonly weights: number[] = [];
 
   constructor(readonly source: TerrainSurfaceSource) {
     this.layerSamples = source.physicalMaterials.map((id) => resolveSurfaceSample(id));
+    this.layerProfiles = source.physicalMaterials.map((id) => {
+      const profile = id ? resolvePhysicalMaterial(id).deformation : undefined;
+      return profile && profile.maxDepth > 0 ? profile : null;
+    });
+  }
+
+  /** Whether any layer can be deformed at all; a terrain of only grippy layers never stamps tracks. */
+  get deformable(): boolean {
+    return this.layerProfiles.some((profile) => profile !== null);
+  }
+
+  /** `null` off the terrain or where no deformable layer carries weight. */
+  deformationAt(point: VehicleVec3): SurfaceDeformationSample | null {
+    if (!this.deformable || !this.source.weightsAt(point, this.weights)) return null;
+    let total = 0;
+    let soft = 0;
+    let maxDepth = 0;
+    let compaction = 0;
+    let recoveryRate = 0;
+    this.weights.forEach((weight, index) => {
+      if (!Number.isFinite(weight) || weight <= 0) return;
+      total += weight;
+      const profile = this.layerProfiles[index];
+      if (!profile) return;
+      soft += weight;
+      maxDepth += profile.maxDepth * weight;
+      compaction += profile.compaction * weight;
+      recoveryRate += profile.recoveryRate * weight;
+    });
+    if (soft === 0) return null;
+    return {
+      deformability: soft / total,
+      maxDepth: maxDepth / soft,
+      compaction: compaction / soft,
+      recoveryRate: recoveryRate / soft,
+    };
   }
 
   /** `null` off the terrain; neutral where no layer carries weight. */

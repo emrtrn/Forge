@@ -30,6 +30,7 @@ import type {
   VehicleSurfaceDebugSnapshot,
 } from "./RuntimeSceneApp";
 import type { SceneCostSnapshot } from "./runtimeDebugSnapshot";
+import type { TerrainDeformationSnapshot } from "./capabilities/runtimeServiceKeys";
 
 const UPDATE_INTERVAL_MS = 500;
 
@@ -73,6 +74,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       worldPartitionText(app) +
       gameModeDebugText(app) +
       vehicleSurfaceText(app) +
+      terrainDeformationText(app) +
       aiDebugText(app) +
       aiInspectorText(app) +
       aiNavDebugText(app) +
@@ -460,10 +462,20 @@ export function formatVehicleSurfaceDebug(snapshot: VehicleSurfaceDebugSnapshot)
     `${wheel.surface} fs:${wheel.frictionSlipScale.toFixed(2)} rr:${wheel.rollingResistance.toFixed(2)}`).join(" | ")}`;
 }
 
+/** `terrain deformation: cells 812 max 0.112 m wheels 4 upload 96 texels 0.02 ms` (smoke tests parse it). */
+export function formatTerrainDeformationDebug(snapshot: TerrainDeformationSnapshot): string {
+  return `terrain deformation: cells ${snapshot.activeCells} max ${snapshot.maxDepth.toFixed(3)} m`
+    + ` wheels ${snapshot.stampedWheels} upload ${snapshot.uploadedTexels} texels ${snapshot.packMs.toFixed(2)} ms`;
+}
+
+function terrainDeformationText(app: RuntimeStatsApp): string {
+  const snapshot = app.getTerrainDeformationSnapshot?.();
+  return snapshot ? `\n${formatTerrainDeformationDebug(snapshot)}` : "";
+}
+
 function vehicleSurfaceText(app: RuntimeStatsApp): string {
   const snapshot = app.getVehicleSurfaceSnapshot?.();
-  return snapshot ? `
-${formatVehicleSurfaceDebug(snapshot)}` : "";
+  return snapshot ? `\n${formatVehicleSurfaceDebug(snapshot)}` : "";
 }
 
 function worldPartitionText(app: RuntimeStatsApp): string {

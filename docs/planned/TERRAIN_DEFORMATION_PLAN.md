@@ -1,7 +1,7 @@
 # Terrain Deformasyonu Planı (Kar / Çamur İzleri)
 
-> Durum: **Faz 1a + 1b tamamlandı** (2026-10-24, `feat/terrain-deformation`);
-> sıradaki Faz 2 bağlantısı (iz alanı modülü + shader).
+> Durum: **Faz 1a + 1b + Faz 2 tamamlandı** (2026-10-24, `feat/terrain-deformation`);
+> sırada Faz 3 (gömülme). Görsel kabul kullanıcı testinde (LandscapeTest + Gaz52).
 > Hedef: Araç (ve ileride karakter) Landscape üzerinde giderken kar, çamur ve
 > kum gibi yumuşak zeminlerde **iz bırakması, gömülmesi ve zorlanması**.
 > Referans his: SnowRunner / Expeditions. Hedef, o hissin web'de ulaşılabilir
@@ -397,21 +397,54 @@ GPU kopyası Faz 0'da ölçülen R8 yoluna uyar: kısmi yüklemenin paketleme ad
 kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
 ~1,2 mm adım) indirir; CPU alanı fizik için `Uint16` kalır.
 
-- [ ] Pencere merkezi: oyuncunun aracı. Pencere içindeki AI araçları da iz basar.
-- [ ] `terrainDeformation.ts` shader parçası açık dünya Faz 2'nin CDLOD
+- [x] Pencere merkezi: oyuncunun aracı. Pencere içindeki AI araçları da iz basar.
+- [x] `terrainDeformation.ts` shader parçası açık dünya Faz 2'nin CDLOD
       `terrainMaterial`'ına eklenir (eski splat/vertex-color landscape
       materyalleri o fazda kalkıyor). Uniform'lar: `uDeformTex`, `uDeformOrigin`, `uDeformSize`, `uDeformTint`.
       Fragment tarafında komşu örneklerin farkından normal üretilir, tint ve
       wetness uygulanır, pencere kenarında etki sönümlenir.
       `customProgramCacheKey` deformasyon bayrağını içerir.
-- [ ] Tint ve wetness, katman başına profilden gelir (`vLandscapeWeight` ile
+- [x] Tint ve wetness, katman başına profilden gelir (`vLandscapeWeight` ile
       karıştırılır; shader dört katmanla sınırlı).
-- [ ] `recoveryRate`: kar izleri zamanla dolar.
-- [ ] `?debug`: aktif hücre sayısı, en derin iz, yükleme süresi ve tekerlek
-      başına yüzey bilgisini gösteren tablo satırı. Pencereyi gösteren
-      görselleştirme açılıp kapatılabilir.
-- [ ] Testler: `tests/engine/deformationField.test.ts` (stamp/sample, toroidal
+- [x] `recoveryRate`: kar izleri zamanla dolar.
+- [x] `?debug`: aktif hücre sayısı, en derin iz, yükleme süresi ve tekerlek
+      başına yüzey bilgisini gösteren tablo satırı. ~~Pencereyi gösteren
+      görselleştirme~~ yapılmadı (gerekirse sonra).
+- [x] Testler: `tests/engine/deformationField.test.ts` (stamp/sample, toroidal
       sarma, recenter temizliği, decay, çizgi basma boşluksuzluğu).
+
+**Faz 2 bağlantı notu (2026-10-24):**
+- *Modül* `src/scene/capabilities/terrainDeformationModule.ts` (varsayılan
+  set, `presentation` slot'unda subsystem; `engine` perf bölgesinde
+  `terrainDeformation` satırı). Alan ilk deforme olabilir terrain'le birlikte
+  tembel kurulur; hiçbir katmanda soft profil yoksa ayrılmaz. Pencere sürülen
+  aracı (yoksa ilk aracı) izler; pencere içindeki tüm araçlar iz basar.
+  `terrainDeformationService`: `stamp` (genel disk girişi), `sample`, `snapshot`.
+- *İz basma* `engine/physics/surface/wheelTracks.ts` (saf): tekerlek başına son
+  temas noktasından süpürme (2 m'den uzun sıçrama yeni iz başlatır), şasi
+  yönü + direksiyon açısı, temas uzunluğu `2√(2 r z)`, derinlik `sinkage()`
+  ile `VehicleWheelState.suspensionForce` (yeni alan) yüküyle. `compaction`
+  60 Hz adım başına tanımlı; kare başına `1 − (1 − c)^(dt·60)` ile kare hızından
+  bağımsız (floor kuantalaması nedeniyle 30/144 fps farkı birkaç mm).
+- *Toparlanma* hücre başına: `DeformationField.recovery` (mm/s, son değiştiren
+  damga yazar) + `recover(dt)` 0,4 s'lik tam adımlarla, çağrı başına en çok 3
+  adım. Çamur izi kalır, yanındaki kar izi dolar. Bellek 768 → 1024 KiB.
+- *GPU* `engine/render-three/terrain/terrainDeformation.ts`: RG8 doku (R
+  derinlik / en derin preset `maxDepth` = 0,3 m, G bozulma), `RepeatWrapping`
+  ile toroidal örnekleme; değişen hücreler mevcut `TerrainTextureUpdates`
+  (`copyTextureToTexture`, dikdörtgen başına tek kopya) ile materyalin
+  `onBeforeRender`'ında gider. **Plandan sapma:** `customProgramCacheKey`
+  bayrağı yerine blok her zaman derlenir, sayfa başına paylaşılan dokunun
+  `uDeformActive` uniform'u kapatır (editör ve izsiz seviyeler yalnız bir
+  dallanma öder, doku okumaz). Lit materyal: dünya X/Z varyingi, kenarda %6
+  sönüm, komşu farkından view-space normal eğimi, katman ağırlıklı tint +
+  derinlikle hafif kararma, ıslaklıkla roughness düşüşü. GTAO normal / depth
+  pass'leri izleri görmez (displacement Faz 3'te). 1×1 Landscape de aynı CDLOD
+  renderer'ı kullandığı için izler orada da görünür.
+- *Testler* `wheelTracks.test.ts` (toparlanma, kare hızı, boşluksuz iz, teleport,
+  yük, sampler karışımı, doku paketleme, sahte servislerle modül);
+  `terrain-surface.spec.ts` çamurlu koşuda >100 hücre ve shader hatasız.
+  Görsel kabul ekran görüntüsüyle yapılmadı (headless canvas siyah).
 
 ## Faz 3 — Gömülme (fizik + yerel yoğun mesh)
 

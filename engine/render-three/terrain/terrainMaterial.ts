@@ -17,6 +17,18 @@ import {
 
 import { TERRAIN_RENDER_LAYERS, TERRAIN_WEIGHT_BLOCKS } from "@engine/terrain/terrainRenderData";
 
+import {
+  sharedTerrainDeformation,
+  terrainDeformationLayerUniforms,
+  TERRAIN_DEFORMATION_COLOR,
+  TERRAIN_DEFORMATION_FRAGMENT_PARS,
+  TERRAIN_DEFORMATION_NORMAL,
+  TERRAIN_DEFORMATION_ROUGHNESS,
+  TERRAIN_DEFORMATION_VERTEX,
+  TERRAIN_DEFORMATION_VERTEX_PARS,
+  type TerrainDeformationTexture,
+} from "./terrainDeformation";
+
 /**
  * CDLOD terrain materials (OPEN_WORLD_PLAN Faz 2, from the Faz 0 S2 spike). The
  * mesh is one flat instanced patch; the vertex shader places every instance on
@@ -65,6 +77,8 @@ export interface TerrainLayerInput {
   color: string;
   /** Texture repeats per metre. */
   scale: number;
+  /** Physical material id: its soft-surface profile tints this layer's tracks. */
+  physicalMaterial?: string | null;
 }
 
 export interface TerrainMaterialInputs {
@@ -93,6 +107,8 @@ export interface TerrainMaterialInputs {
   /** Height-view range (world metres). */
   heightRange: Vector2;
   layers: TerrainLayerInput[];
+  /** Runtime track texture the lit material samples (default: the page's shared one). */
+  deformation?: TerrainDeformationTexture;
 }
 
 export interface TerrainUniforms {
@@ -183,6 +199,9 @@ vTerrainAxisX = normalMatrix * vec3(1.0, 0.0, 0.0);
 vTerrainAxisY = normalMatrix * vec3(0.0, 1.0, 0.0);
 vTerrainAxisZ = normalMatrix * vec3(0.0, 0.0, 1.0);
 `;
+
+/** The lit material's vertex additions: world X/Z for the track lookup. */
+const LIT_VERTEX_BEGIN = `${VERTEX_BEGIN}${TERRAIN_DEFORMATION_VERTEX}`;
 
 const FRAGMENT_TERRAIN_PARS = /* glsl */ `
 uniform highp sampler2DArray uTerrainNormals;
@@ -282,15 +301,16 @@ const FRAGMENT_COLOR = /* glsl */ `
     float forgeWeight = forgeChannel == 0 ? forgeBlock.x : forgeChannel == 1 ? forgeBlock.y : forgeChannel == 2 ? forgeBlock.z : forgeBlock.w;
     forgeColor = uLayerColors[forgeLayer] * (0.2 + clamp(forgeWeight, 0.0, 1.0) * 0.8);
   }
+${TERRAIN_DEFORMATION_COLOR}
   diffuseColor.rgb = forgeColor;
 }
 `;
 
-function injectVertex(shader: WebGLProgramParametersWithUniforms): void {
+function injectVertex(shader: WebGLProgramParametersWithUniforms, lit = false): void {
   shader.vertexShader = shader.vertexShader
-    .replace("#include <common>", `#include <common>\n${VERTEX_PARS}`)
+    .replace("#include <common>", `#include <common>\n${VERTEX_PARS}${lit ? TERRAIN_DEFORMATION_VERTEX_PARS : ""}`)
     .replace("#include <beginnormal_vertex>", "vec3 objectNormal = vec3(0.0, 1.0, 0.0);")
-    .replace("#include <begin_vertex>", VERTEX_BEGIN);
+    .replace("#include <begin_vertex>", lit ? LIT_VERTEX_BEGIN : VERTEX_BEGIN);
 }
 
 /** Fragment declarations go before `main`: unlike the vertex shaders, not every
@@ -310,10 +330,13 @@ function injectNormal(shader: WebGLProgramParametersWithUniforms): void {
   shader.fragmentShader = shader.fragmentShader.replace("#include <normal_fragment_begin>", FRAGMENT_NORMAL);
 }
 
-function patch(material: Material, uniforms: TerrainUniforms, key: string, fragment?: (shader: WebGLProgramParametersWithUniforms) => void): void {
+function patch(
+  material: Material, uniforms: TerrainUniforms, key: string,
+  fragment?: (shader: WebGLProgramParametersWithUniforms) => void, lit = false,
+): void {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    injectVertex(shader);
+    injectVertex(shader, lit);
     fragment?.(shader);
   };
   material.customProgramCacheKey = () => key;
@@ -358,13 +381,28 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainHeightRange: { value: inputs.heightRange },
   };
   layerUniforms(uniforms, inputs.layers);
+  // Runtime tracks (TERRAIN_DEFORMATION Faz 2): the lit material only. Always
+  // compiled in; the shared texture's `uDeformActive` skips the block until a
+  // runtime module attaches a field, so the editor and track-free levels pay a
+  // uniform branch and no texture reads.
+  const deformation = inputs.deformation ?? sharedTerrainDeformation();
+  const litUniforms: TerrainUniforms = {
+    ...uniforms,
+    ...deformation.uniforms,
+    ...terrainDeformationLayerUniforms(inputs.layers.map((layer) => layer.physicalMaterial)),
+  };
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
-  patch(material, uniforms, "forge-terrain-cdlod", (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(FRAGMENT_MAIN, `${FRAGMENT_COLOR_PARS}\n${FRAGMENT_MAIN}`);
+  patch(material, litUniforms, "forge-terrain-cdlod", (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      FRAGMENT_MAIN, `${FRAGMENT_COLOR_PARS}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
-    shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>", FRAGMENT_COLOR);
-  });
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${FRAGMENT_COLOR}`)
+      .replace("#include <roughnessmap_fragment>", TERRAIN_DEFORMATION_ROUGHNESS)
+      .replace("  nonPerturbedNormal = normal;\n}", `  nonPerturbedNormal = normal;\n${TERRAIN_DEFORMATION_NORMAL}}`);
+  }, true);
+  material.onBeforeRender = (renderer) => deformation.flush(renderer);
 
   const normalMaterial = new MeshNormalMaterial();
   normalMaterial.blending = NoBlending;

@@ -236,6 +236,8 @@ export function registerRuntimeCapabilityModuleTests(check: Check): void {
       // Vehicle AI decides in the same slot as character AI, before movement.
       "vehicleAi",
       "splinePathFollower",
+      // Wheel tracks: presentation slot, after physics; queued before audio.
+      "terrainDeformation",
       "audio",
       "dialogue",
     ]);

@@ -95,6 +95,38 @@ export function registerDetailCullingTests(check: Check): void {
     culling.dispose();
   });
 
+  check("detail culling: an asset's own node scale (a centimetre model) does not shrink its cull distance", () => {
+    const culling = new StaticDetailCulling();
+    // createInstancedModelGroup: instance matrix = placement (×10) × source node (×0.01).
+    const tower = batchAt([[300, 0, 0]], 0.1);
+    tower.userData.sourceMatrix = new Matrix4().makeScale(0.01, 0.01, 0.01);
+    const level = new Group();
+    level.add(tower);
+    culling.register("tower", 0.87, level, { skipWholeInstanced: true });
+    culling.update(new Vector3(0, 0, 0), 1);
+    // 0.87 m × 200 = 174 m at scale 1, × 10 placement scale = 1740 m: still drawn at 300 m.
+    assert.equal(tower.visible, true);
+    culling.update(new Vector3(-1700, 0, 0), 1);
+    assert.equal(tower.visible, false, "past 1740 m the batch is skipped");
+
+    // A clone placed at scale 10 whose mesh sits under a 0.01 node in the clone root.
+    const cloneRoot = new Group();
+    cloneRoot.userData.placementIndex = 0;
+    cloneRoot.scale.setScalar(10);
+    cloneRoot.position.set(300, 0, 0);
+    const node = new Group();
+    node.scale.setScalar(0.01);
+    const cloneMesh = new Mesh(new BoxGeometry(100, 100, 100), new MeshStandardMaterial());
+    node.add(cloneMesh);
+    cloneRoot.add(node);
+    const clones = new Group();
+    clones.add(cloneRoot);
+    culling.register("tower-clone", 0.87, clones, { skipWholeInstanced: false });
+    culling.update(new Vector3(0, 0, 0), 1);
+    assert.equal(cloneMesh.visible, true);
+    culling.dispose();
+  });
+
   check("detail culling: per-placement clones fade and skip by their own world scale", () => {
     const culling = new StaticDetailCulling();
     const level = new Group();

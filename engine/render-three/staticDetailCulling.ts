@@ -27,10 +27,19 @@ import {
  * of `radius × 200 × its scale`, shadow included. A compact mesh (a World
  * Partition cell's InstancedMesh, or any single clone) whose nearest point is past
  * its largest instance's cull distance is not drawn at all.
+ *
+ * Distances follow the PLACEMENT scale. An instance matrix (or a clone mesh's
+ * world matrix) also carries the mesh's own node transform inside the asset —
+ * e.g. a model authored in centimetres under a 0.01 node — so each mesh's
+ * "base scale" is divided back out: the shader divides distance by the full
+ * scale, so the fade window is multiplied by the base scale, and the skip test
+ * uses full scale ÷ base scale.
  */
 
 interface AssetFade {
   cullDistance: number;
+  /** The node scale of the meshes sharing this fade (see the class comment). */
+  baseScale: number;
   uniforms: FoliageFadeUniforms;
   clones: Map<Material, Material>;
   fades: Set<Material>;
@@ -43,7 +52,7 @@ interface CulledMesh {
   fade: AssetFade;
   /** World bounding sphere (instances included). */
   sphere: Sphere;
-  /** Largest scale the shader divides distance by (instance, or world for a clone). */
+  /** Largest placement scale among its instances (full scale ÷ base scale). */
   maxScale: number;
   /** True while this binding has hidden the mesh (it never un-hides a mesh it did not hide). */
   hiddenByCull: boolean;
@@ -67,17 +76,18 @@ export class StaticDetailCulling {
   register(assetId: string, radius: number, root: Object3D, options: { skipWholeInstanced: boolean }): boolean {
     const cullDistance = detailCullDistance(radius);
     if (cullDistance === null) return false;
-    const fade = this.assetFade(assetId, cullDistance);
     root.updateWorldMatrix(true, true);
     root.traverse((node) => {
       const mesh = node as Mesh;
       if (!mesh.isMesh) return;
+      const instanced = (mesh as InstancedMesh).isInstancedMesh === true;
+      const baseScale = meshBaseScale(mesh, instanced);
+      const fade = this.assetFade(assetId, cullDistance, baseScale);
       mesh.material = Array.isArray(mesh.material)
         ? mesh.material.map((material) => this.fadeOf(fade, material))
         : this.fadeOf(fade, mesh.material);
       mesh.customDepthMaterial = fade.depth;
       mesh.customDistanceMaterial = fade.distance;
-      const instanced = (mesh as InstancedMesh).isInstancedMesh === true;
       if (instanced && !options.skipWholeInstanced) return;
       let sphere: Sphere;
       if (instanced) {
@@ -91,7 +101,7 @@ export class StaticDetailCulling {
         mesh,
         fade,
         sphere: sphere.applyMatrix4(mesh.matrixWorld),
-        maxScale: instanced ? maxInstanceScale(mesh as InstancedMesh) : mesh.matrixWorld.getMaxScaleOnAxis(),
+        maxScale: (instanced ? maxInstanceScale(mesh as InstancedMesh) : mesh.matrixWorld.getMaxScaleOnAxis()) / baseScale,
         hiddenByCull: false,
       });
     });
@@ -113,7 +123,7 @@ export class StaticDetailCulling {
     this.origin.value.copy(cameraPosition);
     for (const fade of this.assets.values()) {
       const [start, end] = detailCullWindow(fade.cullDistance, qualityScale);
-      fade.uniforms.uFoliageFadeRange.value.set(start, end);
+      fade.uniforms.uFoliageFadeRange.value.set(start * fade.baseScale, end * fade.baseScale);
     }
     for (const entry of this.meshes.values()) {
       const culled = detailBatchCulled(
@@ -151,20 +161,22 @@ export class StaticDetailCulling {
     this.meshes.clear();
   }
 
-  private assetFade(assetId: string, cullDistance: number): AssetFade {
-    let fade = this.assets.get(assetId);
+  /** One fade (uniforms + material clones) per asset and mesh base scale. */
+  private assetFade(assetId: string, cullDistance: number, baseScale: number): AssetFade {
+    const key = `${assetId}|${baseScale.toPrecision(6)}`;
+    let fade = this.assets.get(key);
     if (!fade) {
       const uniforms: FoliageFadeUniforms = { uFoliageFadeOrigin: this.origin, uFoliageFadeRange: { value: new Vector2() } };
       const shadow = createFoliageFadeShadowMaterials(uniforms, "instanceScaled");
-      fade = { cullDistance, uniforms, clones: new Map(), fades: new Set(), depth: shadow.depth, distance: shadow.distance };
-      this.assets.set(assetId, fade);
+      fade = { cullDistance, baseScale, uniforms, clones: new Map(), fades: new Set(), depth: shadow.depth, distance: shadow.distance };
+      this.assets.set(key, fade);
     }
     return fade;
   }
 
   private fadeOf(fade: AssetFade, source: Material): Material {
     // A batch rebuilt from already-faded meshes keeps its clone.
-    if (fade.fades.has(source)) return source;
+    for (const other of this.assets.values()) if (other.fades.has(source)) return source;
     let clone = fade.clones.get(source);
     if (!clone) {
       clone = createFoliageFadeMaterial(source, fade.uniforms, "instanceScaled");
@@ -173,6 +185,24 @@ export class StaticDetailCulling {
     }
     return clone;
   }
+}
+
+/**
+ * A mesh's own scale inside its asset: an InstancedMesh keeps its source node
+ * matrix (`createInstancedModelGroup`'s `userData.sourceMatrix`); a placement
+ * clone's mesh is its world scale over the clone root's (the placement).
+ */
+function meshBaseScale(mesh: Mesh, instanced: boolean): number {
+  let scale = 1;
+  if (instanced) {
+    const source = mesh.userData.sourceMatrix as Matrix4 | undefined;
+    scale = source?.isMatrix4 ? source.getMaxScaleOnAxis() : 1;
+  } else {
+    let root: Object3D | null = mesh.parent;
+    while (root && root.userData.placementIndex === undefined) root = root.parent;
+    if (root) scale = mesh.matrixWorld.getMaxScaleOnAxis() / Math.max(root.matrixWorld.getMaxScaleOnAxis(), 1e-6);
+  }
+  return Number.isFinite(scale) && scale > 1e-6 ? scale : 1;
 }
 
 /** The largest axis scale over a batch's instances (its farthest-fading instance). */

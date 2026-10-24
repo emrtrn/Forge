@@ -225,15 +225,15 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
   const settings = { ...DEFAULT_TERRAIN_SCULPT_SETTINGS, ...brush };
   if (!paint) {
     if (![settings.noiseScale, settings.noiseSeed, settings.terraceStep, settings.terraceSmoothing,
-      settings.stampHeight, settings.stampRotation, settings.rampStartOffset, settings.rampEndOffset].every(Number.isFinite)
+      settings.stampHeight, settings.stampRotation, settings.rampStartOffset, settings.rampEndOffset, settings.rampShoulder].every(Number.isFinite)
       || settings.noiseScale <= 0 || settings.terraceStep <= 0 || settings.terraceSmoothing < 0 || settings.terraceSmoothing > 1
-      || !["hill", "crater", "ridge"].includes(settings.stampShape)) throw new Error("Invalid terrain sculpt settings");
+      || settings.rampShoulder < 0 || !["hill", "crater", "ridge"].includes(settings.stampShape)) throw new Error("Invalid terrain sculpt settings");
     if (brush.mode === "ramp" && (!ramp || ![ramp.start.x, ramp.start.z, ramp.start.height, ramp.end.x, ramp.end.z, ramp.end.height].every(Number.isFinite))) {
       throw new Error("Invalid terrain ramp endpoints");
     }
     if (ramp && Math.hypot(ramp.end.x - ramp.start.x, ramp.end.z - ramp.start.z) < 0.001) return { dirty: new Map(), patches: [] };
   }
-  const bounds = terrainSculptBounds(brush.x, brush.z, brush.radius, ramp);
+  const bounds = terrainSculptBounds(brush.x, brush.z, brush.radius + (ramp ? settings.rampShoulder : 0), ramp);
   const x0 = Math.max(0, Math.floor((bounds.minX - origin[0]) / spacing));
   const x1 = Math.min(tilesX * q, Math.ceil((bounds.maxX - origin[0]) / spacing));
   const z0 = Math.max(0, Math.floor((bounds.minZ - origin[2]) / spacing));
@@ -244,7 +244,7 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
   for (let gz = z0; gz <= z1; gz += 1) {
     for (let gx = x0; gx <= x1; gx += 1) {
       const wx = origin[0] + gx * spacing, wz = origin[2] + gz * spacing;
-      const influence = terrainSculptInfluence(wx, wz, brush.x, brush.z, brush.radius, brush.falloff, ramp);
+      const influence = terrainSculptInfluence(wx, wz, brush.x, brush.z, brush.radius, brush.falloff, ramp, settings.rampShoulder);
       if (influence <= 0) continue;
       const copies = vertexCopies(world, gx, gz, required);
       const owner = copies[0];
@@ -265,7 +265,7 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
         if (!Number.isFinite(target)) throw new Error("Invalid terrain flatten height");
         const mode = brush.mode;
         const after = mode === "noise" || mode === "ramp" || mode === "terrace" || mode === "stamp"
-          ? nextTerrainSculptHeight(mode, current, brush.strength * influence, wx, wz, brush.x, brush.z, brush.radius, settings, ramp)
+          ? nextTerrainSculptHeight(mode, current, (mode === "ramp" ? 1 : brush.strength) * influence, wx, wz, brush.x, brush.z, brush.radius, settings, ramp)
           : nextLandscapeBrushHeight(mode, current, target, brush.strength * influence,
           () => landscapeBrushAverage((dx, dz) => {
             const neighbour = vertexCopies(world, gx + dx, gz + dz, required)[0];

@@ -167,12 +167,48 @@ export function registerTerrainEditTests(check: Check): void {
     assert.equal(at(8), 2);
     assert.equal(at(32), 6);
     assert.equal(at(56), 10);
-    assert.equal(at(32, 20), 0, "outside the corridor is untouched");
+    assert.equal(at(32, 22), 0, "outside the road and shoulders is untouched");
     assert.deepEqual(terrainBrushTileKeys(world.def, dab.x, dab.z, dab.radius, dab.ramp), ["0_0", "1_0"]);
     assertSeams(world);
     const before = snapshot(world);
     assert.equal(applyTerrainBrush(world, { ...dab, ramp: { start: dab.ramp.start, end: dab.ramp.start } }).dirty.size, 0);
     assert.deepEqual(snapshot(world), before, "a click without a drag is a no-op");
+  });
+
+  check("terrain sculpt Ramp has a level road cross-section at normal strength and falloff, with separate shoulders", () => {
+    for (const strength of [0.1, 0.25, 1]) for (const height of [-6, 6]) {
+      const world = fixture();
+      for (const tile of world.tiles.values()) tile.heights.fill(0);
+      const centre = brush(world);
+      const dab = { ...centre, mode: "ramp" as const, radius: 4, strength, falloff: 2, rampShoulder: 2,
+        ramp: { start: { x: centre.x - 12, z: centre.z, height }, end: { x: centre.x + 12, z: centre.z, height } },
+      };
+      applyTerrainBrush(world, dab);
+      const at = (dz: number) => terrainHeightAt(world.def, world, centre.x, centre.z + dz)! - world.def.origin[1];
+      for (let dz = -4; dz <= 4; dz++) assert.equal(at(dz), height, `flat road at offset ${dz}, strength ${strength}`);
+      assert.equal(at(-5), height / 4, "left shoulder blends outside the road");
+      assert.equal(at(5), height / 4, "right shoulder blends outside the road");
+      assert.equal(at(-6), 0);
+      assert.equal(at(6), 0);
+      assertSeams(world);
+    }
+  });
+
+  check("terrain sculpt Ramp cuts irregular terrain to the same plane across a diagonal road and includes shoulder tiles", () => {
+    const world = fixture();
+    const centre = brush(world);
+    applyTerrainBrush(world, { ...centre, mode: "ramp", radius: 4, strength: 0.25, falloff: 2, rampShoulder: 2,
+      ramp: { start: { x: centre.x - 12, z: centre.z - 12, height: 2 }, end: { x: centre.x + 12, z: centre.z + 12, height: 10 } },
+    });
+    // These vertices lie on the same perpendicular cross-section of the ramp.
+    for (let offset = -2; offset <= 2; offset++) {
+      assert.equal(terrainHeightAt(world.def, world, centre.x + offset, centre.z - offset)! - world.def.origin[1], 6);
+    }
+    assertSeams(world);
+    const ramp = { start: { x: world.def.origin[0] + 26, z: world.def.origin[2] + 8, height: 2 },
+      end: { x: world.def.origin[0] + 26, z: world.def.origin[2] + 20, height: 4 } };
+    assert.deepEqual(terrainBrushTileKeys(world.def, ramp.start.x, ramp.start.z, 1, ramp, 0), ["0_0"]);
+    assert.deepEqual(terrainBrushTileKeys(world.def, ramp.start.x, ramp.start.z, 1, ramp, 4), ["0_0", "1_0"]);
   });
 
   check("terrain sculpt Terrace supports negative heights and exact step spacing", () => {
@@ -212,7 +248,7 @@ export function registerTerrainEditTests(check: Check): void {
   check("terrain sculpt rejects invalid parameters and unavailable ramp tiles before any writes", () => {
     const world = fixture();
     const original = snapshot(world);
-    for (const invalid of [{ noiseScale: 0 }, { terraceStep: 0 }, { stampHeight: NaN }, { terraceSmoothing: 2 }]) {
+    for (const invalid of [{ noiseScale: 0 }, { terraceStep: 0 }, { stampHeight: NaN }, { terraceSmoothing: 2 }, { rampShoulder: -1 }]) {
       assert.throws(() => applyTerrainBrush(world, { ...brush(world), mode: "noise", ...invalid }), /Invalid terrain sculpt/);
       assert.deepEqual(snapshot(world), original);
     }

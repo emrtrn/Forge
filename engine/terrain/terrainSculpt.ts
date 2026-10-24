@@ -13,11 +13,13 @@ export interface TerrainSculptSettings {
   stampRotation: number;
   rampStartOffset: number;
   rampEndOffset: number;
+  /** Blend width outside each side of the full-strength road surface, in metres. */
+  rampShoulder: number;
 }
 
 export const DEFAULT_TERRAIN_SCULPT_SETTINGS: Readonly<TerrainSculptSettings> = {
   noiseScale: 4, noiseSeed: 1, terraceStep: 2, terraceSmoothing: 0.15,
-  stampShape: "hill", stampHeight: 5, stampRotation: 0, rampStartOffset: 0, rampEndOffset: 0,
+  stampShape: "hill", stampHeight: 5, stampRotation: 0, rampStartOffset: 0, rampEndOffset: 0, rampShoulder: 2,
 };
 
 /** World X/Z and heights in metres relative to the terrain's origin Y. */
@@ -42,11 +44,16 @@ function rampPosition(x: number, z: number, ramp: TerrainRamp): number {
   return length2 > 1e-8 ? Math.max(0, Math.min(1, ((x - ramp.start.x) * dx + (z - ramp.start.z) * dz) / length2)) : 0;
 }
 
-export function terrainSculptInfluence(x: number, z: number, cx: number, cz: number, radius: number, falloff: number, ramp?: TerrainRamp): number {
+export function terrainSculptInfluence(x: number, z: number, cx: number, cz: number, radius: number, falloff: number, ramp?: TerrainRamp, rampShoulder = 0): number {
   const t = ramp ? rampPosition(x, z, ramp) : 0;
   const px = ramp ? ramp.start.x + (ramp.end.x - ramp.start.x) * t : cx;
   const pz = ramp ? ramp.start.z + (ramp.end.z - ramp.start.z) * t : cz;
-  return landscapeBrushFalloff(Math.hypot(x - px, z - pz), radius, falloff);
+  const distance = Math.hypot(x - px, z - pz);
+  if (!ramp) return landscapeBrushFalloff(distance, radius, falloff);
+  // The entire road width reaches the target plane. Falloff belongs only to
+  // the shoulders; fading from the centreline creates a pointed ridge.
+  if (distance <= radius) return 1;
+  return rampShoulder > 0 ? landscapeBrushFalloff(distance - radius, rampShoulder, falloff) : 0;
 }
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -64,7 +71,7 @@ export function terrainSculptNoise(x: number, z: number, seed: number): number {
   return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz;
 }
 
-/** Extra sculpt tools; callers supply strength multiplied by the footprint falloff. */
+/** Extra sculpt tools; Ramp uses footprint influence alone, the others also use strength. */
 export function nextTerrainSculptHeight(
   mode: "noise" | "ramp" | "terrace" | "stamp", current: number, amount: number,
   x: number, z: number, cx: number, cz: number, radius: number,

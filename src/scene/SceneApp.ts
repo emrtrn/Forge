@@ -2295,6 +2295,7 @@ export class SceneApp {
       stampRotation: Number.isFinite(next.stampRotation) ? clamp(next.stampRotation, -360, 360) : 0,
       rampStartOffset: Number.isFinite(next.rampStartOffset) ? clamp(next.rampStartOffset, -1000, 1000) : 0,
       rampEndOffset: Number.isFinite(next.rampEndOffset) ? clamp(next.rampEndOffset, -1000, 1000) : 0,
+      rampShoulder: Number.isFinite(next.rampShoulder) ? clamp(next.rampShoulder, 0, 50) : DEFAULT_TERRAIN_SCULPT_SETTINGS.rampShoulder,
       activeRiverWaterId: typeof next.activeRiverWaterId === "string" && next.activeRiverWaterId.length > 0
         ? next.activeRiverWaterId
         : null,
@@ -9215,6 +9216,7 @@ export class SceneApp {
     const dx = end.x - start.x, dz = end.z - start.z;
     const length = Math.hypot(dx, dz) || 1;
     const side = new Vector3(-dz / length * settings.brushSize, 0, dx / length * settings.brushSize);
+    const shoulder = new Vector3(-dz / length * (settings.brushSize + settings.rampShoulder), 0, dx / length * (settings.brushSize + settings.rampShoulder));
     const a = start.clone().add(new Vector3(0, settings.rampStartOffset + 0.08, 0));
     const b = end.clone().add(new Vector3(0, settings.rampEndOffset + 0.08, 0));
     const al = a.clone().add(side), ar = a.clone().sub(side), bl = b.clone().add(side), br = b.clone().sub(side);
@@ -9224,7 +9226,8 @@ export class SceneApp {
       this.landscapeRampPreview.renderOrder = 21;
       this.scene.add(tagSceneSource(this.landscapeRampPreview, EDITOR_OVERLAY_SOURCE));
     }
-    this.landscapeRampPreview.geometry.setFromPoints([a, b, al, bl, ar, br, al, ar, bl, br]);
+    this.landscapeRampPreview.geometry.setFromPoints([a, b, al, bl, ar, br, al, ar, bl, br,
+      a.clone().add(shoulder), b.clone().add(shoulder), a.clone().sub(shoulder), b.clone().sub(shoulder)]);
     this.landscapeRampPreview.geometry.computeBoundingSphere();
     this.landscapeRampPreview.visible = true;
   }
@@ -9251,7 +9254,7 @@ export class SceneApp {
     if (streaming) {
       // A dab needs every tile under it; load the missing ones and skip this
       // dab rather than reject it. They stay held until the stroke ends.
-      const keys = terrainBrushTileKeys(stroke.document.def, point.x, point.z, settings.brushSize, ramp);
+      const keys = terrainBrushTileKeys(stroke.document.def, point.x, point.z, settings.brushSize, ramp, settings.rampShoulder);
       const missing = keys.filter((key) => !session.world.tiles.has(key));
       for (const key of keys) stroke.demanded.add(key);
       if (missing.length > 0) {
@@ -9506,7 +9509,7 @@ export class SceneApp {
     if (tool === "ramp" && (!ramp || Math.hypot(ramp.end.x - ramp.start.x, ramp.end.z - ramp.start.z) < 0.001)) return null;
     const originX = ((verticesX - 1) * spacing) / 2;
     const originZ = ((verticesZ - 1) * spacing) / 2;
-    const bounds = terrainSculptBounds(localHit.x, localHit.z, radius, ramp);
+    const bounds = terrainSculptBounds(localHit.x, localHit.z, radius + (ramp ? this.landscapeSculptSettings.rampShoulder : 0), ramp);
     const minX = Math.max(0, Math.floor((bounds.minX + originX) / spacing));
     const maxX = Math.min(verticesX - 1, Math.ceil((bounds.maxX + originX) / spacing));
     const minZ = Math.max(0, Math.floor((bounds.minZ + originZ) / spacing));
@@ -9524,12 +9527,12 @@ export class SceneApp {
       for (let x = minX; x <= maxX; x += 1) {
         const worldX = x * spacing - originX;
         const worldZ = z * spacing - originZ;
-        const falloff = terrainSculptInfluence(worldX, worldZ, localHit.x, localHit.z, radius, settings.falloff, ramp);
+        const falloff = terrainSculptInfluence(worldX, worldZ, localHit.x, localHit.z, radius, settings.falloff, ramp, settings.rampShoulder);
         if (falloff <= 0) continue;
         const index = z * verticesX + x;
         const before = data.heights[index] ?? 0;
         const after = tool === "noise" || tool === "ramp" || tool === "terrace" || tool === "stamp"
-          ? nextTerrainSculptHeight(tool, before, settings.strength * falloff / (tool === "noise" ? scale : 1), worldX, worldZ, localHit.x, localHit.z, radius, settings, ramp)
+          ? nextTerrainSculptHeight(tool, before, (tool === "ramp" ? 1 : settings.strength) * falloff / (tool === "noise" ? scale : 1), worldX, worldZ, localHit.x, localHit.z, radius, settings, ramp)
           : this.nextLandscapeHeight(
           tool,
           sourceHeights,

@@ -426,17 +426,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
             <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
             : terrainSculptControls(settings, lockedAttr)
         }
-        <label class="detail-row">
-          <span>Brush Size</span>
-          <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
-            title="Ctrl + mouse wheel over the viewport to resize the brush"
-            value="${settings.brushSize}" ${lockedAttr} />
-        </label>
-        <label class="detail-row">
-          <span>Strength</span>
-          <input data-landscape-number="strength" type="number" min="0.01" max="2" step="0.01"
-            value="${settings.strength}" ${lockedAttr} />
-        </label>
+        ${terrainBrushSizeAndStrength(settings, lockedAttr)}
         <label class="detail-row">
           <span>Falloff</span>
           <input data-landscape-number="falloff" type="number" min="0.25" max="8" step="0.25"
@@ -877,6 +867,10 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
       if (key && Number.isFinite(value)) update({ [key]: value } as Partial<LandscapeSculptSettings>);
     });
   });
+  body.querySelector<HTMLInputElement>("[data-landscape-ramp-width]")?.addEventListener("change", (event) => {
+    const width = Number((event.currentTarget as HTMLInputElement).value);
+    if (Number.isFinite(width)) update({ brushSize: width / 2 });
+  });
   body.querySelector<HTMLInputElement>("[data-landscape-flatten-clicked-height]")?.addEventListener("change", (event) => {
     update({ flattenUseClickedHeight: (event.currentTarget as HTMLInputElement).checked });
   });
@@ -884,6 +878,18 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
     const stampShape = (event.currentTarget as HTMLSelectElement).value;
     if (stampShape === "hill" || stampShape === "crater" || stampShape === "ridge") update({ stampShape });
   });
+}
+
+function terrainBrushSizeAndStrength(settings: LandscapeSculptSettings, lockedAttr: string): string {
+  if (settings.editMode === "sculpt" && settings.tool === "ramp") {
+    return `<label class="detail-row"><span>Ramp Width (m)</span>
+      <input data-landscape-ramp-width type="number" min="1" max="100" step="1" value="${settings.brushSize * 2}" ${lockedAttr} /></label>`;
+  }
+  return `<label class="detail-row"><span>Brush Size</span>
+    <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
+      title="Ctrl + mouse wheel over the viewport to resize the brush" value="${settings.brushSize}" ${lockedAttr} /></label>
+    <label class="detail-row"><span>Strength</span>
+    <input data-landscape-number="strength" type="number" min="0.01" max="2" step="0.01" value="${settings.strength}" ${lockedAttr} /></label>`;
 }
 
 function terrainSculptControls(settings: LandscapeSculptSettings, lockedAttr: string): string {
@@ -898,7 +904,8 @@ function terrainSculptControls(settings: LandscapeSculptSettings, lockedAttr: st
   } else if (settings.tool === "ramp") {
     controls = `${number("rampStartOffset", "Start Offset (m)", -1000, 1000, 0.1)}
       ${number("rampEndOffset", "End Offset (m)", -1000, 1000, 0.1)}
-      <div class="detail-hint">Drag from the start to the end point. Release over the Landscape to apply once. Brush Size is half the ramp width; offsets adjust the sampled endpoint heights. A click alone makes no change.</div>`;
+      ${number("rampShoulder", "Shoulder Width (m)", 0, 50, 0.5)}
+      <div class="detail-hint">Drag and release over the Landscape. Ramp Width is the full flat road width; Shoulder Width blends each side into the terrain. Falloff shapes only the shoulders. The road reaches the endpoint heights in one application, independently of brush Strength. A click alone makes no change.</div>`;
   } else if (settings.tool === "terrace") {
     controls = `${number("terraceStep", "Step Height (m)", 0.01, 1000, 0.1)}
       ${number("terraceSmoothing", "Step Smoothing", 0, 1, 0.05)}
@@ -1002,17 +1009,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-section-title">Landscape Mode</div>
         ${landscapeModeSelect(settings, lockedAttr, ["sculpt", "paint"])}
         ${toolsMarkup}
-        <label class="detail-row">
-          <span>Brush Size</span>
-          <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
-            title="Ctrl + mouse wheel over the viewport to resize the brush"
-            value="${settings.brushSize}" ${lockedAttr} />
-        </label>
-        <label class="detail-row">
-          <span>Strength</span>
-          <input data-landscape-number="strength" type="number" min="0.01" max="2" step="0.01"
-            value="${settings.strength}" ${lockedAttr} />
-        </label>
+        ${terrainBrushSizeAndStrength(settings, lockedAttr)}
         <label class="detail-row">
           <span>Falloff</span>
           <input data-landscape-number="falloff" type="number" min="0.25" max="8" step="0.25"

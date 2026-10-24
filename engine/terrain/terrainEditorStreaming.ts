@@ -19,10 +19,10 @@ export function editorStreamsTerrain(def: Pick<WorldTerrainDef, "tiles">): boole
  */
 export function terrainBrushTileKeys(
   def: Pick<WorldTerrainDef, "origin" | "spacing" | "tileQuads" | "tilesX" | "tilesZ" | "tiles">,
-  x: number, z: number, radius: number, ramp?: TerrainRamp,
+  x: number, z: number, radius: number, ramp?: TerrainRamp, rampShoulder = 0,
 ): string[] {
   const size = terrainTileWorldSize(def);
-  const reach = radius + 2 * def.spacing;
+  const reach = radius + (ramp ? rampShoulder : 0) + 2 * def.spacing;
   const bounds = terrainSculptBounds(x, z, reach, ramp);
   const range = (min: number, max: number, origin: number, count: number) => [
     Math.max(0, Math.floor((min - origin) / size)),

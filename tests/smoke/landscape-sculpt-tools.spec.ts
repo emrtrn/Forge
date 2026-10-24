@@ -1,5 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { PerspectiveCamera } from "three";
+import type { ForgeLandscapeData } from "../../engine/scene/landscape";
+import type { TerrainTileData, WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { SMOKE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 import { expect, test, type Page } from "./test";
 
@@ -7,16 +9,19 @@ interface SculptHarness {
   heights(): number[];
   project(x: number, z: number): { x: number; y: number };
   previewVisible(): boolean;
+  sample(x: number, z: number): number;
 }
 
 async function attachHarness(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const modulePath = "/src/scene/SceneApp.ts";
     const { SceneApp } = await import(modulePath);
+    const heightModulePath = "/engine/terrain/terrainHeightQuery.ts";
+    const { terrainHeightAt } = await import(heightModulePath);
     const original = SceneApp.prototype.getLandscapeSculptSettings;
     SceneApp.prototype.getLandscapeSculptSettings = function (this: {
-      landscapeData: Map<string, { heights: number[] }>;
-      worldTerrains: Map<string, { tiles: Map<string, { heights: Float32Array }> }>;
+      landscapeData: Map<string, ForgeLandscapeData>;
+      worldTerrains: Map<string, { def: WorldTerrainDef; tiles: Map<string, TerrainTileData> }>;
       editorViewportCamera(): PerspectiveCamera;
       landscapeRampPreview: { visible: boolean } | null;
     }) {
@@ -31,6 +36,14 @@ async function attachHarness(page: Page): Promise<void> {
           return { x: box.x + (point.x + 1) * box.width / 2, y: box.y + (1 - point.y) * box.height / 2 };
         },
         previewVisible: () => app.landscapeRampPreview?.visible ?? false,
+        sample: (x, z) => {
+          const world = app.worldTerrains.values().next().value;
+          if (world) return terrainHeightAt(world.def, { tile: (tx: number, tz: number) => world.tiles.get(`${tx}_${tz}`) }, x, z)!;
+          const data = app.landscapeData.values().next().value!;
+          const vx = Math.round(x / data.size.spacing + (data.size.verticesX - 1) / 2);
+          const vz = Math.round(z / data.size.spacing + (data.size.verticesZ - 1) / 2);
+          return data.heights[vz * data.size.verticesX + vx]! * data.size.heightScale;
+        },
       };
       return original.call(this);
     };
@@ -132,8 +145,15 @@ for (const tiles of [1, 2]) {
     await page.getByTestId("editor-undo").click();
     expect(await heights(page)).toEqual(baseline);
 
+    // Reproduce the reported ridge with ordinary brush strength and falloff.
+    await number(page, "strength", "0.25");
     await tool("ramp").click();
-    await number(page, "brushSize", "4");
+    const width = page.locator("[data-landscape-ramp-width]");
+    await width.fill("8");
+    await width.press("Tab");
+    await expect(width).toHaveValue("8");
+    await expect(page.locator('[data-landscape-number="strength"]')).toHaveCount(0);
+    await number(page, "rampShoulder", "2");
     await number(page, "rampEndOffset", "6");
     const start = await project(page, -12, 8), end = await project(page, 12, 8);
     await page.mouse.click(start.x, start.y);
@@ -147,6 +167,18 @@ for (const tiles of [1, 2]) {
     await page.mouse.up();
     const ramp = await heights(page);
     expect(Math.max(...ramp)).toBeGreaterThan(4);
+    const crossSection = await page.evaluate(() => {
+      const harness = (window as unknown as { sculptTools: SculptHarness }).sculptTools;
+      return Array.from({ length: 7 }, (_, i) => harness.sample(0, 5 + i));
+    });
+    expect(Math.max(...crossSection) - Math.min(...crossSection), "the road must be flat across its width").toBeLessThan(0.001);
+    expect(crossSection[3]).toBeGreaterThan(2.5);
+    const shoulders = await page.evaluate(() => {
+      const harness = (window as unknown as { sculptTools: SculptHarness }).sculptTools;
+      return [harness.sample(0, 3), harness.sample(0, 13)];
+    });
+    for (const height of shoulders) expect(height).toBeLessThan(crossSection[3]!);
+    await page.screenshot({ path: testInfo.outputPath("ramp-flat-road.png") });
     await page.getByTestId("editor-undo").click();
     expect(await heights(page)).toEqual(baseline);
     await page.getByTestId("editor-redo").click();

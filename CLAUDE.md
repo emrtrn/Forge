@@ -70,7 +70,9 @@ engine/editor.
   hide that subject's expensive ones. Rationale and the split plan this belongs
   to: `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md`.
 - **CI** (`.github/workflows/ci.yml`) runs `build:verify`
-  (`tsc --noEmit` + `vite build` + `test:engine:slow` + `verify:dist --strict`)
+  (`tsc --noEmit` + `vite build` + `test:engine:slow` + `verify:dist --strict` +
+  `verify:world-data`, which fails when a shipped level references a missing
+  World Partition cell, foliage cell, terrain definition or tile)
   and `check:assets` on every push/PR to `main` — the automated mirror of the
   local gate. CI never runs filtered or FAST. Keep both green; deploy stays out
   of CI (per-fork concern).

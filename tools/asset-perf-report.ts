@@ -23,6 +23,7 @@ import {
   type GltfJson,
   type TextureAssetStat,
 } from "./assetPerfReport";
+import { formatWorldDataLevel, scanWorldData } from "./worldDataFiles";
 
 const projectRoot = process.cwd();
 const assetsRoot = resolve(projectRoot, "public/assets");
@@ -143,6 +144,21 @@ async function main(): Promise<void> {
     `\n[asset-perf] advisories: ${glbWarnings} model(s), ${textureWarnings} texture(s) over budget ` +
       "(informational — does not fail the build).",
   );
+
+  console.log("\n[asset-perf] World data:");
+  try {
+    const worldData = scanWorldData(resolve(projectRoot, "public"));
+    for (const level of worldData.levels) console.log(`  ${formatWorldDataLevel(level)}`);
+    console.log("[asset-perf] Top 5 cell files by bytes:");
+    for (const file of worldData.cellFiles.slice(0, 5)) {
+      console.log(`  ${file.path} ${formatByteSize(file.bytes)}`);
+    }
+    for (const issue of worldData.issues) {
+      console.log(`[asset-perf] advisory ${issue.severity.toUpperCase()} ${issue.level} → ${issue.path}: ${issue.reason}`);
+    }
+  } catch (error) {
+    console.log(`[asset-perf] advisory world data: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 main().catch((error) => {

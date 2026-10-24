@@ -24,6 +24,7 @@
     "world:test": "node tools/world/generate-test-world.mjs",
     "terrain:repair": "node tools/world/repair-terrain.mjs",
     "verify:dist": "node builder/web/verify-dist.mjs",
+    "verify:world-data": "node tools/run-world-data-check.mjs",
     "verify:imports": "node --test tests/builder/verify-imports.test.mjs && node builder/web/verify-imports.mjs",
     "verify:smoke-fixtures": "tsc --noEmit -p tsconfig.smoke.json && node --test tests/builder/smoke-project.test.mjs",
     "verify:content-types": "tsc --noEmit -p tsconfig.content-tests.json",
@@ -35,7 +36,7 @@
     "smoke:browser": "playwright test",
     "smoke:critical": "playwright test boot-errors.spec.ts content-loading.spec.ts editor-authoring.spec.ts runtime-playflow.spec.ts runtime-checkpoint.spec.ts",
     "smoke:production": "playwright test --config playwright.production.config.ts",
-    "build:verify": "npm run verify:imports && npm run verify:smoke-fixtures && npm run verify:content-types && npm run verify:ui-test-types && npm run verify:release-tools && npm run build && npm run test:engine:slow && npm run verify:dist -- --strict",
+    "build:verify": "npm run verify:imports && npm run verify:smoke-fixtures && npm run verify:content-types && npm run verify:ui-test-types && npm run verify:release-tools && npm run build && npm run test:engine:slow && npm run verify:dist -- --strict && npm run verify:world-data",
     "preview": "vite preview",
     "preview:local": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },

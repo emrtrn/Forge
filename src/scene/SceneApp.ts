@@ -10,6 +10,7 @@ import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/cam
 import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey } from "@engine/terrain/terrainTypes";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
+import { DEFAULT_TERRAIN_SCULPT_SETTINGS, nextTerrainSculptHeight, terrainSculptBounds, terrainSculptInfluence, type TerrainSculptSettings, type TerrainSculptTool, type TerrainRamp } from "@engine/terrain/terrainSculpt";
 import {
   applyTerrainBrush,
   applyTerrainUndoPatches,
@@ -690,7 +691,7 @@ export interface SplineReference {
   name: string;
 }
 
-export type LandscapeSculptTool = "raise" | "lower" | "smooth" | "flatten";
+export type LandscapeSculptTool = TerrainSculptTool;
 export type LandscapeEditMode = "sculpt" | "paint" | "splines";
 export type LandscapePaintTool = "paint" | "erase" | "smoothWeights";
 /**
@@ -702,7 +703,7 @@ export type LandscapePaintTool = "paint" | "erase" | "smoothWeights";
 export type LandscapeSplineTool = "draw" | "edit";
 type RiverWaterFoamStampAnchor = "start" | "end";
 
-export interface LandscapeSculptSettings {
+export interface LandscapeSculptSettings extends TerrainSculptSettings {
   editMode: LandscapeEditMode;
   tool: LandscapeSculptTool;
   paintTool: LandscapePaintTool;
@@ -967,6 +968,9 @@ interface LandscapeSculptStroke {
   landscapeId: string;
   mode: LandscapeEditMode;
   flattenSampleHeight: number;
+  tool: LandscapeSculptTool;
+  rampStart: Vector3 | null;
+  rampEnd: Vector3 | null;
   beforeHeights: number[];
   beforeLayers: LandscapeLayerWeights[];
   changed: boolean;
@@ -981,6 +985,12 @@ interface WorldTerrainStroke {
   document: WorldTerrainDocument;
   mode: "sculpt" | "paint";
   flattenSampleHeight: number;
+  /** Stamp applies once; Ramp previews during the drag and applies on release. */
+  tool: LandscapeSculptTool;
+  rampStart: Vector3 | null;
+  rampEnd: Vector3 | null;
+  /** A skipped dab owns its settings while streaming loads the required tiles. */
+  pendingBrush: TerrainBrush | null;
   /** Dab patches in application order. */
   patches: TerrainUndoPatch[];
   /** Tiles this stroke asked a streaming terrain to load; held until it ends. */
@@ -1311,6 +1321,7 @@ export class SceneApp {
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
   private landscapeLayerMaterialCache = new Map<string, ForgeMaterialLayer>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
+    ...DEFAULT_TERRAIN_SCULPT_SETTINGS,
     editMode: "sculpt",
     tool: "raise",
     paintTool: "paint",
@@ -1332,6 +1343,8 @@ export class SceneApp {
   };
   private landscapeSculptStroke: LandscapeSculptStroke | null = null;
   private worldTerrainStroke: WorldTerrainStroke | null = null;
+  private worldTerrainStrokePending = false;
+  private landscapeRampPreview: LineSegments<BufferGeometry, LineBasicMaterial> | null = null;
   /**
    * Active gizmo-drag of a landscape spline control point (Faz 6.1). While set,
    * the shared move-gizmo path drives `point.position` (world→local) instead of a
@@ -1953,6 +1966,12 @@ export class SceneApp {
       else material.dispose();
       this.landscapeBrushCursor = null;
     }
+    if (this.landscapeRampPreview) {
+      this.scene.remove(this.landscapeRampPreview);
+      this.landscapeRampPreview.geometry.dispose();
+      this.landscapeRampPreview.material.dispose();
+      this.landscapeRampPreview = null;
+    }
     for (const layer of this.landscapeLayerMaterialCache.values()) layer.texture?.dispose();
     this.landscapeLayerMaterialCache.clear();
     for (const water of this.riverWaterObjects) {
@@ -2251,7 +2270,7 @@ export class SceneApp {
     for (const world of this.worldTerrains.values()) for (const layer of world.def.layers) layerIds.add(layer.id);
     this.landscapeSculptSettings = {
       editMode: ["sculpt", "paint", "splines"].includes(next.editMode) ? next.editMode : "sculpt",
-      tool: ["raise", "lower", "smooth", "flatten"].includes(next.tool) ? next.tool : "raise",
+      tool: ["raise", "lower", "smooth", "flatten", "noise", "ramp", "terrace", "stamp"].includes(next.tool) ? next.tool : "raise",
       paintTool: ["paint", "erase", "smoothWeights"].includes(next.paintTool)
         ? next.paintTool
         : "paint",
@@ -2267,6 +2286,15 @@ export class SceneApp {
       falloff: clamp(next.falloff, 0.25, 8),
       flattenTargetHeight: clamp(next.flattenTargetHeight, -1000, 1000),
       flattenUseClickedHeight: next.flattenUseClickedHeight === true,
+      noiseScale: Number.isFinite(next.noiseScale) ? clamp(next.noiseScale, 0.1, 1000) : DEFAULT_TERRAIN_SCULPT_SETTINGS.noiseScale,
+      noiseSeed: Number.isFinite(next.noiseSeed) ? Math.round(clamp(next.noiseSeed, 0, 2147483647)) : DEFAULT_TERRAIN_SCULPT_SETTINGS.noiseSeed,
+      terraceStep: Number.isFinite(next.terraceStep) ? clamp(next.terraceStep, 0.01, 1000) : DEFAULT_TERRAIN_SCULPT_SETTINGS.terraceStep,
+      terraceSmoothing: Number.isFinite(next.terraceSmoothing) ? clamp(next.terraceSmoothing, 0, 1) : DEFAULT_TERRAIN_SCULPT_SETTINGS.terraceSmoothing,
+      stampShape: ["hill", "crater", "ridge"].includes(next.stampShape) ? next.stampShape : "hill",
+      stampHeight: Number.isFinite(next.stampHeight) ? clamp(next.stampHeight, -1000, 1000) : DEFAULT_TERRAIN_SCULPT_SETTINGS.stampHeight,
+      stampRotation: Number.isFinite(next.stampRotation) ? clamp(next.stampRotation, -360, 360) : 0,
+      rampStartOffset: Number.isFinite(next.rampStartOffset) ? clamp(next.rampStartOffset, -1000, 1000) : 0,
+      rampEndOffset: Number.isFinite(next.rampEndOffset) ? clamp(next.rampEndOffset, -1000, 1000) : 0,
       activeRiverWaterId: typeof next.activeRiverWaterId === "string" && next.activeRiverWaterId.length > 0
         ? next.activeRiverWaterId
         : null,
@@ -8775,13 +8803,16 @@ export class SceneApp {
       landscapeId: actor.id,
       mode: this.landscapeSculptSettings.editMode,
       flattenSampleHeight: hit.local.y / Math.max(data.size.heightScale, 0.0001),
+      tool: this.landscapeSculptTool(event),
+      rampStart: this.landscapeSculptSettings.editMode === "sculpt" && this.landscapeSculptTool(event) === "ramp" ? hit.local.clone() : null,
+      rampEnd: null,
       beforeHeights: [...data.heights],
       beforeLayers: cloneLandscapeLayers(data.layers),
       changed: false,
       dirty: null,
     };
     this.canvas.setPointerCapture(event.pointerId);
-    this.applyLandscapeSculptDab(selectedIndex, hit.local, event);
+    if (!this.landscapeSculptStroke.rampStart) this.applyLandscapeSculptDab(selectedIndex, hit.local, event);
     return true;
   }
 
@@ -9114,6 +9145,10 @@ export class SceneApp {
    * rectangles' before/after values instead of whole height arrays.
    */
   private beginWorldTerrainStroke(event: PointerEvent): boolean {
+    if (this.worldTerrainStrokePending) {
+      this.onStatus?.("Loading terrain for the previous sculpt operation…", "info");
+      return true;
+    }
     const index = this.selectedEditableLandscapeIndex();
     if (index === null) return false;
     const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY);
@@ -9134,9 +9169,13 @@ export class SceneApp {
     this.worldTerrainStroke = {
       pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, mode,
       flattenSampleHeight: hit.point.y - document.def.origin[1], patches: [], demanded: new Set(),
+      tool: this.landscapeSculptTool(event),
+      rampStart: mode === "sculpt" && this.landscapeSculptTool(event) === "ramp" ? hit.point.clone() : null,
+      rampEnd: null, pendingBrush: null,
     };
     this.canvas.setPointerCapture(event.pointerId);
-    this.applyWorldTerrainDab(this.worldTerrainStroke, hit.point, event);
+    if (this.worldTerrainStroke.rampStart) this.updateTerrainRampPreview(this.worldTerrainStroke.rampStart, hit.point);
+    else this.applyWorldTerrainDab(this.worldTerrainStroke, hit.point, event);
     return true;
   }
 
@@ -9162,35 +9201,75 @@ export class SceneApp {
       : this.landscapeSculptSettings.flattenTargetHeight;
   }
 
-  private applyWorldTerrainDab(stroke: WorldTerrainStroke, point: Vector3, event: PointerEvent): void {
-    const session = this.worldTerrainSessions.get(stroke.document);
-    const object = this.landscapeObjects[stroke.landscapeIndex];
-    if (!session || !object) return;
+  private terrainStrokeRamp(stroke: WorldTerrainStroke): TerrainRamp | undefined {
+    if (!stroke.rampStart || !stroke.rampEnd) return undefined;
+    const datum = stroke.document.def.origin[1];
+    return {
+      start: { x: stroke.rampStart.x, z: stroke.rampStart.z, height: stroke.rampStart.y - datum },
+      end: { x: stroke.rampEnd.x, z: stroke.rampEnd.z, height: stroke.rampEnd.y - datum },
+    };
+  }
+
+  private updateTerrainRampPreview(start: Vector3, end: Vector3): void {
     const settings = this.landscapeSculptSettings;
+    const dx = end.x - start.x, dz = end.z - start.z;
+    const length = Math.hypot(dx, dz) || 1;
+    const side = new Vector3(-dz / length * settings.brushSize, 0, dx / length * settings.brushSize);
+    const a = start.clone().add(new Vector3(0, settings.rampStartOffset + 0.08, 0));
+    const b = end.clone().add(new Vector3(0, settings.rampEndOffset + 0.08, 0));
+    const al = a.clone().add(side), ar = a.clone().sub(side), bl = b.clone().add(side), br = b.clone().sub(side);
+    if (!this.landscapeRampPreview) {
+      this.landscapeRampPreview = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: 0xf2d16b, depthTest: false }));
+      this.landscapeRampPreview.name = "landscape-ramp-preview";
+      this.landscapeRampPreview.renderOrder = 21;
+      this.scene.add(tagSceneSource(this.landscapeRampPreview, EDITOR_OVERLAY_SOURCE));
+    }
+    this.landscapeRampPreview.geometry.setFromPoints([a, b, al, bl, ar, br, al, ar, bl, br]);
+    this.landscapeRampPreview.geometry.computeBoundingSphere();
+    this.landscapeRampPreview.visible = true;
+  }
+
+  private applyWorldTerrainDab(stroke: WorldTerrainStroke, point: Vector3, event: Pick<PointerEvent, "shiftKey" | "ctrlKey" | "altKey">): void {
+    const session = this.worldTerrainSessions.get(stroke.document);
+    if (!session) return;
+    const settings = this.landscapeSculptSettings;
+    stroke.pendingBrush = null;
+    const ramp = this.terrainStrokeRamp(stroke);
+    const base = { x: point.x, z: point.z, radius: settings.brushSize, strength: settings.strength, falloff: settings.falloff };
+    const brush: TerrainBrush = stroke.mode === "paint"
+      ? { ...base, mode: settings.paintTool, layer: this.worldTerrainActiveLayer(stroke.document) }
+      : {
+          ...settings,
+          ...base,
+          mode: ramp ? "ramp" : stroke.tool === "stamp" ? "stamp" : this.landscapeSculptTool(event),
+          ...(ramp ? { ramp } : {}),
+          // Heights are relative to the datum (origin Y), like a Landscape's local Y.
+          hitHeight: point.y - stroke.document.def.origin[1],
+          flattenTargetHeight: this.landscapeFlattenTarget(stroke.flattenSampleHeight, event),
+        };
     const streaming = this.worldTerrainStreams.get(stroke.document);
     if (streaming) {
       // A dab needs every tile under it; load the missing ones and skip this
       // dab rather than reject it. They stay held until the stroke ends.
-      const keys = terrainBrushTileKeys(stroke.document.def, point.x, point.z, settings.brushSize);
+      const keys = terrainBrushTileKeys(stroke.document.def, point.x, point.z, settings.brushSize, ramp);
       const missing = keys.filter((key) => !session.world.tiles.has(key));
       for (const key of keys) stroke.demanded.add(key);
       if (missing.length > 0) {
+        stroke.pendingBrush = brush;
         if (stroke.patches.length === 0) this.onStatus?.(`Loading ${missing.length} terrain tile(s) under the brush…`, "info");
         streaming.demand(keys).catch(() => {});
         return;
       }
       streaming.demand(keys).catch(() => {});
     }
-    const base = { x: point.x, z: point.z, radius: settings.brushSize, strength: settings.strength, falloff: settings.falloff };
-    const brush: TerrainBrush = stroke.mode === "paint"
-      ? { ...base, mode: settings.paintTool, layer: this.worldTerrainActiveLayer(stroke.document) }
-      : {
-          ...base,
-          mode: this.landscapeSculptTool(event),
-          // Heights are relative to the datum (origin Y), like a Landscape's local Y.
-          hitHeight: point.y - stroke.document.def.origin[1],
-          flattenTargetHeight: this.landscapeFlattenTarget(stroke.flattenSampleHeight, event),
-        };
+    this.applyWorldTerrainBrush(stroke, brush);
+  }
+
+  private applyWorldTerrainBrush(stroke: WorldTerrainStroke, brush: TerrainBrush): void {
+    const session = this.worldTerrainSessions.get(stroke.document);
+    const index = this.layout?.landscapes?.findIndex((actor) => actor.id === stroke.landscapeId) ?? -1;
+    const object = this.landscapeObjects[index];
+    if (!session || !object || this.worldTerrains.get(stroke.landscapeId) !== stroke.document) return;
     let dirty: Map<string, TerrainDirtyRect>;
     try {
       const result = applyTerrainBrush(session.world, brush);
@@ -9203,15 +9282,19 @@ export class SceneApp {
     if (dirty.size === 0) return;
     session.markTiles(dirty.keys());
     updateWorldTerrainObjectTiles(object, dirty);
-    const strokeActor = this.layout?.landscapes?.[stroke.landscapeIndex];
-    if (strokeActor) this.scheduleLandscapeFoliageRebuild(strokeActor.id);
+    this.scheduleLandscapeFoliageRebuild(stroke.landscapeId);
   }
 
   private updateWorldTerrainStroke(event: PointerEvent): boolean {
     const stroke = this.worldTerrainStroke;
     if (!stroke || stroke.pointerId !== event.pointerId) return false;
     const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY);
-    if (hit && hit.index === stroke.landscapeIndex) this.applyWorldTerrainDab(stroke, hit.point, event);
+    if (hit && hit.index === stroke.landscapeIndex) {
+      if (stroke.rampStart) {
+        stroke.rampEnd = hit.point.clone();
+        this.updateTerrainRampPreview(stroke.rampStart, hit.point);
+      } else if (stroke.mode !== "sculpt" || stroke.tool !== "stamp") this.applyWorldTerrainDab(stroke, hit.point, event);
+    }
     this.updateLandscapeBrushHover(event.clientX, event.clientY);
     return true;
   }
@@ -9220,14 +9303,45 @@ export class SceneApp {
     const stroke = this.worldTerrainStroke;
     if (!stroke || stroke.pointerId !== event.pointerId) return false;
     this.worldTerrainStroke = null;
+    if (this.landscapeRampPreview) this.landscapeRampPreview.visible = false;
     try {
       this.canvas.releasePointerCapture(event.pointerId);
     } catch {
       // Pointer capture may already be gone after pointercancel.
     }
+    if (stroke.rampStart) {
+      const hit = event.type === "pointercancel" ? null : this.picker.pickLandscapeSurface(event.clientX, event.clientY);
+      if (hit && hit.index === stroke.landscapeIndex) {
+        stroke.rampEnd = hit.point.clone();
+        this.applyWorldTerrainDab(stroke, hit.point, event);
+      } else this.onStatus?.("Ramp cancelled: release over the selected Landscape.", "info");
+    }
+    // Pointercancel must never defer an operation that has not changed terrain yet.
+    if (event.type === "pointercancel") stroke.pendingBrush = null;
+    void this.completeWorldTerrainStroke(stroke);
+    return true;
+  }
+
+  private async completeWorldTerrainStroke(stroke: WorldTerrainStroke): Promise<void> {
+    const streaming = this.worldTerrainStreams.get(stroke.document);
+    const pendingBrush = stroke.pendingBrush;
+    if (pendingBrush && streaming) {
+      this.worldTerrainStrokePending = true;
+      try {
+        await streaming.demand(stroke.demanded);
+        const actor = this.layout?.landscapes?.find((entry) => entry.id === stroke.landscapeId);
+        if (actor && !actor.locked && this.worldTerrains.get(stroke.landscapeId) === stroke.document) {
+          this.applyWorldTerrainBrush(stroke, pendingBrush);
+        }
+      } catch (error) {
+        this.onStatus?.(`Terrain sculpt cancelled: ${error instanceof Error ? error.message : String(error)}`, "warning");
+      } finally {
+        this.worldTerrainStrokePending = false;
+      }
+    }
     // Edited tiles are pinned by the session; the rest may stream out again.
-    this.worldTerrainStreams.get(stroke.document)?.release(stroke.demanded);
-    if (stroke.patches.length === 0) return true;
+    streaming?.release(stroke.demanded);
+    if (stroke.patches.length === 0) return;
     const { landscapeId, document, patches } = stroke;
     const restore = (apply: typeof applyTerrainUndoPatches): void => {
       const session = this.worldTerrainSessions.get(document);
@@ -9249,7 +9363,6 @@ export class SceneApp {
       redo: () => restore(applyTerrainUndoPatches),
       undo: () => restore(revertTerrainUndoPatches),
     });
-    return true;
   }
 
   private updateLandscapeSculpt(event: PointerEvent): boolean {
@@ -9258,7 +9371,11 @@ export class SceneApp {
     if (!stroke || stroke.pointerId !== event.pointerId) return false;
     const hit = this.landscapeLocalHit(event.clientX, event.clientY);
     if (!hit || hit.landscapeIndex !== stroke.landscapeIndex) return true;
-    this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local, event);
+    if (stroke.rampStart) {
+      stroke.rampEnd = hit.local.clone();
+      const object = this.landscapeObjects[stroke.landscapeIndex];
+      if (object) this.updateTerrainRampPreview(object.localToWorld(stroke.rampStart.clone()), object.localToWorld(hit.local.clone()));
+    } else if (stroke.mode !== "sculpt" || stroke.tool !== "stamp") this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local, event);
     this.updateLandscapeBrushHover(event.clientX, event.clientY);
     return true;
   }
@@ -9267,6 +9384,14 @@ export class SceneApp {
     if (this.worldTerrainStroke) return this.endWorldTerrainStroke(event);
     const stroke = this.landscapeSculptStroke;
     if (!stroke || stroke.pointerId !== event.pointerId) return false;
+    if (stroke.rampStart && event.type !== "pointercancel") {
+      const hit = this.landscapeLocalHit(event.clientX, event.clientY);
+      if (hit && hit.landscapeIndex === stroke.landscapeIndex) {
+        stroke.rampEnd = hit.local.clone();
+        this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local, event);
+      } else this.onStatus?.("Ramp cancelled: release over the selected Landscape.", "info");
+    }
+    if (this.landscapeRampPreview) this.landscapeRampPreview.visible = false;
     this.landscapeSculptStroke = null;
     try {
       this.canvas.releasePointerCapture(event.pointerId);
@@ -9357,7 +9482,7 @@ export class SceneApp {
       stroke.mode === "paint"
         ? this.editLandscapeWeights(data, localHit)
         : this.editLandscapeHeights(
-            data, localHit, this.landscapeSculptTool(event),
+            data, localHit, stroke.rampStart ? "ramp" : stroke.tool === "stamp" ? "stamp" : this.landscapeSculptTool(event),
             this.landscapeFlattenTarget(stroke.flattenSampleHeight, event),
           );
     if (!dirty) return;
@@ -9372,14 +9497,26 @@ export class SceneApp {
   ): LandscapeDirtyBounds | null {
     const { verticesX, verticesZ, spacing } = data.size;
     const radius = this.landscapeSculptSettings.brushSize;
+    const stroke = this.landscapeSculptStroke;
+    const scale = Math.max(data.size.heightScale, 0.0001);
+    const ramp: TerrainRamp | undefined = tool === "ramp" && stroke?.rampStart && stroke.rampEnd ? {
+      start: { x: stroke.rampStart.x, z: stroke.rampStart.z, height: stroke.rampStart.y / scale },
+      end: { x: stroke.rampEnd.x, z: stroke.rampEnd.z, height: stroke.rampEnd.y / scale },
+    } : undefined;
+    if (tool === "ramp" && (!ramp || Math.hypot(ramp.end.x - ramp.start.x, ramp.end.z - ramp.start.z) < 0.001)) return null;
     const originX = ((verticesX - 1) * spacing) / 2;
     const originZ = ((verticesZ - 1) * spacing) / 2;
-    const centerX = (localHit.x + originX) / spacing;
-    const centerZ = (localHit.z + originZ) / spacing;
-    const minX = Math.max(0, Math.floor(centerX - radius / spacing));
-    const maxX = Math.min(verticesX - 1, Math.ceil(centerX + radius / spacing));
-    const minZ = Math.max(0, Math.floor(centerZ - radius / spacing));
-    const maxZ = Math.min(verticesZ - 1, Math.ceil(centerZ + radius / spacing));
+    const bounds = terrainSculptBounds(localHit.x, localHit.z, radius, ramp);
+    const minX = Math.max(0, Math.floor((bounds.minX + originX) / spacing));
+    const maxX = Math.min(verticesX - 1, Math.ceil((bounds.maxX + originX) / spacing));
+    const minZ = Math.max(0, Math.floor((bounds.minZ + originZ) / spacing));
+    const maxZ = Math.min(verticesZ - 1, Math.ceil((bounds.maxZ + originZ) / spacing));
+    const settings = { ...this.landscapeSculptSettings,
+      terraceStep: this.landscapeSculptSettings.terraceStep / scale,
+      stampHeight: this.landscapeSculptSettings.stampHeight / scale,
+      rampStartOffset: this.landscapeSculptSettings.rampStartOffset / scale,
+      rampEndOffset: this.landscapeSculptSettings.rampEndOffset / scale,
+    };
     const sourceHeights = [...data.heights];
     let changed = false;
 
@@ -9387,13 +9524,13 @@ export class SceneApp {
       for (let x = minX; x <= maxX; x += 1) {
         const worldX = x * spacing - originX;
         const worldZ = z * spacing - originZ;
-        const distance = Math.hypot(worldX - localHit.x, worldZ - localHit.z);
-        if (distance > radius) continue;
-        const falloff = landscapeBrushFalloff(distance, radius, this.landscapeSculptSettings.falloff);
+        const falloff = terrainSculptInfluence(worldX, worldZ, localHit.x, localHit.z, radius, settings.falloff, ramp);
         if (falloff <= 0) continue;
         const index = z * verticesX + x;
         const before = data.heights[index] ?? 0;
-        const after = this.nextLandscapeHeight(
+        const after = tool === "noise" || tool === "ramp" || tool === "terrace" || tool === "stamp"
+          ? nextTerrainSculptHeight(tool, before, settings.strength * falloff / (tool === "noise" ? scale : 1), worldX, worldZ, localHit.x, localHit.z, radius, settings, ramp)
+          : this.nextLandscapeHeight(
           tool,
           sourceHeights,
           verticesX,
@@ -9487,6 +9624,7 @@ export class SceneApp {
     flattenTargetHeight: number,
     falloff: number,
   ): number {
+    if (tool === "noise" || tool === "ramp" || tool === "terrace" || tool === "stamp") return current;
     return nextLandscapeBrushHeight(
       tool,
       current,

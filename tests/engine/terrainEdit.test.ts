@@ -16,10 +16,12 @@ import {
 import { buildTerrainGlobalMap, updateTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMap";
 import { raycastTerrain, terrainHeightAt, TerrainTileMap } from "../../engine/terrain/terrainHeightQuery";
 import { decodeTerrainTile, encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
+import { terrainSculptNoise, type TerrainSculptTool } from "../../engine/terrain/terrainSculpt";
+import { terrainBrushTileKeys } from "../../engine/terrain/terrainEditorStreaming";
 import { createFlatTerrainTile, terrainTileLayerWeight, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 
 type Check = (label: string, fn: () => void) => void;
-type HeightBrush = Extract<TerrainBrush, { mode: LandscapeHeightBrushMode }>;
+type HeightBrush = Extract<TerrainBrush, { mode: TerrainSculptTool }> & { mode: LandscapeHeightBrushMode };
 const modes = ["raise", "lower", "smooth", "flatten"] as const;
 
 function fixture(tilesX = 2, tilesZ = 2, quads = 32, layers = 8): TerrainEditWorld {
@@ -114,6 +116,119 @@ function assertSeams(world: TerrainEditWorld): void {
 }
 
 export function registerTerrainEditTests(check: Check): void {
+  for (const mode of ["noise", "ramp", "terrace", "stamp"] as const) {
+    check(`terrain sculpt ${mode} crosses four tiles, preserves paint, supports exact undo/redo and f32 save`, () => {
+      const world = fixture();
+      const before = snapshot(world);
+      const centre = brush(world);
+      const dab = { ...centre, mode, strength: 1, falloff: 0,
+        ramp: { start: { x: centre.x - 10, z: centre.z, height: -2 }, end: { x: centre.x + 10, z: centre.z, height: 6 } },
+      };
+      const result = applyTerrainBrush(world, dab);
+      assert.equal(result.dirty.size, 4);
+      assertSeams(world);
+      const after = snapshot(world);
+      assert.notDeepEqual(after, before);
+      for (const [key, tile] of world.tiles) {
+        assert.deepEqual(tile.weights, before.get(key)!.weights);
+        assert.deepEqual(decodeTerrainTile(encodeTerrainTile(tile, { ...world.def, heightFormat: "f32" })).heights, tile.heights);
+      }
+      revertTerrainUndoPatches(world, result.patches);
+      assert.deepEqual(snapshot(world), before);
+      applyTerrainUndoPatches(world, result.patches);
+      assert.deepEqual(snapshot(world), after);
+    });
+  }
+
+  check("terrain sculpt Noise is spatially continuous, seeded and independent of tile partition", () => {
+    assert.equal(terrainSculptNoise(12.25, -4.5, 7), terrainSculptNoise(12.25, -4.5, 7));
+    assert.notEqual(terrainSculptNoise(12.25, -4.5, 7), terrainSculptNoise(12.25, -4.5, 8));
+    assert.ok(Math.abs(terrainSculptNoise(1 - 1e-6, 0.3, 1) - terrainSculptNoise(1 + 1e-6, 0.3, 1)) < 1e-5);
+    const tiled = fixture(2, 2, 32), single = fixture(1, 1, 64);
+    const dab = { ...brush(tiled), mode: "noise" as const, radius: 12, noiseScale: 3.5, noiseSeed: 71 };
+    applyTerrainBrush(tiled, dab);
+    applyTerrainBrush(single, dab);
+    const monolithic = single.tile(0, 0)!;
+    for (const tile of tiled.tiles.values()) for (let z = 0; z < tile.size; z++) for (let x = 0; x < tile.size; x++) {
+      assert.equal(tile.heights[z * tile.size + x], monolithic.heights[(tile.z * 32 + z) * 65 + tile.x * 32 + x]);
+    }
+  });
+
+  check("terrain sculpt Ramp interpolates endpoint heights and offsets along the whole corridor", () => {
+    const world = fixture();
+    for (const tile of world.tiles.values()) tile.heights.fill(0);
+    const dab = { ...brush(world), mode: "ramp" as const, radius: 2, strength: 1, falloff: 0,
+      rampStartOffset: 1, rampEndOffset: 3,
+      ramp: { start: { x: world.def.origin[0] + 8, z: world.def.origin[2] + 16, height: 1 },
+        end: { x: world.def.origin[0] + 56, z: world.def.origin[2] + 16, height: 7 } },
+    };
+    applyTerrainBrush(world, dab);
+    const at = (x: number, z = 16) => terrainHeightAt(world.def, world, world.def.origin[0] + x, world.def.origin[2] + z)! - world.def.origin[1];
+    assert.equal(at(8), 2);
+    assert.equal(at(32), 6);
+    assert.equal(at(56), 10);
+    assert.equal(at(32, 20), 0, "outside the corridor is untouched");
+    assert.deepEqual(terrainBrushTileKeys(world.def, dab.x, dab.z, dab.radius, dab.ramp), ["0_0", "1_0"]);
+    assertSeams(world);
+    const before = snapshot(world);
+    assert.equal(applyTerrainBrush(world, { ...dab, ramp: { start: dab.ramp.start, end: dab.ramp.start } }).dirty.size, 0);
+    assert.deepEqual(snapshot(world), before, "a click without a drag is a no-op");
+  });
+
+  check("terrain sculpt Terrace supports negative heights and exact step spacing", () => {
+    const world = fixture(1, 1);
+    const tile = world.tile(0, 0)!;
+    for (const [before, expected] of [[1.2, 2], [-1.2, -2], [0.2, 0], [-0.2, 0], [4, 4]]) {
+      tile.heights.fill(before!);
+      applyTerrainBrush(world, { ...brush(world, "raise", 16, 16), mode: "terrace", terraceStep: 2, terraceSmoothing: 0, strength: 1, falloff: 0 });
+      assert.ok(Math.abs(tile.heights[16 * tile.size + 16]! - expected!) < 1e-6);
+    }
+  });
+
+  check("terrain sculpt Stamp hill/crater/ridge profiles, inversion and rotation", () => {
+    const world = fixture(1, 1);
+    const tile = world.tile(0, 0)!;
+    const dab = { ...brush(world, "raise", 16, 16), mode: "stamp" as const, radius: 10, strength: 1, falloff: 0, stampHeight: 5 };
+    const at = (x: number, z: number) => tile.heights[z * tile.size + x]!;
+    tile.heights.fill(0);
+    applyTerrainBrush(world, { ...dab, stampShape: "hill" });
+    assert.equal(at(16, 16), 5);
+    assert.equal(at(0, 0), 0);
+    tile.heights.fill(0);
+    applyTerrainBrush(world, { ...dab, stampShape: "crater" });
+    assert.ok(at(16, 16) < -4.9 && at(22, 16) > 1, "crater has a depression and a raised rim");
+    tile.heights.fill(0);
+    applyTerrainBrush(world, { ...dab, stampShape: "ridge" });
+    assert.ok(at(16, 21) > at(21, 16) * 10);
+    const along = at(16, 21);
+    tile.heights.fill(0);
+    applyTerrainBrush(world, { ...dab, stampShape: "ridge", stampRotation: 90 });
+    assert.equal(at(21, 16), along);
+    tile.heights.fill(0);
+    applyTerrainBrush(world, { ...dab, stampHeight: -5 });
+    assert.equal(at(16, 16), -5);
+  });
+
+  check("terrain sculpt rejects invalid parameters and unavailable ramp tiles before any writes", () => {
+    const world = fixture();
+    const original = snapshot(world);
+    for (const invalid of [{ noiseScale: 0 }, { terraceStep: 0 }, { stampHeight: NaN }, { terraceSmoothing: 2 }]) {
+      assert.throws(() => applyTerrainBrush(world, { ...brush(world), mode: "noise", ...invalid }), /Invalid terrain sculpt/);
+      assert.deepEqual(snapshot(world), original);
+    }
+    world.tiles.delete("1_0");
+    const before = snapshot(world);
+    assert.throws(() => applyTerrainBrush(world, { ...brush(world), mode: "ramp",
+      ramp: { start: { x: -10, z: 45, height: 1 }, end: { x: 40, z: 45, height: 8 } },
+    }), /not resident/);
+    assert.deepEqual(snapshot(world), before);
+    const modes: TerrainSculptTool[] = ["noise", "terrace", "stamp"];
+    for (const mode of modes) {
+      assert.throws(() => applyTerrainBrush(world, { ...brush(world), mode }), /not resident/);
+      assert.deepEqual(snapshot(world), before);
+    }
+  });
+
   check("terrain edit working copy owns decoded arrays and summaries", () => {
     const source = fixture(1, 1);
     const decoded = decodeTerrainTile(encodeTerrainTile(source.tile(0, 0)!, source.def));

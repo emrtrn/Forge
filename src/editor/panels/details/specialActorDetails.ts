@@ -172,6 +172,9 @@ const LANDSCAPE_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
   "smooth",
   "flatten",
 ];
+const WORLD_TERRAIN_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
+  ...LANDSCAPE_SCULPT_TOOLS, "noise", "ramp", "terrace", "stamp",
+];
 const LANDSCAPE_PAINT_TOOLS: readonly LandscapePaintTool[] = ["paint", "erase", "smoothWeights"];
 const LANDSCAPE_VIEW_MODES: readonly LandscapeViewMode[] = ["lit", "height", "slope", "layer"];
 const LANDSCAPE_EDIT_MODES: readonly LandscapeEditMode[] = ["sculpt", "paint", "splines"];
@@ -421,24 +424,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
             </label>
             <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>
             <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
-            : `<div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
-              ${LANDSCAPE_SCULPT_TOOLS.map(
-                (tool) => `<button type="button" data-landscape-tool="${tool}" class="${
-                  settings.tool === tool ? "active" : ""
-                }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`,
-              ).join("")}
-            </div>
-            <div class="detail-hint">Hold Shift to swap Raise and Lower while sculpting. Ctrl: Smooth. Alt: Flatten. Ctrl+Alt: Flatten at clicked height.</div>
-            <label class="detail-toggle">
-              <input data-landscape-flatten-clicked-height type="checkbox" ${settings.flattenUseClickedHeight ? "checked" : ""} ${lockedAttr} />
-              <span>Flatten: Use Clicked Height</span>
-            </label>
-            <div class="detail-hint">Uses the height at the start of each drag and keeps it fixed until release.</div>
-            <label class="detail-row">
-              <span>Flatten Target</span>
-              <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
-                value="${settings.flattenTargetHeight}" ${settings.flattenUseClickedHeight ? "disabled" : lockedAttr} />
-            </label>`
+            : terrainSculptControls(settings, lockedAttr)
         }
         <label class="detail-row">
           <span>Brush Size</span>
@@ -865,7 +851,7 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-tool]").forEach((button) => {
     button.addEventListener("click", () => {
       const tool = button.dataset.landscapeTool as LandscapeSculptTool | undefined;
-      if (tool && LANDSCAPE_SCULPT_TOOLS.includes(tool)) update({ tool });
+      if (tool && WORLD_TERRAIN_SCULPT_TOOLS.includes(tool)) update({ tool });
     });
   });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-paint-tool]").forEach((button) => {
@@ -894,6 +880,51 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
   body.querySelector<HTMLInputElement>("[data-landscape-flatten-clicked-height]")?.addEventListener("change", (event) => {
     update({ flattenUseClickedHeight: (event.currentTarget as HTMLInputElement).checked });
   });
+  body.querySelector<HTMLSelectElement>("[data-landscape-stamp-shape]")?.addEventListener("change", (event) => {
+    const stampShape = (event.currentTarget as HTMLSelectElement).value;
+    if (stampShape === "hill" || stampShape === "crater" || stampShape === "ridge") update({ stampShape });
+  });
+}
+
+function terrainSculptControls(settings: LandscapeSculptSettings, lockedAttr: string): string {
+  const number = (key: keyof LandscapeSculptSettings, label: string, min: number, max: number, step: number): string =>
+    `<label class="detail-row"><span>${label}</span><input data-landscape-number="${key}" type="number"
+      min="${min}" max="${max}" step="${step}" value="${settings[key]}" ${lockedAttr} /></label>`;
+  let controls = "";
+  if (settings.tool === "noise") {
+    controls = `${number("noiseScale", "Noise Scale (m)", 0.1, 1000, 0.1)}
+      ${number("noiseSeed", "Noise Seed", 0, 2147483647, 1)}
+      <div class="detail-hint">Paint natural height variation. Scale sets feature size; the same seed keeps the pattern continuous across tiles.</div>`;
+  } else if (settings.tool === "ramp") {
+    controls = `${number("rampStartOffset", "Start Offset (m)", -1000, 1000, 0.1)}
+      ${number("rampEndOffset", "End Offset (m)", -1000, 1000, 0.1)}
+      <div class="detail-hint">Drag from the start to the end point. Release over the Landscape to apply once. Brush Size is half the ramp width; offsets adjust the sampled endpoint heights. A click alone makes no change.</div>`;
+  } else if (settings.tool === "terrace") {
+    controls = `${number("terraceStep", "Step Height (m)", 0.01, 1000, 0.1)}
+      ${number("terraceSmoothing", "Step Smoothing", 0, 1, 0.05)}
+      <div class="detail-hint">Paint height steps relative to the Landscape origin. Smoothing softens the transitions between steps.</div>`;
+  } else if (settings.tool === "stamp") {
+    controls = `<label class="detail-row"><span>Stamp Shape</span><select data-landscape-stamp-shape ${lockedAttr}>
+      ${(["hill", "crater", "ridge"] as const).map((shape) => `<option value="${shape}" ${settings.stampShape === shape ? "selected" : ""}>${shape[0]!.toUpperCase() + shape.slice(1)}</option>`).join("")}
+      </select></label>
+      ${number("stampHeight", "Stamp Height (m)", -1000, 1000, 0.1)}
+      ${number("stampRotation", "Rotation (deg)", -360, 360, 5)}
+      <div class="detail-hint">Click to add one stamp. Dragging does not repeat it. Negative height reverses the shape; rotation is most visible with Ridge. Strength and Falloff control blending.</div>`;
+  } else if (settings.tool === "flatten") {
+    controls = `<label class="detail-toggle">
+      <input data-landscape-flatten-clicked-height type="checkbox" ${settings.flattenUseClickedHeight ? "checked" : ""} ${lockedAttr} />
+      <span>Flatten: Use Clicked Height</span></label>
+      <div class="detail-hint">Uses the height at the start of each drag and keeps it fixed until release.</div>
+      <label class="detail-row"><span>Flatten Target</span>
+      <input data-landscape-number="flattenTargetHeight" type="number" step="0.1" value="${settings.flattenTargetHeight}"
+        ${settings.flattenUseClickedHeight ? "disabled" : lockedAttr} /></label>`;
+  }
+  return `<div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
+    ${WORLD_TERRAIN_SCULPT_TOOLS.map((tool) => `<button type="button" data-landscape-tool="${tool}"
+      class="${settings.tool === tool ? "active" : ""}" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`).join("")}
+    </div>
+    <div class="detail-hint">Hold Shift to swap Raise and Lower while sculpting. Ctrl: Smooth. Alt: Flatten. Ctrl+Alt: Flatten at clicked height.</div>
+    ${controls}`;
 }
 
 /**
@@ -953,22 +984,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       </label>
       <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>`
     : settings.editMode === "sculpt"
-    ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
-        ${LANDSCAPE_SCULPT_TOOLS.map((tool) => `<button type="button" data-landscape-tool="${tool}" class="${
-          settings.tool === tool ? "active" : ""
-        }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`).join("")}
-      </div>
-      <div class="detail-hint">Hold Shift to swap Raise and Lower while sculpting. Ctrl: Smooth. Alt: Flatten. Ctrl+Alt: Flatten at clicked height.</div>
-      <label class="detail-toggle">
-        <input data-landscape-flatten-clicked-height type="checkbox" ${settings.flattenUseClickedHeight ? "checked" : ""} ${lockedAttr} />
-        <span>Flatten: Use Clicked Height</span>
-      </label>
-      <div class="detail-hint">Uses the height at the start of each drag and keeps it fixed until release.</div>
-      <label class="detail-row">
-        <span>Flatten Target</span>
-        <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
-          value="${settings.flattenTargetHeight}" ${settings.flattenUseClickedHeight ? "disabled" : lockedAttr} />
-      </label>`
+    ? terrainSculptControls(settings, lockedAttr)
     : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on a multi-tile Landscape yet.</div>`;
   body.innerHTML = `
       <div class="detail-heading">
@@ -2189,10 +2205,7 @@ function actorLockSection(selection: EditableSelection): string {
 }
 
 function formatLandscapeTool(tool: LandscapeSculptTool): string {
-  if (tool === "raise") return "Raise";
-  if (tool === "lower") return "Lower";
-  if (tool === "smooth") return "Smooth";
-  return "Flatten";
+  return tool[0]!.toUpperCase() + tool.slice(1);
 }
 
 function formatLandscapePaintTool(tool: LandscapePaintTool): string {

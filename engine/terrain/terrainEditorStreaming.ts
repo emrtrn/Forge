@@ -1,5 +1,6 @@
 import { computeStreamingTargets, type GridStreamingSettings, type StreamingSource } from "../world/streamingPolicy";
 import { insertTerrainEditTile, type TerrainEditWorld } from "./terrainEdit";
+import { terrainSculptBounds, type TerrainRamp } from "./terrainSculpt";
 import { terrainTileWorldSize, tileKey, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
 
 /**
@@ -18,16 +19,17 @@ export function editorStreamsTerrain(def: Pick<WorldTerrainDef, "tiles">): boole
  */
 export function terrainBrushTileKeys(
   def: Pick<WorldTerrainDef, "origin" | "spacing" | "tileQuads" | "tilesX" | "tilesZ" | "tiles">,
-  x: number, z: number, radius: number,
+  x: number, z: number, radius: number, ramp?: TerrainRamp,
 ): string[] {
   const size = terrainTileWorldSize(def);
   const reach = radius + 2 * def.spacing;
-  const range = (centre: number, origin: number, count: number) => [
-    Math.max(0, Math.floor((centre - reach - origin) / size)),
-    Math.min(count - 1, Math.floor((centre + reach - origin) / size)),
+  const bounds = terrainSculptBounds(x, z, reach, ramp);
+  const range = (min: number, max: number, origin: number, count: number) => [
+    Math.max(0, Math.floor((min - origin) / size)),
+    Math.min(count - 1, Math.floor((max - origin) / size)),
   ] as const;
-  const [x0, x1] = range(x, def.origin[0], def.tilesX);
-  const [z0, z1] = range(z, def.origin[2], def.tilesZ);
+  const [x0, x1] = range(bounds.minX, bounds.maxX, def.origin[0], def.tilesX);
+  const [z0, z1] = range(bounds.minZ, bounds.maxZ, def.origin[2], def.tilesZ);
   const declared = new Set(def.tiles.map(({ key }) => key));
   const keys: string[] = [];
   for (let tz = z0; tz <= z1; tz += 1) {

@@ -23,7 +23,8 @@
     {
       "id": "dirt",
       "name": "Dirt",
-      "color": "#8a6441"
+      "color": "#8a6441",
+      "material": "m-gravel-material"
     },
     {
       "id": "rock",
@@ -39,23 +40,23 @@
   "tiles": [
     {
       "key": "0_0",
-      "minHeight": 0.003906309604644775,
-      "maxHeight": 6.78525972366333
+      "minHeight": 0.00019999999494757503,
+      "maxHeight": 1.774999976158142
     },
     {
       "key": "1_0",
-      "minHeight": 0.003906309604644775,
-      "maxHeight": 9.254047393798828
+      "minHeight": 0.0008999999845400453,
+      "maxHeight": 9.267399787902832
     },
     {
       "key": "0_1",
-      "minHeight": 0.003906309604644775,
-      "maxHeight": 4.550850868225098
+      "minHeight": -1.597680687904358,
+      "maxHeight": 3.928100109100342
     },
     {
       "key": "1_1",
-      "minHeight": 0.003906309604644775,
-      "maxHeight": 8.621225357055664
+      "minHeight": 0.003100000089034438,
+      "maxHeight": 10.626399993896484
     }
   ],
   "collision": true

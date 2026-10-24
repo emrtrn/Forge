@@ -5788,8 +5788,16 @@
       ],
       "dataRef": "assets/starter-content/Levels/Terrain.landscapes/landscape-1.terrain.json",
       "name": "Landscape",
-      "locked": true,
       "collision": true
+    }
+  ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "landscapeRef": "landscape-1",
+      "splineRef": "spline-2",
+      "name": "River Water 1",
+      "surfaceLevel": 0
     }
   ],
   "actors": [

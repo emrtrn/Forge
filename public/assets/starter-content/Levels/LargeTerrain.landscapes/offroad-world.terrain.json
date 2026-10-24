@@ -13,7 +13,6 @@
   ],
   "heightMin": -8,
   "heightMax": 128,
-  "collision": true,
   "layers": [
     {
       "id": "grass",
@@ -59,5 +58,6 @@
       "minHeight": 3.226978063583374,
       "maxHeight": 44.55927276611328
     }
-  ]
+  ],
+  "collision": true
 }

@@ -39,15 +39,15 @@ asset-health, content collection — still reads one whole `RoomLayout`; a missi
 invalid cell file fails the level read like any other required document.
 
 At runtime the whole layout is **built** eagerly except for cell-assigned Actor
-Script actors (`layout.actors`), static mesh placements (`layout.instances`) and
-blocking volumes (`layout.blockingVolumes`),
+Script actors (`layout.actors`), static mesh placements (`layout.instances`),
+blocking volumes (`layout.blockingVolumes`) and point/spot lights (`layout.lights`),
 routed by `worldPartitionCellContents` — the same rule the saver uses. Those are
 activated and unloaded with their cell around the pawn:
 
 - **What loads when.** Boot, level travel and save-load activate the cells in range
   of the spawn/pawn behind the loading overlay; afterwards the streamer activates at
   most two cells per frame and unloads cells past the 1.25× hysteresis ring.
-  `spatiallyLoaded: false` elements stay persistent. Lights, characters, reflection captures, target points, world widgets and splines are not
+  `spatiallyLoaded: false` elements stay persistent. Directional lights, characters, reflection captures, target points, world widgets and splines are not
   cell-streamed yet.
 - **Static placements and blocking volumes.** A cell's placements render as one instanced batch per asset
   (culled per cell); persistent placements keep one batch per asset. Their colliders,
@@ -59,6 +59,13 @@ activated and unloaded with their cell around the pawn:
   state address them as in an eager level; a placement destroyed by a persisted
   script stays out. Spawn-range cells are built before the scene document, after
   the reflection-capture bake, so those probes do not see them.
+- **Streamed lights.** Point and spot lights render through per-kind pools
+  (point, spot, and their shadow-casting variants) sized at level build to the
+  most that can be near at once (at most 16 per kind; the excess stays dark with
+  a warning). A pooled light is always in the scene: the light count is part of
+  every lit program's key, so it never changes while playing. A parked light is
+  dark with a frozen shadow map; a cell's lights borrow pooled lights while the
+  cell is active.
 - **Assets (`AssetResidency`).** The mesh of a cell-streamed plain actor
   (`parentClass: "actor"`, no `Vehicle` component) is owned by its cell: it is
   fetched asynchronously when the cell enters the prefetch ring (1.5× the load

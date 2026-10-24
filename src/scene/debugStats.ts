@@ -460,7 +460,8 @@ function worldPartitionText(app: RuntimeStatsApp): string {
     : "";
   return `\nworld partition: cells ${stats.activeCells}/${stats.totalCells} actors ${stats.liveActors}`
     + ` prefetch ${stats.prefetchedCells} wait ${stats.waitingCells}${models}`
-    + (stats.statics ? ` statics ${stats.statics.cells} pending ${stats.statics.pending}` : "");
+    + (stats.statics ? ` statics ${stats.statics.cells} pending ${stats.statics.pending}` : "")
+    + (stats.lights?.capacity ? ` lights ${stats.lights.used}/${stats.lights.capacity}` : "");
 }
 
 function terrainStreamingText(app: RuntimeStatsApp): string {

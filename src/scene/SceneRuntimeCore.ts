@@ -42,6 +42,7 @@ import {
   createLightObject as createThreeLightObject,
   entityLightItem,
   type LightObjectRecord,
+  type LightRenderItem,
 } from "@engine/render-three/lights";
 import {
   characterEntity,
@@ -859,6 +860,11 @@ export function buildSceneLightObject(
     DEFAULT_SCENE_LIGHT_COLOR,
     options,
   );
+}
+
+/** The render item buildSceneLightObject builds a layout light from. */
+export function sceneLightItem(actor: LayoutLightActor, index: number): LightRenderItem {
+  return entityLightItem(lightEntity(index, actor));
 }
 
 /** Tag a light record's root + descendants with their light index for picking. */

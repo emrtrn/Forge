@@ -43,7 +43,13 @@ async function writeFixture() {
       }] },
       { assetId: "marker:playerStart", placements: [{ name: "Player Start", position: [8, 2, SPAWN_Z] }] },
     ],
-    lights: [{ id: "sun", type: "directional", position: [4, 8, 4], intensity: 3, castShadow: false }],
+    lights: [
+      { id: "sun", type: "directional", position: [4, 8, 4], intensity: 3, castShadow: false },
+      // Streamed lights in cell 0_7, one per pooled kind, met on the way back.
+      { id: "lamp", name: "Streamed lamp", type: "point", position: [8, 3, 116], intensity: 2 },
+      { id: "shadow-lamp", name: "Streamed shadow lamp", type: "point", position: [8, 3, 120], intensity: 2, castShadow: true },
+      { id: "spot", name: "Streamed spot", type: "spot", position: [8, 4, 124], rotation: [-90, 0, 0], intensity: 3 },
+    ],
     // A streamed blocking volume across the corridor ahead of the spawn (-Z).
     blockingVolumes: [{ id: "streamed-volume", name: "Streamed volume", position: [8, 2, VOLUME_Z], size: [16, 4, 1], renderInGame: true }],
   };
@@ -52,11 +58,14 @@ async function writeFixture() {
 
 function readStats(text: string) {
   const statics = text.match(/statics (\d+) pending (\d+)/);
+  const lights = text.match(/lights (\d+)\/(\d+)/);
+  const programs = text.match(/prog (\d+)/);
   const cells = text.match(/world partition: cells (\d+)\/(\d+)/);
   const position = text.match(/pos: (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/);
-  if (!statics || !cells || !position) throw new Error(`Missing partition/pawn stats:\n${text}`);
+  if (!statics || !cells || !position || !lights || !programs) throw new Error(`Missing partition/pawn stats:\n${text}`);
   return {
     staticCells: Number(statics[1]), pending: Number(statics[2]),
+    lightsUsed: Number(lights[1]), lightCapacity: Number(lights[2]), programs: Number(programs[1]),
     active: Number(cells[1]), total: Number(cells[2]),
     y: Number(position[2]), z: Number(position[3]),
   };
@@ -84,9 +93,14 @@ test("static placements and volumes stream by cell: the floor ahead is there in 
   expect(start.staticCells).toBeGreaterThan(0);
   expect(start.staticCells).toBeLessThan(start.total);
   expect(start.pending).toBe(0);
+  // One pooled light per kind, all parked while their cell is far away.
+  expect(start.lightCapacity).toBe(3);
+  expect(start.lightsUsed).toBe(0);
 
   let lowest = start.y;
   let maxCells = start.staticCells;
+  /** Shader programs at the first sample with every pooled light lit. */
+  let programsWhenLit: number | null = null;
   /** Holds a key until the pawn has stood still for a second beyond `beyond(z)`. */
   const runUntilStopped = async (key: "w" | "s", beyond: (z: number) => boolean) => {
     let previousZ = Number.NaN;
@@ -97,6 +111,7 @@ test("static placements and volumes stream by cell: the floor ahead is there in 
         const current = await stats();
         lowest = Math.min(lowest, current.y);
         maxCells = Math.max(maxCells, current.staticCells);
+        if (programsWhenLit === null && current.lightsUsed === 3) programsWhenLit = current.programs;
         stillFrames = Math.abs(current.z - previousZ) < 0.01 ? stillFrames + 1 : 0;
         previousZ = current.z;
         return beyond(current.z) && stillFrames >= 10;
@@ -113,8 +128,13 @@ test("static placements and volumes stream by cell: the floor ahead is there in 
   expect(atVolume.z, "the streamed volume stopped the pawn").toBeGreaterThan(VOLUME_Z);
   expect(atVolume.z).toBeLessThan(VOLUME_Z + 3);
 
-  // Running back past the spawn, the streamed wall stops it, and the volume's cell is gone.
+  // Running back past the spawn: the streamed lights borrow pooled lights without
+  // compiling a single program, the streamed wall stops the pawn, and the volume's cell is gone.
+  const programsBefore = (await stats()).programs;
   const atWall = await runUntilStopped("s", (z) => z > SPAWN_Z + 40);
+  expect(programsWhenLit, "all three streamed lights were lit").not.toBeNull();
+  // Not equal: three releases programs whose materials left with an unloaded cell.
+  expect(programsWhenLit, "lighting streamed lights compiled no program").toBeLessThanOrEqual(programsBefore);
   expect(atWall.z, "the streamed wall stopped the pawn").toBeLessThan(WALL_Z);
   expect(atWall.z).toBeGreaterThan(WALL_Z - 3);
   expect(events).toContain("[world-partition] unloaded 0_-2");

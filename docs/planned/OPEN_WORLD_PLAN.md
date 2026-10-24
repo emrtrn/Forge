@@ -1208,7 +1208,7 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       mesh'leri yine boot'ta yüklenir. `?debug`: `world partition: cells a/t
       actors n`. Smoke `world-partition-streaming.spec.ts`: 12 hücreli koridorda
       yürürken öndeki hücre yüklenir, arkadaki boşalır, canlı actor ≤ 5.
-- [ ] Runtime: hücre aktivasyonu instances / actors / lights / volumes /
+- [x] Runtime: hücre aktivasyonu instances / actors / lights / volumes /
       characters'ı sahneye, fiziğe (toplu), behavior'a ekler; deaktivasyon
       tersini yapar. Actor Script'te **BeginPlay hücre aktivasyonunda, EndPlay
       boşaltmada** çağrılır (Unreal semantiği); belgelenir.
@@ -1330,6 +1330,19 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       Residency smoke'u pawn'ı 20 m/s'ye indirdi ve sayımları boşaltmadan
       sonrası için yapar: batch'te yavaş karede 60 m/s pawn bir hücreyi aşıp
       fazladan boşalt/canlandır üretiyordu (kod doğruydu).
+      *S4 tamam (2026-10-24):* directional olmayan akan ışıklar havuzdan.
+      Level kurulurken tür başına (point, spot, gölgeli point, gölgeli spot)
+      `streamedLightPeaks` kadar ışık açılır (tür başına en çok 16; aşılırsa
+      uyarı, fazlası karanlık). Havuz ışığı hep görünür kalır, park hâlinde
+      parlaklığı 0 ve gölge haritası donuk (`shadow.autoUpdate = false`); hücre
+      açılınca parametreleri yazılır, kapanınca park edilir. Işık sayısı hiç
+      değişmediği için program yeniden derlenmez (statics smoke'u ışıklar
+      yanarken program sayısının artmadığını doğrular). Işık entity'leri
+      eager kalır (runtime'da ışığı kimliğiyle kontrol eden yol yok). `?debug`:
+      `lights kullanılan/kapasite`.
+      **Seçenek 2 kapandı.** Karakterler (`layout.characters`) bilerek eager;
+      akmaları ayrı karar. Reflection capture, target point ve world widget'lar
+      da kalıcı.
 - [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*

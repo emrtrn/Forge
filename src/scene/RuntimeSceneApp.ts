@@ -1,7 +1,13 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
-import { normalizeWorldPartitionSettings, worldPartitionCellContents } from "@engine/world/worldPartition";
+import {
+  normalizeWorldPartitionSettings,
+  streamedLightPeaks,
+  worldPartitionCellContents,
+  type StreamedLightKind,
+} from "@engine/world/worldPartition";
+import { assignPooledLight, createPooledLightObject } from "@engine/render-three/lights";
 import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
 import { StreamedActorStateCache } from "@engine/world/streamedActorState";
 import { AssetResidency, type AssetResidencySnapshot } from "@engine/world/assetResidency";
@@ -147,6 +153,8 @@ import {
   readSceneRuntimeMemory,
   registerSceneShapeModels,
   resolveSceneWorldSettings,
+  DEFAULT_SCENE_LIGHT_COLOR,
+  sceneLightItem,
   sceneModelAssetIds,
   startSceneRuntime,
   tagSceneLightRecordIndex,
@@ -484,6 +492,18 @@ const PERSISTENT_MODEL_OWNER = "persistent";
  */
 const STATIC_BUILD_BUDGET = 130;
 const STATIC_TRIMESH_WEIGHT = 6;
+/**
+ * Upper bound per streamed light kind. Every pooled light costs every lit pixel
+ * (forward rendering) whether lit or parked, so a level whose peak exceeds this
+ * warns and leaves the excess dark rather than growing every shader.
+ */
+const LIGHT_POOL_CAP = 16;
+const STREAMED_LIGHT_KINDS: readonly StreamedLightKind[] = ["point", "spot", "pointShadow", "spotShadow"];
+
+function streamedLightKind(light: { type: string; castShadow?: boolean }): StreamedLightKind {
+  const type = light.type === "spot" ? "spot" : "point";
+  return light.castShadow === true ? `${type}Shadow` : type;
+}
 
 /** A cell's static placements once built: render batches and the entities they own. */
 interface StaticCellBatch {
@@ -497,6 +517,8 @@ interface StaticCellBatch {
 interface StaticCellState {
   batches: StaticCellBatch[];
   volumes: BlockingVolumeObject[];
+  /** Pooled lights this cell's lights borrowed, returned on unload. */
+  lights: { kind: StreamedLightKind; record: LightObjectRecord }[];
   /** Entities still waiting for the per-frame budget, in activation order. */
   pending: Entity[];
   /** Entities in physics, behavior and modules. */
@@ -562,6 +584,7 @@ export interface RuntimeStatsApp {
   getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & {
     models?: AssetResidencySnapshot;
     statics?: { cells: number; pending: number };
+    lights?: { used: number; capacity: number };
   }) | null;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getUiDebugSnapshot?(): UiDebugSnapshot;
@@ -897,6 +920,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Cell-streamed blocking volumes (indices into layout.blockingVolumes) per cell. */
   private partitionVolumeCells = new Map<string, number[]>();
   private streamedVolumeIndices = new Set<number>();
+  /** Cell-streamed point/spot lights (indices into layout.lights) per cell. */
+  private partitionLightCells = new Map<string, number[]>();
+  private streamedLightIndices = new Set<number>();
+  /** How many pooled lights of each kind the level can need at once (S1 bound). */
+  private lightPoolPeaks: Record<StreamedLightKind, number> | null = null;
+  /** Parked pooled lights by kind; borrowed ones live in their cell's state. */
+  private readonly lightPools = new Map<StreamedLightKind, LightObjectRecord[]>();
+  private lightPoolCapacity = 0;
+  private lightPoolExhaustedWarned = false;
   /** Cells whose statics are built; boot cells wait in bootStaticCells for the scene document. */
   private readonly liveStaticCells = new Map<string, StaticCellState>();
   private bootStaticCells: string[] = [];
@@ -1186,6 +1218,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         buildSceneEntities: () => {
           const layout = this.layout;
           if (!layout) throw new Error("Runtime level content is not ready to build entities.");
+          let lightIndex = 0;
           buildSceneEntities(layout, {
             addInstance: (assetId, placements) => {
               if (isMarkerAssetId(assetId)) return;
@@ -1194,8 +1227,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
               );
             },
             addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
-            addLight: (light) => this.addLight(light),
+            addLight: (light) => {
+              // Cell-streamed lights render through the pools created below.
+              if (!this.streamedLightIndices.has(lightIndex++)) this.addLight(light);
+            },
           });
+          this.createLightPools();
         },
         buildActorInstances: async () => this.addActorObjects(),
       },
@@ -2247,12 +2284,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   getWorldPartitionSnapshot(): (WorldPartitionSnapshot & {
     models: AssetResidencySnapshot;
     statics: { cells: number; pending: number };
+    lights: { used: number; capacity: number };
   }) | null {
     const snapshot = this.runtimeServices.resolve(worldPartitionService)?.snapshot();
     if (!snapshot) return null;
     let pending = 0;
     for (const state of this.liveStaticCells.values()) pending += state.pending.length;
-    return { ...snapshot, models: this.modelResidency.snapshot(), statics: { cells: this.liveStaticCells.size, pending } };
+    let parked = 0;
+    for (const pool of this.lightPools.values()) parked += pool.length;
+    return {
+      ...snapshot,
+      models: this.modelResidency.snapshot(),
+      statics: { cells: this.liveStaticCells.size, pending },
+      lights: { used: this.lightPoolCapacity - parked, capacity: this.lightPoolCapacity },
+    };
   }
 
   private updateWorldPartition(): void {
@@ -3133,6 +3178,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.streamedStaticAssetIds = new Set();
     this.partitionVolumeCells = new Map();
     this.streamedVolumeIndices = new Set();
+    this.partitionLightCells = new Map();
+    this.streamedLightIndices = new Set();
+    this.lightPoolPeaks = null;
+    // Pooled lights are in lightObjects; the light teardown below disposes them.
+    this.lightPools.clear();
+    this.lightPoolCapacity = 0;
+    this.lightPoolExhaustedWarned = false;
     this.assetUvwDefs.clear();
     this.instanceSlots.clear();
     this.instanceOverrideObjects.clear();
@@ -4085,6 +4137,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.streamedStaticAssetIds = new Set();
     this.partitionVolumeCells = new Map();
     this.streamedVolumeIndices = new Set();
+    this.partitionLightCells = new Map();
+    this.streamedLightIndices = new Set();
+    this.lightPoolPeaks = null;
     this.bootStaticCells = [];
     const partition = this.runtimeServices.resolve(worldPartitionService);
     const settings = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
@@ -4121,6 +4176,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.partitionVolumeCells.set(key, content.blockingVolumes);
         for (const index of content.blockingVolumes) this.streamedVolumeIndices.add(index);
       }
+      if (content.lights.length > 0) {
+        this.partitionLightCells.set(key, content.lights);
+        for (const index of content.lights) this.streamedLightIndices.add(index);
+      }
       if (content.instances.length === 0) continue;
       this.partitionStaticCells.set(key, content.instances);
       for (const { group, placement } of content.instances) {
@@ -4131,6 +4190,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
     }
     this.partitionCellModelIds = cellModels;
+    this.lightPoolPeaks = this.streamedLightIndices.size > 0
+      ? streamedLightPeaks(this.layout, contents, settings.grids.main)
+      : null;
     entities.forEach((entity, index) => { if (!actorCells.has(index)) this.registerActorEntity(entity); });
     partition.configure(settings.grids.main, cells, {
       activate: (index) => this.activatePartitionActor(index),
@@ -4145,7 +4207,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         else this.modelResidency.releaseOwner(partitionCellOwner(key));
       },
       isReady: (key) => this.modelResidency.isOwnerReady(partitionCellOwner(key)),
-    }, this.debug, { occupiedCells: [...this.partitionStaticCells.keys(), ...this.partitionVolumeCells.keys()] });
+    }, this.debug, {
+      occupiedCells: [...this.partitionStaticCells.keys(), ...this.partitionVolumeCells.keys(), ...this.partitionLightCells.keys()],
+    });
   }
 
   /** Whether any World Partition cell streams this asset's static placements. */
@@ -4207,7 +4271,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the scene document so they take the batch path with collision sidecars loaded.
    */
   private activateStaticCell(key: string): void {
-    if ((!this.partitionStaticCells.has(key) && !this.partitionVolumeCells.has(key)) || this.liveStaticCells.has(key)) return;
+    if (this.liveStaticCells.has(key)) return;
+    if (!this.partitionStaticCells.has(key) && !this.partitionVolumeCells.has(key) && !this.partitionLightCells.has(key)) return;
     if (!this.worldPartitionLive) {
       if (!this.bootStaticCells.includes(key)) this.bootStaticCells.push(key);
       return;
@@ -4235,7 +4300,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       indices.push(placement);
       byGroup.set(group, indices);
     }
-    const state: StaticCellState = { batches: [], volumes: [], pending: [], added: [], authored: new Map() };
+    const state: StaticCellState = { batches: [], volumes: [], lights: [], pending: [], added: [], authored: new Map() };
     const adapter = {
       colliderBox: (assetId: string, source: ColliderTransformSource) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
@@ -4292,8 +4357,48 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       state.volumes.push(object);
       this.scene.add(tagSceneSource(object, "blocking-volume"));
     }
+    for (const index of this.partitionLightCells.get(key) ?? []) {
+      const actor = layout.lights![index]!;
+      if (actor.hidden) continue;
+      const kind = streamedLightKind(actor);
+      const record = this.lightPools.get(kind)?.pop();
+      if (!record) {
+        if (!this.lightPoolExhaustedWarned) {
+          this.lightPoolExhaustedWarned = true;
+          console.warn(`[world-partition] no pooled ${kind} light left; "${actor.name ?? actor.id}" stays dark`);
+        }
+        continue;
+      }
+      assignPooledLight(record, sceneLightItem(actor, index), DEFAULT_SCENE_LIGHT_COLOR);
+      state.lights.push({ kind, record });
+    }
     this.liveStaticCells.set(key, state);
     return state;
+  }
+
+  /**
+   * One pool per streamed light kind, sized by the level's peak, created with the
+   * eager lights so the light counts every program is compiled for never change.
+   */
+  private createLightPools(): void {
+    const peaks = this.lightPoolPeaks;
+    if (!peaks) return;
+    for (const kind of STREAMED_LIGHT_KINDS) {
+      const size = Math.min(peaks[kind], LIGHT_POOL_CAP);
+      if (peaks[kind] > LIGHT_POOL_CAP) {
+        console.warn(`[world-partition] up to ${peaks[kind]} streamed ${kind} lights can be near at once; pooling ${LIGHT_POOL_CAP}`);
+      }
+      const pool: LightObjectRecord[] = [];
+      for (let index = 0; index < size; index += 1) {
+        const record = createPooledLightObject(kind.startsWith("spot") ? "spot" : "point", kind.endsWith("Shadow"), `pooled-${kind}-${index}`);
+        this.scene.add(tagSceneSource(record.root, "light"));
+        if (record.target) this.scene.add(record.target);
+        this.lightObjects.push(record);
+        pool.push(record);
+      }
+      this.lightPools.set(kind, pool);
+      this.lightPoolCapacity += size;
+    }
   }
 
   /** Adds queued cell statics nearest cell first until the frame's budget is spent. */
@@ -4350,6 +4455,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeBlockingVolumeObject(volume);
     }
     state.volumes = [];
+    for (const { kind, record } of state.lights) {
+      assignPooledLight(record, null, DEFAULT_SCENE_LIGHT_COLOR);
+      this.lightPools.get(kind)?.push(record);
+    }
+    state.lights = [];
   }
 
   /** Like rememberStreamedActorState, for a cell-streamed static placement. */
@@ -5928,9 +6038,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (!light.castShadow) continue;
       if (light.shadow.mapSize.width !== quality.shadowMapSize) {
         light.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
-        // Drop the cached render target so three regenerates it at the new size.
+        // Drop the cached render target so three regenerates it at the new size
+        // (a parked pooled light's frozen shadow included).
         light.shadow.map?.dispose();
         light.shadow.map = null;
+        light.shadow.needsUpdate = true;
       }
     }
     this.fitSunShadowToScene();

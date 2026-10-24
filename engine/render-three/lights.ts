@@ -189,6 +189,62 @@ export function createLightObject(
   return record;
 }
 
+/** Where a parked pooled light waits: far below any level, and dark anyway. */
+const POOLED_LIGHT_PARK_Y = -10000;
+
+/**
+ * A light for a runtime pool (World Partition streamed lights). It stays visible
+ * for its whole life: the scene's light count per type (and shadow count) is
+ * part of every lit material's program key, so adding or hiding lights while
+ * playing would recompile them all. Parked, it is dark and its shadow map frozen.
+ */
+export function createPooledLightObject(type: "point" | "spot", castShadow: boolean, name: string): LightObjectRecord {
+  const record = createLightObject({
+    name, type, position: [0, POOLED_LIGHT_PARK_Y, 0], rotation: [0, 0, 0], hidden: false, intensity: 0, castShadow,
+  }, 0xffffff, { gizmo: false });
+  parkPooledLight(record);
+  return record;
+}
+
+/** Shows `item` through a pooled light of its type, or parks the light for null/hidden. */
+export function assignPooledLight(
+  record: LightObjectRecord,
+  item: LightRenderItem | null,
+  defaultColor: ColorRepresentation,
+): void {
+  if (!item || item.hidden) {
+    parkPooledLight(record);
+    return;
+  }
+  applyLightTransform(record, { ...item, hidden: false });
+  const light = record.light;
+  light.color.set(item.color ?? defaultColor);
+  light.intensity = item.intensity ?? defaultLightIntensity(item.type);
+  if (light instanceof PointLight || light instanceof SpotLight) {
+    light.distance = item.distance ?? (item.type === "point" ? 8 : 10);
+    light.decay = item.decay ?? 2;
+  }
+  if (light instanceof SpotLight) {
+    light.angle = degreesToRadians(item.angle ?? 30);
+    light.penumbra = item.penumbra ?? 0.35;
+  }
+  if (light.castShadow) {
+    light.shadow.autoUpdate = true;
+    light.shadow.needsUpdate = true;
+  }
+}
+
+function parkPooledLight(record: LightObjectRecord): void {
+  record.root.position.set(0, POOLED_LIGHT_PARK_Y, 0);
+  record.root.visible = true;
+  record.light.intensity = 0;
+  if (record.light.castShadow) {
+    // One last render at the parked pose, then frozen: no per-frame shadow pass.
+    record.light.shadow.autoUpdate = false;
+    record.light.shadow.needsUpdate = true;
+  }
+}
+
 export function syncLightObject(
   record: LightObjectRecord,
   item: LightRenderItem,

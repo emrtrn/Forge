@@ -7199,24 +7199,18 @@ await checkAsync("a Vehicle component makes physics build the vehicle, and a reb
   });
 });
 
-await checkAsync("the starter Reference Car actor drives in the VehicleTest level's physics", async () => {
+await checkAsync("the starter Reference Car actor drives in Rapier physics", async () => {
   await withQuietRapierInit(async () => {
     const def =
       normalizeActorScriptDef(
         JSON.parse(readFileSync("public/assets/starter-content/Gameplay/Script_ReferenceCar.actor.json", "utf8")),
       ) ?? assert.fail("Script_ReferenceCar did not normalize");
     assert.ok(def.components.some((node) => node.component === VEHICLE_COMPONENT), "Vehicle node survives");
-    const level = JSON.parse(
-      readFileSync("public/assets/starter-content/Levels/VehicleTest.level.json", "utf8"),
-    ) as { worldSettings: { gameMode: string }; actors: LayoutActorInstance[] };
-    // Driven directly (`forge.vehicle`) or boarded on foot (the project TPS mode).
-    assert.ok(
-      ["forge.vehicle", "assets/starter-content/Gameplay/Script_GameMode.actor.json"].includes(
-        level.worldSettings.gameMode,
-      ),
-      `VehicleTest plays in a mode that reaches the car: ${level.worldSettings.gameMode}`,
-    );
-    const instance = level.actors[0] ?? assert.fail("car placement");
+    const instance: LayoutActorInstance = {
+      classRef: "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
+      position: [0, 1.2, 0],
+      rotation: [0, 0, 0],
+    };
     const resolved = await resolveActorVehicleAssets(def, async (path) =>
       normalizeVehicleAsset(JSON.parse(readFileSync(`public/${path}`, "utf8"))));
     const entity = actorInstanceToEntity(resolved, instance, 0);

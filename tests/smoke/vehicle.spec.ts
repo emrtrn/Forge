@@ -2,14 +2,15 @@ import { expect, test, type Page } from "./test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
-import { smokePublicPath } from "./smokeProject.mjs";
+import { resolve } from "node:path";
+import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
 
 /**
  * Vehicle plan Faz 1b: the starter Reference Car drives in a real browser.
  *
  * The headless checks prove the physics (suspension, drive, brake) and the
  * Game Mode against fakes; this one proves the wiring in between — that the
- * committed `VehicleTest` level boots, the `Vehicle` component on the placed
+ * `VehicleTest` fixture level boots, the `Vehicle` component on the placed
  * actor becomes a Rapier vehicle, `forge.vehicle` possesses it, the default
  * key bindings reach it through the fixed-step world, and the wheel capability
  * hangs its wheels without a page error.
@@ -18,10 +19,25 @@ import { smokePublicPath } from "./smokeProject.mjs";
  * flight, so neither the committed project file nor the shared smoke setup is
  * touched. Each test also picks the level's Game Mode in flight, so the mode
  * the level happens to be authored with does not decide what is tested.
+ *
+ * Both levels are test fixtures (`tests/smoke/fixtures/vehicle-*.level.json`),
+ * not project content: they are served in flight at these level paths, which
+ * do not exist under `public/`.
  */
 const VEHICLE_LEVEL = "assets/starter-content/Levels/VehicleTest.level.json";
 const VEHICLE_LOADED = '"layout":"VehicleTest"';
 const TRACK_LEVEL = "assets/starter-content/Levels/VehicleTrack.level.json";
+const LEVEL_FIXTURES: Record<string, string> = {
+  [VEHICLE_LEVEL]: "vehicle-test.level.json",
+  [TRACK_LEVEL]: "vehicle-track.level.json",
+};
+
+/** A fresh copy of a vehicle level fixture, for editing in flight. */
+async function readLevelFixture(levelPath: string): Promise<LevelJson> {
+  const fixture = LEVEL_FIXTURES[levelPath];
+  if (!fixture) throw new Error(`no vehicle level fixture for ${levelPath}`);
+  return JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures", fixture), "utf8"));
+}
 const VEHICLE_ASSET = "assets/starter-content/Gameplay/ReferenceCar.vehicle.json";
 const VEHICLE_ACTOR = "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json";
 /** Debug-overlay mode name → the `worldSettings.gameMode` that selects it. */
@@ -68,11 +84,10 @@ async function openVehicleTest(
   const consoleMessages: string[] = [];
   const pageErrors: string[] = [];
   await page.route(`**/${levelPath}`, async (route) => {
-    const response = await route.fetch();
-    const level = await response.json();
+    const level = await readLevelFixture(levelPath);
     level.worldSettings.gameMode = GAME_MODES[mode];
     editLevel?.(level);
-    await route.fulfill({ response, json: level });
+    await route.fulfill({ json: level });
   });
 
   await page.context().addInitScript(() => {
@@ -493,15 +508,14 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
   // A separate plain-lit inspection view distinguishes the imported material
   // from the authored VehicleTest atmosphere/lighting. No layout is saved.
   await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
-    const response = await route.fetch();
-    const level = await response.json();
+    const level = await readLevelFixture(VEHICLE_LEVEL);
     delete level.skyAtmosphere;
     delete level.heightFog;
     delete level.cloudLayer;
     level.worldSettings.gameMode = GAME_MODES.Vehicle;
     level.worldSettings.ambientIntensity = 2;
     level.worldSettings.backgroundColor = "#c8d8e8";
-    await route.fulfill({ response, json: level });
+    await route.fulfill({ json: level });
   });
   await page.reload();
   await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 60_000 });
@@ -535,7 +549,7 @@ test("vehicle authoring: place a car from Add Actor, save, Play, and drive it", 
   // The editor opens this run's isolated smoke level. Serve it as a flat,
   // car-free copy of VehicleTest in
   // forge.vehicle mode, so the placed car is the only vehicle to possess.
-  const flat = JSON.parse(await readFile(smokePublicPath(VEHICLE_LEVEL), "utf8")) as LevelJson;
+  const flat = await readLevelFixture(VEHICLE_LEVEL);
   flatLane(flat);
   flat.blockingVolumes[0].size = [1000, 1, 1000]; // the save allowlist's largest volume
   flat.actors = [];

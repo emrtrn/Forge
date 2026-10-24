@@ -34,7 +34,6 @@ import { createVehicleAiModule } from "../../src/scene/capabilities/vehicleAiMod
 type Check = (label: string, fn: () => void) => void;
 
 const AI_CAR = "public/assets/starter-content/Gameplay/Script_AiReferenceCar.actor.json";
-const TRACK = "public/assets/starter-content/Levels/VehicleTrack.level.json";
 
 /** A straight, open 40 m lane from the origin along +Z. */
 const LANE: LayoutSplineActor = {
@@ -190,16 +189,6 @@ export function registerVehicleAiTests(check: Check): void {
     assert.deepEqual(readVehicleAiDriverComponent(actorInstanceToEntity(def, placed, 0)), {
       splineId: "loop", entry: "start", targetSpeed: 9, lookAheadDistance: 5, enabled: true,
     }, "ping-pong is a character patrol mode; a car keeps its default wrap");
-
-    // The committed demo: the track's AI car follows a spline the level owns.
-    const level = JSON.parse(readFileSync(TRACK, "utf8")) as {
-      actors: LayoutActorInstance[];
-      splines: { id: string; spline: { closed: boolean } }[];
-    };
-    const aiCar = level.actors.find((actor) => actor.classRef.endsWith("Script_AiReferenceCar.actor.json"))!;
-    const driver = readVehicleAiDriverComponent(actorInstanceToEntity(def, aiCar, 1))!;
-    const spline = level.splines.find((entry) => entry.id === driver.splineId);
-    assert.equal(spline?.spline.closed, true, "a closed loop the car laps forever");
   });
 
   // (B) the capability.

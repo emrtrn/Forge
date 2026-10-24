@@ -1,0 +1,242 @@
+{
+  "schema": 1,
+  "name": "VehicleTest",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            2.5,
+            0,
+            -1.5
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "sm-road-asphalt",
+      "placements": [
+        {
+          "position": [
+            0.72,
+            0,
+            17.67
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            0.72,
+            0,
+            3.74
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            0.72,
+            0,
+            -10.17
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            0.72,
+            0,
+            -23.97
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -0.38,
+            2.03,
+            45.89
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true,
+    "backgroundColor": "#ffffff",
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 4,
+    "mie": 0.002,
+    "mieDirectionalG": 0.85
+  },
+  "heightFog": {},
+  "cloudLayer": {
+    "coverage": 0.4,
+    "density": 0.5,
+    "scale": 2,
+    "speed": 0.1
+  },
+  "lights": [
+    {
+      "id": "vehicle-test-sun",
+      "type": "directional",
+      "position": [
+        20,
+        30,
+        20
+      ],
+      "name": "Sun",
+      "rotation": [
+        -50,
+        30,
+        0
+      ],
+      "color": "#fff4e0",
+      "intensity": 4,
+      "castShadow": true
+    }
+  ],
+  "blockingVolumes": [
+    {
+      "id": "vehicle-test-ground",
+      "position": [
+        0,
+        -0.5,
+        0
+      ],
+      "name": "Ground",
+      "size": [
+        160,
+        1,
+        160
+      ],
+      "renderInGame": true,
+      "color": "#725637"
+    },
+    {
+      "id": "vehicle-test-ramp",
+      "position": [
+        0,
+        0.6,
+        32
+      ],
+      "name": "Ramp",
+      "rotation": [
+        -10,
+        0,
+        0
+      ],
+      "size": [
+        6,
+        0.6,
+        14
+      ],
+      "renderInGame": true
+    },
+    {
+      "id": "vehicle-test-plateau",
+      "position": [
+        0,
+        1.05,
+        46
+      ],
+      "name": "Plateau",
+      "size": [
+        6,
+        2.1,
+        14
+      ],
+      "renderInGame": true
+    },
+    {
+      "id": "vehicle-test-curb",
+      "position": [
+        14,
+        0.1,
+        10
+      ],
+      "name": "Curb",
+      "size": [
+        0.6,
+        0.2,
+        16
+      ],
+      "renderInGame": true
+    },
+    {
+      "id": "vehicle-test-pillar-a",
+      "position": [
+        -10,
+        1.5,
+        14
+      ],
+      "name": "Pillar A",
+      "brushShape": "cylinder",
+      "size": [
+        1.2,
+        3,
+        1.2
+      ],
+      "renderInGame": true
+    },
+    {
+      "id": "vehicle-test-pillar-b",
+      "position": [
+        -14,
+        1.5,
+        24
+      ],
+      "name": "Pillar B",
+      "brushShape": "cylinder",
+      "size": [
+        1.2,
+        3,
+        1.2
+      ],
+      "renderInGame": true
+    },
+    {
+      "id": "vehicle-test-pillar-c",
+      "position": [
+        -10,
+        1.5,
+        34
+      ],
+      "name": "Pillar C",
+      "brushShape": "cylinder",
+      "size": [
+        1.2,
+        3,
+        1.2
+      ],
+      "renderInGame": true
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
+      "position": [
+        0,
+        1.2,
+        0
+      ],
+      "name": "Reference Car",
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

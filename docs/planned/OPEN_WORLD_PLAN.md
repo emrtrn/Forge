@@ -1303,6 +1303,14 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
         üretmez). Sabit durum adımı 1000 statikle 10–17 ms → 0,2 ms; eklemeden
         sonraki ilk adım 16–27 ms → 6–7 ms. `physicsContacts.test.ts` eski
         sırayı pinler.
+      *S1 tamam (2026-10-24, Codex):* `partitionRoutes` tek yönlendirme kuralı;
+      `partitionLayout` çıktısı değişmedi, `worldPartitionCellContents` aynı
+      kuralla birleşik level indekslerini verir (`instances` için
+      `{ group, placement }`), `streamedLightPeaks` ışık havuzu üst sınırı
+      (kaynak hücre kutusundan `loadRange × 1,25` içindeki hücreler, tür ve
+      gölge başına ayrı). Runtime'da parent zinciri kullanılmadığından
+      (yerleşimler dünya koordinatında) hücreler arası hiyerarşi için özel
+      yönlendirme gerekmedi.
 - [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*

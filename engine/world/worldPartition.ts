@@ -2,7 +2,7 @@
 import { resolveBlockingVolume } from "../scene/blockingVolume";
 import type { LayoutModelInstances, RoomLayout, Vec3 } from "../scene/layout";
 import { levelTerrainDir } from "../terrain/terrainTypes";
-import { parseWorldCellKey, worldCellForActor, worldCellKey } from "./worldGrid";
+import { parseWorldCellKey, worldCellBounds, worldCellForActor, worldCellKey } from "./worldGrid";
 
 export interface WorldPartitionGridSettings {
   cellSize: number;
@@ -101,11 +101,149 @@ function spatiallyLoaded(item: { spatiallyLoaded?: boolean } | LayoutModelInstan
   return !("spatiallyLoaded" in item) || item.spatiallyLoaded !== false;
 }
 
-/** Single actor routing rule for both saved cells and runtime activation. */
-function actorCellKey(actor: NonNullable<RoomLayout["actors"]>[number], grid: WorldPartitionGridSettings): string | null {
-  if (!spatiallyLoaded(actor) || !actor.position) return null;
-  const coord = worldCellForActor(grid, [actor.position[0], actor.position[2]]);
+function positionCellKey(
+  item: { spatiallyLoaded?: boolean },
+  position: Vec3 | undefined,
+  grid: WorldPartitionGridSettings,
+  footprint?: { width: number; depth: number },
+): string | null {
+  if (!spatiallyLoaded(item) || !position) return null;
+  const coord = worldCellForActor(grid, [position[0], position[2]], footprint);
   return coord ? worldCellKey(coord.x, coord.z) : null;
+}
+
+function streamedInstanceGroup(group: LayoutModelInstances): boolean {
+  return !group.assetId.startsWith("marker:playerStart") && spatiallyLoaded(group);
+}
+
+/** Shared per-kind routing for saved documents and merged-layout indices. */
+function partitionRoutes(grid: WorldPartitionGridSettings, warnings?: string[]) {
+  return {
+    instances: (item: LayoutModelInstances["placements"][number]) => positionCellKey(item, item.position, grid),
+    actors: (item: NonNullable<RoomLayout["actors"]>[number]) => positionCellKey(item, item.position, grid),
+    characters: (item: RoomLayout["characters"][number]) => positionCellKey(item, item.position, grid),
+    lights: (item: NonNullable<RoomLayout["lights"]>[number]) =>
+      positionCellKey(item, item.type === "directional" ? undefined : item.position, grid),
+    reflectionCaptures: (item: NonNullable<RoomLayout["reflectionCaptures"]>[number]) =>
+      positionCellKey(item, item.position, grid),
+    targetPoints: (item: NonNullable<RoomLayout["targetPoints"]>[number]) => positionCellKey(item, item.position, grid),
+    blockingVolumes: (item: NonNullable<RoomLayout["blockingVolumes"]>[number]) => {
+      if (!spatiallyLoaded(item) || !item.position) return null;
+      const size = resolveBlockingVolume(item).size;
+      const scale = item.scale ?? 1;
+      // Mirrored scales still have positive extents; rotation is outside this slice.
+      const key = positionCellKey(item, item.position, grid, {
+        width: Math.abs(size[0] * (typeof scale === "number" ? scale : scale[0])),
+        depth: Math.abs(size[2] * (typeof scale === "number" ? scale : scale[2])),
+      });
+      if (key === null) {
+        warnings?.push(`Blocking volume "${item.name ?? item.id}" exceeds main cellSize (${grid.cellSize}); kept persistent`);
+      }
+      return key;
+    },
+    worldWidgets: (item: NonNullable<RoomLayout["worldWidgets"]>[number]) =>
+      positionCellKey(item, item.anchor?.worldPos, grid),
+  };
+}
+
+export interface WorldCellContents {
+  /** Indices into the merged layout, ascending. */
+  actors: number[];
+  /** `group` indexes `layout.instances`; `placement` indexes that group's `placements`. Ascending by (group, placement). */
+  instances: { group: number; placement: number }[];
+  characters: number[];
+  lights: number[];
+  reflectionCaptures: number[];
+  targetPoints: number[];
+  blockingVolumes: number[];
+  worldWidgets: number[];
+}
+
+/**
+ * Same routing as partitionLayout, as indices into the merged layout. Persistent
+ * elements are absent; disabled settings return an empty map. Never mutates layout.
+ * Only occupied cells appear, sorted by compareWorldCellKeys, with all eight arrays.
+ */
+export function worldPartitionCellContents(layout: RoomLayout, settings: WorldPartitionSettings): Map<string, WorldCellContents> {
+  const cells = new Map<string, WorldCellContents>();
+  if (!settings.enabled) return cells;
+  const routes = partitionRoutes(settings.grids.main);
+  function cellForKey(key: string): WorldCellContents {
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = {
+        actors: [], instances: [], characters: [], lights: [], reflectionCaptures: [],
+        targetPoints: [], blockingVolumes: [], worldWidgets: [],
+      };
+      cells.set(key, cell);
+    }
+    return cell;
+  }
+  layout.instances.forEach((group, groupIndex) => {
+    if (!streamedInstanceGroup(group)) return;
+    group.placements.forEach((item, placement) => {
+      const key = routes.instances(item);
+      if (key !== null) cellForKey(key).instances.push({ group: groupIndex, placement });
+    });
+  });
+  function collect<T>(
+    field: Exclude<typeof CELL_ARRAYS[number], "instances">,
+    items: T[] | undefined,
+    route: (item: T) => string | null,
+  ): void {
+    items?.forEach((item, index) => {
+      const key = route(item);
+      if (key !== null) cellForKey(key)[field].push(index);
+    });
+  }
+  collect("actors", layout.actors, routes.actors);
+  collect("characters", layout.characters, routes.characters);
+  collect("lights", layout.lights, routes.lights);
+  collect("reflectionCaptures", layout.reflectionCaptures, routes.reflectionCaptures);
+  collect("targetPoints", layout.targetPoints, routes.targetPoints);
+  collect("blockingVolumes", layout.blockingVolumes, routes.blockingVolumes);
+  collect("worldWidgets", layout.worldWidgets, routes.worldWidgets);
+  return new Map([...cells].sort(([a], [b]) => compareWorldCellKeys(a, b)));
+}
+
+export type StreamedLightKind = "point" | "spot" | "pointShadow" | "spotShadow";
+
+/**
+ * Independent per-kind upper bounds over occupied-cell box neighbourhoods within
+ * loadRange * hysteresis. Only lights in contents count; persistent and directional
+ * lights are not pooled. Each source cell includes itself and cells touching its box.
+ */
+export function streamedLightPeaks(
+  layout: RoomLayout,
+  contents: ReadonlyMap<string, WorldCellContents>,
+  grid: WorldPartitionGridSettings,
+  hysteresis = 1.25,
+): Record<StreamedLightKind, number> {
+  const peaks: Record<StreamedLightKind, number> = { point: 0, spot: 0, pointShadow: 0, spotShadow: 0 };
+  const kinds = Object.keys(peaks) as StreamedLightKind[];
+  const cells = [...contents].map(([key, content]) => {
+    const coord = parseWorldCellKey(key)!;
+    const counts: Record<StreamedLightKind, number> = { point: 0, spot: 0, pointShadow: 0, spotShadow: 0 };
+    for (const index of content.lights) {
+      const light = layout.lights![index]!;
+      if (light.type === "directional") continue;
+      const kind: StreamedLightKind = light.castShadow === true ? `${light.type}Shadow` : light.type;
+      counts[kind] += 1;
+    }
+    return { bounds: worldCellBounds(grid, coord.x, coord.z), counts };
+  });
+  const reach = grid.loadRange * hysteresis;
+  for (const source of cells) {
+    const totals: Record<StreamedLightKind, number> = { point: 0, spot: 0, pointShadow: 0, spotShadow: 0 };
+    for (const target of cells) {
+      const dx = Math.max(source.bounds.minX - target.bounds.maxX, target.bounds.minX - source.bounds.maxX, 0);
+      const dz = Math.max(source.bounds.minZ - target.bounds.maxZ, target.bounds.minZ - source.bounds.maxZ, 0);
+      if (Math.hypot(dx, dz) > reach) continue;
+      for (const kind of kinds) totals[kind] += target.counts[kind];
+    }
+    for (const kind of kinds) peaks[kind] = Math.max(peaks[kind], totals[kind]);
+  }
+  return peaks;
 }
 
 /**
@@ -116,8 +254,9 @@ function actorCellKey(actor: NonNullable<RoomLayout["actors"]>[number], grid: Wo
 export function worldPartitionActorCells(layout: RoomLayout, settings: WorldPartitionSettings): Map<number, string> {
   const cells = new Map<number, string>();
   if (!settings.enabled) return cells;
+  const routes = partitionRoutes(settings.grids.main);
   layout.actors?.forEach((actor, index) => {
-    const key = actorCellKey(actor, settings.grids.main);
+    const key = routes.actors(actor);
     if (key !== null) cells.set(index, key);
   });
   return cells;
@@ -133,7 +272,7 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
   const cells = new Map<string, WorldCellDocument>();
   const warnings: string[] = [];
   if (!settings.enabled) return { persistent, cells, warnings };
-  const grid = settings.grids.main;
+  const routes = partitionRoutes(settings.grids.main, warnings);
 
   function cellForKey(key: string): WorldCellDocument {
     let cell = cells.get(key);
@@ -144,32 +283,23 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
     return cell;
   }
 
-  function split<T extends { spatiallyLoaded?: boolean }>(
+  function split<T>(
     items: T[],
-    position: (item: T) => Vec3 | undefined,
+    route: (item: T) => string | null,
     append: (cell: WorldCellDocument, item: T) => void,
-    footprint?: (item: T) => { width: number; depth: number },
-    label?: (item: T) => string,
   ): T[] {
     return items.filter((item) => {
-      if (!spatiallyLoaded(item)) return true;
-      const pivot = position(item);
-      if (!pivot) return true;
-      const coord = worldCellForActor(grid, [pivot[0], pivot[2]], footprint?.(item));
-      if (!coord) {
-        warnings.push(`Blocking volume "${label?.(item)}" exceeds main cellSize (${grid.cellSize}); kept persistent`);
-        return true;
-      }
-      const key = worldCellKey(coord.x, coord.z);
+      const key = route(item);
+      if (key === null) return true;
       append(cellForKey(key), item);
       return false;
     });
   }
 
   for (const group of persistent.instances) {
-    if (group.assetId.startsWith("marker:playerStart") || !spatiallyLoaded(group)) continue;
+    if (!streamedInstanceGroup(group)) continue;
     const targets = new Map<string, LayoutModelInstances>();
-    group.placements = split(group.placements, (item) => item.position, (cell, item) => {
+    group.placements = split(group.placements, routes.instances, (cell, item) => {
       let target = targets.get(cell.key);
       if (!target) {
         target = { assetId: group.assetId, placements: [] };
@@ -181,41 +311,32 @@ export function partitionLayout(layout: RoomLayout, settings: WorldPartitionSett
   }
   if (persistent.actors) {
     persistent.actors = persistent.actors.filter((actor) => {
-      const key = actorCellKey(actor, grid);
+      const key = routes.actors(actor);
       if (key === null) return true;
       (cellForKey(key).actors ??= []).push(actor);
       return false;
     });
   }
-  persistent.characters = split(persistent.characters, (item) => item.position,
+  persistent.characters = split(persistent.characters, routes.characters,
     (cell, item) => (cell.characters ??= []).push(item));
   if (persistent.lights) {
-    persistent.lights = split(persistent.lights, (item) => item.type === "directional" ? undefined : item.position,
+    persistent.lights = split(persistent.lights, routes.lights,
       (cell, item) => (cell.lights ??= []).push(item));
   }
   if (persistent.reflectionCaptures) {
-    persistent.reflectionCaptures = split(persistent.reflectionCaptures, (item) => item.position,
+    persistent.reflectionCaptures = split(persistent.reflectionCaptures, routes.reflectionCaptures,
       (cell, item) => (cell.reflectionCaptures ??= []).push(item));
   }
   if (persistent.targetPoints) {
-    persistent.targetPoints = split(persistent.targetPoints, (item) => item.position,
+    persistent.targetPoints = split(persistent.targetPoints, routes.targetPoints,
       (cell, item) => (cell.targetPoints ??= []).push(item));
   }
   if (persistent.blockingVolumes) {
-    persistent.blockingVolumes = split(persistent.blockingVolumes, (item) => item.position,
-      (cell, item) => (cell.blockingVolumes ??= []).push(item),
-      (item) => {
-        const size = resolveBlockingVolume(item).size;
-        const scale = item.scale ?? 1;
-        // Mirrored scales still have positive extents; rotation is outside this slice.
-        return {
-          width: Math.abs(size[0] * (typeof scale === "number" ? scale : scale[0])),
-          depth: Math.abs(size[2] * (typeof scale === "number" ? scale : scale[2])),
-        };
-      }, (item) => item.name ?? item.id);
+    persistent.blockingVolumes = split(persistent.blockingVolumes, routes.blockingVolumes,
+      (cell, item) => (cell.blockingVolumes ??= []).push(item));
   }
   if (persistent.worldWidgets) {
-    persistent.worldWidgets = split(persistent.worldWidgets, (item) => item.anchor?.worldPos,
+    persistent.worldWidgets = split(persistent.worldWidgets, routes.worldWidgets,
       (cell, item) => (cell.worldWidgets ??= []).push(item));
   }
   return { persistent, cells: new Map([...cells].sort(([a], [b]) => compareWorldCellKeys(a, b))), warnings };

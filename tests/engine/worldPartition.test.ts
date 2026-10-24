@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import type { RoomLayout, Vec3 } from "../../engine/scene/layout";
 import {
   DEFAULT_WORLD_PARTITION,
+  compareWorldCellKeys,
   countWorldCellElements,
   mergeWorldCells,
   normalizeWorldCellDocument,
   normalizeWorldPartitionSettings,
   partitionLayout,
+  streamedLightPeaks,
   worldCellPath,
   worldPartitionActorCells,
+  worldPartitionCellContents,
+  type StreamedLightKind,
   type WorldCellDocument,
 } from "../../engine/world/worldPartition";
 
@@ -90,6 +94,103 @@ function fixture(): RoomLayout {
   };
 }
 
+function generatedFixture(): RoomLayout {
+  let seed = 0x51ce;
+  const random = (): number => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  const position = (index: number): Vec3 => {
+    const offset = index % 4 === 0 ? 0 : random() * 128;
+    return [Math.floor(random() * 11 - 5) * 128 + offset, random() * 100, Math.floor(random() * 11 - 5) * 128 + offset];
+  };
+  const layout: RoomLayout = {
+    schema: 1, name: "Generated partition fixture", loadGroups: [], characters: [],
+    instances: ["mesh:rock", "mesh:tree", "mesh:rock"].map((assetId) => ({ assetId, placements: [] })),
+    actors: [], lights: [], reflectionCaptures: [], targetPoints: [], blockingVolumes: [], worldWidgets: [],
+  };
+  for (let index = 0; index < 24; index += 1) {
+    const flags = index % 5 === 0 ? { spatiallyLoaded: false } : {};
+    layout.instances[index % 3]!.placements.push({ name: `mesh-${index}`, position: position(index), ...flags });
+    layout.actors!.push({ name: `actor-${index}`, classRef: "Actor_Test", position: position(index), ...flags });
+    layout.characters.push({ name: `character-${index}`, assetId: "character:test", position: position(index), ...flags });
+    layout.lights!.push({ id: `light-${index}`, type: index % 7 === 0 ? "directional" : index % 2 === 0 ? "point" : "spot",
+      position: position(index), castShadow: index % 3 === 0, ...flags });
+    layout.reflectionCaptures!.push({ id: `probe-${index}`, position: position(index), ...flags });
+    layout.targetPoints!.push({ id: `target-${index}`, position: position(index), ...flags });
+    layout.blockingVolumes!.push({ id: `volume-${index}`, position: position(index), size: [4, 2, 8],
+      scale: index % 2 === 0 ? [-1, 2, -1] : 1, ...flags });
+    const anchor = index % 6 === 0 ? { entityId: `actor:${index}` } : { worldPos: position(index) };
+    layout.worldWidgets!.push({ widget: `ui:${index}`, anchor, ...flags } as NonNullable<RoomLayout["worldWidgets"]>[number]);
+  }
+  layout.instances.push(
+    { assetId: "marker:playerStart:generated", placements: [{ position: [-128, 0, 128] }] },
+    always({ assetId: "mesh:persistent", placements: [{ position: [256, 0, -256] as Vec3 }] }),
+  );
+  layout.blockingVolumes!.push({ id: "oversized", position: [-128, 0, 0], size: [129, 2, 2] });
+  return layout;
+}
+
+function assertCellContents(layout: RoomLayout): void {
+  const before = structuredClone(layout);
+  const settingsBefore = structuredClone(ENABLED);
+  const contents = worldPartitionCellContents(layout, ENABLED);
+  const split = partitionLayout(layout, ENABLED);
+  assert.deepEqual([...contents.keys()], [...split.cells.keys()]);
+  assert.deepEqual([...contents.keys()], [...contents.keys()].sort(compareWorldCellKeys));
+  const seen = new Map<string, Set<number>>();
+  const placements = new Set<string>();
+  const actors = new Map<number, string>();
+  for (const [key, indices] of contents) {
+    const cell = split.cells.get(key)!;
+    assert.deepEqual(Object.keys(indices).sort(), [...ARRAYS].sort());
+    assert.ok(Object.values(indices).some((items) => items.length > 0));
+    assert.deepEqual(indices.instances, [...indices.instances].sort((a, b) => a.group - b.group || a.placement - b.placement));
+    for (const { group, placement } of indices.instances) {
+      assert.ok(Number.isInteger(group) && group >= 0 && group < layout.instances.length);
+      assert.ok(Number.isInteger(placement) && placement >= 0 && placement < layout.instances[group]!.placements.length);
+      assert.equal(placements.has(`${group}:${placement}`), false);
+      placements.add(`${group}:${placement}`);
+    }
+    // Preserve separate source groups, including repeated assetIds, and placement order.
+    const groups = layout.instances.flatMap((group, groupIndex) => {
+      const resolved = indices.instances.filter((item) => item.group === groupIndex)
+        .map((item) => group.placements[item.placement]!);
+      return resolved.length ? [{ assetId: group.assetId, placements: resolved }] : [];
+    });
+    assert.deepEqual(cell.instances ?? [], groups);
+    for (const field of ARRAYS) {
+      if (field === "instances") continue;
+      const items = layout[field] ?? [];
+      const listed = indices[field];
+      assert.deepEqual(listed, [...listed].sort((a, b) => a - b));
+      const visited = seen.get(field) ?? new Set<number>();
+      seen.set(field, visited);
+      for (const index of listed) {
+        assert.ok(Number.isInteger(index) && index >= 0 && index < items.length);
+        assert.equal(visited.has(index), false);
+        visited.add(index);
+        if (field === "actors") actors.set(index, key);
+      }
+      assert.deepEqual(cell[field] ?? [], listed.map((index) => items[index]));
+    }
+  }
+  const expectedPersistent = structuredClone(layout);
+  expectedPersistent.instances.forEach((group, groupIndex) => {
+    group.placements = group.placements.filter((_, index) => !placements.has(`${groupIndex}:${index}`));
+  });
+  for (const field of ARRAYS) {
+    if (field === "instances") continue;
+    const items = layout[field];
+    if (items) Object.assign(expectedPersistent, { [field]: items.filter((_, index) => !seen.get(field)?.has(index)) });
+  }
+  assert.deepEqual(split.persistent, expectedPersistent);
+  // Actor-map iteration remains in input-index order, independent of cell order.
+  assert.deepEqual([...worldPartitionActorCells(layout, ENABLED)], [...actors].sort(([a], [b]) => a - b));
+  assert.deepEqual(layout, before);
+  assert.deepEqual(ENABLED, settingsBefore);
+}
+
 /** Only the comparison ignores ordering; the production merge must append. */
 function canonicalize(layout: RoomLayout): RoomLayout {
   const out = structuredClone(layout);
@@ -102,6 +203,93 @@ function canonicalize(layout: RoomLayout): RoomLayout {
 }
 
 export function registerWorldPartitionTests(check: Check): void {
+  for (const [name, create] of [["fixture", fixture], ["generated layout", generatedFixture]] as const) {
+    check(`world partition: cell contents match saved and persistent elements for ${name}`, () => {
+      const layout = create();
+      assertCellContents(layout);
+      const split = partitionLayout(layout, ENABLED);
+      assertCellContents(mergeWorldCells(split.persistent, split.cells.values()));
+    });
+  }
+
+  check("world partition: disabled and empty cell contents return empty maps", () => {
+    const layout = generatedFixture();
+    const before = structuredClone(layout);
+    assert.deepEqual(worldPartitionCellContents(layout, DEFAULT_WORLD_PARTITION), new Map());
+    assert.deepEqual(layout, before);
+    assert.deepEqual(worldPartitionCellContents({ schema: 1, name: "empty", loadGroups: [], instances: [], characters: [] }, ENABLED), new Map());
+  });
+
+  check("world partition: light peaks use inclusive box distances and independent shadow kinds", () => {
+    const settings = normalizeWorldPartitionSettings({ enabled: true, grids: { main: { cellSize: 10, loadRange: 16 } } });
+    const layout: RoomLayout = { schema: 1, name: "light peaks", loadGroups: [], instances: [], characters: [], lights: [] };
+    const kinds: StreamedLightKind[] = ["point", "spot", "pointShadow", "spotShadow"];
+    const cells = [
+      { x: -3, z: 0, counts: [5, 0, 0, 4] }, // A
+      { x: 0, z: 0, counts: [5, 0, 0, 0] }, // B
+      { x: 3, z: 0, counts: [5, 1, 0, 0] }, // C
+      { x: 2, z: 2, counts: [1, 0, 2, 0] }, // D
+      { x: 3, z: 2, counts: [1, 3, 4, 0] }, // E
+      { x: 4, z: 0, counts: [1, 2, 0, 0] }, // F
+    ];
+    for (const cell of cells) {
+      kinds.forEach((kind, kindIndex) => {
+        for (let index = 0; index < cell.counts[kindIndex]!; index += 1) {
+          layout.lights!.push({ id: `${cell.x}_${cell.z}:${kind}:${index}`, type: kind.startsWith("point") ? "point" : "spot",
+            position: [cell.x * 10, 0, cell.z * 10], castShadow: kind.endsWith("Shadow") });
+        }
+      });
+    }
+    layout.lights!.push({ id: "sun", type: "directional", position: [0, 0, 0], castShadow: true });
+    for (const kind of kinds) {
+      layout.lights!.push(always({ id: `persistent:${kind}`, type: kind.startsWith("point") ? "point" as const : "spot" as const,
+        position: [0, 0, 0] as Vec3, castShadow: kind.endsWith("Shadow") }));
+    }
+    const before = structuredClone(layout);
+    const contents = worldPartitionCellContents(layout, settings);
+    const contentsBefore = structuredClone(contents);
+    // Reach = 16 * 1.25 = 20. From B: A/C are exactly 20 (two empty cells
+    // between), D is 10*sqrt(2), E is 10*sqrt(5) and F is 30. Include A/C/D,
+    // exclude E/F. Neighbourhoods: A=AB, B=ABCD, C/D=BCDEF, E/F=CDEF.
+    // B gives (16,1,2,4); C/D give (13,6,6,0). Per-kind maxima: (16,6,6,4).
+    const expected = { point: 16, spot: 6, pointShadow: 6, spotShadow: 4 };
+    assert.deepEqual(streamedLightPeaks(layout, contents, settings.grids.main), expected);
+    assert.deepEqual(streamedLightPeaks(layout, contents, settings.grids.main, 1.25), expected);
+    // At reach 16, B loses A/C; D still sees BCDEF and gives the point peak 13.
+    assert.deepEqual(streamedLightPeaks(layout, contents, settings.grids.main, 1), {
+      point: 13, spot: 6, pointShadow: 6, spotShadow: 4,
+    });
+    assert.deepEqual(streamedLightPeaks(layout, new Map(), settings.grids.main), {
+      point: 0, spot: 0, pointShadow: 0, spotShadow: 0,
+    });
+    assert.deepEqual(layout, before);
+    assert.deepEqual(contents, contentsBefore);
+  });
+
+  check("world partition: lightless occupied cells can set the light pool peak", () => {
+    const settings = normalizeWorldPartitionSettings({ enabled: true, grids: { main: { cellSize: 10, loadRange: 16 } } });
+    const layout: RoomLayout = {
+      schema: 1, name: "lightless centre", loadGroups: [], instances: [], characters: [],
+      targetPoints: [{ id: "centre", position: [0, 0, 0] }],
+      lights: [
+        { id: "left", type: "point", position: [-30, 0, 0] },
+        { id: "right", type: "point", position: [30, 0, 0] },
+      ],
+    };
+    // The centre is within 20 of both light cells; the light cells are 50 apart.
+    const contents = worldPartitionCellContents(layout, settings);
+    assert.deepEqual(streamedLightPeaks(layout, contents, settings.grids.main), {
+      point: 2, spot: 0, pointShadow: 0, spotShadow: 0,
+    });
+    layout.lights = [
+      { id: "sun", type: "directional", position: [0, 0, 0] },
+      always({ id: "persistent", type: "point" as const, position: [0, 0, 0] as Vec3 }),
+    ];
+    assert.deepEqual(streamedLightPeaks(layout, worldPartitionCellContents(layout, settings), settings.grids.main), {
+      point: 0, spot: 0, pointShadow: 0, spotShadow: 0,
+    });
+  });
+
   check("world partition: save summary counts every element exactly once", () => {
     const layout = fixture();
     const split = partitionLayout(layout, ENABLED);

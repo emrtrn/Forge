@@ -6,7 +6,7 @@
   "entry": "src/main.ts",
   "publicDir": "public",
   "editor": {
-    "defaultScene": "assets/starter-content/Levels/LandscapeTest.level.json",
+    "defaultScene": "assets/starter-content/Levels/LargeTerrain.level.json",
     "assetManifest": "assets/manifest.json",
     "gridSize": 0.25,
     "gridEnabled": false,

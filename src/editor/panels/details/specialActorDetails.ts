@@ -421,10 +421,16 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
                 }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`,
               ).join("")}
             </div>
+            <div class="detail-hint">Hold Shift to swap Raise and Lower while sculpting. Ctrl: Smooth. Alt: Flatten. Ctrl+Alt: Flatten at clicked height.</div>
+            <label class="detail-toggle">
+              <input data-landscape-flatten-clicked-height type="checkbox" ${settings.flattenUseClickedHeight ? "checked" : ""} ${lockedAttr} />
+              <span>Flatten: Use Clicked Height</span>
+            </label>
+            <div class="detail-hint">Uses the height at the start of each drag and keeps it fixed until release.</div>
             <label class="detail-row">
               <span>Flatten Target</span>
               <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
-                value="${settings.flattenTargetHeight}" ${lockedAttr} />
+                value="${settings.flattenTargetHeight}" ${settings.flattenUseClickedHeight ? "disabled" : lockedAttr} />
             </label>`
         }
         <label class="detail-row">
@@ -871,6 +877,9 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
       if (key && Number.isFinite(value)) update({ [key]: value } as Partial<LandscapeSculptSettings>);
     });
   });
+  body.querySelector<HTMLInputElement>("[data-landscape-flatten-clicked-height]")?.addEventListener("change", (event) => {
+    update({ flattenUseClickedHeight: (event.currentTarget as HTMLInputElement).checked });
+  });
 }
 
 /**
@@ -935,10 +944,16 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
           settings.tool === tool ? "active" : ""
         }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`).join("")}
       </div>
+      <div class="detail-hint">Hold Shift to swap Raise and Lower while sculpting. Ctrl: Smooth. Alt: Flatten. Ctrl+Alt: Flatten at clicked height.</div>
+      <label class="detail-toggle">
+        <input data-landscape-flatten-clicked-height type="checkbox" ${settings.flattenUseClickedHeight ? "checked" : ""} ${lockedAttr} />
+        <span>Flatten: Use Clicked Height</span>
+      </label>
+      <div class="detail-hint">Uses the height at the start of each drag and keeps it fixed until release.</div>
       <label class="detail-row">
         <span>Flatten Target</span>
         <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
-          value="${settings.flattenTargetHeight}" ${lockedAttr} />
+          value="${settings.flattenTargetHeight}" ${settings.flattenUseClickedHeight ? "disabled" : lockedAttr} />
       </label>`
     : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on a multi-tile Landscape yet.</div>`;
   body.innerHTML = `

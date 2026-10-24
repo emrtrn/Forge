@@ -183,17 +183,44 @@
             "id": "offroad-asphalt-p2",
             "position": [
               -170,
-              6,
+              5.93,
               175
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-1",
+            "position": [
+              -168.938,
+              5.813,
+              149.063
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-7",
+            "position": [
+              -168.607,
+              5.782,
+              128.928
             ],
             "pointType": "curveAuto"
           },
           {
             "id": "offroad-asphalt-p3",
             "position": [
-              -170,
-              6,
-              120
+              -172.22,
+              6.33,
+              108.14
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-6",
+            "position": [
+              -178.416,
+              7.081,
+              95.228
             ],
             "pointType": "curveAuto"
           },
@@ -207,11 +234,29 @@
             "pointType": "curveAuto"
           },
           {
+            "id": "spline-point-12",
+            "position": [
+              -189.383,
+              12.363,
+              35.63
+            ],
+            "pointType": "curveAuto"
+          },
+          {
             "id": "offroad-asphalt-p5",
             "position": [
               -190,
               16,
               5
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              -180.188,
+              19.563,
+              -23.438
             ],
             "pointType": "curveAuto"
           },
@@ -300,13 +345,17 @@
           "id": "offroad-asphalt-mesh",
           "type": "deformMesh",
           "meshAsset": "sm-road-asphalt",
+          "enabled": true,
+          "previewEnabled": true,
+          "runtimeEnabled": true,
           "collisionEnabled": true,
           "forwardAxis": "z",
           "upAxis": "y",
-          "sampleSteps": 64,
+          "sampleSteps": 16,
           "geometryMode": "segments",
           "uvMode": "stretch",
-          "uvTileLength": 10,
+          "uvTileLength": 8,
+          "lateralOffset": 0,
           "verticalOffset": 0.035,
           "crossSectionScale": [
             1,
@@ -316,6 +365,7 @@
       ],
       "debug": {
         "visible": true,
+        "showPointIds": true,
         "color": "#ffffff",
         "resolution": 24
       }

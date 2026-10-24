@@ -708,6 +708,8 @@ export interface LandscapeSculptSettings {
   strength: number;
   falloff: number;
   flattenTargetHeight: number;
+  /** Flatten to the initial terrain hit of each drag instead of the numeric target. */
+  flattenUseClickedHeight: boolean;
   /** Retains the selected water body while Details re-renders. */
   activeRiverWaterId: string | null;
   /** Radial Foam placement mode; the next water/terrain click creates this point. */
@@ -955,6 +957,7 @@ interface LandscapeSculptStroke {
   landscapeIndex: number;
   landscapeId: string;
   mode: LandscapeEditMode;
+  flattenSampleHeight: number;
   beforeHeights: number[];
   beforeLayers: LandscapeLayerWeights[];
   changed: boolean;
@@ -968,6 +971,7 @@ interface WorldTerrainStroke {
   landscapeId: string;
   document: WorldTerrainDocument;
   mode: "sculpt" | "paint";
+  flattenSampleHeight: number;
   /** Dab patches in application order. */
   patches: TerrainUndoPatch[];
   /** Tiles this stroke asked a streaming terrain to load; held until it ends. */
@@ -1305,6 +1309,7 @@ export class SceneApp {
     strength: 0.25,
     falloff: 2,
     flattenTargetHeight: 0,
+    flattenUseClickedHeight: false,
     activeRiverWaterId: null,
     riverWaterRingFoamPlacementId: null,
     activeRiverWaterFoamStampId: null,
@@ -2247,6 +2252,7 @@ export class SceneApp {
       strength: clamp(next.strength, 0.01, 2),
       falloff: clamp(next.falloff, 0.25, 8),
       flattenTargetHeight: clamp(next.flattenTargetHeight, -1000, 1000),
+      flattenUseClickedHeight: next.flattenUseClickedHeight === true,
       activeRiverWaterId: typeof next.activeRiverWaterId === "string" && next.activeRiverWaterId.length > 0
         ? next.activeRiverWaterId
         : null,
@@ -8653,6 +8659,8 @@ export class SceneApp {
   private beginLandscapeSculpt(event: PointerEvent): boolean {
     // Foliage Mode disables terrain sculpting entirely (its brush owns the pointer).
     if (this.foliageModeActive || this.meshPaintModeActive) return false;
+    // Alt+left is a temporary sculpt tool; other terrain modes keep camera orbit.
+    if (event.altKey && this.landscapeSculptSettings.editMode !== "sculpt") return false;
     if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)) {
       return this.beginWorldTerrainStroke(event);
     }
@@ -8685,13 +8693,14 @@ export class SceneApp {
       landscapeIndex: selectedIndex,
       landscapeId: actor.id,
       mode: this.landscapeSculptSettings.editMode,
+      flattenSampleHeight: hit.local.y / Math.max(data.size.heightScale, 0.0001),
       beforeHeights: [...data.heights],
       beforeLayers: cloneLandscapeLayers(data.layers),
       changed: false,
       dirty: null,
     };
     this.canvas.setPointerCapture(event.pointerId);
-    this.applyLandscapeSculptDab(selectedIndex, hit.local);
+    this.applyLandscapeSculptDab(selectedIndex, hit.local, event);
     return true;
   }
 
@@ -9041,9 +9050,12 @@ export class SceneApp {
       this.onStatus?.("The active paint layer is not one of this Landscape's layers.", "warning");
       return false;
     }
-    this.worldTerrainStroke = { pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, mode, patches: [], demanded: new Set() };
+    this.worldTerrainStroke = {
+      pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, mode,
+      flattenSampleHeight: hit.point.y - document.def.origin[1], patches: [], demanded: new Set(),
+    };
     this.canvas.setPointerCapture(event.pointerId);
-    this.applyWorldTerrainDab(this.worldTerrainStroke, hit.point);
+    this.applyWorldTerrainDab(this.worldTerrainStroke, hit.point, event);
     return true;
   }
 
@@ -9051,7 +9063,25 @@ export class SceneApp {
     return document.def.layers.findIndex((layer) => layer.id === this.landscapeSculptSettings.activeLayerId);
   }
 
-  private applyWorldTerrainDab(stroke: WorldTerrainStroke, point: Vector3): void {
+  private landscapeSculptTool(event: Pick<PointerEvent, "shiftKey" | "ctrlKey" | "altKey">): LandscapeSculptTool {
+    const tool = this.landscapeSculptSettings.tool;
+    // Resolve every dab so modifiers can change the tool during the same drag
+    // without changing the user's selected tool.
+    // Alt wins over Ctrl: together they flatten to the initial click height.
+    if (event.altKey) return "flatten";
+    if (event.ctrlKey) return "smooth";
+    if (event.shiftKey && tool === "raise") return "lower";
+    if (event.shiftKey && tool === "lower") return "raise";
+    return tool;
+  }
+
+  private landscapeFlattenTarget(sampleHeight: number, event: Pick<PointerEvent, "ctrlKey" | "altKey">): number {
+    return this.landscapeSculptSettings.flattenUseClickedHeight || (event.ctrlKey && event.altKey)
+      ? sampleHeight
+      : this.landscapeSculptSettings.flattenTargetHeight;
+  }
+
+  private applyWorldTerrainDab(stroke: WorldTerrainStroke, point: Vector3, event: PointerEvent): void {
     const session = this.worldTerrainSessions.get(stroke.document);
     const object = this.landscapeObjects[stroke.landscapeIndex];
     if (!session || !object) return;
@@ -9075,10 +9105,10 @@ export class SceneApp {
       ? { ...base, mode: settings.paintTool, layer: this.worldTerrainActiveLayer(stroke.document) }
       : {
           ...base,
-          mode: settings.tool,
+          mode: this.landscapeSculptTool(event),
           // Heights are relative to the datum (origin Y), like a Landscape's local Y.
           hitHeight: point.y - stroke.document.def.origin[1],
-          flattenTargetHeight: settings.flattenTargetHeight,
+          flattenTargetHeight: this.landscapeFlattenTarget(stroke.flattenSampleHeight, event),
         };
     let dirty: Map<string, TerrainDirtyRect>;
     try {
@@ -9098,7 +9128,7 @@ export class SceneApp {
     const stroke = this.worldTerrainStroke;
     if (!stroke || stroke.pointerId !== event.pointerId) return false;
     const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY);
-    if (hit && hit.index === stroke.landscapeIndex) this.applyWorldTerrainDab(stroke, hit.point);
+    if (hit && hit.index === stroke.landscapeIndex) this.applyWorldTerrainDab(stroke, hit.point, event);
     this.updateLandscapeBrushHover(event.clientX, event.clientY);
     return true;
   }
@@ -9144,7 +9174,7 @@ export class SceneApp {
     if (!stroke || stroke.pointerId !== event.pointerId) return false;
     const hit = this.landscapeLocalHit(event.clientX, event.clientY);
     if (!hit || hit.landscapeIndex !== stroke.landscapeIndex) return true;
-    this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local);
+    this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local, event);
     this.updateLandscapeBrushHover(event.clientX, event.clientY);
     return true;
   }
@@ -9234,7 +9264,7 @@ export class SceneApp {
     });
   }
 
-  private applyLandscapeSculptDab(index: number, localHit: Vector3): void {
+  private applyLandscapeSculptDab(index: number, localHit: Vector3, event: PointerEvent): void {
     const actor = this.layout?.landscapes?.[index];
     const data = actor ? this.landscapeData.get(actor.id) : null;
     const stroke = this.landscapeSculptStroke;
@@ -9242,7 +9272,10 @@ export class SceneApp {
     const dirty =
       stroke.mode === "paint"
         ? this.editLandscapeWeights(data, localHit)
-        : this.editLandscapeHeights(data, localHit);
+        : this.editLandscapeHeights(
+            data, localHit, this.landscapeSculptTool(event),
+            this.landscapeFlattenTarget(stroke.flattenSampleHeight, event),
+          );
     if (!dirty) return;
     stroke.changed = true;
     stroke.dirty = stroke.dirty ? mergeLandscapeDirtyBounds(stroke.dirty, dirty) : dirty;
@@ -9250,8 +9283,10 @@ export class SceneApp {
     this.refreshLandscapeGeometry(index, dirty);
   }
 
-  private editLandscapeHeights(data: ForgeLandscapeData, localHit: Vector3): LandscapeDirtyBounds | null {
-    const { verticesX, verticesZ, spacing, heightScale } = data.size;
+  private editLandscapeHeights(
+    data: ForgeLandscapeData, localHit: Vector3, tool: LandscapeSculptTool, flattenTargetHeight: number,
+  ): LandscapeDirtyBounds | null {
+    const { verticesX, verticesZ, spacing } = data.size;
     const radius = this.landscapeSculptSettings.brushSize;
     const originX = ((verticesX - 1) * spacing) / 2;
     const originZ = ((verticesZ - 1) * spacing) / 2;
@@ -9275,13 +9310,14 @@ export class SceneApp {
         const index = z * verticesX + x;
         const before = data.heights[index] ?? 0;
         const after = this.nextLandscapeHeight(
+          tool,
           sourceHeights,
           verticesX,
           verticesZ,
           x,
           z,
           before,
-          localHit.y / Math.max(heightScale, 0.0001),
+          flattenTargetHeight,
           falloff,
         );
         if (Math.abs(after - before) <= 0.000001) continue;
@@ -9357,21 +9393,20 @@ export class SceneApp {
   }
 
   private nextLandscapeHeight(
+    tool: LandscapeSculptTool,
     sourceHeights: number[],
     verticesX: number,
     verticesZ: number,
     x: number,
     z: number,
     current: number,
-    hitHeight: number,
+    flattenTargetHeight: number,
     falloff: number,
   ): number {
-    const target = Number.isFinite(this.landscapeSculptSettings.flattenTargetHeight)
-      ? this.landscapeSculptSettings.flattenTargetHeight : hitHeight;
     return nextLandscapeBrushHeight(
-      this.landscapeSculptSettings.tool,
+      tool,
       current,
-      target,
+      flattenTargetHeight,
       this.landscapeSculptSettings.strength * falloff,
       () => landscapeBrushAverage((dx, dz) => {
         const sx = x + dx;

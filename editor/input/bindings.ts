@@ -93,6 +93,11 @@ export function bindEditorInputEvents(
 
   on(canvas, "pointerdown", (event) => {
     if (event.altKey) {
+      // On a selected sculptable terrain, Alt+left flattens before camera orbit.
+      if (event.button === 0 && bindings.beginLandscapeSculpt(event)) {
+        event.preventDefault();
+        return;
+      }
       const gizmoHandle = bindings.pickGizmoHandle(event.clientX, event.clientY);
       if (event.button === 0 && gizmoHandle && bindings.hasSelection()) {
         bindings.startGizmoDrag(gizmoHandle, event);

@@ -1273,6 +1273,32 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       **S2** statikler: hücre batch'leri, eşleme, fizik/behavior, asset
       paketi + shader ısıtma, smoke. **S3** blocking volume'ler. **S4** ışık
       havuzu. Karakterler sonra ayrı karar.
+      *S0 sonuçları (2026-10-24, `spikes/cell-activation`, kullanıcının PC'si,
+      headless Chromium; 128 m hücre, ms, ısınmış ortalama):*
+
+      | yerleşim | türetme | batch | fizik ekleme | ilk çizim | ilk adım | boşaltma | toplam |
+      |---|---|---|---|---|---|---|---|
+      | 100 (%15 trimesh) | 0,8 | 0,5 | 8,4 | 2,1 | 1,0 | 1,2 | 12,8 |
+      | 500 (%15) | 1,3 | 1,6 | 22,3 | 2,0 | 6,0 | 2,7 | 33,3 |
+      | 1000 (%15) | 2,8 | 1,5 | 47,9 | 2,3 | 20,2 | 4,5 | 74,7 |
+      | 1000 (%0) | | | 31,4 | | 16,1 | | 52,3 |
+      | 1000 (%50) | | | 103,7 | | 27,3 | | 137,5 |
+
+      - **Fizik ekleme baskın:** basit collider ≈ 30 µs, complex-as-simple
+        trimesh ≈ 180 µs (Rapier BVH kurulumu). Kare bütçesi eleman sayısına
+        ağırlıklı olmalı (trimesh ≈ 6 birim); ≈ 4 ms/kare ≈ 130 basit collider.
+        Boşaltma da bütçelenmeli (bugün çıkan hücreler tek karede).
+      - **Soğuk ilk hücre:** ilk çizim 58–95 ms (shader derleme). Hücre
+        hazırlığında `compileAsync` ile ısıtma şart (tasarımdaki gibi).
+      - **Türetme + batch + statik sorgular ucuz** (1000'de < 5 ms).
+      - **Mevcut hata (akıştan bağımsız):** sabit durumdaki bir fizik
+        adımı 1000 statik collider'la 9–19 ms, oysa ham `rapierWorld.step()`
+        0,14–0,20 ms. Fark Forge'un her karede çalışan temas toplamasından:
+        `addAabbSensorContacts` bütün cisim çiftlerini gezer (O(N²)),
+        `updateRapierContacts` statikler dahil her collider için iki WASM
+        çağrısı yapar. Bugünkü eager level'ları da etkiler; S2'den önce
+        düzeltilmeli (sensör listesi × cisimler, temas taraması yalnız
+        statik olmayan / sensör collider'lardan).
 - [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*

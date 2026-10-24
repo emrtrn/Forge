@@ -1,0 +1,10 @@
+{
+  // Throwaway spikes (OPEN_WORLD_PLAN). Not part of the app build or the root
+  // `tsc --noEmit`; type-check with `npx tsc -p spikes`. Delete the whole
+  // spikes/ folder before feat/terrain-renderer merges to main.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".."
+  },
+  "include": [".", "../src/vite-env.d.ts"]
+}

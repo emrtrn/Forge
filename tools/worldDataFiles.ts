@@ -77,7 +77,8 @@ export function scanWorldData(root: string): WorldDataScan {
 /** One compact line per level, shared by the CLI and advisory asset report. */
 export function formatWorldDataLevel(report: WorldDataLevelReport): string {
   const base = `${report.level}: cells ${report.cells.count} (${formatByteSize(report.cells.bytes)}), ` +
-    `foliage cells ${report.foliageCells.count} (${formatByteSize(report.foliageCells.bytes)})`;
+    `foliage cells ${report.foliageCells.count} (${formatByteSize(report.foliageCells.bytes)}), ` +
+    `hlod ${report.hlod.count} (${formatByteSize(report.hlod.bytes)})`;
   return base + report.terrains.map((terrain) =>
     `, terrain ${terrain.definition} tiles ${terrain.tiles.count} (${formatByteSize(terrain.tiles.bytes)}) ` +
     `global ${terrain.globalBytes === null ? "none" : formatByteSize(terrain.globalBytes)}`,

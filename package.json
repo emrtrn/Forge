@@ -22,6 +22,7 @@
     "optimize:glb": "node tools/optimize-mesh-glb.mjs",
     "dialogue:report": "node tools/dialogue-report.mjs",
     "world:test": "node tools/world/generate-test-world.mjs",
+    "world:build": "node tools/world/build-hlod.mjs",
     "terrain:repair": "node tools/world/repair-terrain.mjs",
     "verify:dist": "node builder/web/verify-dist.mjs",
     "verify:world-data": "node tools/run-world-data-check.mjs",

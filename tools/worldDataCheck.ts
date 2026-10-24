@@ -6,6 +6,7 @@ import {
   terrainTilePath,
 } from "../engine/terrain/terrainTypes";
 import { foliageCellPath } from "../engine/world/foliageCells";
+import { hlodCellPath, hlodIndexPath, normalizeHlodIndex } from "../engine/world/hlod";
 import { worldCellPath } from "../engine/world/worldPartition";
 
 /** Read-only view of a file tree; paths are root-relative with forward slashes (no leading "/"). */
@@ -45,6 +46,8 @@ export interface WorldDataLevelReport {
   readonly level: string;
   readonly cells: WorldDataFileStats;
   readonly foliageCells: WorldDataFileStats;
+  /** HLOD proxies listed by `<Level>.hlod.json` (Faz 7f). */
+  readonly hlod: WorldDataFileStats;
   readonly terrains: readonly WorldTerrainStats[];
 }
 
@@ -167,6 +170,24 @@ export function checkWorldData(levelPaths: readonly string[], source: WorldDataS
       }
     }
 
+    let hlod = emptyStats();
+    const hlodPath = derive(level, "invalid HLOD index path", () => hlodIndexPath(level));
+    if (hlodPath !== null && size(hlodPath) !== null) {
+      let entries: readonly { key: string }[] = [];
+      try {
+        const raw = readJson(hlodPath);
+        if (raw !== null) entries = normalizeHlodIndex(raw).cells;
+      } catch (error) {
+        issue(hlodPath, `invalid HLOD index: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      for (const { key } of entries) {
+        const path = derive(key, "invalid HLOD cell key", () => hlodCellPath(level, key));
+        if (path === null) continue;
+        const bytes = size(path, "missing HLOD proxy");
+        if (bytes !== null) hlod = addFile(hlod, path, bytes);
+      }
+    }
+
     const terrains: WorldTerrainStats[] = [];
     for (const entry of Array.isArray(layout.landscapes) ? layout.landscapes : []) {
       const dataRef = record(entry)?.dataRef;
@@ -203,9 +224,9 @@ export function checkWorldData(levelPaths: readonly string[], source: WorldDataS
       }
       terrains.push({ definition: dataRef, tiles, globalBytes });
     }
-    if (cellKeys.length > 0 || foliageKeys.length > 0 || terrains.length > 0) {
+    if (cellKeys.length > 0 || foliageKeys.length > 0 || hlod.count > 0 || terrains.length > 0) {
       terrains.sort((a, b) => comparePath(a.definition, b.definition));
-      levels.push({ level, cells, foliageCells, terrains });
+      levels.push({ level, cells, foliageCells, hlod, terrains });
     }
   }
   levels.sort((a, b) => comparePath(a.level, b.level));

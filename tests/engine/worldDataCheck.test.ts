@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { foliageDataPath } from "../../engine/scene/foliage";
 import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { foliageCellPath } from "../../engine/world/foliageCells";
+import { hlodCellPath, hlodIndexPath } from "../../engine/world/hlod";
 import { worldCellPath } from "../../engine/world/worldPartition";
 import {
   checkWorldData,
@@ -46,6 +47,27 @@ function terrainFixture(tilesX = 2) {
 }
 
 export function registerWorldDataCheckTests(check: Check): void {
+  check("world data: HLOD proxies listed by the index must ship", () => {
+    const tree = fixture({ worldCells: ["0_0"] });
+    tree.sizes.set(worldCellPath(LEVEL, "main", "0_0"), 50);
+    tree.addJson(hlodIndexPath(LEVEL), {
+      schema: 1, type: "hlod", cellSize: 128,
+      cells: [{ key: "0_0", triangles: 12, sourceHash: "a" }, { key: "3_0", triangles: 12, sourceHash: "b" }],
+    });
+    tree.sizes.set(hlodCellPath(LEVEL, "0_0"), 900);
+    const report = tree.report();
+    assert.deepEqual(report.levels[0]!.hlod, { count: 1, bytes: 900, largest: { path: hlodCellPath(LEVEL, "0_0"), bytes: 900 } });
+    assert.deepEqual(report.issues, [{
+      severity: "fail", level: LEVEL, path: hlodCellPath(LEVEL, "3_0"), reason: "missing HLOD proxy",
+    }]);
+
+    tree.addJson(hlodIndexPath(LEVEL), { schema: 2, type: "hlod", cellSize: 128, cells: [] });
+    const invalid = tree.report().issues;
+    assert.equal(invalid.length, 1);
+    assert.equal(invalid[0]!.path, hlodIndexPath(LEVEL));
+    assert.match(invalid[0]!.reason, /invalid HLOD index/);
+  });
+
   check("world data: existing world and foliage cells have counts, bytes and largest files", () => {
     const tree = fixture({ worldCells: ["0_0", "-1_0"] });
     const cell = worldCellPath(LEVEL, "main", "0_0");
@@ -63,6 +85,7 @@ export function registerWorldDataCheckTests(check: Check): void {
       level: LEVEL,
       cells: { count: 2, bytes: 300, largest: { path: otherCell, bytes: 200 } },
       foliageCells: { count: 2, bytes: 350, largest: { path: foliage, bytes: 300 } },
+      hlod: { count: 0, bytes: 0, largest: null },
       terrains: [],
     }]);
   });

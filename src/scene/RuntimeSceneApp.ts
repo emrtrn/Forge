@@ -21,6 +21,8 @@ import { resolveHeightFog } from "@engine/scene/heightFog";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
 import { StaticDetailCulling } from "@engine/render-three/staticDetailCulling";
+import { hlodCellPlacements, hlodCellSourceHash, type HlodIndex } from "@engine/world/hlod";
+import { fetchHlodIndex, HlodProxies, loadHlodGeometry } from "./hlodProxies";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
@@ -1022,6 +1024,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * world levels (World Partition on or a view distance set); null elsewhere.
    */
   private staticDetailCulling: StaticDetailCulling | null = null;
+  /** HLOD proxies of inactive cells within the view distance (Faz 7f); null without an index. */
+  private hlodProxies: HlodProxies | null = null;
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   /** Consumer for the next frame's CPU capture; see {@link armFrameCapture}. */
   private armedFrameCapture: FrameCaptureConsumer | null = null;
@@ -1756,6 +1760,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.gpuSweepSession.beginFrame();
       this.updateFollowShadow();
       this.staticDetailCulling?.update(this.camera.position, this.qualitySettings.foliageCullDistanceScale);
+      this.hlodProxies?.update(this.camera.position.x, this.camera.position.z, this.camera.far, (key) => this.liveStaticCells.has(key));
       // Simulation time, not real time: the frame is still drawn while the world
       // is held (the GPU sweep depends on exactly that), but an animated pass must
       // not keep advancing over a scene that has stopped.
@@ -2659,6 +2664,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const partition = this.runtimeServices.resolve(worldPartitionService);
     const partitionPosition = partition?.snapshot() ? this.streamingSpawnPosition(spawnTag) : null;
     if (partitionPosition) await this.preparePartitionCells(partitionPosition);
+    await this.setupHlodProxies(layoutPath);
     // Declare every model this level will load up front (P4) so the loading bar's
     // total is right before the first GLB streams in; the loader marks each done.
     await this.levelRuntime.build();
@@ -3334,6 +3340,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.landscapeColliderObjects.clear();
     this.foliageCellStreaming?.dispose();
     this.foliageCellStreaming = null;
+    this.hlodProxies?.dispose();
+    this.hlodProxies = null;
     this.proceduralFoliageRing?.dispose();
     this.proceduralFoliageRing = null;
     this.foliageCellGenerator?.dispose();
@@ -5185,6 +5193,43 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const bounds = this.localBounds.get(assetId);
     if (!this.staticDetailCulling || !bounds || bounds.isEmpty()) return;
     this.staticDetailCulling.register(assetId, bounds.getBoundingSphere(new Sphere()).radius, group, { skipWholeInstanced });
+  }
+
+  /**
+   * Faz 7f: a World Partition level shows the HLOD proxies `npm run world:build`
+   * baked for it. Without an index (or with a stale one) Play still runs; it
+   * only warns, since far cells then show nothing (or an outdated proxy).
+   */
+  private async setupHlodProxies(levelPath: string): Promise<void> {
+    const layout = this.layout;
+    const partition = layout?.worldSettings?.partition;
+    if (!layout || !partition?.enabled) return;
+    let index: HlodIndex | null;
+    try {
+      index = await fetchHlodIndex(levelPath);
+    } catch (error) {
+      console.warn(`[hlod] ${levelPath}: unreadable HLOD index; far cells show no proxies`, error);
+      return;
+    }
+    if (!index) {
+      console.warn(`[hlod] ${levelPath} has no HLOD; far cells show no proxies (npm run world:build -- ${levelPath})`);
+      return;
+    }
+    const settings = normalizeWorldPartitionSettings(partition);
+    const contents = worldPartitionCellContents(layout, settings);
+    const stale = index.cellSize !== settings.grids.main.cellSize
+      ? index.cells.map((entry) => entry.key)
+      : index.cells
+        .filter((entry) => hlodCellSourceHash(hlodCellPlacements(layout, contents.get(entry.key)?.instances ?? [])) !== entry.sourceHash)
+        .map((entry) => entry.key);
+    if (stale.length > 0) {
+      console.warn(`[hlod] ${levelPath}: ${stale.length} stale HLOD cell(s) (${stale.slice(0, 8).join(", ")}${stale.length > 8 ? ", …" : ""}); rebuild with npm run world:build -- ${levelPath}`);
+    }
+    this.hlodProxies = new HlodProxies({
+      index,
+      parent: this.scene,
+      load: (key) => loadHlodGeometry(levelPath, key),
+    });
   }
 
   /** The eager batch for an asset: every placement no World Partition cell streams. */

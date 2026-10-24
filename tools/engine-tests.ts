@@ -1035,6 +1035,7 @@ import { registerCameraFarOverrideTests } from "../tests/engine/cameraFarOverrid
 import { registerSunFollowShadowTests } from "../tests/engine/sunFollowShadow.test";
 import { registerDetailCullingTests } from "../tests/engine/detailCulling.test";
 import { registerWorldDataCheckTests } from "../tests/engine/worldDataCheck.test";
+import { registerHlodTests } from "../tests/engine/hlod.test";
 import { registerProceduralFoliageRingTests } from "../tests/engine/proceduralFoliageRing.test";
 import { registerFoliageCellGeneratorTests } from "../tests/engine/foliageCellGenerator.test";
 import { registerRuntimeParityLevelTests } from "../tests/engine/runtimeParityLevel.test";
@@ -1172,6 +1173,7 @@ registerBuildManifestParityTests(check);
 await registerContentLoadingTests(check, checkAsync);
 await registerLevelRuntimeTests(check, checkAsync);
 await registerCapabilityRegistryTests(check, checkAsync);
+await registerHlodTests(check, checkAsync);
 registerDroppedFieldTests(check);
 registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);

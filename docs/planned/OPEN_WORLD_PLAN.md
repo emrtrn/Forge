@@ -1884,6 +1884,74 @@ yoğunluğu yardımcısı.
   (dosya kenara alındı; `npm run world:test` ikisini yeniden üretir). HLOD
   kapsamı 7f ile gelir.
 
+### 7f HLOD tasarımı (kullanıcı kararları 2026-10-24)
+
+**Kararlar:** materyal (a) — build sırasında her kaynak materyalin
+ortalama rengi vertex color'a pişirilir, proxy tek paylaşılan materyalle
+çizilir (Unreal'ın doku pişirmesi (c) gerekirse sonra); üretim yalnız
+`npm run world:build` (açık soru 5 kapandı).
+
+**Kapsam (v1):** yalnız World Partition'ı açık level'lar; yalnız `main`
+hücrelerine giden statik yerleşimler (`layout.instances`). Actor Script
+mesh'leri, karakterler, foliage ve sentetik `shape:` asset'leri dışarıda.
+7e kuralıyla zaten akış menzilinden önce sönen küçük asset'ler
+(`detailCullDistance(yarıçap × ölçek) ≤ loadRange`) HLOD'a girmez.
+
+**Build (`npm run world:build -- <public altı level yolu>`):**
+1. Level + hücre dosyaları birleştirilir; `worldPartitionCellContents`
+   runtime ile aynı hücre ataması verir.
+2. Hücre başına: her yerleşimin GLB'si (gltf-transform) yerleşim matrisiyle
+   dünya uzayına taşınır. Primitive rengi = slot materyali (asset
+   `*.materials.json` → Forge `*.material.json` `baseColor` ×
+   `baseColorTexture` ortalaması) ya da GLTF `baseColorFactor` ×
+   `baseColorTexture` ortalaması; ortalama lineer uzayda. Slot indeksi
+   runtime'daki `applyMaterialSlotOverrides` ile aynı sıra (sahnede ilk
+   görülen benzersiz materyal sırası).
+3. Hücrenin bütün üçgenleri tek primitive'de (POSITION, NORMAL, COLOR_0)
+   birleşir, `weld` + meshoptimizer `simplify` (hedef oran ve hata sınırı
+   parametreli) ile sadeleşir.
+4. Çıktı: `<Level>.cells/hlod/<x_z>.hlod.glb` + dizin `<Level>.hlod.json`
+   (`schema`, `cellSize`, hücre başına `key`, `triangles`, `sourceHash`).
+   `sourceHash` hücrenin layout girdilerinden (asset id, yerleşim
+   transformu) saf bir fonksiyonla hesaplanır; runtime aynı fonksiyonla
+   eskimiş HLOD'u fark eder (asset dosyasının içeriği değişirse fark
+   etmez — belgelenir).
+
+**Runtime:** dizin varsa yüklenir (yoksa partition'lı level'da dev uyarısı:
+"HLOD yok, `npm run world:build`"). Etkin görüş mesafesi içinde olup
+statikleri **aktif olmayan** hücrenin HLOD'u gösterilir; hücre aktifken
+gizlenir (gerçek mesh'ler ondan sorumlu). GLB'ler talep üzerine okunur,
+görüş mesafesinin 1,25 katı dışında bırakılır. Tek paylaşılan
+`MeshStandardMaterial({ vertexColors: true })`; gölge düşürmez, alır; sis
+uygulanır. Eskimiş hücre: uyarı, yine de gösterilir. `verify:world-data`
+dizinin listelediği GLB'leri de denetler.
+
+**Bölüşüm:** Codex — saf çekirdek (`engine/world/hlod.ts`: dizin
+normalizer, yol, `sourceHash`, dahil etme kuralı, renk ortalaması) + build
+aracı + testler; Claude — runtime gösterimi, `verify:world-data`
+genişlemesi, smoke.
+
+**7f ilerleme:**
+- *7f tamam (2026-10-24, Codex + inceleme):* saf çekirdek
+  `engine/world/hlod.ts` (dizin, yollar, `hlodCellSourceHash`,
+  `hlodIncludesPlacement`, `averageLinearColor`), build
+  `tools/world/hlodBuild.ts` + `npm run world:build -- <level>` (eski proxy'leri
+  budar; slot/Forge materyal rengi, `sharp` ile doku ortalaması, weld +
+  meshopt simplify). Runtime `src/scene/hlodProxies.ts`: görüş mesafesi
+  içinde ve statikleri aktif olmayan hücrenin proxy'si çizilir, aktif
+  hücrede gizlenir; dizin yoksa / eskimişse uyarı. `verify:world-data`
+  dizinin listelediği GLB'leri denetler. Smoke `hlod.spec.ts`: build
+  smoke kopyasına yazılır, uzak hücrenin vertex renkli proxy'si görünür,
+  aktif hücreninki gizli; kamera uzak hücreye gidince proxy gizlenir,
+  gerçek mesh'ler görünür. Elle ekran görüntüsü: proxy kule + zemin
+  doğru yerde. **Smoke'un bulduğu 7e hatası düzeltildi:** instance
+  matrisi asset'in kendi düğüm ölçeğini de taşıyor (`Shape_Cube.glb`
+  santimetre, 0,01 düğüm); culling yerleşim ölçeği yerine onu kullanıyordu,
+  10× küp ~17 m'de kayboluyordu. Mesh başına taban ölçek (instanced:
+  `userData.sourceMatrix`, clone: dünya ölçeği / clone kökü) ayrıştırıldı.
+  CLI gerçek ortamda denendi (geçici level, 2 hücre, budama). Açık:
+  Actor Script mesh'leri ve foliage HLOD'da yok; doku pişirme (c) gerekirse.
+
 ## Faz 8 — Editör dünya araçları
 
 - [ ] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,

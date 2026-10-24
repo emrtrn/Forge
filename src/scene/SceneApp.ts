@@ -12150,7 +12150,26 @@ export class SceneApp {
         this.endAssetDragPreview();
         this.addSpecialActorAt(payload, clientX, clientY);
       },
-      onWheel: (event) => this.cameraController.handleWheel(event),
+      onWheel: (event) => {
+        if (
+          event.ctrlKey && this.selectedEditableLandscapeIndex() !== null &&
+          !this.foliageModeActive && !this.meshPaintModeActive &&
+          this.landscapeSculptSettings.editMode !== "splines"
+        ) {
+          event.preventDefault();
+          if (event.deltaY === 0) return;
+          const current = this.landscapeSculptSettings.brushSize;
+          // Half-metre steps for small brushes; larger brushes resize faster.
+          const step = Math.max(0.5, Math.round(current * 0.1 * 2) / 2);
+          const brushSize = clamp(Math.round((current - Math.sign(event.deltaY) * step) * 2) / 2, 0.5, 50);
+          if (brushSize !== current) {
+            this.setLandscapeSculptSettings({ brushSize });
+            this.emitSelectionChanged();
+          }
+          return;
+        }
+        this.cameraController.handleWheel(event);
+      },
       addPressedKey: (code) => this.cameraController.addPressedKey(code),
       deletePressedKey: (code) => this.cameraController.deletePressedKey(code),
     });

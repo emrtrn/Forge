@@ -436,6 +436,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <label class="detail-row">
           <span>Brush Size</span>
           <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
+            title="Ctrl + mouse wheel over the viewport to resize the brush"
             value="${settings.brushSize}" ${lockedAttr} />
         </label>
         <label class="detail-row">
@@ -1004,6 +1005,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <label class="detail-row">
           <span>Brush Size</span>
           <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
+            title="Ctrl + mouse wheel over the viewport to resize the brush"
             value="${settings.brushSize}" ${lockedAttr} />
         </label>
         <label class="detail-row">

@@ -7,12 +7,16 @@
  * where it touches now, so a fast car leaves a continuous track at any frame
  * rate. The per-call compaction is rescaled to the frame's length: a cell under
  * a wheel for a given time ends equally deep at 30 and at 144 fps.
+ *
+ * Faz 3: a driven wheel that spins (`tractionSlip`) digs its footprint deeper
+ * at `digRate`, up to the soft layer's `maxDepth`, on top of the static rut.
  */
-import type { DeformationField } from "../../scene/deformationField";
+import { DEFORMATION_DEPTH_SCALE, type DeformationField } from "../../scene/deformationField";
 import type { EntityId } from "../../scene/entity";
 import type { SurfaceDeformationSample } from "../../terrain/terrainSurface";
 import type { VehicleDefinition, VehicleState, VehicleVec3 } from "../vehicle/vehicleTypes";
 import { nominalWheelLoad, sinkage, vehicleWheelWidth } from "./sinkage";
+import { digTargetDepth } from "./wheelSink";
 
 /** The soft-surface profile under a wheel contact, or null for hard / non-terrain ground. */
 export type WheelDeformationLookup = (groundEntityId: EntityId, contactPoint: VehicleVec3) => SurfaceDeformationSample | null;
@@ -57,6 +61,12 @@ export function vehicleHeading(state: VehicleState): number | null {
 export class WheelTrackStamper {
   /** Last soft contact per vehicle and wheel (world X/Z). */
   private readonly lastContacts = new Map<EntityId, ([number, number] | null)[]>();
+  /**
+   * Dig depth (m, under one 0.1 mm quantum) each wheel asked for but the
+   * field's floor quantisation dropped; added back next call so slow digging
+   * (low slip, high frame rate) still deepens instead of flooring to nothing.
+   */
+  private readonly digCarry = new Map<EntityId, number[]>();
 
   constructor(private readonly field: DeformationField) {}
 
@@ -70,6 +80,8 @@ export class WheelTrackStamper {
   ): number {
     const last = this.lastContacts.get(vehicleId) ?? [];
     this.lastContacts.set(vehicleId, last);
+    const carry = this.digCarry.get(vehicleId) ?? [];
+    this.digCarry.set(vehicleId, carry);
     const nominalLoad = definition ? nominalWheelLoad(definition) : 0;
     const heading = vehicleHeading(state);
     let stamped = 0;
@@ -79,6 +91,7 @@ export class WheelTrackStamper {
         ? deformationAt(wheel.groundEntityId, contact) : null;
       if (!surface || !contact) {
         last[index] = null;
+        carry[index] = 0;
         return;
       }
       const to: [number, number] = [contact[0], contact[2]];
@@ -89,17 +102,20 @@ export class WheelTrackStamper {
       const width = vehicleWheelWidth(authored ?? wheel);
       const depth = sinkage(surface, surface.deformability, { load: wheel.suspensionForce, nominalLoad, width });
       const compaction = frameCompaction(surface.compaction, dtSeconds);
-      if (compaction === 0) return;
-      this.field.stampWheel({
-        from, to, width,
-        contactLength: wheelContactLength(wheel.radius, depth),
-        ...(heading === null ? {} : { heading: heading + wheel.steering }),
-        targetDepth: depth,
-        compaction,
-        disturbance: 255 * Math.min(1, surface.deformability),
-        recoveryRate: surface.recoveryRate,
-      });
-      stamped += 1;
+      const wheelHeading = heading === null ? {} : { heading: heading + wheel.steering };
+      if (compaction > 0) {
+        this.field.stampWheel({
+          from, to, width,
+          contactLength: wheelContactLength(wheel.radius, depth),
+          ...wheelHeading,
+          targetDepth: depth,
+          compaction,
+          disturbance: 255 * Math.min(1, surface.deformability),
+          recoveryRate: surface.recoveryRate,
+        });
+      }
+      const dug = this.dig(wheel, surface, to, width, wheelHeading, carry, index, dtSeconds);
+      if (compaction > 0 || dug) stamped += 1;
     });
     return stamped;
   }
@@ -107,9 +123,49 @@ export class WheelTrackStamper {
   /** Drops a vehicle's track memory (unloaded, despawned). */
   forget(vehicleId: EntityId): void {
     this.lastContacts.delete(vehicleId);
+    this.digCarry.delete(vehicleId);
   }
 
   clear(): void {
     this.lastContacts.clear();
+    this.digCarry.clear();
+  }
+
+  /** Slip digging at the current contact (full compaction, full tint); true when it deepened the target. */
+  private dig(
+    wheel: VehicleState["wheels"][number],
+    surface: SurfaceDeformationSample,
+    at: [number, number],
+    width: number,
+    heading: { heading?: number },
+    carry: number[],
+    index: number,
+    dtSeconds: number,
+  ): boolean {
+    const slip = wheel.tractionSlip ?? 0;
+    if (!(slip > 0) || !(surface.digRate > 0)) {
+      carry[index] = 0;
+      return false;
+    }
+    const current = this.field.sample(at[0], at[1]).depth;
+    const cap = surface.maxDepth * Math.min(surface.deformability, 1);
+    const dug = digTargetDepth(current, slip, surface.digRate, dtSeconds, cap);
+    if (!(dug > current)) {
+      carry[index] = 0;
+      return false;
+    }
+    const target = Math.min(cap, dug + (carry[index] ?? 0));
+    this.field.stampWheel({
+      from: at, to: at, width,
+      contactLength: wheelContactLength(wheel.radius, target),
+      ...heading,
+      targetDepth: target,
+      compaction: 1,
+      disturbance: 255,
+      recoveryRate: surface.recoveryRate,
+    });
+    const reached = this.field.sample(at[0], at[1]).depth;
+    carry[index] = Math.min(Math.max(target - reached, 0), 1 / DEFORMATION_DEPTH_SCALE);
+    return true;
   }
 }

@@ -155,6 +155,65 @@ export function registerWheelTrackTests(check: Check): void {
     assert.ok(Math.abs(half.disturbance - 127) <= 1);
   });
 
+  /** `carState` with every wheel reporting `slip` (undefined leaves the field off, as Faz 2 states do). */
+  const slipping = (definition: VehicleDefinition, slip: number | undefined): VehicleState => {
+    const state = carState(definition, 0, 0);
+    return slip === undefined ? state : { ...state, wheels: state.wheels.map((wheel) => ({ ...wheel, tractionSlip: slip })) };
+  };
+  /** `seconds` at `fps` with `slip`, after `settle` seconds parked at 60 fps (the static rut converged). */
+  const dig = (slip: number | undefined, seconds: number, fps = 60, surface: SurfaceDeformationSample = mud, settle = 0): DeformationField => {
+    const definition = createReferenceCarDefinition();
+    const field = new DeformationField();
+    const stamper = new WheelTrackStamper(field);
+    for (let frame = 0; frame < Math.round(settle * 60); frame += 1) {
+      stamper.stampVehicle("car", slipping(definition, 0), definition, () => surface, 1 / 60);
+    }
+    const state = slipping(definition, slip);
+    for (let frame = 0; frame < Math.round(seconds * fps); frame += 1) {
+      stamper.stampVehicle("car", state, definition, () => surface, 1 / fps);
+    }
+    return field;
+  };
+  const wheelDepth = (field: DeformationField): number => {
+    const wheel = createReferenceCarDefinition().wheels[0]!;
+    return field.sample(wheel.position[0], wheel.position[2]).depth;
+  };
+
+  check("wheel tracks: a spinning wheel digs below its static rut at digRate and never past the soft layer", () => {
+    const parked = wheelDepth(dig(0, 1));
+    const spun = wheelDepth(dig(1, 1));
+    // One second of full slip on a rut already at its static depth: digRate deeper, less the 0.1 mm floor per call.
+    assert.ok(spun > parked + MUD.digRate * 0.9 && spun <= parked + MUD.digRate + 1e-4, `parked ${parked}, spun ${spun}`);
+    assert.ok(wheelDepth(dig(0.5, 1)) < spun, "half the slip digs less");
+    const deep = dig(1, 10);
+    close(wheelDepth(deep), MUD.maxDepth, 1e-4);
+    assert.ok(deep.stats().maxDepth <= MUD.maxDepth + 1e-4, `cap: ${deep.stats().maxDepth}`);
+    const half = dig(1, 10, 60, { ...mud, deformability: 0.5 });
+    assert.ok(half.stats().maxDepth <= MUD.maxDepth / 2 + 1e-4 && wheelDepth(half) > MUD.maxDepth / 2 - 1e-3,
+      `a half-soft blend caps at half the layer: ${half.stats().maxDepth}`);
+    const disturbance = deep.sample(createReferenceCarDefinition().wheels[0]!.position[0], createReferenceCarDefinition().wheels[0]!.position[2]).disturbance;
+    assert.equal(disturbance, 255, "dug mud is fully churned");
+  });
+
+  check("wheel tracks: without slip or digRate the field matches the Faz 2 stamps exactly", () => {
+    const faz2 = dig(undefined, 2);
+    for (const field of [dig(0, 2), dig(1, 2, 60, { ...mud, digRate: 0 })]) {
+      assert.deepEqual(field.depth, faz2.depth);
+      assert.deepEqual(field.disturbance, faz2.disturbance);
+    }
+  });
+
+  check("wheel tracks: slip digging lands within a few mm at 30 and 144 fps, even below one quantum per frame", () => {
+    for (const slip of [1, 0.1]) {
+      const slow = wheelDepth(dig(slip, 0.5, 30, mud, 1));
+      const fast = wheelDepth(dig(slip, 0.5, 144, mud, 1));
+      const parked = wheelDepth(dig(0, 1));
+      // 0.08 m/s × 0.1 slip at 144 fps is ~0.56 quanta per frame: without the carried remainder it would never dig.
+      assert.ok(fast > parked + MUD.digRate * slip * 0.5 * 0.9, `slip ${slip} at 144 fps: ${fast} vs parked ${parked}`);
+      assert.ok(Math.abs(slow - fast) < 0.003, `slip ${slip}: 30 fps ${slow} vs 144 fps ${fast}`);
+    }
+  });
+
   check("terrain surface: the deformation profile blends over soft layers only", () => {
     const source = { physicalMaterials: [null, "mud", "snow"], weightsAt: (_point: readonly number[], out: number[]) => {
       out.length = 3; out[0] = 0.5; out[1] = 0.25; out[2] = 0.25; return true;

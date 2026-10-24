@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import {
   computeWheelSurfaceResponse, createPhysicalMaterialSurfaceProvider,
-  NEUTRAL_SURFACE_SAMPLE, resolveSurfaceSample, type VehicleSurfaceProvider,
+  NEUTRAL_SURFACE_SAMPLE, resolveSurfaceSample, type SurfaceSample, type VehicleSurfaceProvider,
 } from "../../engine/physics/surface/surfaceResponse";
 import {
   createReferenceCarDefinition, normalizeVehicleAsset, type VehicleInput,
@@ -371,30 +371,39 @@ export async function registerSurfaceResponseRapierTests(
     }
   });
 
-  await checkAsync("wheel sink rapier: a car on mud settles into its own ruts and drives out of them without shaking", async () => {
-    const world = await createWorld();
+  const MUD = PHYSICAL_MATERIALS.mud!.deformation!;
+  const mud: SurfaceDeformationSample = {
+    deformability: 1, maxDepth: MUD.maxDepth, compaction: MUD.compaction, digRate: MUD.digRate,
+    recoveryRate: MUD.recoveryRate, sinkResistance: MUD.sinkResistance,
+  };
+  /**
+   * The terrain deformation module's loop without its services: physics reads
+   * the field, the stamper writes it. Creates the car; `frame` steps 1/60 s.
+   */
+  const rutLoop = (world: VehicleSurfaceTestWorld, grip: SurfaceSample = resolveSurfaceSample("mud")) => {
     const { physics } = world;
-    const MUD = PHYSICAL_MATERIALS.mud!.deformation!;
-    const mud: SurfaceDeformationSample = {
-      deformability: 1, maxDepth: MUD.maxDepth, compaction: MUD.compaction, digRate: MUD.digRate,
-      recoveryRate: MUD.recoveryRate, sinkResistance: MUD.sinkResistance,
-    };
-    // The terrain deformation module's loop without its services: physics reads the field, the stamper writes it.
     const field = new DeformationField();
     const stamper = new WheelTrackStamper(field);
     const definition = createReferenceCarDefinition();
+    physics.setVehicleSurfaceProvider(() => grip);
+    physics.setVehicleGroundSinkProvider((query) => {
+      const depth = wheelFootprintDepth((x, z) => field.sample(x, z).depth,
+        query.contactPoint[0], query.contactPoint[2], query.heading, query.width);
+      return depth > 0 ? { depth, resistance: mud.sinkResistance } : null;
+    });
+    physics.createVehicle("car", definition);
+    const frame = (): void => {
+      world.tick(1 / 60);
+      stamper.stampVehicle("car", physics.vehicleState("car")!, definition, () => mud, 1 / 60);
+    };
+    return { definition, frame };
+  };
+
+  await checkAsync("wheel sink rapier: a car on mud settles into its own ruts and drives out of them without shaking", async () => {
+    const world = await createWorld();
+    const { physics } = world;
     try {
-      physics.setVehicleSurfaceProvider(() => resolveSurfaceSample("mud"));
-      physics.setVehicleGroundSinkProvider((query) => {
-        const depth = wheelFootprintDepth((x, z) => field.sample(x, z).depth,
-          query.contactPoint[0], query.contactPoint[2], query.heading, query.width);
-        return depth > 0 ? { depth, resistance: mud.sinkResistance } : null;
-      });
-      physics.createVehicle("car", definition);
-      const frame = (): void => {
-        world.tick(1 / 60);
-        stamper.stampVehicle("car", physics.vehicleState("car")!, definition, () => mud, 1 / 60);
-      };
+      const { definition, frame } = rutLoop(world);
       // Settle on the collider first: the spawn drop's landing load would press a deeper rut.
       world.tick(2);
       const nominal = nominalWheelLoad(definition);
@@ -434,6 +443,52 @@ export async function registerSurfaceResponseRapierTests(
       assert.ok(maxVerticalSpeed < 0.4, `vertical speed peaked at ${maxVerticalSpeed} m/s`);
       console.info(`[deform] parked sink ${parked.wheels.map((wheel) => wheel.sinkDepth!.toFixed(3)).join("/")} m, `
         + `driving sink ${driving.wheels.map((wheel) => wheel.sinkDepth!.toFixed(3)).join("/")} m at ${driving.forwardSpeed.toFixed(1)} m/s`);
+    } finally {
+      physics.dispose();
+    }
+  });
+  await checkAsync("wheel sink rapier: driven wheels spinning on low-grip mud dig themselves in", async () => {
+    const world = await createWorld();
+    const { physics } = world;
+    try {
+      // Rapier never stalls a straight-line wheelspin, so a wall at the bumper stands in for being stuck.
+      physics.setEntities([...world.entities, {
+        id: "wall",
+        components: {
+          Transform: { position: [0, 1, 2.6], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          Collider: { shape: "box", size: [4, 2, 0.5], isStatic: true, isSensor: false },
+        },
+      }]);
+      const { definition, frame } = rutLoop(world, { ...resolveSurfaceSample("mud"), frictionSlipScale: 0.1 });
+      world.tick(2);
+      for (let index = 0; index < 60 * 2; index += 1) frame();
+      const sink = (driven: boolean): number => {
+        const wheels = physics.vehicleState("car")!.wheels.filter((_, index) => definition.wheels[index]!.drive === driven);
+        return Math.min(...wheels.map((wheel) => wheel.sinkDepth ?? 0));
+      };
+      const parked = sink(true);
+      world.drive({ throttle: 1 });
+      const timeline: number[] = [];
+      let minSlip = Infinity;
+      for (let index = 1; index <= 60 * 3; index += 1) {
+        frame();
+        const wheels = physics.vehicleState("car")!.wheels;
+        assert.ok(wheels.every((wheel) => wheel.inContact), "digging in never lifts a wheel");
+        minSlip = Math.min(minSlip, ...wheels.filter((_, wheel) => definition.wheels[wheel]!.drive).map((wheel) => wheel.tractionSlip ?? 0));
+        if (index % 30 === 0) timeline.push(sink(true));
+      }
+      const state = physics.vehicleState("car")!;
+      assert.ok(Math.abs(state.forwardSpeed) < 0.05, `held at the wall: ${state.forwardSpeed} m/s`);
+      assert.ok(minSlip > 0.2, `the driven wheels spin the whole time: ${minSlip}`);
+      // Sinking at up to digRate × slip, then held by the soft layer / chassis clearance.
+      for (let index = 1; index < 4; index += 1) {
+        assert.ok(timeline[index]! > timeline[index - 1]! + 0.005, `keeps digging: ${timeline.map((depth) => depth.toFixed(3))}`);
+      }
+      assert.ok(sink(true) > parked + 0.05, `dug in: ${parked} → ${sink(true)} m`);
+      assert.ok(sink(true) > sink(false) + 0.03, `the driven axle sinks deeper: ${sink(true)} vs ${sink(false)} m`);
+      assert.ok(sink(true) <= MUD.maxDepth, `never past the soft layer: ${sink(true)} m`);
+      console.info(`[deform] dig-in: parked ${parked.toFixed(3)} m → driven ${sink(true).toFixed(3)} m, `
+        + `free ${sink(false).toFixed(3)} m, slip ≥ ${minSlip.toFixed(2)}`);
     } finally {
       physics.dispose();
     }

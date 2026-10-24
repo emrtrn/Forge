@@ -7,6 +7,8 @@ import { runtimeServiceKey } from "./RuntimeServices";
 interface WorldPartitionCommands {
   configure(settings: WorldPartitionGridSettings, cells: ReadonlyMap<string, readonly number[]>, hooks: WorldPartitionHooks, debug: boolean): void;
   prepare(position: readonly [number, number]): void;
+  /** Prefetches the ring around a position; returns the cells `prepare` there would activate. */
+  prefetchAround(position: readonly [number, number]): string[];
   startSimulation(): void;
   update(sources: readonly StreamingSource[]): void;
   snapshot(): WorldPartitionSnapshot | null;
@@ -37,6 +39,7 @@ export function createWorldPartitionModule(): CapabilityModule {
           });
         },
         prepare: (position) => stream?.prepare(position),
+        prefetchAround: (position) => stream?.prefetchAround(position) ?? [],
         startSimulation: () => { live = true; },
         update: (sources) => { if (live) stream?.update(sources); },
         snapshot: () => stream?.snapshot() ?? null,

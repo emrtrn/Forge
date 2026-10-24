@@ -1212,7 +1212,7 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       characters'ı sahneye, fiziğe (toplu), behavior'a ekler; deaktivasyon
       tersini yapar. Actor Script'te **BeginPlay hücre aktivasyonunda, EndPlay
       boşaltmada** çağrılır (Unreal semantiği); belgelenir.
-- [ ] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
+- [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*
       v1'de yalnız Actor Script actor'leri aktığı için fayda şimdilik actor
@@ -1237,13 +1237,27 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
         dönüşüm girdileri; level'ın malzeme override önbelleği paylaşıldığı
         için dokunulmaz. Runtime'ın kullandığı her model residency'ye kayıtlı
         olmalı (eager olanlar `persistent` sahibiyle), yoksa kullanılan bir
-        GLTF boşaltılabilir. Hücresi boşalan ama tutulan pawn/araç kendi
-        sahibiyle mesh'ini tutar. Level değişince sahipler bırakılır, gecikme
+        GLTF boşaltılabilir. Level değişince sahipler bırakılır, gecikme
         içinde yeni level aynı asset'i isterse yeniden kullanılır.
       - **Editör** değişmez (her şeyi yükler).
       Dilimler: (A) çekirdek + akış halkası, engine testli; (B) loader `evict`,
       host bağlantısı, boot yalnız kalıcı + spawn halkası; (C) smoke + `?debug`
       sayaçları.
+      *Tamam (2026-10-24):* A `6b23e8a` (Codex), B+C bu commit. Uygulamada
+      netleşen sınır: yalnız **düz actor** (`parentClass: "actor"`, `Vehicle`
+      bileşeni yok) mesh'i hücreye ait; akan pawn/karakter/araç mesh'leri
+      sabitlenir, çünkü hücresinden uzun yaşayabilir (sürülen araç, pawn) ya da
+      save restore onu hücresinden önce senkron canlandırır (aracına biner).
+      Ayrı "tutulan actor" sahibi bu yüzden gerekmedi. Sabitlenenler:
+      `loadGroups`, statikler/karakterler, spline ve foliage mesh'leri, kalıcı
+      ve runtime spawn actor'ler, VFX mesh efektleri. Level kurulurken boşaltma
+      duraklatılır (yeni level bekleyen bir modeli yeniden kullanabilsin).
+      Hücre yüklemesi loading çubuğuna girmez; boot "Loading world cells"
+      durumunda bekler. `?debug`: `prefetch p wait w models r+e loading l`;
+      loglar `[world-partition] loaded/evicted model <id>`. Smoke
+      `world-partition-residency.spec.ts`: uzak torus modeli boot'ta yüklenmez,
+      hücresinden önce yüklenir, geri dönünce 30 sn sonra boşalır, yeniden
+      gidince tekrar yüklenir.
 - [x] Save-game: P3.3 opt-in script state'i (destroyed/hidden işaretleri)
       hücre **aktivasyonunda** uygulanır, yalnız level başında değil.
       Hücre boşalırken taşınmış dinamik cisimler ve araçlar için bellek içi

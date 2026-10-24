@@ -48,10 +48,19 @@ the saver used). Those are activated and unloaded with their cell around the paw
   `spatiallyLoaded: false` actors stay persistent. Static meshes, lights, volumes,
   characters and splines are not cell-streamed; their instanced batches are built per
   level.
-- **Assets.** Every mesh model any actor class references is loaded at boot (the
-  persistent level's `loadGroups` behave as before). Per-cell asset residency
-  (ref-counted load/unload) is not implemented, so streaming bounds simulation and
-  scene-graph cost, not model memory.
+- **Assets (`AssetResidency`).** The mesh of a cell-streamed plain actor
+  (`parentClass: "actor"`, no `Vehicle` component) is owned by its cell: it is
+  fetched asynchronously when the cell enters the prefetch ring (1.5× the load
+  range, released past 1.25× that), a cell activates only once its models are
+  settled (a failed model leaves the actor mesh-less, as at boot), and a model no
+  cell or other user holds is freed 30 s later (GPU resources disposed, loader cache
+  dropped). Boot/travel/save-load wait for the in-range cells' models behind the
+  loading overlay. Everything else is pinned for the level: `loadGroups`, statics,
+  characters, spline/foliage meshes, persistent and runtime-spawned actors, VFX mesh
+  effects, and the meshes of streamed pawns, characters and vehicles (they can
+  outlive their cell or be boarded by a save restore before it loads). A model
+  shared by a pinned user and a cell is never freed. Mid-play cell loads do not
+  touch the loading bar.
 - **Identity and lifecycle.** A streamed actor keeps its `actor:<layout index>` id,
   so messages, patrol references and persisted script state address it the same
   whether or not its cell is loaded. Activation runs BeginPlay on the next tick;

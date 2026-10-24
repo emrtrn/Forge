@@ -141,24 +141,31 @@ export class AssetLoader {
     return new Map(entries);
   }
 
-  async loadModel(id: string): Promise<GLTF> {
+  /** `reportProgress: false` keeps mid-play streaming loads off the loading bar. */
+  async loadModel(id: string, options: { reportProgress?: boolean } = {}): Promise<GLTF> {
     const manifest = await this.loadManifest();
     const record = assetRecordById(manifest, id);
     if (!record) throw new Error(`Asset not found in manifest: ${id}`);
     if (!isModelAssetType(assetType(record))) {
       throw new Error(`Asset is not a loadable mesh: ${id}`);
     }
+    const progress = options.reportProgress === false ? undefined : this.modelProgress;
     try {
       const gltf = await this.modelLoader.load(
         id,
         projectPublicFileUrl(this.project, assetPath(record)),
       );
-      this.modelProgress?.onLoaded(id);
+      progress?.onLoaded(id);
       return gltf;
     } catch (error) {
-      this.modelProgress?.onFailed(id, error);
+      progress?.onFailed(id, error);
       throw error;
     }
+  }
+
+  /** Forgets a cached model after its owner disposed it; a later load fetches it again. */
+  forgetModel(id: string): void {
+    this.modelLoader.forget(id);
   }
 
   async totalBytesForGroups(loadGroups: string[]): Promise<number> {

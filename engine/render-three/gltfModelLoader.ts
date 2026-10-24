@@ -1,4 +1,4 @@
-import type { WebGLRenderer } from "three";
+import { Mesh, SkinnedMesh, Texture, type WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createForgeGltfLoader } from "./gltfLoader";
 import { applyDefaultModelTextureAnisotropy } from "./textureConfig";
@@ -34,4 +34,29 @@ export class GltfModelLoader {
     }
     return promise;
   }
+
+  /** Drops a cached model so the next load fetches it again; the caller disposes its resources. */
+  forget(id: string): void {
+    this.modelPromises.delete(id);
+  }
+}
+
+/**
+ * Frees a loaded model's GPU resources: geometries, materials, their textures and
+ * skeleton bone textures. Only for a model no scene object still renders, since
+ * clones share all of these with the source.
+ */
+export function disposeGltfResources(gltf: GLTF): void {
+  const textures = new Set<Texture>();
+  gltf.scene.traverse((object) => {
+    if (object instanceof SkinnedMesh) object.skeleton.dispose();
+    if (!(object instanceof Mesh)) return;
+    object.geometry.dispose();
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      if (!material) continue;
+      for (const value of Object.values(material)) if (value instanceof Texture) textures.add(value);
+      material.dispose();
+    }
+  });
+  for (const texture of textures) texture.dispose();
 }

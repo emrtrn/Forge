@@ -4,6 +4,8 @@ import { worldPartitionService } from "./capabilities/worldPartitionModule";
 import { normalizeWorldPartitionSettings, worldPartitionActorCells } from "@engine/world/worldPartition";
 import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
 import { StreamedActorStateCache } from "@engine/world/streamedActorState";
+import { AssetResidency, type AssetResidencySnapshot } from "@engine/world/assetResidency";
+import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import type {
@@ -379,6 +381,7 @@ import {
   readScriptActorComponent,
   readTransformComponent,
   TRANSFORM_COMPONENT,
+  VEHICLE_COMPONENT,
 } from "@engine/scene/components";
 import type { ColliderComponent, ColliderPrimitive, ColliderShape, TransformComponent } from "@engine/scene/components";
 import type { Entity, EntityComponentData } from "@engine/scene/entity";
@@ -465,6 +468,24 @@ export interface AdaptiveDebugSnapshot {
  * warm-up spikes, short enough to settle the profile early. */
 const STARTUP_CALIBRATION_SECONDS = 12;
 
+/** K5: how long an unowned cell-streamed model stays loaded before it is freed. */
+const MODEL_EVICT_DELAY_MS = 30_000;
+const PERSISTENT_MODEL_OWNER = "persistent";
+
+function partitionCellOwner(key: string): string {
+  return `cell:${key}`;
+}
+
+/**
+ * Whether a cell-streamed actor's mesh may be freed with its cell (K5 v1). Pawns,
+ * characters and vehicles stay pinned: they can outlive their cell (possessed
+ * pawn, driven car) or come alive ahead of it (a save restore boards the car
+ * synchronously), and their animation/vehicle state keeps the model's data.
+ */
+function actorModelStreams(def: ActorScriptDef, entity: Entity): boolean {
+  return def.parentClass === "actor" && entity.components[VEHICLE_COMPONENT] === undefined;
+}
+
 /** Rolling-window size (frames) for the profiler when it runs only for adaptive
  * classification (§7.3): ~1 s at 60 FPS — small, since the classifier reads
  * seconds-scale trends, not per-frame detail. */
@@ -500,7 +521,7 @@ export interface RuntimeStatsApp {
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   getTerrainStreamingSnapshot?(): TerrainStreamingSnapshot | null;
-  getWorldPartitionSnapshot?(): WorldPartitionSnapshot | null;
+  getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & { models?: AssetResidencySnapshot }) | null;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getUiDebugSnapshot?(): UiDebugSnapshot;
   /** Optional: windowed frame-time stats (avg / P95 / spikes) — always on in runtime. */
@@ -803,6 +824,23 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private partitionActorIndexById = new Map<string, number>();
   /** Where moved bodies/cars were left when their cell unloaded (in memory + save). */
   private readonly streamedActorStates = new StreamedActorStateCache();
+  /**
+   * Model ownership (K5). Every model the runtime uses outside cell streaming is
+   * pinned under `persistent`; only plain cell-streamed actors' meshes are owned
+   * by their cell (`cell:<key>`) and freed 30 s after the prefetch ring drops them.
+   */
+  private readonly modelResidency = new AssetResidency({
+    load: (id) => this.loadResidentModel(id),
+    evict: (id) => this.evictResidentModel(id),
+  }, { evictDelayMs: MODEL_EVICT_DELAY_MS, now: () => performance.now() });
+  private readonly residentModels = new Map<string, GLTF>();
+  private readonly pinnedModelIds = new Set<string>();
+  /** Mesh asset ids per partition cell, for actors whose model streams with the cell. */
+  private partitionCellModelIds = new Map<string, string[]>();
+  /** Entity ids of streamed actors whose mesh is cell-owned rather than pinned. */
+  private streamedModelActorIds = new Set<string>();
+  /** No eviction while a level builds: its loads may still be joining a pending model. */
+  private modelEvictionPaused = true;
   /** Live actor entities keyed by entity id (`actor:<n>` and runtime `spawned:<n>`). */
   private readonly actorEntityById = new Map<string, Entity>();
   /** Rendered object per actor entity id (absent for mesh-less logic actors). */
@@ -1067,7 +1105,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           const expectedModelIds = await this.collectExpectedModelIds();
           this.loadProgress.clear();
           this.loadProgress.expectAll(expectedModelIds);
-          this.models = await loader.loadGroups(layout.loadGroups);
+          // Merge, not replace: spawn-range streamed actors adopted their
+          // cell-owned models while the partition was prepared.
+          this.storeModels(await loader.loadGroups(layout.loadGroups));
           await this.loadMissingSceneModels();
           await this.loadActorMeshModels();
           this.setLoadingStatus("Preparing scene");
@@ -1175,6 +1215,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const models = await Promise.all(
           modelIds.map(async (id) => {
             try {
+              // Effects hold the model's scene directly; never let a cell free it.
+              this.pinModels([id]);
               const scene = (await this.assetLoader!.loadModel(id)).scene;
               await this.applyVfxMeshMaterialSlots(id, scene);
               return scene;
@@ -1487,6 +1529,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // the whole simulation at its current pose (including rigid-body pawns).
       const terrainHeld = this.updateTerrainStreaming(requestedMs / 1000);
       this.updateWorldPartition();
+      if (!this.modelEvictionPaused) this.modelResidency.update();
       this.updateTerrainHoldOverlay(terrainHeld, now);
       const simulationMs = terrainHeld ? 0 : requestedMs;
       this.simulationClockMs += simulationMs;
@@ -2140,8 +2183,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.runtimeServices.resolve(worldStreamingService)?.snapshot() ?? null;
   }
 
-  getWorldPartitionSnapshot(): WorldPartitionSnapshot | null {
-    return this.runtimeServices.resolve(worldPartitionService)?.snapshot() ?? null;
+  getWorldPartitionSnapshot(): (WorldPartitionSnapshot & { models: AssetResidencySnapshot }) | null {
+    const snapshot = this.runtimeServices.resolve(worldPartitionService)?.snapshot();
+    return snapshot ? { ...snapshot, models: this.modelResidency.snapshot() } : null;
   }
 
   private updateWorldPartition(): void {
@@ -2156,11 +2200,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }]);
   }
 
-  private prepareWorldPartitionAroundPawn(): void {
+  private async prepareWorldPartitionAroundPawn(): Promise<void> {
     const pawnId = this.gameModeSession?.playerState.pawnEntityId;
     const pawn = pawnId ? this.transformForEntity(pawnId) : null;
-    const position = pawn?.position ?? this.camera.position.toArray();
-    this.runtimeServices.resolve(worldPartitionService)?.prepare([position[0], position[2]]);
+    await this.preparePartitionCells(pawn?.position ?? this.camera.position.toArray());
+  }
+
+  /** Loads the cells' streamed models behind the loading overlay, then activates them. */
+  private async preparePartitionCells(position: readonly number[]): Promise<void> {
+    const partition = this.runtimeServices.resolve(worldPartitionService);
+    if (!partition) return;
+    const at: [number, number] = [position[0]!, position[2]!];
+    const keys = partition.prefetchAround(at);
+    const owners = keys.map(partitionCellOwner);
+    if (!owners.every((owner) => this.modelResidency.isOwnerReady(owner))) {
+      this.setLoadingStatus("Loading world cells");
+      await this.modelResidency.whenReady(owners);
+    }
+    partition.prepare(at);
   }
 
   private async prepareTerrainAroundPawn(): Promise<void> {
@@ -2355,7 +2412,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       for (const record of await this.assetLoader.recordsForGroup(group)) ids.add(record.id);
     }
     for (const id of sceneModelAssetIds(this.layout)) if (loadable.has(id)) ids.add(id);
-    for (const entity of [...this.actorEntities, ...this.placedActorModelEntities]) {
+    for (const entity of this.eagerActorModelEntities()) {
       const renderer = readRenderableMeshComponent(entity);
       if (renderer && loadable.has(renderer.assetId)) ids.add(renderer.assetId);
     }
@@ -2391,7 +2448,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.applyPlayerStartSpawn(spawnTag);
     const partition = this.runtimeServices.resolve(worldPartitionService);
     const partitionPosition = partition?.snapshot() ? this.streamingSpawnPosition(spawnTag) : null;
-    if (partitionPosition) partition?.prepare([partitionPosition[0], partitionPosition[2]]);
+    if (partitionPosition) await this.preparePartitionCells(partitionPosition);
     // Declare every model this level will load up front (P4) so the loading bar's
     // total is right before the first GLB streams in; the loader marks each done.
     await this.levelRuntime.build();
@@ -2518,10 +2575,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // A save restore (or a module) may have moved the pawn off the spawn area
     // prepared above; finish streaming there while the loading overlay is up.
     await this.prepareTerrainAroundPawn();
-    this.prepareWorldPartitionAroundPawn();
+    await this.prepareWorldPartitionAroundPawn();
     // Frame decisions begin only after possession and save-restore preparation.
     partition?.startSimulation();
     await this.warmRuntimeShaders();
+    this.modelEvictionPaused = false;
   }
 
   /**
@@ -3066,6 +3124,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.placedActorModelEntities = [];
     this.placedActorClasses = [];
     this.spawnCoordinator.reset();
+    // Released models wait out the eviction delay, so the next level can reuse them.
+    this.modelEvictionPaused = true;
+    this.modelResidency.releaseAll();
+    this.pinnedModelIds.clear();
+    this.partitionCellModelIds = new Map();
+    this.streamedModelActorIds = new Set();
 
     // Lights: remove root (+ target) and free the shadow map.
     for (const record of this.lightObjects) {
@@ -3882,7 +3946,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private async loadMissingSceneModels(): Promise<void> {
     if (!this.assetLoader) return;
-    const needed = sceneModelAssetIds(this.layout).filter((assetId) => !this.models.has(assetId));
+    const sceneIds = sceneModelAssetIds(this.layout);
+    // A static may share a model a spawn-range streamed actor already adopted.
+    this.pinModels(sceneIds.filter((assetId) => this.models.has(assetId)));
+    const needed = sceneIds.filter((assetId) => !this.models.has(assetId));
     if (needed.length === 0) return;
     // Only load ids the manifest still knows as meshes. A layout can outlive an
     // asset (e.g. a model imported then deleted leaves a dangling placement); such
@@ -3897,8 +3964,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     const missing = needed.filter((assetId) => loadable.has(assetId));
     if (missing.length === 0) return;
-    const models = await this.assetLoader.loadModels(missing);
-    for (const [assetId, model] of models) this.models.set(assetId, model);
+    this.storeModels(await this.assetLoader.loadModels(missing));
   }
 
   /**
@@ -3938,19 +4004,89 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.placedActorModelEntities = entities;
     const actorCells = worldPartitionActorCells(this.layout, settings);
+    const loadable = await this.loadableModelIds();
     const cells = new Map<string, number[]>();
+    const cellModels = new Map<string, string[]>();
+    this.streamedModelActorIds = new Set();
     for (const [index, key] of actorCells) {
       this.partitionActorIndexById.set(actorInstanceEntityId(index), index);
       const indices = cells.get(key) ?? [];
       indices.push(index);
       cells.set(key, indices);
+      const entity = entities[index]!;
+      const assetId = readRenderableMeshComponent(entity)?.assetId;
+      if (!assetId || !loadable.has(assetId) || !actorModelStreams(this.placedActorClasses[index]!, entity)) continue;
+      this.streamedModelActorIds.add(entity.id);
+      const ids = cellModels.get(key) ?? [];
+      if (!ids.includes(assetId)) ids.push(assetId);
+      cellModels.set(key, ids);
     }
+    this.partitionCellModelIds = cellModels;
     entities.forEach((entity, index) => { if (!actorCells.has(index)) this.registerActorEntity(entity); });
     partition.configure(settings.grids.main, cells, {
       activate: (index) => this.activatePartitionActor(index),
       deactivate: (index) => this.deactivatePartitionActor(index),
       isLive: (index) => this.actorEntityById.has(actorInstanceEntityId(index)),
+      prefetch: (key, wanted) => {
+        if (wanted) this.modelResidency.setOwner(partitionCellOwner(key), this.partitionCellModelIds.get(key) ?? []);
+        else this.modelResidency.releaseOwner(partitionCellOwner(key));
+      },
+      isReady: (key) => this.modelResidency.isOwnerReady(partitionCellOwner(key)),
     }, this.debug);
+  }
+
+  private async loadableModelIds(): Promise<Set<string>> {
+    const manifest = await this.assetLoader?.loadManifest();
+    return new Set(
+      manifest?.assets.filter((asset) => isModelAssetType(assetType(asset))).map((asset) => asset.id) ?? [],
+    );
+  }
+
+  /** Pins models a non-streamed user holds (statics, spawns, effects): no cell may free them. */
+  private pinModels(ids: Iterable<string>): void {
+    const before = this.pinnedModelIds.size;
+    for (const id of ids) if (!id.startsWith("shape:")) this.pinnedModelIds.add(id);
+    if (this.pinnedModelIds.size !== before) this.modelResidency.setOwner(PERSISTENT_MODEL_OWNER, this.pinnedModelIds);
+  }
+
+  /** Adds eagerly loaded models to the level and pins them. */
+  private storeModels(models: ReadonlyMap<string, GLTF>): void {
+    for (const [id, model] of models) this.models.set(id, model);
+    this.pinModels(models.keys());
+  }
+
+  /** Residency load hook: fetches without touching the loading bar; the cell's actors adopt it on activation. */
+  private async loadResidentModel(id: string): Promise<void> {
+    if (!this.assetLoader) throw new Error("Runtime has no asset loader");
+    this.residentModels.set(id, await this.assetLoader.loadModel(id, { reportProgress: false }));
+    if (this.debug) console.info(`[world-partition] loaded model ${id}`);
+  }
+
+  /** Residency evict hook: nothing owns the model, so no live object renders it. */
+  private evictResidentModel(id: string): void {
+    const gltf = this.residentModels.get(id);
+    this.residentModels.delete(id);
+    if (!gltf) return;
+    this.assetLoader?.forgetModel(id);
+    if (this.models.get(id) === gltf) {
+      this.models.delete(id);
+      this.localBounds.delete(id);
+    }
+    disposeGltfResources(gltf);
+    if (this.debug) console.info(`[world-partition] evicted model ${id}`);
+  }
+
+  /** Makes a cell-owned model renderable for an actor about to activate. */
+  private adoptStreamedModel(assetId: string): void {
+    if (this.models.has(assetId)) return;
+    const gltf = this.residentModels.get(assetId);
+    // Failed (or never requested) loads leave the actor mesh-less, as eager loading does.
+    if (!gltf) return;
+    const models = new Map([[assetId, gltf]]);
+    convertUnlitModelMaterialsToLit(models);
+    const bounds = computeModelLocalBounds(models).get(assetId);
+    if (bounds) this.localBounds.set(assetId, bounds);
+    this.models.set(assetId, gltf);
   }
 
   /** Shared by actor preparation and terrain's boot preparation. */
@@ -3969,6 +4105,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const def = this.placedActorClasses[index];
     if (!instance || !def) return;
     const entity = actorInstanceToEntity(def, instance, index);
+    const assetId = readRenderableMeshComponent(entity)?.assetId;
+    if (assetId && this.streamedModelActorIds.has(id)) this.adoptStreamedModel(assetId);
     // A body or car moved before its cell unloaded comes back where it was left.
     const remembered = this.streamedActorStates.take(id);
     const authored = readTransformComponent(entity);
@@ -4074,13 +4212,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * can't abort the scene). Procedural `shape:<type>` meshes in actors are not
    * supported in this version (manifest assets only).
    */
-  private async loadActorMeshModels(entities: readonly Entity[] = [...this.actorEntities, ...this.placedActorModelEntities]): Promise<void> {
+  private async loadActorMeshModels(entities: readonly Entity[] = this.eagerActorModelEntities()): Promise<void> {
     if (!this.assetLoader) return;
     const needed = new Set<string>();
+    const present: string[] = [];
     for (const entity of entities) {
       const renderer = readRenderableMeshComponent(entity);
-      if (renderer && !this.models.has(renderer.assetId)) needed.add(renderer.assetId);
+      if (!renderer) continue;
+      if (this.models.has(renderer.assetId)) present.push(renderer.assetId);
+      else needed.add(renderer.assetId);
     }
+    // Spawned and persistent actors may reuse a cell-owned model; pin it for them.
+    this.pinModels(present);
     if (needed.size === 0) return;
     const manifest = await this.assetLoader.loadManifest();
     const loadable: string[] = [];
@@ -4090,8 +4233,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       else console.warn("[runtime] actor mesh asset missing or not a mesh:", id);
     }
     if (loadable.length === 0) return;
-    const models = await this.assetLoader.loadModels(loadable);
-    for (const [id, model] of models) this.models.set(id, model);
+    this.storeModels(await this.assetLoader.loadModels(loadable));
+  }
+
+  /** Boot actor meshes: everything but the cell-owned models of streamed actors. */
+  private eagerActorModelEntities(): Entity[] {
+    return [...this.actorEntities, ...this.placedActorModelEntities]
+      .filter((entity) => !this.streamedModelActorIds.has(entity.id));
   }
 
   /**
@@ -5098,10 +5246,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (types.size === 0) return;
     const meshIds = new Set<string>();
     for (const type of types.values()) if (type.meshAssetId) meshIds.add(type.meshAssetId);
+    this.pinModels([...meshIds].filter((assetId) => this.models.has(assetId)));
     const missingModels = [...meshIds].filter((assetId) => !this.models.has(assetId));
     if (missingModels.length > 0 && this.assetLoader) {
-      const loaded = await this.assetLoader.loadModels(missingModels);
-      for (const [id, model] of loaded) this.models.set(id, model);
+      this.storeModels(await this.assetLoader.loadModels(missingModels));
     }
     const binding = new FoliageRenderBinding();
     this.scene.add(tagSceneSource(binding.root, "foliage"));
@@ -5152,10 +5300,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       for (const assetId of landscapeSplineMeshAssetIds(data)) splineAssetIds.add(assetId);
     }
     if (splineAssetIds.size === 0) return;
+    this.pinModels([...splineAssetIds].filter((assetId) => this.models.has(assetId)));
     const missingModels = [...splineAssetIds].filter((assetId) => !this.models.has(assetId));
     if (missingModels.length > 0 && this.assetLoader) {
-      const loaded = await this.assetLoader.loadModels(missingModels);
-      for (const [id, model] of loaded) this.models.set(id, model);
+      this.storeModels(await this.assetLoader.loadModels(missingModels));
     }
     // Spline assets aren't in `layout.instances`, so `loadSceneMaterials` never
     // loaded their default material slots. An asset whose look comes from a slot

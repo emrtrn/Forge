@@ -454,7 +454,12 @@ function gameModeDebugText(app: RuntimeStatsApp): string {
 
 function worldPartitionText(app: RuntimeStatsApp): string {
   const stats = app.getWorldPartitionSnapshot?.();
-  return stats ? `\nworld partition: cells ${stats.activeCells}/${stats.totalCells} actors ${stats.liveActors}` : "";
+  if (!stats) return "";
+  const models = stats.models
+    ? ` models ${stats.models.resident}+${stats.models.pendingEvict} loading ${stats.models.loading}`
+    : "";
+  return `\nworld partition: cells ${stats.activeCells}/${stats.totalCells} actors ${stats.liveActors}`
+    + ` prefetch ${stats.prefetchedCells} wait ${stats.waitingCells}${models}`;
 }
 
 function terrainStreamingText(app: RuntimeStatsApp): string {

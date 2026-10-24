@@ -35,7 +35,29 @@ export type TerrainNodeHeights = (level: number, ix: number, iz: number) => { mi
 export type TerrainLodVisibility = (box: TerrainLodBox) => boolean;
 export type TerrainMorphRange = readonly [start: number, end: number];
 
+/**
+ * Track-detail refinement (TERRAIN_DEFORMATION Faz 3, research A5): inside this
+ * rectangle a level-0 node may split into up to `levels` finer levels (each
+ * halves the vertex spacing; level −k has `leafSize / 2^k` nodes), still by
+ * camera distance with the usual doubling ranges. Outside it the selection is
+ * unchanged. Rectangle in the selector's world frame (X/Z).
+ */
+export interface TerrainLodDetail {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+  /** Extra levels below 0, at most {@link TERRAIN_LOD_MAX_DETAIL_LEVELS}; 0 turns refinement off. */
+  readonly levels: number;
+  /** Metres the drawn surface may move off the authored heights here (track depth, berm); widens node boxes. */
+  readonly margin?: number;
+}
+
+/** Deepest track refinement: 1 m tiles reach 0.125 m, the deformation field's cell. */
+export const TERRAIN_LOD_MAX_DETAIL_LEVELS = 3;
+
 export interface TerrainLodNode {
+  /** Quadtree level; negative inside a {@link TerrainLodDetail} rectangle. */
   level: number;
   ix: number;
   iz: number;
@@ -107,6 +129,22 @@ export function terrainLodMorphRanges(settings: TerrainLodSettings): TerrainMorp
   });
 }
 
+/**
+ * Morph range of detail level `level` (−1 … −`detailLevels`): the doubling
+ * ranges continue below level 0 (`range0 × 2^level`), and the finest detail
+ * level starts its morph from 0 the way level 0 does without detail. Level 0
+ * keeps its own range, so a node outside the rectangle draws exactly as before.
+ */
+export function terrainLodDetailMorphRange(
+  settings: Pick<TerrainLodSettings, "range0" | "morphStartRatio">,
+  level: number,
+  detailLevels: number,
+): TerrainMorphRange {
+  const end = settings.range0 * 2 ** level * 0.99;
+  const previous = level > -detailLevels ? settings.range0 * 2 ** (level - 1) : 0;
+  return [previous + (end - previous) * settings.morphStartRatio, end];
+}
+
 /** Vertex shader's clamped linear factor, using the unmorphed vertex distance. */
 export function terrainMorphFactor(distance: number, [start, end]: TerrainMorphRange): number {
   return Math.max(0, Math.min(1, (distance - start) / (end - start)));
@@ -134,9 +172,12 @@ export class TerrainLodSelector {
     this.morphRanges = terrainLodMorphRanges(this.settings);
   }
 
+  /** Detail levels (< 0) take their level-0 ancestor's height bounds. */
   nodeBox(level: number, ix: number, iz: number): TerrainLodBox {
     const size = this.settings.leafSize * 2 ** level;
-    const height = this.heights(level, ix, iz);
+    const height = level < 0
+      ? this.heights(0, Math.floor(ix / 2 ** -level), Math.floor(iz / 2 ** -level))
+      : this.heights(level, ix, iz);
     const tileSize = terrainTileWorldSize(this.world);
     return {
       minX: this.world.origin[0] + ix * size,
@@ -148,29 +189,45 @@ export class TerrainLodSelector {
     };
   }
 
-  select(camera: readonly [number, number, number], visible: TerrainLodVisibility = () => true): TerrainLodNode[] {
+  select(
+    camera: readonly [number, number, number],
+    visible: TerrainLodVisibility = () => true,
+    detail: TerrainLodDetail | null = null,
+  ): TerrainLodNode[] {
     const nodes: TerrainLodNode[] = [];
-    const { leafSize, levels, tileLevel } = this.settings;
+    const { leafSize, levels, tileLevel, range0 } = this.settings;
     const tileSize = terrainTileWorldSize(this.world);
     const width = this.world.tilesX * tileSize;
     const depth = this.world.tilesZ * tileSize;
+    const detailLevels = detail && [detail.minX, detail.minZ, detail.maxX, detail.maxZ].every(Number.isFinite)
+      && detail.maxX > detail.minX && detail.maxZ > detail.minZ
+      ? Math.max(0, Math.min(TERRAIN_LOD_MAX_DETAIL_LEVELS, Math.floor(detail.levels))) : 0;
+    const margin = detail && Number.isFinite(detail.margin) ? Math.max(0, detail.margin!) : 0;
+    const inDetail = (box: TerrainLodBox): boolean => detailLevels > 0
+      && box.minX < detail!.maxX && box.maxX > detail!.minX && box.minZ < detail!.maxZ && box.maxZ > detail!.minZ;
+    const range = (level: number): number => level >= 0 ? this.ranges[level]! : range0 * 2 ** level;
     const emit = (level: number, ix: number, iz: number, box: TerrainLodBox, inRange: boolean): void => {
       const needsTileSlot = level <= tileLevel && (level < tileLevel || inRange);
       const size = leafSize * 2 ** level;
       nodes.push({
         level, ix, iz, offsetX: box.minX, offsetZ: box.minZ, size, box,
-        morphRange: this.morphRanges[level]!, inRange, needsTileSlot,
+        morphRange: level >= 0 ? this.morphRanges[level]! : terrainLodDetailMorphRange(this.settings, level, detailLevels),
+        inRange, needsTileSlot,
         tileKey: needsTileSlot ? tileKey(Math.floor(ix * size / tileSize), Math.floor(iz * size / tileSize)) : null,
       });
     };
     const visit = (level: number, ix: number, iz: number): void => {
       const size = leafSize * 2 ** level;
       if (ix * size >= width || iz * size >= depth) return;
-      const box = this.nodeBox(level, ix, iz);
+      let box = this.nodeBox(level, ix, iz);
+      const refinable = inDetail(box);
+      if (refinable && margin > 0) box = { ...box, minY: box.minY - margin, maxY: box.maxY + margin };
       if (!visible(box)) return;
       const distanceSquared = boxDistanceSquared(box, camera);
-      const inRange = distanceSquared <= this.ranges[level]! ** 2;
-      if (level === 0 || distanceSquared > this.ranges[level - 1]! ** 2) {
+      const inRange = distanceSquared <= range(level) ** 2;
+      // A detail child that misses the rectangle stops at its own level.
+      const finest = level <= (refinable ? -detailLevels : 0);
+      if (finest || distanceSquared > range(level - 1) ** 2) {
         // Roots always cover the horizon, even outside the finite top range.
         emit(level, ix, iz, box, level === levels - 1 || inRange);
         return;

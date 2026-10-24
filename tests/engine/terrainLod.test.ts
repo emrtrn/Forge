@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import {
   createTerrainLodSettings,
+  TERRAIN_LOD_MAX_DETAIL_LEVELS,
+  terrainLodDetailMorphRange,
   terrainLodMorphRanges,
   terrainLodRanges,
   terrainMorphFactor,
   terrainResidentTileKeys,
   TerrainLodSelector,
   validateTerrainLodRange,
+  type TerrainLodDetail,
   type TerrainLodNode,
   type TerrainLodWorld,
   type TerrainNodeHeights,
@@ -98,7 +101,138 @@ function nodeLevels(nodes: TerrainLodNode[], effective: boolean): Int16Array {
   return levels;
 }
 
+/**
+ * {@link nodeLevels} on a raster of `leaf / 2^fine` cells, for selections with
+ * detail levels down to −`fine`; returns levels and the raster width.
+ */
+function detailLevels(def: TerrainLodWorld, nodes: TerrainLodNode[], fine: number, effective: boolean): { levels: Int16Array; width: number } {
+  const perTile = (def.tileQuads / 32) * 2 ** fine;
+  const width = def.tilesX * perTile;
+  const depth = def.tilesZ * perTile;
+  const levels = new Int16Array(width * depth).fill(-100);
+  for (const node of nodes) {
+    const cells = 2 ** (node.level + fine);
+    const level = node.level + (effective && !node.inRange ? 1 : 0);
+    for (let z = node.iz * cells; z < Math.min((node.iz + 1) * cells, depth); z += 1) {
+      for (let x = node.ix * cells; x < Math.min((node.ix + 1) * cells, width); x += 1) {
+        assert.equal(levels[z * width + x], -100, "selected nodes overlap");
+        levels[z * width + x] = level;
+      }
+    }
+  }
+  assert.ok(levels.every((level) => level > -100), "selected nodes leave a hole");
+  return { levels, width };
+}
+
 export function registerTerrainLodTests(check: Check): void {
+  const small: TerrainLodWorld = { tileQuads: 256, spacing: 1, tilesX: 4, tilesZ: 4, origin: [-300, 40, 120] };
+  /** A 64 m track window around (x, z) in `small`'s world frame. */
+  const windowAt = (x: number, z: number, levels = 2, margin = 0): TerrainLodDetail => ({
+    minX: small.origin[0] + x - 32, minZ: small.origin[2] + z - 32,
+    maxX: small.origin[0] + x + 32, maxZ: small.origin[2] + z + 32, levels, margin,
+  });
+
+  check("terrain LOD detail: track windows refine to leaf/4 near the camera; inside them neighbours differ by at most one", () => {
+    const selector = new TerrainLodSelector(small, mountainBounds(small));
+    const random = randomSource();
+    let finest = 0;
+    for (let index = 0; index < 60; index += 1) {
+      const x = 40 + random() * 944;
+      const z = 40 + random() * 944;
+      const camera = [small.origin[0] + x + (random() - 0.5) * 20, small.origin[1] + mountain(x, z) + 2 + random() * 8,
+        small.origin[2] + z + (random() - 0.5) * 20] as const;
+      const detail = windowAt(x, z);
+      const nodes = selector.select(camera, undefined, detail);
+      finest += nodes.filter((node) => node.level === -2).length;
+      const misses = (node: TerrainLodNode) => node.box.maxX <= detail.minX || node.box.minX >= detail.maxX
+        || node.box.maxZ <= detail.minZ || node.box.minZ >= detail.maxZ;
+      const raster = detailLevels(small, nodes, 2, false);
+      // 1 where the covering node misses the window.
+      const missRaster = new Uint8Array(raster.levels.length);
+      for (const node of nodes.filter(misses)) {
+        const cells = 2 ** (node.level + 2);
+        for (let cz = node.iz * cells; cz < Math.min((node.iz + 1) * cells, raster.levels.length / raster.width); cz += 1) {
+          for (let cx = node.ix * cells; cx < Math.min((node.ix + 1) * cells, raster.width); cx += 1) missRaster[cz * raster.width + cx] = 1;
+        }
+      }
+      for (const effective of [false, true]) {
+        const { levels, width } = detailLevels(small, nodes, 2, effective);
+        const depth = levels.length / width;
+        const pair = (a: number, b: number, axis: string) => {
+          if (Math.abs(levels[a]! - levels[b]!) <= 1) return;
+          // A wider step only where refinement stops: the coarse side misses the window (track depth 0 on the shared edge).
+          const coarse = levels[a]! > levels[b]! ? a : b;
+          assert.ok(missRaster[coarse] === 1 && levels[coarse]! <= 1,
+            `${axis} jump ${levels[a]} → ${levels[b]} at cell ${a % width},${Math.floor(a / width)}; camera ${camera}`);
+        };
+        for (let cz = 0; cz < depth; cz += 1) {
+          for (let cx = 0; cx < width; cx += 1) {
+            const at = cz * width + cx;
+            if (cx + 1 < width) pair(at, at + 1, "X");
+            if (cz + 1 < depth) pair(at, at + width, "Z");
+          }
+        }
+      }
+      for (const node of nodes.filter((candidate) => candidate.level < 0)) {
+        assert.equal(node.size, 32 * 2 ** node.level);
+        assert.ok(node.needsTileSlot && node.tileKey === `${Math.floor((node.box.minX - small.origin[0]) / 256)}_${Math.floor((node.box.minZ - small.origin[2]) / 256)}`);
+        assert.deepEqual(node.morphRange, terrainLodDetailMorphRange(selector.settings, node.level, 2));
+      }
+    }
+    assert.ok(finest > 60 * 4, `the window under the camera reaches leaf/4: ${finest} nodes`);
+  });
+
+  check("terrain LOD detail: off, empty or far windows select exactly as before; nodes outside the window never change", () => {
+    const selector = new TerrainLodSelector(small, mountainBounds(small));
+    const camera = [small.origin[0] + 500, small.origin[1] + mountain(500, 500) + 3, small.origin[2] + 500] as const;
+    const plain = selector.select(camera);
+    assert.deepEqual(selector.select(camera, undefined, null), plain);
+    assert.deepEqual(selector.select(camera, undefined, windowAt(500, 500, 0)), plain);
+    assert.deepEqual(selector.select(camera, undefined, { ...windowAt(500, 500), maxX: Number.NaN }), plain);
+    assert.deepEqual(selector.select(camera, undefined, { ...windowAt(500, 500), maxX: windowAt(500, 500).minX }), plain);
+    // A window 400 m from the camera: inside it every node is still too far to split below level 0.
+    assert.deepEqual(selector.select(camera, undefined, windowAt(900, 100)), plain);
+    const detail = windowAt(500, 500);
+    const refined = selector.select(camera, undefined, detail);
+    const misses = (node: TerrainLodNode) => node.box.maxX <= detail.minX || node.box.minX >= detail.maxX
+      || node.box.maxZ <= detail.minZ || node.box.minZ >= detail.maxZ;
+    const key = (node: TerrainLodNode) => `${node.level}:${node.ix}:${node.iz}`;
+    const refinedKeys = new Set(refined.map(key));
+    for (const node of plain.filter(misses)) assert.ok(refinedKeys.has(key(node)), `${key(node)} outside the window changed`);
+    // What is new outside the window is only the far side of a node that straddles its edge.
+    const plainKeys = new Set(plain.map(key));
+    assert.ok(refined.filter((node) => misses(node) && !plainKeys.has(key(node))).every((node) => node.level < 0));
+    assert.ok(refined.length > plain.length);
+  });
+
+  check("terrain LOD detail: levels clamp to three, the margin widens refined boxes and morph ranges keep doubling", () => {
+    const selector = new TerrainLodSelector(small, mountainBounds(small));
+    const camera = [small.origin[0] + 500, small.origin[1] + mountain(500, 500) + 3, small.origin[2] + 500] as const;
+    const deep = selector.select(camera, undefined, windowAt(500, 500, 9));
+    assert.equal(Math.min(...deep.map((node) => node.level)), -TERRAIN_LOD_MAX_DETAIL_LEVELS);
+    detailLevels(small, deep, TERRAIN_LOD_MAX_DETAIL_LEVELS, false);
+    const plainBoxes = new Map(selector.select(camera, undefined, windowAt(500, 500, 2)).map((node) => [`${node.level}:${node.ix}:${node.iz}`, node.box]));
+    const window = windowAt(500, 500, 2, 0.4);
+    let widened = 0;
+    for (const node of selector.select(camera, undefined, window)) {
+      const plain = plainBoxes.get(`${node.level}:${node.ix}:${node.iz}`);
+      // Only boxes over the window move: the surface outside it is never displaced.
+      if (!plain || node.box.maxX <= window.minX || node.box.minX >= window.maxX
+        || node.box.maxZ <= window.minZ || node.box.minZ >= window.maxZ) continue;
+      widened += 1;
+      assert.ok(Math.abs(plain.minY - node.box.minY - 0.4) < 1e-9 && Math.abs(node.box.maxY - plain.maxY - 0.4) < 1e-9);
+    }
+    assert.ok(widened > 10);
+    const settings = selector.settings;
+    assert.deepEqual(terrainLodDetailMorphRange(settings, -2, 2), [0.7 * 0.99 * 32, 0.99 * 32]);
+    const [start, end] = terrainLodDetailMorphRange(settings, -1, 2);
+    assert.equal(end, 0.99 * 64);
+    assert.equal(start, 32 + (end - 32) * 0.7);
+    // Level 0 keeps its authored morph: refinement never changes a node outside the window.
+    assert.deepEqual(terrainLodMorphRanges(settings)[0], [0.7 * 0.99 * 128, 0.99 * 128]);
+  });
+
+
   check("terrain LOD: mountainous neighbours differ by at most one across 180 seeded cameras", () => {
     const selector = new TerrainLodSelector(world, mountainBounds(world));
     const width = world.tilesX * 8;

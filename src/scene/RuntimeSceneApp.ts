@@ -760,6 +760,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
   /**
+   * Where each instanced placement renders, keyed by `overrideObjectKey(assetId,
+   * placementIndex)` (merged-level index). A batch may hold a subset of an
+   * asset's placements, so its slot is not always the placement index.
+   */
+  private readonly instanceSlots = new Map<string, { meshes: InstancedMesh[]; slot: number }>();
+  /**
    * Instanced-static placements a `collectible` behavior has collected, keyed by
    * `overrideObjectKey(assetId, placementIndex)`. The per-frame instance-transform
    * sink re-writes an instance's matrix, so a one-shot collapse would reappear;
@@ -3051,6 +3057,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.instanceGroups.clear();
     this.instanceMeshes.clear();
+    this.instanceSlots.clear();
     this.instanceOverrideObjects.clear();
     this.collectedInstances.clear();
     this.disposeInstanceProbeMaterials();
@@ -4502,10 +4509,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Collapses one instanced-static slot to a point so it renders invisibly. */
   private collapseInstance(assetId: string, placementIndex: number): void {
-    const meshes = this.instanceMeshes.get(assetId);
-    if (!meshes) return;
-    for (const mesh of meshes) {
-      mesh.setMatrixAt(placementIndex, COLLAPSED_INSTANCE_MATRIX);
+    const target = this.instanceSlots.get(overrideObjectKey(assetId, placementIndex));
+    if (!target) return;
+    for (const mesh of target.meshes) {
+      mesh.setMatrixAt(target.slot, COLLAPSED_INSTANCE_MATRIX);
       mesh.instanceMatrix.needsUpdate = true;
     }
   }
@@ -4524,7 +4531,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
   }
 
-  private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {
+  /**
+   * `placementIndices[i]` is `placements[i]`'s index in the merged level's group
+   * (identity when the batch holds the whole group); render slots follow `placements`.
+   */
+  private createInstancedModel(
+    assetId: string,
+    placements: LayoutPlacement[],
+    placementIndices: readonly number[] = placements.map((_, index) => index),
+  ): Group {
     const gltf = this.models.get(assetId);
     // A dangling layout placement (asset removed from the manifest) renders
     // nothing rather than aborting the whole scene build.
@@ -4536,7 +4551,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Placements with a material override and/or a reflection-capture probe envMap
     // are hidden in the instanced mesh and rendered as a separate clone (clone-
     // fallback), matching the editor so Play renders identically.
-    const decisions = placements.map((placement, placementIndex) => {
+    const decisions = placements.map((placement, slot) => {
+      const placementIndex = placementIndices[slot]!;
       const meshPaint = this.meshPaintData.placements.filter(
         (entry) => entry.target.assetId === assetId && entry.target.placementIndex === placementIndex,
       );
@@ -4571,7 +4587,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       castShadow: this.staticObjectsCastShadow(),
       receiveShadow: this.staticObjectsReceiveShadow(),
     });
-    decisions.forEach((decision, placementIndex) => {
+    decisions.forEach((decision, slot) => {
+      const placementIndex = placementIndices[slot]!;
+      this.instanceSlots.set(overrideObjectKey(assetId, placementIndex), { meshes, slot });
       if (!decision.asClone || decision.placement.hidden) return;
       const object = this.createInstancedCloneObject(
         assetId,
@@ -5479,14 +5497,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       overrideObject.matrixWorldNeedsUpdate = true;
       return;
     }
-    const meshes = this.instanceMeshes.get(assetId);
-    if (!meshes) return;
-    for (const mesh of meshes) {
+    const target = this.instanceSlots.get(overrideObjectKey(assetId, placementIndex));
+    if (!target) return;
+    for (const mesh of target.meshes) {
       const sourceMatrix =
         mesh.userData.sourceMatrix instanceof Matrix4
           ? mesh.userData.sourceMatrix
           : new Matrix4();
-      mesh.setMatrixAt(placementIndex, transformMatrix.clone().multiply(sourceMatrix));
+      mesh.setMatrixAt(target.slot, transformMatrix.clone().multiply(sourceMatrix));
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
     }

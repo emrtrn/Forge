@@ -13,6 +13,7 @@ import { StreamedActorStateCache } from "@engine/world/streamedActorState";
 import { AssetResidency, type AssetResidencySnapshot } from "@engine/world/assetResidency";
 import { effectiveViewDistance, isFarViewMode } from "@engine/world/viewDistance";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
+import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
@@ -1008,6 +1009,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private farViewMode = false;
   private warnedNoReversedDepth = false;
+  private readonly followShadowForward = new Vector3();
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   /** Consumer for the next frame's CPU capture; see {@link armFrameCapture}. */
   private armedFrameCapture: FrameCaptureConsumer | null = null;
@@ -1740,6 +1742,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // step it belongs to. Tag 0 stays reserved for ordinary frames, so the
       // rolling `gpu` readout is never fed a deliberately crippled frame.
       this.gpuSweepSession.beginFrame();
+      this.updateFollowShadow();
       // Simulation time, not real time: the frame is still drawn while the world
       // is held (the GPU sweep depends on exactly that), but an animated pass must
       // not keep advancing over a scene that has stopped.
@@ -6142,6 +6145,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private fitSunShadowToScene(): void {
+    // Far view mode re-centres the sun shadow on the camera every frame instead.
+    if (this.farViewMode) return;
     fitDirectionalShadowToBounds(
       this.sun,
       this.getRoomBounds(),
@@ -6184,6 +6189,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       scene: this.scene,
       ambientLight: this.ambientLight,
       settings: resolveSceneWorldSettings(this.layout),
+    });
+  }
+
+  /**
+   * Far view mode (Faz 7c1): the sun's shadow frustum follows the camera,
+   * covering `FOLLOW_SHADOW_HALF_EXTENT × shadowDistanceScale` around a point
+   * ahead of it, texel-snapped so it does not shimmer. Smaller levels keep the
+   * bounds fit ({@link fitSunShadowToScene}).
+   */
+  private updateFollowShadow(): void {
+    if (!this.farViewMode || !this.sun?.castShadow || !this.renderer.shadowMap.enabled) return;
+    this.camera.getWorldDirection(this.followShadowForward);
+    updateSunFollowShadow(this.sun, this.camera.position, this.followShadowForward, {
+      halfExtent: FOLLOW_SHADOW_HALF_EXTENT * this.qualitySettings.shadowDistanceScale,
     });
   }
 

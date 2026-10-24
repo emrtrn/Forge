@@ -26,6 +26,10 @@ interface FrameProbe {
   targetSamples: number | null;
   sunBias: number | null;
   sunShadowMap: boolean;
+  shadowLeft: number | null;
+  shadowFar: number | null;
+  /** Horizontal distance from the camera to the sun's target (the follow shadow's centre). */
+  sunTargetLead: number | null;
 }
 
 async function bootLevel(page: import("@playwright/test").Page, viewDistance: number | undefined): Promise<{ probe: FrameProbe; errors: string[]; messages: string[] }> {
@@ -95,6 +99,10 @@ async function bootLevel(page: import("@playwright/test").Page, viewDistance: nu
       for (const scene of w.__farScenes) scene.traverse((node: any) => {
         if (!sun && node.isDirectionalLight && node.castShadow) sun = node;
       });
+      const targetWorld = sun ? sun.target.matrixWorld.elements : null;
+      const lead = targetWorld
+        ? Math.hypot(targetWorld[12] - camera.matrixWorld.elements[12], targetWorld[14] - camera.matrixWorld.elements[14])
+        : null;
       done({
         reversedState: renderer.state.buffers.depth.getReversed(),
         clipControl: renderer.extensions.has("EXT_clip_control"),
@@ -106,6 +114,9 @@ async function bootLevel(page: import("@playwright/test").Page, viewDistance: nu
         targetSamples: target ? target.samples : null,
         sunBias: sun ? sun.shadow.bias : null,
         sunShadowMap: Boolean(sun?.shadow.map),
+        shadowLeft: sun ? sun.shadow.camera.left : null,
+        shadowFar: sun ? sun.shadow.camera.far : null,
+        sunTargetLead: lead,
       });
     };
     requestAnimationFrame(tick);
@@ -121,12 +132,18 @@ test("far view: a long view distance renders Play with reversed-Z into a float-d
   expect(probe.targetDepthType).toBe(FLOAT_TYPE);
   expect(probe.targetSamples).toBe(4);
   expect(probe.sunShadowMap).toBe(true);
+  // Faz 7c1 follow shadow: 60 m × the "high" profile's 0.75 shadow distance scale,
+  // ±150 m along the light, centred half an extent ahead of the camera.
+  expect(probe.shadowLeft).toBeCloseTo(-45, 5);
+  expect(probe.shadowFar).toBe(300);
+  expect(probe.sunTargetLead).toBeGreaterThan(21);
+  expect(probe.sunTargetLead).toBeLessThan(24);
   if (probe.clipControl) {
     expect(probe.reversedState).toBe(true);
     expect(probe.cameraReversed).toBe(true);
     // Reversed [0, 1] projection: depth 1 at the near plane, so z' grows toward the camera.
     expect(probe.projection10).toBeGreaterThan(0);
-    expect(probe.sunBias).toBeGreaterThan(0);
+    expect(probe.sunBias).toBeCloseTo(0.02 / 300, 8);
   } else {
     expect(probe.reversedState).toBe(false);
     expect(probe.near).toBeGreaterThanOrEqual(0.5);

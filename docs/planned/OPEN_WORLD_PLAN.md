@@ -1826,6 +1826,19 @@ yoğunluğu yardımcısı.
   projeksiyonu reversed, hedef float32 + 4 örnek, güneş bias'ı pozitif ve
   gölge haritası var; `viewDistance`'sız level standart yolda. Editör
   bilerek standart derinlikte (far ≤ `viewDistance`, en az 2000 m).
+- *7c1 tamam (2026-10-24):* `engine/render-three/sunFollowShadow.ts`
+  `updateSunFollowShadow` her karede (yalnız uzak mod, gölge açık, güneş
+  gölge düşürüyorsa) güneşin frustum'unu kameranın yatay ileri yönünde yarı
+  genişlik kadar öndeki noktaya kurar: yarı genişlik 60 m ×
+  `shadowDistanceScale`, ışık ekseninde ±150 m, `computeFollowShadowFrame`
+  ile texel'e hizalı. Işık ve hedefi birlikte ışık ekseninde kayar (yön
+  değişmez; döndürülmüş light root'u altında `worldToLocal`). Bias dünya
+  biriminde sabit (2 cm / derinlik aralığı, işaret moddan). Uzak modda
+  `fitSunShadowToScene` devre dışı. Engine testi `sunFollowShadow.test.ts`
+  (yön korunur, odak + texel, ışık ekseninde hareket kaydırmaz); smoke
+  `far-view.spec.ts` high profilde −45 m frustum, far 300, hedef kameranın
+  ~22,5 m önünde. Elle ekran görüntüsü: zemin + küpte gölge standart yolla
+  aynı yerde, acne/peter-panning yok. Açık: gölge sınırı sert (solma 7c2).
 
 ## Faz 8 — Editör dünya araçları
 

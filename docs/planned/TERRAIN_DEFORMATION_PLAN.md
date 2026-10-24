@@ -470,6 +470,9 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
       kenarında derinlik 0. Ayrıntı aşağıdaki görsel notta.
 - [x] İz kenarlarında kabarma (berm): ezilen malzeme izin iki yanında hafifçe
       yükselir. Yalnız görseldir (vertex shader), fiziğe ve alana etki etmez.
+- [x] **Yanal iz-tutma (araştırma C6, plana ek):** iz duvarı yuvarlanan
+      tekerleği derin tarafa iter; araç var olan izleri izler, çıkmak için
+      direksiyon ister. Ayrıntı aşağıdaki C6 notunda.
 - [x] Kalite profili: `terrainTrackDetailLevels` (ultra/high 2, medium 1,
       low 0); düşük profilde alt-seviye yok, Faz 2 görünümüne düşülür.
 - [x] Testler: tile vertex'lerinin `terrainHeightAt` ile eşitliği (collider
@@ -533,9 +536,8 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
   `terrainSurface.test.ts` (formatter); `terrain-surface.spec.ts` smoke'u neutral
   koşuda dört tekerlek 0, mud koşuda dört tekerlek ve en derin > 1 cm
   (ölçülen 0,106 / 0,105 / 0,172 / 0,171 m, arka tahrik akslar kazdığı için derin).
-- *Açık kalanlar.* Yanal iz-tutma (C6; sol/sağ ayak izi derinlik
-  farkına orantılı yanal kuvvet, "rut steering" hissi). Mesh, berm ve kalite
-  profili aşağıdaki görsel notta kapandı.
+- *Açık kalanlar.* Yok: mesh, berm ve kalite profili aşağıdaki görsel notta,
+  yanal iz-tutma (C6) C6 notunda kapandı.
 
 **Faz 3 görsel notu (2026-10-24):**
 - *Karar.* Araştırma A5: ayrı patch mesh yerine CDLOD'un kendi alt-seviyeleri
@@ -593,6 +595,37 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
   shader hatasız. GLSL headless çalıştırılamadığı için formüller CPU
   aynalarıyla (`terrainSlotHeight`, `terrainDeformationDisplacement`)
   sabitlendi; smoke derleme hatasını yakalıyor (bilerek bozulan GLSL ile denendi).
+
+**Faz 3 C6 notu — yanal iz-tutma (2026-10-24):**
+- *Model.* İz duvarı lastiğin temasını eğer; yükün bir kısmı tekerleği derin
+  tarafa iter. Sink provider (`VehicleWheelSink.slope`) iz tabanının aks
+  boyunca eğimini döndürür: ayak izinin ±0,35·genişlik'teki iki yan örneğinin
+  farkı / aralık (`wheelFootprint`, + taraf `(cos h, −sin h)`). Fizik her
+  dilimde temas noktasına `rutLateralImpulse` uygular:
+  `RUT_LATERAL_GAIN (0,5) × yük × clamp(eğim, ±RUT_MAX_SLOPE 0,5) × dt`, aks
+  boyunca. Kazanç 1 (eğik normalin tam yatay bileşeni) de denendi, davranış
+  benzerdi (itişin çoğunu lastiğin yan sürtünmesi karşılıyor); hareketli
+  damgaların pürüzlü kenarları eğimde gürültü ürettiği için temkinli 0,5.
+- *İleriden okuma (bulgu).* Eğim tekerleğin tam altından okunduğunda her
+  tekerlek kendi taze izinde sürekli yan itiş alıyordu: iz 12,5 cm hücrelere
+  oturur ve iki hücreden dar bir lastik kendi izini hiçbir zaman simetrik
+  görmez (merkezde −0,37 ölçüldü). Bu yüzden eğim yuvarlanan tekerleğin
+  önünden okunur (`rutSlopeAhead`): kendi temas uzunluğunun yarısı +
+  `RUT_LOOKAHEAD_MARGIN` 0,25 m ileride, o kare basılan iz henüz yoktur;
+  orada yalnız önceden var olan iz (kendi eski geçişi, başka araç) bulunur.
+  Duran / sürünen tekerlek (< 0,3 m/s, `RUT_STEERING_MIN_SPEED`) itilmez; geri
+  giderken arkası okunur. Sorgu tekerlek yarıçapını ve `travel` yönünü taşır.
+- *Davranış (Rapier).* İki basılmış izin (0,30 m, 0,10 m) 10 cm yanından
+  başlayan araç ize çekilir (0,103 → 0,069 m; lastik izin düz tabanına
+  oturunca, ~0,06–0,07 m'de, iki yan örnek de tabanı okur ve itiş biter), iz
+  dışına salınmaz; 0,25 direksiyonla izden çıkar (x ≈ −0,58 m); kendi taze
+  izinde düz giden aracın çizgisi C6 açık / kapalı aynı (< 5 mm); hiçbir
+  tekerlek havalanmaz. Önceki kapalı döngü testleri C6 açıkken de geçiyor.
+- *Testler.* `wheelSink.test.ts` (eğim işareti ve dönen aks, impuls yönü /
+  sınırı / sıfır durumları), `wheelTracks.test.ts` (ileriden okuma: duran,
+  ize varmadan, geri, derin izde uzayan erişim; modül provider'ı),
+  `surfaceResponse.test.ts` "rut walls pull an offset car back into its ruts…".
+  His ayarı (kazanç, eğim sınırı, ileriden okuma payı) kullanıcı testinde.
 
 ## Faz 4 — Efekt ve ses
 

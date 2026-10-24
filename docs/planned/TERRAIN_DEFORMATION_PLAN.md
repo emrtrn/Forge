@@ -1,9 +1,9 @@
 # Terrain Deformasyonu Planı (Kar / Çamur İzleri)
 
-> Durum: **Faz 1a + 1b + Faz 2 + Faz 3 fiziği tamamlandı** (2026-10-24,
-> `feat/terrain-deformation`); Faz 3'ün görsel kısmı (patch mesh / CDLOD
-> alt-seviyeleri, berm, kalite profili) açık. Görsel kabul kullanıcı testinde
-> (LandscapeTest + Gaz52).
+> Durum: **Faz 1a + 1b + Faz 2 + Faz 3 tamamlandı** (2026-10-24,
+> `feat/terrain-deformation`); Faz 3'ün görsel kısmı CDLOD alt-seviyeleriyle
+> (A5) yapıldı. Görsel kabul ve S-D1'in GPU / pop ölçümü kullanıcı testinde
+> (LandscapeTest + Gaz52); sırada Faz 4 (efekt ve ses).
 > Hedef: Araç (ve ileride karakter) Landscape üzerinde giderken kar, çamur ve
 > kum gibi yumuşak zeminlerde **iz bırakması, gömülmesi ve zorlanması**.
 > Referans his: SnowRunner / Expeditions. Hedef, o hissin web'de ulaşılabilir
@@ -45,7 +45,9 @@
 > (`nominal` = boş aracın tekerlek başına statik yükü); derinlik hesabı tek bir
 > `sinkage(...)` fonksiyonunda toplanır, Bekker ileride aynı arayüzün arkasına
 > konabilir. Rapor ayrıca Faz 3'ün "yerel patch mesh + discard" maddesi yerine
-> CDLOD alt-seviyelerini öneriyor; bu henüz **karar değil**, spike S-D1 bekliyor.
+> CDLOD alt-seviyelerini öneriyor. **Karar (2026-10-24, kullanıcı):** A5 (CDLOD
+> alt-seviyeleri), ayrı spike yok; S-D1 kapıları üretim koduna testlerle
+> bağlandı, GPU süresi ve pop kullanıcının makinesinde `?debug` ile ölçülür.
 
 ## Karar: Yüzey profili + CPU-otoriter iz alanı + yerel yoğun mesh
 
@@ -112,7 +114,7 @@ Değerlendirilip reddedilenler:
 6. **Editör `?editor` arkasında.** Yeni editör yüzeyleri `src/editor/` altında
    kalır. `verify:dist --strict` ve `verify:imports` yeşil kalır.
 7. **Bütçe ölçülür.** Modül bir perf bölgesi (`frameRegions`) ve `?debug`
-   satırı açar. Pahalı parçalar (yoğun patch mesh, alan çözünürlüğü) kalite
+   satırı açar. Pahalı parçalar (iz penceresi alt-seviyeleri, alan çözünürlüğü) kalite
    profiline bağlanır.
 
 ## Veri modeli
@@ -182,7 +184,7 @@ allowlist notu güncellenir.
 | `engine/physics/surface/surfaceResponse.ts` | Physical material → `SurfaceSample` çözümü, katman ağırlığı karışımı, tekerlek tepkisi matematiği (saf) |
 | `engine/scene/deformationField.ts` | Toroidal CPU alanı: `stamp`, `sample`, `recenter`, `decay`, kirli bölge takibi (saf) |
 | `engine/terrain/terrainHeightQuery.ts` (**mevcut**) | `terrainLayerWeightsAt`, `terrainHeightAt` (collider üçgenleriyle **birebir**, Rapier testli). Yeni landscape-local örnekleyici yazılmaz |
-| `engine/render-three/terrain/terrainDeformation.ts` | Shader parçası (açık dünya Faz 2'nin CDLOD `terrainMaterial`'ına), `DataTexture` yükleme, Faz 3 patch mesh'i |
+| `engine/render-three/terrain/terrainDeformation.ts` | Shader parçası (açık dünya Faz 2'nin CDLOD `terrainMaterial`'ına), `DataTexture` yükleme, Faz 3 vertex yer değiştirmesi + berm (alt-seviye seçimi `engine/terrain/terrainLod.ts`) |
 | `engine/physics/physicsSubsystem.ts` | `setVehicleSurfaceProvider()`; `vehicleState()` her tekerlekte `groundEntityId` döndürür (`wheelGroundObject` + `rapierColliderToEntity`) |
 | `src/scene/capabilities/terrainDeformationModule.ts` | Capability: alanın sahibi; tekerlek temaslarından iz basar, surface provider'ı sağlar, render uniform'larını günceller |
 | `src/scene/capabilities/runtimeServiceKeys.ts` | `landscapeHostService` (landscape data + dünya dönüşümü + render objesi) ve `terrainDeformationCommandsService` (`stamp`, `debugSnapshot`) |
@@ -448,7 +450,7 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
   `terrain-surface.spec.ts` çamurlu koşuda >100 hücre ve shader hatasız.
   Görsel kabul ekran görüntüsüyle yapılmadı (headless canvas siyah).
 
-## Faz 3 — Gömülme (fizik + yerel yoğun mesh)
+## Faz 3 — Gömülme (fizik + iz penceresinde yoğun mesh)
 
 - [x] **Fizik:** tekerlek başına `restLength − alan derinliği` (Faz 0 işaret
       düzeltmesi; değişim ≤ 0,3 m/s slew-limit, değişince `wakeUp()`).
@@ -460,17 +462,18 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
       yerine `tractionSlip`'ten okunuyor; aşağıdaki nota bakın.)
 - [x] **Gövde sürtünmesi (belly drag):** derinlik yerden yüksekliği aşınca
       şasiye hızla orantılı ters impuls uygulanır (`sinkResistance`).
-- [ ] **Yerel patch mesh:** aracın çevresinde yoğun bir grid (örneğin 256²,
-      20 cm aralık; boyutu kalite profiline bağlı). Vertex yüksekliği
-      `terrainHeightAt` (collider üçgenleriyle birebir aynı köşegen) − alan
-      derinliği. Ana terrain fragment'i
-      patch'in kapladığı alanda `discard` edilir; kenarda derinlik 0 olduğu
-      için patch, terrain ile dikişsiz birleşir.
-- [ ] İz kenarlarında kabarma (berm): ezilen malzeme izin iki yanında hafifçe
-      yükselir. Yalnız görseldir, fiziğe etki etmez.
-- [ ] Kalite profili: düşük profilde patch kapanır, Faz 2 görünümüne düşülür.
-- [ ] Testler: patch vertex'lerinin `terrainHeightAt` ile eşitliği (collider
-      eşitliği açık dünya Faz 1'de zaten testli), patch kenarında sıfır fark, derin çamurda
+- [x] ~~**Yerel patch mesh:** aracın çevresinde yoğun bir grid (örneğin 256²,
+      20 cm aralık), ana terrain'de `discard`.~~ **Yerine CDLOD alt-seviyeleri
+      (A5):** iz penceresinde quadtree level 0'ın altına iner (1 m tile'da
+      0,5 / 0,25 m), vertex yüksekliği `terrainHeightAt` ile aynı üçgenlerden
+      − alan derinliği. Tek mesh, `discard` ve ikinci yüzey yok; pencere
+      kenarında derinlik 0. Ayrıntı aşağıdaki görsel notta.
+- [x] İz kenarlarında kabarma (berm): ezilen malzeme izin iki yanında hafifçe
+      yükselir. Yalnız görseldir (vertex shader), fiziğe ve alana etki etmez.
+- [x] Kalite profili: `terrainTrackDetailLevels` (ultra/high 2, medium 1,
+      low 0); düşük profilde alt-seviye yok, Faz 2 görünümüne düşülür.
+- [x] Testler: tile vertex'lerinin `terrainHeightAt` ile eşitliği (collider
+      eşitliği açık dünya Faz 1'de zaten testli), pencere kenarında sıfır fark, derin çamurda
       sabit gazla hızın düz zemine göre belirgin düşük kalması.
 
 **Faz 3 fizik notu (2026-10-24):**
@@ -530,9 +533,66 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
   `terrainSurface.test.ts` (formatter); `terrain-surface.spec.ts` smoke'u neutral
   koşuda dört tekerlek 0, mud koşuda dört tekerlek ve en derin > 1 cm
   (ölçülen 0,106 / 0,105 / 0,172 / 0,171 m, arka tahrik akslar kazdığı için derin).
-- *Açık kalanlar.* Patch mesh ya da CDLOD alt-seviyeleri (spike S-D1 kararı),
-  berm, kalite profili, yanal iz-tutma (C6; sol/sağ ayak izi derinlik
-  farkına orantılı yanal kuvvet, "rut steering" hissi).
+- *Açık kalanlar.* Yanal iz-tutma (C6; sol/sağ ayak izi derinlik
+  farkına orantılı yanal kuvvet, "rut steering" hissi). Mesh, berm ve kalite
+  profili aşağıdaki görsel notta kapandı.
+
+**Faz 3 görsel notu (2026-10-24):**
+- *Karar.* Araştırma A5: ayrı patch mesh yerine CDLOD'un kendi alt-seviyeleri
+  (kullanıcı onaylı; ayrı S-D1 spike'ı yapılmadı, kapılar testlere bağlandı).
+- *Seçim* (`engine/terrain/terrainLod.ts`). `TerrainLodSelector.select(camera,
+  visible, detail)`: `TerrainLodDetail` dikdörtgeniyle kesişen level-0 düğüm
+  en çok 3 seviye (`TERRAIN_LOD_MAX_DETAIL_LEVELS`; leaf/2, /4, /8) bölünür.
+  Bölme yine kamera uzaklığıyla, aralıklar level 0'ın altında da ikiye
+  bölünerek (`range0 × 2^level`; morph `terrainLodDetailMorphRange`). Alt-seviye
+  düğümleri level-0 atasının yükseklik sınırını alır, iz payı (derinlik
+  aralığı + en yüksek berm) kadar genişletilir ve tile slot'u ister. Dikdörtgen
+  yoksa seçim bit-bit aynı; level 0'ın morph'u değişmez.
+- *Pencere kenarı.* Bölme pencerede durduğu için bir alt-seviye düğüm,
+  pencereye değmeyen iki seviye kaba bir level-0 komşuya dayanabilir. Bu kenar
+  her zaman bir 1 m grid çizgisi üstünde (orada üçgen yüzey doğrusal) ve
+  pencere dışında (iz derinliği 0). Kaba komşu tam o sırada morph ediyorsa
+  kiriş küçük bir aralık bırakabilir; alt-seviye düğümler bu yüzden her zaman
+  skirt asar. Testler yalnız bu adıma izin verir; pencere içinde fark ≤ 1.
+- *Taban.* Tile slot düğümlerinde `forgeTerrainHeight` artık collider'ın b–c
+  köşegenli üçgenleriyle (`terrainHeightAt` ile aynı); bilinear karışım testteki
+  bükülmüş hücrelerde 5 cm'den fazla sapıyor (K3a: en çok burulma / 4). Global
+  harita (uzak düğümler) bilinear kaldı.
+- *Yer değiştirme* (`engine/render-three/terrain/terrainDeformation.ts`).
+  Üç materyalin de (lit, GTAO normal, DOF depth) vertex shader'ı
+  `forgeDeformDisplacement`'ı uygular: kenar sönümlü iz derinliği kadar aşağı,
+  berm kadar yukarı. Dünya X/Z'nin saf fonksiyonu olduğu için ortak düğüm
+  kenarları buluşur; morph uzaklığı ezilmemiş yükseklikten hesaplanır.
+  `textureLod` ile 5 doku okuması/vertex; alan etkin değilken (`uDeformActive`)
+  hiç okuma yok.
+- *Berm.* Noktanın 0,3 m çevresindeki 4 örneğin ortalaması noktadan
+  derinse farkın 0,6'sı kadar kabarma, en çok 6 cm, kenar sönümüyle çarpılır
+  (pencere kenarı tam 0). Işık için lit materyal normali berm gradyanına göre
+  eğer; gradyan ekran türevlerinden (`dFdx/dFdy`) gelir, üçgen başına sabit.
+  Alan ve kayıt değişmedi; fizik bermi görmez.
+- *Renderer.* `TerrainRenderer` paylaşılan iz dokusunun penceresini
+  (`TerrainDeformationTexture.trackWindow`, değişince `revision`) terrain-local
+  koordinata çevirip seçiciye verir; pencere kayınca, takılınca ya da kalkınca
+  yeniden seçer. Varsayılan 2 seviye (`DEFAULT_TRACK_DETAIL_LEVELS`).
+- *Kalite.* `QualitySettings.terrainTrackDetailLevels` → sayfa genelinde
+  `setTerrainTrackDetailLevels` (canlı ve sonradan kurulan renderer'lar).
+  Adaptif denetleyici bu ayara dokunmaz. `?debug`: `terrain deformation:`
+  satırının altında `terrain detail: nodes N levels L`.
+- *Ölçülen.* OffroadTest çamur smoke'unda (2 seviye) 58 alt-seviye düğüm ≈
+  120 bin ek üçgen (düğüm başına 2048). Headless yazılım GL'de bu kareyi
+  belirgin yavaşlatıyor; smoke bu yüzden low maliyetli custom profil + 2
+  seviye kullanıyor. Gerçek GPU süresi ve pop kullanıcı testinde.
+  Sabit gaz 4 s: düz zemin 15,9 m/s, çamur (kendi izinde, sink 0,09 m) 11,1 m/s.
+- *Testler.* `terrainLod.test.ts` "terrain LOD detail:" (60 kamerada pencere
+  içi fark ≤ 1 ve tek izinli kenar adımı, kapalı/uzak pencere = eski seçim,
+  3 seviye sınırı, pay, morph); `terrainTrackDetail.test.ts` (tile yüksekliği =
+  `terrainHeightAt`, yer değiştirme / berm sınırı / kenarda tam 0, renderer
+  detayı açıp kapatır, kalite kancası, üç materyalin enjekte kaynakları);
+  `surfaceResponse.test.ts` "on deep mud a steady-throttle car…";
+  `terrain-surface.spec.ts` çamurda `terrain detail` levels 2 ve düğüm > 0,
+  shader hatasız. GLSL headless çalıştırılamadığı için formüller CPU
+  aynalarıyla (`terrainSlotHeight`, `terrainDeformationDisplacement`)
+  sabitlendi; smoke derleme hatasını yakalıyor (bilerek bozulan GLSL ile denendi).
 
 ## Faz 4 — Efekt ve ses
 
@@ -621,7 +681,7 @@ opt-out davranışını kapsar; tarayıcı ve örnek asset kabulü sonraya aitti
 | İz basma (4 tekerlek × 1 araç, adım başına) | < 0,05 ms |
 | Decay + recenter (ortalama) | < 0,2 ms/kare |
 | Doku yükleme (512² R8) | < 0,3 ms/kare; aşılırsa N karede bir yükleme |
-| Patch mesh (Faz 3) | < 0,5 ms GPU; düşük profilde kapalı |
+| İz penceresi alt-seviyeleri (Faz 3) | < 0,5 ms GPU; düşük profilde kapalı |
 | Bellek | Alan ~0,5 MB + kaba katman ~0,25 MB |
 
 ## Riskler
@@ -633,7 +693,7 @@ opt-out davranışını kapsar; tarayıcı ve örnek asset kabulü sonraya aitti
 | Yükseklik sorgusu bilinear kalırsa tekerlek ile iz hizasız olur | **Kapandı:** `terrainHeightAt` üçgen-birebir, Rapier ışınıyla eşitlik testi var (açık dünya Faz 1, K3a) |
 | Eski landscape shader'ı yalnız ilk 4 katmanı görüyor (`vec4 landscapeWeight`) | CDLOD materyali 2 × RGBA8 ağırlık dokusuyla 8 katman taşır; fizik 8 katmanın tamamını kullanır |
 | Döndürülmüş ya da birden çok landscape | Alan dünya ekseninde tutulur; örnekleme her landscape'in ters dönüşümüyle yapılır |
-| Düşük donanım / mobil | Kalite profili: hücre boyutu büyür, patch kapanır, gerekirse yalnız Faz 1 kalır |
+| Düşük donanım / mobil | Kalite profili: hücre boyutu büyür, iz alt-seviyeleri kapanır, gerekirse yalnız Faz 1 kalır |
 | Hızlı araçta izler kesik kesik çıkar | Adımlar arası çizgi olarak basma (Faz 2) |
 | Save boyutu büyür | RLE + kaba katmana düşme + opt-in |
 

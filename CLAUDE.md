@@ -167,7 +167,9 @@ engine/editor.
   `grids.foliage`, 64 m). `/__save-foliage-cells` validates through
   `validateSaveFoliageCellsPayload` (instances via `normalizeFoliageInstance`);
   the editor save order is cells → index → prune, and it re-partitions whenever
-  the files do not match the level's partition settings, edit or not.
+  the files do not match the level's partition settings, edit or not. The
+  editor merges every cell (an unreadable one fails the load); Play streams them
+  around the camera (`src/scene/foliageCellStreaming.ts`).
 - **Fifth allowlist surface — World Terrain:** `*.terrain.json` definitions
   use `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`) on read
   and through `validateSaveTerrainPayload` re-exported by `tools/saveValidator.ts`.

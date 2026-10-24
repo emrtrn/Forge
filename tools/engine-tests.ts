@@ -1026,6 +1026,7 @@ import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCover
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
+import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
 import { registerRuntimeParityLevelTests } from "../tests/engine/runtimeParityLevel.test";
 import { registerForgeGameModuleTests } from "../tests/engine/forgeGameModule.test";
 import { registerRuntimeCapabilityModuleTests } from "../tests/engine/runtimeCapabilityModules.test";
@@ -1166,6 +1167,7 @@ registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);
+await registerFoliageCellStreamingTests(checkAsync);
 registerRuntimeParityLevelTests(check);
 await registerForgeGameModuleTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);

@@ -1605,8 +1605,23 @@ halkası → F3 editör halkası + panel → smoke'lar (`foliage-fade`,
 - *G1 tamam (2026-10-24, 3861e49, Codex):* `grids.foliage` (64/256),
   `engine/world/foliageCells.ts`, `validateSaveFoliageCellsPayload` (uca
   bağlı değil), `engine/scene/proceduralFoliage.ts` (`FoliageSurface`,
-  `generateFoliageCell`, paketli matris, iç içe küme). Sırada F2: editör
-  save/load + `/__save-foliage-cells` + runtime `FoliageCellStreaming`.
+  `generateFoliageCell`, paketli matris, iç içe küme).
+- *F2 tamam (2026-10-24):* **F2a** (a8cff90) `/__save-foliage-cells`,
+  kayıt sırası hücreler → dizin → budama, partition kapatılınca önce
+  birleşik sidecar sonra hücre silme. Kayıt oturumu diskteki hücre ayak
+  izlerini tutar ve level'ın foliage grid'ine uymuyorsa düzenleme olmadan da
+  yeniden böler. Editör bütün hücreleri birleştirir; okunamayan hücrede
+  yükleme durur (Save okunmamış instance'ın üzerine yazamaz). **F2b**
+  `FoliageCellStreaming` (`src/scene/foliageCellStreaming.ts`, çekirdek
+  `WorldPartitionStreaming`, actor indeksi olmayan dolu hücrelerle):
+  kamera çevresinde talep üzerine okuma (ön-yükleme halkası 1,5×, menzil
+  × `viewDistanceMultiplier`), hücre × grup tek batch
+  (`FoliageRenderBinding.addCell/removeCell`), boot/travel/save-load
+  hazırlığı loading ekranı arkasında, okunamayan hücre boş + uyarı.
+  Smoke `foliage-cells.spec.ts`: Save hücreleri yazar, bayat hücreyi
+  budar, yeniden açılan editör 5 instance görür, ikinci Save foliage
+  yazmaz, Play yalnız spawn çevresindeki 3 hücreyi okur (3 km'deki hücreyi
+  okumaz). Sırada F3: prosedürel çim halkası.
 
 **Kapsam dışı:** foliage collision'ın akması (bugün collision çizim dışı,
 `collision: true` türler yok sayılıyor — değişmiyor), editörde foliage

@@ -35,8 +35,8 @@ export interface LoadedFoliageDocument {
   cells: FoliageCellFootprint[] | null;
 }
 
-/** Fetches the raw sidecar: null when absent or unreadable (no foliage). */
-async function fetchFoliageSidecar(scenePath: string): Promise<LayoutFoliageData | null> {
+/** Fetches the raw sidecar (a partitioned one keeps its `foliageCells` index): null when absent or unreadable. */
+export async function loadFoliageSidecar(scenePath: string): Promise<LayoutFoliageData | null> {
   try {
     const response = await fetch(projectFileUrl(foliageDataPath(scenePath)), { cache: "no-cache" });
     if (!response.ok) return null;
@@ -70,7 +70,7 @@ export async function loadFoliageDocument(
   scenePath: string,
   missingCells: "throw" | "skip" = "throw",
 ): Promise<LoadedFoliageDocument> {
-  const sidecar = await fetchFoliageSidecar(scenePath);
+  const sidecar = await loadFoliageSidecar(scenePath);
   if (!sidecar) return { data: createEmptyFoliageData(), cells: null };
   if (!sidecar.foliageCells) return { data: sidecar, cells: null };
   const results = await Promise.allSettled(sidecar.foliageCells.map((key) => fetchFoliageCell(scenePath, key)));

@@ -11,13 +11,15 @@ import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
  * saved as an index sidecar plus `<Level>.cells/foliage/<x_z>.foliage.json`.
  * A level whose foliage is still one sidecar is re-partitioned by a Save with
  * no foliage edit; the reopened editor sees every instance; a second Save
- * writes no foliage file; Play reads the cells.
+ * writes no foliage file; Play reads only the cells around the spawn.
  */
 
 const LEVEL = "layouts/__playwright-foliage-cells.level.json";
 const TYPE_ID = "__playwright-cell-foliage";
 const TYPE_PATH = `assets/${TYPE_ID}.foliagetype.json`;
-const KEYS = ["0_0", "1_0", "-1_2"];
+const KEYS = ["0_0", "1_0", "46_0", "-1_2"];
+/** Cells within the foliage prefetch ring of the spawn (1.5 x 256 m); 46_0 is 3 km away. */
+const NEAR = ["0_0", "1_0", "-1_2"];
 
 async function writeJson(path: string, value: unknown) {
   await mkdir(dirname(smokePublicPath(path)), { recursive: true });
@@ -52,7 +54,7 @@ test("foliage cells: a partitioned level saves, reopens and plays its foliage fr
   manifest.assets.push({ ...cube, id: TYPE_ID, name: "Cell Foliage", assetType: "foliageType", path: TYPE_PATH, placeable: false });
   await writeFile(manifestPath, JSON.stringify(manifest));
   await writeJson(TYPE_PATH, normalizeFoliageType({ name: "Cell Foliage", meshAssetId: "shape-cube" }));
-  const positions = [[10, 0, 10], [70, 0, 10], [-5, 0, 130], [12, 0, 20]];
+  const positions = [[10, 0, 10], [70, 0, 10], [-5, 0, 130], [12, 0, 20], [3000, 0, 10]];
   await writeJson(foliageDataPath(LEVEL), {
     schema: 1, type: "foliage", landscapeRules: [],
     groups: [{
@@ -69,13 +71,19 @@ test("foliage cells: a partitioned level saves, reopens and plays its foliage fr
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
     await page.locator('[data-inspector-tab="foliage"]').click();
     await expect(page.locator(".foliage-type-name")).toHaveText("Cell Foliage", { timeout: 30_000 });
-    await expect(page.locator(".foliage-type-count")).toHaveText("4");
+    await expect(page.locator(".foliage-type-count")).toHaveText("5");
   };
-  const save = async () => {
+  // Foliage steps run after the level write; the status line is soon replaced
+  // (Content Browser refresh), so wait on the requests themselves.
+  const save = async (foliageWrites: number) => {
+    let answered = 0;
+    const foliageDone = foliageWrites === 0 ? null : page.waitForResponse((res) =>
+      /\/__save-foliage(-cells)?$/.test(res.url()) && res.ok() && ++answered === foliageWrites);
     const saved = page.waitForResponse((res) => res.url().endsWith("/__save-layout") && res.request().method() === "POST");
     await page.getByTestId("editor-save").click();
     expect((await saved).ok()).toBeTruthy();
-    await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 30_000 });
+    if (foliageDone) await foliageDone;
+    else await page.waitForTimeout(1_000);
   };
 
   // A leftover cell file no index lists; the save's prune step removes it.
@@ -84,7 +92,7 @@ test("foliage cells: a partitioned level saves, reopens and plays its foliage fr
 
   await bootEditor();
   // No foliage edit: the single sidecar no longer matches the partitioned level.
-  await save();
+  await save(3);
   await expect(stat(smokePublicPath(stale))).rejects.toThrow();
   expect(foliageRequests).toEqual(["/__save-foliage-cells", "/__save-foliage", "/__save-foliage-cells"]);
   const index = await readJson<LayoutFoliageData>(foliageDataPath(LEVEL));
@@ -92,15 +100,15 @@ test("foliage cells: a partitioned level saves, reopens and plays its foliage fr
   expect(index.groups.map((group) => [group.id, group.instances.length])).toEqual([["cell-group", 0]]);
   const counts = await Promise.all(KEYS.map(async (key) =>
     (await readJson<FoliageCellDocument>(foliageCellPath(LEVEL, key))).groups.map((group) => group.instances.length)));
-  expect(counts).toEqual([[2], [1], [1]]);
+  expect(counts).toEqual([[2], [1], [1], [1]]);
 
   // Reopened from the cell files: same instances, and nothing to write.
   await bootEditor();
   foliageRequests.length = 0;
-  await save();
+  await save(0);
   expect(foliageRequests).toEqual([]);
 
-  // Play reads the index and every listed cell.
+  // Play streams: the cells around the spawn are read and built, the far one is not read.
   const cellResponses: string[] = [];
   page.on("response", (res) => {
     if (res.url().includes(".cells/foliage/") && res.ok()) cellResponses.push(res.url().replace(/.*\/foliage\//, "").replace(/\?.*$/, ""));
@@ -108,6 +116,9 @@ test("foliage cells: a partitioned level saves, reopens and plays its foliage fr
   await page.goto(`/?debug&foliageCellsPlay=${Date.now()}`);
   await expect.poll(() => messages.some((message) => message.includes("[runtime] scene loaded")), { timeout: 60_000 }).toBeTruthy();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
-  expect([...new Set(cellResponses)].sort()).toEqual(KEYS.map((key) => `${key}.foliage.json`).sort());
+  expect([...new Set(cellResponses)].sort()).toEqual(NEAR.map((key) => `${key}.foliage.json`).sort());
+  for (const [key, count] of [["0_0", 2], ["1_0", 1], ["-1_2", 1]] as const) {
+    expect(messages).toContain(`[foliage-cells] activated ${key} (${count} instances)`);
+  }
   expect(errors).toEqual([]);
 });

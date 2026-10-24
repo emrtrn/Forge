@@ -255,7 +255,8 @@ import { forEachHeightfieldTriangle } from "@engine/physics/heightfieldStatic";
 import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
 import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
 import type { LayoutFoliageData, LayoutFoliageGroup } from "@engine/scene/foliage";
-import { loadFoliageData, loadFoliageTypesForData } from "./foliageLoader";
+import { fetchFoliageCell, loadFoliageData, loadFoliageSidecar, loadFoliageTypesForData } from "./foliageLoader";
+import { FoliageCellStreaming } from "./foliageCellStreaming";
 import {
   createEmptyMeshPaintData,
   type LayoutMeshPaintData,
@@ -867,6 +868,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   /** InstancedMesh foliage batches painted onto the level (Foliage Mode). */
   private foliageBinding: FoliageRenderBinding | null = null;
+  /** Partitioned level: painted foliage cells streamed around the camera. */
+  private foliageCellStreaming: FoliageCellStreaming | null = null;
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
   /** Landscape sidecar data by actor id, kept for the River Water pass. */
@@ -1685,6 +1688,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.environment.update(simulationMs / 1000);
       this.perfRegion(FRAME_REGION_ENVIRONMENT, mark);
       mark = this.perfMark();
+      this.foliageCellStreaming?.update([this.camera.position.x, this.camera.position.z]);
       this.foliageBinding?.updateCulling(
         this.camera.position,
         this.qualitySettings.foliageCullDistanceScale,
@@ -2321,9 +2325,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Loads the cells' streamed models behind the loading overlay, then activates them. */
   private async preparePartitionCells(position: readonly number[]): Promise<void> {
+    const at: [number, number] = [position[0]!, position[2]!];
+    // Painted foliage in range is read and built before play resumes (no pop-in).
+    await this.foliageCellStreaming?.prepare(at);
     const partition = this.runtimeServices.resolve(worldPartitionService);
     if (!partition) return;
-    const at: [number, number] = [position[0]!, position[2]!];
     const keys = partition.prefetchAround(at);
     const owners = keys.map(partitionCellOwner);
     if (!owners.every((owner) => this.modelResidency.isOwnerReady(owner))) {
@@ -3237,6 +3243,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.landscapeLayerTextures = [];
     this.landscapeColliderEntities = [];
     this.landscapeColliderObjects.clear();
+    this.foliageCellStreaming?.dispose();
+    this.foliageCellStreaming = null;
     if (this.foliageBinding) {
       this.foliageBinding.dispose();
       this.foliageBinding = null;
@@ -5722,7 +5730,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async buildRuntimeFoliage(): Promise<void> {
     if (!this.activeLevelPath) return;
-    const data = await loadFoliageData(this.activeLevelPath);
+    const levelPath = this.activeLevelPath;
+    // A partitioned level streams its painted cells; otherwise (or with a stale
+    // index after partition was switched off) every listed cell is merged now.
+    const sidecar = await loadFoliageSidecar(levelPath);
+    const partition = this.layout?.worldSettings?.partition;
+    const streamCells = Boolean(partition?.enabled && sidecar?.foliageCells);
+    const data = streamCells ? sidecar! : await loadFoliageData(levelPath);
     if (data.groups.length === 0 && (data.landscapeRules?.length ?? 0) === 0) return;
     const manifest =
       this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
@@ -5767,15 +5781,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
     }
     const renderData: LayoutFoliageData = { schema: 1, type: "foliage", groups: [...data.groups, ...generated] };
-    binding.rebuild(renderData, {
-      getType: (id) => types.get(id) ?? null,
-      getModel: (assetId) => this.models.get(assetId) ?? null,
-      applyMaterialSlots: (assetId, group) => {
+    const resolver = {
+      getType: (id: string) => types.get(id) ?? null,
+      getModel: (assetId: string) => this.models.get(assetId) ?? null,
+      applyMaterialSlots: (assetId: string, group: Group) => {
         const slots = this.assetMaterialSlots.get(assetId);
         if (slots) applyMaterialSlotOverrides(group, slots, (materialId) => this.materialCache.get(materialId));
       },
-    });
+    };
+    binding.rebuild(renderData, resolver);
     this.foliageBinding = binding;
+    if (streamCells) {
+      const grid = normalizeWorldPartitionSettings(partition).grids.foliage;
+      this.foliageCellStreaming = new FoliageCellStreaming({
+        index: data,
+        // Foliage is visual: its range follows the view distance, unlike gameplay cells.
+        grid: { cellSize: grid.cellSize, loadRange: grid.loadRange * (this.qualityExtensions.viewDistanceMultiplier ?? 1) },
+        binding,
+        resolver,
+        fetchCell: (key) => fetchFoliageCell(levelPath, key),
+        debug: this.debug,
+      });
+    }
   }
 
   /** Loads spline mesh assets (Faz 6) and parents their instanced groups under each landscape. */

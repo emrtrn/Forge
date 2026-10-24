@@ -96,8 +96,15 @@ activated and unloaded with their cell around the pawn:
   index (`foliageCells`, groups with no instances) and the instances live in
   `<Level>.cells/foliage/<x_z>.foliage.json`, by position on the `foliage` grid.
   The editor reads every listed cell and fails the load if one is unreadable, so
-  a Save never writes over instances it did not read; Play currently reads them
-  all too (an unreadable cell is skipped with a warning).
+  a Save never writes over instances it did not read. Play reads the index only
+  and streams the cells around the camera (`FoliageCellStreaming`): a cell file
+  is fetched on demand when the prefetch ring (1.5× `grids.foliage.loadRange` ×
+  `viewDistanceMultiplier`) reaches it, built as one batch per group in range,
+  unloaded past 1.25× and its data dropped past the prefetch ring; boot, travel
+  and save-load build the cells around the pawn behind the loading overlay. An
+  unreadable cell is empty with a warning and never blocks the ring. Foliage
+  meshes stay pinned for the level (known from the index). A partitioned index
+  in a level whose partition was switched off is merged eagerly.
 
 ## Required documents
 

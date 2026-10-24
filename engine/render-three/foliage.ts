@@ -358,6 +358,8 @@ export class FoliageRenderBinding {
   private readonly fadeOrigin = { value: new Vector3() };
   /** Last quality cull scale, so a group built between frames starts with the right window. */
   private cullDistanceScale = 1;
+  /** Streamed cell → the object keys of its batches ({@link addCell}). */
+  private readonly cellObjects = new Map<string, string[]>();
 
   constructor() {
     this.root.name = "Foliage";
@@ -426,8 +428,9 @@ export class FoliageRenderBinding {
   /** Rebuilds every group from scratch (load, or a bulk change). */
   rebuild(data: LayoutFoliageData | null, resolver: FoliageRenderResolver): void {
     const wanted = new Set((data?.groups ?? []).map((group) => group.id));
+    const streamed = new Set([...this.cellObjects.values()].flat());
     for (const id of [...this.objects.keys()]) {
-      if (!wanted.has(id)) this.removeGroup(id);
+      if (!wanted.has(id) && !streamed.has(id)) this.removeGroup(id);
     }
     for (const group of data?.groups ?? []) this.rebuildGroup(group, resolver);
   }
@@ -435,16 +438,48 @@ export class FoliageRenderBinding {
   /** Rebuilds a single group's chunk batches in place (paint/erase/type-change path). */
   rebuildGroup(group: LayoutFoliageGroup, resolver: FoliageRenderResolver): void {
     this.removeGroup(group.id);
+    const object = this.buildGroupObject(group, resolver, FOLIAGE_CHUNK_SIZE);
+    if (object) this.objects.set(group.id, object);
+  }
+
+  /**
+   * Partitioned foliage (OPEN_WORLD_PLAN Faz 6 F2): builds one batch per group for
+   * a streamed cell's instances (chunked by the cell size, so a cell is one chunk),
+   * replacing that cell's previous batches. Returns the instances built.
+   */
+  addCell(cellKey: string, groups: readonly LayoutFoliageGroup[], resolver: FoliageRenderResolver, cellSize: number): number {
+    this.removeCell(cellKey);
+    const keys: string[] = [];
+    let built = 0;
+    for (const group of groups) {
+      const object = this.buildGroupObject(group, resolver, cellSize);
+      if (!object) continue;
+      const key = `cell:${cellKey}:${group.id}`;
+      this.objects.set(key, object);
+      keys.push(key);
+      built += group.instances.length;
+    }
+    this.cellObjects.set(cellKey, keys);
+    return built;
+  }
+
+  /** Removes and disposes a streamed cell's batches, if present. */
+  removeCell(cellKey: string): void {
+    for (const key of this.cellObjects.get(cellKey) ?? []) this.removeGroup(key);
+    this.cellObjects.delete(cellKey);
+  }
+
+  private buildGroupObject(group: LayoutFoliageGroup, resolver: FoliageRenderResolver, chunkSize: number): FoliageGroupObject | null {
     const type = resolver.getType(group.foliageTypeId);
-    if (!type || !type.meshAssetId) return;
+    if (!type || !type.meshAssetId) return null;
     const gltf = resolver.getModel(type.meshAssetId);
-    if (!gltf) return;
-    if (group.instances.length === 0) return;
+    if (!gltf) return null;
+    if (group.instances.length === 0) return null;
     const meshRadius = this.meshBoundingRadius(type.meshAssetId, resolver);
     const root = new Group();
     root.name = `foliage-${group.id}`;
     const chunks: FoliageChunkObject[] = [];
-    for (const bucket of chunkFoliageInstances(group.instances, FOLIAGE_CHUNK_SIZE)) {
+    for (const bucket of chunkFoliageInstances(group.instances, chunkSize)) {
       const items: InstanceRenderItem[] = bucket.indices.map((index) => {
         const instance = group.instances[index]!;
         return {
@@ -473,7 +508,7 @@ export class FoliageRenderBinding {
       root.add(built.group);
       chunks.push(chunkObject(built.group, built.meshes, bucket.indices, group.instances, meshRadius));
     }
-    if (chunks.length === 0) return;
+    if (chunks.length === 0) return null;
     this.root.add(root);
     const object: FoliageGroupObject = {
       root,
@@ -483,7 +518,7 @@ export class FoliageRenderBinding {
       fade: type.cullEnd > 0 ? applyGroupFade(chunks, this.fadeOrigin) : null,
     };
     if (object.fade) this.setFadeWindow(object);
-    this.objects.set(group.id, object);
+    return object;
   }
 
   private setFadeWindow(object: FoliageGroupObject): void {
@@ -577,6 +612,7 @@ export class FoliageRenderBinding {
   clear(): void {
     for (const object of this.objects.values()) disposeGroupObject(object);
     this.objects.clear();
+    this.cellObjects.clear();
     if (this.selectionMesh) {
       this.selectionMesh.removeFromParent();
       this.selectionMesh.dispose();

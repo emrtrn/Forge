@@ -5,10 +5,14 @@ import {
   Euler,
   Group,
   InstancedMesh,
+  type Material,
   MathUtils,
   Matrix4,
   MeshBasicMaterial,
+  type MeshDepthMaterial,
+  type MeshDistanceMaterial,
   Quaternion,
+  Vector2,
   Vector3,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -27,6 +31,12 @@ import type { FoliageInstanceRoll } from "@engine/scene/foliagePaint";
 import { makeFoliageRng } from "@engine/scene/foliagePaint";
 import { composeTransformMatrix } from "./transforms";
 import { createInstancedModelGroup, type InstanceRenderItem } from "./models";
+import {
+  createFoliageFadeMaterial,
+  createFoliageFadeShadowMaterials,
+  foliageFadeWindow,
+  type FoliageFadeUniforms,
+} from "./foliageFade";
 
 const WORLD_UP = new Vector3(0, 1, 0);
 
@@ -228,6 +238,14 @@ interface FoliageChunkObject {
   radius: number;
 }
 
+/** A group's fading materials (owned by the group, disposed with it). */
+interface FoliageGroupFade {
+  uniforms: FoliageFadeUniforms;
+  materials: Material[];
+  depth: MeshDepthMaterial;
+  distance: MeshDistanceMaterial;
+}
+
 /** A group's render state: its chunk batches + the type's distance-cull window. */
 interface FoliageGroupObject {
   /** Per-group container under the binding root; holds every chunk sub-group. */
@@ -236,6 +254,8 @@ interface FoliageGroupObject {
   /** Type cull window (`cullEnd <= 0` disables distance culling for this group). */
   cullStart: number;
   cullEnd: number;
+  /** Per-instance dither fade, null when the type never culls. */
+  fade: FoliageGroupFade | null;
 }
 
 /** One group's selected instance indices (Foliage Mode selection overlay input). */
@@ -261,6 +281,41 @@ function disposeGroupObject(object: FoliageGroupObject): void {
   for (const chunk of object.chunks) {
     for (const mesh of chunk.meshes) mesh.dispose();
   }
+  if (object.fade) {
+    for (const material of object.fade.materials) material.dispose();
+    object.fade.depth.dispose();
+    object.fade.distance.dispose();
+  }
+}
+
+/**
+ * Swaps every chunk mesh onto fading clones of its (slot-resolved) materials and
+ * the matching shadow materials. One clone per source material per group, so a
+ * group's chunks share programs and uniforms.
+ */
+function applyGroupFade(chunks: readonly FoliageChunkObject[], origin: { value: Vector3 }): FoliageGroupFade {
+  const uniforms: FoliageFadeUniforms = {
+    uFoliageFadeOrigin: origin,
+    uFoliageFadeRange: { value: new Vector2() },
+  };
+  const clones = new Map<Material, Material>();
+  const fadeOf = (source: Material): Material => {
+    let clone = clones.get(source);
+    if (!clone) {
+      clone = createFoliageFadeMaterial(source, uniforms);
+      clones.set(source, clone);
+    }
+    return clone;
+  };
+  const { depth, distance } = createFoliageFadeShadowMaterials(uniforms);
+  for (const chunk of chunks) {
+    for (const mesh of chunk.meshes) {
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(fadeOf) : fadeOf(mesh.material);
+      mesh.customDepthMaterial = depth;
+      mesh.customDistanceMaterial = distance;
+    }
+  }
+  return { uniforms, materials: [...clones.values()], depth, distance };
 }
 
 /** Builds a chunk render object, deriving its instance center + distance-cull radius. */
@@ -299,6 +354,10 @@ export class FoliageRenderBinding {
   private selectionMesh: InstancedMesh | null = null;
   /** Foliage mesh bounding boxes, keyed by mesh asset id (selection cage sizing). */
   private readonly boxCache = new Map<string, Box3>();
+  /** Camera position every group's fade measures from (shared uniform). */
+  private readonly fadeOrigin = { value: new Vector3() };
+  /** Last quality cull scale, so a group built between frames starts with the right window. */
+  private cullDistanceScale = 1;
 
   constructor() {
     this.root.name = "Foliage";
@@ -333,18 +392,23 @@ export class FoliageRenderBinding {
 
   /**
    * Distance culling: hides whole chunks farther than their type's `cullEnd` from the
-   * camera (nearest-point test via the chunk bounding radius). Cheap enough to run
-   * every frame; a no-op for types with `cullEnd <= 0`. Per-chunk frustum culling is
-   * handled by three itself (each chunk mesh gets a tight bounding sphere at build).
+   * camera (nearest-point test via the chunk bounding radius), and moves every group's
+   * per-instance fade ({@link foliageFadeWindow}: dither from `cullStart` to `cullEnd`,
+   * or a per-instance cut at `cullEnd`) to this camera. Cheap enough to run every
+   * frame; a no-op for types with `cullEnd <= 0`. Per-chunk frustum culling is handled
+   * by three itself (each chunk mesh gets a tight bounding sphere at build).
    *
    * `cullDistanceScale` is the runtime quality knob: it multiplies each type's
-   * authored `cullEnd` (smaller = foliage culls nearer), without touching the
-   * authored type. `1` keeps the authored distance; a non-positive scale falls
+   * authored `cullStart`/`cullEnd` (smaller = foliage culls nearer), without touching
+   * the authored type. `1` keeps the authored distance; a non-positive scale falls
    * back to `1`. A type with `cullEnd <= 0` (never cull) is unaffected.
    */
   updateCulling(cameraPosition: Vector3, cullDistanceScale = 1): void {
     const scale = cullDistanceScale > 0 ? cullDistanceScale : 1;
+    this.cullDistanceScale = scale;
+    this.fadeOrigin.value.copy(cameraPosition);
     for (const object of this.objects.values()) {
+      if (object.fade) this.setFadeWindow(object);
       const cullEnd = object.cullEnd * scale;
       if (cullEnd <= 0) {
         for (const chunk of object.chunks) {
@@ -411,12 +475,20 @@ export class FoliageRenderBinding {
     }
     if (chunks.length === 0) return;
     this.root.add(root);
-    this.objects.set(group.id, {
+    const object: FoliageGroupObject = {
       root,
       chunks,
       cullStart: type.cullStart,
       cullEnd: type.cullEnd,
-    });
+      fade: type.cullEnd > 0 ? applyGroupFade(chunks, this.fadeOrigin) : null,
+    };
+    if (object.fade) this.setFadeWindow(object);
+    this.objects.set(group.id, object);
+  }
+
+  private setFadeWindow(object: FoliageGroupObject): void {
+    const fadeWindow = foliageFadeWindow(object.cullStart, object.cullEnd, this.cullDistanceScale);
+    if (fadeWindow) object.fade!.uniforms.uFoliageFadeRange.value.set(fadeWindow[0], fadeWindow[1]);
   }
 
   /** Removes and disposes a single group's chunk batches, if present. */

@@ -178,8 +178,13 @@ export function terrainSmoothNormalAt(def: TerrainQueryDef, tiles: TerrainTileLo
   return normalizeVec(left - right, 2 * def.spacing, up - down);
 }
 
-/** Bilinear paint weights (`0..1`, one per tile layer) at X/Z. */
-export function terrainLayerWeightsAt(def: TerrainQueryDef, tiles: TerrainTileLookup, worldX: number, worldZ: number): number[] | null {
+/**
+ * Bilinear paint weights (`0..1`, one per tile layer) at X/Z. Pass `out` to
+ * reuse an array on a per-step path; it is truncated to the tile's layer count.
+ */
+export function terrainLayerWeightsAt(
+  def: TerrainQueryDef, tiles: TerrainTileLookup, worldX: number, worldZ: number, out: number[] = [],
+): number[] | null {
   const cell = locateCell(def, tiles, worldX, worldZ);
   if (!cell) return null;
   const { tile, cx, cz, fx, fz } = cell;
@@ -187,13 +192,13 @@ export function terrainLayerWeightsAt(def: TerrainQueryDef, tiles: TerrainTileLo
   const b = a + 1;
   const c = a + tile.size;
   const d = c + 1;
-  const weights: number[] = [];
+  out.length = tile.layerCount;
   for (let layer = 0; layer < tile.layerCount; layer += 1) {
     const top = terrainTileLayerWeight(tile, layer, a) * (1 - fx) + terrainTileLayerWeight(tile, layer, b) * fx;
     const bottom = terrainTileLayerWeight(tile, layer, c) * (1 - fx) + terrainTileLayerWeight(tile, layer, d) * fx;
-    weights.push(top * (1 - fz) + bottom * fz);
+    out[layer] = top * (1 - fz) + bottom * fz;
   }
-  return weights;
+  return out;
 }
 
 // --- Raycast ------------------------------------------------------------------

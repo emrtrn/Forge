@@ -219,7 +219,10 @@ export interface PhysicalMaterialDef {
   };
   /** Soft-surface profile for runtime tracks; never written into level data. */
   deformation?: {
-    /** Maximum single-pass depth at full load (m). */
+    /**
+     * Soft layer thickness over a hard base (m): the depth a wheel approaches as
+     * its load grows; an empty vehicle presses half of it (see `sinkage`).
+     */
     maxDepth: number;
     /** Fraction of target depth reached per pass (0..1). */
     compaction: number;

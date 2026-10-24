@@ -2,7 +2,7 @@ import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import type { ForgeSplineDeformMeshGeneratorDef, ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef, SplineMeshAxis } from "@engine/scene/splineGenerator";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
-import { NAVIGATION_ROLE_VALUES, type NavigationRole } from "@engine/scene/collision";
+import { NAVIGATION_ROLE_VALUES, PHYSICAL_MATERIAL_IDS, type NavigationRole } from "@engine/scene/collision";
 import { splinePerformanceWarnings } from "@engine/scene/splineDiagnostics";
 import type {
   EditableAiNavigationVolume,
@@ -145,6 +145,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   applySelectedLandscapeSplineDeform: () => void;
   applySelectedLandscapeSplinePaint: () => void;
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
+  setSelectedLandscapeLayerPhysicalMaterial: (layerId: string, physicalMaterialId: string | null) => void;
   importSelectedLandscapeHeightmap: (rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
   exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
   getSelectedLandscapeResolution: () => { verticesX: number; verticesZ: number; worldSize: number } | null;
@@ -423,6 +424,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
               <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
             </label>
             <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>
+            ${layerPhysicalMaterialRow(activeLayer, lockedAttr)}
             <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
             : terrainSculptControls(settings, lockedAttr)
         }
@@ -643,6 +645,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       );
       options.refreshDetails();
     });
+  bindLayerPhysicalMaterial(options);
 
   body.querySelector<HTMLButtonElement>("[data-landscape-fill]")?.addEventListener("click", () => {
     options.fillSelectedLandscapeLayer(options.getLandscapeSculptSettings().activeLayerId);
@@ -824,6 +827,29 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   });
 }
 
+/** Physical Material picker for the active paint layer (TERRAIN_DEFORMATION Faz 1b). */
+function layerPhysicalMaterialRow(layer: LandscapeLayerView | undefined, lockedAttr: string): string {
+  const current = layer?.physicalMaterial ?? null;
+  const choices = [`<option value="" ${current ? "" : "selected"}>None (neutral)</option>`]
+    .concat(PHYSICAL_MATERIAL_IDS.map((id) => `<option value="${id}" ${current === id ? "selected" : ""}>${id}</option>`))
+    .join("");
+  return `<label class="detail-row">
+      <span>Physical Material</span>
+      <select data-landscape-layer-physical-material ${lockedAttr}>${choices}</select>
+    </label>
+    <div class="detail-hint">Vehicle grip and drag on this layer, blended by paint weight. None keeps the layer neutral.</div>`;
+}
+
+function bindLayerPhysicalMaterial(options: SpecialActorDetailsOptions): void {
+  options.body
+    .querySelector<HTMLSelectElement>("[data-landscape-layer-physical-material]")
+    ?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value;
+      options.setSelectedLandscapeLayerPhysicalMaterial(options.getLandscapeSculptSettings().activeLayerId, value || null);
+      options.refreshDetails();
+    });
+}
+
 /**
  * Mode, tool, layer, brush and view controls shared by the Landscape and World
  * Terrain panels; every change re-renders whichever panel is showing.
@@ -995,7 +1021,8 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <span>Material</span>
         <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
       </label>
-      <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>`
+      <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>
+      ${layerPhysicalMaterialRow(activeLayer, lockedAttr)}`
     : settings.editMode === "sculpt"
     ? terrainSculptControls(settings, lockedAttr)
     : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on a multi-tile Landscape yet.</div>`;
@@ -1098,6 +1125,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       );
       options.refreshDetails();
     });
+  bindLayerPhysicalMaterial(options);
   body.querySelector<HTMLInputElement>("[data-world-terrain-raw-import]")?.addEventListener("change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];

@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "name": "OffroadTest",
+  "loadGroups": [],
+  "instances": [],
+  "characters": [],
+  "worldSettings": {
+    "backgroundColor": "#a9c9df",
+    "ambientColor": "#cfdeed",
+    "ambientIntensity": 0.55,
+    "killZ": -40,
+    "gameMode": "forge.vehicle"
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1.4,
+    "turbidity": 3,
+    "mie": 0.003,
+    "mieDirectionalG": 0.8
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -55,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "offroad",
+      "name": "Offroad Terrain",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "layouts/OffroadTest.landscapes/offroad.terrain.json"
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
+      "position": [
+        0,
+        0.9526359960436821,
+        -105
+      ],
+      "rotationYDeg": 0,
+      "scale": 1
+    }
+  ]
+}

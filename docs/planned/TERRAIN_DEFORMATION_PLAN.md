@@ -1,6 +1,7 @@
 # Terrain Deformasyonu Planı (Kar / Çamur İzleri)
 
-> Durum: **Faz 1a tamamlandı; Faz 1b, OPEN_WORLD Faz 3'ü bekliyor** (2026-10-23).
+> Durum: **Faz 1a + 1b tamamlandı** (2026-10-24, `feat/terrain-deformation`);
+> sıradaki Faz 2 bağlantısı (iz alanı modülü + shader).
 > Hedef: Araç (ve ileride karakter) Landscape üzerinde giderken kar, çamur ve
 > kum gibi yumuşak zeminlerde **iz bırakması, gömülmesi ve zorlanması**.
 > Referans his: SnowRunner / Expeditions. Hedef, o hissin web'de ulaşılabilir
@@ -200,11 +201,14 @@ Gerçek kod yazılmadan önce riskli varsayımlar ölçülür. Spike kodu atıla
       Ölçülecekler: zıplama, titreşim ve uyuyan gövdenin uyanması
       (`wakeUp`). Sonuç: kabul / sınır değerleri / ret.
       *Koşullu kabul (2026-10-23), bkz. bulgular.*
-- [ ] **Zemin tanıma** (açık dünya Faz 3'ten sonra): `wheelGroundObject(i)` →
+- [x] **Zemin tanıma** (açık dünya Faz 3'ten sonra): `wheelGroundObject(i)` →
       `rapierColliderToEntity` → `landscape:<id>:<tile>` eşlemesinin tile
       heightfield'ında çalıştığı doğrulanır. *Mesh zeminde doğrulandı
-      (2026-10-23): Faz 1a'nın `groundEntityId` Rapier testi; heightfield
-      kısmı açık.*
+      (2026-10-23): Faz 1a'nın `groundEntityId` Rapier testi.* *Heightfield
+      (2026-10-24): açık dünya Faz 3'ün dikiş testi
+      (`terrainHeightfieldPhysics.test.ts`) her tekerleğin `groundEntityId`'sini
+      tile kimliğiyle zaten doğruluyor; Faz 1b'nin `terrain surface rapier`
+      testleri aynı kimlikten paint katmanını çözüyor.*
 - [x] **Doku yükleme maliyeti:** 512² R8 `DataTexture`'ın her kare tam
       yüklenmesi `gpuTimer` ile ölçülür. three 0.184'te kısmi yükleme yoksa
       tam yükleme ya da N karede bir yükleme kararı verilir.
@@ -315,15 +319,45 @@ Faz 1b terrain katmanı bağlantıları bu değişikliğe dahil değildir.
 
 **1b — terrain bağlantısı (açık dünya Faz 3'ten sonra)**
 
-- [ ] `WorldTerrainLayerDef.physicalMaterial` + `normalizeWorldTerrain` +
+- [x] `WorldTerrainLayerDef.physicalMaterial` + `normalizeWorldTerrain` +
       1×1 adaptör + drift testi. Örnekleme mevcut `terrainLayerWeightsAt`
       ile (dünya uzayı; ayrı landscape-local örnekleyici yok).
-- [ ] `terrainDeformationModule` iskeleti: terrain host servisi üzerinden
-      provider'ı kurar. Hiçbir katmanda physical material yoksa boşta bekler.
-- [ ] Editör (minimum): terrain paint katmanı satırına Physical Material
+- [x] ~~`terrainDeformationModule` iskeleti~~ → host düzeyinde yüzey çözücü
+      (aşağıdaki nota bakın). Hiçbir katmanda physical material yoksa kaynak
+      kurulmaz, davranış birebir aynı kalır.
+- [x] Editör (minimum): terrain paint katmanı satırına Physical Material
       dropdown'u eklenir.
-- [ ] Test seviyesi `public/layouts/OffroadTest.level.json`: çim/çamur/kar
-      boyanmış terrain, araç ve Player Start.
+- [x] Test seviyesi `public/layouts/OffroadTest.level.json`: çim/çamur/kar/kum
+      boyanmış terrain ve araç (`forge.vehicle` modu; Player Start gerekmiyor).
+
+**Faz 1b notu (2026-10-24):** Katman alanı ortak normalizer'da sıkı
+doğrulanır: `null`/yok nötr, bilinmeyen preset id'si terrain'i reddeder
+(placement validator'ıyla aynı kural). 1×1 yolda `LandscapeLayerWeights`
+alanı taşır (köprü, legacy dönüşüm, genişletme, yeniden örnekleme, klonlama);
+legacy `.landscape.json` yazılmadığı için ayrı validator gerekmedi. Çözücü
+`engine/terrain/terrainSurface.ts`: `TerrainSurfaceSource` (dünya uzayında
+çok-tile, aktör çerçevesinde döndürülmüş 1×1), katman başına bir kez çözülmüş
+profillerle ağırlık karışımı (`TerrainSurfaceSampler`, `resolveSurfaceSample`
+ile aynı sonuç, adım başına tekrar kullanılan dizi) ve
+`createTerrainSurfaceProvider` (terrain collider'ında sampler, diğer her yerde
+Faz 1a'nın collider-material provider'ı). **Plandan sapma:** modül yerine
+`RuntimeSceneApp` kurar; yüzey tepkisi authored veridir ve Faz 1a mesh
+provider'ı gibi deformasyon modülünden bağımsız çalışmalı. Modül Faz 2'de
+alanın sahibi olarak gelir. Tekerlek efekti/sesi (`surfaceMaterialForWheel`)
+aynı sampler'ın en ağır katmanını kullanır. Collider kimliği
+`landscapeColliderActorId` ile aktöre çözülür. Editör viewport'u araç
+sürmediği için `SceneApp` mesh provider'ında kaldı. Testler:
+`terrainSurface.test.ts` (karışım, kenar, döndürülmüş 1×1, kimlik eşlemesi,
+Rapier: materyalsiz terrain collider provider'ıyla birebir aynı hız eğrisi,
+çamur katmanı ivmeyi %20'den fazla düşürür), `offroadTestWorld.test.ts`
+(commit edilen dosyalar üreteçle aynı; `npm run world:offroad`). `?debug`
+overlay'ine sürülen aracın tekerlek başına `vehicle surface:` satırı eklendi
+(zemin id'si, `fs`/`rr`). Browser smoke'ları: `terrain-surface.spec.ts`
+(OffroadTest, katmanlar uçuşta nötr/çamur; dört tekerlek doğru zemini
+raporlar, araç sürülür — headless kare hızında duvar saati hız kıyası
+anlamsız olduğu için dinamik Rapier testlerinde) ve `landscape-paint.spec.ts`
+(dropdown → Save → reload'da `physicalMaterial` kalıcı). Çok-tile editör
+paneli aynı setter'ı kullanıyor, ayrıca browser'da denenmedi.
 
 ## Faz 2 — İz alanı + görsel izler
 
@@ -335,10 +369,22 @@ Displacement yok. İzler normal map, albedo ve roughness ile görünür.
       `sample`, `recenter`, `decay` (aktif hücre listesi ya da 0,5 s'de bir
       tarama), kirli dikdörtgen.
 - [x] İz basma modeli: temas eden tekerlek başına, her fizik adımında hedef
-      derinlik = `maxDepth × deformability × yük oranı`
-      (`wheelSuspensionForce` / nominal yük).
+      derinlik = `sinkage(profil, deformability, {yük, nominal, genişlik})`
+      (`engine/physics/surface/sinkage.ts`, K-B; aşağıdaki nota bakın).
       `hücre = max(hücre, lerp(hücre, hedef, compaction))`. Hızlı giden araçta
       iz boşluk bırakmasın diye iki temas noktası arası çizgi olarak basılır.
+
+**K-B notu (2026-10-24):** `targetDepthForWheel`'in `min(yük/nominal, 1)`
+doygunluğu kaldırıldı; tek giriş noktası `sinkage()`:
+`maxDepth × deformability × (1 − 2^(−yük/nominal))`. Boş araç (`nominal` =
+`nominalWheelLoad`, kütle × g / tekerlek sayısı) `maxDepth`'in yarısına basar,
+her ek nominal yük kalan farkı yarıya indirir; ağır yük her zaman daha derin
+ama asla `maxDepth`'i (sert taban üstündeki yumuşak katman kalınlığı, rapor
+§6 #6'daki `T`) geçmez. Genişlik girdide taşınır, preset eğrisi kullanmaz;
+Bekker aynı arayüzün arkasına konabilir. `VehicleWheelDefinition.width`
+eklendi (normalizer + allowlist + araç editörü satırı); yoksa `radius × 0,7`
+(`vehicleWheelWidth`), üretilen tekerlek görseli ve editör üstten görünüşü de
+bunu kullanır (eski sabit 0,26 m kalktı).
 
 **Faz 2 çekirdek notu (2026-10-23):** Saf toroidal alan, süpürülmüş tekerlek/disk
 izi, max-lerp, bilinear örnekleme, aktif hücre recovery ve en fazla dört kirli

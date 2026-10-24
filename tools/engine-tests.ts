@@ -1076,6 +1076,7 @@ import { registerWorldTerrainActorAsyncTests, registerWorldTerrainActorTests, re
 import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
 import { registerTerrainHeightfieldPhysicsTests, registerTerrainHeightfieldRapierTests } from "../tests/engine/terrainHeightfieldPhysics.test";
 import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
+import { registerTerrainSurfaceRapierTests, registerTerrainSurfaceTests } from "../tests/engine/terrainSurface.test";
 import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
 import { registerDeformationPersistenceTests } from "../tests/engine/deformationPersistence.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
@@ -1085,6 +1086,7 @@ import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.te
 import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
 import { registerTerrainRuntimeStreamingTests } from "../tests/engine/terrainRuntimeStreaming.test";
 import { registerTestWorldTests } from "../tests/engine/testWorld.test";
+import { registerOffroadTestWorldTests } from "../tests/engine/offroadTestWorld.test";
 import { registerTerrainEditorStreamingTests } from "../tests/engine/terrainEditorStreaming.test";
 import { registerTerrainRepairTests } from "../tests/engine/terrainRepair.test";
 
@@ -1216,6 +1218,7 @@ registerTerrainGlobalMapFileTests(check);
 registerTerrainRendererTests(check);
 registerTerrainWorldRendererTests(check);
 registerSurfaceResponseTests(check);
+registerTerrainSurfaceTests(check);
 registerDeformationFieldTests(check);
 registerDeformationPersistenceTests(check);
 registerTerrainLodTests(check);
@@ -1226,6 +1229,7 @@ registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);
 await registerTerrainRuntimeStreamingTests(check, checkAsync);
 registerTestWorldTests(check);
+registerOffroadTestWorldTests(check);
 await registerTerrainEditorStreamingTests(check, checkAsync);
 registerTerrainRepairTests(check);
 registerTerrainDocumentTests(check);
@@ -1256,6 +1260,7 @@ await registerWorldTerrainActorAsyncTests(checkAsync);
 await registerTerrainRapierTests(checkAsync);
 registerTerrainHeightfieldPhysicsTests(check);
 await registerTerrainHeightfieldRapierTests(checkAsync);
+await registerTerrainSurfaceRapierTests(checkAsync);
 
 function listPublicFiles(root: string): string[] {
   const files: string[] = [];

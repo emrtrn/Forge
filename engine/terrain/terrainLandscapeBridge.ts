@@ -46,6 +46,7 @@ export function terrainDocumentToLandscape({ def, tiles }: WorldTerrainDocument)
     heights: Array.from(tile.heights),
     layers: def.layers.map((layer, index) => ({
       id: layer.id, name: layer.name, ...(layer.material === undefined ? {} : { material: layer.material }),
+      ...(layer.physicalMaterial ? { physicalMaterial: layer.physicalMaterial } : {}),
       weights: Array.from(tile.heights, (_height, vertex) => terrainTileLayerWeight(tile, index, vertex)),
     })),
     ...(def.splines === undefined ? {} : { splines: structuredClone(def.splines) }),

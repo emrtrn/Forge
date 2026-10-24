@@ -45,6 +45,11 @@ export interface WorldTerrainLayerDef {
   color: string;
   /** Assigned material asset id; `null`/absent uses the preset look. */
   material?: string | null;
+  /**
+   * Built-in physical material id (`PHYSICAL_MATERIAL_IDS`) for vehicle surface
+   * response; `null`/absent leaves the layer neutral (TERRAIN_DEFORMATION Faz 1b).
+   */
+  physicalMaterial?: string | null;
 }
 
 /** Per-tile index entry kept in `terrain.json`, readable without fetching the tile. */

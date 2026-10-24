@@ -83,6 +83,7 @@ export function expandLandscapeToWorldTerrain(
       id: layer.id, name: layer.name,
       color: LANDSCAPE_DEFAULT_LAYERS.find((preset) => preset.id === layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color,
       ...(layer.material === undefined ? {} : { material: layer.material }),
+      ...(layer.physicalMaterial ? { physicalMaterial: layer.physicalMaterial } : {}),
     })),
     tiles: [], collision: actor.collision ?? true,
   };

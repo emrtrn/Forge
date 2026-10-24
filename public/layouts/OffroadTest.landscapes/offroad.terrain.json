@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "type": "worldTerrain",
+  "name": "Offroad Test",
+  "tileQuads": 128,
+  "spacing": 1,
+  "tilesX": 2,
+  "tilesZ": 2,
+  "origin": [
+    -128,
+    0,
+    -128
+  ],
+  "heightMin": -32,
+  "heightMax": 32,
+  "layers": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "color": "#5f9449"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt Road",
+      "color": "#8a6441"
+    },
+    {
+      "id": "mud",
+      "name": "Mud",
+      "color": "#4a3626",
+      "physicalMaterial": "mud"
+    },
+    {
+      "id": "snow",
+      "name": "Snow",
+      "color": "#dce7ec",
+      "physicalMaterial": "snow"
+    },
+    {
+      "id": "sand",
+      "name": "Sand",
+      "color": "#c9a96b",
+      "physicalMaterial": "sand"
+    }
+  ],
+  "tiles": [
+    {
+      "key": "0_0",
+      "minHeight": -1.6587166786193848,
+      "maxHeight": 1.1235523223876953
+    },
+    {
+      "key": "1_0",
+      "minHeight": -1.7837185859680176,
+      "maxHeight": 1.6343022584915161
+    },
+    {
+      "key": "0_1",
+      "minHeight": -1.6343022584915161,
+      "maxHeight": 1.7837185859680176
+    },
+    {
+      "key": "1_1",
+      "minHeight": -1.1235523223876953,
+      "maxHeight": 1.6587166786193848
+    }
+  ],
+  "collision": true
+}

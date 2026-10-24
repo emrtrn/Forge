@@ -117,6 +117,7 @@ export function legacyLandscapeToWorldTerrain(actor: LayoutLandscape, source: Fo
       name: layer.name,
       color: legacyLayerColor(layer.id),
       ...(layer.material ? { material: layer.material } : {}),
+      ...(layer.physicalMaterial ? { physicalMaterial: layer.physicalMaterial } : {}),
     })),
     tiles: [{ key: tileKey(0, 0), minHeight: range.min, maxHeight: range.max }],
     collision: actor.collision ?? true,

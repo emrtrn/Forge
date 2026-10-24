@@ -141,7 +141,7 @@ engine/editor.
   The optional `drivetrain` block enables torque/RPM/gearing; missing/null keeps
   legacy flat-force behavior. Engine/transmission/differential inline objects
   merge field-by-field; authored curves/gear lists replace their base lists.
-  Wheel `axle`, `steeringSpeedCurve`, `handbrakeSideFrictionMultiplier`,
+  Wheel `axle`, `width`, `steeringSpeedCurve`, `handbrakeSideFrictionMultiplier`,
   `aerodynamics` and `engineSound` use the same normalizer and must round-trip
   too. `engineSound` (a `sound`/`soundCue` id + pitch/volume/distance tuning)
   is presentation data the `vehicle` capability plays while the car is driven;
@@ -183,6 +183,10 @@ engine/editor.
   `/__save-terrain-global?path=<definition>` validates the binary global map and derives its sibling `<name>.global.bin` path; it uses the same privileged local-only middleware, and definition commits cross-check its shape when present.
   These endpoints use the privileged local-only middleware. Add new definition
   fields to the shared normalizer and terrain serialization-drift tests.
+  A paint layer's `physicalMaterial` (a `PHYSICAL_MATERIAL_IDS` preset or
+  `null`; an unknown id rejects the terrain) drives vehicle surface response
+  (`engine/terrain/terrainSurface.ts`); the 1×1 path carries it on
+  `LandscapeLayerWeights` through the bridge, legacy conversion and clones.
   Editor saves migrate legacy sidecars tile → global map → definition → level reference,
   preserving the old file. Phase 1 bridges 1×1 terrain to the existing mesh/brush
   path; multi-tile rendering is Phase 2 and currently rejects explicitly.

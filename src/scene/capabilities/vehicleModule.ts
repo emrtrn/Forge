@@ -43,6 +43,7 @@ import {
 } from "three";
 
 import type { AudioPlaybackHandle } from "@engine/audio/audioSubsystem";
+import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
 import { vehicleEngineSoundLevels } from "@engine/physics/vehicle/vehicleEngineSound";
 import type { VehicleState, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
 
@@ -64,7 +65,6 @@ import { WheelSurfacePresentation } from "./wheelSurfacePresentation";
 
 export const VEHICLE_MODULE_ID = "vehicle";
 
-const TYRE_WIDTH = 0.26;
 /** Seconds the engine takes to die away once the driver leaves the car. */
 const ENGINE_STOP_FADE_SECONDS = 0.5;
 /** Per-frame volume ramp; smooths a load step (throttle stab, gear change cut). */
@@ -226,12 +226,12 @@ export function createVehicleModule(): CapabilityModule {
     updateVehicleSuspensionWire(rig.debugWire, rig.debugWire, state.wheels, host.vehicleDefinition(entityId));
   };
 
-  const buildWheel = (radius: number): Group => {
+  const buildWheel = (radius: number, width: number): Group => {
     // Cylinders stand on +Y; lay the tyre on its side so it rolls about X.
-    const tyre = new CylinderGeometry(radius, radius, TYRE_WIDTH, 24);
+    const tyre = new CylinderGeometry(radius, radius, width, 24);
     tyre.rotateZ(Math.PI / 2);
     // A bar across the hub face makes the spin readable on a symmetric tyre.
-    const hub = new BoxGeometry(TYRE_WIDTH * 1.04, radius * 1.3, radius * 0.22);
+    const hub = new BoxGeometry(width * 1.04, radius * 1.3, radius * 0.22);
     geometries.push(tyre, hub);
     const wheel = new Group();
     wheel.rotation.order = "YXZ"; // steer about the chassis up axis, then spin
@@ -258,7 +258,8 @@ export function createVehicleModule(): CapabilityModule {
     container.name = "VehicleWheels";
     const restoreNodes: (() => void)[] = [];
     const boundNodes = new Set<Object3D>();
-    const wheels = state.wheels.map((wheel) => {
+    const definition = host.vehicleDefinition(entityId);
+    const wheels = state.wheels.map((wheel, index) => {
       const node = wheel.visualNode ? object.getObjectByName(wheel.visualNode) : undefined;
       if (node && !boundNodes.has(node)) {
         const pivot = new Group();
@@ -273,7 +274,7 @@ export function createVehicleModule(): CapabilityModule {
         }
       }
       if (wheel.visualNode) console.warn(`[vehicle] Wheel node ${wheel.visualNode} is missing or unusable; using a generated wheel.`);
-      const group = buildWheel(wheel.radius);
+      const group = buildWheel(wheel.radius, vehicleWheelWidth(definition?.wheels[index] ?? wheel));
       container.add(group);
       return group;
     });

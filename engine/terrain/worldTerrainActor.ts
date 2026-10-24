@@ -88,6 +88,18 @@ export function worldTerrainColliderEntityId(actorId: string, key: string): stri
 }
 
 /**
+ * Landscape actor id behind a terrain collider entity — a tile collider
+ * (`landscape:<actor id>:<tile key>`) or a 1×1 Landscape (`landscape:<actor id>`);
+ * `null` for any other entity.
+ */
+export function landscapeColliderActorId(entityId: string): string | null {
+  if (!entityId.startsWith("landscape:")) return null;
+  const rest = entityId.slice("landscape:".length);
+  const split = rest.lastIndexOf(":");
+  return split >= 0 && parseTileKey(rest.slice(split + 1)) ? rest.slice(0, split) : rest;
+}
+
+/**
  * Static collider entities for a collidable World Terrain actor, one per
  * existing tile (holes get none). Callers pass the actor's resolved collision
  * flag, the toggle the Details panel edits.

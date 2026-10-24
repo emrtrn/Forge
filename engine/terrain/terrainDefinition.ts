@@ -1,4 +1,5 @@
 import type { ForgeLandscapeSpline } from "../scene/landscape";
+import { PHYSICAL_MATERIAL_IDS } from "../scene/collision";
 import { validateLandscapeSplines } from "../scene/landscapeSplineValidation";
 import {
   isValidTileQuads, parseTileKey, tileKey, TERRAIN_MAX_LAYERS, TERRAIN_MAX_TILES_PER_AXIS,
@@ -50,8 +51,14 @@ export function normalizeWorldTerrain(value: unknown): WorldTerrainDef {
     ids.add(id);
     const color = text(layer.color, "layer color");
     if (!/^#[\da-f]{6}$/i.test(color)) throw new Error("invalid terrain layer color");
+    const physicalMaterial = layer.physicalMaterial;
+    if (physicalMaterial !== undefined && physicalMaterial !== null
+      && (typeof physicalMaterial !== "string" || !PHYSICAL_MATERIAL_IDS.includes(physicalMaterial))) {
+      throw new Error("invalid terrain layer physicalMaterial");
+    }
     return { id, name: text(layer.name, "layer name"), color,
-      ...(layer.material === null ? { material: null } : layer.material === undefined ? {} : { material: text(layer.material, "layer material") }) };
+      ...(layer.material === null ? { material: null } : layer.material === undefined ? {} : { material: text(layer.material, "layer material") }),
+      ...(physicalMaterial === undefined ? {} : { physicalMaterial }) };
   });
   if (!Array.isArray(input.tiles) || input.tiles.length > tilesX * tilesZ) throw new Error("invalid terrain.tiles");
   const keys = new Set<string>();

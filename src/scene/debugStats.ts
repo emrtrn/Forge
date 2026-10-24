@@ -27,6 +27,7 @@ import type {
   PerfMemorySnapshot,
   RuntimeStatsApp,
   UiDebugSnapshot,
+  VehicleSurfaceDebugSnapshot,
 } from "./RuntimeSceneApp";
 import type { SceneCostSnapshot } from "./runtimeDebugSnapshot";
 
@@ -71,6 +72,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       terrainStreamingText(app) +
       worldPartitionText(app) +
       gameModeDebugText(app) +
+      vehicleSurfaceText(app) +
       aiDebugText(app) +
       aiInspectorText(app) +
       aiNavDebugText(app) +
@@ -450,6 +452,18 @@ export function formatVfxDebug(snapshot: VfxDebugSnapshot, topN = 4): string[] {
 function gameModeDebugText(app: RuntimeStatsApp): string {
   if (!app.getGameModeDebugSnapshot) return "";
   return `\n${formatGameModeDebug(app.getGameModeDebugSnapshot()).join("\n")}`;
+}
+
+/** `vehicle surface: <id> | mud fs:0.55 rr:0.35 | …`, one entry per wheel (smoke tests parse it). */
+export function formatVehicleSurfaceDebug(snapshot: VehicleSurfaceDebugSnapshot): string {
+  return `vehicle surface: ${snapshot.vehicle} | ${snapshot.wheels.map((wheel) =>
+    `${wheel.surface} fs:${wheel.frictionSlipScale.toFixed(2)} rr:${wheel.rollingResistance.toFixed(2)}`).join(" | ")}`;
+}
+
+function vehicleSurfaceText(app: RuntimeStatsApp): string {
+  const snapshot = app.getVehicleSurfaceSnapshot?.();
+  return snapshot ? `
+${formatVehicleSurfaceDebug(snapshot)}` : "";
 }
 
 function worldPartitionText(app: RuntimeStatsApp): string {

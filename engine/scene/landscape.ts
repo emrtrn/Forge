@@ -116,6 +116,8 @@ export interface LandscapeLayerWeights {
    * tints the terrain in place of the default swatch.
    */
   material?: string | null;
+  /** Built-in physical material id for vehicle surface response; absent is neutral. */
+  physicalMaterial?: string | null;
   /** `verticesX * verticesZ` weights, `0..1`. Empty in Faz 1 (paint is Faz 3). */
   weights: number[];
 }
@@ -701,6 +703,9 @@ export function ensureLandscapeLayers(data: ForgeLandscapeData): boolean {
     if (typeof existing.material === "string" && existing.material.length > 0) {
       layer.material = existing.material;
     }
+    if (typeof existing.physicalMaterial === "string" && existing.physicalMaterial.length > 0) {
+      layer.physicalMaterial = existing.physicalMaterial;
+    }
     nextLayers.push(layer);
   }
 
@@ -842,6 +847,7 @@ export function resampleLandscapeData(
       id: layer.id,
       name: layer.name,
       ...(layer.material ? { material: layer.material } : {}),
+      ...(layer.physicalMaterial ? { physicalMaterial: layer.physicalMaterial } : {}),
       weights: resampleLandscapeGrid(layer.weights, source, target),
     })),
     ...(data.splines

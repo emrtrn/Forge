@@ -522,6 +522,7 @@ import type {
 import {
   assetCollisionDefHasCollider,
   complexAsSimpleAssetIds,
+  PHYSICAL_MATERIAL_IDS,
 } from "@engine/scene/collision";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
@@ -936,6 +937,8 @@ export interface LandscapeLayerView {
   color: string;
   /** Assigned material asset id, or `null` for the built-in preset look. */
   material: string | null;
+  /** Built-in physical material id for vehicle surface response, or `null` (neutral). */
+  physicalMaterial: string | null;
 }
 
 /** A landscape that references a multi-tile World Terrain, as the Details panel shows it. */
@@ -1007,6 +1010,9 @@ function cloneLandscapeLayers(layers: readonly LandscapeLayerWeights[]): Landsca
     };
     if (typeof layer.material === "string" && layer.material.length > 0) {
       clone.material = layer.material;
+    }
+    if (typeof layer.physicalMaterial === "string" && layer.physicalMaterial.length > 0) {
+      clone.physicalMaterial = layer.physicalMaterial;
     }
     return clone;
   });
@@ -10127,6 +10133,7 @@ export class SceneApp {
           ? this.landscapeLayerMaterialCache.get(materialId)?.baseColor ?? presetColor
           : presetColor,
         material: materialId,
+        physicalMaterial: ("physicalMaterial" in layer && layer.physicalMaterial) || null,
       };
     });
   }
@@ -10538,6 +10545,44 @@ export class SceneApp {
       label: nextMaterial ? "Assign Landscape Layer Material" : "Clear Landscape Layer Material",
       redo: () => applyLayers(after),
       undo: () => applyLayers(before),
+    });
+  }
+
+  /**
+   * Assigns (or clears, with `null`) the physical material of one paint layer on
+   * the selected landscape: the surface vehicles feel there (TERRAIN_DEFORMATION
+   * Faz 1b). Undoable; nothing visible changes, so the terrain is not rebuilt.
+   */
+  setSelectedLandscapeLayerPhysicalMaterial(layerId: string, physicalMaterialId: string | null): void {
+    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    if (!actor) return;
+    const next = physicalMaterialId && PHYSICAL_MATERIAL_IDS.includes(physicalMaterialId) ? physicalMaterialId : null;
+    const document = this.worldTerrains.get(actor.id);
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    if (document && !session) return;
+    // Looked up on every apply: paint/fill undo swaps a 1×1 Landscape's layer objects.
+    const findLayer = (): { physicalMaterial?: string | null } | undefined => session
+      ? session.world.def.layers.find((entry) => entry.id === layerId)
+      : this.landscapeData.get(actor.id)?.layers.find((entry) => entry.id === layerId);
+    const layer = findLayer();
+    if (!layer || (layer.physicalMaterial ?? null) === next) return;
+    const before = layer.physicalMaterial;
+    const apply = (value: string | null | undefined): void => {
+      const layer = findLayer();
+      if (!layer || !this.layout?.landscapes?.some((entry) => entry.id === actor.id)) return;
+      if (value) layer.physicalMaterial = value;
+      else delete layer.physicalMaterial;
+      if (session) session.markDefinitionDirty();
+      else this.markLandscapeDirty(actor.id);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: next ? "Assign Landscape Layer Physical Material" : "Clear Landscape Layer Physical Material",
+      redo: () => apply(next),
+      undo: () => apply(before),
     });
   }
 

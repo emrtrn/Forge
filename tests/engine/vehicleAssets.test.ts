@@ -76,6 +76,20 @@ export async function registerVehicleAssetTests(check: Check, checkAsync: CheckA
       ["vehicle.ignored", "vehicle.wheels[0].ignoredWheel"]);
   });
 
+  check("vehicle wheel width: an authored tyre width saves intact; invalid widths stay absent", () => {
+    const reference = createReferenceCarDefinition();
+    const wide = { ...reference, wheels: reference.wheels.map((wheel) => ({ ...wheel, width: 0.42 })) };
+    const asset = normalizeVehicleAsset({ schema: 1, type: "vehicle", ...wide })!;
+    assert.ok(asset.wheels.every((wheel) => wheel.width === 0.42));
+    const saved = validateSaveVehiclePayload({ path: PATH, vehicle: asset });
+    assert.deepEqual(saved.vehicle, asset);
+    assert.deepEqual(collectDroppedFields(asset, saved.vehicle).paths, []);
+    for (const width of [0, -0.3, Number.NaN, "wide", null]) {
+      const wheel = normalizeVehicleDefinition({ wheels: [{ position: [1, 0, 1], width }] })!.wheels[0]!;
+      assert.equal("width" in wheel, false, String(width));
+    }
+  });
+
   check("vehicle engine sound: the asset block saves intact, inline fields override one by one, null silences", () => {
     const asset = normalizeVehicleAsset(JSON.parse(readFileSync(`public/${PATH}`, "utf8")))!;
     assert.deepEqual(asset.engineSound, {

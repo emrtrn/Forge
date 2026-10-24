@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  DEFORMATION_DEPTH_SCALE, DeformationField, targetDepthForWheel,
+  DEFORMATION_DEPTH_SCALE, DeformationField,
   type DeformationDirtyRect, type WheelDeformationStamp,
 } from "../../engine/scene/deformationField";
 
@@ -279,20 +279,6 @@ export function registerDeformationFieldTests(check: Check): void {
     assert.deepEqual(field.sample(0.0625, 0.0625), { depth: 6.5535, disturbance: 255 });
     assert.equal(field.decay(NaN, 1), 0);
     assert.equal(field.decay(1, -1), 0);
-  });
-
-  check("deformation field: wheel target depth clamps participation and load ratio", () => {
-    const profile = { maxDepth: 0.22 };
-    close(targetDepthForWheel(profile, 0.5, 1500, 3000), 0.055);
-    close(targetDepthForWheel(profile, 1, 6000, 3000), 0.22);
-    close(targetDepthForWheel(profile, 2, 3000, 3000), 0.22);
-    close(targetDepthForWheel(profile, 1, Number.MAX_VALUE, Number.MIN_VALUE), 0.22);
-    for (const [deformability, load, nominal] of [[0, 3000, 3000], [-1, 3000, 3000],
-      [1, -1, 3000], [1, 3000, 0], [1, NaN, 3000], [NaN, 3000, 3000], [1, 3000, Infinity]]) {
-      assert.equal(targetDepthForWheel(profile, deformability!, load!, nominal!), 0);
-    }
-    assert.equal(targetDepthForWheel(undefined, 1, 3000, 3000), 0);
-    assert.equal(targetDepthForWheel({ maxDepth: -1 }, 1, 3000, 3000), 0);
   });
 
   check("deformation field: four wheels for 600 steps stay within a local cell work budget", () => {

@@ -110,7 +110,9 @@ import {
 } from "@engine/behavior/behaviorSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
-import { createPhysicalMaterialSurfaceProvider } from "@engine/physics/surface/surfaceResponse";
+import {
+  createPhysicalMaterialSurfaceProvider, NEUTRAL_SURFACE_SAMPLE, resolveSurfaceSample,
+} from "@engine/physics/surface/surfaceResponse";
 import type { SplinePathFollowerDebugState } from "@engine/scene/splinePathFollower";
 import type { AudioBus, AudioPlaybackHandle } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
@@ -263,7 +265,12 @@ import {
 } from "@engine/render-three/landscape";
 import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
-import { worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues } from "@engine/terrain/worldTerrainActor";
+import {
+  landscapeColliderActorId, worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues,
+} from "@engine/terrain/worldTerrainActor";
+import {
+  createTerrainSurfaceProvider, landscapeSurfaceSource, TerrainSurfaceSampler, worldTerrainSurfaceSource,
+} from "@engine/terrain/terrainSurface";
 import { forEachHeightfieldTriangle } from "@engine/physics/heightfieldStatic";
 import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
 import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
@@ -398,7 +405,7 @@ import {
 // Re-exported: the overlay formatters have always imported the `?debug`
 // snapshot shapes from this shell, and both are still read through it.
 export type { AudioBudgetReadout, DrawingBufferSnapshot };
-import type { AssetCollisionDef } from "@engine/scene/collision";
+import type { AssetCollisionDef, PhysicalMaterialDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
   complexAsSimpleAssetIds,
@@ -417,7 +424,8 @@ import {
   VEHICLE_COMPONENT,
 } from "@engine/scene/components";
 import type { ColliderComponent, ColliderPrimitive, ColliderShape, TransformComponent } from "@engine/scene/components";
-import type { Entity, EntityComponentData } from "@engine/scene/entity";
+import type { Entity, EntityComponentData, EntityId } from "@engine/scene/entity";
+import type { VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 
@@ -588,6 +596,18 @@ export type FrameCaptureConsumer = (
   context: FrameCaptureContext,
 ) => void;
 
+/** One wheel's ground for `?debug`: physical material id ("neutral", "air") and its response. */
+export interface VehicleSurfaceDebugWheel {
+  surface: string;
+  frictionSlipScale: number;
+  rollingResistance: number;
+}
+
+export interface VehicleSurfaceDebugSnapshot {
+  vehicle: string;
+  wheels: readonly VehicleSurfaceDebugWheel[];
+}
+
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
   getRenderStats(): { drawCalls: number; triangles: number };
@@ -602,6 +622,8 @@ export interface RuntimeStatsApp {
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   getTerrainStreamingSnapshot?(): TerrainStreamingSnapshot | null;
+  /** Optional: the possessed vehicle's per-wheel ground response; null when not driving. */
+  getVehicleSurfaceSnapshot?(): VehicleSurfaceDebugSnapshot | null;
   getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & {
     models?: AssetResidencySnapshot;
     statics?: { cells: number; pending: number };
@@ -899,6 +921,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private landscapeObjects: LandscapeObject[] = [];
   /** Landscape sidecar data by actor id, kept for the River Water pass. */
   private readonly landscapeDataById = new Map<string, ForgeLandscapeData>();
+  /** Paint-layer surface response per Landscape actor id; only terrains with a physical material layer. */
+  private readonly terrainSurfaceSamplers = new Map<string, TerrainSurfaceSampler>();
   /** Live river-water ribbons, and the planar reflections they share. */
   private riverWaterObjects: RiverWaterObjectLike[] = [];
   private riverReflectionSources: PlanarReflectionSource[] = [];
@@ -1391,8 +1415,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.runtimeServices.resolve(vehicleAiService)?.isDriving(entityId) === true,
       possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
       setVehicleInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
-      surfaceMaterialForWheel: (_entityId, wheel) => wheel.groundEntityId === null ? null
-        : resolvePhysicalMaterial(this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId)),
+      surfaceMaterialForWheel: (_entityId, wheel) => this.wheelSurfaceMaterial(wheel),
       isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
     });
     this.runtimeServices.provide(aiHostService, {
@@ -1425,8 +1448,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.addSubsystem("pre-physics", this.animationSubsystem);
     this.runtimeServices.addSubsystem("pre-physics", this.inputSubsystem);
     this.runtimeServices.addSubsystem("physics", this.physicsSubsystem);
-    this.physicsSubsystem.setVehicleSurfaceProvider(createPhysicalMaterialSurfaceProvider(
-      (entityId) => this.physicsSubsystem.colliderPhysicalMaterialId(entityId),
+    this.physicsSubsystem.setVehicleSurfaceProvider(createTerrainSurfaceProvider(
+      (entityId) => this.terrainSurfaceSampler(entityId),
+      createPhysicalMaterialSurfaceProvider((entityId) => this.physicsSubsystem.colliderPhysicalMaterialId(entityId)),
     ));
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
@@ -1860,6 +1884,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.landscapeObjects = [];
     this.landscapeDataById.clear();
+    this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
@@ -2370,6 +2395,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getTerrainStreamingSnapshot(): TerrainStreamingSnapshot | null {
     return this.runtimeServices.resolve(worldStreamingService)?.snapshot() ?? null;
+  }
+
+  /** Ground under each wheel of the possessed vehicle, resolved the way its surface provider does. */
+  getVehicleSurfaceSnapshot(): VehicleSurfaceDebugSnapshot | null {
+    const pawn = this.gameModeSession?.playerState.pawnEntityId;
+    const state = pawn ? this.physicsSubsystem.vehicleState(pawn) : null;
+    if (!pawn || !state) return null;
+    return {
+      vehicle: pawn,
+      wheels: state.wheels.map((wheel) => {
+        if (!wheel.inContact || wheel.groundEntityId === null || !wheel.contactPoint) {
+          return { surface: "air", frictionSlipScale: 1, rollingResistance: 0 };
+        }
+        const sampler = this.terrainSurfaceSampler(wheel.groundEntityId);
+        const id = sampler
+          ? sampler.dominantMaterialAt(wheel.contactPoint)
+          : this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId) ?? null;
+        const sample = (sampler ? sampler.sampleAt(wheel.contactPoint) : resolveSurfaceSample(id)) ?? NEUTRAL_SURFACE_SAMPLE;
+        return { surface: id ?? "neutral", frictionSlipScale: sample.frictionSlipScale, rollingResistance: sample.rollingResistance };
+      }),
+    };
   }
 
   getWorldPartitionSnapshot(): (WorldPartitionSnapshot & {
@@ -3327,6 +3373,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.landscapeObjects = [];
     this.landscapeDataById.clear();
+    this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
@@ -5676,6 +5723,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
   }
 
+  private terrainSurfaceSampler(groundEntityId: EntityId): TerrainSurfaceSampler | undefined {
+    const actorId = landscapeColliderActorId(groundEntityId);
+    return actorId === null ? undefined : this.terrainSurfaceSamplers.get(actorId);
+  }
+
+  /** The physical material a wheel's effects/sounds follow: a terrain's heaviest layer, else the collider's. */
+  private wheelSurfaceMaterial(wheel: VehicleWheelState): PhysicalMaterialDef | null {
+    if (wheel.groundEntityId === null) return null;
+    const sampler = this.terrainSurfaceSampler(wheel.groundEntityId);
+    if (sampler) {
+      const id = wheel.contactPoint ? sampler.dominantMaterialAt(wheel.contactPoint) : null;
+      return resolvePhysicalMaterial(id ?? undefined);
+    }
+    return resolvePhysicalMaterial(this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId));
+  }
+
   private landscapeColliderEntity(actor: LayoutLandscape, data: ForgeLandscapeData): Entity | null {
     const item = this.landscapeItem(actor, data);
     if (!item.collision) return null;
@@ -5721,6 +5784,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const landscapes = this.layout?.landscapes ?? [];
     const datas: ForgeLandscapeData[] = [];
     this.landscapeDataById.clear();
+    this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
       const loaded = await this.fetchLandscapeDocument(actor.dataRef);
       if (loaded.kind === "world") {
@@ -5732,6 +5796,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // River Water resolves its shape from a Landscape spline, so the data has
       // to outlive this pass rather than being re-fetched per water body.
       this.landscapeDataById.set(actor.id, data);
+      const surface = landscapeSurfaceSource(data, actor.position, readRotation(actor));
+      if (surface) this.terrainSurfaceSamplers.set(actor.id, new TerrainSurfaceSampler(surface));
       const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data.layers, (data.size.verticesX - 1) * data.size.spacing);
       const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
       this.landscapeObjects.push(object);
@@ -5750,6 +5816,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeWorldTerrain(actor: LayoutLandscape, document: WorldTerrainDocument): Promise<void> {
     const { def } = document;
     this.worldTerrainDocuments.set(actor.id, document);
+    const surface = worldTerrainSurfaceSource(document);
+    if (surface) this.terrainSurfaceSamplers.set(actor.id, new TerrainSurfaceSampler(surface));
     for (const issue of worldTerrainPlacementIssues(actor, def)) console.warn(`[terrain] ${actor.id}: ${issue}`);
     if (def.splines?.length) console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
     const resolved = resolveLandscape(actor);

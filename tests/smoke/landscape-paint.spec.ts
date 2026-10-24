@@ -82,6 +82,9 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await expect(
     page.locator('[data-landscape-layer="dirt"]'),
   ).toContainText(assignedMaterial.label.trim(), { timeout: 10_000 });
+  // The dirt layer also becomes mud for vehicles (TERRAIN_DEFORMATION Faz 1b).
+  await page.locator("[data-landscape-layer-physical-material]").selectOption("mud");
+  await expect(page.locator("[data-landscape-layer-physical-material]")).toHaveValue("mud");
   await page.waitForTimeout(1500);
 
   await page.getByTestId("editor-save").click();
@@ -95,6 +98,8 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   expect(grass?.weights.some((weight) => weight < 0.95)).toBeTruthy();
   // The assigned layer material persisted into the sidecar.
   expect(dirt?.material).toBe(assignedMaterial.id);
+  expect(dirt?.physicalMaterial).toBe("mud");
+  expect(grass?.physicalMaterial).toBeUndefined();
 
   await page.goto(`/?editor&landscapePaintReload=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
@@ -111,6 +116,9 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   // server's demo-layout autosave; the pre-reload assertion pins the exact id).
   expect(typeof reloadedDirt?.material).toBe("string");
   expect((reloadedDirt?.material ?? "").length).toBeGreaterThan(0);
+  expect(reloadedDirt?.physicalMaterial).toBe("mud");
+  await page.locator('[data-landscape-layer="dirt"]').click();
+  await expect(page.locator("[data-landscape-layer-physical-material]")).toHaveValue("mud");
 
   expect(pageErrors).toEqual([]);
 });

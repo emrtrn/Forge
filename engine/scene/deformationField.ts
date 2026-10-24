@@ -1,5 +1,7 @@
-/** CPU-authoritative, world-aligned track field; independent of rendering/physics. */
-import type { PhysicalMaterialDef } from "./collision";
+/**
+ * CPU-authoritative, world-aligned track field; independent of rendering/physics.
+ * Stamp depths come from `sinkage` (`engine/physics/surface/sinkage.ts`).
+ */
 
 /** Channel 0: metres × 10,000 (0.1 mm steps, saturating at 6.5535 m). */
 export const DEFORMATION_DEPTH_SCALE = 10_000;
@@ -41,18 +43,6 @@ export interface WheelDeformationStamp {
 
 const mod = (value: number, size: number): number => ((value % size) + size) % size;
 const clamp = (value: number, max: number): number => Number.isFinite(value) ? Math.max(0, Math.min(value, max)) : 0;
-
-/** Load ratio and soft-surface participation are each clamped to 0..1. */
-export function targetDepthForWheel(
-  profile: Pick<NonNullable<PhysicalMaterialDef["deformation"]>, "maxDepth"> | null | undefined,
-  deformability: number,
-  wheelLoad: number,
-  nominalLoad: number,
-): number {
-  if (!profile || !Number.isFinite(nominalLoad) || nominalLoad <= 0 || !Number.isFinite(wheelLoad)) return 0;
-  const maxDepth = Number.isFinite(profile.maxDepth) ? Math.max(0, profile.maxDepth) : 0;
-  return maxDepth * clamp(deformability, 1) * clamp(Math.min(wheelLoad / nominalLoad, 1), 1);
-}
 
 /**
  * Cell (cx, cz) occupies [cx*s, (cx+1)*s) × [cz*s, (cz+1)*s), sampled at its

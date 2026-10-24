@@ -6,6 +6,7 @@ import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { captureTerrainSnapshot, terrainDocumentToLandscape, terrainTransformNeedsSave } from "../../engine/terrain/terrainLandscapeBridge";
 import { loadWorldTerrain, validateTerrainTile } from "../../engine/terrain/terrainLoader";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
+import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { collectDroppedFields } from "../../tools/droppedFields";
@@ -19,6 +20,7 @@ const actor: LayoutLandscape = { id: "l", name: "Terrain", position: [10, 2, -3]
 function fixture() {
   const data = createFlatLandscapeData("small");
   data.heights[0] = 3.25;
+  data.layers[1]!.physicalMaterial = "mud";
   data.splines = [{ id: "road", name: "Road", hidden: false, locked: false, smooth: true, smoothness: 0.25,
     points: [{ id: "a", position: [0, 0, 0], width: 2, falloff: 1, arriveTangent: [1, 0, 0] },
       { id: "b", position: [4, 0, 4], width: 2, falloff: 1, leaveTangent: [1, 0, 0] }],
@@ -37,6 +39,11 @@ export function registerTerrainDocumentTests(check: Check): void {
     const saved = validateSaveTerrainPayload({ path, terrain: def }).terrain;
     assert.deepEqual(saved, normalizeWorldTerrain(def));
     assert.deepEqual(collectDroppedFields(def, saved, "terrain").paths, []);
+    assert.equal(saved.layers[1]?.physicalMaterial, "mud", "the 1x1 adapter carries the layer's physical material");
+    const nulled = { ...def, layers: def.layers.map((layer, index) => index === 0 ? { ...layer, physicalMaterial: null } : layer) };
+    assert.equal(normalizeWorldTerrain(nulled).layers[0]?.physicalMaterial, null);
+    const edited = terrainDocumentToLandscape({ def: saved, tiles: new Map([["0_0", decodeTerrainTile(fixture().bytes)]]) });
+    assert.deepEqual(edited.layers.map((layer) => layer.physicalMaterial ?? null), [null, "mud", null, null]);
     const extra = { ...def, secret: true, layers: def.layers.map((l) => ({ ...l, future: 1 })) };
     const report = collectDroppedFields(extra, normalizeWorldTerrain(extra), "terrain");
     assert.ok(report.paths.includes("terrain.secret"));
@@ -51,6 +58,7 @@ export function registerTerrainDocumentTests(check: Check): void {
       { layers: [...def.layers, def.layers[0]] }, { tiles: [def.tiles[0], def.tiles[0]] },
       { tiles: [{ ...def.tiles[0], key: "01_0" }] }, { tiles: [{ ...def.tiles[0], key: "1_0" }] },
       { tiles: [{ ...def.tiles[0], maxHeight: 10000 }] },
+      { layers: [{ ...def.layers[0], physicalMaterial: "lava" }] }, { layers: [{ ...def.layers[0], physicalMaterial: 3 }] },
       { splines: [{ id: "x", points: [], segments: [{ id: "s", startPointId: "x", endPointId: "y" }] }] },
     ]) assert.throws(() => normalizeWorldTerrain({ ...def, ...patch }), JSON.stringify(patch));
   });

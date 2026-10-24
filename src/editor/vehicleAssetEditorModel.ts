@@ -13,9 +13,9 @@ import type {
   VehicleDrivetrainDefinition,
   VehicleWheelDefinition,
 } from "@engine/physics/vehicle/vehicleTypes";
+import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
 
 const GRAVITY = 9.81;
-const TYRE_WIDTH = 0.26;
 
 /** Wheels the engine turns: the drivetrain's axle(s), else the legacy `drive` flags. */
 export function drivenWheels(def: VehicleDefinition): VehicleWheelDefinition[] {
@@ -144,7 +144,7 @@ export function vehicleTopViewSvg(def: VehicleDefinition, selectedWheel: number 
   const body = `<rect class="vhe-chassis" x="${fmt(sx(halfX - 0.25))}" y="${fmt(sz(halfZ - 0.25))}" width="${fmt((halfX - 0.25) * 2 * scale)}" height="${fmt((halfZ - 0.25) * 2 * scale)}" rx="10"/>`;
   const nose = `<path class="vhe-nose" d="M${fmt(width / 2 - 7)} ${fmt(sz(halfZ - 0.25) + 12)} L${fmt(width / 2)} ${fmt(sz(halfZ - 0.25) + 4)} L${fmt(width / 2 + 7)} ${fmt(sz(halfZ - 0.25) + 12)}"/>`;
   const wheels = def.wheels.map((wheel, index) => {
-    const w = TYRE_WIDTH * scale;
+    const w = vehicleWheelWidth(wheel) * scale;
     const h = wheel.radius * 2 * scale;
     const classes = [
       "vhe-wheel",

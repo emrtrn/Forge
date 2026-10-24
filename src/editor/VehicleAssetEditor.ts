@@ -26,6 +26,7 @@ import {
   type VehicleWheelDefinition,
 } from "@engine/physics/vehicle/vehicleTypes";
 import { loadVehicleAssetForEditor, saveVehicleAsset } from "@/editor/vehicleAssetStore";
+import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
 import {
   drivenWheels,
   enginePeaks,
@@ -454,6 +455,7 @@ export class VehicleAssetEditor {
           ${this.vec3Row("Hard Point", `${base}.position`, wheel.position, 0.01)}
           ${this.enumRow("Axle", `${base}.axle`, wheel.axle, AXLES)}
           ${this.numRow("Radius (m)", `${base}.radius`, wheel.radius, 0.01, 5, 0.01)}
+          ${this.numRow("Width (m)", `${base}.width`, vehicleWheelWidth(wheel), 0.01, 5, 0.01)}
           ${this.numRow("Rest Length (m)", `${base}.suspensionRestLength`, wheel.suspensionRestLength, 0, 5, 0.01)}
           ${this.numRow("Max Travel (m)", `${base}.suspensionMaxTravel`, wheel.suspensionMaxTravel, 0, 5, 0.01)}
           ${this.numRow("Stiffness", `${base}.suspensionStiffness`, wheel.suspensionStiffness, 0.1, 1000, 1)}

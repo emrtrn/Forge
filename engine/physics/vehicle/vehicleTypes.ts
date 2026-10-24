@@ -20,6 +20,8 @@ export interface VehicleWheelDefinition {
   /** Torque-mode axle; inferred from local Z when omitted (+Z = front). */
   readonly axle: "front" | "rear";
   readonly radius: number;
+  /** Tyre width (m): track footprint and generated wheel; absent is `radius × 0.7`. */
+  readonly width?: number;
   /** Spring length at rest; the wheel centre hangs this far below `position`. */
   readonly suspensionRestLength: number;
   /** How far the spring may travel past its rest length either way. */
@@ -482,6 +484,7 @@ function resolveWheel(wheel: VehicleWheelDefinitionInput): VehicleWheelDefinitio
     position: vec3(wheel.position, [0, 0, 0]),
     axle: wheel.axle === "front" || wheel.axle === "rear" ? wheel.axle : wheel.position[2] >= 0 ? "front" : "rear",
     radius: positive(wheel.radius, DEFAULT_WHEEL.radius),
+    ...(typeof wheel.width === "number" && Number.isFinite(wheel.width) && wheel.width > 0 ? { width: wheel.width } : {}),
     suspensionRestLength: nonNegative(wheel.suspensionRestLength, DEFAULT_WHEEL.suspensionRestLength),
     suspensionMaxTravel: nonNegative(wheel.suspensionMaxTravel, DEFAULT_WHEEL.suspensionMaxTravel),
     suspensionStiffness: positive(wheel.suspensionStiffness, DEFAULT_WHEEL.suspensionStiffness),

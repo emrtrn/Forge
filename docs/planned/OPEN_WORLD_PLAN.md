@@ -1952,7 +1952,7 @@ genişlemesi, smoke.
   CLI gerçek ortamda denendi (geçici level, 2 hücre, budama). Açık:
   Actor Script mesh'leri ve foliage HLOD'da yok; doku pişirme (c) gerekirse.
 
-### 7c2 kaskadlı gölge — S7 ölçümü ve öneri (2026-10-24, onay bekliyor)
+### 7c2 kaskadlı gölge — S7 ölçümü ve öneri (2026-10-24, kullanıcı onayladı)
 
 **Spike** `spikes/far-view` (`run.mjs` + `probe.ts`; merge öncesi silinir).
 Runtime gerçek OpenWorldTest'i (`npm run world:test`, 4 km) açar; level route
@@ -2081,6 +2081,10 @@ kaskad başına bölme mesafesi ve texel boyutu):
 7. Çim gölgesi varsayılan kapalı kalır (G0). Sonraki düğme olarak dış
    kaskadlardan küçük caster'ları `shadow.camera.layers` ile dışlamak
    mümkün; 7c2'de yok.
+
+**Onay (2026-10-24):** kullanıcı öneri 1–7'yi olduğu gibi onayladı (kendi
+uygulama, profil tablosu, uzak modda ikinci yönlü ışığın gölgesi kapalı +
+uyarı, materyal kaydı kare başına tarama + `WeakSet`).
 
 **Codex'e uygun saf dilim:** `engine/world/sunCascades.ts`: bölme
 (`computeCascadeSplits(count, near, distance, lambda)`), dilim küresi

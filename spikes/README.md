@@ -45,3 +45,22 @@ URL knobs: `densities` (per m², default `2,4,8`), `counts` (ring instances,
 default `50000,150000,300000`), `frames` (default 60), `ring` (metres, default
 96), `mesh` (asset id, default `kenney-grass`). Results: OPEN_WORLD_PLAN Faz 6,
 "G0 sonuçları".
+
+## far-view (Faz 7 S7, 7c2 cascaded shadows)
+
+Sun shadow cost on the real runtime: OpenWorldTest (`npm run world:test`) in far
+view mode, statics in World Partition cells, a grass ring. `probe.ts` attaches to
+the live renderer and swaps the sun between no shadow, today's single follow
+cascade, three's `CSM` addon (2/3/4) and a Forge prototype (2/3/4, chained
+per-material patch, cascade picked from shadow coordinates). Timer queries split
+the shadow pass out; interleaved rounds, median of medians.
+
+```
+npm run world:test
+npx vite --port 5274 --strictPort --host 127.0.0.1
+node spikes/far-view/run.mjs 5274 ultra,high,medium <outDir> [variants]
+```
+
+Env knobs: `ROUNDS` (default 4), `LOAD` (untimed extra renders that keep GPU
+clocks up, default 2), `VIEW=dx,dz` (screenshot pose 30 m above the camera).
+Results: OPEN_WORLD_PLAN Faz 7, "7c2 kaskadlı gölge — S7 ölçümü ve öneri".

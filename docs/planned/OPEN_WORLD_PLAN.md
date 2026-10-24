@@ -1952,6 +1952,142 @@ genişlemesi, smoke.
   CLI gerçek ortamda denendi (geçici level, 2 hücre, budama). Açık:
   Actor Script mesh'leri ve foliage HLOD'da yok; doku pişirme (c) gerekirse.
 
+### 7c2 kaskadlı gölge — S7 ölçümü ve öneri (2026-10-24, onay bekliyor)
+
+**Spike** `spikes/far-view` (`run.mjs` + `probe.ts`; merge öncesi silinir).
+Runtime gerçek OpenWorldTest'i (`npm run world:test`, 4 km) açar; level route
+ile `viewDistance` 3000 (uzak mod, reversed-Z), `staticObjectsCastShadow`,
+World Partition hücrelerinde (128 m, 36 hücre) 500 `commontree` + 120
+`shape-cube` ve çim katmanına 4 m⁻² çim kuralı (80–96 m cull) alır. Probe
+canlı renderer'a bağlanır ve güneş gölgesini varyantlar arasında değiştirir:
+gölgesiz, bugünkü tek kaskad takipli gölge, three `CSM` eklentisi (2/3/4) ve
+kendi prototipimiz (2/3/4, 4'te uzak iki kaskad dönüşümlü). RTX 3060 / ANGLE
+D3D11, 1280×720, TPS kamera. Her varyant 4 turda karışık sırayla ölçüldü,
+turların medyanı alındı. Ölçülen render'dan sonra sahne iki kez daha çizildi
+(zamanlamasız): kare başına 3–4 ms işte GPU saati iniyor ve timer query
+şişiyor. Bu yük olmadan "gölgesiz" bazen takipli gölgeden pahalı çıkıyordu.
+
+**Sonuçlar** (GPU ms p50: kare toplamı / gölge geçişi; gölge draw call;
+kaskad başına bölme mesafesi ve texel boyutu):
+
+| Profil | Varyant | Kare | Gölge | Gölge DC | Bölmeler → texel |
+|---|---|---|---|---|---|
+| ultra 2048, 200 m | gölgesiz | 2,69 | — | 0 | — |
+| | takipli (bugün) | 3,15 | 0,84 | 19 | ~90 m önü → 5,9 cm |
+| | CSM 2 / 3 / 4 | 3,69 / 3,70 / 4,13 | 1,44 / 1,66 / 1,89 | 59 / 73 / 93 | 3: 34/75/200 m → 2,7/6,0/16,3 cm |
+| | Forge 2 / 3 / 4 | 3,82 / 3,68 / 3,94 | 1,36 / 1,60 / 1,71 | 52 / 69 / 81 | 4: 16/36/77/200 m → 1,3/2,9/6,4/16,4 cm |
+| | Forge 4 dönüşümlü | 3,95 | 1,38 | 51 | aynı |
+| high 1024, 150 m | gölgesiz | 2,37 | — | 0 | — |
+| | takipli | 3,1–3,5 | 0,81 | 17 | ~68 m → 8,8 cm |
+| | CSM 2 / 3 / 4 | 3,38 / 3,37 / 3,35 | 1,19 / 1,43 / 1,47 | 50 / 65 / 73 | 3: 26/57/150 m → 4,1/9,1/24,3 cm |
+| | Forge 2 / 3 / 4 | 3,3–3,8 / 3,31 / 3,30 | 1,17 / 1,35 / 1,43 | 45 / 61 / 70 | 3: 17/46/150 m → 2,7/7,6/24,6 cm |
+| | Forge 4 dönüşümlü | 3,39 | 1,16 | 44 | |
+| medium 512, 100 m | gölgesiz | 1,90 | — | 0 | — |
+| | takipli | 2,38 | 0,77 | 14 | ~45 m → 11,7 cm |
+| | CSM 2 / 3 / 4 | 2,79 / 2,78 / 2,83 | 1,06 / 1,14 / 1,30 | 36 / 45 / 58 | 2: 27/100 m → 8,6/32,4 cm |
+| | Forge 2 / 3 / 4 | 2,66 / 2,72 / 2,82 | 1,06 / 1,11 / 1,22 | 36 / 44 / 54 | 2: 20/100 m → 6,6/32,8 cm |
+
+- **Maliyet:** kaskadlar takipli gölgeye göre GPU'da +0,3–0,8 ms
+  (gölge geçişi ×1,4–2,2) ve gölge draw call'ında ×2,5–4,5 ekler; CPU render
+  +0,1–0,3 ms. Kaskad sayısından çok kapsama (200 m'lik son kaskad hemen
+  bütün hücreleri görür) belirleyici: 2 → 4 kaskad yalnız +0,2–0,4 ms.
+  Statikler hücre × asset batch'lerinde olduğu için her kaskad yalnız
+  frustum'una giren hücreleri çizer. Level çapında tek InstancedMesh
+  olsaydı her kaskad 500 ağacın tamamını yeniden çizerdi (ilk koşuda +6 M
+  üçgen/kaskad).
+- **Dönüşümlü güncelleme** (4 kaskadda uzak ikisi her iki karede bir):
+  ultra'da gölge geçişi 1,71 → 1,38 ms, 30 draw call daha az. Güncellenmeyen
+  kaskadın haritası da matrisi de eski karede kalır, yani birbiriyle
+  tutarlı. Yalnız ilk kare çizilmeli (ilk denemede boş harita bağlandı, GL
+  sampler hatası verdi).
+- **Kalite:** aynı mesafede kaskadlar takipli gölgeden 2–5 kat keskin
+  (ultra ilk 16 m 1,3 cm, bugün 5,9 cm) ve gölge 45–90 m yerine 100–200 m'ye
+  uzanır. Ekran görüntülerinde (30 m yüksekten vadiye) CSM 3 ile Forge 3
+  aynı: ağaç gölgeleri ~200 m'ye kadar var, kaskad geçişi görünmüyor,
+  acne/peter-panning yok (Forge'da kaskad başına 2 cm/derinlik bias +
+  0,75 texel normal bias). Bölme λ=0,75 (Forge) ilk kaskadı CSM'in
+  λ=0,5'inden küçük ve keskin tutuyor.
+
+**three `CSM` eklentisinin uyumsuzlukları** (kaynak + spike):
+1. `setupMaterial` materyalin `onBeforeCompile`'ını zincirlemeden ezer:
+   OpenWorldTest'te 48 lit materyalin 46'sının Forge yaması düşüyordu
+   (arazi splat'ı, foliage fade, 7e `instanceScaled`, worldMask,
+   materials.ts). Spike ölçebilmek için bunları elle zincirledi.
+2. Kurulurken `ShaderChunk.lights_fragment_begin` ve `lights_pars_begin`'i
+   **global** olarak değiştirir. Kopyası 0.184'ün parçasından eski (156
+   satır fark: iridescence Fresnel karışımı, nokta ışık gölgesinin
+   PCF/BASIC koşulu). Yani CSM'i kullanmayan materyaller, küçük level'lar
+   dahil, three'nin eski aydınlatma koduyla derlenir. `dispose()` parçaları
+   geri koymaz.
+3. `dispose()` materyallerin `onBeforeCompile`'ını `delete` eder, yani
+   Forge'un kendi yamalarını da siler.
+4. `CSMFrustum` WebGL NDC'sini (z −1…1) varsayar. Reversed-Z projeksiyonunda
+   near 1, far 0'a düştüğü için kaskad köşeleri ters/arkada çıkar. Spike
+   reversed olmayan bir vekil kamera kullandı.
+5. Kaskad bölmeleri, kamera near/far ve gölge mesafesi materyal başına
+   uniform'dur. Sonradan gelen her materyal (hücre aktivasyonu, çim batch'i,
+   HLOD proxy'si, aktör) ayrıca `setupMaterial`'dan geçmeli.
+
+**Forge prototipi** (spike'ta çalışır, iki varyant da aynı maliyette):
+- Işıklar: N `DirectionalLight` bir grupta, sırayla eklenir. Kaskad 0
+  güneşin renk/parlaklığını taşır; 1..N−1 sıfır parlaklıklı yardımcı gölge
+  ışıklarıdır. Güneş kaskad modunda gölge düşürmez. three gölgeli ışıkları
+  öne, kendi aralarında sahne sırasıyla dizdiği için kaskad sırası korunur.
+- Shader: materyal başına **zincirli** `onBeforeCompile`. Önceki yama ve
+  `customProgramCacheKey` korunur, anahtar sona `|forge-cascades` ekler.
+  `#include <lights_fragment_begin>` three'nin **o anki** parçasından
+  türetilen kopyayla değişir. Yalnız yönlü gölge satırı (çapa; bulunamazsa
+  hata, three yükseltmesinde test yakalar) ve yardımcı ışıkların
+  `RE_Direct`'i değişir. Global `ShaderChunk`'a dokunulmaz, eski kopya
+  tutulmaz.
+- Kaskad seçimi gölge koordinatından yapılır: fragment'ı içeren ilk kaskad
+  kullanılır. Kenarın %5'lik bandında bir sonrakiyle karıştırılır, son
+  kaskadın kenarında gölgesize solar. Ek uniform gerekmez; sampler dizisi
+  sabit indeksle açılır (`#if NUM_DIR_LIGHT_SHADOWS > k`, en çok 4).
+- Frustum: kaskad k, kameradan bölme mesafesine kadar olan frustum
+  diliminin çevrel küresine oturur (dönüşte boyu değişmez, titremez).
+  Merkezi `computeFollowShadowFrame` ile texel'e hizalanır. Kaskadlar iç
+  içedir, bu yüzden kenar karışımında her zaman bir sonraki kaskad vardır.
+
+**Öneri (7c2 kapsamı):**
+1. **Kendi uygulamamız, three `CSM` değil.** Maliyet aynı, ama eklenti
+   Forge'un materyal yamalarını düşürüyor, global aydınlatma parçasını eski
+   kopyayla değiştiriyor ve reversed-Z'de bozuk.
+2. **Profil:** ultra 4 kaskad / 2048 / 200 m (son iki kaskad dönüşümlü),
+   high 3 / 1024 / 150 m, medium 2 / 512 / 100 m. Low gölgesiz (bugün de
+   `shadowsEnabled: false`); kullanıcı açarsa 2 kaskad / 70 m. Mesafe =
+   200 m × `shadowDistanceScale`, yani adaptif kalite mesafeyi küçültmeye
+   devam eder. Kaskad sayısı ve dönüşüm yeni profil alanları (ör.
+   `shadowCascades`), normalizer + testlerle.
+3. **Gölge mesafesi sonunda mesafeye bağlı solma:** paylaşılan tek bir
+   uniform nesnesi (`{ value: [başlangıç, bitiş] }`, bütün yamalı
+   materyallere aynı referans; [0,85 D, D]). Prototipteki son kaskad kenarı
+   ışık uzayında bir kare: küre merkezi dilimin sonunda olduğundan ileri
+   yönde 2,2 D'ye uzanıyor, yanlarda daha kısa kalıyor. Mesafe solması
+   kenarı kamera çevresinde düzgün bir daire yapar. Kaskadlar arası geçiş
+   gölge koordinatı bandıyla kalır.
+4. **Yalnız uzak mod.** Yama ve kaskad ışıkları yalnız uzak modda kurulur.
+   Küçük level'lar bugünkü sınır sığdırmada ve shader'da kalır (program
+   anahtarı değişmez). 7c1'in takipli tek kaskadı kaskad sayısı 1 olarak
+   bu yolun içinde kalır (`EXT_clip_control` yoksa ya da profil 1 derse).
+5. **Materyal kaydı:** uzak modda sahneye sonradan giren her lit materyal
+   (hücre aktivasyonu, çim/foliage batch'leri, HLOD proxy'leri, aktörler,
+   karakterler) yamayı almalı. Önerilen yol kare başına `scene.traverse` +
+   `WeakSet` (OpenWorldTest'te ~130 mesh; maliyeti entegrasyonda
+   ölçülecek). Alternatif: materyal üreten noktalarda kayıt.
+6. **İkinci gölgeli yönlü ışık:** shader gölgeli yönlü ışıkların hepsini
+   kaskad sayar. Uzak modda güneş dışındaki yönlü ışığın gölgesi kapatılır
+   ve tek seferlik uyarı verilir. Nokta/spot gölgeleri etkilenmez.
+7. Çim gölgesi varsayılan kapalı kalır (G0). Sonraki düğme olarak dış
+   kaskadlardan küçük caster'ları `shadow.camera.layers` ile dışlamak
+   mümkün; 7c2'de yok.
+
+**Codex'e uygun saf dilim:** `engine/world/sunCascades.ts`: bölme
+(`computeCascadeSplits(count, near, distance, lambda)`), dilim küresi
+(`cascadeSliceSphere(fovDeg, aspect, distance)`), kaskad frame'leri
+(`computeFollowShadowFrame` üstünde) ve dönüşüm takvimi + testler. Shader
+yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da.
+
 ## Faz 8 — Editör dünya araçları
 
 - [ ] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,

@@ -1419,6 +1419,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const seen = new Set<string>();
     for (const record of this.rapierBodies.values()) {
       if (this.suspendedDynamicBodies.has(record.id)) continue;
+      // Rapier never pairs two fixed bodies, so a static solid's contacts are
+      // all found from its moving partner; asking from the static crowd too cost
+      // two WASM calls per collider per frame.
+      if (!record.isSensor && this.bodiesById.get(record.id)?.collider.isStatic === true) continue;
       for (const collider of record.colliders) {
         this.rapierWorld.contactPairsWith(collider, (other) => {
           this.addRapierContact(contacts, seen, record, other);
@@ -1529,12 +1533,25 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   private addAabbSensorContacts(contacts: PhysicsContact[], seen: Set<string>): void {
-    for (let i = 0; i < this.bodies.length; i += 1) {
-      for (let j = i + 1; j < this.bodies.length; j += 1) {
+    const sensors: number[] = [];
+    for (let index = 0; index < this.bodies.length; index += 1) {
+      if (this.bodies[index]?.collider.isSensor) sensors.push(index);
+    }
+    if (sensors.length === 0) return;
+    // Only pairs with a sensor report, so visit sensors × bodies rather than all
+    // pairs (O(N²) per frame with a level's static crowd), then restore the
+    // all-pairs (i, j) order so contact orientation and order are unchanged.
+    const isSensor = new Set(sensors);
+    const pairs: [number, number][] = [];
+    for (const sensor of sensors) {
+      for (let other = 0; other < this.bodies.length; other += 1) {
+        // A sensor-sensor pair is visited once, from its lower sensor.
+        if (other === sensor || (other < sensor && isSensor.has(other))) continue;
+        const i = Math.min(sensor, other);
+        const j = Math.max(sensor, other);
         const a = this.bodies[i];
         const b = this.bodies[j];
         if (!a || !b) continue;
-        if (!a.collider.isSensor && !b.collider.isSensor) continue;
         if (a.collider.isStatic && b.collider.isStatic) continue;
         if (this.collisionDisabled.has(a.id) || this.collisionDisabled.has(b.id)) continue;
         if (this.suspendedDynamicBodies.has(a.id) || this.suspendedDynamicBodies.has(b.id)) continue;
@@ -1542,15 +1559,21 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           continue;
         }
         if (!aabbOverlaps(bodyAabb(a), bodyAabb(b))) continue;
-        const key = contactKey(a.id, b.id);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        contacts.push({
-          a: a.id,
-          b: b.id,
-          isSensor: true,
-        });
+        pairs.push([i, j]);
       }
+    }
+    pairs.sort((left, right) => left[0] - right[0] || left[1] - right[1]);
+    for (const [i, j] of pairs) {
+      const a = this.bodies[i]!;
+      const b = this.bodies[j]!;
+      const key = contactKey(a.id, b.id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      contacts.push({
+        a: a.id,
+        b: b.id,
+        isSensor: true,
+      });
     }
   }
 

@@ -1296,9 +1296,13 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
         0,14–0,20 ms. Fark Forge'un her karede çalışan temas toplamasından:
         `addAabbSensorContacts` bütün cisim çiftlerini gezer (O(N²)),
         `updateRapierContacts` statikler dahil her collider için iki WASM
-        çağrısı yapar. Bugünkü eager level'ları da etkiler; S2'den önce
-        düzeltilmeli (sensör listesi × cisimler, temas taraması yalnız
-        statik olmayan / sensör collider'lardan).
+        çağrısı yapar. Bugünkü eager level'ları da etkiler.
+        *Düzeltildi (2026-10-24):* AABB sensör geçişi sensörler × cisimler
+        (sonra eski (i, j) sırasına dizilir, yön ve sıra aynı), Rapier temas
+        taraması statik katı collider'lardan sorulmaz (Rapier sabit-sabit çift
+        üretmez). Sabit durum adımı 1000 statikle 10–17 ms → 0,2 ms; eklemeden
+        sonraki ilk adım 16–27 ms → 6–7 ms. `physicsContacts.test.ts` eski
+        sırayı pinler.
 - [x] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
       *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*

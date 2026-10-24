@@ -284,7 +284,7 @@ import {
   type FoliageFillArea,
   type FoliageSurfaceHit,
 } from "@engine/scene/foliagePaint";
-import { loadFoliageData, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
+import { loadFoliageDocument, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
 import {
   createEmptyMeshPaintData,
   fillMeshVertexColors,
@@ -6967,8 +6967,9 @@ export class SceneApp {
     }
     this.foliageTypes.clear();
     this.foliageSelection.clear();
-    this.foliageData = await loadFoliageData(this.foliageScenePath());
-    this.editorSaves.foliageSaveRevision.reset();
+    const foliage = await loadFoliageDocument(this.foliageScenePath());
+    this.foliageData = foliage.data;
+    this.editorSaves.foliageLoaded(foliage.cells);
     const manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
     if (manifest) {
       this.foliageTypes = await loadFoliageTypesForData(this.foliageData, manifest);

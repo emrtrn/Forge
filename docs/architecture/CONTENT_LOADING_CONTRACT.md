@@ -92,6 +92,12 @@ activated and unloaded with their cell around the pawn:
 - **AI navigation.** Streamed colliders enter and leave the physics static indexes
   incrementally; the nav grid cache keys on those lists, so a streamed wall blocks
   paths and an unloaded one stops blocking them.
+- **Painted foliage (Phase 6).** The level's `<Level>.foliage.json` becomes an
+  index (`foliageCells`, groups with no instances) and the instances live in
+  `<Level>.cells/foliage/<x_z>.foliage.json`, by position on the `foliage` grid.
+  The editor reads every listed cell and fails the load if one is unreadable, so
+  a Save never writes over instances it did not read; Play currently reads them
+  all too (an unreadable cell is skipped with a warning).
 
 ## Required documents
 

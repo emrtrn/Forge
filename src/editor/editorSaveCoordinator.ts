@@ -6,6 +6,14 @@ import { saveMeshPaintData } from "./meshPaintStore";
 import { captureTerrainWrite, type WorldTerrainEditSession } from "./terrainStore";
 import { levelTerrainPath } from "@engine/terrain/terrainTypes";
 import { terrainTransformNeedsSave } from "@engine/terrain/terrainLandscapeBridge";
+import {
+  foliageCellFootprints,
+  foliageCellPath,
+  foliageFootprintsFit,
+  partitionFoliageData,
+  type FoliageCellFootprint,
+} from "@engine/world/foliageCells";
+import { normalizeWorldPartitionSettings, type WorldPartitionGridSettings } from "@engine/world/worldPartition";
 
 /** In-memory edit revisions; these are never written into authored content. */
 export class SaveRevision {
@@ -120,11 +128,24 @@ export class EditorSaveSession {
    */
   private readonly unwrittenLandscapes = new WeakSet<ForgeLandscapeData>();
   private readonly queue = new EditorSaveCoordinator();
+  /**
+   * The foliage cell files on disk (null: one sidecar, or none). A save
+   * re-partitions when they do not match the level's partition settings, even
+   * with no foliage edit — turning partition on/off or changing the foliage
+   * cell size moves the instances between files.
+   */
+  private foliageDiskCells: FoliageCellFootprint[] | null = null;
 
   constructor(
     private readonly source: () => EditorSaveSource,
     private readonly onStatus: (message: string, tone: "success" | "warning") => void,
   ) {}
+
+  /** A level's foliage was (re)loaded: nothing is dirty and `cells` is what is on disk. */
+  foliageLoaded(cells: FoliageCellFootprint[] | null): void {
+    this.foliageSaveRevision.reset();
+    this.foliageDiskCells = cells;
+  }
 
   markLandscapeUnwritten(id: string, data: ForgeLandscapeData): void {
     this.unwrittenLandscapes.add(data);
@@ -193,7 +214,7 @@ export class EditorSaveSession {
         const step = this.captureLandscapeSave(source, actor.id);
         if (step) steps.push(step);
       }
-      if (this.foliageSaveRevision.dirty) steps.push(this.captureFoliageSave(source));
+      steps.push(...this.captureFoliageSave(source));
       if (this.meshPaintSaveRevision.dirty) steps.push(this.captureMeshPaintSave(source));
       return steps;
     });
@@ -256,17 +277,47 @@ export class EditorSaveSession {
     return revision ? revision.capture(write.path, write.write) : write;
   }
 
-  private captureFoliageSave(source: EditorSaveSource): EditorSaveStep {
+  /**
+   * Foliage steps for this save: none when nothing changed. A partitioned level
+   * writes its cells (changed files only, nothing deleted), then the index
+   * sidecar, then deletes cells the index no longer lists — so a failure never
+   * leaves the sidecar naming a missing cell. Turning partition off writes the
+   * merged sidecar first and only then removes the cells.
+   */
+  private captureFoliageSave(source: EditorSaveSource): EditorSaveStep[] {
+    const grid = foliageGrid(source.layout);
+    const disk = this.foliageDiskCells;
+    const reshape = grid
+      ? !(disk && foliageFootprintsFit(disk, grid)) && !(disk === null && isEmptyFoliage(source.foliageData))
+      : disk !== null;
+    if (!this.foliageSaveRevision.dirty && !reshape) return [];
     const path = foliageDataPath(source.scenePath);
-    const body = JSON.stringify({ path, foliage: source.foliageData });
-    return this.foliageSaveRevision.capture(path, async () => {
-      const response = await fetch("/__save-foliage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      });
-      if (!response.ok) throw new Error(`Foliage save failed: HTTP ${response.status}`);
-    });
+    const level = source.scenePath;
+    if (!grid) {
+      const body = JSON.stringify({ path, foliage: source.foliageData });
+      const sidecar = this.foliageSaveRevision.capture(path, () => postFoliage("/__save-foliage", body));
+      if (disk === null) return [sidecar];
+      return [sidecar, {
+        path: foliageCellPath(level, "0_0").replace(/\/[^/]+$/, ""),
+        write: async () => {
+          await postFoliage("/__save-foliage-cells", JSON.stringify({ level, cells: [], keep: [] }));
+          if (this.foliageDiskCells === disk) this.foliageDiskCells = null;
+        },
+      }];
+    }
+    const { index, cells } = partitionFoliageData(source.foliageData, grid);
+    const cellsBody = JSON.stringify({ level, cells });
+    const indexBody = JSON.stringify({ path, foliage: index });
+    const keepBody = JSON.stringify({ level, cells: [], keep: index.foliageCells });
+    const written = foliageCellFootprints(cells);
+    return [
+      { path: foliageCellPath(level, cells[0]?.key ?? "0_0"), write: () => postFoliage("/__save-foliage-cells", cellsBody) },
+      { path, write: () => postFoliage("/__save-foliage", indexBody) },
+      this.foliageSaveRevision.capture(foliageCellPath(level, "0_0").replace(/\/[^/]+$/, ""), async () => {
+        await postFoliage("/__save-foliage-cells", keepBody);
+        if (this.foliageDiskCells === disk) this.foliageDiskCells = written;
+      }),
+    ];
   }
 
   private captureMeshPaintSave(source: EditorSaveSource): EditorSaveStep {
@@ -274,6 +325,26 @@ export class EditorSaveSession {
     const data = structuredClone(source.meshPaintData);
     return this.meshPaintSaveRevision.capture(path, () => saveMeshPaintData(path, data));
   }
+}
+
+async function postFoliage(url: string, body: string): Promise<void> {
+  const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+  if (!response.ok) {
+    const detail = await response.json().then((json: { error?: string }) => json.error ?? "", () => "");
+    throw new Error(`Foliage save failed (${url}): HTTP ${response.status}${detail ? ` ${detail}` : ""}`);
+  }
+}
+
+/** The foliage grid of a partitioned level, or null when the level is not partitioned. */
+function foliageGrid(layout: EditorSaveSource["layout"]): WorldPartitionGridSettings | null {
+  const partition = layout.worldSettings?.partition;
+  if (!partition?.enabled) return null;
+  return normalizeWorldPartitionSettings(partition).grids.foliage;
+}
+
+/** No group and no rule: a partitioned level without foliage needs no sidecar. */
+function isEmptyFoliage(data: LayoutFoliageData): boolean {
+  return data.groups.length === 0 && (data.landscapeRules?.length ?? 0) === 0;
 }
 
 function partitionSummary(result: LayoutSaveResult): string {

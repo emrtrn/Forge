@@ -161,6 +161,13 @@ engine/editor.
   actors (`layout.actors`) by cell around the pawn (`worldPartitionModule`;
   EndPlay reason `"unloaded"`, only `persist`ed state survives an unload) while
   every other element is still built eagerly.
+  Painted foliage of a partitioned level is an index `<Level>.foliage.json`
+  (`foliageCells` keys, groups without instances) plus
+  `<Level>.cells/foliage/<x_z>.foliage.json` (`engine/world/foliageCells.ts`,
+  `grids.foliage`, 64 m). `/__save-foliage-cells` validates through
+  `validateSaveFoliageCellsPayload` (instances via `normalizeFoliageInstance`);
+  the editor save order is cells → index → prune, and it re-partitions whenever
+  the files do not match the level's partition settings, edit or not.
 - **Fifth allowlist surface — World Terrain:** `*.terrain.json` definitions
   use `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`) on read
   and through `validateSaveTerrainPayload` re-exported by `tools/saveValidator.ts`.
@@ -210,7 +217,7 @@ engine/editor.
   `/__save-collision`, `/__save-actor`, `/__new-behavior`,
   `/__save-material-slots`, `/__save-skeleton`, `/__save-material`,
   `/__save-terrain`, `/__save-terrain-tile`, `/__save-terrain-global`,
-  `/__save-world-cells`,
+  `/__save-world-cells`, `/__save-foliage-cells`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,

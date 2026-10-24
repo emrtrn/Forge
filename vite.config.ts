@@ -1,5 +1,6 @@
 import { validateTerrainTile } from "./engine/terrain/terrainLoader";
 import { worldCellPath } from "./engine/world/worldPartition";
+import { foliageCellPath } from "./engine/world/foliageCells";
 import { validateTerrainGlobalMap } from "./engine/terrain/terrainGlobalMapFile";
 import { levelTerrainDir, terrainGlobalMapPath, terrainTilePath } from "./engine/terrain/terrainTypes";
 import { collectJsonStrings, findOrphanedLevelTerrain } from "./tools/terrainOrphans";
@@ -33,6 +34,7 @@ import {
   validateSaveMaterialSlotsPayload,
   validateSavePayload,
   validateSaveWorldCellsPayload,
+  validateSaveFoliageCellsPayload,
   validateSaveSkeletonPayload,
   validateSaveUiPayload,
   validateSaveUvwPayload,
@@ -923,6 +925,7 @@ async function ensureDefaultSceneSurvivesFolderDelete(folder: string): Promise<v
 const PRIVILEGED_URLS = new Set([
   "/__save-layout",
   "/__save-world-cells",
+  "/__save-foliage-cells",
   "/__save-collision",
   "/__save-material-slots",
   "/__save-skeleton",
@@ -1547,6 +1550,57 @@ function layoutEditorPlugin(): Plugin {
           return;
         }
 
+        // Partitioned foliage (OPEN_WORLD_PLAN Faz 6 F2): writes
+        // `<Level>.cells/foliage/<x_z>.foliage.json` files of the open level
+        // (unchanged files untouched); with `keep`, deletes every other cell file.
+        if (req.url === "/__save-foliage-cells") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method Not Allowed");
+            return;
+          }
+          try {
+            const submitted = await readJsonBody(req, LANDSCAPE_BODY_MAX_BYTES);
+            const payload = validateSaveFoliageCellsPayload(submitted);
+            const manifest = await readProjectManifest();
+            if (normalizePublicRelativePath(payload.level) !== normalizePublicRelativePath(manifest.editor.defaultScene)) {
+              throw new Error(`foliage cells can only be saved for the open level (${manifest.editor.defaultScene})`);
+            }
+            const dropped = reportDroppedFields((submitted as Record<string, unknown>).cells, payload.cells, "cells");
+            const foliageDir = resolvePublicPath(foliageCellPath(payload.level, "0_0").replace(/\/[^/]+$/, ""));
+            for (const cell of payload.cells) {
+              const target = resolvePublicPath(foliageCellPath(payload.level, cell.key));
+              await mkdir(foliageDir, { recursive: true });
+              const next = `${JSON.stringify(cell, null, 2)}\n`;
+              const previous = await readFile(target, "utf8").catch((error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return null;
+                throw error;
+              });
+              if (previous !== next) await writeFile(target, next, "utf8");
+            }
+            const entries = payload.keep === null ? [] : await readdir(foliageDir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+              if (error.code === "ENOENT") return [];
+              throw error;
+            });
+            for (const entry of entries) {
+              if (entry.isFile() && entry.name.endsWith(".foliage.json") && !payload.keep!.includes(entry.name.slice(0, -".foliage.json".length))) {
+                await unlink(resolve(foliageDir, entry.name));
+              }
+            }
+            for (const directory of [foliageDir, resolve(foliageDir, "..")]) {
+              await rmdir(directory).catch((error: NodeJS.ErrnoException) => {
+                if (error.code !== "ENOENT" && error.code !== "ENOTEMPTY") throw error;
+              });
+            }
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, dropped }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+          }
+          return;
+        }
         // Foliage Mode save: writes a `<layout>.foliage.json` instance sidecar
         // (can hold thousands of instances, so it uses the larger landscape body
         // cap). Validated/normalized server-side (validateSaveFoliagePayload).

@@ -102,6 +102,48 @@ export function mergeFoliageCells(index: LayoutFoliageData, cells: Iterable<Foli
   return { schema: 1, type: "foliage", groups, landscapeRules: structuredClone(index.landscapeRules ?? []) };
 }
 
+/** A stored cell's key and the X/Z bounds of its instances, kept instead of the instances themselves. */
+export interface FoliageCellFootprint {
+  key: string;
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+}
+
+/** Footprints of stored cells; a cell without instances gets an inverted (empty) box. */
+export function foliageCellFootprints(cells: Iterable<FoliageCellDocument>): FoliageCellFootprint[] {
+  const footprints: FoliageCellFootprint[] = [];
+  for (const cell of cells) {
+    const footprint = { key: cell.key, minX: Infinity, minZ: Infinity, maxX: -Infinity, maxZ: -Infinity };
+    for (const group of cell.groups) {
+      for (const { position } of group.instances) {
+        footprint.minX = Math.min(footprint.minX, position[0]);
+        footprint.maxX = Math.max(footprint.maxX, position[0]);
+        footprint.minZ = Math.min(footprint.minZ, position[2]);
+        footprint.maxZ = Math.max(footprint.maxZ, position[2]);
+      }
+    }
+    footprints.push(footprint);
+  }
+  return footprints.sort((a, b) => compareWorldCellKeys(a.key, b.key));
+}
+
+/**
+ * True when every stored instance sits in the cell its file is named after for
+ * `grid` (the files were written with this cell size), so a save need not
+ * re-partition them.
+ */
+export function foliageFootprintsFit(footprints: readonly FoliageCellFootprint[], grid: WorldPartitionGridSettings): boolean {
+  return footprints.every((footprint) => {
+    if (footprint.minX > footprint.maxX) return true;
+    const low = worldCellAt(grid, footprint.minX, footprint.minZ);
+    const high = worldCellAt(grid, footprint.maxX, footprint.maxZ);
+    const key = worldCellKey(low.x, low.z);
+    return key === footprint.key && key === worldCellKey(high.x, high.z);
+  });
+}
+
 /** Counts painted instances across a cell's groups. */
 export function countFoliageCellInstances(cell: FoliageCellDocument): number {
   return cell.groups.reduce((count, group) => count + group.instances.length, 0);

@@ -11,7 +11,7 @@
     0,
     -256
   ],
-  "heightMin": -8,
+  "heightMin": -11,
   "heightMax": 128,
   "layers": [
     {
@@ -40,23 +40,23 @@
   "tiles": [
     {
       "key": "0_0",
-      "minHeight": 5.989105224609375,
-      "maxHeight": 86.5556411743164
+      "minHeight": 5.9892425537109375,
+      "maxHeight": 86.55558013916016
     },
     {
       "key": "1_0",
-      "minHeight": 6.77561616897583,
-      "maxHeight": 105.10194396972656
+      "minHeight": 6.776134967803955,
+      "maxHeight": 105.10163879394531
     },
     {
       "key": "0_1",
-      "minHeight": -0.5871999859809875,
-      "maxHeight": 42.34085464477539
+      "minHeight": -7.122804641723633,
+      "maxHeight": 42.341129302978516
     },
     {
       "key": "1_1",
-      "minHeight": 3.226978063583374,
-      "maxHeight": 44.55927276611328
+      "minHeight": 3.2276952266693115,
+      "maxHeight": 44.55970001220703
     }
   ],
   "collision": true

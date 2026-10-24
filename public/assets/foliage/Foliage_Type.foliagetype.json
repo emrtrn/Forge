@@ -3,20 +3,20 @@
   "type": "foliageType",
   "name": "Foliage Type",
   "meshAssetId": "commontree",
-  "radius": 0.5,
+  "radius": 1,
   "density": 1,
   "scaleMin": [
-    1,
-    1,
-    1
+    0.8,
+    0.8,
+    0.8
   ],
   "scaleMax": [
-    1,
-    1,
-    1
+    1.2,
+    1.2,
+    1.2
   ],
   "randomYaw": true,
-  "alignToNormal": true,
+  "alignToNormal": false,
   "zOffsetMin": 0,
   "zOffsetMax": 0,
   "slopeMin": 0,

@@ -48,6 +48,8 @@ interface TransformBindOptions {
 }
 
 export interface SpecialActorDetailsOptions extends TransformBindOptions {
+  /** Rebuild through the inspector owner to restore shared section chrome and state. */
+  refreshDetails: () => void;
   editableAssets: readonly EditableAsset[];
   targetPoints: readonly TargetPointReference[];
   setDetailsScale: (scale: Vec3) => void;
@@ -174,6 +176,22 @@ const LANDSCAPE_PAINT_TOOLS: readonly LandscapePaintTool[] = ["paint", "erase", 
 const LANDSCAPE_VIEW_MODES: readonly LandscapeViewMode[] = ["lit", "height", "slope", "layer"];
 const LANDSCAPE_EDIT_MODES: readonly LandscapeEditMode[] = ["sculpt", "paint", "splines"];
 const LANDSCAPE_SPLINE_TOOLS: readonly LandscapeSplineTool[] = ["draw", "edit"];
+
+function landscapeModeSelect(
+  settings: LandscapeSculptSettings,
+  lockedAttr: string,
+  modes: readonly LandscapeEditMode[],
+): string {
+  return `<label class="detail-row">
+        <span>Mode</span>
+        <select data-landscape-mode aria-label="Landscape edit mode" ${lockedAttr}>
+          ${modes.includes(settings.editMode) ? "" : '<option value="" disabled selected>Select mode</option>'}
+          ${modes.map((mode) => `<option value="${mode}" ${settings.editMode === mode ? "selected" : ""}>${
+            mode === "sculpt" ? "Sculpt" : mode === "paint" ? "Paint" : "Splines"
+          }</option>`).join("")}
+        </select>
+      </label>`;
+}
 
 export function renderLandscapeDetails(options: SpecialActorDetailsOptions): void {
   const worldTerrain = options.getSelectedWorldTerrain();
@@ -340,13 +358,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       <div class="detail-section">
         <div class="detail-section-title">Landscape Mode</div>
-        <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape edit mode">
-          ${LANDSCAPE_EDIT_MODES.map(
-            (mode) => `<button type="button" data-landscape-mode="${mode}" class="${
-              settings.editMode === mode ? "active" : ""
-            }" ${lockedAttr}>${mode === "sculpt" ? "Sculpt" : mode === "paint" ? "Paint" : "Splines"}</button>`,
-          ).join("")}
-        </div>
+        ${landscapeModeSelect(settings, lockedAttr, LANDSCAPE_EDIT_MODES)}
         ${
           settings.editMode === "splines"
             ? `<div class="detail-subsection-title">Landscape Splines</div>
@@ -514,7 +526,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const splineTool = button.dataset.landscapeSplineTool as LandscapeSplineTool | undefined;
       if (!splineTool || !LANDSCAPE_SPLINE_TOOLS.includes(splineTool)) return;
       options.setLandscapeSculptSettings({ splineTool });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
 
@@ -523,31 +535,31 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const activeSplineId = button.dataset.landscapeSpline;
       if (!activeSplineId) return;
       options.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId: null, activeSplineSegmentId: null });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-create]")?.addEventListener("click", () => {
     options.createSelectedLandscapeSpline();
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-delete]")?.addEventListener("click", () => {
     options.deleteSelectedLandscapeSpline(options.getLandscapeSculptSettings().activeSplineId);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-close]")?.addEventListener("click", () => {
     options.closeSelectedLandscapeSpline();
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelector<HTMLInputElement>("[data-landscape-spline-smooth]")?.addEventListener("change", (event) => {
     options.setSelectedLandscapeSplineSmooth((event.currentTarget as HTMLInputElement).checked);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-point]").forEach((button) => {
     button.addEventListener("click", () => {
       const activeSplinePointId = button.dataset.landscapeSplinePoint;
       if (!activeSplinePointId) return;
       options.setLandscapeSculptSettings({ activeSplinePointId });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLInputElement>("[data-landscape-spline-point-axis]").forEach((input) => {
@@ -559,7 +571,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const position: Vec3 = [...point.position];
       position[axis === "x" ? 0 : axis === "y" ? 1 : 2] = value;
       options.setSelectedLandscapeSplinePointPosition(point.id, position);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLInputElement>("[data-landscape-spline-point-shape]").forEach((input) => {
@@ -569,24 +581,24 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const value = Number(input.value);
       if (!point || !key || !Number.isFinite(value)) return;
       options.setSelectedLandscapeSplinePointShape(point.id, { [key]: value });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-point-delete]")?.addEventListener("click", () => {
     options.deleteSelectedLandscapeSplinePoint(options.getLandscapeSculptSettings().activeSplinePointId);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-segment]").forEach((button) => {
     button.addEventListener("click", () => {
       const activeSplineSegmentId = button.dataset.landscapeSplineSegment;
       if (!activeSplineSegmentId) return;
       options.setLandscapeSculptSettings({ activeSplineSegmentId });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-segment-split]")?.addEventListener("click", () => {
     options.splitSelectedLandscapeSplineSegment(options.getLandscapeSculptSettings().activeSplineSegmentId);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   const activeSegmentId = (): string | null =>
     options.getLandscapeSculptSettings().activeSplineSegmentId ??
@@ -603,7 +615,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       if (!segmentId || !key) return;
       const [group, flag] = key.split(".") as [string, string];
       options.setSelectedLandscapeSplineSegment(segmentId, { [group]: { [flag]: input.checked } } as LandscapeSplineSegmentPatch);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLInputElement>("[data-landscape-segment-number]").forEach((input) => {
@@ -620,7 +632,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       if (!segmentId || !key || !Number.isFinite(value)) return;
       const [group, flag] = key.split(".") as [string, string];
       options.setSelectedLandscapeSplineSegment(segmentId, { [group]: { [flag]: value } } as LandscapeSplineSegmentPatch);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelector<HTMLSelectElement>("[data-landscape-segment-layer]")?.addEventListener("change", (event) => {
@@ -628,21 +640,21 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     const layerId = (event.currentTarget as HTMLSelectElement).value;
     if (!segmentId || !layerId) return;
     options.setSelectedLandscapeSplineSegment(segmentId, { paint: { layerId } });
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelector<HTMLSelectElement>("[data-landscape-segment-mesh]")?.addEventListener("change", (event) => {
     const segmentId = activeSegmentId();
     if (!segmentId) return;
     options.setSelectedLandscapeSplineSegment(segmentId, { mesh: { assetId: (event.currentTarget as HTMLSelectElement).value } });
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-apply-deform]")?.addEventListener("click", () => {
     options.applySelectedLandscapeSplineDeform();
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-apply-paint]")?.addEventListener("click", () => {
     options.applySelectedLandscapeSplinePaint();
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
 
   body
@@ -653,26 +665,26 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         options.getLandscapeSculptSettings().activeLayerId,
         value || null,
       );
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
 
   body.querySelector<HTMLButtonElement>("[data-landscape-fill]")?.addEventListener("click", () => {
     options.fillSelectedLandscapeLayer(options.getLandscapeSculptSettings().activeLayerId);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
 
   body.querySelector<HTMLButtonElement>("[data-river-water-create]")?.addEventListener("click", () => {
     const splineId = body.querySelector<HTMLSelectElement>("[data-river-water-create-spline]")?.value;
     if (!splineId) return;
     options.createSelectedLandscapeRiverWater(splineId);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelectorAll<HTMLButtonElement>("[data-river-water]").forEach((button) => {
     button.addEventListener("click", () => {
       const activeRiverWaterId = button.dataset.riverWater;
       if (!activeRiverWaterId) return;
       options.setLandscapeSculptSettings({ activeRiverWaterId });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   const selectedRiverWater = (): RiverWaterDetailsView | null => {
@@ -684,7 +696,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     const water = selectedRiverWater();
     if (!water) return;
     options.deleteSelectedLandscapeRiverWater(water.id);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
   body.querySelectorAll<HTMLInputElement>("[data-river-water-number]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -693,7 +705,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const value = Number(input.value);
       if (!water || !key || !Number.isFinite(value)) return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: value } as RiverWaterDetailsPatch);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLInputElement>("[data-river-water-color]").forEach((input) => {
@@ -702,7 +714,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const key = input.dataset.riverWaterColor as "deepColor" | "shallowColor" | "foamColor" | undefined;
       if (!water || !key) return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: input.value } as RiverWaterDetailsPatch);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLButtonElement>("[data-river-water-foam-add]").forEach((button) => {
@@ -711,7 +723,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const kind = button.dataset.riverWaterFoamAdd;
       if (!water || kind !== "ring") return;
       options.beginSelectedLandscapeRiverWaterRingFoam(water.id);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLButtonElement>("[data-river-water-foam-delete]").forEach((button) => {
@@ -720,7 +732,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const stampId = button.dataset.riverWaterFoamDelete;
       if (!water || !stampId) return;
       options.removeSelectedLandscapeRiverWaterFoamStamp(water.id, stampId);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLButtonElement>("[data-river-water-foam-select]").forEach((button) => {
@@ -733,7 +745,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         activeRiverWaterFoamStampId: stampId,
         activeRiverWaterFoamStampAnchor: "start",
       });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLInputElement>("[data-river-water-foam-number]").forEach((input) => {
@@ -751,7 +763,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           return { ...stamp, [key]: value };
         }),
       });
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
   body.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-river-water-reflection]").forEach((input) => {
@@ -763,7 +775,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       if (key === "reflectionMode" && value !== "off" && value !== "sharedPlanar") return;
       if (key === "reflectionQuality" && value !== "low" && value !== "medium" && value !== "high") return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: value } as RiverWaterDetailsPatch);
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   });
 
@@ -801,14 +813,14 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     const preset = (event.currentTarget as HTMLSelectElement).value;
     if (preset !== "small" && preset !== "medium" && preset !== "large") return;
     options.resampleSelectedLandscape(preset);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
 
   body.querySelector<HTMLInputElement>("[data-landscape-world-size]")?.addEventListener("change", (event) => {
     const worldSize = Number((event.currentTarget as HTMLInputElement).value);
     if (!Number.isFinite(worldSize)) return;
     options.setSelectedLandscapeWorldSize(worldSize);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   });
 
   body.querySelector<HTMLButtonElement>("[data-landscape-heightmap-export]")?.addEventListener("click", () => {
@@ -844,13 +856,11 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
   const { body } = options;
   const update = (patch: Partial<LandscapeSculptSettings>): void => {
     options.setLandscapeSculptSettings(patch);
-    renderLandscapeDetails(options);
+    options.refreshDetails();
   };
-  body.querySelectorAll<HTMLButtonElement>("[data-landscape-mode]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const editMode = button.dataset.landscapeMode as LandscapeEditMode | undefined;
-      if (editMode && LANDSCAPE_EDIT_MODES.includes(editMode)) update({ editMode });
-    });
+  body.querySelector<HTMLSelectElement>("[data-landscape-mode]")?.addEventListener("change", (event) => {
+    const editMode = (event.currentTarget as HTMLSelectElement).value as LandscapeEditMode;
+    if (LANDSCAPE_EDIT_MODES.includes(editMode)) update({ editMode });
   });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-tool]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -974,11 +984,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       ${vectorRow("Rotation", "r", selection.rotation, 1, true)}
       <div class="detail-section" data-world-terrain-tools>
         <div class="detail-section-title">Landscape Mode</div>
-        <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape edit mode">
-          ${(["sculpt", "paint"] as const).map((mode) => `<button type="button" data-landscape-mode="${mode}" class="${
-            settings.editMode === mode ? "active" : ""
-          }" ${lockedAttr}>${mode === "sculpt" ? "Sculpt" : "Paint"}</button>`).join("")}
-        </div>
+        ${landscapeModeSelect(settings, lockedAttr, ["sculpt", "paint"])}
         ${toolsMarkup}
         <label class="detail-row">
           <span>Brush Size</span>
@@ -1071,7 +1077,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         options.getLandscapeSculptSettings().activeLayerId,
         value || null,
       );
-      renderLandscapeDetails(options);
+      options.refreshDetails();
     });
   body.querySelector<HTMLInputElement>("[data-world-terrain-raw-import]")?.addEventListener("change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;

@@ -39,23 +39,23 @@
   "tiles": [
     {
       "key": "0_0",
-      "minHeight": 0,
-      "maxHeight": 6.782899856567383
+      "minHeight": 0.003906309604644775,
+      "maxHeight": 6.78525972366333
     },
     {
       "key": "1_0",
-      "minHeight": 0,
-      "maxHeight": 9.252699851989746
+      "minHeight": 0.003906309604644775,
+      "maxHeight": 9.254047393798828
     },
     {
       "key": "0_1",
-      "minHeight": 0,
-      "maxHeight": 4.551199913024902
+      "minHeight": 0.003906309604644775,
+      "maxHeight": 4.550850868225098
     },
     {
       "key": "1_1",
-      "minHeight": 0,
-      "maxHeight": 8.617799758911133
+      "minHeight": 0.003906309604644775,
+      "maxHeight": 8.621225357055664
     }
   ],
   "collision": true

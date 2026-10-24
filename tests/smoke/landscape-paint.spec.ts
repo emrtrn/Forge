@@ -36,10 +36,10 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   // Type-specific controls identify the selection; the shared Details chrome
   // (`finalizeDetailsRender`) strips the `.detail-heading` the renderer emits.
   await expect(
-    page.locator('[data-inspector-pane="details"] [data-landscape-mode="paint"]'),
+    page.locator('[data-inspector-pane="details"] [data-landscape-mode]'),
   ).toBeVisible();
 
-  await page.locator('[data-landscape-mode="paint"]').click();
+  await page.locator('[data-landscape-mode]').selectOption('paint');
   await expect(page.locator('[data-landscape-paint-tool="paint"]')).toBeVisible();
   await page.locator('[data-landscape-layer="dirt"]').click();
   await page.locator("[data-landscape-view]").selectOption("layer");
@@ -99,7 +99,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await page.goto(`/?editor&landscapePaintReload=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
-  await page.locator('[data-landscape-mode="paint"]').click();
+  await page.locator('[data-landscape-mode]').selectOption('paint');
   await expect(page.locator('[data-landscape-layer="dirt"]')).toBeVisible();
   // Reload rebuilds the splat material from the sidecar's assigned material — wait
   // for it to settle so a load-time shader error would be caught below.

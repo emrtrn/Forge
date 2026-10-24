@@ -29,9 +29,9 @@ test("editor and Play render the authored asphalt spline chain without browser e
   // Type-specific controls identify the selection; the shared Details chrome
   // (`finalizeDetailsRender`) strips the `.detail-heading` the renderer emits.
   await expect(
-    page.locator('[data-inspector-pane="details"] [data-landscape-mode="splines"]'),
+    page.locator('[data-inspector-pane="details"] [data-landscape-mode]'),
   ).toBeVisible();
-  await page.locator('[data-landscape-mode="splines"]').click();
+  await page.locator('[data-landscape-mode]').selectOption('splines');
   await page.keyboard.press("f");
   // The editor's post-process OutputPass reports its fullscreen triangle in
   // WebGL's final-frame counters, so draw-call counts here cannot represent the

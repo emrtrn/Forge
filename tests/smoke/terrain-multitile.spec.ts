@@ -202,7 +202,7 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   await expect(details).toContainText("192 m × 128 m");
   await expect(page.locator("[data-world-terrain-limits]")).toContainText("Splines, resizing and PNG heightmaps");
   await expect(page.locator("[data-world-terrain-limits]")).not.toContainText("Foliage painting");
-  await expect(page.locator("[data-world-terrain-tools] [data-landscape-mode]")).toHaveCount(2);
+  await expect(page.locator("[data-world-terrain-tools] [data-landscape-mode] option")).toHaveCount(2);
   for (const input of await page.locator('input[data-detail="pr"]').all()) await expect(input).toBeDisabled();
   await page.keyboard.press("f");
   await expect(page.getByTestId("editor-status")).toContainText("Focused World Terrain");
@@ -223,7 +223,7 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   await expect(row).toBeVisible({ timeout: 60_000 });
   await page.waitForLoadState("networkidle");
   await row.click();
-  await page.locator('[data-world-terrain-tools] [data-landscape-mode="sculpt"]').click();
+  await page.locator('[data-world-terrain-tools] [data-landscape-mode]').selectOption('sculpt');
   await page.locator('[data-world-terrain-tools] [data-landscape-tool="raise"]').click();
   await page.locator('[data-landscape-number="brushSize"]').fill("6");
   await page.locator('[data-landscape-number="brushSize"]').press("Enter");

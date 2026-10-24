@@ -4249,6 +4249,7 @@ export class EditorUi {
   private specialActorDetailsOptions(selection: EditableSelection): SpecialActorDetailsOptions {
     return {
       body: this.detailsBody,
+      refreshDetails: () => this.renderDetails(this.selected),
       selection,
       editableAssets: this.editableAssets,
       targetPoints: this.app.getTargetPointReferences(),

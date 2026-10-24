@@ -87,7 +87,7 @@ test("editor streams a large World Terrain around the camera and a seam stroke s
   const residency = page.locator("[data-world-terrain-residency]");
   await expect(residency).toContainText("/ 144");
   await expect(residency).toContainText("unsaved");
-  await page.locator('[data-world-terrain-tools] [data-landscape-mode="sculpt"]').click();
+  await page.locator('[data-world-terrain-tools] [data-landscape-mode]').selectOption('sculpt');
   await page.locator('[data-world-terrain-tools] [data-landscape-tool="raise"]').click();
   await page.locator('[data-landscape-number="brushSize"]').fill("6");
   await page.locator('[data-landscape-number="brushSize"]').press("Enter");

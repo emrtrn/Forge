@@ -1551,6 +1551,39 @@ instance'ının GPU kare süresi, dither'lı ve dither'sız, gölgeli ve
 gölgesiz; (c) hücre × grup batch'i kurma/yükleme süresi. Bütçe hedefleri ve
 worker kararı buradan çıkar.
 
+*G0 sonuçları (2026-10-24, `spikes/grass-ring`, RTX 3060 / ANGLE D3D11,
+1280×720, Kenney `grass.glb` 132 üçgen, 2×2 tile sentetik arazi, %58 çim
+katmanı):*
+
+| Ölçüm | Sonuç |
+|---|---|
+| (a) 32 m hücre, 4 m⁻² (2355 kabul) | bugünkü yardımcılarla 2,9–3,0 ms (1,25 µs/instance); doğrudan paketli matris 1,6 ms ort., p95 2,7 ms (0,7 µs/instance) |
+| (a) 8 m⁻² (4763 kabul) | yardımcılar 6,5 ms, paketli 3,5 ms (p95 6,7) |
+| (b) 50k / 150k / 300k, gölgesiz | GPU 1,0 / 2,6–2,8 / 5,3 ms (38 batch, frustum sonrası 19 draw call) |
+| (b) dither fade'in ek maliyeti | ≤ %4 (gölgeli ve gölgesiz) |
+| (b) çimin gölge atması | ×2,5–2,8 (150k: 2,6 → 7,1 ms; 300k: 5,3 → 15,1 ms) |
+| (c) batch kurma, 2k / 4k / 8k / 16k | `createInstancedModelGroup` 0,4 / 0,6 / 1,2 / 3,4 ms; paketli 0,1 / 0,3 / 0,6 / 1,4 ms; ilk çizim (yükleme dahil) 1,2–2,8 ms |
+
+Kararlar:
+- **Üretim worker'da.** Paketli yolla bile hücre başına ortalama 1,6 ms,
+  p95 2,7 ms ve kurallar üst üste biniyor (3 kural ≈ 5–8 ms); 1 ms eşiğinin
+  üstünde. Faz 4'ün `terrainWorkerPool`'una "foliage cell" işi eklenir;
+  worker aynı saf üreticiyi hücrenin yükseklik + ağırlık dilimi (bir quad
+  paylı, ~10–20 KB) üzerinde koşturur ve paketli `Float32Array` matrisleri
+  transferable olarak döndürür. Ana thread'e yalnız batch kurma (paketli,
+  ≤ 1,4 ms) + ilk çizim kalır: kare başına en çok bir hücre aktive edilir.
+- Üretici Euler/`Matrix4` nesnesi üretmez, doğrudan paketli matris yazar;
+  `createInstancedModelGroup`'un `Matrix4[]` yolunu çim kullanmaz.
+- **Dither fade tasarlandığı gibi** (F1), maliyeti ölçüm gürültüsü
+  düzeyinde.
+- **Çim gölgesi varsayılan kapalı:** gölge çim maliyetini 2,5–2,8 katına
+  çıkarıyor. Starter çim türü `castShadow: false`; gölge atan türe bağlı
+  halka kuralı panelde uyarı gösterir (yasak değil).
+- **Bütçe:** 3060'ta 150k gölgesiz çim ≈ 2,7 ms GPU; orta seviye GPU için
+  2–3 kat pay bırakılır. `grassDensity` ultra 1 / high 0,8 / medium 0,55 /
+  low 0,3 korunur; 4 m⁻² × %60 kaplama × 96 m halka ≈ 67k (ultra) …
+  20k (low) instance. `?debug` overlay'i halka instance sayısını gösterir.
+
 **Dilimler.** G0 spike → F1 fade → G1 saf çekirdekler (foliage hücre
 bölme/birleştirme + dosya formatı + validator; prosedürel hücre örnekleyici;
 Codex'e uygun) → F2 editör save/load + runtime hücre akışı → F3 runtime çim

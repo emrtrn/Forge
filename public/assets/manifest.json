@@ -21022,6 +21022,70 @@
         "bytes": 104
       },
       "license": "Unknown"
+    },
+    {
+      "id": "kenney-grass",
+      "name": "Grass",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/kenney-nature-kit/grass.glb",
+      "tags": [
+        "foliage",
+        "grass",
+        "Kenney"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": true,
+        "collision": false,
+        "bytes": 11496
+      },
+      "source": {
+        "origin": "Kenney",
+        "pack": "Nature Kit",
+        "packVersion": "2.1"
+      },
+      "license": "CC0"
+    },
+    {
+      "id": "kenney-grass-large",
+      "name": "Grass Large",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/kenney-nature-kit/grass_large.glb",
+      "tags": [
+        "foliage",
+        "grass",
+        "Kenney"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": true,
+        "collision": false,
+        "bytes": 18504
+      },
+      "source": {
+        "origin": "Kenney",
+        "pack": "Nature Kit",
+        "packVersion": "2.1"
+      },
+      "license": "CC0"
     }
   ]
 }

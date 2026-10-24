@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { terrainTileHeightfieldShape } from "../../engine/physics/terrainCollider";
-import { createFlatLandscapeData, createLandscapeColliderPrimitive, type ForgeLandscapeData } from "../../engine/scene/landscape";
+import { createFlatLandscapeData, type ForgeLandscapeData } from "../../engine/scene/landscape";
+import { landscapeTrimesh } from "./terrainTrimeshReference";
 import type { LayoutLandscape, Vec3 } from "../../engine/scene/layout";
 import { buildTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMap";
 import {
@@ -357,7 +358,7 @@ export function registerTerrainTests(check: Check): void {
     const tiles = new TerrainTileMap();
     tiles.set(tile);
     // Every legacy collider vertex lies on the converted surface.
-    const primitive = createLandscapeColliderPrimitive(data);
+    const primitive = landscapeTrimesh(data);
     for (const vertex of primitive.vertices) {
       const worldX = actor.position[0] + vertex[0];
       const worldZ = actor.position[2] + vertex[2];

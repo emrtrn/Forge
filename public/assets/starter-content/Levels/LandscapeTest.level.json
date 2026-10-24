@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "name": "LandscapeTest",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "mercedes-sls",
+      "placements": []
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "gameMode": "forge.vehicle"
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 2
+  },
+  "cloudLayer": {
+    "density": 0.5,
+    "speed": 0.1
+  },
+  "postProcess": {
+    "toneMapping": "aces",
+    "antialias": "smaa",
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    }
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -50,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json",
+      "name": "Landscape"
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/vehicles/mercedes-sls/Script_MercedesSLS.actor.json",
+      "position": [
+        1021.39,
+        0,
+        -66.96
+      ],
+      "rotationYDeg": 0,
+      "rotation": [
+        0,
+        -90,
+        0
+      ],
+      "scale": 1
+    }
+  ]
+}

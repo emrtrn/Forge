@@ -34,7 +34,6 @@ import {
   validateSavePayload,
   validateSaveWorldCellsPayload,
   validateSaveSkeletonPayload,
-  validateSaveLandscapePayload,
   validateSaveUiPayload,
   validateSaveUvwPayload,
   validateSaveGameDataPayload,
@@ -927,7 +926,6 @@ const PRIVILEGED_URLS = new Set([
   "/__save-collision",
   "/__save-material-slots",
   "/__save-skeleton",
-  "/__save-landscape",
   "/__save-terrain",
   "/__save-terrain-tile",
   "/__save-terrain-global",
@@ -1241,9 +1239,8 @@ function layoutEditorPlugin(): Plugin {
           return;
         }
 
-        // Landscape editor save: writes a `<id>.landscape.json` height/layer
-        // sidecar. Validated/normalized server-side (validateSaveLandscapePayload),
-        // kept inside public/ by resolvePublicPath.
+        // World Terrain saves (Landscape actors of every size): binary tiles and
+        // global map, then the `*.terrain.json` definition that cross-checks them.
         if (["/__save-terrain-tile", "/__save-terrain-global"].includes(req.url?.split("?")[0] ?? "") || req.url === "/__save-terrain") {
           if (req.method !== "POST") {
             res.statusCode = 405;
@@ -1287,33 +1284,6 @@ function layoutEditorPlugin(): Plugin {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
-          }
-          return;
-        }
-
-        if (req.url === "/__save-landscape") {
-          if (req.method !== "POST") {
-            res.statusCode = 405;
-            res.end("Method not allowed");
-            return;
-          }
-          try {
-            const payload = validateSaveLandscapePayload(
-              await readJsonBody(req, LANDSCAPE_BODY_MAX_BYTES),
-            );
-            const sidecarPath = resolvePublicPath(payload.path);
-            await mkdir(resolve(sidecarPath, ".."), { recursive: true });
-            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
-            const nextSidecar = `${JSON.stringify(payload.landscape, null, 2)}\n`;
-            await writeFile(sidecarPath, nextSidecar, "utf8");
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));
-          } catch (error) {
-            res.statusCode = 400;
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(
-              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
-            );
           }
           return;
         }

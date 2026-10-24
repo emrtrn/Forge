@@ -113,12 +113,23 @@ export class EditorSaveSession {
   readonly meshPaintSaveRevision = new SaveRevision();
   readonly foliageSaveRevision = new SaveRevision();
   readonly landscapeSaveRevisions = new Map<string, SaveRevision>();
+  /**
+   * 1x1 Landscape data whose terrain may not be on disk yet: newly added, or
+   * restored by undo after a Save pruned its level-owned files. Save writes its
+   * tile and definition before the level that names them, like a migration.
+   */
+  private readonly unwrittenLandscapes = new WeakSet<ForgeLandscapeData>();
   private readonly queue = new EditorSaveCoordinator();
 
   constructor(
     private readonly source: () => EditorSaveSource,
     private readonly onStatus: (message: string, tone: "success" | "warning") => void,
   ) {}
+
+  markLandscapeUnwritten(id: string, data: ForgeLandscapeData): void {
+    this.unwrittenLandscapes.add(data);
+    this.markLandscapeDirty(id);
+  }
 
   markLandscapeDirty(id: string): void {
     let revision = this.landscapeSaveRevisions.get(id);
@@ -138,6 +149,7 @@ export class EditorSaveSession {
       const payload = structuredClone({ layout: source.layout, editor: source.editor, scenePath: source.scenePath });
       const migrations: EditorSaveStep[] = [];
       const pendingReferences: { id: string; from: string; to: string; actor: object }[] = [];
+      const writtenFirst = new Set<string>();
       for (const actor of source.layout.landscapes ?? []) {
         if (source.worldTerrainIds.has(actor.id)) {
           // Tiles and definition before the level, so the level never names a
@@ -147,8 +159,14 @@ export class EditorSaveSession {
           continue;
         }
         const path = levelTerrainPath(source.scenePath, actor.id);
-        if (actor.dataRef === path) continue;
         const data = source.landscapeData.get(actor.id);
+        if (actor.dataRef === path) {
+          if (!data || !this.unwrittenLandscapes.has(data)) continue;
+          const step = this.captureLandscapeSave(source, actor.id);
+          if (step) migrations.push({ path: step.path, write: async () => { await step.write(); this.unwrittenLandscapes.delete(data); } });
+          writtenFirst.add(actor.id);
+          continue;
+        }
         if (!data) throw new Error(`Cannot migrate missing landscape data: ${actor.id}`);
         // Fork legacy/shared/copied references before writing anything. Never
         // overwrite another level's definition or its tile binaries.
@@ -171,7 +189,7 @@ export class EditorSaveSession {
         },
       }];
       for (const actor of source.layout.landscapes ?? []) {
-        if (source.worldTerrainIds.has(actor.id) || pendingReferences.some((entry) => entry.id === actor.id)) continue;
+        if (source.worldTerrainIds.has(actor.id) || writtenFirst.has(actor.id) || pendingReferences.some((entry) => entry.id === actor.id)) continue;
         const step = this.captureLandscapeSave(source, actor.id);
         if (step) steps.push(step);
       }
@@ -214,8 +232,11 @@ export class EditorSaveSession {
       });
     }
     const actor = this.source().layout.landscapes?.find((entry) => entry.id === id);
-    // A direct first sidecar save must persist its new level reference as well.
+    const data = this.source().landscapeData.get(id);
+    // A direct first sidecar save must persist its new level reference as well;
+    // a terrain not on disk yet goes through the level save, which writes it first.
     if (actor && actor.dataRef !== levelTerrainPath(this.source().scenePath, actor.id)) return this.saveLayout();
+    if (data && this.unwrittenLandscapes.has(data)) return this.saveLayout();
     return this.queue.save(() => {
       const step = this.captureLandscapeSave(this.source(), id);
       return step ? [step] : [];

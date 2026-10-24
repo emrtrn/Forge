@@ -38,8 +38,9 @@ export interface WorldTerrainCreateOptions {
   baseHeight: number;
 }
 
+/** One 128-quad tile at 1 m: the 129 × 129 grid Add Landscape has always made. */
 export const WORLD_TERRAIN_CREATE_DEFAULTS: WorldTerrainCreateOptions = {
-  name: "World Terrain", tilesX: 2, tilesZ: 2, tileQuads: 256, spacing: 1, baseHeight: 0,
+  name: "Landscape", tilesX: 1, tilesZ: 1, tileQuads: 128, spacing: 1, baseHeight: 0,
 };
 
 export interface WorldTerrainCreateEstimate {
@@ -76,9 +77,6 @@ export function worldTerrainCreateProblems(options: WorldTerrainCreateOptions): 
       problems.push(`Tiles ${axis} must be a whole number from 1 to ${TERRAIN_MAX_TILES_PER_AXIS}.`);
     }
   }
-  if (Number.isInteger(options.tilesX) && Number.isInteger(options.tilesZ) && options.tilesX * options.tilesZ < 2) {
-    problems.push("A World Terrain needs at least two tiles; use Landscape for a single tile.");
-  }
   if (!WORLD_TERRAIN_CREATE_TILE_QUADS.includes(options.tileQuads)) problems.push("Pick a tile resolution.");
   if (!(options.spacing >= WORLD_TERRAIN_CREATE_MIN_SPACING && options.spacing <= WORLD_TERRAIN_CREATE_MAX_SPACING)) {
     problems.push(`Vertex spacing must be between ${WORLD_TERRAIN_CREATE_MIN_SPACING} and ${WORLD_TERRAIN_CREATE_MAX_SPACING} m.`);
@@ -93,7 +91,8 @@ export function worldTerrainCreateProblems(options: WorldTerrainCreateOptions): 
 }
 
 /**
- * A flat World Terrain centred on world X/Z 0 at `baseHeight`: every grid cell
+ * A flat World Terrain centred on world X/Z 0 at `baseHeight` (1x1 included,
+ * which the editor edits through the Landscape adapter): every grid cell
  * has a tile (no holes), the default Landscape layers with layer 0 at full
  * weight, and the default ±256 m height range. Nothing is written; the editor
  * saves the tiles and definition like any edited World Terrain.

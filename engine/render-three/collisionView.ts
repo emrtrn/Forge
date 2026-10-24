@@ -1,5 +1,7 @@
 import { Box3, Vector3 } from "three";
 
+import { forEachHeightfieldTriangle } from "@engine/physics/heightfieldStatic";
+import type { ColliderHeightfield } from "@engine/scene/components";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
 import type {
   AssetCollisionDef,
@@ -178,30 +180,16 @@ function triangleUpNormalY(a: Vector3, b: Vector3, c: Vector3): number {
 }
 
 /**
- * Local-space line-segment pairs tracing every triangle edge of an indexed
- * trimesh (vertices grouped by threes via `indices`). Shared by the editor's
- * "Show > Collision" landscape overlay and any caller that needs to visualise a
- * trimesh collider — the host turns the flat segment list into a LineSegments,
- * applying the owner's world transform. Degenerate/out-of-range indices are
- * skipped.
+ * Local-space line-segment pairs tracing every triangle edge of a heightfield
+ * collider, in the body frame and triangle order physics uses. The editor's
+ * "Show > Collision" landscape overlay draws these, so it shows exactly the
+ * surface characters walk on in Play.
  */
-export function trimeshWireSegments(
-  vertices: readonly Vec3[],
-  indices: readonly number[],
-): Vec3[] {
+export function heightfieldWireSegments(field: ColliderHeightfield): Vec3[] {
   const segments: Vec3[] = [];
-  const edge = (a: Vec3 | undefined, b: Vec3 | undefined): void => {
-    if (!a || !b) return;
-    segments.push(a, b);
-  };
-  for (let t = 0; t + 2 < indices.length; t += 3) {
-    const a = vertices[indices[t]!];
-    const b = vertices[indices[t + 1]!];
-    const c = vertices[indices[t + 2]!];
-    edge(a, b);
-    edge(b, c);
-    edge(c, a);
-  }
+  forEachHeightfieldTriangle(field, 0, field.quadsX - 1, 0, field.quadsZ - 1, (a, b, c) => {
+    segments.push(a, b, b, c, c, a);
+  });
   return segments;
 }
 

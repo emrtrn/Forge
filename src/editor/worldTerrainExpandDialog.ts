@@ -13,8 +13,8 @@ export function pickWorldTerrainExpansion(
     const overlay = document.createElement("div");
     overlay.className = "parent-class-overlay";
     overlay.innerHTML = `
-      <div class="parent-class-dialog world-terrain-dialog" role="dialog" aria-modal="true" aria-label="Expand to World Terrain" data-world-terrain-expand-dialog>
-        <header class="parent-class-head">Expand to World Terrain</header>
+      <div class="parent-class-dialog world-terrain-dialog" role="dialog" aria-modal="true" aria-label="Expand Landscape" data-world-terrain-expand-dialog>
+        <header class="parent-class-head">Expand Landscape</header>
         <form class="world-terrain-form" novalidate>
           <label><span>Tiles X</span><input data-field="tilesX" type="number" min="1" max="${TERRAIN_MAX_TILES_PER_AXIS}" step="1" /></label>
           <label><span>Tiles Z</span><input data-field="tilesZ" type="number" min="1" max="${TERRAIN_MAX_TILES_PER_AXIS}" step="1" /></label>

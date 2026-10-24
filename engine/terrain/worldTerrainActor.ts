@@ -1,6 +1,5 @@
 import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type ColliderPrimitive } from "../scene/components";
 import type { Entity, EntityComponentData } from "../scene/entity";
-import type { LandscapeColliderPrimitive } from "../scene/landscape";
 import type { LayoutLandscape, Vec3 } from "../scene/layout";
 import type { WorldTerrainDocument } from "./terrainLoader";
 import { parseTileKey, terrainTileWorldBounds, terrainTileWorldSize, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
@@ -53,56 +52,9 @@ export function worldTerrainPlacementIssues(actor: Pick<LayoutLandscape, "positi
 }
 
 /**
- * One tile as a static trimesh in a frame centred on the tile at the height
- * datum — the frame of its heightfield collider (`terrainTileHeightfield`).
- * Triangles split each quad along the same b–c diagonal as the renderer and
- * `terrainHeightAt` (OPEN_WORLD_PLAN K3a). The runtime collides with the
- * heightfield; this stays for the editor's collision overlay and as the
- * reference the heightfield's on-demand triangles are tested against.
- */
-export function terrainTileTrimesh(
-  def: Pick<WorldTerrainDef, "tileQuads" | "spacing" | "origin">,
-  tile: TerrainTileData,
-): { translation: Vec3; primitive: LandscapeColliderPrimitive } {
-  const size = tile.size;
-  const half = ((size - 1) * def.spacing) / 2;
-  const vertices: Vec3[] = [];
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (let z = 0; z < size; z += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const y = tile.heights[z * size + x]!;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-      vertices.push([x * def.spacing - half, y, z * def.spacing - half]);
-    }
-  }
-  const indices: number[] = [];
-  for (let z = 0; z < size - 1; z += 1) {
-    for (let x = 0; x < size - 1; x += 1) {
-      const a = z * size + x;
-      const b = a + 1;
-      const c = a + size;
-      const d = c + 1;
-      indices.push(a, c, b, b, c, d);
-    }
-  }
-  const bounds = terrainTileWorldBounds(def, tile.x, tile.z);
-  return {
-    translation: [(bounds.minX + bounds.maxX) / 2, def.origin[1], (bounds.minZ + bounds.maxZ) / 2],
-    primitive: {
-      shape: "trimesh",
-      size: [2 * half, maxY - minY, 2 * half],
-      center: [0, (minY + maxY) / 2, 0],
-      vertices,
-      indices,
-    },
-  };
-}
-
-/**
  * One tile as a heightfield collider primitive (OPEN_WORLD_PLAN Faz 3), in the
- * same tile-centred frame as {@link terrainTileTrimesh}. The tile's height
+ * frame centred on the tile at the height datum. Quads split along the same
+ * b–c diagonal as the renderer and `terrainHeightAt` (K3a). The tile's height
  * array is shared, not copied, so the tile must not be edited while a body
  * uses it (runtime tiles never are).
  */

@@ -28,6 +28,7 @@ interface SaveHost extends EditorSaveSource {
   saveLayout(): Promise<void>;
   saveLandscapeData(id: string): Promise<void>;
   markLandscapeDirty(id: string): void;
+  markLandscapeUnwritten(id: string, data: ForgeLandscapeData): void;
   layoutSaver: LayoutSaver;
   landscapeData: Map<string, ForgeLandscapeData>;
   landscapeSaveRevisions: Map<string, SaveRevision>;
@@ -68,6 +69,7 @@ function fixture(scenePath = LEVEL) {
     saveLayout: () => session.saveLayout(),
     saveLandscapeData: (id: string) => session.saveLandscapeData(id),
     markLandscapeDirty: (id: string) => session.markLandscapeDirty(id),
+    markLandscapeUnwritten: (id: string, data: ForgeLandscapeData) => session.markLandscapeUnwritten(id, data),
     landscapeSaveRevisions: session.landscapeSaveRevisions,
     foliageSaveRevision: session.foliageSaveRevision,
     meshPaintSaveRevision: session.meshPaintSaveRevision,
@@ -211,6 +213,34 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
       });
     });
   }
+
+  await checkAsync("editor save: a new 1x1 Landscape writes its terrain before the level, later edits after it", async () => {
+    const f = fixture();
+    const order: string[] = [];
+    const saver = f.host.layoutSaver;
+    f.host.layoutSaver = async (payload) => { order.push("layout"); return saver(payload); };
+    let failTile = true;
+    await withFetch(async (input, init) => {
+      const kind = String(input).startsWith("/__save-terrain-tile") ? "tile" : String(input).startsWith("/__save-terrain-global") ? "global" : "definition";
+      order.push(kind);
+      if (failTile && kind === "tile") return new Response("failed", { status: 400 });
+      return f.fetch(input, init);
+    }, async () => {
+      f.host.markLandscapeUnwritten("terrain", f.host.landscapeData.get("terrain")!);
+      // A failed terrain write keeps the level unsaved, so it never names a missing terrain.
+      await assert.rejects(f.host.saveLandscapeData("terrain"), /Save failed/);
+      assert.deepEqual(order, ["tile"]);
+      failTile = false;
+      order.length = 0;
+      await f.host.saveLandscapeData("terrain");
+      assert.deepEqual(order, ["tile", "global", "definition", "layout"]);
+      // Once on disk, edits keep the historic level-first order.
+      order.length = 0;
+      f.edit("landscape", 3);
+      await f.host.saveLayout();
+      assert.deepEqual(order, ["layout", "tile", "global", "definition"]);
+    });
+  });
 
   for (const kind of ["landscape", "foliage", "meshPaint"] as const) {
     await checkAsync(`editor save: delayed ${kind} response preserves newer edits and next save writes them`, async () => {

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "./test";
 import { SMOKE_SPLINE_SCENE } from "./smokeProject.mjs";
+import { addLandscapeFromMenu } from "./terrain";
 
 // Observe the live chunk materials without exposing editor internals in production.
 async function observeTerrain(page: Page): Promise<void> {
@@ -80,9 +81,7 @@ test("terrain follows Wireframe and Lit across material rebuilds and new landsca
   await landscapeRows.first().click();
   await page.keyboard.press("Delete");
   await expect(landscapeRows).toHaveCount(0);
-  await page.getByTestId("add-actor-button").hover();
-  await page.getByRole("button", { name: /^Terrain/ }).hover();
-  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape", exact: true }).click();
+  await addLandscapeFromMenu(page);
   await expect(landscapeRows).toHaveCount(1);
   await expectTerrainMode(page, true);
   await setViewMode(page, "lit");

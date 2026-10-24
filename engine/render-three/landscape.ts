@@ -24,7 +24,7 @@ export {
   uniqueLandscapeName,
   landscapeSizeForPreset,
   createFlatLandscapeData,
-  createLandscapeColliderPrimitive,
+  createLandscapeHeightfieldPrimitive,
   landscapeDataPath,
   ensureLandscapeLayers,
   normalizeLandscapeLayerWeights,

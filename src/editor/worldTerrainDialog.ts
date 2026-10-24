@@ -15,17 +15,18 @@ const megabytes = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(
 const metres = (value: number): string => `${Number(value.toFixed(2))} m`;
 
 /**
- * Asks for a new World Terrain's grid (Add Actor → World Terrain). Shows the
- * resulting world size and cost while typing and only enables Create for
- * options `createFlatWorldTerrain` accepts. Resolves null on cancel.
+ * Asks for a new Landscape's tile grid (Add Actor → Landscape; 1x1 is the
+ * classic single-grid Landscape). Shows the resulting world size and cost while
+ * typing and only enables Create for options `createFlatWorldTerrain` accepts.
+ * Resolves null on cancel.
  */
 export function pickWorldTerrainOptions(initial: WorldTerrainCreateOptions = WORLD_TERRAIN_CREATE_DEFAULTS): Promise<WorldTerrainCreateOptions | null> {
   return new Promise((resolvePick) => {
     const overlay = document.createElement("div");
     overlay.className = "parent-class-overlay";
     overlay.innerHTML = `
-      <div class="parent-class-dialog world-terrain-dialog" role="dialog" aria-label="New World Terrain" data-world-terrain-dialog>
-        <header class="parent-class-head">New World Terrain</header>
+      <div class="parent-class-dialog world-terrain-dialog" role="dialog" aria-label="New Landscape" data-world-terrain-dialog>
+        <header class="parent-class-head">New Landscape</header>
         <form class="world-terrain-form" data-world-terrain-form novalidate>
           <label><span>Name</span><input data-field="name" type="text" maxlength="80" /></label>
           <label><span>Tiles X</span><input data-field="tilesX" type="number" min="1" max="${TERRAIN_MAX_TILES_PER_AXIS}" step="1" /></label>
@@ -37,6 +38,7 @@ export function pickWorldTerrainOptions(initial: WorldTerrainCreateOptions = WOR
           <label><span>Base Height (m)</span><input data-field="baseHeight" type="number" min="${-WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT}" max="${WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT}" step="0.5" /></label>
           <div class="world-terrain-summary" data-world-terrain-summary></div>
           <ul class="world-terrain-problems" data-world-terrain-problems></ul>
+          <div class="detail-hint" data-world-terrain-multitile hidden>Splines and River Water work on a single-tile Landscape only for now.</div>
           <div class="detail-hint">Flat and centred on the world origin, with the default Grass/Dirt/Rock/Snow layers. Save writes the tiles into this level's terrain folder.</div>
         </form>
         <footer class="parent-class-foot">
@@ -58,6 +60,7 @@ export function pickWorldTerrainOptions(initial: WorldTerrainCreateOptions = WOR
     const create = overlay.querySelector<HTMLButtonElement>("[data-world-terrain-create]")!;
     const summary = overlay.querySelector<HTMLElement>("[data-world-terrain-summary]")!;
     const problemList = overlay.querySelector<HTMLElement>("[data-world-terrain-problems]")!;
+    const multiTileNote = overlay.querySelector<HTMLElement>("[data-world-terrain-multitile]")!;
 
     const read = (): WorldTerrainCreateOptions => ({
       name: field<HTMLInputElement>("name").value,
@@ -72,12 +75,13 @@ export function pickWorldTerrainOptions(initial: WorldTerrainCreateOptions = WOR
       const problems = worldTerrainCreateProblems(options);
       problemList.replaceChildren(...problems.map((problem) => Object.assign(document.createElement("li"), { textContent: problem })));
       create.disabled = problems.length > 0;
+      multiTileNote.hidden = !(options.tilesX * options.tilesZ > 1);
       if (problems.length > 0) {
         summary.textContent = "";
         return null;
       }
       const estimate = estimateWorldTerrain(options);
-      summary.textContent = `${metres(estimate.extent[0])} × ${metres(estimate.extent[1])} · ${estimate.tileCount} tiles of ${metres(options.tileQuads * options.spacing)} · ` +
+      summary.textContent = `${metres(estimate.extent[0])} × ${metres(estimate.extent[1])} · ${estimate.tileCount} tile${estimate.tileCount === 1 ? "" : "s"} of ${metres(options.tileQuads * options.spacing)} · ` +
         `${(estimate.vertices / 1e6).toFixed(2)} M vertices · ~${megabytes(estimate.diskBytes)} on disk · ~${megabytes(estimate.memoryBytes)} in editor memory`;
       return options;
     };

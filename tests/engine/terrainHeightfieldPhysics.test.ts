@@ -7,11 +7,13 @@ import { rotatePointAboutOrigin } from "../../engine/physics/rotatedBox";
 import { createReferenceCarDefinition, NEUTRAL_VEHICLE_INPUT } from "../../engine/physics/vehicle/vehicleTypes";
 import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type ColliderPrimitive, type TransformComponent } from "../../engine/scene/components";
 import type { Entity, EntityComponentData } from "../../engine/scene/entity";
-import { createLandscapeColliderPrimitive, createLandscapeHeightfieldPrimitive, type ForgeLandscapeData } from "../../engine/scene/landscape";
+import { createLandscapeHeightfieldPrimitive, type ForgeLandscapeData } from "../../engine/scene/landscape";
 import type { Vec3 } from "../../engine/scene/layout";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { createFlatTerrainTile, terrainTileHeightRange, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
-import { terrainTileTrimesh, worldTerrainColliderEntities } from "../../engine/terrain/worldTerrainActor";
+import { terrainTileHeightfield, worldTerrainColliderEntities } from "../../engine/terrain/worldTerrainActor";
+import { heightfieldWireSegments } from "../../engine/render-three/collisionView";
+import { landscapeTrimesh, terrainTileTrimesh } from "./terrainTrimeshReference";
 
 type Check = (label: string, fn: () => void) => void;
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
@@ -385,7 +387,7 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
     check(`landscape heightfield physics: ${label} matches every legacy trimesh static query in order`, () => {
       const data = landscape(verticesX, verticesZ, heightScale);
       const originalHeights = [...data.heights];
-      const mesh = createLandscapeColliderPrimitive(data);
+      const mesh = landscapeTrimesh(data);
       const field = createLandscapeHeightfieldPrimitive(data);
       assert.equal(field.shape, "heightfield");
       assert.deepEqual(field.size, mesh.size);
@@ -480,6 +482,21 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
     for (const id of ["0_0", "1_0", "0_1"]) physics.setEntityCollisionEnabled(`landscape:world:${id}`, false);
     assert.equal(physics.hasStaticGround(), false);
   });
+
+  check("terrain heightfield collision overlay: the editor wire traces exactly the legacy trimesh edges, 1x1 and per tile", () => {
+    const edges = ({ vertices, indices }: { vertices: Vec3[]; indices: number[] }): Vec3[] =>
+      Array.from({ length: indices.length / 3 }, (_, t) => indices.slice(t * 3, t * 3 + 3).map((i) => vertices[i]!))
+        .flatMap(([a, b, c]) => [a!, b!, b!, c!, c!, a!]);
+    const data = landscape(65, 33, 2);
+    assert.deepEqual(heightfieldWireSegments(createLandscapeHeightfieldPrimitive(data).heightfield!), edges(landscapeTrimesh(data)));
+    const document = terrain(1.5, [3, -2, 7]);
+    for (const tile of document.tiles.values()) {
+      const field = terrainTileHeightfield(document.def, tile);
+      const mesh = terrainTileTrimesh(document.def, tile);
+      assert.deepEqual(field.translation, mesh.translation);
+      assert.deepEqual(heightfieldWireSegments(field.primitive.heightfield!), edges(mesh.primitive));
+    }
+  });
 }
 
 export async function registerTerrainHeightfieldRapierTests(checkAsync: CheckAsync): Promise<void> {
@@ -505,7 +522,7 @@ export async function registerTerrainHeightfieldRapierTests(checkAsync: CheckAsy
     const data = landscape(129, 65, 1.7);
     // Non-dyadic heights also exercise Float32 conversion at the Rapier boundary.
     data.heights = data.heights.map((_, index) => 3 * Math.sin(index * 0.21) + 0.01 * index);
-    const mesh = createLandscapeColliderPrimitive(data);
+    const mesh = landscapeTrimesh(data);
     const rotation: Vec3 = [0, 30, 0];
     const trimesh = new PhysicsSubsystem({ backend: "rapier" });
     const heightfield = new PhysicsSubsystem({ backend: "rapier" });

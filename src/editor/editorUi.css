@@ -3882,7 +3882,7 @@
 }
 .parent-class-cancel:hover { background: var(--forge-surface-raise); }
 
-/* New World Terrain (Add Actor → World Terrain) reuses the modal shell above. */
+/* New Landscape (Add Actor → Landscape) reuses the modal shell above. */
 .world-terrain-dialog { width: 460px; }
 .world-terrain-form { display: grid; gap: 8px; padding: 12px 16px; overflow-y: auto; }
 .world-terrain-form label { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 10px; }

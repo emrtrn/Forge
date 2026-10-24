@@ -11,14 +11,13 @@ import { makeFoliageRng, rollFoliageInstance } from "../../engine/scene/foliageP
 import { FoliageRenderBinding, foliageInstanceFromRoll } from "../../engine/render-three/foliage";
 import type { LayoutLandscape, Vec3 } from "../../engine/scene/layout";
 import { terrainFaceNormalAt, terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
-import { captureTerrainSnapshot } from "../../engine/terrain/terrainLandscapeBridge";
+import { captureTerrainSnapshot, terrainDocumentToLandscape } from "../../engine/terrain/terrainLandscapeBridge";
 import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
 import { validateTerrainTile, type WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
 import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { createFlatTerrainTile, terrainTileHeightRange, terrainTileLayerWeight, tileKey, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import {
   isMultiTileTerrain,
-  terrainTileTrimesh,
   worldTerrainActorPosition,
   worldTerrainColliderEntities,
   worldTerrainExtent,
@@ -32,6 +31,7 @@ import {
   worldTerrainCreateProblems,
 } from "../../engine/terrain/worldTerrainCreate";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
+import { terrainTileTrimesh } from "./terrainTrimeshReference";
 import { fetchLandscapeDocument, fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
 
 type Check = (label: string, fn: () => void) => void;
@@ -326,10 +326,20 @@ export function registerWorldTerrainCreateTests(check: Check): void {
     assert.equal(estimate.diskBytes, 6 * (32 + 65 * 65 * 2 + 65 * 65 * 4));
   });
 
-  check("world terrain create: one tile, out-of-range spacing and oversized grids are refused with a reason", () => {
-    const base = WORLD_TERRAIN_CREATE_DEFAULTS;
+  check("world terrain create: the Add Landscape default is one flat 129 x 129 tile edited through the 1x1 adapter", () => {
+    const { def, tiles } = createFlatWorldTerrain(WORLD_TERRAIN_CREATE_DEFAULTS);
+    assert.equal(isMultiTileTerrain(def), false);
+    assert.deepEqual(worldTerrainExtent(def), [128, 128]);
+    assert.deepEqual(worldTerrainActorPosition(def), [0, 0, 0]);
+    const data = terrainDocumentToLandscape({ def, tiles });
+    assert.deepEqual(data.size, { verticesX: 129, verticesZ: 129, spacing: 1, heightScale: 1 });
+    assert.ok(data.heights.every((height) => height === 0));
+    assert.deepEqual(data.layers.map((layer) => layer.weights[0]), [1, 0, 0, 0]);
+  });
+
+  check("world terrain create: out-of-range spacing and oversized grids are refused with a reason", () => {
+    const base = { ...WORLD_TERRAIN_CREATE_DEFAULTS, tileQuads: 256 as const };
     assert.deepEqual(worldTerrainCreateProblems(base), []);
-    assert.match(worldTerrainCreateProblems({ ...base, tilesX: 1, tilesZ: 1 }).join(" "), /use Landscape/);
     assert.match(worldTerrainCreateProblems({ ...base, spacing: 0.1 }).join(" "), /spacing/);
     assert.match(worldTerrainCreateProblems({ ...base, tilesX: 33 }).join(" "), /Tiles X/);
     assert.match(worldTerrainCreateProblems({ ...base, name: "  " }).join(" "), /name/);
@@ -337,7 +347,7 @@ export function registerWorldTerrainCreateTests(check: Check): void {
     assert.deepEqual(worldTerrainCreateProblems({ ...base, tilesX: 8, tilesZ: 8 }), []);
     assert.match(worldTerrainCreateProblems({ ...base, tilesX: 13, tilesZ: 5 }).join(" "), /Too large/);
     assert.deepEqual(worldTerrainCreateProblems({ ...base, tilesX: 16, tilesZ: 16, tileQuads: 64 }), []);
-    assert.throws(() => createFlatWorldTerrain({ ...base, tilesX: 1, tilesZ: 1 }), /use Landscape/);
+    assert.throws(() => createFlatWorldTerrain({ ...base, spacing: 0.1 }), /spacing/);
   });
 }
 

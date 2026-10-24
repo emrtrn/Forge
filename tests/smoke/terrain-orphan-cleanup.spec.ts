@@ -3,6 +3,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { levelTerrainDir, terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { expect, test, type Page } from "./test";
 import { SMOKE_SCENE, smokePublicPath } from "./smokeProject.mjs";
+import { addLandscapeFromMenu } from "./terrain";
 
 async function save(page: Page): Promise<void> {
   const saved = page.waitForResponse((response) => response.url().endsWith("/__save-layout") && response.request().method() === "POST");
@@ -17,9 +18,7 @@ test("saving a level removes a deleted landscape's terrain files unless another 
   await page.goto("/?editor");
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId("add-actor-button").hover();
-  await page.getByRole("button", { name: /^Terrain/ }).hover();
-  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape" }).click();
+  await addLandscapeFromMenu(page);
   await save(page);
 
   const dataRef = (await (await request.get(`/${SMOKE_SCENE}`)).json()).landscapes[0].dataRef as string;

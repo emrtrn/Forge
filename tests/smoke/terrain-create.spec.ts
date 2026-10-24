@@ -7,8 +7,9 @@ import { expect, test, type Page } from "./test";
 import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
 /**
- * Add Actor → World Terrain (OPEN_WORLD_PLAN Faz 2): the dialog refuses a
- * single tile, creates a flat 2×2 grid, and Save writes its u16 tiles and
+ * Add Actor → Landscape (OPEN_WORLD_PLAN Faz 2): the dialog defaults to one
+ * tile, flags the single-tile-only spline/river tools once more tiles are
+ * picked, creates a flat 2×2 grid, and Save writes its u16 tiles and
  * definition into the level's terrain folder before the level. Undo + Save
  * prunes the files, Redo writes them again, a reload shows the terrain, and the
  * pawn stands on it in Play.
@@ -38,7 +39,7 @@ function saved(page: Page, path: "/__save-terrain" | "/__save-layout") {
   return page.waitForResponse((response) => response.url().endsWith(path) && response.request().method() === "POST", { timeout: 30_000 });
 }
 
-test("Add Actor → World Terrain creates a flat multi-tile terrain that saves, undoes, reloads and collides", async ({ page, request }, testInfo) => {
+test("Add Actor → Landscape creates a flat multi-tile terrain that saves, undoes, reloads and collides", async ({ page, request }, testInfo) => {
   test.setTimeout(240_000);
   const errors: string[] = [];
   const messages: string[] = [];
@@ -56,13 +57,15 @@ test("Add Actor → World Terrain creates a flat multi-tile terrain that saves, 
 
   await page.getByTestId("add-actor-button").hover();
   await page.getByRole("button", { name: /^Terrain/ }).hover();
-  await page.locator("[data-add-categories]").getByRole("button", { name: "World Terrain" }).click();
+  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape", exact: true }).click();
   const dialog = page.locator("[data-world-terrain-dialog]");
   await expect(dialog).toBeVisible();
   const create = dialog.locator("[data-world-terrain-create]");
-  await dialog.locator('[data-field="tilesX"]').fill("1");
-  await dialog.locator('[data-field="tilesZ"]').fill("1");
-  await expect(dialog.locator("[data-world-terrain-problems]")).toContainText("use Landscape");
+  await expect(dialog.locator('[data-field="tilesX"]')).toHaveValue("1");
+  await expect(dialog.locator('[data-field="tilesZ"]')).toHaveValue("1");
+  await expect(dialog.locator("[data-world-terrain-multitile]")).toBeHidden();
+  await expect(create).toBeEnabled();
+  await dialog.locator('[data-field="tilesX"]').fill("0");
   await expect(create).toBeDisabled();
   await dialog.locator('[data-field="tilesX"]').fill("2");
   await dialog.locator('[data-field="tilesZ"]').fill("2");
@@ -70,6 +73,7 @@ test("Add Actor → World Terrain creates a flat multi-tile terrain that saves, 
   await dialog.locator('[data-field="spacing"]').fill("1");
   await dialog.locator('[data-field="baseHeight"]').fill(String(BASE_HEIGHT));
   await expect(dialog.locator("[data-world-terrain-summary]")).toContainText("128 m × 128 m · 4 tiles of 64 m");
+  await expect(dialog.locator("[data-world-terrain-multitile]")).toBeVisible();
   await expect(create).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath("dialog.png") });
 
@@ -80,7 +84,7 @@ test("Add Actor → World Terrain creates a flat multi-tile terrain that saves, 
   await expect(dialog).toHaveCount(0);
   expect((await terrainSave).ok()).toBeTruthy();
   expect((await layoutSave).ok()).toBeTruthy();
-  const row = page.getByTestId("outliner-row").filter({ hasText: "World Terrain" }).first();
+  const row = page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first();
   await expect(row).toBeVisible();
   await expect(page.locator("[data-world-terrain]")).toContainText("2 × 2");
   await expect(page.locator("[data-world-terrain]")).toContainText("128 m × 128 m");

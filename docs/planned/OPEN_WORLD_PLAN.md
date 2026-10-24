@@ -852,6 +852,25 @@ Doğrulama (2026-10-22):
       ve `tests/smoke/terrain-create.spec.ts` (diyalog ret/kabul, u16 tile'lar
       ve tanım seviye klasöründe, undo budar / redo yeniden yazar, yeniden
       yükleme, Play'de pawn 2 m taban yüksekliğinde).
+- [x] **Tek Landscape girişi (2026-10-24):** Add Actor → Terrain'de artık
+      yalnız **Landscape** var; ayrı "World Terrain" girişi kalktı. Kullanıcıya
+      görünen ad Landscape, "World Terrain" veri formatının adı (`*.terrain.json`
+      + tile ikilileri). Diyalog ("New Landscape") 1×1 dahil her grid'i kabul
+      eder; varsayılan 1 tile × 128 quad × 1 m, yani eski Add Landscape'in
+      129 × 129'u. 1×1 köprüden (`terrainDocumentToLandscape`) düzenlenir,
+      spline/River çalışır; birden çok tile seçilince diyalog spline/River'ın
+      şimdilik tek tile'da çalıştığını söyler. Add Landscape artık sahte
+      `.landscape.json` referansıyla migrasyon yolundan geçmiyor, doğrudan
+      `.terrain.json` yazıyor: `EditorSaveSession.markLandscapeUnwritten`
+      diskte olmayan 1×1 veriyi (yeni ekleme, budanmış silme/genişletme
+      geri alması) işaretler ve Save onun tile + tanımını level'dan **önce**
+      yazar; sonraki düzenlemeler eski level-önce sırasını korur. Kullanılmayan
+      `/__save-landscape` ucu ve `validateSaveLandscapePayload` silindi
+      (`validateLandscapeData` legacy okuyucu emekliye ayrılana kadar kalır).
+      Details/undo/durum metinleri "multi-tile Landscape" diliyle güncellendi.
+      Doğrulama: engine (1×1 varsayılan, yazılmamış Landscape'in level'dan önce
+      yazımı + başarısız tile yazımında level'ın kaydedilmemesi) ve Add
+      Landscape kullanan smoke'lar (`addLandscapeFromMenu`).
 - [ ] Heightmap import/export: 16-bit PNG ve RAW, dünya boyunda; tile'lara
       bölme `terrainImport.ts`'de (büyük import worker'da, Faz 4'ten sonra).
       *Saf RAW import/export + tile bölme hazır (2026-10-23): little/big-endian
@@ -988,10 +1007,16 @@ Doğrulama (2026-10-22):
       (heightfield yüzeyleri üretilmez); yerel AI sorgu sözleşmesi sonraki iş
       olduğundan bu madde
       açık. Heightfield bağlantısı/anlık arazi üçgenleri bu bölümün dışında.
-- [ ] `createLandscapeColliderPrimitive` (trimesh) kaldırılır.
-      *Açık:* runtime artık heightfield kullanıyor; editörün `SceneApp`
-      collision overlay'i ve parity testinin referansı hâlâ bu trimesh'i
-      kullandığı için yardımcı korunuyor.
+- [x] `createLandscapeColliderPrimitive` (trimesh) kaldırılır.
+      *Tamam (2026-10-24):* editörün "Show > Collision" overlay'i 1×1'de
+      `createLandscapeHeightfieldPrimitive`, çok-tile'da `terrainTileHeightfield`
+      primitive'inden `heightfieldWireSegments` (`collisionView.ts`, physics'in
+      `forEachHeightfieldTriangle` sırası) ile çiziliyor — Play'in debug wire'ıyla
+      aynı kaynak. `createLandscapeColliderPrimitive`, `terrainTileTrimesh`,
+      `LandscapeColliderPrimitive` ve kullanılmayan `trimeshWireSegments`
+      motordan silindi; trimesh'ler bağımsız parity referansı ve statik fixture
+      olarak yalnız test tarafında yaşıyor (`tests/engine/terrainTrimeshReference.ts`,
+      `data.heights`'tan kurulur, heightfield'dan türetilmez).
 - [x] Araç: tile kenarında süspansiyon zıplaması yok (2×2 tile'lık arazide
       gerçek araçla dikiş geçişi).
       *Tamam (2026-10-23, deterministik motor testi):*
@@ -1459,6 +1484,18 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
 - [ ] Landscape splines ve River Water dünya uzayına taşınır (`landscapeRef`
       yerine terrain'e bağlı dünya spline'ı); deform/paint birden çok tile'a
       uygulanır.
+- [ ] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
+      prosedürel çim maddesi bittikten sonra 1×1 de çok-tile ile aynı yoldan
+      (`terrainEdit.ts`, `worldTerrainActor.ts`) düzenlenir;
+      `terrainLandscapeBridge.ts` ve `engine/scene/landscape.ts`'in köprüye ait
+      kısmı (veri tipi, fırça, spline adaptörü, foliage kuralları) silinir. Expand
+      ve tek-tile/çok-tile ayrımı (Details, spline uyarıları) bununla kalkar.
+- [ ] Eski `.landscape.json` okuyucusu emekliye ayrılır: fork'lar için toplu
+      migrasyon komutu (`terrain:repair` gibi, `--check` ile CI'da), upstream
+      notu, bir geçiş süresi; sonra okuma dönüşümü (`terrainLegacy.ts`),
+      `validateLandscapeData` ve `public/landscapes/*.landscape.json` kaldırılır
+      (`runtime-parity.landscape.json` parity referansı mı, önce bakılır).
+      İlke 3 gereği o zamana kadar okuyucu kalır.
 - [x] **Editör tile akışı (2026-10-23, ilk dilim):** 6×6'dan büyük
       (`editorStreamsTerrain`, >36 tile) ve geçerli global haritası olan
       World Terrain editörde yalnız tanım + global harita ile açılır;

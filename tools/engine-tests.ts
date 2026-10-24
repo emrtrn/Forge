@@ -1,3 +1,4 @@
+import { landscapeTrimesh } from "../tests/engine/terrainTrimeshReference";
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
@@ -224,7 +225,6 @@ import {
   splineToPolyline,
   landscapeSplineMeshAssetIds,
   createFlatLandscapeData,
-  createLandscapeColliderPrimitive,
   ensureLandscapeLayers,
   landscapeHeightsToGrayscale,
   resampleLandscapeHeightmap,
@@ -695,7 +695,6 @@ import {
   validateSplineActor,
   validateLandscape,
   validateLandscapeData,
-  validateSaveLandscapePayload,
   validatePostProcess,
   validateSaveActorPayload,
   validateNewBehaviorPayload,
@@ -24446,16 +24445,6 @@ check("validateLandscapeData accepts a valid flat heightfield and rejects malfor
     }),
   );
 
-  // Missing dataRef path / wrong extension rejects the save payload.
-  assert.throws(() =>
-    validateSaveLandscapePayload({ path: "landscapes/x.json", landscape: data }),
-  );
-  const payload = validateSaveLandscapePayload({
-    path: "landscapes/landscape-1.landscape.json",
-    landscape: data,
-  });
-  assert.equal(payload.path, "landscapes/landscape-1.landscape.json");
-  assert.deepEqual(payload.landscape, data);
 });
 
 check("landscape layer material is allowlisted, round-trips, and survives normalization", () => {
@@ -24497,7 +24486,7 @@ check("landscape layer material is allowlisted, round-trips, and survives normal
   assert.equal(data.layers.find((layer) => layer.id === "grass")?.material, undefined);
 });
 
-check("createLandscapeColliderPrimitive builds a centered up-facing heightfield trimesh", () => {
+check("landscape trimesh reference is centred and up-facing, and physics files its triangles as walkable surfaces", () => {
   const data = createFlatLandscapeData("small");
   data.size = { verticesX: 3, verticesZ: 3, spacing: 2, heightScale: 1 };
   data.heights = [
@@ -24506,7 +24495,7 @@ check("createLandscapeColliderPrimitive builds a centered up-facing heightfield 
     0, 0, 0,
   ];
   data.layers = [];
-  const primitive = createLandscapeColliderPrimitive(data);
+  const primitive = landscapeTrimesh(data);
   assert.equal(primitive.shape, "trimesh");
   assert.equal(primitive.vertices.length, 9);
   assert.equal(primitive.indices.length, 24);
@@ -24546,7 +24535,7 @@ check("physics subsystem spatially narrows static landscape surface candidates f
   data.size = { verticesX: 9, verticesZ: 9, spacing: 1, heightScale: 1 };
   data.heights = new Array(81).fill(0);
   data.layers = [];
-  const primitive = createLandscapeColliderPrimitive(data);
+  const primitive = landscapeTrimesh(data);
   const physics = new PhysicsSubsystem();
   physics.setEntities([
     {

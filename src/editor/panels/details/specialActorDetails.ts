@@ -339,8 +339,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       <div class="detail-section">
-        <div class="detail-section-title">World Terrain</div>
-        <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand to World Terrain…</button>
+        <div class="detail-section-title">Tiles</div>
+        <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
         <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
       </div>
       <div class="detail-section">
@@ -940,11 +940,11 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
           value="${settings.flattenTargetHeight}" ${lockedAttr} />
       </label>`
-    : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on multi-tile World Terrain yet.</div>`;
+    : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on a multi-tile Landscape yet.</div>`;
   body.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
-        <span>terrain / world terrain</span>
+        <span>terrain / landscape (multi-tile)</span>
       </div>
       <label class="detail-row">
         <span>Name</span>
@@ -953,16 +953,16 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       </label>
       ${vectorRow("Location", "p", selection.position, 0.1, true)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, true)}
-      <div class="detail-hint">Placed by the terrain definition: the location is the centre of the tile grid. World Terrain cannot be rotated.</div>
+      <div class="detail-hint">Placed by the terrain definition: the location is the centre of the tile grid. A multi-tile Landscape cannot be rotated.</div>
       <div class="detail-section" data-world-terrain>
-        <div class="detail-section-title">World Terrain</div>
+        <div class="detail-section-title">Tiles</div>
         <div class="detail-row"><span>Tiles in memory</span><span data-world-terrain-residency></span></div>
         <div class="detail-row"><span>Tiles</span><span>${terrain.tilesX} × ${terrain.tilesZ}${holes > 0 ? ` (${holes} empty)` : ""}</span></div>
         <div class="detail-row"><span>Tile Size</span><span>${metres(terrain.tileSize)}</span></div>
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, resizing and PNG heightmaps are not available for multi-tile World Terrain yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, resizing and PNG heightmaps are not available for a multi-tile Landscape yet.</div>
       </div>
       <div class="detail-section" data-world-terrain-heightmap>
         <div class="detail-section-title">Heightmap</div>

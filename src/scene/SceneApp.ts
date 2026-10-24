@@ -24,8 +24,10 @@ import { exportRawHeightmap, importRawHeightmap } from "@engine/terrain/terrainI
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
 import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@engine/terrain/worldTerrainExpand";
+import { terrainDocumentToLandscape } from "@engine/terrain/terrainLandscapeBridge";
 import {
-  terrainTileTrimesh,
+  isMultiTileTerrain,
+  terrainTileHeightfield,
   worldTerrainActorPosition,
   worldTerrainExtent,
   worldTerrainPlacementIssues,
@@ -151,7 +153,7 @@ import {
 import {
   collisionWireboxes,
   collisionSurfaceTriangles,
-  trimeshWireSegments,
+  heightfieldWireSegments,
 } from "@engine/render-three/collisionView";
 import {
   createAiNavigationView,
@@ -202,7 +204,7 @@ import {
 import {
   applyLandscapeTransform,
   createFlatLandscapeData,
-  createLandscapeColliderPrimitive,
+  createLandscapeHeightfieldPrimitive,
   createLandscapeObject,
   createWorldTerrainObject,
   disposeLandscapeObject,
@@ -535,7 +537,7 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import { readRenderableMeshComponent } from "@engine/scene/components";
-import type { AiPatrolRoute, TransformComponent } from "@engine/scene/components";
+import type { AiPatrolRoute, ColliderHeightfield, TransformComponent } from "@engine/scene/components";
 import { VEHICLE_COMPONENT } from "@engine/scene/components";
 import type { SceneJsonValue } from "@engine/scene/entity";
 import type { VehicleOverrides } from "@engine/physics/vehicle/vehicleTypes";
@@ -6497,7 +6499,7 @@ export class SceneApp {
   private transformBlockedReason(selection: Selection): string | null {
     if (this.isSelectionLocked(selection)) return "Selected object is locked.";
     if (this.isWorldTerrainSelection(selection)) {
-      return "Multi-tile World Terrain is placed by its terrain definition; moving or rotating it is not supported yet.";
+      return "A multi-tile Landscape is placed by its terrain definition; moving or rotating it is not supported yet.";
     }
     return null;
   }
@@ -8468,7 +8470,7 @@ export class SceneApp {
       console.warn(`[terrain] ${actor.id}: ${issues.join("; ")}`);
       actor.position = worldTerrainActorPosition(document.def);
       delete actor.rotation;
-      this.onStatus?.(`${actor.name ?? actor.id}: placement taken from its World Terrain definition.`, "warning");
+      this.onStatus?.(`${actor.name ?? actor.id}: placement taken from its terrain definition.`, "warning");
     }
     if (document.def.splines?.length) {
       console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
@@ -9029,14 +9031,14 @@ export class SceneApp {
     const mode = this.landscapeSculptSettings.editMode;
     if (mode === "splines") {
       // Say why nothing happens instead of silently selecting the terrain again.
-      this.onStatus?.("Splines are not supported on multi-tile World Terrain yet.", "warning");
+      this.onStatus?.("Splines are not supported on a multi-tile Landscape yet.", "warning");
       return false;
     }
     const actor = this.layout?.landscapes?.[index];
     const document = actor ? this.worldTerrains.get(actor.id) : undefined;
     if (!actor || !document || !this.worldTerrainSessions.has(document)) return false;
     if (mode === "paint" && this.worldTerrainActiveLayer(document) < 0) {
-      this.onStatus?.("The active paint layer is not one of this World Terrain's layers.", "warning");
+      this.onStatus?.("The active paint layer is not one of this Landscape's layers.", "warning");
       return false;
     }
     this.worldTerrainStroke = { pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, mode, patches: [], demanded: new Set() };
@@ -9129,7 +9131,7 @@ export class SceneApp {
     };
     const tool = stroke.mode === "paint" ? this.landscapeSculptSettings.paintTool : this.landscapeSculptSettings.tool;
     this.executeCommand({
-      label: `World Terrain ${tool}`,
+      label: `Landscape ${tool}`,
       redo: () => restore(applyTerrainUndoPatches),
       undo: () => restore(revertTerrainUndoPatches),
     });
@@ -9393,7 +9395,8 @@ export class SceneApp {
       session?.markTiles(document.document.tiles.keys());
     } else {
       this.landscapeData.set(actor.id, document.data);
-      this.markLandscapeDirty(actor.id);
+      // New, or back after a Save pruned it: the next Save writes it first.
+      this.editorSaves.markLandscapeUnwritten(actor.id, document.data);
     }
     const object = this.createLandscapeObjectFor(actor);
     this.applyWireframeToLevelObject(object);
@@ -9419,52 +9422,13 @@ export class SceneApp {
     return removed ? cloneLandscape(removed) : null;
   }
 
-  /** Adds a flat Medium (129x129) Landscape actor at the origin and selects it. */
-  addLandscape(): void {
-    if (!this.layout || !this.activeProject) return;
-    const landscapes = this.layout.landscapes ?? [];
-    if (landscapes.length > 0) {
-      this.onStatus?.("Only one Landscape is supported per level in this build.", "error");
-      return;
-    }
-    const id = uniqueLandscapeId(landscapes);
-    const actor: LayoutLandscape = {
-      id,
-      name: uniqueLandscapeName("Landscape", landscapes),
-      position: [0, 0, 0],
-      // Stage the first reference so Save commits the tile/definition before
-      // publishing this actor in the level, just like a legacy migration.
-      dataRef: levelTerrainPath(this.activeProject.manifest.editor.defaultScene, id).replace(/\.terrain\.json$/, ".landscape.json"),
-    };
-    const data = createFlatLandscapeData("medium");
-    const index = landscapes.length;
-    this.executeCommand({
-      label: "Add Landscape",
-      redo: () => {
-        this.insertLandscape(index, actor, { kind: "landscape", data });
-        this.select({ kind: "landscape", index });
-        this.emitSceneObjectsChanged();
-        this.scheduleAutoSave();
-        void this.saveLandscapeData(actor.id).catch((error) => {
-          this.onStatus?.(error instanceof Error ? error.message : String(error), "error");
-        });
-      },
-      undo: () => {
-        this.removeLandscapeAt(index);
-        this.select(null);
-        this.emitSceneObjectsChanged();
-        this.scheduleAutoSave();
-      },
-    });
-    this.onStatus?.("Added Landscape.", "info");
-  }
-
   /**
-   * Adds a flat multi-tile World Terrain centred on the world origin and selects
-   * it (undoable). Its tiles and definition are written to the level's terrain
-   * folder by the next Save, before the level that references them.
+   * Adds a flat Landscape centred on the world origin and selects it (undoable).
+   * One tile is the classic single-grid Landscape, edited through the 1x1
+   * adapter; more tiles make a multi-tile World Terrain. Either way the next
+   * Save writes the level's terrain folder before the level that references it.
    */
-  addWorldTerrain(options: WorldTerrainCreateOptions): void {
+  addLandscape(options: WorldTerrainCreateOptions): void {
     if (!this.layout || !this.activeProject) return;
     const landscapes = this.layout.landscapes ?? [];
     if (landscapes.length > 0) {
@@ -9485,13 +9449,20 @@ export class SceneApp {
       position: worldTerrainActorPosition(loaded.def),
       dataRef: levelTerrainPath(this.activeProject.manifest.editor.defaultScene, id),
     };
-    // New tiles use compact u16 heights (OPEN_WORLD_PLAN K1).
-    const document = this.editableWorldTerrain(actor.dataRef, loaded, "u16");
+    let terrain: TerrainActorDocument;
+    if (isMultiTileTerrain(loaded.def)) {
+      // New tiles use compact u16 heights (OPEN_WORLD_PLAN K1).
+      terrain = { kind: "world", document: this.editableWorldTerrain(actor.dataRef, loaded, "u16") };
+    } else {
+      const data = terrainDocumentToLandscape(loaded);
+      data.splines = [];
+      terrain = { kind: "landscape", data };
+    }
     const index = landscapes.length;
     this.executeCommand({
-      label: "Add World Terrain",
+      label: "Add Landscape",
       redo: () => {
-        this.insertLandscape(index, actor, { kind: "world", document });
+        this.insertLandscape(index, actor, terrain);
         this.select({ kind: "landscape", index });
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
@@ -9504,7 +9475,7 @@ export class SceneApp {
       },
     });
     const [width, depth] = worldTerrainExtent(loaded.def);
-    this.onStatus?.(`Added World Terrain: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m.`, "info");
+    this.onStatus?.(`Added Landscape: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m.`, "info");
   }
 
   /** The selected 1x1 source, for the editor-only expansion dialog. */
@@ -9544,7 +9515,7 @@ export class SceneApp {
       this.scheduleAutoSave();
     };
     this.executeCommand({
-      label: "Expand to World Terrain",
+      label: "Expand Landscape",
       redo: () => replace(actor, { kind: "world", document }),
       undo: () => replace(source.actor, { kind: "landscape", data: source.data }),
     });
@@ -10247,7 +10218,7 @@ export class SceneApp {
         this.scheduleAutoSave();
       };
       this.executeCommand({
-        label: nextMaterial ? "Assign World Terrain Layer Material" : "Clear World Terrain Layer Material",
+        label: nextMaterial ? "Assign Landscape Layer Material" : "Clear Landscape Layer Material",
         redo: () => applyMaterial(nextMaterial),
         undo: () => applyMaterial(before),
       });
@@ -10424,7 +10395,7 @@ export class SceneApp {
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
       };
-      this.executeCommand({ label: "Import World Terrain Heightmap",
+      this.executeCommand({ label: "Import Landscape Heightmap",
         redo: () => restore(applyTerrainUndoPatches), undo: () => restore(revertTerrainUndoPatches) });
       this.onStatus?.(`Imported ${width} x ${height} RAW heightmap (${patches.length} tiles).`, "info");
     } catch (error) {
@@ -13437,11 +13408,12 @@ export class SceneApp {
   }
 
   /**
-   * Adds the terrain trimesh wire for every collidable landscape actor to the
-   * "Show > Collision" overlay — the editor twin of the collider debug wire the
-   * runtime always draws in Play. The heightfield collider mirrors the render
-   * mesh, so this reveals exactly the surface characters walk on. Built in local
-   * landscape space and positioned by the actor transform, matching
+   * Adds the heightfield collider wire for every collidable landscape actor to
+   * the "Show > Collision" overlay — the editor twin of the collider debug wire
+   * the runtime always draws in Play, built from the same collider primitives
+   * (one per tile for a multi-tile Landscape). The heightfield mirrors the render
+   * mesh, so this reveals exactly the surface characters walk on. Built in the
+   * body frame and positioned like the collider body, matching
    * `applyLandscapeTransform` (there is no landscape transform scale).
    */
   private updateLandscapeCollisionWires(): void {
@@ -13451,23 +13423,23 @@ export class SceneApp {
       const world = this.worldTerrains.get(actor.id);
       if (world) {
         for (const tile of world.tiles.values()) {
-          const { translation, primitive } = terrainTileTrimesh(world.def, tile);
-          this.addLandscapeCollisionWire(primitive, translation, [0, 0, 0]);
+          const { translation, primitive } = terrainTileHeightfield(world.def, tile);
+          this.addLandscapeCollisionWire(primitive.heightfield!, translation, [0, 0, 0]);
         }
         continue;
       }
       const item = this.landscapeItem(actor);
-      this.addLandscapeCollisionWire(createLandscapeColliderPrimitive(item.data), actor.position, item.rotation);
+      this.addLandscapeCollisionWire(createLandscapeHeightfieldPrimitive(item.data).heightfield!, actor.position, item.rotation);
     }
   }
 
-  /** One terrain trimesh wire for the "Show > Collision" overlay, placed like its collider body. */
+  /** One terrain heightfield wire for the "Show > Collision" overlay, placed like its collider body. */
   private addLandscapeCollisionWire(
-    primitive: { vertices: Vec3[]; indices: number[] },
+    field: ColliderHeightfield,
     position: Vec3,
     rotation: Vec3,
   ): void {
-    const segments = trimeshWireSegments(primitive.vertices, primitive.indices);
+    const segments = heightfieldWireSegments(field);
     if (segments.length === 0) return;
     const geometry = new BufferGeometry();
     geometry.setAttribute(

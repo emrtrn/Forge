@@ -2158,8 +2158,7 @@ export class EditorUi {
       this.app.addPostProcess(),
     );
 
-    singleton("landscape", "Landscape", "Terrain", "terrain", () => this.app.addLandscape());
-    singleton("worldTerrain", "World Terrain", "Terrain", "terrain", () => void this.addWorldTerrain());
+    singleton("landscape", "Landscape", "Terrain", "terrain", () => void this.addLandscape());
 
     entries.push({
       key: "ambientSound",
@@ -3757,11 +3756,11 @@ export class EditorUi {
     });
   }
 
-  /** Add Actor → World Terrain: grid options first, then an undoable add. */
-  private async addWorldTerrain(): Promise<void> {
+  /** Add Actor → Landscape: tile grid options first (1x1 by default), then an undoable add. */
+  private async addLandscape(): Promise<void> {
     const { pickWorldTerrainOptions } = await import("@/editor/worldTerrainDialog");
     const options = await pickWorldTerrainOptions();
-    if (options) this.app.addWorldTerrain(options);
+    if (options) this.app.addLandscape(options);
   }
 
   private async expandLandscapeToWorldTerrain(): Promise<void> {

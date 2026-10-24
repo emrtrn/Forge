@@ -1410,26 +1410,6 @@ export function validateLandscapeData(value: unknown): Record<string, unknown> {
   };
 }
 
-export function validateSaveLandscapePayload(value: unknown): {
-  path: string;
-  landscape: Record<string, unknown>;
-} {
-  if (!value || typeof value !== "object") {
-    throw new Error("landscape payload must be an object");
-  }
-  const input = value as Record<string, unknown>;
-  if (typeof input.path !== "string" || !input.path.endsWith(".landscape.json")) {
-    throw new Error("landscape payload path must end with .landscape.json");
-  }
-  if (input.path.includes("..")) {
-    throw new Error("landscape payload path must not contain ..");
-  }
-  return {
-    path: input.path,
-    landscape: validateLandscapeData(input.landscape),
-  };
-}
-
 /**
  * Allowlist validator for one placed Blocking Volume (parametric blockout brush)
  * actor. Mirrors {@link validateReflectionPlane}: a required `id` + `position`, the

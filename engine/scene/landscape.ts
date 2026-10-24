@@ -635,12 +635,6 @@ export function landscapeSplineMeshAssetIds(data: Pick<ForgeLandscapeData, "spli
   return [...ids];
 }
 
-export interface LandscapeColliderPrimitive extends ColliderPrimitive {
-  shape: "trimesh";
-  vertices: Vec3[];
-  indices: number[];
-}
-
 export function landscapeVertexCount(data: Pick<ForgeLandscapeData, "size">): number {
   return data.size.verticesX * data.size.verticesZ;
 }
@@ -1472,72 +1466,11 @@ function landscapeNormalAtLocal(data: ForgeLandscapeData, localX: number, localZ
   return normalize([left - right, 2 * step, down - up]);
 }
 
-function landscapePointAabb(points: readonly Vec3[]): { size: Vec3; center: Vec3 } {
-  let minX = Infinity;
-  let minY = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  let maxZ = -Infinity;
-  for (const point of points) {
-    minX = Math.min(minX, point[0]);
-    maxX = Math.max(maxX, point[0]);
-    minY = Math.min(minY, point[1]);
-    maxY = Math.max(maxY, point[1]);
-    minZ = Math.min(minZ, point[2]);
-    maxZ = Math.max(maxZ, point[2]);
-  }
-  return {
-    size: [maxX - minX, maxY - minY, maxZ - minZ],
-    center: [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2],
-  };
-}
-
 /**
- * Builds the trimesh used by the editor collision overlay and as a reference
- * for the runtime heightfield.
- * Vertices are body-local (centered exactly like the render mesh); the actor's
- * Transform component supplies world position/rotation when physics bakes it.
+ * The Landscape collider: an actor-centred heightfield whose quads split along
+ * the render mesh's b-c diagonal, at Rapier's Float32 precision. Vertices are
+ * body-local; the actor's Transform supplies world position/rotation.
  */
-export function createLandscapeColliderPrimitive(data: ForgeLandscapeData): LandscapeColliderPrimitive {
-  const { spacing, heightScale, verticesX, verticesZ } = data.size;
-  const originX = ((verticesX - 1) * spacing) / 2;
-  const originZ = ((verticesZ - 1) * spacing) / 2;
-  const vertices: Vec3[] = [];
-
-  for (let z = 0; z < verticesZ; z += 1) {
-    for (let x = 0; x < verticesX; x += 1) {
-      vertices.push([
-        x * spacing - originX,
-        landscapeHeightAt(data, x, z) * heightScale,
-        z * spacing - originZ,
-      ]);
-    }
-  }
-
-  const indices: number[] = [];
-  for (let z = 0; z < verticesZ - 1; z += 1) {
-    for (let x = 0; x < verticesX - 1; x += 1) {
-      const a = z * verticesX + x;
-      const b = a + 1;
-      const c = a + verticesX;
-      const d = c + 1;
-      // Same winding as the landscape render mesh: flat terrain is up-facing.
-      indices.push(a, c, b, b, c, d);
-    }
-  }
-
-  const aabb = landscapePointAabb(vertices);
-  return {
-    shape: "trimesh",
-    size: aabb.size,
-    center: aabb.center,
-    vertices,
-    indices,
-  };
-}
-
-/** Same actor-centred grid and b-c diagonal as the trimesh, at Rapier's Float32 precision. */
 export function createLandscapeHeightfieldPrimitive(data: ForgeLandscapeData): ColliderPrimitive & { center: Vec3 } {
   const { spacing, heightScale, verticesX, verticesZ } = data.size;
   const quadsX = verticesX - 1;

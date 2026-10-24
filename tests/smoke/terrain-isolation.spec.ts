@@ -1,15 +1,13 @@
 import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { expect, test, type Page } from "./test";
 import { SMOKE_SCENE, SMOKE_TARGET_SCENE } from "./smokeProject.mjs";
-import { readSavedTerrain } from "./terrain";
+import { addLandscapeFromMenu, readSavedTerrain } from "./terrain";
 
 async function addLandscape(page: Page): Promise<void> {
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId("add-actor-button").hover();
-  await page.getByRole("button", { name: /^Terrain/ }).hover();
   const saved = page.waitForResponse((response) => response.url().endsWith("/__save-terrain") && response.request().method() === "POST");
-  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape" }).click();
+  await addLandscapeFromMenu(page);
   expect((await saved).ok()).toBeTruthy();
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved");

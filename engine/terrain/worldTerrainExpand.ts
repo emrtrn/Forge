@@ -51,7 +51,7 @@ export function worldTerrainExpandProblems(
     if (!Number.isInteger(original) || original < 0 || original >= tiles) problems.push(`Original tile ${axis} must be a whole number from 0 to Tiles ${axis} minus 1.`);
   }
   const tileCount = options.tilesX * options.tilesZ;
-  if (tileCount < 2) problems.push("A World Terrain needs at least two tiles.");
+  if (tileCount < 2) problems.push("Expanding needs at least two tiles.");
   if (tileCount * count > WORLD_TERRAIN_CREATE_MAX_VERTICES) problems.push("Too large for this build: exceeds the World Terrain creation vertex limit.");
   return problems;
 }

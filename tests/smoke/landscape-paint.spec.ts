@@ -1,4 +1,4 @@
-import { readSavedTerrain } from "./terrain";
+import { addLandscapeFromMenu, readSavedTerrain } from "./terrain";
 import { expect, test, type Page } from "./test";
 
 test.setTimeout(210_000);
@@ -28,11 +28,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 30_000 });
 
   await deleteExistingLandscape(page);
-  await page.getByTestId("add-actor-button").hover();
-  await page.getByRole("button", { name: /^Terrain/ }).hover();
-  // Scope to the category submenu: the Undo button's aria-label is dynamic
-  // ("Undo Delete Landscape"), so an unscoped "Landscape" role query is ambiguous.
-  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape" }).click();
+  await addLandscapeFromMenu(page);
 
   const landscapeRows = page.getByTestId("outliner-row").filter({ hasText: "Landscape" });
   await expect(landscapeRows.first()).toBeVisible();

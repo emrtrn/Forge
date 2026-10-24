@@ -1214,6 +1214,36 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       boşaltmada** çağrılır (Unreal semantiği); belgelenir.
 - [ ] `AssetResidency` (K5): hücre başına asset ref-count, gecikmeli boşaltma.
       Persistent level'ın `loadGroups`'u eski davranışta kalır.
+      *Tasarım (kullanıcı onayı 2026-10-24; parametreler 1,5× menzil, 30 sn):*
+      v1'de yalnız Actor Script actor'leri aktığı için fayda şimdilik actor
+      mesh'leriyle sınırlı; seçenek 2 (statik/ışık/volume akışı) aynı çekirdeği
+      kullanacak.
+      - **Çekirdek** `engine/world/assetResidency.ts` (saf, three yok): asset
+        başına sahip kümesi (`persistent`, hücre anahtarı, tutulan actor),
+        durumlar yüklü değil → yükleniyor → yüklü → boşaltma bekliyor; son
+        sahip düşünce 30 sn gecikme, süre dolunca sahipsizse `evict`. Yükleme
+        hatası "yerleşti" sayılır (actor bugünkü gibi mesh'siz kurulur),
+        yeniden istenince tekrar denenir. Saat enjekte edilir.
+      - **Ön-yükleme halkası:** `WorldPartitionStreaming` ikinci menzil
+        (1,5 × `loadRange`, bırakma histerezisi 1,25) hesaplar; hücre halkaya
+        girince host asset'lerini async ister, çıkınca bırakır. Aktivasyon
+        menzili ve senkron aktivasyon değişmez; asset'i hazır olmayan hücre
+        ertelenir, kare bütçesini harcamaz. Boot/travel/save yükleme menzildeki
+        hücrelerin asset'lerini loading ekranı arkasında bekler. Bırakma
+        mesafesi (720 m) deaktivasyondan (480 m) büyük olduğundan aktif hücre
+        hep referans tutar.
+      - **Boşaltma (host):** loader önbelleğinden silme + GLTF geometri/malzeme/
+        doku dispose + `models`, `localBounds`, complex collision ve unlit
+        dönüşüm girdileri; level'ın malzeme override önbelleği paylaşıldığı
+        için dokunulmaz. Runtime'ın kullandığı her model residency'ye kayıtlı
+        olmalı (eager olanlar `persistent` sahibiyle), yoksa kullanılan bir
+        GLTF boşaltılabilir. Hücresi boşalan ama tutulan pawn/araç kendi
+        sahibiyle mesh'ini tutar. Level değişince sahipler bırakılır, gecikme
+        içinde yeni level aynı asset'i isterse yeniden kullanılır.
+      - **Editör** değişmez (her şeyi yükler).
+      Dilimler: (A) çekirdek + akış halkası, engine testli; (B) loader `evict`,
+      host bağlantısı, boot yalnız kalıcı + spawn halkası; (C) smoke + `?debug`
+      sayaçları.
 - [x] Save-game: P3.3 opt-in script state'i (destroyed/hidden işaretleri)
       hücre **aktivasyonunda** uygulanır, yalnız level başında değil.
       Hücre boşalırken taşınmış dinamik cisimler ve araçlar için bellek içi

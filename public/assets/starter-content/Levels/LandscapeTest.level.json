@@ -27659,8 +27659,8 @@
       "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
         0,
-        0,
-        0
+        -0.38,
+        -43.84
       ],
       "rotationYDeg": 0,
       "scale": 1

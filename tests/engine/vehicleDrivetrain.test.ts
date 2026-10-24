@@ -111,6 +111,26 @@ export function registerVehicleDrivetrainTests(check: Check): void {
     close(sumForce(result) * 2, sumForce(full));
   });
 
+  check("vehicle drivetrain holds a lower gear when surface drag makes an upshift unsustainable", () => {
+    const def = normalizeVehicleAsset(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Gaz52.vehicle.json", "utf8")))!;
+    const transmission = def.drivetrain!.transmission;
+    const speed = transmission.upshiftRpm * 2 * Math.PI * def.wheels[2]!.radius
+      / (60 * transmission.forwardRatios[0]! * transmission.finalDriveRatio);
+    const drive = (resistance: number, definition = def, input = fullThrottle) =>
+      computeVehicleDrive(definition, input, speed, 0, 1 / 60, initialVehicleDrivetrainState(definition), resistance);
+    assert.equal(drive(0).drivetrain!.gear, 2, "neutral ground retains normal shifts");
+    assert.equal(drive(1000).drivetrain!.gear, 2, "a sustainable shift is still allowed");
+    assert.equal(drive(3500).drivetrain!.gear, 1, "account for speed lost during the shift even with enough upper-gear torque");
+    const mud = drive(0.35 * def.massKg * 9.81);
+    assert.equal(mud.drivetrain!.gear, 1, "keep first instead of losing speed during the power cut");
+    assert.ok(sumForce(mud) > 0, "holding the gear keeps torque connected");
+    const instant = normalizeVehicleDefinition({ drivetrain: { transmission: { shiftDurationSeconds: 0 } } }, def)!;
+    assert.equal(drive(10000, instant).drivetrain!.gear, 1, "upper gear must also overcome drag after reconnecting");
+    assert.equal(drive(10000, def, NEUTRAL_VEHICLE_INPUT).drivetrain!.gear, 2, "coasting retains RPM-based shifts");
+    assert.equal(computeVehicleDrive(def, fullThrottle, speed, 0, 1 / 60, mud.drivetrain, 0).drivetrain!.gear,
+      2, "leaving mud immediately restores upshifts");
+  });
+
   check("vehicle drivetrain FWD RWD and AWD split torque by axle independently of legacy drive flags", () => {
     for (const mode of ["FWD", "RWD", "AWD"]) {
       const def = torqueCar(mode);

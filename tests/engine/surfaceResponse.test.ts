@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import {
   computeWheelSurfaceResponse, createPhysicalMaterialSurfaceProvider,
   NEUTRAL_SURFACE_SAMPLE, resolveSurfaceSample, type VehicleSurfaceProvider,
 } from "../../engine/physics/surface/surfaceResponse";
 import {
-  createReferenceCarDefinition, type VehicleInput,
+  createReferenceCarDefinition, normalizeVehicleAsset, type VehicleInput,
 } from "../../engine/physics/vehicle/vehicleTypes";
 import { PHYSICAL_MATERIALS } from "../../engine/scene/collision";
+import { normalizeActorScriptDef } from "../../engine/scene/actorScript";
 import { readColliderComponent } from "../../engine/scene/components";
 import type { Entity } from "../../engine/scene/entity";
 import type { RoomLayout } from "../../engine/scene/layout";
@@ -134,6 +136,53 @@ export async function registerSurfaceResponseRapierTests(
   checkAsync: CheckAsync,
   createWorld: () => Promise<VehicleSurfaceTestWorld>,
 ): Promise<void> {
+  await checkAsync("surface response rapier: GAZ-52 holds steady throttle on mud without gear hunting at 30/60/144 Hz", async () => {
+    const asset = normalizeVehicleAsset(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Gaz52.vehicle.json", "utf8")))!;
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Script_Gaz52.actor.json", "utf8")));
+    const collider = actor.components.find((node) => node.component === "Collider")!.props;
+    const finalSpeeds: number[] = [];
+    for (const hz of [30, 60, 144]) {
+      const world = await createWorld();
+      const { physics } = world;
+      try {
+        const car = world.entities[1]!;
+        physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
+        physics.createVehicle("car", asset);
+        physics.setVehicleSurfaceProvider(() => resolveSurfaceSample("mud"));
+        world.tick(2);
+        world.drive({ throttle: 1 });
+        let minSpeed = Infinity;
+        let maxSpeed = 0;
+        let shifts = 0;
+        let lastGear = 1;
+        for (let frame = 1; frame <= hz * 20; frame += 1) {
+          physics.update({ deltaSeconds: 1 / hz, elapsedSeconds: 2 + frame / hz, frame });
+          const state = physics.vehicleState("car")!;
+          if (state.drivetrain!.gear !== lastGear) shifts += 1;
+          lastGear = state.drivetrain!.gear;
+          if (frame >= hz * 3) {
+            minSpeed = Math.min(minSpeed, state.forwardSpeed);
+            maxSpeed = Math.max(maxSpeed, state.forwardSpeed);
+          }
+        }
+        assert.ok(minSpeed > 8 / 3.6, `${hz} Hz: mud slowed to ${minSpeed * 3.6} km/h`);
+        assert.ok(maxSpeed - minSpeed < 2 / 3.6, `${hz} Hz: steady speed oscillated by ${(maxSpeed - minSpeed) * 3.6} km/h`);
+        assert.ok(shifts <= 1, `${hz} Hz: ${shifts} gear changes on constant mud`);
+        finalSpeeds.push(physics.vehicleState("car")!.forwardSpeed);
+        // Leaving the soft surface must release the hold and permit ordinary acceleration.
+        physics.setVehicleSurfaceProvider(() => resolveSurfaceSample("wood"));
+        world.tick(5);
+        const neutral = physics.vehicleState("car")!;
+        assert.ok(neutral.drivetrain!.gear >= 2, "neutral ground permits upshifts again");
+        assert.ok(neutral.forwardSpeed > 25 / 3.6, `neutral reached only ${neutral.forwardSpeed * 3.6} km/h`);
+      } finally {
+        physics.dispose();
+      }
+    }
+    assert.ok(Math.max(...finalSpeeds) - Math.min(...finalSpeeds) < 0.1, `frame-rate drift: ${finalSpeeds}`);
+    console.info(`[vehicle] GAZ-52 steady mud speed at 30/60/144 Hz: ${finalSpeeds.map((speed) => (speed * 3.6).toFixed(2)).join(" / ")} km/h`);
+  });
+
   const curve = async (provider: "mesh" | VehicleSurfaceProvider | null, materialId?: string): Promise<number[]> => {
     const world = await createWorld();
     const { physics } = world;

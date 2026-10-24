@@ -26,7 +26,7 @@
       "name": "Earth and Scree",
       "color": "#9b825d",
       "material": "lt-earth",
-      "physicalMaterial": "mud"
+      "physicalMaterial": "snow"
     },
     {
       "id": "rock",
@@ -38,7 +38,8 @@
       "id": "snow",
       "name": "Alpine Snow",
       "color": "#e5e7e2",
-      "material": "lt-snow"
+      "material": "lt-snow",
+      "physicalMaterial": "snow"
     }
   ],
   "tiles": [

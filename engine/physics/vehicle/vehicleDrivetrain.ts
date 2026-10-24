@@ -69,6 +69,7 @@ export function computeDrivetrainDrive(
   forwardSpeed: number,
   previous: VehicleDrivetrainState | null,
   dt: number,
+  surfaceResistanceForce = 0,
 ): { state: VehicleDrivetrainState; forces: number[]; engineBrakeForces: number[] } {
   const { engine, transmission } = definition.drivetrain!;
   const shares = torqueShares(definition);
@@ -89,6 +90,19 @@ export function computeDrivetrainDrive(
       next = requestedDirection < 0 ? -1 : 1;
     } else if (gear > 0) {
       next = selectAutomaticGear(transmission, gear, wheelRpm * ratioFor(gear));
+      // Soft ground keeps braking throughout the torque cut. A shift that is
+      // viable at today's speed can therefore finish below the downshift RPM,
+      // causing two consecutive power cuts and an almost complete stop.
+      if (next > gear && signedPedal > 0 && Number.isFinite(surfaceResistanceForce) && surfaceResistanceForce > 0) {
+        const speed = Math.abs(forwardSpeed);
+        const exitSpeed = Math.max(0, speed - surfaceResistanceForce / definition.massKg * transmission.shiftDurationSeconds);
+        const exitRpm = speed > 0 ? wheelRpm * ratioFor(next) * exitSpeed / speed : 0;
+        const torque = exitRpm >= engine.maxRpm ? 0
+          : sampleTorqueCurve(engine.torqueCurve, Math.max(engine.idleRpm, exitRpm)) * signedPedal;
+        const force = Math.min(definition.maxEngineForce, torque * ratioFor(next) * transmission.efficiency
+          * shares.reduce((sum, share, i) => sum + share / definition.wheels[i]!.radius, 0));
+        if (exitRpm <= transmission.downshiftRpm || force <= surfaceResistanceForce) next = gear;
+      }
     }
     if (next !== gear) {
       gear = next;

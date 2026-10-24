@@ -1329,6 +1329,22 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       if (!controller || !rapier) continue;
       if (this.suspendedDynamicBodies.has(record.entityId)) continue;
       const forwardSpeed = chassisForwardSpeed(rapier.body);
+      // Rapier exposes the previous slice's wheel rays/load until updateVehicle.
+      // Sample once, before gearing, so the gearbox sees the resistance that
+      // will remain active during its power cut. Side stiffness is a scale here
+      // and composes with the command's handbrake response below.
+      const surfaces = record.definition.wheels.map((wheel, index) => {
+        const contact = this.vehicleSurfaceProvider && controller.wheelIsInContact(index)
+          ? controller.wheelContactPoint(index) : null;
+        const sample = contact ? this.vehicleSurfaceProvider!(
+          record.entityId, index, this.vehicleWheelGroundEntity(controller, index),
+          [contact.x, contact.y, contact.z],
+        ) : null;
+        return computeWheelSurfaceResponse(
+          { frictionSlip: wheel.frictionSlip, sideFrictionStiffness: 1 },
+          sample, forwardSpeed, controller.wheelSuspensionForce(index) ?? 0,
+        );
+      });
       const drive = computeVehicleDrive(
         record.definition,
         record.input,
@@ -1336,29 +1352,19 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         record.steer,
         deltaSeconds,
         record.drivetrain,
+        surfaces.reduce((sum, surface) => sum + surface.rollingResistanceForce, 0),
       );
       record.steer = drive.steer;
       record.drivetrain = drive.drivetrain;
       record.engineLoad = drive.engineLoad;
       drive.wheels.forEach((command, index) => {
-        const wheel = record.definition.wheels[index]!;
-        // Rapier exposes the previous slice's wheel rays/load until updateVehicle.
-        const contact = this.vehicleSurfaceProvider && controller.wheelIsInContact(index)
-          ? controller.wheelContactPoint(index) : null;
-        const sample = contact ? this.vehicleSurfaceProvider!(
-          record.entityId, index, this.vehicleWheelGroundEntity(controller, index),
-          [contact.x, contact.y, contact.z],
-        ) : null;
-        const surface = computeWheelSurfaceResponse(
-          { frictionSlip: wheel.frictionSlip, sideFrictionStiffness: command.sideFrictionStiffness },
-          sample, forwardSpeed, controller.wheelSuspensionForce(index) ?? 0,
-        );
+        const surface = surfaces[index]!;
         controller.setWheelEngineForce(index, command.engineForce);
         // The controller takes the brake as a per-slice impulse cap.
         controller.setWheelBrake(index, (command.brakeForce + surface.rollingResistanceForce) * deltaSeconds);
         controller.setWheelSteering(index, command.steering);
         controller.setWheelFrictionSlip(index, surface.frictionSlip);
-        controller.setWheelSideFrictionStiffness(index, surface.sideFrictionStiffness);
+        controller.setWheelSideFrictionStiffness(index, command.sideFrictionStiffness * surface.sideFrictionStiffness);
       });
       const velocity = rapier.body.linvel();
       const force = computeVehicleAerodynamics(record.definition, [velocity.x, velocity.y, velocity.z]);

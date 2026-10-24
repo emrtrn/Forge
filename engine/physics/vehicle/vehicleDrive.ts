@@ -43,6 +43,7 @@ export function computeVehicleDrive(
   previousSteer: number,
   deltaSeconds: number,
   previousDrivetrain: VehicleDrivetrainState | null = null,
+  surfaceResistanceForce = 0,
 ): VehicleDriveResult {
   const throttle = clamp(finiteOr(input.throttle, 0), 0, 1);
   const brake = clamp(finiteOr(input.brake, 0), 0, 1);
@@ -74,7 +75,7 @@ export function computeVehicleDrive(
   const steering = -steerResponse(steer, definition.steerGamma) * (definition.maxSteerAngleDeg * Math.PI) / 180
     * sampleSteeringCurve(definition.steeringSpeedCurve, forwardSpeed);
   const drivetrain = definition.drivetrain ? computeDrivetrainDrive(
-    definition, forwardPedal - reversePedal, forwardSpeed, previousDrivetrain, dt,
+    definition, forwardPedal - reversePedal, forwardSpeed, previousDrivetrain, dt, surfaceResistanceForce,
   ) : null;
 
   const wheels = definition.wheels;

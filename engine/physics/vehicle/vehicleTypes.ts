@@ -217,6 +217,13 @@ export interface VehicleWheelState {
   readonly suspensionLength: number;
   /** Spring force on the wheel from the last step (N): its load on the ground; 0 airborne. */
   readonly suspensionForce: number;
+  /**
+   * Virtual sink into a soft track (m): the rest length is this much shorter,
+   * and the visible wheel sits this far below `suspensionLength`. Absent = 0.
+   */
+  readonly sinkDepth?: number;
+  /** Share of the engine impulse the tyre could not transfer in the last step (0..1). Absent = 0. */
+  readonly tractionSlip?: number;
   /** Wheel yaw in radians (positive turns toward the car's left, +X). */
   readonly steering: number;
   /** Accumulated spin about the axle in radians. */

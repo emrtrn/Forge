@@ -32,8 +32,14 @@ const close = (actual: number, expected: number, epsilon = 1e-9): void =>
 
 const MUD = PHYSICAL_MATERIALS.mud!.deformation!;
 const SNOW = PHYSICAL_MATERIALS.snow!.deformation!;
-const mud: SurfaceDeformationSample = { deformability: 1, maxDepth: MUD.maxDepth, compaction: MUD.compaction, recoveryRate: MUD.recoveryRate };
-const snow: SurfaceDeformationSample = { deformability: 1, maxDepth: SNOW.maxDepth, compaction: SNOW.compaction, recoveryRate: SNOW.recoveryRate };
+const mud: SurfaceDeformationSample = {
+  deformability: 1, maxDepth: MUD.maxDepth, compaction: MUD.compaction, digRate: MUD.digRate,
+  recoveryRate: MUD.recoveryRate, sinkResistance: MUD.sinkResistance,
+};
+const snow: SurfaceDeformationSample = {
+  deformability: 1, maxDepth: SNOW.maxDepth, compaction: SNOW.compaction, digRate: SNOW.digRate,
+  recoveryRate: SNOW.recoveryRate, sinkResistance: SNOW.sinkResistance,
+};
 
 /** A reference car at (x, z) heading +Z, every wheel on `ground` with the static load. */
 function carState(definition: VehicleDefinition, x: number, z: number, ground: string | null = "landscape:t:0_0", steering = 0): VehicleState {
@@ -157,7 +163,9 @@ export function registerWheelTrackTests(check: Check): void {
     close(sample.deformability, 0.5);
     close(sample.maxDepth, (MUD.maxDepth + SNOW.maxDepth) / 2);
     close(sample.compaction, (MUD.compaction + SNOW.compaction) / 2);
+    close(sample.digRate, (MUD.digRate + SNOW.digRate) / 2);
     close(sample.recoveryRate, (MUD.recoveryRate + SNOW.recoveryRate) / 2);
+    close(sample.sinkResistance, (mud.sinkResistance + snow.sinkResistance) / 2);
     const grassOnly = { physicalMaterials: [null, "mud"], weightsAt: (_point: readonly number[], out: number[]) => {
       out.length = 2; out[0] = 1; out[1] = 0; return true;
     } };

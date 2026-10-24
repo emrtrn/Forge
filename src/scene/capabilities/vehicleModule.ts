@@ -358,9 +358,12 @@ export function createVehicleModule(): CapabilityModule {
   };
 }
 
-/** Hangs the wheel at its live spring length (suspension rays point down -Y). */
+/**
+ * Hangs the wheel at its live spring length (suspension rays point down -Y),
+ * plus its sink: the ray still meets the unchanged terrain collider.
+ */
 function poseWheel(group: Group, wheel: VehicleWheelState): void {
-  group.position.set(wheel.position[0], wheel.position[1] - wheel.suspensionLength, wheel.position[2]);
+  group.position.set(wheel.position[0], wheel.position[1] - wheel.suspensionLength - (wheel.sinkDepth ?? 0), wheel.position[2]);
   group.rotation.y = wheel.steering;
   // Rolling forward (+Z) is a positive spin about +X.
   group.rotation.x = wheel.rotation;

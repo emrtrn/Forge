@@ -55,6 +55,7 @@ import type {
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
+import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
 import type { VehicleDefinition, VehicleInput, VehicleState, VehicleVec3, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
 import type { SurfaceDeformationSample } from "@engine/terrain/terrainSurface";
 import type { PhysicalMaterialDef } from "@engine/scene/collision";
@@ -191,6 +192,8 @@ export interface VehicleHost {
   surfaceMaterialForWheel?(entityId: string, wheel: VehicleWheelState): PhysicalMaterialDef | null;
   /** Shares the dynamic-physics active radius; driven/possessed vehicles always qualify. */
   isSurfaceFxActive?(entityId: string): boolean;
+  /** Installs the wheels' soft-track depth source (TERRAIN_DEFORMATION Faz 3); null removes it. */
+  setGroundSinkProvider?(provider: VehicleGroundSinkProvider | null): void;
 }
 
 export const vehicleHostService = runtimeServiceKey<VehicleHost>("vehicle-host");

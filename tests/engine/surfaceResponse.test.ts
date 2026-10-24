@@ -128,6 +128,8 @@ interface VehicleSurfaceTestWorld {
   physics: PhysicsSubsystem;
   entities: Entity[];
   tick: (seconds: number) => void;
+  /** The car chassis' synced world position. */
+  position: () => [number, number, number];
   drive: (patch: Partial<VehicleInput>) => void;
 }
 
@@ -282,6 +284,83 @@ export async function registerSurfaceResponseRapierTests(
       assert.ok(physics.vehicleState("car")!.wheels.every((wheel) => !wheel.inContact && wheel.groundEntityId === null));
       physics.setVehicleSurfaceProvider(() => assert.fail("airborne wheel queried the surface provider"));
       world.tick(0.5);
+    } finally {
+      physics.dispose();
+    }
+  });
+
+  await checkAsync("wheel sink rapier: a constant track lowers the chassis by its depth at the slew rate and climbs back out", async () => {
+    const world = await createWorld();
+    const { physics } = world;
+    try {
+      physics.createVehicle("car", createReferenceCarDefinition());
+      world.tick(2);
+      const base = world.position()[1];
+      physics.setVehicleGroundSinkProvider(() => ({ depth: 0.12, resistance: 0.5 }));
+      world.tick(0.1);
+      assert.ok(base - world.position()[1] <= 0.3 * 0.1 + 0.005, `dropped ${base - world.position()[1]} m in 0.1 s`);
+      world.tick(2.9);
+      const sunk = physics.vehicleState("car")!;
+      for (const wheel of sunk.wheels) {
+        assert.ok(wheel.inContact, "every wheel keeps its contact while sinking");
+        assert.ok(Math.abs(wheel.sinkDepth! - 0.12) < 1e-9, `sink ${wheel.sinkDepth}`);
+      }
+      assert.ok(Math.abs(base - world.position()[1] - 0.12) < 0.01, `chassis dropped ${base - world.position()[1]} m`);
+      const heights: number[] = [];
+      for (let index = 0; index < 20; index += 1) {
+        world.tick(0.05);
+        heights.push(world.position()[1]);
+      }
+      assert.ok(Math.max(...heights) - Math.min(...heights) < 0.002, "a settled sunk chassis does not bounce");
+      physics.setVehicleGroundSinkProvider(null);
+      world.tick(2);
+      assert.ok(physics.vehicleState("car")!.wheels.every((wheel) => wheel.sinkDepth === 0), "no provider restores the authored rest");
+      assert.ok(Math.abs(world.position()[1] - base) < 0.01, `back at ${world.position()[1]}, started at ${base}`);
+    } finally {
+      physics.dispose();
+    }
+  });
+
+  await checkAsync("wheel sink rapier: the chassis bottom caps the sink and deeper mud drags on the belly", async () => {
+    const run = async (depth: number): Promise<{ speed: number; sink: number }> => {
+      const world = await createWorld();
+      const { physics } = world;
+      try {
+        physics.createVehicle("car", createReferenceCarDefinition());
+        physics.setVehicleGroundSinkProvider(() => ({ depth, resistance: 0.5 }));
+        world.tick(3);
+        world.drive({ throttle: 1 });
+        world.tick(3);
+        const state = physics.vehicleState("car")!;
+        return { speed: state.forwardSpeed, sink: Math.max(...state.wheels.map((wheel) => wheel.sinkDepth ?? 0)) };
+      } finally {
+        physics.dispose();
+      }
+    };
+    // Reference car: rest 0.35 m, so the rest-length floor (0.05 m) caps the sink at 0.30 m.
+    const atLimit = await run(0.3);
+    const beyond = await run(0.5);
+    assert.ok(Math.abs(atLimit.sink - 0.3) < 1e-9 && Math.abs(beyond.sink - 0.3) < 1e-9, `sinks ${atLimit.sink} / ${beyond.sink}`);
+    assert.ok(atLimit.speed > 3, `a full-depth rut alone still drives: ${atLimit.speed} m/s`);
+    assert.ok(beyond.speed < atLimit.speed * 0.5, `belly drag: ${beyond.speed} vs ${atLimit.speed} m/s`);
+  });
+
+  await checkAsync("wheel sink rapier: traction slip reports engine impulse the tyres could not transfer", async () => {
+    const world = await createWorld();
+    const { physics } = world;
+    try {
+      physics.createVehicle("car", createReferenceCarDefinition());
+      world.tick(1);
+      const driven = (): number => Math.max(...physics.vehicleState("car")!.wheels.map((wheel) => wheel.tractionSlip ?? 0));
+      assert.equal(driven(), 0, "a parked car does not slip");
+      physics.setVehicleSurfaceProvider(() => ({ ...NEUTRAL_SURFACE_SAMPLE, frictionSlipScale: 0.05 }));
+      world.drive({ throttle: 1 });
+      world.tick(0.5);
+      assert.ok(driven() > 0.3, `ice-like grip spins the driven wheels: ${driven()}`);
+      physics.setVehicleSurfaceProvider(null);
+      world.drive({});
+      world.tick(0.5);
+      assert.equal(driven(), 0, "coasting transfers no engine impulse to lose");
     } finally {
       physics.dispose();
     }

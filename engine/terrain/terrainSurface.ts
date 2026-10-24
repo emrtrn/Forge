@@ -37,7 +37,11 @@ export interface SurfaceDeformationSample {
   readonly deformability: number;
   readonly maxDepth: number;
   readonly compaction: number;
+  /** Additional digging while slipping (m/s). */
+  readonly digRate: number;
   readonly recoveryRate: number;
+  /** Extra resistance multiplier as the wheel sinks. */
+  readonly sinkResistance: number;
 }
 
 type DeformationProfile = NonNullable<PhysicalMaterialDef["deformation"]>;
@@ -131,7 +135,9 @@ export class TerrainSurfaceSampler {
     let soft = 0;
     let maxDepth = 0;
     let compaction = 0;
+    let digRate = 0;
     let recoveryRate = 0;
+    let sinkResistance = 0;
     this.weights.forEach((weight, index) => {
       if (!Number.isFinite(weight) || weight <= 0) return;
       total += weight;
@@ -140,14 +146,18 @@ export class TerrainSurfaceSampler {
       soft += weight;
       maxDepth += profile.maxDepth * weight;
       compaction += profile.compaction * weight;
+      digRate += profile.digRate * weight;
       recoveryRate += profile.recoveryRate * weight;
+      sinkResistance += profile.sinkResistance * weight;
     });
     if (soft === 0) return null;
     return {
       deformability: soft / total,
       maxDepth: maxDepth / soft,
       compaction: compaction / soft,
+      digRate: digRate / soft,
       recoveryRate: recoveryRate / soft,
+      sinkResistance: sinkResistance / soft,
     };
   }
 

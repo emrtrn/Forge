@@ -26,7 +26,11 @@ import { interactionGroupsInteract, type NavigationRole } from "../scene/collisi
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
 import { computeVehicleDrive } from "./vehicle/vehicleDrive";
-import { computeWheelSurfaceResponse, type VehicleSurfaceProvider } from "./surface/surfaceResponse";
+import { vehicleWheelWidth } from "./surface/sinkage";
+import {
+  computeWheelSurfaceResponse, type VehicleGroundSinkProvider, type VehicleSurfaceProvider,
+} from "./surface/surfaceResponse";
+import { bellyDragImpulse, slewSinkDepth, tractionSlip, wheelSinkLimit } from "./surface/wheelSink";
 import { computeVehicleAerodynamics, initialVehicleDrivetrainState } from "./vehicle/vehicleDrivetrain";
 import {
   NEUTRAL_VEHICLE_INPUT,
@@ -139,6 +143,12 @@ interface VehicleRecord {
   drivetrain: VehicleDrivetrainState | null;
   /** The driving pedal of the latest slice (0..1); see `VehicleDriveResult.engineLoad`. */
   engineLoad: number;
+  /** Applied virtual sink per wheel (m), slew-limited toward the provider's depth. */
+  sink: number[];
+  /** Deepest sink per wheel before the chassis would touch the terrain collider. */
+  sinkLimits: number[];
+  /** Per-wheel `tractionSlip` read back after the latest slice. */
+  tractionSlip: number[];
 }
 
 interface RapierBodyRecord {
@@ -218,6 +228,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private previousPoses = new Map<EntityId, PreviousBodyPose>();
   private vehicles = new Map<EntityId, VehicleRecord>();
   private vehicleSurfaceProvider: VehicleSurfaceProvider | null = null;
+  private vehicleGroundSinkProvider: VehicleGroundSinkProvider | null = null;
 
   constructor(options: PhysicsSubsystemOptions = {}) {
     this.backend = options.backend ?? "placeholder";
@@ -240,6 +251,14 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   /** Installs optional wheel surface response; null restores authored behaviour. */
   setVehicleSurfaceProvider(provider: VehicleSurfaceProvider | null): void {
     this.vehicleSurfaceProvider = provider;
+  }
+
+  /**
+   * Installs the soft-track depth source (TERRAIN_DEFORMATION Faz 3). Null
+   * lets every sunk wheel climb back to its authored rest length at the slew rate.
+   */
+  setVehicleGroundSinkProvider(provider: VehicleGroundSinkProvider | null): void {
+    this.vehicleGroundSinkProvider = provider;
   }
 
   /** Live collider profile reference for generic surface-provider hosts. */
@@ -270,6 +289,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       steer: 0,
       drivetrain: initialVehicleDrivetrainState(definition),
       engineLoad: 0,
+      sink: [],
+      sinkLimits: [],
+      tractionSlip: [],
     };
     if (!this.attachVehicleController(record)) return false;
     this.vehicles.set(entityId, record);
@@ -413,6 +435,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           ...(wheel.visualNode ? { visualNode: wheel.visualNode } : {}),
           suspensionLength: controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength,
           suspensionForce: inContact ? Math.max(0, controller.wheelSuspensionForce(index) ?? 0) : 0,
+          sinkDepth: record.sink[index] ?? 0,
+          tractionSlip: record.tractionSlip[index] ?? 0,
           steering: controller.wheelSteering(index) ?? 0,
           rotation: controller.wheelRotation(index) ?? 0,
           inContact,
@@ -1310,6 +1334,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       controller.setWheelFrictionSlip(index, wheel.frictionSlip);
       controller.setWheelSideFrictionStiffness(index, wheel.sideFrictionStiffness);
     });
+    // A new controller starts at the authored rest lengths.
+    const bottom = chassisBottomY(body.collider);
+    record.sink = definition.wheels.map(() => 0);
+    record.sinkLimits = definition.wheels.map((wheel) => wheelSinkLimit(wheel, bottom));
+    record.tractionSlip = definition.wheels.map(() => 0);
     record.controller = controller;
     return true;
   }
@@ -1329,6 +1358,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       if (!controller || !rapier) continue;
       if (this.suspendedDynamicBodies.has(record.entityId)) continue;
       const forwardSpeed = chassisForwardSpeed(rapier.body);
+      this.applyWheelSink(record, controller, rapier.body, deltaSeconds);
       // Rapier exposes the previous slice's wheel rays/load until updateVehicle.
       // Sample once, before gearing, so the gearbox sees the resistance that
       // will remain active during its power cut. Side stiffness is a scale here
@@ -1378,6 +1408,80 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
         body?.collider.collisionGroups,
       );
+      // Rapier's ray-cast wheels never spin faster than the ground, so wheelspin
+      // is read from the friction circle this slice's impulses were judged by.
+      record.definition.wheels.forEach((_wheel, index) => {
+        record.tractionSlip[index] = controller.wheelIsInContact(index)
+          ? tractionSlip(
+            controller.wheelEngineForce(index) ?? 0, controller.wheelSideImpulse(index) ?? 0,
+            controller.wheelSuspensionForce(index) ?? 0, controller.wheelFrictionSlip(index) ?? 0, deltaSeconds,
+          )
+          : 0;
+      });
+    }
+  }
+
+  /**
+   * Faz 3 sinkage as a virtual ground offset: each wheel's rest length shrinks
+   * by the track depth under its last contact (Faz 0: `rest − depth`, at most
+   * 0.3 m/s, and a sleeping chassis does not notice on its own). The terrain
+   * collider never changes, so a wheel stops at the depth where the chassis
+   * would reach it; mud wanted deeper than that drags on the belly instead.
+   */
+  private applyWheelSink(
+    record: VehicleRecord,
+    controller: RapierVehicleController,
+    body: RapierRigidBody,
+    deltaSeconds: number,
+  ): void {
+    const provider = this.vehicleGroundSinkProvider;
+    if (!provider && !record.sink.some((depth) => depth > 0)) return;
+    let heading = 0;
+    if (provider) {
+      const q = body.rotation();
+      heading = Math.atan2(2 * (q.x * q.z + q.w * q.y), 1 - 2 * (q.x * q.x + q.y * q.y));
+    }
+    let changed = false;
+    let overlap = 0;
+    let resistance = 0;
+    let sinking = 0;
+    record.definition.wheels.forEach((wheel, index) => {
+      let target = 0;
+      const contact = provider && controller.wheelIsInContact(index) ? controller.wheelContactPoint(index) : null;
+      const sink = contact ? provider!({
+        vehicleEntityId: record.entityId,
+        wheelIndex: index,
+        groundEntityId: this.vehicleWheelGroundEntity(controller, index),
+        contactPoint: [contact.x, contact.y, contact.z],
+        heading: heading + (controller.wheelSteering(index) ?? 0),
+        width: vehicleWheelWidth(wheel),
+      }) : null;
+      if (sink && Number.isFinite(sink.depth) && sink.depth > 0) {
+        const limit = record.sinkLimits[index] ?? 0;
+        target = Math.min(sink.depth, limit);
+        overlap += Math.max(0, sink.depth - limit);
+        if (Number.isFinite(sink.resistance)) resistance += sink.resistance;
+        sinking += 1;
+      }
+      const previous = record.sink[index] ?? 0;
+      const next = slewSinkDepth(previous, target, deltaSeconds);
+      if (next === previous) return;
+      record.sink[index] = next;
+      controller.setWheelSuspensionRestLength(index, wheel.suspensionRestLength - next);
+      changed = true;
+    });
+    if (changed) body.wakeUp();
+    if (overlap > 0 && sinking > 0) {
+      // Spread over every wheel: one wheel in a deep hole drags a quarter as hard as four.
+      const velocity = body.linvel();
+      const impulse = bellyDragImpulse(
+        [velocity.x, velocity.y, velocity.z],
+        overlap / record.definition.wheels.length,
+        resistance / sinking,
+        record.definition.massKg,
+        deltaSeconds,
+      );
+      if (impulse[0] !== 0 || impulse[2] !== 0) body.applyImpulse({ x: impulse[0], y: 0, z: impulse[2] }, true);
     }
   }
 
@@ -1415,6 +1519,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         steer: 0,
         drivetrain: initialVehicleDrivetrainState(body.vehicle),
         engineLoad: 0,
+        sink: [],
+        sinkLimits: [],
+        tractionSlip: [],
       };
       if (this.attachVehicleController(record)) this.vehicles.set(body.id, record);
     }
@@ -1691,6 +1798,12 @@ export function isOutsideDynamicActiveArea(
   const dy = position[1] - focus[1];
   const dz = position[2] - focus[2];
   return dx * dx + dy * dy + dz * dz > activeDistance * activeDistance;
+}
+
+/** Lowest body-local Y of a chassis collider (its primitives' AABBs when compound). */
+function chassisBottomY(collider: PhysicsBody["collider"]): number {
+  const boxes = collider.primitives && collider.primitives.length > 0 ? collider.primitives : [collider];
+  return Math.min(...boxes.map((box) => (box.center?.[1] ?? 0) - (box.size[1] ?? 0) / 2));
 }
 
 function bodyAabb(body: PhysicsBody): Aabb {

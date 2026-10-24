@@ -1422,6 +1422,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       setVehicleInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
       surfaceMaterialForWheel: (_entityId, wheel) => this.wheelSurfaceMaterial(wheel),
       isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
+      setGroundSinkProvider: (provider) => this.physicsSubsystem.setVehicleGroundSinkProvider(provider),
     });
     this.runtimeServices.provide(terrainSurfaceHostService, {
       deformationAt: (groundEntityId, contactPoint) =>

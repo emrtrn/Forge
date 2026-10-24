@@ -1078,6 +1078,7 @@ import { registerTerrainHeightfieldPhysicsTests, registerTerrainHeightfieldRapie
 import { registerSurfaceResponseRapierTests, registerSurfaceResponseTests } from "../tests/engine/surfaceResponse.test";
 import { registerTerrainSurfaceRapierTests, registerTerrainSurfaceTests } from "../tests/engine/terrainSurface.test";
 import { registerWheelTrackTests } from "../tests/engine/wheelTracks.test";
+import { registerWheelSinkTests } from "../tests/engine/wheelSink.test";
 import { registerDeformationFieldTests } from "../tests/engine/deformationField.test";
 import { registerDeformationPersistenceTests } from "../tests/engine/deformationPersistence.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
@@ -1221,6 +1222,7 @@ registerTerrainWorldRendererTests(check);
 registerSurfaceResponseTests(check);
 registerTerrainSurfaceTests(check);
 registerWheelTrackTests(check);
+registerWheelSinkTests(check);
 registerDeformationFieldTests(check);
 registerDeformationPersistenceTests(check);
 registerTerrainLodTests(check);

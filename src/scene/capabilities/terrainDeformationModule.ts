@@ -7,12 +7,18 @@
  * material's track texture. Snow tracks refill at their layer's rate; mud ones
  * stay while the window holds them.
  *
- * Switching the module off removes only the tracks (I3): grip and drag come
+ * It also hands physics the track depth under each wheel (Faz 3 sinkage): the
+ * wheels settle into their ruts through shorter rest lengths, never through a
+ * rebuilt terrain collider.
+ *
+ * Switching the module off removes the tracks and the sinkage (I3): grip and drag come
  * from the paint layers' physical materials through the shell's surface
  * provider, which runs with or without this module. Nothing here is written to
  * the level; the field is runtime state only.
  */
 import type { Subsystem } from "@engine/core/Subsystem";
+import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
+import { wheelFootprintDepth } from "@engine/physics/surface/wheelSink";
 import { WheelTrackStamper } from "@engine/physics/surface/wheelTracks";
 import type { VehicleState } from "@engine/physics/vehicle/vehicleTypes";
 import { sharedTerrainDeformation, type TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
@@ -56,6 +62,19 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
   let stamper: WheelTrackStamper | null = null;
   let stampedWheels = 0;
   let centre: [number, number] = [0, 0];
+  let sinkInstalled = false;
+
+  /** Physics asks once per wheel and fixed slice; it sees the tracks stamped up to the last frame. */
+  const groundSink: VehicleGroundSinkProvider = (query) => {
+    const active = field;
+    const surface = services?.resolve(terrainSurfaceHostService);
+    if (!active || !surface || query.groundEntityId === null) return null;
+    const [x, , z] = query.contactPoint;
+    const depth = wheelFootprintDepth((sx, sz) => active.sample(sx, sz).depth, x, z, query.heading, query.width);
+    if (depth <= 0) return null;
+    const profile = surface.deformationAt(query.groundEntityId, query.contactPoint);
+    return profile ? { depth, resistance: profile.sinkResistance } : null;
+  };
 
   /** Created on the first frame a deformable terrain exists, so track-free levels never allocate it. */
   const ensureField = (): DeformationField => {
@@ -72,6 +91,8 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
   };
 
   const release = (): void => {
+    if (sinkInstalled) services?.resolve(vehicleHostService)?.setGroundSinkProvider?.(null);
+    sinkInstalled = false;
     field = null;
     stamper = null;
     stampedWheels = 0;
@@ -86,6 +107,10 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
       return;
     }
     const active = ensureField();
+    if (!sinkInstalled && vehicles.setGroundSinkProvider) {
+      vehicles.setGroundSinkProvider(groundSink);
+      sinkInstalled = true;
+    }
     // The window follows the player's car; otherwise the first live vehicle.
     const ids = vehicles.vehicleIds();
     const possessed = vehicles.possessedEntityId();
@@ -122,8 +147,8 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
 
     onRuntimeStart(runtimeServices) {
       services = runtimeServices;
-      // After physics, so this frame's wheel contacts are stamped. Output-only
-      // until sinkage (Faz 3) makes the physics read the field back.
+      // After physics, so this frame's wheel contacts are stamped; physics
+      // reads them back through the ground-sink provider from the next frame.
       runtimeServices.addSubsystem("presentation", subsystem);
       runtimeServices.provide(terrainDeformationService, {
         stamp(worldX, worldZ, radius, depth) {

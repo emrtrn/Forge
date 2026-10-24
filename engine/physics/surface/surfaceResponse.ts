@@ -23,6 +23,32 @@ export type VehicleSurfaceProvider = (
   contactPoint: VehicleVec3,
 ) => SurfaceSample | null;
 
+/** One wheel contact asking how far the visible soft ground lies below the collider (Faz 3). */
+export interface VehicleWheelGroundQuery {
+  readonly vehicleEntityId: EntityId;
+  readonly wheelIndex: number;
+  readonly groundEntityId: EntityId | null;
+  readonly contactPoint: VehicleVec3;
+  /** Rolling direction in world X/Z: radians from +Z toward +X, steering included. */
+  readonly heading: number;
+  /** Tyre width (m). */
+  readonly width: number;
+}
+
+/** The track under a wheel: how deep it lies and how hard its mud drags a grounded belly. */
+export interface VehicleWheelSink {
+  /** Visible ground below the collider surface (m, >= 0). */
+  readonly depth: number;
+  /** The soft layer's `sinkResistance`, the belly-drag coefficient. */
+  readonly resistance: number;
+}
+
+/**
+ * Virtual ground offset: the physics step lowers each wheel's suspension rest
+ * length by the returned depth instead of rebuilding the terrain collider.
+ */
+export type VehicleGroundSinkProvider = (query: VehicleWheelGroundQuery) => VehicleWheelSink | null;
+
 export const NEUTRAL_SURFACE_SAMPLE: SurfaceSample = Object.freeze({
   frictionSlipScale: 1,
   sideFrictionScale: 1,

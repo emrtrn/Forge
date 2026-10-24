@@ -1679,6 +1679,116 @@ taşır).
       Dev'de HLOD yoksa uyarı, oyun yine çalışır.
 - [ ] `perf:assets` ve `verify:dist` hücre/tile/HLOD dosyalarını kapsar.
 
+### Faz 7 tasarımı (taslak, 2026-10-24, onay bekliyor)
+
+**Bugünkü durum (kaynaktan):**
+
+- **Uzak düzlem.** TPS karakter modu kameranın Camera component
+  `farClip`'ini kullanır (varsayılan **100 m**). Diğer modlar ve editör
+  `createSceneCamera`'nın 2000 m'sinde. Arazi global haritayla bütün dünyayı
+  çizer ama TPS'te 100 m'de kesilir. World Settings'te görüş mesafesi yok.
+  `viewDistanceMultiplier` bir fork uzantısı (`QualityExtensions`): akış
+  menzillerini çarpar, şablon profilleri yazmaz.
+- **Derinlik (K7) uygulanmadı.** K7'nin "Forge her kareyi EffectComposer ile
+  çiziyor" varsayımı da yanlış: `PostProcessPipeline` yalnız authored bir
+  effect pass varsa kurulur, yoksa sahne doğrudan tuvale (24-bit derinlik)
+  çizilir. `reversedDepthBuffer` renderer kurulurken verilir; three'de
+  sonradan `state.buffers.depth.setReversed` ile değişebilir (iç API).
+  `logarithmicDepthBuffer` yalnız kurulumda verilebilir.
+- **Gölge kamerayı izlemez.** `fitDirectionalShadowToBounds` güneş gölgesini
+  `layout.instances` sınırlarına (arazi hariç) sığdırır ve frustum güneşin
+  authored konumunda durur. 4 km dünyada ya her yeri kaba texel'le kaplar
+  ya da güneşten uzaklaşınca gölge kalmaz. Arazi gölge alır, düşürmez.
+- **Sis.** `FogExp2`/`Fog` mesafe tabanlı; varsayılan yoğunluk 0,03
+  (~50 m'de %90). Açık dünyada ya hiç yok ya da çok yoğun.
+- **Gökyüzü.** Sky kutusu derinlik testsiz, far'dan bağımsız. **Cloud Layer
+  küresi** 90 m yarıçaplı, derinlik testli ama yazmasız: far büyüyünce 90 m'den
+  uzaktaki arazinin üstüne bulut çizer. Far ile birlikte düzelmeli.
+- **LOD.** `distanceLod.ts` yalnız fork'un verdiği LOD'lara bias uygular; Forge
+  LOD üretmez. Actor/statik akışı `main` menzilinde (384 m) keser, HLOD yok.
+
+**Dilimler ve sıra:** S7 spike ∥ 7a → 7b → 7c1 → (7c2, spike'a göre) → 7d →
+7e → 7f → 7g.
+
+**S7 — ölçüm spike'ı** (`spikes/far-view`, merge öncesi silinir;
+OpenWorldTest + çim halkası + statikler, RTX 3060):
+(1) çalışan bir sahnede `setReversed` aç/kapa: programlar yeniden derleniyor
+mu, gölge karşılaştırması doğru dönüyor mu, maliyet; (2) kamera-takipli tek
+kaskad vs three `CSM` eklentisiyle 2/3/4 kaskad: GPU ms, gölge draw call,
+texel kalitesi, Forge'un kendi `onBeforeCompile` yamalarıyla (arazi, foliage
+fade, world mask, materials) zincirlenebilirlik; (3) GTAO ve Bokeh reversed +
+float derinlikle doğru mu.
+
+**7a — Görüş mesafesi.**
+- Yeni alan `worldSettings.viewDistance` (m, 50–20000). Yoksa bugünkü
+  davranış sürer (İlke 3). saveValidator allowlist + drift testi, World
+  Settings panelinde alan.
+- Etkin far = `viewDistance × viewDistanceMultiplier` (yoksa 1). Akışla
+  aynı düğme olduğundan görüş ve akış birlikte büyür ya da küçülür.
+- Level `viewDistance` verdiyse oyun kameralarının hepsinde (Camera
+  component, araç takip kamerası, serbest kamera) far'ı o belirler.
+  Tek uygulama noktası `PlayerCameraManager`'ın projeksiyonu uyguladığı
+  yerdir. Component `farClip` yalnız `viewDistance`'ı olmayan level'da
+  geçerli kalır. Near component'ten gelir.
+- Editör: kamera far = max(2000, `viewDistance`), kalite çarpanı uygulanmaz.
+- Cloud Layer küresi far'a bağlanır (yarıçap ≈ 0,9 × far).
+
+**7b — Derinlik (K7'nin uygulanması).**
+- Etkin far > 1000 m olan level "uzak mod"a geçer: reversed-Z + float32
+  derinlikli sahne hedefi. Daha küçük level'lar bugünkü standart tuval
+  yolunda kalır.
+- Mod level yüklenirken tek bir engine fonksiyonuyla değişir
+  (`setSceneDepthMode`). Bu fonksiyon `setReversed`'i, gölge bias işaretini
+  ve program yenilemeyi tek yerde toplar; travel bunu loading ekranı
+  arkasında yapar.
+- Uzak modda `PostProcessPipeline` her zaman kurulur (RenderPass →
+  OutputPass), hedefine `DepthTexture(FloatType)` verilir.
+- `EXT_clip_control` yoksa near uzak modda 0,1 → 0,5 m'ye çıkar ve tek
+  seferlik uyarı verilir. Log derinlik renderer'ı yeniden kurmayı
+  gerektirdiği için yedek olmaktan çıkar.
+- GTAO/Bokeh S7'de bozuk çıkarsa uzak modda düzeltilir ya da uyarıyla
+  kapatılır.
+
+**7c — Gölge.**
+- **7c1, kamera-takipli tek kaskad** (yalnız uzak mod; küçük level'lar
+  sınır sığdırmada kalır): güneş frustum'u kamera odağının çevresine
+  kurulur. Yarı genişlik `shadowDistance` × `shadowDistanceScale`
+  (varsayılan 60 m; 2048'de ~6 cm texel). Kayma ışık uzayında texel'e
+  hizalanır (yürürken gölge titremez). Derinlik aralığı yüklü arazinin
+  yükseklik aralığını ve yüksek caster'ları kapsar. Saf hesap
+  `engine/render-three` dışında, testli bir fonksiyon olur.
+- **7c2, kaskadlar** (S7'nin sonucuna göre): three `CSM` ya da kendi
+  uygulamamız, 3–4 kaskad high/ultra, 2 kaskad low/medium, kaskad sınırında
+  ve gölge mesafesinin sonunda solma. Tek kaskadda gölge sınırı sert bir
+  çizgidir; solma shader yaması gerektirdiği için kaskadlarla birlikte gelir.
+- Çim gölgesi varsayılan kapalı kalır (G0).
+
+**7d — Sis ve gökyüzü.** İlke gereği runtime authored veriye yazmaz;
+varsayılanlar editör tarafındadır.
+- Height Fog Details'ında **"Fit to View Distance"** komutu (undo'lu):
+  exp yoğunluğu = 1,98 / far, yani far'da %98 sis
+  (`FogExp2`: 1 − e^{−(ρd)²}).
+- World Terrain oluşturma diyaloğu `viewDistance` ve uygun bir Height Fog
+  önerir; Faz 8 New Open World sihirbazı da aynısını yapar.
+- Uzak modda sis yoksa ya da far'daki opaklık %90'ın altındaysa World
+  Settings'te uyarı satırı ve runtime'da tek seferlik konsol uyarısı
+  ("arazi far düzleminde sert kesilir").
+- Sis 384 m'deki actor akış kenarını gizlemeye yetmez; o 7f'nin (HLOD) işi.
+
+**7e — Actor LOD / küçük nesne culling** (dilim başında kısa tasarım):
+hücre batch'lerinde instance başına cull mesafesi, asset bounds yarıçapı ×
+kalite katsayısından hesaplanır. Forge LOD mesh'i üretmez; fork'un
+verdiğine `lodBias` uygulanır.
+
+**7f — HLOD** (ayrı tasarım; açık soru 5 o zaman karara bağlanır):
+`npm run world:build`, gltf-transform + meshoptimizer.
+
+**7g —** `perf:assets` / `verify:dist` hücre, tile ve HLOD dosyalarını kapsar.
+
+**Codex'e uygun saf dilimler:** `viewDistance` normalizer, validator ve
+drift testleri; 7c1'in frustum/texel hizalama matematiği + testleri; sis
+yoğunluğu yardımcısı.
+
 ## Faz 8 — Editör dünya araçları
 
 - [ ] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,

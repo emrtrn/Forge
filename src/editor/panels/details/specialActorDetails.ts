@@ -339,11 +339,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       <div class="detail-section">
-        <div class="detail-section-title">Tiles</div>
-        <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
-        <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
-      </div>
-      <div class="detail-section">
         <div class="detail-section-title">Landscape Mode</div>
         <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape edit mode">
           ${LANDSCAPE_EDIT_MODES.map(
@@ -461,10 +456,31 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         </label>
       </div>
       <div class="detail-section">
-        <div class="detail-section-title">Runtime</div>
+        <div class="detail-section-title">Heightmap</div>
+        <label class="detail-row">
+          <span>Import Height</span>
+          <input data-landscape-import-range type="number" min="0" step="0.1" value="${importHeight}" ${lockedAttr} />
+        </label>
+        <div class="landscape-heightmap-actions">
+          <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
+          <button type="button" class="detail-action-button" data-landscape-heightmap-export>Export PNG</button>
+        </div>
+        <div class="detail-hint">Import Height scales the PNG's brightness into terrain height. The imported terrain is baked into the level; re-import to change the height scale.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Tiles</div>
+        <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
+        <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Others</div>
         <label class="detail-toggle">
           <input type="checkbox" data-landscape-collision ${selection.collision ? "checked" : ""} ${lockedAttr} />
           <span>Collision</span>
+        </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
         </label>
       </div>
       ${riverWaterMarkup}
@@ -485,19 +501,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         </label>
         <div class="detail-hint">Changes the terrain width and depth while keeping its height and paint data.</div>
       </div>
-      <div class="detail-section">
-        <div class="detail-section-title">Heightmap</div>
-        <label class="detail-row">
-          <span>Import Height</span>
-          <input data-landscape-import-range type="number" min="0" step="0.1" value="${importHeight}" ${lockedAttr} />
-        </label>
-        <div class="landscape-heightmap-actions">
-          <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
-          <button type="button" class="detail-action-button" data-landscape-heightmap-export>Export PNG</button>
-        </div>
-        <div class="detail-hint">Import Height scales the PNG's brightness into terrain height. The imported terrain is baked into the level; re-import to change the height scale.</div>
-      </div>
-      ${actorLockSection(selection)}
     `;
 
   bindPositionRotation(options);
@@ -969,31 +972,6 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       </label>
       ${vectorRow("Location", "p", selection.position, 0.1, true)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, true)}
-      <div class="detail-hint">Placed by the terrain definition: the location is the centre of the tile grid. A multi-tile Landscape cannot be rotated.</div>
-      <div class="detail-section" data-world-terrain>
-        <div class="detail-section-title">Tiles</div>
-        <div class="detail-row"><span>Tiles in memory</span><span data-world-terrain-residency></span></div>
-        <div class="detail-row"><span>Tiles</span><span>${terrain.tilesX} × ${terrain.tilesZ}${holes > 0 ? ` (${holes} empty)` : ""}</span></div>
-        <div class="detail-row"><span>Tile Size</span><span>${metres(terrain.tileSize)}</span></div>
-        <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
-        <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
-        <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, resizing and PNG heightmaps are not available for a multi-tile Landscape yet.</div>
-      </div>
-      <div class="detail-section" data-world-terrain-heightmap>
-        <div class="detail-section-title">Heightmap</div>
-        <div class="detail-hint">16-bit RAW: exactly ${width} × ${height} samples (${width * height * 2} bytes), rows along +Z. Heights are metres relative to terrain origin Y. Empty tiles are skipped; export fills uncovered samples with 0.</div>
-        <label class="detail-row"><span>Byte Order</span><select data-world-terrain-raw-order ${lockedAttr}>
-          <option value="little">Little-endian</option><option value="big">Big-endian</option>
-        </select></label>
-        <label class="detail-row"><span>Min Height (0), m</span><input data-world-terrain-raw-min type="number" step="any" value="${terrain.heightMin}" ${lockedAttr} /></label>
-        <label class="detail-row"><span>Max Height (65535), m</span><input data-world-terrain-raw-max type="number" step="any" value="${terrain.heightMax}" ${lockedAttr} /></label>
-        <div class="landscape-heightmap-actions">
-          <label class="detail-action-button">Import RAW<input data-world-terrain-raw-import type="file" accept=".raw,.r16" hidden ${lockedAttr} /></label>
-          <button type="button" class="detail-action-button" data-world-terrain-raw-export>Export RAW</button>
-        </div>
-        <div class="detail-hint">Export is little-endian; the status line reports the height range needed to re-import.</div>
-      </div>
       <div class="detail-section" data-world-terrain-tools>
         <div class="detail-section-title">Landscape Mode</div>
         <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape edit mode">
@@ -1029,14 +1007,41 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
           </select>
         </label>
       </div>
+      <div class="detail-section" data-world-terrain-heightmap>
+        <div class="detail-section-title">Heightmap</div>
+        <div class="detail-hint">16-bit RAW: exactly ${width} × ${height} samples (${width * height * 2} bytes), rows along +Z. Heights are metres relative to terrain origin Y. Empty tiles are skipped; export fills uncovered samples with 0.</div>
+        <label class="detail-row"><span>Byte Order</span><select data-world-terrain-raw-order ${lockedAttr}>
+          <option value="little">Little-endian</option><option value="big">Big-endian</option>
+        </select></label>
+        <label class="detail-row"><span>Min Height (0), m</span><input data-world-terrain-raw-min type="number" step="any" value="${terrain.heightMin}" ${lockedAttr} /></label>
+        <label class="detail-row"><span>Max Height (65535), m</span><input data-world-terrain-raw-max type="number" step="any" value="${terrain.heightMax}" ${lockedAttr} /></label>
+        <div class="landscape-heightmap-actions">
+          <label class="detail-action-button">Import RAW<input data-world-terrain-raw-import type="file" accept=".raw,.r16" hidden ${lockedAttr} /></label>
+          <button type="button" class="detail-action-button" data-world-terrain-raw-export>Export RAW</button>
+        </div>
+        <div class="detail-hint">Export is little-endian; the status line reports the height range needed to re-import.</div>
+      </div>
+      <div class="detail-section" data-world-terrain>
+        <div class="detail-section-title">Tiles</div>
+        <div class="detail-row"><span>Tiles in memory</span><span data-world-terrain-residency></span></div>
+        <div class="detail-row"><span>Tiles</span><span>${terrain.tilesX} × ${terrain.tilesZ}${holes > 0 ? ` (${holes} empty)` : ""}</span></div>
+        <div class="detail-row"><span>Tile Size</span><span>${metres(terrain.tileSize)}</span></div>
+        <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
+        <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
+        <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, resizing and PNG heightmaps are not available for a multi-tile Landscape yet.</div>
+      </div>
       <div class="detail-section">
-        <div class="detail-section-title">Runtime</div>
+        <div class="detail-section-title">Others</div>
         <label class="detail-toggle">
           <input type="checkbox" data-landscape-collision ${selection.collision ? "checked" : ""} ${lockedAttr} />
           <span>Collision</span>
         </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
+        </label>
       </div>
-      ${actorLockSection(selection)}
     `;
 
   const residencyElement = body.querySelector<HTMLElement>("[data-world-terrain-residency]")!;

@@ -69,19 +69,13 @@
   ],
   "actors": [
     {
-      "classRef": "assets/vehicles/mercedes-sls/Script_MercedesSLS.actor.json",
+      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
-        8189.02,
-        0,
-        -66.96
+        -21.55,
+        3.61,
+        3.89
       ],
-      "rotationYDeg": 0,
-      "rotation": [
-        0,
-        -90,
-        0
-      ],
-      "scale": 1
+      "rotationYDeg": 0
     }
   ]
 }

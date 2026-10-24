@@ -1072,6 +1072,7 @@ import { registerTerrainOrphanTests } from "../tests/engine/terrainOrphans.test"
 import { registerTerrainGlobalMapFileTests } from "../tests/engine/terrainGlobalMapFile.test";
 import { registerTerrainRendererTests } from "../tests/engine/terrainRenderer.test";
 import { registerTerrainWorldRendererTests } from "../tests/engine/terrainWorldRenderer.test";
+import { registerTerrainTrackDetailTests } from "../tests/engine/terrainTrackDetail.test";
 import { registerWorldTerrainActorAsyncTests, registerWorldTerrainActorTests, registerWorldTerrainCreateTests, registerWorldTerrainSaveTests } from "../tests/engine/worldTerrainActor.test";
 import { registerTerrainRapierTests, registerTerrainTests } from "../tests/engine/terrain.test";
 import { registerTerrainHeightfieldPhysicsTests, registerTerrainHeightfieldRapierTests } from "../tests/engine/terrainHeightfieldPhysics.test";
@@ -1219,6 +1220,7 @@ registerTerrainOrphanTests(check);
 registerTerrainGlobalMapFileTests(check);
 registerTerrainRendererTests(check);
 registerTerrainWorldRendererTests(check);
+registerTerrainTrackDetailTests(check);
 registerSurfaceResponseTests(check);
 registerTerrainSurfaceTests(check);
 registerWheelTrackTests(check);

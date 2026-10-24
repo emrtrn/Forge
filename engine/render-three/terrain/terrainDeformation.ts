@@ -38,6 +38,22 @@ export const TERRAIN_DEFORMATION_DEPTH_RANGE = Math.max(
   0.05, ...Object.values(PHYSICAL_MATERIALS).map((material) => material.deformation?.maxDepth ?? 0),
 );
 
+/** Berm (raised rim) gain: the share of the surrounding ring's extra depth lifted beside a track (visual only). */
+export const TERRAIN_DEFORMATION_BERM = 0.6;
+/** Ring radius (m) the berm looks across: about a tyre's half-width plus its rim. */
+export const TERRAIN_DEFORMATION_BERM_RADIUS = 0.3;
+/** Highest berm (m). */
+export const TERRAIN_DEFORMATION_BERM_MAX = 0.06;
+/** Share of the window, on each side, over which tracks fade out (the window's moving edge never shows a seam). */
+export const TERRAIN_DEFORMATION_EDGE_FADE = 0.06;
+
+/** World X/Z rectangle the track texture covers while a field is attached. */
+export interface TerrainDeformationWindow {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly size: number;
+}
+
 export interface TerrainDeformationStats {
   /** Texels sent to the GPU by the last {@link TerrainDeformationTexture.update}. */
   readonly uploadedTexels: number;
@@ -57,6 +73,22 @@ export class TerrainDeformationTexture {
   private updates: TerrainTextureUpdates | null = null;
   private field: DeformationField | null = null;
   private lastStats: TerrainDeformationStats = { uploadedTexels: 0, packMs: 0 };
+  private windowRevision = 0;
+
+  /**
+   * Bumps whenever {@link trackWindow} changes (attach, detach, recentre), so
+   * a terrain renderer re-selects its detail nodes only then.
+   */
+  get revision(): number {
+    return this.windowRevision;
+  }
+
+  /** The covered world rectangle, or null while no field is attached. */
+  trackWindow(): TerrainDeformationWindow | null {
+    if (!this.field) return null;
+    const window = this.uniforms.uDeformWindow!.value as Vector4;
+    return { minX: window.x, minZ: window.y, size: window.z };
+  }
 
   /** Mirrors `field` from now on: a full copy now, then its dirty rectangles via {@link update}. */
   attach(field: DeformationField): void {
@@ -102,6 +134,7 @@ export class TerrainDeformationTexture {
 
   /** Stops drawing tracks (level unload); the texture is kept for the next attach. */
   detach(): void {
+    if (this.field) this.windowRevision += 1;
     this.field = null;
     this.uniforms.uDeformActive!.value = 0;
   }
@@ -132,7 +165,13 @@ export class TerrainDeformationTexture {
   private syncWindow(): void {
     const field = this.field!;
     const [cx, cz] = field.originCell;
-    (this.uniforms.uDeformWindow!.value as Vector4).set(cx * field.cellSize, cz * field.cellSize, field.windowSize, field.cellSize);
+    const window = this.uniforms.uDeformWindow!.value as Vector4;
+    const x = cx * field.cellSize;
+    const z = cz * field.cellSize;
+    if (window.x !== x || window.y !== z || window.z !== field.windowSize || window.w !== field.cellSize || this.uniforms.uDeformActive!.value !== 1) {
+      this.windowRevision += 1;
+    }
+    window.set(x, z, field.windowSize, field.cellSize);
   }
 
   private disposeTexture(): void {
@@ -168,13 +207,103 @@ export function terrainDeformationLayerUniforms(physicalMaterials: readonly (str
   return { uDeformLayerTint: { value: tints }, uDeformLayerWet: { value: wetness } };
 }
 
+/**
+ * Track depth (m) at world X/Z from a bilinear sampler of the field, faded
+ * toward the window's edge exactly as the shaders fade it: 0 on and past the
+ * edge. Mirrors `forgeDeformDepthAt`.
+ */
+export function terrainDeformationDepthAt(
+  depthAt: (worldX: number, worldZ: number) => number,
+  window: TerrainDeformationWindow,
+  worldX: number,
+  worldZ: number,
+): number {
+  const fade = terrainDeformationFade(window, worldX, worldZ);
+  return fade > 0 ? Math.max(0, depthAt(worldX, worldZ)) * fade : 0;
+}
+
+/** Edge fade at world X/Z (mirrors `forgeDeformFade`): 1 inside, smoothly 0 on and past the window's edge. */
+export function terrainDeformationFade(window: TerrainDeformationWindow, worldX: number, worldZ: number): number {
+  const tx = (worldX - window.minX) / window.size;
+  const tz = (worldZ - window.minZ) / window.size;
+  if (!(tx >= 0 && tx <= 1 && tz >= 0 && tz <= 1)) return 0;
+  const smooth = (edge0: number, edge1: number, value: number): number => {
+    const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+  };
+  const fade = (t: number): number => smooth(0, TERRAIN_DEFORMATION_EDGE_FADE, t) * (1 - smooth(1 - TERRAIN_DEFORMATION_EDGE_FADE, 1, t));
+  return fade(tx) * fade(tz);
+}
+
+/**
+ * Vertex height change at world X/Z (mirrors `forgeDeformDisplacement`): down
+ * by the track depth, up by a berm where the ring at
+ * {@link TERRAIN_DEFORMATION_BERM_RADIUS} around it is deeper than the point
+ * itself (just outside a rut's edge), faded like the depth so the edge stays
+ * at exactly 0. Visual only: physics reads the field.
+ */
+export function terrainDeformationDisplacement(
+  depthAt: (worldX: number, worldZ: number) => number,
+  window: TerrainDeformationWindow,
+  worldX: number,
+  worldZ: number,
+): { offset: number; berm: number } {
+  const at = (x: number, z: number) => terrainDeformationDepthAt(depthAt, window, x, z);
+  const r = TERRAIN_DEFORMATION_BERM_RADIUS;
+  const depth = at(worldX, worldZ);
+  const ring = (at(worldX + r, worldZ) + at(worldX - r, worldZ) + at(worldX, worldZ + r) + at(worldX, worldZ - r)) / 4;
+  const berm = Math.min(TERRAIN_DEFORMATION_BERM_MAX, TERRAIN_DEFORMATION_BERM * Math.max(0, ring - depth))
+    * terrainDeformationFade(window, worldX, worldZ);
+  return { offset: berm - depth, berm };
+}
+
+const glslFloat = (value: number): string => (Number.isInteger(value) ? value.toFixed(1) : String(value));
+
+/**
+ * Every terrain material's vertex shader (lit, GTAO normal, DOF depth): the
+ * track displacement, so all passes see the same dented surface.
+ */
+export const TERRAIN_DEFORMATION_DISPLACEMENT_PARS = /* glsl */ `
+uniform sampler2D uDeformTex;
+uniform vec4 uDeformWindow;
+uniform float uDeformDepthRange;
+uniform float uDeformActive;
+
+float forgeDeformFade(vec2 world) {
+  vec2 t = (world - uDeformWindow.xy) / uDeformWindow.z;
+  if (any(lessThan(t, vec2(0.0))) || any(greaterThan(t, vec2(1.0)))) return 0.0;
+  vec2 edge = smoothstep(vec2(0.0), vec2(${glslFloat(TERRAIN_DEFORMATION_EDGE_FADE)}), t)
+    * (1.0 - smoothstep(vec2(${glslFloat(1 - TERRAIN_DEFORMATION_EDGE_FADE)}), vec2(1.0), t));
+  return edge.x * edge.y;
+}
+
+float forgeDeformDepthAt(vec2 world) {
+  float fade = forgeDeformFade(world);
+  return fade > 0.0 ? textureLod(uDeformTex, world / uDeformWindow.z, 0.0).r * uDeformDepthRange * fade : 0.0;
+}
+
+// x: height change (berm - depth), y: berm.
+vec2 forgeDeformDisplacement(vec2 world) {
+  if (uDeformActive < 0.5) return vec2(0.0);
+  float depth = forgeDeformDepthAt(world);
+  float r = ${glslFloat(TERRAIN_DEFORMATION_BERM_RADIUS)};
+  float ring = (forgeDeformDepthAt(world + vec2(r, 0.0)) + forgeDeformDepthAt(world - vec2(r, 0.0))
+    + forgeDeformDepthAt(world + vec2(0.0, r)) + forgeDeformDepthAt(world - vec2(0.0, r))) * 0.25;
+  float berm = min(${glslFloat(TERRAIN_DEFORMATION_BERM_MAX)}, ${glslFloat(TERRAIN_DEFORMATION_BERM)} * max(0.0, ring - depth))
+    * forgeDeformFade(world);
+  return vec2(berm - depth, berm);
+}
+`;
+
 export const TERRAIN_DEFORMATION_VERTEX_PARS = /* glsl */ `
 varying vec2 vForgeDeformWorld;
+varying float vForgeDeformBerm;
 `;
 
 /** After `transformed` is set: the deformation lookup works in world X/Z. */
 export const TERRAIN_DEFORMATION_VERTEX = /* glsl */ `
 vForgeDeformWorld = (modelMatrix * vec4(transformed, 1.0)).xz;
+vForgeDeformBerm = forgeDisp.y;
 `;
 
 export const TERRAIN_DEFORMATION_FRAGMENT_PARS = /* glsl */ `
@@ -185,6 +314,7 @@ uniform float uDeformActive;
 uniform vec4 uDeformLayerTint[${TERRAIN_RENDER_LAYERS}];
 uniform float uDeformLayerWet[${TERRAIN_RENDER_LAYERS}];
 varying vec2 vForgeDeformWorld;
+varying float vForgeDeformBerm;
 // x: depth (m), y: disturbance (0..1), z/w: depth gradient along world X/Z.
 vec4 forgeDeform = vec4(0.0);
 float forgeDeformWetness = 0.0;
@@ -193,8 +323,9 @@ void forgeSampleDeformation() {
   if (uDeformActive < 0.5) return;
   vec2 t = (vForgeDeformWorld - uDeformWindow.xy) / uDeformWindow.z;
   if (any(lessThan(t, vec2(0.0))) || any(greaterThan(t, vec2(1.0)))) return;
-  // Fade over the outer 6% so the window's moving edge never shows a seam.
-  vec2 edge = smoothstep(vec2(0.0), vec2(0.06), t) * (1.0 - smoothstep(vec2(0.94), vec2(1.0), t));
+  // Fade over the outer edge so the window's moving edge never shows a seam (as forgeDeformDepthAt).
+  vec2 edge = smoothstep(vec2(0.0), vec2(${glslFloat(TERRAIN_DEFORMATION_EDGE_FADE)}), t)
+    * (1.0 - smoothstep(vec2(${glslFloat(1 - TERRAIN_DEFORMATION_EDGE_FADE)}), vec2(1.0), t));
   float fade = edge.x * edge.y;
   vec2 uv = vForgeDeformWorld / uDeformWindow.z;
   float texel = uDeformWindow.w / uDeformWindow.z;
@@ -237,10 +368,24 @@ export const TERRAIN_DEFORMATION_ROUGHNESS = /* glsl */ `
 roughnessFactor *= 1.0 - 0.7 * forgeDeformWetness;
 `;
 
-/** After the terrain normal is set (view space): tilt it by the track's depth gradient in world X/Z. */
+/**
+ * After the terrain normal is set (view space): tilt it by the track's depth
+ * gradient in world X/Z, and against the berm's. The berm is vertex-only, so
+ * its gradient comes from screen derivatives of the interpolated berm height
+ * (constant per triangle: the detail mesh is fine where berms show).
+ */
 export const TERRAIN_DEFORMATION_NORMAL = /* glsl */ `
-  if (forgeDeform.y > 0.0 || forgeDeform.x > 0.0) {
-    normal = normalize(normal + mat3(viewMatrix) * vec3(forgeDeform.z, 0.0, forgeDeform.w));
+  if (forgeDeform.y > 0.0 || forgeDeform.x > 0.0 || vForgeDeformBerm > 0.0) {
+    vec2 forgeBermGrad = vec2(0.0);
+    vec2 forgeWx = dFdx(vForgeDeformWorld);
+    vec2 forgeWy = dFdy(vForgeDeformWorld);
+    float forgeDet = forgeWx.x * forgeWy.y - forgeWx.y * forgeWy.x;
+    if (abs(forgeDet) > 1e-10) {
+      float forgeBx = dFdx(vForgeDeformBerm);
+      float forgeBy = dFdy(vForgeDeformBerm);
+      forgeBermGrad = vec2(forgeBx * forgeWy.y - forgeWx.y * forgeBy, forgeWx.x * forgeBy - forgeBx * forgeWy.x) / forgeDet;
+    }
+    normal = normalize(normal + mat3(viewMatrix) * vec3(forgeDeform.z - forgeBermGrad.x, 0.0, forgeDeform.w - forgeBermGrad.y));
     nonPerturbedNormal = normal;
   }
 `;

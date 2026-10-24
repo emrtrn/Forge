@@ -35,7 +35,7 @@ import {
   type WebGLRenderTarget,
 } from "three";
 
-import { TerrainLodSelector, terrainResidentTileKeys, type TerrainLodWorld } from "@engine/terrain/terrainLod";
+import { TerrainLodSelector, terrainResidentTileKeys, type TerrainLodDetail, type TerrainLodWorld } from "@engine/terrain/terrainLod";
 import { invalidateTerrainTileRange, raycastTerrain, type TerrainQueryDef } from "@engine/terrain/terrainHeightQuery";
 import { TERRAIN_PATCH_QUADS, TERRAIN_WEIGHT_BLOCKS, type TerrainVertexRect } from "@engine/terrain/terrainRenderData";
 import {
@@ -56,6 +56,12 @@ import {
   type TerrainMaterials,
   type TerrainViewMode,
 } from "./terrainMaterial";
+import {
+  sharedTerrainDeformation,
+  TERRAIN_DEFORMATION_BERM_MAX,
+  TERRAIN_DEFORMATION_DEPTH_RANGE,
+  type TerrainDeformationTexture,
+} from "./terrainDeformation";
 import { TerrainTextureUpdates } from "./terrainTextureUpdates";
 
 /**
@@ -86,7 +92,17 @@ export interface TerrainRendererOptions {
   slotCapacity?: number;
   /** Tile uploads per `updateLod` call (default 4). */
   uploadsPerFrame?: number;
+  /** Runtime track texture (default: the page's shared one); its window drives the detail levels. */
+  deformation?: TerrainDeformationTexture;
+  /**
+   * CDLOD levels below the tile spacing inside the track window (TERRAIN_DEFORMATION
+   * Faz 3; default {@link DEFAULT_TRACK_DETAIL_LEVELS}, 0 = the Faz 2 look).
+   */
+  trackDetailLevels?: number;
 }
+
+/** 1 m tiles → 0.5 m and 0.25 m vertices near the camera inside the track window. */
+export const DEFAULT_TRACK_DETAIL_LEVELS = 2;
 
 export type TerrainOverrideKind = "normal" | "depth";
 
@@ -253,7 +269,13 @@ export class TerrainRenderer {
   private readonly uploaded = new Set<string>();
   private readonly lastCamera = new Vector3(Number.NaN, Number.NaN, Number.NaN);
   private readonly cameraScratch = new Vector3();
+  private readonly cornerScratch = new Vector3();
   private selectionDirty = true;
+  private readonly deformation: TerrainDeformationTexture;
+  private trackDetailLevels: number;
+  /** {@link TerrainDeformationTexture.revision} the selection was made for. */
+  private deformationRevision = -1;
+  private detailNodes = 0;
 
   constructor(private readonly source: TerrainRenderSource, options: TerrainRendererOptions) {
     this.origin = options.origin.clone();
@@ -266,6 +288,8 @@ export class TerrainRenderer {
     const capacity = Math.max(1, Math.min(this.allKeys.size, options.slotCapacity ?? DEFAULT_SLOT_CAPACITY));
     this.allResident = this.allKeys.size <= capacity;
     this.uploadsPerFrame = options.uploadsPerFrame ?? DEFAULT_UPLOADS_PER_FRAME;
+    this.deformation = options.deformation ?? sharedTerrainDeformation();
+    this.trackDetailLevels = options.trackDetailLevels ?? DEFAULT_TRACK_DETAIL_LEVELS;
     this.pool = new TerrainSlotPool(capacity);
 
     const size = this.tileVertices;
@@ -317,6 +341,7 @@ export class TerrainRenderer {
       activeLayer: options.activeLayer,
       heightRange: new Vector2(),
       layers: options.layers,
+      deformation: this.deformation,
     });
     this.updateHeightRange();
 
@@ -340,6 +365,19 @@ export class TerrainRenderer {
   /** Tiles currently drawn from a slot at full resolution. */
   get residentTileCount(): number {
     return this.uploaded.size;
+  }
+
+  /** Selected nodes finer than a tile's grid (track detail), for `?debug`. */
+  get trackDetailNodeCount(): number {
+    return this.detailNodes;
+  }
+
+  /** Quality hook: detail levels inside the track window (0 = Faz 2 look); re-selects on the next update. */
+  setTrackDetailLevels(levels: number): void {
+    const next = Number.isFinite(levels) ? Math.max(0, Math.floor(levels)) : 0;
+    if (next === this.trackDetailLevels) return;
+    this.trackDetailLevels = next;
+    this.selectionDirty = true;
   }
 
   /** Streaming changes residency, never the persisted global map or hole mask. */
@@ -368,8 +406,26 @@ export class TerrainRenderer {
     const local = this.mesh.worldToLocal(camera.getWorldPosition(this.cameraScratch)).sub(this.origin);
     const residencyChanged = this.allResident ? false : this.updateResidency(local);
     const threshold = this.selector.settings.leafSize * 0.01;
-    if (!residencyChanged && !this.selectionDirty && local.distanceToSquared(this.lastCamera) < threshold * threshold) return;
+    if (!residencyChanged && !this.selectionDirty && this.deformationRevision === this.deformation.revision
+      && local.distanceToSquared(this.lastCamera) < threshold * threshold) return;
     this.select(local);
+  }
+
+  /** The track window in terrain-local X/Z, or null without tracks or detail levels. */
+  private trackDetail(): TerrainLodDetail | null {
+    const window = this.trackDetailLevels > 0 ? this.deformation.trackWindow() : null;
+    if (!window) return null;
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    for (const [x, z] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+      const corner = this.mesh.worldToLocal(this.cornerScratch.set(window.minX + x * window.size, 0, window.minZ + z * window.size))
+        .sub(this.origin);
+      minX = Math.min(minX, corner.x); maxX = Math.max(maxX, corner.x);
+      minZ = Math.min(minZ, corner.z); maxZ = Math.max(maxZ, corner.z);
+    }
+    return {
+      minX, minZ, maxX, maxZ, levels: this.trackDetailLevels,
+      margin: TERRAIN_DEFORMATION_DEPTH_RANGE + TERRAIN_DEFORMATION_BERM_MAX,
+    };
   }
 
   /**
@@ -601,7 +657,9 @@ export class TerrainRenderer {
     (this.materials.uniforms.uTerrainLodCamera!.value as Vector3).copy(cameraLocal);
     const geometry = this.mesh.geometry;
     const tileSize = this.source.tileQuads * this.source.spacing;
-    const nodes = this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z]).filter((node) =>
+    this.deformationRevision = this.deformation.revision;
+    this.mesh.updateWorldMatrix(true, false);
+    const nodes = this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z], undefined, this.trackDetail()).filter((node) =>
       // Nodes wholly past the drawn extent (legacy padding) or on a missing tile draw nothing.
       node.offsetX < this.extent.x && node.offsetZ < this.extent.y && (!node.tileKey || this.allKeys.has(node.tileKey)));
     if (nodes.length > (geometry.getAttribute("terrainNodeA") as InstancedBufferAttribute).count) {
@@ -622,7 +680,9 @@ export class TerrainRenderer {
     nodes.forEach((node, index) => {
       const slot = slots[index]!;
       const tile = slot >= 0 ? parseTileKey(node.tileKey!)! : { x: 0, z: 0 };
-      const skirt = standIns.includes(node) || (slot >= 0 && standIns.some((standIn) => touches(node, standIn)));
+      // Track detail nodes always hang one: where refinement stops at the window a coarse neighbour
+      // can be mid-morph, and its chord need not meet the finer edge.
+      const skirt = node.level < 0 || standIns.includes(node) || (slot >= 0 && standIns.some((standIn) => touches(node, standIn)));
       a.setXYZW(index, node.offsetX, node.offsetZ, node.size, slot);
       b.setXYZW(index, tile.x * tileSize, tile.z * tileSize, node.morphRange[0], node.morphRange[1]);
       c.setX(index, skirt ? 1 : 0);
@@ -631,6 +691,7 @@ export class TerrainRenderer {
     b.needsUpdate = true;
     c.needsUpdate = true;
     geometry.instanceCount = nodes.length;
+    this.detailNodes = nodes.reduce((count, node) => count + (node.level < 0 ? 1 : 0), 0);
   }
 
   private raycast(raycaster: Raycaster, intersects: Intersection[]): void {

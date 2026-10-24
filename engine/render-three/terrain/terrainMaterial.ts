@@ -21,6 +21,7 @@ import {
   sharedTerrainDeformation,
   terrainDeformationLayerUniforms,
   TERRAIN_DEFORMATION_COLOR,
+  TERRAIN_DEFORMATION_DISPLACEMENT_PARS,
   TERRAIN_DEFORMATION_FRAGMENT_PARS,
   TERRAIN_DEFORMATION_NORMAL,
   TERRAIN_DEFORMATION_ROUGHNESS,
@@ -70,6 +71,34 @@ export function setTerrainAppearance(
   uniforms.uTerrainActiveLayer!.value = activeLayer;
   const values = uniforms.uLayerColors!.value as Color[];
   values.forEach((color, index) => color.set(colors[index] ?? colors[0] ?? "#808080"));
+}
+
+/**
+ * CPU mirror of the vertex shader's tile-slot `forgeTerrainHeight`: texel
+ * clamping and the collider's b–c diagonal, for tests that pin the drawn
+ * surface to `terrainHeightAt`. `heights` is one slot (`tileVertices²` R32F
+ * texels), `local` terrain-local metres, `tileOrigin` the tile's min corner.
+ */
+export function terrainSlotHeight(
+  heights: ArrayLike<number>,
+  tileVertices: number,
+  spacing: number,
+  tileOrigin: readonly [number, number],
+  local: readonly [number, number],
+): number {
+  const gx = (local[0] - tileOrigin[0]) / spacing;
+  const gz = (local[1] - tileOrigin[1]) / spacing;
+  const cx = Math.floor(gx);
+  const cz = Math.floor(gz);
+  const fx = gx - cx;
+  const fz = gz - cz;
+  const last = tileVertices - 1;
+  const texel = (x: number, z: number) => heights[Math.max(0, Math.min(z, last)) * tileVertices + Math.max(0, Math.min(x, last))]!;
+  const ha = texel(cx, cz);
+  const hb = texel(cx + 1, cz);
+  const hc = texel(cx, cz + 1);
+  const hd = texel(cx + 1, cz + 1);
+  return fx + fz <= 1 ? ha + (hb - ha) * fx + (hc - ha) * fz : hd + (hc - hd) * (1 - fx) + (hb - hd) * (1 - fz);
 }
 
 export interface TerrainLayerInput {
@@ -152,26 +181,30 @@ float forgeTerrainGlobalTexel(ivec2 cell) {
   return texelFetch(uTerrainGlobalHeights, clamp(cell, ivec2(0), ivec2(uTerrainGlobalSize) - 1), 0).r;
 }
 
+// Tile slots: the collider's triangle (b–c diagonal, as terrainHeightAt), so a
+// detail vertex between grid points sits on the surface the wheels touch. The
+// global map stays bilinear (far nodes, one sample per parent-of-tile vertex).
 float forgeTerrainHeight(vec2 local, vec2 tileOrigin, int slot) {
   vec2 grid = slot >= 0 ? (local - tileOrigin) / uTerrainSpacing : local / uTerrainGlobalSpacing;
   vec2 base = floor(grid);
   vec2 f = grid - base;
   ivec2 cell = ivec2(base);
-  float h00, h10, h01, h11;
   if (slot >= 0) {
-    h00 = forgeTerrainTexel(cell, slot);
-    h10 = forgeTerrainTexel(cell + ivec2(1, 0), slot);
-    h01 = forgeTerrainTexel(cell + ivec2(0, 1), slot);
-    h11 = forgeTerrainTexel(cell + ivec2(1, 1), slot);
-  } else {
-    h00 = forgeTerrainGlobalTexel(cell);
-    h10 = forgeTerrainGlobalTexel(cell + ivec2(1, 0));
-    h01 = forgeTerrainGlobalTexel(cell + ivec2(0, 1));
-    h11 = forgeTerrainGlobalTexel(cell + ivec2(1, 1));
+    float ha = forgeTerrainTexel(cell, slot);
+    float hb = forgeTerrainTexel(cell + ivec2(1, 0), slot);
+    float hc = forgeTerrainTexel(cell + ivec2(0, 1), slot);
+    float hd = forgeTerrainTexel(cell + ivec2(1, 1), slot);
+    return f.x + f.y <= 1.0
+      ? ha + (hb - ha) * f.x + (hc - ha) * f.y
+      : hd + (hc - hd) * (1.0 - f.x) + (hb - hd) * (1.0 - f.y);
   }
+  float h00 = forgeTerrainGlobalTexel(cell);
+  float h10 = forgeTerrainGlobalTexel(cell + ivec2(1, 0));
+  float h01 = forgeTerrainGlobalTexel(cell + ivec2(0, 1));
+  float h11 = forgeTerrainGlobalTexel(cell + ivec2(1, 1));
   return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
 }
-`;
+${TERRAIN_DEFORMATION_DISPLACEMENT_PARS}`;
 
 const VERTEX_BEGIN = /* glsl */ `
 // floor, not int(): int() truncates toward zero and would turn slot -1 into 0.
@@ -188,6 +221,10 @@ float forgeMorph = clamp(
 vec2 forgeFrac = fract(forgeGrid * uTerrainPatchQuads * 0.5) * 2.0 / uTerrainPatchQuads;
 forgeLocal = clamp(forgeLocal - forgeFrac * terrainNodeA.z * forgeMorph, vec2(0.0), forgeEdge);
 float forgeH = forgeTerrainHeight(forgeLocal, terrainNodeB.xy, forgeSlot);
+// Runtime tracks (TERRAIN_DEFORMATION Faz 3): a pure function of world X/Z,
+// so shared node edges still meet; the morph above keeps the undented height.
+vec2 forgeDisp = forgeDeformDisplacement((modelMatrix * vec4(uTerrainOrigin + vec3(forgeLocal.x, forgeH, forgeLocal.y), 1.0)).xz);
+forgeH += forgeDisp.x;
 // Skirt vertices (position.y = 1) drop below the surface only on flagged nodes
 // and never on the terrain's outer border; otherwise they fold onto the edge.
 bool forgeBorder = forgeLocal.x <= 0.0 || forgeLocal.y <= 0.0 || forgeLocal.x >= forgeEdge.x || forgeLocal.y >= forgeEdge.y;
@@ -381,14 +418,15 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainHeightRange: { value: inputs.heightRange },
   };
   layerUniforms(uniforms, inputs.layers);
-  // Runtime tracks (TERRAIN_DEFORMATION Faz 2): the lit material only. Always
-  // compiled in; the shared texture's `uDeformActive` skips the block until a
-  // runtime module attaches a field, so the editor and track-free levels pay a
-  // uniform branch and no texture reads.
+  // Runtime tracks (TERRAIN_DEFORMATION Faz 2/3): always compiled in; the
+  // shared texture's `uDeformActive` skips the block until a runtime module
+  // attaches a field, so the editor and track-free levels pay a uniform branch
+  // and no texture reads. Every material displaces vertices (the GTAO/DOF
+  // passes see the dents); only the lit one tints and tilts normals.
   const deformation = inputs.deformation ?? sharedTerrainDeformation();
+  Object.assign(uniforms, deformation.uniforms);
   const litUniforms: TerrainUniforms = {
     ...uniforms,
-    ...deformation.uniforms,
     ...terrainDeformationLayerUniforms(inputs.layers.map((layer) => layer.physicalMaterial)),
   };
 

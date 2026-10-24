@@ -8,6 +8,7 @@ import {
   DEFAULT_TERRAIN_SCULPT_SETTINGS, nextTerrainSculptHeight, terrainSculptBounds, terrainSculptInfluence,
   type TerrainSculptTool, type TerrainSculptSettings, type TerrainRamp,
 } from "./terrainSculpt";
+import { erodeTerrainRegion, validTerrainErosionSettings } from "./terrainErosion";
 import { invalidateTerrainTileRange, type TerrainTileLookup } from "./terrainHeightQuery";
 import {
   TERRAIN_MAX_LAYERS,
@@ -225,21 +226,31 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
   const settings = { ...DEFAULT_TERRAIN_SCULPT_SETTINGS, ...brush };
   if (!paint) {
     if (![settings.noiseScale, settings.noiseSeed, settings.terraceStep, settings.terraceSmoothing,
-      settings.stampHeight, settings.stampRotation, settings.rampStartOffset, settings.rampEndOffset, settings.rampShoulder].every(Number.isFinite)
+      settings.rampStartOffset, settings.rampEndOffset, settings.rampShoulder].every(Number.isFinite)
       || settings.noiseScale <= 0 || settings.terraceStep <= 0 || settings.terraceSmoothing < 0 || settings.terraceSmoothing > 1
-      || settings.rampShoulder < 0 || !["hill", "crater", "ridge"].includes(settings.stampShape)) throw new Error("Invalid terrain sculpt settings");
+      || settings.rampShoulder < 0 || !validTerrainErosionSettings(settings)) throw new Error("Invalid terrain sculpt settings");
     if (brush.mode === "ramp" && (!ramp || ![ramp.start.x, ramp.start.z, ramp.start.height, ramp.end.x, ramp.end.z, ramp.end.height].every(Number.isFinite))) {
       throw new Error("Invalid terrain ramp endpoints");
     }
     if (ramp && Math.hypot(ramp.end.x - ramp.start.x, ramp.end.z - ramp.start.z) < 0.001) return { dirty: new Map(), patches: [] };
   }
-  const bounds = terrainSculptBounds(brush.x, brush.z, brush.radius + (ramp ? settings.rampShoulder : 0), ramp);
+  const erosionMode = brush.mode === "erosion";
+  const bounds = terrainSculptBounds(brush.x, brush.z, brush.radius + (ramp ? settings.rampShoulder : 0) + (erosionMode ? spacing : 0), ramp);
   const x0 = Math.max(0, Math.floor((bounds.minX - origin[0]) / spacing));
   const x1 = Math.min(tilesX * q, Math.ceil((bounds.maxX - origin[0]) / spacing));
   const z0 = Math.max(0, Math.floor((bounds.minZ - origin[2]) / spacing));
   const z1 = Math.min(tilesZ * q, Math.ceil((bounds.maxZ - origin[2]) / spacing));
+  if (x1 < x0 || z1 < z0) return { dirty: new Map(), patches: [] };
   const dirty = new Map<string, TerrainDirtyRect>();
   const required = new Set(world.def.tiles.map((entry) => entry.key));
+  const erosion = erosionMode ? erodeTerrainRegion({
+    x0, x1, z0, z1, originX: origin[0], originZ: origin[2], spacing,
+    x: brush.x, z: brush.z, radius: brush.radius, strength: brush.strength, falloff: brush.falloff, settings,
+    sample: (gx, gz) => {
+      const owner = vertexCopies(world, gx, gz, required)[0];
+      return owner?.tile.heights[owner.index];
+    },
+  }) : undefined;
   const changes: { copy: VertexCopy; height: number; weights: Uint8Array | undefined }[] = [];
   for (let gz = z0; gz <= z1; gz += 1) {
     for (let gx = x0; gx <= x1; gx += 1) {
@@ -264,8 +275,9 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
         const target = Number.isFinite(brush.flattenTargetHeight) ? brush.flattenTargetHeight! : brush.hitHeight ?? 0;
         if (!Number.isFinite(target)) throw new Error("Invalid terrain flatten height");
         const mode = brush.mode;
-        const after = mode === "noise" || mode === "ramp" || mode === "terrace" || mode === "stamp"
-          ? nextTerrainSculptHeight(mode, current, (mode === "ramp" ? 1 : brush.strength) * influence, wx, wz, brush.x, brush.z, brush.radius, settings, ramp)
+        const after = mode === "erosion" ? erosion![(gz - z0) * (x1 - x0 + 1) + gx - x0]!
+          : mode === "noise" || mode === "ramp" || mode === "terrace"
+          ? nextTerrainSculptHeight(mode, current, (mode === "ramp" ? 1 : brush.strength) * influence, wx, wz, settings, ramp)
           : nextLandscapeBrushHeight(mode, current, target, brush.strength * influence,
           () => landscapeBrushAverage((dx, dz) => {
             const neighbour = vertexCopies(world, gx + dx, gz + dz, required)[0];

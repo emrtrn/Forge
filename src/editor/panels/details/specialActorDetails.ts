@@ -173,7 +173,7 @@ const LANDSCAPE_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
   "flatten",
 ];
 const WORLD_TERRAIN_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
-  ...LANDSCAPE_SCULPT_TOOLS, "noise", "ramp", "terrace", "stamp",
+  ...LANDSCAPE_SCULPT_TOOLS, "noise", "ramp", "terrace", "erosion",
 ];
 const LANDSCAPE_PAINT_TOOLS: readonly LandscapePaintTool[] = ["paint", "erase", "smoothWeights"];
 const LANDSCAPE_VIEW_MODES: readonly LandscapeViewMode[] = ["lit", "height", "slope", "layer"];
@@ -874,9 +874,8 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
   body.querySelector<HTMLInputElement>("[data-landscape-flatten-clicked-height]")?.addEventListener("change", (event) => {
     update({ flattenUseClickedHeight: (event.currentTarget as HTMLInputElement).checked });
   });
-  body.querySelector<HTMLSelectElement>("[data-landscape-stamp-shape]")?.addEventListener("change", (event) => {
-    const stampShape = (event.currentTarget as HTMLSelectElement).value;
-    if (stampShape === "hill" || stampShape === "crater" || stampShape === "ridge") update({ stampShape });
+  body.querySelector<HTMLSelectElement>("[data-landscape-erosion-type]")?.addEventListener("change", (event) => {
+    update({ erosionHydraulic: (event.currentTarget as HTMLSelectElement).value === "hydraulic" });
   });
 }
 
@@ -910,13 +909,20 @@ function terrainSculptControls(settings: LandscapeSculptSettings, lockedAttr: st
     controls = `${number("terraceStep", "Step Height (m)", 0.01, 1000, 0.1)}
       ${number("terraceSmoothing", "Step Smoothing", 0, 1, 0.05)}
       <div class="detail-hint">Paint height steps relative to the Landscape origin. Smoothing softens the transitions between steps.</div>`;
-  } else if (settings.tool === "stamp") {
-    controls = `<label class="detail-row"><span>Stamp Shape</span><select data-landscape-stamp-shape ${lockedAttr}>
-      ${(["hill", "crater", "ridge"] as const).map((shape) => `<option value="${shape}" ${settings.stampShape === shape ? "selected" : ""}>${shape[0]!.toUpperCase() + shape.slice(1)}</option>`).join("")}
+  } else if (settings.tool === "erosion") {
+    controls = `<label class="detail-row"><span>Erosion Type</span><select data-landscape-erosion-type ${lockedAttr}>
+      <option value="thermal" ${settings.erosionHydraulic ? "" : "selected"}>Thermal</option>
+      <option value="hydraulic" ${settings.erosionHydraulic ? "selected" : ""}>Hydraulic</option>
       </select></label>
-      ${number("stampHeight", "Stamp Height (m)", -1000, 1000, 0.1)}
-      ${number("stampRotation", "Rotation (deg)", -360, 360, 5)}
-      <div class="detail-hint">Click to add one stamp. Dragging does not repeat it. Negative height reverses the shape; rotation is most visible with Ridge. Strength and Falloff control blending.</div>`;
+      ${number("erosionIterations", "Iterations", 1, 64, 1)}
+      ${settings.erosionHydraulic ? `
+        ${number("erosionRainAmount", "Rain Amount", 0, 10, 0.1)}
+        ${number("erosionSedimentCapacity", "Sediment Capacity", 0, 20, 0.5)}
+        ${number("erosionEvaporation", "Evaporation", 0, 1, 0.01)}
+        ${number("erosionSeed", "Rain Seed", 0, 2147483647, 1)}
+        <div class="detail-hint">Rain flows downhill, carves channels and deposits transported soil. Increase Rain Amount or Iterations for stronger weathering. Flat terrain needs a slope for flowing-water erosion.</div>`
+        : `${number("erosionTalus", "Resting Angle (deg)", 0, 89, 1)}
+        <div class="detail-hint">Loose soil moves down slopes steeper than the Resting Angle and builds up below. Lower angles affect gentler slopes. Strength and Falloff control the amount of weathering.</div>`}`;
   } else if (settings.tool === "flatten") {
     controls = `<label class="detail-toggle">
       <input data-landscape-flatten-clicked-height type="checkbox" ${settings.flattenUseClickedHeight ? "checked" : ""} ${lockedAttr} />

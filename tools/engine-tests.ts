@@ -1,4 +1,5 @@
 import { landscapeTrimesh } from "../tests/engine/terrainTrimeshReference";
+import { registerTerrainErosionTests } from "../tests/engine/terrainErosion.test";
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
@@ -1214,6 +1215,7 @@ registerDeformationFieldTests(check);
 registerDeformationPersistenceTests(check);
 registerTerrainLodTests(check);
 registerTerrainEditTests(check);
+registerTerrainErosionTests(check);
 registerTerrainImportTests(check);
 registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);

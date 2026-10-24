@@ -11,6 +11,7 @@ import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey } from
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
 import { DEFAULT_TERRAIN_SCULPT_SETTINGS, nextTerrainSculptHeight, terrainSculptBounds, terrainSculptInfluence, type TerrainSculptSettings, type TerrainSculptTool, type TerrainRamp } from "@engine/terrain/terrainSculpt";
+import { erodeTerrainRegion } from "@engine/terrain/terrainErosion";
 import {
   applyTerrainBrush,
   applyTerrainUndoPatches,
@@ -985,7 +986,7 @@ interface WorldTerrainStroke {
   document: WorldTerrainDocument;
   mode: "sculpt" | "paint";
   flattenSampleHeight: number;
-  /** Stamp applies once; Ramp previews during the drag and applies on release. */
+  /** Ramp previews during the drag and applies on release. */
   tool: LandscapeSculptTool;
   rampStart: Vector3 | null;
   rampEnd: Vector3 | null;
@@ -2270,7 +2271,7 @@ export class SceneApp {
     for (const world of this.worldTerrains.values()) for (const layer of world.def.layers) layerIds.add(layer.id);
     this.landscapeSculptSettings = {
       editMode: ["sculpt", "paint", "splines"].includes(next.editMode) ? next.editMode : "sculpt",
-      tool: ["raise", "lower", "smooth", "flatten", "noise", "ramp", "terrace", "stamp"].includes(next.tool) ? next.tool : "raise",
+      tool: ["raise", "lower", "smooth", "flatten", "noise", "ramp", "terrace", "erosion"].includes(next.tool) ? next.tool : "raise",
       paintTool: ["paint", "erase", "smoothWeights"].includes(next.paintTool)
         ? next.paintTool
         : "paint",
@@ -2290,9 +2291,13 @@ export class SceneApp {
       noiseSeed: Number.isFinite(next.noiseSeed) ? Math.round(clamp(next.noiseSeed, 0, 2147483647)) : DEFAULT_TERRAIN_SCULPT_SETTINGS.noiseSeed,
       terraceStep: Number.isFinite(next.terraceStep) ? clamp(next.terraceStep, 0.01, 1000) : DEFAULT_TERRAIN_SCULPT_SETTINGS.terraceStep,
       terraceSmoothing: Number.isFinite(next.terraceSmoothing) ? clamp(next.terraceSmoothing, 0, 1) : DEFAULT_TERRAIN_SCULPT_SETTINGS.terraceSmoothing,
-      stampShape: ["hill", "crater", "ridge"].includes(next.stampShape) ? next.stampShape : "hill",
-      stampHeight: Number.isFinite(next.stampHeight) ? clamp(next.stampHeight, -1000, 1000) : DEFAULT_TERRAIN_SCULPT_SETTINGS.stampHeight,
-      stampRotation: Number.isFinite(next.stampRotation) ? clamp(next.stampRotation, -360, 360) : 0,
+      erosionHydraulic: next.erosionHydraulic === true,
+      erosionIterations: Number.isFinite(next.erosionIterations) ? Math.round(clamp(next.erosionIterations, 1, 64)) : DEFAULT_TERRAIN_SCULPT_SETTINGS.erosionIterations,
+      erosionTalus: Number.isFinite(next.erosionTalus) ? clamp(next.erosionTalus, 0, 89) : DEFAULT_TERRAIN_SCULPT_SETTINGS.erosionTalus,
+      erosionRainAmount: Number.isFinite(next.erosionRainAmount) ? clamp(next.erosionRainAmount, 0, 10) : DEFAULT_TERRAIN_SCULPT_SETTINGS.erosionRainAmount,
+      erosionSedimentCapacity: Number.isFinite(next.erosionSedimentCapacity) ? clamp(next.erosionSedimentCapacity, 0, 20) : DEFAULT_TERRAIN_SCULPT_SETTINGS.erosionSedimentCapacity,
+      erosionEvaporation: Number.isFinite(next.erosionEvaporation) ? clamp(next.erosionEvaporation, 0, 1) : DEFAULT_TERRAIN_SCULPT_SETTINGS.erosionEvaporation,
+      erosionSeed: Number.isFinite(next.erosionSeed) ? Math.round(clamp(next.erosionSeed, 0, 2147483647)) : DEFAULT_TERRAIN_SCULPT_SETTINGS.erosionSeed,
       rampStartOffset: Number.isFinite(next.rampStartOffset) ? clamp(next.rampStartOffset, -1000, 1000) : 0,
       rampEndOffset: Number.isFinite(next.rampEndOffset) ? clamp(next.rampEndOffset, -1000, 1000) : 0,
       rampShoulder: Number.isFinite(next.rampShoulder) ? clamp(next.rampShoulder, 0, 50) : DEFAULT_TERRAIN_SCULPT_SETTINGS.rampShoulder,
@@ -9244,7 +9249,7 @@ export class SceneApp {
       : {
           ...settings,
           ...base,
-          mode: ramp ? "ramp" : stroke.tool === "stamp" ? "stamp" : this.landscapeSculptTool(event),
+          mode: ramp ? "ramp" : this.landscapeSculptTool(event),
           ...(ramp ? { ramp } : {}),
           // Heights are relative to the datum (origin Y), like a Landscape's local Y.
           hitHeight: point.y - stroke.document.def.origin[1],
@@ -9296,7 +9301,7 @@ export class SceneApp {
       if (stroke.rampStart) {
         stroke.rampEnd = hit.point.clone();
         this.updateTerrainRampPreview(stroke.rampStart, hit.point);
-      } else if (stroke.mode !== "sculpt" || stroke.tool !== "stamp") this.applyWorldTerrainDab(stroke, hit.point, event);
+      } else this.applyWorldTerrainDab(stroke, hit.point, event);
     }
     this.updateLandscapeBrushHover(event.clientX, event.clientY);
     return true;
@@ -9378,7 +9383,7 @@ export class SceneApp {
       stroke.rampEnd = hit.local.clone();
       const object = this.landscapeObjects[stroke.landscapeIndex];
       if (object) this.updateTerrainRampPreview(object.localToWorld(stroke.rampStart.clone()), object.localToWorld(hit.local.clone()));
-    } else if (stroke.mode !== "sculpt" || stroke.tool !== "stamp") this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local, event);
+    } else this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local, event);
     this.updateLandscapeBrushHover(event.clientX, event.clientY);
     return true;
   }
@@ -9485,7 +9490,7 @@ export class SceneApp {
       stroke.mode === "paint"
         ? this.editLandscapeWeights(data, localHit)
         : this.editLandscapeHeights(
-            data, localHit, stroke.rampStart ? "ramp" : stroke.tool === "stamp" ? "stamp" : this.landscapeSculptTool(event),
+            data, localHit, stroke.rampStart ? "ramp" : this.landscapeSculptTool(event),
             this.landscapeFlattenTarget(stroke.flattenSampleHeight, event),
           );
     if (!dirty) return;
@@ -9509,18 +9514,30 @@ export class SceneApp {
     if (tool === "ramp" && (!ramp || Math.hypot(ramp.end.x - ramp.start.x, ramp.end.z - ramp.start.z) < 0.001)) return null;
     const originX = ((verticesX - 1) * spacing) / 2;
     const originZ = ((verticesZ - 1) * spacing) / 2;
-    const bounds = terrainSculptBounds(localHit.x, localHit.z, radius + (ramp ? this.landscapeSculptSettings.rampShoulder : 0), ramp);
+    const bounds = terrainSculptBounds(localHit.x, localHit.z, radius + (ramp ? this.landscapeSculptSettings.rampShoulder : 0) + (tool === "erosion" ? spacing : 0), ramp);
     const minX = Math.max(0, Math.floor((bounds.minX + originX) / spacing));
     const maxX = Math.min(verticesX - 1, Math.ceil((bounds.maxX + originX) / spacing));
     const minZ = Math.max(0, Math.floor((bounds.minZ + originZ) / spacing));
     const maxZ = Math.min(verticesZ - 1, Math.ceil((bounds.maxZ + originZ) / spacing));
     const settings = { ...this.landscapeSculptSettings,
       terraceStep: this.landscapeSculptSettings.terraceStep / scale,
-      stampHeight: this.landscapeSculptSettings.stampHeight / scale,
       rampStartOffset: this.landscapeSculptSettings.rampStartOffset / scale,
       rampEndOffset: this.landscapeSculptSettings.rampEndOffset / scale,
     };
     const sourceHeights = [...data.heights];
+    let erosion: Float64Array | undefined;
+    if (tool === "erosion") {
+      try {
+        erosion = erodeTerrainRegion({
+          x0: minX, x1: maxX, z0: minZ, z1: maxZ, spacing, originX: -originX, originZ: -originZ,
+          x: localHit.x, z: localHit.z, radius, strength: settings.strength, falloff: settings.falloff, settings,
+          sample: (x, z) => sourceHeights[z * verticesX + x]! * scale,
+        });
+      } catch (error) {
+        this.onStatus?.(`Terrain erosion failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+        return null;
+      }
+    }
     let changed = false;
 
     for (let z = minZ; z <= maxZ; z += 1) {
@@ -9531,8 +9548,9 @@ export class SceneApp {
         if (falloff <= 0) continue;
         const index = z * verticesX + x;
         const before = data.heights[index] ?? 0;
-        const after = tool === "noise" || tool === "ramp" || tool === "terrace" || tool === "stamp"
-          ? nextTerrainSculptHeight(tool, before, (tool === "ramp" ? 1 : settings.strength) * falloff / (tool === "noise" ? scale : 1), worldX, worldZ, localHit.x, localHit.z, radius, settings, ramp)
+        const after = tool === "erosion" ? erosion![(z - minZ) * (maxX - minX + 1) + x - minX]! / scale
+          : tool === "noise" || tool === "ramp" || tool === "terrace"
+          ? nextTerrainSculptHeight(tool, before, (tool === "ramp" ? 1 : settings.strength) * falloff / (tool === "noise" ? scale : 1), worldX, worldZ, settings, ramp)
           : this.nextLandscapeHeight(
           tool,
           sourceHeights,
@@ -9627,7 +9645,7 @@ export class SceneApp {
     flattenTargetHeight: number,
     falloff: number,
   ): number {
-    if (tool === "noise" || tool === "ramp" || tool === "terrace" || tool === "stamp") return current;
+    if (tool === "noise" || tool === "ramp" || tool === "terrace" || tool === "erosion") return current;
     return nextLandscapeBrushHeight(
       tool,
       current,

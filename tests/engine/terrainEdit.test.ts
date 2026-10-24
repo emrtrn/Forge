@@ -116,7 +116,7 @@ function assertSeams(world: TerrainEditWorld): void {
 }
 
 export function registerTerrainEditTests(check: Check): void {
-  for (const mode of ["noise", "ramp", "terrace", "stamp"] as const) {
+  for (const mode of ["noise", "ramp", "terrace", "erosion"] as const) {
     check(`terrain sculpt ${mode} crosses four tiles, preserves paint, supports exact undo/redo and f32 save`, () => {
       const world = fixture();
       const before = snapshot(world);
@@ -153,6 +153,28 @@ export function registerTerrainEditTests(check: Check): void {
       assert.equal(tile.heights[z * tile.size + x], monolithic.heights[(tile.z * 32 + z) * 65 + tile.x * 32 + x]);
     }
   });
+
+  for (const hydraulic of [false, true]) {
+    check(`terrain erosion ${hydraulic ? "Hydraulic" : "Thermal"} is tile-partition independent, preserves seams and supports exact undo`, () => {
+      const tiled = fixture(2, 2, 32), single = fixture(1, 1, 64);
+      const before = snapshot(tiled);
+      const dab = { ...brush(tiled), mode: "erosion" as const, radius: 12, erosionHydraulic: hydraulic, strength: 0.75 };
+      const result = applyTerrainBrush(tiled, dab);
+      applyTerrainBrush(single, dab);
+      assert.ok(result.patches.length > 0);
+      assertSeams(tiled);
+      const monolithic = single.tile(0, 0)!;
+      for (const tile of tiled.tiles.values()) for (let z = 0; z < tile.size; z++) for (let x = 0; x < tile.size; x++) {
+        assert.equal(tile.heights[z * tile.size + x], monolithic.heights[(tile.z * 32 + z) * 65 + tile.x * 32 + x]);
+      }
+      const after = snapshot(tiled);
+      revertTerrainUndoPatches(tiled, result.patches);
+      assert.deepEqual(snapshot(tiled), before);
+      applyTerrainUndoPatches(tiled, result.patches);
+      assert.deepEqual(snapshot(tiled), after);
+      for (const [key, tile] of tiled.tiles) assert.deepEqual(tile.weights, before.get(key)!.weights);
+    });
+  }
 
   check("terrain sculpt Ramp interpolates endpoint heights and offsets along the whole corridor", () => {
     const world = fixture();
@@ -221,34 +243,10 @@ export function registerTerrainEditTests(check: Check): void {
     }
   });
 
-  check("terrain sculpt Stamp hill/crater/ridge profiles, inversion and rotation", () => {
-    const world = fixture(1, 1);
-    const tile = world.tile(0, 0)!;
-    const dab = { ...brush(world, "raise", 16, 16), mode: "stamp" as const, radius: 10, strength: 1, falloff: 0, stampHeight: 5 };
-    const at = (x: number, z: number) => tile.heights[z * tile.size + x]!;
-    tile.heights.fill(0);
-    applyTerrainBrush(world, { ...dab, stampShape: "hill" });
-    assert.equal(at(16, 16), 5);
-    assert.equal(at(0, 0), 0);
-    tile.heights.fill(0);
-    applyTerrainBrush(world, { ...dab, stampShape: "crater" });
-    assert.ok(at(16, 16) < -4.9 && at(22, 16) > 1, "crater has a depression and a raised rim");
-    tile.heights.fill(0);
-    applyTerrainBrush(world, { ...dab, stampShape: "ridge" });
-    assert.ok(at(16, 21) > at(21, 16) * 10);
-    const along = at(16, 21);
-    tile.heights.fill(0);
-    applyTerrainBrush(world, { ...dab, stampShape: "ridge", stampRotation: 90 });
-    assert.equal(at(21, 16), along);
-    tile.heights.fill(0);
-    applyTerrainBrush(world, { ...dab, stampHeight: -5 });
-    assert.equal(at(16, 16), -5);
-  });
-
   check("terrain sculpt rejects invalid parameters and unavailable ramp tiles before any writes", () => {
     const world = fixture();
     const original = snapshot(world);
-    for (const invalid of [{ noiseScale: 0 }, { terraceStep: 0 }, { stampHeight: NaN }, { terraceSmoothing: 2 }, { rampShoulder: -1 }]) {
+    for (const invalid of [{ noiseScale: 0 }, { terraceStep: 0 }, { erosionRainAmount: NaN }, { terraceSmoothing: 2 }, { rampShoulder: -1 }]) {
       assert.throws(() => applyTerrainBrush(world, { ...brush(world), mode: "noise", ...invalid }), /Invalid terrain sculpt/);
       assert.deepEqual(snapshot(world), original);
     }
@@ -258,7 +256,7 @@ export function registerTerrainEditTests(check: Check): void {
       ramp: { start: { x: -10, z: 45, height: 1 }, end: { x: 40, z: 45, height: 8 } },
     }), /not resident/);
     assert.deepEqual(snapshot(world), before);
-    const modes: TerrainSculptTool[] = ["noise", "terrace", "stamp"];
+    const modes: TerrainSculptTool[] = ["noise", "terrace", "erosion"];
     for (const mode of modes) {
       assert.throws(() => applyTerrainBrush(world, { ...brush(world), mode }), /not resident/);
       assert.deepEqual(snapshot(world), before);

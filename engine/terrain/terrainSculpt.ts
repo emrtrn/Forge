@@ -1,16 +1,13 @@
 import { landscapeBrushFalloff, type LandscapeHeightBrushMode } from "../scene/landscapeBrush";
+import { DEFAULT_TERRAIN_EROSION_SETTINGS, type TerrainErosionSettings } from "./terrainErosion";
 
-export type TerrainSculptTool = LandscapeHeightBrushMode | "noise" | "ramp" | "terrace" | "stamp";
-export type TerrainStampShape = "hill" | "crater" | "ridge";
+export type TerrainSculptTool = LandscapeHeightBrushMode | "noise" | "ramp" | "terrace" | "erosion";
 
-export interface TerrainSculptSettings {
+export interface TerrainSculptSettings extends TerrainErosionSettings {
   noiseScale: number;
   noiseSeed: number;
   terraceStep: number;
   terraceSmoothing: number;
-  stampShape: TerrainStampShape;
-  stampHeight: number;
-  stampRotation: number;
   rampStartOffset: number;
   rampEndOffset: number;
   /** Blend width outside each side of the full-strength road surface, in metres. */
@@ -18,8 +15,9 @@ export interface TerrainSculptSettings {
 }
 
 export const DEFAULT_TERRAIN_SCULPT_SETTINGS: Readonly<TerrainSculptSettings> = {
+  ...DEFAULT_TERRAIN_EROSION_SETTINGS,
   noiseScale: 4, noiseSeed: 1, terraceStep: 2, terraceSmoothing: 0.15,
-  stampShape: "hill", stampHeight: 5, stampRotation: 0, rampStartOffset: 0, rampEndOffset: 0, rampShoulder: 2,
+  rampStartOffset: 0, rampEndOffset: 0, rampShoulder: 2,
 };
 
 /** World X/Z and heights in metres relative to the terrain's origin Y. */
@@ -73,8 +71,8 @@ export function terrainSculptNoise(x: number, z: number, seed: number): number {
 
 /** Extra sculpt tools; Ramp uses footprint influence alone, the others also use strength. */
 export function nextTerrainSculptHeight(
-  mode: "noise" | "ramp" | "terrace" | "stamp", current: number, amount: number,
-  x: number, z: number, cx: number, cz: number, radius: number,
+  mode: "noise" | "ramp" | "terrace", current: number, amount: number,
+  x: number, z: number,
   settings: TerrainSculptSettings, ramp?: TerrainRamp,
 ): number {
   if (mode === "noise") return current + terrainSculptNoise(x / settings.noiseScale, z / settings.noiseScale, settings.noiseSeed) * amount;
@@ -93,14 +91,5 @@ export function nextTerrainSculptHeight(
     const end = ramp.end.height + settings.rampEndOffset;
     return current + (start + (end - start) * t - current) * Math.min(1, amount);
   }
-  const angle = settings.stampRotation * Math.PI / 180;
-  const dx = (x - cx) / radius, dz = (z - cz) / radius;
-  const u = dx * Math.cos(angle) + dz * Math.sin(angle);
-  const v = -dx * Math.sin(angle) + dz * Math.cos(angle);
-  const r = Math.hypot(dx, dz);
-  let profile: number;
-  if (settings.stampShape === "crater") profile = -Math.exp(-r * r * 12) + 0.65 * Math.exp(-(((r - 0.65) / 0.14) ** 2));
-  else if (settings.stampShape === "ridge") profile = Math.exp(-u * u * 24) * Math.max(0, 1 - v * v);
-  else profile = Math.max(0, 1 - r * r) ** 2;
-  return current + profile * settings.stampHeight * Math.min(1, amount);
+  return current;
 }

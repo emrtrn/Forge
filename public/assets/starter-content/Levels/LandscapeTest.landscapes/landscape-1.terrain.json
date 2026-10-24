@@ -2,14 +2,14 @@
   "schema": 1,
   "type": "worldTerrain",
   "name": "Landscape",
-  "tileQuads": 64,
+  "tileQuads": 256,
   "spacing": 1,
   "tilesX": 2,
   "tilesZ": 2,
   "origin": [
-    -64,
+    -256,
     0,
-    -64
+    -256
   ],
   "heightMin": -256,
   "heightMax": 256,
@@ -29,7 +29,8 @@
     {
       "id": "rock",
       "name": "Rock",
-      "color": "#7f8485"
+      "color": "#7f8485",
+      "material": "m-gravel-material"
     },
     {
       "id": "snow",
@@ -40,23 +41,23 @@
   "tiles": [
     {
       "key": "0_0",
-      "minHeight": 0.003000000026077032,
-      "maxHeight": 2.3605000972747803
+      "minHeight": 0.0038999998942017555,
+      "maxHeight": 20.39739990234375
     },
     {
       "key": "1_0",
-      "minHeight": 0.00019999999494757503,
-      "maxHeight": 8.305000305175781
+      "minHeight": 0.0038999998942017555,
+      "maxHeight": 26.677099227905273
     },
     {
       "key": "0_1",
-      "minHeight": -1.597680687904358,
-      "maxHeight": 3.9258410930633545
+      "minHeight": -0.006099999882280827,
+      "maxHeight": 1.1009000539779663
     },
     {
       "key": "1_1",
-      "minHeight": 0.0020000000949949026,
-      "maxHeight": 16.251100540161133
+      "minHeight": -0.017500000074505806,
+      "maxHeight": 27.068700790405273
     }
   ],
   "collision": true

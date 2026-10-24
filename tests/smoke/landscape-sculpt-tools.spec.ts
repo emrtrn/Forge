@@ -66,8 +66,8 @@ async function number(page: Page, key: string, value: string): Promise<void> {
 }
 
 for (const tiles of [1, 2]) {
-  test(`Landscape ${tiles}x${tiles}: Noise, Ramp, Terrace and Stamp with undo, save and reload`, async ({ page }, testInfo) => {
-    test.setTimeout(210_000);
+  test(`Landscape ${tiles}x${tiles}: Noise, Ramp, Terrace and Thermal/Hydraulic Erosion with undo, save and reload`, async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
@@ -97,7 +97,8 @@ for (const tiles of [1, 2]) {
     await expect(dialog).toHaveCount(0);
     await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
     const tool = (name: string) => page.locator(`[data-landscape-tool="${name}"]`);
-    for (const name of ["raise", "lower", "smooth", "flatten", "noise", "ramp", "terrace", "stamp"]) await expect(tool(name)).toBeVisible();
+    for (const name of ["raise", "lower", "smooth", "flatten", "noise", "ramp", "terrace", "erosion"]) await expect(tool(name)).toBeVisible();
+    await expect(tool("stamp")).toHaveCount(0);
     await number(page, "brushSize", "8");
     await number(page, "strength", "1");
     const point = await project(page, 0, 8);
@@ -117,32 +118,65 @@ for (const tiles of [1, 2]) {
     expect(await heights(page)).toEqual(noise);
     await page.getByTestId("editor-undo").click();
 
-    await tool("stamp").click();
-    await page.locator("[data-landscape-stamp-shape]").selectOption("ridge");
-    await number(page, "stampHeight", "8");
-    await number(page, "stampRotation", "45");
-    await page.mouse.move(point.x, point.y);
-    await page.mouse.down();
-    const stamped = await heights(page);
-    expect(Math.max(...stamped)).toBeGreaterThan(5);
-    await page.mouse.move(point.x + 40, point.y, { steps: 8 });
-    expect(await heights(page), "a drag must not repeat Stamp").toEqual(stamped);
-    await page.mouse.up();
-    await page.screenshot({ path: testInfo.outputPath("stamp.png") });
+    await tool("raise").click();
+    await number(page, "strength", "2");
+    for (let i = 0; i < 6; i++) await page.mouse.click(point.x, point.y);
+    const hill = await heights(page);
+    await page.screenshot({ path: testInfo.outputPath("erosion-before.png") });
+    await tool("erosion").click();
+    const erosionType = page.locator("[data-landscape-erosion-type]");
+    await expect(erosionType).toHaveValue("thermal");
+    await number(page, "strength", "0.75");
+    await number(page, "erosionTalus", "25");
+    await number(page, "erosionIterations", "24");
+    await page.mouse.click(point.x, point.y);
+    const thermal = await heights(page);
+    expect(thermal).not.toEqual(hill);
+    expect(Math.max(...thermal)).toBeLessThan(Math.max(...hill));
+    expect(thermal.some((height, i) => height > hill[i]! + 0.001)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("erosion-thermal.png") });
     await page.getByTestId("editor-undo").click();
-    expect(await heights(page)).toEqual(baseline);
+    expect(await heights(page)).toEqual(hill);
     await page.getByTestId("editor-redo").click();
-    expect(await heights(page)).toEqual(stamped);
+    expect(await heights(page)).toEqual(thermal);
+    await page.getByTestId("editor-undo").click();
+    await erosionType.selectOption("hydraulic");
+    await expect(page.locator('[data-landscape-number="erosionTalus"]')).toHaveCount(0);
+    await number(page, "erosionRainAmount", "1");
+    await number(page, "erosionSedimentCapacity", "6");
+    await number(page, "erosionEvaporation", "0.02");
+    await number(page, "erosionSeed", "42");
+    await page.mouse.click(point.x, point.y);
+    const hydraulic = await heights(page);
+    expect(Math.max(...hydraulic.map((height, i) => Math.abs(height - hill[i]!)))).toBeGreaterThan(0.01);
+    expect(hydraulic).not.toEqual(thermal);
+    await page.screenshot({ path: testInfo.outputPath("erosion-hydraulic.png") });
+    await page.getByTestId("editor-undo").click();
+    expect(await heights(page)).toEqual(hill);
+    await page.getByTestId("editor-redo").click();
+    expect(await heights(page)).toEqual(hydraulic);
+
+    await page.getByTestId("editor-save").click();
+    await expect.poll(async () => page.evaluate(async ({ scene, expected }) => {
+      const level = await (await fetch(`/${scene}`)).json();
+      const modulePath = "/src/scene/terrainDocument.ts";
+      const { fetchTerrainActorDocument } = await import(modulePath);
+      const doc = await fetchTerrainActorDocument(level.landscapes[0].dataRef);
+      const saved = doc.kind === "landscape" ? doc.data.heights
+        : [...doc.document.tiles.values()].flatMap((tile: { heights: Float32Array }) => Array.from(tile.heights));
+      return saved.length === expected.length ? Math.max(...saved.map((height: number, i: number) => Math.abs(height - expected[i]!))) : Infinity;
+    }, { scene: SMOKE_SCENE, expected: hydraulic }), { timeout: 20_000 }).toBeLessThan(0.01);
 
     await tool("terrace").click();
     await number(page, "terraceStep", "3");
     await number(page, "terraceSmoothing", "0");
     await page.mouse.click(point.x, point.y);
-    expect(await heights(page)).not.toEqual(stamped);
+    expect(await heights(page)).not.toEqual(hydraulic);
     await page.screenshot({ path: testInfo.outputPath("terrace.png") });
     await page.getByTestId("editor-undo").click();
-    expect(await heights(page)).toEqual(stamped);
+    expect(await heights(page)).toEqual(hydraulic);
     await page.getByTestId("editor-undo").click();
+    for (let i = 0; i < 6; i++) await page.getByTestId("editor-undo").click();
     expect(await heights(page)).toEqual(baseline);
 
     // Reproduce the reported ridge with ordinary brush strength and falloff.

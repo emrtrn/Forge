@@ -1,7 +1,9 @@
 # Terrain Deformasyonu Planı (Kar / Çamur İzleri)
 
-> Durum: **Faz 1a + 1b + Faz 2 tamamlandı** (2026-10-24, `feat/terrain-deformation`);
-> sırada Faz 3 (gömülme). Görsel kabul kullanıcı testinde (LandscapeTest + Gaz52).
+> Durum: **Faz 1a + 1b + Faz 2 + Faz 3 fiziği tamamlandı** (2026-10-24,
+> `feat/terrain-deformation`); Faz 3'ün görsel kısmı (patch mesh / CDLOD
+> alt-seviyeleri, berm, kalite profili) açık. Görsel kabul kullanıcı testinde
+> (LandscapeTest + Gaz52).
 > Hedef: Araç (ve ileride karakter) Landscape üzerinde giderken kar, çamur ve
 > kum gibi yumuşak zeminlerde **iz bırakması, gömülmesi ve zorlanması**.
 > Referans his: SnowRunner / Expeditions. Hedef, o hissin web'de ulaşılabilir
@@ -448,14 +450,15 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
 
 ## Faz 3 — Gömülme (fizik + yerel yoğun mesh)
 
-- [ ] **Fizik:** tekerlek başına `restLength − alan derinliği` (Faz 0 işaret
+- [x] **Fizik:** tekerlek başına `restLength − alan derinliği` (Faz 0 işaret
       düzeltmesi; değişim ≤ 0,3 m/s slew-limit, değişince `wakeUp()`).
       Tekerlek ışını arazi collider'ına çarpar; kısalan rest length gövdeyi
       derinlik kadar indirir, tekerlek görseli aynı miktarda aşağı kaydırılır.
-- [ ] **Patinajda kazma:** tekerlek dönüş hızı ile zemin hızı arasındaki fark
+- [x] **Patinajda kazma:** tekerlek dönüş hızı ile zemin hızı arasındaki fark
       (`wheelRotation` deltası) `digRate` ile çarpılıp derinliğe eklenir. Araç
-      patinaj yaptıkça kendini gömer.
-- [ ] **Gövde sürtünmesi (belly drag):** derinlik yerden yüksekliği aşınca
+      patinaj yaptıkça kendini gömer. (Uygulamada fark `wheelRotation`
+      yerine `tractionSlip`'ten okunuyor; aşağıdaki nota bakın.)
+- [x] **Gövde sürtünmesi (belly drag):** derinlik yerden yüksekliği aşınca
       şasiye hızla orantılı ters impuls uygulanır (`sinkResistance`).
 - [ ] **Yerel patch mesh:** aracın çevresinde yoğun bir grid (örneğin 256²,
       20 cm aralık; boyutu kalite profiline bağlı). Vertex yüksekliği
@@ -469,6 +472,67 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
 - [ ] Testler: patch vertex'lerinin `terrainHeightAt` ile eşitliği (collider
       eşitliği açık dünya Faz 1'de zaten testli), patch kenarında sıfır fark, derin çamurda
       sabit gazla hızın düz zemine göre belirgin düşük kalması.
+
+**Faz 3 fizik notu (2026-10-24):**
+- *Sanal ofset.* Terrain collider hiç değişmez. `PhysicsSubsystem.setVehicleGroundSinkProvider`
+  (enjekte edilen provider; `terrainDeformationModule` kurar) tekerlek başına
+  son temas noktasının altındaki iz derinliğini döndürür; fizik adımı
+  `rest − derinlik` ile rest length'i kısaltır, değişim ≤ 0,3 m/s
+  (`slewSinkDepth`), değişince `wakeUp()`. Tekerlek görseli `sinkDepth` kadar
+  aşağı iner. `VehicleWheelState` yeni `sinkDepth` ve `tractionSlip` alanlarını
+  taşır; `SurfaceDeformationSample` `digRate` + `sinkResistance` taşır. Saf
+  yardımcılar `engine/physics/surface/wheelSink.ts`'te.
+- *Sınır + belly drag.* `wheelSinkLimit = max(0, min(açıklık − 5 cm, rest − 5 cm))`;
+  açıklık = şasi collider altı − tekerleğin rest pozundaki zemin
+  (`hardPointY − rest − radius`), araç kurulurken hesaplanır. İstenen derinlik
+  sınırı aşınca fark (`overlap`) gövdeye sürtünür:
+  `F = sinkResistance × m × g × min(overlap / 0,1 m, 1) × min(|v_yatay|, 1 m/s)`,
+  yatay hıza ters impuls `min(F·dt, m·|v_yatay|)` (bir dilimde hareketi asla
+  ters çevirmez, y'ye dokunmaz).
+- *Ayak izi.* Derinlik tek nokta değil, aks boyunca −0,35·genişlik / 0 /
+  +0,35·genişlik'teki üç örneğin ortalaması (`wheelFootprintDepth`). 12,5 cm
+  hücrede 0,245 m'lik lastiğin yan örnekleri izin bilinear kenarına düşer:
+  park eden araç statik `sinkage`'ın ~%85'ine oturur (referans araç 0,093 m /
+  0,11 m), iz merkezinin biraz üstünde. Bu kabul edildi; titreşim yok.
+- *Patinajda kazma.* `tractionSlip` Rapier'in sürtünme dairesinden hesaplanır
+  (`tractionSlip()`: ileri impuls `engineForce × dt × 0,5`, son yan impulsla
+  birlikte `yük × dt × frictionSlip` sınırına karşı). **Rapier bulgusu:**
+  ray-cast vehicle ileri impulsu yalnız yan impuls ≠ 0 iken ölçekler; düz
+  çizgide patinaj `wheelForwardImpulse`'ta hiç görünmez. Bu yüzden **buzda da
+  tam motor kuvveti** uygulanır: `frictionSlipScale` 0,1'lik çamurda referans
+  araç 10 s'de ~20 m/s'ye çıkıyor, slip ~0,45 raporlanırken. `tractionSlip`
+  yalnız raporlar; Rapier'in itişini düzeltmez (ayrı iş, VEHICLE_PHYSICS_PLAN).
+  `WheelTrackStamper.stampVehicle` normal damgadan sonra slip > 0 ve
+  `digRate` > 0 ise: `current = field.sample(temas)`,
+  `cap = maxDepth × min(deformability, 1)`,
+  `target = digTargetDepth(current, slip, digRate, dt, cap)`
+  (= `current + digRate × slip × dt`, cap'te durur, mevcut daha derin izi asla
+  sığlaştırmaz); `target > current` ise yerinde (`from = to`) compaction 1,
+  bozulma 255, temas uzunluğu `wheelContactLength(radius, target)` ile basılır.
+  Slip 0 ya da `digRate` 0'da alan Faz 2 ile bit-bit aynı. **Plana ek:** alanın
+  0,1 mm'lik floor kuantalaması yavaş kazmayı yutuyordu (144 fps'te slip 0,1 ≈
+  kare başına 0,56 kuanta → hiç kazmaz); tekerlek başına bir kuantadan küçük
+  kalan "carry" sonraki kareye eklenir, temas kesilince / slip bitince sıfırlanır.
+- *Uyuyan gövde.* Park edip uyuyan şasi için ray-cast controller tekerlekleri
+  güncellemez; `suspensionForce` 0 okunur. İz basma o anda yeni derinlik
+  eklemez (max-lerp mevcut izi korur), sink değişimi gövdeyi kendiliğinden
+  uyandırmaz; bu yüzden rest length değişince `wakeUp()` şart.
+- *Debug.* `?debug`'da `vehicle surface:` satırının hemen ardından
+  `vehicle sink: actor:0 | 0.031 m slip 0.00 | …` (`formatVehicleSinkDebug`);
+  `vehicle surface:` biçimi değişmedi.
+- *Testler.* `tests/engine/wheelSink.test.ts` (slew, sınır, belly drag, slip,
+  kazma hedefi, ayak izi); `surfaceResponse.test.ts` "wheel sink rapier:"
+  kontrolleri (sabit izde slew'le inip çıkma, şasi sınırı + belly drag, slip
+  raporu, çamurda kendi izine oturup sarsılmadan çıkma, duvara dayanmış araç
+  düşük tutuşlu çamurda gazda tahrik tekerleklerini 0,096 → ~0,175 m gömer);
+  `wheelTracks.test.ts` (slip'li tekerlek daha derin, cap aşılmaz, slip 0 = Faz 2
+  birebir, 30/144 fps farkı < 3 mm, slip 0,1'de bile kazar);
+  `terrainSurface.test.ts` (formatter); `terrain-surface.spec.ts` smoke'u neutral
+  koşuda dört tekerlek 0, mud koşuda dört tekerlek ve en derin > 1 cm
+  (ölçülen 0,106 / 0,105 / 0,172 / 0,171 m, arka tahrik akslar kazdığı için derin).
+- *Açık kalanlar.* Patch mesh ya da CDLOD alt-seviyeleri (spike S-D1 kararı),
+  berm, kalite profili, yanal iz-tutma (C6; sol/sağ ayak izi derinlik
+  farkına orantılı yanal kuvvet, "rut steering" hissi).
 
 ## Faz 4 — Efekt ve ses
 

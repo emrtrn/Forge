@@ -97,14 +97,55 @@ export function wheelFootprintDepth(
   heading: number,
   width: number,
 ): number {
-  if (!Number.isFinite(contactX) || !Number.isFinite(contactZ) || !Number.isFinite(heading)) return 0;
+  return wheelFootprint(depthAt, contactX, contactZ, heading, width).depth;
+}
+
+/** Share of the footprint offset (±0.35·width) the side samples sit at. */
+const FOOTPRINT_SIDE = 0.35;
+
+/**
+ * {@link wheelFootprintDepth}'s three samples, plus the rut's cross slope:
+ * how much deeper the track is toward the axle's + side
+ * (`(cos heading, −sin heading)` in world X/Z) per metre across the tyre.
+ * Positive means the ground falls away toward +; 0 for a centred or level rut.
+ */
+export function wheelFootprint(
+  depthAt: (worldX: number, worldZ: number) => number,
+  contactX: number,
+  contactZ: number,
+  heading: number,
+  width: number,
+): { depth: number; slope: number } {
+  if (!Number.isFinite(contactX) || !Number.isFinite(contactZ) || !Number.isFinite(heading)) return { depth: 0, slope: 0 };
   const sample = (x: number, z: number): number => {
     const depth = depthAt(x, z);
     return Number.isFinite(depth) ? Math.max(0, depth) : 0;
   };
-  if (!Number.isFinite(width) || width <= 0) return sample(contactX, contactZ);
-  const dx = Math.cos(heading) * 0.35 * width;
-  const dz = -Math.sin(heading) * 0.35 * width;
-  return sample(contactX - dx, contactZ - dz) / 3 + sample(contactX, contactZ) / 3
-    + sample(contactX + dx, contactZ + dz) / 3;
+  if (!Number.isFinite(width) || width <= 0) return { depth: sample(contactX, contactZ), slope: 0 };
+  const dx = Math.cos(heading) * FOOTPRINT_SIDE * width;
+  const dz = -Math.sin(heading) * FOOTPRINT_SIDE * width;
+  const minus = sample(contactX - dx, contactZ - dz);
+  const centre = sample(contactX, contactZ);
+  const plus = sample(contactX + dx, contactZ + dz);
+  return { depth: minus / 3 + centre / 3 + plus / 3, slope: (plus - minus) / (2 * FOOTPRINT_SIDE * width) };
+}
+
+/**
+ * Rut steering (research C6): a rut wall under a tyre tilts its contact, so
+ * part of the wheel's load pushes it sideways toward the deeper side. Gain on
+ * `load × slope`; the slope is capped so a cell-sharp rut edge cannot kick.
+ */
+export const RUT_LATERAL_GAIN = 0.5;
+export const RUT_MAX_SLOPE = 0.5;
+
+/**
+ * World impulse (N·s, horizontal) a rut's cross slope puts on one wheel this
+ * slice: along the axle's + side for a positive slope (ground falling away
+ * there), `RUT_LATERAL_GAIN × load × clamp(slope)` × dt. Zero without load,
+ * slope or time.
+ */
+export function rutLateralImpulse(slope: number, load: number, heading: number, dtSeconds: number): [number, number, number] {
+  if (![slope, load, heading, dtSeconds].every(Number.isFinite) || slope === 0 || load <= 0 || dtSeconds <= 0) return [0, 0, 0];
+  const push = RUT_LATERAL_GAIN * load * Math.max(-RUT_MAX_SLOPE, Math.min(RUT_MAX_SLOPE, slope)) * dtSeconds;
+  return [Math.cos(heading) * push, 0, -Math.sin(heading) * push];
 }

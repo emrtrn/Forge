@@ -19,7 +19,7 @@
 import type { Subsystem } from "@engine/core/Subsystem";
 import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
 import { wheelFootprintDepth } from "@engine/physics/surface/wheelSink";
-import { WheelTrackStamper } from "@engine/physics/surface/wheelTracks";
+import { rutSlopeAhead, WheelTrackStamper } from "@engine/physics/surface/wheelTracks";
 import type { VehicleState } from "@engine/physics/vehicle/vehicleTypes";
 import { sharedTerrainDeformation, type TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
 import { DeformationField } from "@engine/scene/deformationField";
@@ -70,10 +70,13 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
     const surface = services?.resolve(terrainSurfaceHostService);
     if (!active || !surface || query.groundEntityId === null) return null;
     const [x, , z] = query.contactPoint;
-    const depth = wheelFootprintDepth((sx, sz) => active.sample(sx, sz).depth, x, z, query.heading, query.width);
+    const depthAt = (sx: number, sz: number) => active.sample(sx, sz).depth;
+    const depth = wheelFootprintDepth(depthAt, x, z, query.heading, query.width);
     if (depth <= 0) return null;
     const profile = surface.deformationAt(query.groundEntityId, query.contactPoint);
-    return profile ? { depth, resistance: profile.sinkResistance } : null;
+    if (!profile) return null;
+    const slope = rutSlopeAhead(depthAt, x, z, query.heading, query.width, query.radius ?? 0, depth, query.travel ?? 0);
+    return { depth, resistance: profile.sinkResistance, slope };
   };
 
   /** Created on the first frame a deformable terrain exists, so track-free levels never allocate it. */

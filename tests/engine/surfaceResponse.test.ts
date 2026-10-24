@@ -10,7 +10,7 @@ import {
 } from "../../engine/physics/vehicle/vehicleTypes";
 import { nominalWheelLoad, sinkage } from "../../engine/physics/surface/sinkage";
 import { wheelFootprintDepth } from "../../engine/physics/surface/wheelSink";
-import { WheelTrackStamper } from "../../engine/physics/surface/wheelTracks";
+import { rutSlopeAhead, WheelTrackStamper } from "../../engine/physics/surface/wheelTracks";
 import { PHYSICAL_MATERIALS } from "../../engine/scene/collision";
 import { DeformationField } from "../../engine/scene/deformationField";
 import type { SurfaceDeformationSample } from "../../engine/terrain/terrainSurface";
@@ -380,23 +380,32 @@ export async function registerSurfaceResponseRapierTests(
    * The terrain deformation module's loop without its services: physics reads
    * the field, the stamper writes it. Creates the car; `frame` steps 1/60 s.
    */
-  const rutLoop = (world: VehicleSurfaceTestWorld, grip: SurfaceSample = resolveSurfaceSample("mud")) => {
+  const rutLoop = (
+    world: VehicleSurfaceTestWorld,
+    grip: SurfaceSample = resolveSurfaceSample("mud"),
+    options: { rutSteering?: boolean; field?: DeformationField } = {},
+  ) => {
     const { physics } = world;
-    const field = new DeformationField();
+    const field = options.field ?? new DeformationField();
     const stamper = new WheelTrackStamper(field);
     const definition = createReferenceCarDefinition();
     physics.setVehicleSurfaceProvider(() => grip);
+    // Mirrors the terrain deformation module's provider.
     physics.setVehicleGroundSinkProvider((query) => {
-      const depth = wheelFootprintDepth((x, z) => field.sample(x, z).depth,
-        query.contactPoint[0], query.contactPoint[2], query.heading, query.width);
-      return depth > 0 ? { depth, resistance: mud.sinkResistance } : null;
+      const depthAt = (x: number, z: number) => field.sample(x, z).depth;
+      const [x, , z] = query.contactPoint;
+      const depth = wheelFootprintDepth(depthAt, x, z, query.heading, query.width);
+      if (depth <= 0) return null;
+      if (options.rutSteering === false) return { depth, resistance: mud.sinkResistance };
+      const slope = rutSlopeAhead(depthAt, x, z, query.heading, query.width, query.radius ?? 0, depth, query.travel ?? 0);
+      return { depth, resistance: mud.sinkResistance, slope };
     });
     physics.createVehicle("car", definition);
     const frame = (): void => {
       world.tick(1 / 60);
       stamper.stampVehicle("car", physics.vehicleState("car")!, definition, () => mud, 1 / 60);
     };
-    return { definition, frame };
+    return { definition, frame, field };
   };
 
   await checkAsync("wheel sink rapier: a car on mud settles into its own ruts and drives out of them without shaking", async () => {
@@ -516,5 +525,66 @@ export async function registerSurfaceResponseRapierTests(
     assert.ok(mud.sink > 0.03, `the car drives in its own ruts: ${mud.sink} m`);
     assert.ok(mud.speed > 1 && mud.speed < firm.speed * 0.8, `4 s of full throttle: mud ${mud.speed} vs firm ${firm.speed} m/s`);
     console.info(`[deform] steady throttle 4 s: firm ${firm.speed.toFixed(2)} m/s, mud ${mud.speed.toFixed(2)} m/s (sink ${mud.sink.toFixed(3)} m)`);
+  });
+  /** Two straight 0.3 m wide, 0.1 m deep ruts along +Z under the reference car's wheels, for 60 m. */
+  const pressedRuts = (): DeformationField => {
+    const field = new DeformationField();
+    const halfTrack = Math.abs(createReferenceCarDefinition().wheels[0]!.position[0]);
+    for (const x of [-halfTrack, halfTrack]) {
+      field.stampWheel({ from: [x, -10], to: [x, 30], width: 0.3, contactLength: 0.3, targetDepth: 0.1, compaction: 1, disturbance: 255 });
+    }
+    return field;
+  };
+
+  await checkAsync("wheel sink rapier: rut walls pull an offset car back into its ruts; steering still climbs out", async () => {
+    const run = async (rutSteering: boolean, steer: number) => {
+      const world = await createWorld();
+      const { physics } = world;
+      try {
+        const { frame } = rutLoop(world, resolveSurfaceSample("mud"), { rutSteering, field: pressedRuts() });
+        // 10 cm off the ruts' centre lines: each tyre's outer side sits on the rut wall.
+        physics.resetVehicle("car", { position: [0.1, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+        for (let index = 0; index < 60; index += 1) frame();
+        world.drive({ throttle: 0.4, steer });
+        let contactLosses = 0;
+        let maxOffset = 0;
+        for (let index = 0; index < 60 * 4; index += 1) {
+          frame();
+          contactLosses += physics.vehicleState("car")!.wheels.filter((wheel) => !wheel.inContact).length;
+          maxOffset = Math.max(maxOffset, Math.abs(world.position()[0]));
+        }
+        return { x: world.position()[0], z: world.position()[2], contactLosses, maxOffset };
+      } finally {
+        physics.dispose();
+      }
+    };
+    const free = await run(false, 0);
+    const pulled = await run(true, 0);
+    assert.ok(Math.abs(free.x - 0.1) < 0.01, `without rut steering the offset stays: ${free.x}`);
+    // Pulled in until the tyre rests on the rut's flat bottom (0.30 m rut, 0.245 m tyre), never across it.
+    // The side samples sit 0.086 m off the tyre's centre and blur over one 0.125 m cell: from ~0.06–0.07 m in, both read the flat bottom.
+    assert.ok(pulled.x < 0.08 && pulled.x < free.x - 0.02 && pulled.x > -0.02, `rut steering re-centres: ${pulled.x} vs ${free.x}`);
+    assert.ok(pulled.maxOffset <= 0.11, `no swing past the start: ${pulled.maxOffset}`);
+    assert.ok(pulled.z > 3, `still driving: ${pulled.z} m`);
+    const exit = await run(true, 0.25);
+    // Own fresh ruts never push: driving straight onto untouched mud, the car tracks the same line with and without.
+    const fresh = async (rutSteering: boolean) => {
+      const world = await createWorld();
+      const { physics } = world;
+      try {
+        const { frame } = rutLoop(world, resolveSurfaceSample("mud"), { rutSteering });
+        for (let index = 0; index < 60; index += 1) frame();
+        world.drive({ throttle: 0.6 });
+        for (let index = 0; index < 60 * 4; index += 1) frame();
+        return world.position()[0];
+      } finally {
+        physics.dispose();
+      }
+    };
+    const own = [await fresh(false), await fresh(true)];
+    assert.ok(Math.abs(own[0]! - own[1]!) < 0.005, `own ruts stay neutral: x ${own[0]} vs ${own[1]}`);
+    assert.ok(exit.x < -0.4, `steering climbs out of the ruts: x ${exit.x}`);
+    assert.equal(pulled.contactLosses + exit.contactLosses, 0, "rut walls never lift a wheel");
+    console.info(`[deform] rut steering: offset 0.10 → ${pulled.x.toFixed(3)} m (free ${free.x.toFixed(3)}), steered out to ${exit.x.toFixed(2)} m`);
   });
 }

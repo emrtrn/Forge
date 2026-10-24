@@ -30,7 +30,7 @@ import { vehicleWheelWidth } from "./surface/sinkage";
 import {
   computeWheelSurfaceResponse, type VehicleGroundSinkProvider, type VehicleSurfaceProvider,
 } from "./surface/surfaceResponse";
-import { bellyDragImpulse, slewSinkDepth, tractionSlip, wheelSinkLimit } from "./surface/wheelSink";
+import { bellyDragImpulse, rutLateralImpulse, slewSinkDepth, tractionSlip, wheelSinkLimit } from "./surface/wheelSink";
 import { computeVehicleAerodynamics, initialVehicleDrivetrainState } from "./vehicle/vehicleDrivetrain";
 import {
   NEUTRAL_VEHICLE_INPUT,
@@ -1358,7 +1358,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       if (!controller || !rapier) continue;
       if (this.suspendedDynamicBodies.has(record.entityId)) continue;
       const forwardSpeed = chassisForwardSpeed(rapier.body);
-      this.applyWheelSink(record, controller, rapier.body, deltaSeconds);
+      this.applyWheelSink(record, controller, rapier.body, deltaSeconds, forwardSpeed);
       // Rapier exposes the previous slice's wheel rays/load until updateVehicle.
       // Sample once, before gearing, so the gearbox sees the resistance that
       // will remain active during its power cut. Side stiffness is a scale here
@@ -1427,12 +1427,16 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * 0.3 m/s, and a sleeping chassis does not notice on its own). The terrain
    * collider never changes, so a wheel stops at the depth where the chassis
    * would reach it; mud wanted deeper than that drags on the belly instead.
+   * A rut's cross slope just ahead of a rolling wheel pushes it toward the
+   * deeper side at the contact point (rut steering, research C6), so a car
+   * tends to follow existing ruts and needs steering to climb out.
    */
   private applyWheelSink(
     record: VehicleRecord,
     controller: RapierVehicleController,
     body: RapierRigidBody,
     deltaSeconds: number,
+    forwardSpeed: number,
   ): void {
     const provider = this.vehicleGroundSinkProvider;
     if (!provider && !record.sink.some((depth) => depth > 0)) return;
@@ -1441,6 +1445,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       const q = body.rotation();
       heading = Math.atan2(2 * (q.x * q.z + q.w * q.y), 1 - 2 * (q.x * q.x + q.y * q.y));
     }
+    // Rut steering reads the ground ahead of a rolling wheel; a creeping or parked car has no "ahead".
+    const travel = Math.abs(forwardSpeed) < RUT_STEERING_MIN_SPEED ? 0 : Math.sign(forwardSpeed);
     let changed = false;
     let overlap = 0;
     let resistance = 0;
@@ -1448,13 +1454,16 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     record.definition.wheels.forEach((wheel, index) => {
       let target = 0;
       const contact = provider && controller.wheelIsInContact(index) ? controller.wheelContactPoint(index) : null;
+      const wheelHeading = heading + (controller.wheelSteering(index) ?? 0);
       const sink = contact ? provider!({
         vehicleEntityId: record.entityId,
         wheelIndex: index,
         groundEntityId: this.vehicleWheelGroundEntity(controller, index),
         contactPoint: [contact.x, contact.y, contact.z],
-        heading: heading + (controller.wheelSteering(index) ?? 0),
+        heading: wheelHeading,
         width: vehicleWheelWidth(wheel),
+        radius: wheel.radius,
+        travel,
       }) : null;
       if (sink && Number.isFinite(sink.depth) && sink.depth > 0) {
         const limit = record.sinkLimits[index] ?? 0;
@@ -1462,6 +1471,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         overlap += Math.max(0, sink.depth - limit);
         if (Number.isFinite(sink.resistance)) resistance += sink.resistance;
         sinking += 1;
+        const push = rutLateralImpulse(sink.slope ?? 0, controller.wheelSuspensionForce(index) ?? 0, wheelHeading, deltaSeconds);
+        if (push[0] !== 0 || push[2] !== 0) body.applyImpulseAtPoint({ x: push[0], y: 0, z: push[2] }, contact!, true);
       }
       const previous = record.sink[index] ?? 0;
       const next = slewSinkDepth(previous, target, deltaSeconds);
@@ -1801,6 +1812,9 @@ export function isOutsideDynamicActiveArea(
 }
 
 /** Lowest body-local Y of a chassis collider (its primitives' AABBs when compound). */
+/** Below this forward speed (m/s) a wheel is standing for rut steering: no ground "ahead" to read. */
+const RUT_STEERING_MIN_SPEED = 0.3;
+
 function chassisBottomY(collider: PhysicsBody["collider"]): number {
   const boxes = collider.primitives && collider.primitives.length > 0 ? collider.primitives : [collider];
   return Math.min(...boxes.map((box) => (box.center?.[1] ?? 0) - (box.size[1] ?? 0) / 2));

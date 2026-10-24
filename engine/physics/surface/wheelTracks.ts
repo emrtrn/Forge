@@ -16,7 +16,7 @@ import type { EntityId } from "../../scene/entity";
 import type { SurfaceDeformationSample } from "../../terrain/terrainSurface";
 import type { VehicleDefinition, VehicleState, VehicleVec3 } from "../vehicle/vehicleTypes";
 import { nominalWheelLoad, sinkage, vehicleWheelWidth } from "./sinkage";
-import { digTargetDepth } from "./wheelSink";
+import { digTargetDepth, wheelFootprint } from "./wheelSink";
 
 /** The soft-surface profile under a wheel contact, or null for hard / non-terrain ground. */
 export type WheelDeformationLookup = (groundEntityId: EntityId, contactPoint: VehicleVec3) => SurfaceDeformationSample | null;
@@ -36,6 +36,33 @@ export function frameCompaction(compaction: number, dtSeconds: number): number {
 /** Tyre footprint length for a sinkage: the chord `2√(2 r z)`, never below a quarter radius. */
 export function wheelContactLength(radius: number, depth: number): number {
   return Math.max(2 * Math.sqrt(2 * radius * Math.max(0, depth)), radius * 0.25);
+}
+
+/** Gap (m) past the wheel's own fresh footprint where rut steering reads the ground. */
+export const RUT_LOOKAHEAD_MARGIN = 0.25;
+
+/**
+ * Rut steering's cross slope (research C6): the footprint slope
+ * ({@link wheelFootprint}) half a contact length plus
+ * {@link RUT_LOOKAHEAD_MARGIN} ahead of a rolling wheel, along `travel`. The
+ * ground right under a tyre is the rut it is stamping now, quantised to the
+ * field's cells and so never symmetric about a tyre narrower than two cells;
+ * ahead lies only track that was there before (its own earlier pass, another
+ * vehicle's). A standing wheel (`travel` 0) has no slope.
+ */
+export function rutSlopeAhead(
+  depthAt: (worldX: number, worldZ: number) => number,
+  contactX: number,
+  contactZ: number,
+  heading: number,
+  width: number,
+  radius: number,
+  depth: number,
+  travel: number,
+): number {
+  if (!Number.isFinite(travel) || travel === 0 || !Number.isFinite(heading)) return 0;
+  const reach = Math.sign(travel) * ((Number.isFinite(radius) && radius > 0 ? wheelContactLength(radius, depth) / 2 : 0) + RUT_LOOKAHEAD_MARGIN);
+  return wheelFootprint(depthAt, contactX + Math.sin(heading) * reach, contactZ + Math.cos(heading) * reach, heading, width).slope;
 }
 
 /**

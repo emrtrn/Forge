@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import {
-  BELLY_FULL_OVERLAP, MAX_SINK_RATE, MIN_SINK_REST_LENGTH, SINK_CLEARANCE_MARGIN,
-  bellyDragImpulse, digTargetDepth, slewSinkDepth, tractionSlip, wheelFootprintDepth, wheelSinkLimit,
+  BELLY_FULL_OVERLAP, MAX_SINK_RATE, MIN_SINK_REST_LENGTH, RUT_LATERAL_GAIN, RUT_MAX_SLOPE, SINK_CLEARANCE_MARGIN,
+  bellyDragImpulse, digTargetDepth, rutLateralImpulse, slewSinkDepth, tractionSlip, wheelFootprint, wheelFootprintDepth, wheelSinkLimit,
 } from "../../engine/physics/surface/wheelSink";
 
 type Check = (label: string, fn: () => void) => void;
 const close = (actual: number, expected: number, epsilon = 1e-9): void =>
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);
 
-/** TERRAIN_DEFORMATION Faz 3: pure suspension sink, belly drag, traction and tyre footprint checks. */
+/** TERRAIN_DEFORMATION Faz 3: pure suspension sink, belly drag, traction, tyre footprint and rut steering checks. */
 export function registerWheelSinkTests(check: Check): void {
   check("wheel sink: slew limits sinking and recovery and arrives exactly without overshooting", () => {
     close(slewSinkDepth(0.1, 0.3, 0.1), 0.1 + MAX_SINK_RATE * 0.1);
@@ -180,6 +180,38 @@ export function registerWheelSinkTests(check: Check): void {
       assert.equal(wheelFootprintDepth(unexpected, invalid, 0, 0, 1), 0);
       assert.equal(wheelFootprintDepth(unexpected, 0, invalid, 0, 1), 0);
       assert.equal(wheelFootprintDepth(unexpected, 0, 0, invalid, 1), 0);
+    }
+  });
+  check("wheel sink: the footprint's cross slope points to the rut's deeper side, along the rotated axle", () => {
+    // A rut deepening toward +X: 0.1 m per metre.
+    const ramp = (x: number) => Math.max(0, 0.1 * x);
+    const along = wheelFootprint(ramp, 1, 0, 0, 0.3);
+    close(along.depth, wheelFootprintDepth(ramp, 1, 0, 0, 0.3));
+    close(along.slope, 0.1);
+    // Heading +X: the axle's + side is −Z, where this ramp is level.
+    close(wheelFootprint(ramp, 1, 0, Math.PI / 2, 0.3).slope, 0, 1e-12);
+    // Heading −Z: the axle's + side is −X, the shallow side.
+    close(wheelFootprint(ramp, 1, 0, Math.PI, 0.3).slope, -0.1);
+    // A flat rut bottom, a missing width or bad input: no slope.
+    assert.equal(wheelFootprint(() => 0.1, 0, 0, 0, 0.3).slope, 0);
+    assert.deepEqual(wheelFootprint(ramp, 1, 0, 0, 0), { depth: 0.1, slope: 0 });
+    assert.deepEqual(wheelFootprint(ramp, Number.NaN, 0, 0, 0.3), { depth: 0, slope: 0 });
+    assert.equal(wheelFootprint((x) => (x > 0 ? Number.NaN : 0.05), 0, 0, 0, 0.3).slope, -0.05 / (0.7 * 0.3));
+  });
+
+  check("wheel sink: rut steering pushes along the axle toward the deeper side, capped and only under load", () => {
+    const [x, y, z] = rutLateralImpulse(0.2, 4000, 0, 1 / 60);
+    close(x, RUT_LATERAL_GAIN * 4000 * 0.2 / 60);
+    assert.equal(y, 0);
+    close(z, 0, 1e-12);
+    const turned = rutLateralImpulse(-0.2, 4000, Math.PI / 2, 1 / 60);
+    // Heading +X, negative slope: deeper toward the axle's − side, +Z.
+    close(turned[2], RUT_LATERAL_GAIN * 4000 * 0.2 / 60);
+    close(turned[0], 0, 1e-9);
+    close(rutLateralImpulse(5, 4000, 0, 1 / 60)[0], RUT_LATERAL_GAIN * 4000 * RUT_MAX_SLOPE / 60, 1e-9);
+    close(rutLateralImpulse(-5, 4000, 0, 1 / 60)[0], -RUT_LATERAL_GAIN * 4000 * RUT_MAX_SLOPE / 60, 1e-9);
+    for (const args of [[0, 4000, 0, 1 / 60], [0.2, 0, 0, 1 / 60], [0.2, -1, 0, 1 / 60], [0.2, 4000, 0, 0], [Number.NaN, 4000, 0, 1 / 60], [0.2, 4000, Number.NaN, 1 / 60]] as const) {
+      assert.deepEqual(rutLateralImpulse(...args), [0, 0, 0], JSON.stringify(args));
     }
   });
 }

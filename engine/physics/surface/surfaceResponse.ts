@@ -33,14 +33,27 @@ export interface VehicleWheelGroundQuery {
   readonly heading: number;
   /** Tyre width (m). */
   readonly width: number;
+  /** Tyre radius (m); sizes the footprint a rolling wheel is about to leave behind. */
+  readonly radius?: number;
+  /**
+   * Rolling direction along `heading`: +1 forward, −1 reverse, 0 (or absent)
+   * standing. Rut steering reads the ground ahead, so only a rolling wheel has one.
+   */
+  readonly travel?: number;
 }
 
-/** The track under a wheel: how deep it lies and how hard its mud drags a grounded belly. */
+/** The track under a wheel: how deep it lies, how hard its mud drags a grounded belly, how its walls lean. */
 export interface VehicleWheelSink {
   /** Visible ground below the collider surface (m, >= 0). */
   readonly depth: number;
   /** The soft layer's `sinkResistance`, the belly-drag coefficient. */
   readonly resistance: number;
+  /**
+   * Rut cross slope just ahead of the tyre (research C6, `rutSlopeAhead` in
+   * wheelTracks.ts): extra depth toward the axle's + side per metre. Physics
+   * pushes the wheel toward the deeper side (rut steering). Absent = 0.
+   */
+  readonly slope?: number;
 }
 
 /**

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import type { Subsystem } from "../../engine/core/Subsystem";
 import { nominalWheelLoad, sinkage } from "../../engine/physics/surface/sinkage";
 import {
-  frameCompaction, vehicleHeading, wheelContactLength, WheelTrackStamper, type WheelDeformationLookup,
+  frameCompaction, RUT_LOOKAHEAD_MARGIN, rutSlopeAhead, vehicleHeading, wheelContactLength, WheelTrackStamper,
+  type WheelDeformationLookup,
 } from "../../engine/physics/surface/wheelTracks";
 import {
   createReferenceCarDefinition, type VehicleDefinition, type VehicleState, type VehicleWheelState,
@@ -10,6 +11,7 @@ import {
 import {
   TerrainDeformationTexture, terrainDeformationLayerUniforms, TERRAIN_DEFORMATION_DEPTH_RANGE,
 } from "../../engine/render-three/terrain/terrainDeformation";
+import type { VehicleGroundSinkProvider } from "../../engine/physics/surface/surfaceResponse";
 import { PHYSICAL_MATERIALS } from "../../engine/scene/collision";
 import { DEFORMATION_DEPTH_SCALE, DEFORMATION_RECOVERY_STEP_SECONDS, DeformationField } from "../../engine/scene/deformationField";
 import { TerrainSurfaceSampler, type SurfaceDeformationSample } from "../../engine/terrain/terrainSurface";
@@ -214,6 +216,27 @@ export function registerWheelTrackTests(check: Check): void {
     }
   });
 
+  check("wheel tracks: rut steering reads the cross slope ahead of a rolling wheel, past its own fresh footprint", () => {
+    // An old rut along +Z from z = 2 on, deepening toward +X across x ∈ [0, 0.3].
+    const oldRut = (x: number, z: number) => (z >= 2 ? Math.max(0, Math.min(0.1, x / 3)) : 0);
+    const reach = wheelContactLength(0.35, 0.05) / 2 + RUT_LOOKAHEAD_MARGIN;
+    // Standing: nothing ahead to read.
+    assert.equal(rutSlopeAhead(oldRut, 0.1, 2 - reach, 0, 0.25, 0.35, 0.05, 0), 0);
+    // Rolling +Z: the point `reach` ahead is in the old rut, deeper toward +X (the axle's + side).
+    close(rutSlopeAhead(oldRut, 0.1, 2 - reach + 1e-6, 0, 0.25, 0.35, 0.05, 1), 1 / 3, 1e-9);
+    // Short of it, or reversing away from it: level ground ahead.
+    assert.equal(rutSlopeAhead(oldRut, 0.1, 2 - reach - 0.01, 0, 0.25, 0.35, 0.05, 1), 0);
+    assert.equal(rutSlopeAhead(oldRut, 0.1, 1.9, 0, 0.25, 0.35, 0.05, -1), 0);
+    // Facing −Z and reversing toward +Z rolls into it; that axle's + side is −X, so the slope flips sign.
+    close(rutSlopeAhead(oldRut, 0.1, 2.5, Math.PI, 0.25, 0.35, 0.05, -1), -1 / 3, 1e-9);
+    // Reversing into it: heading +Z, travel −1 reads behind, where the rut is; same slope sign along the same axle.
+    close(rutSlopeAhead(oldRut, 0.1, 2 + reach + 0.1, 0, 0.25, 0.35, 0.05, -1), 1 / 3, 1e-9);
+    // A deeper own rut has a longer footprint: the read moves further ahead.
+    assert.ok(wheelContactLength(0.35, 0.2) > wheelContactLength(0.35, 0.05));
+    close(rutSlopeAhead(oldRut, 0.1, 2 - reach - 0.01, 0, 0.25, 0.35, 0.2, 1), 1 / 3, 1e-9);
+    assert.equal(rutSlopeAhead(oldRut, 0.1, 2.5, Number.NaN, 0.25, 0.35, 0.05, 1), 0);
+  });
+
   check("terrain surface: the deformation profile blends over soft layers only", () => {
     const source = { physicalMaterials: [null, "mud", "snow"], weightsAt: (_point: readonly number[], out: number[]) => {
       out.length = 3; out[0] = 0.5; out[1] = 0.25; out[2] = 0.25; return true;
@@ -269,11 +292,13 @@ export function registerWheelTrackTests(check: Check): void {
     let z = 0;
     let soft = true;
     const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
-    const vehicles: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "possessedEntityId"> = {
+    let groundSink: VehicleGroundSinkProvider | null = null;
+    const vehicles: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "possessedEntityId" | "setGroundSinkProvider"> = {
       vehicleIds: () => ["parked", "car"],
       vehicleState: (id) => carState(definition, id === "car" ? 0 : 200, id === "car" ? z : 0),
       vehicleDefinition: () => definition,
       possessedEntityId: () => "car",
+      setGroundSinkProvider: (provider) => { groundSink = provider; },
     };
     host.provide(vehicleHostService, vehicles as VehicleHost);
     host.provide(terrainSurfaceHostService, {
@@ -300,6 +325,17 @@ export function registerWheelTrackTests(check: Check): void {
     close(snapshot.centre[1], z + axleOffset, 1e-9);
     assert.ok(commands.sample(definition.wheels[0]!.position[0], z - 1).depth > 0);
     assert.equal(commands.sample(200 + definition.wheels[0]!.position[0], 0).depth, 0);
+    // Physics reads the ruts through the installed provider: depth, the mud's drag and the rut's cross slope.
+    const wheelX = definition.wheels[0]!.position[0];
+    const query = (x: number, travel = 1) => groundSink!({
+      vehicleEntityId: "car", wheelIndex: 0, groundEntityId: "landscape:t:0_0", contactPoint: [x, 0, z - 1], heading: 0, width: 0.25,
+      radius: definition.wheels[0]!.radius, travel,
+    });
+    const centred = query(wheelX, 0)!;
+    assert.ok(centred.depth > 0.05 && centred.resistance === mud.sinkResistance && centred.slope === 0, JSON.stringify(centred));
+    // Rolling +Z along the rut it left: the axle's + side is +X, so a tyre left of the rut (−X) sees the ground fall away toward +.
+    assert.ok(query(wheelX - 0.15)!.slope! > 0.1 && query(wheelX + 0.15)!.slope! < -0.1);
+    assert.equal(query(wheelX + 3), null, "off the rut: nothing to sink into");
     commands.stamp(0, z, 0.3, 0.05);
     assert.ok(commands.sample(0, z).depth > 0.04);
     assert.match(formatTerrainDeformationDebug(snapshot), /^terrain deformation: cells \d+ max 0\.\d{3} m wheels 8 upload \d+ texels \d+\.\d{2} ms$/);
@@ -307,6 +343,7 @@ export function registerWheelTrackTests(check: Check): void {
     soft = false;
     tick();
     assert.equal(commands.snapshot(), null, "no deformable terrain: the field is released");
+    assert.equal(groundSink, null, "and the physics provider with it");
     assert.equal(texture.uniforms.uDeformActive!.value, 0);
     module.dispose!();
   });

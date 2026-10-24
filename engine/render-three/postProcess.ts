@@ -1,5 +1,8 @@
 import {
   ACESFilmicToneMapping,
+  DepthTexture,
+  FloatType,
+  HalfFloatType,
   NeutralToneMapping,
   NoToneMapping,
   Vector2,
@@ -9,7 +12,7 @@ import {
   type Object3D,
   type Scene,
   type WebGLRenderer,
-  type WebGLRenderTarget,
+  WebGLRenderTarget,
 } from "three";
 import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -374,6 +377,17 @@ export function createPostProcessAntialiasPass(
   return null;
 }
 
+/** The composer's scene target for far view mode; the composer sizes it (and its clone). */
+function createFloatDepthTarget(): WebGLRenderTarget {
+  const target = new WebGLRenderTarget(1, 1, {
+    type: HalfFloatType,
+    samples: 4,
+    depthTexture: new DepthTexture(1, 1, FloatType),
+  });
+  target.texture.name = "EffectComposer.rt1";
+  return target;
+}
+
 /**
  * Shared composer backbone for editor/runtime post-process work. F2.0 only owns
  * RenderPass/OutputPass and lets callers inject editor-only passes before output.
@@ -385,6 +399,8 @@ export class PostProcessPipeline {
   private readonly injectedPasses: Pass[] = [];
   private effectPasses: Pass[] = [];
   private antialiasPass: Pass | null = null;
+  /** Whether the scene target has float32 depth (see the constructor's `floatDepth`). */
+  readonly floatDepth: boolean;
 
   constructor(options: {
     renderer: WebGLRenderer;
@@ -392,8 +408,15 @@ export class PostProcessPipeline {
     camera: Camera;
     width: number;
     height: number;
+    /**
+     * Render the scene into a float32-depth, 4× MSAA target (far view mode,
+     * OPEN_WORLD_PLAN K7): with reversed-Z this keeps kilometre-range depth
+     * free of z-fighting. Default: the composer's own 24-bit-depth target.
+     */
+    floatDepth?: boolean;
   }) {
-    this.composer = new EffectComposer(options.renderer);
+    this.floatDepth = options.floatDepth === true;
+    this.composer = new EffectComposer(options.renderer, this.floatDepth ? createFloatDepthTarget() : undefined);
     this.renderPass = new RenderPass(options.scene, options.camera);
     this.composer.addPass(this.renderPass);
     this.outputPass = new OutputPass();

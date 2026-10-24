@@ -36,25 +36,37 @@ export function applyResponsiveCameraViewport(
 }
 
 /** Level view distance per camera (OPEN_WORLD_PLAN Faz 7); see {@link setCameraFarOverride}. */
-const farOverrides = new WeakMap<PerspectiveCamera, { far: number; base: number }>();
+const farOverrides = new WeakMap<PerspectiveCamera, { far: number; nearMin: number; base: { far: number; near: number } }>();
 
 /**
- * Pins a camera's far plane to the level's view distance, whatever far clip the
- * active view target asks for (Camera component, vehicle chase camera). `null`
- * hands the far plane back: the camera returns to the far it had before the
- * first override until a view target sets its own. Applies immediately.
+ * Pins a camera's far plane to the level's view distance, whatever far clip a
+ * gameplay camera manager's view target asks for (Camera component, vehicle
+ * chase camera). `nearMin` raises the near plane to at least that value — the
+ * far view mode's depth-precision fallback without reversed-Z. `null` hands the
+ * clip planes back: the camera returns to the far/near it had before the first
+ * override until a view target sets its own. Applies immediately.
  */
-export function setCameraFarOverride(camera: PerspectiveCamera, far: number | null): void {
+export function setCameraFarOverride(
+  camera: PerspectiveCamera,
+  far: number | null,
+  options: { nearMin?: number } = {},
+): void {
   const existing = farOverrides.get(camera);
+  let near: number;
   if (far === null) {
     if (!existing) return;
     farOverrides.delete(camera);
-    far = existing.base;
+    far = existing.base.far;
+    near = existing.base.near;
   } else {
-    farOverrides.set(camera, { far, base: existing?.base ?? camera.far });
+    const nearMin = options.nearMin ?? 0;
+    const base = existing?.base ?? { far: camera.far, near: camera.near };
+    farOverrides.set(camera, { far, nearMin, base });
+    near = Math.max(existing ? base.near : camera.near, nearMin);
   }
-  if (camera.far !== far) {
+  if (camera.far !== far || camera.near !== near) {
     camera.far = far;
+    camera.near = near;
     camera.updateProjectionMatrix();
   }
 }
@@ -62,4 +74,9 @@ export function setCameraFarOverride(camera: PerspectiveCamera, far: number | nu
 /** The far plane pinned by {@link setCameraFarOverride}, if any. */
 export function cameraFarOverride(camera: PerspectiveCamera): number | undefined {
   return farOverrides.get(camera)?.far;
+}
+
+/** The smallest near plane {@link setCameraFarOverride} allows (0 without an override). */
+export function cameraNearMin(camera: PerspectiveCamera): number {
+  return farOverrides.get(camera)?.nearMin ?? 0;
 }

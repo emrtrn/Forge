@@ -1806,7 +1806,26 @@ yoğunluğu yardımcısı.
   Settings → Environment'ta "View Distance (m)" alanı (boş = kameranın kendi
   far'ı). Cloud Layer küresi far × 0,9'a ölçeklenir (shader yön tabanlı,
   görünüm değişmez; uzak arazinin üstüne bulut çizilmesi düzeldi).
-  Açık: editör ve runtime uzak modda hâlâ 24-bit derinlik (7b).
+- *S7'nin derinlik kısmı kaynak okumasıyla kapandı (2026-10-24):* three
+  program anahtarına derinlik durumunu katıyor (mod değişince shader'lar
+  kendiliğinden yeniden derlenir); GTAO (`USE_REVERSED_DEPTH_BUFFER`) ve
+  Bokeh (packing yardımcıları) reversed derinliği zaten destekliyor. İki
+  tuzak: three kameranın `_reversedDepth`'ini yalnız açar (geri almaz) ve
+  gölge haritasının karşılaştırma fonksiyonunu harita kurulurken sabitler.
+  S7'nin kalanı (CSM maliyeti) 7c2'ye ertelendi.
+- *7b tamam (2026-10-24):* `engine/render-three/depthMode.ts`
+  `setSceneDepthMode` reversed durumunu, sahnedeki ve verilen kameraların
+  projeksiyonunu, gölge haritalarını (yeniden kurulur) ve bias işaretini
+  (`shadowDepthBias`, ±0,0005; `configureShadowCastingLight` buradan okur)
+  birlikte değiştirir. Runtime etkin far > 1000 m'de (level yüklenirken ve
+  kalite uzantısı değişince) uzak moda geçer: `PostProcessPipeline`
+  `floatDepth` ile her zaman kurulur (HalfFloat renk, `DepthTexture(FloatType)`,
+  4× MSAA — composer'da tuvalin MSAA'sı yok). `EXT_clip_control` yoksa
+  near 0,5 m (`setCameraFarOverride` `nearMin`) + tek seferlik uyarı. Smoke
+  `far-view.spec.ts`: 6000 m level'da reversed durum, far 6000, kamera
+  projeksiyonu reversed, hedef float32 + 4 örnek, güneş bias'ı pozitif ve
+  gölge haritası var; `viewDistance`'sız level standart yolda. Editör
+  bilerek standart derinlikte (far ≤ `viewDistance`, en az 2000 m).
 
 ## Faz 8 — Editör dünya araçları
 

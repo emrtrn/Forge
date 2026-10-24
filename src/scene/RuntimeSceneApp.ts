@@ -11,7 +11,8 @@ import { assignPooledLight, createPooledLightObject } from "@engine/render-three
 import type { WorldPartitionSnapshot } from "@engine/world/worldPartitionStreaming";
 import { StreamedActorStateCache } from "@engine/world/streamedActorState";
 import { AssetResidency, type AssetResidencySnapshot } from "@engine/world/assetResidency";
-import { effectiveViewDistance } from "@engine/world/viewDistance";
+import { effectiveViewDistance, isFarViewMode } from "@engine/world/viewDistance";
+import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { terrainRendererOf } from "@engine/render-three/terrain/terrainRenderer";
@@ -492,6 +493,8 @@ const STARTUP_CALIBRATION_SECONDS = 12;
 
 /** K5: how long an unowned cell-streamed model stays loaded before it is freed. */
 const MODEL_EVICT_DELAY_MS = 30_000;
+/** Near plane of far view mode on GPUs without reversed-Z (OPEN_WORLD_PLAN K7). */
+const FAR_VIEW_FALLBACK_NEAR = 0.5;
 const PERSISTENT_MODEL_OWNER = "persistent";
 /**
  * Per-frame budget for adding a live cell's static placements to physics and
@@ -998,6 +1001,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private killZ = DEFAULT_SCENE_KILL_Z;
   /** Authored `worldSettings.viewDistance` of the open level (Faz 7), before the quality multiplier. */
   private authoredViewDistance: number | null = null;
+  /**
+   * Far view mode (Faz 7b): the effective view distance exceeds
+   * `FAR_VIEW_MODE_THRESHOLD`, so the scene renders through a float32-depth
+   * composer target with reversed-Z (or a raised near plane without it).
+   */
+  private farViewMode = false;
+  private warnedNoReversedDepth = false;
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   /** Consumer for the next frame's CPU capture; see {@link armFrameCapture}. */
   private armedFrameCapture: FrameCaptureConsumer | null = null;
@@ -2083,10 +2093,25 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * `worldSettings.viewDistance` keeps each camera's own far clip.
    */
   private applyViewDistance(): void {
-    setCameraFarOverride(
-      this.camera,
-      effectiveViewDistance(this.authoredViewDistance ?? undefined, this.qualityExtensions.viewDistanceMultiplier),
-    );
+    const far = effectiveViewDistance(this.authoredViewDistance ?? undefined, this.qualityExtensions.viewDistanceMultiplier);
+    const farViewMode = isFarViewMode(far);
+    const depthMode = setSceneDepthMode(this.renderer, farViewMode ? "reversed" : "standard", {
+      scene: this.scene,
+      cameras: [this.camera],
+    });
+    const nearMin = farViewMode && depthMode === "standard" ? FAR_VIEW_FALLBACK_NEAR : 0;
+    if (nearMin > 0 && !this.warnedNoReversedDepth) {
+      this.warnedNoReversedDepth = true;
+      console.warn(
+        `[view-distance] EXT_clip_control is unavailable: far view mode raises the near plane to ${FAR_VIEW_FALLBACK_NEAR} m instead of reversed-Z`,
+      );
+    }
+    setCameraFarOverride(this.camera, far, { nearMin });
+    if (farViewMode !== this.farViewMode) {
+      this.farViewMode = farViewMode;
+      // Far view mode always renders through the float-depth composer target.
+      if (this.layout) this.applyRuntimePostProcess();
+    }
   }
 
   getQualityExtensions(): Readonly<QualityExtensions> {
@@ -6172,10 +6197,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const resolved = authored ? applyQualityToPostProcess(authored, this.qualitySettings) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
     this.environment.applySkyPostProcessExposure(resolved, this.layout);
-    if (!hasPostProcessEffectPasses(resolved)) {
+    if (!hasPostProcessEffectPasses(resolved) && !this.farViewMode) {
       this.postProcessPipeline?.dispose();
       this.postProcessPipeline = null;
       return;
+    }
+    if (this.postProcessPipeline && this.postProcessPipeline.floatDepth !== this.farViewMode) {
+      this.postProcessPipeline.dispose();
+      this.postProcessPipeline = null;
     }
     this.postProcessPipeline ??= new PostProcessPipeline({
       renderer: this.renderer,
@@ -6183,6 +6212,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       camera: this.camera,
       width: window.innerWidth,
       height: window.innerHeight,
+      floatDepth: this.farViewMode,
     });
     this.postProcessPipeline.setEffectPasses(
       createPostProcessEffectPasses(resolved, {

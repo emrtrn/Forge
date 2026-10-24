@@ -1,6 +1,6 @@
 import { Vector3, type PerspectiveCamera } from "three";
 import type { Vec3 } from "@/game/followCamera";
-import { cameraFarOverride } from "@engine/render-three/camera";
+import { cameraFarOverride, cameraNearMin } from "@engine/render-three/camera";
 
 export interface CameraPose {
   readonly position: Vec3;
@@ -164,6 +164,7 @@ export class PlayerCameraManager {
       ...projection,
       fov: projection.fov + this.effects.fovOffset,
       far: cameraFarOverride(this.camera) ?? projection.far,
+      near: Math.max(projection.near, cameraNearMin(this.camera)),
     };
   }
 }

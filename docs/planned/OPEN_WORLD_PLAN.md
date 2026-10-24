@@ -1871,6 +1871,18 @@ yoğunluğu yardımcısı.
   piksel (kenar yumuşatma). Editör bilerek clone yolunda kaldı. Engine testi `detailCulling.test.ts`,
   smoke `detail-culling.spec.ts` (600 m'deki karo atlanır, yakın ve 3×
   karo çizilir, program derlenir).
+- *7g tamam (2026-10-24, 15bbf43, Codex + inceleme):*
+  `tools/worldDataCheck.ts` (saf; engine'in yol yardımcılarıyla) her
+  level'ın `worldCells`, foliage `foliageCells`, `landscapes[].dataRef`,
+  World Terrain tile'ları ve global haritasını denetler: eksik dosya `fail`,
+  tek tile'dan büyük terrain'de eksik global harita `warn`. `npm run
+  verify:world-data` (varsayılan `dist`, `--root`, `--report`) build:verify'ın
+  son adımı, CI'da da koşar. `perf:assets` aynı taramayı `public/` üzerinde
+  "World data" bölümü olarak basar (level başına hücre/foliage/tile boyutu,
+  en büyük 5 hücre). İlk koşu yerel bir artık buldu: gitignore'lu
+  `OpenWorldTest.level.json` kalmış, `OpenWorldTest.landscapes/` silinmişti
+  (dosya kenara alındı; `npm run world:test` ikisini yeniden üretir). HLOD
+  kapsamı 7f ile gelir.
 
 ## Faz 8 — Editör dünya araçları
 

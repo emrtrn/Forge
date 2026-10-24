@@ -19,7 +19,7 @@ import {
   type TerrainTileData, type WorldTerrainDef, type WorldTerrainLayerDef,
 } from "../../engine/terrain/terrainTypes";
 import { landscapeColliderActorId, worldTerrainColliderEntities } from "../../engine/terrain/worldTerrainActor";
-import { formatVehicleSurfaceDebug } from "../../src/scene/debugStats";
+import { formatVehicleSinkDebug, formatVehicleSurfaceDebug } from "../../src/scene/debugStats";
 
 type Check = (label: string, fn: () => void) => void;
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
@@ -181,9 +181,16 @@ export function registerTerrainSurfaceTests(check: Check): void {
 
   check("terrain surface: the ?debug vehicle surface line names each wheel's ground and response", () => {
     assert.equal(formatVehicleSurfaceDebug({ vehicle: "actor:0", wheels: [
-      { surface: "mud", frictionSlipScale: 0.55, rollingResistance: 0.35 },
-      { surface: "air", frictionSlipScale: 1, rollingResistance: 0 },
+      { surface: "mud", frictionSlipScale: 0.55, rollingResistance: 0.35, sinkDepth: 0.031, tractionSlip: 0.4 },
+      { surface: "air", frictionSlipScale: 1, rollingResistance: 0, sinkDepth: 0, tractionSlip: 0 },
     ] }), "vehicle surface: actor:0 | mud fs:0.55 rr:0.35 | air fs:1.00 rr:0.00");
+  });
+
+  check("terrain surface: the ?debug vehicle sink line shows each wheel's sink depth and traction slip", () => {
+    assert.equal(formatVehicleSinkDebug({ vehicle: "actor:0", wheels: [
+      { surface: "mud", frictionSlipScale: 0.55, rollingResistance: 0.35, sinkDepth: 0.0314, tractionSlip: 0.456 },
+      { surface: "air", frictionSlipScale: 1, rollingResistance: 0, sinkDepth: 0, tractionSlip: 0 },
+    ] }), "vehicle sink: actor:0 | 0.031 m slip 0.46 | 0.000 m slip 0.00");
   });
 
   check("sinkage: an empty vehicle presses half the layer, heavier loads sink deeper but never past it", () => {

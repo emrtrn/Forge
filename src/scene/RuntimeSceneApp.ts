@@ -599,11 +599,15 @@ export type FrameCaptureConsumer = (
   context: FrameCaptureContext,
 ) => void;
 
-/** One wheel's ground for `?debug`: physical material id ("neutral", "air") and its response. */
+/** One wheel's ground for `?debug`: physical material id ("neutral", "air"), its response, and its sinkage. */
 export interface VehicleSurfaceDebugWheel {
   surface: string;
   frictionSlipScale: number;
   rollingResistance: number;
+  /** Virtual sink into the soft track (m), {@link VehicleWheelState.sinkDepth}. */
+  sinkDepth: number;
+  /** Engine impulse share the tyre could not transfer (0..1), {@link VehicleWheelState.tractionSlip}. */
+  tractionSlip: number;
 }
 
 export interface VehicleSurfaceDebugSnapshot {
@@ -2423,15 +2427,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return {
       vehicle: pawn,
       wheels: state.wheels.map((wheel) => {
+        const sink = { sinkDepth: wheel.sinkDepth ?? 0, tractionSlip: wheel.tractionSlip ?? 0 };
         if (!wheel.inContact || wheel.groundEntityId === null || !wheel.contactPoint) {
-          return { surface: "air", frictionSlipScale: 1, rollingResistance: 0 };
+          return { surface: "air", frictionSlipScale: 1, rollingResistance: 0, ...sink };
         }
         const sampler = this.terrainSurfaceSampler(wheel.groundEntityId);
         const id = sampler
           ? sampler.dominantMaterialAt(wheel.contactPoint)
           : this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId) ?? null;
         const sample = (sampler ? sampler.sampleAt(wheel.contactPoint) : resolveSurfaceSample(id)) ?? NEUTRAL_SURFACE_SAMPLE;
-        return { surface: id ?? "neutral", frictionSlipScale: sample.frictionSlipScale, rollingResistance: sample.rollingResistance };
+        return { surface: id ?? "neutral", frictionSlipScale: sample.frictionSlipScale, rollingResistance: sample.rollingResistance, ...sink };
       }),
     };
   }

@@ -462,6 +462,12 @@ export function formatVehicleSurfaceDebug(snapshot: VehicleSurfaceDebugSnapshot)
     `${wheel.surface} fs:${wheel.frictionSlipScale.toFixed(2)} rr:${wheel.rollingResistance.toFixed(2)}`).join(" | ")}`;
 }
 
+/** `vehicle sink: <id> | 0.031 m slip 0.00 | …`, one entry per wheel (smoke tests parse it). */
+export function formatVehicleSinkDebug(snapshot: VehicleSurfaceDebugSnapshot): string {
+  return `vehicle sink: ${snapshot.vehicle} | ${snapshot.wheels.map((wheel) =>
+    `${wheel.sinkDepth.toFixed(3)} m slip ${wheel.tractionSlip.toFixed(2)}`).join(" | ")}`;
+}
+
 /** `terrain deformation: cells 812 max 0.112 m wheels 4 upload 96 texels 0.02 ms` (smoke tests parse it). */
 export function formatTerrainDeformationDebug(snapshot: TerrainDeformationSnapshot): string {
   return `terrain deformation: cells ${snapshot.activeCells} max ${snapshot.maxDepth.toFixed(3)} m`
@@ -475,7 +481,7 @@ function terrainDeformationText(app: RuntimeStatsApp): string {
 
 function vehicleSurfaceText(app: RuntimeStatsApp): string {
   const snapshot = app.getVehicleSurfaceSnapshot?.();
-  return snapshot ? `\n${formatVehicleSurfaceDebug(snapshot)}` : "";
+  return snapshot ? `\n${formatVehicleSurfaceDebug(snapshot)}\n${formatVehicleSinkDebug(snapshot)}` : "";
 }
 
 function worldPartitionText(app: RuntimeStatsApp): string {

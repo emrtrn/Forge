@@ -5100,9 +5100,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       return { group: new Group(), meshes: [], clonedMaterials: [] };
     }
     const clonedMaterials: Material[] = [];
-    // Placements with a material override and/or a reflection-capture probe envMap
-    // are hidden in the instanced mesh and rendered as a separate clone (clone-
-    // fallback), matching the editor so Play renders identically.
+    // Placements with a material override, a reflection-capture probe envMap or
+    // mesh paint are hidden in the instanced mesh and rendered as a separate clone
+    // (clone-fallback), matching the editor so Play renders identically. The
+    // asset's own material slots are the same for every placement, so they are
+    // applied to the instanced batch below rather than forcing clones (a slotted
+    // asset used to lose instancing for all its placements).
     const decisions = placements.map((placement, slot) => {
       const placementIndex = placementIndices[slot]!;
       const meshPaint = this.meshPaintData.placements.filter(
@@ -5122,11 +5125,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         materialSlots,
         bake,
         meshPaint,
-        asClone:
-          Boolean(overrideMaterial) ||
-          hasAssignedMaterialSlots(materialSlots) ||
-          Boolean(bake) ||
-          meshPaint.length > 0,
+        asClone: Boolean(overrideMaterial) || Boolean(bake) || meshPaint.length > 0,
       };
     });
     const instancedPlacements = decisions.map((decision) =>
@@ -5139,6 +5138,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       castShadow: this.staticObjectsCastShadow(),
       receiveShadow: this.staticObjectsReceiveShadow(),
     });
+    // Before the clones join the group: they resolve their own materials.
+    const assetSlots = this.resolveAssetMaterialSlots(assetId);
+    if (assetSlots) applyMaterialSlotOverrides(group, assetSlots, (materialId) => this.materialCache.get(materialId));
     decisions.forEach((decision, slot) => {
       const placementIndex = placementIndices[slot]!;
       this.instanceSlots.set(overrideObjectKey(assetId, placementIndex), { meshes, slot });

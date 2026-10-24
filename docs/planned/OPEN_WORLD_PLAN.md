@@ -1863,8 +1863,12 @@ yoğunluğu yardımcısı.
   en büyük instance'ın mesafesini aşınca hiç çizilmez; level çapındaki
   InstancedMesh yalnız instance başına solar. Bulgu: material slot'u atanmış
   bir asset'in bütün yerleşimleri instanced batch yerine ayrı clone olarak
-  çiziliyor (mevcut davranış; instancing kaybı ayrı bir perf adayı) — bu
-  yüzden culling clone'ları da kapsıyor. Engine testi `detailCulling.test.ts`,
+  çiziliyordu — bu yüzden culling clone'ları da kapsıyor. **Düzeltildi
+  (aynı gün):** runtime asset slot'larını instanced batch'e uygular
+  (`applyMaterialSlotOverrides`, spline/foliage ile aynı yol); clone'a yalnız
+  yerleşime özel override materyal, probe envMap ve mesh paint gider. Zemin
+  + küp sahnesinde 17 clone → 2 batch, ekran görüntüsü farkı 23/921600
+  piksel (kenar yumuşatma). Editör bilerek clone yolunda kaldı. Engine testi `detailCulling.test.ts`,
   smoke `detail-culling.spec.ts` (600 m'deki karo atlanır, yakın ve 3×
   karo çizilir, program derlenir).
 

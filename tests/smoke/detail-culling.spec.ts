@@ -7,8 +7,7 @@ import { REPO_ROOT } from "./smokeProject.mjs";
  * OPEN_WORLD_PLAN Faz 7e: in a World Partition level, small static placements
  * render through the size-scaled dither-fade materials, and a cell batch whose
  * nearest point is past its cull distance is not drawn. floor-400x400 (a 4 m
- * tile; the smoke project's material slots make it render as per-placement
- * clones, which cull like an instanced cell batch) has a ~2.83 m bounding radius → 566 m at scale 1, × 0.85 on the "high" profile ≈
+ * tile) has a ~2.83 m bounding radius → 566 m at scale 1, × 0.85 on the "high" profile ≈
  * 481 m: the tile 600 m away is skipped, the near one and a 3× tile there are not.
  * The level is served in flight, so no project file is written.
  */

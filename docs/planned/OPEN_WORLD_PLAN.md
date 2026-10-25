@@ -1707,10 +1707,11 @@ taşır).
 
 - [ ] Kamera far/near World Settings `viewDistance` × kalite çarpanı;
       spring arm `farClip` buna bağlanır; K7 kararı uygulanır.
-- [ ] Gölge: `fitDirectionalShadowToBounds` yerine kameraya bağlı
+- [x] Gölge: `fitDirectionalShadowToBounds` yerine kameraya bağlı
       **cascaded shadow maps** (3–4 kaskad high/ultra, 2 low), texel'e
       hizalı kaydırma, gölge solma mesafesi. Splat ve foliage
       malzemeleriyle uyum.
+      *Tamam (2026-10-25, 7c1 + 7c2):* ayrıntı aşağıdaki "7c2 ilerleme".
 - [ ] Height Fog ve Sky Atmosphere uzak mesafeyi ve akış kenarını gizleyecek
       varsayılanlar (dünya ayarına bağlı).
 - [ ] Actor LOD: mevcut `distanceLod.ts` + hücre bazlı küçük-nesne culling
@@ -1721,7 +1722,7 @@ taşır).
       Dev'de HLOD yoksa uyarı, oyun yine çalışır.
 - [ ] `perf:assets` ve `verify:dist` hücre/tile/HLOD dosyalarını kapsar.
 
-### Faz 7 tasarımı (taslak, 2026-10-24, onay bekliyor)
+### Faz 7 tasarımı (2026-10-24, kullanıcı onayladı)
 
 **Bugünkü durum (kaynaktan):**
 
@@ -2133,6 +2134,56 @@ uyarı, materyal kaydı kare başına tarama + `WeakSet`).
 (`cascadeSliceSphere(fovDeg, aspect, distance)`), kaskad frame'leri
 (`computeFollowShadowFrame` üstünde) ve dönüşüm takvimi + testler. Shader
 yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da.
+
+**7c2 ilerleme:**
+- *7c2 tamam (2026-10-25):* saf çekirdek `engine/world/sunCascades.ts`:
+  bölmeler (λ 0,75, 1 m'den), dilim küresi, `computeSunCascades`
+  (`computeFollowShadowFrame` üstünde, ışık yönünde küre + 100 m), dönüşüm
+  takvimi, mesafe 200 m × `shadowDistanceScale`, solma [0,85 D, D]. Kalite
+  profiline `shadowCascades` (ultra 4 / high 3 / medium 2 / low 2) ve
+  `shadowCascadeStagger` (yalnız ultra) eklendi; custom ayar normalizer'ı
+  ikisini de kabul eder. `engine/render-three/sunCascadeShadow.ts`
+  (`SunCascadeShadow`): bir grupta N yönlü ışık; 0 güneşin renk ve
+  parlaklığını her kare kopyalar, diğerleri siyah yardımcıdır. Güneş katman
+  maskesi 0 ile render dışına çıkar (authored `visible`/`castShadow`
+  okunabilir kalır), haritası serbest bırakılır; çıkışta maskesi geri gelir.
+  Yama zincirlidir: önceki `onBeforeCompile` ve anahtar korunur, anahtara
+  yalnız etkinken `|forge-sun-cascades` eklenir; three'nin o anki
+  `lights_fragment_begin`'i çapa satırıyla kopyalanır (çapa yoksa hata, engine
+  testi yakalar). Pasifken yama hiçbir şey yapmaz ve anahtar aynı kalır,
+  yani küçük level'lar eskisiyle aynı programları derler. Materyal kaydı
+  kare başına sahne taraması + `WeakSet` (yalnız uzak modda); başka gölgeli
+  yönlü ışığın gölgesi kapanır, tek uyarı verilir, çıkışta geri gelir.
+  Kaskad başına 2 cm / derinlik bias ve 0,75 texel normal bias. Runtime:
+  uzak mod + reversed-Z + profil ≥ 2 kaskad → kaskadlar; aksi halde (profil
+  1 ya da `EXT_clip_control` yok) 7c1 takipli gölgesi değişmeden çalışır,
+  onda mesafe solması yok.
+- *Uygulamada bulunan kaskad hatası:* kaskad kutusu ışık uzayında kare,
+  derinliği ise yalnız dilim küresi kadar. Uzak düzlemin ötesindeki parça
+  reversed-Z'de `z < 0` ile three'nin `z <= 1` testini geçiyor ve gölgede
+  okunuyordu (Ultra, 7,5° aşağı bakan pozda caster'sız zeminde kama).
+  Standart derinlikte aynı parçalar yanlışlıkla aydınlık çıkardı. Seçim artık
+  derinliği de [0, 1] içinde olan ilk kaskadı alır, değilse sonrakine düşer.
+- *7e hatası düzeltildi (aynı gün):* `staticDetailCulling` solma penceresini
+  taban ölçekle çarpıyordu. Shader mesafeyi tam ölçeğe (taban × yerleşim)
+  böldüğü için pencerenin tabana bölünmesi gerekir. Santimetre GLB'ler
+  (`Shape_Cube`, 0,01 düğüm) uzak modda birkaç santimetrede dither ile
+  tamamen kayboluyordu. CPU atlama testi doğru olduğundan smoke'lar
+  (`visible` bayrağı) yakalamadı. `detailCulling` engine testi artık
+  pencereyi ve shader mesafesini de doğrular.
+- *Doğrulama:* engine testleri `sunCascades.test.ts` (bölme tablosu, küre,
+  her kutu kendi ve önceki dilimleri kapsar, dönüşte sabit boy, texel
+  hizası, takvim, profil alanları) ve `sunCascadeShadow.test.ts` (çapalar,
+  güneş devri, ışık sayısı/güneş değişimi, susturulan ışık, dönüşüm, zincirli
+  yama + anahtar + pasif no-op). Smoke `far-view.spec.ts`: high profilde
+  3 kaskad, güneş katmanı 0 ve haritasız, kaskad başına bias/derinlik,
+  yamalı program derlendi; pozlanmış Ultra'da 4 kaskad ve açık zemin
+  köşelerinde karanlık piksel < %1 (derinlik düzeltmesi geri alınınca %15).
+  Elle ekran görüntüleri: aynı pozda high kaskadlar ~150 m'ye kadar gölge
+  çiziyor, 7c1 kadrajdaki küplere hiç gölge vermiyor; Ultra standart yolla
+  tutarlı. **Ölçülmedi:** GPU maliyeti (headless, yazılım GL; S7 rakamları
+  geçerli varsayım), kare başına tarama maliyeti, OpenWorldTest'te görsel
+  kabul ve kamera hareketinde titreme/kaskad geçişi.
 
 ## Faz 8 — Editör dünya araçları
 

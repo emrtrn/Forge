@@ -32,6 +32,9 @@ export const QUALITY_LEVELS: readonly Exclude<QualityLevel, "custom">[] = [
 /** Shadow map resolutions the quality layer may select (256 = lowest usable). */
 export type ShadowMapSize = 256 | 512 | 1024 | 2048;
 
+/** Sun shadow cascades in far view mode (OPEN_WORLD_PLAN Faz 7c2; 1 = the 7c1 follow shadow). */
+export type ShadowCascadeCount = 1 | 2 | 3 | 4;
+
 /**
  * Core quality settings — every field has a direct applier in today's engine
  * (render scale, pixel ratio, post-process gates, shadows, particles, foliage).
@@ -60,6 +63,13 @@ export interface QualitySettings {
   shadowMapSize: ShadowMapSize;
   /** Shadow camera extent multiplier (smaller = shadows fade in nearer). */
   shadowDistanceScale: number;
+  /**
+   * Sun shadow cascades in far view mode (OPEN_WORLD_PLAN Faz 7c2). Smaller
+   * levels keep one bounds-fitted map whatever this says.
+   */
+  shadowCascades: ShadowCascadeCount;
+  /** Redraw cascades 2+ every other frame, alternating (saves ~0.3 ms on Ultra). */
+  shadowCascadeStagger: boolean;
 
   /** Global VFX spawn-rate / maxParticles multiplier (1 = authored density). */
   particleDensity: number;
@@ -112,6 +122,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowsEnabled: true,
     shadowMapSize: 2048,
     shadowDistanceScale: 1.0,
+    shadowCascades: 4,
+    shadowCascadeStagger: true,
     particleDensity: 1.0,
     foliageCullDistanceScale: 1.0,
     grassDensity: 1.0,
@@ -128,6 +140,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowsEnabled: true,
     shadowMapSize: 1024,
     shadowDistanceScale: 0.75,
+    shadowCascades: 3,
+    shadowCascadeStagger: false,
     particleDensity: 0.8,
     foliageCullDistanceScale: 0.85,
     grassDensity: 0.8,
@@ -144,6 +158,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowsEnabled: true,
     shadowMapSize: 512,
     shadowDistanceScale: 0.5,
+    shadowCascades: 2,
+    shadowCascadeStagger: false,
     particleDensity: 0.55,
     foliageCullDistanceScale: 0.65,
     grassDensity: 0.55,
@@ -160,6 +176,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowsEnabled: false,
     shadowMapSize: 256,
     shadowDistanceScale: 0.35,
+    shadowCascades: 2,
+    shadowCascadeStagger: false,
     particleDensity: 0.3,
     foliageCullDistanceScale: 0.45,
     grassDensity: 0.3,
@@ -297,6 +315,10 @@ function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | nul
     out.shadowMapSize = raw.shadowMapSize;
   }
   num("shadowDistanceScale");
+  if (raw.shadowCascades === 1 || raw.shadowCascades === 2 || raw.shadowCascades === 3 || raw.shadowCascades === 4) {
+    out.shadowCascades = raw.shadowCascades;
+  }
+  bool("shadowCascadeStagger");
   num("particleDensity");
   num("foliageCullDistanceScale");
   num("grassDensity");

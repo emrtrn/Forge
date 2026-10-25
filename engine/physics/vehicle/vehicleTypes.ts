@@ -222,6 +222,10 @@ export interface VehicleWheelState {
    * and the visible wheel sits this far below `suspensionLength`. Absent = 0.
    */
   readonly sinkDepth?: number;
+  /** Fixed-step soil depth before chassis clearance/suspension slew, for track presentation. */
+  readonly soilDepth?: number;
+  /** Total wheel rolling/ploughing resistance capacity (N), independent of throttle. */
+  readonly groundResistanceForce?: number;
   /** Share of the engine impulse the tyre could not transfer in the last step (0..1). Absent = 0. */
   readonly tractionSlip?: number;
   /** Wheel yaw in radians (positive turns toward the car's left, +X). */

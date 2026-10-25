@@ -9,6 +9,7 @@ import {
   createReferenceCarDefinition, normalizeVehicleAsset, type VehicleInput,
 } from "../../engine/physics/vehicle/vehicleTypes";
 import { nominalWheelLoad, sinkage } from "../../engine/physics/surface/sinkage";
+import { resistanceImpulse, wheelGroundResistance } from "../../engine/physics/surface/softGroundResistance";
 import { wheelFootprintDepth } from "../../engine/physics/surface/wheelSink";
 import { advanceWheelSpin, limitWheelEngineForce, longitudinalSlip } from "../../engine/physics/surface/wheelTraction";
 import { wheelSurfaceFxLevels } from "../../engine/physics/surface/wheelSurfaceFx";
@@ -28,6 +29,34 @@ const close = (actual: number, expected: number): void =>
   assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} != ${expected}`);
 
 export function registerSurfaceResponseTests(check: Check): void {
+  check("soft ground resistance: depth and load increase ploughing below belly contact, with finite breakaway", () => {
+    for (const id of ["mud", "snow"]) {
+      const sample = resolveSurfaceSample(id);
+      const force = (depth: number, load = 3000) => wheelGroundResistance(sample, load, depth, 0.5, 10);
+      assert.ok(force(0.1) > force(0));
+      assert.ok(force(0.22) > force(0.1));
+      close(force(0.1, 6000), force(0.1) * 2);
+      close(wheelGroundResistance(sample, 3000, 0.1, 0.5, 0), force(0.1));
+      close(wheelGroundResistance(sample, 3000, 0.1, 0.5, -10), force(0.1));
+      assert.equal(force(0.1, 0), 0);
+      assert.equal(wheelGroundResistance(NEUTRAL_SURFACE_SAMPLE, 3000, 0.2, 0.5, 10), 0);
+    }
+    const mixed = resolveSurfaceSample([{ physicalMaterialId: "mud", weight: 1 }, { physicalMaterialId: "stone", weight: 1 }]);
+    close(mixed.softGround!.maxDepth, 0.22);
+    close(mixed.deformability, 0.5);
+    close(mixed.softGround!.ploughResistance, resolveSurfaceSample("mud").softGround!.ploughResistance);
+  });
+  check("soft ground resistance: impulse dissipates energy and cannot reverse relative contact motion", () => {
+    for (const speed of [0, 1e-6, 0.1, 10]) for (const force of [0, 100, 1e8]) for (const dt of [1 / 120, 1 / 60]) {
+      const inverseMass = 0.002;
+      const impulse = resistanceImpulse(speed, force, dt, inverseMass);
+      assert.ok(impulse >= 0 && impulse <= speed / inverseMass);
+      assert.ok(speed - impulse * inverseMass >= -1e-12);
+      assert.ok(-impulse * speed + 0.5 * impulse ** 2 * inverseMass <= 1e-12);
+    }
+    assert.equal(resistanceImpulse(10, 100, 1 / 60, 0), 0);
+    assert.equal(resistanceImpulse(NaN, 100, 1 / 60, 1), 0);
+  });
   check("wheel traction: longitudinal grip caps drive symmetrically and wheelspin slews and brakes", () => {
     close(limitWheelEngineForce(10000, 1000, 0.5, 1 / 60), 1000);
     close(limitWheelEngineForce(-10000, 1000, 0.5, 1 / 60), -1000);
@@ -55,6 +84,7 @@ export function registerSurfaceResponseTests(check: Check): void {
     }
     assert.deepEqual(resolveSurfaceSample("mud"), {
       frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12, deformability: 1,
+      softGround: { maxDepth: 0.22, compaction: 0.5, digRate: 0.08, sinkResistance: 0.6, ploughResistance: 0.05 },
     });
     for (const id of ["snow", "mud", "sand"]) {
       assert.ok(PHYSICAL_MATERIALS[id]!.deformation!.maxDepth > 0);
@@ -166,8 +196,140 @@ interface VehicleSurfaceTestWorld {
 /** Reuses the existing flat-ground reference-car scenario in tools/engine-tests.ts. */
 export async function registerSurfaceResponseRapierTests(
   checkAsync: CheckAsync,
-  createWorld: () => Promise<VehicleSurfaceTestWorld>,
+  createWorld: (options?: { slopeDeg?: number; groundSize?: number; fixedTimestep?: number }) => Promise<VehicleSurfaceTestWorld>,
 ): Promise<void> {
+  const resistanceRun = async (options: {
+    material?: string; depth?: number; speed?: number; slope?: number; pedal?: number;
+    hz?: number; seconds?: number; axle?: "front" | "rear"; field?: boolean;
+    sample?: SurfaceSample; lateral?: boolean; stock?: boolean; fixedTimestep?: number;
+  } = {}) => {
+    const world = await createWorld({ slopeDeg: options.slope ?? 0, groundSize: 2000, fixedTimestep: options.fixedTimestep });
+    const { physics } = world;
+    try {
+      const definition = options.stock
+        ? normalizeVehicleAsset(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Gaz52.vehicle.json", "utf8")))!
+        : createReferenceCarDefinition();
+      if (options.stock) {
+        const actor = normalizeActorScriptDef(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Script_Gaz52.actor.json", "utf8")));
+        const collider = actor.components.find((node) => node.component === "Collider")!.props;
+        physics.setEntities([world.entities[0]!, { ...world.entities[1]!, components: { ...world.entities[1]!.components, Collider: collider } }]);
+      }
+      physics.createVehicle("car", definition);
+      world.drive({ handbrake: true });
+      world.tick(2);
+      const pose = physics.simulatedTransform("car")!;
+      const slope = (options.slope ?? 0) * Math.PI / 180;
+      const speed = options.speed ?? 40 / 3.6;
+      physics.restoreVehicle("car", pose, { linearVelocity: options.lateral ? [speed, 0, 0] : [0, speed * Math.sin(slope), speed * Math.cos(slope)],
+        angularVelocity: [0, 0, 0], handbrake: false, drivetrain: null });
+      const sample = options.sample ?? resolveSurfaceSample(options.material ?? "mud");
+      physics.setVehicleSurfaceProvider((_id, index) => options.axle && definition.wheels[index]!.axle !== options.axle ? null : sample);
+      if (options.depth !== undefined) physics.setVehicleGroundSinkProvider(() => ({ depth: options.depth!, resistance: 0 }));
+      const field = options.field ? new DeformationField() : null;
+      if (field) {
+        const stamper = new WheelTrackStamper(field);
+        const profile = PHYSICAL_MATERIALS[options.material ?? "mud"]!.deformation!;
+        physics.setVehicleGroundSinkProvider((query) => ({ depth: wheelFootprintDepth(
+          (x, z) => field.sample(x, z).depth, query.contactPoint[0], query.contactPoint[2], query.heading, query.width), resistance: profile.sinkResistance }));
+        physics.onFixedStep((dt) => {
+          stamper.stampVehicle("car", physics.vehicleState("car")!, definition, () => ({ ...profile, deformability: 1 }), dt);
+          field.recover(dt);
+        });
+      }
+      world.drive(options.pedal === -1 ? { brake: 1 } : { throttle: options.pedal ?? 0 });
+      const hz = options.hz ?? 60;
+      let stopDistance: number | null = null;
+      for (let frame = 0; frame < hz * (options.seconds ?? 3); frame++) {
+        physics.update({ deltaSeconds: 1 / hz, elapsedSeconds: frame / hz, frame });
+        if (stopDistance === null && Math.abs(physics.vehicleState("car")!.forwardSpeed) < 0.05) {
+          stopDistance = Math.hypot(world.position()[0] - pose.position[0], world.position()[2] - pose.position[2]);
+        }
+      }
+      const state = physics.vehicleState("car")!;
+      const motion = physics.vehicleMotion("car")!;
+      return { speed: state.forwardSpeed, velocity: motion.linearVelocity, state, distance: Math.hypot(world.position()[0] - pose.position[0], world.position()[2] - pose.position[2]),
+        force: state.wheels.reduce((sum, wheel) => sum + (wheel.groundResistanceForce ?? 0), 0), fieldDepth: field?.stats().maxDepth ?? 0, stopDistance };
+    } finally { physics.dispose(); }
+  };
+
+  await checkAsync("soft ground resistance rapier: deeper wheels slow both powered and coasting motion, including reverse", async () => {
+    const preset = resolveSurfaceSample("snow");
+    // Prescribed ruts isolate burial from fresh compaction/digging and belly drag.
+    const sample = { ...preset, rollingResistance: 0, softGround: { ...preset.softGround!, maxDepth: 0, digRate: 0, ploughResistance: 0.4 } };
+    for (const pedal of [0, 1, -1]) {
+      const speed = (pedal === -1 ? -1 : 1) * 40 / 3.6;
+      const shallow = await resistanceRun({ depth: 0.05, sample, speed, pedal });
+      const deep = await resistanceRun({ depth: 0.22, sample, speed, pedal });
+      assert.ok(Math.abs(deep.speed) < Math.abs(shallow.speed) - 0.4, `pedal ${pedal}: ${deep.speed} vs ${shallow.speed}`);
+      assert.ok(deep.force > shallow.force);
+      assert.ok(Math.sign(deep.speed) === Math.sign(speed), "resistance never reverses travel");
+    }
+  });
+  await checkAsync("soft ground resistance rapier: finite slope hold releases above the soil threshold", async () => {
+    const held = await resistanceRun({ slope: -5, speed: 0, seconds: 5 });
+    const released = await resistanceRun({ slope: -15, speed: 0, seconds: 5 });
+    console.info(`[soil slope] 5deg ${held.speed.toFixed(4)} m/s, ${held.distance.toFixed(3)} m; 15deg ${released.speed.toFixed(3)} m/s`);
+    assert.ok(Math.abs(held.speed) < 0.02, "soil holds below its force threshold");
+    assert.ok(held.distance < 0.15, "holding does not continuously creep");
+    assert.ok(released.speed > 1, "gravity above the threshold breaks free");
+  });
+  await checkAsync("soft ground resistance rapier: fresh soil works without textures and fixed-step tracks agree at 30/60/144 Hz", async () => {
+    for (const material of ["mud", "snow"]) {
+      const runs = [];
+      for (const hz of [30, 60, 144]) {
+        const bare = await resistanceRun({ material, hz, pedal: 1, speed: 0 });
+        const tracked = await resistanceRun({ material, hz, pedal: 1, speed: 0, field: true });
+        assert.ok(bare.state.wheels.every((wheel) => wheel.sinkDepth! > 0.02), "fresh soil presses with no visual field");
+        assert.ok(tracked.fieldDepth > 0.02 && tracked.force > 0);
+        runs.push(tracked.speed);
+        assert.ok(Math.abs(bare.speed - tracked.speed) < 0.5, "field is persistence, not the source of fresh-soil resistance");
+      }
+      assert.ok(Math.max(...runs) - Math.min(...runs) < 1e-7, `${material}: ${runs}`);
+    }
+  });
+  await checkAsync("soft ground resistance rapier: one soft axle and lateral sliding use contact-local tangents", async () => {
+    const neutral = await resistanceRun({ material: "stone" });
+    const front = await resistanceRun({ axle: "front" });
+    const all = await resistanceRun();
+    assert.ok(all.speed < front.speed && front.speed < neutral.speed);
+    assert.ok(front.state.wheels.slice(2).every((wheel) => wheel.groundResistanceForce === 0));
+    // Suppress lateral tyre grip to isolate the new soil contact impulse.
+    const mud = resolveSurfaceSample("mud");
+    const lateral = await resistanceRun({ lateral: true, sample: { ...mud, sideFrictionScale: 0 } });
+    const free = await resistanceRun({ lateral: true, sample: { ...NEUTRAL_SURFACE_SAMPLE, sideFrictionScale: 0 } });
+    assert.ok(Math.abs(lateral.velocity[0]) < Math.abs(free.velocity[0]) - 1);
+  });
+  await checkAsync("soft ground resistance rapier: 60/120 Hz physics retains the same force balance", async () => {
+    for (const material of ["mud", "snow"]) {
+      const runs = [];
+      for (const fixedTimestep of [1 / 60, 1 / 120]) runs.push(await resistanceRun({ material, fixedTimestep, field: true }));
+      console.info(`[soil fixed step] ${material}: ${runs.map((run) => run.speed.toFixed(3)).join(" / ")} m/s`);
+      assert.ok(Math.abs(runs[0]!.speed - runs[1]!.speed) < 0.3, "time-step drift stays below 0.3 m/s after 3 seconds");
+    }
+  });
+  await checkAsync("soft ground resistance rapier: stock GAZ-52 entry matrix covers speed, slope, throttle and reverse", async () => {
+    let scenarios = 0;
+    for (const slope of [0, 5, 10, 15]) for (const kmh of [20, 40, 60]) {
+      const coast: string[] = [];
+      for (const direction of [1, -1]) for (const pedal of [0, direction]) {
+        let neutralSpeed = 0;
+        for (const material of ["stone", "mud", "snow"]) {
+          const run = await resistanceRun({ stock: true, material, speed: direction * kmh / 3.6, slope: -direction * slope, pedal });
+          scenarios++;
+          assert.ok(Number.isFinite(run.speed) && Math.abs(run.speed) < kmh / 3.6 + 10);
+          assert.ok(run.state.wheels.every((wheel) => wheel.sinkDepth! >= 0 && wheel.sinkDepth! <= 0.3));
+          if (material === "stone") neutralSpeed = Math.abs(run.speed);
+          else if (slope === 0 && pedal === 0) assert.ok(Math.abs(run.speed) < neutralSpeed, `${material} must slow flat-ground coasting`);
+          if (direction === 1 && pedal === 0) {
+            coast.push(`${material} ${(run.speed * 3.6).toFixed(2)}km/h ${run.distance.toFixed(1)}m sink${Math.max(...run.state.wheels.map((wheel) => wheel.sinkDepth!)).toFixed(3)}m R${run.force.toFixed(0)}N stop${run.stopDistance?.toFixed(1) ?? "-"}m`);
+          }
+        }
+      }
+      console.info(`[soil entry ${kmh}km/h ${slope}deg downhill 3s] ${coast.join("; ")}`);
+    }
+    assert.equal(scenarios, 144);
+  });
+
   await checkAsync("wheel traction rapier: stock GAZ-52 spins its rear wheels on real mud and snow presets at 30/60/144 Hz", async () => {
     const asset = normalizeVehicleAsset(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Gaz52.vehicle.json", "utf8")))!;
     const actor = normalizeActorScriptDef(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Script_Gaz52.actor.json", "utf8")));
@@ -329,10 +491,10 @@ export async function registerSurfaceResponseRapierTests(
             minSpeed = Math.min(minSpeed, state.forwardSpeed);
           }
         }
-        assert.ok(minSpeed > 8 / 3.6, `${hz} Hz: mud slowed to ${minSpeed * 3.6} km/h`);
+        assert.ok(minSpeed > 0.3, `${hz} Hz: mud failed to make progress: ${minSpeed * 3.6} km/h`);
         // Lower drag permits normal acceleration and several upshifts; reject
         // up/down hunting directly rather than assuming a fixed speed plateau.
-        assert.equal(downshifts, 0, `${hz} Hz: downshifts under steady flat-ground throttle`);
+        assert.ok(downshifts <= 1, `${hz} Hz: repeated downshifts under steady flat-ground throttle: ${downshifts}`);
         finalSpeeds.push(physics.vehicleState("car")!.forwardSpeed);
         // Leaving the soft surface must release the hold and permit ordinary acceleration.
         physics.setVehicleSurfaceProvider(() => resolveSurfaceSample("wood"));
@@ -547,6 +709,9 @@ export async function registerSurfaceResponseRapierTests(
     const field = options.field ?? new DeformationField();
     const stamper = new WheelTrackStamper(field);
     const definition = createReferenceCarDefinition();
+    // Isolate soil behaviour from the spawn drop's transient landing load.
+    physics.createVehicle("car", definition);
+    world.tick(2);
     physics.setVehicleSurfaceProvider(() => grip);
     // Mirrors the terrain deformation module's provider.
     physics.setVehicleGroundSinkProvider((query) => {
@@ -558,7 +723,6 @@ export async function registerSurfaceResponseRapierTests(
       const slope = rutSlopeAhead(depthAt, x, z, query.heading, query.width, query.radius ?? 0, depth, query.travel ?? 0);
       return { depth, resistance: mud.sinkResistance, slope };
     });
-    physics.createVehicle("car", definition);
     const frame = (): void => {
       world.tick(1 / 60);
       stamper.stampVehicle("car", physics.vehicleState("car")!, definition, () => mud, 1 / 60);
@@ -582,7 +746,7 @@ export async function registerSurfaceResponseRapierTests(
         assert.ok(wheel.inContact, "parked wheels keep their contact");
         // The tyre rests on its footprint's mean: across a 0.245 m tyre on a 0.125 m grid the
         // side samples catch the rut's bilinear edge, so it sits a little above the rut's centre.
-        assert.ok(wheel.sinkDepth! <= expected[index]! + 0.005 && wheel.sinkDepth! > expected[index]! * 0.75,
+        assert.ok(wheel.sinkDepth! <= expected[index]! + 0.015 && wheel.sinkDepth! > expected[index]! * 0.9,
           `parked sink ${wheel.sinkDepth}, sinkage ${expected[index]}`);
       });
       const heights: number[] = [];
@@ -604,7 +768,7 @@ export async function registerSurfaceResponseRapierTests(
         previousY = y;
       }
       const driving = physics.vehicleState("car")!;
-      assert.ok(driving.forwardSpeed > 2, `climbed out of its ruts: ${driving.forwardSpeed} m/s`);
+      assert.ok(driving.forwardSpeed > 0.3, `makes progress against soil resistance: ${driving.forwardSpeed} m/s`);
       assert.equal(contactLosses, 0, "leaving the ruts never lifts a wheel off the ground");
       // Climbing out at <= 0.3 m/s per wheel keeps the chassis' vertical motion near that rate.
       assert.ok(maxVerticalSpeed < 0.4, `vertical speed peaked at ${maxVerticalSpeed} m/s`);
@@ -618,15 +782,11 @@ export async function registerSurfaceResponseRapierTests(
     const world = await createWorld();
     const { physics } = world;
     try {
-      // Rapier never stalls a straight-line wheelspin, so a wall at the bumper stands in for being stuck.
-      physics.setEntities([...world.entities, {
-        id: "wall",
-        components: {
-          Transform: { position: [0, 1, 2.6], rotation: [0, 0, 0], scale: [1, 1, 1] },
-          Collider: { shape: "box", size: [4, 2, 0.5], isStatic: true, isSensor: false },
-        },
-      }]);
-      const { definition, frame } = rutLoop(world, { ...resolveSurfaceSample("mud"), frictionSlipScale: 0.1 });
+      // A stronger soil preset stalls the body through real wheel resistance,
+      // while the driven tyres keep spinning and digging without a blocking wall.
+      const preset = resolveSurfaceSample("mud");
+      const { definition, frame } = rutLoop(world, { ...preset, frictionSlipScale: 0.1,
+        softGround: { ...preset.softGround!, ploughResistance: 1 } });
       world.tick(2);
       for (let index = 0; index < 60 * 2; index += 1) frame();
       const sink = (driven: boolean): number => {
@@ -681,7 +841,7 @@ export async function registerSurfaceResponseRapierTests(
     const mud = await run(true);
     assert.equal(firm.sink, 0);
     assert.ok(mud.sink > 0.03, `the car drives in its own ruts: ${mud.sink} m`);
-    assert.ok(mud.speed > 1 && mud.speed < firm.speed * 0.8, `4 s of full throttle: mud ${mud.speed} vs firm ${firm.speed} m/s`);
+    assert.ok(mud.speed > 0.3 && mud.speed < firm.speed * 0.8, `4 s of full throttle: mud ${mud.speed} vs firm ${firm.speed} m/s`);
     console.info(`[deform] steady throttle 4 s: firm ${firm.speed.toFixed(2)} m/s, mud ${mud.speed.toFixed(2)} m/s (sink ${mud.sink.toFixed(3)} m)`);
   });
   /** Two straight 0.3 m wide, 0.1 m deep ruts along +Z under the reference car's wheels, for 60 m. */
@@ -706,7 +866,7 @@ export async function registerSurfaceResponseRapierTests(
         world.drive({ throttle: 0.4, steer });
         let contactLosses = 0;
         let maxOffset = 0;
-        for (let index = 0; index < 60 * 4; index += 1) {
+        for (let index = 0; index < 60 * (steer === 0 ? 4 : 8); index += 1) {
           frame();
           contactLosses += physics.vehicleState("car")!.wheels.filter((wheel) => !wheel.inContact).length;
           maxOffset = Math.max(maxOffset, Math.abs(world.position()[0]));
@@ -725,7 +885,7 @@ export async function registerSurfaceResponseRapierTests(
     // The side samples sit 0.086 m off the tyre's centre and blur over one 0.125 m cell: from ~0.06–0.07 m in, both read the flat bottom.
     assert.ok(pulled.x < 0.08 && pulled.x < free.x - 0.02 && pulled.x > -0.02, `rut steering re-centres: ${pulled.x} vs ${free.x}`);
     assert.ok(pulled.maxOffset <= 0.11, `no swing past the start: ${pulled.maxOffset}`);
-    assert.ok(pulled.z > 3, `still driving: ${pulled.z} m`);
+    assert.ok(pulled.z > 1, `still driving: ${pulled.z} m`);
     const exit = await run(true, 0.25);
     // Own fresh ruts never push: driving straight onto untouched mud, the car tracks the same line with and without.
     const fresh = async (rutSteering: boolean) => {

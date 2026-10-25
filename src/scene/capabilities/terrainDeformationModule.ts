@@ -11,7 +11,7 @@
  * wheels settle into their ruts through shorter rest lengths, never through a
  * rebuilt terrain collider.
  *
- * Switching the module off removes the tracks and the sinkage (I3): grip and drag come
+ * Switching the module off removes persistent tracks; load sinkage, local digging, grip and drag come
  * from the paint layers' physical materials through the shell's surface
  * provider, which runs with or without this module. Nothing here is written to
  * the level; the field is runtime state only.
@@ -63,8 +63,9 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
   let stampedWheels = 0;
   let centre: [number, number] = [0, 0];
   let sinkInstalled = false;
+  let unsubscribePhysics: (() => void) | null = null;
 
-  /** Physics asks once per wheel and fixed slice; it sees the tracks stamped up to the last frame. */
+  /** Physics sees the CPU field stamped after the preceding fixed slice. */
   const groundSink: VehicleGroundSinkProvider = (query) => {
     const active = field;
     const surface = services?.resolve(terrainSurfaceHostService);
@@ -137,12 +138,14 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
       );
     }
     active.recover(deltaSeconds);
-    texture.update(active.takeDirty());
   };
 
   const subsystem: Subsystem = {
     id: "terrainDeformation",
-    update: (context) => tick(context.deltaSeconds),
+    update: () => {
+      // Rendering uploads only. No stamps, digging or recovery on render time.
+      if (field) texture.update(field.takeDirty());
+    },
   };
 
   return {
@@ -150,8 +153,7 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
 
     onRuntimeStart(runtimeServices) {
       services = runtimeServices;
-      // After physics, so this frame's wheel contacts are stamped; physics
-      // reads them back through the ground-sink provider from the next frame.
+      unsubscribePhysics = runtimeServices.resolve(vehicleHostService)?.onPhysicsStep?.(tick) ?? null;
       runtimeServices.addSubsystem("presentation", subsystem);
       runtimeServices.provide(terrainDeformationService, {
         stamp(worldX, worldZ, radius, depth) {
@@ -176,6 +178,8 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
     },
 
     dispose() {
+      unsubscribePhysics?.();
+      unsubscribePhysics = null;
       release();
       services = null;
     },

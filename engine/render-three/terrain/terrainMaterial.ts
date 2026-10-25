@@ -107,6 +107,8 @@ export interface TerrainLayerInput {
   /** Texture repeats per metre. */
   scale: number;
   roughness?: number;
+  /** Optional linear roughness packed in the albedo texture's alpha channel. */
+  roughnessInAlpha?: boolean;
   /** Physical material id: its soft-surface profile tints this layer's tracks. */
   physicalMaterial?: string | null;
 }
@@ -298,6 +300,7 @@ ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `uniform sampler2D uLa
 uniform float uLayerHasTex[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerScale[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerRoughness[${TERRAIN_RENDER_LAYERS}];
+uniform float uLayerRoughnessInAlpha[${TERRAIN_RENDER_LAYERS}];
 float forgeLayerRoughness = 1.0;
 `;
 
@@ -317,14 +320,16 @@ const FRAGMENT_COLOR = /* glsl */ `
   vec3 forgeColor;
   if (uTerrainView < 0.5) {
     vec2 forgeP = vTerrainLocal;
-    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec3 forgeC${i} = uLayerHasTex[${i}] > 0.5 ? texture(uLayerTex${i}, forgeP * uLayerScale[${i}]).rgb : uLayerColors[${i}];`).join("\n    ")}
+    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec4 forgeS${i} = uLayerHasTex[${i}] > 0.5 ? texture(uLayerTex${i}, forgeP * uLayerScale[${i}]) : vec4(uLayerColors[${i}], 1.0);
+    vec3 forgeC${i} = forgeS${i}.rgb;
+    float forgeR${i} = uLayerRoughness[${i}] * mix(1.0, forgeS${i}.a, uLayerRoughnessInAlpha[${i}]);`).join("\n    ")}
     vec3 forgeSum = forgeC0 * forgeW0.x + forgeC1 * forgeW0.y + forgeC2 * forgeW0.z + forgeC3 * forgeW0.w
       + forgeC4 * forgeW1.x + forgeC5 * forgeW1.y + forgeC6 * forgeW1.z + forgeC7 * forgeW1.w;
     float forgeTotal = dot(forgeW0, vec4(1.0)) + dot(forgeW1, vec4(1.0));
     forgeColor = forgeTotal > 0.0001 ? forgeSum / forgeTotal : uLayerColors[0];
     forgeLayerRoughness = forgeTotal > 0.0001 ? (
-      dot(vec4(uLayerRoughness[0], uLayerRoughness[1], uLayerRoughness[2], uLayerRoughness[3]), forgeW0)
-      + dot(vec4(uLayerRoughness[4], uLayerRoughness[5], uLayerRoughness[6], uLayerRoughness[7]), forgeW1)) / forgeTotal : 1.0;
+      dot(vec4(forgeR0, forgeR1, forgeR2, forgeR3), forgeW0)
+      + dot(vec4(forgeR4, forgeR5, forgeR6, forgeR7), forgeW1)) / forgeTotal : 1.0;
   } else if (uTerrainView < 1.5) {
     float forgeT = (vTerrainTile.w - uTerrainHeightRange.x) / max(0.0001, uTerrainHeightRange.y - uTerrainHeightRange.x);
     forgeColor = vec3(0.16 + forgeT * 0.62, 0.28 + forgeT * 0.5, 0.2 + forgeT * 0.68);
@@ -391,6 +396,7 @@ function layerUniforms(uniforms: TerrainUniforms, layers: TerrainLayerInput[]): 
   uniforms.uLayerHasTex = { value: hasTex };
   uniforms.uLayerScale = { value: scale };
   uniforms.uLayerRoughness = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.roughness ?? 1) };
+  uniforms.uLayerRoughnessInAlpha = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.roughnessInAlpha ? 1 : 0) };
   const fallback = layers[0]?.color ?? "#808080";
   uniforms.uLayerColors = {
     value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, index) => new Color(layers[index]?.color ?? fallback)),

@@ -194,6 +194,8 @@ export interface VehicleHost {
   isSurfaceFxActive?(entityId: string): boolean;
   /** Installs the wheels' soft-track depth source (TERRAIN_DEFORMATION Faz 3); null removes it. */
   setGroundSinkProvider?(provider: VehicleGroundSinkProvider | null): void;
+  /** CPU terrain state follows every fixed physics slice; returns an unsubscribe function. */
+  onPhysicsStep?(listener: (deltaSeconds: number) => void): () => void;
 }
 
 export const vehicleHostService = runtimeServiceKey<VehicleHost>("vehicle-host");

@@ -21183,6 +21183,20 @@
       "license": "AI-generated project asset"
     },
     {
+      "id": "lt-wet-mud-roughness",
+      "name": "LT Wet Mud Roughness",
+      "assetType": "texture",
+      "category": "LandscapeTest/Textures",
+      "path": "assets/LandscapeTest/Textures/LT_Wet_Mud_Roughness.webp",
+      "thumbnail": "assets/LandscapeTest/Textures/LT_Wet_Mud_Roughness.webp",
+      "tags": ["terrain", "mud", "wet", "roughness"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 2523928 },
+      "source": { "origin": "OpenAI image_gen", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "license": "AI-generated project asset"
+    },
+    {
       "id": "lt-wet-mud",
       "name": "LT Wet Mud",
       "assetType": "material",
@@ -21191,7 +21205,7 @@
       "tags": ["terrain", "mud", "wet"],
       "placeable": false,
       "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 695 },
+      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 711 },
       "source": { "origin": "forge", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
       "license": "CC0-1.0"
     },
@@ -21226,6 +21240,20 @@
         "origin": "ThreeAges",
         "path": "assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.webp"
       }
+    },
+    {
+      "id": "lt-snow-roughness",
+      "name": "LT Alpine Snow Roughness",
+      "assetType": "texture",
+      "category": "LandscapeTest/Textures",
+      "path": "assets/LandscapeTest/Textures/LT_Snow_Roughness.webp",
+      "thumbnail": "assets/LandscapeTest/Textures/LT_Snow_Roughness.webp",
+      "tags": ["landscape-test", "terrain", "snow", "roughness"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "LandscapeTest", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1799454 },
+      "source": { "origin": "OpenAI image_gen", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "license": "AI-generated project asset"
     },
     {
       "id": "lt-snow-bc",
@@ -21376,7 +21404,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 620
+        "bytes": 713
       },
       "source": {
         "origin": "forge",

@@ -13,6 +13,10 @@ test("wet mud fifth layer renders reflective water on track floors", async ({ pa
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/tests/smoke/pages/wet-mud.html");
   await expect.poll(() => page.evaluate(() => Boolean((window as any).__wetMudQa?.ready)), { timeout: 60_000 }).toBe(true);
+  const uniformSurface = await page.evaluate(() => (window as any).__wetMudQa.roughness(false) as number[]);
+  const texturedSurface = await page.evaluate(() => (window as any).__wetMudQa.roughness(true) as number[]);
+  expect(texturedSurface.filter((value, i) => Math.abs(value - uniformSurface[i]!) > 3).length).toBeGreaterThan(30);
+  await page.screenshot({ path: info.outputPath("wet-mud-roughness.png") });
   const dry = await page.evaluate(() => (window as any).__wetMudQa.water(false) as number[]);
   const dryCentre = await page.evaluate(() => (window as any).__wetMudQa.sample() as number[]);
   await page.screenshot({ path: info.outputPath("mud-track-without-water.png") });

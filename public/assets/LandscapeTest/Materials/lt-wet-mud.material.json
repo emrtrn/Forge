@@ -7,7 +7,7 @@
   "baseColorTexture": "lt-wet-mud-bc",
   "normalTexture": null,
   "maskTexture": null,
-  "roughnessTexture": null,
+  "roughnessTexture": "lt-wet-mud-roughness",
   "metalnessTexture": null,
   "aoTexture": null,
   "opacityTexture": null,
@@ -19,7 +19,7 @@
     "y": 1
   },
   "flipY": true,
-  "roughness": 0.5,
+  "roughness": 1,
   "metalness": 0,
   "aoIntensity": 1,
   "opacity": 1,

@@ -6623,6 +6623,7 @@ export class SceneApp {
         texture: cached?.texture ?? null,
         color: cached?.baseColor ?? presetColor,
         roughness: cached?.roughness ?? 1,
+        roughnessInAlpha: cached?.roughnessInAlpha ?? false,
         tiling,
       };
     });

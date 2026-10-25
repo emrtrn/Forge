@@ -127,8 +127,11 @@ export class WheelTrackStamper {
       last[index] = to;
       const authored = definition?.wheels[index];
       const width = vehicleWheelWidth(authored ?? wheel);
-      const depth = sinkage(surface, surface.deformability, { load: wheel.suspensionForce, nominalLoad, width });
-      const compaction = frameCompaction(surface.compaction, dtSeconds);
+      const depth = wheel.soilDepth ?? Math.max(wheel.sinkDepth ?? 0,
+        sinkage(surface, surface.deformability, { load: wheel.suspensionForce, nominalLoad, width }));
+      // Physics already combined compaction, old ruts and digging. Mirror its
+      // target once, rather than applying those processes a second time.
+      const compaction = wheel.soilDepth === undefined ? frameCompaction(surface.compaction, dtSeconds) : 1;
       const wheelHeading = heading === null ? {} : { heading: heading + wheel.steering };
       if (compaction > 0) {
         this.field.stampWheel({
@@ -141,7 +144,7 @@ export class WheelTrackStamper {
           recoveryRate: surface.recoveryRate,
         });
       }
-      const dug = this.dig(wheel, surface, to, width, wheelHeading, carry, index, dtSeconds);
+      const dug = wheel.soilDepth === undefined && this.dig(wheel, surface, to, width, wheelHeading, carry, index, dtSeconds);
       if (compaction > 0 || dug) stamped += 1;
     });
     return stamped;

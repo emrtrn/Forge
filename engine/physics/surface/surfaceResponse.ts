@@ -11,6 +11,16 @@ export interface SurfaceSample {
   readonly deformability: number;
   /** Optional physical longitudinal grip (force / load), separate from Rapier tuning. */
   readonly tractionCoefficient?: number;
+  /** Physical soil data, available even without a visual deformation field. */
+  readonly softGround?: SoftGroundSample;
+}
+
+export interface SoftGroundSample {
+  readonly maxDepth: number;
+  readonly compaction: number;
+  readonly digRate: number;
+  readonly sinkResistance: number;
+  readonly ploughResistance: number;
 }
 
 export interface WeightedSurfaceMaterial {
@@ -83,6 +93,11 @@ export function resolveSurfaceSample(
       rollingResistance: profile.vehicle?.rollingResistance ?? 0,
       deformability: (profile.deformation?.maxDepth ?? 0) > 0 ? 1 : 0,
       ...(profile.vehicle?.tractionCoefficient === undefined ? {} : { tractionCoefficient: profile.vehicle.tractionCoefficient }),
+      ...(profile.deformation ? { softGround: {
+        maxDepth: profile.deformation.maxDepth, compaction: profile.deformation.compaction,
+        digRate: profile.deformation.digRate, sinkResistance: profile.deformation.sinkResistance,
+        ploughResistance: profile.deformation.ploughResistance ?? 0,
+      } } : {}),
     };
   }
   const entries = material.filter(({ weight }) => Number.isFinite(weight) && weight > 0);
@@ -96,6 +111,8 @@ export function resolveSurfaceSample(
   let deformability = 0;
   let tractionCoefficient = 0;
   let hasTractionCoefficient = false;
+  let softWeight = 0;
+  const softGround = { maxDepth: 0, compaction: 0, digRate: 0, sinkResistance: 0, ploughResistance: 0 };
   for (const entry of entries) {
     const sample = resolveSurfaceSample(entry.physicalMaterialId);
     const weight = (entry.weight / maxWeight) / total;
@@ -105,8 +122,14 @@ export function resolveSurfaceSample(
     deformability += sample.deformability * weight;
     tractionCoefficient += (sample.tractionCoefficient ?? 1) * weight;
     hasTractionCoefficient ||= sample.tractionCoefficient !== undefined;
+    if (sample.softGround) {
+      softWeight += weight;
+      for (const key of Object.keys(softGround) as (keyof SoftGroundSample)[]) softGround[key] += sample.softGround[key] * weight;
+    }
   }
+  if (softWeight > 0) for (const key of Object.keys(softGround) as (keyof SoftGroundSample)[]) softGround[key] /= softWeight;
   return { frictionSlipScale, sideFrictionScale, rollingResistance, deformability,
+    ...(softWeight > 0 ? { softGround } : {}),
     ...(hasTractionCoefficient ? { tractionCoefficient } : {}) };
 }
 
@@ -119,10 +142,10 @@ export function createPhysicalMaterialSurfaceProvider(
 }
 
 /**
- * Additional brake force = coefficient × suspension load × min(|speed| / 1 m/s, 1).
+ * Rolling-only diagnostic = coefficient × suspension load × min(|speed| / 1 m/s, 1).
  * The low-speed ramp gives zero drag at rest and caps drag at coefficient × load.
- * Rapier receives force × dt as its brake impulse cap, so this cannot reverse a
- * wheel. Faz 0 must still compare brakes with chassis impulses in a real scene.
+ * Runtime uses wheelGroundResistance and a separate contact impulse, since
+ * Rapier skips its wheel brake whenever that wheel has engine force.
  * Pass the drive command's side stiffness to preserve its handbrake multiplier.
  */
 export function computeWheelSurfaceResponse(

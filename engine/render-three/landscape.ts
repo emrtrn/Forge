@@ -83,6 +83,7 @@ export type LandscapeLayerColors = Record<string, string>;
  */
 export interface LandscapeLayerTexture {
   roughness?: number;
+  roughnessInAlpha?: boolean;
   id: string;
   texture: Texture | null;
   color: string;
@@ -142,6 +143,7 @@ function terrainLayerInputs(
       texture: texture?.texture ?? null, color, scale: (texture?.tiling ?? 1) / worldSize,
       physicalMaterial: layers[index]?.physicalMaterial ?? null,
       roughness: texture?.roughness ?? 1,
+      roughnessInAlpha: texture?.roughnessInAlpha ?? false,
     };
   });
 }

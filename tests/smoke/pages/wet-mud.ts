@@ -1,4 +1,5 @@
-import { AmbientLight, Color, DirectionalLight, PerspectiveCamera, Scene, SRGBColorSpace, TextureLoader, RepeatWrapping, Vector3, WebGLRenderer } from "three";
+import { AmbientLight, Color, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
+import { loadForgeMaterialLayer } from "@/scene/materialAssets";
 import { TerrainRenderer } from "@engine/render-three/terrain/terrainRenderer";
 import { TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
 import { DeformationField } from "@engine/scene/deformationField";
@@ -28,24 +29,25 @@ for (let z = 0; z < 2; z++) for (let x = 0; x < 2; x++) {
   for (let v = 0; v < size * size; v++) weights[size * size * 4 + v * 4] = 255;
   tiles.set(`${x}_${z}`, { x, z, size, layerCount: 5, heights: new Float32Array(size * size), weights });
 }
-const texture = await new TextureLoader().loadAsync("/assets/LandscapeTest/Textures/LT_Wet_Mud_BC.webp");
-const materialDef = await (await fetch("/assets/LandscapeTest/Materials/lt-wet-mud.material.json")).json();
-texture.colorSpace = SRGBColorSpace;
-texture.wrapS = texture.wrapT = RepeatWrapping;
+const manifest = await (await fetch("/assets/manifest.json")).json();
+const mudLayer = await loadForgeMaterialLayer(manifest, "lt-wet-mud");
+if (!mudLayer?.texture || !mudLayer.roughnessInAlpha) throw new Error("Wet mud roughness did not load");
 const field = new DeformationField();
 for (const x of [-1.1, 1.1]) field.stampWheel({ from: [x, -14], to: [x, 14], width: 0.55, contactLength: 0.6, targetDepth: 0.18, compaction: 1, disturbance: 255 });
 const deformation = new TerrainDeformationTexture();
 deformation.attach(field);
 const terrain = new TerrainRenderer(worldTerrainRenderSource({ tileQuads: q, spacing: 0.5, tilesX: 2, tilesZ: 2 }, tiles), {
   viewMode: "lit", activeLayer: 4, origin: new Vector3(-32, 0, -32), slotCapacity: 4, uploadsPerFrame: 4, deformation,
-  layers: Array.from({ length: 5 }, (_, i) => ({ texture: i === 4 ? texture : null, color: "#493226", scale: 0.25, roughness: materialDef.roughness, physicalMaterial: i === 4 ? "mud" : null })),
+  layers: Array.from({ length: 5 }, (_, i) => ({ texture: i === 4 ? mudLayer.texture : null, color: "#493226", scale: 0.25, roughness: mudLayer.roughness ?? 1, roughnessInAlpha: i === 4, physicalMaterial: i === 4 ? "mud" : null })),
 });
 scene.add(terrain.mesh);
 let wet: number[] | undefined;
+let roughnessInAlpha: number[] | undefined;
 const compile = terrain.mesh.material.onBeforeCompile;
 terrain.mesh.material.onBeforeCompile = (shader, renderer) => {
   compile(shader, renderer);
   wet = shader.uniforms.uDeformLayerWet!.value as number[];
+  roughnessInAlpha = shader.uniforms.uLayerRoughnessInAlpha!.value as number[];
 };
 function draw() { terrain.updateLod(camera); renderer.render(scene, camera); }
 function sample() {
@@ -67,9 +69,21 @@ function probes() {
   }
   return result;
 }
+function surfaceProbes() {
+  const gl = renderer.getContext();
+  const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+  gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  const result: number[] = [];
+  for (let y = 32; y < canvas.height; y += 32) for (let x = 32; x < canvas.width; x += 32) {
+    const offset = (y * canvas.width + x) * 4;
+    result.push(pixels[offset]!, pixels[offset + 1]!, pixels[offset + 2]!);
+  }
+  return result;
+}
 let frame = 0;
 function loop() { draw(); if (++frame < 20) requestAnimationFrame(loop); else {
   (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample,
+    roughness(on: boolean) { roughnessInAlpha![4] = on ? 1 : 0; draw(); return surfaceProbes(); },
     side() { camera.position.set(-2.5, 3.2, 6); camera.lookAt(0, -0.12, 0); camera.updateMatrixWorld(true); draw(); },
     triangles: renderer.info.render.triangles };
 } }

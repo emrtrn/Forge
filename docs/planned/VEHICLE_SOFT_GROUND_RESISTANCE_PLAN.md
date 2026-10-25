@@ -1,7 +1,7 @@
 # Araçların Çamur / Kar Direnci: Araştırma ve Düzeltme Planı
 
 > Tarih: 2026-10-25
-> Durum: **Plan kaydedildi; uygulama başlamadı. Claude'un çalışması pull edilene kadar bekliyor.**
+> Durum: **2026-10-25: motor uygulaması ve otomatik doğrulama tamamlandı. 1878 motor kontrolü, build gate ve OffroadTest/LandscapeTest Playwright senaryoları geçti. Görsel kalite ve kullanıcı sürüş hissi kabulü açık; ayrıntılar uygulama raporunda.**
 > Kullanıcı kararı: Çakışmayı önlemek için önce Claude'un çalışması alınacak, ardından güncel kod karşılaştırılarak bu işe başlanacak.
 > Araştırma tabanı: `main`, `e081cf1c`. Bulgular bu revizyondaki kod ve yerel fizik deneylerine aittir; pull sonrasında yeniden doğrulanmalıdır.
 
@@ -146,3 +146,11 @@ Yeni kalıcı alan gerekirse ilgili normalizer, save/load sözleşmesi ve `tools
 ## 8. Bu belgenin teslim sınırı
 
 Bu aşama yalnızca araştırma ve plan kaydıdır. Motor, test, sahne ve asset dosyalarında bu plan kapsamında uygulama yapılmadı. Başlangıç, Claude'un çalışmasının alınmasından ve güncel kodla karşılaştırmadan sonradır.
+
+## 9. Uygulama kaydı — 2026-10-25
+
+Yukarıdaki 2–3 ve 8. bölümler ilk araştırmanın tarihsel kaydıdır. Kullanıcının başlama talimatından sonra güncel `main` incelendi; birleşmiş Claude çalışması ve çalışma ağacındaki görsel değişiklikler korundu. Bu iş için pull, merge, commit veya push yapılmadı.
+
+A–D motor adımları uygulandı: motor/fren dalından bağımsız temas impulsu, derinliğe bağlı teker direnci, sabit fizik adımında yük batması ve patinaj kazması, fizik durumunu izleyen iz dokusu, sonlu kopma eşiği ve şanzımana toplam teker/gövde direnci aktarımı. Katsayılar yerel deneylerle ayarlandı; gerçek zemin ölçümlerine dayanan toprak mekaniği kalibrasyonu değildir.
+
+Ölçümler, doğrulama sonuçları ve açık kabul sınırları: [uygulama raporu](../reports/VEHICLE_SOFT_GROUND_RESISTANCE_2026-10-25.md).

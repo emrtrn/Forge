@@ -7051,8 +7051,8 @@ check("computeVehicleDrive eases steering and turns right as a negative yaw", ()
 
 const VEHICLE_SLICE = 1 / 60;
 
-async function createVehicleTestWorld(options: { slopeDeg?: number; groundSize?: number } = {}) {
-  const physics = new PhysicsSubsystem({ backend: "rapier" });
+async function createVehicleTestWorld(options: { slopeDeg?: number; groundSize?: number; fixedTimestep?: number } = {}) {
+  const physics = new PhysicsSubsystem({ backend: "rapier", fixedTimestep: options.fixedTimestep });
   physics.setGravity([0, -9.81, 0]);
   let pose: TransformComponent | null = null;
   physics.setTransformSink((entityId, transform) => {

@@ -1434,6 +1434,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       surfaceMaterialForWheel: (_entityId, wheel) => this.wheelSurfaceMaterial(wheel),
       isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
       setGroundSinkProvider: (provider) => this.physicsSubsystem.setVehicleGroundSinkProvider(provider),
+      onPhysicsStep: (listener) => this.physicsSubsystem.onFixedStep(listener),
     });
     this.runtimeServices.provide(terrainSurfaceHostService, {
       deformationAt: (groundEntityId, contactPoint) =>
@@ -5753,6 +5754,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           texture: resolved?.texture ?? null,
           color: resolved?.baseColor ?? presetColor,
           roughness: resolved?.roughness ?? 1,
+          roughnessInAlpha: resolved?.roughnessInAlpha ?? false,
           tiling,
         } satisfies LandscapeLayerTexture;
       }),

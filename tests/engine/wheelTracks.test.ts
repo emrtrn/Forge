@@ -293,12 +293,14 @@ export function registerWheelTrackTests(check: Check): void {
     let soft = true;
     const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
     let groundSink: VehicleGroundSinkProvider | null = null;
-    const vehicles: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "possessedEntityId" | "setGroundSinkProvider"> = {
+    let physicsStep: ((dt: number) => void) | null = null;
+    const vehicles: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "possessedEntityId" | "setGroundSinkProvider" | "onPhysicsStep"> = {
       vehicleIds: () => ["parked", "car"],
       vehicleState: (id) => carState(definition, id === "car" ? 0 : 200, id === "car" ? z : 0),
       vehicleDefinition: () => definition,
       possessedEntityId: () => "car",
       setGroundSinkProvider: (provider) => { groundSink = provider; },
+      onPhysicsStep: (listener) => { physicsStep = listener; return () => { physicsStep = null; }; },
     };
     host.provide(vehicleHostService, vehicles as VehicleHost);
     host.provide(terrainSurfaceHostService, {
@@ -310,8 +312,11 @@ export function registerWheelTrackTests(check: Check): void {
     module.onRuntimeStart!(host);
     const subsystems: Subsystem[] = [];
     host.installSubsystems((subsystem) => subsystems.push(subsystem));
-    const tick = () => subsystems[0]!.update!({ deltaSeconds: 1 / 60, elapsedSeconds: 0, frame: 0 });
+    const render = () => subsystems[0]!.update!({ deltaSeconds: 1 / 60, elapsedSeconds: 0, frame: 0 });
+    const tick = () => { physicsStep!(1 / 60); render(); };
     const commands = host.resolve(terrainDeformationService)!;
+    render();
+    assert.equal(commands.snapshot(), null, "render-only frames cannot create physical soil state");
     for (let frame = 0; frame < 60; frame += 1) {
       z += 0.1;
       tick();
@@ -346,5 +351,6 @@ export function registerWheelTrackTests(check: Check): void {
     assert.equal(groundSink, null, "and the physics provider with it");
     assert.equal(texture.uniforms.uDeformActive!.value, 0);
     module.dispose!();
+    assert.equal(physicsStep, null, "module disposal unsubscribes from physics");
   });
 }

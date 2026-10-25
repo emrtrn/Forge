@@ -234,6 +234,8 @@ export interface PhysicalMaterialDef {
     recoveryRate: number;
     /** Extra resistance multiplier as the wheel sinks. */
     sinkResistance: number;
+    /** Preset-only wheel ploughing force / load per unit sink-depth/radius. */
+    ploughResistance?: number;
     /** Track albedo blend colour (RGB, 0..1). */
     tint: Vec3;
     /** Track albedo blend strength (0..1). */
@@ -259,7 +261,7 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
     vehicle: { frictionSlipScale: 0.6, tractionCoefficient: 0.22, sideFrictionScale: 0.5, rollingResistance: 0.06 },
     deformation: {
       maxDepth: 0.3, compaction: 0.25, digRate: 0.05, recoveryRate: 0.01,
-      sinkResistance: 0.4, tint: [0.85, 0.9, 0.95], tintStrength: 0.3, wetness: 0.1,
+      sinkResistance: 0.4, ploughResistance: 0.045, tint: [0.85, 0.9, 0.95], tintStrength: 0.3, wetness: 0.1,
     },
   },
   mud: {
@@ -268,7 +270,7 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
     vehicle: { frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12 },
     deformation: {
       maxDepth: 0.22, compaction: 0.5, digRate: 0.08, recoveryRate: 0,
-      sinkResistance: 0.6, tint: [0.035, 0.025, 0.015], tintStrength: 0.85, wetness: 0.9,
+      sinkResistance: 0.6, ploughResistance: 0.05, tint: [0.035, 0.025, 0.015], tintStrength: 0.85, wetness: 0.9,
     },
   },
   sand: {
@@ -276,7 +278,7 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
     vehicle: { frictionSlipScale: 0.75, sideFrictionScale: 0.8, rollingResistance: 0.25 },
     deformation: {
       maxDepth: 0.15, compaction: 0.4, digRate: 0.06, recoveryRate: 0.002,
-      sinkResistance: 0.45, tint: [0.65, 0.5, 0.3], tintStrength: 0.4, wetness: 0.05,
+      sinkResistance: 0.45, ploughResistance: 0.2, tint: [0.65, 0.5, 0.3], tintStrength: 0.4, wetness: 0.05,
     },
   },
 };

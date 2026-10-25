@@ -7,17 +7,19 @@
   "baseColorTexture": "lt-snow-bc",
   "normalTexture": null,
   "maskTexture": null,
-  "roughnessTexture": null,
+  "roughnessTexture": "lt-snow-roughness",
   "metalnessTexture": null,
   "aoTexture": null,
   "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
   "emissiveTexture": null,
   "ormTexture": null,
   "uvTiling": {
     "x": 1.4,
     "y": 1.4
   },
-  "roughness": 0.95,
+  "flipY": true,
+  "roughness": 1,
   "metalness": 0,
   "aoIntensity": 1,
   "opacity": 1,
@@ -26,5 +28,6 @@
   "side": "front",
   "emissive": "#000000",
   "emissiveIntensity": 0,
+  "normalMotion": null,
   "layerBlend": null
 }

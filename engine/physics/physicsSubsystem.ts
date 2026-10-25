@@ -26,11 +26,13 @@ import { interactionGroupsInteract, type NavigationRole } from "../scene/collisi
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
 import { computeVehicleDrive } from "./vehicle/vehicleDrive";
-import { vehicleWheelWidth } from "./surface/sinkage";
+import { nominalWheelLoad, sinkage, vehicleWheelWidth } from "./surface/sinkage";
+import { frameCompaction } from "./surface/wheelTracks";
+import { resistanceImpulse, wheelGroundResistance } from "./surface/softGroundResistance";
 import {
-  computeWheelSurfaceResponse, type VehicleGroundSinkProvider, type VehicleSurfaceProvider,
+  computeWheelSurfaceResponse, type SurfaceSample, type VehicleGroundSinkProvider, type VehicleSurfaceProvider,
 } from "./surface/surfaceResponse";
-import { bellyDragImpulse, rutLateralImpulse, slewSinkDepth, tractionSlip, wheelSinkLimit } from "./surface/wheelSink";
+import { bellyDragImpulse, digTargetDepth, rutLateralImpulse, slewSinkDepth, tractionSlip, wheelSinkLimit } from "./surface/wheelSink";
 import { advanceWheelSpin, limitWheelEngineForce, longitudinalSlip } from "./surface/wheelTraction";
 import { computeVehicleAerodynamics, initialVehicleDrivetrainState } from "./vehicle/vehicleDrivetrain";
 import {
@@ -152,6 +154,9 @@ interface VehicleRecord {
   tractionSlip: number[];
   wheelSpinSpeed: number[];
   wheelSpinRotation: number[];
+  groundResistance?: number[];
+  /** Local digging survives without a track field, but never travels with the tyre. */
+  soil?: ({ x: number; z: number; depth: number } | null)[];
 }
 
 interface RapierBodyRecord {
@@ -232,6 +237,13 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private vehicles = new Map<EntityId, VehicleRecord>();
   private vehicleSurfaceProvider: VehicleSurfaceProvider | null = null;
   private vehicleGroundSinkProvider: VehicleGroundSinkProvider | null = null;
+  private readonly fixedStepListeners = new Set<(deltaSeconds: number) => void>();
+
+  /** Runtime CPU ground state advances after every completed physics slice. */
+  onFixedStep(listener: (deltaSeconds: number) => void): () => void {
+    this.fixedStepListeners.add(listener);
+    return () => { this.fixedStepListeners.delete(listener); };
+  }
 
   constructor(options: PhysicsSubsystemOptions = {}) {
     this.backend = options.backend ?? "placeholder";
@@ -444,6 +456,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           suspensionLength: controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength,
           suspensionForce: inContact ? Math.max(0, controller.wheelSuspensionForce(index) ?? 0) : 0,
           sinkDepth: record.sink[index] ?? 0,
+          ...(record.soil?.[index] ? { soilDepth: record.soil[index]!.depth } : {}),
+          groundResistanceForce: inContact ? record.groundResistance?.[index] ?? 0 : 0,
           tractionSlip: record.tractionSlip[index] ?? 0,
           steering: controller.wheelSteering(index) ?? 0,
           rotation: (controller.wheelRotation(index) ?? 0) + (record.wheelSpinRotation[index] ?? 0),
@@ -1190,6 +1204,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           // Vehicles push velocity into their chassis right before each slice.
           this.updateVehicles(this.stepClock.step);
           this.rapierWorld.step();
+          this.applyVehicleGroundResistance(this.stepClock.step);
+          for (const listener of this.fixedStepListeners) listener(this.stepClock.step);
         }
         this.updateRapierContacts();
       }
@@ -1349,6 +1365,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     record.tractionSlip = definition.wheels.map(() => 0);
     record.wheelSpinSpeed = definition.wheels.map(() => 0);
     record.wheelSpinRotation = definition.wheels.map(() => 0);
+    record.groundResistance = definition.wheels.map(() => 0);
+    record.soil = definition.wheels.map(() => null);
     record.controller = controller;
     return true;
   }
@@ -1368,23 +1386,28 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       if (!controller || !rapier) continue;
       if (this.suspendedDynamicBodies.has(record.entityId)) continue;
       const forwardSpeed = chassisForwardSpeed(rapier.body);
-      this.applyWheelSink(record, controller, rapier.body, deltaSeconds, forwardSpeed);
       // Rapier exposes the previous slice's wheel rays/load until updateVehicle.
       // Sample once, before gearing, so the gearbox sees the resistance that
       // will remain active during its power cut. Side stiffness is a scale here
       // and composes with the command's handbrake response below.
-      const surfaces = record.definition.wheels.map((wheel, index) => {
+      const samples = record.definition.wheels.map((_wheel, index) => {
         const contact = this.vehicleSurfaceProvider && controller.wheelIsInContact(index)
           ? controller.wheelContactPoint(index) : null;
-        const sample = contact ? this.vehicleSurfaceProvider!(
+        return contact ? this.vehicleSurfaceProvider!(
           record.entityId, index, this.vehicleWheelGroundEntity(controller, index),
           [contact.x, contact.y, contact.z],
         ) : null;
+      });
+      const bellyResistance = this.applyWheelSink(record, controller, rapier.body, deltaSeconds, forwardSpeed, samples);
+      const surfaces = record.definition.wheels.map((wheel, index) => {
         return computeWheelSurfaceResponse(
           { frictionSlip: wheel.frictionSlip, sideFrictionStiffness: 1 },
-          sample, forwardSpeed, controller.wheelSuspensionForce(index) ?? 0,
+          samples[index]!, forwardSpeed, controller.wheelSuspensionForce(index) ?? 0,
         );
       });
+      record.groundResistance = record.definition.wheels.map((wheel, index) => controller.wheelIsInContact(index)
+        ? wheelGroundResistance(samples[index]!, controller.wheelSuspensionForce(index) ?? 0,
+          record.sink[index] ?? 0, wheel.radius, forwardSpeed) : 0);
       const drive = computeVehicleDrive(
         record.definition,
         record.input,
@@ -1392,7 +1415,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         record.steer,
         deltaSeconds,
         record.drivetrain,
-        surfaces.reduce((sum, surface) => sum + surface.rollingResistanceForce, 0),
+        bellyResistance + record.groundResistance.reduce((sum, force) => sum + force, 0),
       );
       record.steer = drive.steer;
       record.drivetrain = drive.drivetrain;
@@ -1404,7 +1427,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           ? limitWheelEngineForce(command.engineForce, controller.wheelSuspensionForce(index) ?? 0, surface.frictionSlip, deltaSeconds, surface.tractionCoefficient)
           : command.engineForce);
         // The controller takes the brake as a per-slice impulse cap.
-        controller.setWheelBrake(index, (command.brakeForce + surface.rollingResistanceForce) * deltaSeconds);
+        controller.setWheelBrake(index, command.brakeForce * deltaSeconds);
         controller.setWheelSteering(index, command.steering);
         controller.setWheelFrictionSlip(index, surface.frictionSlip);
         controller.setWheelSideFrictionStiffness(index, command.sideFrictionStiffness * surface.sideFrictionStiffness);
@@ -1442,6 +1465,40 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
   }
 
+  /** Applies after drive AND gravity: a finite soil threshold can hold a resting car. */
+  private applyVehicleGroundResistance(dt: number): void {
+    for (const record of this.vehicles.values()) {
+      const controller = record.controller;
+      const body = this.rapierBodies.get(record.entityId)?.body;
+      if (!controller || !body || this.suspendedDynamicBodies.has(record.entityId)) continue;
+      record.definition.wheels.forEach((wheel, index) => {
+        if (!controller.wheelIsInContact(index)) return;
+        const point = controller.wheelContactPoint(index);
+        const normal = controller.wheelContactNormal(index);
+        if (!point || !normal) return;
+        const ground = controller.wheelGroundObject(index)?.parent();
+        const a = body.velocityAtPoint(point);
+        const b = ground?.velocityAtPoint(point) ?? { x: 0, y: 0, z: 0 };
+        const normalSpeed = (a.x - b.x) * normal.x + (a.y - b.y) * normal.y + (a.z - b.z) * normal.z;
+        const tangent = { x: a.x - b.x - normal.x * normalSpeed,
+          y: a.y - b.y - normal.y * normalSpeed, z: a.z - b.z - normal.z * normalSpeed };
+        const speed = Math.hypot(tangent.x, tangent.y, tangent.z);
+        const sample = this.vehicleSurfaceProvider?.(record.entityId, index,
+          this.vehicleWheelGroundEntity(controller, index), [point.x, point.y, point.z]) ?? null;
+        const force = wheelGroundResistance(sample, controller.wheelSuspensionForce(index) ?? 0,
+          record.sink[index] ?? 0, wheel.radius, speed);
+        record.groundResistance![index] = force;
+        if (speed < 1e-9 || force <= 0) return;
+        const direction = { x: tangent.x / speed, y: tangent.y / speed, z: tangent.z / speed };
+        const inverseMass = pointInverseMass(body, point, direction) + (ground ? pointInverseMass(ground, point, direction) : 0);
+        const magnitude = resistanceImpulse(speed, force, dt, inverseMass);
+        const impulse = { x: -direction.x * magnitude, y: -direction.y * magnitude, z: -direction.z * magnitude };
+        body.applyImpulseAtPoint(impulse, point, false);
+        if (ground?.isDynamic()) ground.applyImpulseAtPoint({ x: -impulse.x, y: -impulse.y, z: -impulse.z }, point, true);
+      });
+    }
+  }
+
   /**
    * Faz 3 sinkage as a virtual ground offset: each wheel's rest length shrinks
    * by the track depth under its last contact (Faz 0: `rest − depth`, at most
@@ -1458,9 +1515,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     body: RapierRigidBody,
     deltaSeconds: number,
     forwardSpeed: number,
-  ): void {
+    samples: readonly (SurfaceSample | null)[],
+  ): number {
     const provider = this.vehicleGroundSinkProvider;
-    if (!provider && !record.sink.some((depth) => depth > 0)) return;
+    if (!provider && !samples.some((sample) => sample?.softGround) && !record.sink.some((depth) => depth > 0)) return 0;
     let heading = 0;
     if (provider) {
       const q = body.rotation();
@@ -1474,9 +1532,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     let sinking = 0;
     record.definition.wheels.forEach((wheel, index) => {
       let target = 0;
-      const contact = provider && controller.wheelIsInContact(index) ? controller.wheelContactPoint(index) : null;
+      const contact = controller.wheelIsInContact(index) ? controller.wheelContactPoint(index) : null;
       const wheelHeading = heading + (controller.wheelSteering(index) ?? 0);
-      const sink = contact ? provider!({
+      const sink = contact && provider ? provider({
         vehicleEntityId: record.entityId,
         wheelIndex: index,
         groundEntityId: this.vehicleWheelGroundEntity(controller, index),
@@ -1486,13 +1544,29 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         radius: wheel.radius,
         travel,
       }) : null;
-      if (sink && Number.isFinite(sink.depth) && sink.depth > 0) {
+      let depth = sink && Number.isFinite(sink.depth) ? Math.max(0, sink.depth) : 0;
+      const sample = samples[index];
+      const soil = sample?.softGround;
+      if (contact && soil) {
+        const width = vehicleWheelWidth(wheel);
+        const loadDepth = sinkage(soil, sample.deformability, {
+          load: controller.wheelSuspensionForce(index) ?? 0, nominalLoad: nominalWheelLoad(record.definition), width,
+        });
+        const previous = record.soil?.[index];
+        const staying = previous && Math.hypot(contact.x - previous.x, contact.z - previous.z) < width / 2;
+        const current = Math.max(depth, staying ? previous.depth : 0);
+        const compacted = current + Math.max(0, loadDepth - current) * frameCompaction(soil.compaction, deltaSeconds);
+        depth = digTargetDepth(compacted, record.tractionSlip[index] ?? 0, soil.digRate, deltaSeconds,
+          soil.maxDepth * sample.deformability);
+        record.soil![index] = { x: staying ? previous.x : contact.x, z: staying ? previous.z : contact.z, depth };
+      } else if (record.soil) record.soil[index] = null;
+      if (contact && depth > 0) {
         const limit = record.sinkLimits[index] ?? 0;
-        target = Math.min(sink.depth, limit);
-        overlap += Math.max(0, sink.depth - limit);
-        if (Number.isFinite(sink.resistance)) resistance += sink.resistance;
+        target = Math.min(depth, limit);
+        overlap += Math.max(0, depth - limit);
+        resistance += soil?.sinkResistance ?? sink?.resistance ?? 0;
         sinking += 1;
-        const push = rutLateralImpulse(sink.slope ?? 0, controller.wheelSuspensionForce(index) ?? 0, wheelHeading, deltaSeconds);
+        const push = rutLateralImpulse(sink?.slope ?? 0, controller.wheelSuspensionForce(index) ?? 0, wheelHeading, deltaSeconds);
         if (push[0] !== 0 || push[2] !== 0) body.applyImpulseAtPoint({ x: push[0], y: 0, z: push[2] }, contact!, true);
       }
       const previous = record.sink[index] ?? 0;
@@ -1514,7 +1588,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         deltaSeconds,
       );
       if (impulse[0] !== 0 || impulse[2] !== 0) body.applyImpulse({ x: impulse[0], y: 0, z: impulse[2] }, true);
+      return Math.hypot(impulse[0], impulse[2]) / deltaSeconds;
     }
+    return 0;
   }
 
   private addRapierBody(body: PhysicsBody): void {
@@ -1795,6 +1871,20 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: left.isSensor || right.isSensor,
     });
   }
+}
+
+/** Inverse point mass n·M⁻¹n + (r×n)·I⁻¹(r×n), including locked axes. */
+function pointInverseMass(body: RapierRigidBody, point: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }): number {
+  if (!body.isDynamic()) return 0;
+  const centre = body.worldCom();
+  const r = { x: point.x - centre.x, y: point.y - centre.y, z: point.z - centre.z };
+  const c = { x: r.y * n.z - r.z * n.y, y: r.z * n.x - r.x * n.z, z: r.x * n.y - r.y * n.x };
+  const m = body.effectiveInvMass();
+  const i = body.effectiveWorldInvInertia();
+  return n.x * n.x * m.x + n.y * n.y * m.y + n.z * n.z * m.z
+    + c.x * (i.m11 * c.x + i.m12 * c.y + i.m13 * c.z)
+    + c.y * (i.m21 * c.x + i.m22 * c.y + i.m23 * c.z)
+    + c.z * (i.m31 * c.x + i.m32 * c.y + i.m33 * c.z);
 }
 
 /** Signed linear speed along the body's local +Z (Forge's model forward). */

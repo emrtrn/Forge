@@ -86,6 +86,7 @@ test("editor authoring smoke: place, transform, undo, save, reload, play", async
   expect(originalX).not.toBe("2");
 
   await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-save")).toBeEnabled({ timeout: 60_000 });
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
 
   await page.goto(`/?editor&smokeReload=${Date.now()}`);

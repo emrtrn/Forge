@@ -4979,11 +4979,27 @@ export class EditorUi {
     this.app.setSelectionPivot([value(0), value(1), value(2)]);
   }
 
+  private manualSavePending = false;
+
   private async save(): Promise<void> {
+    if (this.manualSavePending) return;
+    this.manualSavePending = true;
+    const button = this.root.querySelector<HTMLButtonElement>('[data-action="save"]');
+    if (button) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+    }
+    this.setStatus("Saving layout…", "info");
     try {
       await this.app.saveLayout();
     } catch (error) {
       this.setStatus(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      this.manualSavePending = false;
+      if (button) {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+      }
     }
   }
 

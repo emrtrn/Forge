@@ -138,11 +138,7 @@
      (see .editor-details) so it sits above the viewport, ending at the Details
      panel's left edge instead of on top of the panel. */
   margin-right: 410px;
-  /* Never let this cluster be crushed below its content: with min-width:0 +
-     justify-content:flex-end a cramped workbar (narrow window) would overflow
-     its children leftward on top of the transform tools. Keeping it at content
-     width makes the overflow clip against the Details panel on the right
-     instead — the tools stay clickable. */
+  /* Keep each group intact; narrower desktops give view controls their own row. */
   flex: 0 0 auto;
 }
 
@@ -6621,6 +6617,27 @@
     .editor-workbar [data-viewmode-label] {
       display: none;
     }
+  }
+
+  /* A single row no longer fits once Quality joins Camera/View/Show/Play.
+     Reserve a second row instead of pushing Play outside the window. The
+     shared height also moves the viewport and side panels below the toolbar. */
+  @media (max-width: 1600px) {
+    .editor-shell { --editor-topbar-height: 80px; }
+    .editor-workbar {
+      height: 100%;
+      flex-wrap: wrap;
+      align-content: center;
+      gap: 6px 12px;
+    }
+    .editor-workbar > .editor-view-controls {
+      flex-basis: 100%;
+      margin-right: 0;
+    }
+  }
+
+  @media (max-width: 1000px) {
+    .editor-shell { --editor-topbar-height: 116px; }
   }
 
   .editor-panel {

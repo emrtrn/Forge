@@ -1,11 +1,14 @@
 import { readFile } from "node:fs/promises";
+import assert from "node:assert/strict";
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { addLandscapeFromMenu, readSavedTerrain } from "./terrain";
 import { expect, test, type Page } from "./test";
 import { SMOKE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
-test.setTimeout(210_000);
+// Paint, material, reload, fill, remove and undo each await their real save batch.
+// Individual saves remain bounded below; the full workflow needs room for all of them.
+test.setTimeout(360_000);
 
 // Saves stay inside the per-run smoke project.
 
@@ -17,6 +20,8 @@ async function savedTileBytes(): Promise<Buffer> {
 
 async function saveLayout(page: Page): Promise<void> {
   await page.getByTestId("editor-save").click();
+  // A previous autosave can still say "Saved" while this manual save is queued.
+  await expect(page.getByTestId("editor-save")).toBeEnabled({ timeout: 60_000 });
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
 }
 
@@ -26,8 +31,7 @@ async function deleteExistingLandscape(page: Page): Promise<void> {
   await landscapeRows.first().click();
   await page.keyboard.press("Delete");
   await expect(page.getByTestId("outliner-row").filter({ hasText: "Landscape" })).toHaveCount(0);
-  await page.getByTestId("editor-save").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  await saveLayout(page);
 }
 
 test("editor Landscape paint smoke: paint layer, save, reload", async ({ page }) => {
@@ -102,8 +106,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await expect(page.locator("[data-landscape-layer-physical-material]")).toHaveValue("mud");
   await page.waitForTimeout(1500);
 
-  await page.getByTestId("editor-save").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  await saveLayout(page);
 
   const landscapeData = await readSavedTerrain(page);
   const grass = landscapeData.layers.find((layer) => layer.id === "grass");
@@ -140,14 +143,12 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await page.locator('[data-landscape-layer="snow"]').click();
   await page.locator("[data-landscape-fill]").click();
   await expect(page.getByTestId("editor-undo")).toHaveAttribute("aria-label", "Undo Landscape Fill Layer");
-  await page.getByTestId("editor-save").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  await saveLayout(page);
   const filled = await readSavedTerrain(page);
   expect(filled.layers.find((layer) => layer.id === "snow")?.weights.every((weight) => weight === 1)).toBe(true);
   expect(filled.layers.filter((layer) => layer.id !== "snow").every((layer) => layer.weights.every((weight) => weight === 0))).toBe(true);
   await page.getByTestId("editor-undo").click();
-  await page.getByTestId("editor-save").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  await saveLayout(page);
   const unfilled = await readSavedTerrain(page);
   expect(unfilled.layers.map((layer) => layer.weights)).toEqual(reloadedData.layers.map((layer) => layer.weights));
 
@@ -177,14 +178,16 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   expect(removedTile.layerCount).toBe(4);
   expect(removedTile.weights.length).toBe(count * 4);
   let spread = 0;
+  // These are synchronous binary invariants, not browser assertions. Recording
+  // two Playwright steps per vertex overwhelms tracing and stalls timeout handling.
   for (let index = 0; index < count; index += 1) {
     const now = Array.from(removedTile.weights.subarray(index * 4, index * 4 + 4));
-    expect(now.reduce((sum, value) => sum + value, 0), `vertex ${index} sums to 255`).toBe(255);
+    assert.equal(now.reduce((sum, value) => sum + value, 0), 255, `vertex ${index} sums to 255`);
     if (fiveTile.weights[index * 4 + 1]! > 0) {
       spread += 1;
-      expect(now[0]!).toBeGreaterThanOrEqual(fiveTile.weights[index * 4]!);
+      assert.ok(now[0]! >= fiveTile.weights[index * 4]!, `vertex ${index} retains its grass weight`);
     } else {
-      expect(now).toEqual([0, 2, 3].map((layer) => fiveTile.weights[index * 4 + layer]!).concat(fiveTile.weights[count * 4 + index * 4]!));
+      assert.deepEqual(now, [0, 2, 3].map((layer) => fiveTile.weights[index * 4 + layer]!).concat(fiveTile.weights[count * 4 + index * 4]!), `vertex ${index} keeps untouched layers`);
     }
   }
   console.log(`[landscape-paint] Remove Layer spread dirt over ${spread} vertices`);

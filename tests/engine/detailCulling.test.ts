@@ -1,6 +1,6 @@
 /** Small-object distance culling of static placements (OPEN_WORLD_PLAN Faz 7e). */
 import assert from "node:assert/strict";
-import { BoxGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector3 } from "three";
+import { BoxGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, ShaderLib, Vector2, Vector3 } from "three";
 import {
   DETAIL_CULL_MAX_DISTANCE,
   detailBatchCulled,
@@ -106,6 +106,19 @@ export function registerDetailCullingTests(check: Check): void {
     culling.update(new Vector3(0, 0, 0), 1);
     // 0.87 m × 200 = 174 m at scale 1, × 10 placement scale = 1740 m: still drawn at 300 m.
     assert.equal(tower.visible, true);
+    // The shader fades on distance ÷ the instance matrix's full scale (0.1 here,
+    // node 0.01 × placement 10), so its window is in those units: 174 m ÷ 0.01.
+    const shader = {
+      uniforms: {} as Record<string, { value: unknown }>,
+      vertexShader: ShaderLib.standard.vertexShader,
+      fragmentShader: ShaderLib.standard.fragmentShader,
+    };
+    (tower.material as MeshStandardMaterial).onBeforeCompile(shader as never, {} as never);
+    const range = (shader.uniforms.uFoliageFadeRange!.value as Vector2).toArray();
+    assert.ok(Math.abs(range[1]! - 17400) < 1e-6 && Math.abs(range[0]! - 0.8 * 17400) < 1e-6, `fade window ${range}`);
+    const shaderDistance = (metres: number) => metres / 0.1;
+    assert.ok(shaderDistance(300) < range[0]!, "fully drawn at 300 m");
+    assert.ok(shaderDistance(1800) > range[1]!, "gone past 1740 m");
     culling.update(new Vector3(-1700, 0, 0), 1);
     assert.equal(tower.visible, false, "past 1740 m the batch is skipped");
 

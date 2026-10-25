@@ -1,6 +1,19 @@
 {
   "schema": 1,
   "type": "foliage",
-  "groups": [],
-  "landscapeRules": []
+  "groups": [
+    {
+      "id": "foliage-group-1",
+      "foliageTypeId": "pine-foliagetype",
+      "target": {
+        "kind": "landscape",
+        "id": "landscape-1"
+      },
+      "instances": []
+    }
+  ],
+  "landscapeRules": [],
+  "foliageCells": [
+    "-2_-2"
+  ]
 }

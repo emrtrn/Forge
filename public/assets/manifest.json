@@ -1909,11 +1909,31 @@
       "assetType": "effect",
       "category": "starter-effects",
       "path": "assets/starter-content/Effects/FX_Snow_Dust.effect.json",
-      "tags": ["starter", "effect", "snow", "wheel"],
+      "tags": [
+        "starter",
+        "effect",
+        "snow",
+        "wheel"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "starter-effects", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1063 },
-      "source": { "origin": "forge", "pack": "Forge Starter Content", "packVersion": "0.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1063
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
       "license": "CC0-1.0"
     },
     {
@@ -1922,11 +1942,31 @@
       "assetType": "effect",
       "category": "starter-effects",
       "path": "assets/starter-content/Effects/FX_Mud_Splash.effect.json",
-      "tags": ["starter", "effect", "mud", "wheel"],
+      "tags": [
+        "starter",
+        "effect",
+        "mud",
+        "wheel"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "starter-effects", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1063 },
-      "source": { "origin": "forge", "pack": "Forge Starter Content", "packVersion": "0.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1063
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
       "license": "CC0-1.0"
     },
     {
@@ -21114,29 +21154,6 @@
       "license": "CC0"
     },
     {
-      "id": "foliage-type-foliagetype",
-      "name": "Foliage Type.Foliagetype",
-      "assetType": "foliageType",
-      "category": "foliage",
-      "path": "assets/foliage/Foliage_Type.foliagetype.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "foliage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 437
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "lt-meadow-bc",
       "name": "LT Meadow Base Color",
       "assetType": "texture",
@@ -21175,11 +21192,30 @@
       "category": "LandscapeTest/Textures",
       "path": "assets/LandscapeTest/Textures/LT_Wet_Mud_BC.webp",
       "thumbnail": "assets/LandscapeTest/Textures/LT_Wet_Mud_BC.webp",
-      "tags": ["terrain", "mud", "wet"],
+      "tags": [
+        "terrain",
+        "mud",
+        "wet"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 457812 },
-      "source": { "origin": "OpenAI image_gen", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "landscape-test",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 457812
+      },
+      "source": {
+        "origin": "OpenAI image_gen",
+        "pack": "Forge LandscapeTest",
+        "packVersion": "0.1"
+      },
       "license": "AI-generated project asset"
     },
     {
@@ -21189,11 +21225,31 @@
       "category": "LandscapeTest/Textures",
       "path": "assets/LandscapeTest/Textures/LT_Wet_Mud_Roughness.webp",
       "thumbnail": "assets/LandscapeTest/Textures/LT_Wet_Mud_Roughness.webp",
-      "tags": ["terrain", "mud", "wet", "roughness"],
+      "tags": [
+        "terrain",
+        "mud",
+        "wet",
+        "roughness"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 2523928 },
-      "source": { "origin": "OpenAI image_gen", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "landscape-test",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2523928
+      },
+      "source": {
+        "origin": "OpenAI image_gen",
+        "pack": "Forge LandscapeTest",
+        "packVersion": "0.1"
+      },
       "license": "AI-generated project asset"
     },
     {
@@ -21202,11 +21258,30 @@
       "assetType": "material",
       "category": "LandscapeTest/Materials",
       "path": "assets/LandscapeTest/Materials/lt-wet-mud.material.json",
-      "tags": ["terrain", "mud", "wet"],
+      "tags": [
+        "terrain",
+        "mud",
+        "wet"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 711 },
-      "source": { "origin": "forge", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "landscape-test",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 711
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge LandscapeTest",
+        "packVersion": "0.1"
+      },
       "license": "CC0-1.0"
     },
     {
@@ -21248,11 +21323,31 @@
       "category": "LandscapeTest/Textures",
       "path": "assets/LandscapeTest/Textures/LT_Snow_Roughness.webp",
       "thumbnail": "assets/LandscapeTest/Textures/LT_Snow_Roughness.webp",
-      "tags": ["landscape-test", "terrain", "snow", "roughness"],
+      "tags": [
+        "landscape-test",
+        "terrain",
+        "snow",
+        "roughness"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "LandscapeTest", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1799454 },
-      "source": { "origin": "OpenAI image_gen", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "LandscapeTest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1799454
+      },
+      "source": {
+        "origin": "OpenAI image_gen",
+        "pack": "Forge LandscapeTest",
+        "packVersion": "0.1"
+      },
       "license": "AI-generated project asset"
     },
     {
@@ -21561,6 +21656,29 @@
         "origin": "ThreeAges",
         "path": "assets/ThreeAges/NatureMega/Rock_Medium_2.glb"
       }
+    },
+    {
+      "id": "pine-foliagetype",
+      "name": "Pine.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Pine.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 433
+      },
+      "license": "Unknown"
     }
   ]
 }

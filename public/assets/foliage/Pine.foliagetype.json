@@ -1,22 +1,22 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "name": "Foliage Type",
-  "meshAssetId": "commontree",
-  "radius": 1,
-  "density": 1,
+  "name": "Pine",
+  "meshAssetId": "lt-alpine-pine",
+  "radius": 0.5,
+  "density": 0.1,
   "scaleMin": [
-    0.8,
-    0.8,
-    0.8
+    20,
+    20,
+    20
   ],
   "scaleMax": [
-    1.2,
-    1.2,
-    1.2
+    22,
+    22,
+    22
   ],
   "randomYaw": true,
-  "alignToNormal": false,
+  "alignToNormal": true,
   "zOffsetMin": 0,
   "zOffsetMax": 0,
   "slopeMin": 0,

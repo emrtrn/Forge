@@ -49,6 +49,7 @@
     },
     "staticObjectsCastShadow": true,
     "killZ": -160,
+    "viewDistance": 900,
     "gameMode": "forge.vehicle"
   },
   "worldCells": [
@@ -102,9 +103,14 @@
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 2,
+    "exposure": 1,
     "skyLightCapture": {
-      "intensity": 1
+      "intensity": 0.5
     }
+  },
+  "heightFog": {
+    "mode": "exp",
+    "density": 0.002198
   },
   "cloudLayer": {
     "density": 0.5,
@@ -130,18 +136,18 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        3,
+        -56.89,
         9,
-        4
+        -4.53
       ],
       "name": "Sun",
       "rotation": [
-        -50,
-        35,
+        -30,
+        20,
         0
       ],
       "color": "#ffffff",
-      "intensity": 2,
+      "intensity": 5,
       "castShadow": true
     }
   ],
@@ -1863,8 +1869,7 @@
         0
       ],
       "dataRef": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json",
-      "name": "Landscape",
-      "locked": true
+      "name": "Landscape"
     }
   ],
   "actors": []

@@ -12,6 +12,7 @@ import {
   applyTerrainUndoPatches,
   createTerrainEditWorld,
   createTerrainHeightmapPatches,
+  createTerrainLayerFillPatches,
   createTerrainPaintAccumulator,
   revertTerrainUndoPatches,
   type TerrainBrush,
@@ -28,6 +29,7 @@ import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@
 import {
   landscapeEditIssues,
   landscapeEditWorld,
+  landscapeGridPatchValues,
   terrainDocumentToLandscape,
   writeTerrainPatchToLandscape,
 } from "@engine/terrain/terrainLandscapeBridge";
@@ -9393,9 +9395,23 @@ export class SceneApp {
     // Edited tiles are pinned by the session; the rest may stream out again.
     streaming?.release(stroke.demanded);
     if (stroke.patches.length === 0) return;
-    const { landscapeId, document, patches } = stroke;
+    const tool = stroke.mode === "paint" ? this.landscapeSculptSettings.paintTool : this.landscapeSculptSettings.tool;
     const size = stroke.world.def.tileQuads + 1;
-    const layerCount = stroke.world.def.layers.length;
+    this.executeTerrainPatchCommand(`Landscape ${tool}`, stroke.landscapeId, stroke.document, stroke.patches,
+      { verticesX: size, verticesZ: size, layerCount: stroke.world.def.layers.length });
+  }
+
+  /**
+   * One undoable terrain edit made of tile patches (a stroke, Fill Layer, a
+   * spline bake); executing it applies the after side. A World Terrain replays
+   * them on its session tiles. A 1×1 Landscape writes them into its grid and
+   * skips them when the grid no longer has the `grid` shape (the resample or
+   * layer change that altered it is undone first, in order).
+   */
+  private executeTerrainPatchCommand(
+    label: string, landscapeId: string, document: WorldTerrainDocument | null, patches: readonly TerrainUndoPatch[],
+    grid?: { verticesX: number; verticesZ: number; layerCount: number },
+  ): void {
     const restore = (side: "before" | "after"): void => {
       const index = this.layout?.landscapes?.findIndex((actor) => actor.id === landscapeId) ?? -1;
       const object = this.landscapeObjects[index];
@@ -9409,22 +9425,16 @@ export class SceneApp {
         updateWorldTerrainObjectTiles(object, dirty);
         this.scheduleLandscapeFoliageRebuild(landscapeId);
       } else {
-        // The grid is edited in place by id; a later resample or layer change
-        // is undone before this command is reached, so its shape matches again.
         const data = this.landscapeData.get(landscapeId);
-        if (!data || data.size.verticesX !== size || data.size.verticesZ !== size || data.layers.length !== layerCount) return;
+        if (!data || !grid || data.size.verticesX !== grid.verticesX || data.size.verticesZ !== grid.verticesZ
+          || data.layers.length !== grid.layerCount) return;
         this.writeLandscapePatches(landscapeId, index, data, patches, side);
       }
       this.select({ kind: "landscape", index });
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
     };
-    const tool = stroke.mode === "paint" ? this.landscapeSculptSettings.paintTool : this.landscapeSculptSettings.tool;
-    this.executeCommand({
-      label: `Landscape ${tool}`,
-      redo: () => restore("after"),
-      undo: () => restore("before"),
-    });
+    this.executeCommand({ label, redo: () => restore("after"), undo: () => restore("before") });
   }
 
   private updateLandscapeSculpt(event: PointerEvent): boolean {
@@ -10081,27 +10091,10 @@ export class SceneApp {
     const data = actor ? this.landscapeData.get(actor.id) : null;
     const spline = data?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
     if (!actor || !data || !spline) return;
-    const before = data.heights.slice();
-    const result = run(data, spline);
-    if (!result.changed || !result.bounds) {
+    if (!this.applyLandscapeGridOperation(actor.id, data, label, (scratch) => run(scratch, spline))) {
       this.onStatus?.(emptyMessage, "info");
       return;
     }
-    const after = data.heights.slice();
-    data.heights = before.slice();
-    const dirty = result.bounds;
-    const selection: Selection = { kind: "landscape", index };
-    const apply = (heights: readonly number[]): void => {
-      const current = this.landscapeData.get(actor.id);
-      if (!current) return;
-      current.heights = heights.slice();
-      this.markLandscapeDirty(actor.id);
-      this.refreshLandscapeGeometry(index, dirty);
-      this.select(selection);
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
     this.onStatus?.("Spline terrain deform applied.", "info");
   }
 
@@ -10114,29 +10107,34 @@ export class SceneApp {
     const spline = data?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
     if (!actor || !data || !spline) return;
     ensureLandscapeLayers(data);
-    const before = cloneLandscapeLayers(data.layers);
-    const result = applyLandscapeSplinePaint(data, spline);
-    if (!result.changed || !result.bounds) {
+    if (!this.applyLandscapeGridOperation(actor.id, data, "Apply Spline Layer Paint", (scratch) => applyLandscapeSplinePaint(scratch, spline))) {
       this.onStatus?.("No paint applied: enable Paint on a segment and pick a target Layer with Strength > 0.", "info");
       return;
     }
-    const after = cloneLandscapeLayers(data.layers);
-    data.layers = cloneLandscapeLayers(before);
-    const dirty = result.bounds;
-    const selection: Selection = { kind: "landscape", index };
-    const apply = (layers: LandscapeLayerWeights[]): void => {
-      const current = this.landscapeData.get(actor.id);
-      if (!current) return;
-      current.layers = cloneLandscapeLayers(layers);
-      ensureLandscapeLayers(current);
-      this.markLandscapeDirty(actor.id);
-      this.refreshLandscapeGeometry(index, dirty);
-      this.select(selection);
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({ label: "Apply Spline Layer Paint", redo: () => apply(after), undo: () => apply(before) });
     this.onStatus?.("Spline layer paint applied.", "info");
+  }
+
+  /**
+   * Runs a grid operation that still works on `ForgeLandscapeData` (spline
+   * deform/paint) on a scratch copy and commits only its changed rectangle as a
+   * tile patch, so undo stays proportional to the edit. False when nothing changed.
+   */
+  private applyLandscapeGridOperation(
+    landscapeId: string, data: ForgeLandscapeData, label: string,
+    run: (scratch: ForgeLandscapeData) => { changed: boolean; bounds: LandscapeDirtyBounds | null },
+  ): boolean {
+    const scratch: ForgeLandscapeData = { ...data, heights: data.heights.slice(), layers: cloneLandscapeLayers(data.layers) };
+    const result = run(scratch);
+    if (!result.changed || !result.bounds) return false;
+    const rect = result.bounds;
+    const patch: TerrainUndoPatch = {
+      key: tileKey(0, 0), rect,
+      before: landscapeGridPatchValues(data, rect),
+      after: landscapeGridPatchValues(scratch, rect),
+    };
+    this.executeTerrainPatchCommand(label, landscapeId, null, [patch],
+      { verticesX: data.size.verticesX, verticesZ: data.size.verticesZ, layerCount: data.layers.length });
+    return true;
   }
 
   createSelectedLandscapeSpline(): void {
@@ -10450,38 +10448,49 @@ export class SceneApp {
     });
   }
 
-  fillSelectedLandscapeLayer(layerId = this.landscapeSculptSettings.activeLayerId): void {
-    if (this.selection?.kind !== "landscape") return;
-    const index = this.selection.index;
-    const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!actor || !data) return;
-    ensureLandscapeLayers(data);
-    if (!data.layers.some((layer) => layer.id === layerId)) return;
-    const before = cloneLandscapeLayers(data.layers);
-    const after = cloneLandscapeLayers(data.layers).map((layer) => ({
-      ...layer,
-      weights: layer.weights.map(() => (layer.id === layerId ? 1 : 0)),
-    }));
-    const dirty = this.landscapeFullDirtyBounds(data);
-    const selection: Selection = { kind: "landscape", index };
-    const applyLayers = (layers: LandscapeLayerWeights[]): void => {
-      const current = this.landscapeData.get(actor.id);
-      if (!current) return;
-      current.layers = cloneLandscapeLayers(layers);
-      ensureLandscapeLayers(current);
-      this.markLandscapeDirty(actor.id);
-      this.refreshLandscapeGeometry(index, dirty);
-      this.select(selection);
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({
-      label: "Landscape Fill Layer",
-      redo: () => applyLayers(after),
-      undo: () => applyLayers(before),
-    });
-    this.onStatus?.(`Filled Landscape layer: ${layerId}`, "info");
+  /** Undoable: every vertex becomes 100 % `layerId`. A multi-tile Landscape loads all its tiles first. */
+  async fillSelectedLandscapeLayer(layerId = this.landscapeSculptSettings.activeLayerId): Promise<void> {
+    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    if (!actor) return;
+    const document = this.worldTerrains.get(actor.id) ?? null;
+    try {
+      let world: TerrainEditWorld;
+      let data: ForgeLandscapeData | undefined;
+      if (document) {
+        const session = this.worldTerrainSessions.get(document);
+        if (!session) return;
+        await this.loadWholeWorldTerrain(document, "fill a paint layer");
+        if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
+          || this.isSelectionLocked(this.selection) || this.worldTerrains.get(actor.id) !== document) return;
+        world = session.world;
+      } else {
+        data = this.landscapeData.get(actor.id);
+        if (!data) return;
+        ensureLandscapeLayers(data);
+        const issues = landscapeEditIssues(data);
+        if (issues.length > 0) {
+          this.onStatus?.(`${actor.name ?? actor.id} cannot be filled (${issues.join("; ")}). Resample it to a preset resolution first.`, "warning");
+          return;
+        }
+        world = landscapeEditWorld(data);
+      }
+      const layer = world.def.layers.findIndex((entry) => entry.id === layerId);
+      if (layer < 0) return;
+      const patches = createTerrainLayerFillPatches(world, layer);
+      if (patches.length === 0) {
+        this.onStatus?.(`Landscape layer ${layerId} already covers the whole terrain.`, "info");
+        return;
+      }
+      this.executeTerrainPatchCommand("Landscape Fill Layer", actor.id, document, patches, data
+        ? { verticesX: data.size.verticesX, verticesZ: data.size.verticesZ, layerCount: data.layers.length }
+        : undefined);
+      this.onStatus?.(`Filled Landscape layer: ${layerId}`, "info");
+    } catch (error) {
+      this.onStatus?.(`Fill layer failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      if (document) this.worldTerrainStreams.get(document)?.release();
+    }
   }
 
   /**

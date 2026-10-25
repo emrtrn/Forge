@@ -128,7 +128,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   setLandscapeSculptSettings: (
     patch: Partial<LandscapeSculptSettings>,
   ) => LandscapeSculptSettings;
-  fillSelectedLandscapeLayer: (layerId?: string) => void;
+  fillSelectedLandscapeLayer: (layerId?: string) => Promise<void>;
   getSelectedLandscapeLayers: () => LandscapeLayerView[];
   addSelectedLandscapeLayer: () => Promise<void>;
   getSelectedLandscapeSplines: () => LandscapeSplineView[];
@@ -649,11 +649,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     });
   bindLayerPhysicalMaterial(options);
 
-  body.querySelector<HTMLButtonElement>("[data-landscape-fill]")?.addEventListener("click", () => {
-    options.fillSelectedLandscapeLayer(options.getLandscapeSculptSettings().activeLayerId);
-    options.refreshDetails();
-  });
-
   body.querySelector<HTMLButtonElement>("[data-river-water-create]")?.addEventListener("click", () => {
     const splineId = body.querySelector<HTMLSelectElement>("[data-river-water-create-spline]")?.value;
     if (!splineId) return;
@@ -863,6 +858,11 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
     await options.addSelectedLandscapeLayer();
     options.refreshDetails();
   });
+  body.querySelector<HTMLButtonElement>("[data-landscape-fill]")?.addEventListener("click", async (event) => {
+    (event.currentTarget as HTMLButtonElement).disabled = true;
+    await options.fillSelectedLandscapeLayer(options.getLandscapeSculptSettings().activeLayerId);
+    options.refreshDetails();
+  });
   const update = (patch: Partial<LandscapeSculptSettings>): void => {
     options.setLandscapeSculptSettings(patch);
     options.refreshDetails();
@@ -1030,7 +1030,8 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
       </label>
       <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>
-      ${layerPhysicalMaterialRow(activeLayer, lockedAttr)}`
+      ${layerPhysicalMaterialRow(activeLayer, lockedAttr)}
+      <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
     : settings.editMode === "sculpt"
     ? terrainSculptControls(settings, lockedAttr)
     : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on a multi-tile Landscape yet.</div>`;

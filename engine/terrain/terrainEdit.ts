@@ -338,6 +338,29 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush, 
   }) };
 }
 
+/**
+ * Fill Layer: every vertex of every tile becomes 100 % `layer`, as patches to
+ * apply with `applyTerrainUndoPatches`. Nothing is written here. A tile whose
+ * weights already match is skipped; the whole grid must be resident.
+ */
+export function createTerrainLayerFillPatches(world: TerrainEditWorld, layer: number): TerrainUndoPatch[] {
+  if (!Number.isInteger(layer) || layer < 0 || layer >= world.def.layers.length) throw new Error("Invalid terrain fill layer");
+  const patches: TerrainUndoPatch[] = [];
+  for (const { key } of world.def.tiles) {
+    const tile = world.tiles.get(key);
+    if (!tile) throw new Error(`Terrain fill tile is not resident: ${key}`);
+    const rect = { x0: 0, z0: 0, x1: tile.size - 1, z1: tile.size - 1 };
+    const before = readRect(tile, rect);
+    const weights = new Uint8Array(before.weights.length);
+    const count = tile.size * tile.size;
+    const base = Math.floor(layer / 4) * count * 4 + layer % 4;
+    for (let index = 0; index < count; index += 1) weights[base + index * 4] = 255;
+    if (weights.every((weight, index) => weight === before.weights[index])) continue;
+    patches.push({ key, rect, before, after: { heights: before.heights.slice(), weights } });
+  }
+  return patches;
+}
+
 function restorePatches(world: TerrainEditWorld, patches: readonly TerrainUndoPatch[], side: "before" | "after"): Map<string, TerrainDirtyRect> {
   for (const patch of patches) {
     if (!world.tiles.has(patch.key)) throw new Error(`Terrain undo tile is not resident: ${patch.key}`);

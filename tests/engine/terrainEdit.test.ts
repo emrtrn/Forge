@@ -3,6 +3,7 @@ import { createFlatLandscapeData, ensureLandscapeLayers } from "../../engine/sce
 import {
   landscapeEditIssues,
   landscapeEditWorld,
+  landscapeGridPatchValues,
   terrainDocumentToLandscape,
   writeTerrainPatchToLandscape,
 } from "../../engine/terrain/terrainLandscapeBridge";
@@ -17,6 +18,7 @@ import {
   applyTerrainBrush,
   applyTerrainUndoPatches,
   createTerrainEditWorld,
+  createTerrainLayerFillPatches,
   createTerrainPaintAccumulator,
   mergeTerrainDirtyRects,
   revertTerrainUndoPatches,
@@ -515,6 +517,46 @@ export function registerTerrainEditTests(check: Check): void {
       assert.deepEqual(data.layers.map((layer) => layer.weights), original.layers.map((layer) => layer.weights));
       data.heights.forEach((height, i) => assert.ok(Math.abs(height - original.heights[i]!) < 1e-6));
     }
+  });
+
+  check("terrain edit Fill Layer patches cover every tile, keep heights and undo exactly", () => {
+    const world = fixture(2, 2, 32, 5);
+    applyTerrainBrush(world, { ...brush(world), mode: "paint", layer: 2 });
+    const before = snapshot(world);
+    const patches = createTerrainLayerFillPatches(world, 4);
+    assert.equal(patches.length, 4);
+    assert.deepEqual(snapshot(world), before, "creating the patches writes nothing");
+    applyTerrainUndoPatches(world, patches);
+    for (const [key, tile] of world.tiles) {
+      assert.deepEqual(tile.heights, before.get(key)!.heights);
+      for (let i = 0; i < tile.heights.length; i += 1) {
+        for (let layer = 0; layer < 5; layer += 1) assert.equal(terrainTileLayerWeight(tile, layer, i), layer === 4 ? 1 : 0);
+      }
+    }
+    assertSeams(world);
+    assert.deepEqual(createTerrainLayerFillPatches(world, 4), [], "an already filled grid has nothing to change");
+    revertTerrainUndoPatches(world, patches);
+    assert.deepEqual(snapshot(world), before);
+    assert.throws(() => createTerrainLayerFillPatches(world, 5), /Invalid terrain fill layer/);
+    world.tiles.delete("1_1");
+    assert.throws(() => createTerrainLayerFillPatches(world, 0), /not resident/);
+  });
+
+  check("terrain 1x1 Landscape grid rectangles round-trip through tile patch values", () => {
+    const data = createFlatLandscapeData("small");
+    data.size.heightScale = 2;
+    data.heights = data.heights.map((_, i) => Math.fround(i % 11) / 2);
+    data.layers[1]!.weights[70] = 0.4;
+    data.layers[0]!.weights[70] = 0.6;
+    const rect = { x0: 3, x1: 9, z0: 0, z1: 2 };
+    const values = landscapeGridPatchValues(data, rect);
+    assert.equal(values.heights[(1 - 0) * 7 + 5 - 3], (70 % 11));
+    const copy = structuredClone(data);
+    writeTerrainPatchToLandscape(copy, rect, values);
+    assert.deepEqual(copy.heights, data.heights);
+    assert.equal(copy.layers[1]!.weights[70], 102 / 255);
+    assert.equal(copy.layers[0]!.weights[70], 153 / 255);
+    assert.deepEqual(landscapeGridPatchValues(copy, rect), values);
   });
 
   check("terrain edit dirty rectangles bound every changed vertex tightly and merge", () => {

@@ -839,7 +839,9 @@ Kalan maddelerin onaylı uygulama planı:
       tanımı paylaşan iki seviye düzenlemeyi birlikte görür. Details paneli
       Sculpt/Paint araçlarını, katman listesini, fırça ayarlarını ve View'ı
       gösteriyor; katman materyali atama artık açık. **Hâlâ kapalı:** spline'lar (uyarı),
-      Fill Layer, yeniden boyutlandırma ve heightmap import/export.
+      yeniden boyutlandırma ve heightmap import/export. *(Fill Layer 2026-10-25'te
+      açıldı; 1×1 ve çok-tile aynı `terrainEdit` stroke/undo yolunda — ayrıntı
+      [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).)*
       Elle foliage Paint/Erase/Single/Fill/Select araçları çok-tile yüzeyinde çalışır;
       yükseklik/normal raycast'ten gelir, boş tile'a düzlem fallback'i yapılmaz.
       Aynı `landscape` hedefi ve foliage sidecar'ı Save/Load/Play'de kullanılır;

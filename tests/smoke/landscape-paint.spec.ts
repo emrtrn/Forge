@@ -120,5 +120,21 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await page.locator('[data-landscape-layer="dirt"]').click();
   await expect(page.locator("[data-landscape-layer-physical-material]")).toHaveValue("mud");
 
+  // Fill Layer goes through the shared tile editor: the active layer covers
+  // every vertex, and undo puts the painted weights back exactly.
+  await page.locator('[data-landscape-layer="snow"]').click();
+  await page.locator("[data-landscape-fill]").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Filled Landscape layer: snow");
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  const filled = await readSavedTerrain(page);
+  expect(filled.layers.find((layer) => layer.id === "snow")?.weights.every((weight) => weight === 1)).toBe(true);
+  expect(filled.layers.filter((layer) => layer.id !== "snow").every((layer) => layer.weights.every((weight) => weight === 0))).toBe(true);
+  await page.getByTestId("editor-undo").click();
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+  const unfilled = await readSavedTerrain(page);
+  expect(unfilled.layers.map((layer) => layer.weights)).toEqual(reloadedData.layers.map((layer) => layer.weights));
+
   expect(pageErrors).toEqual([]);
 });

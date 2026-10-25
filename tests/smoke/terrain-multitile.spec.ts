@@ -301,6 +301,22 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   // Measured: rounded per dab, 13 vertices change; accumulated, 62.
   console.log(`[terrain-multitile] low-strength paint changed ${painted.size} vertices`);
   expect(painted.size).toBeGreaterThan(20);
+
+  // Fill Layer: every tile becomes 100 % rock; undo restores the painted bytes.
+  const tilePaths = world.def.tiles.map(({ key }) => terrainTilePath(TERRAIN, key));
+  const beforeFill = new Map(await Promise.all(tilePaths.map(async (path) => [path, await fileBytes(path)] as const)));
+  saved = terrainSaved();
+  await page.locator("[data-landscape-fill]").click();
+  expect((await saved).ok()).toBeTruthy();
+  for (const path of tilePaths) {
+    const { weights } = decodeTerrainTile(await fileBytes(path));
+    const rock = Array.from({ length: (Q + 1) * (Q + 1) }, (_, index) => [weights[index * 4]!, weights[index * 4 + 1]!]);
+    expect(rock.every(([grass, stone]) => grass === 0 && stone === 255), `${path} filled with rock`).toBe(true);
+  }
+  saved = terrainSaved();
+  await page.getByTestId("editor-undo").click();
+  expect((await saved).ok()).toBeTruthy();
+  for (const path of tilePaths) expect((await fileBytes(path)).equals(beforeFill.get(path)!), `${path} after fill undo`).toBe(true);
   await page.mouse.move(viewport.x + 8, viewport.y + 8);
   await page.waitForTimeout(500);
   const sculptShot = await viewportShot(page);

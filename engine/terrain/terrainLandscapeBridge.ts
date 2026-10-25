@@ -119,6 +119,31 @@ export function landscapeEditWorld(data: ForgeLandscapeData): TerrainEditWorld {
 }
 
 /**
+ * Reads one rectangle of a 1×1 grid as tile patch values (metres, RGBA8
+ * rounded as the terrain save rounds them), so an operation that still runs on
+ * the grid itself (spline deform/paint) can keep a rectangle-sized undo.
+ */
+export function landscapeGridPatchValues(data: ForgeLandscapeData, rect: TerrainDirtyRect): TerrainPatchValues {
+  const { verticesX, heightScale } = data.size;
+  const width = rect.x1 - rect.x0 + 1;
+  const count = width * (rect.z1 - rect.z0 + 1);
+  const heights = new Float32Array(count);
+  const weights = new Uint8Array(terrainWeightBlockCount(data.layers.length) * count * 4);
+  for (let z = rect.z0; z <= rect.z1; z += 1) {
+    for (let x = rect.x0; x <= rect.x1; x += 1) {
+      const target = (z - rect.z0) * width + x - rect.x0;
+      const source = z * verticesX + x;
+      heights[target] = (data.heights[source] ?? 0) * heightScale;
+      data.layers.forEach((layer, index) => {
+        const weight = layer.weights[source] ?? 0;
+        weights[Math.floor(index / 4) * count * 4 + target * 4 + index % 4] = Math.round(Math.min(1, Math.max(0, Number.isFinite(weight) ? weight : 0)) * 255);
+      });
+    }
+  }
+  return { heights, weights };
+}
+
+/**
  * Writes one tile rectangle (an undo patch side, or a dab's result) back into
  * the 1×1 grid that `landscapeEditWorld` was built from.
  */

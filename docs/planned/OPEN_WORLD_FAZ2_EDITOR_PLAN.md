@@ -1,6 +1,6 @@
 # Open World Faz 2 — kalan iş: editör düzenlemesinin `terrainEdit`'e taşınması + 16-bit heightmap
 
-> Durum: **onaylandı; 1. ve 2. adım tamam** (2026-10-25, "İlerleme" bölümü). Üst plan:
+> Durum: **onaylandı; 1.–3. adım tamam** (2026-10-25, "İlerleme" bölümü). Üst plan:
 > [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) "Faz 2". Bu dosya Faz 2'nin kalan iki
 > maddesinin uygulama planıdır; tamamlanınca maddeler OPEN_WORLD_PLAN'da kapatılır
 > ve bu dosya `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivlenir.
@@ -256,6 +256,40 @@ erosion-visual`, `landscape-paint`, `landscape-spline-chain`, `landscape-wirefra
 `terrain-create`, `terrain-editor-streaming`, `terrain-isolation`, `terrain-migration`
 (2), `terrain-multitile` (2). Düşen `terrain-surface` aşağıdaki ortam notunda.
 
+### Adım 3 — Fill Layer ve spline bake tile yamalarıyla (2026-10-25)
+
+- **Fill Layer** `terrainEdit`'e taşındı: `createTerrainLayerFillPatches(world, layer)`
+  her tile için tam tile yaması üretir; zaten dolu tile'ı atlar, yazmaz. İki arazi
+  türü de aynı yoldan geçer (`fillSelectedLandscapeLayer` artık async). Çok-tile'da
+  önce bütün tile'lar yüklenir (`loadWholeWorldTerrain`); Details'te çok-tile Paint
+  araçlarına **Fill Layer** düğmesi eklendi (eskiden kapalıydı).
+- Ortak `executeTerrainPatchCommand`: stroke, Fill Layer ve spline bake aynı undo
+  komutunu kullanır. World Terrain'de yamalar session tile'larına, 1×1'de grid'e
+  yazılır; grid'in şekli değiştiyse komut hiçbir şey yapmaz.
+- **Spline Apply Deform / Apply Paint (1×1):** hesap hâlâ grid fonksiyonlarında
+  (`applyLandscapeSpline*`, runtime yeniden boyama da bunları kullanıyor), ama
+  grid'in bir kopyası üzerinde çalışır. Yalnız değişen dikdörtgen tile yaması olarak
+  işlenir (`landscapeGridPatchValues`), yani undo artık tüm dizinin iki kopyası
+  değil, dikdörtgen boyutunda.
+- **Plandan sapma:** spline korridor matematiği `TerrainEditWorld`'e kopyalanmadı.
+  Çok-tile spline'lar dünya-uzayı spline'ları gelene kadar (Faz 8) kapalı; ikinci
+  bir korridor uygulamasının şimdi çağıranı olmazdı. Resample ve dünya boyutu
+  zaten yalnız 1×1'de; çok-tile panelinde yoklar ve ipucu bunu söylüyor.
+  **Katman silme** iki yolda da hiç yok; yeni özellik olduğu için eklenmedi,
+  ayrı karar bekliyor.
+- **Davranış farkı:** Fill/spline undo'su dikdörtgen içinde RGBA8'e yuvarlanmış
+  "önce" değerlerini yazar. Bu, diskteki değerlerle aynıdır; float ağırlıklar
+  yalnız kaydedilmemiş durumda farklıydı.
+
+Doğrulama: engine testleri — Fill yamaları dört tile'ı kaplar, yükseklikleri
+korur, dolu grid'de boş liste, birebir undo, eksik tile reddi; grid dikdörtgeni
+↔ yama değerleri round-trip (`heightScale` 2). Yeni smoke
+`landscape-spline-bake.spec.ts`: 1×1'de iki tıkla spline, Deform +2 m ve rock
+Paint, Save (63 vertex yükseldi, 82 vertex boyandı, grid'in yarısından fazlası
+dokunulmamış), undo sonrası disk birebir orijinal. `landscape-paint`'e 1×1 Fill +
+undo (disk ağırlıkları birebir geri), `terrain-multitile`'a çok-tile Fill (bütün
+tile'lar %100 rock) + undo (tile baytları birebir) eklendi.
+
 ### Kalan adımların yeniden eşlenmesi (onaylandı 2026-10-25)
 
 1. **1b — 1×1 Landscape'i belge tabanlı düzenlemeye almak:** 1×1 de
@@ -269,6 +303,7 @@ erosion-visual`, `landscape-paint`, `landscape-spline-chain`, `landscape-wirefra
    *1b ile birlikte yapıldı.*
 3. **Diğer işlemler:** Fill Layer, katman ekle/sil/malzeme ve spline deform/paint
    `TerrainEditWorld` üzerinde çalışır. Resample yalnız 1×1'de kalır.
+   *Tamam; kapsam farkı yukarıda (Adım 3).*
 4. **Kayıt:** 1×1 de kirli tile + tanım yazımına geçer (`captureTerrainWrite`
    emekli olur). Legacy sidecar migrasyonu korunur. Smoke: 1×1 sculpt → kaydet →
    yeniden aç.

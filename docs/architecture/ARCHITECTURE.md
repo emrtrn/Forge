@@ -1,6 +1,6 @@
 # Forge Architecture Contract
 
-> Created: 2026-06-13 | Updated: 2026-07-04
+> Created: 2026-06-13 | Updated: 2026-10-25
 > Scope: architecture-v2 migration workspace for the single-codebase template.
 > Migration status: complete (phases 0-7 done); this file is the steady-state
 > contract going forward.
@@ -8,6 +8,17 @@
 This document is the working contract for future Codex/Claude tasks. If a task
 conflicts with this file, update the contract first or call out the conflict
 before changing code.
+
+> **2026-10-25 accepted direction, implementation pending:** New Offroad project
+> development will use one authoritative Forge engine/editor source and a
+> separate game repository, rather than maintaining an editable platform copy
+> inside the game fork. See
+> [Shared Forge / independent game project plan](../planned/SHARED_FORGE_GAME_PROJECT_WORKFLOW.md).
+> The fork-based ownership and repo-local paths below describe the existing
+> implementation until that plan's acceptance gate passes. The new plan governs
+> this targeted project-loading change; generic engine/editor ownership and
+> production runtime boundaries still apply. It does not authorize restoring
+> the former Studio launcher or migrating existing games automatically.
 
 ## Direction
 
@@ -436,4 +447,7 @@ boundary that owns it; do not introduce empty architecture for its own sake.
   field overrides resolved to a normal Three.js material;
 - physics editor;
 - generic engine marketplace/plugin ecosystem;
-- reviving the Project Browser / external-project system.
+- reviving the former Project Browser / Studio external-project system. Targeted
+  independent game loading through shared Forge source is a separately accepted,
+  not-yet-implemented scope in
+  [the shared-source plan](../planned/SHARED_FORGE_GAME_PROJECT_WORKFLOW.md).

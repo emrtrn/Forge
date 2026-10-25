@@ -1,5 +1,14 @@
 # Forge → Oyun Fork İş Akışı
 
+> **2026-10-25 — Yeni Offroad hedefi:**
+> [Ortak Forge Kaynağı ve Bağımsız Oyun Projesi](SHARED_FORGE_GAME_PROJECT_WORKFLOW.md)
+> çalışma ilkesi onaylandı; uygulama ve kabul bekliyor. Hedef, motor/editör
+> kopyasını oyun deposunda geliştirmek yerine bağımsız oyunun ortak Forge
+> kaynağını kullanmasıdır. Aşağıdaki fork/upstream ve elle `cherry-pick` akışı
+> mevcut oyunların eski yöntemidir; yeni Offroad hedefinin çözümü sayılmaz.
+> Yeni altyapı kabul edilene kadar eski projelerin çalışma biçimi değişmez.
+> `sync-forge-to-games` araçları yalnız bu eski fork akışı içindir.
+
 > Tarih: 2026-06-26
 > Durum: Referans doküman. İlk gerçek fork (`minigolf`, `origin` = oyun /
 > `upstream` = Forge) bu akışla kuruldu; araç tarafı (`tools/create-project.mjs`)

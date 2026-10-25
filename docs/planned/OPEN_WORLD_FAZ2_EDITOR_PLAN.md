@@ -1,6 +1,6 @@
 # Open World Faz 2 — kalan iş: editör düzenlemesinin `terrainEdit`'e taşınması + 16-bit heightmap
 
-> Durum: **onaylandı; 1.–3., 5. ve 6. adım tamam, 4. adım için erteleme önerisi** (2026-10-25, "İlerleme" bölümü). Üst plan:
+> Durum: **1.–3., 5. ve 6. adım tamam; 4. adım Faz 3'e ertelendi; kalan: katman silme** (2026-10-25, "İlerleme" bölümü). Üst plan:
 > [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) "Faz 2". Bu dosya Faz 2'nin kalan iki
 > maddesinin uygulama planıdır; tamamlanınca maddeler OPEN_WORLD_PLAN'da kapatılır
 > ve bu dosya `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivlenir.
@@ -290,7 +290,7 @@ dokunulmamış), undo sonrası disk birebir orijinal. `landscape-paint`'e 1×1 F
 undo (disk ağırlıkları birebir geri), `terrain-multitile`'a çok-tile Fill (bütün
 tile'lar %100 rock) + undo (tile baytları birebir) eklendi.
 
-### Adım 4 — öneri: Faz 3'e ertele (kullanıcı kararı bekliyor)
+### Adım 4 — Faz 3'e ertelendi (kullanıcı onayladı, 2026-10-25)
 
 1×1 kaydı zaten tek tile + global harita + tanım yazıyor; "yalnız kirli tile'lar"
 farkı 1×1'de yok. `captureTerrainWrite`'ı emekliye ayırmak, 1×1 edit world'ünü
@@ -363,6 +363,30 @@ idi: 500 ms'lik autosave'in "Saved…" mesajı geçici durum satırını test ok
 etiketine bakıyor; düzeltmeden sonra üçü birlikte geçti. Son kapı
 `npm run build:verify` (tsc, Vite build, 1866 kontrol + slow, sıkı dist taraması,
 world-data) ve `check:assets` yeşil.
+
+### Kalan iş: katman silme (kullanıcı onayladı, 2026-10-25)
+
+Plan 3. adımda "katman silme" sayıyordu ama iki yolda da böyle bir işlem yoktu;
+kullanıcı yeni özellik olarak eklenmesini onayladı. Kapsam:
+
+- Engine: `engine/terrain/terrainLayers.ts`'e `createTerrainLayerAddition`'ın
+  karşılığı bir silme (`TerrainLayerState` önce/sonra, bütün grid yüklü olmalı).
+  Silinen katmanın ağırlığı vertex başına kalan katmanlara orantılı dağıtılır;
+  hepsi 0 ise ilk kalan katmana gider; RGBA8 toplamı 255 kalır. En az bir katman
+  kalır. Blok sayısı değişebilir (5 → 4 katman tek bloğa iner).
+- Editör: Details Paint bölümünde aktif katman için **Remove Layer** (1×1 ve
+  çok-tile). Tek undo komutu; çok-tile'da bütün tile'lar kirli sayılır ve tanım
+  da yazılır (katman ekleme gibi). 1×1 grid yolunda `data.layers` buna göre
+  güncellenir. Aktif katman silinince aktif katman ilk kalana geçer.
+- Kayıt: tanım ve tile'lar katman ekleme yolundan geçer; `saveValidator` /
+  `normalizeWorldTerrain` ve `droppedFields` açısından yeni alan yok, ama
+  serialization-drift testleri katman sayısı azalınca da geçmeli.
+- Doğrulama: engine (ağırlık dağıtımı, toplam 255, blok sayısı düşüşü, undo
+  birebir, eksik tile reddi); smoke'larda 1×1 ve çok-tile için Remove Layer →
+  Save → tile/tanım katman sayısı → undo → eski baytlar.
+- Bitince: OPEN_WORLD_PLAN Faz 2'nin sculpt/paint ve heightmap maddelerini
+  kapat; bu dosyayı `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivle (açık kalan
+  Faz 2 renderer ekleri ve büyük import worker'ı OPEN_WORLD_PLAN'da kalır).
 
 ### Kalan adımların yeniden eşlenmesi (onaylandı 2026-10-25)
 

@@ -3,7 +3,9 @@
 > Durum: **Faz 1a + 1b + Faz 2 + Faz 3 tamamlandı** (2026-10-24,
 > `feat/terrain-deformation`); Faz 3'ün görsel kısmı CDLOD alt-seviyeleriyle
 > (A5) yapıldı. Görsel kabul ve S-D1'in GPU / pop ölçümü kullanıcı testinde
-> (LandscapeTest + Gaz52); sırada Faz 4 (efekt ve ses).
+> (LandscapeTest + Gaz52). Faz 4A + çamur/kar efekti ve düşük tutuşta patinaj
+> bağlantısı uygulandı (2026-10-25); kullanıcı patinaj ve parçacıkların görünür
+> olduğunu doğruladı. Yüzey sesleri, son his ayarı ve performans kabulü açık.
 > Hedef: Araç (ve ileride karakter) Landscape üzerinde giderken kar, çamur ve
 > kum gibi yumuşak zeminlerde **iz bırakması, gömülmesi ve zorlanması**.
 > Referans his: SnowRunner / Expeditions. Hedef, o hissin web'de ulaşılabilir
@@ -131,8 +133,9 @@ davranış korunur:
   "restitution": 0,
   "vehicle": {
     "frictionSlipScale": 0.55,      // wheel.frictionSlip ile çarpılır
+    "tractionCoefficient": 0.35,    // ileri çekiş kuvveti / tekerlek yükü; Rapier ayarından bağımsız
     "sideFrictionScale": 0.7,       // sideFrictionStiffness ile çarpılır
-    "rollingResistance": 0.35       // hız ve tekerlek yüküyle ölçeklenen direnç
+    "rollingResistance": 0.12       // hız ve tekerlek yüküyle ölçeklenen direnç
   },
   "deformation": {
     "maxDepth": 0.22,               // m, tam yükte tek geçişte ulaşılabilen derinlik
@@ -504,10 +507,12 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
   (`tractionSlip()`: ileri impuls `engineForce × dt × 0,5`, son yan impulsla
   birlikte `yük × dt × frictionSlip` sınırına karşı). **Rapier bulgusu:**
   ray-cast vehicle ileri impulsu yalnız yan impuls ≠ 0 iken ölçekler; düz
-  çizgide patinaj `wheelForwardImpulse`'ta hiç görünmez. Bu yüzden **buzda da
-  tam motor kuvveti** uygulanır: `frictionSlipScale` 0,1'lik çamurda referans
-  araç 10 s'de ~20 m/s'ye çıkıyor, slip ~0,45 raporlanırken. `tractionSlip`
-  yalnız raporlar; Rapier'in itişini düzeltmez (ayrı iş, VEHICLE_PHYSICS_PLAN).
+  çizgide patinaj `wheelForwardImpulse`'ta hiç görünmez. İlk uygulamada bu yüzden
+  düşük tutuşta da tam motor kuvveti uygulanıyordu. **2026-10-25 düzeltmesi:**
+  fizik yüzey profili authored tutuşu azaltıyorsa `limitWheelEngineForce`
+  motor kuvvetini adım öncesinde ileri sürtünme sınırına indirir; birleşik yan
+  sürtünmeyi Rapier yönetir. `tractionSlip` kırpılmış kuvvetten değil istenen
+  motor kuvvetinden hesaplanır; kazma ve efekt böylece kayıp çekişi görür.
   `WheelTrackStamper.stampVehicle` normal damgadan sonra slip > 0 ve
   `digRate` > 0 ise: `current = field.sample(temas)`,
   `cap = maxDepth × min(deformability, 1)`,
@@ -641,28 +646,114 @@ kirli dikdörtgeni R8'e (profilin `maxDepth`'ine göre ölçeklenmiş, 0,3 m'de
       canlı partiküllerin ömrünü tamamlamasını bekler. Araç/yüzey bağlantısı bu
       maddeden ayrıdır.
 - [x] Physical material'a isteğe bağlı `wheelEffect` (effect asset id veya public-root `.effect.json` yolu) eklenir;
-      emisyon hızı patinaj ve hızla ölçeklenir. Çamur sıçraması ve kar tozu
-      birer `*.effect.json` örnek asset olarak gelir.
+      emisyon hızı patinaj ve hızla ölçeklenir.
 - [x] İsteğe bağlı `wheelSound` (sound / soundCue id): yüzeye göre lastik sesi döngüsü,
       `vehicleModule`'deki motor sesi deseniyle.
+- [x] **4A (2026-10-25):** efekt/ses şiddeti fizikteki `tractionSlip`'i kullanır;
+      veri yoksa eski dönüş farkı hesabı korunur. Araç yerinde kazarken de
+      emisyon vardır; güçsüz duruşta ve havada sıfırdır. Çıkış noktası görünür
+      gömülme kadar aşağı alınır; yön şasi dünya dönüşü + direksiyon + ileri/geri
+      tekerlek hareketinden hesaplanır. Geç yüklenen emitter son konum/yönü alır.
+- [x] **Çamur örneği:** `FX_Mud_Splash.effect.json`, manifest kimliği
+      `starter-fx-mud-splash`, `mud.wheelEffect` bağlantısı. Rate 144/s, ömür
+      0,375 s, mevcut sprite kapasitesi 58/tekerlek; kalite ve hareket/patinaj
+      çarpanları emisyonu azaltır. Sprite runtime artık mevcut `gravityScale`
+      alanını uygular; damlacıklar yay çizerek düşer. Yerçekimi 0/yoksa eski
+      hareket korunur. Yeni dosya biçimi veya save alanı eklenmedi.
+- [x] **Ek kullanıcı isteği — çamur/karda patinaj:** düşük tutuşta ileri kuvvet
+      sınırlanır; tahrik tekerleklerinin görünür dönüşüne slew ile sönümlenen
+      ek dönüş eklenir. Ek lastik çevre hızı `sign(kuvvet) × slip × 12 m/s`,
+      tepki süresi 0,12 s, frenle sönüm 0,04 s. Bu, ayrı tekerlek rigid body'si
+      veya bağımsız açısal dinamik çözümü değildir. Gaz torku tutuşu aşınca
+      çalışır; her çamur/kar temasında zorunlu patinaj uygulanmaz. Fizik
+      surface provider yoksa / nötrse eski hız eğrisi birebir korunur.
+- [x] Kar tozu `FX_Snow_Dust.effect.json` örneği ve `snow.wheelEffect` bağlantısı
+      (`starter-fx-snow-dust`). Rate 180/s, ömür 0,575 s, kapasite 108/tekerlek;
+      hafif yerçekimi, büyüyen gri-mavi toz bulutu. Kar ve çamur parçacıkları
+      takip kamerasından okunabilen boyutlara ayarlandı.
+- [ ] Çamur/kar döngü sesleri ve `wheelSound` preset bağlantıları.
+- [x] LandscapeTest + Gaz52 patinaj/parçacık görünürlüğü: kullanıcı
+      "şimdi görünmeye başladı, hem patinaj hem de parçacık" diye doğruladı.
+- [ ] Son his ayarı, ses dengesi ve performans ölçümü.
 
-**Faz 4, maddeler 2–3 (2026-10-23):** `wheelEffect` / `wheelSound`, diğer
+**Video sonrası düzeltme (2026-10-25):** İlk yüksek torklu referans testinin
+geçmesi stok Gaz52'de patinajın çalıştığını kanıtlamıyordu. Kullanıcının
+18,933 s Bandicam kaydında iz vardı, görünür patinaj/parçacık yoktu. `snow`
+efektsizdi; Rapier'in varsayılan `frictionSlip = 2,5` ayarı ileri fiziksel
+tutuş olarak kullanıldığında stok motorun aşamayacağı bir sınır çıkıyordu.
+Yeni isteğe bağlı preset alanı `vehicle.tractionCoefficient` yük ile çarpılarak
+ileri kuvveti sınırlar; yanal Rapier ayarı ayrı kalır. Terrain ve mesh
+provider'ları aynı alanı taşır; katman sınırlarında ağırlıklı karışır
+(tanımsız katmanın karışım katsayısı 1; tümü tanımsızsa eski davranış).
+`mud`: çekiş 0,35 / direnç 0,12; `snow`: çekiş 0,22 / direnç 0,06.
+Direnç çekişle dengelendi; araç tam gazda ilerlerken arka tekerlekleri patinaj
+yapabilir. Slip talep edilen kuvvet ile gerçek ileri sınırdan hesaplanır;
+kazma, görünür dönüş ve efekt aynı sinyali kullanır. Düşen rolling direncinde
+vites avlanmasını önlemek için vites sonrası çekiş hesabına hava direnci de
+katıldı. Yeni disk/save alanı yok; bu alan da yalnız yerleşik preset verisi.
+
+**Faz 4, güncel bağlantı (2026-10-25):** `wheelEffect` / `wheelSound`, diğer
 physical material blokları gibi yalnız preset verisidir; kayıtlar yalnız
-`physicalMaterialId` taşır. Yerleşik presetlerde ikisi de boş bırakıldı; bu
-yüzeylerde efekt veya ses çağrısı yapılmaz. Çamur sıçraması (mud-splash) ve kar
-tozu (snow-dust) örnek assetleri **henüz yazılmadı**, ayrı içerik işidir.
-Araç host'unun enjekte edilebilir `surfaceMaterialForWheel` sorgusu bugün
-temas edilen mesh collider'ın materyalini çözer; terrain katmanları Faz 1b'ye
-aittir. Sürülen/possess edilen araçlar ve mevcut dinamik fizik aktif yarıçapı
+`physicalMaterialId` taşır. `mud` ve `snow` kendi efektlerini kullanır.
+Diğer presetler sunum asset'i kullanmaz. Yeni yüzey sesleri eklenmedi.
+Araç host'unun enjekte edilebilir `surfaceMaterialForWheel` sorgusu terrain
+temasında baskın paint katmanının materyalini, diğer collider'larda collider
+materyalini çözer. Fiziğin ağırlıklı profil karışımı değişmedi.
+Sürülen/possess edilen araçlar ve mevcut dinamik fizik aktif yarıçapı
 içindeki diğer araçlar tekerlek başına bir emitter ve bir mekânsal ses döngüsü
 kullanır; aktif yarıçap kapalıysa tüm araçlar uygundur. Saf `wheelSurfaceFx`
-eğrileri dönüş farkından hesaplanan patinaj ve hızla emisyon/ses düzeyini
+eğrileri fizik patinajı ve hızla emisyon/ses düzeyini
 ölçekler; duruşta ve havada sıfırlanır (yerinde dönen lastik patinaj sayılır).
 Yüzey değişimi eski parçacıkları/sesi sönümleyerek durdurur; parçacıkları VFX
 runtime kendi havuzuna geri alır. Araç/seviye/modül kapanışı mevcut handle'ları
 ve geç yüklenen emitter'ları temizler. Yeni yol sabit durumda konum, girdi ve
-sonuç nesnelerini tekrar kullanır. Fake servis testleri yaşam döngüsünü ve
-opt-out davranışını kapsar; tarayıcı ve örnek asset kabulü sonraya aittir.
+sonuç nesnelerini tekrar kullanır.
+
+**Doğrulama (2026-10-25):** `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+(1.841 kontrol, tam build içindeki engine koşusu) ve `npm.cmd run build:verify`
+geçti. `wheel traction rapier` artık **değiştirilmemiş Gaz52 asset'i + collider'ı**
+ile iki gerçek preseti 30/60/144 Hz'de doğrular: 3 s gaz sonrası çamurda
+11,13 km/h / slip 0,70 / ek lastik hızı 8,40 m/s; karda
+7,84 km/h / slip 0,82 / ek lastik hızı 9,86 m/s. Bu ölçüm düz fizik testidir;
+iz/kazma olan authored seviye hızı değildir. Diğer testler yüksek torkla iki
+gerçek presetin ileri/geri çekişi sınırladığını,
+yalnız tahrik tekerleklerinin patinaj yaptığını; düşük tutuşta duvara dayanmış
+araçta sıçrama, frenle sönme, tutuşa dönüş ve reset temizliğini doğrular.
+Saf spin tepkisi 30/60/144 Hz'de aynı; mevcut GAZ-52 vites avlanması testi ve nötr
+zemin birebir hız eğrisi yeşil. `wheelSurfaceFx.test.ts` fizik sinyali,
+gömülme/yön, geç yükleme, gerçek çamur/kar asset'leri, düşük yoğunlukta kar
+parçacığı ve sprite balistik hareketini kapsar.
+`terrain-surface.spec.ts` Chromium'da nötr + çamur + kar koşusuyla geçti
+(tek test, 2,8 dk): nötr zeminde sürüş, iki yumuşak zeminde gerçek preset ve
+manifest üzerinden slip > 0,15, aktif parçacık ve iz alanı, konsol hatasız.
+OffroadTest'in başlangıçtaki derin izi aracı saplayabildiğinden yumuşak zeminde
+zorunlu 5 km/sa eşiği yerine güçlü patinaj + canlı parçacık kontrol edilir;
+stok aracın ilerleyebildiğini düz fizik testleri ayrıca doğrular.
+`tsconfig.smoke.json` tür kontrolü de geçti. Ekran görüntüleri
+`test-results/terrain-mud-splash.png` ve `test-results/terrain-snow-splash.png`;
+OffroadTest sahnesi çok karanlık olduğundan bu görüntüler görsel kabul değildir. LandscapeTest +
+Gaz52 üzerinde patinaj ve parçacık görünürlüğü kullanıcı tarafından
+doğrulandı; son his/ses dengesi açık. Yeni yolun CPU/GPU maliyeti ölçülmedi.
+
+### Islak çamur görsel katmanı (2026-10-25)
+
+- [x] `LT Wet Mud` ayrı görsel materyal ve imagegen albedo dokusu. Kuru
+      `LT Earth and Scree` yerinde kalır; çamur beşinci paint katmanına atanır.
+- [x] Paint > Add Layer (en çok 8): World Terrain'de bütün tile kanalları
+      korunarak genişletilir; undo/redo, global harita ve kayıt birlikte güncellenir.
+      Bir tile'lık Landscape normalizasyonu ek katmanları korur.
+- [x] CDLOD'da 5–8. katmanların dokuları ve bütün katmanların materyal roughness
+      değerleri kullanılır. Önceden son dört katman yalnız düz renk çiziliyordu.
+- [x] Çamur izi koyulaşır; derin/ıslak iz tabanı pürüzsüz, yatay normal ve
+      bakış açısına bağlı su yansıması alır. Environment map yoksa gökyüzü
+      yaklaşımı kullanılır. Su ayrı akış/hacim simülasyonu değildir.
+- [x] `build:verify` (1.844 engine kontrolü), TypeScript, WebGL su açık/kapalı
+      piksel kontrolü ve iki açıdan görsel inceleme; editörde beşinci katman
+      ekle/undo/redo/boya/kaydet/yeniden aç ve tüm tile yüksekliklerinin korunması.
+- [ ] Stok araç ve authored LandscapeTest üzerinde nihai görsel his kabulü.
+
+Üretilen doku, prompt, kullanım ve sınırlar:
+[WET_MUD_VISUAL_2026-10-25.md](../reports/WET_MUD_VISUAL_2026-10-25.md).
 
 ## Faz 5 — Kalıcılık
 

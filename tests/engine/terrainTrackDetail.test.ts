@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Texture } from "three";
 import { PerspectiveCamera, ShaderLib, Vector3, type BufferAttribute, type InstancedBufferGeometry, type Material, type WebGLProgramParametersWithUniforms, type WebGLRenderer } from "three";
 import {
   TerrainDeformationTexture,
@@ -81,6 +82,22 @@ function compiled(material: Material, base: { vertexShader: string; fragmentShad
 }
 
 export function registerTerrainTrackDetailTests(check: Check): void {
+  check("terrain wet layers: all eight albedos and material roughness reach the lit shader with puddle shading", () => {
+    const textures = Array.from({ length: 8 }, () => new Texture());
+    const source = worldTerrainRenderSource({ tileQuads: Q, spacing: 1, tilesX: 1, tilesZ: 1 }, new Map([["0_0", tiles().get("0_0")!]]));
+    const terrain = new TerrainRenderer(source, { viewMode: "lit", activeLayer: 4, origin: new Vector3(),
+      layers: textures.map((texture, i) => ({ texture, color: "#493226", scale: 0.125, roughness: i === 4 ? 0.22 : 0.95, physicalMaterial: i === 4 ? "mud" : null })) });
+    try {
+      const shader = compiled(terrain.mesh.material, ShaderLib.standard);
+      assert.equal(shader.uniforms.uLayerTex4!.value, textures[4]);
+      assert.equal(shader.uniforms.uLayerTex7!.value, textures[7]);
+      assert.equal((shader.uniforms.uLayerRoughness!.value as number[])[4], 0.22);
+      assert.match(shader.fragmentShader, /texture\(uLayerTex4,/);
+      assert.match(shader.fragmentShader, /texture\(uLayerTex7,/);
+      assert.match(shader.fragmentShader, /roughnessFactor = mix\(roughnessFactor, 0.035, forgePuddle\)/);
+      assert.match(shader.fragmentShader, /outgoingLight = mix\(outgoingLight, forgeSky/);
+    } finally { terrain.dispose(); textures.forEach((texture) => texture.dispose()); }
+  });
   check("terrain track detail: tile-slot vertices sit on the collider's triangles, not a bilinear blend", () => {
     const map = tiles();
     const def = { tileQuads: Q, spacing: 1, tilesX: TILES, tilesZ: TILES, origin: [0, 0, 0] as const };

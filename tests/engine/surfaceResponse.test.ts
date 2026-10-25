@@ -10,6 +10,8 @@ import {
 } from "../../engine/physics/vehicle/vehicleTypes";
 import { nominalWheelLoad, sinkage } from "../../engine/physics/surface/sinkage";
 import { wheelFootprintDepth } from "../../engine/physics/surface/wheelSink";
+import { advanceWheelSpin, limitWheelEngineForce, longitudinalSlip } from "../../engine/physics/surface/wheelTraction";
+import { wheelSurfaceFxLevels } from "../../engine/physics/surface/wheelSurfaceFx";
 import { rutSlopeAhead, WheelTrackStamper } from "../../engine/physics/surface/wheelTracks";
 import { PHYSICAL_MATERIALS } from "../../engine/scene/collision";
 import { DeformationField } from "../../engine/scene/deformationField";
@@ -26,12 +28,33 @@ const close = (actual: number, expected: number): void =>
   assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} != ${expected}`);
 
 export function registerSurfaceResponseTests(check: Check): void {
+  check("wheel traction: longitudinal grip caps drive symmetrically and wheelspin slews and brakes", () => {
+    close(limitWheelEngineForce(10000, 1000, 0.5, 1 / 60), 1000);
+    close(limitWheelEngineForce(-10000, 1000, 0.5, 1 / 60), -1000);
+    close(limitWheelEngineForce(500, 1000, 0.5, 1 / 60), 500);
+    close(limitWheelEngineForce(10000, 0, 0.5, 1 / 60), 0);
+    close(limitWheelEngineForce(10000, 1000, 2.5, 1 / 60, 0.35), 350);
+    close(longitudinalSlip(10000, 1000, 0.35), 0.965);
+    close(longitudinalSlip(0, 1000, 0.35), 0);
+    close(longitudinalSlip(10000, 1000, undefined), 0);
+    const spin = advanceWheelSpin(0, 10000, 0.8, false, 0.1);
+    assert.ok(spin > 0 && spin < 12 * 0.8);
+    close(advanceWheelSpin(0, -10000, 0.8, false, 0.1), -spin);
+    assert.ok(advanceWheelSpin(spin, 0, 0, false, 0.1) < spin);
+    assert.ok(advanceWheelSpin(spin, 10000, 0.8, true, 0.1) < spin * 0.1);
+    const rates = [30, 60, 144].map((hz) => {
+      let speed = 0;
+      for (let frame = 0; frame < hz; frame++) speed = advanceWheelSpin(speed, 10000, 0.8, false, 1 / hz);
+      return speed;
+    });
+    assert.ok(Math.max(...rates) - Math.min(...rates) < 1e-10);
+  });
   check("surface response: missing blocks and unknown ids are neutral", () => {
     for (const id of [undefined, null, "missing", "__proto__", "default", "slippery", "rubber", "metal", "wood", "stone"]) {
       assert.deepEqual(resolveSurfaceSample(id), NEUTRAL_SURFACE_SAMPLE, String(id));
     }
     assert.deepEqual(resolveSurfaceSample("mud"), {
-      frictionSlipScale: 0.55, sideFrictionScale: 0.7, rollingResistance: 0.35, deformability: 1,
+      frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12, deformability: 1,
     });
     for (const id of ["snow", "mud", "sand"]) {
       assert.ok(PHYSICAL_MATERIALS[id]!.deformation!.maxDepth > 0);
@@ -46,7 +69,8 @@ export function registerSurfaceResponseTests(check: Check): void {
     ]);
     close(sample.frictionSlipScale, 0.55 * 0.25 + 0.75);
     close(sample.sideFrictionScale, 0.7 * 0.25 + 0.75);
-    close(sample.rollingResistance, 0.35 * 0.25);
+    close(sample.rollingResistance, 0.12 * 0.25);
+    close(sample.tractionCoefficient!, 0.35 * 0.25 + 0.75);
     close(sample.deformability, 0.25);
     assert.deepEqual(sample, resolveSurfaceSample([
       { physicalMaterialId: "mud", weight: 20 },
@@ -86,7 +110,8 @@ export function registerSurfaceResponseTests(check: Check): void {
     const response = computeWheelSurfaceResponse(wheel, mud, 10, 3000);
     close(response.frictionSlip, 1.375);
     close(response.sideFrictionStiffness, 0.14);
-    close(response.rollingResistanceForce, 1050);
+    close(response.rollingResistanceForce, 360);
+    close(response.tractionCoefficient!, 0.35);
     assert.deepEqual(computeWheelSurfaceResponse(wheel, mud, 10, 3000), response);
     for (const sample of [null, NEUTRAL_SURFACE_SAMPLE]) {
       assert.deepEqual(computeWheelSurfaceResponse(wheel, sample, 10, 3000), { ...wheel, rollingResistanceForce: 0 });
@@ -101,7 +126,7 @@ export function registerSurfaceResponseTests(check: Check): void {
     assert.equal(force(0, 3000), 0);
     assert.equal(force(10, 0), 0);
     assert.equal(force(10, -1), 0);
-    close(force(0.5, 3000), 525);
+    close(force(0.5, 3000), 180);
     assert.equal(force(-0.5, 3000), force(0.5, 3000));
     assert.equal(force(100, 3000), force(1, 3000));
     assert.equal(force(1, 6000), 2 * force(1, 3000));
@@ -143,7 +168,141 @@ export async function registerSurfaceResponseRapierTests(
   checkAsync: CheckAsync,
   createWorld: () => Promise<VehicleSurfaceTestWorld>,
 ): Promise<void> {
-  await checkAsync("surface response rapier: GAZ-52 holds steady throttle on mud without gear hunting at 30/60/144 Hz", async () => {
+  await checkAsync("wheel traction rapier: stock GAZ-52 spins its rear wheels on real mud and snow presets at 30/60/144 Hz", async () => {
+    const asset = normalizeVehicleAsset(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Gaz52.vehicle.json", "utf8")))!;
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Script_Gaz52.actor.json", "utf8")));
+    const collider = actor.components.find((node) => node.component === "Collider")!.props;
+    for (const material of ["mud", "snow"]) {
+      const results: number[] = [];
+      for (const hz of [30, 60, 144]) {
+        const world = await createWorld();
+        const { physics } = world;
+        try {
+          const car = world.entities[1]!;
+          physics.setEntities([world.entities[0]!, { ...car, components: { ...car.components, Collider: collider } }]);
+          physics.createVehicle("car", asset);
+          physics.setVehicleSurfaceProvider(() => resolveSurfaceSample(material));
+          world.tick(2);
+          world.drive({ throttle: 1 });
+          for (let frame = 0; frame < hz * 3; frame++) physics.update({ deltaSeconds: 1 / hz, elapsedSeconds: 2 + frame / hz, frame });
+          const previous = physics.vehicleState("car")!;
+          world.tick(1 / 60);
+          const state = physics.vehicleState("car")!;
+          const slip = Math.min(...state.wheels.slice(2).map((wheel) => wheel.tractionSlip!));
+          const excess = Math.min(...state.wheels.slice(2).map((wheel, index) =>
+            (wheel.rotation - previous.wheels[index + 2]!.rotation) * wheel.radius * 60 - state.forwardSpeed));
+          console.info(`[stock GAZ-52] ${material} ${hz} Hz: ${(state.forwardSpeed * 3.6).toFixed(2)} km/h, slip ${slip.toFixed(2)}, excess ${excess.toFixed(2)} m/s`);
+          assert.ok(state.forwardSpeed > 0.3, "the stock truck can still drive through the surface");
+          assert.ok(slip > 0.15 && excess > 1, "real stock torque visibly spins both rear tyres");
+          assert.ok(state.wheels.slice(0, 2).every((wheel) => wheel.tractionSlip === 0), "free front wheels do not spin");
+          assert.ok(wheelSurfaceFxLevels({ inContact: true, wheelSpeed: state.forwardSpeed, groundSpeed: state.forwardSpeed,
+            chassisSpeed: state.forwardSpeed, tractionSlip: slip }).emissionRate > 0.1);
+          results.push(state.forwardSpeed);
+        } finally { physics.dispose(); }
+      }
+      assert.ok(Math.max(...results) - Math.min(...results) < 0.1, `${material}: frame-rate drift ${results}`);
+    }
+  });
+  await checkAsync("wheel traction rapier: mud and snow limit straight-line thrust and spin only driven wheels, forward and reverse", async () => {
+    const run = async (material: string | null, reverse: boolean) => {
+      const world = await createWorld();
+      const { physics } = world;
+      try {
+        // Enough torque to exceed both soft profiles. No rolling drag, so a
+        // speed difference proves the new grip cap, not the old brake path.
+        const definition = { ...createReferenceCarDefinition(), maxEngineForce: 60000, maxReverseForce: 60000 };
+        if (material) physics.setVehicleSurfaceProvider(() => ({ ...resolveSurfaceSample(material), rollingResistance: 0 }));
+        physics.createVehicle("car", definition);
+        world.tick(1);
+        world.drive(reverse ? { brake: 1 } : { throttle: 1 });
+        world.tick(0.5);
+        const before = physics.vehicleState("car")!;
+        world.tick(1 / 60);
+        const state = physics.vehicleState("car")!;
+        const excess = state.wheels.map((wheel, index) => {
+          const speed = (wheel.rotation - before.wheels[index]!.rotation) * wheel.radius * 60;
+          return Math.abs(speed) - Math.abs(state.forwardSpeed);
+        });
+        if (material) {
+          for (const [index, wheel] of state.wheels.entries()) {
+            if (definition.wheels[index]!.drive) {
+              assert.ok(wheel.tractionSlip! > 0.05, `${material} reverse=${reverse}: slip ${wheel.tractionSlip}`);
+              assert.ok(excess[index]! > 0.2, `${material}: driven tyre has excess rolling speed ${excess[index]}`);
+              assert.equal(Math.sign(wheel.rotation - before.wheels[index]!.rotation), reverse ? -1 : 1);
+            } else {
+              assert.equal(wheel.tractionSlip, 0);
+              assert.ok(Math.abs(excess[index]!) < 0.6, `free tyre rolls with chassis: ${excess[index]}`);
+            }
+          }
+        }
+        return Math.abs(state.forwardSpeed);
+      } finally { physics.dispose(); }
+    };
+    for (const reverse of [false, true]) {
+      const firm = await run(null, reverse);
+      for (const material of ["mud", "snow"]) {
+        const soft = await run(material, reverse);
+        assert.ok(soft > 0 && soft < firm * 0.8, `${material} reverse=${reverse}: soft ${soft}, firm ${firm}`);
+      }
+    }
+  });
+
+  await checkAsync("wheel traction rapier: stuck wheels splash while digging; brake, grip recovery and respawn clear spin", async () => {
+    const world = await createWorld();
+    const { physics } = world;
+    try {
+      physics.setEntities([...world.entities, {
+        id: "wall", components: {
+          Transform: { position: [0, 1, 2.6], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          Collider: { shape: "box", size: [4, 2, 0.5], isStatic: true, isSensor: false },
+        },
+      }]);
+      const definition = createReferenceCarDefinition();
+      physics.createVehicle("car", definition);
+      physics.setVehicleSurfaceProvider(() => ({ ...resolveSurfaceSample("mud"), frictionSlipScale: 0.1 }));
+      world.tick(1);
+      world.drive({ throttle: 1 });
+      world.tick(3);
+      const before = physics.vehicleState("car")!;
+      world.tick(1 / 60);
+      const spinning = physics.vehicleState("car")!;
+      assert.ok(Math.abs(spinning.forwardSpeed) < 0.05);
+      for (const [index, wheel] of spinning.wheels.entries()) {
+        if (!definition.wheels[index]!.drive) continue;
+        assert.ok((wheel.rotation - before.wheels[index]!.rotation) * wheel.radius * 60 > 1);
+        assert.ok(wheelSurfaceFxLevels({ inContact: wheel.inContact, wheelSpeed: 0, groundSpeed: 0,
+          chassisSpeed: spinning.forwardSpeed, tractionSlip: wheel.tractionSlip }).emissionRate > 0.05);
+      }
+      world.drive({ handbrake: true });
+      world.tick(1);
+      const braking = physics.vehicleState("car")!;
+      world.tick(1 / 60);
+      const braked = physics.vehicleState("car")!;
+      for (const [index, wheel] of braked.wheels.entries()) {
+        assert.equal(wheel.tractionSlip, 0);
+        assert.ok(Math.abs(wheel.rotation - braking.wheels[index]!.rotation) < 0.02);
+      }
+      // Returning to firm ground releases extra RPM without snapping the angle.
+      world.drive({ throttle: 1 });
+      world.tick(0.5);
+      physics.setVehicleSurfaceProvider(null);
+      world.drive({});
+      world.tick(1);
+      const recovered = physics.vehicleState("car")!;
+      world.tick(1 / 60);
+      assert.ok(physics.vehicleState("car")!.wheels.every((wheel, index) =>
+        Math.abs(wheel.rotation - recovered.wheels[index]!.rotation) < 0.02));
+      physics.resetVehicle("car", { position: [0, 1, -20], rotation: [0, 0, 0], scale: [1, 1, 1] });
+      assert.ok(physics.vehicleState("car")!.wheels.every((wheel) => wheel.tractionSlip === 0));
+      world.tick(1);
+      const reset = physics.vehicleState("car")!;
+      world.tick(1 / 60);
+      assert.ok(physics.vehicleState("car")!.wheels.every((wheel, index) =>
+        Math.abs(wheel.rotation - reset.wheels[index]!.rotation) < 0.02));
+    } finally { physics.dispose(); }
+  });
+
+  await checkAsync("surface response rapier: GAZ-52 accelerates on mud without gear hunting at 30/60/144 Hz", async () => {
     const asset = normalizeVehicleAsset(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Gaz52.vehicle.json", "utf8")))!;
     const actor = normalizeActorScriptDef(JSON.parse(readFileSync("public/assets/vehicles/gaz52/Script_Gaz52.actor.json", "utf8")));
     const collider = actor.components.find((node) => node.component === "Collider")!.props;
@@ -159,22 +318,21 @@ export async function registerSurfaceResponseRapierTests(
         world.tick(2);
         world.drive({ throttle: 1 });
         let minSpeed = Infinity;
-        let maxSpeed = 0;
-        let shifts = 0;
+        let downshifts = 0;
         let lastGear = 1;
         for (let frame = 1; frame <= hz * 20; frame += 1) {
           physics.update({ deltaSeconds: 1 / hz, elapsedSeconds: 2 + frame / hz, frame });
           const state = physics.vehicleState("car")!;
-          if (state.drivetrain!.gear !== lastGear) shifts += 1;
+          if (state.drivetrain!.gear < lastGear) downshifts += 1;
           lastGear = state.drivetrain!.gear;
           if (frame >= hz * 3) {
             minSpeed = Math.min(minSpeed, state.forwardSpeed);
-            maxSpeed = Math.max(maxSpeed, state.forwardSpeed);
           }
         }
         assert.ok(minSpeed > 8 / 3.6, `${hz} Hz: mud slowed to ${minSpeed * 3.6} km/h`);
-        assert.ok(maxSpeed - minSpeed < 2 / 3.6, `${hz} Hz: steady speed oscillated by ${(maxSpeed - minSpeed) * 3.6} km/h`);
-        assert.ok(shifts <= 1, `${hz} Hz: ${shifts} gear changes on constant mud`);
+        // Lower drag permits normal acceleration and several upshifts; reject
+        // up/down hunting directly rather than assuming a fixed speed plateau.
+        assert.equal(downshifts, 0, `${hz} Hz: downshifts under steady flat-ground throttle`);
         finalSpeeds.push(physics.vehicleState("car")!.forwardSpeed);
         // Leaving the soft surface must release the hold and permit ordinary acceleration.
         physics.setVehicleSurfaceProvider(() => resolveSurfaceSample("wood"));
@@ -560,7 +718,9 @@ export async function registerSurfaceResponseRapierTests(
     };
     const free = await run(false, 0);
     const pulled = await run(true, 0);
-    assert.ok(Math.abs(free.x - 0.1) < 0.01, `without rut steering the offset stays: ${free.x}`);
+    // Load-limited drive can create a small left/right force imbalance at the
+    // rut edges; the control must remain within 1.5 cm of its starting offset.
+    assert.ok(Math.abs(free.x - 0.1) < 0.015, `without rut steering the offset stays: ${free.x}`);
     // Pulled in until the tyre rests on the rut's flat bottom (0.30 m rut, 0.245 m tyre), never across it.
     // The side samples sit 0.086 m off the tyre's centre and blur over one 0.125 m cell: from ~0.06–0.07 m in, both read the flat bottom.
     assert.ok(pulled.x < 0.08 && pulled.x < free.x - 0.02 && pulled.x > -0.02, `rut steering re-centres: ${pulled.x} vs ${free.x}`);

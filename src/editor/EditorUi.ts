@@ -4326,6 +4326,7 @@ export class EditorUi {
       applySelectedLandscapeSplinePaint: () => this.app.applySelectedLandscapeSplinePaint(),
       setSelectedLandscapeLayerMaterial: (layerId, materialId) =>
         this.app.setSelectedLandscapeLayerMaterial(layerId, materialId),
+      addSelectedLandscapeLayer: () => this.app.addSelectedLandscapeLayer(),
       setSelectedLandscapeLayerPhysicalMaterial: (layerId, physicalMaterialId) =>
         this.app.setSelectedLandscapeLayerPhysicalMaterial(layerId, physicalMaterialId),
       importSelectedLandscapeHeightmap: (rgba, width, height, heightRange) =>

@@ -1,0 +1,87 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { generateTestWorld, testWorldLevel } from "../../tools/world/testWorld";
+import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
+import { expect, test } from "./test";
+import { smokePublicPath } from "./smokeProject.mjs";
+
+test("wet mud fifth layer renders reflective water on track floors", async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/tests/smoke/pages/wet-mud.html");
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).__wetMudQa?.ready)), { timeout: 60_000 }).toBe(true);
+  const dry = await page.evaluate(() => (window as any).__wetMudQa.water(false) as number[]);
+  const dryCentre = await page.evaluate(() => (window as any).__wetMudQa.sample() as number[]);
+  await page.screenshot({ path: info.outputPath("mud-track-without-water.png") });
+  const wet = await page.evaluate(() => (window as any).__wetMudQa.water(true) as number[]);
+  const wetCentre = await page.evaluate(() => (window as any).__wetMudQa.sample() as number[]);
+  await page.screenshot({ path: info.outputPath("wet-mud-puddles.png") });
+  expect(Math.max(...wet.map((value, i) => value - dry[i]!))).toBeGreaterThan(10); // blue sky on visible flat parts of the floor
+  expect(wetCentre[2]! - dryCentre[2]!).toBeGreaterThan(10); // the rut centre must fill, not only one narrow edge
+  await page.evaluate(() => (window as any).__wetMudQa.side());
+  await page.screenshot({ path: info.outputPath("wet-mud-puddles-side.png") });
+  expect(errors).toEqual([]);
+});
+
+test("editor adds a fifth World Terrain layer with undo, paints wet mud, saves every tile and reloads", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  const world = generateTestWorld({ tiles: 2, tileQuads: 32, spacing: 1 });
+  const terrainPath = "landscapes/__wet-mud.terrain.json", levelPath = "layouts/__wet-mud.level.json";
+  const write = async (path: string, data: string | Uint8Array) => { await mkdir(dirname(smokePublicPath(path)), { recursive: true }); await writeFile(smokePublicPath(path), data); };
+  for (const [key, bytes] of world.tileBytes) await write(terrainTilePath(terrainPath, key), bytes);
+  await write(terrainGlobalMapPath(terrainPath), world.globalBytes);
+  await write(terrainPath, JSON.stringify(world.def));
+  await write(levelPath, JSON.stringify(testWorldLevel(world, terrainPath, "__wet-mud")));
+  expect((await request.post("/__open-level", { data: { path: levelPath } })).ok()).toBe(true);
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("outliner-row").filter({ hasText: "World Terrain" }).first().click();
+  await page.locator("[data-landscape-mode]").selectOption("paint");
+  await expect(page.locator("[data-landscape-layer]")).toHaveCount(4);
+  await page.locator("[data-landscape-add-layer]").click();
+  await expect(page.locator("[data-landscape-layer]")).toHaveCount(5);
+  await page.keyboard.press("Control+z");
+  await expect(page.locator("[data-landscape-layer]")).toHaveCount(4);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(page.locator("[data-landscape-layer]")).toHaveCount(5);
+  await page.locator("[data-landscape-layer-material]").selectOption("lt-wet-mud");
+  await page.locator("[data-landscape-layer-physical-material]").selectOption("mud");
+  await expect(page.locator("[data-landscape-layer].active")).toContainText("LT Wet Mud");
+  await page.getByTestId("outliner-row").filter({ hasText: "World Terrain" }).first().click();
+  await page.keyboard.press("KeyF");
+  const box = await page.locator("#game-canvas").boundingBox();
+  if (!box) throw new Error("No canvas");
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.6);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5 + 15, box.y + box.height * 0.6 + 8, { steps: 5 });
+  await page.mouse.up();
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 30_000 });
+  await expect.poll(async () => JSON.parse(await readFile(smokePublicPath(terrainPath), "utf8")).layers[4]?.physicalMaterial, { timeout: 30_000 }).toBe("mud");
+  const def = JSON.parse(await readFile(smokePublicPath(terrainPath), "utf8"));
+  expect(def.layers).toHaveLength(5);
+  expect(def.layers[4].material).toBe("lt-wet-mud");
+  expect(def.layers[4].physicalMaterial).toBe("mud");
+  let painted = false;
+  for (const [key, before] of world.tileBytes) {
+    const tile = decodeTerrainTile(await readFile(smokePublicPath(terrainTilePath(terrainPath, key))));
+    expect(tile.layerCount).toBe(5);
+    expect(tile.heights).toEqual(decodeTerrainTile(before).heights);
+    painted ||= tile.weights.slice(tile.size * tile.size * 4).some((weight) => weight > 0);
+  }
+  expect(painted).toBe(true);
+  await page.reload();
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("outliner-row").filter({ hasText: "World Terrain" }).first().click();
+  await page.locator("[data-landscape-mode]").selectOption("paint");
+  await expect(page.locator("[data-landscape-layer]")).toHaveCount(5);
+  await page.locator(`[data-landscape-layer="${def.layers[4].id}"]`).click();
+  await expect(page.locator("[data-landscape-layer-material]")).toHaveValue("lt-wet-mud");
+  expect(errors).toEqual([]);
+});

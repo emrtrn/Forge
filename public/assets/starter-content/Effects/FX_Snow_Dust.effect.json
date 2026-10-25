@@ -1,0 +1,38 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "Snow Dust",
+  "category": "Surface",
+  "tags": ["snow", "wheel", "powder"],
+  "system": {
+    "enabled": true,
+    "loop": true,
+    "duration": 1,
+    "seed": null,
+    "maxParticles": 128,
+    "bounds": { "mode": "fixed", "min": [-3, -1, -3], "max": [3, 2, 3], "showInPreview": true }
+  },
+  "spawn": { "mode": "rate", "rate": 180, "count": 0, "delay": 0, "interval": 0, "shape": "point", "radius": 0, "boxSize": [0, 0, 0] },
+  "initialize": {
+    "lifetime": [0.45, 0.7],
+    "startSize": [0.15, 0.28],
+    "startColor": "#aabccc",
+    "startOpacity": 0.85,
+    "direction": [0, 0.6, -0.8],
+    "speed": [2.5, 4],
+    "spreadAngleDeg": 16,
+    "rotation": [0, 0],
+    "angularVelocity": [0, 0]
+  },
+  "update": {
+    "gravityScale": 0.4,
+    "drag": 0,
+    "acceleration": [0, 0, 0],
+    "endSize": [0.3, 0.5],
+    "endColor": "#aabccc",
+    "endOpacity": 0,
+    "fadeInTime": 0,
+    "fadeOutTime": 0.2
+  },
+  "renderer": { "type": "sprite", "blendMode": "alpha", "softness": 0.5, "sortMode": "none" }
+}

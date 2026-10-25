@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { ensureLandscapeLayers } from "../../engine/scene/landscape";
+import { terrainDocumentToLandscape } from "../../engine/terrain/terrainLandscapeBridge";
+import { applyTerrainLayerState, createTerrainLayerAddition } from "../../engine/terrain/terrainLayers";
 import {
   editLandscapeBrushWeights,
   normalizeLandscapeBrushWeights,
@@ -116,6 +119,43 @@ function assertSeams(world: TerrainEditWorld): void {
 }
 
 export function registerTerrainEditTests(check: Check): void {
+  check("terrain paint layers: a fifth layer survives the one-tile adapter and legacy normalization", () => {
+    const world = fixture(1, 1, 32, 4);
+    // The one-tile editing adapter backfills the four legacy preset ids.
+    world.def.layers.forEach((layer, i) => { layer.id = ["grass", "dirt", "rock", "snow"][i]!; });
+    const addition = createTerrainLayerAddition(world, { id: "wet-mud", name: "Wet Mud", color: "#493226", material: "lt-wet-mud", physicalMaterial: "mud" });
+    applyTerrainLayerState(world, addition.after);
+    const data = terrainDocumentToLandscape({ def: world.def, tiles: world.tiles });
+    data.layers.forEach((layer, i) => { layer.weights[0] = i === 4 ? 1 : 0; });
+    ensureLandscapeLayers(data);
+    assert.equal(data.layers.length, 5);
+    assert.equal(data.layers[4]!.material, "lt-wet-mud");
+    assert.equal(data.layers[4]!.physicalMaterial, "mud");
+    assert.equal(data.layers[4]!.weights[0], 1);
+  });
+  check("terrain paint layers: fifth channel preserves all tiles, relief and old weights; undo and binary round-trip", () => {
+    const world = fixture(2, 2, 32, 4);
+    const original = [...world.tiles].map(([key, tile]) => ({ key, heights: tile.heights.slice(), weights: tile.weights.slice() }));
+    const firstLayer = world.def.layers[0];
+    const addition = createTerrainLayerAddition(world, { id: "wet-mud", name: "Wet Mud", color: "#493226", material: "lt-wet-mud", physicalMaterial: "mud" });
+    applyTerrainLayerState(world, addition.after);
+    for (const entry of original) {
+      const tile = world.tiles.get(entry.key)!;
+      assert.equal(tile.layerCount, 5);
+      assert.deepEqual(tile.heights, entry.heights);
+      assert.deepEqual(tile.weights.slice(0, entry.weights.length), entry.weights);
+      assert.ok(tile.weights.slice(entry.weights.length).every((weight) => weight === 0));
+      const decoded = decodeTerrainTile(encodeTerrainTile(tile, { heightMin: -256, heightMax: 256, heightFormat: "f32" }));
+      assert.equal(decoded.layerCount, 5);
+      assert.deepEqual(decoded.weights, tile.weights);
+    }
+    applyTerrainLayerState(world, addition.before);
+    assert.equal(world.def.layers[0], firstLayer, "older material undo commands retain their layer identity");
+    for (const entry of original) assert.deepEqual(world.tiles.get(entry.key)!.weights, entry.weights);
+    world.tiles.delete("1_1");
+    assert.throws(() => createTerrainLayerAddition(world, { id: "other", name: "Other", color: "#fff" }), /Load all/);
+    assert.throws(() => createTerrainLayerAddition(fixture(), { id: "other", name: "Other", color: "#fff" }), /limit/);
+  });
   for (const mode of ["noise", "ramp", "terrace", "erosion"] as const) {
     check(`terrain sculpt ${mode} crosses four tiles, preserves paint, supports exact undo/redo and f32 save`, () => {
       const world = fixture();

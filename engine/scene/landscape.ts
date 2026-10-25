@@ -709,6 +709,13 @@ export function ensureLandscapeLayers(data: ForgeLandscapeData): boolean {
     nextLayers.push(layer);
   }
 
+  // Extra authored paint layers survive loading, rendering, painting and save.
+  for (const existing of data.layers) {
+    if (LANDSCAPE_DEFAULT_LAYERS.some((defaults) => defaults.id === existing.id) || nextLayers.length >= 8) continue;
+    const weights = existing.weights.slice(0, vertexCount).map((weight) => Number.isFinite(weight) ? Math.min(1, Math.max(0, weight)) : 0);
+    while (weights.length < vertexCount) weights.push(0);
+    nextLayers.push({ ...existing, weights });
+  }
   if (data.layers.length !== nextLayers.length) changed = true;
   data.layers = nextLayers;
   normalizeLandscapeLayerWeights(data);

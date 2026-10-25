@@ -226,7 +226,7 @@ export interface VehicleWheelState {
   readonly tractionSlip?: number;
   /** Wheel yaw in radians (positive turns toward the car's left, +X). */
   readonly steering: number;
-  /** Accumulated spin about the axle in radians. */
+  /** Accumulated spin about the axle in radians, including soft-ground wheelspin. */
   readonly rotation: number;
   readonly inContact: boolean;
   /** Entity owning the contacted collider, or null when airborne/unmapped. */

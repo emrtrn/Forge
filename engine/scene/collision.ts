@@ -204,7 +204,7 @@ export interface PhysicalMaterialDef {
   friction: number;
   restitution: number;
   /** Preset-only effect asset id or public-root-relative .effect.json path.
-   * Built-in presets leave wheel presentation unset; saves carry only the preset id. */
+   * Saves carry only the preset id. */
   wheelEffect?: string;
   /** Preset-only sound/soundCue id for a spatial tyre loop. */
   wheelSound?: string;
@@ -212,6 +212,8 @@ export interface PhysicalMaterialDef {
   vehicle?: {
     /** Multiplier on the wheel's longitudinal friction slip. */
     frictionSlipScale: number;
+    /** Longitudinal force / suspension load. Independent of Rapier's lateral tuning. */
+    tractionCoefficient?: number;
     /** Multiplier on the wheel's lateral friction stiffness. */
     sideFrictionScale: number;
     /** Load-relative rolling drag coefficient; ramps up over the first 1 m/s. */
@@ -253,7 +255,8 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
   stone: { friction: 0.7, restitution: 0.05 },
   snow: {
     friction: 0.3, restitution: 0,
-    vehicle: { frictionSlipScale: 0.6, sideFrictionScale: 0.5, rollingResistance: 0.2 },
+    wheelEffect: "starter-fx-snow-dust",
+    vehicle: { frictionSlipScale: 0.6, tractionCoefficient: 0.22, sideFrictionScale: 0.5, rollingResistance: 0.06 },
     deformation: {
       maxDepth: 0.3, compaction: 0.25, digRate: 0.05, recoveryRate: 0.01,
       sinkResistance: 0.4, tint: [0.85, 0.9, 0.95], tintStrength: 0.3, wetness: 0.1,
@@ -261,10 +264,11 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
   },
   mud: {
     friction: 0.6, restitution: 0,
-    vehicle: { frictionSlipScale: 0.55, sideFrictionScale: 0.7, rollingResistance: 0.35 },
+    wheelEffect: "starter-fx-mud-splash",
+    vehicle: { frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12 },
     deformation: {
       maxDepth: 0.22, compaction: 0.5, digRate: 0.08, recoveryRate: 0,
-      sinkResistance: 0.6, tint: [0.35, 0.27, 0.2], tintStrength: 0.6, wetness: 0.5,
+      sinkResistance: 0.6, tint: [0.035, 0.025, 0.015], tintStrength: 0.85, wetness: 0.9,
     },
   },
   sand: {

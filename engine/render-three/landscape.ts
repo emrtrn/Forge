@@ -82,6 +82,7 @@ export type LandscapeLayerColors = Record<string, string>;
  * "lit" view; `color` is the fallback tint (and the debug-view look).
  */
 export interface LandscapeLayerTexture {
+  roughness?: number;
   id: string;
   texture: Texture | null;
   color: string;
@@ -140,6 +141,7 @@ function terrainLayerInputs(
     return {
       texture: texture?.texture ?? null, color, scale: (texture?.tiling ?? 1) / worldSize,
       physicalMaterial: layers[index]?.physicalMaterial ?? null,
+      roughness: texture?.roughness ?? 1,
     };
   });
 }

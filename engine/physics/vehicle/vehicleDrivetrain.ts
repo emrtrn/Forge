@@ -95,13 +95,16 @@ export function computeDrivetrainDrive(
       // causing two consecutive power cuts and an almost complete stop.
       if (next > gear && signedPedal > 0 && Number.isFinite(surfaceResistanceForce) && surfaceResistanceForce > 0) {
         const speed = Math.abs(forwardSpeed);
-        const exitSpeed = Math.max(0, speed - surfaceResistanceForce / definition.massKg * transmission.shiftDurationSeconds);
+        // The lighter soft-ground rolling profiles permit higher speed: drag
+        // during the torque cut must be included in shift viability as well.
+        const resistance = surfaceResistanceForce + definition.aerodynamics.dragCoefficient * speed * speed;
+        const exitSpeed = Math.max(0, speed - resistance / definition.massKg * transmission.shiftDurationSeconds);
         const exitRpm = speed > 0 ? wheelRpm * ratioFor(next) * exitSpeed / speed : 0;
         const torque = exitRpm >= engine.maxRpm ? 0
           : sampleTorqueCurve(engine.torqueCurve, Math.max(engine.idleRpm, exitRpm)) * signedPedal;
         const force = Math.min(definition.maxEngineForce, torque * ratioFor(next) * transmission.efficiency
           * shares.reduce((sum, share, i) => sum + share / definition.wheels[i]!.radius, 0));
-        if (exitRpm <= transmission.downshiftRpm || force <= surfaceResistanceForce) next = gear;
+        if (exitRpm <= transmission.downshiftRpm || force <= resistance) next = gear;
       }
     }
     if (next !== gear) {

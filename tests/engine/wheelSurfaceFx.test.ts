@@ -1,6 +1,9 @@
 /** Terrain deformation Faz 4: pure curves and vehicle presentation with recording services. */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { Group } from "three";
+import { ParticleEffect } from "../../engine/render-three/particleEffect";
+import { parseRuntimeParticleEffect } from "../../engine/vfx/particleEffectParser";
 import type { AudioPlaybackHandle, AudioPlayOptions } from "../../engine/audio/audioSubsystem";
 import { wheelSurfaceFxLevels } from "../../engine/physics/surface/wheelSurfaceFx";
 import type { VehicleState, VehicleWheelState } from "../../engine/physics/vehicle/vehicleTypes";
@@ -24,9 +27,13 @@ type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 class FakeEmitter implements VfxEffectHandle {
   rate = -1;
   position: number[] = [];
+  direction: number[] = [];
   readonly stops: boolean[] = [];
   disposed = false;
-  setTransform(position: [number, number, number]): void { this.position = [...position]; }
+  setTransform(position: [number, number, number], direction?: [number, number, number]): void {
+    this.position = [...position];
+    if (direction) this.direction = [...direction];
+  }
   setEmissionRate(rate: number): void { this.rate = rate; }
   stop(fadeOut = true): void { this.stops.push(fadeOut); }
   dispose(): void { this.disposed = true; }
@@ -60,6 +67,8 @@ function harness(options: { deferred?: boolean; vfx?: boolean; audio?: boolean; 
   const wheel = {
     position: [0, 0, 0] as [number, number, number], radius: 0.5, suspensionLength: 0.3,
     steering: 0, rotation: 0, inContact: true, groundEntityId: "ground" as string | null,
+    tractionSlip: undefined as number | undefined,
+    sinkDepth: 0,
     contactPoint: [1, 2, 3] as [number, number, number] | null, hardPoint: null,
   };
   const state = { forwardSpeed: 5, engineLoad: 0, wheels: [wheel], drivetrain: null } satisfies VehicleState;
@@ -113,7 +122,7 @@ function harness(options: { deferred?: boolean; vfx?: boolean; audio?: boolean; 
     for (const contact of state.wheels) contact.rotation += state.forwardSpeed / contact.radius / 60;
     module.update!(1 / 60);
   };
-  return { module, tick, ids, wheel, state, settings, materials, requests, pending, voices, lookups: () => lookups };
+  return { module, tick, ids, wheel, state, object, settings, materials, requests, pending, voices, lookups: () => lookups };
 }
 
 /** Flush emitter installation and its rejection handler without timers or browser services. */
@@ -155,9 +164,10 @@ export async function registerWheelSurfaceFxTests(check: Check, checkAsync: Chec
     assert.deepEqual(out, { emissionRate: 0, soundVolume: 0, soundPitch: 0 });
   });
 
-  check("wheel surface fx: built-in presets and absent lookup make no effect or sound calls", () => {
+  check("wheel surface fx: presets without presentation and absent lookup make no effect or sound calls", () => {
     const h = harness();
     for (const material of Object.values(PHYSICAL_MATERIALS)) {
+      if (material.wheelEffect || material.wheelSound) continue;
       assert.equal(material.wheelEffect, undefined);
       assert.equal(material.wheelSound, undefined);
       h.materials.set("ground", material);
@@ -170,6 +180,96 @@ export async function registerWheelSurfaceFxTests(check: Check, checkAsync: Chec
     absent.tick();
     assert.equal(absent.requests.length + absent.voices.length, 0);
     absent.module.dispose!();
+  });
+
+  check("wheel surface fx: physics slip drives a stationary burnout and overrides rotation noise", () => {
+    const stopped = { inContact: true, wheelSpeed: 0, groundSpeed: 0, chassisSpeed: 0, tractionSlip: 0.8 };
+    assert.ok(wheelSurfaceFxLevels(stopped).emissionRate > 0.3);
+    assert.equal(wheelSurfaceFxLevels({ ...stopped, tractionSlip: 0 }).emissionRate, 0);
+    assert.equal(wheelSurfaceFxLevels({ ...stopped, wheelSpeed: 10000, tractionSlip: 0 }).emissionRate, 0, "reset angle jump is not powered slip");
+    assert.equal(wheelSurfaceFxLevels({ ...stopped, inContact: false }).emissionRate, 0);
+    const rolling = { inContact: true, wheelSpeed: 5, groundSpeed: 5, chassisSpeed: 5, tractionSlip: 0 };
+    assert.ok(wheelSurfaceFxLevels({ ...rolling, tractionSlip: 0.8 }).emissionRate > wheelSurfaceFxLevels(rolling).emissionRate);
+    assert.equal(wheelSurfaceFxLevels({ ...rolling, tractionSlip: NaN }).emissionRate, 0);
+    assert.deepEqual(wheelSurfaceFxLevels({ ...stopped, tractionSlip: 5 }), wheelSurfaceFxLevels({ ...stopped, tractionSlip: 1 }));
+  });
+
+  check("wheel surface fx: authored mud droplets arc, keep world positions and drain after stopping", () => {
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
+    const asset = manifest.assets.find((entry: { id: string }) => entry.id === PHYSICAL_MATERIALS.mud!.wheelEffect);
+    assert.ok(asset, "the preset resolves through the runtime manifest");
+    const definition = parseRuntimeParticleEffect(JSON.parse(readFileSync(`public/${asset.path}`, "utf8")))!;
+    assert.equal(definition.loop, true);
+    assert.equal(definition.gravityScale, 1);
+    // Remove spread for a deterministic trajectory; retain the authored speed and gravity.
+    const fx = new ParticleEffect({ ...definition, spread: 0, rate: 60 });
+    try {
+      fx.setOrigin(1, 0, 2);
+      fx.update(1 / 60);
+      fx.stopEmission();
+      const positions = fx.object3D.geometry.getAttribute("position");
+      const x = positions.getX(0);
+      fx.setOrigin(100, 0, 100);
+      fx.setDirection([0, 1, 0]);
+      fx.update(0.1);
+      assert.equal(positions.getX(0), x, "moving the emitter never drags an old droplet");
+      assert.ok(positions.getZ(0) < 2, "old velocity survives emitter direction changes");
+      const raised = positions.getY(0);
+      fx.update(0.2);
+      assert.ok(positions.getY(0) < raised, "gravity bends the splash back down");
+      fx.update(1);
+      assert.equal(fx.aliveCount(), 0);
+    } finally { fx.dispose(); }
+  });
+
+  check("wheel surface fx: snow preset resolves an authored powder emitter at low particle density", () => {
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
+    const asset = manifest.assets.find((entry: { id: string }) => entry.id === PHYSICAL_MATERIALS.snow!.wheelEffect);
+    assert.ok(asset);
+    const definition = parseRuntimeParticleEffect(JSON.parse(readFileSync(`public/${asset.path}`, "utf8")))!;
+    const fx = new ParticleEffect(definition);
+    try {
+      const levels = wheelSurfaceFxLevels({ inContact: true, wheelSpeed: 2, groundSpeed: 2, chassisSpeed: 2, tractionSlip: 0.8 });
+      fx.setDensityScale(levels.emissionRate * 0.3);
+      for (let frame = 0; frame < 60; frame++) fx.update(1 / 60);
+      assert.ok(fx.aliveCount() >= 5, "powder remains present with low's 0.3 particle density");
+      assert.ok(definition.startSize >= 0.15 && definition.endSize >= 0.3, "powder is sized for a vehicle chase camera");
+      fx.stopEmission();
+      fx.update(1);
+      assert.equal(fx.aliveCount(), 0);
+    } finally { fx.dispose(); }
+  });
+
+  await checkAsync("wheel surface fx: mud opts in without audio and spray follows chassis, steering and reverse", async () => {
+    const h = harness();
+    h.materials.set("ground", PHYSICAL_MATERIALS.mud!);
+    h.wheel.tractionSlip = 0.7;
+    h.wheel.sinkDepth = 0.12;
+    h.tick();
+    await settle();
+    const emitter = h.requests[0]!.handle;
+    assert.equal(h.requests[0]!.effect, PHYSICAL_MATERIALS.mud!.wheelEffect);
+    assert.equal(h.voices.length, 0);
+    assert.equal(emitter.position[1], 1.88);
+    assert.ok(Math.abs(emitter.direction[0]!) < 1e-10);
+    assert.equal(emitter.direction[1], 0.6);
+    assert.equal(emitter.direction[2], -0.8);
+    h.object.rotation.y = Math.PI / 2;
+    h.wheel.steering = -Math.PI / 4;
+    h.tick();
+    assert.ok(emitter.direction[0]! < -0.5 && emitter.direction[2]! < -0.5);
+    const forward = [...emitter.direction];
+    h.state.forwardSpeed = -5;
+    h.tick();
+    assert.ok(Math.abs(emitter.direction[0]! + forward[0]!) < 1e-10);
+    assert.ok(Math.abs(emitter.direction[2]! + forward[2]!) < 1e-10);
+    h.state.forwardSpeed = 0;
+    h.tick();
+    assert.ok(emitter.rate > 0, "a stuck driven wheel still splashes");
+    h.wheel.tractionSlip = 0;
+    h.tick();
+    assert.equal(emitter.rate, 0);
+    h.module.dispose!();
   });
 
   await checkAsync("wheel surface fx: one emitter and loop per wheel follow contacts and spin", async () => {
@@ -320,12 +420,14 @@ export async function registerWheelSurfaceFxTests(check: Check, checkAsync: Chec
     const h = harness({ deferred: true });
     h.tick();
     h.wheel.contactPoint = [8, 7, 6];
+    h.object.rotation.y = Math.PI / 2;
     h.tick();
     h.wheel.inContact = false;
     h.tick();
     h.pending[0]!.resolve(h.requests[0]!.handle);
     await settle();
     assert.deepEqual(h.requests[0]!.handle.position, [8, 7, 6]);
+    assert.ok(h.requests[0]!.handle.direction[0]! < -0.79, "deferred load uses the latest direction");
     assert.equal(h.requests[0]!.handle.rate, 0);
     h.module.dispose!();
   });

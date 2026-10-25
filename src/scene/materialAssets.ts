@@ -83,6 +83,7 @@ export async function loadForgeMaterial(
 }
 
 export interface ForgeMaterialLayer {
+  roughness?: number;
   /** Material base color (hex), used as the flat tint when there's no texture. */
   baseColor: string;
   /** Base-color (albedo) texture, tiling-wrapped for terrain splatting, or `null`. */
@@ -116,7 +117,7 @@ export async function loadForgeMaterialLayer(
       if (options.maxAnisotropy) texture.anisotropy = options.maxAnisotropy;
       texture.needsUpdate = true;
     }
-    return { baseColor: def.baseColor ?? "#ffffff", texture };
+    return { baseColor: def.baseColor ?? "#ffffff", texture, roughness: def.roughness };
   } catch {
     return null;
   }

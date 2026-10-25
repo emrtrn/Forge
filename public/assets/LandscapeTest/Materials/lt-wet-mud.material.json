@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "LT Wet Mud",
+  "baseColor": "#493226",
+  "baseColorTexture": "lt-wet-mud-bc",
+  "normalTexture": null,
+  "maskTexture": null,
+  "roughnessTexture": null,
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "flipY": true,
+  "roughness": 0.6,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "normalMotion": null,
+  "layerBlend": null
+}

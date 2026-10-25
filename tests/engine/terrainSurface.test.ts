@@ -89,6 +89,7 @@ export function registerTerrainSurfaceTests(check: Check): void {
         { physicalMaterialId: null, weight: weight(0) }, { physicalMaterialId: "mud", weight: weight(1) },
       ]);
       const actual = sampler.sampleAt([x, 0, 3])!;
+      close(actual.tractionCoefficient!, expected.tractionCoefficient!);
       for (const key of ["frictionSlipScale", "sideFrictionScale", "rollingResistance", "deformability"] as const) {
         close(actual[key], expected[key]);
       }

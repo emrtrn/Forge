@@ -9,6 +9,8 @@ export interface SurfaceSample {
   readonly rollingResistance: number;
   /** Soft-surface participation (0..1), independent of the profile's depth. */
   readonly deformability: number;
+  /** Optional physical longitudinal grip (force / load), separate from Rapier tuning. */
+  readonly tractionCoefficient?: number;
 }
 
 export interface WeightedSurfaceMaterial {
@@ -80,6 +82,7 @@ export function resolveSurfaceSample(
       sideFrictionScale: profile.vehicle?.sideFrictionScale ?? 1,
       rollingResistance: profile.vehicle?.rollingResistance ?? 0,
       deformability: (profile.deformation?.maxDepth ?? 0) > 0 ? 1 : 0,
+      ...(profile.vehicle?.tractionCoefficient === undefined ? {} : { tractionCoefficient: profile.vehicle.tractionCoefficient }),
     };
   }
   const entries = material.filter(({ weight }) => Number.isFinite(weight) && weight > 0);
@@ -91,6 +94,8 @@ export function resolveSurfaceSample(
   let sideFrictionScale = 0;
   let rollingResistance = 0;
   let deformability = 0;
+  let tractionCoefficient = 0;
+  let hasTractionCoefficient = false;
   for (const entry of entries) {
     const sample = resolveSurfaceSample(entry.physicalMaterialId);
     const weight = (entry.weight / maxWeight) / total;
@@ -98,8 +103,11 @@ export function resolveSurfaceSample(
     sideFrictionScale += sample.sideFrictionScale * weight;
     rollingResistance += sample.rollingResistance * weight;
     deformability += sample.deformability * weight;
+    tractionCoefficient += (sample.tractionCoefficient ?? 1) * weight;
+    hasTractionCoefficient ||= sample.tractionCoefficient !== undefined;
   }
-  return { frictionSlipScale, sideFrictionScale, rollingResistance, deformability };
+  return { frictionSlipScale, sideFrictionScale, rollingResistance, deformability,
+    ...(hasTractionCoefficient ? { tractionCoefficient } : {}) };
 }
 
 /** Default mesh-ground provider; the host supplies the live collider material lookup. */
@@ -122,11 +130,12 @@ export function computeWheelSurfaceResponse(
   sample: SurfaceSample | null,
   speed: number,
   wheelLoad: number,
-): { frictionSlip: number; sideFrictionStiffness: number; rollingResistanceForce: number } {
+): { frictionSlip: number; sideFrictionStiffness: number; rollingResistanceForce: number; tractionCoefficient?: number } {
   if (!sample) return { ...wheel, rollingResistanceForce: 0 };
   return {
     frictionSlip: wheel.frictionSlip * sample.frictionSlipScale,
     sideFrictionStiffness: wheel.sideFrictionStiffness * sample.sideFrictionScale,
     rollingResistanceForce: sample.rollingResistance * Math.max(0, wheelLoad) * Math.min(Math.abs(speed), 1),
+    ...(sample.tractionCoefficient === undefined ? {} : { tractionCoefficient: sample.tractionCoefficient }),
   };
 }

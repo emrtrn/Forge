@@ -8,6 +8,8 @@ import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainD
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
 import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey } from "@engine/terrain/terrainTypes";
+import { applyTerrainLayerState, createTerrainLayerAddition } from "@engine/terrain/terrainLayers";
+import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
 import { DEFAULT_TERRAIN_SCULPT_SETTINGS, nextTerrainSculptHeight, terrainSculptBounds, terrainSculptInfluence, type TerrainSculptSettings, type TerrainSculptTool, type TerrainRamp } from "@engine/terrain/terrainSculpt";
@@ -6609,6 +6611,7 @@ export class SceneApp {
         id: layer.id,
         texture: cached?.texture ?? null,
         color: cached?.baseColor ?? presetColor,
+        roughness: cached?.roughness ?? 1,
         tiling,
       };
     });
@@ -10480,6 +10483,59 @@ export class SceneApp {
    * selected landscape. Undoable; the layer's display name and terrain tint then
    * follow the material. Only the layer's `material` changes — weights are kept.
    */
+  async addSelectedLandscapeLayer(): Promise<void> {
+    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    if (!actor) return;
+    const document = this.worldTerrains.get(actor.id);
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    const data = this.landscapeData.get(actor.id);
+    const layers = document?.def.layers ?? data?.layers;
+    if (!layers || layers.length >= 8) return;
+    const id = Array.from({ length: 9 }, (_, i) => `layer-${i + 1}`).find((id) => !layers.some((layer) => layer.id === id))!;
+    const layer = { id, name: `Layer ${layers.length + 1}`, color: "#55493b" };
+    try {
+      if (document) await this.loadWholeWorldTerrain(document, "add a paint layer");
+      if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
+        || this.isSelectionLocked(this.selection) || (document && this.worldTerrains.get(actor.id) !== document)) return;
+      const refresh = (): void => {
+        const index = this.layout?.landscapes?.findIndex((entry) => entry.id === actor.id) ?? -1;
+        if (index < 0) return;
+        this.rebuildLandscapeObject(index);
+        this.select({ kind: "landscape", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      };
+      if (document && session) {
+        const addition = createTerrainLayerAddition(session.world, layer);
+        const apply = (state: typeof addition.before): void => {
+          if (this.worldTerrains.get(actor.id) !== document) return;
+          applyTerrainLayerState(session.world, state);
+          document.globalAttributes = buildTerrainGlobalAttributes(worldTerrainRenderSource(document.def, document.tiles));
+          session.markTiles(document.tiles.keys());
+          session.markDefinitionDirty();
+          this.landscapeSculptSettings.activeLayerId = state.layers.some((entry) => entry.id === id) ? id : state.layers[0]!.id;
+          refresh();
+        };
+        this.executeCommand({ label: "Add Landscape Paint Layer", redo: () => apply(addition.after), undo: () => apply(addition.before) });
+      } else if (data) {
+        const before = cloneLandscapeLayers(data.layers);
+        const after = [...cloneLandscapeLayers(data.layers), { id, name: layer.name, weights: new Array(data.heights.length).fill(0) }];
+        const apply = (layers: LandscapeLayerWeights[]): void => {
+          data.layers = cloneLandscapeLayers(layers);
+          this.landscapeSculptSettings.activeLayerId = layers.some((entry) => entry.id === id) ? id : layers[0]!.id;
+          this.markLandscapeDirty(actor.id);
+          refresh();
+        };
+        this.executeCommand({ label: "Add Landscape Paint Layer", redo: () => apply(after), undo: () => apply(before) });
+      }
+    } catch (error) {
+      this.onStatus?.(`Add layer failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      if (document) this.worldTerrainStreams.get(document)?.release();
+    }
+  }
+
   setSelectedLandscapeLayerMaterial(layerId: string, materialId: string | null): void {
     if (this.selection?.kind !== "landscape") return;
     const index = this.selection.index;

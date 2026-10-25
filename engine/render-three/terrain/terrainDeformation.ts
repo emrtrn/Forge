@@ -318,6 +318,7 @@ varying float vForgeDeformBerm;
 // x: depth (m), y: disturbance (0..1), z/w: depth gradient along world X/Z.
 vec4 forgeDeform = vec4(0.0);
 float forgeDeformWetness = 0.0;
+float forgePuddle = 0.0;
 
 void forgeSampleDeformation() {
   if (uDeformActive < 0.5) return;
@@ -360,12 +361,32 @@ export const TERRAIN_DEFORMATION_COLOR = /* glsl */ `
     forgeColor = mix(forgeColor, forgeTint.rgb, clamp(forgeTint.a * forgeDeform.y, 0.0, 1.0));
     forgeColor *= 1.0 - 0.3 * clamp(forgeDeform.x / max(0.0001, uDeformDepthRange), 0.0, 1.0);
     forgeDeformWetness = clamp(forgeWet / forgeWeightSum * forgeDeform.y, 0.0, 1.0);
+    // A water film collects only on deep wet tracks over gentle base terrain.
+    // Snow/neutral layers and the dry raised berm never acquire a water sheen.
+    forgePuddle = smoothstep(0.02, 0.08, forgeDeform.x)
+      * smoothstep(0.4, 0.8, forgeDeformWetness)
+      * smoothstep(0.92, 0.99, forgeTerrainLocalNormal().y);
+    forgeColor = mix(forgeColor, vec3(0.018, 0.025, 0.027), forgePuddle * 0.75);
   }
 `;
 
 export const TERRAIN_DEFORMATION_ROUGHNESS = /* glsl */ `
 #include <roughnessmap_fragment>
 roughnessFactor *= 1.0 - 0.7 * forgeDeformWetness;
+roughnessFactor *= forgeLayerRoughness;
+roughnessFactor = mix(roughnessFactor, 0.035, forgePuddle);
+`;
+
+/** Environment-lit water; an analytic sky is the fallback without an env map. */
+export const TERRAIN_DEFORMATION_WATER = /* glsl */ `
+#ifndef USE_ENVMAP
+if (forgePuddle > 0.0) {
+  vec3 forgeReflection = inverseTransformDirection(reflect(-normalize(vViewPosition), normal), viewMatrix);
+  vec3 forgeSky = mix(vec3(0.55, 0.62, 0.68), vec3(0.18, 0.35, 0.58), smoothstep(0.0, 0.8, forgeReflection.y));
+  float forgeFresnel = 0.02 + 0.98 * pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 5.0);
+  outgoingLight = mix(outgoingLight, forgeSky, forgePuddle * (0.04 + 0.9 * forgeFresnel));
+}
+#endif
 `;
 
 /**
@@ -386,6 +407,7 @@ export const TERRAIN_DEFORMATION_NORMAL = /* glsl */ `
       forgeBermGrad = vec2(forgeBx * forgeWy.y - forgeWx.y * forgeBy, forgeWx.x * forgeBy - forgeBx * forgeWy.x) / forgeDet;
     }
     normal = normalize(normal + mat3(viewMatrix) * vec3(forgeDeform.z - forgeBermGrad.x, 0.0, forgeDeform.w - forgeBermGrad.y));
+    normal = normalize(mix(normal, mat3(viewMatrix) * vec3(0.0, 1.0, 0.0), forgePuddle));
     nonPerturbedNormal = normal;
   }
 `;

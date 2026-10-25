@@ -1904,6 +1904,32 @@
       "license": "Project-local placeholder; replace before distribution if needed"
     },
     {
+      "id": "starter-fx-snow-dust",
+      "name": "Snow Dust",
+      "assetType": "effect",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Snow_Dust.effect.json",
+      "tags": ["starter", "effect", "snow", "wheel"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "starter-effects", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1063 },
+      "source": { "origin": "forge", "pack": "Forge Starter Content", "packVersion": "0.1" },
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "starter-fx-mud-splash",
+      "name": "Mud Splash",
+      "assetType": "effect",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Mud_Splash.effect.json",
+      "tags": ["starter", "effect", "mud", "wheel"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "starter-effects", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1063 },
+      "source": { "origin": "forge", "pack": "Forge Starter Content", "packVersion": "0.1" },
+      "license": "CC0-1.0"
+    },
+    {
       "id": "starter-fx-dust-hit",
       "name": "Dust Hit Effect",
       "assetType": "effect",
@@ -21141,6 +21167,33 @@
         "origin": "ThreeAges",
         "path": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.webp"
       }
+    },
+    {
+      "id": "lt-wet-mud-bc",
+      "name": "LT Wet Mud Base Color",
+      "assetType": "texture",
+      "category": "LandscapeTest/Textures",
+      "path": "assets/LandscapeTest/Textures/LT_Wet_Mud_BC.webp",
+      "thumbnail": "assets/LandscapeTest/Textures/LT_Wet_Mud_BC.webp",
+      "tags": ["terrain", "mud", "wet"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 457812 },
+      "source": { "origin": "OpenAI image_gen", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "license": "AI-generated project asset"
+    },
+    {
+      "id": "lt-wet-mud",
+      "name": "LT Wet Mud",
+      "assetType": "material",
+      "category": "LandscapeTest/Materials",
+      "path": "assets/LandscapeTest/Materials/lt-wet-mud.material.json",
+      "tags": ["terrain", "mud", "wet"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "landscape-test", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 695 },
+      "source": { "origin": "forge", "pack": "Forge LandscapeTest", "packVersion": "0.1" },
+      "license": "CC0-1.0"
     },
     {
       "id": "lt-earth-bc",

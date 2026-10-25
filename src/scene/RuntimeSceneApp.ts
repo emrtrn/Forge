@@ -5752,6 +5752,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           id: layer.id,
           texture: resolved?.texture ?? null,
           color: resolved?.baseColor ?? presetColor,
+          roughness: resolved?.roughness ?? 1,
           tiling,
         } satisfies LandscapeLayerTexture;
       }),

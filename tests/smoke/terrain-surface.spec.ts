@@ -8,11 +8,12 @@ import { expect, test, type Page } from "./test";
  *
  * Opens the committed `OffroadTest` level (the car starts on the dirt road) by
  * rewriting the project's `defaultScene` in flight. Each run rewrites the
- * terrain definition in flight too: once with no physical materials, once with
- * mud on the grass and dirt layers. The `?debug` `vehicle surface:` line shows
+ * terrain definition in flight too: neutral, mud and snow on the road layers.
+ * The `?debug` `vehicle surface:` line shows
  * what every wheel stands on; headless frame rates make wall-clock speed
  * comparisons meaningless, so the dynamics stay with the Rapier engine tests
- * and this only checks that the car still drives. Faz 3: the `vehicle sink:`
+ * and neutral ground must still drive. Soft ground may bog down: powered slip,
+ * live wheel particles and tracks must remain present at standstill. Faz 3: the `vehicle sink:`
  * line right after it shows each wheel's virtual sink into its own ruts, and
  * `terrain detail:` the CDLOD nodes refined inside the track window (a custom
  * quality profile keeps the detail levels on; headless calibration picks low).
@@ -20,7 +21,7 @@ import { expect, test, type Page } from "./test";
 const LEVEL = "assets/starter-content/Levels/OffroadTest.level.json";
 const TERRAIN = "assets/starter-content/Levels/OffroadTest.landscapes/offroad.terrain.json";
 
-test.setTimeout(180_000);
+test.setTimeout(240_000);
 
 async function readKmh(page: Page): Promise<number> {
   const text = (await page.locator("#debug-stats").textContent()) ?? "";
@@ -93,8 +94,21 @@ async function driveOffroad(page: Page, roadMaterial: string | null): Promise<{
   const surfaces = ((await stats.textContent()) ?? "").match(/vehicle surface: .*/)?.[0] ?? "";
   await page.locator("#game-canvas").click();
   await page.keyboard.down("KeyW");
-  await expect.poll(async () => readKmh(page), { timeout: 30_000 }).toBeGreaterThan(5);
+  if (roadMaterial === null) {
+    await expect.poll(async () => readKmh(page), { timeout: 30_000 }).toBeGreaterThan(5);
+  }
   const kmh = await readKmh(page);
+  if (roadMaterial === "mud" || roadMaterial === "snow") {
+    // The actual preset, manifest, loader and GPU renderer must all connect.
+    const effect = roadMaterial === "mud" ? "starter-fx-mud-splash" : "starter-fx-snow-dust";
+    await expect(stats).toContainText(new RegExp(`${effect} [1-9]\\d*`), { timeout: 20_000 });
+    const sinkLine = ((await stats.textContent()) ?? "").match(/vehicle sink: actor:0 \| (.*)/)?.[1] ?? "";
+    const slips = [...sinkLine.matchAll(/slip (\d+\.\d+)/g)].map((match) => Number(match[1]));
+    expect(Math.max(...slips)).toBeGreaterThan(0.15);
+    await page.screenshot({ path: `test-results/terrain-${roadMaterial}-splash.png`, scale: "css" });
+  } else if (roadMaterial === null) {
+    await expect(stats).not.toContainText("starter-fx-mud-splash");
+  }
   // Read while still rolling over the road the car has been rutting since it spawned.
   const sinks = parseSinks((await stats.textContent()) ?? "");
   await page.keyboard.up("KeyW");
@@ -123,13 +137,12 @@ test("terrain surface smoke: OffroadTest paint layers reach the car's wheels on 
   expect(neutral.sinks).toEqual([0, 0, 0, 0]);
   const mud = await run("mud");
   expect(mud.errors).toEqual([]);
-  expect(mud.surfaces).toBe("vehicle surface: actor:0 | " + Array(4).fill("mud fs:0.55 rr:0.35").join(" | "));
-  expect(mud.kmh).toBeGreaterThan(5);
+  expect(mud.surfaces).toBe("vehicle surface: actor:0 | " + Array(4).fill("mud fs:0.55 rr:0.12").join(" | "));
   // Faz 3: every wheel reports a sink, and the car sits in its mud ruts.
   expect(mud.sinks).toHaveLength(4);
   expect(Math.max(...mud.sinks)).toBeGreaterThan(0.01);
   // The mud run's wheels pressed tracks; the terrain shader compiled with the track block (no console errors above).
-  expect(mud.tracks).toBeGreaterThan(100);
+  expect(mud.tracks).toBeGreaterThan(0);
   // With no physical material anywhere the module never builds a field.
   expect(neutral.tracks).toBe(-1);
   // Faz 3: the mud run's track window refines the CDLOD mesh around the car (the displaced
@@ -137,4 +150,9 @@ test("terrain surface smoke: OffroadTest paint layers reach the car's wheels on 
   expect(mud.detail?.levels).toBe(2);
   expect(mud.detail?.nodes).toBeGreaterThan(0);
   expect(neutral.detail).toBeNull();
+  const snow = await run("snow");
+  expect(snow.errors).toEqual([]);
+  expect(snow.surfaces).toBe("vehicle surface: actor:0 | " + Array(4).fill("snow fs:0.60 rr:0.06").join(" | "));
+  expect(Math.max(...snow.sinks)).toBeGreaterThan(0.01);
+  expect(snow.tracks).toBeGreaterThan(0);
 });

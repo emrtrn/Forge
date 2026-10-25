@@ -31,6 +31,7 @@ import {
   computeWheelSurfaceResponse, type VehicleGroundSinkProvider, type VehicleSurfaceProvider,
 } from "./surface/surfaceResponse";
 import { bellyDragImpulse, rutLateralImpulse, slewSinkDepth, tractionSlip, wheelSinkLimit } from "./surface/wheelSink";
+import { advanceWheelSpin, limitWheelEngineForce, longitudinalSlip } from "./surface/wheelTraction";
 import { computeVehicleAerodynamics, initialVehicleDrivetrainState } from "./vehicle/vehicleDrivetrain";
 import {
   NEUTRAL_VEHICLE_INPUT,
@@ -149,6 +150,8 @@ interface VehicleRecord {
   sinkLimits: number[];
   /** Per-wheel `tractionSlip` read back after the latest slice. */
   tractionSlip: number[];
+  wheelSpinSpeed: number[];
+  wheelSpinRotation: number[];
 }
 
 interface RapierBodyRecord {
@@ -292,6 +295,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       sink: [],
       sinkLimits: [],
       tractionSlip: [],
+      wheelSpinSpeed: [],
+      wheelSpinRotation: [],
     };
     if (!this.attachVehicleController(record)) return false;
     this.vehicles.set(entityId, record);
@@ -324,6 +329,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     record.steer = 0;
     record.drivetrain = initialVehicleDrivetrainState(record.definition);
     record.engineLoad = 0;
+    record.tractionSlip.fill(0);
+    record.wheelSpinSpeed.fill(0);
+    record.wheelSpinRotation.fill(0);
   }
 
   /** The resolved definition a vehicle was built from, or null when not a vehicle. */
@@ -438,7 +446,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           sinkDepth: record.sink[index] ?? 0,
           tractionSlip: record.tractionSlip[index] ?? 0,
           steering: controller.wheelSteering(index) ?? 0,
-          rotation: controller.wheelRotation(index) ?? 0,
+          rotation: (controller.wheelRotation(index) ?? 0) + (record.wheelSpinRotation[index] ?? 0),
           inContact,
           groundEntityId: inContact ? this.vehicleWheelGroundEntity(controller, index) : null,
           contactPoint: contact ? [contact.x, contact.y, contact.z] : null,
@@ -1339,6 +1347,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     record.sink = definition.wheels.map(() => 0);
     record.sinkLimits = definition.wheels.map((wheel) => wheelSinkLimit(wheel, bottom));
     record.tractionSlip = definition.wheels.map(() => 0);
+    record.wheelSpinSpeed = definition.wheels.map(() => 0);
+    record.wheelSpinRotation = definition.wheels.map(() => 0);
     record.controller = controller;
     return true;
   }
@@ -1389,7 +1399,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       record.engineLoad = drive.engineLoad;
       drive.wheels.forEach((command, index) => {
         const surface = surfaces[index]!;
-        controller.setWheelEngineForce(index, command.engineForce);
+        const reducedGrip = surface.tractionCoefficient !== undefined || surface.frictionSlip < record.definition.wheels[index]!.frictionSlip;
+        controller.setWheelEngineForce(index, reducedGrip
+          ? limitWheelEngineForce(command.engineForce, controller.wheelSuspensionForce(index) ?? 0, surface.frictionSlip, deltaSeconds, surface.tractionCoefficient)
+          : command.engineForce);
         // The controller takes the brake as a per-slice impulse cap.
         controller.setWheelBrake(index, (command.brakeForce + surface.rollingResistanceForce) * deltaSeconds);
         controller.setWheelSteering(index, command.steering);
@@ -1410,13 +1423,21 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       );
       // Rapier's ray-cast wheels never spin faster than the ground, so wheelspin
       // is read from the friction circle this slice's impulses were judged by.
-      record.definition.wheels.forEach((_wheel, index) => {
+      record.definition.wheels.forEach((wheel, index) => {
+        const command = drive.wheels[index]!;
         record.tractionSlip[index] = controller.wheelIsInContact(index)
-          ? tractionSlip(
-            controller.wheelEngineForce(index) ?? 0, controller.wheelSideImpulse(index) ?? 0,
+          ? Math.max(longitudinalSlip(command.engineForce, controller.wheelSuspensionForce(index) ?? 0, surfaces[index]!.tractionCoefficient), tractionSlip(
+            command.engineForce, controller.wheelSideImpulse(index) ?? 0,
             controller.wheelSuspensionForce(index) ?? 0, controller.wheelFrictionSlip(index) ?? 0, deltaSeconds,
-          )
+          ))
           : 0;
+        const reducedGrip = surfaces[index]!.tractionCoefficient !== undefined || surfaces[index]!.frictionSlip < wheel.frictionSlip;
+        record.wheelSpinSpeed[index] = advanceWheelSpin(
+          record.wheelSpinSpeed[index] ?? 0, command.engineForce,
+          reducedGrip ? record.tractionSlip[index]! : 0, command.brakeForce > 0, deltaSeconds,
+        );
+        record.wheelSpinRotation[index] = (record.wheelSpinRotation[index] ?? 0)
+          + record.wheelSpinSpeed[index]! / wheel.radius * deltaSeconds;
       });
     }
   }
@@ -1533,6 +1554,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         sink: [],
         sinkLimits: [],
         tractionSlip: [],
+        wheelSpinSpeed: [],
+        wheelSpinRotation: [],
       };
       if (this.attachVehicleController(record)) this.vehicles.set(body.id, record);
     }

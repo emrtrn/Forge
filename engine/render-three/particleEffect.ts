@@ -115,6 +115,7 @@ export class ParticleEffect {
   private readonly capacity: number;
   private readonly lifetime: number;
   private readonly rate: number;
+  private readonly gravity: number;
   // Authored opacity ramp + fade windows. Not override-affected, so they are read
   // once from the definition; the defaults reproduce the old linear 1 → 0 ramp.
   private readonly startOpacity: number;
@@ -164,6 +165,7 @@ export class ParticleEffect {
     this.definition = definition;
     this.lifetime = definition.lifetime;
     this.rate = definition.rate;
+    this.gravity = (definition.gravityScale ?? 0) * 9.81;
     this.startOpacity = clamp01(definition.startOpacity ?? 1);
     this.endOpacity = clamp01(definition.endOpacity ?? 0);
     this.fadeInTime = clampMin0(definition.fadeInTime ?? 0);
@@ -328,6 +330,7 @@ export class ParticleEffect {
       this.ages[i] = age;
       const t = age / lifetime;
       const base = i * 3;
+      if (this.gravity !== 0) this.velocities[base + 1] = this.velocities[base + 1]! - this.gravity * dt;
       this.positions[base] = this.positions[base]! + this.velocities[base]! * dt;
       this.positions[base + 1] = this.positions[base + 1]! + this.velocities[base + 1]! * dt;
       this.positions[base + 2] = this.positions[base + 2]! + this.velocities[base + 2]! * dt;

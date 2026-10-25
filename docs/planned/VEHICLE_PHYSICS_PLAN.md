@@ -8,6 +8,15 @@
 > Vehicle asset editörü, Actor Script viewport'unda tekerlek gizmo'su ve
 > yerleştir→kaydet→Play→sür smoke'u.
 > Faz 0'ın gerçek 60/144 Hz ekran kullanıcı smoke'u hâlâ açık.
+> **2026-10-25 ek:** Terrain Deformation Faz 4A kapsamında düşük tutuşlu yüzeylerde
+> Rapier'in düz sürüşte atladığı ileri çekiş sınırı tamamlandı. İstenen tork
+> tutuşu aşınca tahrik tekerlekleri görünür patinaj yapar; aynı `tractionSlip`
+> kazma ve yüzey efektini besler. Nötr yüzeyin eski hız eğrisi korunur.
+> Video sonrası düzeltme: fiziksel ileri tutuş `vehicle.tractionCoefficient`
+> ile Rapier'in yanal ayarından ayrıldı. Stok Gaz52, gerçek kar/çamur presetleriyle
+> 30/60/144 Hz'de patinaj testinden geçiyor; kullanıcı parçacıkları ve patinajı
+> gördüğünü doğruladı. Vites uygunluk hesabı yüzey direncine ek hava direncini içerir.
+> Ayrıntı/kabul sınırı: [TERRAIN_DEFORMATION_PLAN.md](TERRAIN_DEFORMATION_PLAN.md), Faz 4.
 > Hedef: Forge'a Unreal Chaos Vehicles benzeri, veri odaklı
 > (data-driven) tekerlekli araç desteği — runtime + editör.
 >

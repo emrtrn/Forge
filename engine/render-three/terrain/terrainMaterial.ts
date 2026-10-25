@@ -7,7 +7,6 @@ import {
   RGBADepthPacking,
   Vector2,
   Vector3,
-  Vector4,
   type DataArrayTexture,
   type DataTexture,
   type Material,
@@ -27,6 +26,7 @@ import {
   TERRAIN_DEFORMATION_ROUGHNESS,
   TERRAIN_DEFORMATION_VERTEX,
   TERRAIN_DEFORMATION_VERTEX_PARS,
+  TERRAIN_DEFORMATION_WATER,
   type TerrainDeformationTexture,
 } from "./terrainDeformation";
 
@@ -106,6 +106,7 @@ export interface TerrainLayerInput {
   color: string;
   /** Texture repeats per metre. */
   scale: number;
+  roughness?: number;
   /** Physical material id: its soft-surface profile tints this layer's tracks. */
   physicalMaterial?: string | null;
 }
@@ -293,12 +294,11 @@ uniform float uTerrainView;
 uniform vec2 uTerrainHeightRange;
 uniform float uTerrainActiveLayer;
 uniform vec3 uLayerColors[${TERRAIN_RENDER_LAYERS}];
-uniform sampler2D uLayerTex0;
-uniform sampler2D uLayerTex1;
-uniform sampler2D uLayerTex2;
-uniform sampler2D uLayerTex3;
-uniform vec4 uLayerHasTex;
-uniform vec4 uLayerScale;
+${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `uniform sampler2D uLayerTex${i};`).join("\n")}
+uniform float uLayerHasTex[${TERRAIN_RENDER_LAYERS}];
+uniform float uLayerScale[${TERRAIN_RENDER_LAYERS}];
+uniform float uLayerRoughness[${TERRAIN_RENDER_LAYERS}];
+float forgeLayerRoughness = 1.0;
 `;
 
 // The Landscape look: weighted layer colours/textures, or a debug view.
@@ -317,14 +317,14 @@ const FRAGMENT_COLOR = /* glsl */ `
   vec3 forgeColor;
   if (uTerrainView < 0.5) {
     vec2 forgeP = vTerrainLocal;
-    vec3 forgeC0 = uLayerHasTex.x > 0.5 ? texture(uLayerTex0, forgeP * uLayerScale.x).rgb : uLayerColors[0];
-    vec3 forgeC1 = uLayerHasTex.y > 0.5 ? texture(uLayerTex1, forgeP * uLayerScale.y).rgb : uLayerColors[1];
-    vec3 forgeC2 = uLayerHasTex.z > 0.5 ? texture(uLayerTex2, forgeP * uLayerScale.z).rgb : uLayerColors[2];
-    vec3 forgeC3 = uLayerHasTex.w > 0.5 ? texture(uLayerTex3, forgeP * uLayerScale.w).rgb : uLayerColors[3];
+    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec3 forgeC${i} = uLayerHasTex[${i}] > 0.5 ? texture(uLayerTex${i}, forgeP * uLayerScale[${i}]).rgb : uLayerColors[${i}];`).join("\n    ")}
     vec3 forgeSum = forgeC0 * forgeW0.x + forgeC1 * forgeW0.y + forgeC2 * forgeW0.z + forgeC3 * forgeW0.w
-      + uLayerColors[4] * forgeW1.x + uLayerColors[5] * forgeW1.y + uLayerColors[6] * forgeW1.z + uLayerColors[7] * forgeW1.w;
+      + forgeC4 * forgeW1.x + forgeC5 * forgeW1.y + forgeC6 * forgeW1.z + forgeC7 * forgeW1.w;
     float forgeTotal = dot(forgeW0, vec4(1.0)) + dot(forgeW1, vec4(1.0));
     forgeColor = forgeTotal > 0.0001 ? forgeSum / forgeTotal : uLayerColors[0];
+    forgeLayerRoughness = forgeTotal > 0.0001 ? (
+      dot(vec4(uLayerRoughness[0], uLayerRoughness[1], uLayerRoughness[2], uLayerRoughness[3]), forgeW0)
+      + dot(vec4(uLayerRoughness[4], uLayerRoughness[5], uLayerRoughness[6], uLayerRoughness[7]), forgeW1)) / forgeTotal : 1.0;
   } else if (uTerrainView < 1.5) {
     float forgeT = (vTerrainTile.w - uTerrainHeightRange.x) / max(0.0001, uTerrainHeightRange.y - uTerrainHeightRange.x);
     forgeColor = vec3(0.16 + forgeT * 0.62, 0.28 + forgeT * 0.5, 0.2 + forgeT * 0.68);
@@ -380,16 +380,17 @@ function patch(
 }
 
 function layerUniforms(uniforms: TerrainUniforms, layers: TerrainLayerInput[]): void {
-  const hasTex = new Vector4();
-  const scale = new Vector4(1, 1, 1, 1);
-  for (let index = 0; index < 4; index += 1) {
+  const hasTex: number[] = [];
+  const scale: number[] = [];
+  for (let index = 0; index < TERRAIN_RENDER_LAYERS; index += 1) {
     const layer = layers[index];
     uniforms[`uLayerTex${index}`] = { value: layer?.texture ?? null };
-    hasTex.setComponent(index, layer?.texture ? 1 : 0);
-    scale.setComponent(index, layer?.scale ?? 1);
+    hasTex.push(layer?.texture ? 1 : 0);
+    scale.push(layer?.scale ?? 1);
   }
   uniforms.uLayerHasTex = { value: hasTex };
   uniforms.uLayerScale = { value: scale };
+  uniforms.uLayerRoughness = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.roughness ?? 1) };
   const fallback = layers[0]?.color ?? "#808080";
   uniforms.uLayerColors = {
     value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, index) => new Color(layers[index]?.color ?? fallback)),
@@ -438,6 +439,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <color_fragment>", `forgeSampleDeformation();\n${FRAGMENT_COLOR}`)
       .replace("#include <roughnessmap_fragment>", TERRAIN_DEFORMATION_ROUGHNESS)
+      .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)
       .replace("  nonPerturbedNormal = normal;\n}", `  nonPerturbedNormal = normal;\n${TERRAIN_DEFORMATION_NORMAL}}`);
   }, true);
   material.onBeforeRender = (renderer) => deformation.flush(renderer);

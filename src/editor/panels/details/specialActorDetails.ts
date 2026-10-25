@@ -130,6 +130,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   ) => LandscapeSculptSettings;
   fillSelectedLandscapeLayer: (layerId?: string) => void;
   getSelectedLandscapeLayers: () => LandscapeLayerView[];
+  addSelectedLandscapeLayer: () => Promise<void>;
   getSelectedLandscapeSplines: () => LandscapeSplineView[];
   createSelectedLandscapeSpline: () => void;
   deleteSelectedLandscapeSpline: (splineId?: string | null) => void;
@@ -419,6 +420,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
                 )
                 .join("")}
             </div>
+            <button type="button" class="detail-action-button" data-landscape-add-layer ${layers.length >= 8 ? "disabled" : lockedAttr}>Add Layer (${layers.length}/8)</button>
             <label class="detail-row">
               <span>Material</span>
               <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
@@ -856,6 +858,11 @@ function bindLayerPhysicalMaterial(options: SpecialActorDetailsOptions): void {
  */
 function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
   const { body } = options;
+  body.querySelector<HTMLButtonElement>("[data-landscape-add-layer]")?.addEventListener("click", async (event) => {
+    (event.currentTarget as HTMLButtonElement).disabled = true;
+    await options.addSelectedLandscapeLayer();
+    options.refreshDetails();
+  });
   const update = (patch: Partial<LandscapeSculptSettings>): void => {
     options.setLandscapeSculptSettings(patch);
     options.refreshDetails();
@@ -1017,6 +1024,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
           <span>${escapeHtml(layerDisplayName(layer))}</span>
         </button>`).join("")}
       </div>
+      <button type="button" class="detail-action-button" data-landscape-add-layer ${layers.length >= 8 ? "disabled" : lockedAttr}>Add Layer (${layers.length}/8)</button>
       <label class="detail-row">
         <span>Material</span>
         <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>

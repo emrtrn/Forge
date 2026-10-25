@@ -171,6 +171,8 @@ export class TerrainSurfaceSampler {
     let sideFrictionScale = 0;
     let rollingResistance = 0;
     let deformability = 0;
+    let tractionCoefficient = 0;
+    let hasTractionCoefficient = false;
     this.weights.forEach((weight, index) => {
       if (!Number.isFinite(weight) || weight <= 0) return;
       // A tile layer beyond the definition's layer list is neutral.
@@ -180,8 +182,11 @@ export class TerrainSurfaceSampler {
       sideFrictionScale += sample.sideFrictionScale * share;
       rollingResistance += sample.rollingResistance * share;
       deformability += sample.deformability * share;
+      tractionCoefficient += (sample.tractionCoefficient ?? 1) * share;
+      hasTractionCoefficient ||= sample.tractionCoefficient !== undefined;
     });
-    return { frictionSlipScale, sideFrictionScale, rollingResistance, deformability };
+    return { frictionSlipScale, sideFrictionScale, rollingResistance, deformability,
+      ...(hasTractionCoefficient ? { tractionCoefficient } : {}) };
   }
 
   /** Heaviest layer's physical material (for wheel effects/sounds); `null` off-terrain or neutral. */

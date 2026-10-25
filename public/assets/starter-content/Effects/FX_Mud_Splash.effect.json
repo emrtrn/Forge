@@ -1,0 +1,38 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "Mud Splash",
+  "category": "Surface",
+  "tags": ["mud", "wheel", "splash"],
+  "system": {
+    "enabled": true,
+    "loop": true,
+    "duration": 1,
+    "seed": null,
+    "maxParticles": 96,
+    "bounds": { "mode": "fixed", "min": [-2, -1, -2], "max": [2, 2, 2], "showInPreview": true }
+  },
+  "spawn": { "mode": "rate", "rate": 144, "count": 0, "delay": 0, "interval": 0, "shape": "point", "radius": 0, "boxSize": [0, 0, 0] },
+  "initialize": {
+    "lifetime": [0.3, 0.45],
+    "startSize": [0.11, 0.18],
+    "startColor": "#59412b",
+    "startOpacity": 0.95,
+    "direction": [0, 0.6, -0.8],
+    "speed": [2.5, 4],
+    "spreadAngleDeg": 9,
+    "rotation": [0, 0],
+    "angularVelocity": [0, 0]
+  },
+  "update": {
+    "gravityScale": 1,
+    "drag": 0,
+    "acceleration": [0, 0, 0],
+    "endSize": [0.06, 0.09],
+    "endColor": "#59412b",
+    "endOpacity": 0,
+    "fadeInTime": 0,
+    "fadeOutTime": 0.12
+  },
+  "renderer": { "type": "sprite", "blendMode": "alpha", "softness": 0.25, "sortMode": "none" }
+}

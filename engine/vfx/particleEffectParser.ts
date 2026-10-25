@@ -428,6 +428,8 @@ export function toRuntimeParticleEffect(def: ParticleEffectDefinition): RuntimeP
     // fields below carry the complete renderer contract for the instanced path.
     materialMode: def.renderer.type === "sprite" ? def.renderer.blendMode : "alpha",
     color: def.initialize.startColor,
+    ...(def.renderer.type === "sprite" && def.update.gravityScale !== 0
+      ? { gravityScale: def.update.gravityScale } : {}),
     // The sprite renderer consumes the authored opacity ramp directly; the mesh
     // path ignores it (opaque instanced meshes have no per-particle alpha yet).
     startOpacity: def.initialize.startOpacity,

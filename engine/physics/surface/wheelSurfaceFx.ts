@@ -6,6 +6,8 @@ export interface WheelSurfaceFxInput {
   /** Signed ground speed along the wheel's rolling direction. */
   groundSpeed: number;
   chassisSpeed: number;
+  /** Physics traction demand (0..1). When present, replaces the rotation estimate. */
+  tractionSlip?: number | undefined;
 }
 
 export interface WheelSurfaceFxLevels {
@@ -18,8 +20,9 @@ export interface WheelSurfaceFxLevels {
 
 /**
  * Slip = clamp(|wheel - ground| / max(|wheel|, |ground|, 1), 0, 1).
- * Motion = clamp(max(|chassis|, |wheel|) / 15, 0, 1), so a stationary
- * burnout still sprays, but stopped wheels on a stopped chassis stay silent.
+ * Physics slip overrides the rotation estimate: Rapier ties rotation to ground
+ * speed, even while a driven tyre is digging. Slip provides up to 0.6 motion
+ * at standstill; an unpowered parked tyre remains silent.
  * Emission = motion * (0.2 + 0.8 * slip); volume = motion * (0.3 + 0.7 * slip).
  * Pitch = 0.75 + 0.75 * motion + 0.5 * slip. Airborne/invalid input is silent.
  */
@@ -31,12 +34,18 @@ export function wheelSurfaceFxLevels(
   out.soundVolume = 0;
   out.soundPitch = 0;
   if (!input.inContact || !Number.isFinite(input.wheelSpeed) ||
-      !Number.isFinite(input.groundSpeed) || !Number.isFinite(input.chassisSpeed)) return out;
+      !Number.isFinite(input.groundSpeed) || !Number.isFinite(input.chassisSpeed) ||
+      (input.tractionSlip !== undefined && !Number.isFinite(input.tractionSlip))) return out;
   const wheelSpeed = Math.abs(input.wheelSpeed);
   const groundSpeed = Math.abs(input.groundSpeed);
-  const motion = Math.min(1, Math.max(Math.abs(input.chassisSpeed), wheelSpeed) / 15);
+  const slip = input.tractionSlip === undefined
+    ? Math.min(1, Math.abs(input.wheelSpeed - input.groundSpeed) / Math.max(wheelSpeed, groundSpeed, 1))
+    : Math.max(0, Math.min(1, input.tractionSlip));
+  // With authoritative physics slip, a reset's rotation discontinuity must
+  // not look like one frame of extreme wheelspin.
+  const speed = input.tractionSlip === undefined ? Math.max(Math.abs(input.chassisSpeed), wheelSpeed) : Math.abs(input.chassisSpeed);
+  const motion = Math.max(Math.min(1, speed / 15), slip * 0.6);
   if (motion === 0) return out;
-  const slip = Math.min(1, Math.abs(input.wheelSpeed - input.groundSpeed) / Math.max(wheelSpeed, groundSpeed, 1));
   out.emissionRate = motion * (0.2 + 0.8 * slip);
   out.soundVolume = motion * (0.3 + 0.7 * slip);
   out.soundPitch = 0.75 + 0.75 * motion + 0.5 * slip;

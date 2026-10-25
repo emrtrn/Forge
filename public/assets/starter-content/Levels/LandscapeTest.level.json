@@ -49,7 +49,6 @@
     },
     "staticObjectsCastShadow": true,
     "killZ": -160,
-    "viewDistance": 900,
     "gameMode": "forge.vehicle"
   },
   "worldCells": [
@@ -110,7 +109,7 @@
   },
   "heightFog": {
     "mode": "exp",
-    "density": 0.002198
+    "density": 0.000659
   },
   "cloudLayer": {
     "density": 0.5,
@@ -136,14 +135,14 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        9.69,
-        3.6,
-        -28.92
+        10.27,
+        5,
+        -30.69
       ],
       "name": "Sun",
       "rotation": [
-        -5,
-        20,
+        -10,
+        50,
         0
       ],
       "color": "#ffffff",

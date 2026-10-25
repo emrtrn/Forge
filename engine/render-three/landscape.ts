@@ -261,6 +261,16 @@ export function updateWorldTerrainAppearance(
   landscapeTerrain(object)?.setAppearance(viewMode, terrainActiveLayer(layers, activeLayerId), terrainLayerColors(layers, colors));
 }
 
+/**
+ * Texture units the costliest lit terrain among `objects` takes for itself
+ * (0 without terrain): what the sun's shadow cascades are budgeted against.
+ */
+export function landscapeLitFragmentSamplers(objects: Iterable<LandscapeObject>): number {
+  let most = 0;
+  for (const object of objects) most = Math.max(most, landscapeTerrain(object)?.litFragmentSamplers ?? 0);
+  return most;
+}
+
 /** The GPU terrain drawing a landscape group. */
 function landscapeTerrain(object: LandscapeObject): TerrainRenderer | null {
   for (const child of object.children) {

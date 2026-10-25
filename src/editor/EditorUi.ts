@@ -1,5 +1,6 @@
 // Editor-only styles. Importing here (rather than statically in index.html)
 // keeps them in the dev-only editor chunk, out of the production game build.
+import type { QualityLevel } from "@engine/perf/qualityProfiles";
 import "./editorUi.css";
 import {
   assetPath,
@@ -280,6 +281,15 @@ const CAMERA_VIEW_LABELS: Record<CameraView, string> = {
 };
 
 /** Menu-button labels for each viewport View Mode. */
+/** Quality menu entries: "auto" lets Play calibrate; the rest are the shared profiles. */
+const QUALITY_CHOICES: ReadonlyArray<readonly [QualityLevel | "auto", string]> = [
+  ["auto", "Auto"],
+  ["ultra", "Ultra"],
+  ["high", "High"],
+  ["medium", "Medium"],
+  ["low", "Low"],
+];
+
 const VIEW_MODE_LABELS: Record<ViewMode, string> = {
   lit: "Lit",
   wireframe: "Wireframe",
@@ -548,6 +558,14 @@ export class EditorUi {
             <div class="topbar-popover" data-viewmode-popover>
               <button type="button" data-view-mode="lit">Lit</button>
               <button type="button" data-view-mode="wireframe">Wireframe</button>
+            </div>
+          </div>
+          <div class="quality-menu topbar-menu">
+            <button type="button" class="topbar-menu-button" data-quality-button data-testid="quality-button" aria-label="Graphics quality">
+              Quality: <span data-quality-label>Auto</span>${MENU_CHEVRON}
+            </button>
+            <div class="topbar-popover" data-quality-popover>
+              ${QUALITY_CHOICES.map(([choice, label]) => `<button type="button" data-quality-choice="${choice}">${label}</button>`).join("")}
             </div>
           </div>
           <div class="show-menu topbar-menu">
@@ -853,6 +871,29 @@ export class EditorUi {
     this.updateViewState(this.app.getViewState());
   }
 
+  /**
+   * The Quality menu (Unreal's Scalability): one choice for the viewport and
+   * Play. "Auto" leaves Play's own calibration in charge.
+   */
+  private bindQualityMenu(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-quality-choice]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.app.setGraphicsQualityChoice(button.dataset.qualityChoice as QualityLevel | "auto");
+        this.updateQualityMenu();
+      });
+    });
+    this.updateQualityMenu();
+  }
+
+  private updateQualityMenu(): void {
+    const choice = this.app.getGraphicsQualityChoice();
+    const label = this.root.querySelector("[data-quality-label]");
+    if (label) label.textContent = QUALITY_CHOICES.find(([value]) => value === choice)?.[1] ?? "Custom";
+    this.root.querySelectorAll<HTMLButtonElement>("[data-quality-choice]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.qualityChoice === choice);
+    });
+  }
+
   private updateViewState(state: ViewportViewState): void {
     const cameraLabel = this.root.querySelector("[data-camera-label]");
     if (cameraLabel) cameraLabel.textContent = CAMERA_VIEW_LABELS[state.view];
@@ -1083,7 +1124,7 @@ export class EditorUi {
     // ever pins the menu open).
     this.root
       .querySelectorAll<HTMLButtonElement>(
-        "[data-add-actor-button], .add-actor-category-label, [data-show-button], [data-camera-button], [data-viewmode-button], [data-datatables-button]",
+        "[data-add-actor-button], .add-actor-category-label, [data-show-button], [data-camera-button], [data-viewmode-button], [data-quality-button], [data-datatables-button]",
       )
       .forEach((button) => {
         button.addEventListener("mousedown", (event) => event.preventDefault());
@@ -1127,6 +1168,7 @@ export class EditorUi {
     });
 
     this.bindViewMenus();
+    this.bindQualityMenu();
     this.bindMenuHoverIntent();
 
     this.bindAddActorMenu();

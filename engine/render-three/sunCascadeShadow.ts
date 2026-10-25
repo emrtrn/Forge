@@ -12,7 +12,6 @@ import {
 } from "three";
 
 import { computeSunCascades, sunCascadeBudget, sunCascadeNeedsUpdate, sunShadowFadeRange, SUN_CASCADE_MAX } from "@engine/world/sunCascades";
-import { TERRAIN_LIT_FRAGMENT_SAMPLERS } from "./terrain/terrainMaterial";
 import { shadowDepthBias } from "./depthMode";
 
 /**
@@ -133,14 +132,15 @@ const LIT_ENVIRONMENT_SAMPLERS = 2;
 
 /**
  * The cascade count to use: the profile's request, capped by the texture units
- * the GPU leaves once the costliest lit material has its own. With terrain in
- * the level that is the lit terrain (its samplers + environment map + BRDF
- * table = 15), so a 16-unit GPU (ANGLE on D3D11) has room for one shadow map
- * only and gets no cascades; past the limit the terrain program fails to link
- * and the ground disappears.
+ * the GPU leaves once the costliest lit material has its own (`materialSamplers`,
+ * e.g. the lit terrain's: 5 + one per paint layer; 0 when nothing heavy is in
+ * the level) plus the environment map and its BRDF table. On a 16-unit GPU
+ * (ANGLE on D3D11) a 5-layer terrain leaves 4 cascades, 6 layers 3, 8 layers
+ * none; past the limit the terrain program fails to link and the ground
+ * disappears.
  */
-export function affordableSunCascades(requested: number, maxTextureUnits: number, hasTerrain: boolean): number {
-  const reserved = hasTerrain ? TERRAIN_LIT_FRAGMENT_SAMPLERS + LIT_ENVIRONMENT_SAMPLERS : 0;
+export function affordableSunCascades(requested: number, maxTextureUnits: number, materialSamplers: number): number {
+  const reserved = materialSamplers > 0 ? materialSamplers + LIT_ENVIRONMENT_SAMPLERS : 0;
   return Math.min(requested, sunCascadeBudget(maxTextureUnits, reserved));
 }
 

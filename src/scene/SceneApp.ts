@@ -81,11 +81,21 @@ import {
 } from "three";
 import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
 import { sunCascadeDistance } from "@engine/world/sunCascades";
-import { QUALITY_PROFILES } from "@engine/perf/qualityProfiles";
+import {
+  applyQualityToPostProcess,
+  QUALITY_PROFILES,
+  resolveQualitySettings,
+  type QualityLevel,
+  type QualitySettings,
+} from "@engine/perf/qualityProfiles";
+import { createLocalStorageAdapter } from "@engine/persistence/saveGameStore";
+import { UserSettingsStore } from "@engine/persistence/userSettingsStore";
 import type {
   AmbientLight,
   Camera,
   InstancedMesh,
+  Light,
+  LightShadow,
   Material,
   PerspectiveCamera,
   Scene,
@@ -216,6 +226,7 @@ import {
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
 import {
+  landscapeLitFragmentSamplers,
   applyLandscapeTransform,
   createFlatLandscapeData,
   createLandscapeHeightfieldPrimitive,
@@ -445,6 +456,7 @@ import {
   DEFAULT_SCENE_SUN_ID,
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
+  invalidateMaterialsForShadowToggle,
   isSceneSunLight,
   beginSceneRuntimeFrameStats,
   readSceneRuntimeStats,
@@ -1229,6 +1241,10 @@ export class SceneApp {
   private sun: DirectionalLight | null = null;
   /** The sun's Cascaded Shadows preview in the perspective viewport; created on first use. */
   private sunCascades: SunCascadeShadow | null = null;
+  /** The game's graphics preference, shared with Play (same-origin localStorage). */
+  private readonly userSettingsStore = createEditorUserSettingsStore();
+  /** What the viewport renders with: the chosen profile, or Ultra while Play picks it automatically. */
+  private editorQuality: QualitySettings = QUALITY_PROFILES.ultra;
   private ambientLight: AmbientLight | null = null;
   /**
    * The authored environment singletons (sky dome, Sky Light capture, fog,
@@ -1804,6 +1820,8 @@ export class SceneApp {
         height,
       });
     }
+
+    this.applyEditorQuality();
 
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
@@ -2818,9 +2836,9 @@ export class SceneApp {
 
   /** Fits the sun's shadow frustum to the room AABB so shadows stay crisp. */
   /**
-   * Previews a sun's Cascaded Shadows in the perspective viewport, with the
-   * High profile's cascades (3, out to 150 m); Play follows the player's
-   * quality profile. The orthographic views keep the bounds-fitted map.
+   * Previews a sun's Cascaded Shadows in the perspective viewport with the
+   * graphics quality's cascades (count, map size, distance). The orthographic
+   * views keep the bounds-fitted map.
    */
   private updateSunCascades(): void {
     const sun = this.sun;
@@ -2834,8 +2852,8 @@ export class SceneApp {
       this.sunCascades?.deactivate();
       return;
     }
-    const profile = QUALITY_PROFILES.high;
-    const count = affordableSunCascades(profile.shadowCascades, this.renderer.capabilities.maxTextures, this.landscapeObjects.length > 0);
+    const profile = this.editorQuality;
+    const count = affordableSunCascades(profile.shadowCascades, this.renderer.capabilities.maxTextures, landscapeLitFragmentSamplers(this.landscapeObjects));
     if (count < 2) {
       this.sunCascades?.deactivate();
       return;
@@ -2845,14 +2863,69 @@ export class SceneApp {
       sun,
       camera: camera as PerspectiveCamera,
       count,
-      stagger: false,
-      mapSize: sun.shadow.mapSize.width,
+      stagger: profile.shadowCascadeStagger,
+      mapSize: profile.shadowMapSize,
       distance: sunCascadeDistance(profile.shadowDistanceScale),
     });
   }
 
   private fitSunShadowToScene(): void {
-    fitDirectionalShadowToBounds(this.sun, this.getRoomBounds());
+    fitDirectionalShadowToBounds(this.sun, this.getRoomBounds(), this.editorQuality.shadowDistanceScale);
+  }
+
+  /**
+   * The graphics quality choice shared with Play: a profile picked here (or in
+   * the game's settings), or `"auto"` while Play calibrates one itself.
+   */
+  getGraphicsQualityChoice(): QualityLevel | "auto" {
+    const graphics = this.userSettingsStore?.read().graphics;
+    return graphics?.manuallySelected ? graphics.selectedQualityLevel : "auto";
+  }
+
+  /**
+   * Picks the graphics quality for the viewport and for Play (Unreal's
+   * Scalability menu). A profile is stored as the player's manual choice, so
+   * Play's startup calibration does not override it and an open Play tab
+   * switches live; `"auto"` hands the choice back to Play's calibration and
+   * renders the viewport at Ultra.
+   */
+  setGraphicsQualityChoice(choice: QualityLevel | "auto"): void {
+    const store = this.userSettingsStore;
+    if (store) {
+      const graphics = store.read().graphics;
+      store.setGraphics(choice === "auto"
+        ? { ...graphics, manuallySelected: false }
+        : { ...graphics, selectedQualityLevel: choice, manuallySelected: true });
+    }
+    this.applyEditorQuality();
+    this.onStatus?.(`Graphics quality: ${choice === "auto" ? "Auto (Play calibrates)" : choice}.`, "info");
+  }
+
+  /** Renders the viewport with the chosen quality: shadows, cascades and post-process gates. */
+  private applyEditorQuality(): void {
+    const graphics = this.userSettingsStore?.read().graphics;
+    const quality = graphics?.manuallySelected
+      ? resolveQualitySettings(graphics.selectedQualityLevel, graphics.customSettings)
+      : QUALITY_PROFILES.ultra;
+    this.editorQuality = quality;
+    if (this.renderer.shadowMap.enabled !== quality.shadowsEnabled) {
+      this.renderer.shadowMap.enabled = quality.shadowsEnabled;
+      invalidateMaterialsForShadowToggle(this.scene);
+    }
+    for (const record of this.lightObjects) this.applyShadowMapSize(record.light);
+    this.fitSunShadowToScene();
+    this.applyPostProcess();
+  }
+
+  /** The quality's shadow map resolution on a shadow-casting light (the sun's cascades size their own). */
+  private applyShadowMapSize(light: Light): void {
+    const size = this.editorQuality.shadowMapSize;
+    const shadow = (light as Light & { shadow?: LightShadow }).shadow;
+    if (!light.castShadow || !shadow || shadow.mapSize.width === size) return;
+    shadow.mapSize.set(size, size);
+    shadow.map?.dispose();
+    shadow.map = null;
+    shadow.needsUpdate = true;
   }
 
   private getRoomBounds(): Box3 | null {
@@ -4713,6 +4786,7 @@ export class SceneApp {
       defaultColor: DEFAULT_SCENE_LIGHT_COLOR,
       selected: this.isLightSelected(index),
     });
+    this.applyShadowMapSize(record.light);
     // Sun = source of truth for the sky's sun: keep the sky disc in sync as the
     // (directional) Sun light is rotated via gizmo or its rotation fields.
     if (actor.type === "directional") this.updateSkySunFromLight();
@@ -12166,7 +12240,8 @@ export class SceneApp {
   /** Applies the global Post Process renderer properties after Sky tone mapping. */
   private applyPostProcess(): void {
     const actor = this.layout?.postProcess ?? null;
-    const resolved = actor ? resolvePostProcess(actor) : null;
+    // The graphics quality only turns authored effects off, as in Play.
+    const resolved = actor ? applyQualityToPostProcess(resolvePostProcess(actor), this.editorQuality) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
     this.applySkyPostProcessExposure(resolved);
     const { width, height } = this.viewportSize();
@@ -14782,4 +14857,12 @@ function isWireframeCapableMaterial(material: Material): material is WireframeCa
     "wireframe" in material &&
     typeof (material as Partial<WireframeCapableMaterial>).wireframe === "boolean"
   );
+}
+
+function createEditorUserSettingsStore(): UserSettingsStore | null {
+  try {
+    return new UserSettingsStore({ storage: createLocalStorageAdapter(window.localStorage) });
+  } catch {
+    return null;
+  }
 }

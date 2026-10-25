@@ -894,7 +894,10 @@ function bindLayerPhysicalMaterial(options: SpecialActorDetailsOptions): void {
 function layerAddRemoveButtons(count: number, activeLayer: { id: string } | undefined, lockedAttr: string): string {
   return `<button type="button" class="detail-action-button" data-landscape-add-layer ${count >= 8 ? "disabled" : lockedAttr}>Add Layer (${count}/8)</button>
     <button type="button" class="detail-action-button" data-landscape-remove-layer="${escapeHtml(activeLayer?.id ?? "")}" ${count <= 1 || !activeLayer ? "disabled" : lockedAttr}>Remove Layer</button>
-    <div class="detail-hint">Remove Layer deletes the active layer; its paint goes to the remaining layers in proportion.</div>`;
+    <div class="detail-hint">Remove Layer deletes the active layer; its paint goes to the remaining layers in proportion.</div>
+    ${count >= 5 ? `<div class="detail-hint" data-landscape-layer-shadow-hint>${count >= 6
+      ? `${count} layers: on GPUs with 16 texture units (Windows / D3D11) the sun's Cascaded Shadows drop to ${Math.max(0, 9 - count) >= 2 ? `${9 - count} cascades` : "a single shadow map"}. 5 layers keep all 4.`
+      : "A 6th layer costs the sun's Cascaded Shadows one cascade on GPUs with 16 texture units (Windows / D3D11)."}</div>` : ""}`;
 }
 
 /**

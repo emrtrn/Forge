@@ -257,6 +257,7 @@ import {
 } from "@engine/render-three/reflectionPlane";
 import { createLandscapeHeightfieldPrimitive } from "@engine/scene/landscape";
 import {
+  landscapeLitFragmentSamplers,
   createLandscapeObject,
   createWorldTerrainObject,
   disposeLandscapeObject,
@@ -1605,6 +1606,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (options.autoLoadLevel ?? true) void this.loadActiveProjectScene();
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
+    window.addEventListener("storage", this.handleUserSettingsStorage);
   }
 
   /**
@@ -1872,6 +1874,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.gameModules.dispose();
     this.capabilities.dispose();
     window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("storage", this.handleUserSettingsStorage);
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     }
@@ -3084,6 +3087,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * profile to the live renderer (only when the profile itself changed), and
    * refreshes the settings-screen ViewModel fields + status message.
    */
+  /**
+   * Another tab changed the stored graphics preference — the editor's Quality
+   * menu while this Play tab is open. A newly picked profile applies live; a
+   * switch back to Auto keeps the current profile (calibration runs at boot).
+   */
+  private readonly handleUserSettingsStorage = (event: StorageEvent): void => {
+    if (event.key !== null && event.key !== "forge.userSettings") return;
+    const next = this.userSettingsStore?.read().graphics;
+    if (!next) return;
+    const previous = this.userSettings.graphics;
+    if (
+      next.selectedQualityLevel === previous.selectedQualityLevel
+      && next.manuallySelected === previous.manuallySelected
+      && JSON.stringify(next.customSettings) === JSON.stringify(previous.customSettings)
+    ) return;
+    this.userSettings = { ...this.userSettings, graphics: next };
+    if (next.manuallySelected) {
+      this.startupCalibrationElapsed = null;
+      this.applyQualityProfile(resolveQualitySettings(next.selectedQualityLevel, next.customSettings));
+    }
+    this.refreshGraphicsUiFields(`Quality set to ${qualityLevelLabel(next.selectedQualityLevel)}.`);
+  };
+
   private applyAndPersistGraphics(
     graphics: GraphicsPreferences,
     status: string,
@@ -6426,7 +6452,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     const quality = this.qualitySettings;
     const cascades = this.sunCascadedShadows
-      ? affordableSunCascades(quality.shadowCascades, this.renderer.capabilities.maxTextures, this.landscapeObjects.length > 0)
+      ? affordableSunCascades(quality.shadowCascades, this.renderer.capabilities.maxTextures, landscapeLitFragmentSamplers(this.landscapeObjects))
       : 0;
     if (this.sunCascadedShadows && cascades < quality.shadowCascades && !this.warnedSunCascadeBudget) {
       this.warnedSunCascadeBudget = true;

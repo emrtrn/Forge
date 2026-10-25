@@ -78,8 +78,9 @@ test("Cascaded Shadows: the sun's Details toggle previews cascades in the viewpo
   const body = await (await request.response())?.json();
   expect(body?.dropped ?? []).toEqual([]);
 
-  // The editor previews the High profile's three cascades; the sun leaves the render.
-  await expect.poll(cascadeLights, { timeout: 10_000 }).toEqual({ count: 3, sunLayers: 0 });
+  // The editor previews the graphics quality's cascades (Ultra's four until a
+  // Quality is picked); the sun leaves the render.
+  await expect.poll(cascadeLights, { timeout: 10_000 }).toEqual({ count: 4, sunLayers: 0 });
 
   // Turning Cast Shadow off disables the toggle and hands the sun back.
   await details.locator('[data-light-toggle="castShadow"]').uncheck();
@@ -88,7 +89,7 @@ test("Cascaded Shadows: the sun's Details toggle previews cascades in the viewpo
   expect(errors).toEqual([]);
 });
 
-test("Cascaded Shadows: on a 16-texture-unit GPU a terrain level falls back to one shadow map and its terrain program fits", async ({ page }) => {
+test("Cascaded Shadows: on a 16-texture-unit GPU a 5-layer terrain level keeps its cascades and its terrain program fits", async ({ page }) => {
   const errors: string[] = [];
   const messages: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -101,7 +102,7 @@ test("Cascaded Shadows: on a 16-texture-unit GPU a terrain level falls back to o
   level.lights = level.lights.map((light: { type: string }) => light.type === "directional"
     ? { ...light, name: "Sun", castShadow: true, cascadedShadows: true }
     : light);
-  // The starter LandscapeTest terrain (8 paint layers) plus a Sky Light capture: the
+  // The starter LandscapeTest terrain (5 paint layers) plus a Sky Light capture: the
   // environment map and its BRDF table are two more units on the lit terrain.
   level.landscapes = [{ id: "landscape-1", name: "Landscape", position: [0, 0, 0], dataRef: "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json" }];
   level.skyAtmosphere = { skyLightCapture: { intensity: 1 } };
@@ -150,7 +151,8 @@ test("Cascaded Shadows: on a 16-texture-unit GPU a terrain level falls back to o
     let terrainSamplers = -1;
     for (const program of renderer.info.programs ?? []) {
       const key = String(program.cacheKey);
-      if (!key.includes("forge-terrain-cdlod|") && !key.endsWith("forge-terrain-cdlod")) continue;
+      // three's program key ends with the material's own key.
+      if (!/forge-terrain-cdlod-l\d/.test(key)) continue;
       const handle = program.program;
       let count = 0;
       const active = gl.getProgramParameter(handle, gl.ACTIVE_UNIFORMS) as number;
@@ -162,14 +164,16 @@ test("Cascaded Shadows: on a 16-texture-unit GPU a terrain level falls back to o
     }
     return { cascades, terrainSamplers, maxTextures: renderer.capabilities.maxTextures };
   });
-  await expect.poll(() => messages.some((message) => message.includes("[shadows] Cascaded Shadows off")), { timeout: 60_000 }).toBe(true);
+  await expect.poll(async () => (await probe()).cascades, { timeout: 60_000 }).toBe(3);
   await expect.poll(async () => (await probe()).terrainSamplers, { timeout: 60_000 }).toBeGreaterThan(0);
   const result = await probe();
   console.log(`[cascade-budget] ${JSON.stringify(result)}`);
   expect(result.maxTextures).toBe(16);
-  expect(result.cascades).toBe(0);
-  // The program's active samplers over both stages; the tile and global height
-  // lookups are vertex-only, so the fragment stage binds two fewer and must fit 16.
-  expect(result.terrainSamplers - 2).toBeLessThanOrEqual(16);
+  // 5 fixed + 5 layers + environment map + BRDF table + 3 cascades = 15 in the
+  // fragment stage. The program's active samplers are counted over both stages,
+  // and the tile and global height lookups are vertex-only.
+  expect(result.terrainSamplers - 2).toBe(15);
+  expect(messages.some((message) => message.includes("[shadows] Cascaded Shadows"))).toBe(false);
+
   expect(errors).toEqual([]);
 });

@@ -89,14 +89,16 @@ export function registerSunCascadeShadowTests(check: Check): void {
   });
 
   check("sun cascade shadow: terrain levels keep the lit terrain within the GPU's texture units", () => {
-    // Terrain samplers + environment map + BRDF table + one shadow map per cascade
-    // must fit, or the terrain program fails to link and the ground disappears.
-    // ANGLE on D3D11 has 16: one shadow map, so no cascades next to terrain.
-    assert.equal(affordableSunCascades(4, 16, true), 1);
-    assert.equal(affordableSunCascades(3, 17, true), 2);
-    assert.equal(affordableSunCascades(4, 32, true), 4);
-    assert.equal(affordableSunCascades(2, 32, true), 2);
-    assert.equal(affordableSunCascades(4, 16, false), 4);
+    // Terrain samplers (5 + one per paint layer) + environment map + BRDF table +
+    // one shadow map per cascade must fit, or the terrain program fails to link
+    // and the ground disappears. ANGLE on D3D11 has 16.
+    assert.equal(affordableSunCascades(4, 16, 5 + 5), 4, "5 layers: Ultra fits");
+    assert.equal(affordableSunCascades(4, 16, 5 + 6), 3, "6 layers: one cascade fewer");
+    assert.equal(affordableSunCascades(4, 16, 5 + 7), 2);
+    assert.equal(affordableSunCascades(4, 16, 5 + 8), 1, "8 layers: no cascades");
+    assert.equal(affordableSunCascades(3, 16, 5 + 5), 3, "never more than the profile asks");
+    assert.equal(affordableSunCascades(4, 32, 5 + 8), 4);
+    assert.equal(affordableSunCascades(4, 16, 0), 4, "no terrain");
   });
 
   check("sun cascade shadow: cascades replace the sun in the render and hand it back", () => {

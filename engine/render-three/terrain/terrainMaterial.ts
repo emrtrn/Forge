@@ -152,6 +152,8 @@ export interface TerrainMaterials {
   normalMaterial: MeshNormalMaterial;
   depthMaterial: MeshDepthMaterial;
   uniforms: TerrainUniforms;
+  /** Texture units the lit material's fragment stage takes for itself ({@link terrainLitFragmentSamplers}). */
+  litFragmentSamplers: number;
 }
 
 const VERTEX_PARS = /* glsl */ `
@@ -289,14 +291,20 @@ const FRAGMENT_NORMAL = /* glsl */ `
 }
 `;
 
-const FRAGMENT_COLOR_PARS = /* glsl */ `
+/**
+ * Paint layer declarations. Only the first `samplers` layers get a texture
+ * sampler (the terrain's layer count): every declared sampler is a texture unit
+ * whether or not a texture is bound, and units are what the sun's shadow
+ * cascades compete for. Layers past it draw their colour.
+ */
+const fragmentColorPars = (samplers: number): string => /* glsl */ `
 uniform highp sampler2DArray uTerrainWeights;
 uniform highp sampler2DArray uTerrainGlobalWeights;
 uniform float uTerrainView;
 uniform vec2 uTerrainHeightRange;
 uniform float uTerrainActiveLayer;
 uniform vec3 uLayerColors[${TERRAIN_RENDER_LAYERS}];
-${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `uniform sampler2D uLayerTex${i};`).join("\n")}
+${Array.from({ length: samplers }, (_, i) => `uniform sampler2D uLayerTex${i};`).join("\n")}
 uniform float uLayerHasTex[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerScale[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerRoughness[${TERRAIN_RENDER_LAYERS}];
@@ -305,7 +313,7 @@ float forgeLayerRoughness = 1.0;
 `;
 
 // The Landscape look: weighted layer colours/textures, or a debug view.
-const FRAGMENT_COLOR = /* glsl */ `
+const fragmentColor = (samplers: number): string => /* glsl */ `
 #include <color_fragment>
 {
   vec2 forgeUv = forgeTerrainUv();
@@ -320,7 +328,9 @@ const FRAGMENT_COLOR = /* glsl */ `
   vec3 forgeColor;
   if (uTerrainView < 0.5) {
     vec2 forgeP = vTerrainLocal;
-    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec4 forgeS${i} = uLayerHasTex[${i}] > 0.5 ? texture(uLayerTex${i}, forgeP * uLayerScale[${i}]) : vec4(uLayerColors[${i}], 1.0);
+    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec4 forgeS${i} = ${i < samplers
+      ? `uLayerHasTex[${i}] > 0.5 ? texture(uLayerTex${i}, forgeP * uLayerScale[${i}]) : vec4(uLayerColors[${i}], 1.0)`
+      : `vec4(uLayerColors[${i}], 1.0)`};
     vec3 forgeC${i} = forgeS${i}.rgb;
     float forgeR${i} = uLayerRoughness[${i}] * mix(1.0, forgeS${i}.a, uLayerRoughnessInAlpha[${i}]);`).join("\n    ")}
     vec3 forgeSum = forgeC0 * forgeW0.x + forgeC1 * forgeW0.y + forgeC2 * forgeW0.z + forgeC3 * forgeW0.w
@@ -348,16 +358,31 @@ ${TERRAIN_DEFORMATION_COLOR}
 }
 `;
 
+const SAMPLER_DECLARATION = /^uniform\s+(?:\w+\s+)?sampler\w*\s/gm;
+
 /**
- * Texture units the lit terrain's fragment shader takes for itself (normals,
- * weights, the paint layers, the track field), before three adds the
- * environment map and one shadow map per shadowed light. WebGL2 GPUs may offer
- * only 16 (ANGLE on D3D11): past that the program fails to link and the
- * terrain is not drawn at all, so the sun's cascade count is budgeted against it.
+ * Texture units the lit terrain's fragment shader takes for itself regardless
+ * of its layers: normals, weights (tile + global each) and the track field.
  */
-export const TERRAIN_LIT_FRAGMENT_SAMPLERS = [FRAGMENT_TERRAIN_PARS, FRAGMENT_COLOR_PARS, TERRAIN_DEFORMATION_FRAGMENT_PARS]
+export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(0), TERRAIN_DEFORMATION_FRAGMENT_PARS]
   .join("\n")
-  .match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm)!.length;
+  .match(SAMPLER_DECLARATION)!.length;
+
+/** Paint layers that get a texture sampler: the terrain's layer count, 1..8. */
+export function terrainLayerSamplers(layerCount: number): number {
+  return Math.max(1, Math.min(TERRAIN_RENDER_LAYERS, Math.floor(layerCount)));
+}
+
+/**
+ * Texture units the lit terrain's fragment shader takes for itself (the fixed
+ * ones + one per paint layer), before three adds the environment map, its BRDF
+ * table and one shadow map per shadowed light. WebGL2 GPUs may offer only 16
+ * (ANGLE on D3D11): past that the program fails to link and the terrain is not
+ * drawn at all, so the sun's cascade count is budgeted against it.
+ */
+export function terrainLitFragmentSamplers(layerCount: number): number {
+  return TERRAIN_LIT_FIXED_SAMPLERS + terrainLayerSamplers(layerCount);
+}
 
 function injectVertex(shader: WebGLProgramParametersWithUniforms, lit = false): void {
   shader.vertexShader = shader.vertexShader
@@ -395,12 +420,12 @@ function patch(
   material.customProgramCacheKey = () => key;
 }
 
-function layerUniforms(uniforms: TerrainUniforms, layers: TerrainLayerInput[]): void {
+function layerUniforms(uniforms: TerrainUniforms, layers: TerrainLayerInput[], samplers: number): void {
   const hasTex: number[] = [];
   const scale: number[] = [];
   for (let index = 0; index < TERRAIN_RENDER_LAYERS; index += 1) {
     const layer = layers[index];
-    uniforms[`uLayerTex${index}`] = { value: layer?.texture ?? null };
+    if (index < samplers) uniforms[`uLayerTex${index}`] = { value: layer?.texture ?? null };
     hasTex.push(layer?.texture ? 1 : 0);
     scale.push(layer?.scale ?? 1);
   }
@@ -435,7 +460,8 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainActiveLayer: { value: inputs.activeLayer },
     uTerrainHeightRange: { value: inputs.heightRange },
   };
-  layerUniforms(uniforms, inputs.layers);
+  const samplers = terrainLayerSamplers(inputs.layers.length);
+  layerUniforms(uniforms, inputs.layers, samplers);
   // Runtime tracks (TERRAIN_DEFORMATION Faz 2/3): always compiled in; the
   // shared texture's `uDeformActive` skips the block until a runtime module
   // attaches a field, so the editor and track-free levels pay a uniform branch
@@ -449,12 +475,12 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   };
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
-  patch(material, litUniforms, "forge-terrain-cdlod", (shader) => {
+  patch(material, litUniforms, `forge-terrain-cdlod-l${samplers}`, (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
-      FRAGMENT_MAIN, `${FRAGMENT_COLOR_PARS}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${FRAGMENT_MAIN}`);
+      FRAGMENT_MAIN, `${fragmentColorPars(samplers)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${FRAGMENT_COLOR}`)
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(samplers)}`)
       .replace("#include <roughnessmap_fragment>", TERRAIN_DEFORMATION_ROUGHNESS)
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)
       .replace("  nonPerturbedNormal = normal;\n}", `  nonPerturbedNormal = normal;\n${TERRAIN_DEFORMATION_NORMAL}}`);
@@ -469,5 +495,5 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   depthMaterial.blending = NoBlending;
   patch(depthMaterial, uniforms, "forge-terrain-cdlod-depth", injectFragmentBase);
 
-  return { material, normalMaterial, depthMaterial, uniforms };
+  return { material, normalMaterial, depthMaterial, uniforms, litFragmentSamplers: TERRAIN_LIT_FIXED_SAMPLERS + samplers };
 }

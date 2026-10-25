@@ -517,6 +517,11 @@ export class TerrainRenderer {
     this.mesh.visible = visible;
   }
 
+  /** Texture units the lit terrain's fragment stage takes for itself (shadow cascades budget against it). */
+  get litFragmentSamplers(): number {
+    return this.materials.litFragmentSamplers;
+  }
+
   dispose(): void {
     liveRenderers.delete(this);
     this.textureUpdates.dispose();

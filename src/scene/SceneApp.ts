@@ -1,7 +1,7 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
-import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey } from "@engine/terrain/terrainTypes";
+import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
 import { applyTerrainLayerState, createTerrainLayerAddition } from "@engine/terrain/terrainLayers";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
@@ -21,8 +21,10 @@ import {
   type TerrainPaintAccumulator,
   type TerrainUndoPatch,
 } from "@engine/terrain/terrainEdit";
-import { decodeTerrainTile, type DecodedTerrainTile, type TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
-import { exportRawHeightmap, importRawHeightmap } from "@engine/terrain/terrainImport";
+import { decodeTerrainTile, encodeTerrainTile, type DecodedTerrainTile, type TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
+import { exportRawHeightmap, heightmapSamplesToRaw, importRawHeightmap, rawHeightmapToSamples } from "@engine/terrain/terrainImport";
+import { decodeHeightmapPng, encodeHeightmapPng16 } from "@engine/terrain/heightmapPng";
+import { legacyTerrainHeightRange } from "@engine/terrain/terrainLegacy";
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
 import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@engine/terrain/worldTerrainExpand";
@@ -219,7 +221,6 @@ import {
   ensureLandscapeLayers,
   LANDSCAPE_DEFAULT_LAYERS,
   resampleLandscapeHeightmap,
-  landscapeHeightsToGrayscale,
   landscapeSizeForPreset,
   resampleLandscapeData,
   applyLandscapeSplineDeform,
@@ -947,6 +948,20 @@ export interface LandscapeLayerView {
 }
 
 /** A landscape that references a multi-tile World Terrain, as the Details panel shows it. */
+export type HeightmapFileFormat = "raw" | "png";
+
+/** Exact 16-bit heightmap grid of the selected Landscape (`getSelectedLandscapeHeightmapShape`). */
+export interface LandscapeHeightmapShape {
+  width: number;
+  height: number;
+  /** Default metres (relative to terrain origin Y) for codes 0 and 65535. */
+  heightMin: number;
+  heightMax: number;
+  multiTile: boolean;
+  /** Why a 1×1 grid cannot use 16-bit heightmaps (`landscapeEditIssues`); empty when it can. */
+  issues: string[];
+}
+
 export interface WorldTerrainDetailsView {
   dataRef: string;
   tileQuads: number;
@@ -10518,7 +10533,11 @@ export class SceneApp {
       return;
     }
     this.lastLandscapeImportHeight = heightRange;
-    this.applyImportedLandscapeHeightmap(index, actor.id, samples, heightRange, "Import Landscape Heightmap");
+    const heights = samples.map((sample) => Math.round(sample * heightRange * 1_000_000) / 1_000_000);
+    this.applyLandscapeGridOperation(actor.id, data, "Import Landscape Heightmap", (scratch) => {
+      scratch.heights = heights;
+      return { changed: true, bounds: this.landscapeFullDirtyBounds(scratch) };
+    });
     try {
       await this.saveLandscapeData(actor.id);
     } catch (error) {
@@ -10532,111 +10551,131 @@ export class SceneApp {
     return this.lastLandscapeImportHeight;
   }
 
-  private applyImportedLandscapeHeightmap(
-    index: number,
-    landscapeId: string,
-    samples: readonly number[],
-    heightRange: number,
-    label: string,
-  ): void {
-    const data = this.landscapeData.get(landscapeId);
-    if (!data) return;
-    const before = data.heights.slice();
-    const after = samples.map((sample) => Math.round(sample * heightRange * 1_000_000) / 1_000_000);
-    const dirty = this.landscapeFullDirtyBounds(data);
-    const selection: Selection = { kind: "landscape", index };
-    const apply = (heights: readonly number[]): void => {
-      const current = this.landscapeData.get(landscapeId);
-      if (!current) return;
-      current.heights = heights.slice();
-      this.markLandscapeDirty(landscapeId);
-      this.refreshLandscapeGeometry(index, dirty);
-      this.select(selection);
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
-  }
-
-  async importSelectedWorldTerrainHeightmap(file: File, endianness: "little" | "big", heightMin: number, heightMax: number): Promise<void> {
-    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
-    const actor = this.layout?.landscapes?.[this.selection.index];
-    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
-    const session = document ? this.worldTerrainSessions.get(document) : undefined;
-    if (!actor || !document || !session) return;
-    const { def } = document;
-    const width = def.tilesX * def.tileQuads + 1;
-    const height = def.tilesZ * def.tileQuads + 1;
-    try {
-      if (file.size !== width * height * 2) {
-        throw new Error(`RAW expected ${width * height * 2} bytes for ${width} x ${height} samples (16-bit), got ${file.size}.`);
-      }
-      // Replacing every tile pins every tile (undo needs them all).
-      await this.loadWholeWorldTerrain(document, "import the heightmap");
-      const bytes = await file.arrayBuffer();
-      if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
-        || this.worldTerrains.get(actor.id) !== document || this.isSelectionLocked(this.selection)) {
-        throw new Error("Terrain selection changed while reading the RAW file; import cancelled.");
-      }
-      const imported = importRawHeightmap({ bytes, width, height, endianness, heightMin, heightMax,
-        tileQuads: def.tileQuads, spacing: def.spacing, origin: def.origin });
-      const heights = new Map([...imported.tiles].map(([key, tile]) => [key, decodeTerrainTile(tile).heights]));
-      const patches = createTerrainHeightmapPatches(session.world, heights);
-      const restore = (apply: typeof applyTerrainUndoPatches): void => {
-        const index = this.layout?.landscapes?.findIndex((entry) => entry.id === actor.id) ?? -1;
-        const object = this.landscapeObjects[index];
-        if (!object || this.worldTerrains.get(actor.id) !== document) return;
-        const dirty = apply(session.world, patches);
-        session.markTiles(dirty.keys());
-        updateWorldTerrainObjectTiles(object, dirty);
-        this.scheduleLandscapeFoliageRebuild(actor.id);
-        this.select({ kind: "landscape", index });
-        this.emitSceneObjectsChanged();
-        this.scheduleAutoSave();
-      };
-      this.executeCommand({ label: "Import Landscape Heightmap",
-        redo: () => restore(applyTerrainUndoPatches), undo: () => restore(revertTerrainUndoPatches) });
-      this.onStatus?.(`Imported ${width} x ${height} RAW heightmap (${patches.length} tiles).`, "info");
-    } catch (error) {
-      this.onStatus?.(`Heightmap import failed: ${error instanceof Error ? error.message : String(error)}`, "error");
-    } finally {
-      this.worldTerrainStreams.get(document)?.release();
-    }
-  }
-
-  async exportSelectedWorldTerrainHeightmap(): Promise<{ bytes: Uint8Array; name: string } | null> {
+  /**
+   * Grid of the selected Landscape's exact 16-bit RAW/PNG heightmap, with the
+   * heights 0 and 65535 map to by default: a World Terrain's definition range,
+   * or the range a 1×1 grid's terrain save would use.
+   */
+  getSelectedLandscapeHeightmapShape(): LandscapeHeightmapShape | null {
     if (this.selection?.kind !== "landscape") return null;
     const actor = this.layout?.landscapes?.[this.selection.index];
     const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    if (document) {
+      const { def } = document;
+      return { width: def.tilesX * def.tileQuads + 1, height: def.tilesZ * def.tileQuads + 1,
+        heightMin: def.heightMin, heightMax: def.heightMax, multiTile: true, issues: [] };
+    }
+    const data = actor ? this.landscapeData.get(actor.id) : undefined;
+    if (!data) return null;
+    let min = Infinity, max = -Infinity;
+    for (const height of data.heights) {
+      const value = Math.fround(height * data.size.heightScale);
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
+    return { width: data.size.verticesX, height: data.size.verticesZ, ...legacyTerrainHeightRange(min, max),
+      multiTile: false, issues: landscapeEditIssues(data) };
+  }
+
+  /**
+   * Replaces every height from a 16-bit RAW or PNG of exactly the grid's size
+   * (0/65535 → `heightMin`/`heightMax`, metres relative to terrain origin Y), as
+   * one undo command; paint is kept. Wrong sizes are rejected, never resampled.
+   */
+  async importSelectedLandscapeHeightmapFile(
+    file: File, format: HeightmapFileFormat, endianness: "little" | "big", heightMin: number, heightMax: number,
+  ): Promise<void> {
+    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const shape = this.getSelectedLandscapeHeightmapShape();
+    if (!actor || !shape) return;
+    const document = this.worldTerrains.get(actor.id) ?? null;
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
-    if (!actor || !document || !session) return null;
+    const data = document ? undefined : this.landscapeData.get(actor.id);
+    if ((document && !session) || (!document && !data)) return;
+    const { width, height } = shape;
+    const label = format === "png" ? "PNG" : "RAW";
     try {
-      await this.loadWholeWorldTerrain(document, "export the heightmap");
-      // The save snapshot includes unsaved relief outside the old encoding range.
-      const snapshot = captureWorldTerrainSave(session.world, document.tiles.keys(), new Map());
-      const bytes = exportRawHeightmap(snapshot.def, new Map(snapshot.tiles.map((tile) => [tile.key, tile.bytes])));
-      const name = (actor.name || snapshot.def.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
-      this.onStatus?.(`Exported RAW heightmap (little-endian). Re-import range: ${Math.fround(snapshot.def.heightMin)} to ${Math.fround(snapshot.def.heightMax)} m relative to terrain origin Y.`, "info");
-      return { bytes, name: `${name}-heightmap.raw` };
+      if (shape.issues.length > 0) {
+        throw new Error(`this grid cannot take a 16-bit heightmap (${shape.issues.join("; ")}); resample it to a preset resolution first.`);
+      }
+      if (format === "raw" && file.size !== width * height * 2) {
+        throw new Error(`RAW expected ${width * height * 2} bytes for ${width} x ${height} samples (16-bit), got ${file.size}.`);
+      }
+      // Replacing every tile pins every tile (undo needs them all).
+      if (document) await this.loadWholeWorldTerrain(document, "import the heightmap");
+      let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
+      let order = endianness;
+      if (format === "png") {
+        const png = await decodeHeightmapPng(bytes);
+        if (png.width !== width || png.height !== height) {
+          throw new Error(`PNG is ${png.width} x ${png.height}; this Landscape needs exactly ${width} x ${height} pixels (rows along +Z)${
+            document ? "" : ". Import PNG (resample) fits any size"}.`);
+        }
+        bytes = heightmapSamplesToRaw(png.samples);
+        order = "little";
+      }
+      if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
+        || this.isSelectionLocked(this.selection)
+        || (document ? this.worldTerrains.get(actor.id) !== document : this.landscapeData.get(actor.id) !== data)) {
+        throw new Error(`Terrain selection changed while reading the ${label} file; import cancelled.`);
+      }
+      const world = session?.world ?? landscapeEditWorld(data!);
+      const { def } = world;
+      const imported = importRawHeightmap({ bytes, width, height, endianness: order, heightMin, heightMax,
+        tileQuads: def.tileQuads, spacing: def.spacing, origin: def.origin });
+      const heights = new Map([...imported.tiles].map(([key, tile]) => [key, decodeTerrainTile(tile).heights]));
+      const patches = createTerrainHeightmapPatches(world, heights);
+      this.executeTerrainPatchCommand("Import Landscape Heightmap", actor.id, document, patches, data
+        ? { verticesX: width, verticesZ: height, layerCount: data.layers.length }
+        : undefined);
+      this.onStatus?.(`Imported ${width} x ${height} ${label} heightmap${document ? ` (${patches.length} tiles)` : ""}.`, "info");
+    } catch (error) {
+      this.onStatus?.(`Heightmap import failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      if (document) this.worldTerrainStreams.get(document)?.release();
+    }
+  }
+
+  /** The whole grid as 16-bit RAW (little-endian) or greyscale PNG; the status line gives the re-import range. */
+  async exportSelectedLandscapeHeightmapFile(format: HeightmapFileFormat): Promise<{ bytes: Uint8Array; name: string } | null> {
+    if (this.selection?.kind !== "landscape") return null;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const document = actor ? this.worldTerrains.get(actor.id) ?? null : null;
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    const data = actor && !document ? this.landscapeData.get(actor.id) : undefined;
+    if (!actor || (document ? !session : !data)) return null;
+    try {
+      let def: WorldTerrainDef;
+      let tiles: Map<string, Uint8Array>;
+      if (document && session) {
+        await this.loadWholeWorldTerrain(document, "export the heightmap");
+        // The save snapshot includes unsaved relief outside the old encoding range.
+        const snapshot = captureWorldTerrainSave(session.world, document.tiles.keys(), new Map());
+        def = snapshot.def;
+        tiles = new Map(snapshot.tiles.map((tile) => [tile.key, tile.bytes]));
+      } else {
+        const issues = landscapeEditIssues(data!);
+        if (issues.length > 0) throw new Error(`this grid cannot be written as a 16-bit heightmap (${issues.join("; ")}); resample it first.`);
+        const world = landscapeEditWorld(data!);
+        def = world.def;
+        tiles = new Map([...world.tiles].map(([key, tile]) => [key,
+          encodeTerrainTile(tile, { heightMin: def.heightMin, heightMax: def.heightMax, heightFormat: "f32" })]));
+      }
+      const raw = exportRawHeightmap(def, tiles);
+      const bytes = format === "png"
+        ? await encodeHeightmapPng16(def.tilesX * def.tileQuads + 1, def.tilesZ * def.tileQuads + 1, rawHeightmapToSamples(raw))
+        : raw;
+      const name = (actor.name || def.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
+      this.onStatus?.(`Exported ${format === "png" ? "16-bit PNG" : "RAW (little-endian)"} heightmap. Re-import range: ${
+        Math.fround(def.heightMin)} to ${Math.fround(def.heightMax)} m relative to terrain origin Y.`, "info");
+      return { bytes, name: `${name}-heightmap.${format}` };
     } catch (error) {
       this.onStatus?.(`Heightmap export failed: ${error instanceof Error ? error.message : String(error)}`, "error");
       return null;
     } finally {
-      this.worldTerrainStreams.get(document)?.release();
+      if (document) this.worldTerrainStreams.get(document)?.release();
     }
-  }
-
-  /** Produces a normalized grayscale PNG-ready buffer for the selected landscape. */
-  exportSelectedLandscapeHeightmap(): { width: number; height: number; pixels: Uint8ClampedArray } | null {
-    if (this.selection?.kind !== "landscape") return null;
-    const actor = this.layout?.landscapes?.[this.selection.index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!data) return null;
-    return {
-      width: data.size.verticesX,
-      height: data.size.verticesZ,
-      pixels: landscapeHeightsToGrayscale(data),
-    };
   }
 
   /** Shape of the selected landscape's multi-tile World Terrain, or null for an editable grid. */

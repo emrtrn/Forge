@@ -4,7 +4,8 @@ import {
   applyTerrainUndoPatches, createTerrainEditWorld, createTerrainHeightmapPatches, revertTerrainUndoPatches,
 } from "../../engine/terrain/terrainEdit";
 import {
-  exportRawHeightmap, importRawHeightmap, iterateRawHeightmapTiles, type RawHeightmapImportOptions,
+  exportRawHeightmap, heightmapSamplesToRaw, importRawHeightmap, iterateRawHeightmapTiles, rawHeightmapToSamples,
+  type RawHeightmapImportOptions,
 } from "../../engine/terrain/terrainImport";
 import { validateTerrainTile } from "../../engine/terrain/terrainLoader";
 import {
@@ -68,6 +69,15 @@ function referenceHeights(bytes: Uint8Array): Float32Array {
 }
 
 export function registerTerrainImportTests(check: Check): void {
+  check("terrain heightmap u16 codes and little-endian RAW bytes convert both ways", () => {
+    const samples = Uint16Array.from([0, 1, 255, 256, 32768, 65534, 65535]);
+    const raw = heightmapSamplesToRaw(samples);
+    assert.deepEqual(Array.from(raw.subarray(0, 8)), [0, 0, 1, 0, 255, 0, 0, 1]);
+    assert.deepEqual(rawHeightmapToSamples(raw), samples);
+    assert.deepEqual(rawHeightmapToSamples(raw.subarray(2, 6)), Uint16Array.from([1, 255]));
+    assert.throws(() => rawHeightmapToSamples(new Uint8Array(3)), /odd byte count/);
+  });
+
   check("terrain RAW: 2x3 tiles round-trip byte-identically with row-major orientation", () => {
     const options = fixture();
     const { def, tiles } = importRawHeightmap(options);

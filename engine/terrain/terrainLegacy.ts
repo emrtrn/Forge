@@ -45,6 +45,14 @@ export interface LegacyLandscapeConversion {
 /** Headroom kept around legacy relief so a first sculpt stroke does not clip. */
 const LEGACY_HEIGHT_PADDING = 16;
 
+/** The definition range a converted 1×1 grid gets: the default ±256 m, widened with headroom. */
+export function legacyTerrainHeightRange(min: number, max: number): { heightMin: number; heightMax: number } {
+  return {
+    heightMin: Math.min(TERRAIN_DEFAULT_HEIGHT_MIN, Math.floor(min - LEGACY_HEIGHT_PADDING)),
+    heightMax: Math.max(TERRAIN_DEFAULT_HEIGHT_MAX, Math.ceil(max + LEGACY_HEIGHT_PADDING)),
+  };
+}
+
 function nextValidTileQuads(quads: number): number {
   let value = TERRAIN_MIN_TILE_QUADS;
   while (value < quads && value < TERRAIN_MAX_TILE_QUADS) value *= 2;
@@ -110,8 +118,7 @@ export function legacyLandscapeToWorldTerrain(actor: LayoutLandscape, source: Fo
     tilesX: 1,
     tilesZ: 1,
     origin: [actor.position[0] - half, actor.position[1], actor.position[2] - half],
-    heightMin: Math.min(TERRAIN_DEFAULT_HEIGHT_MIN, Math.floor(range.min - LEGACY_HEIGHT_PADDING)),
-    heightMax: Math.max(TERRAIN_DEFAULT_HEIGHT_MAX, Math.ceil(range.max + LEGACY_HEIGHT_PADDING)),
+    ...legacyTerrainHeightRange(range.min, range.max),
     layers: layers.map((layer) => ({
       id: layer.id,
       name: layer.name,

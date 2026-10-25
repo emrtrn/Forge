@@ -200,7 +200,7 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   const details = page.locator("[data-world-terrain]");
   await expect(details).toContainText("3 × 2 (1 empty)");
   await expect(details).toContainText("192 m × 128 m");
-  await expect(page.locator("[data-world-terrain-limits]")).toContainText("Splines, resizing and PNG heightmaps");
+  await expect(page.locator("[data-world-terrain-limits]")).toContainText("Splines and resizing are not available");
   await expect(page.locator("[data-world-terrain-limits]")).not.toContainText("Foliage painting");
   await expect(page.locator("[data-world-terrain-tools] [data-landscape-mode] option")).toHaveCount(2);
   for (const input of await page.locator('input[data-detail="pr"]').all()) await expect(input).toBeDisabled();

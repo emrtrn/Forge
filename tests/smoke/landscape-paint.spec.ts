@@ -124,7 +124,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   // every vertex, and undo puts the painted weights back exactly.
   await page.locator('[data-landscape-layer="snow"]').click();
   await page.locator("[data-landscape-fill]").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Filled Landscape layer: snow");
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute("aria-label", "Undo Landscape Fill Layer");
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
   const filled = await readSavedTerrain(page);

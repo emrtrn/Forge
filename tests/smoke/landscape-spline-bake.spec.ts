@@ -50,15 +50,17 @@ test("Landscape spline Apply Deform and Apply Paint bake, save and undo to the e
   await flag("deform.enabled").check();
   await page.locator('[data-landscape-segment-number="deform.targetOffset"]').fill("2");
   await page.locator('[data-landscape-segment-number="deform.targetOffset"]').press("Enter");
+  // The undo label proves the bake ran; the status line is overwritten by autosave.
+  const undo = page.getByTestId("editor-undo");
   await page.locator("[data-landscape-spline-apply-deform]").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Spline terrain deform applied.");
+  await expect(undo).toHaveAttribute("aria-label", "Undo Apply Spline Terrain Deform");
 
   await flag("paint.enabled").check();
   await page.locator("[data-landscape-segment-layer]").selectOption("rock");
   await page.locator('[data-landscape-segment-number="paint.strength"]').fill("1");
   await page.locator('[data-landscape-segment-number="paint.strength"]').press("Enter");
   await page.locator("[data-landscape-spline-apply-paint]").click();
-  await expect(page.getByTestId("editor-status")).toContainText("Spline layer paint applied.");
+  await expect(undo).toHaveAttribute("aria-label", "Undo Apply Spline Layer Paint");
 
   await save(page);
   const baked = await readSavedTerrain(page);
@@ -72,7 +74,6 @@ test("Landscape spline Apply Deform and Apply Paint bake, save and undo to the e
 
   // Undo back through the deform bake (segment edits in between are commands
   // too): the grid on disk is the original again.
-  const undo = page.getByTestId("editor-undo");
   for (let i = 0; i < 12 && (await undo.getAttribute("aria-label")) !== "Undo Apply Spline Terrain Deform"; i += 1) await undo.click();
   await expect(undo).toHaveAttribute("aria-label", "Undo Apply Spline Terrain Deform");
   await undo.click();

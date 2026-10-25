@@ -1,6 +1,6 @@
 # Open World Faz 2 — kalan iş: editör düzenlemesinin `terrainEdit`'e taşınması + 16-bit heightmap
 
-> Durum: **onaylandı; 1.–3. ve 5. adım tamam, 4. adım için erteleme önerisi** (2026-10-25, "İlerleme" bölümü). Üst plan:
+> Durum: **onaylandı; 1.–3., 5. ve 6. adım tamam, 4. adım için erteleme önerisi** (2026-10-25, "İlerleme" bölümü). Üst plan:
 > [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) "Faz 2". Bu dosya Faz 2'nin kalan iki
 > maddesinin uygulama planıdır; tamamlanınca maddeler OPEN_WORLD_PLAN'da kapatılır
 > ve bu dosya `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivlenir.
@@ -325,6 +325,44 @@ satır filtre baytları Node zlib ile açılıp doğrulandı; yumuşak rampada s
 PLTE'siz palet, bilinmeyen filtre, kısa görüntü verisi, açılamayan zlib, boyut sınırı,
 bilinmeyen kritik chunk (yardımcı chunk atlanır). Arayüze bağlı olmadığı için smoke
 yok; tarayıcıdaki `CompressionStream` 6. adımın smoke'unda sınanacak.
+
+### Adım 6 — PNG16 + RAW arayüzü (2026-10-25)
+
+- Details'te tek **Heightmap** bölümü (`heightmapFileSection`) hem 1×1 hem çok-tile
+  Landscape'te: grid boyu (`W × H`), RAW bayt sırası, 0/65535'in metre karşılığı
+  (Min/Max), Import RAW / Import PNG, Export RAW / Export PNG. Varsayılan Min/Max
+  çok-tile'da tanım aralığı, 1×1'de terrain kaydının kullanacağı aralık
+  (`legacyTerrainHeightRange`, `terrainLegacy.ts` ile ortak).
+- `SceneApp.importSelectedLandscapeHeightmapFile` / `exportSelectedLandscapeHeightmapFile`
+  iki türü de yönetir; eski çok-tile'a özel RAW yöntemleri ve 8-bit PNG export
+  kaldırıldı. PNG ve RAW aynı yoldan geçer: PNG kodları
+  `heightmapSamplesToRaw` ile little-endian RAW'a çevrilip `importRawHeightmap`'e
+  verilir. Export `exportRawHeightmap` + `encodeHeightmapPng16`. Dosya tam grid
+  boyunda olmalı; yanlış boy beklenen boyla reddedilir, arazi değişmez.
+  Import tek undo komutudur (`executeTerrainPatchCommand`), boya korunur.
+  1×1'de grid sorunluysa (`landscapeEditIssues`) bölüm pasif olur ve nedeni yazar.
+- 1×1'deki **Import PNG (resample)** (her boy, tarayıcı çözümlemesi, Import Height
+  ölçeği) kaldı; undo'su artık tam dizi değil, `applyLandscapeGridOperation` yaması.
+- Çok-tile ipucu artık yalnız "Splines and resizing" kapalı diyor.
+- **Plandan sapma:** "dünya boyunda import yeni tanım yazar" kısmı uygulanmadı.
+  Import mevcut grid'in yüksekliklerini değiştirir (tile sayısı/boyu aynı); aralık
+  dışına çıkan yükseklikler Save'de tanım aralığını genişletir (mevcut kural). Farklı
+  boyda bir dünyayı dosyadan kurmak yeniden boyutlandırmadır, Faz 8 dünya
+  araçlarına kalır.
+
+Doğrulama: engine — u16 kodları ↔ little-endian RAW (1866 kontrol). Yeni smoke
+`terrain-heightmap.spec.ts` (Chromium'un `CompressionStream`'i ile): 1×1'de
+yanlış boy PNG reddi, 129 × 129 PNG16 import (en kötü hata 4,8e-7 m), PNG ve RAW
+export'u aynı kodlar, status satırındaki aralıkla yükseklik farkı yarım adımın
+altında (3,9 mm / 7,8 mm adım), undo düz grid'e döner, resample import 65 × 65
+→ 1,16..4,51 m; çok-tile 2 × 1 (64 quad) 129 × 65 PNG16 import iki tile'a
+yazılır (u16 tile adımının yarısı içinde), export PNG = RAW.
+Regresyon smoke'ları 13/14 geçti; düşen 3. adımda eklenen `landscape-spline-bake`
+idi: 500 ms'lik autosave'in "Saved…" mesajı geçici durum satırını test okumadan
+önce eziyordu. O ve `landscape-paint`'in Fill kontrolü artık undo düğmesinin
+etiketine bakıyor; düzeltmeden sonra üçü birlikte geçti. Son kapı
+`npm run build:verify` (tsc, Vite build, 1866 kontrol + slow, sıkı dist taraması,
+world-data) ve `check:assets` yeşil.
 
 ### Kalan adımların yeniden eşlenmesi (onaylandı 2026-10-25)
 

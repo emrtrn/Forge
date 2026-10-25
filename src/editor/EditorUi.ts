@@ -4331,13 +4331,13 @@ export class EditorUi {
         this.app.setSelectedLandscapeLayerPhysicalMaterial(layerId, physicalMaterialId),
       importSelectedLandscapeHeightmap: (rgba, width, height, heightRange) =>
         this.app.importSelectedLandscapeHeightmap(rgba, width, height, heightRange),
-      exportSelectedLandscapeHeightmap: () => this.app.exportSelectedLandscapeHeightmap(),
       getSelectedLandscapeResolution: () => this.app.getSelectedLandscapeResolution(),
       getSelectedWorldTerrain: () => this.app.getSelectedWorldTerrain(),
       getSelectedWorldTerrainResidency: () => this.app.getSelectedWorldTerrainResidency(),
-      importSelectedWorldTerrainHeightmap: (file, endianness, heightMin, heightMax) =>
-        this.app.importSelectedWorldTerrainHeightmap(file, endianness, heightMin, heightMax),
-      exportSelectedWorldTerrainHeightmap: () => this.app.exportSelectedWorldTerrainHeightmap(),
+      getSelectedLandscapeHeightmapShape: () => this.app.getSelectedLandscapeHeightmapShape(),
+      importSelectedLandscapeHeightmapFile: (file, format, endianness, heightMin, heightMax) =>
+        this.app.importSelectedLandscapeHeightmapFile(file, format, endianness, heightMin, heightMax),
+      exportSelectedLandscapeHeightmapFile: (format) => this.app.exportSelectedLandscapeHeightmapFile(format),
       resampleSelectedLandscape: (preset) => this.app.resampleSelectedLandscape(preset),
       setSelectedLandscapeWorldSize: (worldSize) => this.app.setSelectedLandscapeWorldSize(worldSize),
       expandLandscapeToWorldTerrain: () => void this.expandLandscapeToWorldTerrain(),

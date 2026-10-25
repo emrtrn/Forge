@@ -176,3 +176,18 @@ export function exportRawHeightmap(
   }
   return bytes;
 }
+
+/** Row-major u16 codes as the little-endian RAW bytes `importRawHeightmap` reads (PNG import). */
+export function heightmapSamplesToRaw(samples: Uint16Array): Uint8Array {
+  const bytes = new Uint8Array(samples.length * 2);
+  const view = new DataView(bytes.buffer);
+  samples.forEach((sample, index) => view.setUint16(index * 2, sample, true));
+  return bytes;
+}
+
+/** Little-endian RAW bytes (`exportRawHeightmap`) as row-major u16 codes (PNG export). */
+export function rawHeightmapToSamples(bytes: Uint8Array): Uint16Array {
+  if (bytes.length % 2 !== 0) throw new Error("RAW heightmap has an odd byte count");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return Uint16Array.from({ length: bytes.length / 2 }, (_, index) => view.getUint16(index * 2, true));
+}

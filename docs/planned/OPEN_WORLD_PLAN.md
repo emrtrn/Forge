@@ -838,8 +838,8 @@ Kalan maddelerin onaylı uygulama planı:
       çatallanmaz — bütün tile grid'ini kopyalamak büyük dünyada pahalı; aynı
       tanımı paylaşan iki seviye düzenlemeyi birlikte görür. Details paneli
       Sculpt/Paint araçlarını, katman listesini, fırça ayarlarını ve View'ı
-      gösteriyor; katman materyali atama artık açık. **Hâlâ kapalı:** spline'lar (uyarı),
-      yeniden boyutlandırma ve heightmap import/export. *(Fill Layer 2026-10-25'te
+      gösteriyor; katman materyali atama artık açık. **Hâlâ kapalı:** spline'lar (uyarı) ve
+      yeniden boyutlandırma (heightmap import/export açık: RAW 2026-10-23, PNG16 2026-10-25). *(Fill Layer 2026-10-25'te
       açıldı; 1×1 ve çok-tile aynı `terrainEdit` stroke/undo yolunda — ayrıntı
       [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).)*
       Elle foliage Paint/Erase/Single/Fill/Select araçları çok-tile yüzeyinde çalışır;
@@ -917,7 +917,11 @@ Kalan maddelerin onaylı uygulama planı:
       yükseklik aralığını verir; kaydedilmemiş aralık dışı tepeler de export'a
       girer. `tests/engine/terrainImport.test.ts`: delikli 2×2 u16 round-trip,
       dikiş eşitliği, tam undo/redo, paint korunumu ve yanlış boyut reddi.
-      **Açık:** 16-bit PNG import/export ve büyük import'un worker'a taşınması.
+      *16-bit PNG + 1×1 (2026-10-25):* RAW ve 16-bit PNG import/export artık
+      1×1 ve çok-tile Landscape'te aynı Details bölümünden; bağımlılıksız codec
+      `engine/terrain/heightmapPng.ts`. 1×1'de eski "Import PNG (resample)" kalır.
+      Ayrıntı [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
+      **Açık:** büyük import'un worker'a taşınması.
 - [x] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
       `landscape-spline-chain`, `runtime-parity`, `game-starter` yeşil.
       *Tamam (2026-10-23):* yeni renderer varsayılanken bunlar ve

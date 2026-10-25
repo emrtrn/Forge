@@ -21,6 +21,8 @@ import type {
   LandscapeSculptTool,
   LandscapeSplineTool,
   TargetPointReference,
+  HeightmapFileFormat,
+  LandscapeHeightmapShape,
   WorldTerrainDetailsView,
   WorldTerrainResidencyView,
 } from "@/scene/SceneApp";
@@ -116,8 +118,11 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   setSelectedLandscape: (patch: { collision?: boolean }) => void;
   getSelectedWorldTerrain: () => WorldTerrainDetailsView | null;
   getSelectedWorldTerrainResidency: () => WorldTerrainResidencyView | null;
-  importSelectedWorldTerrainHeightmap: (file: File, endianness: "little" | "big", heightMin: number, heightMax: number) => Promise<void>;
-  exportSelectedWorldTerrainHeightmap: () => Promise<{ bytes: Uint8Array; name: string } | null>;
+  getSelectedLandscapeHeightmapShape: () => LandscapeHeightmapShape | null;
+  importSelectedLandscapeHeightmapFile: (
+    file: File, format: HeightmapFileFormat, endianness: "little" | "big", heightMin: number, heightMax: number,
+  ) => Promise<void>;
+  exportSelectedLandscapeHeightmapFile: (format: HeightmapFileFormat) => Promise<{ bytes: Uint8Array; name: string } | null>;
   getSelectedLandscapeRiverWaters: () => RiverWaterDetailsView[];
   createSelectedLandscapeRiverWater: (splineId: string) => void;
   deleteSelectedLandscapeRiverWater: (waterId: string) => void;
@@ -148,7 +153,6 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
   setSelectedLandscapeLayerPhysicalMaterial: (layerId: string, physicalMaterialId: string | null) => void;
   importSelectedLandscapeHeightmap: (rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
-  exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
   getSelectedLandscapeResolution: () => { verticesX: number; verticesZ: number; worldSize: number } | null;
   resampleSelectedLandscape: (preset: "small" | "medium" | "large") => void;
   setSelectedLandscapeWorldSize: (worldSize: number) => void;
@@ -447,18 +451,16 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           </select>
         </label>
       </div>
-      <div class="detail-section">
-        <div class="detail-section-title">Heightmap</div>
+      ${heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr, `
+        <div class="detail-subsection-title">Any size (resample)</div>
         <label class="detail-row">
           <span>Import Height</span>
           <input data-landscape-import-range type="number" min="0" step="0.1" value="${importHeight}" ${lockedAttr} />
         </label>
         <div class="landscape-heightmap-actions">
-          <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
-          <button type="button" class="detail-action-button" data-landscape-heightmap-export>Export PNG</button>
+          <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG (resample)<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
         </div>
-        <div class="detail-hint">Import Height scales the PNG's brightness into terrain height. The imported terrain is baked into the level; re-import to change the height scale.</div>
-      </div>
+        <div class="detail-hint">Resamples any PNG onto this grid; Import Height scales its brightness (0 m to Import Height). Re-import to change the height scale.</div>`)}
       <div class="detail-section">
         <div class="detail-section-title">Tiles</div>
         <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
@@ -799,28 +801,68 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     options.refreshDetails();
   });
 
-  body.querySelector<HTMLButtonElement>("[data-landscape-heightmap-export]")?.addEventListener("click", () => {
-    const heightmap = options.exportSelectedLandscapeHeightmap();
-    if (!heightmap) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = heightmap.width;
-    canvas.height = heightmap.height;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.putImageData(
-      new ImageData(new Uint8ClampedArray(heightmap.pixels), heightmap.width, heightmap.height),
-      0,
-      0,
-    );
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
+  bindHeightmapFileControls(options);
+}
+
+/**
+ * Exact 16-bit RAW/PNG heightmap of the whole grid, shared by 1×1 and
+ * multi-tile Landscapes; `extra` is appended inside the section.
+ */
+function heightmapFileSection(shape: LandscapeHeightmapShape | null, lockedAttr: string, extra = ""): string {
+  if (!shape) return "";
+  const { width, height } = shape;
+  const disabled = shape.issues.length > 0 ? "disabled" : lockedAttr;
+  return `<div class="detail-section" data-landscape-heightmap>
+        <div class="detail-section-title">Heightmap</div>
+        <div class="detail-hint">16-bit RAW or PNG: exactly ${width} × ${height} samples, rows along +Z. Heights are metres relative to terrain origin Y.${
+          shape.multiTile ? " Empty tiles are skipped; export fills uncovered samples with 0." : ""}</div>
+        ${shape.issues.length > 0 ? `<div class="detail-hint" data-heightmap-issues>Not available for this grid (${escapeHtml(shape.issues.join("; "))}); resample it to a preset resolution first.</div>` : ""}
+        <label class="detail-row"><span>RAW Byte Order</span><select data-heightmap-order ${disabled}>
+          <option value="little">Little-endian</option><option value="big">Big-endian</option>
+        </select></label>
+        <label class="detail-row"><span>Min Height (0), m</span><input data-heightmap-min type="number" step="any" value="${shape.heightMin}" ${disabled} /></label>
+        <label class="detail-row"><span>Max Height (65535), m</span><input data-heightmap-max type="number" step="any" value="${shape.heightMax}" ${disabled} /></label>
+        <div class="landscape-heightmap-actions">
+          <label class="detail-action-button">Import RAW<input data-heightmap-import="raw" type="file" accept=".raw,.r16" hidden ${disabled} /></label>
+          <label class="detail-action-button">Import PNG<input data-heightmap-import="png" type="file" accept="image/png,.png" hidden ${disabled} /></label>
+        </div>
+        <div class="landscape-heightmap-actions">
+          <button type="button" class="detail-action-button" data-heightmap-export="raw" ${shape.issues.length > 0 ? "disabled" : ""}>Export RAW</button>
+          <button type="button" class="detail-action-button" data-heightmap-export="png" ${shape.issues.length > 0 ? "disabled" : ""}>Export PNG</button>
+        </div>
+        <div class="detail-hint">Export writes little-endian RAW or 16-bit greyscale PNG; the status line reports the height range needed to re-import.</div>${extra}
+      </div>`;
+}
+
+function bindHeightmapFileControls(options: SpecialActorDetailsOptions): void {
+  const { body } = options;
+  body.querySelectorAll<HTMLInputElement>("[data-heightmap-import]").forEach((input) => {
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const format: HeightmapFileFormat = input.dataset.heightmapImport === "png" ? "png" : "raw";
+      const order = body.querySelector<HTMLSelectElement>("[data-heightmap-order]")?.value === "big" ? "big" : "little";
+      const min = body.querySelector<HTMLInputElement>("[data-heightmap-min]")!.valueAsNumber;
+      const max = body.querySelector<HTMLInputElement>("[data-heightmap-max]")!.valueAsNumber;
+      try {
+        await options.importSelectedLandscapeHeightmapFile(file, format, order, min, max);
+      } finally {
+        input.value = "";
+      }
+    });
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-heightmap-export]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const heightmap = await options.exportSelectedLandscapeHeightmapFile(button.dataset.heightmapExport === "png" ? "png" : "raw");
+      if (!heightmap) return;
+      const type = button.dataset.heightmapExport === "png" ? "image/png" : "application/octet-stream";
+      const url = URL.createObjectURL(new Blob([heightmap.bytes.slice().buffer], { type }));
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "landscape-heightmap.png";
+      anchor.download = heightmap.name;
       anchor.click();
       URL.revokeObjectURL(url);
-    }, "image/png");
+    });
   });
 }
 
@@ -1007,8 +1049,6 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
     .join("");
   const metres = (value: number) => `${Number(value.toFixed(2))} m`;
   const holes = terrain.tilesX * terrain.tilesZ - terrain.tileCount;
-  const width = terrain.tilesX * terrain.tileQuads + 1;
-  const height = terrain.tilesZ * terrain.tileQuads + 1;
   const toolsMarkup = settings.editMode === "paint"
     ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
         ${LANDSCAPE_PAINT_TOOLS.map((tool) => `<button type="button" data-landscape-paint-tool="${tool}" class="${
@@ -1068,20 +1108,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
           </select>
         </label>
       </div>
-      <div class="detail-section" data-world-terrain-heightmap>
-        <div class="detail-section-title">Heightmap</div>
-        <div class="detail-hint">16-bit RAW: exactly ${width} × ${height} samples (${width * height * 2} bytes), rows along +Z. Heights are metres relative to terrain origin Y. Empty tiles are skipped; export fills uncovered samples with 0.</div>
-        <label class="detail-row"><span>Byte Order</span><select data-world-terrain-raw-order ${lockedAttr}>
-          <option value="little">Little-endian</option><option value="big">Big-endian</option>
-        </select></label>
-        <label class="detail-row"><span>Min Height (0), m</span><input data-world-terrain-raw-min type="number" step="any" value="${terrain.heightMin}" ${lockedAttr} /></label>
-        <label class="detail-row"><span>Max Height (65535), m</span><input data-world-terrain-raw-max type="number" step="any" value="${terrain.heightMax}" ${lockedAttr} /></label>
-        <div class="landscape-heightmap-actions">
-          <label class="detail-action-button">Import RAW<input data-world-terrain-raw-import type="file" accept=".raw,.r16" hidden ${lockedAttr} /></label>
-          <button type="button" class="detail-action-button" data-world-terrain-raw-export>Export RAW</button>
-        </div>
-        <div class="detail-hint">Export is little-endian; the status line reports the height range needed to re-import.</div>
-      </div>
+      ${heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr)}
       <div class="detail-section" data-world-terrain>
         <div class="detail-section-title">Tiles</div>
         <div class="detail-row"><span>Tiles in memory</span><span data-world-terrain-residency></span></div>
@@ -1090,7 +1117,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines, resizing and PNG heightmaps are not available for a multi-tile Landscape yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines and resizing are not available for a multi-tile Landscape yet.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Others</div>
@@ -1135,29 +1162,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       options.refreshDetails();
     });
   bindLayerPhysicalMaterial(options);
-  body.querySelector<HTMLInputElement>("[data-world-terrain-raw-import]")?.addEventListener("change", async (event) => {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    const order = body.querySelector<HTMLSelectElement>("[data-world-terrain-raw-order]")?.value === "big" ? "big" : "little";
-    const minInput = body.querySelector<HTMLInputElement>("[data-world-terrain-raw-min]")!;
-    const maxInput = body.querySelector<HTMLInputElement>("[data-world-terrain-raw-max]")!;
-    try {
-      await options.importSelectedWorldTerrainHeightmap(file, order, minInput.valueAsNumber, maxInput.valueAsNumber);
-    } finally {
-      input.value = "";
-    }
-  });
-  body.querySelector<HTMLButtonElement>("[data-world-terrain-raw-export]")?.addEventListener("click", async () => {
-    const heightmap = await options.exportSelectedWorldTerrainHeightmap();
-    if (!heightmap) return;
-    const url = URL.createObjectURL(new Blob([heightmap.bytes.slice().buffer], { type: "application/octet-stream" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = heightmap.name;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  });
+  bindHeightmapFileControls(options);
   body.querySelector<HTMLInputElement>("[data-landscape-collision]")?.addEventListener("change", (event) => {
     options.setSelectedLandscape({ collision: (event.currentTarget as HTMLInputElement).checked });
   });

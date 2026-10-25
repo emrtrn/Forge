@@ -34,6 +34,8 @@ tanım yeniden yazılır, eklenen tile dosyaları `.tiles/` altında sahipsiz ka
 > alternatif Faz 2 renderer'ı, bu özellikleri koruyan yerel renderer üzerinde
 > uzlaştırıldı; kararlar aşağıdaki birleştirme notunda. Açık Faz 2 işleri
 > 16-bit PNG, büyük import worker'ı ve renderer maddesinde belirtilen eklerdir.
+> Kalan editör işinin onaylı planı (birleştirmeden önce yazıldı; kapsam farkı o
+> belgenin başındaki notta): [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -695,6 +697,9 @@ GTAO'yu dışlamak yerine yerel displaced normal/depth geçişleri korunur.
 `tests/engine/terrainRender.test.ts` uyarlaması; kaynak/padding, slot cache ve
 eviction, döndürülmüş arazide 60 ışın, sculpt/picking, shader geçişleri ve
 outline davranışını mevcut API üzerinde denetler.
+
+Kalan maddelerin onaylı uygulama planı:
+[OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
 
 - [x] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
       (saf, test edilir: komşu düğüm LOD farkı ≤ 1, menzil monotonluğu).

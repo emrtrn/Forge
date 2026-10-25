@@ -136,6 +136,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   fillSelectedLandscapeLayer: (layerId?: string) => Promise<void>;
   getSelectedLandscapeLayers: () => LandscapeLayerView[];
   addSelectedLandscapeLayer: () => Promise<void>;
+  removeSelectedLandscapeLayer: (layerId: string) => Promise<void>;
   getSelectedLandscapeSplines: () => LandscapeSplineView[];
   createSelectedLandscapeSpline: () => void;
   deleteSelectedLandscapeSpline: (splineId?: string | null) => void;
@@ -424,7 +425,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
                 )
                 .join("")}
             </div>
-            <button type="button" class="detail-action-button" data-landscape-add-layer ${layers.length >= 8 ? "disabled" : lockedAttr}>Add Layer (${layers.length}/8)</button>
+            ${layerAddRemoveButtons(layers.length, activeLayer, lockedAttr)}
             <label class="detail-row">
               <span>Material</span>
               <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
@@ -889,6 +890,13 @@ function bindLayerPhysicalMaterial(options: SpecialActorDetailsOptions): void {
     });
 }
 
+/** Add Layer, and Remove Layer for the shown active one (a terrain keeps at least one layer). */
+function layerAddRemoveButtons(count: number, activeLayer: { id: string } | undefined, lockedAttr: string): string {
+  return `<button type="button" class="detail-action-button" data-landscape-add-layer ${count >= 8 ? "disabled" : lockedAttr}>Add Layer (${count}/8)</button>
+    <button type="button" class="detail-action-button" data-landscape-remove-layer="${escapeHtml(activeLayer?.id ?? "")}" ${count <= 1 || !activeLayer ? "disabled" : lockedAttr}>Remove Layer</button>
+    <div class="detail-hint">Remove Layer deletes the active layer; its paint goes to the remaining layers in proportion.</div>`;
+}
+
 /**
  * Mode, tool, layer, brush and view controls shared by the Landscape and World
  * Terrain panels; every change re-renders whichever panel is showing.
@@ -898,6 +906,12 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
   body.querySelector<HTMLButtonElement>("[data-landscape-add-layer]")?.addEventListener("click", async (event) => {
     (event.currentTarget as HTMLButtonElement).disabled = true;
     await options.addSelectedLandscapeLayer();
+    options.refreshDetails();
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-remove-layer]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    await options.removeSelectedLandscapeLayer(button.dataset.landscapeRemoveLayer ?? "");
     options.refreshDetails();
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-fill]")?.addEventListener("click", async (event) => {
@@ -1064,7 +1078,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
           <span>${escapeHtml(layerDisplayName(layer))}</span>
         </button>`).join("")}
       </div>
-      <button type="button" class="detail-action-button" data-landscape-add-layer ${layers.length >= 8 ? "disabled" : lockedAttr}>Add Layer (${layers.length}/8)</button>
+      ${layerAddRemoveButtons(layers.length, activeLayer, lockedAttr)}
       <label class="detail-row">
         <span>Material</span>
         <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>

@@ -2,7 +2,7 @@ import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainD
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
 import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
-import { applyTerrainLayerState, createTerrainLayerAddition } from "@engine/terrain/terrainLayers";
+import { applyTerrainLayerState, createTerrainLayerAddition, createTerrainLayerRemoval } from "@engine/terrain/terrainLayers";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
@@ -31,6 +31,7 @@ import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@
 import {
   landscapeEditIssues,
   landscapeEditWorld,
+  landscapeLayersWithoutLayer,
   landscapeGridPatchValues,
   terrainDocumentToLandscape,
   writeTerrainPatchToLandscape,
@@ -10352,6 +10353,84 @@ export class SceneApp {
       }
     } catch (error) {
       this.onStatus?.(`Add layer failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      if (document) this.worldTerrainStreams.get(document)?.release();
+    }
+  }
+
+  /**
+   * Removes one paint layer from the selected landscape as one undo command;
+   * its weight goes to the remaining layers (`createTerrainLayerRemoval`). A
+   * multi-tile terrain loads every tile first and rewrites all of them plus
+   * the definition on Save, like Add Layer. The active layer moves to the
+   * first remaining one; undo restores the exact weights and selection.
+   */
+  async removeSelectedLandscapeLayer(layerId: string): Promise<void> {
+    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    if (!actor) return;
+    const document = this.worldTerrains.get(actor.id);
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    const data = this.landscapeData.get(actor.id);
+    const layers = document?.def.layers ?? data?.layers;
+    if (!layers || layers.length <= 1 || !layers.some((layer) => layer.id === layerId)) return;
+    try {
+      if (document) await this.loadWholeWorldTerrain(document, "remove a paint layer");
+      if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
+        || this.isSelectionLocked(this.selection) || (document && this.worldTerrains.get(actor.id) !== document)) return;
+      const refresh = (activeLayerId: string): void => {
+        this.landscapeSculptSettings.activeLayerId = activeLayerId;
+        const index = this.layout?.landscapes?.findIndex((entry) => entry.id === actor.id) ?? -1;
+        if (index < 0) return;
+        this.rebuildLandscapeObject(index);
+        this.select({ kind: "landscape", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      };
+      const previousActive = this.landscapeSculptSettings.activeLayerId;
+      const activeAfter = (remaining: readonly { id: string }[]): string =>
+        remaining.some((entry) => entry.id === previousActive) ? previousActive : remaining[0]!.id;
+      if (document && session) {
+        const removal = createTerrainLayerRemoval(session.world, layerId);
+        const nextActive = activeAfter(removal.after.layers);
+        const apply = (state: typeof removal.before, activeLayerId: string): void => {
+          if (this.worldTerrains.get(actor.id) !== document) return;
+          applyTerrainLayerState(session.world, state);
+          document.globalAttributes = buildTerrainGlobalAttributes(worldTerrainRenderSource(document.def, document.tiles));
+          session.markTiles(document.tiles.keys());
+          session.markDefinitionDirty();
+          refresh(activeLayerId);
+        };
+        this.executeCommand({
+          label: "Remove Landscape Paint Layer",
+          redo: () => apply(removal.after, nextActive),
+          undo: () => apply(removal.before, previousActive),
+        });
+      } else if (data) {
+        ensureLandscapeLayers(data);
+        const issues = landscapeEditIssues(data);
+        if (issues.length > 0) {
+          this.onStatus?.(`${actor.name ?? actor.id} cannot remove a layer (${issues.join("; ")}). Resample it to a preset resolution first.`, "warning");
+          return;
+        }
+        const before = cloneLandscapeLayers(data.layers);
+        const after = landscapeLayersWithoutLayer(data, layerId);
+        const nextActive = activeAfter(after);
+        const apply = (next: LandscapeLayerWeights[], activeLayerId: string): void => {
+          const current = this.landscapeData.get(actor.id);
+          if (!current) return;
+          current.layers = cloneLandscapeLayers(next);
+          this.markLandscapeDirty(actor.id);
+          refresh(activeLayerId);
+        };
+        this.executeCommand({
+          label: "Remove Landscape Paint Layer",
+          redo: () => apply(after, nextActive),
+          undo: () => apply(before, previousActive),
+        });
+      }
+    } catch (error) {
+      this.onStatus?.(`Remove layer failed: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
       if (document) this.worldTerrainStreams.get(document)?.release();
     }

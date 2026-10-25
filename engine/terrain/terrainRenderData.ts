@@ -133,12 +133,16 @@ export function packTerrainWeights(
   rect: TerrainVertexRect,
 ): void {
   const texels = grid.stride * grid.stride;
+  // Coarse/morphing vertices can read the padding beside an authored edge.
+  // Match height padding, including after a partial edge paint operation.
+  const x1 = rect.x1 === grid.verticesX - 1 ? grid.stride - 1 : rect.x1;
+  const z1 = rect.z1 === grid.verticesZ - 1 ? grid.stride - 1 : rect.z1;
   for (let layer = 0; layer < TERRAIN_RENDER_LAYERS; layer += 1) {
     const weights = data.layers[layer]?.weights;
     const base = Math.floor(layer / 4) * texels * 4 + (layer % 4);
-    for (let z = rect.z0; z <= rect.z1; z += 1) {
-      for (let x = rect.x0; x <= rect.x1; x += 1) {
-        const weight = weights?.[z * grid.verticesX + x] ?? 0;
+    for (let z = rect.z0; z <= z1; z += 1) {
+      for (let x = rect.x0; x <= x1; x += 1) {
+        const weight = weights?.[Math.min(z, grid.verticesZ - 1) * grid.verticesX + Math.min(x, grid.verticesX - 1)] ?? 0;
         out[base + (z * grid.stride + x) * 4] = Math.round(Math.min(1, Math.max(0, weight)) * 255);
       }
     }

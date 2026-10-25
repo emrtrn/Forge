@@ -10,6 +10,8 @@ export interface TerrainLodOptions {
   range0?: number;
   levels?: number;
   morphStartRatio?: number;
+  /** Drawn X/Z footprint; padded legacy tiles can be larger than the authored grid. */
+  extent?: readonly [number, number];
 }
 
 export interface TerrainLodSettings {
@@ -161,6 +163,8 @@ export class TerrainLodSelector {
   readonly settings: TerrainLodSettings;
   readonly ranges: readonly number[];
   readonly morphRanges: readonly TerrainMorphRange[];
+  readonly extentX: number;
+  readonly extentZ: number;
 
   constructor(
     readonly world: TerrainLodWorld,
@@ -170,6 +174,13 @@ export class TerrainLodSelector {
     this.settings = createTerrainLodSettings(world, options);
     this.ranges = terrainLodRanges(this.settings);
     this.morphRanges = terrainLodMorphRanges(this.settings);
+    const tileSize = terrainTileWorldSize(world);
+    const [extentX, extentZ] = options.extent ?? [world.tilesX * tileSize, world.tilesZ * tileSize];
+    if (![extentX, extentZ].every((value) => Number.isFinite(value) && value > 0)) {
+      throw new Error("Terrain LOD extent must be finite and positive");
+    }
+    this.extentX = Math.min(extentX, world.tilesX * tileSize);
+    this.extentZ = Math.min(extentZ, world.tilesZ * tileSize);
   }
 
   /** Detail levels (< 0) take their level-0 ancestor's height bounds. */
@@ -178,14 +189,13 @@ export class TerrainLodSelector {
     const height = level < 0
       ? this.heights(0, Math.floor(ix / 2 ** -level), Math.floor(iz / 2 ** -level))
       : this.heights(level, ix, iz);
-    const tileSize = terrainTileWorldSize(this.world);
     return {
       minX: this.world.origin[0] + ix * size,
       minY: this.world.origin[1] + height.min,
       minZ: this.world.origin[2] + iz * size,
-      maxX: this.world.origin[0] + Math.min((ix + 1) * size, this.world.tilesX * tileSize),
+      maxX: this.world.origin[0] + Math.min((ix + 1) * size, this.extentX),
       maxY: this.world.origin[1] + height.max,
-      maxZ: this.world.origin[2] + Math.min((iz + 1) * size, this.world.tilesZ * tileSize),
+      maxZ: this.world.origin[2] + Math.min((iz + 1) * size, this.extentZ),
     };
   }
 
@@ -197,8 +207,8 @@ export class TerrainLodSelector {
     const nodes: TerrainLodNode[] = [];
     const { leafSize, levels, tileLevel, range0 } = this.settings;
     const tileSize = terrainTileWorldSize(this.world);
-    const width = this.world.tilesX * tileSize;
-    const depth = this.world.tilesZ * tileSize;
+    const width = this.extentX;
+    const depth = this.extentZ;
     const detailLevels = detail && [detail.minX, detail.minZ, detail.maxX, detail.maxZ].every(Number.isFinite)
       && detail.maxX > detail.minX && detail.maxZ > detail.minZ
       ? Math.max(0, Math.min(TERRAIN_LOD_MAX_DETAIL_LEVELS, Math.floor(detail.levels))) : 0;

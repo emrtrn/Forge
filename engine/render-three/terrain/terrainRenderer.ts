@@ -343,6 +343,7 @@ export class TerrainRenderer {
 
     this.selector = new TerrainLodSelector(this.world, (level, ix, iz) => this.bounds.node(level, ix, iz), {
       patchQuads: TERRAIN_PATCH_QUADS,
+      extent: source.extent,
     });
     this.materials = createTerrainMaterials({
       heights: this.heightTexture,

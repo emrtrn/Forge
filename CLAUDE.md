@@ -188,8 +188,11 @@ engine/editor.
   (`engine/terrain/terrainSurface.ts`); the 1×1 path carries it on
   `LandscapeLayerWeights` through the bridge, legacy conversion and clones.
   Editor saves migrate legacy sidecars tile → global map → definition → level reference,
-  preserving the old file. Phase 1 bridges 1×1 terrain to the existing mesh/brush
-  path; multi-tile rendering is Phase 2 and currently rejects explicitly.
+  preserving the old file. Landscapes render through the GPU CDLOD renderer
+  (`engine/render-three/terrain/`, wrapped by `engine/render-three/landscape.ts`);
+  picking raycasts the CPU heightfield. Multi-tile World Terrain supports
+  sculpt/paint, heightfield collision, and editor/runtime streaming. The 1×1
+  legacy adapter remains available for existing Landscape authoring data.
   A tile rewritten after its definition was committed (overlapping saves) leaves
   the `minHeight..maxHeight` summary stale and the editor refuses to load the level
   (`terrain tile K samples … exceed declared bounds`, shown as an editor toast).

@@ -27,16 +27,13 @@ tanım yeniden yazılır, eklenen tile dosyaları `.tiles/` altında sahipsiz ka
 > K7 reversed-Z + float derinlik. Spike sayfaları merge öncesi silindi;
 > son halleri `035a659` commit'inde (`git show 035a659:spikes/terrain-cdlod/terrainMaterial.ts`,
 > `git checkout 035a659 -- spikes` ile geri gelir). Belgede geçen `spikes/…`
-> yolları o commit'e aittir. **Faz 2 renderer'ının ilk dilimi (2026-10-23, dal
-> `feat/terrain-renderer`):** 1×1 Landscape'ler GPU CDLOD renderer'ıyla çiziliyor;
-> görsel karşılaştırma kullanıcı tarafından onaylandı ve eski chunk mesh
-> renderer'ı kaldırıldı. **Çok-tile renderer çekirdeği tamam (2026-10-23):**
-> slot havuzu + kameraya göre yerleşim + global harita + delikler; 3×2 tile'lık
-> GPU smoke'unda dikiş çatlağı 0. **Editör/runtime çok-tile yüklemesi tamam
-> (2026-10-23):** çok-tile World Terrain'e başvuran bir Landscape actor'ü iki
-> uygulamada da çiziliyor, editörde seçiliyor/odaklanıyor (görünüm-yalnız),
-> Save referansı olduğu gibi koruyor, runtime tile başına trimesh ile çarpışıyor.
-> Sonraki iş editörde çok-tile sculpt/paint.
+> yolları o commit'e aittir. **Güncel uygulama (2026-10-25):** GPU CDLOD
+> renderer, çok-tile World Terrain, sculpt/paint, Rapier heightfield çarpışması,
+> editör/runtime streaming ve deformasyon/iz detayları birlikte mevcut.
+> Eski CPU chunk renderer kaldırıldı. `claude/zealous-brown-lfi5ti` dalındaki
+> alternatif Faz 2 renderer'ı, bu özellikleri koruyan yerel renderer üzerinde
+> uzlaştırıldı; kararlar aşağıdaki birleştirme notunda. Açık Faz 2 işleri
+> 16-bit PNG, büyük import worker'ı ve renderer maddesinde belirtilen eklerdir.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -679,7 +676,27 @@ Doğrulama (2026-10-22):
 
 ## Faz 2 — Terrain renderer (CDLOD) + editör araçlarının taşınması
 
-- [ ] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
+**Birleştirme notu (2026-10-25):** `feat/terrain-deformation` ile
+`claude/zealous-brown-lfi5ti` ortak `0a685bab` tabanından ayrı renderer'lar
+üretmişti. Runtime'da yerel `TerrainRenderer` korunur: çok-tile/streaming,
+seam normalleri, artımlı texture rect yüklemeleri, deformasyon ve GTAO/DOF
+normal/depth materyalleri kaybolmaz. Bulut dalından seçiciye `extent` kırpması
+(deformasyon alt seviyeleri korunarak), GPU terrain'in outline proxy'sinden
+çıkarılması ve test vakaları taşındı. Kenar boya padding'i yüksekliklerle
+aynı uzatma kuralına getirildi. `terrainTexturePool.ts` testli bağımsız bir
+slot/doku yardımcısı olarak korunur; aktif renderer kendi normal/weight/global
+texture ve dirty-rect yönetimini kullanmaya devam eder.
+
+Bulut renderer'ının node-texture + `onBeforeRender` kamera seçimi ve fragment
+normal hesabı mevcut renderer'ın yerine geçirilmedi. Bu dala ait eski
+SwiftShader parite ölçümleri birleşmiş renderer için yeni doğrulama sayılmaz.
+Aktif renderer'ın node frustum culling'i aşağıdaki açık iş olarak kalır;
+GTAO'yu dışlamak yerine yerel displaced normal/depth geçişleri korunur.
+`tests/engine/terrainRender.test.ts` uyarlaması; kaynak/padding, slot cache ve
+eviction, döndürülmüş arazide 60 ışın, sculpt/picking, shader geçişleri ve
+outline davranışını mevcut API üzerinde denetler.
+
+- [x] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
       (saf, test edilir: komşu düğüm LOD farkı ≤ 1, menzil monotonluğu).
       *Saf çekirdek hazır (2026-10-23): düğüm seçimi, 3B rölyef alt sınırı,
       morph ve yakın→uzak residency listesi testli. *Renderer'a bağlandı
@@ -688,7 +705,7 @@ Doğrulama (2026-10-22):
       `terrainResidentTileKeys` ile.
       Tam morph olmuş tile-seviyesi düğüm global haritayı kullanır; 67 tile
       yaklaşık değerdir, kesin sayı kamera konumuna bağlıdır.*
-- [ ] `terrainTexturePool.ts`: slot ayırma/serbest bırakma, global düşük
+- [x] `terrainTexturePool.ts`: slot ayırma/serbest bırakma, global düşük
       çözünürlüklü harita.
       *Saf slot ayırıcı `engine/terrain/terrainSlotPool.ts` hazır (2026-10-23):
       varsayılan 80 slot, serbest bırakılan veriyi önbellekte tutma ve en önce

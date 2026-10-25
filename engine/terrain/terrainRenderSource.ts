@@ -1,6 +1,13 @@
 import type { ForgeLandscapeData } from "../scene/landscape";
 import type { TerrainDirtyRect } from "./terrainEdit";
-import { TerrainTileMap, invalidateTerrainTileRange, type TerrainQueryDef } from "./terrainHeightQuery";
+import type { Vec3 } from "../scene/layout";
+import {
+  TerrainTileMap,
+  invalidateTerrainTileRange,
+  raycastTerrain,
+  type TerrainQueryDef,
+  type TerrainRayHit,
+} from "./terrainHeightQuery";
 import type { TerrainNodeHeights } from "./terrainLod";
 import type { WorldTerrainDocument } from "./terrainLoader";
 import {
@@ -199,4 +206,37 @@ export function terrainRenderSourceHeightRange(source: TerrainRenderSource): { m
     max = Math.max(max, range.max);
   }
   return Number.isFinite(min) ? { min, max } : { min: 0, max: 0 };
+}
+
+/**
+ * {@link raycastTerrain} limited to the drawn footprint, so a ray never hits a
+ * padded legacy tile's invisible margin. Same frame and units as the source.
+ */
+export function raycastTerrainRenderSource(
+  source: TerrainRenderSource,
+  origin: Vec3,
+  direction: Vec3,
+  maxDistance = Infinity,
+): TerrainRayHit | null {
+  const length = Math.hypot(direction[0], direction[1], direction[2]);
+  if (!(length > 0) || !Number.isFinite(length)) return null;
+  const dir: Vec3 = [direction[0] / length, direction[1] / length, direction[2] / length];
+  let enter = 0;
+  let exit = maxDistance;
+  for (const [axis, extent] of [[0, source.extentX], [2, source.extentZ]] as const) {
+    const lo = source.def.origin[axis];
+    const hi = lo + extent;
+    if (Math.abs(dir[axis]) < 1e-12) {
+      if (origin[axis] < lo || origin[axis] > hi) return null;
+      continue;
+    }
+    const t0 = (lo - origin[axis]) / dir[axis];
+    const t1 = (hi - origin[axis]) / dir[axis];
+    enter = Math.max(enter, Math.min(t0, t1));
+    exit = Math.min(exit, Math.max(t0, t1));
+  }
+  if (!(enter <= exit)) return null;
+  const start: Vec3 = [origin[0] + dir[0] * enter, origin[1] + dir[1] * enter, origin[2] + dir[2] * enter];
+  const hit = raycastTerrain(source.def, source.tiles, start, dir, exit - enter);
+  return hit ? { ...hit, distance: hit.distance + enter } : null;
 }

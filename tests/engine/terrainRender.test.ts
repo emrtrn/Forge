@@ -12,6 +12,23 @@ import {
 import { createFlatTerrainTile, terrainTileLayerWeight, tileKey, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import type { ForgeLandscapeData } from "../../engine/scene/landscape";
 import { TerrainTexturePool } from "../../engine/render-three/terrain/terrainTexturePool";
+import {
+  Box3,
+  Group,
+  Matrix3,
+  PerspectiveCamera,
+  Raycaster,
+  ShaderLib,
+  Texture,
+  Vector2,
+  Vector3,
+  type WebGLProgramParametersWithUniforms,
+  type WebGLRenderer,
+} from "three";
+import { TerrainRenderer, createTerrainPatchGeometry, packTerrainNode } from "../../engine/render-three/terrain/terrainRenderer";
+import type { TerrainLook } from "../../engine/render-three/terrain/terrainMaterial";
+import { createLandscapeObject, disposeLandscapeObject, resolveLandscape } from "../../engine/render-three/landscape";
+import type { LayoutLandscape } from "../../engine/scene/layout";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -205,5 +222,169 @@ export function registerTerrainRenderTests(check: Check): void {
     pool.acquire(tile);
     assert.ok((pool.weights.image.data as Uint8Array).every((value) => value === 0));
     pool.dispose();
+  });
+}
+
+function legacyRenderItem(data: ForgeLandscapeData, rotation: [number, number, number]) {
+  return {
+    ...resolveLandscape({ id: "land", position: [3, 1.5, -2], dataRef: "x.landscape.json" } as LayoutLandscape),
+    position: [3, 1.5, -2] as [number, number, number],
+    rotation,
+    data,
+  };
+}
+
+const LOOK: TerrainLook = {
+  viewMode: "lit",
+  layers: [{ color: "#5d7f3a", texture: null, tiling: 8 }],
+  activeLayer: 0,
+  defaultColor: "#5d7f3a",
+};
+
+/** A legacy landscape drawn by the GPU renderer, placed like the chunk mesh under a rotated actor. */
+function placedTerrain(data: ForgeLandscapeData, rotation: [number, number, number]): { group: Group; terrain: TerrainRenderer } {
+  const terrain = new TerrainRenderer(landscapeRenderSource(data), LOOK);
+  const group = new Group();
+  group.add(terrain.mesh);
+  group.position.set(3, 1.5, -2);
+  group.rotation.set((rotation[0] * Math.PI) / 180, (rotation[1] * Math.PI) / 180, (rotation[2] * Math.PI) / 180, "XYZ");
+  group.updateMatrixWorld(true);
+  return { group, terrain };
+}
+
+export function registerTerrainRendererTests(check: Check): void {
+  check("terrain renderer: patch and node packing match the shader's layout", () => {
+    const geometry = createTerrainPatchGeometry(4);
+    assert.equal(geometry.getAttribute("position").count, 25);
+    assert.deepEqual(Array.from(geometry.index!.array.slice(0, 6)), [0, 5, 1, 1, 5, 6], "b–c diagonal like the collider");
+    assert.equal(geometry.index!.count, 4 * 4 * 6);
+    const data = new Float32Array(16);
+    packTerrainNode(data, 1, 10, 20, 32, 2, -1, 0, 0);
+    assert.deepEqual(Array.from(data.slice(8)), [10, 20, 32, 2, -1, 0, 0, 0]);
+  });
+
+  check("terrain renderer: raycasts hit the same points as the legacy chunk mesh under a rotated actor", () => {
+    const data = legacyData(65, 97, 0.5, 2);
+    const rotation: [number, number, number] = [0, 37, 0];
+    const { group, terrain } = placedTerrain(data, rotation);
+    const legacy = createLandscapeObject(legacyRenderItem(data, rotation));
+    legacy.updateMatrixWorld(true);
+    const raycaster = new Raycaster();
+    let hits = 0;
+    for (let index = 0; index < 60; index += 1) {
+      const origin = new Vector3(3 + Math.sin(index * 1.7) * 14, 30, -2 + Math.cos(index * 2.3) * 20);
+      const direction = new Vector3(Math.sin(index) * 0.4, -1, Math.cos(index * 0.7) * 0.4).normalize();
+      raycaster.set(origin, direction);
+      const expected = raycaster.intersectObject(legacy, true)[0];
+      const actual = raycaster.intersectObject(group, true)[0];
+      assert.equal(Boolean(actual), Boolean(expected), `ray ${index} hit/miss parity`);
+      if (!actual || !expected) continue;
+      hits += 1;
+      assert.ok(actual.point.distanceTo(expected.point) < 1e-4, `ray ${index}: ${actual.point.toArray()} vs ${expected.point.toArray()}`);
+      assert.ok(Math.abs(actual.distance - expected.distance) < 1e-4);
+      assert.equal(actual.object, terrain.mesh);
+      const actualNormal = actual.face!.normal.clone().applyMatrix3(new Matrix3().getNormalMatrix(terrain.mesh.matrixWorld));
+      const expectedNormal = expected.face!.normal.clone().applyMatrix3(new Matrix3().getNormalMatrix(expected.object.matrixWorld));
+      assert.ok(actualNormal.distanceTo(expectedNormal) < 1e-4, `ray ${index} face normal`);
+    }
+    assert.ok(hits > 25, `enough rays hit to compare (${hits})`);
+    terrain.dispose();
+    disposeLandscapeObject(legacy);
+  });
+
+  check("terrain renderer: rays never hit the padded margin and respect raycaster far", () => {
+    const data = legacyData(65, 97, 1, 1);
+    const { group, terrain } = placedTerrain(data, [0, 0, 0]);
+    const raycaster = new Raycaster(new Vector3(3 + 40, 50, -2), new Vector3(0, -1, 0));
+    assert.equal(raycaster.intersectObject(group, true).length, 0, "x = +40 is inside the 128-quad tile but outside the 64 m footprint");
+    raycaster.set(new Vector3(3, 50, -2), new Vector3(0, -1, 0));
+    assert.equal(raycaster.intersectObject(group, true).length, 1);
+    raycaster.far = 10;
+    assert.equal(raycaster.intersectObject(group, true).length, 0);
+    terrain.dispose();
+  });
+
+  check("terrain renderer: selection packs visible nodes over the footprint and slots single-tile nodes", () => {
+    const data = legacyData(65, 97, 1, 1);
+    const { terrain } = placedTerrain(data, [0, 0, 0]);
+    const camera = new PerspectiveCamera(90, 1, 0.1, 5000);
+    camera.position.set(3, 400, -2);
+    camera.lookAt(3, 0, -2);
+    camera.updateMatrixWorld(true);
+    terrain.select(camera);
+    assert.equal(terrain.mesh.geometry.instanceCount, terrain.stats.nodes);
+    assert.ok(terrain.stats.nodes > 0);
+    const nodes = terrain.nodeBuffer;
+    let area = 0;
+    for (let base = 0; base < nodes.length; base += 8) {
+      const [x, z, size, , slot] = nodes.slice(base, base + 5);
+      area += (Math.min(x! + size!, 64) - x!) * (Math.min(z! + size!, 96) - z!);
+      assert.equal(slot, 0, "a 1×1 source always reads its tile");
+    }
+    assert.equal(area, 64 * 96);
+    camera.lookAt(3, 0, 5000);
+    camera.position.set(3, 1, 300);
+    camera.updateMatrixWorld(true);
+    terrain.select(camera);
+    assert.equal(terrain.stats.nodes, 0, "a camera looking away culls every node");
+    terrain.dispose();
+
+    const def = worldDef(2, 2, 1);
+    const tiles = new Map([[0, 0], [1, 0], [0, 1], [1, 1]].map(([x, z]) => [tileKey(x!, z!), createFlatTerrainTile(def, x!, z!, x! + z!)]));
+    const world = new TerrainRenderer(worldTerrainRenderSource({ def, tiles }), LOOK);
+    world.mesh.updateMatrixWorld(true);
+    camera.position.set(-40 + 64, 5000, 12 + 64);
+    camera.lookAt(-40 + 64, 0, 12 + 64);
+    camera.updateMatrixWorld(true);
+    world.select(camera);
+    const far = world.nodeBuffer;
+    assert.equal(far.length, 8, "from far away one root node covers the world");
+    assert.equal(far[4], -1, "a node spanning tiles reads the global map");
+    world.dispose();
+  });
+
+  check("terrain renderer: edits update bounds, the height view range and the global map", () => {
+    const data = legacyData(65, 65, 1, 1);
+    const source = landscapeRenderSource(data);
+    const terrain = new TerrainRenderer(source, LOOK);
+    data.heights[10 * 65 + 10] = 99;
+    const rect = writeLandscapeRegion(source, data, { x0: 10, x1: 10, z0: 10, z1: 10 });
+    terrain.updateTile(0, 0, rect);
+    assert.equal(terrain.mesh.geometry.boundingBox!.max.y, 99);
+    const uniforms = (terrain as unknown as { terrainMaterial: { uniforms: Record<string, { value: unknown }> } }).terrainMaterial.uniforms;
+    assert.equal((uniforms.uTerrainHeightRange!.value as Vector2).y, 99);
+    const box = new Box3().setFromObject(terrain.mesh);
+    assert.deepEqual([box.min.x, box.max.x, box.min.z, box.max.z], [-32, 32, -32, 32]);
+    terrain.dispose();
+  });
+
+  check("terrain material: shader injection replaces the standard chunks and keeps the look switchable", () => {
+    const terrain = new TerrainRenderer(landscapeRenderSource(legacyData(65, 65, 1, 1)), LOOK);
+    const material = terrain.material;
+    const shader = {
+      vertexShader: ShaderLib.standard.vertexShader,
+      fragmentShader: ShaderLib.standard.fragmentShader,
+      uniforms: {} as Record<string, { value: unknown }>,
+    } as unknown as WebGLProgramParametersWithUniforms;
+    material.onBeforeCompile(shader, {} as WebGLRenderer);
+    assert.match(shader.vertexShader, /texelFetch\(uTerrainNodes/);
+    assert.match(shader.vertexShader, /vec3 transformed = uTerrainOrigin/);
+    assert.doesNotMatch(shader.vertexShader, /#include <begin_vertex>/);
+    assert.match(shader.fragmentShader, /forgeTerrainNormal\(\)/);
+    assert.match(shader.fragmentShader, /if \(vTerrainHole > 0.5\) discard;/);
+    assert.ok(shader.uniforms.uTerrainHeights && shader.uniforms.uTerrainNodes && shader.uniforms.uLayerColor);
+    assert.equal(material.defines!.TERRAIN_VIEW_MODE, "0");
+    assert.equal(material.defines!.TERRAIN_SPLAT, undefined);
+    const version = material.version;
+    terrain.setLook({ ...LOOK, layers: [{ color: "#ffffff", texture: new Texture(), tiling: 4 }] });
+    assert.equal(material.defines!.TERRAIN_SPLAT, "");
+    assert.ok(material.version > version, "a define change recompiles");
+    const splatVersion = material.version;
+    terrain.setLook({ ...LOOK, layers: [{ color: "#000000", texture: new Texture(), tiling: 2 }] });
+    assert.equal(material.version, splatVersion, "uniform-only changes do not recompile");
+    terrain.setLook({ ...LOOK, viewMode: "layer", activeLayer: 3 });
+    assert.equal(material.defines!.TERRAIN_VIEW_MODE, "3");
+    assert.notEqual(material.customProgramCacheKey(), "");
+    terrain.dispose();
   });
 }

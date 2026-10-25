@@ -43,6 +43,7 @@ import {
   type VehicleInput,
   type VehicleMotionState,
   type VehicleState,
+  type VehicleTelemetry,
   type VehicleVec3,
 } from "./vehicle/vehicleTypes";
 import type { Entity, EntityId } from "../scene/entity";
@@ -157,6 +158,7 @@ interface VehicleRecord {
   groundResistance?: number[];
   /** Local digging survives without a track field, but never travels with the tyre. */
   soil?: ({ x: number; z: number; depth: number } | null)[];
+  telemetry?: { -readonly [K in keyof Omit<VehicleTelemetry, "pitchDeg" | "gravityForwardForce">]: VehicleTelemetry[K] };
 }
 
 interface RapierBodyRecord {
@@ -441,10 +443,18 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const controller = record?.controller;
     const rapier = this.rapierBodies.get(entityId);
     if (!record || !controller || !rapier) return null;
+    const q = rapier.body.rotation();
+    const forward = { x: 2 * (q.x * q.z + q.w * q.y), y: 2 * (q.y * q.z - q.w * q.x),
+      z: 1 - 2 * (q.x * q.x + q.y * q.y) };
     return {
       forwardSpeed: chassisForwardSpeed(rapier.body),
       engineLoad: record.engineLoad,
       drivetrain: record.drivetrain ? { ...record.drivetrain } : null,
+      ...(record.telemetry ? { telemetry: {
+        ...record.telemetry, input: { ...record.telemetry.input },
+        pitchDeg: Math.atan2(forward.y, Math.hypot(forward.x, forward.z)) * 180 / Math.PI,
+        gravityForwardForce: record.definition.massKg * (this.gravity[0] * forward.x + this.gravity[1] * forward.y + this.gravity[2] * forward.z),
+      } } : {}),
       wheels: record.definition.wheels.map((wheel, index) => {
         const inContact = controller.wheelIsInContact(index);
         const contact = inContact ? controller.wheelContactPoint(index) : null;
@@ -1367,6 +1377,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     record.wheelSpinRotation = definition.wheels.map(() => 0);
     record.groundResistance = definition.wheels.map(() => 0);
     record.soil = definition.wheels.map(() => null);
+    record.telemetry = { input: { ...NEUTRAL_VEHICLE_INPUT }, requestedDriveForce: 0, appliedDriveForce: 0,
+      appliedGroundResistanceForce: 0, bellyResistanceForce: 0 };
     record.controller = controller;
     return true;
   }
@@ -1420,6 +1432,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       record.steer = drive.steer;
       record.drivetrain = drive.drivetrain;
       record.engineLoad = drive.engineLoad;
+      record.telemetry = { input: { ...record.input },
+        requestedDriveForce: drive.wheels.reduce((sum, command) => sum + command.engineForce, 0),
+        appliedDriveForce: 0, appliedGroundResistanceForce: 0, bellyResistanceForce: bellyResistance };
       drive.wheels.forEach((command, index) => {
         const surface = surfaces[index]!;
         const reducedGrip = surface.tractionCoefficient !== undefined || surface.frictionSlip < record.definition.wheels[index]!.frictionSlip;
@@ -1444,6 +1459,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
         body?.collider.collisionGroups,
       );
+      record.telemetry.appliedDriveForce = record.definition.wheels.reduce((sum, _wheel, index) =>
+        sum + (controller.wheelIsInContact(index) && controller.wheelEngineForce(index) !== 0
+          ? (controller.wheelForwardImpulse(index) ?? 0) / deltaSeconds : 0), 0);
       // Rapier's ray-cast wheels never spin faster than the ground, so wheelspin
       // is read from the friction circle this slice's impulses were judged by.
       record.definition.wheels.forEach((wheel, index) => {
@@ -1492,6 +1510,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         const direction = { x: tangent.x / speed, y: tangent.y / speed, z: tangent.z / speed };
         const inverseMass = pointInverseMass(body, point, direction) + (ground ? pointInverseMass(ground, point, direction) : 0);
         const magnitude = resistanceImpulse(speed, force, dt, inverseMass);
+        if (record.telemetry) record.telemetry.appliedGroundResistanceForce += magnitude / dt;
         const impulse = { x: -direction.x * magnitude, y: -direction.y * magnitude, z: -direction.z * magnitude };
         body.applyImpulseAtPoint(impulse, point, false);
         if (ground?.isDynamic()) ground.applyImpulseAtPoint({ x: -impulse.x, y: -impulse.y, z: -impulse.z }, point, true);

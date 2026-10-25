@@ -50,6 +50,7 @@ import {
   type VehicleHost,
 } from "../../src/scene/capabilities/runtimeServiceKeys";
 import { createVehicleModule } from "../../src/scene/capabilities/vehicleModule";
+import { vehicleTelemetryValues } from "../../src/scene/capabilities/vehicleTelemetryModule";
 import { vehicleEngineSoundLevels } from "../../engine/physics/vehicle/vehicleEngineSound";
 import { normalizeVehicleDefinition } from "../../engine/physics/vehicle/vehicleTypes";
 import { computeVehicleDrive } from "../../engine/physics/vehicle/vehicleDrive";
@@ -172,6 +173,17 @@ function fakeContext(vehicles: FakeVehicles) {
 }
 
 export function registerVehicleRuntimeTests(check: Check): void {
+  check("vehicle telemetry: rollback is distinct from reverse gear and missing diagnostics stay unknown", () => {
+    const rollback: VehicleState = { forwardSpeed: -1, engineLoad: 0, wheels: [],
+      drivetrain: { gear: 1, engineRpm: 900, shiftTimeRemaining: 0 } };
+    const values = vehicleTelemetryValues(rollback);
+    assert.equal(values.speed, "-3.6");
+    assert.equal(values.movement, "Geri hareket");
+    assert.equal(values.gear, "1");
+    assert.equal(values.throttle, "—");
+    assert.equal(values.transmitted, "—");
+    assert.equal(vehicleTelemetryValues({ ...rollback, drivetrain: { ...rollback.drivetrain!, gear: -1 } }).gear, "R");
+  });
   // (A) pure helpers.
   check("vehicle mode maps WASD + Space onto pedals, steering and handbrake", () => {
     const held = (...names: string[]) => ({ held: (action: string) => names.includes(action) });

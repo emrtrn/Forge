@@ -25,6 +25,7 @@ import { createSplineFollowerModule } from "./splineFollowerModule";
 import { createTerrainDeformationModule } from "./terrainDeformationModule";
 import { createVehicleAiModule } from "./vehicleAiModule";
 import { createVehicleModule } from "./vehicleModule";
+import { createVehicleTelemetryModule } from "./vehicleTelemetryModule";
 import { createVfxModule } from "./vfxModule";
 import { createWorldStreamingModule } from "./worldStreamingModule";
 import { createWorldPartitionModule } from "./worldPartitionModule";
@@ -38,6 +39,7 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     // Wheel visuals and engine sound only: the `Vehicle` component drives
     // through physics even with this module off.
     createVehicleModule(),
+    createVehicleTelemetryModule(),
     // AI drivers steer `VehicleAiDriver` cars along splines; off, they park.
     createVehicleAiModule(),
     // Wheel tracks in soft paint layers; off, the terrain keeps its grip/drag

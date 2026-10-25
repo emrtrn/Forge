@@ -120,6 +120,42 @@ async function openVehicleTest(
   return pageErrors;
 }
 
+test("vehicle telemetry: recording panel shows live pedals, drivetrain, soil and forces; F8 toggles it", async ({ page }) => {
+  const errors = await openVehicleTest(page, "Vehicle", (level) => {
+    flatLane(level);
+  });
+  const panel = page.getByRole("region", { name: "Araç sürüş ölçümleri" });
+  await expect(panel).toBeVisible();
+  await expect(panel.locator("tbody tr")).toHaveCount(4);
+  await expect(panel).toContainText("neutral");
+  await expect(panel.locator('[data-vt="gear"]')).toHaveText("1");
+  await expect(panel.locator('[data-vt="throttle"]')).toHaveText("0%");
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect(panel.locator('[data-vt="throttle"]')).toHaveText("100%");
+  await expect.poll(async () => Number.parseFloat(await panel.locator('[data-vt="requested"]').innerText())).toBeGreaterThan(0);
+  await expect(panel.locator('[data-vt="capacity"]')).toHaveText("0.00 kN");
+  await page.keyboard.press("F8");
+  await expect(panel).toBeHidden();
+  await page.keyboard.press("F8");
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('[data-vt="throttle"]')).toHaveText("100%");
+  await page.keyboard.up("KeyW");
+  await expect(panel.locator('[data-vt="throttle"]')).toHaveText("0%");
+  await page.keyboard.down("KeyS");
+  await expect(panel.locator('[data-vt="brake"]')).toHaveText("100%");
+  await page.keyboard.up("KeyS");
+  await page.locator("#debug-stats").evaluate((element) => { element.style.display = "none"; });
+  await page.screenshot({ path: "test-results/vehicle-telemetry-desktop.png" });
+  await page.setViewportSize({ width: 640, height: 480 });
+  await expect.poll(() => panel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight;
+  })).toBe(true);
+  await page.screenshot({ path: "test-results/vehicle-telemetry-small.png" });
+  expect(errors).toEqual([]);
+});
+
 test("vehicle smoke: the Reference Car is possessed and drives on W", async ({ page }) => {
   const assetResponse = page.waitForResponse((response) => response.url().endsWith(VEHICLE_ASSET));
   // This checks input/braking/reverse on a flat lane; ramps and props belong

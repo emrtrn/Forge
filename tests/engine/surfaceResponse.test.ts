@@ -198,6 +198,32 @@ export async function registerSurfaceResponseRapierTests(
   checkAsync: CheckAsync,
   createWorld: (options?: { slopeDeg?: number; groundSize?: number; fixedTimestep?: number }) => Promise<VehicleSurfaceTestWorld>,
 ): Promise<void> {
+  await checkAsync("vehicle telemetry rapier: demand, delivered impulse and soil capacity remain separate", async () => {
+    const world = await createWorld();
+    const { physics } = world;
+    try {
+      physics.createVehicle("car", createReferenceCarDefinition());
+      world.tick(2);
+      physics.setVehicleSurfaceProvider(() => resolveSurfaceSample("mud"));
+      world.drive({ throttle: 1 });
+      world.tick(1);
+      const state = physics.vehicleState("car")!;
+      const t = state.telemetry!;
+      assert.equal(t.input.throttle, 1);
+      assert.equal(t.input.brake, 0);
+      assert.ok(t.requestedDriveForce > t.appliedDriveForce + 100, "grip-limited engine demand cannot masquerade as delivered thrust");
+      assert.ok(t.appliedDriveForce > 0);
+      const capacity = state.wheels.reduce((sum, wheel) => sum + (wheel.groundResistanceForce ?? 0), 0);
+      assert.ok(t.appliedGroundResistanceForce >= 0 && t.appliedGroundResistanceForce <= capacity + 1e-6);
+      assert.notEqual(t.input, physics.vehicleState("car")!.telemetry!.input, "snapshot input does not alias the live record");
+      world.drive({});
+      world.tick(1 / 60);
+      const coasting = physics.vehicleState("car")!.telemetry!;
+      assert.equal(coasting.input.throttle, 0);
+      assert.equal(coasting.requestedDriveForce, 0);
+      assert.equal(coasting.appliedDriveForce, 0, "wheel brake impulses are not reported as engine thrust");
+    } finally { physics.dispose(); }
+  });
   const resistanceRun = async (options: {
     material?: string; depth?: number; speed?: number; slope?: number; pedal?: number;
     hz?: number; seconds?: number; axle?: "front" | "rear"; field?: boolean;

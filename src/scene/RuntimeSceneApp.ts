@@ -1432,6 +1432,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       possessedEntityId: () => this.gameModeSession?.playerState.pawnEntityId ?? null,
       setVehicleInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
       surfaceMaterialForWheel: (_entityId, wheel) => this.wheelSurfaceMaterial(wheel),
+      surfaceIdForWheel: (_entityId, wheel) => {
+        if (!wheel.inContact || wheel.groundEntityId === null || !wheel.contactPoint) return "air";
+        const sampler = this.terrainSurfaceSampler(wheel.groundEntityId);
+        return (sampler ? sampler.dominantMaterialAt(wheel.contactPoint)
+          : this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId)) ?? "neutral";
+      },
       isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
       setGroundSinkProvider: (provider) => this.physicsSubsystem.setVehicleGroundSinkProvider(provider),
       onPhysicsStep: (listener) => this.physicsSubsystem.onFixedStep(listener),

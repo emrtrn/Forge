@@ -252,6 +252,24 @@ export interface VehicleState {
   readonly engineLoad: number;
   readonly wheels: readonly VehicleWheelState[];
   readonly drivetrain: VehicleDrivetrainState | null;
+  /** Read-only diagnostics from the last fixed slice; never changes vehicle tuning. */
+  readonly telemetry?: VehicleTelemetry;
+}
+
+export interface VehicleTelemetry {
+  readonly input: VehicleInput;
+  /** Chassis forward axis above the world X/Z plane; positive means nose up. */
+  readonly pitchDeg: number;
+  /** Signed engine demand before grip limiting (N). Zero through a shift power cut. */
+  readonly requestedDriveForce: number;
+  /** Signed engine impulse actually delivered by Rapier / slice duration (N). */
+  readonly appliedDriveForce: number;
+  /** Sum of wheel soil/rolling impulse magnitudes / slice duration (N). */
+  readonly appliedGroundResistanceForce: number;
+  /** Actual belly-drag impulse magnitude / slice duration (N). */
+  readonly bellyResistanceForce: number;
+  /** Gravity projected onto the chassis forward axis (N); negative opposes forward travel. */
+  readonly gravityForwardForce: number;
 }
 
 const DEFAULT_WHEEL: Omit<VehicleWheelDefinition, "position" | "axle"> = {

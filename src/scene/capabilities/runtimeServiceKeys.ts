@@ -190,6 +190,8 @@ export interface VehicleHost {
   setVehicleInput(entityId: string, input: VehicleInput): void;
   /** The physical material a wheel's effects follow: a terrain's heaviest paint layer, else its collider's. */
   surfaceMaterialForWheel?(entityId: string, wheel: VehicleWheelState): PhysicalMaterialDef | null;
+  /** Dominant physical material id for diagnostics, not the rendered layer name. */
+  surfaceIdForWheel?(entityId: string, wheel: VehicleWheelState): string;
   /** Shares the dynamic-physics active radius; driven/possessed vehicles always qualify. */
   isSurfaceFxActive?(entityId: string): boolean;
   /** Installs the wheels' soft-track depth source (TERRAIN_DEFORMATION Faz 3); null removes it. */

@@ -1,0 +1,228 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-4_0",
+  "instances": [
+    {
+      "assetId": "lt-alpine-pine",
+      "placements": [
+        {
+          "position": [
+            -410.71,
+            -14.976,
+            42.624
+          ],
+          "name": "LT Pine 58",
+          "rotation": [
+            0,
+            164.7,
+            0
+          ],
+          "scale": 19.221
+        },
+        {
+          "position": [
+            -393.54,
+            -13.364,
+            15.419
+          ],
+          "name": "LT Pine 141",
+          "rotation": [
+            0,
+            108.4,
+            0
+          ],
+          "scale": 16.099
+        },
+        {
+          "position": [
+            -393.016,
+            -12.264,
+            5.979
+          ],
+          "name": "LT Pine 152",
+          "rotation": [
+            0,
+            33.2,
+            0
+          ],
+          "scale": 20.185
+        },
+        {
+          "position": [
+            -434.003,
+            -13.399,
+            8.237
+          ],
+          "name": "LT Pine 211",
+          "rotation": [
+            0,
+            4.5,
+            0
+          ],
+          "scale": 19.829
+        },
+        {
+          "position": [
+            -400.088,
+            -15.197,
+            28.602
+          ],
+          "name": "LT Pine 221",
+          "rotation": [
+            0,
+            146.6,
+            0
+          ],
+          "scale": 17.978
+        },
+        {
+          "position": [
+            -426.465,
+            -13.469,
+            43.236
+          ],
+          "name": "LT Pine 274",
+          "rotation": [
+            0,
+            308.6,
+            0
+          ],
+          "scale": 15.629
+        },
+        {
+          "position": [
+            -390.08,
+            -13.212,
+            37.776
+          ],
+          "name": "LT Pine 306",
+          "rotation": [
+            0,
+            61.8,
+            0
+          ],
+          "scale": 23.916
+        },
+        {
+          "position": [
+            -431.281,
+            -13.423,
+            26.366
+          ],
+          "name": "LT Pine 321",
+          "rotation": [
+            0,
+            292.6,
+            0
+          ],
+          "scale": 25.962
+        },
+        {
+          "position": [
+            -388.912,
+            -44.822,
+            97.891
+          ],
+          "name": "LT Pine 465",
+          "rotation": [
+            0,
+            48,
+            0
+          ],
+          "scale": 24.143
+        },
+        {
+          "position": [
+            -407.314,
+            -14.187,
+            20.456
+          ],
+          "name": "LT Pine 516",
+          "rotation": [
+            0,
+            85.7,
+            0
+          ],
+          "scale": 19.901
+        },
+        {
+          "position": [
+            -388.379,
+            -12.532,
+            25.884
+          ],
+          "name": "LT Pine 562",
+          "rotation": [
+            0,
+            78.3,
+            0
+          ],
+          "scale": 27.795
+        },
+        {
+          "position": [
+            -414.479,
+            -15.578,
+            53.787
+          ],
+          "name": "LT Pine 588",
+          "rotation": [
+            0,
+            83.5,
+            0
+          ],
+          "scale": 26.953
+        },
+        {
+          "position": [
+            -396.911,
+            -15.263,
+            50.608
+          ],
+          "name": "LT Pine 595",
+          "rotation": [
+            0,
+            70.5,
+            0
+          ],
+          "scale": 24.737
+        }
+      ]
+    },
+    {
+      "assetId": "lt-valley-tree",
+      "placements": [
+        {
+          "position": [
+            -422.711,
+            -13.606,
+            5.71
+          ],
+          "name": "LT Tree 38",
+          "rotation": [
+            0,
+            70,
+            0
+          ],
+          "scale": 8.946
+        },
+        {
+          "position": [
+            -416.031,
+            -31.793,
+            75.186
+          ],
+          "name": "LT Tree 59",
+          "rotation": [
+            0,
+            355.5,
+            0
+          ],
+          "scale": 7.859
+        }
+      ]
+    }
+  ]
+}

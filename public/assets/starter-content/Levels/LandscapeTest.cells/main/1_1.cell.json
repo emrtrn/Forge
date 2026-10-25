@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "1_1",
+  "instances": [
+    {
+      "assetId": "lt-boulder-b",
+      "placements": [
+        {
+          "position": [
+            130.032,
+            -35.307,
+            186.671
+          ],
+          "name": "LT Rock 101",
+          "rotation": [
+            -5.9,
+            2,
+            0.2
+          ],
+          "scale": 1.823
+        }
+      ]
+    },
+    {
+      "assetId": "lt-meadow-tuft",
+      "placements": [
+        {
+          "position": [
+            165.339,
+            -71.542,
+            235.325
+          ],
+          "name": "LT Grass 126",
+          "collision": false,
+          "rotation": [
+            0,
+            346.3,
+            0
+          ],
+          "scale": 0.58
+        },
+        {
+          "position": [
+            169.194,
+            -69.415,
+            252.6
+          ],
+          "name": "LT Grass 334",
+          "collision": false,
+          "rotation": [
+            0,
+            225.3,
+            0
+          ],
+          "scale": 0.639
+        },
+        {
+          "position": [
+            156.934,
+            -68.703,
+            225.428
+          ],
+          "name": "LT Grass 516",
+          "collision": false,
+          "rotation": [
+            0,
+            207.8,
+            0
+          ],
+          "scale": 0.341
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            162.793,
+            -71.603,
+            251.904
+          ],
+          "name": "LT Rock 18",
+          "rotation": [
+            6.3,
+            308.8,
+            -5.7
+          ],
+          "scale": 1.25
+        }
+      ]
+    }
+  ]
+}

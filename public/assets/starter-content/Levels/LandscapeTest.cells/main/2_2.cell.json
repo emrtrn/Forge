@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "2_2",
+  "instances": [
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            363.417,
+            8.608,
+            302.561
+          ],
+          "name": "LT Rock 161",
+          "rotation": [
+            0,
+            224.3,
+            0
+          ],
+          "scale": 1.724
+        }
+      ]
+    }
+  ]
+}

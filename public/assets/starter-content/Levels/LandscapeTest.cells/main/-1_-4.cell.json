@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-1_-4",
+  "instances": [
+    {
+      "assetId": "lt-boulder-b",
+      "placements": [
+        {
+          "position": [
+            -52.306,
+            30.265,
+            -416.128
+          ],
+          "name": "LT Rock 159",
+          "rotation": [
+            0,
+            142.3,
+            0
+          ],
+          "scale": 2.201
+        },
+        {
+          "position": [
+            -72.256,
+            29.64,
+            -386.153
+          ],
+          "name": "LT Rock 168",
+          "rotation": [
+            0,
+            264,
+            0
+          ],
+          "scale": 3.259
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            -1.114,
+            29.479,
+            -420.363
+          ],
+          "name": "LT Rock 153",
+          "rotation": [
+            0,
+            45.3,
+            0
+          ],
+          "scale": 1.828
+        },
+        {
+          "position": [
+            -39.572,
+            30.909,
+            -429.976
+          ],
+          "name": "LT Rock 164",
+          "rotation": [
+            0,
+            324.5,
+            0
+          ],
+          "scale": 2.414
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,565 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-1_2",
+  "instances": [
+    {
+      "assetId": "lt-boulder-b",
+      "placements": [
+        {
+          "position": [
+            -95.798,
+            -53.284,
+            369.464
+          ],
+          "name": "LT Rock 11",
+          "rotation": [
+            -2.9,
+            290.8,
+            -6.8
+          ],
+          "scale": 0.829
+        },
+        {
+          "position": [
+            -4.678,
+            -78.264,
+            329.812
+          ],
+          "name": "LT Rock 20",
+          "rotation": [
+            -0.1,
+            90.9,
+            -0.1
+          ],
+          "scale": 0.871
+        },
+        {
+          "position": [
+            -99.373,
+            -50.368,
+            376.225
+          ],
+          "name": "LT Rock 27",
+          "rotation": [
+            -3.7,
+            279.6,
+            -7
+          ],
+          "scale": 0.857
+        },
+        {
+          "position": [
+            -1.821,
+            -79.073,
+            317.651
+          ],
+          "name": "LT Rock 84",
+          "rotation": [
+            -3.6,
+            298.9,
+            -4
+          ],
+          "scale": 0.986
+        },
+        {
+          "position": [
+            -42.501,
+            -66.002,
+            354.727
+          ],
+          "name": "LT Rock 105",
+          "rotation": [
+            -0.2,
+            40.9,
+            -5.2
+          ],
+          "scale": 1.575
+        },
+        {
+          "position": [
+            -115.685,
+            -49.053,
+            380.307
+          ],
+          "name": "LT Rock 119",
+          "rotation": [
+            -4.7,
+            6.5,
+            1.8
+          ],
+          "scale": 0.673
+        }
+      ]
+    },
+    {
+      "assetId": "lt-meadow-tuft",
+      "placements": [
+        {
+          "position": [
+            -8.293,
+            -82.456,
+            379.613
+          ],
+          "name": "LT Grass 78",
+          "collision": false,
+          "rotation": [
+            0,
+            214.9,
+            0
+          ],
+          "scale": 0.529
+        },
+        {
+          "position": [
+            -82.07,
+            -49.996,
+            380.945
+          ],
+          "name": "LT Grass 116",
+          "collision": false,
+          "rotation": [
+            0,
+            13.6,
+            0
+          ],
+          "scale": 0.488
+        },
+        {
+          "position": [
+            -74.619,
+            -53.945,
+            370.456
+          ],
+          "name": "LT Grass 121",
+          "collision": false,
+          "rotation": [
+            0,
+            222.7,
+            0
+          ],
+          "scale": 0.546
+        },
+        {
+          "position": [
+            -4.296,
+            -78.422,
+            343.584
+          ],
+          "name": "LT Grass 127",
+          "collision": false,
+          "rotation": [
+            0,
+            257.3,
+            0
+          ],
+          "scale": 0.525
+        },
+        {
+          "position": [
+            -76.332,
+            -54.269,
+            369.875
+          ],
+          "name": "LT Grass 128",
+          "collision": false,
+          "rotation": [
+            0,
+            168.8,
+            0
+          ],
+          "scale": 0.432
+        },
+        {
+          "position": [
+            -123.641,
+            -51.481,
+            374.645
+          ],
+          "name": "LT Grass 177",
+          "collision": false,
+          "rotation": [
+            0,
+            269.1,
+            0
+          ],
+          "scale": 0.366
+        },
+        {
+          "position": [
+            -29.4,
+            -72.192,
+            343.561
+          ],
+          "name": "LT Grass 196",
+          "collision": false,
+          "rotation": [
+            0,
+            118.1,
+            0
+          ],
+          "scale": 0.313
+        },
+        {
+          "position": [
+            -34.097,
+            -69.984,
+            348.728
+          ],
+          "name": "LT Grass 226",
+          "collision": false,
+          "rotation": [
+            0,
+            336.2,
+            0
+          ],
+          "scale": 0.407
+        },
+        {
+          "position": [
+            -26.146,
+            -71.887,
+            356.534
+          ],
+          "name": "LT Grass 233",
+          "collision": false,
+          "rotation": [
+            0,
+            136.7,
+            0
+          ],
+          "scale": 0.359
+        },
+        {
+          "position": [
+            -90.827,
+            -52.378,
+            373.877
+          ],
+          "name": "LT Grass 293",
+          "collision": false,
+          "rotation": [
+            0,
+            176,
+            0
+          ],
+          "scale": 0.394
+        },
+        {
+          "position": [
+            -46.271,
+            -66.236,
+            353.496
+          ],
+          "name": "LT Grass 299",
+          "collision": false,
+          "rotation": [
+            0,
+            224.8,
+            0
+          ],
+          "scale": 0.361
+        },
+        {
+          "position": [
+            -52.513,
+            -72.538,
+            343.541
+          ],
+          "name": "LT Grass 305",
+          "collision": false,
+          "rotation": [
+            0,
+            352,
+            0
+          ],
+          "scale": 0.65
+        },
+        {
+          "position": [
+            -10.358,
+            -76.495,
+            333.364
+          ],
+          "name": "LT Grass 328",
+          "collision": false,
+          "rotation": [
+            0,
+            237.4,
+            0
+          ],
+          "scale": 0.502
+        },
+        {
+          "position": [
+            -5.334,
+            -82.389,
+            383.245
+          ],
+          "name": "LT Grass 389",
+          "collision": false,
+          "rotation": [
+            0,
+            220.3,
+            0
+          ],
+          "scale": 0.575
+        },
+        {
+          "position": [
+            -35.945,
+            -72.119,
+            342.732
+          ],
+          "name": "LT Grass 411",
+          "collision": false,
+          "rotation": [
+            0,
+            286.8,
+            0
+          ],
+          "scale": 0.609
+        },
+        {
+          "position": [
+            -3.911,
+            -82.224,
+            382.867
+          ],
+          "name": "LT Grass 417",
+          "collision": false,
+          "rotation": [
+            0,
+            251.6,
+            0
+          ],
+          "scale": 0.348
+        },
+        {
+          "position": [
+            -76.917,
+            -50.682,
+            378.518
+          ],
+          "name": "LT Grass 438",
+          "collision": false,
+          "rotation": [
+            0,
+            189.5,
+            0
+          ],
+          "scale": 0.406
+        },
+        {
+          "position": [
+            -89.735,
+            -50.277,
+            379.93
+          ],
+          "name": "LT Grass 464",
+          "collision": false,
+          "rotation": [
+            0,
+            79.4,
+            0
+          ],
+          "scale": 0.644
+        },
+        {
+          "position": [
+            -119.242,
+            -51.358,
+            372.911
+          ],
+          "name": "LT Grass 512",
+          "collision": false,
+          "rotation": [
+            0,
+            227.3,
+            0
+          ],
+          "scale": 0.631
+        },
+        {
+          "position": [
+            -79.203,
+            -50.604,
+            381.5
+          ],
+          "name": "LT Grass 617",
+          "collision": false,
+          "rotation": [
+            0,
+            38.3,
+            0
+          ],
+          "scale": 0.417
+        },
+        {
+          "position": [
+            -28.167,
+            -76.169,
+            329.77
+          ],
+          "name": "LT Grass 631",
+          "collision": false,
+          "rotation": [
+            0,
+            301.6,
+            0
+          ],
+          "scale": 0.391
+        },
+        {
+          "position": [
+            -94.747,
+            -51.593,
+            374.318
+          ],
+          "name": "LT Grass 634",
+          "collision": false,
+          "rotation": [
+            0,
+            119.1,
+            0
+          ],
+          "scale": 0.427
+        },
+        {
+          "position": [
+            -8.065,
+            -76.42,
+            334.35
+          ],
+          "name": "LT Grass 636",
+          "collision": false,
+          "rotation": [
+            0,
+            289.7,
+            0
+          ],
+          "scale": 0.385
+        },
+        {
+          "position": [
+            -43.918,
+            -71.131,
+            345.333
+          ],
+          "name": "LT Grass 655",
+          "collision": false,
+          "rotation": [
+            0,
+            128.8,
+            0
+          ],
+          "scale": 0.32
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            -40.954,
+            -69.431,
+            348.956
+          ],
+          "name": "LT Rock 10",
+          "rotation": [
+            1.2,
+            317.2,
+            1.2
+          ],
+          "scale": 1.166
+        },
+        {
+          "position": [
+            -103.04,
+            -52.244,
+            368.545
+          ],
+          "name": "LT Rock 45",
+          "rotation": [
+            5.5,
+            44.6,
+            -1.3
+          ],
+          "scale": 0.65
+        },
+        {
+          "position": [
+            -79.917,
+            -53.188,
+            373.87
+          ],
+          "name": "LT Rock 72",
+          "rotation": [
+            -2.6,
+            173.5,
+            -3.3
+          ],
+          "scale": 1.281
+        },
+        {
+          "position": [
+            -8.143,
+            -79.31,
+            322.497
+          ],
+          "name": "LT Rock 75",
+          "rotation": [
+            -6.3,
+            261.4,
+            1.8
+          ],
+          "scale": 1.554
+        },
+        {
+          "position": [
+            -18.521,
+            -74.043,
+            338.959
+          ],
+          "name": "LT Rock 86",
+          "rotation": [
+            5.1,
+            341.8,
+            -5.7
+          ],
+          "scale": 1.101
+        },
+        {
+          "position": [
+            -61.685,
+            -70.921,
+            348.834
+          ],
+          "name": "LT Rock 87",
+          "rotation": [
+            -3,
+            118.9,
+            3.1
+          ],
+          "scale": 1.464
+        },
+        {
+          "position": [
+            -10.106,
+            -77.673,
+            330.288
+          ],
+          "name": "LT Rock 97",
+          "rotation": [
+            -2.5,
+            153.7,
+            -4
+          ],
+          "scale": 0.85
+        }
+      ]
+    }
+  ]
+}

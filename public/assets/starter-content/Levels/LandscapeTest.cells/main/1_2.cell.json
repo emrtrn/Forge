@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "1_2",
+  "instances": [
+    {
+      "assetId": "lt-boulder-b",
+      "placements": [
+        {
+          "position": [
+            155.341,
+            -71.815,
+            269.99
+          ],
+          "name": "LT Rock 93",
+          "rotation": [
+            -1.9,
+            172.7,
+            -3.4
+          ],
+          "scale": 0.783
+        },
+        {
+          "position": [
+            167.707,
+            -69.152,
+            266.225
+          ],
+          "name": "LT Rock 112",
+          "rotation": [
+            0.9,
+            334.1,
+            5
+          ],
+          "scale": 1.162
+        }
+      ]
+    },
+    {
+      "assetId": "lt-meadow-tuft",
+      "placements": [
+        {
+          "position": [
+            150.015,
+            -72.045,
+            274.565
+          ],
+          "name": "LT Grass 4",
+          "collision": false,
+          "rotation": [
+            0,
+            136.8,
+            0
+          ],
+          "scale": 0.431
+        },
+        {
+          "position": [
+            156.987,
+            -71.548,
+            267.575
+          ],
+          "name": "LT Grass 11",
+          "collision": false,
+          "rotation": [
+            0,
+            52.7,
+            0
+          ],
+          "scale": 0.626
+        },
+        {
+          "position": [
+            150.978,
+            -70.943,
+            277.702
+          ],
+          "name": "LT Grass 527",
+          "collision": false,
+          "rotation": [
+            0,
+            177.9,
+            0
+          ],
+          "scale": 0.329
+        },
+        {
+          "position": [
+            150.549,
+            -71.98,
+            271.164
+          ],
+          "name": "LT Grass 677",
+          "collision": false,
+          "rotation": [
+            0,
+            43.1,
+            0
+          ],
+          "scale": 0.601
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            160.737,
+            -71.89,
+            258.895
+          ],
+          "name": "LT Rock 88",
+          "rotation": [
+            1.4,
+            67,
+            -2.2
+          ],
+          "scale": 1.407
+        }
+      ]
+    }
+  ]
+}

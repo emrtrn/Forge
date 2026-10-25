@@ -1,0 +1,622 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-4_2",
+  "instances": [
+    {
+      "assetId": "lt-alpine-pine",
+      "placements": [
+        {
+          "position": [
+            -386.1,
+            -29.198,
+            324.925
+          ],
+          "name": "LT Pine 27",
+          "rotation": [
+            0,
+            147.3,
+            0
+          ],
+          "scale": 27.419
+        },
+        {
+          "position": [
+            -415.1,
+            -29.871,
+            324.086
+          ],
+          "name": "LT Pine 62",
+          "rotation": [
+            0,
+            302,
+            0
+          ],
+          "scale": 26.603
+        },
+        {
+          "position": [
+            -404.195,
+            -32.937,
+            269.158
+          ],
+          "name": "LT Pine 103",
+          "rotation": [
+            0,
+            16,
+            0
+          ],
+          "scale": 15.795
+        },
+        {
+          "position": [
+            -398.183,
+            -29.676,
+            336.72
+          ],
+          "name": "LT Pine 132",
+          "rotation": [
+            0,
+            124,
+            0
+          ],
+          "scale": 19.695
+        },
+        {
+          "position": [
+            -437.827,
+            -32.489,
+            296.054
+          ],
+          "name": "LT Pine 145",
+          "rotation": [
+            0,
+            254.2,
+            0
+          ],
+          "scale": 26.31
+        },
+        {
+          "position": [
+            -384.151,
+            -31.696,
+            259.762
+          ],
+          "name": "LT Pine 155",
+          "rotation": [
+            0,
+            263.3,
+            0
+          ],
+          "scale": 16.495
+        },
+        {
+          "position": [
+            -441.739,
+            -33.981,
+            259.676
+          ],
+          "name": "LT Pine 191",
+          "rotation": [
+            0,
+            356.9,
+            0
+          ],
+          "scale": 18.845
+        },
+        {
+          "position": [
+            -398.214,
+            -31.575,
+            287.341
+          ],
+          "name": "LT Pine 203",
+          "rotation": [
+            0,
+            41.4,
+            0
+          ],
+          "scale": 26.483
+        },
+        {
+          "position": [
+            -421.824,
+            -30.887,
+            348.261
+          ],
+          "name": "LT Pine 225",
+          "rotation": [
+            0,
+            283.3,
+            0
+          ],
+          "scale": 22.986
+        },
+        {
+          "position": [
+            -395.262,
+            -28.514,
+            363.966
+          ],
+          "name": "LT Pine 256",
+          "rotation": [
+            0,
+            75.5,
+            0
+          ],
+          "scale": 19.522
+        },
+        {
+          "position": [
+            -416.204,
+            -30.738,
+            308.417
+          ],
+          "name": "LT Pine 258",
+          "rotation": [
+            0,
+            202.6,
+            0
+          ],
+          "scale": 26.471
+        },
+        {
+          "position": [
+            -407.36,
+            -30.477,
+            357.164
+          ],
+          "name": "LT Pine 263",
+          "rotation": [
+            0,
+            288.9,
+            0
+          ],
+          "scale": 28.053
+        },
+        {
+          "position": [
+            -406.774,
+            -31.452,
+            294.614
+          ],
+          "name": "LT Pine 265",
+          "rotation": [
+            0,
+            51.2,
+            0
+          ],
+          "scale": 23.075
+        },
+        {
+          "position": [
+            -396.21,
+            -31.756,
+            276.13
+          ],
+          "name": "LT Pine 281",
+          "rotation": [
+            0,
+            256.6,
+            0
+          ],
+          "scale": 21.755
+        },
+        {
+          "position": [
+            -428.545,
+            -32.964,
+            287.722
+          ],
+          "name": "LT Pine 304",
+          "rotation": [
+            0,
+            59.8,
+            0
+          ],
+          "scale": 20.466
+        },
+        {
+          "position": [
+            -425.961,
+            -30.9,
+            316.548
+          ],
+          "name": "LT Pine 356",
+          "rotation": [
+            0,
+            176.2,
+            0
+          ],
+          "scale": 23.514
+        },
+        {
+          "position": [
+            -402.372,
+            -33.445,
+            259.695
+          ],
+          "name": "LT Pine 359",
+          "rotation": [
+            0,
+            281.6,
+            0
+          ],
+          "scale": 19.167
+        },
+        {
+          "position": [
+            -436.716,
+            -31.677,
+            313.803
+          ],
+          "name": "LT Pine 379",
+          "rotation": [
+            0,
+            244.9,
+            0
+          ],
+          "scale": 15.631
+        },
+        {
+          "position": [
+            -426.229,
+            -31.958,
+            299.137
+          ],
+          "name": "LT Pine 413",
+          "rotation": [
+            0,
+            276.6,
+            0
+          ],
+          "scale": 22.456
+        },
+        {
+          "position": [
+            -407.077,
+            -29.824,
+            332.236
+          ],
+          "name": "LT Pine 450",
+          "rotation": [
+            0,
+            70.5,
+            0
+          ],
+          "scale": 16.407
+        },
+        {
+          "position": [
+            -440.119,
+            -32.921,
+            280.898
+          ],
+          "name": "LT Pine 451",
+          "rotation": [
+            0,
+            153.4,
+            0
+          ],
+          "scale": 20.073
+        },
+        {
+          "position": [
+            -389.342,
+            -29.328,
+            314.095
+          ],
+          "name": "LT Pine 496",
+          "rotation": [
+            0,
+            52.6,
+            0
+          ],
+          "scale": 22.282
+        },
+        {
+          "position": [
+            -407.319,
+            -32.76,
+            283.117
+          ],
+          "name": "LT Pine 515",
+          "rotation": [
+            0,
+            9.5,
+            0
+          ],
+          "scale": 20.554
+        },
+        {
+          "position": [
+            -415.23,
+            -33.972,
+            269.722
+          ],
+          "name": "LT Pine 520",
+          "rotation": [
+            0,
+            254.8,
+            0
+          ],
+          "scale": 22.777
+        },
+        {
+          "position": [
+            -424.507,
+            -33.768,
+            280.319
+          ],
+          "name": "LT Pine 531",
+          "rotation": [
+            0,
+            246.9,
+            0
+          ],
+          "scale": 16.198
+        },
+        {
+          "position": [
+            -397.86,
+            -29.694,
+            346.087
+          ],
+          "name": "LT Pine 606",
+          "rotation": [
+            0,
+            91.5,
+            0
+          ],
+          "scale": 18.524
+        }
+      ]
+    },
+    {
+      "assetId": "lt-valley-tree",
+      "placements": [
+        {
+          "position": [
+            -424.224,
+            -34.065,
+            269.537
+          ],
+          "name": "LT Tree 2",
+          "rotation": [
+            0,
+            232.6,
+            0
+          ],
+          "scale": 8.17
+        },
+        {
+          "position": [
+            -433.617,
+            -33.971,
+            261.801
+          ],
+          "name": "LT Tree 15",
+          "rotation": [
+            0,
+            79,
+            0
+          ],
+          "scale": 8.313
+        },
+        {
+          "position": [
+            -402.053,
+            -29.611,
+            320.958
+          ],
+          "name": "LT Tree 31",
+          "rotation": [
+            0,
+            182,
+            0
+          ],
+          "scale": 6.71
+        },
+        {
+          "position": [
+            -429.315,
+            -30.871,
+            335.879
+          ],
+          "name": "LT Tree 71",
+          "rotation": [
+            0,
+            239.7,
+            0
+          ],
+          "scale": 6.595
+        },
+        {
+          "position": [
+            -392.651,
+            -30.258,
+            297.637
+          ],
+          "name": "LT Tree 80",
+          "rotation": [
+            0,
+            354.1,
+            0
+          ],
+          "scale": 9.65
+        },
+        {
+          "position": [
+            -399.68,
+            -29.625,
+            326.746
+          ],
+          "name": "LT Tree 88",
+          "rotation": [
+            0,
+            305.1,
+            0
+          ],
+          "scale": 7.236
+        },
+        {
+          "position": [
+            -395.318,
+            -30.154,
+            307.329
+          ],
+          "name": "LT Tree 92",
+          "rotation": [
+            0,
+            240.2,
+            0
+          ],
+          "scale": 7.92
+        },
+        {
+          "position": [
+            -388.629,
+            -27.821,
+            361.542
+          ],
+          "name": "LT Tree 93",
+          "rotation": [
+            0,
+            31.8,
+            0
+          ],
+          "scale": 7.665
+        },
+        {
+          "position": [
+            -384.36,
+            -29.676,
+            289.461
+          ],
+          "name": "LT Tree 130",
+          "rotation": [
+            0,
+            245.7,
+            0
+          ],
+          "scale": 6.708
+        }
+      ]
+    },
+    {
+      "assetId": "lt-meadow-tuft",
+      "placements": [
+        {
+          "position": [
+            -386.46,
+            -31.166,
+            264.273
+          ],
+          "name": "LT Grass 88",
+          "collision": false,
+          "rotation": [
+            0,
+            185,
+            0
+          ],
+          "scale": 0.435
+        },
+        {
+          "position": [
+            -397.298,
+            -29.222,
+            322.278
+          ],
+          "name": "LT Grass 125",
+          "collision": false,
+          "rotation": [
+            0,
+            198.1,
+            0
+          ],
+          "scale": 0.585
+        },
+        {
+          "position": [
+            -397.482,
+            -31.929,
+            268.434
+          ],
+          "name": "LT Grass 222",
+          "collision": false,
+          "rotation": [
+            0,
+            236.7,
+            0
+          ],
+          "scale": 0.367
+        },
+        {
+          "position": [
+            -408.649,
+            -33.252,
+            270.315
+          ],
+          "name": "LT Grass 280",
+          "collision": false,
+          "rotation": [
+            0,
+            158.6,
+            0
+          ],
+          "scale": 0.356
+        },
+        {
+          "position": [
+            -391.074,
+            -31.187,
+            273.217
+          ],
+          "name": "LT Grass 300",
+          "collision": false,
+          "rotation": [
+            0,
+            319.4,
+            0
+          ],
+          "scale": 0.502
+        },
+        {
+          "position": [
+            -389.149,
+            -30.41,
+            281.472
+          ],
+          "name": "LT Grass 474",
+          "collision": false,
+          "rotation": [
+            0,
+            318.1,
+            0
+          ],
+          "scale": 0.407
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            -388.738,
+            -31.404,
+            270.467
+          ],
+          "name": "LT Rock 115",
+          "rotation": [
+            -2.7,
+            326.9,
+            6.1
+          ],
+          "scale": 1.276
+        }
+      ]
+    }
+  ]
+}

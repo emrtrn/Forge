@@ -1,0 +1,224 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "0_-3",
+  "instances": [
+    {
+      "assetId": "lt-alpine-pine",
+      "placements": [
+        {
+          "position": [
+            53.556,
+            26.433,
+            -261.33
+          ],
+          "name": "LT Pine 122",
+          "rotation": [
+            0,
+            247.7,
+            0
+          ],
+          "scale": 18.441
+        },
+        {
+          "position": [
+            74.309,
+            25.229,
+            -264.891
+          ],
+          "name": "LT Pine 178",
+          "rotation": [
+            0,
+            186,
+            0
+          ],
+          "scale": 26.4
+        },
+        {
+          "position": [
+            37.702,
+            28.277,
+            -257.279
+          ],
+          "name": "LT Pine 271",
+          "rotation": [
+            0,
+            328.1,
+            0
+          ],
+          "scale": 19.44
+        },
+        {
+          "position": [
+            61.717,
+            25.55,
+            -262.948
+          ],
+          "name": "LT Pine 419",
+          "rotation": [
+            0,
+            318.2,
+            0
+          ],
+          "scale": 18.648
+        }
+      ]
+    },
+    {
+      "assetId": "lt-valley-tree",
+      "placements": [
+        {
+          "position": [
+            82.173,
+            23.543,
+            -258.009
+          ],
+          "name": "LT Tree 132",
+          "rotation": [
+            0,
+            169.2,
+            0
+          ],
+          "scale": 10.454
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-b",
+      "placements": [
+        {
+          "position": [
+            44.71,
+            29.121,
+            -381.601
+          ],
+          "name": "LT Rock 158",
+          "rotation": [
+            0,
+            220.8,
+            0
+          ],
+          "scale": 3.515
+        },
+        {
+          "position": [
+            65.934,
+            27.091,
+            -294.512
+          ],
+          "name": "LT Rock 160",
+          "rotation": [
+            0,
+            271.6,
+            0
+          ],
+          "scale": 1.892
+        },
+        {
+          "position": [
+            54.817,
+            25.523,
+            -315.138
+          ],
+          "name": "LT Rock 163",
+          "rotation": [
+            0,
+            332.8,
+            0
+          ],
+          "scale": 3.646
+        },
+        {
+          "position": [
+            23.373,
+            26.698,
+            -353.843
+          ],
+          "name": "LT Rock 169",
+          "rotation": [
+            0,
+            322.3,
+            0
+          ],
+          "scale": 2.733
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            46.207,
+            27.22,
+            -348.189
+          ],
+          "name": "LT Rock 155",
+          "rotation": [
+            0,
+            308.7,
+            0
+          ],
+          "scale": 1.611
+        },
+        {
+          "position": [
+            91.751,
+            27.353,
+            -367.126
+          ],
+          "name": "LT Rock 156",
+          "rotation": [
+            0,
+            295.7,
+            0
+          ],
+          "scale": 2.117
+        },
+        {
+          "position": [
+            67.59,
+            29.483,
+            -382.384
+          ],
+          "name": "LT Rock 159",
+          "rotation": [
+            0,
+            298.2,
+            0
+          ],
+          "scale": 2.35
+        },
+        {
+          "position": [
+            16.578,
+            27.293,
+            -344.903
+          ],
+          "name": "LT Rock 160",
+          "rotation": [
+            0,
+            66.8,
+            0
+          ],
+          "scale": 2.168
+        },
+        {
+          "position": [
+            51.453,
+            28.639,
+            -355.948
+          ],
+          "name": "LT Rock 165",
+          "rotation": [
+            0,
+            156,
+            0
+          ],
+          "scale": 1.279
+        }
+      ]
+    }
+  ]
+}

@@ -18,8 +18,10 @@ import {
   VIEW_DISTANCE_FOG_WARN_OPACITY,
 } from "@engine/world/viewDistance";
 import { resolveHeightFog } from "@engine/scene/heightFog";
-import { setSceneDepthMode } from "@engine/render-three/depthMode";
+import { activeSceneDepthMode, setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
+import { SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
+import { sunCascadeDistance } from "@engine/world/sunCascades";
 import { StaticDetailCulling } from "@engine/render-three/staticDetailCulling";
 import { hlodCellPlacements, hlodCellSourceHash, type HlodIndex } from "@engine/world/hlod";
 import { fetchHlodIndex, HlodProxies, loadHlodGeometry } from "./hlodProxies";
@@ -1059,6 +1061,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private farViewMode = false;
   private warnedNoReversedDepth = false;
   private readonly followShadowForward = new Vector3();
+  /** Cascaded sun shadow of far view mode (Faz 7c2); created on first use. */
+  private sunCascades: SunCascadeShadow | null = null;
   /**
    * Small-object distance culling of static placements (Faz 7e), only in open
    * world levels (World Partition on or a view distance set); null elsewhere.
@@ -3473,6 +3477,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       record.light.dispose();
     }
     this.lightObjects = [];
+    this.sunCascades?.dispose();
     this.sun = null;
     if (this.ambientLight) {
       this.scene.remove(this.ambientLight);
@@ -6393,15 +6398,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Far view mode (Faz 7c1): the sun's shadow frustum follows the camera,
-   * covering `FOLLOW_SHADOW_HALF_EXTENT × shadowDistanceScale` around a point
-   * ahead of it, texel-snapped so it does not shimmer. Smaller levels keep the
-   * bounds fit ({@link fitSunShadowToScene}).
+   * Far view mode sun shadow. With 2+ quality `shadowCascades` and reversed-Z
+   * (Faz 7c2) the sun casts through camera-fitted cascades out to
+   * `200 m × shadowDistanceScale`, fading out over its last 15 %. Otherwise
+   * (Faz 7c1) the sun's own frustum follows the camera, covering
+   * `FOLLOW_SHADOW_HALF_EXTENT × shadowDistanceScale` around a point ahead of
+   * it, texel-snapped so it does not shimmer. Smaller levels keep the bounds
+   * fit ({@link fitSunShadowToScene}).
    */
   private updateFollowShadow(): void {
-    if (!this.farViewMode || !this.sun?.castShadow || !this.renderer.shadowMap.enabled) return;
+    const sun = this.sun;
+    if (!this.farViewMode || !sun?.castShadow || !this.renderer.shadowMap.enabled) {
+      this.sunCascades?.deactivate();
+      return;
+    }
+    const quality = this.qualitySettings;
+    const cascades = activeSceneDepthMode() === "reversed" ? quality.shadowCascades : 1;
+    if (cascades >= 2) {
+      this.sunCascades ??= new SunCascadeShadow(this.scene);
+      const fitted = this.sunCascades.update({
+        sun,
+        camera: this.camera,
+        count: cascades,
+        stagger: quality.shadowCascadeStagger,
+        mapSize: quality.shadowMapSize,
+        distance: sunCascadeDistance(quality.shadowDistanceScale),
+      });
+      if (fitted) return;
+    } else {
+      this.sunCascades?.deactivate();
+    }
     this.camera.getWorldDirection(this.followShadowForward);
-    updateSunFollowShadow(this.sun, this.camera.position, this.followShadowForward, {
+    updateSunFollowShadow(sun, this.camera.position, this.followShadowForward, {
       halfExtent: FOLLOW_SHADOW_HALF_EXTENT * this.qualitySettings.shadowDistanceScale,
     });
   }

@@ -32,8 +32,8 @@ import {
  * world matrix) also carries the mesh's own node transform inside the asset —
  * e.g. a model authored in centimetres under a 0.01 node — so each mesh's
  * "base scale" is divided back out: the shader divides distance by the full
- * scale, so the fade window is multiplied by the base scale, and the skip test
- * uses full scale ÷ base scale.
+ * scale (base × placement), so the fade window is divided by the base scale,
+ * and the skip test uses full scale ÷ base scale.
  */
 
 interface AssetFade {
@@ -123,7 +123,7 @@ export class StaticDetailCulling {
     this.origin.value.copy(cameraPosition);
     for (const fade of this.assets.values()) {
       const [start, end] = detailCullWindow(fade.cullDistance, qualityScale);
-      fade.uniforms.uFoliageFadeRange.value.set(start * fade.baseScale, end * fade.baseScale);
+      fade.uniforms.uFoliageFadeRange.value.set(start / fade.baseScale, end / fade.baseScale);
     }
     for (const entry of this.meshes.values()) {
       const culled = detailBatchCulled(

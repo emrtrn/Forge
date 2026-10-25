@@ -281,6 +281,8 @@ export interface EditableSelection {
    */
   animation?: string;
   lightType?: LayoutLightActor["type"];
+  /** Directional lights: Cascaded Shadows ({@link LayoutLightActor.cascadedShadows}). */
+  cascadedShadows?: boolean;
   color?: string;
   intensity?: number;
   distance?: number;

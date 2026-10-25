@@ -235,6 +235,23 @@ export function registerSerializationDriftTests(check: Check): void {
     }
   });
 
+  check("serialization drift: a sun's Cascaded Shadows flag round-trips save and editor clone", () => {
+    for (const cascadedShadows of [true, false]) {
+      const sun = { id: "sun", type: "directional", position: [0, 10, 0], castShadow: true, cascadedShadows } as const;
+      const layout = { ...partitionFixture(), lights: [sun] };
+      const saved = validateLayout(layout) as RoomLayout;
+      assert.equal(saved.lights![0]!.cascadedShadows, cascadedShadows);
+      assertNoDrift(layout, saved, "layout");
+      assert.equal(cloneLightActor(saved.lights![0]!).cascadedShadows, cascadedShadows);
+    }
+    const absent = validateLayout({ ...partitionFixture(), lights: [{ id: "sun", type: "directional", position: [0, 10, 0] }] }) as RoomLayout;
+    assert.equal("cascadedShadows" in absent.lights![0]!, false);
+    assert.throws(
+      () => validateLayout({ ...partitionFixture(), lights: [{ id: "sun", type: "directional", position: [0, 10, 0], cascadedShadows: "yes" }] }),
+      /light\.cascadedShadows must be boolean/,
+    );
+  });
+
   check("serialization drift: a Height Fog fitted to a long view distance keeps its density", () => {
     // Faz 7d: 1.98 / 10 km ≈ 0.000198 must not round to 0 (3 decimals) on save.
     const layout = { ...partitionFixture(), heightFog: { mode: "exp", density: 0.000198 } };

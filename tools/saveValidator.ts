@@ -908,6 +908,10 @@ export function validateLightActor(value: unknown): Record<string, unknown> {
     if (typeof input.castShadow !== "boolean") throw new Error("light.castShadow must be boolean");
     light.castShadow = input.castShadow;
   }
+  if (input.cascadedShadows !== undefined) {
+    if (typeof input.cascadedShadows !== "boolean") throw new Error("light.cascadedShadows must be boolean");
+    light.cascadedShadows = input.cascadedShadows;
+  }
   const distance = validateOptionalNumber(input.distance, "light.distance", 0, 100);
   if (distance !== undefined) light.distance = distance;
   const angle = validateOptionalNumber(input.angle, "light.angle", 1, 90);

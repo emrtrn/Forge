@@ -2184,6 +2184,26 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
   tutarlı. **Ölçülmedi:** GPU maliyeti (headless, yazılım GL; S7 rakamları
   geçerli varsayım), kare başına tarama maliyeti, OpenWorldTest'te görsel
   kabul ve kamera hareketinde titreme/kaskad geçişi.
+- *Sun üzerinde bayrak (2026-10-25, kullanıcı kararı):* kaskadlar artık uzak
+  moda değil, Sun'daki **Cascaded Shadows** onay kutusuna bağlı
+  (`LayoutLightActor.cascadedShadows`, Unreal'daki directional light CSM;
+  save validator, editör klonu, drift testi). Bayrak açıkken her level'da
+  çalışır, standart derinlikte de (bias işareti moddan). Bayrak kapalıyken uzak
+  mod 7c1 takipli gölgeyi, diğer level'lar sınır sığdırmasını kullanır.
+  Editörün perspektif görünümü High profilinin kaskadlarıyla önizler.
+- *Doku birimi bütçesi:* her kaskad lit materyallere bir gölge haritası daha
+  ekler. Lit arazinin fragment aşaması 13 kendi dokusu + ortam haritası +
+  `dfgLUT` = 15 birim kullanır; ANGLE/D3D11'in sınırı 16. 2 kaskadda program
+  bağlanamıyor, arazi hiç çizilmiyordu (kullanıcının LandscapeTest'te gördüğü
+  "arazi yok"). `affordableSunCascades` sayıyı GPU'nun
+  `MAX_TEXTURE_IMAGE_UNITS`'ine göre sınırlar; 16 birimde arazili level'da
+  kaskad kapanır, güneş tek haritaya döner ve konsola uyarı yazılır.
+  `TERRAIN_LIT_FRAGMENT_SAMPLERS` shader kaynağından sayılır, engine testi
+  derlenen arazi shader'ına bağlar. Smoke `sun-cascaded-shadows.spec.ts`
+  sınırı 16'ya düşürüp arazi programının aktif sampler'larını sayar.
+  **Açık:** 8 katman dokusunu tek `sampler2DArray`'e toplamak (Faz 2 renderer
+  maddesindeki plan) 7 birim kazandırır ve 16 birimli GPU'larda arazili
+  level'lara 4 kaskadı geri getirir.
 
 ## Faz 8 — Editör dünya araçları
 

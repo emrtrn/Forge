@@ -11,7 +11,8 @@ import {
   type WebGLRenderer,
 } from "three";
 
-import { computeSunCascades, sunCascadeNeedsUpdate, sunShadowFadeRange, SUN_CASCADE_MAX } from "@engine/world/sunCascades";
+import { computeSunCascades, sunCascadeBudget, sunCascadeNeedsUpdate, sunShadowFadeRange, SUN_CASCADE_MAX } from "@engine/world/sunCascades";
+import { TERRAIN_LIT_FRAGMENT_SAMPLERS } from "./terrain/terrainMaterial";
 import { shadowDepthBias } from "./depthMode";
 
 /**
@@ -122,6 +123,25 @@ function isLitMaterial(material: Material): boolean {
 function isEffectivelyVisible(object: Object3D): boolean {
   for (let node: Object3D | null = object; node; node = node.parent) if (!node.visible) return false;
   return true;
+}
+
+/**
+ * Texture units three adds to a lit standard material besides the shadow maps:
+ * the environment map and its BRDF lookup table (`dfgLUT`).
+ */
+const LIT_ENVIRONMENT_SAMPLERS = 2;
+
+/**
+ * The cascade count to use: the profile's request, capped by the texture units
+ * the GPU leaves once the costliest lit material has its own. With terrain in
+ * the level that is the lit terrain (its samplers + environment map + BRDF
+ * table = 15), so a 16-unit GPU (ANGLE on D3D11) has room for one shadow map
+ * only and gets no cascades; past the limit the terrain program fails to link
+ * and the ground disappears.
+ */
+export function affordableSunCascades(requested: number, maxTextureUnits: number, hasTerrain: boolean): number {
+  const reserved = hasTerrain ? TERRAIN_LIT_FRAGMENT_SAMPLERS + LIT_ENVIRONMENT_SAMPLERS : 0;
+  return Math.min(requested, sunCascadeBudget(maxTextureUnits, reserved));
 }
 
 export interface SunCascadeUpdate {

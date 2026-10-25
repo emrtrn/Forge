@@ -11,8 +11,9 @@ import { REPO_ROOT } from "./smokeProject.mjs";
  * near plane), and the gameplay camera's far plane is the view distance. A level
  * without a view distance keeps today's standard path. Faz 7c1/7c2: far view
  * mode casts the sun's shadow through camera-fitted cascades (or, without
- * reversed-Z, the sun's own follow frustum). The levels are served in flight, so
- * no project file is written.
+ * reversed-Z, the sun's own follow frustum). The sun's Cascaded Shadows flag,
+ * not the view distance, switches cascades on. The levels are served in flight,
+ * so no project file is written.
  */
 
 const LEVEL = "layouts/__playwright-far-view.level.json";
@@ -46,6 +47,8 @@ interface BootOptions {
   quality?: "high" | "ultra";
   /** Start from a high pose looking ~200 m down the row of cubes (the Play camera handoff). */
   pose?: boolean;
+  /** The sun's Cascaded Shadows flag (default on). */
+  cascadedShadows?: boolean;
 }
 
 async function bootLevel(
@@ -78,7 +81,9 @@ async function bootLevel(
       scaleLocked: true,
     })) },
   ];
-  level.lights = level.lights.map((light: { type: string }) => light.type === "directional" ? { ...light, castShadow: true } : light);
+  level.lights = level.lights.map((light: { type: string }) => light.type === "directional"
+    ? { ...light, castShadow: true, cascadedShadows: options.cascadedShadows ?? true }
+    : light);
   await page.route(`**/${LEVEL}`, (route) => route.fulfill({ json: level }));
   await page.route("**/project.3dgame.json", async (route) => {
     const response = await route.fetch();
@@ -212,16 +217,7 @@ test("far view: a long view distance renders Play with reversed-Z into a float-d
     }
     expect(probe.cascadePrograms).toBeGreaterThan(0);
   } else {
-    // Without reversed-Z the sun keeps the Faz 7c1 follow shadow: 60 m × the "high"
-    // profile's 0.75 shadow distance scale, ±150 m along the light, centred half an
-    // extent ahead of the camera.
-    expect(probe.cascades).toHaveLength(0);
-    expect(probe.sunShadowMap).toBe(true);
-    expect(probe.shadowLeft).toBeCloseTo(-45, 5);
-    expect(probe.shadowFar).toBe(300);
-    expect(probe.sunTargetLead).toBeGreaterThan(21);
-    expect(probe.sunTargetLead).toBeLessThan(24);
-    expect(probe.sunBias).toBeCloseTo(-0.02 / 300, 8);
+    expect(probe.cascades).toHaveLength(3);
     expect(probe.reversedState).toBe(false);
     expect(probe.near).toBeGreaterThanOrEqual(0.5);
     expect(messages.some((message) => message.includes("EXT_clip_control is unavailable"))).toBe(true);
@@ -229,7 +225,7 @@ test("far view: a long view distance renders Play with reversed-Z into a float-d
 });
 
 test("far view: a level without a view distance keeps the standard depth path", async ({ page }) => {
-  const { probe, errors } = await bootLevel(page, undefined);
+  const { probe, errors } = await bootLevel(page, undefined, { cascadedShadows: false });
   expect(errors).toEqual([]);
   expect(probe.reversedState).toBe(false);
   expect(probe.cameraReversed).toBe(false);
@@ -240,6 +236,33 @@ test("far view: a level without a view distance keeps the standard depth path", 
   expect(probe.sunLayers).toBe(1);
   expect(probe.cascades).toHaveLength(0);
   expect(probe.cascadePrograms).toBe(0);
+});
+
+test("cascaded shadows: the sun's flag casts through cascades without a view distance", async ({ page }) => {
+  const { probe, errors } = await bootLevel(page, undefined);
+  expect(errors).toEqual([]);
+  // Standard depth, no far view mode: the flag alone turns the cascades on.
+  expect(probe.reversedState).toBe(false);
+  expect(probe.sunLayers).toBe(0);
+  expect(probe.cascades).toHaveLength(3);
+  expect(probe.cascades.every((cascade) => cascade.map)).toBe(true);
+  // Standard depth flips the bias sign: 2 cm of world depth toward the light.
+  for (const cascade of probe.cascades) expect(cascade.bias).toBeCloseTo(-0.02 / cascade.far, 8);
+  expect(probe.cascadePrograms).toBeGreaterThan(0);
+});
+
+test("cascaded shadows: far view mode without the flag keeps the 7c1 follow shadow", async ({ page }) => {
+  const { probe, errors } = await bootLevel(page, 6000, { cascadedShadows: false });
+  expect(errors).toEqual([]);
+  expect(probe.cascades).toHaveLength(0);
+  expect(probe.sunLayers).toBe(1);
+  expect(probe.sunShadowMap).toBe(true);
+  // 60 m × the "high" profile's 0.75 shadow distance scale, ±150 m along the light,
+  // centred half an extent ahead of the camera.
+  expect(probe.shadowLeft).toBeCloseTo(-45, 5);
+  expect(probe.shadowFar).toBe(300);
+  expect(probe.sunTargetLead).toBeGreaterThan(21);
+  expect(probe.sunTargetLead).toBeLessThan(24);
 });
 
 /** Fraction of a screenshot rectangle's pixels darker than `threshold` luminance (0–255). */

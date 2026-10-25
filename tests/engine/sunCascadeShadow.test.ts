@@ -15,7 +15,7 @@ import {
   type Material,
   type WebGLRenderer,
 } from "three";
-import { createSunCascadeLightsChunk, SunCascadeShadow, type SunCascadeUpdate } from "../../engine/render-three/sunCascadeShadow";
+import { affordableSunCascades, createSunCascadeLightsChunk, SunCascadeShadow, type SunCascadeUpdate } from "../../engine/render-three/sunCascadeShadow";
 
 type Check = (label: string, fn: () => void) => void;
 type ShaderPatch = Parameters<Material["onBeforeCompile"]>[0];
@@ -86,6 +86,17 @@ export function registerSunCascadeShadowTests(check: Check): void {
     assert.ok(chunk.includes("pointShadowMap[ i ]") && chunk.includes("spotShadowMap[ i ]"));
     assert.equal(chunk.split("RE_Direct(").length, ShaderChunk.lights_fragment_begin.split("RE_Direct(").length);
     assert.throws(() => createSunCascadeLightsChunk("void main() {}"), /directional shadow line not found/);
+  });
+
+  check("sun cascade shadow: terrain levels keep the lit terrain within the GPU's texture units", () => {
+    // Terrain samplers + environment map + BRDF table + one shadow map per cascade
+    // must fit, or the terrain program fails to link and the ground disappears.
+    // ANGLE on D3D11 has 16: one shadow map, so no cascades next to terrain.
+    assert.equal(affordableSunCascades(4, 16, true), 1);
+    assert.equal(affordableSunCascades(3, 17, true), 2);
+    assert.equal(affordableSunCascades(4, 32, true), 4);
+    assert.equal(affordableSunCascades(2, 32, true), 2);
+    assert.equal(affordableSunCascades(4, 16, false), 4);
   });
 
   check("sun cascade shadow: cascades replace the sun in the render and hand it back", () => {

@@ -50,6 +50,16 @@ export interface SunCascadeInput {
   readonly mapSize: number;
 }
 
+/**
+ * Cascades that fit a fragment shader's texture units: each cascade is a shadow
+ * map sampled by every lit material, so a GPU with `maxTextureUnits` and a
+ * material that already takes `reservedUnits` affords the rest (0..4).
+ */
+export function sunCascadeBudget(maxTextureUnits: number, reservedUnits: number): number {
+  if (!Number.isFinite(maxTextureUnits) || !Number.isFinite(reservedUnits)) return 0;
+  return Math.max(0, Math.min(SUN_CASCADE_MAX, Math.floor(maxTextureUnits - reservedUnits)));
+}
+
 /** Shadow distance for a quality `shadowDistanceScale` (200 m on Ultra, 150 m on High…). */
 export function sunCascadeDistance(shadowDistanceScale: number): number {
   return SUN_CASCADE_BASE_DISTANCE * Math.max(0, shadowDistanceScale);

@@ -14,7 +14,7 @@ import { createFlatTerrainTile, terrainTileLayerWeight, tileKey, type WorldTerra
 import type { ForgeLandscapeData } from "../../engine/scene/landscape";
 import { TerrainTexturePool } from "../../engine/render-three/terrain/terrainTexturePool";
 import { TerrainRenderer, terrainRendererOf } from "../../engine/render-three/terrain/terrainRenderer";
-import type { TerrainUniforms } from "../../engine/render-three/terrain/terrainMaterial";
+import { TERRAIN_LIT_FRAGMENT_SAMPLERS, type TerrainUniforms } from "../../engine/render-three/terrain/terrainMaterial";
 import { createLandscapeObject, disposeLandscapeObject, resolveLandscape, updateLandscapeObjectGeometry } from "../../engine/render-three/landscape";
 import type { LayoutLandscape } from "../../engine/scene/layout";
 import { EditorSelectionOutline } from "../../src/scene/editorSelectionOutline";
@@ -321,6 +321,20 @@ export function registerTerrainRenderTests(check: Check): void {
     assert.equal(uniforms.uTerrainView!.value, 3);
     assert.equal(uniforms.uTerrainActiveLayer!.value, 5);
     assert.equal((uniforms.uLayerColors!.value as Color[])[0]!.getHexString(), "123456");
+    terrain.dispose();
+  });
+
+  check("terrain renderer: the lit fragment shader's own samplers match the cascade budget's count", () => {
+    const terrain = makeTerrain(legacyData(65, 65, 1, 1));
+    const material = (terrain as unknown as { materials: { material: MeshBasicMaterial } }).materials.material;
+    const shader = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
+    material.onBeforeCompile(shader, {} as WebGLRenderer);
+    // three's own samplers sit behind #includes; every sampler line here is the terrain's.
+    const own = shader.fragmentShader.match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm) ?? [];
+    assert.equal(own.length, TERRAIN_LIT_FRAGMENT_SAMPLERS);
+    // Normals ×2, weights ×2, 8 paint layers, the track field: with the environment
+    // map that leaves 2 shadow maps on a 16-unit GPU (ANGLE / D3D11).
+    assert.equal(TERRAIN_LIT_FRAGMENT_SAMPLERS, 13);
     terrain.dispose();
   });
 

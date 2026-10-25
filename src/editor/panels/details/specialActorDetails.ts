@@ -1249,6 +1249,17 @@ export function renderLightDetails(options: SpecialActorDetailsOptions): void {
           } ${lockedAttr} />
           <span>Cast Shadow</span>
         </label>
+        ${
+          selection.lightType === "directional"
+            ? `<label class="detail-toggle">
+              <input type="checkbox" data-light-cascades ${selection.cascadedShadows ? "checked" : ""} ${
+                selection.castShadow ? "" : "disabled"
+              } ${lockedAttr} />
+              <span>Cascaded Shadows</span>
+            </label>
+            <div class="detail-hint">Sharp shadows around the camera through 2–4 cascades (count and distance follow the quality profile) instead of one map over the whole level. Applies to the level's sun.</div>`
+            : ""
+        }
       </div>
       ${actorLockSection(selection)}
     `;
@@ -1281,6 +1292,15 @@ export function renderLightDetails(options: SpecialActorDetailsOptions): void {
     (event) => {
       options.setSelectedLightSettings({
         castShadow: (event.currentTarget as HTMLInputElement).checked,
+      });
+    },
+  );
+
+  body.querySelector<HTMLInputElement>("[data-light-cascades]")?.addEventListener(
+    "change",
+    (event) => {
+      options.setSelectedLightSettings({
+        cascadedShadows: (event.currentTarget as HTMLInputElement).checked,
       });
     },
   );

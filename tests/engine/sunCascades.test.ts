@@ -4,6 +4,7 @@ import {
   cascadeSliceSphere,
   computeCascadeSplits,
   computeSunCascades,
+  sunCascadeBudget,
   sunCascadeDistance,
   sunCascadeNeedsUpdate,
   sunShadowFadeRange,
@@ -183,6 +184,14 @@ export function registerSunCascadesTests(check: Check): void {
     assert.deepEqual(updates(2), [false, true, false, true, false, true]);
     assert.deepEqual(updates(3), [true, false, true, false, true, false]);
     assert.deepEqual(Array.from({ length: 4 }, (_, frame) => sunCascadeNeedsUpdate(3, frame, false)), [true, true, true, true]);
+  });
+
+  check("sun cascades: the texture-unit budget caps the cascade count", () => {
+    assert.equal(sunCascadeBudget(16, 14), 2);
+    assert.equal(sunCascadeBudget(16, 15), 1);
+    assert.equal(sunCascadeBudget(16, 17), 0);
+    assert.equal(sunCascadeBudget(32, 14), 4, "never more than the shader unrolls");
+    assert.equal(sunCascadeBudget(Number.NaN, 0), 0);
   });
 
   check("sun cascades: quality profiles carry the approved cascade counts", () => {

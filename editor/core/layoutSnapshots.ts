@@ -236,6 +236,7 @@ export function cloneLightActor(light: LayoutLightActor): LayoutLightActor {
   if (light.color !== undefined) clone.color = light.color;
   if (light.intensity !== undefined) clone.intensity = light.intensity;
   if (light.castShadow !== undefined) clone.castShadow = light.castShadow;
+  if (light.cascadedShadows !== undefined) clone.cascadedShadows = light.cascadedShadows;
   if (light.distance !== undefined) clone.distance = light.distance;
   if (light.angle !== undefined) clone.angle = light.angle;
   if (light.penumbra !== undefined) clone.penumbra = light.penumbra;

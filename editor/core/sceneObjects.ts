@@ -974,9 +974,10 @@ export function buildEditableSelection(
 
 /** Copies the optional point/spot-light fields onto a view-model when set. */
 function applyOptionalLightFields(
-  target: { distance?: number; angle?: number; penumbra?: number; decay?: number },
+  target: { distance?: number; angle?: number; penumbra?: number; decay?: number; cascadedShadows?: boolean },
   light: LayoutLightActor,
 ): void {
+  if (light.type === "directional") target.cascadedShadows = light.cascadedShadows === true;
   if (light.distance !== undefined) target.distance = light.distance;
   if (light.angle !== undefined) target.angle = light.angle;
   if (light.penumbra !== undefined) target.penumbra = light.penumbra;

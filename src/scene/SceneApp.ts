@@ -79,6 +79,9 @@ import {
   Vector2,
   Vector3,
 } from "three";
+import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
+import { sunCascadeDistance } from "@engine/world/sunCascades";
+import { QUALITY_PROFILES } from "@engine/perf/qualityProfiles";
 import type {
   AmbientLight,
   Camera,
@@ -1224,6 +1227,8 @@ export class SceneApp {
   private activeCamera: Camera;
   private orthoViewHeight = ORTHO_DEFAULT_VIEW_HEIGHT;
   private sun: DirectionalLight | null = null;
+  /** The sun's Cascaded Shadows preview in the perspective viewport; created on first use. */
+  private sunCascades: SunCascadeShadow | null = null;
   private ambientLight: AmbientLight | null = null;
   /**
    * The authored environment singletons (sky dome, Sky Light capture, fog,
@@ -1902,6 +1907,7 @@ export class SceneApp {
       }
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera());
       advanceForgeMaterialAnimations(now / 1000);
+      this.updateSunCascades();
 
       // The sweep decides what this frame draws and tags the GPU query with the
       // step it belongs to; with the panel closed both calls are a null check.
@@ -2811,6 +2817,40 @@ export class SceneApp {
   }
 
   /** Fits the sun's shadow frustum to the room AABB so shadows stay crisp. */
+  /**
+   * Previews a sun's Cascaded Shadows in the perspective viewport, with the
+   * High profile's cascades (3, out to 150 m); Play follows the player's
+   * quality profile. The orthographic views keep the bounds-fitted map.
+   */
+  private updateSunCascades(): void {
+    const sun = this.sun;
+    const index = sun ? this.lightObjects.findIndex((record) => record.light === sun) : -1;
+    const actor = index >= 0 ? this.layout?.lights?.[index] : undefined;
+    const camera = this.editorViewportCamera();
+    if (
+      !sun?.castShadow || actor?.cascadedShadows !== true || !this.renderer.shadowMap.enabled
+      || !(camera as PerspectiveCamera).isPerspectiveCamera
+    ) {
+      this.sunCascades?.deactivate();
+      return;
+    }
+    const profile = QUALITY_PROFILES.high;
+    const count = affordableSunCascades(profile.shadowCascades, this.renderer.capabilities.maxTextures, this.landscapeObjects.length > 0);
+    if (count < 2) {
+      this.sunCascades?.deactivate();
+      return;
+    }
+    this.sunCascades ??= new SunCascadeShadow(this.scene);
+    this.sunCascades.update({
+      sun,
+      camera: camera as PerspectiveCamera,
+      count,
+      stagger: false,
+      mapSize: sun.shadow.mapSize.width,
+      distance: sunCascadeDistance(profile.shadowDistanceScale),
+    });
+  }
+
   private fitSunShadowToScene(): void {
     fitDirectionalShadowToBounds(this.sun, this.getRoomBounds());
   }

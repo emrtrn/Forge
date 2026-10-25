@@ -348,6 +348,17 @@ ${TERRAIN_DEFORMATION_COLOR}
 }
 `;
 
+/**
+ * Texture units the lit terrain's fragment shader takes for itself (normals,
+ * weights, the paint layers, the track field), before three adds the
+ * environment map and one shadow map per shadowed light. WebGL2 GPUs may offer
+ * only 16 (ANGLE on D3D11): past that the program fails to link and the
+ * terrain is not drawn at all, so the sun's cascade count is budgeted against it.
+ */
+export const TERRAIN_LIT_FRAGMENT_SAMPLERS = [FRAGMENT_TERRAIN_PARS, FRAGMENT_COLOR_PARS, TERRAIN_DEFORMATION_FRAGMENT_PARS]
+  .join("\n")
+  .match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm)!.length;
+
 function injectVertex(shader: WebGLProgramParametersWithUniforms, lit = false): void {
   shader.vertexShader = shader.vertexShader
     .replace("#include <common>", `#include <common>\n${VERTEX_PARS}${lit ? TERRAIN_DEFORMATION_VERTEX_PARS : ""}`)

@@ -596,6 +596,14 @@ export interface LayoutLightActor {
   color?: string;
   intensity?: number;
   castShadow?: boolean;
+  /**
+   * Directional light only (Unreal's Cascaded Shadow Maps): the sun casts its
+   * shadow through 2–4 camera-fitted cascades — count and distance from the
+   * quality profile — instead of one map stretched over the whole level.
+   * Absent/false keeps the single bounds-fitted map (or, in far view mode, the
+   * camera-following one).
+   */
+  cascadedShadows?: boolean;
   distance?: number;
   angle?: number;
   penumbra?: number;

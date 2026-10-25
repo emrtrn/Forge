@@ -18,9 +18,9 @@ import {
   VIEW_DISTANCE_FOG_WARN_OPACITY,
 } from "@engine/world/viewDistance";
 import { resolveHeightFog } from "@engine/scene/heightFog";
-import { activeSceneDepthMode, setSceneDepthMode } from "@engine/render-three/depthMode";
+import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
-import { SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
+import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
 import { sunCascadeDistance } from "@engine/world/sunCascades";
 import { StaticDetailCulling } from "@engine/render-three/staticDetailCulling";
 import { hlodCellPlacements, hlodCellSourceHash, type HlodIndex } from "@engine/world/hlod";
@@ -1062,8 +1062,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private farViewMode = false;
   private warnedNoReversedDepth = false;
   private readonly followShadowForward = new Vector3();
-  /** Cascaded sun shadow of far view mode (Faz 7c2); created on first use. */
+  /** Cascaded sun shadow (Faz 7c2); created on first use. */
   private sunCascades: SunCascadeShadow | null = null;
+  /** The level sun's authored `cascadedShadows`. */
+  private sunCascadedShadows = false;
+  private warnedSunCascadeBudget = false;
   /**
    * Small-object distance culling of static placements (Faz 7e), only in open
    * world levels (World Partition on or a view distance set); null elsewhere.
@@ -3480,6 +3483,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.lightObjects = [];
     this.sunCascades?.dispose();
     this.sun = null;
+    this.sunCascadedShadows = false;
     if (this.ambientLight) {
       this.scene.remove(this.ambientLight);
       this.ambientLight = null;
@@ -6343,6 +6347,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.lightObjects.push(record);
     if (isSceneSunLight(actor, this.sun)) {
       this.sun = record.light as DirectionalLight;
+      this.sunCascadedShadows = actor.cascadedShadows === true;
     }
   }
 
@@ -6405,22 +6410,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Far view mode sun shadow. With 2+ quality `shadowCascades` and reversed-Z
-   * (Faz 7c2) the sun casts through camera-fitted cascades out to
-   * `200 m × shadowDistanceScale`, fading out over its last 15 %. Otherwise
-   * (Faz 7c1) the sun's own frustum follows the camera, covering
-   * `FOLLOW_SHADOW_HALF_EXTENT × shadowDistanceScale` around a point ahead of
-   * it, texel-snapped so it does not shimmer. Smaller levels keep the bounds
-   * fit ({@link fitSunShadowToScene}).
+   * The sun's shadow each frame. A sun with **Cascaded Shadows** on (Faz 7c2,
+   * like Unreal's directional light CSM) casts through 2+ camera-fitted
+   * cascades — count, map size and `200 m × shadowDistanceScale` distance from
+   * the quality profile — fading out over the last 15 %, in any level. Without
+   * it, far view mode (Faz 7c1) re-centres the sun's own frustum ahead of the
+   * camera (`FOLLOW_SHADOW_HALF_EXTENT × shadowDistanceScale`, texel-snapped),
+   * and every other level keeps the bounds fit ({@link fitSunShadowToScene}).
    */
   private updateFollowShadow(): void {
     const sun = this.sun;
-    if (!this.farViewMode || !sun?.castShadow || !this.renderer.shadowMap.enabled) {
+    if (!sun?.castShadow || !this.renderer.shadowMap.enabled) {
       this.sunCascades?.deactivate();
       return;
     }
     const quality = this.qualitySettings;
-    const cascades = activeSceneDepthMode() === "reversed" ? quality.shadowCascades : 1;
+    const cascades = this.sunCascadedShadows
+      ? affordableSunCascades(quality.shadowCascades, this.renderer.capabilities.maxTextures, this.landscapeObjects.length > 0)
+      : 0;
+    if (this.sunCascadedShadows && cascades < quality.shadowCascades && !this.warnedSunCascadeBudget) {
+      this.warnedSunCascadeBudget = true;
+      const maxTextures = this.renderer.capabilities.maxTextures;
+      console.warn(cascades >= 2
+        ? `[shadows] Cascaded Shadows: ${cascades} of ${quality.shadowCascades} cascades fit this GPU's ${maxTextures} texture units next to the terrain shader`
+        : `[shadows] Cascaded Shadows off: the terrain shader leaves no room for cascades in this GPU's ${maxTextures} texture units; the sun keeps one shadow map`);
+    }
     if (cascades >= 2) {
       this.sunCascades ??= new SunCascadeShadow(this.scene);
       const fitted = this.sunCascades.update({
@@ -6435,6 +6449,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     } else {
       this.sunCascades?.deactivate();
     }
+    if (!this.farViewMode) return;
     this.camera.getWorldDirection(this.followShadowForward);
     updateSunFollowShadow(sun, this.camera.position, this.followShadowForward, {
       halfExtent: FOLLOW_SHADOW_HALF_EXTENT * this.qualitySettings.shadowDistanceScale,

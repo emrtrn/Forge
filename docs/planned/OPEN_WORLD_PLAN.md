@@ -9,7 +9,8 @@
 > `git checkout 035a659 -- spikes` ile geri gelir). Belgede geçen `spikes/…`
 > yolları o commit'e aittir. **Faz 2 renderer geçişi tamam (2026-10-25):** Landscape'ler
 > GPU CDLOD renderer'ıyla çiziliyor, CPU chunk renderer'ı kaldırıldı. Faz 2'nin kalanı
-> editör sculpt/paint'in `terrainEdit.ts`'e taşınması ve PNG heightmap import/export.
+> editör sculpt/paint'in `terrainEdit.ts`'e taşınması ve PNG heightmap import/export
+> ([OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md)).
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -651,6 +652,10 @@ Doğrulama (2026-10-22):
   yapmadı. Yeni kayıt uçları için dar security-diff-scan önerisi ayrı onay bekler.
 
 ## Faz 2 — Terrain renderer (CDLOD) + editör araçlarının taşınması
+
+> Renderer geçişi tamam (2026-10-25). Kalan maddelerin (editör sculpt/paint →
+> `terrainEdit.ts`, 16-bit PNG + RAW heightmap) onaylı uygulama planı:
+> [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
 
 - [x] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
       (saf, test edilir: komşu düğüm LOD farkı ≤ 1, menzil monotonluğu).

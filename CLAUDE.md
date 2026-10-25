@@ -48,6 +48,13 @@ engine/editor.
 
 ## Working Rules
 
+- **Work on `main`.** The user wants every change committed and pushed straight
+  to `main` (decided 2026-10-25): side branches left unmerged cost them a manual
+  merge before every local pull. When a cloud session starts on a `claude/*`
+  branch, sync it with `origin/main`, merge the work into `main` and push `main`;
+  do not leave finished work only on the side branch. Run the usual gates
+  (`npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify` for engine
+  work) before pushing, since `main` has no review step in between.
 - Keep the editor core generic; project-specific game rules live in game runtime
   code/data, not the editor.
 - Keep the stable `C:\Users\emret\Desktop\3DGameDev` repo untouched from this

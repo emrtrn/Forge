@@ -17,6 +17,7 @@ import {
   terrainWeightBlockCount,
   tileKey,
   type TerrainTileData,
+  type TerrainWorldBounds,
   type WorldTerrainDef,
 } from "./terrainTypes";
 
@@ -225,6 +226,87 @@ function writeRect(tile: TerrainTileData, rect: TerrainDirtyRect, values: Terrai
       tile.weights.set(values.weights.subarray(offset, offset + width * 4), block * tile.size * tile.size * 4 + dst * 4);
     }
   }
+}
+
+export interface TerrainVertexEdit {
+  /** Skip vertices outside the actual footprint before requiring their tiles. */
+  affects(worldX: number, worldZ: number): boolean;
+  /** Heights are relative to origin[1]; weights are normalized floats. No writes. */
+  sample(worldX: number, worldZ: number, height: number, weights: readonly number[]): {
+    height?: number;
+    weights?: readonly number[];
+  };
+}
+
+/** Bound one synchronous preview/undo transaction; callers can split larger regions. */
+export const TERRAIN_REGION_MAX_VERTICES = 1 << 20;
+
+/**
+ * Prepare a region edit without mutating tiles or summaries. Compute each world
+ * vertex once from its positive-side owner, then copy its requested values to
+ * every declared seam neighbour. Missing footprint tiles reject the whole
+ * transaction; actual holes are skipped. Patch bounds contain only changes.
+ */
+export function createTerrainRegionPatches(
+  world: TerrainEditWorld,
+  bounds: TerrainWorldBounds,
+  edit: TerrainVertexEdit,
+): TerrainUndoPatch[] {
+  if (![bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ].every(Number.isFinite)
+    || bounds.minX > bounds.maxX || bounds.minZ > bounds.maxZ) throw new Error("Invalid terrain edit bounds");
+  const { tileQuads: q, spacing, origin, tilesX, tilesZ } = world.def;
+  const x0 = Math.max(0, Math.ceil((bounds.minX - origin[0]) / spacing));
+  const x1 = Math.min(tilesX * q, Math.floor((bounds.maxX - origin[0]) / spacing));
+  const z0 = Math.max(0, Math.ceil((bounds.minZ - origin[2]) / spacing));
+  const z1 = Math.min(tilesZ * q, Math.floor((bounds.maxZ - origin[2]) / spacing));
+  if (x1 < x0 || z1 < z0) return [];
+  if ((x1 - x0 + 1) * (z1 - z0 + 1) > TERRAIN_REGION_MAX_VERTICES) {
+    throw new Error("Terrain edit region is too large; split the operation into smaller regions");
+  }
+  const required = new Set(world.def.tiles.map((entry) => entry.key));
+  const staged = new Map<string, {
+    rect: TerrainDirtyRect;
+    changes: { copy: VertexCopy; height: number; weights: Uint8Array | undefined }[];
+  }>();
+  for (let gz = z0; gz <= z1; gz += 1) {
+    for (let gx = x0; gx <= x1; gx += 1) {
+      const wx = origin[0] + gx * spacing, wz = origin[2] + gz * spacing;
+      if (!edit.affects(wx, wz)) continue;
+      const copies = vertexCopies(world, gx, gz, required);
+      const owner = copies[0];
+      if (!owner) continue;
+      const next = edit.sample(wx, wz, owner.tile.heights[owner.index]!,
+        Array.from({ length: owner.tile.layerCount }, (_, layer) => terrainTileLayerWeight(owner.tile, layer, owner.index)));
+      const height = next.height === undefined ? undefined : Math.fround(next.height);
+      if (height !== undefined && !Number.isFinite(height)) throw new Error("Invalid terrain edit height");
+      if (next.weights !== undefined && (next.weights.length !== owner.tile.layerCount
+        || !next.weights.every((value) => Number.isFinite(value) && value >= 0 && value <= 1))) throw new Error("Invalid terrain edit weights");
+      const weights = next.weights === undefined ? undefined : quantizeWeights([...next.weights]);
+      for (const copy of copies) {
+        const changed = (height !== undefined && !Object.is(height, copy.tile.heights[copy.index]))
+          || weights?.some((value, layer) => value !== copy.tile.weights[weightOffset(copy.tile, copy.index, layer)]);
+        if (!changed) continue;
+        const key = tileKey(copy.tile.x, copy.tile.z);
+        const rect = { x0: copy.x, x1: copy.x, z0: copy.z, z1: copy.z };
+        let entry = staged.get(key);
+        if (!entry) { entry = { rect, changes: [] }; staged.set(key, entry); }
+        else entry.rect = mergeTerrainDirtyRects(entry.rect, rect);
+        entry.changes.push({ copy, height: height ?? copy.tile.heights[copy.index]!, weights });
+      }
+    }
+  }
+  return [...staged].map(([key, { rect, changes }]) => {
+    const before = readRect(world.tiles.get(key)!, rect);
+    const after = { heights: before.heights.slice(), weights: before.weights.slice() };
+    const width = rect.x1 - rect.x0 + 1;
+    const count = width * (rect.z1 - rect.z0 + 1);
+    for (const { copy, height, weights } of changes) {
+      const index = (copy.z - rect.z0) * width + copy.x - rect.x0;
+      after.heights[index] = height;
+      weights?.forEach((value, layer) => { after.weights[Math.floor(layer / 4) * count * 4 + index * 4 + layer % 4] = value; });
+    }
+    return { key, rect, before, after };
+  });
 }
 
 /**

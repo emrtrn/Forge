@@ -2222,6 +2222,15 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
 - [ ] Landscape splines ve River Water dünya uzayına taşınır (`landscapeRef`
       yerine terrain'e bağlı dünya spline'ı); deform/paint birden çok tile'a
       uygulanır.
+      **İlk motor dilimi tamam (2026-10-25):** W0 ortak tasarım → bu aktarım →
+      Lake/Puddle/Ocean sırası onaylandı. 8A1'de `terrainSplines.ts` dünya
+      spline dönüşümü ve `terrainEdit` çok tile deform/boya patch çekirdeği
+      eklendi. 11 yeni regresyon ve tam `build:verify` (1.916 engine kontrolü)
+      geçti. Editör/runtime/kayıt aktarımı ve tarayıcı kabulü sonraki dilimlerdir;
+      mevcut `def.splines` merkez-yerel anlamını korur. Koordinat, kimlik,
+      eksik tile ve undo sözleşmesi ile 8A0–8A5
+      iş sırası [Water Body alt planı §11](WORLD_TERRAIN_WATER_BODY_PLAN.md#11-uygulama-başlangıcı--2026-10-25)
+      içinde kayıtlıdır. Bu ana madde uçtan uca aktarım kabulüne kadar açık kalır.
 - [ ] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
       prosedürel çim maddesi bittikten sonra 1×1 de çok-tile ile aynı yoldan
       (`terrainEdit.ts`, `worldTerrainActor.ts`) düzenlenir;

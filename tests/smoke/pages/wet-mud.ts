@@ -1,4 +1,4 @@
-import { AmbientLight, Color, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
+import { AmbientLight, Color, DirectionalLight, OrthographicCamera, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
 import { loadForgeMaterialLayer } from "@/scene/materialAssets";
 import { TerrainRenderer } from "@engine/render-three/terrain/terrainRenderer";
 import { TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
@@ -44,8 +44,16 @@ scene.add(terrain.mesh);
 let wet: number[] | undefined;
 let roughnessInAlpha: number[] | undefined;
 const compile = terrain.mesh.material.onBeforeCompile;
+const debug = { value: 0 };
 terrain.mesh.material.onBeforeCompile = (shader, renderer) => {
   compile(shader, renderer);
+  shader.uniforms.uWetMudDebug = debug;
+  shader.fragmentShader = `uniform float uWetMudDebug;\n${shader.fragmentShader}`.replace("#include <opaque_fragment>", `
+    if (uWetMudDebug > 0.5) {
+      gl_FragColor = vec4(forgePuddle, roughnessFactor, forgeDeformedWorldNormal(vec3(0.0, 1.0, 0.0)).y, 1.0);
+      return;
+    }
+    #include <opaque_fragment>`);
   wet = shader.uniforms.uDeformLayerWet!.value as number[];
   roughnessInAlpha = shader.uniforms.uLayerRoughnessInAlpha!.value as number[];
 };
@@ -80,9 +88,43 @@ function surfaceProbes() {
   }
   return result;
 }
+// Orthographic top view isolates shader masks from perspective/occlusion. Raw
+// output bypasses tone mapping so R=puddle, G=roughness, B=surface normal Y.
+function profile() {
+  const top = new OrthographicCamera(-2, 2, 2, -2, 0.05, 40);
+  top.position.set(0, 12, 0);
+  top.up.set(0, 0, -1);
+  top.lookAt(0, 0, 0);
+  top.updateMatrixWorld(true);
+  debug.value = 1;
+  terrain.updateLod(top);
+  renderer.render(scene, top);
+  const gl = renderer.getContext();
+  const result = [-0.5, -0.38, -0.22, -0.1, 0, 0.1, 0.22, 0.38, 0.5].map((offset) => {
+    const p = new Vector3(-1.1 + offset, 0, 0).project(top);
+    const pixel = new Uint8Array(4);
+    gl.readPixels(Math.round((p.x + 1) * 0.5 * canvas.width), Math.round((p.y + 1) * 0.5 * canvas.height), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    return { offset, puddle: pixel[0]! / 255, roughness: pixel[1]! / 255, normalY: pixel[2]! / 255 };
+  });
+  debug.value = 0;
+  draw();
+  return result;
+}
+function tracks(angle: number, width: number, detail: number) {
+  field.decay(10, 1);
+  const rotate = (x: number, z: number): [number, number] => [x * Math.cos(angle) + z * Math.sin(angle), -x * Math.sin(angle) + z * Math.cos(angle)];
+  for (const x of [-1.1, 1.1]) field.stampWheel({ from: rotate(x, -14), to: rotate(x, 14), heading: angle,
+    width, contactLength: 0.6, targetDepth: 0.18, compaction: 1, disturbance: 255 });
+  deformation.update(field.takeDirty());
+  terrain.setTrackDetailLevels(detail);
+  camera.position.set(2.5, 3.5, 7);
+  camera.lookAt(0, -0.12, 0);
+  camera.updateMatrixWorld(true);
+  draw();
+}
 let frame = 0;
 function loop() { draw(); if (++frame < 20) requestAnimationFrame(loop); else {
-  (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample,
+  (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks,
     roughness(on: boolean) { roughnessInAlpha![4] = on ? 1 : 0; draw(); return surfaceProbes(); },
     side() { camera.position.set(-2.5, 3.2, 6); camera.lookAt(0, -0.12, 0); camera.updateMatrixWorld(true); draw(); },
     triangles: renderer.info.render.triangles };

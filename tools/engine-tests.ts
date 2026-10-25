@@ -1,5 +1,6 @@
 import { landscapeTrimesh } from "../tests/engine/terrainTrimeshReference";
 import { registerTerrainErosionTests } from "../tests/engine/terrainErosion.test";
+import { registerTerrainSplineTests } from "../tests/engine/terrainSplines.test";
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
@@ -1238,6 +1239,7 @@ registerTerrainRenderTests(check);
 registerTerrainEditTests(check);
 await registerHeightmapPngTests(checkAsync);
 registerTerrainErosionTests(check);
+registerTerrainSplineTests(check);
 registerTerrainImportTests(check);
 registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);

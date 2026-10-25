@@ -95,9 +95,44 @@ export function registerTerrainTrackDetailTests(check: Check): void {
       assert.deepEqual(shader.uniforms.uLayerRoughnessInAlpha!.value, [0, 0, 0, 0, 1, 0, 0, 0]);
       assert.match(shader.fragmentShader, /texture\(uLayerTex4,/);
       assert.match(shader.fragmentShader, /texture\(uLayerTex7,/);
-      assert.match(shader.fragmentShader, /roughnessFactor = mix\(roughnessFactor, 0.035, forgePuddle\)/);
+      assert.match(shader.fragmentShader, /roughnessFactor = mix\(roughnessFactor, 0.16, forgePuddle\)/);
       assert.match(shader.fragmentShader, /outgoingLight = mix\(outgoingLight, forgeSky/);
     } finally { terrain.dispose(); textures.forEach((texture) => texture.dispose()); }
+  });
+  check("terrain deformation texture: filtering softens edges without changing physics and partial halos match full copies", () => {
+    const field = new DeformationField({ windowSize: 8, cellSize: 0.125 });
+    const texture = new TerrainDeformationTexture();
+    texture.attach(field);
+    field.takeDirty();
+    const image = () => (texture.uniforms.uDeformTex!.value as Texture & { image: { data: Uint8Array } }).image.data;
+    const copy = new TerrainDeformationTexture();
+    const compareFullCopy = () => {
+      const depths = field.depth.slice();
+      const disturbance = field.disturbance.slice();
+      texture.update(field.takeDirty());
+      copy.attach(field);
+      assert.deepEqual(image(), (copy.uniforms.uDeformTex!.value as Texture & { image: { data: Uint8Array } }).image.data);
+      assert.deepEqual(field.depth, depths, "render filtering preserves physical depth");
+      assert.deepEqual(field.disturbance, disturbance, "render filtering preserves physical disturbance");
+    };
+    try {
+      field.stampDisc([0.0625, 0.0625], 0.01, 0.2, 1, 240);
+      compareFullCopy();
+      // The single cell crosses both toroidal texture seams: the filter must
+      // also update its eight neighbours, including the diagonally wrapped one.
+      assert.equal(image()[1], 60, "one-cell impulse: tent centre has one quarter of the disturbance");
+      assert.equal(image()[(63 * 64 + 63) * 2 + 1], 15, "wrapped diagonal has one sixteenth");
+      assert.equal(field.sample(0.0625, 0.0625).depth, 0.2);
+      field.stampWheel({ from: [-3.8, -3], to: [3.8, 3], width: 0.4, contactLength: 0.5, targetDepth: 0.18, compaction: 1, disturbance: 255 });
+      compareFullCopy();
+      field.decay(0.04, 1);
+      compareFullCopy();
+      field.recenter(0.25, -0.375);
+      compareFullCopy();
+      field.recenter(20, 20);
+      compareFullCopy();
+      assert.ok(image().every((value) => value === 0), "large recentre clears the filtered field too");
+    } finally { texture.dispose(); copy.dispose(); }
   });
   check("terrain track detail: tile-slot vertices sit on the collider's triangles, not a bilinear blend", () => {
     const map = tiles();
@@ -248,7 +283,9 @@ export function registerTerrainTrackDetailTests(check: Check): void {
       assert.equal(shader.uniforms.uDeformTex, texture.uniforms.uDeformTex, "one shared track texture");
     }
     assert.match(lit.vertexShader, /vForgeDeformBerm = forgeDisp\.y;/);
-    assert.match(lit.fragmentShader, /dFdx\(vForgeDeformBerm\)/);
+    assert.match(lit.fragmentShader, /forgeDeformDisplacement\(vForgeDeformWorld \+ vec2\(stepSize, 0.0\)\)/);
+    assert.match(lit.fragmentShader, /forgeDeformedWorldNormal\(forgeBaseWorld\).y/);
+    assert.doesNotMatch(lit.fragmentShader, /dFdx\(vForgeDeformBerm\)/);
     assert.doesNotMatch(normal.fragmentShader + depth.fragmentShader, /forgeDeformBerm/);
     terrain.dispose();
     texture.dispose();

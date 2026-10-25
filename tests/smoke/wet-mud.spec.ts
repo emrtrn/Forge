@@ -25,8 +25,32 @@ test("wet mud fifth layer renders reflective water on track floors", async ({ pa
   await page.screenshot({ path: info.outputPath("wet-mud-puddles.png") });
   expect(Math.max(...wet.map((value, i) => value - dry[i]!))).toBeGreaterThan(10); // blue sky on visible flat parts of the floor
   expect(wetCentre[2]! - dryCentre[2]!).toBeGreaterThan(10); // the rut centre must fill, not only one narrow edge
+  const profile = await page.evaluate(() => (window as any).__wetMudQa.profile() as { offset: number; puddle: number; roughness: number; normalY: number }[]);
+  await writeFile(info.outputPath("wet-mud-profile.json"), JSON.stringify(profile, null, 2));
+  const floor = profile.find((point) => point.offset === 0)!;
+  expect(floor.puddle).toBeGreaterThan(0.8);
+  expect(floor.roughness).toBeGreaterThan(0.12);
+  const walls = profile.filter((point) => Math.abs(point.offset) === 0.22);
+  for (const wall of walls) {
+    expect(wall.normalY).toBeLessThan(0.94);
+    expect(wall.puddle).toBeLessThan(0.05);
+    expect(wall.roughness).toBeGreaterThan(0.28);
+  }
+  for (const rim of profile.filter((point) => Math.abs(point.offset) >= 0.38)) expect(rim.puddle).toBeLessThan(0.01);
+  await page.evaluate(() => (window as any).__wetMudQa.water(false));
+  const dryProfile = await page.evaluate(() => (window as any).__wetMudQa.profile() as { puddle: number }[]);
+  expect(dryProfile.every((point) => point.puddle < 0.01)).toBe(true);
+  await page.evaluate(() => (window as any).__wetMudQa.water(true));
   await page.evaluate(() => (window as any).__wetMudQa.side());
   await page.screenshot({ path: info.outputPath("wet-mud-puddles-side.png") });
+  // 0.5 m authored spacing + one detail level = 25 cm vertices, matching
+  // LandscapeTest at its existing 1 m spacing / two detail levels.
+  await page.evaluate(() => (window as any).__wetMudQa.tracks(Math.PI / 7, 0.55, 1));
+  await page.screenshot({ path: info.outputPath("wet-mud-diagonal-25cm.png") });
+  await page.evaluate(() => (window as any).__wetMudQa.tracks(0, 0.25, 1));
+  await page.screenshot({ path: info.outputPath("wet-mud-narrow-25cm.png") });
+  const viewport = await page.locator("canvas").boundingBox();
+  expect(viewport).toMatchObject({ x: 0, y: 0, width: 1280, height: 720 });
   expect(errors).toEqual([]);
 });
 

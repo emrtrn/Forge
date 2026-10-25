@@ -259,7 +259,7 @@ export function registerWheelTrackTests(check: Check): void {
     const field = new DeformationField({ windowSize: 8, cellSize: 0.5 });
     const texture = new TerrainDeformationTexture();
     assert.equal(texture.uniforms.uDeformActive!.value, 0);
-    field.stampDisc([0.25, 0.25], 0.2, TERRAIN_DEFORMATION_DEPTH_RANGE / 2, 1, 100);
+    field.stampDisc([0.25, 0.25], 1, TERRAIN_DEFORMATION_DEPTH_RANGE / 2, 1, 100);
     texture.attach(field);
     assert.equal(texture.uniforms.uDeformActive!.value, 1);
     const tex = texture.uniforms.uDeformTex!.value as { image: { data: Uint8Array; width: number } };
@@ -271,10 +271,10 @@ export function registerWheelTrackTests(check: Check): void {
     assert.equal(tex.image.data[index(0, 0) * 2 + 1], 100);
     field.takeDirty();
     field.recenter(3, -2);
-    field.stampDisc([2.25, 0.25], 0.2, TERRAIN_DEFORMATION_DEPTH_RANGE * 2, 1, 255);
+    field.stampDisc([2.25, 0.25], 1, TERRAIN_DEFORMATION_DEPTH_RANGE * 2, 1, 255);
     texture.update(field.takeDirty());
     assert.equal(tex.image.data[index(4, 0) * 2], 255, "deeper than the range saturates");
-    assert.ok(texture.stats().uploadedTexels > 0 && texture.stats().uploadedTexels < 16 * 16 + 1);
+    assert.ok(texture.stats().uploadedTexels > 0 && texture.stats().uploadedTexels < 2 * 16 * 16, "bounded dirty regions with filter halos");
     const window = texture.uniforms.uDeformWindow!.value as { x: number; y: number; z: number; w: number };
     assert.deepEqual([window.x, window.y, window.z, window.w], [field.originCell[0] * 0.5, field.originCell[1] * 0.5, 8, 0.5]);
     texture.detach();

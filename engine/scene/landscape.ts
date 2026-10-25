@@ -900,7 +900,7 @@ export interface LandscapeSplineApplyResult {
   bounds: LandscapeSplineApplyBounds | null;
 }
 
-interface SplineCorridorSample {
+export interface SplineCorridorSample {
   influence: number;
   /** Interpolation parameter along the winning sub-segment (0 at start, 1 at end). */
   t: number;
@@ -951,6 +951,8 @@ const CORRIDOR_INDEX_MAX_BUCKETS = 1 << 18;
 /**
  * Uniform-grid index over a spline's resolved sub-segments, so a corridor lookup
  * tests only the pieces that can actually reach the sampled vertex.
+ * Coordinates may be landscape-local or world-space; samples and queries must
+ * use the same frame. Shared by the legacy and World Terrain apply paths.
  *
  * This exists for cost, not for behaviour: an apply pass walks every vertex in the
  * corridor's bounding box, and scanning all sub-segments at each one made the pass
@@ -961,7 +963,7 @@ const CORRIDOR_INDEX_MAX_BUCKETS = 1 << 18;
  * the identical sample; ties still resolve to the earliest sub-segment because
  * buckets keep insertion (i.e. polyline) order.
  */
-class SplineCorridorIndex {
+export class SplineCorridorIndex {
   private readonly buckets: (LandscapeSplineSubSegment[] | undefined)[];
   private readonly bucketSize: number;
   private readonly gridX: number;

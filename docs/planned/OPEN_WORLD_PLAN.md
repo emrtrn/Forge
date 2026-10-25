@@ -33,9 +33,10 @@ tanım yeniden yazılır, eklenen tile dosyaları `.tiles/` altında sahipsiz ka
 > Eski CPU chunk renderer kaldırıldı. `claude/zealous-brown-lfi5ti` dalındaki
 > alternatif Faz 2 renderer'ı, bu özellikleri koruyan yerel renderer üzerinde
 > uzlaştırıldı; kararlar aşağıdaki birleştirme notunda. Açık Faz 2 işleri
-> 16-bit PNG, büyük import worker'ı ve renderer maddesinde belirtilen eklerdir.
-> Kalan editör işinin onaylı planı (birleştirmeden önce yazıldı; kapsam farkı o
-> belgenin başındaki notta): [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
+> büyük import worker'ı, dab başına GPU yüklemesinin daraltılması ve renderer
+> maddesinde belirtilen eklerdir. Editör işinin (sculpt/paint `terrainEdit`'e,
+> 16-bit PNG + RAW, katman silme) planı 2026-10-25'te tamamlandı:
+> `OPEN_WORLD_FAZ2_EDITOR_PLAN.md` (arşivde, `docs/COMPLETED_WORK_INDEX.md`).
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -698,8 +699,8 @@ GTAO'yu dışlamak yerine yerel displaced normal/depth geçişleri korunur.
 eviction, döndürülmüş arazide 60 ışın, sculpt/picking, shader geçişleri ve
 outline davranışını mevcut API üzerinde denetler.
 
-Kalan maddelerin onaylı uygulama planı:
-[OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
+Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
+`OPEN_WORLD_FAZ2_EDITOR_PLAN.md` (arşivde, `docs/COMPLETED_WORK_INDEX.md`).
 
 - [x] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
       (saf, test edilir: komşu düğüm LOD farkı ≤ 1, menzil monotonluğu).
@@ -806,7 +807,7 @@ Kalan maddelerin onaylı uygulama planı:
       `raycastTerrain`'e gidiyor; picker, brush, foliage ve yüzeye yerleştirme
       değişmeden çalışıyor. Engine testi rastgele ışınlarda (döndürülmüş arazi
       dahil) legacy mesh ile aynı nokta/mesafe/normal'i doğruluyor.
-- [ ] Sculpt/paint: `terrainEdit.ts` ile çok-tile'lı brush, kenar vertex
+- [x] Sculpt/paint: `terrainEdit.ts` ile çok-tile'lı brush, kenar vertex
       senkronu, kirli dikdörtgen doku yüklemesi. Undo artık tüm diziyi değil,
       tile başına kirli dikdörtgenin önce/sonra yamasını saklar.
       *Saf düzenleme çekirdeği hazır (2026-10-23): `terrainEdit.ts` Float32
@@ -841,18 +842,21 @@ Kalan maddelerin onaylı uygulama planı:
       gösteriyor; katman materyali atama artık açık. **Hâlâ kapalı:** spline'lar (uyarı) ve
       yeniden boyutlandırma (heightmap import/export açık: RAW 2026-10-23, PNG16 2026-10-25). *(Fill Layer 2026-10-25'te
       açıldı; 1×1 ve çok-tile aynı `terrainEdit` stroke/undo yolunda — ayrıntı
-      [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).)*
+      `OPEN_WORLD_FAZ2_EDITOR_PLAN.md` (arşivde, `docs/COMPLETED_WORK_INDEX.md`).)*
       Elle foliage Paint/Erase/Single/Fill/Select araçları çok-tile yüzeyinde çalışır;
       yükseklik/normal raycast'ten gelir, boş tile'a düzlem fallback'i yapılmaz.
       Aynı `landscape` hedefi ve foliage sidecar'ı Save/Load/Play'de kullanılır;
       prosedürel Landscape foliage kuralları Faz 6'ya kadar kapalıdır.
       *Paint hassasiyeti (2026-10-25):* stroke boyunca float ağırlık tamponu
       (`TerrainPaintAccumulator`), düşük güçlü dab'lar artık 8-bit'e yuvarlanıp
-      kaybolmuyor; ayrıntı [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
-      **Açık (perf):** GPU'ya dab başına tile katmanının
-      tamamı ve global haritanın tamamı yükleniyor (CPU normalleri
-      dikdörtgenle sınırlı); dikişe değen dab komşu tile'ın normallerini
-      baştan hesaplıyor. Doğrulama: `tests/engine/worldTerrainActor.test.ts`
+      kaybolmuyor; ayrıntı `OPEN_WORLD_FAZ2_EDITOR_PLAN.md` (arşivde, `docs/COMPLETED_WORK_INDEX.md`).
+      *Tamam (2026-10-25):* 1×1 Landscape da aynı stroke/undo yolunda; Fill
+      Layer ve spline bake tile yamalarıyla; Details Paint'te **Remove Layer**
+      (1×1 ve çok-tile, tek undo): silinen katmanın ağırlığı kalan katmanlara
+      orantılı dağıtılır, RGBA8 toplamı 255, blok sayısı katmanla düşer
+      (`createTerrainLayerRemoval`). 1×1 kaydının kirli tile yoluna geçmesi
+      (`captureTerrainWrite`'ın emekliye ayrılması) Faz 3'e ertelendi. Dab
+      başına GPU yüklemesi aşağıdaki açık maddede. Doğrulama: `tests/engine/worldTerrainActor.test.ts`
       (dikiş üstü dab yalnız iki tile'ı, formatıyla ve doğrulanarak kaydeder;
       aralık genişlemesi), `editorSaveCoordinator` (yalnız kirli tile + tanım,
       yerinde; yazım sırasında yeni düzenleme kirli kalır) ve
@@ -860,6 +864,10 @@ Kalan maddelerin onaylı uygulama planı:
       autosave yalnız (0,0) ve (1,0)'ı yazar, dikiş satırları eşit; undo iki
       tile'ın baytlarını birebir geri getirir; redo sonrası Play'de pawn
       arazide).
+- [ ] Dab başına GPU yüklemesi (perf): GPU'ya dab başına tile katmanının
+      tamamı ve global haritanın tamamı yükleniyor (CPU normalleri
+      dikdörtgenle sınırlı); dikişe değen dab komşu tile'ın normallerini
+      baştan hesaplıyor. Yüklemeler kirli dikdörtgene daraltılır.
 - [x] Editörde çok-tile World Terrain oluşturma (2026-10-23): Add Actor →
       Terrain → **World Terrain** bir diyalog açar (ad, Tiles X/Z, tile
       çözünürlüğü 64/128/256 quad, vertex aralığı 0,25–8 m, taban yüksekliği);
@@ -898,7 +906,7 @@ Kalan maddelerin onaylı uygulama planı:
       Doğrulama: engine (1×1 varsayılan, yazılmamış Landscape'in level'dan önce
       yazımı + başarısız tile yazımında level'ın kaydedilmemesi) ve Add
       Landscape kullanan smoke'lar (`addLandscapeFromMenu`).
-- [ ] Heightmap import/export: 16-bit PNG ve RAW, dünya boyunda; tile'lara
+- [x] Heightmap import/export: 16-bit PNG ve RAW, dünya boyunda; tile'lara
       bölme `terrainImport.ts`'de (büyük import worker'da, Faz 4'ten sonra).
       *Saf RAW import/export + tile bölme hazır (2026-10-23): little/big-endian
       16-bit RAW okuma, little-endian export, kopyalı kenarlar ve min/max özetleri
@@ -920,8 +928,11 @@ Kalan maddelerin onaylı uygulama planı:
       *16-bit PNG + 1×1 (2026-10-25):* RAW ve 16-bit PNG import/export artık
       1×1 ve çok-tile Landscape'te aynı Details bölümünden; bağımlılıksız codec
       `engine/terrain/heightmapPng.ts`. 1×1'de eski "Import PNG (resample)" kalır.
-      Ayrıntı [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
-      **Açık:** büyük import'un worker'a taşınması.
+      Ayrıntı `OPEN_WORLD_FAZ2_EDITOR_PLAN.md` (arşivde, `docs/COMPLETED_WORK_INDEX.md`).
+      Büyük import'un worker'a taşınması aşağıdaki açık maddede.
+- [ ] Büyük heightmap import'u worker'da (Faz 4'ten sonra): tile başına
+      generator (`iterateRawHeightmapTiles`) ilerleme sayacıyla worker'a taşınır;
+      bugün import ana thread'de çalışıyor.
 - [x] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
       `landscape-spline-chain`, `runtime-parity`, `game-starter` yeşil.
       *Tamam (2026-10-23):* yeni renderer varsayılanken bunlar ve

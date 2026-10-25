@@ -1,9 +1,24 @@
+import { readFile } from "node:fs/promises";
+import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
+import { terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { addLandscapeFromMenu, readSavedTerrain } from "./terrain";
 import { expect, test, type Page } from "./test";
+import { SMOKE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
 test.setTimeout(210_000);
 
 // Saves stay inside the per-run smoke project.
+
+/** The saved 1×1 tile, straight from disk. */
+async function savedTileBytes(): Promise<Buffer> {
+  const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SCENE), "utf8"));
+  return readFile(smokePublicPath(terrainTilePath(level.landscapes[0].dataRef, "0_0")));
+}
+
+async function saveLayout(page: Page): Promise<void> {
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
+}
 
 async function deleteExistingLandscape(page: Page): Promise<void> {
   const landscapeRows = page.getByTestId("outliner-row").filter({ hasText: "Landscape" });
@@ -135,6 +150,54 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
   const unfilled = await readSavedTerrain(page);
   expect(unfilled.layers.map((layer) => layer.weights)).toEqual(reloadedData.layers.map((layer) => layer.weights));
+
+  // Remove Layer: Add Layer first, so removing the painted dirt layer drops
+  // five layers (two RGBA8 blocks) to four (one). Its weight goes to the other
+  // layers, every vertex stays at 255, and undo restores the exact bytes.
+  await page.locator("[data-landscape-add-layer]").click();
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute("aria-label", "Undo Add Landscape Paint Layer");
+  await saveLayout(page);
+  const fiveLayers = await readSavedTerrain(page);
+  expect(fiveLayers.layers.map((layer) => layer.id)).toEqual(["grass", "dirt", "rock", "snow", "layer-1"]);
+  const beforeRemove = await savedTileBytes();
+  const fiveTile = decodeTerrainTile(beforeRemove);
+  expect(fiveTile.layerCount).toBe(5);
+  await page.locator('[data-landscape-layer="dirt"]').click();
+  await expect(page.locator("[data-landscape-remove-layer]")).toHaveAttribute("data-landscape-remove-layer", "dirt");
+  await page.locator("[data-landscape-remove-layer]").click();
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute("aria-label", "Undo Remove Landscape Paint Layer");
+  await expect(page.locator('[data-landscape-layer="dirt"]')).toHaveCount(0);
+  await expect(page.locator('[data-landscape-layer="grass"]')).toHaveClass(/active/);
+  await expect(page.locator("[data-landscape-add-layer]")).toContainText("(4/8)");
+  await saveLayout(page);
+  const removed = await readSavedTerrain(page);
+  expect(removed.layers.map((layer) => layer.id)).toEqual(["grass", "rock", "snow", "layer-1"]);
+  const removedTile = decodeTerrainTile(await savedTileBytes());
+  const count = removedTile.size * removedTile.size;
+  expect(removedTile.layerCount).toBe(4);
+  expect(removedTile.weights.length).toBe(count * 4);
+  let spread = 0;
+  for (let index = 0; index < count; index += 1) {
+    const now = Array.from(removedTile.weights.subarray(index * 4, index * 4 + 4));
+    expect(now.reduce((sum, value) => sum + value, 0), `vertex ${index} sums to 255`).toBe(255);
+    if (fiveTile.weights[index * 4 + 1]! > 0) {
+      spread += 1;
+      expect(now[0]!).toBeGreaterThanOrEqual(fiveTile.weights[index * 4]!);
+    } else {
+      expect(now).toEqual([0, 2, 3].map((layer) => fiveTile.weights[index * 4 + layer]!).concat(fiveTile.weights[count * 4 + index * 4]!));
+    }
+  }
+  console.log(`[landscape-paint] Remove Layer spread dirt over ${spread} vertices`);
+  expect(spread).toBeGreaterThan(0);
+  await page.getByTestId("editor-undo").click();
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute("aria-label", "Undo Add Landscape Paint Layer");
+  await expect(page.locator('[data-landscape-layer="dirt"]')).toHaveClass(/active/);
+  await saveLayout(page);
+  expect((await savedTileBytes()).equals(beforeRemove), "undo restores the five-layer tile bytes").toBe(true);
+  const restored = await readSavedTerrain(page);
+  expect(restored.layers.map((layer) => layer.id)).toEqual(["grass", "dirt", "rock", "snow", "layer-1"]);
+  expect(restored.layers[1]!.material).toBe(fiveLayers.layers[1]!.material);
+  expect(restored.layers[1]!.physicalMaterial).toBe("mud");
 
   expect(pageErrors).toEqual([]);
 });

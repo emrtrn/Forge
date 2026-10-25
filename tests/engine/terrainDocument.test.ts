@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createFlatLandscapeData } from "../../engine/scene/landscape";
 import type { LayoutLandscape } from "../../engine/scene/layout";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
-import { captureTerrainSnapshot, terrainDocumentToLandscape, terrainTransformNeedsSave } from "../../engine/terrain/terrainLandscapeBridge";
+import { captureTerrainSnapshot, landscapeLayersWithoutLayer, terrainDocumentToLandscape, terrainTransformNeedsSave } from "../../engine/terrain/terrainLandscapeBridge";
 import { loadWorldTerrain, validateTerrainTile } from "../../engine/terrain/terrainLoader";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
@@ -48,6 +48,25 @@ export function registerTerrainDocumentTests(check: Check): void {
     const report = collectDroppedFields(extra, normalizeWorldTerrain(extra), "terrain");
     assert.ok(report.paths.includes("terrain.secret"));
     assert.ok(report.paths.includes("terrain.layers[0].future"));
+  });
+
+  check("terrain definition: removing paint layers down to one has no serialization drift; tiles validate", () => {
+    const { data } = fixture();
+    for (const [id, count, blocks] of [["grass", 3, 1], ["snow", 2, 1], ["rock", 1, 1]] as const) {
+      data.layers = landscapeLayersWithoutLayer(data, id);
+      const snapshot = captureTerrainSnapshot(actor, data);
+      const saved = validateSaveTerrainPayload({ path: snapshot.path, terrain: snapshot.def }).terrain;
+      assert.equal(saved.layers.length, count);
+      assert.deepEqual(saved, normalizeWorldTerrain(snapshot.def));
+      assert.deepEqual(collectDroppedFields(snapshot.def, saved, "terrain").paths, []);
+      const tile = validateTerrainTile(saved, "0_0", snapshot.bytes);
+      assert.equal(tile.layerCount, count);
+      assert.equal(tile.weights.length, blocks * tile.size * tile.size * 4);
+      assert.deepEqual(saved.layers.map((layer) => layer.physicalMaterial ?? null), data.layers.map((layer) => layer.physicalMaterial ?? null));
+    }
+    assert.deepEqual(data.layers.map((layer) => layer.id), ["dirt"]);
+    assert.equal(data.layers[0]!.physicalMaterial, "mud");
+    assert.ok(data.layers[0]!.weights.every((weight) => weight === 1), "the last layer holds every vertex");
   });
 
   check("terrain definition: malformed shape, bounds, layer IDs, keys and spline links are rejected", () => {

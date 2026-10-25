@@ -317,6 +317,30 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   await page.getByTestId("editor-undo").click();
   expect((await saved).ok()).toBeTruthy();
   for (const path of tilePaths) expect((await fileBytes(path)).equals(beforeFill.get(path)!), `${path} after fill undo`).toBe(true);
+
+  // Remove Layer: removing the active rock layer leaves grass alone; every tile
+  // and the definition are rewritten (one layer, 255 everywhere), and undo
+  // restores the exact tile bytes and both layers.
+  const beforeRemove = new Map(await Promise.all([TERRAIN, ...tilePaths].map(async (path) => [path, await fileBytes(path)] as const)));
+  await expect(page.locator("[data-landscape-remove-layer]")).toHaveAttribute("data-landscape-remove-layer", "rock");
+  saved = terrainSaved();
+  await page.locator("[data-landscape-remove-layer]").click();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute("aria-label", "Undo Remove Landscape Paint Layer");
+  await expect(page.locator("[data-landscape-remove-layer]")).toBeDisabled();
+  expect(JSON.parse((await fileBytes(TERRAIN)).toString("utf8")).layers.map((layer: { id: string }) => layer.id)).toEqual(["grass"]);
+  for (const path of tilePaths) {
+    const tile = decodeTerrainTile(await fileBytes(path));
+    expect(tile.layerCount, path).toBe(1);
+    expect(tile.weights.length, path).toBe((Q + 1) * (Q + 1) * 4);
+    expect(Array.from({ length: (Q + 1) * (Q + 1) }, (_, index) => tile.weights[index * 4]).every((weight) => weight === 255), `${path} all grass`).toBe(true);
+  }
+  saved = terrainSaved();
+  await page.getByTestId("editor-undo").click();
+  expect((await saved).ok()).toBeTruthy();
+  for (const path of tilePaths) expect((await fileBytes(path)).equals(beforeRemove.get(path)!), `${path} after remove undo`).toBe(true);
+  expect(JSON.parse((await fileBytes(TERRAIN)).toString("utf8"))).toEqual(JSON.parse(beforeRemove.get(TERRAIN)!.toString("utf8")));
+  await expect(page.locator('[data-landscape-layer="rock"]')).toHaveClass(/active/);
   await page.mouse.move(viewport.x + 8, viewport.y + 8);
   await page.waitForTimeout(500);
   const sculptShot = await viewportShot(page);

@@ -24521,14 +24521,21 @@ check("landscape layer material is allowlisted, round-trips, and survives normal
     }),
   );
 
-  // ensureLandscapeLayers backfills the four presets while preserving assignments.
+  // ensureLandscapeLayers keeps an authored list (order, removed presets) and its assignments.
   const data = createFlatLandscapeData("small");
   data.layers[1]!.material = "mat-desert-sand";
-  data.layers = [data.layers[1]!, data.layers[0]!]; // reorder to prove id-keyed preservation
+  data.layers[0]!.name = "Renamed";
+  data.layers = [data.layers[1]!, data.layers[0]!];
   ensureLandscapeLayers(data);
-  assert.equal(data.layers.length, 4);
-  assert.equal(data.layers.find((layer) => layer.id === "dirt")?.material, "mat-desert-sand");
-  assert.equal(data.layers.find((layer) => layer.id === "grass")?.material, undefined);
+  assert.deepEqual(data.layers.map((layer) => layer.id), ["dirt", "grass"]);
+  assert.equal(data.layers[0]!.material, "mat-desert-sand");
+  assert.equal(data.layers[1]!.material, undefined);
+  assert.equal(data.layers[1]!.name, "Grass", "preset ids keep their preset name");
+  assert.equal(data.layers[1]!.weights[0], 1);
+  // Only an empty list (old Faz 1/2 sidecars) gets the four presets.
+  data.layers = [];
+  assert.equal(ensureLandscapeLayers(data), true);
+  assert.deepEqual(data.layers.map((layer) => layer.id), ["grass", "dirt", "rock", "snow"]);
 });
 
 check("landscape trimesh reference is centred and up-facing, and physics files its triangles as walkable surfaces", () => {

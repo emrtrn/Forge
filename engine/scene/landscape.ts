@@ -667,54 +667,44 @@ export function normalizeLandscapeLayerWeights(
 }
 
 /**
- * Backfills/normalizes the default four paint layers in-place. Old Faz 1/2
- * sidecars with `layers: []` remain loadable and become paint-ready on first use.
+ * Normalizes paint layers in-place. Old Faz 1/2 sidecars with `layers: []`
+ * get the default four and become paint-ready on first use; an authored list
+ * keeps its order and ids (a removed preset layer stays removed), with preset
+ * ids taking their preset name, at most 8 layers and weights clamped/padded.
  */
 export function ensureLandscapeLayers(data: ForgeLandscapeData): boolean {
   const vertexCount = landscapeVertexCount(data);
+  if (data.layers.length === 0) {
+    data.layers = createDefaultLandscapeLayers(vertexCount);
+    return true;
+  }
   let changed = false;
-  const byId = new Map(data.layers.map((layer) => [layer.id, layer]));
   const nextLayers: LandscapeLayerWeights[] = [];
-
-  for (const [defaultIndex, defaults] of LANDSCAPE_DEFAULT_LAYERS.entries()) {
-    const existing = byId.get(defaults.id);
-    if (!existing) {
-      nextLayers.push({
-        id: defaults.id,
-        name: defaults.name,
-        weights: new Array(vertexCount).fill(defaultIndex === 0 ? 1 : 0),
-      });
-      changed = true;
-      continue;
-    }
-
+  for (const existing of data.layers) {
+    if (nextLayers.length >= 8 || nextLayers.some((layer) => layer.id === existing.id)) continue;
+    const padding = nextLayers.length === 0 ? 1 : 0;
     const weights = existing.weights.slice(0, vertexCount).map((weight) =>
       Number.isFinite(weight) ? Math.min(1, Math.max(0, weight)) : 0,
     );
-    while (weights.length < vertexCount) weights.push(defaultIndex === 0 ? 1 : 0);
+    while (weights.length < vertexCount) weights.push(padding);
+    const preset = LANDSCAPE_DEFAULT_LAYERS.find((defaults) => defaults.id === existing.id);
     if (
-      existing.name !== defaults.name ||
+      (preset && existing.name !== preset.name) ||
       existing.weights.length !== vertexCount ||
       existing.weights.some((weight, index) => weights[index] !== weight)
     ) {
       changed = true;
     }
-    const layer: LandscapeLayerWeights = { id: defaults.id, name: defaults.name, weights };
-    if (typeof existing.material === "string" && existing.material.length > 0) {
-      layer.material = existing.material;
+    if (!preset) {
+      nextLayers.push({ ...existing, weights });
+      continue;
     }
+    const layer: LandscapeLayerWeights = { id: preset.id, name: preset.name, weights };
+    if (typeof existing.material === "string" && existing.material.length > 0) layer.material = existing.material;
     if (typeof existing.physicalMaterial === "string" && existing.physicalMaterial.length > 0) {
       layer.physicalMaterial = existing.physicalMaterial;
     }
     nextLayers.push(layer);
-  }
-
-  // Extra authored paint layers survive loading, rendering, painting and save.
-  for (const existing of data.layers) {
-    if (LANDSCAPE_DEFAULT_LAYERS.some((defaults) => defaults.id === existing.id) || nextLayers.length >= 8) continue;
-    const weights = existing.weights.slice(0, vertexCount).map((weight) => Number.isFinite(weight) ? Math.min(1, Math.max(0, weight)) : 0);
-    while (weights.length < vertexCount) weights.push(0);
-    nextLayers.push({ ...existing, weights });
   }
   if (data.layers.length !== nextLayers.length) changed = true;
   data.layers = nextLayers;

@@ -4,10 +4,11 @@ import {
   landscapeEditIssues,
   landscapeEditWorld,
   landscapeGridPatchValues,
+  landscapeLayersWithoutLayer,
   terrainDocumentToLandscape,
   writeTerrainPatchToLandscape,
 } from "../../engine/terrain/terrainLandscapeBridge";
-import { applyTerrainLayerState, createTerrainLayerAddition } from "../../engine/terrain/terrainLayers";
+import { applyTerrainLayerState, createTerrainLayerAddition, createTerrainLayerRemoval } from "../../engine/terrain/terrainLayers";
 import {
   editLandscapeBrushWeights,
   landscapeBrushFalloff,
@@ -127,7 +128,141 @@ function assertSeams(world: TerrainEditWorld): void {
   }
 }
 
+function layerByte(tile: TerrainTileData, layer: number, index: number): number {
+  return tile.weights[Math.floor(layer / 4) * tile.size * tile.size * 4 + index * 4 + layer % 4]!;
+}
+
+/** Deterministic per-world-vertex RGBA8 paint summing to 255 (seam vertices agree); a few vertices are special. */
+function paintRemovalFixture(world: TerrainEditWorld, removed: number): void {
+  const q = world.def.tileQuads;
+  const layers = world.def.layers.length;
+  for (const tile of world.tiles.values()) {
+    for (let vz = 0; vz < tile.size; vz++) {
+      for (let vx = 0; vx < tile.size; vx++) {
+        const gx = tile.x * q + vx;
+        const gz = tile.z * q + vz;
+        const raw = Array.from({ length: layers }, (_, layer) => (gx * 7 + gz * 13 + layer * 29 + gx * gz * (layer + 3)) % 11);
+        const kind = (gx + gz * 5) % 9;
+        if (kind === 0) raw.fill(0), raw[removed] = 1; // only the removed layer
+        if (kind === 1) raw[removed] = 0; // removal leaves the vertex as it was
+        if (kind === 2) raw.fill(0); // unpainted
+        const total = raw.reduce((sum, value) => sum + value, 0);
+        const bytes = raw.map((value) => total > 0 ? Math.floor(value * 255 / total) : 0);
+        if (total > 0) bytes[raw.findIndex((value) => value > 0)]! += 255 - bytes.reduce((sum, value) => sum + value, 0);
+        const index = vz * tile.size + vx;
+        bytes.forEach((value, layer) => { tile.weights[Math.floor(layer / 4) * tile.size * tile.size * 4 + index * 4 + layer % 4] = value; });
+      }
+    }
+  }
+}
+
 export function registerTerrainEditTests(check: Check): void {
+  check("terrain paint layers: removal spreads the weight proportionally, keeps 255 and seams, drops a weight block, exact undo", () => {
+    const world = fixture(2, 2, 32, 5);
+    paintRemovalFixture(world, 2);
+    const original = new Map([...world.tiles].map(([key, tile]) => [key, tile.weights.slice()]));
+    const layerObjects = [...world.def.layers];
+    const removal = createTerrainLayerRemoval(world, "layer2");
+    assert.deepEqual(removal.after.layers.map((layer) => layer.id), ["layer0", "layer1", "layer3", "layer4"]);
+    assert.equal(removal.after.layers[3], layerObjects[4], "kept layers keep their identity");
+    const seen = { only: 0, untouched: 0, unpainted: 0, spread: 0 };
+    for (const [key, tile] of world.tiles) {
+      const count = tile.size * tile.size;
+      const weights = removal.after.weights.get(key)!;
+      assert.equal(tile.weights.length, 2 * count * 4);
+      assert.equal(weights.length, count * 4, "five layers -> four drops to one RGBA8 block");
+      const next = { ...tile, layerCount: 4, weights };
+      for (let i = 0; i < count; i++) {
+        const old = Array.from({ length: 5 }, (_, layer) => layerByte(tile, layer, i));
+        const kept = old.filter((_, layer) => layer !== 2);
+        const now = Array.from({ length: 4 }, (_, layer) => layerByte(next, layer, i));
+        const total = old.reduce((sum, value) => sum + value, 0);
+        const rest = total - old[2]!;
+        assert.equal(now.reduce((sum, value) => sum + value, 0), old[2] ? 255 : total, `${key} vertex ${i} total`);
+        if (total === 0) { seen.unpainted++; assert.deepEqual(now, [0, 0, 0, 0]); }
+        else if (old[2] === 0) { seen.untouched++; assert.deepEqual(now, kept); }
+        else if (rest === 0) { seen.only++; assert.deepEqual(now, [255, 0, 0, 0]); }
+        else {
+          seen.spread++;
+          now.forEach((value, layer) => {
+            assert.ok(Math.abs(value - kept[layer]! * total / rest) < 1, `${key} vertex ${i} layer ${layer} proportional`);
+            assert.ok(value >= kept[layer]!);
+          });
+        }
+      }
+    }
+    assert.ok(Object.values(seen).every((value) => value > 0), JSON.stringify(seen));
+    applyTerrainLayerState(world, removal.after);
+    assert.equal(world.def.layers.length, 4);
+    assertSeams(world);
+    for (const tile of world.tiles.values()) {
+      assert.equal(tile.layerCount, 4);
+      const decoded = decodeTerrainTile(encodeTerrainTile(tile, { heightMin: -256, heightMax: 256, heightFormat: "f32" }));
+      assert.equal(decoded.layerCount, 4);
+      assert.deepEqual(decoded.weights, tile.weights);
+    }
+    applyTerrainLayerState(world, removal.before);
+    assert.deepEqual(world.def.layers, layerObjects);
+    assert.equal(world.def.layers[2], layerObjects[2], "undo restores the removed layer object");
+    for (const [key, tile] of world.tiles) {
+      assert.equal(tile.layerCount, 5);
+      assert.deepEqual(tile.weights, original.get(key));
+    }
+  });
+  check("terrain paint layers: removal from eight layers shifts later channels across blocks; guards", () => {
+    const world = fixture(1, 1, 32, 8);
+    paintRemovalFixture(world, 0);
+    const tile = world.tiles.get("0_0")!;
+    const count = tile.size * tile.size;
+    // Unnormalized legacy bytes: a touched vertex normalizes to 255, an untouched one only shifts.
+    for (const index of [0, 1]) for (let layer = 0; layer < 8; layer++) tile.weights[Math.floor(layer / 4) * count * 4 + index * 4 + layer % 4] = 0;
+    tile.weights[0] = 100; tile.weights[1] = 50; tile.weights[2] = 50;
+    tile.weights[4 + 1] = 120;
+    const removal = createTerrainLayerRemoval(world, "layer0");
+    const weights = removal.after.weights.get("0_0")!;
+    assert.equal(weights.length, 2 * count * 4, "seven layers stay in two blocks");
+    const next = { ...tile, layerCount: 7, weights };
+    for (let i = 0; i < count; i++) {
+      const old = Array.from({ length: 8 }, (_, layer) => layerByte(tile, layer, i));
+      const now = Array.from({ length: 7 }, (_, layer) => layerByte(next, layer, i));
+      if (i === 0) assert.deepEqual(now, [128, 127, 0, 0, 0, 0, 0]);
+      else assert.equal(now.reduce((sum, value) => sum + value, 0), old.reduce((sum, value) => sum + value, 0));
+      // Layer 4 (block 1, R) lands in block 0, A; layer 7 (block 1, A) in block 1, B.
+      if (old[0] === 0) assert.deepEqual(now, old.slice(1));
+    }
+    assert.throws(() => createTerrainLayerRemoval(world, "missing"), /does not exist/);
+    assert.throws(() => createTerrainLayerRemoval(fixture(1, 1, 32, 1), "layer0"), /at least one/);
+    const partial = fixture(2, 1, 32, 4);
+    partial.tiles.delete("1_0");
+    assert.throws(() => createTerrainLayerRemoval(partial, "layer1"), /Load all/);
+  });
+  check("terrain paint layers: a 1x1 Landscape grid removes a layer through the tile removal; the save writes its bytes", () => {
+    const data = createFlatLandscapeData("small");
+    data.layers[1]!.material = "mat-desert-sand";
+    data.layers[3]!.physicalMaterial = "snow";
+    const count = data.heights.length;
+    for (let i = 0; i < count; i++) {
+      // RGBA8-exact weights summing to 255, as painting leaves a 1x1 grid.
+      const raw = [i % 5, (i * 3) % 7, (i * 11) % 4, i % 2];
+      const total = raw.reduce((sum, value) => sum + value, 0) || 1;
+      const bytes = raw.map((value) => Math.floor(value * 255 / total));
+      bytes[0]! += 255 - bytes.reduce((sum, value) => sum + value, 0);
+      data.layers.forEach((layer, index) => { layer.weights[i] = bytes[index]! / 255; });
+    }
+    ensureLandscapeLayers(data);
+    const world = landscapeEditWorld(data);
+    const expected = createTerrainLayerRemoval(world, "rock").after.weights.get("0_0")!;
+    const layers = landscapeLayersWithoutLayer(data, "rock");
+    assert.deepEqual(layers.map((layer) => layer.id), ["grass", "dirt", "snow"]);
+    assert.equal(layers[1]!.material, "mat-desert-sand");
+    assert.equal(layers[2]!.physicalMaterial, "snow");
+    assert.equal(data.layers.length, 4, "the grid itself is unchanged until the command applies");
+    const after = { ...data, layers };
+    ensureLandscapeLayers(after);
+    assert.deepEqual(after.layers.map((layer) => layer.id), ["grass", "dirt", "snow"], "a removed preset is not backfilled");
+    assert.deepEqual(landscapeEditWorld(after).tiles.get("0_0")!.weights, expected);
+    assert.throws(() => landscapeLayersWithoutLayer({ ...data, layers: [data.layers[0]!] }, "grass"), /at least one/);
+  });
   check("terrain paint layers: a fifth layer survives the one-tile adapter and legacy normalization", () => {
     const world = fixture(1, 1, 32, 4);
     // The one-tile editing adapter backfills the four legacy preset ids.

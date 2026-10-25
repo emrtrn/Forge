@@ -1,10 +1,11 @@
-import { LANDSCAPE_QUADS_PER_CHUNK, type ForgeLandscapeData } from "../scene/landscape";
+import { LANDSCAPE_QUADS_PER_CHUNK, type ForgeLandscapeData, type LandscapeLayerWeights } from "../scene/landscape";
 import type { LayoutLandscape } from "../scene/layout";
 import { legacyLandscapeToWorldTerrain } from "./terrainLegacy";
 import { encodeTerrainGlobalMap } from "./terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "./terrainRenderSource";
 import { type WorldTerrainDocument } from "./terrainLoader";
 import { encodeTerrainTile } from "./terrainTileCodec";
+import { createTerrainLayerRemoval } from "./terrainLayers";
 import { createTerrainEditWorld, type TerrainDirtyRect, type TerrainEditWorld, type TerrainPatchValues } from "./terrainEdit";
 import {
   TERRAIN_MAX_LAYERS,
@@ -165,4 +166,20 @@ export function writeTerrainPatchToLandscape(data: ForgeLandscapeData, rect: Ter
       });
     }
   }
+}
+
+/**
+ * The 1×1 grid's paint layers after removing one, through the tile removal
+ * (`createTerrainLayerRemoval`), so the save writes the same RGBA8 bytes a
+ * multi-tile terrain would: weights become `byte / 255`, which the save
+ * rounds back exactly. Layer fields other than weights are kept.
+ */
+export function landscapeLayersWithoutLayer(data: ForgeLandscapeData, layerId: string): LandscapeLayerWeights[] {
+  const world = landscapeEditWorld(data);
+  const tile = createTerrainLayerRemoval(world, layerId).after.weights.get("0_0")!;
+  const count = data.size.verticesX * data.size.verticesZ;
+  return data.layers.filter((layer) => layer.id !== layerId).map((layer, index) => ({
+    ...layer,
+    weights: Array.from({ length: count }, (_, vertex) => tile[Math.floor(index / 4) * count * 4 + vertex * 4 + index % 4]! / 255),
+  }));
 }

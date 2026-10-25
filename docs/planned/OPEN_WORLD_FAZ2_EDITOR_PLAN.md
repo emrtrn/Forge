@@ -1,6 +1,6 @@
 # Open World Faz 2 — kalan iş: editör düzenlemesinin `terrainEdit`'e taşınması + 16-bit heightmap
 
-> Durum: **onaylandı; 1.–3. adım tamam** (2026-10-25, "İlerleme" bölümü). Üst plan:
+> Durum: **onaylandı; 1.–3. ve 5. adım tamam, 4. adım için erteleme önerisi** (2026-10-25, "İlerleme" bölümü). Üst plan:
 > [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) "Faz 2". Bu dosya Faz 2'nin kalan iki
 > maddesinin uygulama planıdır; tamamlanınca maddeler OPEN_WORLD_PLAN'da kapatılır
 > ve bu dosya `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivlenir.
@@ -289,6 +289,42 @@ Paint, Save (63 vertex yükseldi, 82 vertex boyandı, grid'in yarısından fazla
 dokunulmamış), undo sonrası disk birebir orijinal. `landscape-paint`'e 1×1 Fill +
 undo (disk ağırlıkları birebir geri), `terrain-multitile`'a çok-tile Fill (bütün
 tile'lar %100 rock) + undo (tile baytları birebir) eklendi.
+
+### Adım 4 — öneri: Faz 3'e ertele (kullanıcı kararı bekliyor)
+
+1×1 kaydı zaten tek tile + global harita + tanım yazıyor; "yalnız kirli tile'lar"
+farkı 1×1'de yok. `captureTerrainWrite`'ı emekliye ayırmak, 1×1 edit world'ünü
+kalıcı yapmayı gerektirir; bu da grid'e doğrudan yazan bütün işlemlerin (resample,
+dünya boyu, 8-bit import, katman ekleme, spline bake) edit world'e taşınması demek.
+Bu işler, `ForgeLandscapeData` tüketicileri (spline mesh, River, foliage, collider)
+Faz 3'te `TerrainHeightQuery`'ye taşınırken doğal olarak yapılır. 1×1
+sculpt → kaydet → yeniden aç zaten `landscape-sculpt` (kayıt sırasında düzenleme
++ retry dahil) ve `landscape-sculpt-tools` smoke'larında doğrulanıyor.
+
+### Adım 5 — 16-bit PNG codec'i (2026-10-25)
+
+`engine/terrain/heightmapPng.ts`, bağımlılıksız:
+- `decodeHeightmapPng(bytes, { maxSize })`: imza, chunk CRC'si, IHDR doğrulaması,
+  bölünmüş IDAT, bilinmeyen yardımcı chunk'ları atlama, bilinmeyen kritik chunk'ı
+  reddetme. zlib `DecompressionStream("deflate")` ile açılır, beş PNG filtresi
+  geri alınır. Okunanlar: gri 1/2/4/8/16 bit, gri+alfa, RGB, RGBA (8/16) ve palet.
+  Çıktı 0..65535 yükseklik kodu; 8-bit 255 → 65535, renkli piksel 8-bit import'un
+  Rec. 709 parlaklığı, alfa yok sayılır. Adam7 interlace açık bir hatayla reddedilir.
+  Varsayılan boyut sınırı en büyük World Terrain grid'i (32 × 512 + 1 = 16 385).
+- `encodeHeightmapPng16(width, height, samples, { filter })`: 16-bit gri, satır
+  başına uyarlamalı filtre seçimi (en küçük işaretli artık toplamı) ya da sabit
+  filtre, `CompressionStream("deflate")`.
+- Hatalar `HeightmapPngError`; bozuk dosya hiçbir şey döndürmez.
+
+Doğrulama: engine testleri — Python'un zlib/struct'ı ile bağımsız üretilmiş
+dosyalar (16-bit gri her satırda farklı filtreyle, RGB 8-bit Paeth/Average,
+4-bit palet, 2-bit gri; bölünmüş IDAT + tEXt): beklenen kodlar birebir.
+37 × 23 rastgele örnek her sabit filtreyle ve uyarlamalı seçimle birebir round-trip;
+satır filtre baytları Node zlib ile açılıp doğrulandı; yumuşak rampada sıkıştırma
+< %25. Ret: imza, IHDR CRC'si, kesik dosya, interlace, geçersiz bit derinliği,
+PLTE'siz palet, bilinmeyen filtre, kısa görüntü verisi, açılamayan zlib, boyut sınırı,
+bilinmeyen kritik chunk (yardımcı chunk atlanır). Arayüze bağlı olmadığı için smoke
+yok; tarayıcıdaki `CompressionStream` 6. adımın smoke'unda sınanacak.
 
 ### Kalan adımların yeniden eşlenmesi (onaylandı 2026-10-25)
 

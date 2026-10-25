@@ -1085,6 +1085,7 @@ import { registerDeformationPersistenceTests } from "../tests/engine/deformation
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 import { registerTerrainRenderTests } from "../tests/engine/terrainRender.test";
 import { registerTerrainEditTests } from "../tests/engine/terrainEdit.test";
+import { registerHeightmapPngTests } from "../tests/engine/heightmapPng.test";
 import { registerTerrainImportTests } from "../tests/engine/terrainImport.test";
 import { registerStreamingPolicyTests } from "../tests/engine/streamingPolicy.test";
 import { registerWorldStreamingTests } from "../tests/engine/worldStreaming.test";
@@ -1231,6 +1232,7 @@ registerDeformationPersistenceTests(check);
 registerTerrainLodTests(check);
 registerTerrainRenderTests(check);
 registerTerrainEditTests(check);
+await registerHeightmapPngTests(checkAsync);
 registerTerrainErosionTests(check);
 registerTerrainImportTests(check);
 registerStreamingPolicyTests(check);

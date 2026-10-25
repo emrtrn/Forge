@@ -105,7 +105,7 @@
     "turbidity": 2,
     "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.5
+      "intensity": 1
     }
   },
   "heightFog": {
@@ -136,13 +136,13 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        -56.89,
-        9,
-        -4.53
+        9.69,
+        3.6,
+        -28.92
       ],
       "name": "Sun",
       "rotation": [
-        -30,
+        -5,
         20,
         0
       ],

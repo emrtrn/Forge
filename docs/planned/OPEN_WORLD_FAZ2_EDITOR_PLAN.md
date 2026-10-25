@@ -1,6 +1,6 @@
 # Open World Faz 2 — kalan iş: editör düzenlemesinin `terrainEdit`'e taşınması + 16-bit heightmap
 
-> Durum: **1.–3., 5. ve 6. adım tamam; 4. adım Faz 3'e ertelendi; kalan: katman silme** (2026-10-25, "İlerleme" bölümü). Üst plan:
+> Durum: **tamamlandı (2026-10-25).** 1.–3., 5. ve 6. adım ve katman silme tamam; 4. adım Faz 3'e ertelendi ("İlerleme" bölümü). Arşivlendi: `docs/COMPLETED_WORK_INDEX.md`. Üst plan:
 > [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) "Faz 2". Bu dosya Faz 2'nin kalan iki
 > maddesinin uygulama planıdır; tamamlanınca maddeler OPEN_WORLD_PLAN'da kapatılır
 > ve bu dosya `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivlenir.
@@ -364,7 +364,7 @@ etiketine bakıyor; düzeltmeden sonra üçü birlikte geçti. Son kapı
 `npm run build:verify` (tsc, Vite build, 1866 kontrol + slow, sıkı dist taraması,
 world-data) ve `check:assets` yeşil.
 
-### Kalan iş: katman silme (kullanıcı onayladı, 2026-10-25)
+### Katman silme kapsamı (kullanıcı onayladı, 2026-10-25)
 
 Plan 3. adımda "katman silme" sayıyordu ama iki yolda da böyle bir işlem yoktu;
 kullanıcı yeni özellik olarak eklenmesini onayladı. Kapsam:
@@ -387,6 +387,53 @@ kullanıcı yeni özellik olarak eklenmesini onayladı. Kapsam:
 - Bitince: OPEN_WORLD_PLAN Faz 2'nin sculpt/paint ve heightmap maddelerini
   kapat; bu dosyayı `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivle (açık kalan
   Faz 2 renderer ekleri ve büyük import worker'ı OPEN_WORLD_PLAN'da kalır).
+
+### Katman silme — Remove Layer (2026-10-25)
+
+- Engine: `createTerrainLayerRemoval(world, layerId)` (`engine/terrain/terrainLayers.ts`),
+  `createTerrainLayerAddition`'ın karşılığı; bütün tile'lar yüklü olmalı, en az bir
+  katman kalır. Silinen ağırlık vertex başına kalan katmanlara orantılı dağıtılır;
+  tam sayı aritmetiği ve en büyük kalanlarla dokunulan vertex'in RGBA8 toplamı
+  tam 255 olur (eşitlikte düşük indeks). Silinen katmanda ağırlığı olmayan vertex
+  yalnız kanal kaydırılır, hiç boyanmamış (toplam 0) vertex boyanmamış kalır,
+  yalnız silinen katmanla boyanmış vertex ilk kalan katmana gider. Sonraki
+  katmanlar bloklar arasında bir kanal geri kayar; blok sayısı katman sayısından
+  yeniden hesaplanır (5 → 4 tek bloğa iner, 8 → 7 iki blokta kalır).
+- 1×1: `landscapeLayersWithoutLayer(data, layerId)` (`terrainLandscapeBridge.ts`)
+  aynı silmeyi grid'in tek-tile edit world'ü üzerinden yapar ve ağırlıkları
+  `bayt / 255` olarak geri yazar, yani kayıt çok-tile ile aynı baytları yazar.
+- **Davranış değişikliği:** `ensureLandscapeLayers` dört preset katmanı
+  (grass/dirt/rock/snow) artık yalnız boş listeye (eski Faz 1/2 sidecar'ları)
+  ekler; yazılmış liste sırası ve id'leriyle korunur. Eskiden silinen preset
+  katman hemen geri geliyordu. Yan etki: `runtime-parity` 1×1 grid'i (yalnız
+  grass + dirt) editörde 4 değil, yazıldığı gibi 2 katmanla görünür.
+- Editör: Details Paint bölümünde (1×1 ve çok-tile) **Remove Layer**, gösterilen
+  aktif katmanı siler; tek katman kalınca pasif. Tek undo komutu
+  ("Remove Landscape Paint Layer"). Çok-tile'da önce bütün tile'lar yüklenir;
+  bütün tile'lar kirli sayılır ve tanım da yazılır (Add Layer yolu). Aktif
+  katman ilk kalana geçer, undo eski aktif katmanı geri getirir. Spline paint
+  ve foliage kuralları silinmiş bir katman id'sini zaten yok sayar.
+- Kayıt: yeni alan yok; `saveValidator` / `normalizeWorldTerrain` değişmedi.
+
+Doğrulama: engine (1870 kontrol) — 2×2 / 5 katmanda orantılı dağıtım (her
+ağırlık kesin değerin 1 birim içinde ve eskisinden küçük değil), toplam 255,
+dikişler eşit, 2 blok → 1 blok, f32 codec round-trip, undo birebir ve katman
+nesnesi kimliği; 8 katmanda ilk katmanı silme iki blokta kalır, normalize
+edilmemiş eski baytlar 255'e çekilir; bilinmeyen id / son katman / eksik tile
+reddi; 1×1 köprü silmesi tile silmesiyle aynı baytları kaydeder ve silinen
+preset geri eklenmez; katman sayısı 4 → 1'e inerken terrain tanımı
+serialization drift'siz, `dropped[]` boş, tile'lar doğrulanır. Smoke:
+`landscape-paint` (1×1: Add Layer → 5 katman, boyalı dirt'ü sil → Save, tile 4
+katman tek blok, her vertex 255, dirt'ün dokunduğu 298 vertex'te grass artmış,
+diğerleri yalnız kaymış; undo → Save → beş katmanlı tile baytları birebir,
+materyal ve `mud` korunur) ve `terrain-multitile` (çok-tile: aktif rock'u sil →
+autosave tanımda tek katman, bütün tile'lar 1 katman / %100 grass; undo → tile
+baytları ve tanım birebir). Regresyon smoke'ları 19/19: `game-starter`, `landscape-sculpt`
+(+ `-shift`, `-tools`, 1×1 ve 2×2), `landscape-spline-bake`, `landscape-spline-chain`,
+`landscape-wireframe`, `runtime-parity`, `terrain-create`, `terrain-expand` (2),
+`terrain-heightmap`, `terrain-isolation`, `terrain-migration` (2), `wet-mud` (2).
+Son kapı `npm run build:verify` (tsc, Vite build, 1870 kontrol + slow, sıkı dist
+taraması, world-data) ve `check:assets` yeşil.
 
 ### Kalan adımların yeniden eşlenmesi (onaylandı 2026-10-25)
 

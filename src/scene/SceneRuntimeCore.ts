@@ -207,26 +207,130 @@ export function computeSceneRoomBounds(
   return found ? box : null;
 }
 
+/** Slack added to the fitted depth range so a caster is never clipped at the plane. */
+const SHADOW_FIT_DEPTH_MARGIN = 2;
+
+// Scratch state: a caller may re-fit every frame, so this allocates nothing.
+const shadowFitEye = new Vector3();
+const shadowFitFocus = new Vector3();
+const shadowFitView = new Matrix4();
+const shadowFitCorner = new Vector3();
+
+/**
+ * Fits a directional light's shadow frustum around `room`.
+ *
+ * Three.js places the shadow camera *at the light* and aims it at the light's
+ * target, so the covered slab is anchored to wherever the light actor happens to
+ * sit — not to the world. A symmetric `±half` frustum therefore only covers the
+ * map when the actor stands above its centre and high enough that nothing falls
+ * behind `near`; an authored sun placed low and off to one side (LandscapeTest's
+ * sits at y≈9 near the origin of a 1 km terrain) left most of the level outside
+ * the frustum: no shadows at all, until the sun actor is dragged next to a caster.
+ * (Ported from ThreeAges, where the same bug hid shadows across an RTS map.)
+ *
+ * So the box is fitted in the light's own view space and the *asymmetric* ortho
+ * planes are used. `near` is allowed to go negative: an orthographic frustum can
+ * reach behind its own camera, and refusing to do so is what dropped every caster
+ * standing up-sun of a low light.
+ */
 export function fitDirectionalShadowToBounds(
   sun: DirectionalLight | null,
   room: Box3 | null,
   distanceScale = 1,
 ): void {
   if (!sun || !room || room.isEmpty()) return;
-  // Quality shrinks the orthographic ground coverage (distant objects fall out of
-  // the shadow frustum) so the fixed-resolution shadow map concentrates nearer.
-  // Only the extent scales — the depth range (`far`) is left intact so shrinking
-  // coverage never clips the light's shadow depth.
+  sun.updateWorldMatrix(true, false);
+  sun.target.updateWorldMatrix(true, false);
+  shadowFitEye.setFromMatrixPosition(sun.matrixWorld);
+  shadowFitFocus.setFromMatrixPosition(sun.target.matrixWorld);
+  // A light aimed at its own position has no direction to fit along; leave the
+  // frustum as it stands rather than deriving a basis from a zero vector.
+  if (shadowFitEye.distanceToSquared(shadowFitFocus) < 1e-12) return;
+  // The exact basis `LightShadow.updateMatrices` will build for this light —
+  // `Matrix4.lookAt` with the shadow camera's own up vector, including its
+  // degenerate-aim nudge — so the fit matches the frustum three actually renders.
+  shadowFitView.identity().lookAt(shadowFitEye, shadowFitFocus, sun.shadow.camera.up);
+  shadowFitView.setPosition(shadowFitEye);
+  shadowFitView.invert();
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let minDepth = Infinity;
+  let maxDepth = -Infinity;
+  for (let corner = 0; corner < 8; corner += 1) {
+    shadowFitCorner
+      .set(
+        corner & 1 ? room.max.x : room.min.x,
+        corner & 2 ? room.max.y : room.min.y,
+        corner & 4 ? room.max.z : room.min.z,
+      )
+      .applyMatrix4(shadowFitView);
+    minX = Math.min(minX, shadowFitCorner.x);
+    maxX = Math.max(maxX, shadowFitCorner.x);
+    minY = Math.min(minY, shadowFitCorner.y);
+    maxY = Math.max(maxY, shadowFitCorner.y);
+    // View space looks down -Z, so distance in front of the light is -z.
+    const depth = -shadowFitCorner.z;
+    minDepth = Math.min(minDepth, depth);
+    maxDepth = Math.max(maxDepth, depth);
+  }
+
+  // Quality shrinks the ground coverage around the fitted box's centre so a
+  // fixed-resolution shadow map concentrates its texels. Only the extent scales —
+  // the depth range is left intact, so shrinking coverage never clips a caster.
   const scale = distanceScale > 0 ? distanceScale : 1;
-  const size = room.getSize(new Vector3());
-  const half = (Math.max(size.x, size.z) * 0.6 + 1) * scale;
+  const width = (maxX - minX) * scale;
+  const height = (maxY - minY) * scale;
   const cam = sun.shadow.camera;
-  cam.left = -half;
-  cam.right = half;
-  cam.top = half;
-  cam.bottom = -half;
-  cam.far = size.y + 30;
+  // Snap the frustum centre to whole shadow-map texels. Without it a caller that
+  // re-fits a moving box (e.g. one following the camera at reduced coverage) makes
+  // every shadow edge crawl as the map slides under the texel grid. One texel of
+  // padding absorbs the snap so the box never falls outside what it fitted.
+  // The floor keeps a degenerate (flat) box from snapping through a zero divisor.
+  const texelX = Math.max(width / Math.max(1, sun.shadow.mapSize.x), 1e-6);
+  const texelY = Math.max(height / Math.max(1, sun.shadow.mapSize.y), 1e-6);
+  const centerX = Math.round((minX + maxX) / 2 / texelX) * texelX;
+  const centerY = Math.round((minY + maxY) / 2 / texelY) * texelY;
+  cam.left = centerX - width / 2 - texelX;
+  cam.right = centerX + width / 2 + texelX;
+  cam.bottom = centerY - height / 2 - texelY;
+  cam.top = centerY + height / 2 + texelY;
+  cam.near = minDepth - SHADOW_FIT_DEPTH_MARGIN;
+  cam.far = maxDepth + SHADOW_FIT_DEPTH_MARGIN;
   cam.updateProjectionMatrix();
+}
+
+/**
+ * Force every material under `root` to relink its program, after the master
+ * shadow toggle (`renderer.shadowMap.enabled`) has moved.
+ *
+ * three does not do this itself, and the failure is spectacular rather than
+ * subtle. `WebGLRenderer`'s `needsProgramChange` watches the *lights state*
+ * version, and flipping the master toggle changes neither the light count nor
+ * the number of casters — so a material keeps a program compiled with
+ * `USE_SHADOWMAP` while the renderer has stopped producing a shadow map. Its
+ * `sampler2DShadow` then points at nothing, and every draw call using that
+ * program fails with `GL_INVALID_OPERATION: Mismatch between texture format and
+ * sampler type`. What the player sees is the whole lit scene disappearing —
+ * terrain, buildings, characters — while unlit meshes and the sky keep drawing,
+ * which reads as a rendering collapse rather than as a shader mismatch and sends
+ * the search in entirely the wrong direction.
+ *
+ * Bumping `Material.version` is the documented remedy: it takes the renderer's
+ * `material.version !== __version` branch, which relinks unconditionally. The
+ * recompile is inherent — turning shadows off genuinely changes every lit shader
+ * — and callers pay it only on the frame a profile actually crosses the toggle,
+ * which is why they must track the previous value rather than call this on every
+ * profile change.
+ */
+export function invalidateMaterialsForShadowToggle(root: Object3D): void {
+  root.traverse((object) => {
+    const material = (object as { material?: { needsUpdate: boolean } | { needsUpdate: boolean }[] }).material;
+    if (!material) return;
+    for (const entry of Array.isArray(material) ? material : [material]) entry.needsUpdate = true;
+  });
 }
 
 export function applySceneBackgroundAndAmbient(options: {

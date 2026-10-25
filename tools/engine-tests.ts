@@ -29,6 +29,7 @@ import {
   BackSide,
   BoxGeometry,
   DoubleSide,
+  Frustum,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -651,6 +652,7 @@ import {
   DEFAULT_SCENE_SUN_ID,
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
+  invalidateMaterialsForShadowToggle,
   resolveSceneWorldSettings,
   buildSceneEntities,
   computeModelLocalBounds,
@@ -1602,36 +1604,115 @@ check("scene runtime room bounds unions placements and honors asset filters", ()
   assert.deepEqual(roomBounds?.max.toArray(), [2, 1, 3]);
 });
 
-check("scene runtime fits directional shadows from room bounds", () => {
+check("crossing the master shadow toggle relinks every lit material in the scene", () => {
+  // three's `needsProgramChange` watches the lights-state version, and flipping
+  // `renderer.shadowMap.enabled` changes neither the light count nor the caster
+  // count — so nothing there ever notices. A material left on its old program
+  // keeps a `sampler2DShadow` the renderer no longer fills, and every draw using
+  // it fails with a texture/sampler mismatch: the whole lit scene disappears
+  // while the sky keeps drawing. Bumping `Material.version` is what forces the
+  // relink, so that is what this asserts — `needsUpdate` is a write-only setter
+  // whose entire observable effect is the version.
+  const root = new Group();
+  const single = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  const multi = new Mesh(new BoxGeometry(1, 1, 1), [new MeshStandardMaterial(), new MeshBasicMaterial()]);
+  const nested = new Group();
+  // Nested, because the scene is a tree and the terrain sits several levels down
+  // — a one-level walk would have looked green and fixed nothing on screen.
+  const deep = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  nested.add(deep);
+  root.add(single, multi, nested);
+  // A light carries no material and must not throw the walk off.
+  root.add(new DirectionalLight(0xffffff, 1));
+
+  const versionsBefore = [
+    (single.material as MeshStandardMaterial).version,
+    ...(multi.material as MeshStandardMaterial[]).map((entry) => entry.version),
+    (deep.material as MeshStandardMaterial).version,
+  ];
+  invalidateMaterialsForShadowToggle(root);
+  const versionsAfter = [
+    (single.material as MeshStandardMaterial).version,
+    ...(multi.material as MeshStandardMaterial[]).map((entry) => entry.version),
+    (deep.material as MeshStandardMaterial).version,
+  ];
+  assert.equal(versionsAfter.length, 4, "single, both slots of a multi-material, and a nested mesh");
+  versionsAfter.forEach((after, index) => {
+    assert.ok(after > versionsBefore[index]!, `material ${index} was flagged for a relink`);
+  });
+});
+
+check("scene runtime fits directional shadows around the whole room", () => {
+  // The frustum three.js actually renders the shadow map with, built the way
+  // `WebGLShadowMap` does: pose the camera at the light, then intersect.
+  const shadowFrustum = (light: DirectionalLight): Frustum => {
+    light.shadow.updateMatrices(light);
+    const camera = light.shadow.camera;
+    return new Frustum().setFromProjectionMatrix(
+      new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+    );
+  };
+  const corners = (box: Box3): Vector3[] => {
+    const out: Vector3[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      out.push(new Vector3(
+        index & 1 ? box.max.x : box.min.x,
+        index & 2 ? box.max.y : box.min.y,
+        index & 4 ? box.max.z : box.min.z,
+      ));
+    }
+    return out;
+  };
+
+  // The regression this pins: three anchors a directional shadow camera at the
+  // *light*, so a sun authored low and off to one side — the RTS field's sits at
+  // y≈4, x≈-28 — covered only the slab in front of itself. Half the map (the
+  // port, the AI's base) rendered with no shadows at all, and the far side of the
+  // box sat behind a positive `near` plane. Every corner must be inside.
+  const room = new Box3(new Vector3(-70, -12, -70), new Vector3(70, 45, 70));
   const sun = new DirectionalLight();
-  fitDirectionalShadowToBounds(
-    sun,
-    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
-  );
+  sun.position.set(-28, 4, 5);
+  sun.target.position.set(-28.64, 3.51, 5.59);
+  fitDirectionalShadowToBounds(sun, room);
+  for (const corner of corners(room)) {
+    assert.ok(
+      shadowFrustum(sun).containsPoint(corner),
+      `room corner ${corner.toArray().join(",")} fell outside the shadow frustum`,
+    );
+  }
+  // A sun standing inside the world puts part of the room behind itself; an
+  // orthographic frustum may reach backwards, and refusing to was the bug.
+  assert.ok(sun.shadow.camera.near < 0);
 
-  assert.equal(sun.shadow.camera.left, -7);
-  assert.equal(sun.shadow.camera.right, 7);
-  assert.equal(sun.shadow.camera.top, 7);
-  assert.equal(sun.shadow.camera.bottom, -7);
-  assert.equal(sun.shadow.camera.far, 34);
+  // A high, centred sun is fitted just as tightly — the coverage tracks the room,
+  // never a fixed multiple of it.
+  const overhead = new DirectionalLight();
+  overhead.position.set(0, 200, 0.001);
+  fitDirectionalShadowToBounds(overhead, room);
+  for (const corner of corners(room)) {
+    assert.ok(
+      shadowFrustum(overhead).containsPoint(corner),
+      `room corner ${corner.toArray().join(",")} fell outside the overhead frustum`,
+    );
+  }
+  assert.ok(overhead.shadow.camera.right - overhead.shadow.camera.left < 200);
 
-  // Quality shadowDistanceScale shrinks the coverage extent only; far is intact
-  // (never clip shadow depth). scale 0.5 → half 3.5, far still 34.
-  fitDirectionalShadowToBounds(
-    sun,
-    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
-    0.5,
-  );
-  assert.equal(sun.shadow.camera.right, 3.5);
-  assert.equal(sun.shadow.camera.top, 3.5);
-  assert.equal(sun.shadow.camera.far, 34);
+  // Quality shadowDistanceScale shrinks the coverage extent only; the depth range
+  // is intact (shrinking coverage must never clip a caster out of the map).
+  fitDirectionalShadowToBounds(sun, room);
+  const fullWidth = sun.shadow.camera.right - sun.shadow.camera.left;
+  const fullHeight = sun.shadow.camera.top - sun.shadow.camera.bottom;
+  const fullNear = sun.shadow.camera.near;
+  const fullFar = sun.shadow.camera.far;
+  fitDirectionalShadowToBounds(sun, room, 0.5);
+  const halved = sun.shadow.camera;
+  assert.ok(Math.abs((halved.right - halved.left) / fullWidth - 0.5) < 0.02);
+  assert.ok(Math.abs((halved.top - halved.bottom) / fullHeight - 0.5) < 0.02);
+  assert.equal(halved.near, fullNear);
+  assert.equal(halved.far, fullFar);
   // A non-positive scale falls back to 1 (no shrink).
-  fitDirectionalShadowToBounds(
-    sun,
-    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
-    0,
-  );
-  assert.equal(sun.shadow.camera.right, 7);
+  fitDirectionalShadowToBounds(sun, room, 0);
+  assert.ok(Math.abs(sun.shadow.camera.right - sun.shadow.camera.left - fullWidth) < 1e-6);
 });
 
 check("scene runtime applies background and ambient light lifecycle", () => {

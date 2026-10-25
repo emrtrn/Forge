@@ -167,6 +167,7 @@ import {
   DEFAULT_SCENE_SUN_ID,
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
+  invalidateMaterialsForShadowToggle,
   isSceneSunLight,
   beginSceneRuntimeFrameStats,
   readSceneRuntimeStats,
@@ -6369,7 +6370,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private applyRuntimeShadowQuality(): void {
     const quality = this.qualitySettings;
-    this.renderer.shadowMap.enabled = quality.shadowsEnabled;
+    if (this.renderer.shadowMap.enabled !== quality.shadowsEnabled) {
+      this.renderer.shadowMap.enabled = quality.shadowsEnabled;
+      // three does not relink programs on this toggle: without it every lit draw
+      // fails with a shadow sampler mismatch and the lit scene (terrain included)
+      // vanishes while the sky still draws — e.g. when adaptive quality drops to Low.
+      invalidateMaterialsForShadowToggle(this.scene);
+    }
     for (const record of this.lightObjects) {
       const light = record.light;
       if (!light.castShadow) continue;

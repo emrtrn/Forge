@@ -25856,6 +25856,10 @@
           "scale": 1.279
         }
       ]
+    },
+    {
+      "assetId": "shape:sphere",
+      "placements": []
     }
   ],
   "characters": [],
@@ -25865,7 +25869,10 @@
   },
   "skyAtmosphere": {
     "rayleigh": 1,
-    "turbidity": 2
+    "turbidity": 2,
+    "skyLightCapture": {
+      "intensity": 1
+    }
   },
   "cloudLayer": {
     "density": 0.5,
@@ -25906,6 +25913,7 @@
       "castShadow": true
     }
   ],
+  "reflectionCaptures": [],
   "targetPoints": [
     {
       "id": "lt-start",
@@ -27659,10 +27667,15 @@
       "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
         0,
-        -0.38,
+        -0.45,
         -43.84
       ],
       "rotationYDeg": 0,
+      "rotation": [
+        -1,
+        0,
+        0
+      ],
       "scale": 1
     }
   ]

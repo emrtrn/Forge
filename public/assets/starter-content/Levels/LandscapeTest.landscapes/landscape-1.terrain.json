@@ -19,20 +19,21 @@
       "name": "Alpine Meadow",
       "color": "#7d8953",
       "material": "lt-meadow",
-      "physicalMaterial": "wood"
+      "physicalMaterial": "default"
     },
     {
       "id": "dirt",
       "name": "Earth and Scree",
       "color": "#9b825d",
       "material": "lt-earth",
-      "physicalMaterial": "mud"
+      "physicalMaterial": "default"
     },
     {
       "id": "rock",
       "name": "Layered Rock",
       "color": "#827b70",
-      "material": "lt-rock"
+      "material": "lt-rock",
+      "physicalMaterial": "mud"
     },
     {
       "id": "snow",
@@ -40,6 +41,13 @@
       "color": "#e5e7e2",
       "material": "lt-snow",
       "physicalMaterial": "snow"
+    },
+    {
+      "id": "layer-1",
+      "name": "Layer 5",
+      "color": "#55493b",
+      "material": "lt-wet-mud",
+      "physicalMaterial": "mud"
     }
   ],
   "tiles": [
@@ -91,7 +99,7 @@
     {
       "key": "1_2",
       "minHeight": -69.57432556152344,
-      "maxHeight": 0
+      "maxHeight": 0.8187999725341797
     },
     {
       "key": "2_2",

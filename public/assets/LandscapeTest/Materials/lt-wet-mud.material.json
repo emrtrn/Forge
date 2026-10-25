@@ -19,7 +19,7 @@
     "y": 1
   },
   "flipY": true,
-  "roughness": 0.6,
+  "roughness": 0.5,
   "metalness": 0,
   "aoIntensity": 1,
   "opacity": 1,

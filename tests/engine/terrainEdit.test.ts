@@ -11,6 +11,7 @@ import {
   applyTerrainBrush,
   applyTerrainUndoPatches,
   createTerrainEditWorld,
+  createTerrainPaintAccumulator,
   mergeTerrainDirtyRects,
   revertTerrainUndoPatches,
   type TerrainBrush,
@@ -421,6 +422,48 @@ export function registerTerrainEditTests(check: Check): void {
       }
       assertSeams(world);
     }
+  });
+
+  check("terrain edit low-strength paint accumulates across a stroke instead of rounding away", () => {
+    const strength = 0.001, dabs = 40;
+    const stroke = (accumulate: boolean) => {
+      const world = fixture(2, 2, 32, 2);
+      const original = snapshot(world);
+      const paint = accumulate ? createTerrainPaintAccumulator() : undefined;
+      const patches = [];
+      for (let i = 0; i < dabs; i += 1) {
+        patches.push(...applyTerrainBrush(world, { ...brush(world), mode: "paint", layer: 1, strength }, { paint }).patches);
+      }
+      return { world, original, patches };
+    };
+    // Each dab moves the centre by 0.255 of a byte step: alone, it rounds back.
+    const plain = stroke(false);
+    assert.deepEqual(snapshot(plain.world), plain.original);
+    const reference = [1, 0];
+    for (let i = 0; i < dabs; i += 1) editLandscapeBrushWeights(reference, "paint", 1, strength, () => 0);
+    const { world, original, patches } = stroke(true);
+    const centre = world.tile(1, 1)!;
+    assert.equal(Math.round(terrainTileLayerWeight(centre, 1, 0) * 255), Math.round(reference[1]! * 255));
+    assert.ok(Math.round(terrainTileLayerWeight(centre, 1, 0) * 255) >= 9);
+    for (const tile of world.tiles.values()) {
+      for (let i = 0; i < tile.heights.length; i += 1) {
+        assert.equal(Math.round(terrainTileLayerWeight(tile, 0, i) * 255) + Math.round(terrainTileLayerWeight(tile, 1, i) * 255), 255);
+      }
+    }
+    assertSeams(world);
+    revertTerrainUndoPatches(world, patches);
+    assert.deepEqual(snapshot(world), original);
+  });
+
+  check("terrain edit accumulated smoothWeights reads each dab's starting weights", () => {
+    const run = (paint?: ReturnType<typeof createTerrainPaintAccumulator>) => {
+      const world = fixture(2, 2, 32, 4);
+      applyTerrainBrush(world, { ...brush(world), mode: "paint", layer: 3, radius: 2.5, strength: 1 });
+      applyTerrainBrush(world, { ...brush(world), mode: "smoothWeights", layer: 0, radius: 6 }, { paint });
+      return snapshot(world);
+    };
+    // A fresh accumulator holds nothing yet, so the first dab must match a plain one.
+    assert.deepEqual(run(createTerrainPaintAccumulator()), run());
   });
 
   check("terrain edit dirty rectangles bound every changed vertex tightly and merge", () => {

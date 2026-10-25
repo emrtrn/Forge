@@ -167,7 +167,7 @@ async function fileBytes(path: string): Promise<Buffer> {
 }
 
 test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edited tiles and collides per tile in Play", async ({ page, request }, testInfo) => {
-  test.setTimeout(300_000);
+  test.setTimeout(420_000);
   const errors: string[] = [];
   const messages: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -262,6 +262,45 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   await page.getByTestId("editor-redo").click();
   expect((await saved).ok()).toBeTruthy();
   expect(decodeTerrainTile(await fileBytes(edited[0]!)).heights[SEAM_ROW * (Q + 1) + Q]! + world.def.origin[1]).toBe(seamHeight);
+
+  // Paint: a weak, hard-edged brush held over the seam. One dab moves the rim
+  // by less than half an RGBA8 step; the stroke's float accumulator must let
+  // the dabs add up there instead of rounding each one away.
+  const rockBefore = await Promise.all(edited.map(async (path) => decodeTerrainTile(await fileBytes(path)).weights));
+  await page.locator('[data-world-terrain-tools] [data-landscape-mode]').selectOption('paint');
+  await page.locator('[data-landscape-paint-tool="paint"]').click();
+  await page.locator('[data-landscape-layer="rock"]').click();
+  for (const [key, value] of [["strength", "0.01"], ["falloff", "4"]] as const) {
+    await page.locator(`[data-landscape-number="${key}"]`).fill(value);
+    await page.locator(`[data-landscape-number="${key}"]`).press("Enter");
+  }
+  await page.mouse.move(centre.x, centre.y);
+  await page.mouse.down();
+  const strokeStart = Date.now();
+  for (let i = 0; i < 30; i += 1) {
+    await page.mouse.move(centre.x + 1, centre.y);
+    await page.mouse.move(centre.x, centre.y);
+  }
+  console.log(`[terrain-multitile] 60 paint dabs took ${Date.now() - strokeStart} ms`);
+  // The stroke's undo command, and so its autosave, only exists after release.
+  saved = terrainSaved();
+  await page.mouse.up();
+  expect((await saved).ok()).toBeTruthy();
+  const rockAfter = await Promise.all(edited.map(async (path) => decodeTerrainTile(await fileBytes(path)).weights));
+  const painted = new Set<string>();
+  rockAfter.forEach((weights, tile) => {
+    for (let index = 0; index < (Q + 1) * (Q + 1); index += 1) {
+      expect(weights[index * 4]! + weights[index * 4 + 1]!, "weights stay normalized").toBe(255);
+      if (weights[index * 4 + 1]! > rockBefore[tile]![index * 4 + 1]!) painted.add(`${tile * Q + index % (Q + 1)}_${Math.floor(index / (Q + 1))}`);
+    }
+  });
+  for (let z = 0; z <= Q; z += 1) {
+    expect(rockAfter[0]!.subarray((z * (Q + 1) + Q) * 4, (z * (Q + 1) + Q) * 4 + 4), `painted seam row ${z}`)
+      .toEqual(rockAfter[1]!.subarray(z * (Q + 1) * 4, z * (Q + 1) * 4 + 4));
+  }
+  // Measured: rounded per dab, 13 vertices change; accumulated, 62.
+  console.log(`[terrain-multitile] low-strength paint changed ${painted.size} vertices`);
+  expect(painted.size).toBeGreaterThan(20);
   await page.mouse.move(viewport.x + 8, viewport.y + 8);
   await page.waitForTimeout(500);
   const sculptShot = await viewportShot(page);

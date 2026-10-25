@@ -19,9 +19,11 @@ import {
   applyTerrainUndoPatches,
   createTerrainEditWorld,
   createTerrainHeightmapPatches,
+  createTerrainPaintAccumulator,
   revertTerrainUndoPatches,
   type TerrainBrush,
   type TerrainDirtyRect,
+  type TerrainPaintAccumulator,
   type TerrainUndoPatch,
 } from "@engine/terrain/terrainEdit";
 import { decodeTerrainTile, type DecodedTerrainTile, type TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
@@ -1001,6 +1003,8 @@ interface WorldTerrainStroke {
   patches: TerrainUndoPatch[];
   /** Tiles this stroke asked a streaming terrain to load; held until it ends. */
   demanded: Set<string>;
+  /** Unquantized paint weights, so low-strength dabs add up across the stroke. */
+  paint: TerrainPaintAccumulator;
 }
 
 function cloneLandscapeLayers(layers: readonly LandscapeLayerWeights[]): LandscapeLayerWeights[] {
@@ -9186,7 +9190,7 @@ export class SceneApp {
       flattenSampleHeight: hit.point.y - document.def.origin[1], patches: [], demanded: new Set(),
       tool: this.landscapeSculptTool(event),
       rampStart: mode === "sculpt" && this.landscapeSculptTool(event) === "ramp" ? hit.point.clone() : null,
-      rampEnd: null, pendingBrush: null,
+      rampEnd: null, pendingBrush: null, paint: createTerrainPaintAccumulator(),
     };
     this.canvas.setPointerCapture(event.pointerId);
     if (this.worldTerrainStroke.rampStart) this.updateTerrainRampPreview(this.worldTerrainStroke.rampStart, hit.point);
@@ -9289,7 +9293,7 @@ export class SceneApp {
     if (!session || !object || this.worldTerrains.get(stroke.landscapeId) !== stroke.document) return;
     let dirty: Map<string, TerrainDirtyRect>;
     try {
-      const result = applyTerrainBrush(session.world, brush);
+      const result = applyTerrainBrush(session.world, brush, { paint: stroke.paint });
       stroke.patches.push(...result.patches);
       dirty = result.dirty;
     } catch (error) {

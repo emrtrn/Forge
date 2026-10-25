@@ -65,6 +65,26 @@ export interface TerrainBrushResult {
   patches: TerrainUndoPatch[];
 }
 
+/**
+ * Unquantized layer weights of one paint stroke, keyed by world vertex index.
+ * Tiles store RGBA8, so a dab that moves a weight by less than half a step
+ * (1/510) rounds back to the stored byte, and a low-strength stroke would
+ * never leave a mark however long it is held. A stroke keeps painting on these
+ * floats and writes only their quantized bytes to the tiles.
+ */
+export interface TerrainPaintAccumulator {
+  readonly vertices: Map<number, number[]>;
+}
+
+export function createTerrainPaintAccumulator(): TerrainPaintAccumulator {
+  return { vertices: new Map() };
+}
+
+export interface TerrainBrushOptions {
+  /** One per stroke; omitted, each dab starts from the stored bytes. */
+  paint?: TerrainPaintAccumulator;
+}
+
 export function mergeTerrainDirtyRects(a: TerrainDirtyRect, b: TerrainDirtyRect): TerrainDirtyRect {
   return { x0: Math.min(a.x0, b.x0), x1: Math.max(a.x1, b.x1), z0: Math.min(a.z0, b.z0), z1: Math.max(a.z1, b.z1) };
 }
@@ -214,7 +234,7 @@ function writeRect(tile: TerrainTileData, rect: TerrainDirtyRect, values: Terrai
  * Stage changes before writing so smooth always reads the pre-dab surface,
  * independent of tile iteration order, without cloning entire tiles.
  */
-export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush): TerrainBrushResult {
+export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush, options: TerrainBrushOptions = {}): TerrainBrushResult {
   if (![brush.x, brush.z, brush.radius, brush.strength, brush.falloff].every(Number.isFinite)
     || brush.radius <= 0 || brush.strength < 0 || brush.falloff < 0) throw new Error("Invalid terrain brush");
   const paint = brush.mode === "paint" || brush.mode === "erase" || brush.mode === "smoothWeights";
@@ -252,6 +272,11 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
     },
   }) : undefined;
   const changes: { copy: VertexCopy; height: number; weights: Uint8Array | undefined }[] = [];
+  const accumulated = options.paint?.vertices;
+  const floatWrites: [number, number[]][] = [];
+  const vertexId = (gx: number, gz: number) => gz * (tilesX * q + 1) + gx;
+  const storedWeight = (copy: VertexCopy, gx: number, gz: number, layer: number) =>
+    accumulated?.get(vertexId(gx, gz))?.[layer] ?? terrainTileLayerWeight(copy.tile, layer, copy.index);
   for (let gz = z0; gz <= z1; gz += 1) {
     for (let gx = x0; gx <= x1; gx += 1) {
       const wx = origin[0] + gx * spacing, wz = origin[2] + gz * spacing;
@@ -264,12 +289,14 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
       let height = current;
       let weights: Uint8Array | undefined;
       if ("layer" in brush) {
-        const values = Array.from({ length: owner.tile.layerCount }, (_, layer) => terrainTileLayerWeight(owner.tile, layer, owner.index));
+        const values = Array.from({ length: owner.tile.layerCount }, (_, layer) => storedWeight(owner, gx, gz, layer));
         editLandscapeBrushWeights(values, brush.mode, brush.layer, brush.strength * influence,
           (layer) => landscapeBrushAverage((dx, dz) => {
             const neighbour = vertexCopies(world, gx + dx, gz + dz, required)[0];
-            return neighbour ? terrainTileLayerWeight(neighbour.tile, layer, neighbour.index) : undefined;
+            return neighbour ? storedWeight(neighbour, gx + dx, gz + dz, layer) : undefined;
           }, values[layer] ?? 0));
+        // Staged like the bytes: smoothing must read this dab's starting weights.
+        if (accumulated) floatWrites.push([vertexId(gx, gz), values]);
         weights = quantizeWeights(values);
       } else {
         const target = Number.isFinite(brush.flattenTargetHeight) ? brush.flattenTargetHeight! : brush.hitHeight ?? 0;
@@ -298,6 +325,7 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush):
       }
     }
   }
+  for (const [id, values] of floatWrites) accumulated!.set(id, values);
   const patches = [...dirty].map(([key, rect]) => ({ key, rect, before: readRect(world.tiles.get(key)!, rect) }));
   for (const { copy, height, weights } of changes) {
     copy.tile.heights[copy.index] = height;

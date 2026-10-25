@@ -844,6 +844,9 @@ Kalan maddelerin onaylı uygulama planı:
       yükseklik/normal raycast'ten gelir, boş tile'a düzlem fallback'i yapılmaz.
       Aynı `landscape` hedefi ve foliage sidecar'ı Save/Load/Play'de kullanılır;
       prosedürel Landscape foliage kuralları Faz 6'ya kadar kapalıdır.
+      *Paint hassasiyeti (2026-10-25):* stroke boyunca float ağırlık tamponu
+      (`TerrainPaintAccumulator`), düşük güçlü dab'lar artık 8-bit'e yuvarlanıp
+      kaybolmuyor; ayrıntı [OPEN_WORLD_FAZ2_EDITOR_PLAN.md](OPEN_WORLD_FAZ2_EDITOR_PLAN.md).
       **Açık (perf):** GPU'ya dab başına tile katmanının
       tamamı ve global haritanın tamamı yükleniyor (CPU normalleri
       dikdörtgenle sınırlı); dikişe değen dab komşu tile'ın normallerini

@@ -1,9 +1,21 @@
 # Open World Faz 2 — kalan iş: editör düzenlemesinin `terrainEdit`'e taşınması + 16-bit heightmap
 
-> Durum: **onaylandı, başlanmadı** (2026-10-25). Üst plan:
+> Durum: **onaylandı; 1. adımın paint kısmı tamam** (2026-10-25, "İlerleme" bölümü). Üst plan:
 > [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) "Faz 2". Bu dosya Faz 2'nin kalan iki
 > maddesinin uygulama planıdır; tamamlanınca maddeler OPEN_WORLD_PLAN'da kapatılır
 > ve bu dosya `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivlenir.
+
+> **Kapsam notu (2026-10-25, birleştirme sonrası).** Bu plan `58f05f6` üzerinde
+> yazıldı; `main` daha sonra yerel arazi işiyle birleşti (`8caca42`). Orada çok-tile
+> World Terrain zaten `terrainEdit` üzerinden düzenleniyor: belge tabanlı
+> `TerrainEditWorld` + `WorldTerrainEditSession` (`src/editor/terrainStore.ts`),
+> stroke başına tile yamalı undo, yalnız kirli tile'ları yazan kayıt, editör
+> streaming'i, RAW import/export arayüzü ve `terrain-multitile` smoke'u. Aşağıdaki
+> "bugün editör yalnız 1×1 açabiliyor" ve "RAW için arayüz yok" cümleleri o tabana
+> aittir. `ForgeLandscapeData` üzerinden düzenlenen yalnız **1×1 Landscape** kaldı
+> (`SceneApp.editLandscapeHeights/editLandscapeWeights`, tam dizi undo,
+> `captureTerrainWrite`). Kalan iş bu yüzden "1×1'i çok-tile yoluna almak" ve
+> 16-bit PNG'dir; adımların yeniden eşlenmesi "İlerleme" bölümünde.
 
 ## Context
 
@@ -134,7 +146,8 @@ Adımlar:
   `terrain-migration`. Adım 4'te yeni çok-tile sculpt smoke'u, adım 6'da
   heightmap import/export smoke'u eklenecek.
 - Son adımda `npm run build:verify`.
-- Her adım ayrı commit, `git push -u origin claude/zealous-brown-lfi5ti`, ardından
+- Her adım ayrı commit, oturumun çalışma dalına push (2026-10-25'ten beri
+  `claude/serene-fermi-qh36kn`), ardından
   kullanıcıya haber.
 
 ## Smoke ortam notu (bulut oturumları)
@@ -172,3 +185,47 @@ export default defineConfig({
   kullanın.
 - `vehicle.spec.ts` "a TPS character gets in with E…" bu ortamda (SwiftShader,
   ~10 fps) Faz 2 öncesi commit'te de düşüyor; arazi içermez, regresyon sayılmaz.
+
+## İlerleme
+
+### Adım 1a — stroke boyunca float paint tamponu (2026-10-25)
+
+`applyTerrainBrush(world, brush, { paint })`: `TerrainPaintAccumulator` stroke
+başına dünya vertex'i anahtarlı, quantize edilmemiş katman ağırlıklarını tutar.
+Dab ağırlıkları tampondan okur (tamponda yoksa tile baytlarından), yeni float'ı
+tampona, quantize edilmiş baytları tile'a yazar. Tampon yazımı da baytlar gibi
+dab sonuna ertelenir, yani `smoothWeights` dab'ın başlangıç ağırlıklarını okur.
+Seçenek verilmezse davranış eskisi gibidir. Editörde her `WorldTerrainStroke`
+kendi tamponunu taşır. Undo yamaları değişmedi; geri alma bit-birebir kalır.
+
+Neden: 8-bit adımın yarısından (1/510) az değişen bir dab bayta geri yuvarlanıyordu.
+UI'da en düşük güç 0,01 olduğu için merkezde sorun yok, ama falloff kenarında
+etkili fırça küçülüyordu: güç 0,01, falloff 4'te yarıçapın yalnız iç üçte biri
+boyanıyordu.
+
+Doğrulama: engine testleri — düşük güçte (0,001 × 40 dab) tamponsuz stroke hiç
+iz bırakmaz, tamponlu stroke legacy float referansıyla aynı baytı verir;
+ağırlık toplamı 255, dikişler eşit, undo birebir; ilk dab'da tamponlu
+`smoothWeights` tamponsuzla aynı. `terrain-multitile` smoke'una dikiş üstünde
+güç 0,01 / falloff 4 ile 60 dab'lık paint stroke'u eklendi: autosave'de değişen
+vertex sayısı tamponla **62**, tampon editörde kapatılınca **13** (smoke düşer);
+toplam 255 ve dikiş satırları eşit.
+
+### Kalan adımların yeniden eşlenmesi (onay bekliyor)
+
+1. **1b — 1×1 Landscape'i belge tabanlı düzenlemeye almak:** 1×1 de
+   `editableWorldTerrain` + `WorldTerrainEditSession` ile açılır, sculpt/paint
+   `applyWorldTerrainDab` yolundan geçer. `ForgeLandscapeData` kirli dikdörtgenden
+   güncellenen türev görünüm olur (spline mesh, River, foliage, collider).
+   Döndürülmüş, kare olmayan ya da `heightScale ≠ 1` legacy veri salt-okunur açılır
+   ve migrasyon uyarısı gösterilir.
+2. **Stroke/undo:** `LandscapeSculptStroke`'un tam dizi kopyaları ve
+   `editLandscapeHeights/Weights` silinir. Çok-tile tarafında bu iş zaten bitmişti.
+3. **Diğer işlemler:** Fill Layer, katman ekle/sil/malzeme ve spline deform/paint
+   `TerrainEditWorld` üzerinde çalışır. Resample yalnız 1×1'de kalır.
+4. **Kayıt:** 1×1 de kirli tile + tanım yazımına geçer (`captureTerrainWrite`
+   emekli olur). Legacy sidecar migrasyonu korunur. Smoke: 1×1 sculpt → kaydet →
+   yeniden aç.
+5. **16-bit PNG codec'i** (değişmedi).
+6. **Arayüz:** RAW'ın yanına PNG16 gelir, 1×1 için de import/export açılır.
+   8-bit PNG resample seçeneği kalır.

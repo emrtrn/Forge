@@ -1,6 +1,6 @@
 # Open World Faz 2 — kalan iş: editör düzenlemesinin `terrainEdit`'e taşınması + 16-bit heightmap
 
-> Durum: **onaylandı; 1. adımın paint kısmı tamam** (2026-10-25, "İlerleme" bölümü). Üst plan:
+> Durum: **onaylandı; 1. ve 2. adım tamam** (2026-10-25, "İlerleme" bölümü). Üst plan:
 > [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md) "Faz 2". Bu dosya Faz 2'nin kalan iki
 > maddesinin uygulama planıdır; tamamlanınca maddeler OPEN_WORLD_PLAN'da kapatılır
 > ve bu dosya `docs/COMPLETED_WORK_INDEX.md` üzerinden arşivlenir.
@@ -185,6 +185,9 @@ export default defineConfig({
   kullanın.
 - `vehicle.spec.ts` "a TPS character gets in with E…" bu ortamda (SwiftShader,
   ~10 fps) Faz 2 öncesi commit'te de düşüyor; arazi içermez, regresyon sayılmaz.
+- `terrain-surface.spec.ts` "OffroadTest paint layers reach the car's wheels…"
+  (Play'de araba sürüşü) bu ortamda 240 s zaman aşımına uğruyor; 1b'den önceki
+  `0fc52275`'te de aynı şekilde düşüyor (2026-10-25). Editör fırçasından geçmez.
 
 ## İlerleme
 
@@ -211,7 +214,49 @@ güç 0,01 / falloff 4 ile 60 dab'lık paint stroke'u eklendi: autosave'de deği
 vertex sayısı tamponla **62**, tampon editörde kapatılınca **13** (smoke düşer);
 toplam 255 ve dikiş satırları eşit.
 
-### Kalan adımların yeniden eşlenmesi (onay bekliyor)
+### Adım 1b + 2 — 1×1 Landscape aynı stroke yolunda (2026-10-25)
+
+Kullanıcı yeniden eşlemeyi onayladı. 1×1 için ayrı fırça kodu kalmadığından 2. adım
+(tam dizi undo'nun ve `editLandscapeHeights/Weights`'in silinmesi) bu committe
+birlikte yapıldı; ölü kod bırakmamak için ayrılmadı.
+
+- `SceneApp`'te tek stroke yolu var (`TerrainStroke`, `beginTerrainStroke` …
+  `completeTerrainStroke`). Çok-tile arazi session'ın tile'larını dünya uzayında
+  düzenler. 1×1 Landscape stroke başında grid'inden **actor-yerel** bir tek-tile
+  edit world kurar (`landscapeEditWorld`, `engine/terrain/terrainLandscapeBridge.ts`):
+  origin grid'in min köşesi, Y yerel yükseklik (metre, `heightScale` katlanmış).
+  Hit noktası `worldToLocal` ile bu çerçeveye çevrilir; taşınmış ya da döndürülmüş
+  actor aynı şekilde düzenlenir. Ramp önizlemesi `localToWorld` ile çizilir.
+- Her dab'ın yamaları (`patch.after`) `writeTerrainPatchToLandscape` ile grid'e
+  yazılır; `ForgeLandscapeData` artık kirli dikdörtgenden güncellenen türev görünüm.
+  Renderer, spline/River, foliage ve Save onu okumaya devam eder (Save 4. adımda).
+- Undo/redo yamaları grid'e yazar (undo ters sırada). Grid'in boyutu ya da katman
+  sayısı yamanınkiyle uyuşmazsa komut hiçbir şey yapmaz.
+- Edit world her stroke'ta yeniden kurulur, çünkü fill, spline, resample ve import
+  3. adıma kadar grid'i doğrudan değiştiriyor. 257² × 8 katman için kopya ucuz.
+  3. adımda bütün yazıcılar edit world'den geçince kalıcı olacak.
+- **Davranış farkları:**
+  - 1×1 boya ağırlıkları dab başına RGBA8'e nicemlenir; stroke tamponu (1a)
+    düşük güçlü dab'ları korur. Kayıt zaten RGBA8'di.
+  - Terrace adımı ve ramp ofsetleri `heightScale ≠ 1` grid'de artık ham birim
+    değil, metre. Arayüzdeki değerler zaten metreydi.
+  - Aktif katman bulunamazsa 1×1 eskisi gibi ilk katmana düşer, çok-tile
+    uyarı verir.
+- **Salt-okunur:** kare olmayan, ikinin kuvveti olmayan ya da 8'den fazla katmanlı
+  grid. Bunlar yalnız migrasyonun yeniden örneklemesi gereken legacy sidecar'larda
+  görülür; zaten kaydedilemiyorlardı. Sculpt/paint denemesi nedenini ve "önce bir
+  preset çözünürlüğüne Resample" önerisini gösterir. `heightScale ≠ 1`
+  düzenlenebilir kalır.
+
+Doğrulama: engine testleri — 1×1 sorun listesi; `heightScale` 1 ve 2,5'te dab
+actor-yerel metrelerde ve yalnız kirli dikdörtgende; paint toplamı 1; undo birebir.
+Tam suite 1860 kontrol. Smoke'lar 16/17: `landscape-sculpt` (kayıt sırasında
+düzenleme + retry), `landscape-sculpt-tools` ve `-shift` (1×1 ve 2×2), `landscape-
+erosion-visual`, `landscape-paint`, `landscape-spline-chain`, `landscape-wireframe`,
+`terrain-create`, `terrain-editor-streaming`, `terrain-isolation`, `terrain-migration`
+(2), `terrain-multitile` (2). Düşen `terrain-surface` aşağıdaki ortam notunda.
+
+### Kalan adımların yeniden eşlenmesi (onaylandı 2026-10-25)
 
 1. **1b — 1×1 Landscape'i belge tabanlı düzenlemeye almak:** 1×1 de
    `editableWorldTerrain` + `WorldTerrainEditSession` ile açılır, sculpt/paint
@@ -221,6 +266,7 @@ toplam 255 ve dikiş satırları eşit.
    ve migrasyon uyarısı gösterilir.
 2. **Stroke/undo:** `LandscapeSculptStroke`'un tam dizi kopyaları ve
    `editLandscapeHeights/Weights` silinir. Çok-tile tarafında bu iş zaten bitmişti.
+   *1b ile birlikte yapıldı.*
 3. **Diğer işlemler:** Fill Layer, katman ekle/sil/malzeme ve spline deform/paint
    `TerrainEditWorld` üzerinde çalışır. Resample yalnız 1×1'de kalır.
 4. **Kayıt:** 1×1 de kirli tile + tanım yazımına geçer (`captureTerrainWrite`

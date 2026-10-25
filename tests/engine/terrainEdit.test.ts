@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
-import { ensureLandscapeLayers } from "../../engine/scene/landscape";
-import { terrainDocumentToLandscape } from "../../engine/terrain/terrainLandscapeBridge";
+import { createFlatLandscapeData, ensureLandscapeLayers } from "../../engine/scene/landscape";
+import {
+  landscapeEditIssues,
+  landscapeEditWorld,
+  terrainDocumentToLandscape,
+  writeTerrainPatchToLandscape,
+} from "../../engine/terrain/terrainLandscapeBridge";
 import { applyTerrainLayerState, createTerrainLayerAddition } from "../../engine/terrain/terrainLayers";
 import {
   editLandscapeBrushWeights,
+  landscapeBrushFalloff,
   normalizeLandscapeBrushWeights,
   type LandscapeHeightBrushMode,
 } from "../../engine/scene/landscapeBrush";
@@ -464,6 +470,51 @@ export function registerTerrainEditTests(check: Check): void {
     };
     // A fresh accumulator holds nothing yet, so the first dab must match a plain one.
     assert.deepEqual(run(createTerrainPaintAccumulator()), run());
+  });
+
+  check("terrain 1x1 Landscape edit: only power-of-two square grids with at most eight layers use the tile editor", () => {
+    const data = createFlatLandscapeData("small");
+    assert.deepEqual(landscapeEditIssues(data), []);
+    assert.match(landscapeEditIssues({ ...data, size: { ...data.size, verticesZ: 129 } }).join(), /non-square/);
+    assert.match(landscapeEditIssues({ ...data, size: { ...data.size, verticesX: 101, verticesZ: 101 } }).join(), /power-of-two/);
+    assert.match(landscapeEditIssues({ ...data, size: { ...data.size, heightScale: 0 } }).join(), /height scale/);
+    const layers = Array.from({ length: 9 }, (_, i) => ({ id: `l${i}`, name: `L${i}`, weights: [] as number[] }));
+    assert.match(landscapeEditIssues({ ...data, layers }).join(), /9 paint layers/);
+    assert.throws(() => landscapeEditWorld({ ...data, size: { ...data.size, verticesZ: 129 } }), /not editable/);
+  });
+
+  check("terrain 1x1 Landscape edit: dabs land in actor-local metres and write back only their rectangle", () => {
+    for (const heightScale of [1, 2.5]) {
+      const data = createFlatLandscapeData("small");
+      data.size.heightScale = heightScale;
+      data.heights = data.heights.map((_, i) => Math.fround((i % 7) * 0.25 / heightScale));
+      const original = structuredClone(data);
+      const world = landscapeEditWorld(data);
+      // Grid centred on the actor: vertex (32, 32) is local (0, 0).
+      assert.deepEqual(world.def.origin, [-32, 0, -32]);
+      const dab = { mode: "raise" as const, x: 3.2, z: -5.7, radius: 4.5, strength: 0.6, falloff: 1.5, hitHeight: 0 };
+      const result = applyTerrainBrush(world, dab);
+      for (const patch of result.patches) writeTerrainPatchToLandscape(data, patch.rect, patch.after);
+      const rect = result.dirty.get("0_0")!;
+      for (let z = 0; z < 65; z += 1) {
+        for (let x = 0; x < 65; x += 1) {
+          const i = z * 65 + x;
+          const inside = x >= rect.x0 && x <= rect.x1 && z >= rect.z0 && z <= rect.z1;
+          const amount = dab.strength * landscapeBrushFalloff(Math.hypot(x - 32 - dab.x, z - 32 - dab.z), dab.radius, dab.falloff);
+          if (!inside) assert.equal(data.heights[i], original.heights[i]);
+          else assert.ok(Math.abs(data.heights[i]! * heightScale - (original.heights[i]! * heightScale + amount)) < 2e-4, `vertex ${x},${z}`);
+        }
+      }
+      const painted = applyTerrainBrush(world, { ...dab, mode: "paint", layer: 2, strength: 1 });
+      for (const patch of painted.patches) writeTerrainPatchToLandscape(data, patch.rect, patch.after);
+      const centre = 26 * 65 + 35;
+      assert.ok(data.layers[2]!.weights[centre]! > 0.5);
+      assert.ok(Math.abs(data.layers.reduce((sum, layer) => sum + layer.weights[centre]!, 0) - 1) < 1e-9);
+      // Undo: before sides in reverse order restore the grid exactly.
+      for (const patch of [...result.patches, ...painted.patches].reverse()) writeTerrainPatchToLandscape(data, patch.rect, patch.before);
+      assert.deepEqual(data.layers.map((layer) => layer.weights), original.layers.map((layer) => layer.weights));
+      data.heights.forEach((height, i) => assert.ok(Math.abs(height - original.heights[i]!) < 1e-6));
+    }
   });
 
   check("terrain edit dirty rectangles bound every changed vertex tightly and merge", () => {

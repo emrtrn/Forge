@@ -1,7 +1,7 @@
 import { expect, test } from "./test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { REPO_ROOT } from "./smokeProject.mjs";
+import { smokePublicPath } from "./smokeProject.mjs";
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 
@@ -23,16 +23,18 @@ for (const material of ["mud", "snow"]) {
             smaaAllowed: false, shadowsEnabled: false, particleDensity: 0.3, grassDensity: 0, foliageCullDistanceScale: 0.3 } } } }));
     });
     // Override only response data in flight; authored scene, terrain and assets stay untouched.
-    const terrainRoot = resolve(REPO_ROOT, "public/assets/starter-content/Levels/LandscapeTest.landscapes");
+    const terrainRoot = smokePublicPath("assets/starter-content/Levels/LandscapeTest.landscapes");
     const definition = JSON.parse(await readFile(resolve(terrainRoot, "landscape-1.terrain.json"), "utf8"));
     const tile = decodeTerrainTile(await readFile(resolve(terrainRoot, "landscape-1.tiles/2_1.tile.bin")));
     const height = terrainHeightAt(definition, { tile: (x, z) => x === 2 && z === 1 ? tile : undefined }, 12, -43.84)!;
     await page.route("**/LandscapeTest.level.json", async (route) => {
       const response = await route.fetch();
-      const level = await response.json() as { actors: { position: number[] }[] };
-      // The authored spawn is on the asphalt spline, which correctly masks the
-      // terrain's physical response. Start beside it on the actual terrain.
-      level.actors[0]!.position = [12, height + 0.15, -43.84];
+      const level = await response.json() as { actors: { classRef: string; position: number[]; rotation: number[]; scale: number }[];
+        worldSettings?: { gameMode?: string } };
+      // Own the test vehicle: authoring may remove/reorder actors. Keep the
+      // truck beside the asphalt, on the isolated terrain snapshot itself.
+      level.actors = [{ classRef: "assets/vehicles/gaz52/Script_Gaz52.actor.json", position: [12, height + 0.15, -43.84], rotation: [-1, 0, 0], scale: 1 }];
+      level.worldSettings = { ...level.worldSettings, gameMode: "forge.vehicle" };
       await route.fulfill({ response, json: level });
     });
     await page.route("**/LandscapeTest.landscapes/landscape-1.terrain.json", async (route) => {

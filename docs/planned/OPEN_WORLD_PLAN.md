@@ -49,6 +49,9 @@ tanım yeniden yazılır, eklenen tile dosyaları `.tiles/` altında sahipsiz ka
 >
 > Bağlı planlar: [TERRAIN_DEFORMATION_PLAN.md](TERRAIN_DEFORMATION_PLAN.md)
 > (bu planın Faz 1–3'ünden sonra başlamalı, bkz. "Bağımlılıklar"),
+> [WORLD_TERRAIN_WATER_BODY_PLAN.md](WORLD_TERRAIN_WATER_BODY_PLAN.md)
+> (yol/nehir aktarımı, eski arazi emekliliği ve göl/birikinti/deniz araçları;
+> sohbet kaydı ve önerilen geliştirme sırası),
 > [VEHICLE_PHYSICS_PLAN.md](VEHICLE_PHYSICS_PLAN.md),
 > [SAVE_GAME_CONTRACT.md](../architecture/SAVE_GAME_CONTRACT.md),
 > [CONTENT_LOADING_CONTRACT.md](../architecture/CONTENT_LOADING_CONTRACT.md),

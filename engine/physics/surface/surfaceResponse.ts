@@ -23,6 +23,17 @@ export interface SoftGroundSample {
   readonly ploughResistance: number;
   readonly ploughExponent?: number;
   readonly rollingResistanceAtRest?: number;
+  readonly highSpeedResistance?: number;
+  readonly resistanceSpeedMps?: number;
+}
+
+const SOFT_GROUND_CONTROL_DEFAULTS: Partial<Record<keyof SoftGroundSample, number>> = Object.freeze({
+  ploughExponent: 1, rollingResistanceAtRest: 1, highSpeedResistance: 0, resistanceSpeedMps: 20 / 3.6,
+});
+
+/** Defaults for optional preset controls, also used by both material blend paths. */
+export function softGroundParameter(sample: SoftGroundSample, key: keyof SoftGroundSample): number {
+  return sample[key] ?? SOFT_GROUND_CONTROL_DEFAULTS[key] ?? 0;
 }
 
 export interface WeightedSurfaceMaterial {
@@ -101,6 +112,8 @@ export function resolveSurfaceSample(
         ploughResistance: profile.deformation.ploughResistance ?? 0,
         ploughExponent: profile.deformation.ploughExponent ?? 1,
         rollingResistanceAtRest: profile.deformation.rollingResistanceAtRest ?? 1,
+        highSpeedResistance: profile.deformation.highSpeedResistance ?? 0,
+        resistanceSpeedMps: profile.deformation.resistanceSpeedMps ?? 20 / 3.6,
       } } : {}),
     };
   }
@@ -116,7 +129,7 @@ export function resolveSurfaceSample(
   let tractionCoefficient = 0;
   let hasTractionCoefficient = false;
   let softWeight = 0;
-  const softGround = { maxDepth: 0, compaction: 0, digRate: 0, sinkResistance: 0, ploughResistance: 0, ploughExponent: 0, rollingResistanceAtRest: 0 };
+  const softGround = { maxDepth: 0, compaction: 0, digRate: 0, sinkResistance: 0, ploughResistance: 0, ploughExponent: 0, rollingResistanceAtRest: 0, highSpeedResistance: 0, resistanceSpeedMps: 0 };
   for (const entry of entries) {
     const sample = resolveSurfaceSample(entry.physicalMaterialId);
     const weight = (entry.weight / maxWeight) / total;
@@ -128,7 +141,7 @@ export function resolveSurfaceSample(
     hasTractionCoefficient ||= sample.tractionCoefficient !== undefined;
     if (sample.softGround) {
       softWeight += weight;
-      for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] += (sample.softGround[key] ?? 1) * weight;
+      for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] += softGroundParameter(sample.softGround, key) * weight;
     }
   }
   if (softWeight > 0) for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] /= softWeight;

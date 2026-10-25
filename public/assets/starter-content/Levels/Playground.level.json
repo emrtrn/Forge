@@ -447,7 +447,8 @@
       ],
       "color": "#ffffff",
       "intensity": 5,
-      "castShadow": true
+      "castShadow": true,
+      "cascadedShadows": true
     }
   ],
   "reflectionPlanes": [],

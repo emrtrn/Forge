@@ -2,7 +2,7 @@
 import type { SurfaceSample } from "./surfaceResponse";
 
 /**
- * F = load × (speed-ramped rolling + k × min(sink / radius, 1)^exponent). Only wheel burial is
+ * F = load × (speed-ramped rolling + ploughing + high-speed soil drag). Only wheel burial is
  * counted here; excess depth beyond chassis clearance remains belly drag.
  * Ploughing supplies finite breakaway even at zero speed. Buried rolling can
  * be rate-dependent so it need not consume all grip on a hill start. Presets
@@ -17,7 +17,15 @@ export function wheelGroundResistance(sample: SurfaceSample | null, load: number
   const plough = Math.max(0, profile?.ploughResistance ?? 0) * buried ** exponent;
   const ramp = Math.min(Math.abs(speed), 1);
   const rolling = Math.max(0, sample.rollingResistance) * (plough > 0 ? atRest + (1 - atRest) * ramp : ramp);
-  return load * (rolling + plough);
+  // Work against fresh soft ground does not wait for a visual rut or depend
+  // on throttle. Ramp smoothly over half..full reference speed, then cap the
+  // coefficient so road-speed entries cannot create unbounded impact forces.
+  const referenceSpeed = profile?.resistanceSpeedMps ?? 20 / 3.6;
+  const highSpeed = Number.isFinite(referenceSpeed) && referenceSpeed > 0
+    ? Math.max(0, Math.min(1, Math.abs(speed) / referenceSpeed * 2 - 1)) : 0;
+  const speedDrag = Math.max(0, profile?.highSpeedResistance ?? 0)
+    * Math.max(0, Math.min(1, sample.deformability)) * highSpeed ** 2;
+  return load * (rolling + plough + speedDrag);
 }
 
 /**

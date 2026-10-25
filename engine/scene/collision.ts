@@ -240,6 +240,10 @@ export interface PhysicalMaterialDef {
     ploughExponent?: number;
     /** Share of buried rolling drag present at rest, ramping to full at 1 m/s (default 1). */
     rollingResistanceAtRest?: number;
+    /** Extra force / load above the soft-ground cruise range (default 0). */
+    highSpeedResistance?: number;
+    /** Full high-speed drag at this speed; ramp starts at half of it (m/s). */
+    resistanceSpeedMps?: number;
     /** Track albedo blend colour (RGB, 0..1). */
     tint: Vec3;
     /** Track albedo blend strength (0..1). */
@@ -265,7 +269,8 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
     vehicle: { frictionSlipScale: 0.6, tractionCoefficient: 0.22, sideFrictionScale: 0.5, rollingResistance: 0.06 },
     deformation: {
       maxDepth: 0.3, compaction: 0.25, digRate: 0.05, recoveryRate: 0.01,
-      sinkResistance: 0.4, ploughResistance: 0.045, tint: [0.85, 0.9, 0.95], tintStrength: 0.3, wetness: 0.1,
+      sinkResistance: 0.4, ploughResistance: 0.045, highSpeedResistance: 0.55, resistanceSpeedMps: 20 / 3.6,
+      tint: [0.85, 0.9, 0.95], tintStrength: 0.3, wetness: 0.1,
     },
   },
   mud: {
@@ -275,6 +280,7 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
     deformation: {
       maxDepth: 0.22, compaction: 0.5, digRate: 0.08, recoveryRate: 0,
       sinkResistance: 0.6, ploughResistance: 0.3, ploughExponent: 2, rollingResistanceAtRest: 0,
+      highSpeedResistance: 0.65, resistanceSpeedMps: 20 / 3.6,
       tint: [0.035, 0.025, 0.015], tintStrength: 0.85, wetness: 0.9,
     },
   },

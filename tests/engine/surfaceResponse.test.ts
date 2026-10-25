@@ -29,6 +29,23 @@ const close = (actual: number, expected: number): void =>
   assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} != ${expected}`);
 
 export function registerSurfaceResponseTests(check: Check): void {
+  check("soft ground speed: progressive entry drag fades with soft participation and preserves launch", () => {
+    for (const material of ["mud", "snow"]) {
+      const preset = resolveSurfaceSample(material);
+      const base = { ...preset, softGround: { ...preset.softGround!, highSpeedResistance: 0 } };
+      const extra = (speed: number, sample = preset) => wheelGroundResistance(sample, 3000, 0, 0.537, speed)
+        - wheelGroundResistance(base, 3000, 0, 0.537, speed);
+      for (const speed of [0, 0.5, 1, 10 / 3.6]) close(extra(speed), 0);
+      assert.ok(extra(15 / 3.6) > 0 && extra(15 / 3.6) < extra(20 / 3.6));
+      close(extra(20 / 3.6), extra(60 / 3.6));
+      close(extra(-20 / 3.6), extra(20 / 3.6));
+      close(extra(20 / 3.6, { ...preset, deformability: 0.5 }), extra(20 / 3.6) * 0.5);
+      assert.equal(wheelGroundResistance(preset, 0, 0, 0.537, 60 / 3.6), 0);
+    }
+    const blend = resolveSurfaceSample([{ physicalMaterialId: "mud", weight: 1 }, { physicalMaterialId: "stone", weight: 1 }]);
+    close(wheelGroundResistance(blend, 3000, 0, 0.537, 60 / 3.6),
+      wheelGroundResistance(resolveSurfaceSample("mud"), 3000, 0, 0.537, 60 / 3.6) * 0.5);
+  });
   check("soft ground launch: mud preserves a finite depth threshold while rolling builds with speed", () => {
     const mud = resolveSurfaceSample("mud");
     const resistance = (depth: number, speed: number) => wheelGroundResistance(mud, 6000, depth, 0.537, speed);
@@ -37,10 +54,10 @@ export function registerSurfaceResponseTests(check: Check): void {
     assert.ok(shallowRest > 0, "launch does not erase soil breakaway");
     close(deepRest, shallowRest * 4);
     assert.ok(resistance(0.11, 0.5) > shallowRest && resistance(0.11, 0.5) < resistance(0.11, 1));
-    close(resistance(0.11, 1), resistance(0.11, 10));
+    close(resistance(0.11, 1), resistance(0.11, 2));
     close(resistance(0.11, -0.5), resistance(0.11, 0.5));
     assert.ok(resistance(0.22, 10) - resistance(0.11, 10) > 200, "burial adds a material load well before belly contact");
-    for (const speed of [0, 0.5, 1, 10]) {
+    for (const speed of [0, 0.5, 1, 2]) {
       close(wheelGroundResistance(resolveSurfaceSample("snow"), 3000, 0.1, 0.5, speed), 207);
       close(wheelGroundResistance(resolveSurfaceSample("sand"), 3000, 0.1, 0.5, speed), 870);
     }
@@ -102,7 +119,7 @@ export function registerSurfaceResponseTests(check: Check): void {
     assert.deepEqual(resolveSurfaceSample("mud"), {
       frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12, deformability: 1,
       softGround: { maxDepth: 0.22, compaction: 0.5, digRate: 0.08, sinkResistance: 0.6, ploughResistance: 0.3,
-        ploughExponent: 2, rollingResistanceAtRest: 0 },
+        ploughExponent: 2, rollingResistanceAtRest: 0, highSpeedResistance: 0.65, resistanceSpeedMps: 20 / 3.6 },
     });
     for (const id of ["snow", "mud", "sand"]) {
       assert.ok(PHYSICAL_MATERIALS[id]!.deformation!.maxDepth > 0);
@@ -294,8 +311,10 @@ export async function registerSurfaceResponseRapierTests(
       world.drive(options.pedal === -1 ? { brake: 1 } : { throttle: options.pedal ?? 0 });
       const hz = options.hz ?? 60;
       let stopDistance: number | null = null;
+      let below20Seconds: number | null = null;
       for (let frame = 0; frame < hz * (options.seconds ?? 3); frame++) {
         physics.update({ deltaSeconds: 1 / hz, elapsedSeconds: frame / hz, frame });
+        if (below20Seconds === null && Math.abs(physics.vehicleState("car")!.forwardSpeed) <= 20 / 3.6) below20Seconds = (frame + 1) / hz;
         if (stopDistance === null && Math.abs(physics.vehicleState("car")!.forwardSpeed) < 0.05) {
           stopDistance = Math.hypot(world.position()[0] - pose.position[0], world.position()[2] - pose.position[2]);
         }
@@ -304,9 +323,41 @@ export async function registerSurfaceResponseRapierTests(
       const motion = physics.vehicleMotion("car")!;
       return { speed: state.forwardSpeed, velocity: motion.linearVelocity, state, distance: Math.hypot(world.position()[0] - start[0], world.position()[2] - start[2]),
         progress: world.position()[2] - start[2],
-        force: state.wheels.reduce((sum, wheel) => sum + (wheel.groundResistanceForce ?? 0), 0), fieldDepth: field?.stats().maxDepth ?? 0, stopDistance };
+        force: state.wheels.reduce((sum, wheel) => sum + (wheel.groundResistanceForce ?? 0), 0), fieldDepth: field?.stats().maxDepth ?? 0, stopDistance, below20Seconds };
     } finally { physics.dispose(); }
   };
+
+  await checkAsync("soft ground speed rapier: stock truck sheds road speed on mud and snow with throttle on or off", async () => {
+    for (const material of ["mud", "snow"]) for (const kmh of [60, 40]) for (const pedal of [0, 1]) {
+      for (const slope of [0, -5, -10, -15]) {
+        const run = await resistanceRun({ stock: true, material, speed: kmh / 3.6, pedal, slope, seconds: 4 });
+        console.info(`[soft speed entry] ${material} ${kmh}km/h ${-slope}deg downhill pedal${pedal}: ${(run.speed * 3.6).toFixed(2)}km/h after 4s`);
+        assert.ok(Math.abs(run.speed) <= 20 / 3.6, "road-speed entry settles below the soft-ground 20 km/h envelope");
+      }
+    }
+  });
+
+  await checkAsync("soft ground speed rapier: cruise stays in 10-20 km/h and coasting stops promptly at 30/60/144 Hz", async () => {
+    for (const material of ["mud", "snow"]) {
+      const cruiseSpeeds: number[] = [];
+      for (const hz of [30, 60, 144]) {
+        for (const direction of [1, -1]) {
+          const cruise = await resistanceRun({ stock: true, material, speed: 0, pedal: direction, seconds: 25, hz });
+          assert.ok(Math.abs(cruise.speed) >= 10 / 3.6 && Math.abs(cruise.speed) <= 20 / 3.6, `${material}: cruise ${cruise.speed * 3.6} km/h`);
+          cruiseSpeeds.push(Math.abs(cruise.speed));
+          const coast = await resistanceRun({ stock: true, material, speed: direction * 60 / 3.6, seconds: 6, hz });
+          assert.ok(Math.abs(coast.speed) < 0.05 && coast.stopDistance !== null && coast.stopDistance < 35, "road-speed coasting loses momentum within 35 m");
+          assert.ok(coast.below20Seconds !== null && coast.below20Seconds < 3);
+          console.info(`[soft speed ${material} ${hz}Hz ${direction > 0 ? "forward" : "reverse"}] cruise ${(cruise.speed * 3.6).toFixed(2)}km/h, 60→20 ${coast.below20Seconds!.toFixed(2)}s, stop ${coast.stopDistance!.toFixed(2)}m`);
+        }
+      }
+      // Compare matching directions separately: forward and reverse ratios differ.
+      for (const parity of [0, 1]) {
+        const speeds = cruiseSpeeds.filter((_speed, index) => index % 2 === parity);
+        assert.ok(Math.max(...speeds) - Math.min(...speeds) < 0.01);
+      }
+    }
+  });
 
   await checkAsync("soft ground launch rapier: stock GAZ-52 restarts on a 5 degree mud incline including old rear ruts", async () => {
     for (const hz of [30, 60, 144]) for (const scenario of [
@@ -326,9 +377,9 @@ export async function registerSurfaceResponseRapierTests(
 
   await checkAsync("soft ground launch rapier: deeper mud still costs speed with throttle on and off", async () => {
     const preset = resolveSurfaceSample("mud");
-    const sample = { ...preset, softGround: { ...preset.softGround!, maxDepth: 0, digRate: 0 } };
-    // A flat-force reference car isolates burial from automatic-gear torque
-    // cuts; stock-truck hill starts are exercised separately above.
+    const sample = { ...preset, softGround: { ...preset.softGround!, maxDepth: 0, digRate: 0, highSpeedResistance: 0 } };
+    // Isolate burial from upper-speed drag and automatic-gear torque cuts;
+    // stock-truck speed and hill starts are exercised separately.
     for (const pedal of [0, 1]) {
       const shallow = await resistanceRun({ depth: 0.08, sample, speed: 40 / 3.6, pedal });
       const deep = await resistanceRun({ depth: 0.22, sample, speed: 40 / 3.6, pedal });
@@ -340,7 +391,7 @@ export async function registerSurfaceResponseRapierTests(
   await checkAsync("soft ground resistance rapier: deeper wheels slow both powered and coasting motion, including reverse", async () => {
     const preset = resolveSurfaceSample("snow");
     // Prescribed ruts isolate burial from fresh compaction/digging and belly drag.
-    const sample = { ...preset, rollingResistance: 0, softGround: { ...preset.softGround!, maxDepth: 0, digRate: 0, ploughResistance: 0.4 } };
+    const sample = { ...preset, rollingResistance: 0, softGround: { ...preset.softGround!, maxDepth: 0, digRate: 0, ploughResistance: 0.4, highSpeedResistance: 0 } };
     for (const pedal of [0, 1, -1]) {
       const speed = (pedal === -1 ? -1 : 1) * 40 / 3.6;
       const shallow = await resistanceRun({ depth: 0.05, sample, speed, pedal });

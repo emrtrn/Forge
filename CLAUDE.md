@@ -156,8 +156,11 @@ engine/editor.
   Both endpoints use the privileged local-only middleware. Add new definition
   fields to the shared normalizer and terrain serialization-drift tests.
   Editor saves migrate legacy sidecars tile → definition → level reference,
-  preserving the old file. Phase 1 bridges 1×1 terrain to the existing mesh/brush
-  path; multi-tile rendering is Phase 2 and currently rejects explicitly.
+  preserving the old file. Landscapes render through the GPU CDLOD renderer
+  (`engine/render-three/terrain/`, wrapped by `engine/render-three/landscape.ts`;
+  the terrain mesh raycasts on the CPU heightfield). The editor brush path still
+  edits a 1×1 terrain through the legacy adapter; multi-tile documents still
+  reject explicitly until they are wired into runtime and collision (Faz 3).
   Rotation/non-square/resampling adaptations require explicit resolution rather
   than silently changing an authored scene during Save.
 

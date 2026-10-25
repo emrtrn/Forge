@@ -22,7 +22,10 @@
 > material bağlantısı, zemin tanıma) açık dünya Faz 3'ten sonra. Faz 0'ın
 > araç/render spike'ları da araziden bağımsızdır. Faz 2 shader'ı ve Faz 3
 > patch mesh'i açık dünya Faz 2'nin CDLOD `terrainMaterial`'ına yazılır,
-> eski iki landscape materyaline değil.
+> eski iki landscape materyaline değil. *(2026-10-25: o materyal artık var —
+> `engine/render-three/terrain/terrainMaterial.ts`; Landscape'ler onunla
+> çiziliyor. Ağırlıklar `forgeTerrainWeights` ile 8 katmana kadar fragment'ta
+> okunuyor, `vLandscapeWeight` attribute'u yok.)*
 >
 > **Ortak not (2026-10-22):** iz alanı ve gömülme, zemin yüksekliğinin
 > collider ile birebir aynı örneklenmesine dayanıyor. Bilinear örnekleme

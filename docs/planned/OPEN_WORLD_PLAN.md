@@ -7,8 +7,9 @@
 > K7 reversed-Z + float derinlik. Spike sayfaları merge öncesi silindi;
 > son halleri `035a659` commit'inde (`git show 035a659:spikes/terrain-cdlod/terrainMaterial.ts`,
 > `git checkout 035a659 -- spikes` ile geri gelir). Belgede geçen `spikes/…`
-> yolları o commit'e aittir. Sonraki iş Faz 2 renderer/editör geçişi; 1×1 adaptörü
-> o zamana kadar mevcut renderer'ı kullanır.
+> yolları o commit'e aittir. **Faz 2 renderer geçişi tamam (2026-10-25):** Landscape'ler
+> GPU CDLOD renderer'ıyla çiziliyor, CPU chunk renderer'ı kaldırıldı. Faz 2'nin kalanı
+> editör sculpt/paint'in `terrainEdit.ts`'e taşınması ve PNG heightmap import/export.
 > Hedef: Forge'da **kilometrelerce genişlikte** oynanabilir açık dünyalar:
 > parçalı (tile) arazi, uzaklığa göre detay (LOD), oyuncunun etrafında
 > içerik akışı (streaming) ve bunları üreten editör araçları. Unreal'ın
@@ -651,13 +652,15 @@ Doğrulama (2026-10-22):
 
 ## Faz 2 — Terrain renderer (CDLOD) + editör araçlarının taşınması
 
-- [ ] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
+- [x] `terrainLod.ts`: quadtree seçimi, LOD menzilleri, morph faktörü
       (saf, test edilir: komşu düğüm LOD farkı ≤ 1, menzil monotonluğu).
       *Saf çekirdek hazır (2026-10-23): düğüm seçimi, 3B rölyef alt sınırı,
       morph ve yakın→uzak residency listesi testli; renderer entegrasyonu açık.
       Tam morph olmuş tile-seviyesi düğüm global haritayı kullanır; 67 tile
       yaklaşık değerdir, kesin sayı kamera konumuna bağlıdır.*
-- [ ] `terrainTexturePool.ts`: slot ayırma/serbest bırakma, global düşük
+      *Renderer'a bağlandı (2026-10-25); isteğe bağlı `extent` kırpması padded
+      legacy tile'ın yazılmış alanına sınırlar.*
+- [x] `terrainTexturePool.ts`: slot ayırma/serbest bırakma, global düşük
       çözünürlüklü harita.
       *Saf slot ayırıcı `engine/terrain/terrainSlotPool.ts` hazır (2026-10-23):
       varsayılan 80 slot, serbest bırakılan veriyi önbellekte tutma ve en önce
@@ -666,13 +669,24 @@ Doğrulama (2026-10-22):
       tüm dünya için tile'ın bir üst LOD gridinde (`2 · tileQuads / patchQuads`
       vertex stride) nokta örnekler; kirli tile dikdörtgenleri ve tile yükleme
       için artımlı güncelleme testli. GPU yüklemeleri ve editör bağlantısı açık.*
-- [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
-      splat, `sampler2DArray` katmanlar, uzak tekrar kırma, view mode'lar,
-      gölge alma, kalite profiline bağlı kendine gölge.
-- [ ] Eski `engine/render-three/landscape.ts` chunk renderer'ı kaldırılır;
+      *GPU tarafı tamam (2026-10-25): `engine/render-three/terrain/terrainTexturePool.ts`
+      R32F height + RGBA8 weight `DataArrayTexture` slotları ve R32F global
+      harita; yükleme `addLayerUpdate` ile slot katmanı başına. Kapasite
+      `min(80, tile sayısı)`. Yükseklik R32F/filtresiz seçildi (norm16 yerine):
+      shader `texelFetch` + elle bilinear okur, float-linear uzantısı gerekmez,
+      editörün f32 yükseklikleri GPU'ya birebir gider.*
+- [x] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, view
+      mode'lar, gölge alma. *Tamam (2026-10-25), ayrıntı aşağıdaki uygulama
+      notunda. Bilinçli olarak ertelenenler: dünya UV'si, `sampler2DArray`
+      katmanlar ve uzak tekrar kırma (legacy görünümle birebir kalmak için
+      splat UV'si hâlâ `yerel / extent × tiling`, 4 dokulu katman); kendine
+      gölge (`castShadow` eskisi gibi kapalı, gölge fit'i araziyi kapsamıyor —
+      Faz 7 CSM).*
+- [x] Eski `engine/render-three/landscape.ts` chunk renderer'ı kaldırılır;
       `RuntimeSceneApp` ve `SceneApp` yeni renderer'ı kullanır.
-- [ ] Seçim ve brush hover: CPU heightfield raycast (`scenePicker`,
-      foliage boyama, landscape brush cursor).
+- [x] Seçim ve brush hover: CPU heightfield raycast (`scenePicker`,
+      foliage boyama, landscape brush cursor). *Mesh'in `raycast` metodu
+      kırpılmış CPU raycast'e yönlendirildi; `ScenePicker` yolları değişmedi.*
 - [ ] Sculpt/paint: `terrainEdit.ts` ile çok-tile'lı brush, kenar vertex
       senkronu, kirli dikdörtgen doku yüklemesi. Undo artık tüm diziyi değil,
       tile başına kirli dikdörtgenin önce/sonra yamasını saklar.
@@ -687,10 +701,62 @@ Doğrulama (2026-10-22):
       16-bit RAW okuma, little-endian export, kopyalı kenarlar ve min/max özetleri
       testli. Tile başına generator ilerleme sayacıyla worker'a taşınmaya hazır;
       PNG, editör UI ve worker bağlantısı açık.*
-- [ ] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
+- [x] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
       `landscape-spline-chain`, `runtime-parity`, `game-starter` yeşil.
-- [ ] Ekran görüntüsü karşılaştırması: legacy landscape eski ve yeni
+- [x] Ekran görüntüsü karşılaştırması: legacy landscape eski ve yeni
       renderer'da görsel olarak eşdeğer (tolerans belgelenir).
+
+**Uygulama notu — renderer geçişi (2026-10-25).**
+
+- *Render kaynağı* (`engine/terrain/terrainRenderSource.ts`, saf): legacy
+  Landscape, aktörün yerel uzayında padded 1×1 tile olur. Tile boyu quad
+  sayısının bir sonraki ikinin kuvveti; padding kenar örneklerini tekrarlar;
+  `extentX/extentZ` çizimi ve raycast'i yazılmış alana kırpar; `heightScale`
+  yüksekliklere katlanır. Böylece kare olmayan, ikinin kuvveti olmayan ve
+  döndürülmüş landscape'ler yeniden örneklenmeden aynı görünür. World Terrain
+  dokümanı dünya uzayında birebir kaynak olur.
+- *Kare başına seçim* `mesh.onBeforeRender` içinde, çizen kameranın frustum'uyla
+  ve yerel uzayda yapılır (planar yansıma, cube capture dahil). Düğümler
+  RGBA32F bir `DataTexture`'a paketlenir; shader `gl_InstanceID` + `texelFetch`
+  ile okur. Sebep: three r184 attribute'ları `onBeforeRender`'dan önce, doku ve
+  uniform'ları sonra yükler. Ortografik kamerada LOD kamerası arazi tepesine
+  indirilir.
+- *Düğüm → veri:* tek bir yüklü tile'ın içindeki her düğüm (menzil dışındaki
+  tam morph olmuş tile düğümleri dahil) o tile'ı okur; birden çok tile'ı kapsayan
+  düğümler global haritayı okur. Tile ve global harita aynı nokta örneklerini
+  taşıdığı için komşu düğümler çatlamaz. Global haritada ağırlık yok; çok tile'lı
+  dünyada uzak düğümler taban katman rengini gösterir (Faz 3/4'te global ağırlık
+  haritası).
+- *Bağlama* (`engine/render-three/landscape.ts`): API aynı. Grup düz `Group`
+  kalır (spline mesh/overlay'ler altında); terrain mesh'inin adı
+  `landscape-terrain`. Sculpt/paint kirli dikdörtgeni tile'a kopyalar ve tek
+  doku katmanı yükler; chunk geometrisi yeniden kurulmaz. Seçim outline'ı terrain
+  mesh'ini atlar (paylaşılan geometrisi düz patch'tir). Terrain mesh'i
+  `userData.noAmbientOcclusion` taşır: GTAO normal pass'i malzemeyi
+  değiştirdiğinde displacement düşerdi (Faz 7'de derinlik okuyan pass'lerle
+  birlikte).
+- *Görsel eşdeğerlik:* aynı sayfa iki worktree'de (eski chunk renderer / yeni),
+  RuntimeParity arazisi ve döndürülmüş, kare olmayan, `heightScale = 1.5`
+  boyalı bir test arazisiyle, SwiftShader'da 1024×640 çizildi. Arazi
+  piksellerinde ortalama mutlak fark (0–255): lit 1,31 (piksellerin %0,39'u
+  > 32), alçak kamera lit 1,80 (%0,19), slope 2,35 (%0,36), layer 1,22 (%0,36).
+  Kaynak: köşe başına interpolasyon yerine piksel başına normal/renk ve
+  ağırlıkların RGBA8'e quantize edilmesi. Tolerans: lit/slope/layer'da ortalama
+  ≤ 3, > 32 farklı piksel ≤ %1. Height görünümü `heightScale ≠ 1` arazide
+  bilinçli olarak farklı: eski renderer ölçekli yükseklikleri ölçeksiz aralıkla
+  boyuyordu; yeni renderer ölçekli aralığı kullanır (`heightScale = 1`
+  RuntimeParity arazisinde fark yok).
+- *Doğrulama:* engine testlerine 13 kontrol eklendi (render kaynağı, extent
+  kırpması, doku havuzu, düğüm paketleme, shader enjeksiyonu, bağlama). Bunların
+  arasında döndürülmüş arazide 60 ışının eski chunk mesh'iyle aynı noktaya
+  vurması (1e-4) da var. Shader'lar headless Chromium'da derlendi; dört görünüm
+  modu, delikli 2×2 dünya ve yakın kamerada LOD geçişi çatlaksız çizildi.
+  Smoke'lar: terrain'e dokunan 10 smoke, kritik paket, spline ve araç
+  smoke'ları geçti; "TPS karakter E ile biner" bu ortamda eski commit'te de
+  aynı şekilde düşüyor (seviyesinde arazi yok).
+- *Bilinen sınır:* çok tile'lı dünyada tile kenarında normal tek taraflı
+  hesaplanır, hafif bir ışık çizgisi görünür (S1 bulgusu); apron ya da komşu slot
+  örneklemesi çok tile'lı dünyanın runtime'a bağlandığı adımda.
 
 ## Faz 3 — Fizik, hareket, navigasyon zemini
 

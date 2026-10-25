@@ -241,6 +241,22 @@ export interface TerrainVertexEdit {
 /** Bound one synchronous preview/undo transaction; callers can split larger regions. */
 export const TERRAIN_REGION_MAX_VERTICES = 1 << 20;
 
+/** Shared preflight, including the allocation limit, before loading edit tiles. */
+export function terrainRegionGridBounds(def: WorldTerrainDef, bounds: TerrainWorldBounds): TerrainDirtyRect | null {
+  if (![bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ].every(Number.isFinite)
+    || bounds.minX > bounds.maxX || bounds.minZ > bounds.maxZ) throw new Error("Invalid terrain edit bounds");
+  const { tileQuads: q, spacing, origin, tilesX, tilesZ } = def;
+  const x0 = Math.max(0, Math.ceil((bounds.minX - origin[0]) / spacing));
+  const x1 = Math.min(tilesX * q, Math.floor((bounds.maxX - origin[0]) / spacing));
+  const z0 = Math.max(0, Math.ceil((bounds.minZ - origin[2]) / spacing));
+  const z1 = Math.min(tilesZ * q, Math.floor((bounds.maxZ - origin[2]) / spacing));
+  if (x1 < x0 || z1 < z0) return null;
+  if ((x1 - x0 + 1) * (z1 - z0 + 1) > TERRAIN_REGION_MAX_VERTICES) {
+    throw new Error("Terrain edit region is too large; split the operation into smaller regions");
+  }
+  return { x0, x1, z0, z1 };
+}
+
 /**
  * Prepare a region edit without mutating tiles or summaries. Compute each world
  * vertex once from its positive-side owner, then copy its requested values to
@@ -252,17 +268,10 @@ export function createTerrainRegionPatches(
   bounds: TerrainWorldBounds,
   edit: TerrainVertexEdit,
 ): TerrainUndoPatch[] {
-  if (![bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ].every(Number.isFinite)
-    || bounds.minX > bounds.maxX || bounds.minZ > bounds.maxZ) throw new Error("Invalid terrain edit bounds");
-  const { tileQuads: q, spacing, origin, tilesX, tilesZ } = world.def;
-  const x0 = Math.max(0, Math.ceil((bounds.minX - origin[0]) / spacing));
-  const x1 = Math.min(tilesX * q, Math.floor((bounds.maxX - origin[0]) / spacing));
-  const z0 = Math.max(0, Math.ceil((bounds.minZ - origin[2]) / spacing));
-  const z1 = Math.min(tilesZ * q, Math.floor((bounds.maxZ - origin[2]) / spacing));
-  if (x1 < x0 || z1 < z0) return [];
-  if ((x1 - x0 + 1) * (z1 - z0 + 1) > TERRAIN_REGION_MAX_VERTICES) {
-    throw new Error("Terrain edit region is too large; split the operation into smaller regions");
-  }
+  const rect = terrainRegionGridBounds(world.def, bounds);
+  if (!rect) return [];
+  const { x0, x1, z0, z1 } = rect;
+  const { spacing, origin } = world.def;
   const required = new Set(world.def.tiles.map((entry) => entry.key));
   const staged = new Map<string, {
     rect: TerrainDirtyRect;

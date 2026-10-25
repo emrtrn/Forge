@@ -1,6 +1,5 @@
-import type { ForgeLandscapeSpline } from "../scene/landscape";
 import { PHYSICAL_MATERIAL_IDS } from "../scene/collision";
-import { validateLandscapeSplines } from "../scene/landscapeSplineValidation";
+import { normalizeTerrainSplines } from "./terrainSplineData";
 import {
   isValidTileQuads, parseTileKey, tileKey, TERRAIN_MAX_LAYERS, TERRAIN_MAX_TILES_PER_AXIS,
   type WorldTerrainDef,
@@ -79,6 +78,6 @@ export function normalizeWorldTerrain(value: unknown): WorldTerrainDef {
   return {
     schema: 1, type: "worldTerrain", name: text(input.name, "terrain.name"), tileQuads, spacing,
     tilesX, tilesZ, origin, heightMin, heightMax, layers, tiles, collision: input.collision,
-    ...(input.splines === undefined ? {} : { splines: validateLandscapeSplines(input.splines) as unknown as ForgeLandscapeSpline[] }),
+    ...(input.splines === undefined ? {} : { splines: normalizeTerrainSplines(input.splines) }),
   };
 }

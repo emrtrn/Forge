@@ -1,6 +1,7 @@
 import { LANDSCAPE_QUADS_PER_CHUNK, type ForgeLandscapeData, type LandscapeLayerWeights } from "../scene/landscape";
 import type { LayoutLandscape } from "../scene/layout";
 import { legacyLandscapeToWorldTerrain } from "./terrainLegacy";
+import { migrateTerrainSplineCoordinates, terrainSplineInLocalFrame } from "./terrainSplineData";
 import { encodeTerrainGlobalMap } from "./terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "./terrainRenderSource";
 import { type WorldTerrainDocument } from "./terrainLoader";
@@ -58,7 +59,7 @@ export function terrainDocumentToLandscape({ def, tiles }: WorldTerrainDocument)
       ...(layer.physicalMaterial ? { physicalMaterial: layer.physicalMaterial } : {}),
       weights: Array.from(tile.heights, (_height, vertex) => terrainTileLayerWeight(tile, index, vertex)),
     })),
-    ...(def.splines === undefined ? {} : { splines: structuredClone(def.splines) }),
+    ...(def.splines === undefined ? {} : { splines: def.splines.map((spline) => terrainSplineInLocalFrame(def, spline)) }),
   };
   sourceDefinitions.set(data, def);
   return data;
@@ -77,7 +78,7 @@ export function captureTerrainSnapshot(actor: LayoutLandscape, data: ForgeLandsc
   if (converted.warnings.length) {
     throw new Error(`Terrain migration requires explicit adaptation: ${converted.warnings.join(" ")}`);
   }
-  const def = converted.def;
+  const def = migrateTerrainSplineCoordinates(converted.def);
   const previous = sourceDefinitions.get(data);
   if (previous) {
     def.heightMin = Math.min(previous.heightMin, def.tiles[0]!.minHeight - 1);

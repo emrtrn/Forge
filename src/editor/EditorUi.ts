@@ -4356,6 +4356,7 @@ export class EditorUi {
       getSelectedLandscapeSplinePoints: () => this.app.getSelectedLandscapeSplinePoints(),
       setSelectedLandscapeSplinePointPosition: (pointId, position) =>
         this.app.setSelectedLandscapeSplinePointPosition(pointId, position),
+      snapSelectedLandscapeSplinePoint: () => this.app.snapSelectedLandscapeSplinePoint(),
       deleteSelectedLandscapeSplinePoint: (pointId) => this.app.deleteSelectedLandscapeSplinePoint(pointId),
       setSelectedLandscapeSplinePointShape: (pointId, patch) =>
         this.app.setSelectedLandscapeSplinePointShape(pointId, patch),

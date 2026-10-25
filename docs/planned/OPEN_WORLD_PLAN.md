@@ -2226,8 +2226,17 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       Lake/Puddle/Ocean sırası onaylandı. 8A1'de `terrainSplines.ts` dünya
       spline dönüşümü ve `terrainEdit` çok tile deform/boya patch çekirdeği
       eklendi. 11 yeni regresyon ve tam `build:verify` (1.916 engine kontrolü)
-      geçti. Editör/runtime/kayıt aktarımı ve tarayıcı kabulü sonraki dilimlerdir;
-      mevcut `def.splines` merkez-yerel anlamını korur. Koordinat, kimlik,
+      geçti. **8A2 veri geçişi tamam (2026-10-25):** yeni save snapshot'larında
+      spline başına `coordinateSpace: "world"`; işaretsiz eski veri okunur,
+      1×1 köprü dünya verisini mevcut yerel editör/runtime'a uyarlar. Ortak
+      runtime/save allowlist, açık kopya migrasyonu ve repeat-save korunumu;
+      8 yeni regresyon, tam `build:verify` (1.925 engine kontrolü) ve nehirli
+      migrasyon/Save/Reload/Play Chromium smoke'u (2/2) geçti. Çok-tile editör
+      bağlantısı (8A3), yol çıktısı (8A4), nehir aktarımı (8A5) ve bunların
+      görsel/performans kabulü açık.
+      **8A3 devir (2026-10-26):** Çok-tile spline editör kodu eklendi; son
+      tarayıcı kabulü tamamlanmadı. Kullanıcı isteğiyle commit/push noktasında
+      sonlandırıldı; detay ve devam adımları alt plan §11.7'dedir. Koordinat, kimlik,
       eksik tile ve undo sözleşmesi ile 8A0–8A5
       iş sırası [Water Body alt planı §11](WORLD_TERRAIN_WATER_BODY_PLAN.md#11-uygulama-başlangıcı--2026-10-25)
       içinde kayıtlıdır. Bu ana madde uçtan uca aktarım kabulüne kadar açık kalır.

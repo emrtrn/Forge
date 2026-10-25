@@ -61,6 +61,13 @@ export interface WorldTerrainTileSummary {
   maxHeight: number;
 }
 
+/** Missing frame is the schema-1 centre-local compatibility format. */
+export type TerrainSpline = ForgeLandscapeSpline & { coordinateSpace?: "world" };
+
+export interface WorldTerrainSpline extends ForgeLandscapeSpline {
+  coordinateSpace: "world";
+}
+
 export interface WorldTerrainDef {
   schema: typeof TERRAIN_SCHEMA;
   type: "worldTerrain";
@@ -81,11 +88,11 @@ export interface WorldTerrainDef {
   tiles: WorldTerrainTileSummary[];
   collision: boolean;
   /**
-   * Road/spline data carried over from a legacy Landscape, still in that
-   * Landscape's local frame (relative to the terrain centre), until splines
-   * move to world space (OPEN_WORLD_PLAN Faz 8).
+   * Road/spline data. New saves mark each spline coordinateSpace:"world".
+   * Unmarked schema-1 data remains relative to the terrain centre when read;
+   * terrainSplineData provides explicit copy migration and the 1x1 adapter.
    */
-  splines?: ForgeLandscapeSpline[];
+  splines?: TerrainSpline[];
 }
 
 /**

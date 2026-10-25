@@ -1,4 +1,5 @@
 import type { TerrainEditWorld } from "./terrainEdit";
+import { migrateTerrainSplineCoordinates } from "./terrainSplineData";
 import { encodeTerrainGlobalMap } from "./terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource, type TerrainGlobalAttributes } from "./terrainRenderSource";
 import { decodeTerrainTile, encodeTerrainTile, type TerrainHeightFormat } from "./terrainTileCodec";
@@ -45,7 +46,7 @@ export function captureWorldTerrainSave(
   formats: ReadonlyMap<string, TerrainHeightFormat>,
   globalAttributes?: TerrainGlobalAttributes,
 ): WorldTerrainSaveSnapshot {
-  const def = structuredClone(world.def);
+  const def = migrateTerrainSplineCoordinates(world.def);
   let low = Infinity;
   let high = -Infinity;
   for (const summary of def.tiles) {

@@ -25,6 +25,15 @@ test("terrain endpoints validate raw binaries, definitions and dropped fields", 
   const saved = await request.post("/__save-terrain", { data: { path: snapshot.path, terrain: { ...snapshot.def, unsupported: 1 } } });
   expect(saved.ok()).toBeTruthy();
   expect((await saved.json()).dropped).toEqual(["terrain.unsupported"]);
+  const world = { ...snapshot.def, splines: [{ id: "world-road", coordinateSpace: "world",
+    points: [{ id: "p", position: [23, 7, -17], width: 2, falloff: 1 }], segments: [] }] };
+  const worldSave = await request.post("/__save-terrain", { data: { path: snapshot.path, terrain: world } });
+  expect(worldSave.ok()).toBeTruthy();
+  expect((await worldSave.json()).dropped).toEqual([]);
+  expect((await (await request.get(`/${snapshot.path}`)).json()).splines).toEqual(world.splines);
+  const invalid = { ...world, splines: [{ ...world.splines[0], coordinateSpace: "invalid" }] };
+  expect((await request.post("/__save-terrain", { data: { path: snapshot.path, terrain: invalid } })).status()).toBe(400);
+  expect((await (await request.get(`/${snapshot.path}`)).json()).splines).toEqual(world.splines);
   expect((await request.post("/__save-terrain", { data: { path: "../escape.terrain.json", terrain: snapshot.def } })).status()).toBe(400);
   expect((await request.post("/__save-terrain", { data: { path: snapshot.path, terrain: { ...snapshot.def, tileQuads: 128 } } })).status()).toBe(400);
 });
@@ -60,6 +69,12 @@ test("legacy terrain Save migrates files, preserves road/water IDs, reloads and 
   const data = await readSavedTerrain(page, level.landscapes[0].dataRef);
   const legacy = JSON.parse(oldBytes.toString());
   expect(data.splines).toEqual(legacy.splines);
+  const definition = await (await request.get(`/${level.landscapes[0].dataRef}`)).json();
+  expect(definition.splines).toEqual(legacy.splines.map((spline: { points: Array<{ position: number[] }> }) => ({
+    ...spline, coordinateSpace: "world", points: spline.points.map((point) => ({
+      ...point, position: point.position.map((value, axis) => Number((value + before.landscapes[0].position[axis]).toFixed(3))),
+    })),
+  })));
   expect(data.heights).toEqual(legacy.heights.map((h: number) => Math.fround(h * legacy.size.heightScale)));
   await page.reload();
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
@@ -67,6 +82,12 @@ test("legacy terrain Save migrates files, preserves road/water IDs, reloads and 
   await expect(page.locator("[data-project-name]")).toHaveText("__playwright-smoke-spline", { timeout: 60_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
   await page.keyboard.press("f");
+  expect((await readSavedTerrain(page, level.landscapes[0].dataRef)).splines).toEqual(legacy.splines);
+  const repeatSave = page.waitForResponse((response) => response.url().endsWith("/__save-layout") && response.request().method() === "POST");
+  await page.getByTestId("editor-save").click();
+  expect((await repeatSave).ok()).toBeTruthy();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 20_000 });
+  expect((await (await request.get(`/${level.landscapes[0].dataRef}`)).json()).splines).toEqual(definition.splines);
   await page.screenshot({ path: testInfo.outputPath("terrain-migrated-editor.png") });
   await page.goto("/?debug");
   await expect.poll(() => messages.some((message) => message.includes("[runtime] scene loaded")), { timeout: 60_000 }).toBeTruthy();

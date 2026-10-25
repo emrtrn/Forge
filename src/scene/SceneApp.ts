@@ -26,6 +26,9 @@ import { exportRawHeightmap, heightmapSamplesToRaw, importRawHeightmap, rawHeigh
 import { decodeHeightmapPng, encodeHeightmapPng16 } from "@engine/terrain/heightmapPng";
 import { legacyTerrainHeightRange } from "@engine/terrain/terrainLegacy";
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
+import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineData";
+import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
+import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
 import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@engine/terrain/worldTerrainExpand";
 import {
@@ -1354,6 +1357,7 @@ export class SceneApp {
    * level's landscapes are rebuilt.
    */
   private worldTerrainStreams = new Map<WorldTerrainDocument, TerrainEditorStreaming>();
+  private worldTerrainSplineBusy = false;
   /** Last height scale used for a heightmap import, echoed back into the Details input. */
   private lastLandscapeImportHeight = 20;
   private readonly editorSaves = new EditorSaveSession(
@@ -2306,6 +2310,8 @@ export class SceneApp {
     const previousLayerId = this.landscapeSculptSettings.activeLayerId;
     const previousEditMode = this.landscapeSculptSettings.editMode;
     const previousSplineTool = this.landscapeSculptSettings.splineTool;
+    const previousSplineId = this.landscapeSculptSettings.activeSplineId;
+    const previousSplinePointId = this.landscapeSculptSettings.activeSplinePointId;
     const previousFoamStampId = this.landscapeSculptSettings.activeRiverWaterFoamStampId;
     const previousFoamStampAnchor = this.landscapeSculptSettings.activeRiverWaterFoamStampAnchor;
     const next = { ...this.landscapeSculptSettings, ...patch };
@@ -2382,6 +2388,8 @@ export class SceneApp {
     if (
       previousEditMode !== this.landscapeSculptSettings.editMode ||
       previousSplineTool !== this.landscapeSculptSettings.splineTool ||
+      previousSplineId !== this.landscapeSculptSettings.activeSplineId ||
+      previousSplinePointId !== this.landscapeSculptSettings.activeSplinePointId ||
       previousFoamStampId !== this.landscapeSculptSettings.activeRiverWaterFoamStampId ||
       previousFoamStampAnchor !== this.landscapeSculptSettings.activeRiverWaterFoamStampAnchor
     ) {
@@ -6878,7 +6886,7 @@ export class SceneApp {
     }
     const object = this.landscapeObjects[index];
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!object || !data) return;
     const visible =
       this.landscapeSculptSettings.editMode === "splines" &&
@@ -6890,6 +6898,8 @@ export class SceneApp {
     const settings = this.landscapeSculptSettings;
     const overlay = new Group();
     overlay.name = "landscape-spline-overlay";
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    if (document) overlay.position.set(...worldTerrainActorPosition(document.def)).negate();
     const markerGeometry = new SphereGeometry(0.6, 16, 12);
     const pointMaterial = new MeshBasicMaterial({ color: 0x35c4ff, depthTest: false, transparent: true, opacity: 0.95 });
     const activePointMaterial = new MeshBasicMaterial({ color: 0xffd23f, depthTest: false, transparent: true, opacity: 1 });
@@ -8728,9 +8738,6 @@ export class SceneApp {
       delete actor.rotation;
       this.onStatus?.(`${actor.name ?? actor.id}: placement taken from its terrain definition.`, "warning");
     }
-    if (document.def.splines?.length) {
-      console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
-    }
   }
 
   /**
@@ -8740,7 +8747,7 @@ export class SceneApp {
    * loaded with; tiles that never came from disk use `newTileFormat`.
    */
   private editableWorldTerrain(path: string, loaded: WorldTerrainDocument, newTileFormat?: TerrainHeightFormat): WorldTerrainDocument {
-    const world = createTerrainEditWorld(loaded.def, loaded.tiles.values());
+    const world = createTerrainEditWorld(migrateTerrainSplineCoordinates(loaded.def), loaded.tiles.values());
     const formats = new Map<string, TerrainHeightFormat>();
     for (const [key, tile] of loaded.tiles) {
       const format = (tile as Partial<DecodedTerrainTile>).heightFormat ?? newTileFormat;
@@ -8853,6 +8860,22 @@ export class SceneApp {
     return this.selection.index;
   }
 
+  /** Live editor source: 1x1 points are local, multi-tile points are world-space. */
+  private landscapeSplineSource(id: string): Pick<ForgeLandscapeData, "splines"> | null {
+    return this.worldTerrains.get(id)?.def ?? this.landscapeData.get(id) ?? null;
+  }
+
+  private markLandscapeSplineDirty(id: string): void {
+    const document = this.worldTerrains.get(id);
+    if (document) this.worldTerrainSessions.get(document)?.markDefinitionDirty();
+    else this.markLandscapeDirty(id);
+  }
+
+  private defaultLandscapeSplinePaintLayer(): string {
+    const layers = this.getSelectedLandscapeLayers();
+    return layers[1]?.id ?? layers[0]?.id ?? LANDSCAPE_DEFAULT_LAYERS[1]!.id;
+  }
+
   private ensureLandscapeBrushCursor(): Mesh {
     if (this.landscapeBrushCursor) return this.landscapeBrushCursor;
     const cursor = new Mesh(
@@ -8881,7 +8904,7 @@ export class SceneApp {
 
   private updateLandscapeBrushHover(clientX: number, clientY: number): void {
     // Foliage mode owns the brush cursor; never show the landscape sculpt ring too.
-    if (this.foliageModeActive || this.meshPaintModeActive) {
+    if (this.foliageModeActive || this.meshPaintModeActive || this.landscapeSculptSettings.editMode === "splines") {
       this.clearLandscapeBrushHover();
       return;
     }
@@ -8911,7 +8934,8 @@ export class SceneApp {
     if (this.foliageModeActive || this.meshPaintModeActive) return false;
     // Alt+left is a temporary sculpt tool; other terrain modes keep camera orbit.
     if (event.altKey && this.landscapeSculptSettings.editMode !== "sculpt") return false;
-    if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)) {
+    if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)
+      && this.landscapeSculptSettings.editMode !== "splines") {
       return this.beginTerrainStroke(event);
     }
     if (this.landscapeSculptSettings.riverWaterRingFoamPlacementId) {
@@ -8950,7 +8974,7 @@ export class SceneApp {
     const index = this.selection.index;
     const object = this.landscapeObjects[index];
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!object || !data?.splines?.length) return null;
     object.updateWorldMatrix(true, false);
     const camera = this.editorViewportCamera();
@@ -8963,10 +8987,9 @@ export class SceneApp {
     let best: { splineId: string; pointId: string; dist: number } | null = null;
     for (const spline of data.splines) {
       for (const point of spline.points) {
-        projected
-          .set(point.position[0], point.position[1] + 0.4, point.position[2])
-          .applyMatrix4(object.matrixWorld)
-          .project(camera);
+        projected.set(point.position[0], point.position[1] + 0.4, point.position[2]);
+        if (!actor || !this.worldTerrains.has(actor.id)) projected.applyMatrix4(object.matrixWorld);
+        projected.project(camera);
         if (projected.z < -1 || projected.z > 1) continue; // behind camera / clipped
         const sx = (projected.x * 0.5 + 0.5) * rect.width;
         const sy = (-projected.y * 0.5 + 0.5) * rect.height;
@@ -8999,16 +9022,15 @@ export class SceneApp {
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
     const object = this.landscapeObjects[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || actor.locked || !object || !data) return null;
     const point = data.splines
       ?.find((spline) => spline.id === activeSplineId)
       ?.points.find((entry) => entry.id === activeSplinePointId);
     if (!point) return null;
     object.updateWorldMatrix(true, false);
-    const world = new Vector3(point.position[0], point.position[1], point.position[2]).applyMatrix4(
-      object.matrixWorld,
-    );
+    const world = new Vector3(...point.position);
+    if (!this.worldTerrains.has(actor.id)) world.applyMatrix4(object.matrixWorld);
     return { index, landscapeId: actor.id, object, splineId: activeSplineId, pointId: activeSplinePointId, world };
   }
 
@@ -9130,10 +9152,45 @@ export class SceneApp {
       this.updateGizmo();
       return true;
     }
-    const hit = this.landscapeLocalHit(event.clientX, event.clientY);
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!hit || hit.landscapeIndex !== index || !actor || !data) return false;
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    if (document && actor) {
+      const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY);
+      if (!hit || hit.index !== index) return false;
+      void this.addWorldTerrainSplinePoint(index, actor.id, document, hit.point);
+      return true;
+    }
+    const hit = this.landscapeLocalHit(event.clientX, event.clientY);
+    if (!hit || hit.landscapeIndex !== index) return false;
+    this.appendLandscapeSplinePoint(index, [round(hit.local.x), round(hit.local.y), round(hit.local.z)]);
+    return true;
+  }
+
+  private async addWorldTerrainSplinePoint(index: number, id: string, document: WorldTerrainDocument, point: Vector3): Promise<void> {
+    if (this.worldTerrainSplineBusy) { this.onStatus?.("Loading terrain for the previous spline operation…", "info"); return; }
+    this.worldTerrainSplineBusy = true;
+    const streaming = this.worldTerrainStreams.get(document);
+    const keys = terrainBrushTileKeys(document.def, point.x, point.z, 0);
+    const active = this.landscapeSculptSettings.activeSplineId;
+    const activePoint = this.landscapeSculptSettings.activeSplinePointId;
+    const revision = JSON.stringify(document.def.splines);
+    try {
+      await streaming?.demand(keys);
+      if (this.worldTerrains.get(id) !== document || this.selectedEditableLandscapeIndex() !== index
+        || this.landscapeSculptSettings.editMode !== "splines" || this.landscapeSculptSettings.splineTool !== "draw"
+        || this.landscapeSculptSettings.activeSplineId !== active || this.landscapeSculptSettings.activeSplinePointId !== activePoint
+        || JSON.stringify(document.def.splines) !== revision) return;
+      const height = terrainHeightAt(document.def, { tile: (x, z) => document.tiles.get(tileKey(x, z)) }, point.x, point.z);
+      if (height === null) throw new Error("Exact terrain is unavailable at this point");
+      this.appendLandscapeSplinePoint(index, [round(point.x), round(height), round(point.z)]);
+    } catch (error) { this.onStatus?.(`Spline point failed: ${error instanceof Error ? error.message : String(error)}`, "error"); }
+    finally { streaming?.release(keys); this.worldTerrainSplineBusy = false; }
+  }
+
+  private appendLandscapeSplinePoint(index: number, local: Vec3): void {
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
+    if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     let spline = before.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
     if (!spline) {
@@ -9143,12 +9200,13 @@ export class SceneApp {
       spline = { id: `spline-${number}`, name: `Spline ${number}`, points: [], segments: [] };
       before.push(spline);
     }
-    const local: Vec3 = [round(hit.local.x), round(hit.local.y), round(hit.local.z)];
     const from =
       spline.points.find((point) => point.id === this.landscapeSculptSettings.activeSplinePointId) ??
       spline.points.at(-1);
     // Weld radius scales with the terrain footprint so it feels the same at any size.
-    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
+    const document = this.worldTerrains.get(actor.id);
+    const grid = this.landscapeData.get(actor.id);
+    const worldSize = document ? terrainTileWorldSize(document.def) : grid ? (grid.size.verticesX - 1) * grid.size.spacing : 0;
     const weldDist = Math.max(1.5, worldSize * 0.02);
     // Search every spline, not just the active one, so a click can weld onto a
     // point of another spline to fork/join two roads. The nearest point wins
@@ -9188,7 +9246,6 @@ export class SceneApp {
       activePointId = pointId;
     }
     this.applySelectedLandscapeSplines(index, actor.id, data.splines ? cloneLandscapeSplines(data.splines) : [], before, "Add Landscape Spline Point", activeSplineId, activePointId);
-    return true;
   }
 
   /** Adds a segment between two points if one doesn't already connect them (either direction). */
@@ -9235,7 +9292,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = cloneLandscapeSplines(before);
@@ -9554,6 +9611,7 @@ export class SceneApp {
         const dirty = (side === "after" ? applyTerrainUndoPatches : revertTerrainUndoPatches)(session.world, patches);
         session.markTiles(dirty.keys());
         updateWorldTerrainObjectTiles(object, dirty);
+        if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
         this.scheduleLandscapeFoliageRebuild(landscapeId);
       } else {
         const data = this.landscapeData.get(landscapeId);
@@ -10093,7 +10151,7 @@ export class SceneApp {
   getSelectedLandscapeSplines(): LandscapeSplineView[] {
     if (this.selection?.kind !== "landscape") return [];
     const actor = this.layout?.landscapes?.[this.selection.index];
-    const splines = actor ? this.landscapeData.get(actor.id)?.splines : undefined;
+    const splines = actor ? this.landscapeSplineSource(actor.id)?.splines : undefined;
     return (splines ?? []).map((spline) => ({
       id: spline.id,
       name: spline.name ?? spline.id,
@@ -10107,7 +10165,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return [];
     const actor = this.layout?.landscapes?.[this.selection.index];
     const spline = actor
-      ? this.landscapeData.get(actor.id)?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId)
+      ? this.landscapeSplineSource(actor.id)?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId)
       : undefined;
     return (spline?.points ?? []).map((point) => ({ id: point.id, position: [...point.position] as Vec3, width: point.width, falloff: point.falloff }));
   }
@@ -10115,7 +10173,7 @@ export class SceneApp {
   getSelectedLandscapeSplineSegments(): LandscapeSplineSegmentView[] {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return [];
     const actor = this.layout?.landscapes?.[this.selection.index];
-    const spline = actor ? this.landscapeData.get(actor.id)?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId) : undefined;
+    const spline = actor ? this.landscapeSplineSource(actor.id)?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId) : undefined;
     return (spline?.segments ?? []).map((segment) => ({
       id: segment.id,
       startPointId: segment.startPointId,
@@ -10129,7 +10187,7 @@ export class SceneApp {
       },
       paint: {
         enabled: segment.paint?.enabled ?? false,
-        layerId: segment.paint?.layerId ?? LANDSCAPE_DEFAULT_LAYERS[1]!.id,
+        layerId: segment.paint?.layerId ?? this.defaultLandscapeSplinePaintLayer(),
         strength: segment.paint?.strength ?? 1,
       },
       mesh: {
@@ -10150,7 +10208,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = cloneLandscapeSplines(before);
@@ -10171,7 +10229,7 @@ export class SceneApp {
       };
     }
     if (patch.paint) {
-      const current = segment.paint ?? { enabled: false, layerId: LANDSCAPE_DEFAULT_LAYERS[1]!.id, strength: 1 };
+      const current = segment.paint ?? { enabled: false, layerId: this.defaultLandscapeSplinePaintLayer(), strength: 1 };
       segment.paint = {
         enabled: patch.paint.enabled ?? current.enabled,
         layerId: patch.paint.layerId ?? current.layerId,
@@ -10204,6 +10262,10 @@ export class SceneApp {
 
   /** Destructively bakes the active spline's deform config into the heightfield (undoable). */
   applySelectedLandscapeSplineDeform(): void {
+    if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)) {
+      void this.applyWorldTerrainSpline("deform");
+      return;
+    }
     this.applyActiveLandscapeSplineHeights(
       (data, spline) => applyLandscapeSplineDeform(data, spline),
       "Apply Spline Terrain Deform",
@@ -10231,6 +10293,10 @@ export class SceneApp {
 
   /** Destructively bakes the active spline's paint config into the paint layers (undoable). */
   applySelectedLandscapeSplinePaint(): void {
+    if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)) {
+      void this.applyWorldTerrainSpline("paint");
+      return;
+    }
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
@@ -10272,10 +10338,12 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape") return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
-    const number = before.length + 1;
+    const used = new Set(before.map((entry) => entry.id));
+    let number = 1;
+    while (used.has(`spline-${number}`)) number++;
     const spline: ForgeLandscapeSpline = { id: `spline-${number}`, name: `Spline ${number}`, points: [], segments: [] };
     const after = [...before, spline];
     this.applySelectedLandscapeSplines(index, actor.id, before, after, "Create Landscape Spline", spline.id);
@@ -10291,7 +10359,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = cloneLandscapeSplines(before);
@@ -10315,7 +10383,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !splineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = before.filter((spline) => spline.id !== splineId);
@@ -10327,7 +10395,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !Number.isFinite(position[0]) || !Number.isFinite(position[1]) || !Number.isFinite(position[2])) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     const splineId = this.landscapeSculptSettings.activeSplineId;
     if (!actor || !data || !splineId) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
@@ -10340,11 +10408,36 @@ export class SceneApp {
     this.applySelectedLandscapeSplines(index, actor.id, before, after, "Move Landscape Spline Point", splineId, pointId);
   }
 
+  async snapSelectedLandscapeSplinePoint(): Promise<void> {
+    const index = this.selectedEditableLandscapeIndex();
+    const actor = index === null ? undefined : this.layout?.landscapes?.[index];
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    const splineId = this.landscapeSculptSettings.activeSplineId;
+    const pointId = this.landscapeSculptSettings.activeSplinePointId;
+    const point = document?.def.splines?.find((spline) => spline.id === splineId)?.points.find((point) => point.id === pointId);
+    if (!actor || !document || !point || !pointId || this.worldTerrainSplineBusy) return;
+    const position = [...point.position] as Vec3;
+    const revision = JSON.stringify(document.def.splines);
+    const keys = terrainBrushTileKeys(document.def, position[0], position[2], 0);
+    const streaming = this.worldTerrainStreams.get(document);
+    this.worldTerrainSplineBusy = true;
+    try {
+      await streaming?.demand(keys);
+      if (this.worldTerrains.get(actor.id) !== document || this.selectedEditableLandscapeIndex() !== index
+        || this.landscapeSculptSettings.activeSplineId !== splineId || this.landscapeSculptSettings.activeSplinePointId !== pointId
+        || JSON.stringify(document.def.splines) !== revision) return;
+      const height = terrainHeightAt(document.def, { tile: (x, z) => document.tiles.get(tileKey(x, z)) }, position[0], position[2]);
+      if (height === null) throw new Error("Exact terrain is unavailable at this point");
+      this.setSelectedLandscapeSplinePointPosition(pointId, [position[0], height, position[2]]);
+    } catch (error) { this.onStatus?.(`Snap to terrain failed: ${error instanceof Error ? error.message : String(error)}`, "error"); }
+    finally { streaming?.release(keys); this.worldTerrainSplineBusy = false; }
+  }
+
   setSelectedLandscapeSplinePointShape(pointId: string, patch: { width?: number; falloff?: number }): void {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = cloneLandscapeSplines(before);
@@ -10362,7 +10455,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !segmentId || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = cloneLandscapeSplines(before);
@@ -10383,7 +10476,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !pointId || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const data = actor ? this.landscapeSplineSource(actor.id) : null;
     const splineId = this.landscapeSculptSettings.activeSplineId;
     if (!actor || !data) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
@@ -10396,12 +10489,15 @@ export class SceneApp {
   }
 
   private applySelectedLandscapeSplines(index: number, landscapeId: string, before: ForgeLandscapeSpline[], after: ForgeLandscapeSpline[], label: string, activeSplineId: string | null, activeSplinePointId: string | null = null, activeSplineSegmentId: string | null = null): void {
+    if (this.layout?.landscapes?.[index]?.locked) return;
+    const document = this.worldTerrains.get(landscapeId);
     const selection: Selection = { kind: "landscape", index };
     const apply = (splines: ForgeLandscapeSpline[]): void => {
-      const data = this.landscapeData.get(landscapeId);
+      if (document && this.worldTerrains.get(landscapeId) !== document) return;
+      const data = this.landscapeSplineSource(landscapeId);
       if (!data) return;
-      data.splines = cloneLandscapeSplines(splines);
-      this.markLandscapeDirty(landscapeId);
+      data.splines = cloneLandscapeSplines(splines).map((spline) => document ? { ...spline, coordinateSpace: "world" as const } : spline);
+      this.markLandscapeSplineDirty(landscapeId);
       this.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId, activeSplineSegmentId });
       void this.rebuildLandscapeSplineMeshes(index);
       // River Water Bodies reference the same sidecar spline, so an editor point,
@@ -10413,6 +10509,33 @@ export class SceneApp {
       this.scheduleAutoSave();
     };
     this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
+  }
+
+  private async applyWorldTerrainSpline(effect: TerrainSplineEffect): Promise<void> {
+    const index = this.selectedEditableLandscapeIndex();
+    const actor = index === null ? undefined : this.layout?.landscapes?.[index];
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    const source = document?.def.splines?.find((spline) => spline.id === this.landscapeSculptSettings.activeSplineId);
+    if (!actor || !document || !session || !source || this.worldTerrainSplineBusy) return;
+    const spline: WorldTerrainSpline = { ...structuredClone(source), coordinateSpace: "world" };
+    const revision = JSON.stringify(document.def.splines);
+    let keys: string[] = [];
+    const streaming = this.worldTerrainStreams.get(document);
+    this.worldTerrainSplineBusy = true;
+    try {
+      keys = terrainSplineTileKeys(document.def, spline, effect);
+      if (streaming) this.onStatus?.("Loading terrain for spline effects…", "info");
+      await streaming?.demand(keys);
+      if (this.worldTerrains.get(actor.id) !== document || this.selectedEditableLandscapeIndex() !== index
+        || this.landscapeSculptSettings.activeSplineId !== spline.id || this.landscapeSculptSettings.editMode !== "splines"
+        || JSON.stringify(document.def.splines) !== revision) return;
+      const patches = createTerrainSplinePatches(session.world, spline, effect);
+      if (patches.length === 0) { this.onStatus?.(`No spline ${effect} change: enable the segment effect and adjust its settings.`, "info"); return; }
+      this.executeTerrainPatchCommand(effect === "deform" ? "Apply Spline Terrain Deform" : "Apply Spline Layer Paint", actor.id, document, patches);
+      this.onStatus?.(`Spline ${effect} applied (${patches.length} tiles).`, "info");
+    } catch (error) { this.onStatus?.(`Spline ${effect} failed: ${error instanceof Error ? error.message : String(error)}`, "error"); }
+    finally { streaming?.release(keys); this.worldTerrainSplineBusy = false; }
   }
 
   /**
@@ -12642,6 +12765,11 @@ export class SceneApp {
 
   private startGizmoDrag(handle: GizmoHandle, event: PointerEvent): void {
     if (!this.selection) return;
+    const splinePoint = this.activeLandscapeSplinePoint();
+    if (splinePoint) {
+      if (handle.tool === "move") this.startLandscapeSplinePointDrag(handle, event, splinePoint);
+      return;
+    }
     const blocked = this.transformBlockedReason(this.selection);
     if (blocked) {
       this.onStatus?.(blocked, "warning");
@@ -12649,12 +12777,6 @@ export class SceneApp {
     }
     // Landscape spline control point (Faz 6.1): drag its world position, mapped
     // back to the point's local space — only the move tool acts on it.
-    const splinePoint = this.activeLandscapeSplinePoint();
-    if (splinePoint) {
-      if (handle.tool !== "move") return;
-      this.startLandscapeSplinePointDrag(handle, event, splinePoint);
-      return;
-    }
     const foamStamp = this.activeRiverWaterFoamStamp();
     if (foamStamp) {
       if (handle.tool !== "move") return;
@@ -12724,7 +12846,7 @@ export class SceneApp {
   ): void {
     const landscapeEditable = this.getSelected();
     if (!landscapeEditable) return;
-    const data = this.landscapeData.get(splinePoint.landscapeId);
+    const data = this.landscapeSplineSource(splinePoint.landscapeId);
     if (!data) return;
 
     this.gizmoInteraction.beginDrag(handle);
@@ -12748,7 +12870,7 @@ export class SceneApp {
       splineId: splinePoint.splineId,
       pointId: splinePoint.pointId,
       before: cloneLandscapeSplines(data.splines ?? []),
-      objectMatrixInverse: splinePoint.object.matrixWorld.clone().invert(),
+      objectMatrixInverse: this.worldTerrains.has(splinePoint.landscapeId) ? new Matrix4() : splinePoint.object.matrixWorld.clone().invert(),
     };
     this.pointerDrag = createGizmoPointerDrag({
       handle,
@@ -12912,15 +13034,13 @@ export class SceneApp {
     const drag = this.landscapeSplinePointDrag;
     if (!drag) return null;
     const object = this.landscapeObjects[drag.index];
-    const point = this.landscapeData
-      .get(drag.landscapeId)
+    const point = this.landscapeSplineSource(drag.landscapeId)
       ?.splines?.find((spline) => spline.id === drag.splineId)
       ?.points.find((entry) => entry.id === drag.pointId);
     if (!object || !point) return null;
     object.updateWorldMatrix(true, false);
-    const world = new Vector3(point.position[0], point.position[1], point.position[2]).applyMatrix4(
-      object.matrixWorld,
-    );
+    const world = new Vector3(...point.position);
+    if (!this.worldTerrains.has(drag.landscapeId)) world.applyMatrix4(object.matrixWorld);
     return [world.x, world.y, world.z];
   }
 
@@ -12945,14 +13065,13 @@ export class SceneApp {
   private applyLandscapeSplinePointWorld(world: Vec3): void {
     const drag = this.landscapeSplinePointDrag;
     if (!drag) return;
-    const point = this.landscapeData
-      .get(drag.landscapeId)
+    const point = this.landscapeSplineSource(drag.landscapeId)
       ?.splines?.find((spline) => spline.id === drag.splineId)
       ?.points.find((entry) => entry.id === drag.pointId);
     if (!point) return;
     const local = new Vector3(...world).applyMatrix4(drag.objectMatrixInverse);
     point.position = [round(local.x), round(local.y), round(local.z)];
-    this.markLandscapeDirty(drag.landscapeId);
+    this.markLandscapeSplineDirty(drag.landscapeId);
     this.refreshLandscapeSplineOverlay(drag.index);
     this.updateGizmo();
     this.emitSelectionChanged();
@@ -12979,7 +13098,7 @@ export class SceneApp {
     const drag = this.landscapeSplinePointDrag;
     this.landscapeSplinePointDrag = null;
     if (!drag) return;
-    const data = this.landscapeData.get(drag.landscapeId);
+    const data = this.landscapeSplineSource(drag.landscapeId);
     if (!data) return;
     const after = cloneLandscapeSplines(data.splines ?? []);
     if (JSON.stringify(drag.before) === JSON.stringify(after)) return;

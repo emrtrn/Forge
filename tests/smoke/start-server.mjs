@@ -15,7 +15,9 @@ try {
     root: REPO_ROOT,
     publicDir: resolve(root, "public"),
     cacheDir: resolve(root, "vite-cache"),
-    server: { host: "127.0.0.1", port: SMOKE_PORT, strictPort: true },
+    // A test must finish against the modules its page loaded, even when another
+    // editor session changes source files. Reloads under test remain explicit.
+    server: { host: "127.0.0.1", port: SMOKE_PORT, strictPort: true, hmr: false },
   });
   await writeFile(resolve(root, "server.json"), JSON.stringify({ root, pid: process.pid }), "utf8");
   await server.listen();

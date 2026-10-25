@@ -1,40 +1,31 @@
-import {
-  SplineCorridorIndex, splineToPolyline,
-  type ForgeLandscapeSpline,
-} from "../scene/landscape";
+import { SplineCorridorIndex, splineToPolyline } from "../scene/landscape";
 import { validateLandscapeSplines } from "../scene/landscapeSplineValidation";
 import { normalizeLandscapeBrushWeights } from "../scene/landscapeBrush";
-import type { Vec3 } from "../scene/layout";
-import { createTerrainRegionPatches, type TerrainEditWorld, type TerrainUndoPatch } from "./terrainEdit";
-import type { WorldTerrainDef } from "./terrainTypes";
-import { worldTerrainActorPosition } from "./worldTerrainActor";
-
-/** Explicit API frame; the persisted def.splines field remains legacy-local. */
-export interface WorldTerrainSpline extends ForgeLandscapeSpline {
-  coordinateSpace: "world";
-}
-
-type TerrainSplineFrame = Pick<WorldTerrainDef, "tileQuads" | "spacing" | "tilesX" | "tilesZ" | "origin">;
+import { createTerrainRegionPatches, terrainRegionGridBounds, type TerrainEditWorld, type TerrainUndoPatch } from "./terrainEdit";
+import { terrainTileWorldBounds, type WorldTerrainDef, type WorldTerrainSpline } from "./terrainTypes";
+export type { WorldTerrainSpline } from "./terrainTypes";
+export { terrainSplineToWorld, terrainSplineToLocal } from "./terrainSplineData";
 export type TerrainSplineEffect = "deform" | "paint" | "both";
 
-function translatedSpline(spline: ForgeLandscapeSpline, offset: Vec3): ForgeLandscapeSpline {
-  const copy = structuredClone(spline);
-  for (const point of copy.points) {
-    point.position = point.position.map((value, axis) => value + offset[axis]!) as Vec3;
-  }
-  return copy;
-}
-
-/** Copy legacy centre-local positions into world space; tangents stay vectors. */
-export function terrainSplineToWorld(def: TerrainSplineFrame, spline: ForgeLandscapeSpline): WorldTerrainSpline {
-  if ("coordinateSpace" in spline) throw new Error("Terrain spline is already in an explicit coordinate frame");
-  return { ...translatedSpline(spline, worldTerrainActorPosition(def)), coordinateSpace: "world" };
-}
-
-/** Copy back for compatibility consumers. Never persists or mutates the source. */
-export function terrainSplineToLocal(def: TerrainSplineFrame, spline: WorldTerrainSpline): ForgeLandscapeSpline {
-  const { coordinateSpace: _space, ...local } = spline;
-  return translatedSpline(local, worldTerrainActorPosition(def).map((value) => -value) as Vec3);
+/** Declared corridor tiles plus seam neighbours, without requiring residency. */
+export function terrainSplineTileKeys(def: WorldTerrainDef, spline: WorldTerrainSpline, effect: TerrainSplineEffect = "both"): string[] {
+  const boxes = splineToPolyline(spline).filter(({ segment }) =>
+    (effect !== "paint" && segment.deform?.enabled && (segment.deform.flatten || segment.deform.raiseTerrain || segment.deform.lowerTerrain))
+    || (effect !== "deform" && segment.paint?.enabled && segment.paint.strength > 0 && def.layers.some((layer) => layer.id === segment.paint!.layerId)))
+    .map(({ start, end }) => {
+    const reach = Math.max(start.width, end.width) / 2 + Math.max(start.falloff, end.falloff) + def.spacing;
+    return { minX: Math.min(start.position[0], end.position[0]) - reach, maxX: Math.max(start.position[0], end.position[0]) + reach,
+      minZ: Math.min(start.position[2], end.position[2]) - reach, maxZ: Math.max(start.position[2], end.position[2]) + reach };
+  });
+  if (boxes.length === 0) return [];
+  // Reject oversized synchronous transactions before they fetch a whole world.
+  terrainRegionGridBounds(def, { minX: Math.min(...boxes.map((box) => box.minX)), maxX: Math.max(...boxes.map((box) => box.maxX)),
+    minZ: Math.min(...boxes.map((box) => box.minZ)), maxZ: Math.max(...boxes.map((box) => box.maxZ)) });
+  return def.tiles.filter(({ key }) => {
+    const [x, z] = key.split("_").map(Number) as [number, number];
+    const tile = terrainTileWorldBounds(def, x, z);
+    return boxes.some((box) => box.maxX >= tile.minX && box.minX <= tile.maxX && box.maxZ >= tile.minZ && box.minZ <= tile.maxZ);
+  }).map(({ key }) => key);
 }
 
 /**

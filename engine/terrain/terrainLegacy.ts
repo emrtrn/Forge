@@ -37,7 +37,7 @@ import {
 export interface LegacyLandscapeConversion {
   def: WorldTerrainDef;
   tile: TerrainTileData;
-  /** Landscape-local splines, carried unchanged until world-space splines (Faz 8). */
+  /** Landscape-local compatibility view; save snapshots migrate the definition. */
   splines: ForgeLandscapeSpline[];
   warnings: string[];
 }

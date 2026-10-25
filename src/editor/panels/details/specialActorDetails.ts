@@ -144,6 +144,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   setSelectedLandscapeSplineSmooth: (smooth: boolean) => void;
   getSelectedLandscapeSplinePoints: () => LandscapeSplinePointView[];
   setSelectedLandscapeSplinePointPosition: (pointId: string, position: Vec3) => void;
+  snapSelectedLandscapeSplinePoint: () => Promise<void>;
   deleteSelectedLandscapeSplinePoint: (pointId?: string | null) => void;
   setSelectedLandscapeSplinePointShape: (pointId: string, patch: { width?: number; falloff?: number }) => void;
   getSelectedLandscapeSplineSegments: () => LandscapeSplineSegmentView[];
@@ -205,7 +206,7 @@ function landscapeModeSelect(
 
 export function renderLandscapeDetails(options: SpecialActorDetailsOptions): void {
   const worldTerrain = options.getSelectedWorldTerrain();
-  if (worldTerrain) {
+  if (worldTerrain && options.getLandscapeSculptSettings().editMode !== "splines") {
     renderWorldTerrainDetails(options, worldTerrain);
     return;
   }
@@ -309,7 +310,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         )
         .join("")}</div>
       <div class="detail-vector">
-        <span class="detail-vector-label">Location</span>
+        <span class="detail-vector-label">${worldTerrain ? "World Location" : "Location"}</span>
         <div class="vector-fields">${["x", "y", "z"]
           .map(
             (axis, index) =>
@@ -321,7 +322,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       </div>
       <label class="detail-row"><span>Width</span><input data-landscape-spline-point-shape="width" type="number" min="0.1" step="0.1" value="${activeSplinePoint.width}" ${lockedAttr} /></label>
       <label class="detail-row"><span>Falloff</span><input data-landscape-spline-point-shape="falloff" type="number" min="0" step="0.1" value="${activeSplinePoint.falloff}" ${lockedAttr} /></label>
-      <button type="button" class="detail-action-button" data-landscape-spline-point-delete ${lockedAttr}>Delete Point</button>`
+      <button type="button" class="detail-action-button" data-landscape-spline-point-delete ${lockedAttr}>Delete Point</button>
+      ${worldTerrain ? `<button type="button" class="detail-action-button" data-landscape-spline-point-snap ${lockedAttr}>Snap to Terrain</button>` : ""}`
     : "";
   const segmentLayerOptions = layers
     .map((layer) => `<option value="${escapeHtml(layer.id)}" ${activeSegment?.paint.layerId === layer.id ? "selected" : ""}>${escapeHtml(layerDisplayName(layer))}</option>`)
@@ -339,6 +341,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="paint.enabled" ${activeSegment.paint.enabled ? "checked" : ""} ${lockedAttr} /><span>Paint Layer</span></label>
       <label class="detail-row"><span>Layer</span><select data-landscape-segment-layer ${lockedAttr}>${segmentLayerOptions}</select></label>
       <label class="detail-row"><span>Paint Strength</span><input data-landscape-segment-number="paint.strength" type="number" min="0" max="1" step="0.05" value="${activeSegment.paint.strength}" ${lockedAttr} /></label>
+      ${worldTerrain ? `<div class="detail-hint">Spline mesh output will be available in a later update.</div>` : `
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.enabled" ${activeSegment.mesh.enabled ? "checked" : ""} ${lockedAttr} /><span>Spline Mesh</span></label>
       <label class="detail-row"><span>Mesh</span><select data-landscape-segment-mesh ${lockedAttr}>${segmentMeshOptions}</select></label>
       <label class="detail-row"><span>Mesh Spacing</span><input data-landscape-segment-number="mesh.spacing" type="number" min="0.01" step="0.1" value="${activeSegment.mesh.spacing}" ${lockedAttr} /></label>
@@ -347,7 +350,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.fitToLength" ${activeSegment.mesh.fitToLength ? "checked" : ""} ${lockedAttr} /><span>Fit Mesh To Segment</span></label>
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.alignToTerrain" ${activeSegment.mesh.alignToTerrain ? "checked" : ""} ${lockedAttr} /><span>Align To Terrain</span></label>
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.deform" ${activeSegment.mesh.deform ? "checked" : ""} ${lockedAttr} /><span>Deform Mesh Along Curve</span></label>
-      <div class="detail-hint">Mesh length runs along local +Z. Deform Mesh creates curved geometry; it is more expensive than fitted instances.</div>
+      <div class="detail-hint">Mesh length runs along local +Z. Deform Mesh creates curved geometry; it is more expensive than fitted instances.</div>`}
       <div class="landscape-heightmap-actions">
         <button type="button" class="detail-action-button" data-landscape-spline-apply-deform ${lockedAttr}>Apply Deform</button>
         <button type="button" class="detail-action-button" data-landscape-spline-apply-paint ${lockedAttr}>Apply Paint</button>
@@ -364,8 +367,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
           placeholder="Landscape" />
       </label>
-      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
-      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked || Boolean(worldTerrain))}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked || Boolean(worldTerrain))}
       <div class="detail-section">
         <div class="detail-section-title">Landscape Mode</div>
         ${landscapeModeSelect(settings, lockedAttr, LANDSCAPE_EDIT_MODES)}
@@ -452,7 +455,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           </select>
         </label>
       </div>
-      ${heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr, `
+      ${worldTerrain ? "" : heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr, `
         <div class="detail-subsection-title">Any size (resample)</div>
         <label class="detail-row">
           <span>Import Height</span>
@@ -462,11 +465,11 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG (resample)<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
         </div>
         <div class="detail-hint">Resamples any PNG onto this grid; Import Height scales its brightness (0 m to Import Height). Re-import to change the height scale.</div>`)}
-      <div class="detail-section">
+      ${worldTerrain ? `<div class="detail-hint" data-world-terrain-splines>Control points use world coordinates. Draw places points on the terrain. Apply changes the terrain; moving or deleting a spline keeps previously applied edits.</div>` : `<div class="detail-section">
         <div class="detail-section-title">Tiles</div>
         <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
         <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
-      </div>
+      </div>`}
       <div class="detail-section">
         <div class="detail-section-title">Others</div>
         <label class="detail-toggle">
@@ -478,7 +481,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           <span>Lock Movement</span>
         </label>
       </div>
-      ${riverWaterMarkup}
+      ${worldTerrain ? "" : `${riverWaterMarkup}
       ${riverWaterCreateMarkup}
       <div class="detail-section">
         <div class="detail-section-title">Landscape Size</div>
@@ -495,7 +498,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           <input data-landscape-world-size type="number" min="${resolution ? (resolution.verticesX - 1) * 0.01 : 0.01}" max="${resolution ? (resolution.verticesX - 1) * 100 : 10000}" step="0.1" value="${resolution?.worldSize ?? ""}" ${lockedAttr} />
         </label>
         <div class="detail-hint">Changes the terrain width and depth while keeping its height and paint data.</div>
-      </div>
+      </div>`}
     `;
 
   bindPositionRotation(options);
@@ -569,6 +572,10 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-point-delete]")?.addEventListener("click", () => {
     options.deleteSelectedLandscapeSplinePoint(options.getLandscapeSculptSettings().activeSplinePointId);
+    options.refreshDetails();
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-spline-point-snap]")?.addEventListener("click", async () => {
+    await options.snapSelectedLandscapeSplinePoint();
     options.refreshDetails();
   });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-segment]").forEach((button) => {
@@ -1091,7 +1098,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
     : settings.editMode === "sculpt"
     ? terrainSculptControls(settings, lockedAttr)
-    : `<div class="detail-hint">Pick Sculpt or Paint: splines are not supported on a multi-tile Landscape yet.</div>`;
+    : "";
   body.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
@@ -1106,7 +1113,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       ${vectorRow("Rotation", "r", selection.rotation, 1, true)}
       <div class="detail-section" data-world-terrain-tools>
         <div class="detail-section-title">Landscape Mode</div>
-        ${landscapeModeSelect(settings, lockedAttr, ["sculpt", "paint"])}
+        ${landscapeModeSelect(settings, lockedAttr, LANDSCAPE_EDIT_MODES)}
         ${toolsMarkup}
         ${terrainBrushSizeAndStrength(settings, lockedAttr)}
         <label class="detail-row">
@@ -1134,7 +1141,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines and resizing are not available for a multi-tile Landscape yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing and terrain effects; spline mesh output, River Water and resizing are not available for a multi-tile Landscape yet.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Others</div>

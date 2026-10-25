@@ -1,7 +1,7 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
 Tarih: 2026-10-25  
-Durum: Ortak tasarım (8A0) ve ilk motor dilimi (8A1) tamamlandı; editör/nehir aktarımı henüz tamamlanmadı.
+Durum: 8A0–8A2 tamamlandı. 8A3 editör kodu hazır; tarayıcı kabulü açık. Kullanıcı isteğiyle 2026-10-26 tarihinde bu noktada sonlandırıldı.
 Ana plan: [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md)
 
 ## 1. Amaç ve karar durumu
@@ -265,9 +265,9 @@ araçlarının ayrıntılı alt planıdır. Yukarıdaki ilk görüşme kaydı ta
   Tangent'lar yön/uzunluk vektörleridir; konum dönüşümünde ötelenmez.
   Nokta/segment/spline kimlikleri korunur; mevcut River Water referansları
   ileride aynı kimliklere bağlanabilir.
-- İlk motor API'sinde `coordinateSpace: "world"` zorunludur. Mevcut
-  `WorldTerrainDef.splines` alanı hâlâ merkez-yerel veridir; bu dilimde diskteki
-  anlamı değiştirilmez. Dönüşüm kopya üretir, kendiliğinden kaydetmez.
+- İlk motor API'sinde `coordinateSpace: "world"` zorunludur. 8A1 sırasında
+  `WorldTerrainDef.splines` alanı merkez-yerel bırakıldı; o dilimde diskteki
+  anlamı değiştirilmedi. Dönüşüm kopya üretir, kendiliğinden kaydetmez.
   Kalıcı dünya şemasına geçiş; okuyucu, validator, 1×1 köprü, editör/runtime
   ve save/reload birlikte ele alındığında yapılacaktır.
 - Yol ve nehir yatağı aynı koridor deform/boya matematiğini kullanır.
@@ -291,7 +291,7 @@ araçlarının ayrıntılı alt planıdır. Yukarıdaki ilk görüşme kaydı ta
   sınırlarını belirle.
 - [x] **8A1 / motor:** Dünya spline dönüşümü; çok tile deform/boya patch'leri;
   dikiş, eksik tile, delik, datum, yön kısıtları, undo/redo ve tile codec kontrolleri.
-- [ ] **8A2 / veri:** Dünya spline şeması ve açık migrasyon; runtime/save ortak
+- [x] **8A2 / veri:** Dünya spline şeması ve açık migrasyon; runtime/save ortak
   validator, 1×1 uyumluluk, save/reload; mevcut referansların korunması.
 - [ ] **8A3 / yol editörü:** Draw/Edit, kontrol noktası gizmo'su, terrain'e
   bağlama, tile yükleme/sabitleme, tek undo komutu ve kirli kayıt bağlantısı.
@@ -334,7 +334,132 @@ koşulları tamamlandıktan sonra ayrıca ele alınır.
   editör kaydı olarak sayılmaz. Çalışma sırasında dışarıdan değişen
   LandscapeTest terrain dosyalarına dokunulmadı; commit/push yapılmadı.
 
-**Sonraki adım:** 8A2'de kalıcı dünya spline şemasını ortak runtime/save
-validator ve 1×1 uyumlulukla taşı; sonra 8A3 editör bağlantısı. Save/load
-sınırlarını değiştiren bu sonraki dilim için kapsamlı bir Security diff
-incelemesi önerilir; kullanıcı onayı olmadan scan başlatılmaz.
+**8A1 sonundaki devam noktası:** 8A2 veri geçişi; sonucu aşağıda kayıtlıdır.
+
+### 11.4. 8A2 veri sözleşmesi — 2026-10-25
+
+- Terrain tanımı schema 1 içinde yeni editör save snapshot'larındaki her spline
+  `coordinateSpace: "world"` taşır. İşaretsiz mevcut spline merkez-yereldir.
+  Başka bir koordinat işareti runtime/save ortak normalizer tarafından
+  reddedilir; işaret sessizce düşürülmez. Karışık diziler açık geçiş için okunur.
+- Okuma kaynak tanımı veya dosyaları değiştirmez. Açık, saf kopya migrasyonu
+  ve her iki terrain save snapshot'ı yerel veriyi dünya koordinatına taşır;
+  zaten dünya verisi tekrar ötelenmez. Eski Forge sürümleri yeni işareti
+  desteklemeyebilir; yeni kayıtlar bu koordinat sözleşmesini bilen sürümle açılmalıdır.
+- 1×1 uyumluluk köprüsü işaretli spline'ı terrain tanımının merkezine göre
+  yerel kopyaya çevirir. Mevcut editör, yol mesh'i ve River Water bu yerel
+  görünümü kullanmayı sürdürür. Actor taşınıp kaydedildiğinde yeni dünya
+  konumları actor ile birlikte taşınır; kimlikler ve river referansları korunur.
+- Snapshot ilk await'ten önce alınır. Kayıt sırasında yapılan spline
+  düzenlemesi, eski snapshot'ı veya yeni düzenlemenin kirli revizyonunu
+  değiştirmez. İşaretsiz canlı çok-tile tanım, yeniden okunana kadar yerel
+  kalabilir; her snapshot kendi kopyasını yalnız bir kez dönüştürür.
+- `/__save-terrain` yeni alanı runtime ile aynı normalizer üzerinden doğrular;
+  endpoint yetkileri/yol kuralları değişmez. Kullanıcı onayı olmadan Security
+  scan başlatılmaz. Tarayıcı kabulü mevcut 1×1 nehirli migrasyon Save/Reload/Play
+  akışıyla, çok-tile veri kabulü loader ve gerçek save session kontrolleriyle yapılır.
+
+### 11.5. 8A2 sonucu ve doğrulama — 2026-10-25
+
+- `terrainSplineData.ts`: ortak runtime/save koordinat allowlist'i, açık ve
+  tekrar uygulanabilir kopya migrasyonu, 1×1 yerel görünüm adaptörü. 8A1
+  dönüşüm API'leri `terrainSplines.ts` üzerinden yeniden export edilir.
+- `captureTerrainSnapshot` ve `captureWorldTerrainSave` dünya koordinatlı
+  tanım üretir. 1×1 okuma köprüsü hem eski işaretsiz hem yeni dünya verisini
+  mevcut editör/runtime yoluna uyarlar; terrain/river referansları değişmez.
+- **8 yeni engine regresyonu** geçti: marker allowlist/ret, karışık veri
+  migrasyonu ve tekrar uygulama, tekrar kayıt/actor taşıma, fractional origin
+  sabit noktası, ondalıklı Y datumunun yuvarlama artığı, çok-tile eager/streaming
+  reload, gerçek save session sırasında yeni düzenleme ve salt okuma yolu.
+- Tarayıcı ilk çalışmada `0.15 → 0.15000000000000002` yerel dönüşüm farkını
+  yakaladı. Köprü yalnız milimetre grid'i yakınındaki hesaplama artığını
+  temizleyecek şekilde düzeltildi; gerçek fractional-origin farkı korunur.
+  Test eşitliği gevşetilmedi ve örnek engine regresyonuna eklendi.
+- Son kodla `npx.cmd tsc --noEmit`, yeni engine test dosyasının ayrı TypeScript
+  kontrolü ve tam `npm.cmd run build:verify` geçti: **1.925 engine kontrolü**,
+  üretim derlemesi, import/tip/fixture/release, strict dist ve world-data dahil.
+- Chromium, izole smoke projesi, port **5274**: genişletilmiş
+  `terrain-migration.spec.ts` **2/2 geçti** (1,4 dakika). Gerçek endpoint
+  dünya işaretini korudu, bilinmeyen frame'i dosyayı değiştirmeden reddetti;
+  nehirli eski veri Save → Reload → tekrar Save → Play akışı, spline/river
+  kimlikleri, dünya konumları ve konsol hatasız açılış doğrulandı.
+- `test-results/terrain-migration-legacy-t-e5df1-water-IDs-reloads-and-plays-chromium/`
+  içindeki editor/runtime görüntüleri incelendi. Editörde yol görünüyor;
+  runtime görüntüsü debug grid'li başlangıç açısından alınmış olduğundan nehir
+  görünümü, uzak yol, çok-tile mesh/çarpışma veya performans kabulü sayılmaz.
+- Kaynak sahneler, legacy dosyalar ve terrain tile'ları değiştirilmedi.
+  Commit/push ve Codex Security taraması yapılmadı. Bu save/load değişikliği
+  için kullanıcı onayıyla Codex Security diff incelemesi önerilir.
+
+**Sonraki adım: 8A3.** Çok-tile spline Draw/Edit ve gizmo; terrain bağlantısı,
+gerekli tile'ların yüklenip sabitlenmesi, tek undo komutu ve kirli kayıt
+entegrasyonu. Çok-tile spline engeli bu dilimde kaldırılmadı; yol mesh/çarpışma
+8A4, nehir yüzeyi ve akışı 8A5 olarak açık kalır.
+
+### 11.6. 8A3 uygulama kapsamı — 2026-10-25
+
+- Mevcut Landscape Mode → Splines Draw/Edit, kontrol noktası/segment/loop,
+  smooth ve width/falloff araçları aynı editör kaynağı üzerinden çok tile'a açılır.
+  1×1 yerel veri görünümü korunur; çok-tile kontrol noktaları dünya koordinatındadır.
+- Çizim önce coarse isabetin gerekli tile'larını yükler, sonra kesin terrain
+  yüksekliğini örnekler. Snap to Terrain aynı kesin veriyle, ayrı undo komutudur.
+  Gizmo dünya noktasını düzenler; terrain actor'ünün taşıma kilidi korunur.
+- Apply Deform/Paint, spline koridoru + seam komşularını yükleyip işlem boyunca
+  tutar. Tüm patch'ler hazır olmadan canlı veriye yazılmaz. Yazılan tile'lar
+  session/undo tarafından sabitlenir, renderer ve kirli kayıt güncellenir.
+  Yükleme başarısızlığı veya bekleme sırasında spline/level değişimi yarım bake
+  üretmez. 8A1'in tek işlem için 1.048.576 kapsayıcı vertex sınırı korunur.
+- Çok-tile spline metadata komutları yalnız tanımı kirletir. Eski çok-tile
+  merkez-yerel spline'lar editörün bellek kopyasında dünya koordinatına çevrilir;
+  dosya okuma sırasında yazılmaz. Mevcut 8A2 snapshot/kayıt yolu kullanılır.
+- Çok-tile yol mesh ve River Water araçları bu dilimde sunulmaz; 8A4/8A5.
+  Tarayıcı QA: seam üzerinden çizim, Details ve gizmo, snap, lock, bake,
+  undo/redo, save/reload, eksik tile ret/retry ve 1×1 regresyonu.
+
+### 11.7. 8A3 devir noktası — 2026-10-26
+
+Kullanıcı, eşzamanlı diğer oturum ve uzun doğrulama süresi nedeniyle çalışmayı
+uygun noktada sonlandırıp bu oturumun değişikliklerini commit + push etmeyi istedi.
+8A3 kutusu tarayıcı kabulü tamamlanana kadar açık tutulur.
+
+**Hazır kod:** Çok-tile Draw/Edit, dünya koordinatlı nokta/gizmo, Snap to Terrain,
+segment/smooth/width/falloff/loop komutları; metadata için tanım revizyonu;
+koridor ve seam tile'larının talep edilmesi, bake boyunca tutulması ve değişen
+tile'ların undo için sabitlenmesi; tek komutlu deform/boya patch uygulaması.
+İş sınırı tile yüklemeden önce denetlenir; kapalı efektler tile talep etmez.
+Terrain actor'ünün taşıma/rotasyon kilidi korunur. Yol mesh'i ve River Water
+çok-tile araçları 8A4/8A5 olarak uygulanmadı.
+
+**Doğrulama sınırı:**
+
+- Önceki tamamlanmış tam `build:verify`: **1.933 engine kontrolü** dahil geçti.
+  Bu, o anda diğer oturumun değişikliklerini de içeren çalışma ağacına aittir;
+  son tarayıcı fixture düzenlemesinden sonra tam kapı yeniden çalıştırılmadı.
+- Spline çekirdeği, veri geçişi ve editör yükleme/pin/undo testleri geçti.
+  8A3 için dört yeni engine kontrolü eklendi; yeni engine dosyası ayrıca
+  TypeScript ile denetlendi. Smoke fixture izolasyonunun 5 kontrolü geçti.
+- Eski 1×1 spline bake tarayıcı regresyonu geçti. İlk çok-tile koşuda çizim,
+  gerçek gizmo sürükleme, snap, lock, iki tile deform/boya ve byte eşitliğiyle
+  undo/redo adımları geçti; reload sonrasında mevcut spline'ı seçme adımı testte
+  eksikti ve düzeltildi. Ayrı ilk streaming ret/retry koşusu geçti.
+- Son toplu tarayıcı kabulü **geçmiş sayılmadı**. Eski çok-tile kapsamlı test,
+  20 sn Save yanıtı sınırında durdu. Sonraki hedefli koşuda Save meşgul beklemesi
+  ve `networkidle` süre aşımı görüldü; iz kaydında ilgisiz Content Browser
+  `/__project-dir/assets` isteği uzun süre açık kaldı. Kök neden ve bütün
+  etkileşimler son kodla uçtan uca kabul edilmiş değildir.
+- Yeni smoke dosyası üç bağımsız senaryoya bölündü: Draw/gizmo/snap/reload;
+  seam bake/undo/redo/reload; eksik uzak tile ret/retry. Yalnız kullanılmayan
+  Content Browser assets dizin listesi küçük fixture ile yanıtlanır; terrain
+  dosyaları ve Save/Reload endpoint'leri gerçektir. `networkidle` yerine somut
+  kontrol hazır olma beklentisi kullanılır. Son koşu kullanıcı isteğiyle
+  durduruldu; **3/3 geçti** denmez.
+- Test sunucusunda HMR kapatıldı; açık sayfanın başka oturumdaki kaynak
+  değişiklikleriyle kendiliğinden yenilenmesi önlendi. Manuel reload çalışır.
+  Son koşular ayrı port ve `.dev-server/spline-editor-*-results` çıktılarıyla
+  yürütüldü. Bunlar performans kabulü değildir.
+
+**Devam:** Önce `terrain-spline-editor.spec.ts` içindeki üç senaryoyu düşük
+eşzamanlı yükte tamamla ve görüntüleri incele; gerekiyorsa bekleyen kayıt sorununun
+kök nedenini araştır. Sonra 8A3'ü kapat ve 8A4 yol mesh/çarpışmasına geç.
+Diğer oturumun terrain/water, renderer, fizik, kaynak sahne ve tile değişiklikleri
+bu oturumun commit kapsamına alınmaz. Codex Security taraması çalıştırılmadı.

@@ -174,7 +174,7 @@ export class TerrainSurfaceSampler {
     let tractionCoefficient = 0;
     let hasTractionCoefficient = false;
     let softWeight = 0;
-    const softGround = { maxDepth: 0, compaction: 0, digRate: 0, sinkResistance: 0, ploughResistance: 0 };
+    const softGround = { maxDepth: 0, compaction: 0, digRate: 0, sinkResistance: 0, ploughResistance: 0, ploughExponent: 0, rollingResistanceAtRest: 0 };
     this.weights.forEach((weight, index) => {
       if (!Number.isFinite(weight) || weight <= 0) return;
       // A tile layer beyond the definition's layer list is neutral.
@@ -188,7 +188,7 @@ export class TerrainSurfaceSampler {
       hasTractionCoefficient ||= sample.tractionCoefficient !== undefined;
       if (sample.softGround) {
         softWeight += share;
-        for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] += sample.softGround[key] * share;
+        for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] += (sample.softGround[key] ?? 1) * share;
       }
     });
     if (softWeight > 0) for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] /= softWeight;

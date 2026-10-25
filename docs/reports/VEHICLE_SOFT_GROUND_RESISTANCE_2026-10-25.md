@@ -1,5 +1,7 @@
 # Yumuşak zemin araç direnci — uygulama ve doğrulama
 
+> Bu belge ilk uygulamanın tarihsel kaydıdır. `4.mp4` sonrası güncel mud kalkış eğrisi, 5° eğim regresyonu ve yeni katsayılar: [çamurda kalkış düzeltmesi](MUD_HILL_LAUNCH_2026-10-25.md).
+
 Tarih: 2026-10-25. Başlangıç: `main`, `d66b06b2`. Araştırma tabanı `e081cf1c` ile ilgili fizik/yüzey/deformasyon/şanzıman dosyaları aynıydı. Başlangıçta mevcut 9 odaklı regresyon geçti. Kullanıcının/Claude'un görsel, malzeme ve asset değişiklikleri korundu. Bu iş için Git pull/merge/commit/push yapılmadı.
 
 ## Davranış ve model

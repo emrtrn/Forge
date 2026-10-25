@@ -234,8 +234,12 @@ export interface PhysicalMaterialDef {
     recoveryRate: number;
     /** Extra resistance multiplier as the wheel sinks. */
     sinkResistance: number;
-    /** Preset-only wheel ploughing force / load per unit sink-depth/radius. */
+    /** Preset-only wheel ploughing force / load at sink-depth/radius = 1. */
     ploughResistance?: number;
+    /** Exponent on sink-depth/radius in the wheel ploughing model (default 1). */
+    ploughExponent?: number;
+    /** Share of buried rolling drag present at rest, ramping to full at 1 m/s (default 1). */
+    rollingResistanceAtRest?: number;
     /** Track albedo blend colour (RGB, 0..1). */
     tint: Vec3;
     /** Track albedo blend strength (0..1). */
@@ -270,7 +274,8 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
     vehicle: { frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12 },
     deformation: {
       maxDepth: 0.22, compaction: 0.5, digRate: 0.08, recoveryRate: 0,
-      sinkResistance: 0.6, ploughResistance: 0.05, tint: [0.035, 0.025, 0.015], tintStrength: 0.85, wetness: 0.9,
+      sinkResistance: 0.6, ploughResistance: 0.3, ploughExponent: 2, rollingResistanceAtRest: 0,
+      tint: [0.035, 0.025, 0.015], tintStrength: 0.85, wetness: 0.9,
     },
   },
   sand: {

@@ -2,16 +2,21 @@
 import type { SurfaceSample } from "./surfaceResponse";
 
 /**
- * F = load × (rolling + k × min(sink / radius, 1)). Only wheel burial is
+ * F = load × (speed-ramped rolling + k × min(sink / radius, 1)^exponent). Only wheel burial is
  * counted here; excess depth beyond chassis clearance remains belly drag.
- * Buried soil has a finite breakaway threshold, including at zero speed.
- * Hard-ground rolling keeps its historical low-speed ramp.
+ * Ploughing supplies finite breakaway even at zero speed. Buried rolling can
+ * be rate-dependent so it need not consume all grip on a hill start. Presets
+ * without the optional controls retain their historical response exactly.
  */
 export function wheelGroundResistance(sample: SurfaceSample | null, load: number, depth: number, radius: number, speed: number): number {
   if (!sample || ![load, depth, radius, speed].every(Number.isFinite) || load <= 0 || radius <= 0) return 0;
   const buried = Math.max(0, Math.min(depth / radius, 1));
-  const plough = Math.max(0, sample.softGround?.ploughResistance ?? 0) * buried;
-  const rolling = Math.max(0, sample.rollingResistance) * (plough > 0 ? 1 : Math.min(Math.abs(speed), 1));
+  const profile = sample.softGround;
+  const exponent = Number.isFinite(profile?.ploughExponent) ? Math.max(1, Math.min(4, profile!.ploughExponent!)) : 1;
+  const atRest = Number.isFinite(profile?.rollingResistanceAtRest) ? Math.max(0, Math.min(1, profile!.rollingResistanceAtRest!)) : 1;
+  const plough = Math.max(0, profile?.ploughResistance ?? 0) * buried ** exponent;
+  const ramp = Math.min(Math.abs(speed), 1);
+  const rolling = Math.max(0, sample.rollingResistance) * (plough > 0 ? atRest + (1 - atRest) * ramp : ramp);
   return load * (rolling + plough);
 }
 

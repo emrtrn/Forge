@@ -21,6 +21,8 @@ export interface SoftGroundSample {
   readonly digRate: number;
   readonly sinkResistance: number;
   readonly ploughResistance: number;
+  readonly ploughExponent?: number;
+  readonly rollingResistanceAtRest?: number;
 }
 
 export interface WeightedSurfaceMaterial {
@@ -97,6 +99,8 @@ export function resolveSurfaceSample(
         maxDepth: profile.deformation.maxDepth, compaction: profile.deformation.compaction,
         digRate: profile.deformation.digRate, sinkResistance: profile.deformation.sinkResistance,
         ploughResistance: profile.deformation.ploughResistance ?? 0,
+        ploughExponent: profile.deformation.ploughExponent ?? 1,
+        rollingResistanceAtRest: profile.deformation.rollingResistanceAtRest ?? 1,
       } } : {}),
     };
   }
@@ -112,7 +116,7 @@ export function resolveSurfaceSample(
   let tractionCoefficient = 0;
   let hasTractionCoefficient = false;
   let softWeight = 0;
-  const softGround = { maxDepth: 0, compaction: 0, digRate: 0, sinkResistance: 0, ploughResistance: 0 };
+  const softGround = { maxDepth: 0, compaction: 0, digRate: 0, sinkResistance: 0, ploughResistance: 0, ploughExponent: 0, rollingResistanceAtRest: 0 };
   for (const entry of entries) {
     const sample = resolveSurfaceSample(entry.physicalMaterialId);
     const weight = (entry.weight / maxWeight) / total;
@@ -124,10 +128,10 @@ export function resolveSurfaceSample(
     hasTractionCoefficient ||= sample.tractionCoefficient !== undefined;
     if (sample.softGround) {
       softWeight += weight;
-      for (const key of Object.keys(softGround) as (keyof SoftGroundSample)[]) softGround[key] += sample.softGround[key] * weight;
+      for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] += (sample.softGround[key] ?? 1) * weight;
     }
   }
-  if (softWeight > 0) for (const key of Object.keys(softGround) as (keyof SoftGroundSample)[]) softGround[key] /= softWeight;
+  if (softWeight > 0) for (const key of Object.keys(softGround) as (keyof typeof softGround)[]) softGround[key] /= softWeight;
   return { frictionSlipScale, sideFrictionScale, rollingResistance, deformability,
     ...(softWeight > 0 ? { softGround } : {}),
     ...(hasTractionCoefficient ? { tractionCoefficient } : {}) };

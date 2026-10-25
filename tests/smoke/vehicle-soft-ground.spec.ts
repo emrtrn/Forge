@@ -57,7 +57,9 @@ for (const material of ["mud", "snow"]) {
     await page.keyboard.up("KeyW");
     await page.waitForFunction((time) => window.softGroundQA.read().seconds > time + 0.75, powered.seconds);
     const coasting = await page.evaluate(() => window.softGroundQA.read());
-    expect(coasting.forces.reduce((sum, force) => sum + force, 0)).toBeGreaterThan(500);
+    // Near rest, mud now retains its finite plough threshold while the rolling
+    // part fades. It need not reach the former full-rolling 500 N threshold.
+    expect(coasting.forces.reduce((sum, force) => sum + force, 0)).toBeGreaterThan(material === "mud" ? 100 : 500);
     expect(coasting.tracks).toBeGreaterThan(0);
     expect(Number.isFinite(coasting.speed)).toBe(true);
     await page.screenshot({ path: `test-results/landscape-soft-ground-${material}.png` });

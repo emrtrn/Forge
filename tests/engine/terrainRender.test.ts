@@ -14,7 +14,12 @@ import type { ForgeLandscapeData } from "../../engine/scene/landscape";
 import { TerrainTexturePool } from "../../engine/render-three/terrain/terrainTexturePool";
 import {
   Box3,
+  Color,
+  BufferAttribute,
+  BufferGeometry,
   Group,
+  Mesh,
+  MeshBasicMaterial,
   Matrix3,
   PerspectiveCamera,
   Raycaster,
@@ -27,8 +32,15 @@ import {
 } from "three";
 import { TerrainRenderer, createTerrainPatchGeometry, packTerrainNode } from "../../engine/render-three/terrain/terrainRenderer";
 import type { TerrainLook } from "../../engine/render-three/terrain/terrainMaterial";
-import { createLandscapeObject, disposeLandscapeObject, resolveLandscape } from "../../engine/render-three/landscape";
+import {
+  createLandscapeObject,
+  disposeLandscapeObject,
+  landscapeTerrainRenderer,
+  resolveLandscape,
+  updateLandscapeObjectGeometry,
+} from "../../engine/render-three/landscape";
 import type { LayoutLandscape } from "../../engine/scene/layout";
+
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -225,13 +237,34 @@ export function registerTerrainRenderTests(check: Check): void {
   });
 }
 
-function legacyRenderItem(data: ForgeLandscapeData, rotation: [number, number, number]) {
-  return {
-    ...resolveLandscape({ id: "land", position: [3, 1.5, -2], dataRef: "x.landscape.json" } as LayoutLandscape),
-    position: [3, 1.5, -2] as [number, number, number],
-    rotation,
-    data,
-  };
+/**
+ * The pre-Faz-2 chunk renderer's surface, rebuilt as one mesh: vertices
+ * centred on the actor, heightScale applied, cells split a,c,b / b,c,d.
+ */
+function legacyChunkMesh(data: ForgeLandscapeData, rotation: [number, number, number]): Mesh {
+  const { verticesX, verticesZ, spacing, heightScale } = data.size;
+  const positions = new Float32Array(verticesX * verticesZ * 3);
+  for (let z = 0; z < verticesZ; z += 1) {
+    for (let x = 0; x < verticesX; x += 1) {
+      const index = z * verticesX + x;
+      positions.set([x * spacing - ((verticesX - 1) * spacing) / 2, data.heights[index]! * heightScale, z * spacing - ((verticesZ - 1) * spacing) / 2], index * 3);
+    }
+  }
+  const indices: number[] = [];
+  for (let z = 0; z < verticesZ - 1; z += 1) {
+    for (let x = 0; x < verticesX - 1; x += 1) {
+      const a = z * verticesX + x;
+      indices.push(a, a + verticesX, a + 1, a + 1, a + verticesX, a + verticesX + 1);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  const mesh = new Mesh(geometry, new MeshBasicMaterial());
+  mesh.position.set(3, 1.5, -2);
+  mesh.rotation.set((rotation[0] * Math.PI) / 180, (rotation[1] * Math.PI) / 180, (rotation[2] * Math.PI) / 180, "XYZ");
+  mesh.updateMatrixWorld(true);
+  return mesh;
 }
 
 const LOOK: TerrainLook = {
@@ -267,8 +300,7 @@ export function registerTerrainRendererTests(check: Check): void {
     const data = legacyData(65, 97, 0.5, 2);
     const rotation: [number, number, number] = [0, 37, 0];
     const { group, terrain } = placedTerrain(data, rotation);
-    const legacy = createLandscapeObject(legacyRenderItem(data, rotation));
-    legacy.updateMatrixWorld(true);
+    const legacy = legacyChunkMesh(data, rotation);
     const raycaster = new Raycaster();
     let hits = 0;
     for (let index = 0; index < 60; index += 1) {
@@ -289,7 +321,7 @@ export function registerTerrainRendererTests(check: Check): void {
     }
     assert.ok(hits > 25, `enough rays hit to compare (${hits})`);
     terrain.dispose();
-    disposeLandscapeObject(legacy);
+    legacy.geometry.dispose();
   });
 
   check("terrain renderer: rays never hit the padded margin and respect raycaster far", () => {
@@ -386,5 +418,44 @@ export function registerTerrainRendererTests(check: Check): void {
     assert.equal(material.defines!.TERRAIN_VIEW_MODE, "3");
     assert.notEqual(material.customProgramCacheKey(), "");
     terrain.dispose();
+  });
+
+  check("landscape binding: the actor group wraps the GPU terrain and sculpt edits reach it", () => {
+    const data = legacyData(65, 65, 1, 1);
+    data.layers = data.layers.slice(0, 4).map((layer, index) => ({ ...layer, id: ["grass", "dirt", "rock", "snow"][index]! }));
+    const actor = { id: "land", name: "Hills", position: [10, 2, 0], rotation: [0, 90, 0], dataRef: "x.landscape.json" } as unknown as LayoutLandscape;
+    const group = createLandscapeObject({
+      ...resolveLandscape(actor), position: [10, 2, 0], rotation: [0, 90, 0], data,
+      viewMode: "lit", activeLayerId: "rock", layerColors: { dirt: "#123456" },
+    });
+    group.updateMatrixWorld(true);
+    const terrain = landscapeTerrainRenderer(group)!;
+    assert.equal(group.children.length, 1);
+    assert.equal(group.children[0], terrain.mesh);
+    assert.equal(terrain.mesh.name, "landscape-terrain");
+    assert.ok(Math.abs(group.rotation.y - Math.PI / 2) < 1e-9);
+    const uniforms = (terrain as unknown as { terrainMaterial: { uniforms: Record<string, { value: unknown }> } }).terrainMaterial.uniforms;
+    const colors = uniforms.uLayerColor!.value as Color[];
+    assert.equal(colors[1]!.getHexString(), "123456", "assigned-material tint by layer id");
+    assert.equal(uniforms.uTerrainActiveLayer!.value, 2);
+
+    const raycaster = new Raycaster(new Vector3(10, 50, 0), new Vector3(0, -1, 0));
+    const before = raycaster.intersectObject(group, true)[0]!;
+    data.heights[32 * 65 + 32] = 20;
+    updateLandscapeObjectGeometry(group, data, { x0: 31, x1: 33, z0: 31, z1: 33 }, "layer", "snow");
+    const after = raycaster.intersectObject(group, true)[0]!;
+    assert.ok(Math.abs(after.point.y - (2 + 20)) < 1e-4, `sculpted vertex is hit: ${after.point.y}`);
+    assert.notEqual(before.point.y, after.point.y);
+    assert.equal(terrain.material.defines!.TERRAIN_VIEW_MODE, "3");
+    assert.equal(uniforms.uTerrainActiveLayer!.value, 3);
+
+    // A child parented by the editor (spline meshes) still gets its geometry freed.
+    const child = new Mesh(new BufferGeometry(), new MeshBasicMaterial());
+    let disposed = false;
+    child.geometry.addEventListener("dispose", () => (disposed = true));
+    group.add(child);
+    disposeLandscapeObject(group);
+    assert.ok(disposed);
+    assert.equal(landscapeTerrainRenderer(group), null);
   });
 }

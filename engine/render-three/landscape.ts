@@ -1,21 +1,16 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Color,
-  Group,
-  Mesh,
-  MeshStandardMaterial,
-  type Texture,
-} from "three";
+import { Group, Mesh, type Material, type Texture } from "three";
 
 import type { Vec3 } from "@engine/scene/layout";
 import {
   LANDSCAPE_DEFAULT_LAYERS,
-  LANDSCAPE_QUADS_PER_CHUNK,
   ensureLandscapeLayers,
   type ForgeLandscapeData,
   type ResolvedLandscape,
 } from "@engine/scene/landscape";
+import { landscapeRenderSource, writeLandscapeRegion } from "@engine/terrain/terrainRenderSource";
+
+import type { TerrainLayerLook, TerrainLook } from "./terrain/terrainMaterial";
+import { TerrainRenderer } from "./terrain/terrainRenderer";
 
 export {
   DEFAULT_LANDSCAPE_MATERIAL,
@@ -56,17 +51,18 @@ export {
 
 /**
  * Landscape render binding — the web/three counterpart to Unreal's Landscape
- * actor. Faz 1 builds a flat chunked heightfield mesh from the sidecar's
- * `heights` array; the actor's transform (position/rotation) places it in the
- * world (there is no transform scale — terrain size is fixed by the sidecar's
- * `size`). Normals are computed on the CPU from neighboring heights.
+ * actor. Since OPEN_WORLD_PLAN Faz 2 the surface is drawn by the GPU CDLOD
+ * {@link TerrainRenderer}: the sidecar's grid becomes a padded 1×1 terrain tile
+ * (`landscapeRenderSource`), displaced in the vertex shader, LOD-selected per
+ * camera and raycast on the CPU heightfield. The actor's transform
+ * (position/rotation) places the group; there is no transform scale — terrain
+ * size is fixed by the sidecar's `size`.
  *
- * The mesh is split into `quadsPerChunk`-sized chunk meshes (Faz 1 doesn't
- * dirty-track individual chunks yet — that lands with Faz 2 sculpt — but
- * building chunked from day one avoids a reshape later).
+ * The group stays an ordinary `Group`, so callers keep parenting spline meshes
+ * and overlays under it and tagging `userData` on it.
  */
 
-/** The three.js object backing a Landscape actor: one child mesh per chunk. */
+/** The three.js object backing a Landscape actor: a group holding the terrain mesh. */
 export type LandscapeObject = Group;
 
 export interface LandscapeDirtyBounds {
@@ -108,309 +104,65 @@ export interface LandscapeRenderItem extends ResolvedLandscape {
   layerTextures?: LandscapeLayerTexture[];
 }
 
-const DEFAULT_LAYER_COLOR = new Color(LANDSCAPE_DEFAULT_LAYERS[0]!.color);
-
-function heightAt(data: ForgeLandscapeData, x: number, z: number): number {
-  const { verticesX, verticesZ } = data.size;
-  const cx = Math.min(Math.max(x, 0), verticesX - 1);
-  const cz = Math.min(Math.max(z, 0), verticesZ - 1);
-  return data.heights[cz * verticesX + cx] ?? 0;
+interface LandscapeBinding {
+  terrain: TerrainRenderer;
+  layerTextures: LandscapeLayerTexture[] | undefined;
 }
 
-function heightRange(data: ForgeLandscapeData): { min: number; max: number } {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const height of data.heights) {
-    if (!Number.isFinite(height)) continue;
-    min = Math.min(min, height);
-    max = Math.max(max, height);
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 1 };
-  if (Math.abs(max - min) < 0.0001) return { min: min - 0.5, max: max + 0.5 };
-  return { min, max };
-}
+const bindings = new WeakMap<LandscapeObject, LandscapeBinding>();
 
-function layerColor(layerId: string, colors?: LandscapeLayerColors): Color {
-  const override = colors?.[layerId];
-  if (override) return new Color(override);
-  const defaults = LANDSCAPE_DEFAULT_LAYERS.find((layer) => layer.id === layerId);
-  return new Color(defaults?.color ?? DEFAULT_LAYER_COLOR);
-}
+const DEFAULT_LAYER_COLOR = LANDSCAPE_DEFAULT_LAYERS[0]!.color;
 
-function setColor(values: Float32Array, vertexIndex: number, color: Color): void {
-  values[vertexIndex * 3] = color.r;
-  values[vertexIndex * 3 + 1] = color.g;
-  values[vertexIndex * 3 + 2] = color.b;
-}
-
-function landscapeVertexColor(
-  data: ForgeLandscapeData,
-  vertexIndex: number,
-  height: number,
-  normalY: number,
-  viewMode: LandscapeViewMode,
-  activeLayerId: string,
-  range: { min: number; max: number },
-  colors?: LandscapeLayerColors,
-): Color {
-  if (viewMode === "height") {
-    const t = (height - range.min) / Math.max(0.0001, range.max - range.min);
-    return new Color().setRGB(0.16 + t * 0.62, 0.28 + t * 0.5, 0.2 + t * 0.68);
-  }
-  if (viewMode === "slope") {
-    const slope = Math.min(1, Math.max(0, 1 - normalY));
-    return new Color().setRGB(0.15 + slope * 0.75, 0.62 - slope * 0.34, 0.22 + slope * 0.32);
-  }
-
-  if (viewMode === "layer") {
-    const layer = data.layers.find((entry) => entry.id === activeLayerId) ?? data.layers[0];
-    const weight = Math.min(1, Math.max(0, layer?.weights[vertexIndex] ?? 0));
-    return layerColor(layer?.id ?? activeLayerId, colors).multiplyScalar(0.2 + weight * 0.8);
-  }
-
-  const color = new Color(0, 0, 0);
-  for (const layer of data.layers) {
-    const weight = Math.min(1, Math.max(0, layer.weights[vertexIndex] ?? 0));
-    if (weight <= 0) continue;
-    color.add(layerColor(layer.id, colors).multiplyScalar(weight));
-  }
-  return color.r + color.g + color.b > 0 ? color : DEFAULT_LAYER_COLOR.clone();
+function presetLayerColor(layerId: string, colors?: LandscapeLayerColors): string {
+  return colors?.[layerId] ?? LANDSCAPE_DEFAULT_LAYERS.find((layer) => layer.id === layerId)?.color ?? DEFAULT_LAYER_COLOR;
 }
 
 /**
- * Builds one chunk's geometry covering vertex range `[x0, x1] x [z0, z1]`
- * (inclusive), with position/normal/uv attributes. Normals sample one vertex
- * of padding beyond the chunk so seams between chunks shade continuously.
+ * The chunk renderer's two looks, as one: with a layer texture in "lit" view the
+ * splat tints come from `layerTextures` (by index); otherwise each layer shows
+ * its assigned-material/preset colour (by id).
  */
-function buildChunkGeometry(
-  data: ForgeLandscapeData,
-  x0: number,
-  x1: number,
-  z0: number,
-  z1: number,
-  viewMode: LandscapeViewMode,
-  activeLayerId: string,
-  layerColors?: LandscapeLayerColors,
-): BufferGeometry {
-  const { spacing, heightScale, verticesX, verticesZ } = data.size;
-  const cols = x1 - x0 + 1;
-  const rows = z1 - z0 + 1;
-  const vertexCount = cols * rows;
-  const positions = new Float32Array(vertexCount * 3);
-  const normals = new Float32Array(vertexCount * 3);
-  const uvs = new Float32Array(vertexCount * 2);
-  const colors = new Float32Array(vertexCount * 3);
-  // Per-vertex weight of the first four paint layers (grass/dirt/rock/snow),
-  // consumed by the splat material to blend up to four base-color textures.
-  const layerWeights = new Float32Array(vertexCount * 4);
-  const range = heightRange(data);
-
-  // World-space origin centers the full grid on the actor's position.
-  const originX = ((verticesX - 1) * spacing) / 2;
-  const originZ = ((verticesZ - 1) * spacing) / 2;
-
-  for (let row = 0; row < rows; row += 1) {
-    const z = z0 + row;
-    for (let col = 0; col < cols; col += 1) {
-      const x = x0 + col;
-      const vertexIndex = row * cols + col;
-      const height = heightAt(data, x, z) * heightScale;
-      positions[vertexIndex * 3] = x * spacing - originX;
-      positions[vertexIndex * 3 + 1] = height;
-      positions[vertexIndex * 3 + 2] = z * spacing - originZ;
-
-      const left = heightAt(data, x - 1, z) * heightScale;
-      const right = heightAt(data, x + 1, z) * heightScale;
-      const up = heightAt(data, x, z - 1) * heightScale;
-      const down = heightAt(data, x, z + 1) * heightScale;
-      const dx = left - right;
-      const dz = up - down;
-      const length = Math.sqrt(dx * dx + 4 * spacing * spacing + dz * dz) || 1;
-      normals[vertexIndex * 3] = dx / length;
-      const normalY = (2 * spacing) / length;
-      normals[vertexIndex * 3 + 1] = normalY;
-      normals[vertexIndex * 3 + 2] = dz / length;
-
-      uvs[vertexIndex * 2] = x / (verticesX - 1);
-      uvs[vertexIndex * 2 + 1] = z / (verticesZ - 1);
-
-      const globalVertexIndex = z * verticesX + x;
-      setColor(
-        colors,
-        vertexIndex,
-        landscapeVertexColor(
-          data,
-          globalVertexIndex,
-          height,
-          normalY,
-          viewMode,
-          activeLayerId,
-          range,
-          layerColors,
-        ),
-      );
-      for (let layer = 0; layer < 4; layer += 1) {
-        const weight = data.layers[layer]?.weights[globalVertexIndex] ?? 0;
-        layerWeights[vertexIndex * 4 + layer] = Math.min(1, Math.max(0, weight));
-      }
-    }
-  }
-
-  const indexCount = (cols - 1) * (rows - 1) * 6;
-  const indices = indexCount > 0 ? new Uint32Array(indexCount) : new Uint32Array(0);
-  let cursor = 0;
-  for (let row = 0; row < rows - 1; row += 1) {
-    for (let col = 0; col < cols - 1; col += 1) {
-      const a = row * cols + col;
-      const b = a + 1;
-      const c = a + cols;
-      const d = c + 1;
-      indices[cursor] = a;
-      indices[cursor + 1] = c;
-      indices[cursor + 2] = b;
-      indices[cursor + 3] = b;
-      indices[cursor + 4] = c;
-      indices[cursor + 5] = d;
-      cursor += 6;
-    }
-  }
-
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(positions, 3));
-  geometry.setAttribute("normal", new BufferAttribute(normals, 3));
-  geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
-  geometry.setAttribute("color", new BufferAttribute(colors, 3));
-  geometry.setAttribute("landscapeWeight", new BufferAttribute(layerWeights, 4));
-  if (indices.length > 0) geometry.setIndex(new BufferAttribute(indices, 1));
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-  return geometry;
-}
-
-/**
- * Builds a MeshStandardMaterial that blends up to four paint-layer base-color
- * textures by the per-vertex `landscapeWeight` attribute, keeping full PBR
- * lighting/shadows. Layers without a texture fall back to their flat color.
- * Used only in "lit" view when at least one layer has a texture; otherwise the
- * plain vertex-color material renders the tint and the debug view modes.
- */
-function createLandscapeSplatMaterial(layerTextures: LandscapeLayerTexture[]): MeshStandardMaterial {
-  const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
-  material.defines = { ...(material.defines ?? {}), USE_UV: "" };
-  const texAt = (index: number): Texture | null => layerTextures[index]?.texture ?? null;
-  const colorAt = (index: number): Color =>
-    new Color(layerTextures[index]?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color);
-  const tilingAt = (index: number): number => Math.max(0.0001, layerTextures[index]?.tiling ?? 1);
-
-  material.onBeforeCompile = (shader) => {
-    for (let index = 0; index < 4; index += 1) {
-      shader.uniforms[`uLayerTex${index}`] = { value: texAt(index) };
-      shader.uniforms[`uLayerColor${index}`] = { value: colorAt(index) };
-      shader.uniforms[`uLayerHasTex${index}`] = { value: texAt(index) ? 1 : 0 };
-      shader.uniforms[`uLayerTiling${index}`] = { value: tilingAt(index) };
-    }
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute vec4 landscapeWeight;\nvarying vec4 vLandscapeWeight;")
-      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvLandscapeWeight = landscapeWeight;");
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-uniform sampler2D uLayerTex0;
-uniform sampler2D uLayerTex1;
-uniform sampler2D uLayerTex2;
-uniform sampler2D uLayerTex3;
-uniform vec3 uLayerColor0;
-uniform vec3 uLayerColor1;
-uniform vec3 uLayerColor2;
-uniform vec3 uLayerColor3;
-uniform float uLayerHasTex0;
-uniform float uLayerHasTex1;
-uniform float uLayerHasTex2;
-uniform float uLayerHasTex3;
-uniform float uLayerTiling0;
-uniform float uLayerTiling1;
-uniform float uLayerTiling2;
-uniform float uLayerTiling3;
-varying vec4 vLandscapeWeight;`,
-      )
-      // Inlined here (not a helper at <common>) because vUv is only in scope
-      // inside main(), after three's <uv_pars_fragment> declares it.
-      .replace(
-        "#include <color_fragment>",
-        `#include <color_fragment>
-{
-  vec3 forgeC0 = uLayerHasTex0 > 0.5 ? texture2D(uLayerTex0, vUv * uLayerTiling0).rgb : uLayerColor0;
-  vec3 forgeC1 = uLayerHasTex1 > 0.5 ? texture2D(uLayerTex1, vUv * uLayerTiling1).rgb : uLayerColor1;
-  vec3 forgeC2 = uLayerHasTex2 > 0.5 ? texture2D(uLayerTex2, vUv * uLayerTiling2).rgb : uLayerColor2;
-  vec3 forgeC3 = uLayerHasTex3 > 0.5 ? texture2D(uLayerTex3, vUv * uLayerTiling3).rgb : uLayerColor3;
-  vec3 forgeAlbedo =
-    forgeC0 * vLandscapeWeight.x +
-    forgeC1 * vLandscapeWeight.y +
-    forgeC2 * vLandscapeWeight.z +
-    forgeC3 * vLandscapeWeight.w;
-  float forgeWeight = vLandscapeWeight.x + vLandscapeWeight.y + vLandscapeWeight.z + vLandscapeWeight.w;
-  diffuseColor.rgb = forgeWeight > 0.0001 ? forgeAlbedo / forgeWeight : uLayerColor0;
-}`,
-      );
-  };
-  // Distinguish this program from the plain landscape material in three's cache.
-  material.customProgramCacheKey = () => "forge-landscape-splat";
-  return material;
-}
-
-/** Splits the vertex grid into `quadsPerChunk`-sized chunk meshes under one shared material. */
-function buildLandscapeChunkMeshes(
+function landscapeLook(
   data: ForgeLandscapeData,
   viewMode: LandscapeViewMode,
   activeLayerId: string,
-  colors?: LandscapeLayerColors,
-  layerTextures?: LandscapeLayerTexture[],
-): Mesh[] {
-  const { verticesX, verticesZ } = data.size;
-  const quadsPerChunk = Math.max(1, data.chunks?.quadsPerChunk || LANDSCAPE_QUADS_PER_CHUNK);
-  ensureLandscapeLayers(data);
-  const useSplat = viewMode === "lit" && Boolean(layerTextures?.some((layer) => layer.texture));
-  const material = useSplat
-    ? createLandscapeSplatMaterial(layerTextures!)
-    : new MeshStandardMaterial({
-        color: new Color("#ffffff"),
-        roughness: 1,
-        metalness: 0,
-        vertexColors: true,
-      });
-  const meshes: Mesh[] = [];
-  for (let z0 = 0; z0 < verticesZ - 1; z0 += quadsPerChunk) {
-    const z1 = Math.min(z0 + quadsPerChunk, verticesZ - 1);
-    for (let x0 = 0; x0 < verticesX - 1; x0 += quadsPerChunk) {
-      const x1 = Math.min(x0 + quadsPerChunk, verticesX - 1);
-      const geometry = buildChunkGeometry(data, x0, x1, z0, z1, viewMode, activeLayerId, colors);
-      const mesh = new Mesh(geometry, material);
-      mesh.name = "landscape-chunk";
-      mesh.receiveShadow = true;
-      mesh.castShadow = false;
-      mesh.userData.landscapeChunk = { x0, x1, z0, z1 } satisfies LandscapeDirtyBounds;
-      meshes.push(mesh);
-    }
-  }
-  return meshes;
+  colors: LandscapeLayerColors | undefined,
+  layerTextures: LandscapeLayerTexture[] | undefined,
+): TerrainLook {
+  const splat = viewMode === "lit" && Boolean(layerTextures?.some((layer) => layer.texture));
+  const layers = data.layers.map((layer, index): TerrainLayerLook => {
+    const textured = layerTextures?.[index];
+    return {
+      color: splat ? textured?.color ?? DEFAULT_LAYER_COLOR : presetLayerColor(layer.id, colors),
+      texture: splat ? textured?.texture ?? null : null,
+      tiling: textured?.tiling ?? 1,
+    };
+  });
+  const active = data.layers.findIndex((layer) => layer.id === activeLayerId);
+  return { viewMode, layers, activeLayer: Math.max(0, active), defaultColor: DEFAULT_LAYER_COLOR };
 }
 
-/** Builds a landscape's chunked mesh group; rebuild required whenever `data` changes shape. */
+function createLandscapeTerrain(item: LandscapeRenderItem): TerrainRenderer {
+  ensureLandscapeLayers(item.data);
+  return new TerrainRenderer(
+    landscapeRenderSource(item.data),
+    landscapeLook(
+      item.data,
+      item.viewMode ?? "lit",
+      item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id,
+      item.layerColors,
+      item.layerTextures,
+    ),
+  );
+}
+
+/** Builds a landscape's terrain group; rebuild required whenever `data` changes shape. */
 export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObject {
   const group = new Group();
   group.name = item.name;
-  const viewMode = item.viewMode ?? "lit";
-  const activeLayerId = item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id;
-  for (const mesh of buildLandscapeChunkMeshes(
-    item.data,
-    viewMode,
-    activeLayerId,
-    item.layerColors,
-    item.layerTextures,
-  )) {
-    group.add(mesh);
-  }
+  const terrain = createLandscapeTerrain(item);
+  group.add(terrain.mesh);
+  bindings.set(group, { terrain, layerTextures: item.layerTextures });
   applyLandscapeTransform(group, item);
   return group;
 }
@@ -427,20 +179,11 @@ export function applyLandscapeTransform(object: LandscapeObject, item: Landscape
   object.visible = !item.hidden;
 }
 
-function intersectsDirtyBounds(chunk: LandscapeDirtyBounds, dirty: LandscapeDirtyBounds): boolean {
-  return (
-    chunk.x0 <= dirty.x1 &&
-    chunk.x1 >= dirty.x0 &&
-    chunk.z0 <= dirty.z1 &&
-    chunk.z1 >= dirty.z0
-  );
-}
-
 /**
- * Rebuilds only the chunk geometries that overlap the edited vertex bounds.
- * Sculpt changes don't alter chunk count/materials, so replacing geometry in
- * place keeps selection and scene ownership stable while avoiding a full actor
- * rebuild for every brush dab.
+ * Re-sends the edited vertex bounds to the GPU (a sub-rectangle copy and one
+ * texture-layer upload, no geometry rebuild) and applies the current view
+ * mode / active layer / tints. A grid that changed shape gets a new terrain mesh
+ * in the same group, keeping selection and scene ownership stable.
  */
 export function updateLandscapeObjectGeometry(
   object: LandscapeObject,
@@ -450,36 +193,50 @@ export function updateLandscapeObjectGeometry(
   activeLayerId: string = LANDSCAPE_DEFAULT_LAYERS[0]!.id,
   colors?: LandscapeLayerColors,
 ): void {
+  const binding = bindings.get(object);
+  if (!binding) return;
   ensureLandscapeLayers(data);
-  object.traverse((child) => {
-    if (!(child instanceof Mesh)) return;
-    const chunk = child.userData.landscapeChunk as LandscapeDirtyBounds | undefined;
-    if (!chunk || !intersectsDirtyBounds(chunk, dirty)) return;
-    child.geometry.dispose();
-    child.geometry = buildChunkGeometry(
-      data,
-      chunk.x0,
-      chunk.x1,
-      chunk.z0,
-      chunk.z1,
-      viewMode,
-      activeLayerId,
-      colors,
-    );
-  });
+  const look = landscapeLook(data, viewMode, activeLayerId, colors, binding.layerTextures);
+  const grid = binding.terrain.source.legacyGrid;
+  if (!grid || grid.verticesX !== data.size.verticesX || grid.verticesZ !== data.size.verticesZ
+    || binding.terrain.source.layerCount !== Math.min(data.layers.length, 8)) {
+    const previous = binding.terrain;
+    const terrain = new TerrainRenderer(landscapeRenderSource(data), look);
+    terrain.mesh.userData = { ...previous.mesh.userData, forgeTerrain: terrain };
+    terrain.material.wireframe = previous.material.wireframe;
+    object.remove(previous.mesh);
+    previous.dispose();
+    object.add(terrain.mesh);
+    binding.terrain = terrain;
+    return;
+  }
+  const rect = writeLandscapeRegion(binding.terrain.source, data, dirty);
+  binding.terrain.updateTile(0, 0, rect);
+  binding.terrain.setLook(look);
 }
 
-/** Frees every chunk's geometry + (shared) material under a landscape group. */
+/** The GPU terrain behind a landscape group (debug readouts, tests). */
+export function landscapeTerrainRenderer(object: LandscapeObject): TerrainRenderer | null {
+  return bindings.get(object)?.terrain ?? null;
+}
+
+/**
+ * Frees the terrain's GPU resources, plus — as before the GPU renderer — the
+ * geometry and materials of meshes callers parented under the group.
+ */
 export function disposeLandscapeObject(object: LandscapeObject): void {
-  const disposedMaterials = new Set<MeshStandardMaterial>();
+  const binding = bindings.get(object);
+  const disposedMaterials = new Set<Material>();
   object.traverse((child) => {
-    if (child instanceof Mesh) {
-      child.geometry.dispose();
-      const material = child.material as MeshStandardMaterial;
-      if (!disposedMaterials.has(material)) {
-        material.dispose();
-        disposedMaterials.add(material);
-      }
+    if (!(child instanceof Mesh) || child === binding?.terrain.mesh) return;
+    child.geometry.dispose();
+    const materials: Material[] = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      if (disposedMaterials.has(material)) continue;
+      material.dispose();
+      disposedMaterials.add(material);
     }
   });
+  binding?.terrain.dispose();
+  bindings.delete(object);
 }

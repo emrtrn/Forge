@@ -105,7 +105,8 @@ export class EditorSelectionOutline {
     group.name = `${source.name || "selection"}-outline-proxy`;
     source.updateMatrixWorld(true);
     source.traverse((object) => {
-      if (!isRenderableMesh(object)) return;
+      // GPU terrain draws a shared flat patch; a proxy of it would outline a unit square.
+      if (!isRenderableMesh(object) || object.userData.forgeTerrain) return;
       const proxy = new Mesh(object.geometry, this.invisibleMaterial);
       proxy.name = `${object.name || "mesh"}-outline-proxy`;
       proxy.matrix.copy(object.matrixWorld);

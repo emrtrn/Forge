@@ -33,7 +33,7 @@
       "name": "Layered Rock",
       "color": "#827b70",
       "material": "lt-rock",
-      "physicalMaterial": "mud"
+      "physicalMaterial": "stone"
     },
     {
       "id": "snow",

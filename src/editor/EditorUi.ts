@@ -2,6 +2,7 @@
 // keeps them in the dev-only editor chunk, out of the production game build.
 import type { QualityLevel } from "@engine/perf/qualityProfiles";
 import "./editorUi.css";
+import { renderLakeDetails } from "./panels/details/lakeDetails";
 import {
   assetPath,
   assetRecordById,
@@ -1381,7 +1382,7 @@ export class EditorUi {
 
     if (event.code === "Escape") {
       event.preventDefault();
-      this.app.clearSelection();
+      if (!this.app.cancelLake()) this.app.clearSelection();
     } else if (event.code === "KeyQ") {
       event.preventDefault();
       this.setActiveTool("select");
@@ -4422,6 +4423,9 @@ export class EditorUi {
   }
 
   private renderDetails(selection: EditableSelection | null): void {
+    if (selection?.kind === "lake") {
+      renderLakeDetails(this.detailsBody, this.app, true); this.finalizeDetailsRender(selection); return;
+    }
     if (!selection) {
       this.detailsScale = null;
       this.detailsBody.innerHTML = `
@@ -4499,6 +4503,7 @@ export class EditorUi {
     }
     if (selection.kind === "landscape") {
       renderLandscapeDetails(this.specialActorDetailsOptions(selection));
+      renderLakeDetails(this.detailsBody, this.app);
       this.finalizeDetailsRender(selection);
       return;
     }

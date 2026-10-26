@@ -1,4 +1,5 @@
 import type { RoomLayout } from "./layout";
+import { validateWaterBodies } from "./waterBody";
 import { parseWorldCellKey } from "../world/worldGrid";
 import {
   ContentLoadError, isFiniteNumber, requireArray, requireRecord,
@@ -8,6 +9,7 @@ import {
 /** Structural read guard; retains extension fields and legacy transform forms. */
 export function readRoomLayout(value: unknown, path: string): RoomLayout {
   const input = requireRecord(value, path);
+  if (input.waterBodies !== undefined) validateWaterBodies(input.waterBodies);
   if (input.worldCells !== undefined) {
     const keys = requireArray(input.worldCells, `${path}.worldCells`);
     const seen = new Set<string>();

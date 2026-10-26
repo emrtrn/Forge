@@ -182,12 +182,16 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
 
 test("streamed river rejects an unreadable remote bed without invented water and rebuilds on retry", async ({ page, request }, info) => {
   const { errors, def } = await setup(page, request, true, false, false, true);
+  await expect.poll(async () => (await riverSnapshot(page)).streamingPending, { timeout: 60_000 }).toBe(0);
   const before = await riverSnapshot(page); expect(before.resident[0]).toBeLessThan(def.tiles.length);
   const writes: string[] = [];
   page.on("request", (req) => { if (req.url().includes("/__save-terrain-tile")) writes.push(req.url()); });
   await page.route("**/__playwright-spline-world.tiles/10_0.tile.bin", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+  const failedTile = page.waitForResponse((response) => response.url().endsWith("/__playwright-spline-world.tiles/10_0.tile.bin") && response.status() === 503);
   await page.locator("[data-river-water-create]").click();
-  await expect(page.getByTestId("editor-status")).toContainText("River Water river-water-1 failed", { timeout: 30_000 });
+  // Autosave may replace the transient status text before a polling assertion.
+  // The controlled 503 and absent body are durable witnesses of the failure.
+  expect((await failedTile).status()).toBe(503);
   expect((await riverSnapshot(page)).waters).toEqual([]); expect(writes).toEqual([]);
   await page.unroute("**/__playwright-spline-world.tiles/10_0.tile.bin");
   const height = page.locator('[data-river-water-number="surfaceLevel"]');

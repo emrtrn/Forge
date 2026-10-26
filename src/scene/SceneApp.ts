@@ -1,4 +1,9 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
+import { LakeWaterController } from "./lakeWaterController";
+import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
+import { validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
+import { legacyLandscapeToWorldTerrain } from "@engine/terrain/terrainLegacy";
+import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
 import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
@@ -30,7 +35,7 @@ import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineDa
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
 import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
-import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
+import { terrainHeightAt, raycastTerrain } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
 import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@engine/terrain/worldTerrainExpand";
 import {
@@ -1334,6 +1339,13 @@ export class SceneApp {
   /** Visible spline-water ribbons, index-aligned with `layout.riverWaters`. */
   private riverWaterObjects: RiverWaterObjectLike[] = [];
   private riverWaterBuild = 0;
+  private lakes: LakeWaterController | null = null;
+  private readonly waterReflections = new WaterReflectionRegistry();
+  private lakeDraft: LayoutLakeWaterBody | null = null;
+  private lakePick: { terrainRef: string; reseed: string | null } | null = null;
+  private lakeSeedAbort = new AbortController();
+  private lakeDrag: { before: LayoutLakeWaterBody; edge: number; pointerId: number; draft: boolean } | null = null;
+  private lakeTimer: ReturnType<typeof setTimeout> | null = null;
   /** Shared planar reflection sources, one per River Water Body plane/group. */
   private riverReflectionSources: PlanarReflectionSource[] = [];
   /** Loaded normal maps owned by the editor water preview. */
@@ -2033,8 +2045,10 @@ export class SceneApp {
       disposeRiverWaterObject(water);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) source.dispose();
+    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
     this.riverReflectionSources = [];
+    this.lakes?.dispose();
+    if (this.lakeTimer) clearTimeout(this.lakeTimer);
     for (const texture of this.riverWaterTextures.values()) texture.dispose();
     this.riverWaterTextures.clear();
     this.lightOutlineGeometry.dispose();
@@ -2219,6 +2233,7 @@ export class SceneApp {
   }
 
   renameSceneObject(id: string, name: string): void {
+    if (id.startsWith("lake:")) { this.setLakeByIndex(Number(id.slice(5)), { name }); return; }
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
     if (selection.kind === "sky") {
@@ -2248,6 +2263,7 @@ export class SceneApp {
   }
 
   setSceneObjectHidden(id: string, hidden: boolean): void {
+    if (id.startsWith("lake:")) { this.setLakeByIndex(Number(id.slice(5)), { hidden }); return; }
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
     if (selection.kind === "sky") {
@@ -2277,6 +2293,7 @@ export class SceneApp {
   }
 
   setSceneObjectLocked(id: string, locked: boolean): void {
+    if (id.startsWith("lake:")) { this.setLakeByIndex(Number(id.slice(5)), { locked }); return; }
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
     if (this.editorSceneController.selectedCount > 1 && this.isSelectionSelected(selection)) {
@@ -2422,7 +2439,9 @@ export class SceneApp {
   }
 
   private editorViewportCamera(): PerspectiveCamera | OrthographicCamera {
-    return this.activeCamera instanceof OrthographicCamera ? this.orthoCamera : this.camera;
+    const camera = this.activeCamera instanceof OrthographicCamera ? this.orthoCamera : this.camera;
+    if (this.lakes) camera.layers.enable(31);
+    return camera;
   }
 
   private syncOrthoCameraFromPerspective(): void {
@@ -3266,6 +3285,7 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
+    if (this.selection?.kind === "lake") { this.deleteLake(); return; }
     // Environment singletons are outside the transform/
     // multi-select stack; route their deletes through the dedicated (undoable)
     // commands.
@@ -7016,6 +7036,8 @@ export class SceneApp {
    * freshly authored landscape whose sidecar hasn't been saved).
    */
   private async buildLandscapes(): Promise<void> {
+    this.lakes?.dispose(); this.lakeDraft = null; this.lakePick = null;
+    if (this.lakeTimer) { clearTimeout(this.lakeTimer); this.lakeTimer = null; }
     this.riverWaterBuild += 1;
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
@@ -7063,14 +7085,247 @@ export class SceneApp {
    * resident. This is presentation-only: water is excluded from picking and never
    * creates a collider or navigation rule.
    */
-  private async buildRiverWaters(): Promise<void> {
+  private lakeDocument(id: string): WorldTerrainDocument | undefined {
+    const world = this.worldTerrains.get(id); if (world) return world;
+    const actor = this.layout?.landscapes?.find((a) => a.id === id), data = this.landscapeData.get(id);
+    if (!actor || !data || !actor.dataRef.endsWith(".terrain.json")) return undefined;
+    const converted = legacyLandscapeToWorldTerrain(actor, data);
+    return converted.warnings.length ? undefined : { def: converted.def, tiles: new Map([["0_0", converted.tile]]) };
+  }
+
+  private lakeController(): LakeWaterController {
+    return this.lakes ??= new LakeWaterController({ scene: this.scene, editor: true, reflections: this.waterReflections,
+      document: (id) => this.lakeDocument(id),
+      load: async (id, key, signal) => {
+        const actor = this.layout?.landscapes?.find((a) => a.id === id), document = this.lakeDocument(id);
+        if (!actor || !document) throw new Error("Missing Lake terrain");
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
+        if (!response.ok) throw new Error(`Lake tile ${key}: HTTP ${response.status}`);
+        return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+      }, normal: (id) => this.loadRiverWaterNormalTexture(id),
+      changed: () => { if (this.lakeDraft || this.selection?.kind === "lake") this.emitSelectionChanged(); },
+    });
+  }
+
+  private rebuildLakes(delay = 0): void {
+    this.lakes?.invalidate();
+    if (this.lakeTimer) clearTimeout(this.lakeTimer);
+    const work = () => {
+      this.lakeTimer = null;
+      const bodies = [...(this.layout?.waterBodies ?? []), ...(this.lakeDraft ? [this.lakeDraft] : [])];
+      if (!bodies.length && !this.lakes) return;
+      const controller = this.lakeController();
+      controller.select(this.lakeDraft?.id ?? (this.selection?.kind === "lake" ? this.layout?.waterBodies?.[this.selection.index]?.id ?? null : null));
+      void controller.rebuild(bodies);
+    };
+    if (delay) this.lakeTimer = setTimeout(work, delay); else work();
+  }
+
+  private updateLakesForTerrainPatches(id: string, patches: readonly TerrainUndoPatch[]): void {
+    const document = this.lakeDocument(id); if (!document) return;
+    const bodies = [...(this.layout?.waterBodies ?? []), ...(this.lakeDraft ? [this.lakeDraft] : [])].filter((w) => w.terrainRef === id);
+    if (!bodies.length) return;
+    const { def } = document, q = def.tileQuads, s = def.spacing;
+    for (const patch of patches) {
+      if (!patch.before.heights.some((v, i) => v !== patch.after.heights[i])) continue;
+      const [tx, tz] = patch.key.split("_").map(Number) as [number, number];
+      // A vertex also influences the adjacent terrain triangles, including across a seam.
+      const minX = def.origin[0] + (tx * q + patch.rect.x0 - 1) * s;
+      const maxX = def.origin[0] + (tx * q + patch.rect.x1 + 1) * s;
+      const minZ = def.origin[2] + (tz * q + patch.rect.z0 - 1) * s;
+      const maxZ = def.origin[2] + (tz * q + patch.rect.z1 + 1) * s;
+      if (bodies.some((w) => maxX >= w.bounds.min[0] && minX <= w.bounds.max[0] && maxZ >= w.bounds.min[1] && minZ <= w.bounds.max[1])) {
+        this.rebuildLakes(); return;
+      }
+    }
+  }
+
+  getLakeEditorState() {
+    const source = this.lakeDraft ?? (this.selection?.kind === "lake" ? this.layout?.waterBodies?.[this.selection.index] : undefined);
+    const actor = this.selection?.kind === "landscape" ? this.layout?.landscapes?.[this.selection.index] : undefined;
+    return { source: source ? structuredClone(source) : null, result: source ? this.lakes?.results.get(source.id) ?? null : null,
+      draft: !!this.lakeDraft, picking: !!this.lakePick, available: !!(actor && !actor.locked && this.lakeDocument(actor.id)) };
+  }
+
+  beginLakeFill(): void {
+    if (this.selection?.kind !== "landscape") return;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    if (!actor || actor.locked || !this.lakeDocument(actor.id)) return;
+    if ((this.layout?.waterBodies?.length ?? 0) >= LAKE_LIMITS.bodies) { this.onStatus?.("Lake limit: 8 bodies", "warning"); return; }
+    this.lakePick = { terrainRef: actor.id, reseed: null }; this.lakeDraft = null;
+    this.onStatus?.("Lake: click inside the depression. Escape cancels.", "info"); this.emitSelectionChanged();
+  }
+
+  beginLakeReseed(): void {
+    const source = this.getLakeEditorState().source;
+    if (!source || source.locked) return;
+    this.lakePick = { terrainRef: source.terrainRef, reseed: source.id }; this.emitSelectionChanged();
+  }
+
+  cancelLake(): boolean {
+    if (!this.lakePick && !this.lakeDraft && !this.lakeDrag) return false;
+    this.lakeSeedAbort.abort();
+    if (this.lakeDrag) {
+      const drag = this.lakeDrag, index = this.layout?.waterBodies?.findIndex((w) => w.id === drag.before.id) ?? -1;
+      if (!drag.draft && index >= 0) this.layout!.waterBodies![index] = drag.before;
+      if (this.canvas.hasPointerCapture(drag.pointerId)) this.canvas.releasePointerCapture(drag.pointerId);
+    }
+    this.lakePick = null; this.lakeDraft = null; this.lakeDrag = null; this.rebuildLakes(); this.emitSelectionChanged(); return true;
+  }
+
+  retryLake(): void { this.rebuildLakes(); }
+
+  selectLakeTerrain(): void {
+    const source = this.getLakeEditorState().source;
+    const index = this.layout?.landscapes?.findIndex((a) => a.id === source?.terrainRef) ?? -1;
+    if (index >= 0) this.select({ kind: "landscape", index });
+  }
+
+  editLake(patch: Partial<LayoutLakeWaterBody>): void {
+    if (this.lakeDraft) {
+      try { this.lakeDraft = validateWaterBody({ ...this.lakeDraft, ...patch }); this.rebuildLakes(150); this.emitSelectionChanged(); }
+      catch (error) { this.onStatus?.(String(error), "warning"); }
+    } else if (this.selection?.kind === "lake") this.setLakeByIndex(this.selection.index, patch);
+  }
+
+  private setLakeByIndex(index: number, patch: Partial<LayoutLakeWaterBody>): void {
+    const before = this.layout?.waterBodies?.[index];
+    if (!before || (before.locked && patch.locked === undefined)) return;
+    try {
+      const after = validateWaterBody({ ...before, ...patch }), previous = structuredClone(before);
+      const apply = (lake: LayoutLakeWaterBody) => {
+        const current = this.layout?.waterBodies?.findIndex((w) => w.id === previous.id) ?? -1;
+        if (current < 0 || !this.layout?.waterBodies) return;
+        this.layout.waterBodies[current] = structuredClone(lake); this.rebuildLakes();
+        this.emitSelectionChanged(); this.emitSceneObjectsChanged(); this.scheduleAutoSave();
+      };
+      this.executeCommand({ label: "Edit Lake", redo: () => apply(after), undo: () => apply(previous) });
+    } catch (error) { this.onStatus?.(String(error), "warning"); }
+  }
+
+  commitLake(): void {
+    const lake = this.lakeDraft;
+    if (!lake || this.lakes?.results.get(lake.id)?.status !== "ready") return;
+    const before = structuredClone(this.layout?.waterBodies ?? []), after = [...before, structuredClone(lake)];
+    this.lakeDraft = null; this.lakePick = null;
+    this.executeCommand({ label: "Create Lake", redo: () => this.restoreLakeList(after, lake.id), undo: () => this.restoreLakeList(before) });
+  }
+
+  deleteLake(): void {
+    if (this.selection?.kind !== "lake") return;
+    const lake = this.layout?.waterBodies?.[this.selection.index]; if (!lake || lake.locked) return;
+    const before = structuredClone(this.layout?.waterBodies ?? []), after = before.filter((w) => w.id !== lake.id);
+    this.executeCommand({ label: "Delete Lake", redo: () => this.restoreLakeList(after), undo: () => this.restoreLakeList(before, lake.id) });
+  }
+
+  private restoreLakeList(bodies: LayoutLakeWaterBody[], selected?: string): void {
+    if (!this.layout) return;
+    if (bodies.length) this.layout.waterBodies = structuredClone(bodies); else delete this.layout.waterBodies;
+    const index = selected ? bodies.findIndex((w) => w.id === selected) : -1;
+    this.select(index >= 0 ? { kind: "lake", index } : null); this.rebuildLakes();
+    this.emitSceneObjectsChanged(); this.scheduleAutoSave();
+  }
+
+  private lakeRay(clientX: number, clientY: number): void {
+    const rect = this.canvas.getBoundingClientRect();
+    this.raycaster.setFromCamera(new Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), this.editorViewportCamera());
+  }
+
+  private pickLake(clientX: number, clientY: number): Selection | null {
+    if (!this.lakes) return null;
+    this.lakeRay(clientX, clientY);
+    const mask = this.raycaster.layers.mask; this.raycaster.layers.enable(31);
+    const hits = this.raycaster.intersectObjects([...this.lakes.objects.values(), ...this.lakes.helpers.children], true);
+    this.raycaster.layers.mask = mask;
+    const id = hits.find((h) => h.object.visible && h.object.parent?.visible && h.object.userData.waterBodyId)?.object.userData.waterBodyId as string | undefined;
+    const index = this.layout?.waterBodies?.findIndex((w) => w.id === id) ?? -1;
+    return index >= 0 ? { kind: "lake", index } : null;
+  }
+
+  private beginLakePointer(event: PointerEvent): boolean {
+    if (event.altKey || event.button !== 0) return false;
+    const picking = this.lakePick;
+    if (picking) {
+      void this.chooseLakeSeed(event.clientX, event.clientY, picking); return true;
+    }
+    const source = this.getLakeEditorState().source;
+    if (!source || source.locked || !this.lakes) return false;
+    this.lakeRay(event.clientX, event.clientY); const mask = this.raycaster.layers.mask; this.raycaster.layers.enable(31);
+    const hit = this.raycaster.intersectObjects(this.lakes.helpers.children, true).find((h) => h.object.userData.lakeEdge !== undefined && h.object.parent?.visible);
+    this.raycaster.layers.mask = mask;
+    if (!hit) return !!this.lakeDraft;
+    this.lakeDrag = { before: structuredClone(source), edge: Number(hit.object.userData.lakeEdge), pointerId: event.pointerId, draft: !!this.lakeDraft };
+    this.canvas.setPointerCapture(event.pointerId); return true;
+  }
+
+  private async chooseLakeSeed(clientX: number, clientY: number, picking: { terrainRef: string; reseed: string | null }): Promise<void> {
+    this.lakeSeedAbort.abort(); this.lakeSeedAbort = new AbortController(); const signal = this.lakeSeedAbort.signal;
+    const actor = this.layout?.landscapes?.find((a) => a.id === picking.terrainRef), document = this.lakeDocument(picking.terrainRef);
+    if (!actor || actor.locked || !document) return;
+    this.lakeRay(clientX, clientY); const origin = this.raycaster.ray.origin.toArray() as Vec3, direction = this.raycaster.ray.direction.toArray() as Vec3;
+    const tiles = new Map(document.tiles), lookup = { tile: (x: number, z: number) => tiles.get(tileKey(x, z)) };
+    try {
+      let hit = raycastTerrain(document.def, lookup, origin, direction, Infinity, document.globalAttributes?.map);
+      for (let i = 0; hit?.approximate && i < 4; i++) {
+        const key = tileKey(hit.tileX, hit.tileZ);
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { signal, cache: "no-cache" });
+        if (!response.ok) throw new Error(`Lake seed tile ${key}: HTTP ${response.status}`);
+        tiles.set(key, validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer())));
+        hit = raycastTerrain(document.def, lookup, origin, direction, Infinity, document.globalAttributes?.map);
+      }
+      if (signal.aborted || this.lakePick !== picking) return;
+      if (!hit || hit.approximate) throw new Error("No exact Lake seed hit; move closer and retry");
+      const [x, height, z] = hit.point;
+      this.lakePick = null;
+      if (picking.reseed) this.editLake({ seed: [x, z] });
+      else {
+        const ids = new Set(this.layout?.waterBodies?.map((w) => w.id)); let i = 1; while (ids.has(`lake-${i}`)) i++;
+        const s = document.def.spacing, o = document.def.origin;
+        this.lakeDraft = { schema: 1, kind: "lake", mode: "fillExisting", coordinateSpace: "world", terrainRef: actor.id,
+          id: `lake-${i}`, name: `Lake ${i}`, seed: [x, z], surfaceLevel: height + 0.5,
+          bounds: { min: [o[0] + Math.floor((x - 32 - o[0]) / s) * s, o[2] + Math.floor((z - 32 - o[2]) / s) * s],
+            max: [o[0] + Math.ceil((x + 32 - o[0]) / s) * s, o[2] + Math.ceil((z + 32 - o[2]) / s) * s] } };
+        this.rebuildLakes();
+      }
+      this.emitSelectionChanged();
+    } catch (error) { if (!signal.aborted) this.onStatus?.(error instanceof Error ? error.message : String(error), "warning"); }
+  }
+
+  private updateLakePointer(event: PointerEvent): boolean {
+    const drag = this.lakeDrag; if (!drag || drag.pointerId !== event.pointerId) return false;
+    this.lakeRay(event.clientX, event.clientY);
+    const point = this.raycaster.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), -drag.before.surfaceLevel), new Vector3());
+    const document = this.lakeDocument(drag.before.terrainRef); if (!point || !document) return true;
+    const next = structuredClone(drag.before), axis = drag.edge % 2, s = document.def.spacing, o = document.def.origin[axis === 0 ? 0 : 2];
+    const value = o + Math.round(((axis === 0 ? point.x : point.z) - o) / s) * s;
+    (drag.edge < 2 ? next.bounds.min : next.bounds.max)[axis] = value;
+    try { validateWaterBody(next); if (drag.draft) this.lakeDraft = next;
+      else { const i = this.layout?.waterBodies?.findIndex((w) => w.id === next.id) ?? -1; if (i >= 0) this.layout!.waterBodies![i] = next; }
+      this.rebuildLakes(150); this.emitSelectionChanged();
+    } catch { /* Keep the last valid rectangle while a handle crosses its seed. */ }
+    return true;
+  }
+
+  private endLakePointer(event: PointerEvent): boolean {
+    const drag = this.lakeDrag; if (!drag || drag.pointerId !== event.pointerId) return false;
+    this.lakeDrag = null; if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
+    const after = this.getLakeEditorState().source;
+    if (!drag.draft && after) {
+      const index = this.layout?.waterBodies?.findIndex((w) => w.id === after.id) ?? -1;
+      if (index >= 0) { this.layout!.waterBodies![index] = drag.before; if (event.type !== "pointercancel") this.setLakeByIndex(index, after); }
+    } else if (drag.draft && event.type === "pointercancel") this.lakeDraft = drag.before;
+    this.rebuildLakes(); return true;
+  }
+
+  private async buildRiverWaters(includeLakes = true): Promise<void> {
+    if (includeLakes) this.rebuildLakes();
     const build = ++this.riverWaterBuild;
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) source.dispose();
+    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
     this.riverReflectionSources = [];
     const waters = this.layout?.riverWaters ?? [];
     const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
@@ -7098,11 +7353,12 @@ export class SceneApp {
         if (build !== this.riverWaterBuild) return;
         let reflectionSource: PlanarReflectionSource | null = null;
         const planeY = source.position[1] + source.surfaceLevel;
-        const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+        const groupKey = riverWaterReflectionGroupKey(resolved, planeY);
+        const reflectionKey = groupKey ? `${groupKey}:${planeY}` : null;
         if (reflectionKey && resolved.reflectionQuality !== "low") {
           reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
           if (!reflectionSource) {
-            reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+            reflectionSource = this.waterReflections.acquire(resolved.reflectionGroup ?? "water", planeY, resolved.reflectionQuality);
             reflectionSourceByKey.set(reflectionKey, reflectionSource);
             this.riverReflectionSources.push(reflectionSource);
           }
@@ -9654,7 +9910,7 @@ export class SceneApp {
         session.markTiles(dirty.keys());
         updateWorldTerrainObjectTiles(object, dirty);
         void this.rebuildLandscapeSplineMeshes(index);
-        void this.buildRiverWaters();
+        void this.buildRiverWaters(false);
         if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
         this.scheduleLandscapeFoliageRebuild(landscapeId);
       } else {
@@ -9663,6 +9919,7 @@ export class SceneApp {
           || data.layers.length !== grid.layerCount) return;
         this.writeLandscapePatches(landscapeId, index, data, patches, side);
       }
+      this.updateLakesForTerrainPatches(landscapeId, patches);
       this.select({ kind: "landscape", index });
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
@@ -11881,6 +12138,7 @@ export class SceneApp {
   }
 
   private isSelectionLocked(selection: Selection): boolean {
+    if (selection.kind === "lake") return this.layout?.waterBodies?.[selection.index]?.locked === true;
     return Boolean(this.getMutableTransform(selection)?.locked);
   }
 
@@ -12665,6 +12923,7 @@ export class SceneApp {
       beginAltCameraDrag: (event) => this.cameraController.beginAltDrag(event),
       beginCameraNavigation: (event) => this.cameraController.beginNavigation(event),
       pickSelection: (clientX, clientY) => {
+        const lake = this.pickLake(clientX, clientY); if (lake) return lake;
         const hit = this.pickSplinePoint(clientX, clientY);
         if (hit && this.selection?.kind === "spline") {
           this.activeSplinePointId = hit.pointId;
@@ -12677,9 +12936,9 @@ export class SceneApp {
       },
       toggleSelection: (selection) => this.toggleSelection(selection),
       select: (selection) => this.select(selection),
-      beginLandscapeSculpt: (event) => this.beginLandscapeSculpt(event),
-      updateLandscapeSculpt: (event) => this.updateLandscapeSculpt(event),
-      endLandscapeSculpt: (event) => this.endLandscapeSculpt(event),
+      beginLandscapeSculpt: (event) => this.beginLakePointer(event) || this.beginLandscapeSculpt(event),
+      updateLandscapeSculpt: (event) => this.updateLakePointer(event) || this.updateLandscapeSculpt(event),
+      endLandscapeSculpt: (event) => this.endLakePointer(event) || this.endLandscapeSculpt(event),
       updateLandscapeBrushHover: (clientX, clientY) => this.updateLandscapeBrushHover(clientX, clientY),
       clearLandscapeBrushHover: () => this.clearLandscapeBrushHover(),
       beginMeshPaintStroke: (event) => this.beginMeshPaintStroke(event),
@@ -13366,6 +13625,7 @@ export class SceneApp {
   }
 
   private select(selection: Selection | null): void {
+    this.lakes?.select(selection?.kind === "lake" ? this.layout?.waterBodies?.[selection.index]?.id ?? null : this.lakeDraft?.id ?? null);
     this.editorSceneController.select(selection);
     this.updateAiNavigationView();
     this.refreshAllLandscapeSplineOverlays();
@@ -13528,10 +13788,15 @@ export class SceneApp {
       if (!options.includeHidden && actor.hidden) return;
       selections.push({ kind: "landscape", index });
     });
+    this.layout.waterBodies?.forEach((lake, index) => {
+      if (!options.includeHidden && lake.hidden) return;
+      selections.push({ kind: "lake", index });
+    });
     return selections;
   }
 
   private getSelectionLabel(selection: Selection): string {
+    if (selection.kind === "lake") return this.layout?.waterBodies?.[selection.index]?.name ?? "Lake";
     if (selection.kind === "sky") {
       return resolveSkyAtmosphere(this.layout?.skyAtmosphere ?? null).name;
     }
@@ -13623,6 +13888,10 @@ export class SceneApp {
   }
 
   private getSelectionWorldBox(selection: Selection): Box3 | null {
+    if (selection.kind === "lake") {
+      const lake = this.layout?.waterBodies?.[selection.index];
+      return lake ? new Box3(new Vector3(lake.bounds.min[0], lake.surfaceLevel - 0.1, lake.bounds.min[1]), new Vector3(lake.bounds.max[0], lake.surfaceLevel + 0.1, lake.bounds.max[1])) : null;
+    }
     if (selection.kind === "instance") {
       const bounds = this.localBounds.get(selection.assetId);
       const transform = this.getMutableTransform(selection);
@@ -13709,6 +13978,7 @@ export class SceneApp {
   }
 
   private createSelectionOutlineTarget(selection: Selection): Object3D | null {
+    if (selection.kind === "lake") return null;
     if (!this.selectionOutline || !this.layout) return null;
     // The Sky Atmosphere + Cloud Layer are full-screen backdrops and Height Fog is scene-wide; none has an outline proxy.
     if (selection.kind === "sky" || selection.kind === "fog" || selection.kind === "cloud") {
@@ -14447,6 +14717,7 @@ export class SceneApp {
     clearGizmoGroup(this.gizmoGroup, this.gizmoPickables);
     this.refreshSplinePointOverlay();
     if (!this.selection) return;
+    if (this.selection.kind === "lake") return;
     // The Sky Atmosphere, Height Fog, Cloud Layer and Post Process are scene-wide
     // environment singletons with no transform, so they never show a move gizmo.
     if (
@@ -14552,7 +14823,7 @@ export class SceneApp {
     | LayoutSplineActor
     | LayoutLandscape
     | null {
-    if (!this.layout) return null;
+    if (!this.layout || selection.kind === "lake") return null;
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
       return instance?.placements[selection.placementIndex] ?? null;
@@ -14769,6 +15040,7 @@ export class SceneApp {
   }
 
   private hasSelection(selection: Selection): boolean {
+    if (selection.kind === "lake") return Boolean(this.layout?.waterBodies?.[selection.index]);
     if (!this.layout) return false;
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);

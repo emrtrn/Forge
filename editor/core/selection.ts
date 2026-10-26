@@ -11,6 +11,7 @@ export type Selection =
   | { kind: "targetPoint"; index: number }
   | { kind: "spline"; index: number }
   | { kind: "landscape"; index: number }
+  | { kind: "lake"; index: number }
   | { kind: "worldWidget"; index: number }
   | { kind: "sky" }
   | { kind: "fog" }
@@ -48,6 +49,7 @@ export type CloudSelection = Extract<Selection, { kind: "cloud" }>;
 export type PostSelection = Extract<Selection, { kind: "post" }>;
 
 export function cloneSelection(selection: Selection): Selection {
+  if (selection.kind === "lake") return { ...selection };
   if (selection.kind === "instance") {
     return {
       kind: "instance",
@@ -74,6 +76,7 @@ export function cloneSelection(selection: Selection): Selection {
 }
 
 export function selectionId(selection: Selection): string {
+  if (selection.kind === "lake") return `lake:${selection.index}`;
   if (selection.kind === "character") return `character:${selection.index}`;
   if (selection.kind === "light") return `light:${selection.index}`;
   if (selection.kind === "actor") return `actor:${selection.index}`;
@@ -95,6 +98,7 @@ export function selectionId(selection: Selection): string {
 
 export function parseSelectionId(id: string): Selection | null {
   const [kind, encodedAssetId, rawIndex] = id.split(":");
+  if (kind === "lake") { const index = Number(encodedAssetId); return Number.isInteger(index) && index >= 0 ? { kind, index } : null; }
   if (kind === "sky") return { kind: "sky" };
   if (kind === "fog") return { kind: "fog" };
   if (kind === "cloud") return { kind: "cloud" };
@@ -162,6 +166,7 @@ export function selectionsEqual(
   right: Selection | null,
 ): boolean {
   if (!left || !right || left.kind !== right.kind) return false;
+  if (left.kind === "lake" && right.kind === "lake") return left.index === right.index;
   if (left.kind === "character" && right.kind === "character") {
     return left.index === right.index;
   }

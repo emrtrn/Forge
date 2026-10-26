@@ -19,6 +19,7 @@ import type {
   LayoutCharacter,
   LayoutHeightFog,
   LayoutLandscape,
+  LayoutLakeWaterBody,
   LayoutLightActor,
   LayoutPlacement,
   LayoutPostProcess,
@@ -46,6 +47,13 @@ import {
 import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
+
+function buildLakeSelection(lake: LayoutLakeWaterBody, index: number): EditableSelection {
+  return { id: `lake:${index}`, kind: "lake", assetId: "lake-water", category: "terrain", label: lake.name ?? lake.id,
+    position: [lake.seed[0], lake.surfaceLevel, lake.seed[1]], rotation: [0, 0, 0], scale: [1, 1, 1],
+    pivot: [0, 0, 0], scaleLocked: true, locked: lake.locked ?? false, castShadow: false,
+    collision: false, simulatePhysics: false, physics: {}, metadata: {} };
+}
 
 function collisionOverrides(
   source: LayoutPlacement | LayoutCharacter,
@@ -740,6 +748,9 @@ export function buildSceneObjects(
     });
   });
 
+  layout.waterBodies?.forEach((lake, index) => {
+    objects.push({ ...buildLakeSelection(lake, index), selected: deps.isSelected({ kind: "lake", index }), hidden: lake.hidden ?? false, locked: lake.locked ?? false });
+  });
   layout.landscapes?.forEach((actor, index) => {
     const selection: Selection = { kind: "landscape", index };
     objects.push({
@@ -783,6 +794,10 @@ export function buildEditableSelection(
   selection: Selection,
   deps: SceneObjectDeps,
 ): EditableSelection | null {
+  if (selection.kind === "lake") {
+    const lake = layout.waterBodies?.[selection.index];
+    return lake ? buildLakeSelection(lake, selection.index) : null;
+  }
   if (selection.kind === "instance") {
     const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
     const placement = instance?.placements[selection.placementIndex];

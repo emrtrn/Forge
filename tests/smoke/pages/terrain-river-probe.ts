@@ -2,6 +2,8 @@ import { Box3, Vector3, type Group, type PerspectiveCamera, type Scene, type Web
 import { updateLandscapeLod } from "@engine/render-three/landscape";
 import type { RiverWaterObject } from "@engine/render-three/riverWater";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
+import type { TerrainEditorStreaming } from "@engine/terrain/terrainEditorStreaming";
+import { pendingTerrainLoads } from "./terrain-probe-state";
 
 interface RiverProbeApp {
   camera: PerspectiveCamera;
@@ -13,6 +15,7 @@ interface RiverProbeApp {
   postProcessPipeline: { render(dt: number): void } | null;
   worldTerrains?: Map<string, WorldTerrainDocument>;
   worldTerrainDocuments?: Map<string, WorldTerrainDocument>;
+  worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
 }
 
 // Read-only observations of the actual editor/runtime output. Authoring and
@@ -48,7 +51,7 @@ export function installRiverProbe(app: unknown) {
           flowSpeed: water.material.uniforms["flowSpeed"]!.value,
           reflection: water.material.uniforms["reflectionStrength"]!.value,
           foam: water.children.map((child) => ({ name: child.name, world: child.getWorldPosition(water.position.clone()).toArray() })) };
-      }), resident: [...(internal.worldTerrains ?? internal.worldTerrainDocuments ?? new Map()).values()].map((doc) => doc.tiles.size) };
+      }), streamingPending: pendingTerrainLoads(internal), resident: [...(internal.worldTerrains ?? internal.worldTerrainDocuments ?? new Map()).values()].map((doc) => doc.tiles.size) };
     },
   };
 }

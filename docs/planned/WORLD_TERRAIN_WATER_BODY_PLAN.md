@@ -1,7 +1,7 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
 Tarih: 2026-10-25  
-Durum: 8A0–8A5 tamamlandı (2026-10-26). Çok-tile spline editörü, yol mesh/çarpışması ve nehir aktarımı kabul edildi. Sonraki dilim W0-Lake tasarımıdır; Lake/Puddle/Ocean henüz uygulanmadı.
+Durum: 8A0–8A5 tamamlandı, başlangıç HEAD `af599269`. W0-Lake kullanıcı tarafından onaylandı; W1 Lake uygulandı (2026-10-26). İşlevsel kabul ve ölçümler §13'te; donanım GPU ve büyük dünya performans kabulü açık. W2/Puddle/Ocean uygulanmadı. Commit/push yapılmadı.
 Ana plan: [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md)
 
 ## 1. Amaç ve karar durumu
@@ -20,7 +20,8 @@ Sonraki kapsam ve uygulama kararları bu belge üzerinden takip edilecektir.
   kıyısı ve derinliği araziyle ilişkili olmalıdır.
 - Unreal Water aktörleri tasarım referansı olarak incelenmiştir.
 
-**Öneri durumu:** Aşağıdaki Water Body mimarisi, araç davranışları ve geliştirme
+**Öneri durumu:** §1–10 ilk görüşmenin tarihsel çerçevesidir; 8A0–8A5 sonuçları
+§11'de, güncel W0-Lake/W1 önerisi §12'dedir. Aşağıdaki Water Body mimarisi, araç davranışları ve geliştirme
 sırası görüşme sırasında önerilmiştir. Dokümantasyon isteği, bu önerilerin
 tamamının uygulanmasına verilmiş onay olarak yorumlanmamalıdır. Henüz teslim
 tarihi veya uygulanacak ilk dilimin ayrıntılı kapsamı belirlenmemiştir.
@@ -197,10 +198,10 @@ kirli dikdörtgenler ve undo patch yapısı yatak uygulaması için başlangıç
 
 Bu sıra görüşme önerisidir; her dilimin kapsamı uygulama öncesinde netleştirilecektir.
 
-- [ ] **W0 — Tasarım:** Veri şeması, alan/başlangıç noktası davranışı, kıyı
-  üretimi ve mevcut River Water ile ortaklaşma sınırlarını belirle.
-- [ ] **W1 — Lake / mevcut çukur:** Kapalı sınır, su seviyesi, bağlantılı alan,
-  gerçek kıyı, derinliğe bağlı görünüm, seçim/düzenleme, undo/redo ve kayıt/reload.
+- [x] **W0 — Tasarım onayı:** §12 kullanıcı tarafından onaylandı (2026-10-26).
+- [x] **W1 — Lake / mevcut çukur işlevleri:** Sınırlı çalışma alanı, su seviyesi,
+  bağlantılı alan, gerçek kıyı, kesin derinlik, seçim/düzenleme, undo/redo ve
+  Save/Reload/Play uygulandı. İşlevsel kabul §13; GPU performans kabulü ayrı açık.
 - [ ] **W2 — Yatak oluşturma:** Derinlik profili, kıyı geçişi, önizleme ve tek
   undo komutuyla çok tile'a uygulama; isteğe bağlı kıyı boyası.
 - [ ] **W3 — Puddle:** Küçük alan aracı, sığ su/ıslaklık görünümü; terrain
@@ -225,7 +226,7 @@ Görsel su yüzeyi, bu oyun/fizik davranışlarını otomatik sağlamaz.
 - [ ] Su seviyesi değişince kıyı/derinlik güncellenir; kuru zeminde su görünmez.
 - [ ] Eksik tile senaryosu düz/sıfır zemin varsayımına düşmez.
 - [ ] Sculpt, undo/redo ve kaydet–yeniden aç akışlarında su/terrain tutarlılığı korunur.
-- [ ] Yatak uygulaması yalnız hedef alana etki eder, seam kopyaları eşittir ve
+- [ ] **W2 kabulü:** Yatak uygulaması yalnız hedef alana etki eder, seam kopyaları eşittir ve
   undo hem yükseklik hem boya değişikliğini geri alır.
 - [ ] Tarayıcıda yakın kıyı, uzak görünüm, sığ taban ve dalga geçişi incelenir;
   konsol hataları kontrol edilir ve hedef sahnede maliyet ölçülür.
@@ -239,18 +240,12 @@ olmadan scan başlatılmaz.
 
 ## 10. Açık kararlar ve sonraki oturum
 
-- İlk uygulama dilimi olarak W0 + sınırlandırılmış W1 seçilecek mi?
-- Lake için spline sınırı mı, başlangıç noktasıyla doldurma mı önce sunulacak;
-  diğer yöntem aynı sürüme girecek mi?
-- Alan sınırında suyun kesilmesi ve taşma önizlemesi nasıl davranacak?
-- İlk sürümde kullanılacak kıyı üretim yöntemi ve görünüm kalitesi ne olacak?
-- Yatak uygulaması bake + undo ile mi başlayacak; modifier katmanları ne zaman ele alınacak?
-- İlk hedef sahne, minimum su alanı ölçeği ve performans kabul bütçesi ne olacak?
-- Eski araziyi kaldırmak için hedef sürüm, geçiş süresi ve kabul listesi ne olacak?
+İlk görüşmedeki Lake soruları §12'de yanıtlandı ve kullanıcı tarafından
+onaylandı. W1'in uygulaması ve kabul sınırı §13'tedir. Yatak bake/modifier
+kararı W2'ye, eski araziyi kaldırma sürümü/geçiş süresi §4'e aittir.
 
-**Devam noktası:** Bu belgeyi ve ana planın güncel Faz 8 durumunu oku; W0'da
-ilk dilimin kapsamını somutlaştır. Uygulamaya başlamadan önce yeni kararları
-buraya işle. Bu dokümantasyon turunda motor, editör veya sahne verisi değiştirilmedi.
+**Devam noktası:** Lake'in gerçek donanım GPU/büyük dünya performans kabulü
+açıktır. W2 ayrı kullanıcı onayı gerektirir; W1 arazi yatağı oluşturmaz.
 
 ## 11. Uygulama başlangıcı — 2026-10-25
 
@@ -299,9 +294,11 @@ araçlarının ayrıntılı alt planıdır. Yukarıdaki ilk görüşme kaydı ta
   çarpışma ve tarayıcıda iki tile'ı geçen yol kabulü.
 - [x] **8A5 / nehir:** Dünya koordinatlı nehir yatağı/yüzeyi, kesin derinlik,
   akış, sculpt sonrası güncelleme ve eksik tile davranışı; tarayıcı kabulü.
-- [ ] **W0-Lake + W1:** Göl şeması, başlangıç noktası/kapalı sınır davranışı,
-  kıyı üretimi, hedef sahne ve ölçülmüş performans bütçesini kesinleştir;
-  ardından mevcut çukuru dolduran Lake aracını uygula.
+- [x] **W0-Lake onayı:** §12 kullanıcı tarafından onaylandı (2026-10-26).
+- [x] **W1 işlevleri:** Mevcut çukuru dolduran Lake aracı uygulandı; bağımsız
+  fixture, engine ve tarayıcı kanıtları §13'te.
+- [ ] **W1 donanım GPU / büyük dünya kabulü:** SwiftShader timer sağlamıyor;
+  gerçek donanım ve geometri streaming kabulü yapılmış sayılmaz.
 
 İlk dilim editör engelini kaldırmış veya yol/nehir aktarımını bitirmiş sayılmaz.
 Eski köprü/dosya biçimi emekliliği, Faz 8'deki diğer bağımlılıklar ve geçiş
@@ -611,5 +608,488 @@ Kaynak sahne/tile dosyaları değiştirilmedi. Başlangıçtaki tüm değişikli
 Kayıt/veri okuma değişiklikleri için Codex Security diff incelemesi önerildi;
 kullanıcı scan onayı olmadan çalıştırılmadı.
 
-**Devam noktası: W0-Lake.** Göl şeması, başlangıç noktası/kapalı kıyı sınırı,
-hedef sahne ve ölçülmüş performans bütçesi kesinleştirildikten sonra W1'e geçilir.
+**Güncel devir notu (2026-10-26):** Bu bölümdeki çalışma ağacı/commit anlatımı
+8A5 oturumunun tarihsel kaydıdır. Bu tasarım turunda Git çalışma ağacı temiz,
+HEAD `af599269 feat(terrain): complete multi-tile river water support` olarak
+doğrulandı. Yukarıdaki test sonuçları önceki kabul kaydıdır; bu turda yeniden
+çalıştırılmadı. Güncel devam noktası §12'deki W0-Lake önerisinin onayıdır.
+
+## 12. W0-Lake tasarım önerisi ve W1 uygulama planı — 2026-10-26
+
+**Durum: kullanıcı onaylı tasarım (2026-10-26).** Bu bölüm W0 kaynak incelemesi
+ve tasarım turunun kaydıdır. Sonraki kullanıcı onayıyla W1 uygulanmıştır; güncel
+sonuç §13'tedir. Buradaki bütçe değerleri tasarım hedefleridir; ölçülen değerler
+§13'te ayrıca yazılır. Büyük dünya/geometri streaming kabulü açık kalır.
+
+### 12.1. W1 kapsamı ve oluşturma akışı
+
+1. World Terrain seçiliyken **Lake → Mevcut çukuru doldur** açılır. Kesin terrain
+   isabetine tıklamak başlangıç XZ'sini seçer. Global harita/approximate ray hit
+   yeterli değildir; gerekirse hedef tile okunur, sonra kesin isabet tekrarlanır.
+2. Başlangıçta seed çevresinde 64 × 64 m önerilen, terrain grid'ine dışa doğru
+   hizalanmış bir XZ dikdörtgeni gösterilir. Dört kenar tutamacı ve sayısal
+   genişlik/uzunluk ile alan değiştirilir; dünya dışına otomatik büyüme yoktur.
+   **Bu dikdörtgen hesap sınırıdır; kıyı veya su tutan duvar değildir.** W1'de
+   kapalı spline çizimi ve keyfî polygon sınır düzenlemesi yoktur.
+3. `surfaceLevel` mutlak dünya Y'dir. İlk öneri seed zemini + 0,5 m, alanın
+   taşma eşiği biliniyorsa güvenli üst sınırla kısıtlanır. Uygun seviye yoksa
+   yaratma tamamlanmaz; kullanıcı seviyeyi/alanı/seed'i düzenler.
+4. Önizleme yalnız seed'e bağlı su altı bölgesini çıkarır. Kuru adalar ve kuru
+   sırtla ayrılan diğer çukurlar korunur. Seviye bir iç eşiği aşarsa artık
+   gerçekten bağlanan ikinci çukur aynı bileşene katılır; ilk sınırı dondurmayız.
+5. Geçerli önizleme **Oluştur** ile tek undo komutuna dönüşür. Esc taslağı
+   iptal eder. Terrain'e hiçbir yükseklik, boya veya spline patch'i yazılmaz.
+
+W1'de seçim, adlandırma, gizleme/kilitleme, seed'i yeniden seçme, alan/seviye ve
+görünüm düzenleme, silme, undo/redo, Save/Reload ve editör/Play eşleşmesi vardır.
+Genel translate/rotate/scale gizmo'su yerine bu anlamlı kontroller kullanılır;
+terrain taşınırsa mutlak seed/alan/seviye kendiliğinden taşınmaz, tekrar doğrulanır.
+Yatak oyma, otomatik kıyı boyama ve ıslak toprak W2'ye kalır. Akış/hacim
+simülasyonu, yüzdürme, yüzme ve collider bu dilimde yoktur.
+
+### 12.2. Kalıcı veri sözleşmesi
+
+Öneri: `RoomLayout.waterBodies?: LayoutWaterBody[]`; W1 yalnız `kind: "lake"`
+kabul eder. İlerideki River/Puddle/Ocean union üyeleri henüz validator'a eklenmez.
+Örnek tam alanlar aşağıdadır; bu bir şema önerisidir, mevcut API değildir:
+
+```ts
+type LayoutLakeWaterBody = {
+  schema: 1;
+  id: string;
+  kind: "lake";
+  mode: "fillExisting";
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  terrainRef: string; // layout.landscapes içindeki World Terrain aktörünün id'si
+  coordinateSpace: "world";
+  seed: [number, number]; // dünya XZ; seed Y terrain'den yeniden hesaplanır
+  bounds: { min: [number, number]; max: [number, number] }; // dünya XZ, grid hizalı
+  surfaceLevel: number; // dünya Y; origin[1] yalnız yükseklik dönüşümünde kullanılır
+  appearance?: {
+    deepColor?: string;
+    shallowColor?: string;
+    opacity?: number;
+    bedVisibility?: number;
+    absorptionDistance?: number;
+    normalTexture?: string; // manifest texture id, dosya yolu değil
+    normalScale?: number;
+    rippleSpeed?: number;
+    reflectionMode?: "off" | "sharedPlanar";
+    reflectionGroup?: string;
+    reflectionQuality?: "low" | "medium" | "high";
+    reflectionStrength?: number;
+  };
+};
+```
+
+- `terrainRef` dosya yolu veya tile id'si değildir; mevcut World Terrain aktörüne
+  bağlanır. W1 eski `.landscape.json` yüzeyinde çalışmaz; 1×1 World Terrain de
+  aynı çekirdeği kullanmalı, köprüdeki canlı sculpt verisinin önceliği korunmalıdır.
+- Kimlik benzersiz ve kalıcıdır. Enum/şema işaretleri zorunlu; NaN/Infinity,
+  ters/boş alan, sınır dışında seed, bütçeyi aşan örnek/tile sayısı reddedilir.
+  Seed alanın kesin içinde olmalıdır. Dünya koordinatları save sırasında
+  üç ondalığa yuvarlanmaz; grid hizası terrain referansı çözüldükten sonra
+  doğrulanır. Seviye için nehrin ±10.000 sınırı körlemesine kopyalanmaz;
+  sonlu dünya Y doğrulanır; terrain datumuyla kullanılabilir seviye ayrıca
+  hesaplanır. Kuru/açık havza bir hesap durumudur, sonlu kaynak parametrelerini
+  kaydetmeyi engelleyen şema hatası değildir; sessiz seviye clamp'i yapılmaz.
+- Yalnız kaynak parametreler kaydedilir. Mesh, kıyı döngüleri, doluluk maskesi,
+  derinlik, taşma eşiği, tile snapshot'ı ve hata durumu türetilmiş veridir.
+  `bounds` çalışma alanının tamamıdır; suyun hesaplanan AABB'siyle değiştirilmez.
+- Görünüm varsayılanları merkezi resolver'da; renk/opaklık/soğurulma/texture ve
+  yansıma için mevcut nehir kuralları yeniden kullanılır. W1 ripple varsayılanı
+  0,15; yansıma `off`, düşey dalga genliği **0** ve kıyı köpüğü kapalıdır.
+  Ripple yalnız normal/görünüm animasyonudur, su seviyesi veya akış değildir.
+- `waterBodies` level dosyasında persistent kalır, World Partition cell'lerine
+  bölünmez. Yeni dizinin save snapshot, export/clone, partition split/merge,
+  runtime read ve strict build içerik yollarında korunması ayrıca doğrulanır.
+- `engine/scene/layout.ts`, `layoutValidation.ts` ve `tools/saveValidator.ts`
+  aynı yeni sözleşmeyi tanımalıdır. Runtime ve save için ortak Lake doğrulayıcısı
+  tercih edilir; save allowlist'e eklenmeyen alan teslim edilmiş sayılmaz.
+  Eksik terrain referansı editörde onarılabilir hata olarak görünür, runtime'da
+  gövde atlanır; sahte terrain/mesh üretilmez. Geçersiz şema yüklemede reddedilir.
+- Mevcut `riverWaters`, `landscapeRef`, `splineRef`, koordinat işareti ve eski
+  yerel veri olduğu gibi korunur. W1 sessiz River migrasyonu yapmaz. Ortak
+  görünüm resolver'ı River için adaptörle kullanılabilir; veri birleşimi W5'tir.
+
+### 12.3. Geometri: terrain üçgenlerinde bağlantılı dolum
+
+**Öneri: raster hücre merkezi flood-fill veya marching squares yerine terrain'in
+kendi parçalı doğrusal üçgenlerini su düzlemiyle kırp.** `terrainHeightQuery.ts`
+ve collider hücreleri `a,c,b` / `b,c,d` üçgenlerine, yani `b–c` diyagonaline
+ayrılır. Bilinear yükseklik kullanmak saddle hücrelerinde farklı kıyı/bağlantı
+üretir; nehir ribbon'ını büyütmek de ada ve kapalı çukur problemini çözmez.
+
+1. Grid hizalı alanın hücreleri ve ortak kenarları deterministik sırayla
+   listelenir. Yükseklik `origin[1] + tile.heights[index]` olarak dünya Y'ye
+   çevrilir; hesaplar terrain'e yakın yerel frame'de Float64 ile yapılır.
+2. Her terrain üçgeni `h < surfaceLevel` yarı uzayında kırpılır. Kenar kesişimi
+   `t = (L - h0) / (h1 - h0)` ile bulunur. Tamamen ıslak üçgen kalır, kısmi
+   üçgen üçgen/dörtgen verir, kuru ve sıfır alanlı parçalar elenir.
+3. Seed'in düştüğü kesin üçgendeki ıslak parçadan BFS yapılır. Yalnız ortak
+   kenarda **pozitif uzunlukta su altı açıklığı** bulunan parçalar komşudur;
+   yalnız köşe teması su bağlantısı değildir. Seed tam kenardaysa aynı kuralla
+   bağlı adaylar deterministik seçilir. Kuru seed en yakın çukura atlatılmaz.
+4. Ulaşılan kırpılmış parçalar su Y'sine izdüşürülür ve convex fan ile
+   üçgenlenir. Her su üçgeni tek bir kaynak terrain üçgeninin içinde kalır.
+   Böylece vertex derinliğinin interpolasyonu üçgen içindeki her noktada
+   `d = max(0, L - terrainHeightAt(x,z))` verir; arada bilinear yaklaşım yoktur.
+   Kesinlik, tam çözünürlüklü kayıtlı heightfield yüzeyine göredir; kamera LOD'u
+   veya global harita doğruluk kaynağı değildir.
+5. Karşılıklı iç kenarlar kaldırılır; kalan gerçek kesişim kenarları dış kıyı
+   ve ada iç kıyısı döngülerini oluşturur. Mesh'i bu halkalardan yeniden
+   triangulate etmek gerekmez; delikler zaten doluma alınmamıştır. Düz plato
+   ve aynı yükseklikte köşe temasında dallanan konturlar ayrık halkalara ayrılır.
+6. Global grid vertex/kenar kimlikleri kesişim cache anahtarıdır. Aynı kenar
+   kesişimi bir kez hesaplanır; tile chunk'ları aynı değeri kullanır. Tile
+   sınırı kıyı sayılmaz, çift yüzey ve iç köpük oluşturulmaz. Çelişen seam
+   kopyaları toleransı aşıyorsa tanısal hata verilir, suyla gizlenmez.
+7. GPU Float32 konumları alan merkezine yakın yerel frame'de tutulur, Object3D
+   dünya konumuyla yerleştirilir. UV XZ metre cinsindedir; tile sınırında normal
+   animasyonu sıfırlanmaz. XZ dalga deplasmanı yapılmaz, düşey genlik W1'de 0'dır;
+   geometriyle çıkan kıyıdan karaya taşma ve dalga altında negatif derinlik yoktur.
+
+Başlangıç tolerans önerisi: yerel hesapta `epsilonY = 1e-5 m`,
+`epsilonXZ = max(1e-7 m, spacing × 1e-7)`; tam seviye eşitliğinde kuru/kapalı
+taraf seçilir. Kırpma gerçek `h-L` işaretini ve gerçek kenar yüksekliklerini
+kullanır; epsilon bandındaki vertex'i başka tarafa sınıflandırıp aralık dışı
+kesişim üretilmez. Sıfıra yakın parça/kenar bağlantısı korumacı olarak elenir;
+bu tanımlı sayısal belirsizlik bandıdır. Epsilon su düzlemini veya terrain
+yüksekliğini değiştirmez; rastgele ek toleranslar kullanılmaz.
+Kaydın u16 nicemlemesi ayrı bir hata kaynağıdır (§12.9); kıyı toleransı olarak
+bir heightmap basamağına kadar yayılmaz.
+
+### 12.4. Alan kenarı, eksik tile ve taşma sözleşmesi
+
+| Durum | W1 davranışı |
+| --- | --- |
+| Tanımlı ama resident olmayan tile | Gerekli alan için geçici oku/doğrula; bitene kadar `loading`. Sıfır/global-map yüksekliğiyle doldurma yok. |
+| Tanımlı tile'da 404/503/decode hatası | Gövdenin tamamı `missing-data`; kısmi göl çizilmez. Sorunlu key ve yeniden dene gösterilir. Başarılı retry aynı parametrelerle yeniden hesaplar. |
+| Tanımda bulunmayan gerçek tile deliği | Veri yokluğu ile karıştırılmaz; delik üzerinden bağlantı/yüzey üretilmez. Seed deliğe düşerse geçersiz; su bileşeni delik kenarına ulaşıyorsa `open-boundary`, yüzey yayımlanmaz. Ayrı kuru bölgede kalan delik geçerli gölü engellemez. |
+| Dünya dışı çalışma alanı | Commit öncesi reddedilir; sessiz crop yapılmaz. Dünya dışına açılan ıslak bileşen kapalı göl değildir. |
+| Bağlı su alan kenarına ulaşıyor | `open-boundary`; kesilen kenar kırmızı önizleme/uyarıyla gösterilir. Oluştur devre dışı; alan büyüt veya seviyeyi düşür. Runtime'da yüzey yok. |
+| Seed kuru / seviye tabanın altında | `dry-seed`; su yok. Seed'in başka çukura taşınması önerilebilir, otomatik yapılmaz. |
+| Bütçe aşılıyor | `over-budget`; gerekli örnek/tile/byte sayısı ve sınır gösterilir; otomatik kaba örneklemeye veya tüm dünyayı yüklemeye geçilmez. |
+
+**Taşma eşiği:** W1'in ölçtüğü `escapeLevel`, seed'den çalışma alanının dış
+kenarına veya gerçek terrain deliğine ulaşan yollar arasındaki en düşük
+`max(h)` değeridir. Kaynak üçgen komşuluklarında minimax/Dijkstra ile, ortak
+kenarın en düşük geçiş yüksekliği ve sınır çıkışları üzerinden hesaplanır.
+Seed yüksekliği başlangıç maliyetine dahildir. Yalnız kenar/köşe eşitliğinde
+geçit açık sayılmaz; `L >= escapeLevel - epsilonY` tehlike bandında gövde
+korumacı biçimde geçersizdir. İç çukurlar arası eşik geçilirse yeni bağlantı
+gösterilir; bu tek başına dışarı taşma değildir.
+
+Bu **sınırlı alanın kaçış eşiğidir**; alan dışındaki terrain bilinmeden fiziksel
+havzanın nihai taşma seviyesi iddia edilmez. Bir kuru kapalı çevre alan içinde
+bulunursa elde edilen eşik bu kapanmanın ilk açılma seviyesini verir. UI'da
+"Alan dışına açılma seviyesi" ve mevcut seviyeye kalan fark gösterilir.
+Eşiği aşınca su kendiliğinden kısılmaz, alan büyütülmez, akış simüle edilmez.
+
+### 12.5. Nehirden paylaşılacak parçalar ve ayrılacak sorumluluklar
+
+| Bugünkü kaynak | W1'de kullanım / sınır |
+| --- | --- |
+| `engine/terrain/terrainRiverWater.ts::prepareTerrainRiverWaterSource` | Alan tile listesini üretme dışında geçici okuma/doğrulama yaklaşımı ortaklaştırılır. Mevcut kod koridor seçer, en çok 4 paralel okuma yapar ve canlı tile'a öncelik verir; immutable snapshot ve iptal bütçesi ayrıca eklenmelidir. |
+| `terrainHeightQuery.ts`, `terrainTypes.ts`, `terrainLoader.ts` | Kesin üçgen/datum/seam kuralları, tile sınırları ve binary validator; coarse/global yükseklik kıyı için kullanılmaz. |
+| `engine/scene/riverWater.ts` | Renk, opaklık, soğurulma, texture ve yansıma varsayımları ortak küçük görünüm resolver'ına alınabilir; River'ın eski varsayılanları değişmez. |
+| `engine/render-three/riverWater.ts` | Normal/renk/soğurulma shader parçaları kullanılabilir. Ribbon geometri, spline UV, `shoreDistance`, rapid/segment/foam stamp mantığı Lake'e taşınmaz; yeni Lake mesh/material adaptörü gerekir. |
+| `engine/render-three/planarReflectionSource.ts` | Yaşam döngüsü ve capture paylaşımı; aynı dünya düzlemi/grup/kaliteyi gerçekten kullanan gövdeler tek kaynağı paylaşabilir. Yuvarlanmış key tek başına farklı düzlemleri birleştirmemeli. Varsayılan kapalı. |
+| `SceneApp.buildRiverWaters`, `RuntimeSceneApp.buildRuntimeRiverWaters` | Ortak Lake çekirdeğine ayrı editör/runtime bağlantıları gerekir. Nehirdeki tüm gövdeleri silip yeniden kurma yerine Lake başına revision ve atomik sonuç yayımlama tasarlanır. |
+| `terrainEdit.ts`, mevcut sculpt undo komutları | Dirty rect ve işlem tamamlanma sinyalleri Lake invalidation'ına bağlanır. W1 Lake kendisi terrain patch üretmez. |
+
+Önerilen yeni saf çekirdek `engine/terrain/terrainLakeWater.ts`; veri resolver'ı
+`engine/scene/waterBody.ts`, çizim adaptörü `engine/render-three/lakeWater.ts`.
+İsimler öneridir. Shared planar açılacaksa River ve Lake'in ayrı rebuild'leri
+aynı kaynağı birbirinin altından dispose etmemelidir: uygulama düzeyinde
+ref-count/consumer sahiplikli registry gerekir; salt sınıf yeniden kullanımı
+iki gövde türü arasında capture paylaşımı sağlamaz.
+Sorumluluklar: parametre doğrulama → bounded snapshot →
+bağlı bölge/kıyı/derinlik/tanı → mesh buffer'ları; UI, fetch ve Three.js saf
+geometri çekirdeğine girmemelidir. Tüm su sistemini baştan yazmak W1 bağımlılığı
+değildir. River/Lake birleşimi ve üst üste su yüzeyini birleştirme W5'e kalır;
+editörde kesişen gövdeler uyarılır, birleşmiş su diye sunulmaz.
+
+### 12.6. Tile okuma, güncelleme ve asenkron tutarlılık
+
+- Gerekli küme çalışma alanına değen tanımlı tile'lar ve seam sahipliği için
+  gereken sınır kopyalarıdır. Tanımdaki key'ler dışında dosya yolu üretilmez;
+  tüm dünya eager yüklenmez. İlk sürüm bu sınırlı kümeyi baştan okur; yalnız
+  BFS'nin rastladığını okumak, eşik hesabını eksik bırakmamalıdır.
+- Öncelik canlı edit/sculpt tile'ıdır; 1×1 köprüdeki canlı yükseklik dahil.
+  Çekirdek başlamadan gereken yükseklik alt bölgeleri kopyalanır. Eksik tile
+  validated binary olarak geçici okunur, ağırlık/ham dosya yalnız decode ömrünce
+  tutulur. Disk okuması canlı tile'ın üzerine yazmaz; resident/collider/GPU slot,
+  undo pin, dirty/save listesi ve global harita değişmez.
+- Bir build en fazla 4 paralel fetch kullanır; tüm Lake build'leri için de
+  toplam 4 read ve tek CPU geometri işi önerilir. Aynı tile okuması paylaşılır.
+  Gövde/alan/level değişince, silinince veya proje kapanınca AbortController ve
+  generation token ile eski işler iptal edilir; iptal edilemeyen sonuç atılır.
+- Parametre ve terrain yükseklik revision'ı sonuçla eşleşmeden yayımlama yoktur.
+  Resident tile'ı diskten beklerken sculpt değişirse eski snapshot yayımlanmaz.
+  Parametre değişince geometri/eşik; height dirty rect alanla kesişince **bütün
+  alanın bağlantısı** yeniden hesaplanır: tek dar geçit tüm topolojiyi değiştirebilir.
+  Paint-only değişiklik geometriyi değiştirmez; yalnız ilgili görünüm yenilenir.
+- Seviye/alan/seed sürüklemesi 150 ms debounce ile birleştirilir; bırakmada son
+  iş zorlanır. Sculpt'ta dab başına tüm göl kurmak yerine vuruş sonunda tek iş
+  planlanır. Düzenleme sırasında önceki mesh `updating/stale` olarak yalnız
+  editör taslak görünümünde tutulabilir; başarısız sonuçta gizlenir. Runtime
+  geçersiz/eski yüzeyi geçerli su olarak göstermez. Yalnız son revision atomik
+  değiştirilir, eski GPU kaynakları dispose edilir.
+- Terrain verisi değişmiyorsa minimax/topoloji ara verisi seviye değişimleri
+  arasında cache'lenebilir; seed/alan/height revision değişince düşer. Uzak
+  kamera için bağımsız su LOD/streaming W1'de yoktur. Geçerli sınırlı gövde
+  runtime'da bir kez oluşturulur; kamera hareketi exact tile'ları resident yapmaz.
+
+### 12.7. Seçim, undo/redo ve kayıt davranışı
+
+- Outliner'da ayrı Lake satırı ve Details; seed ve çalışma alanı editör
+  yardımcılarıyla görünür. Nehir `raycast = () => {}` kullandığı için Lake seçimi
+  ayrıca tasarlanır: editör su proxy'si + `waterBodyId`, runtime picking kapalı.
+  Oluşturma/sculpt ray'i suyu atlayıp terrain'e gider. Geçersiz veya kuru Lake
+  Outliner/seed proxy'si üzerinden yine seçilebilir. Locked kontrolleri kapatır.
+- Oluştur/sil/seed değişimi birer undo; sürükleme ve slider etkileşimi başına
+  before/after kaynak parametreleriyle tek undo. Cache/mesh undo içine konmaz.
+  Undo/redo aynı invalidation yolunu çağırır; kimlik değişmez.
+- Sculpt kendi mevcut undo komutudur. Sculpt undo/redo bitince etkilenen Lake
+  yeniden hesaplanır; ek bir Lake undo adımı oluşmaz. Gölde seviye değiştirmek
+  terrain undo geçmişine veya tile dirty listesine dokunmaz.
+- Yeni gövde ancak geçerli önizlemeyle oluşturulur. Mevcut gövde sonradan kuru,
+  açık sınırlı veya veri hatalı hâle gelebilir: kaynak parametreler ve Outliner
+  satırı korunur, yüzey gizlenir. Bu geçerli kaynak veri Save ile saklanabilir;
+  `invalid` tanısı kaynak JSON'a yazılmaz. Reload tekrar hesaplar ve aynı
+  sorunu bildirir. Bozuk şema kaydı ile hesap sonucu geçersiz havza ayrıdır.
+- Save hesap mesh'ini beklemek zorunda değildir; son kaynak parametreleri ve
+  terrain snapshot'ı mevcut save sırasıyla korunur. Reload aynı terrain'den
+  yeniden üretir. Salt Lake oluşturma/düzenleme/silme terrain tile'larını
+  kaydetmez. Sculpt varsa yalnız zaten kirlenen terrain kayıtları yazılır.
+
+### 12.8. Önerilen performans ve kaynak bütçesi
+
+Referans: orta seviye masaüstü, Chromium, 1440 × 900, 60 Hz; donanım/driver,
+renderer ayarları ve terrain spacing ölçüm kaydında yazılacak. Aşağıdakiler
+**ölçülmemiş ilk hedeflerdir**; W1.4'te doğrulanır veya gerekçeli revize edilir.
+
+| Kalem | W1 hedefi / üst sınır |
+| --- | --- |
+| Varsayılan alan | 64 × 64 m hedef, grid'e dışa hizalı; spacing 1 m ise seed hizasına göre 4.096–4.225 hücre |
+| Tek Lake çalışma alanı | En çok 65.536 hücre; 131.072 kaynak üçgeni, en çok 262.144 çıktı üçgeni; seyrek temsil adına örnek atlanmaz |
+| Tile ve geçici IO | Alan + seam kopyaları dahil en çok 16 tanımlı tile; toplam 4 eşzamanlı okuma |
+| Decode ön kontrolü | Eşzamanlı decode için tahmini toplam ≤ 32 MiB; tile başına `(q+1)² × (4 + 4×ceil(layerCount/4))` decode byte'ı ve ham byte payı hesaplanır. Büyük tile tek başına aşarsa da reddedilir |
+| Tek gövde geometri belleği | Typed-array CPU buffer ≤ 16 MiB, GPU ≤ 16 MiB; seam vertex paylaşımı yapılır, büyük JS number[] kopyaları tutulmaz |
+| Toplam Lake bütçesi | Level başına ≤ 8 gövde ve toplam ≤ 262.144 çalışma hücresi; ek CPU transient/cache ≤ 64 MiB, GPU ≤ 32 MiB; değiştirme sırasında eski+yeni buffer da sayılır |
+| Ana thread | Hesap/decode/upload işleri parçalara ayrılır; zaman dilimi ≤ 4 ms, Lake nedeniyle > 50 ms long task yok. Gerekirse worker; kesin çözünürlük düşürülmez |
+| Warm rebuild | §12.9'daki 96×96 m fixture'da p95 ≤ 100 ms; üst sınırdaki alanda p95 ≤ 500 ms; debounce ve IO hariç, eşik hesabı dahil |
+| Cold açılış | Aynı fixture'da yerel servisle p95 ≤ 1 s; IO/decode/geometri ayrı ölçülür. Bozuk/503 okuması süre kabulüne dahil edilmez, hata davranışı ayrıca sınanır |
+| Çizim | Tile başına en fazla bir surface chunk; gövde başına ≤ 16 ek renk draw call, gölge pass'i yok; varsayılan 2×2 fixture'da ≤ 4 |
+| GPU | Yansıma kapalı tek fixture Lake'inin ek GPU süresi p95 ≤ 1 ms; GPU timer varsa ölçülür, yoksa GPU kabulü açık raporlanır |
+| Yansıma | Varsayılan `off`; açılırsa aynı grup/düzlem/kalitede ek capture sayısı gövde sayısıyla artmaz. Capture maliyeti ayrı raporlanır; kapalı profilin GPU kabulü açık profil için kanıt değildir |
+
+Hücre/tile/byte/buffer sınırlarının **hepsi** sağlanmalıdır. Bellek tahmini
+okuma ve allocation öncesi yapılır; toplam bütçe bitince sonraki gövde açık
+`over-budget` tanısıyla bekler. Gövde sırası id ile deterministiktir. Başarısız/
+iptal edilmiş iş kaynak bırakmaz. 20 rebuild/undo/reload tekrarında tutulan
+tile, buffer ve reflection sayısının başlangıç düzeyine dönmesi kontrol edilir.
+Bu sınırlar 4 km dünyada çok sayıda su gövdesi performans kabulü yerine geçmez.
+Zaman ölçümlerinde 5 warm-up sonrasında en az 30 rebuild örneği; cold için
+geçici Lake cache'i temizlenerek en az 10 örnek, kare maliyeti için sabit kamera
+rotasında en az 300 kare alınır. Cache durumu ve baseline terrain maliyeti
+kayıtta açıkça belirtilir; küçük 64×64 varsayılan alan ayrıca raporlanır.
+
+### 12.9. Bağımsız test çukuru ve kabul matrisi
+
+**Önerilen fixture (yalnız W1 onayından sonra üretilecek):** Mevcut
+LandscapeTest veya kullanıcı sahnesi kullanılmaz. Engine'de deterministik veri
+fabrikası, tarayıcıda izole smoke projesi kullanılır. Temel dünya 2×2 tile,
+`tileQuads: 64`, `spacing: 1`, `origin: [-64, 10, -64]`; X=0 ve Z=0 sınırlarını
+geçen tek çukur dört tile'a yayılır. Ek 2×1 varyant tek seam'i izole eder.
+
+- Çalışma alanı XZ `[-48,-48]..[48,48]`, seed `[-20,-12]`; başlangıç dünya su
+  Y=12. Çukur merkezindeki zemin dünya Y=10, dış kapalı sırt Y=16; merkezde
+  Y=15 ada ve aynı alanda Y=10 tabanlı, Y=14 sırtla ayrılmış ikinci küçük çukur.
+  İç eşik Y=14, alan dışına tek düşük geçit Y=15 olacak şekilde fixture kurulur;
+  geometri fabrikası bu yükseklik/bağlantı varsayımlarını ayrıca doğrular.
+- Y=12'de ada kuru ve ikinci çukur boş; Y=14,25'te bağlı ikinci çukur dolar,
+  ada kalır; Y=15 eşik bandında açık sınır uyarısı gelir ve yüzey yayımlanmaz.
+  Alan küçültülerek daha düşük seviyede yapay kesilme ayrıca tetiklenir.
+- Bir saddle hücresinde dört farklı köşe yüksekliği, bir dar geçit ve bir
+  tam eşit plato bulunur. Bir varyant origin'i `[1000000.25, 37.5, -1000000.75]`
+  yapar; XZ/Y değerleri aynı farkla ötelenir. Tüm seam kopyaları aynıdır.
+
+| Kabul | Kanıt ve beklenen sonuç |
+| --- | --- |
+| K1 — Yüzey/kıyı | İki sınırda kopma/çift üçgen yok; bütün temel su vertex'leri dünya Y=L. Her kıyı vertex'inde exact terrain yüksekliği L'ye yerel hesapta ≤ 1e-5 m yakın; Float32 çizim konumu/derinlik toleransı ≤ 1e-4 m |
+| K2 — Bağlantı/adalar | Ada üstünde ve bağlantısız çukurda üçgen yok; köşe temasından su atlamaz; dar geçit ve iç eşik aşıldığında yalnız gerçekten bağlı alan katılır. Analitik probe'lar ve su maskesi/alanı engine'de doğrulanır |
+| K3 — Kesin derinlik | Vertex, kenar ve rastgele üçgen içi probe'larda `L-terrainHeightAt` ile eşleşir. Saddle'da bilinear sonuca eşit olmadığı kontrol edilir; tile/origin/datum kayması yok |
+| K4 — Seviye/sculpt | Seviye düşür/yükselt; seed kuru; adayı yükselt; bağlantı boğazını aç/kapat. Sonuç yeniden üretilir, Undo/Redo eski/yeni maskeyi ve derinliği geri getirir; uzak/paint-only değişim gereksiz geometri işi başlatmaz |
+| K5 — Sınır/taşma | Alan küçültme, dünya kenarı ve gerçek delik ayrı denenir. Kesilme kenarı önizlemede görünür; eşik ve epsilon-altı/eşit/üstü davranışı deterministiktir. Dış sınır sahte kıyı olarak çizilmez |
+| K6 — Eksik tile/retry | Tanımlı uzak tile için 503 ve bozuk binary tüm gövdeyi durdurur; retry düzeltir. Ayrı kuru delik gölü engellemez, ıslak delik sınırı reddeder. Okunan key ve eşzamanlılık ölçülür; resident/pin/collider/save listeleri değişmez |
+| K7 — Editör işlemleri | Gerçek UI tıklamasıyla seed, alan/seviye düzenleme, Outliner/proxy seçimi, gizle/kilitle/sil, Esc, oluştur ve sil undo/redo. Her sürükleme tek komut; asenkron eski sonuç yeni ayarı geri alamaz |
+| K8 — Save/Reload/Play | Gerçek endpoint ile Save → Reload → Play; id/parametreler korunur, aynı kayıtlı tile verisinde maskeler/kıyı/derinlik editör ve runtime'da eşleşir. Partition açık/kapalı, export/clone, 1×1 World Terrain ve mevcut River regresyonu kapsanır |
+| K9 — Salt su işlemi | Lake işleminden önce/sonra terrain def/tile byte hash'leri, spline'lar ve dirty durumu aynı; yalnız level kaydı değişir. Sculpt durumunda mevcut terrain save/undo kapsamı dışına yazılmaz |
+| K10 — Asenkron/maliyet | Yavaş IO sırasında seviye değiştir/sil/proje kapat; snapshot sırasında sculpt; stale sonuç yayımlanmaz. 20 tekrar sonrası leak yok; §12.8 sınırları ve cold/warm p95 kaydedilir; büyük-dünya varyantında alan dışı tile okunmaz |
+| K11 — Görsel kabul | Playwright ile yakın eğik kıyı, üstten ada/ayrı çukur, iki seam ve uzaktan çekim; sığ taban/soğurulma, ripple, reflection off/on; 1440×900 ve 1100×720 screenshot'ları incelenir. Kasıtlı IO hatası dışında konsol hatası yok |
+
+Save/Reload karşılaştırması aynı **kaydedilmiş** terrain verisi üzerinde yapılır.
+Sculpt sonrası f32 canlı verinin u16 kaydı yarım nicemleme basamağı kadar
+yükseklik değiştirebilir; eşik çevresinde topoloji bu nedenle değişebilir.
+Bu, Lake koordinatlarının yuvarlanmasına bağlanmaz. Hassas eşik fixture'ları
+f32 formatında tutulur; u16 için beklenen yükseklik hatası ve eşik değişimi
+ayrı kontrol edilir. Görsel kabul, sayısal topoloji kabulünün yerini tutmaz.
+
+### 12.10. Onay sonrası sıralı uygulama dilimleri
+
+1. **W1.1 — Sözleşme ve fixture:** Lake tipi/resolver, ortak runtime/save
+   doğrulayıcısı, bounded alan kontrolleri ve bağımsız 2×2/2×1 çukur fabrikası.
+   Önce save round-trip, referans/enum ve read-budget regresyonları.
+2. **W1.2 — Bounded snapshot:** Canlı 1×1/çok-tile önceliği, geçici tile
+   okuma, seam sahipliği, byte/eşzamanlılık sınırları, revision/iptal. Eksik
+   tile/hole/retry ve streaming yan etkisizliği kanıtlanır.
+3. **W1.3 — Saf geometri:** Üçgen kırpma, seed BFS, kıyı halkaları, exact
+   derinlik ve minimax kaçış eşiği. Saddle/plato/dar geçit/büyük origin testleri;
+   açık sınırda yalnız tanı önizlemesi. Terrain yazımı yok.
+4. **W1.4 — Çizim ve erken performans kapısı:** Lake render adaptörü ve ortak
+   görünüm parçaları, düz yüzey/normal animasyonu, chunk dispose ve editör/Play
+   çekirdek eşleşmesi. Varsayılan ve maksimum alanda cold/warm, heap/buffer,
+   GPU/draw ölçümü. Bütçe tutmazsa önce scheduling/typed-array/worker ele alınır;
+   kıyı doğruluğu düşürülmez. Sonuç kaydı olmadan bütçe kabulü işaretlenmez.
+5. **W1.5 — Editör akışı:** Tıklayarak oluşturma, sınır tutamaçları, dünya
+   Y/seed/appearance Details, proxy/Outliner seçimi ve açık hata/Retry. Tek işlem
+   undo/redo ve Esc; UI yeniden render yolu mevcut Details düzenini korur.
+6. **W1.6 — Sculpt ve kalıcılık:** Dirty rect → tam bağlı alan invalidation'ı,
+   stroke/undo/redo yenilemesi; snapshot/export/partition/save/reload/Play.
+   Runtime invalid gövdeyi güvenli biçimde atlar; editör kaynağı onarılabilir tutar.
+7. **W1.7 — Kabul ve devir:** K1–K11 engine ve tarayıcı kanıtları, performans
+   tablosu, görüntü incelemesi ve veri hash kontrolü. TypeScript sonrasında
+   `npx.cmd tsc --noEmit`; motor/runtime için `npm.cmd run test:engine` ve
+   `npm.cmd run build:verify`; browser için Playwright ek katmanı. W1 kabulü
+   sonrasında W2 ayrı kapsam/onaydır; mevcut sahneye göl yerleştirmek de bu
+   bağımsız fixture kabulünden ayrı kullanıcı işidir.
+
+Save/load allowlist ve tile okuma sınırları değişeceği için uygulama sonunda
+**Codex Security diff scan** önerilir. AGENTS.md gereği kullanıcı başlatmadan
+veya onaylamadan scan çalıştırılmaz; bu tasarım turunda çalıştırılmadı.
+
+### 12.11. Onaya sunulan kararlar ve kalan belirsizlikler
+
+| Karar | Öneri / kalan sınır |
+| --- | --- |
+| İlk giriş yöntemi | Seed + grid hizalı dikdörtgen; spline/polygon aracı W1'e eklenmesin |
+| Açık sınır | Hatalı yüzey yerine tanılı önizleme ve oluşturmayı engelleme; mevcut aktör kaynakları onarılabilir kalsın |
+| Kıyı/doğruluk | Terrain üçgeni kırpma + kenar bağlantısı; en düşük detay veya raster yaklaşım kullanılmasın |
+| Taşma | Sınırlı alanın minimax kaçış seviyesi; alan dışındaki fiziksel havza ve akış simülasyonu iddia edilmesin |
+| Görünüm | Düz geometrik yüzey, hareketli normal, exact derinlik rengi/soğurulma; köpük/ıslaklık/düşey dalga ilk kabulü büyütmesin; yansıma varsayılan kapalı |
+| Şema/geçiş | Yeni `waterBodies` yalnız Lake kabul etsin; River JSON değişmesin, görünüm parçaları ortaklaşsın |
+| İlk sahne | Mevcut sahne yerine izole 2×2 fixture; 2×1 varyant ve 1×1 regresyon eklensin |
+| Bütçe | §12.8 sınırlarıyla başla; donanım ve gerçek p95 değerleri W1.4'te ölçülene kadar performans kabulü açık |
+| Yatak | W2'de ayrıca bake + tek undo yaklaşımı değerlendirilsin; W1 terrain düzenlemesin |
+
+Kullanıcı bu W1 kapsamını onayladı; uygulama sonucu §13'tedir. Ölçüme bağlı noktalar:
+ana thread dilimlemenin yeterliliği/worker gereği, referans donanımdaki GPU
+zamanı ve üst sınırdaki gerçek bellek maliyeti. Sınırlar yetmiyorsa sessiz kapsam
+büyütme yerine ölçüm ve yeni öneri kaydedilir. Büyük dünya su/yol streaming'i,
+Ocean/Puddle ve eski terrain emekliliği ayrı iş olarak açık kalır.
+
+## 13. W1 Lake uygulaması ve kabul kaydı — 2026-10-26
+
+### 13.1. Teslim edilen davranış
+
+- World Terrain Details içinde **Lake → Choose Lake seed**; kesin arazi
+  isabetinden önizleme, dünya Y su seviyesi, başlangıç XZ'sini tekrar seçme,
+  grid hizalı dikdörtgen çalışma alanı, dört kenar tutamacı ve sayısal alan
+  düzenleme. Oluştur yalnız geçerli önizlemede etkin; Esc taslağı iptal eder.
+- Terrain'in `b–c` diyagonalindeki kaynak üçgenleri kırpılır; yalnız seed'e
+  bağlı su altı parçaları alınır. Ada/ayrı çukur korunur; bir iç eşik geçilip
+  bölge gerçekten bağlanınca doluma katılır. Derinlik kaynak üçgen üzerinde
+  doğrusaldır; dünya datumundan ve GPU LOD/global haritadan bağımsız hesaplanır.
+- Alan sınırı/delik üzerinden kaçış için minimax eşik ve kesilen kenar
+  önizlemesi; kuru seed, eksik tile, geçersiz sınır ve bütçe aşımı için açık
+  tanı/Retry. Geçersiz gövde runtime'da yüzey oluşturmaz; kaynak verisi editörde
+  düzeltilebilsin diye korunur. Su seviyesine sessiz clamp uygulanmaz.
+- Ayrı Lake Outliner/Details, su yüzeyi/seed proxy seçimi, ad, gizle/kilitle,
+  silme, sınır/seed/seviye ve görünüm düzenleme; tek işlem undo/redo. Sculpt
+  vuruşu ve undo/redo sonrasında kesişen alanın bağlantısı/derinliği yenilenir.
+  Paint-only ve tüm su alanlarının dışındaki height patch'i Lake üretmez.
+- `waterBodies` persistent level dizisi; ortak runtime/save allowlist ve
+  tam JSON koordinat hassasiyeti. Save/Reload/Play aynı çekirdeği kullanır.
+  Yeni şema eski `riverWaters`/spline kimliklerini değiştirmez.
+- Düz su yüzeyi, derinlik rengi/soğurulma, hareketli normal, varsayılan kapalı
+  planar yansıma. Ortak lease registry River/Lake kaynaklarının birbirini
+  dispose etmesini önler; aynı kesin dünya düzlemi/grup/kalite paylaşılır.
+- Terrain'e yükseklik/boya/spline veya collider yazılmaz. Lake okuması canlı
+  edit verisine öncelik verir; geçici disk tile'larını resident/pin/dirty/save
+  listelerine eklemez. Dört paralel okuma ve sıralı geometri işi, generation ve
+  abort ile eski sonuçların yayımlanmasını engeller.
+
+Ana kaynaklar: `engine/scene/waterBody.ts`, `engine/terrain/terrainLakeWater.ts`,
+`engine/render-three/lakeWater.ts`, `waterReflectionRegistry.ts`,
+`src/scene/lakeWaterController.ts`; editör/runtime ve ortak validator bağlantıları.
+
+### 13.2. Doğrulama
+
+- Son tam `npm.cmd run build:verify`: **1.962 engine kontrolü**, TypeScript,
+  smoke/content/UI test tipleri, production build, strict dist ve world-data
+  geçti. Yeni Lake test dosyası ayrıca TypeScript ile denetlendi.
+- **11 Lake engine regresyonu:** şema/save/partition, iki tile sınırında
+  ada/bağlılık/derinlik/eşik, geçici okuma ve retry, delikler, büyük origin ve
+  immutable snapshot, sculpt undo/redo, gerçek kıyı, bozuk veri, iptal edilmiş
+  iş ve 20 yaşam döngüsü tekrarı, yansıma lease'leri, saddle/eşit plato, 2×1 seam.
+  Tek hücre genişliğinde önizleme kenar kimlikleri de saddle regresyonundadır.
+- **Üç Lake Chromium senaryosu:** oluştur/iptal, alan/seviye, kilit,
+  açık sınırda yüzey reddi, undo, gerçek Save/Reload/Play ve terrain hash'lerinin
+  değişmemesi; kenar tutamacı/seed ve seam sculpt undo/redo; uzak tile 503/Retry.
+  Streaming karşılaştırması kameranın tüm hedef tile'ları yüklemesinden sonra
+  alınır; geçici Lake okumaları resident key kümesini ve tile save listesini
+  değiştirmez.
+- Son odaklı sculpt koşusu, değişiklik üretmeyen flatten ve çalışma alanı
+  dışındaki height patch'inin hazır Lake sonucunu koruduğunu da doğruladı:
+  `lake-w1-sculpt-final.log` ve `lake-w1-sculpt-final-results/`.
+- 1440×900 ve 1100×720 runtime ile editör görüntüleri incelendi; ada ve ayrı
+  çukur, gerçek kıyı ve iki seam sürekliliği görüldü. QA kamerasının far clip'i
+  bütün çukuru kapsayacak şekilde ayarlandı; bu test-only ayardır, oyun
+  kamerasına/level verisine değişiklik değildir.
+- GPU pilotu **atlandı**: headless Chromium `ANGLE/SwiftShader` kullanıyor ve
+  `EXT_disjoint_timer_query_webgl2` sunmuyor. Atlanan senaryo GPU performans
+  kabulü olarak sayılmaz; gerçek donanımda ≤1 ms hedefi açık kalır.
+- Mevcut River UI/sculpt/foam/yansıma/Save/Reload/Play regresyonu geçti;
+  ayrı son koşuda uzak tile 503/Retry de geçti. Kamera streaming'i tamamlanma
+  tanığı ortaklaştırıldı; autosave'in değiştirebildiği geçici hata metni yerine
+  gerçek 503 cevabı ve su gövdesinin oluşmaması kontrol edilir.
+
+Kanıtlar: `.dev-server/lake-w1-final-build.log`, `lake-w1-engine.log`,
+`lake-w1-host.log`, `lake-w1-host-results/` (görüntüler, kaynak/runtime hash,
+streaming key kümeleri ve GPU yokluğu kaydı). İlk sandbox soket engeli,
+Save bitmeden sayfa değiştiren ilk test, kamera dışındaki tutamaca tıklayan
+test ve kamera yüklemesi sürerken alınan resident karşılaştırmaları kabul
+sayılmadı. Testler yalnız izole smoke projesine yazdı; mevcut sahneler korunur.
+Nehir kanıtları `lake-w1-river.log`, `lake-w1-river-results/` (ana senaryo),
+`lake-w1-river-stream.log` ve `lake-w1-river-stream-results/` (503/Retry).
+
+### 13.3. CPU pilotu ve kalan performans sınırı
+
+Tekrarlanabilir komut: `node tools/bench-lake-water.mjs`; rapor
+`.dev-server/lake-w1-perf-final.json`. Windows, Intel i5-11400F; 5 warm-up + 30 warm,
+10 cache'siz binary decode örneği. Bu **Node CPU/decode** pilotudur; HTTP cold
+boot, browser ana thread p95 veya GPU süresi değildir. Değerler cooperative
+yield beklemeleri dahil geçen süreyi ölçer.
+
+| Alan | Hücre | Çıktı üçgeni | Saklanan buffer | Warm p95 | Binary decode + üretim p95 |
+| --- | --- | --- | --- | --- | --- |
+| 96×96 m kabul çukuru | 9.216 | 4.318 | 110.296 byte | 29,5 ms | 16,9 ms |
+| Üst sınırdaki çukur | 65.536 | 73.726 | 1.790.896 byte | 343,4 ms | 373,1 ms |
+
+Hücre/tile/okuma/decode ve saklanan geometri buffer sınırları ön kontrolde
+denetlenir. Geometri işi yaklaşık 3 ms hedefli dilimler arasında yield eder;
+worker eklenmedi. Toplam browser heap/transient tepe ölçümü ve her dilimin
+≤4 ms olduğuna dair donanım profil kaydı henüz kabul edilmedi. Bir Lake'teki
+parametre değişiminde bounded gövde listesi sıralı yeniden değerlendirilir;
+gövdeler arası cache/yalnız değişen gövdeyi yenileme ileride optimize edilebilir.
+Kıyı için halka triangulation yerine kaynak üçgen parçaları çizilir; çizgi
+segmentleri gerçek dış/ada kıyısını taşır. Geometri LOD/streaming eklenmedi.
+
+W2 yatak oyma, otomatik kıyı boyası/ıslaklık, köpük ve düşey dalga, River/Lake
+yüzeylerini birleştirme, Puddle/Ocean ve fizik/hacim simülasyonu bu dilimde yoktur.
+Save/load değişiklikleri için kullanıcı onayıyla Codex Security diff scan önerisi
+geçerlidir; scan çalıştırılmadı. Commit/push yapılmadı.

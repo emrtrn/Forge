@@ -1,6 +1,9 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
+import { LakeWaterController } from "./lakeWaterController";
+import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
+import { legacyLandscapeToWorldTerrain } from "@engine/terrain/terrainLegacy";
 import {
   normalizeWorldPartitionSettings,
   streamedLightPeaks,
@@ -951,6 +954,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Live river-water ribbons, and the planar reflections they share. */
   private riverWaterObjects: RiverWaterObjectLike[] = [];
   private riverWaterBuild = 0;
+  private lakes: LakeWaterController | null = null;
+  private readonly waterReflections = new WaterReflectionRegistry();
   private riverReflectionSources: PlanarReflectionSource[] = [];
   private readonly riverWaterTextures = new Map<string, Texture>();
   /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
@@ -1933,6 +1938,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.landscapeObjects = [];
     this.riverWaterBuild += 1;
+    this.lakes?.dispose();
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -1940,7 +1946,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) source.dispose();
+    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
     this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
@@ -3457,6 +3463,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.landscapeObjects = [];
     this.riverWaterBuild += 1;
+    this.lakes?.dispose();
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -3464,7 +3471,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) source.dispose();
+    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
     this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
@@ -5872,6 +5879,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
     this.riverWaterBuild += 1;
+    this.lakes?.dispose();
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
@@ -5959,14 +5967,36 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * never touches the physics scene document. Bodies that share a plane and a
    * reflection group also share one planar-reflection render.
    */
+  private async buildRuntimeLakes(): Promise<void> {
+    const terrain = (id: string): WorldTerrainDocument | undefined => {
+      const document = this.worldTerrainDocuments.get(id); if (document) return document;
+      const actor = this.layout?.landscapes?.find((a) => a.id === id), data = this.landscapeDataById.get(id);
+      if (!actor || !data || !actor.dataRef.endsWith(".terrain.json")) return undefined;
+      const converted = legacyLandscapeToWorldTerrain(actor, data);
+      return converted.warnings.length ? undefined : { def: converted.def, tiles: new Map([["0_0", converted.tile]]) };
+    };
+    this.lakes ??= new LakeWaterController({ scene: this.scene, editor: false, document: terrain, reflections: this.waterReflections,
+      load: async (id, key, signal) => {
+        const actor = this.layout?.landscapes?.find((a) => a.id === id), document = terrain(id);
+        if (!actor || !document) throw new Error("Missing Lake terrain");
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
+        if (!response.ok) throw new Error(`Lake tile ${key}: HTTP ${response.status}`);
+        return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+      }, normal: (id) => this.loadRuntimeRiverWaterTexture(id, "normal"),
+    });
+    await this.lakes.rebuild(this.layout?.waterBodies ?? []);
+    for (const [id, result] of this.lakes.results) if (result.status !== "ready") console.warn(`[lake-water] ${id}: ${result.message}`);
+  }
+
   private async buildRuntimeRiverWaters(): Promise<void> {
+    await this.buildRuntimeLakes();
     const build = ++this.riverWaterBuild;
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) source.dispose();
+    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
     this.riverReflectionSources = [];
 
     const waters = this.layout?.riverWaters ?? [];
@@ -5998,11 +6028,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         if (build !== this.riverWaterBuild) return;
         let reflectionSource: PlanarReflectionSource | null = null;
         const planeY = source.position[1] + source.surfaceLevel;
-        const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+        const groupKey = riverWaterReflectionGroupKey(resolved, planeY);
+        const reflectionKey = groupKey ? `${groupKey}:${planeY}` : null;
         if (reflectionKey && resolved.reflectionQuality !== "low") {
           reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
           if (!reflectionSource) {
-            reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+            reflectionSource = this.waterReflections.acquire(resolved.reflectionGroup ?? "water", planeY, resolved.reflectionQuality);
             reflectionSourceByKey.set(reflectionKey, reflectionSource);
             this.riverReflectionSources.push(reflectionSource);
           }

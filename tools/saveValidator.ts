@@ -1,4 +1,5 @@
 import { validateLandscapeSplines } from "../engine/scene/landscapeSplineValidation";
+import { validateWaterBodies } from "../engine/scene/waterBody";
 export { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal } from "./terrainSaveValidator";
 ﻿/**
  * Save-payload validator for the `/__save-layout` dev endpoint.
@@ -2291,6 +2292,7 @@ export function validateLayout(value: unknown): unknown {
   if (splines) output.splines = splines;
   if (landscapes) output.landscapes = landscapes;
   if (riverWaters) output.riverWaters = riverWaters;
+  if (layout.waterBodies !== undefined) output.waterBodies = validateWaterBodies(layout.waterBodies);
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

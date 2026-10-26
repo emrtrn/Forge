@@ -995,6 +995,28 @@ export interface LayoutRiverWater {
   reflectionStrength?: number;
 }
 
+export interface LayoutLakeWaterBody {
+  schema: 1;
+  kind: "lake";
+  mode: "fillExisting";
+  coordinateSpace: "world";
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  terrainRef: string;
+  seed: [number, number];
+  bounds: { min: [number, number]; max: [number, number] };
+  surfaceLevel: number;
+  appearance?: {
+    deepColor?: string; shallowColor?: string; opacity?: number; bedVisibility?: number;
+    absorptionDistance?: number; normalTexture?: string; normalScale?: number; rippleSpeed?: number;
+    reflectionMode?: "off" | "sharedPlanar"; reflectionGroup?: string;
+    reflectionQuality?: "low" | "medium" | "high"; reflectionStrength?: number;
+  };
+}
+export type LayoutWaterBody = LayoutLakeWaterBody;
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -1031,6 +1053,8 @@ export interface RoomLayout {
   landscapes?: LayoutLandscape[];
   /** Spline-driven visual water bodies. They do not own collision or navigation. */
   riverWaters?: LayoutRiverWater[];
+  /** Connected, terrain-clipped Lakes; persistent source parameters only. */
+  waterBodies?: LayoutWaterBody[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

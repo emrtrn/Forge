@@ -2258,6 +2258,16 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       Nehir aktarımı kapatıldı; su/yol geometri streaming'i ve büyük dünya
       performans kabulü açık. Sonraki su dilimi W0-Lake tasarımıdır; ayrıntı
       ve kanıtlar Water Body alt planı §11.9'da.
+      **W1 Lake işlevleri tamam (2026-10-26):** Kullanıcı onaylı W0-Lake
+      tasarımının ardından seed + sınırlı çalışma alanıyla mevcut çukuru
+      doldurma; terrain üçgeninden gerçek kıyı/derinlik, adalar/bağlılık,
+      minimax kaçış eşiği ve eksik tile tanıları; seçim/düzenleme,
+      sculpt/undo/redo, Save/Reload/Play. 11 Lake engine regresyonu, tam
+      `build:verify` (1.962 kontrol), üç Lake Chromium kabulü geçti.
+      Donanım GPU pilotu SwiftShader timer sağlamadığı için atlandı; browser
+      tepe bellek/ana thread ve büyük dünya/geometri streaming kabulü açık.
+      Mevcut sahne/tile verileri değişmedi; yatak oyma W2'de kaldı.
+      Ayrıntı ve CPU pilotu Water Body alt planı §13'te.
 - [ ] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
       prosedürel çim maddesi bittikten sonra 1×1 de çok-tile ile aynı yoldan
       (`terrainEdit.ts`, `worldTerrainActor.ts`) düzenlenir;

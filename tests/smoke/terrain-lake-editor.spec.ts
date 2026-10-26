@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { PerspectiveCamera } from "three";
 import { createLakeFixture } from "../engine/fixtures/lakeFixture";
+import { createLakeBedFixture } from "../engine/fixtures/lakeBedFixture";
 import { terrainGlobalMapPath, terrainTilePath, createFlatTerrainTile, tileKey } from "../../engine/terrain/terrainTypes";
 import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
@@ -14,11 +15,23 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 const LEVEL = "layouts/__playwright-lake-world.level.json", TERRAIN = "landscapes/__playwright-lake-world.terrain.json";
 const snapshot = (page: Page) => page.evaluate(() => (window as any).__lakeQA.snapshot());
 async function clickWorld(page: Page, point: number[]) {
-  const p = await page.evaluate((p) => (window as any).__lakeQA.project(...p), point); await page.mouse.click(p.x, p.y);
+  const p = await page.evaluate((p) => (window as any).__lakeQA.project(...p), point);
+  const viewport = (await page.locator("[data-viewport-host]").boundingBox())!;
+  expect(p.x).toBeGreaterThan(viewport.x); expect(p.x).toBeLessThan(viewport.x + viewport.width);
+  expect(p.y).toBeGreaterThan(viewport.y); expect(p.y).toBeLessThan(viewport.y + viewport.height);
+  await page.mouse.click(p.x, p.y);
 }
-async function number(page: Page, key: string, value: number) { const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab"); }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false) {
+async function expandLake(page: Page, id = "advanced") {
+  const section = page.locator(`[data-detail-section="lake-${id}"]`);
+  if (await section.evaluate((e) => e.classList.contains("collapsed"))) await section.locator(".detail-section-toggle").click();
+}
+async function number(page: Page, key: string, value: number) {
+  if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
+  const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
+}
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false) {
   const doc = createLakeFixture();
+  if (bed) doc.lake.bed = createLakeBedFixture().lake.bed!;
   if (streamed) {
     const original = new Map(doc.tiles); doc.def.tilesX = 12; doc.def.tilesZ = 4; doc.def.tiles = []; doc.tiles.clear();
     for (let z = 0; z < 4; z++) for (let x = 0; x < 12; x++) {
@@ -27,6 +40,7 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
       const key = tileKey(x, z); doc.tiles.set(key, tile); doc.def.tiles.push({ key, minHeight: 0, maxHeight: 6 });
     }
     doc.lake.seed[0] += 384; doc.lake.bounds.min[0] += 384; doc.lake.bounds.max[0] += 384;
+    if (doc.lake.bed) for (const point of doc.lake.bed.points) point[0] += 384;
   }
   const write = async (path: string, data: string | Uint8Array) => { const p = smokePublicPath(path); await mkdir(dirname(p), { recursive: true }); await writeFile(p, data); };
   for (const [key, tile] of doc.tiles) await write(terrainTilePath(TERRAIN, key), encodeTerrainTile(tile, { heightMin: -64, heightMax: 64, heightFormat: "f32" }));
@@ -35,6 +49,7 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
   level.instances = level.instances.filter((g: { assetId: string }) => g.assetId === "marker:playerStart");
   level.instances[0].placements[0].position = [-20, 15, -12];
+  if (foreground) level.instances.push({ assetId: "shape:cube", placements: [{ name: "Lake foreground cube", position: [-12, 17, -12], scale: [4, 4, 4] }] });
   level.landscapes = [{ id: "terrain", name: "Lake QA Terrain", position: worldTerrainActorPosition(doc.def), dataRef: TERRAIN }];
   level.riverWaters = []; level.waterBodies = seeded ? [doc.lake] : [];
   level.actors = []; level.characters = [];
@@ -85,6 +100,7 @@ test("Lake UI creates a connected two-seam lake, preserves terrain and survives 
   expect((await snapshot(page)).results[0].hash).toBe(initial.hash);
   await page.locator("[data-lake-locked]").check(); await expect(page.locator("[data-lake-number=surfaceLevel]")).toBeDisabled();
   await page.locator("[data-lake-locked]").uncheck(); await ready(page);
+  await expandLake(page);
   await page.locator("[data-lake-reflection]").selectOption("sharedPlanar"); await ready(page);
   await page.locator("[data-lake-reflection]").selectOption("off"); await ready(page);
   await page.screenshot({ path: info.outputPath("lake-editor.png") });
@@ -95,7 +111,7 @@ test("Lake UI creates a connected two-seam lake, preserves terrain and survives 
   const source = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")); expect(source.waterBodies[0].surfaceLevel).toBe(12);
   await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 }); await ready(page);
   expect((await snapshot(page)).results[0].hash).toBe(initial.hash);
-  await page.getByTestId("outliner-row").filter({ hasText: "Lake 1" }).first().click(); await page.locator("[data-lake-delete]").click();
+  await page.getByTestId("outliner-row").filter({ hasText: "Lake 1" }).first().click(); await expandLake(page); await page.locator("[data-lake-delete]").click();
   await expect.poll(async () => (await snapshot(page)).objects).toBe(0);
   await page.getByTestId("editor-undo").click(); await ready(page);
   await save(page);
@@ -122,7 +138,7 @@ test("Lake bounds drag and seed editing use undo; seam sculpt refreshes exact de
   await expect(page.locator('[data-lake-number="minZ"]')).toHaveValue("-48");
   await page.locator("[data-lake-reseed]").click(); await clickWorld(page, [-16,10,-12]); await ready(page);
   await page.getByTestId("editor-undo").click(); await ready(page);
-  await page.locator("[data-lake-terrain]").click();
+  await expandLake(page); await page.locator("[data-lake-terrain]").click();
   await page.locator("[data-landscape-mode]").selectOption("sculpt");
   await page.locator('[data-landscape-tool="lower"]').click();
   const brush = page.locator('[data-landscape-number="brushSize"]'); await brush.fill("5"); await brush.press("Enter");
@@ -154,12 +170,116 @@ test("Streamed Lake rejects a remote 503 and retries without activating or savin
   await expect(page.locator("[data-lake-status]")).toContainText("503", { timeout: 60_000 });
   await expect.poll(async () => (await snapshot(page)).streamingPending, { timeout: 60_000 }).toBe(0);
   const before = await snapshot(page); expect(before.objects).toBe(0); expect(before.resident[0].count).toBeLessThan(doc.def.tiles.length);
-  await page.unroute("**/__playwright-lake-world.tiles/7_0.tile.bin"); await page.locator("[data-lake-retry]").click();
+  await page.unroute("**/__playwright-lake-world.tiles/7_0.tile.bin"); await expandLake(page); await page.locator("[data-lake-retry]").click();
   await ready(page); const after = await snapshot(page); expect(after.objects).toBe(1);
   expect(after.resident).toEqual(before.resident); expect(writes).toEqual([]);
   await writeFile(info.outputPath("lake-streaming.json"), JSON.stringify({ before, after, writes }, null, 2));
   await page.screenshot({ path: info.outputPath("lake-streaming-retry.png") });
   expect(errors.every((e) => e.includes("503"))).toBe(true);
+});
+
+const editorSnapshot = (page: Page) => page.evaluate(() => (window as any).__lakeQA.editor());
+async function draftLake(page: Page) {
+  await page.locator("[data-lake-begin]").click(); await clickWorld(page, [-20, 10, -12]);
+  for (const [key, value] of [["minX", -48], ["minZ", -48], ["maxX", 48], ["maxZ", 48], ["surfaceLevel", 12]] as const) await number(page, key, value);
+  await ready(page);
+}
+
+// UX inventory: entry/pick/stop; draft/ready/error; Escape in a field and canvas;
+// commit/discard/resume when leaving via viewport or Outliner; foreground picking;
+// basic/appearance/advanced accordions + retained state; standard buttons/checks;
+// smaller viewport fit; legacy metadata roundtrip; no terrain edits in any flow.
+test("Lake UX preserves a draft on Escape and exits to normal viewport selection", async ({ page, request }, info) => {
+  test.setTimeout(300_000); const { errors } = await setup(page, request, false, false, false, true), hash = await terrainHash();
+  await expect(page.locator("[data-lake-panel] button")).toHaveCount(1);
+  await expect(page.locator("[data-lake-bed-begin], [data-lake-bed-draw], [data-lake-bed-apply]")).toHaveCount(0);
+  const foregroundPoint = [-12, 17, -12];
+  // Leave Landscape's sculpt mode before checking ordinary object picking.
+  await page.keyboard.press("Escape"); expect((await editorSnapshot(page)).selection).toBeNull();
+  await clickWorld(page, foregroundPoint); expect((await editorSnapshot(page)).selection?.assetId).toBe("shape:cube");
+  await page.locator('[data-object-id="landscape:0"]').click();
+  await page.locator("[data-lake-begin]").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("lake-entry.png") });
+  await draftLake(page);
+  const original = await editorSnapshot(page);
+  await page.locator('[data-detail-section="lake-advanced"] .detail-section-toggle').click();
+  await page.locator("[data-lake-workflow]").scrollIntoViewIfNeeded();
+  await expect(page.locator("[data-lake-stage]")).toHaveText("Taslak önizleme");
+  await expect(page.locator('[data-detail-section="lake-appearance"]')).toHaveClass(/collapsed/);
+  await page.screenshot({ path: info.outputPath("lake-draft.png") });
+  await page.locator('[data-lake-number="surfaceLevel"]').focus(); await page.keyboard.press("Escape");
+  await expect(page.locator("[data-lake-resume]")).toBeInViewport();
+  expect((await editorSnapshot(page)).state.source).toEqual(original.state.source);
+  expect((await snapshot(page)).objects).toBe(1);
+  await page.locator("[data-lake-resume]").click();
+  await expect(page.locator("[data-lake-stage]")).toHaveText("Taslak önizleme");
+  await page.locator("[data-lake-finish]").click();
+  await expect(page.locator("[data-lake-create]")).toHaveText("Gölü oluştur ve geç");
+  await page.locator("[data-lake-create]").click(); await ready(page);
+  expect((await editorSnapshot(page)).selection).toBeNull();
+  await page.locator('[data-object-id="lake:0"]').click();
+  await expect(page.locator("[data-lake-stage]")).toHaveText("Oluşturulmuş göl");
+  await page.keyboard.press("Escape");
+  expect((await snapshot(page)).objects).toBe(1); expect((await editorSnapshot(page)).selection).toBeNull();
+  // A mesh above the water must remain selectable in front of the Lake.
+  await clickWorld(page, foregroundPoint);
+  expect((await editorSnapshot(page)).selection?.assetId).toBe("shape:cube");
+  await page.locator('[data-object-id="lake:0"]').click();
+  await page.setViewportSize({ width: 1100, height: 720 });
+  await page.locator("[data-lake-workflow]").scrollIntoViewIfNeeded();
+  const fit = await page.locator("[data-lake-panel]").evaluate((panel) => {
+    const controls = [...panel.querySelectorAll<HTMLElement>("[data-lake-workflow] button, [data-lake-locked], [data-lake-hidden]")];
+    const bounds = panel.getBoundingClientRect();
+    return { overflow: panel.scrollWidth > panel.clientWidth + 1,
+      controlsFit: controls.every((c) => { const r = c.getBoundingClientRect(); return r.left >= bounds.left && r.right <= bounds.right + 1 && r.top >= 0 && r.bottom <= innerHeight; }),
+      checkboxWidth: panel.querySelector("[data-lake-locked]")!.getBoundingClientRect().width };
+  });
+  expect(fit).toEqual({ overflow: false, controlsFit: true, checkboxWidth: 14 });
+  await page.screenshot({ path: info.outputPath("lake-compact.png") });
+  await expandLake(page, "appearance"); await number(page, "opacity", 0.7); await ready(page);
+  await number(page, "opacity", 0.82); await ready(page);
+  await page.screenshot({ path: info.outputPath("lake-appearance.png") });
+  await expandLake(page); await page.locator("[data-lake-group]").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("lake-advanced.png") });
+  await page.locator("[data-lake-workflow]").scrollIntoViewIfNeeded(); await page.locator("[data-lake-finish]").click();
+  expect((await editorSnapshot(page)).selection).toBeNull(); expect(await terrainHash()).toBe(hash);
+  await save(page); expect(errors).toEqual([]);
+});
+
+test("Lake UX asks before leaving an invalid draft and never sculpts while selecting", async ({ page, request }, info) => {
+  test.setTimeout(300_000); const { errors } = await setup(page, request);
+  await page.locator("[data-landscape-mode]").selectOption("sculpt");
+  await page.locator('[data-landscape-tool="lower"]').click();
+  const terrain = (await editorSnapshot(page)).terrain, hash = await terrainHash();
+  await draftLake(page); await number(page, "surfaceLevel", 15);
+  await expect(page.locator("[data-lake-status]")).toContainText("Area opens");
+  await page.locator('[data-object-id="landscape:0"]').click();
+  await expect(page.locator("[data-lake-resume]")).toBeInViewport(); await expect(page.locator("[data-lake-create]")).toBeDisabled();
+  await page.screenshot({ path: info.outputPath("lake-invalid-draft.png") });
+  await page.locator("[data-lake-resume]").click(); await number(page, "surfaceLevel", 12); await ready(page);
+  await page.locator("[data-lake-reseed]").click(); await page.keyboard.press("Escape");
+  expect((await editorSnapshot(page)).state.draft).toBe(true); expect((await editorSnapshot(page)).state.picking).toBe(false);
+  await clickWorld(page, [-40, 16, -40]);
+  await expect(page.locator("[data-lake-resume]")).toBeInViewport();
+  expect((await editorSnapshot(page)).terrain).toEqual(terrain);
+  await page.locator("[data-lake-cancel]").click();
+  await expect.poll(async () => (await snapshot(page)).objects).toBe(0);
+  expect((await editorSnapshot(page)).state.draft).toBe(false);
+  await expect(page.locator("[data-lake-begin]")).toBeEnabled(); expect(await terrainHash()).toBe(hash);
+  expect(errors).toEqual([]);
+});
+
+test("Lake legacy bed metadata loads and saves without exposing terrain baking controls", async ({ page, request }) => {
+  test.setTimeout(300_000); const { doc, errors } = await setup(page, request, true, false, true); await ready(page);
+  const hash = await terrainHash(), terrain = (await editorSnapshot(page)).terrain;
+  await page.locator('[data-object-id="lake:0"]').click();
+  await expect(page.locator('[data-lake-panel]').getByRole("button", { name: /Draw|boundary|bed|yatak|Araziye uygula/i })).toHaveCount(0);
+  await expect(page.locator('[data-lake-bed-panel], [data-lake-bed-draw], [data-lake-bed-apply]')).toHaveCount(0);
+  await number(page, "surfaceLevel", 13); await ready(page); await expandLake(page); await page.locator("[data-lake-retry]").click(); await ready(page);
+  expect((await editorSnapshot(page)).terrain).toEqual(terrain); await save(page); expect(await terrainHash()).toBe(hash);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")); expect(saved.waterBodies[0].bed).toEqual(doc.lake.bed);
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 }); await ready(page);
+  expect(await terrainHash()).toBe(hash); expect(errors).toEqual([]);
 });
 
 test("Lake GPU pilot measures 300 paired baseline/surface frames", async ({ page, request }, info) => {

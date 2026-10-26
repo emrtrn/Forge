@@ -2265,6 +2265,65 @@
   color: #ffb020;
 }
 
+/* Lake authoring uses the shared Details chrome and button variants. */
+.lake-editor {
+  display: grid;
+  gap: var(--forge-space-3, 12px);
+  min-width: 0;
+}
+
+.lake-workflow {
+  display: grid;
+  scroll-margin-top: 10px;
+  gap: var(--forge-space-2, 8px);
+  padding: var(--forge-space-3, 12px);
+  border: 1px solid var(--forge-border-strong);
+  border-radius: var(--forge-radius-md, 6px);
+  background: var(--forge-bg-2);
+}
+
+.lake-workflow-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lake-state {
+  padding: 3px 7px;
+  border-radius: var(--forge-radius-sm, 4px);
+  background: var(--forge-bg-3);
+  color: var(--forge-text-secondary);
+  font-size: 11px;
+}
+
+.lake-state.is-draft { color: var(--forge-text); box-shadow: inset 0 0 0 1px var(--forge-accent); }
+.lake-result { color: var(--forge-text-secondary); font-size: 11px; line-height: 1.5; }
+.lake-result.is-error { color: #ffb020; }
+.lake-editor .detail-row { grid-template-columns: minmax(96px, 0.9fr) minmax(0, 1.4fr); }
+.lake-editor .detail-row > span { overflow-wrap: anywhere; }
+.lake-editor .detail-hint { overflow-wrap: anywhere; }
+.lake-editor .detail-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.lake-toggles { display: flex; flex-wrap: wrap; gap: 16px; }
+.lake-editor input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var(--forge-accent); }
+.lake-editor input[type="color"] { padding: 3px; cursor: pointer; }
+.editor-shell .lake-editor .detail-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: auto;
+  min-height: 30px;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.lake-editor .detail-button > span[aria-hidden] { display: flex; flex: 0 0 auto; }
+.editor-shell .lake-editor .detail-button:disabled { opacity: 0.45; }
+.lake-editor .detail-actions-row { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.editor-shell .lake-editor .detail-button-warning:not(:disabled) { color: #ffb020; border-color: #ffb020; }
+
 .editor-shell .detail-button-warning {
   border-color: #ffb020;
   color: #ffb020;

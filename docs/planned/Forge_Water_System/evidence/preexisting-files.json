@@ -1,0 +1,122 @@
+[
+  {
+    "path": "docs/planned/FORGE_WES_CODEX_K0_GOREV_TALIMATI_v0.1.md",
+    "sha256": "dd6d1cf4100c55616e84f257c280949735a694571ca4417130cb4780d93dd00e"
+  },
+  {
+    "path": "docs/planned/FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.2.md",
+    "sha256": "9183e834ccef74881b91b048a82d5048019d60375e5696aa424806379c81f538"
+  },
+  {
+    "path": "docs/planned/FORGE_WORLD_ENVIRONMENT_MEVSIM_HAVA_ZAMAN_TEKNIK_TASARIM_VE_UYGULAMA_PLANI_v0.2.md",
+    "sha256": "d34c0d063a7de5b51f283e276be6b5b2db43e2be44798434d4138ea0cdeb7335"
+  },
+  {
+    "path": "engine/scene/lakeBed.ts",
+    "sha256": "6e1064344cba0c8a1d57e9a3ef22773b5afe80b1886ca6400752e4bc1bf8677a"
+  },
+  {
+    "path": "engine/terrain/lakeTileReads.ts",
+    "sha256": "39e65e04e64cfda20920c9ecb9d4f2a657bcb3bc9d098d85fd50865e99736669"
+  },
+  {
+    "path": "engine/terrain/terrainLakeBed.ts",
+    "sha256": "52ac8ec0e38b06867249f6ae3358bcff82e943d35bd91b948b1f1e340e769731"
+  },
+  {
+    "path": "tests/engine/fixtures/lakeBedFixture.ts",
+    "sha256": "e299ff728a5d4db2e52a38aa81434517031dae40274cd970aca2d197a24ad47e"
+  },
+  {
+    "path": "tests/engine/terrainLakeBed.test.ts",
+    "sha256": "49736f00c3e7f72a78ca506dd5314b51f33db6459ffd20f1eae223f8fa993e21"
+  },
+  {
+    "path": "tools/bench-lake-bed.mjs",
+    "sha256": "a684c1f2e42b90a9315e0b8b64b09ce843f2308bb67b0e594faed9f471e4f278"
+  },
+  {
+    "path": "docs/planned/FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.1.md",
+    "sha256": null
+  },
+  {
+    "path": "docs/planned/FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.1.md",
+    "sha256": null
+  },
+  {
+    "path": "docs/planned/OPEN_WORLD_PLAN.md",
+    "sha256": "afbaa52cfb5fa681cd2d0b992ad878e02929e1025ed119a505f720be4e518ef3"
+  },
+  {
+    "path": "docs/planned/WORLD_TERRAIN_WATER_BODY_PLAN.md",
+    "sha256": "7b2bc462bae6d93ff6dffa97b4a9494be0986f5e93a627129f267f6da9dec647"
+  },
+  {
+    "path": "editor/render-three/scenePicker.ts",
+    "sha256": "f52264a6a4fc9705f8666772d4048ee151b0e0c2ad5b1e1466bd2fda489bc5da"
+  },
+  {
+    "path": "engine/scene/layout.ts",
+    "sha256": "3bf6c6ff8f018cd589ea40e998ce22564e1c041aa4011b11093682b2ff68622d"
+  },
+  {
+    "path": "engine/scene/waterBody.ts",
+    "sha256": "dfb28936f575be42895238a8d3874736b3a7c7530a6f16171f37e04c64d41bd8"
+  },
+  {
+    "path": "engine/terrain/terrainEdit.ts",
+    "sha256": "8f88fb011266fa6b1309f7877a0e920b9d408da712db4c0fd5cdf45a96c35b2f"
+  },
+  {
+    "path": "engine/terrain/terrainLakeWater.ts",
+    "sha256": "bc0da09a0d6b4009ea8ffa1f9627c5d89239fc2068c5fbc48aa54f122390cd3f"
+  },
+  {
+    "path": "public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.global.bin",
+    "sha256": "9f572e323d546f9be6fcced25037175166e6dea51e7c65064a81baf55063be4e"
+  },
+  {
+    "path": "public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json",
+    "sha256": "c044689d474f51ec7e400ac334637d347f376edfb5643baddb3a4edd0e380763"
+  },
+  {
+    "path": "public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_1.tile.bin",
+    "sha256": "0a37c2e4865f36f6f606c8dd6709ba76b6e10db0669a83c83bbdb4f2fe689871"
+  },
+  {
+    "path": "public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_1.tile.bin",
+    "sha256": "346c5d0c9cfa19a8dba58bdcb5cf51670d8f2e0507e2c0efcbc96e120be597e0"
+  },
+  {
+    "path": "public/assets/starter-content/Levels/LandscapeTest.level.json",
+    "sha256": "9123f063beffef1a64185a4326d9c43820dd2198834df19ad5962cc2b3a87d81"
+  },
+  {
+    "path": "src/editor/EditorUi.ts",
+    "sha256": "de1de5711a1ada81da8b2e102d1aafbc3f2a74413350f0d76bd8713255b58990"
+  },
+  {
+    "path": "src/editor/editorUi.css",
+    "sha256": "b28d9099c4ee3c0f1f7d26c84e287f9714b239175cdc461a40028267a966325d"
+  },
+  {
+    "path": "src/editor/panels/details/lakeDetails.ts",
+    "sha256": "0fc430227d792bd5aeff0945479b58991b7184894605da957363fd8566cd907b"
+  },
+  {
+    "path": "src/scene/SceneApp.ts",
+    "sha256": "f4611c57fa092b65fc86bca9e52d28f4d1a7084836c6986c40d229481f988285"
+  },
+  {
+    "path": "tests/smoke/pages/terrain-lake-probe.ts",
+    "sha256": "29949eee5196db52cb90f33f8b8ec6065014e2db22c1ec113d77d70d98da0a8b"
+  },
+  {
+    "path": "tests/smoke/terrain-lake-editor.spec.ts",
+    "sha256": "94d22627d43df878ee25b6177e21cfc5f2304c625788ff3549fc3842cc5bf91b"
+  },
+  {
+    "path": "tools/engine-tests.ts",
+    "sha256": "aa52b05359046df89c000f9897748931c620cc93e48b26cd4023cd8f2a29845d"
+  }
+]

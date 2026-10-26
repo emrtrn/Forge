@@ -128,6 +128,11 @@ export class ScenePicker {
   }
 
   pickSelection(clientX: number, clientY: number): Selection | null {
+    return this.pickSelectionHit(clientX, clientY)?.selection ?? null;
+  }
+
+  /** Allows separately rendered editor surfaces to participate in depth ordering. */
+  pickSelectionHit(clientX: number, clientY: number): { selection: Selection; distance: number } | null {
     this.setPointerNdc(clientX, clientY);
     const camera = this.getCamera();
     this.raycaster.setFromCamera(this.pointerNdc, camera);
@@ -148,7 +153,7 @@ export class ScenePicker {
       // Locked objects are click-through: fall through to whatever is behind them
       // so they can only be re-selected by unlocking in the Scene Outliner.
       if (this.isSelectionLocked?.(selection)) continue;
-      return selection;
+      return { selection, distance: hit.distance };
     }
     return null;
   }

@@ -1,5 +1,6 @@
 import type { LayoutLakeWaterBody, Vec3 } from "../scene/layout";
 import { LAKE_LIMITS, validateWaterBody } from "../scene/waterBody";
+import { readLakeTile } from "./lakeTileReads";
 import type { WorldTerrainDocument } from "./terrainLoader";
 import { tileKey, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
 
@@ -80,7 +81,7 @@ export async function prepareLakeSnapshot(document: WorldTerrainDocument, value:
     while (cursor < missing.length) {
       abort(signal); const key = missing[cursor++]!;
       if (!load) throw new Error(`missing-data: Lake requires tile ${key}`);
-      copy(key, await load(key, signal));
+      copy(key, await readLakeTile(() => load(key, signal), signal));
     }
   }));
   abort(signal);
@@ -99,7 +100,8 @@ export function emptyLake(lake: LayoutLakeWaterBody, status: LakeStatus, message
 }
 
 /** Terrain triangle graph, exact clipping and minimax escape; yields between bounded batches. */
-export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSignal): Promise<LakeGeometry> {
+export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSignal,
+  connected?: (triangles: Uint8Array) => void): Promise<LakeGeometry> {
   const started = performance.now(); let slice = started;
   const yieldWork = async () => {
     abort(signal);
@@ -164,6 +166,7 @@ export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSi
     }
     if ((head & 255) === 0) await yieldWork();
   }
+  connected?.(wet);
   // Bounded typed buffers. Shared source vertices and all three grid edge families are welded.
   const capacity = h.length + nx * (nz + 1) + (nx + 1) * nz + nx * nz;
   const pos = new Float32Array(capacity * 3), depths = new Float32Array(capacity), uv = new Float32Array(capacity * 2);

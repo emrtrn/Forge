@@ -182,7 +182,7 @@ function quantizeWeights(weights: number[]): Uint8Array {
   return bytes;
 }
 
-function readRect(tile: TerrainTileData, rect: TerrainDirtyRect): TerrainPatchValues {
+export function captureTerrainTileRect(tile: TerrainTileData, rect: TerrainDirtyRect): TerrainPatchValues {
   const width = rect.x1 - rect.x0 + 1;
   const count = width * (rect.z1 - rect.z0 + 1);
   const heights = new Float32Array(count);
@@ -198,6 +198,8 @@ function readRect(tile: TerrainTileData, rect: TerrainDirtyRect): TerrainPatchVa
   }
   return { heights, weights };
 }
+
+const readRect = captureTerrainTileRect;
 
 /** Stage a whole-grid height replacement without writing; holes and paint are preserved. */
 export function createTerrainHeightmapPatches(world: TerrainEditWorld, heights: ReadonlyMap<string, Float32Array>): TerrainUndoPatch[] {
@@ -452,10 +454,21 @@ export function createTerrainLayerFillPatches(world: TerrainEditWorld, layer: nu
   return patches;
 }
 
-function restorePatches(world: TerrainEditWorld, patches: readonly TerrainUndoPatch[], side: "before" | "after"): Map<string, TerrainDirtyRect> {
+/** Reject the entire transaction before the first write, including malformed later patches. */
+export function validateTerrainUndoPatches(world: TerrainEditWorld, patches: readonly TerrainUndoPatch[]): void {
   for (const patch of patches) {
-    if (!world.tiles.has(patch.key)) throw new Error(`Terrain undo tile is not resident: ${patch.key}`);
+    const tile = world.tiles.get(patch.key);
+    if (!tile) throw new Error(`Terrain undo tile is not resident: ${patch.key}`);
+    const { x0, x1, z0, z1 } = patch.rect;
+    if (![x0, x1, z0, z1].every(Number.isInteger) || x0 < 0 || z0 < 0 || x1 < x0 || z1 < z0 || x1 >= tile.size || z1 >= tile.size) throw new Error(`Invalid terrain undo rectangle: ${patch.key}`);
+    const count = (x1 - x0 + 1) * (z1 - z0 + 1);
+    for (const values of [patch.before, patch.after]) if (values.heights.length !== count || !values.heights.every(Number.isFinite)
+      || values.weights.length !== count * 4 * terrainWeightBlockCount(tile.layerCount)) throw new Error(`Invalid terrain undo values: ${patch.key}`);
   }
+}
+
+function restorePatches(world: TerrainEditWorld, patches: readonly TerrainUndoPatch[], side: "before" | "after"): Map<string, TerrainDirtyRect> {
+  validateTerrainUndoPatches(world, patches);
   const dirty = new Map<string, TerrainDirtyRect>();
   const ordered = side === "before" ? [...patches].reverse() : patches;
   for (const patch of ordered) {

@@ -1334,6 +1334,13 @@ export class EditorUi {
 
   private handleKeyDown(event: KeyboardEvent): void {
     if (this.app.isCameraNavigating()) return;
+    // Lake gestures also end while a Details field has focus. Do not intercept
+    // Escape belonging to a modal editor or another inspector.
+    if (event.code === "Escape" && !event.ctrlKey && !event.metaKey && !event.altKey &&
+        (event.target as HTMLElement | null)?.closest?.("[data-lake-panel]")) {
+      if (!this.app.escapeLake()) this.app.clearSelection();
+      event.preventDefault(); (event.target as HTMLElement).blur(); return;
+    }
     if (event.metaKey || event.altKey || isEditableTarget(event.target)) return;
 
     if (event.ctrlKey) {
@@ -1382,7 +1389,7 @@ export class EditorUi {
 
     if (event.code === "Escape") {
       event.preventDefault();
-      if (!this.app.cancelLake()) this.app.clearSelection();
+      if (!this.app.escapeLake()) this.app.clearSelection();
     } else if (event.code === "KeyQ") {
       event.preventDefault();
       this.setActiveTool("select");
@@ -4423,8 +4430,11 @@ export class EditorUi {
   }
 
   private renderDetails(selection: EditableSelection | null): void {
-    if (selection?.kind === "lake") {
-      renderLakeDetails(this.detailsBody, this.app, true); this.finalizeDetailsRender(selection); return;
+    const lakeState = this.app.getLakeEditorState();
+    if (selection && (selection.kind === "lake" || lakeState.draft || lakeState.picking)) {
+      renderLakeDetails(this.detailsBody, this.app, true); this.finalizeDetailsRender(selection);
+      if (lakeState.leaving || lakeState.picking) this.detailsBody.querySelector("[data-lake-workflow]")?.scrollIntoView({ block: "start" });
+      return;
     }
     if (!selection) {
       this.detailsScale = null;
@@ -4639,7 +4649,7 @@ export class EditorUi {
       if (!title || section.dataset.inspectorSectionDecorated === "true") return;
       const label = title.textContent?.trim() || `Section ${index + 1}`;
       const key = storageKeyFor(section, label);
-      const collapsed = this.readDetailSectionCollapsed(key, label);
+      const collapsed = this.readDetailSectionCollapsed(key, label, section.dataset.defaultCollapsed === "true");
       const sectionBody = document.createElement("div");
       sectionBody.className = "detail-section-body";
       for (const child of [...section.childNodes]) if (child !== title) sectionBody.append(child);
@@ -4695,12 +4705,12 @@ export class EditorUi {
     return `forge.editor.details.section.${selection.kind}.${selection.assetId}.${section.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   }
 
-  private readDetailSectionCollapsed(key: string, label: string): boolean {
+  private readDetailSectionCollapsed(key: string, label: string, defaultCollapsed = false): boolean {
     try {
       const saved = window.localStorage.getItem(key);
-      return saved === null ? /^advanced\b/i.test(label) : saved === "collapsed";
+      return saved === null ? defaultCollapsed || /^advanced\b/i.test(label) : saved === "collapsed";
     } catch {
-      return /^advanced\b/i.test(label);
+      return defaultCollapsed || /^advanced\b/i.test(label);
     }
   }
 

@@ -995,6 +995,17 @@ export interface LayoutRiverWater {
   reflectionStrength?: number;
 }
 
+/** A persisted bake recipe; never an automatically evaluated terrain modifier. */
+export interface LakeBedRecipe {
+  points: [number, number][]; // ordered world XZ, implicitly closed
+  smooth: boolean;
+  smoothness: number;
+  maxDepth: number;
+  shoreSlopeDegrees: number;
+  transitionWidth: number;
+  shorePaint?: { layerId: string; strength: number };
+}
+
 export interface LayoutLakeWaterBody {
   schema: 1;
   kind: "lake";
@@ -1008,6 +1019,7 @@ export interface LayoutLakeWaterBody {
   seed: [number, number];
   bounds: { min: [number, number]; max: [number, number] };
   surfaceLevel: number;
+  bed?: LakeBedRecipe;
   appearance?: {
     deepColor?: string; shallowColor?: string; opacity?: number; bedVisibility?: number;
     absorptionDistance?: number; normalTexture?: string; normalScale?: number; rippleSpeed?: number;

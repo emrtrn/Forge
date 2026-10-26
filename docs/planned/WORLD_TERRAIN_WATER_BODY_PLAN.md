@@ -1,7 +1,7 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
 Tarih: 2026-10-25  
-Durum: 8A0–8A5 tamamlandı, başlangıç HEAD `af599269`. W0-Lake kullanıcı tarafından onaylandı; W1 Lake uygulandı (2026-10-26). İşlevsel kabul ve ölçümler §13'te; donanım GPU ve büyük dünya performans kabulü açık. W2/Puddle/Ocean uygulanmadı. Commit/push yapılmadı.
+Durum: 8A0–8A5 ve W1 Lake işlevleri tamamlandı. **2026-10-26 güncel kullanıcı kararı:** Göl yatağı çizme/oyma aracı editörden kaldırıldı; göl, Sculpt ile hazırlanmış çukura tıklanarak eklenir. §14 önceki W2 çalışmasının tarihsel kaydıdır; editör akışı için geçerli değildir. W1 kanıtları §13'te; donanım GPU, browser tepe bellek/ana thread ve büyük dünya performans kabulü açık. Puddle/Ocean uygulanmadı. Commit/push yok.
 Ana plan: [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md)
 
 ## 1. Amaç ve karar durumu
@@ -151,6 +151,8 @@ yatak oluşturma yoluna yönlendirilmelidir. Bu davranışın ayrıntısı açı
 
 ### 6.2. Lake: Göl yatağı oluştur
 
+Güncel W2 kararları ve uygulama sırası §14'tedir.
+
 1. Kullanıcı kapalı spline çizer.
 2. Su seviyesi, maksimum derinlik, kıyı eğimi ve sahil/geçiş genişliğini ayarlar.
 3. Yatak ve kıyı önizlenir.
@@ -203,7 +205,7 @@ Bu sıra görüşme önerisidir; her dilimin kapsamı uygulama öncesinde netle�
   bağlantılı alan, gerçek kıyı, kesin derinlik, seçim/düzenleme, undo/redo ve
   Save/Reload/Play uygulandı. İşlevsel kabul §13; GPU performans kabulü ayrı açık.
 - [ ] **W2 — Yatak oluşturma:** Derinlik profili, kıyı geçişi, önizleme ve tek
-  undo komutuyla çok tile'a uygulama; isteğe bağlı kıyı boyası.
+  undo komutuyla çok tile'a uygulama; isteğe bağlı kıyı boyası. Onaylı tasarım ve kabul kaydı §14.
 - [ ] **W3 — Puddle:** Küçük alan aracı, sığ su/ıslaklık görünümü; terrain
   çözünürlüğü sınırına göre yerel detay yaklaşımı.
 - [ ] **W4 — Ocean:** Deniz seviyesi, kara/ada sınırı, yakın yüzey, uzak LOD.
@@ -1093,3 +1095,161 @@ W2 yatak oyma, otomatik kıyı boyası/ıslaklık, köpük ve düşey dalga, Riv
 yüzeylerini birleştirme, Puddle/Ocean ve fizik/hacim simülasyonu bu dilimde yoktur.
 Save/load değişiklikleri için kullanıcı onayıyla Codex Security diff scan önerisi
 geçerlidir; scan çalıştırılmadı. Commit/push yapılmadı.
+
+## 14. W2 — Kapalı spline ile göl yatağı — 2026-10-26
+
+### 14.1. Onay ve davranış
+
+Plan, kullanıcı tarafından “Implement the proposed plan” ile uygulamaya açıldı.
+Başlangıç `4d00aeaf` (`main`, yerel `origin/main` ile aynı), temiz çalışma ağacı.
+Bu çalışma commit/push veya mevcut kullanıcı sahnelerine içerik yazmayı kapsamaz.
+
+- W2 yalnız terrain'i alçaltır. `maxDepth` oyma profilinin hedef maksimumudur;
+  zaten daha derin zemin doldurulmaz. Gerçek derinlik ayrıca gösterilir.
+- Kapalı sınır + ayarlar Lake üzerinde kalıcı bir **bake tarifi** olarak saklanır.
+  Runtime/Reload veya tarif düzenleme otomatik terrain yazmaz. Açık
+  **Araziye uygula** bir undo/redo komutudur. Yeni Lake'te aktör oluşturma da
+  bu komuta dahildir; mevcut Lake'te seed/bounds değişikliği aynı komuta katılır.
+- Aktörü silmek, yeniden konumlandırmak, su seviyesini veya tarifi değiştirmek
+  eski yatağı geri getirmez. Daha sığ rebake dolgu yapmaz. Geri dönüş bake'in
+  Undo komutudur; Undo geçmişi yeniden yüklemede kalıcı değildir.
+- Modifier katmanı, otomatik eski yatak restorasyonu, ada dışlama halkaları,
+  Puddle/Ocean ve fizik/hacim simülasyonu bu kapsamda yoktur. Spline'ın bütün
+  içi oyma adayıdır; mevcut adalar korunacakmış gibi gösterilmez.
+- Kıyı boyası isteğe bağlı, varsayılan kapalı; mevcut layer seçilir, yeni layer
+  oluşturulmaz. Geçersiz layer uygulamayı durdurur.
+- Kodlama aralığını aşan aday yükseklikler reddedilir: W2 aralığı büyütüp tüm
+  dünyanın tile dosyalarını yeniden kodlatmaz. Tile/global/definition kayıt
+  altyapısı korunur; yeni disk transaction sistemi eklenmez.
+
+### 14.2. Veri, profil, W1 ilişkisi
+
+`LayoutLakeWaterBody` ve ortak runtime/save allowlist'e optional `bed` eklenir:
+ordered world-XZ `points`, `smooth`, `smoothness`, `maxDepth`,
+`shoreSlopeDegrees`, `transitionWidth`, optional `shorePaint:{layerId,strength}`.
+Su seviyesi mevcut `surfaceLevel` alanıdır. `mode:"fillExisting"`, şema 1 ve
+eski W1 kayıtları korunur; runtime `bed` tarifini otomatik çalıştırmaz.
+
+Sınır örtük kapalı, tek basit halkadır. 3–256 nokta; duplicate/zero-area,
+kesişim ve üst üste kenarlar reddedilir. Mevcut Catmull-Rom sampler'ının sekiz
+alt parçası preview ve bake'te aynıdır (en çok 2.048 parça). Varsayılan düz;
+derinlik 3 m, kıyı eğimi 30 derece, geçiş `max(4 m,2*spacing)`; eğim 1–80,
+smoothness 0–1. Dünya koordinatları JSON hassasiyetiyle saklanır.
+
+`L` dünya su seviyesi, `D` derinlik, `m=tan(eğim)`, `W` geçiş genişliği:
+
+- İçeride sınıra uzaklık `s`: `target=L-min(D,m*s)`.
+- Dışarıda uzaklık `r<W`: `t=r/W`, `S=3*t²-2*t³`,
+  `target=L+m*r/(1-S)`. `r>=W` etkilenmez.
+- Her iki durumda `newY=min(originalY,target)`. Bu mutlak zarf tekrar bake'te
+  kümülatif oyma üretmez. Dünya Y, patch'e yazılırken `origin[1]` ile çevrilir.
+  Dar sınırda D'ye ulaşılamaması ayrı uyarıdır; grid çözünürlüğü düşürülmez.
+
+Spline oyma şeklidir; **W1 bounds hesap sınırıdır**, spline su maskesi/duvarı
+değildir. Yeni taslak alanı spline AABB + dış geçiş + iki hücre payıyla grid'e
+dışa hizalanır. Mevcut daha geniş alan korunur; Fit/enlarge açık işlemdir.
+Eksik kontrol payı, dünya dışı veya bütçe aşımı sessiz crop ile çözülmez.
+
+Seed içeride ve aday zeminde ıslaksa kalır; aksi hâlde en derin uygun terrain
+üçgen merkezinden deterministik önerilir. Aday üzerinde mevcut W1 üçgen
+kırpma/BFS/minimax/kıyı/derinlik hesabı çalışır. Açık sınır, kuru seed veya
+spline içi suyun çözünürlük nedeniyle bağlantısız parçalara ayrılması bake'i
+engeller. Diğer bağlantısız mevcut çukurlar W1 kurallarıyla dolmaz.
+
+Kıyı boyası aday W1'in gerçek kıyısına uzaklıktan, W2 etki alanıyla sınırlı
+olarak çıkarılır; bant genişliği W'dir. Ağırlık hedefi byte cinsinden
+`max(current,round(255*strength*(1-S(distance/W))))`; diğer layer'lar kalan
+byte'ı oransal ve deterministik paylaşır. Toplam 255, tekrar bake idempotent.
+
+### 14.3. Snapshot, atomiklik ve bütçe
+
+Ön kontrol → canlı veriyi dondur → bounded geçici tile okuma → yükseklik
+staging → aday W1 → isteğe bağlı boya → patch → revision doğrula → tek yayın.
+Preview, terrain dirty/pin/save/global-map/collider listelerini değiştirmez.
+Eksik tile'lar özel staging'dedir; streaming `demand()` önizlemede kullanılmaz.
+Ancak başarılı bake'te gerekli yeni tile'lar edit dünyasına alınır. Değişen
+tile'lar mevcut session/undo pin düzeninde kalır; Save veya Undo pin kaldırmaz.
+
+Etki alanına değen gerçek terrain deliği işlemin tamamını reddeder; salt kuru
+kontrol bölgesindeki delik için W1 kuralı geçerlidir. 404/503/decode/seam,
+geçersiz bounds/range ve bütçe hataları canlı yazımdan önce sonuçlanır.
+Source, definition, yükseklik ve boya snapshot'ı son kez doğrulanır; eski iş
+generation/AbortController ile yayımlanmaz. Commit sırasında await yoktur.
+Undo/redo kayıtlı before/after yükseklik ve boya patch'lerini kullanır.
+Height değişimi tüm ilgili W1 bağlı alanını yeniler; paint-only topolojiyi
+değiştirmez. Yol/nehir/foliage/global-map mevcut terrain yenileme yolundadır.
+
+| Kaynak | İlk W2 sınırı / ölçülecek hedef |
+| --- | --- |
+| Alan/tile | W1: <=65.536 hücre, seam dahil <=16 tile; toplam Lake alanı <=262.144 |
+| IO/decode | W1/W2 arasında toplam <=4 okuma; ham pay dahil decode <=32 MiB |
+| Undo | Tek bake before+after <=16 MiB |
+| Ek CPU | Staging, W1 transient, preview, undo ve ek tutulan tile'lar <=64 MiB |
+| Birikim | W2 undo/pin session rezervasyonları sonraki işlemde de sayılır; geçmiş sessizce budanmaz; sınırda save/reload önerilir |
+| Ön kontrol | Tam tile snapshot/candidate/patch üst tahmini + hücre başına 360 byte W1/preview transient payı; allocation/IO öncesi |
+| Scheduling | 150 ms debounce, iptal/revision; yaklaşık 3 ms çalışma dilimleri |
+| Zaman hedefi | 96x96 m warm p95 <=200 ms; 65.536 hücre <=1 s; debounce/IO hariç |
+| Browser hedefi | Ana thread dilimleri <=4 ms; W2 nedeniyle >50 ms long task yok; ölçüm olmadan kabul kapanmaz |
+
+Save, mevcut tile → global → terrain tanımı → level sırasındadır. Başarısız
+HTTP kayıt dirty veriyi bırakır, Retry/Save tekrar edilebilir. Bellekte atomik
+bake, birden çok dosyanın crash-atomic disk kaydı garantisi değildir.
+
+### 14.4. Bağımsız kabul alanı ve uygulama sırası
+
+Fixture: 2x2 tile, q=64, spacing=1, origin=[-64,10,-64], başlangıç dünya
+Y=16, L=14; yaklaşık 56x48 m sınır X=0/Z=0 seam'lerini geçer; D=3,
+eğim=30, W=4; alan [-48,-48]..[48,48], Ground/Shore layer'ları. Engine
+fabrikası ve izole smoke projesi kullanılır, kullanıcı sahneleri kullanılmaz.
+Ek 2x1, 1x1, büyük-origin, u16/f32 ve uzak streaming varyantları kapsanır.
+
+Sıra: W2.1 tip/allowlist/fixture → W2.2 saf bounded profil/patch ve erken CPU
+kapısı → W2.3 aday W1 ve yazmadan overlay → W2.4 açık tek undo bake/pin →
+W2.5 isteğe bağlı boya ve Save/Reload/Play → W2.6 engine/browser/ölçüm kabulü.
+
+Kabul: preview hash/dirty/pin değişmez; dört tile seam'inde yükseklik/boya
+birebir eşit; dış örnekler değişmez; deep-ground korunur; ikinci bake no-op;
+tek Undo tüm terrain/boyayı ve yeni aktörü geri alır; silme/taşıma terrain'i
+geri almaz; eksik tile/hole/bounds/range/budget/stale sonuç kısmi yazmaz;
+f32 kesin ve u16 nicemleme sınırları ayrı; gerçek Save/Reload/Play'de kayıtlı
+terrain üzerinde aynı W1 kıyı/maske/derinlik. W1 Lake ve nehir regresyonları
+korunur. Playwright'ta yakın eğik/üstten iki-seam ve 1440x900/1100x720 görseller
+incelenir; konsol, iptal, hata/Retry ve yaşam döngüsü ayrıca denetlenir.
+
+### 14.5. Uygulama ve doğrulama kaydı
+
+**Kullanıcı isteğiyle masaüstüne devirde durduruldu; W2 tamamlanmadı.**
+
+- Diskte kalan: kalıcı tarif/validator, saf oyma profili, bounded tile staging,
+  aday W1 değerlendirmesi, boya/undo patch üretimi, ortak dört-okuma sınırı,
+  bağımsız fixture, engine testleri ve CPU pilot aracı.
+- Oturum içinde tam `build:verify` 1.969 kontrolle geçti
+  (`.dev-server/lake-w2-build.log`). Bu, son disk durumunun tam kabulü değildir;
+  sonrasında patch ön doğrulaması ve eşzamanlı başka değişiklikler var.
+- Son çekirdek devir koşusu `.dev-server/lake-w2-handoff-engine.log`, son
+  TypeScript devir koşusu `.dev-server/lake-w2-handoff-types.log` dosyasındadır.
+- İlk UI entegrasyonunda iki W2 browser akışı geçti; uzak 503/Retry akışı
+  kabul edilmedi: önce testler arası autosave yarışı, sonraki koşuda streaming
+  tamamlanma beklemesi. `lake-w2-host.log`/`lake-w2-host-results/` kısmi kanıttır.
+- Devir sırasında `SceneApp`/Lake editör akışı başka düzenlemelerle değişti;
+  W2'nin `lakeBedOverlay.ts` ve `lakeBedDetails.ts` dosyaları artık yok. W2 UI
+  henüz bağlı değildir; browser senaryoları yeniden entegrasyon sonrasında
+  güncellenip etkinleştirilmelidir. Başarılı W2 kabulü olarak sayılmaz.
+- Görsel incelemede yeni taslakta kamera layer 31 açılmadığı için preview'nin
+  görünmediği bulundu. Entegrasyonda W2 overlay varken de bu layer açılmalı;
+  görünür geometri ve screenshot tanığı eklenmelidir.
+- `.dev-server/lake-w2-perf.json`: ilk Node pilotu 96x96 alan p95 ~216 ms,
+  boyalı ~1.631 ms, üst sınır ~9.083 ms; hedefler karşılanmadı. Browser/build
+  işleriyle çakışan bu pilot izole tekrarlanmalı; kıyıya mesafe sorgusu için
+  uzamsal indeks eklenmelidir. Browser ana-thread veya GPU kabulü değildir.
+- §13 donanım GPU, browser heap/ana thread ve büyük dünya kabulü açık kalır.
+  Çalışma ağacındaki diğer plan/LandscapeTest/EditorUi değişiklikleri geri
+  alınmadı. Bu oturum kullanıcı sahnesine yazmadı; commit/push yok.
+
+**Devam sırası:** Git farkını yeniden incele → eşzamanlı Lake düzenlemelerini
+koruyarak W2 UI/preview/bake'i bağla → kamera görünürlüğünü düzelt → testlere
+ayrı level yolu ve bitmiş Save tanığı sağla → uzak tile hata/Retry kabulü →
+paint mesafe indeksleme ve izole CPU/browser ölçümü → tam gate + W1/River.
+
+Save/load allowlist için kullanıcı onayıyla Codex Security diff scan önerilir;
+scan çalıştırılmadı.

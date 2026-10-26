@@ -2268,6 +2268,11 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       tepe bellek/ana thread ve büyük dünya/geometri streaming kabulü açık.
       Mevcut sahne/tile verileri değişmedi; yatak oyma W2'de kaldı.
       Ayrıntı ve CPU pilotu Water Body alt planı §13'te.
+      **W2 onaylandı (2026-10-26):** Kapalı spline ile yalnız oyma, yazmadan
+      önizleme, açık bake, isteğe bağlı kıyı boyası ve tek undo/redo; kalıcı
+      tarif runtime'da otomatik uygulanmaz. Tasarım, bütçe ve bağımsız kabul
+      alanı Water Body alt planı §14'te. W1 donanım GPU/browser bellek/ana
+      thread ve büyük dünya performans kabulü bu onayla kapanmaz.
 - [ ] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
       prosedürel çim maddesi bittikten sonra 1×1 de çok-tile ile aynı yoldan
       (`terrainEdit.ts`, `worldTerrainActor.ts`) düzenlenir;

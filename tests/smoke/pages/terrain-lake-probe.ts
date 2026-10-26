@@ -4,14 +4,30 @@ import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { updateLandscapeLod } from "@engine/render-three/landscape";
 import type { TerrainEditorStreaming } from "@engine/terrain/terrainEditorStreaming";
 import { pendingTerrainLoads } from "./terrain-probe-state";
+import type { SceneApp } from "@/scene/SceneApp";
+import type { WorldTerrainEditSession } from "@/editor/terrainStore";
 
 export function installLakeProbe(app: unknown) {
   const a = app as { camera: PerspectiveCamera; canvas: HTMLCanvasElement; lakes: LakeWaterController | null;
+    selection: { kind: string; index?: number } | null;
     renderer: WebGLRenderer; scene: Scene; frameHandle: number; landscapeObjects: Group[];
     postProcessPipeline: { render(dt: number): void } | null;
     worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
+    getLakeEditorState?: SceneApp["getLakeEditorState"];
+    worldTerrainSessions?: WeakMap<WorldTerrainDocument, WorldTerrainEditSession>;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    editor() {
+      return { state: a.getLakeEditorState?.(), selection: a.selection,
+        terrain: [...(a.worldTerrains ?? a.worldTerrainDocuments ?? [])].map(([id, doc]) => {
+          let hash = 2166136261;
+          for (const [key, t] of [...doc.tiles].sort(([a], [b]) => a.localeCompare(b))) {
+            for (const c of key) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+            for (const buffer of [t.heights, t.weights]) for (const v of new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)) hash = Math.imul(hash ^ v, 16777619);
+          }
+          return { id, hash: hash >>> 0, dirty: a.worldTerrainSessions?.get(doc)?.dirtyKeys() ?? [], keys: [...doc.tiles.keys()].sort() };
+        }) };
+    },
     async gpuPilot() {
       cancelAnimationFrame(a.frameHandle);
       const renderer = a.renderer, gl = renderer.getContext() as WebGL2RenderingContext;

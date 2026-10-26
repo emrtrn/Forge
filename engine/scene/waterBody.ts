@@ -1,4 +1,5 @@
 import type { LayoutLakeWaterBody } from "./layout";
+import { validateLakeBed } from "./lakeBed";
 import { RIVER_WATER_DEFAULTS } from "./riverWater";
 
 export const LAKE_LIMITS = { bodies: 8, cells: 65536, totalCells: 262144, tiles: 16,
@@ -29,6 +30,7 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
   if (!(min[0] < seed[0] && seed[0] < max[0] && min[1] < seed[1] && seed[1] < max[1])) throw new Error("Lake seed must be inside bounds");
   const out: LayoutLakeWaterBody = { schema: 1, kind: "lake", mode: "fillExisting", coordinateSpace: "world",
     id: input.id as string, terrainRef: input.terrainRef as string, bounds: { min, max }, seed, surfaceLevel: number(input.surfaceLevel) };
+  if (input.bed !== undefined) out.bed = validateLakeBed(input.bed);
   if (input.name !== undefined) {
     if (typeof input.name !== "string" || input.name.length > 256) throw new Error("Invalid Lake name");
     out.name = input.name;

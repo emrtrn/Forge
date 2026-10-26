@@ -1,23 +1,30 @@
-# FORGE WORLD BUILDER
+﻿# FORGE WORLD BUILDER
 ## AI destekli, prosedürel ve düzenlenebilir açık dünya / level üretim sistemi
 
-**Belge:** `FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.1.md`  
-**Sürüm:** 0.1 — başlangıç tasarımı ve araç yol haritası  
-**Tarih:** 25 Ekim 2026  
+
+**Belge:** `FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.2.md`  
+**Sürüm:** 0.2 — World Environment entegrasyon eki  
+**Tarih:** 26 Ekim 2026  
 **İlgili teknoloji:** Forge Editor / Forge Engine — Three.js tabanlı web editörü  
 **İlk kullanım senaryosu:** Forge Offroad (lojistik ve taşımacılık; izole dağ yerleşimleri)  
 **Uzun vadeli kapsam:** Farklı oyun türlerinde yeniden kullanılabilir genel amaçlı world/level üretimi  
 **Belge durumu:** Tasarım önerisi; bu belgede önerilen World Builder modülleri uygulanmış kabul edilmez.
 
+
 ---
+
 
 ## 0. Belgenin amacı ve bilgi kaynakları
 
+
 Bu belge, tek bir **AI referans görselinden** başlayarak Forge'da **aşamalı, denetlenebilir, yeniden üretilebilir ve elle düzenlenebilir** bir oyun dünyası oluşturma sisteminin mimarisini tanımlar. Codex veya Claude referansı inceler, bir **World Plan / World Recipe** üretir; Forge ise kendi editör araçlarıyla dünyayı oluşturur ve doğrular.
+
 
 **En önemli tasarım kararı:** AI'ın on binlerce ayrı fare/fırça işlemini taklit etmesi yerine, parametreleri ve ilişkileri tanımlayan bir üretim tarifi vermesi hedeflenir. Uygulanmış editör işlemleri ve yeni prosedürel modüller bu tarifi çalıştırır.
 
+
 ### 0.1. Durum bilgisinin kaynağı
+
 
 | Bilgi | Durum | Dayanak |
 |---|---|---|
@@ -27,21 +34,30 @@ Bu belge, tek bir **AI referans görselinden** başlayarak Forge'da **aşamalı,
 | Sculpt, paint, spline yol/deformasyon, foliage instancing, nehir görselleştirme temelleri bulunuyor | **23.10.2026 teknik raporunda doğrulanmış** | `FORGE_OFFROAD_FORGE_TEKNIK_DURUM_RAPORU_2026-10-23.md` |
 | World Recipe, World Builder işlem zinciri, yerleşim/rota üreticileri, otomatik biyom maskeleri | **Bu belgedeki öneriler** | Henüz uygulama doğrulaması yok |
 
+
 > **Sürüm farkı notu:** 23 Ekim teknik raporu eski bir kod anını inceliyor ve o tarihte çoklu tile renderer/streaming entegrasyonunun tamamlanmadığını yazıyor. Kullanıcının 25 Ekim'deki açık dünya işlevi açıklaması daha güncel olduğundan burada esas alınmıştır. Bununla birlikte güncel Git commit, performans, tile sınırı ve streaming davranışı yeniden ölçülmemiştir. Eski rapordaki eksikler bugün hâlâ varmış gibi sunulmamalıdır.
+
 
 > **Deformasyon sınırı:** Editörde landscape yüksekliğinin değiştirilmesi, spline'ın zemini kazması/düzleştirmesi ve **oyun sırasında lastik izleriyle dinamik deformasyon** teknik olarak farklı işlevlerdir. Kullanıcının 'arazi deformasyonu mümkün' ifadesi kayda alınır; üç alt türün kapsamı repo incelemesinde ayrı işaretlenir.
 
+
 ### 0.2. Proje bağlamı
+
 
 Forge Offroad'ın kesinleşmiş ana deneyimi **lojistik ve taşımacılık**, dünyası ise **izole dağ yerleşimleri**dir. World Builder'ın ilk kabul senaryosu bu çerçeveyi kullanabilir; buna karşın mimari sadece Offroad'a özgü olmamalıdır.
 
+
 ---
+
 
 ## 1. Vizyon ve ürün ilkeleri
 
+
 **Vizyon:** “Bir referans görseli, kısa tasarım açıklaması ve birkaç oyun kısıtı ver; Forge yerleşimleri, yolları, araziyi, suyu, doğayı ve sahne öğelerini kontrollü aşamalarla oluştursun. Oluşturulan dünya oyun motorunda çalışsın ve gerektiğinde yalnız etkilenen kısımları yeniden üretilebilsin.”
 
+
 **İlkeler**
+
 
 1. **Önce plan, sonra geometri:** Dağ/vadi, su koridoru, ana ulaşım ve yerleşim konumları gerçek mesh ve asset yerleşiminden önce tasarlanır.
 2. **Referansa benzerlik + oynanabilirlik:** Görsel hedef, eğim, yol genişliği, araç geçişi, görev ilişkileri ve performansla birlikte değerlendirilir.
@@ -52,7 +68,9 @@ Forge Offroad'ın kesinleşmiş ana deneyimi **lojistik ve taşımacılık**, d�
 7. **Ölçülebilir kalite kapıları:** Her üretim aşamasının başarı ölçütleri ve testleri bulunur.
 8. **Motor bağımsız tasarım bilgisi:** World Plan, World Recipe ve semantik asset bilgileri yalnız belirli bir editör paneline bağlı kalmaz.
 
+
 ### 1.1. Kapsam dışı varsayımlar
+
 
 - Tek perspektif referanstan eksiksiz, fiziksel olarak doğru 3B dünya çıkarıldığı **iddia edilmez**.
 - Her referans görseli tek başına kesin harita ölçeği, gizlenmiş topografya ve zemin fiziği sağlamaz; bunlar kullanıcı kısıtları veya tasarım varsayımlarıyla tamamlanır.
@@ -60,9 +78,12 @@ Forge Offroad'ın kesinleşmiş ana deneyimi **lojistik ve taşımacılık**, d�
 - Nehir/gölün görsel mesh olarak oluşması, akıntı, yüzdürme veya araç motorunun su altında kalması gibi gameplay fiziğinin hazır olduğu anlamına gelmez.
 - Dünya ölçeğinin büyüklüğü, performans ve bellek testleri yapılmadan kalite garantisi değildir.
 
+
 ---
 
+
 ## 2. Ana kavramlar ve veri otoritesi
+
 
 | Kavram | Açıklama |
 |---|---|
@@ -76,7 +97,9 @@ Forge Offroad'ın kesinleşmiş ana deneyimi **lojistik ve taşımacılık**, d�
 | **World Validation** | Geometri, bağlantı, çakışma, fizik, görsel uyum ve performans denetimleri |
 | **Bake / Commit** | Önizleme üretimini açık onayla kalıcı level verisine dönüştürme |
 
+
 ### 2.1. Önerilen veri akışı
+
 
 ```text
 AI REFERANS GÖRSELİ + METİN + OYUN KISITLARI
@@ -106,7 +129,9 @@ AI REFERANS GÖRSELİ + METİN + OYUN KISITLARI
              [Bake / Save / Playtest]
 ```
 
+
 ### 2.2. Önerilen katman sahipliği
+
 
 | Katman | Değişiklik sahibi | Değiştiğinde etkilediği sistem |
 |---|---|---|
@@ -119,13 +144,18 @@ AI REFERANS GÖRSELİ + METİN + OYUN KISITLARI
 | Generated Foliage / Props | PCG Scatter Generator | Yalnız üretilen instance kümeleri |
 | **Manual Overrides** | Kullanıcı / editör | Yetkisiz otomatik değiştirilemez |
 
+
 Katmanlar tek bir heightmap'e kalıcı olarak gömülmemeli; mümkün olduğunca kaynak parametreleri ve etkileri saklanmalıdır. Bazı sistemlerde performans için bake gerekir; bake, kaynak tarifin kaybı anlamına gelmemelidir.
+
 
 ---
 
+
 ## 3. Referanstan level'a önerilen 13 aşamalı iş akışı
 
+
 Aşağıdaki sıra **çalışma akışıdır**, katı tek-geçiş algoritması değildir. World Plan'ın taslak POI ve su/yol koridorları oluşturması, arazi ve suyun sonradan birbirini düzeltmesine izin verir.
+
 
 | ID | Aşama | Üretilen veri/çıktı | Bir sonraki aşamaya geçiş koşulu |
 |---|---|---|---|
@@ -143,7 +173,9 @@ Aşağıdaki sıra **çalışma akışıdır**, katı tek-geçiş algoritması d
 | **11** | AI & Navigation Setup | Araç rotası, spawn/navigasyon bölgeleri; gerekiyorsa insan/hayvan aktörleri | Ulaşılabilir/uygun spawn, temel AI hareket testi |
 | **12** | Final Lighting, Validation & Optimization | Son ışık, görsel kontrol, sürüş testi, performans/bellek kayıtları, bake/save | Kritik testler geçiyor; açık kusurlar kayıtlı |
 
+
 ### 3.1. Aşama sırası neden böyle?
+
 
 - **Yerleşimin yeri** erken seçilir; **ev ve sokak yerleşimi** sonradan kesinleşir.
 - Nehir ana vadinin ve yolların geometrisini etkilediğinden yolun tamamlanmasını beklemez.
@@ -152,21 +184,30 @@ Aşağıdaki sıra **çalışma akışıdır**, katı tek-geçiş algoritması d
 - Büyük kayalıklar ve jeolojik yapılar Aşama 03/07'yi etkileyebilir; küçük/orta kaya dağılımı Aşama 09'da yapılır.
 - Görsel atmosfer Aşama 02'de başlatılır fakat son ışık düzeni Aşama 12'de yapılır.
 
+
 ### 3.2. Bağımlılık ve kısmi yeniden üretim
+
 
 Örnek: Kullanıcı nehir yatağını değiştirirse öncelikle hydrology deform yeniden üretilir. Etkilenen köprü/yol parçaları, kıyı boya maskeleri, kıyı foliage ve props tekrar hesaplanır. Uzak köyler ve elle kilitlenmiş nesneler otomatik silinmez.
 
+
 Örnek: Köy başka bir yamaca taşınırsa köy parselleri, yol bağlantısı, bina placeholder'ları ve yeni etki alanındaki foliage güncellenir; ana dağ kütlesi zorunlu değilse yeniden üretilmez.
+
 
 Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId`, `preserveManual`, `previewDiff`, `transactionId`.
 
+
 ---
+
 
 ## 4. Forge'un araç yol haritası — yeni geliştirme önerileri
 
+
 Öncelikler **P0 (temel)**, **P1 (ilk kullanışlı sürüm)**, **P2 (ileri kalite)** olarak tanımlanmıştır. Bir modülün önerilmesi, Forge'da bugün bulunmadığına ilişkin doğrulanmış iddia değildir; özellikle geliştirilmekte olan modüller kod incelemesiyle eşleştirilmelidir.
 
+
 ### 4.1. P0 — World Builder'ın çalışması için gerekli araçlar
+
 
 | ID | Araç / modül | Neden gerekli? | Somut ilk işlev |
 |---|---|---|---|
@@ -181,14 +222,18 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 | **T09** | **Asset Catalog Metadata** | AI'ın doğru model bulmasını sağlamak | Asset'e `type`, `biome`, `size`, `tags`, `collision`, `LOD` vb. eklemek |
 | **T10** | **Preview / Diff / Bake / Rollback UI** | Manuel editleri koruyarak otomasyonu denetlemek | Üretilen değişiklikleri önce göster; kabul/geri al |
 
+
 **P0 için teknik notlar:**
+
 
 - T05–T06, mevcut çalışmaların **yeniden yazılması** anlamına gelmez; API, veri formatı ve World Builder bağımlılıklarına bağlanmasını kapsar.
 - Terrain deformasyonunun layer stack ile birleşmesi için bir **yükseklik otoritesi** belirlenmeli: base heightfield + prosedürel katkılar + manual overrides → son surface. Collision ve yüzey sorguları bu son sürümü kullanmalıdır.
 - Çok büyük arazi işlemlerinde tüm dünyanın her küçük editte yeniden hesaplanması önlenmeli; **dirty region/tile** tabanlı güncelleme hedeflenmelidir.
 - Büyük dünya üretimi hazır diye otomatik olarak **tile seam, yükleme gecikmesi, GPU belleği, collider aktivasyonu** testleri tamamlandı varsayılmaz.
 
+
 ### 4.2. P1 — Üretimin gerçek anlamda akıllı ve kullanışlı olması
+
 
 | ID | Araç / modül | Önerilen özellikler |
 |---|---|---|
@@ -206,17 +251,22 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 | **T22** | **Actor/Navigation Authoring** | Araç şeritleri ve rotalar, aktör spawn alanları, insan/hayvan geçilebilir zonları |
 | **T23** | **World Overview / Debug Map** | Üstten semantik harita; POI, yol ağı, su, biyom, hata ve dirty-bounds katmanları |
 
+
 **T13 neden önemli?** Akış ve drenaj analizi olmadan her göl/nehir görünen yüzeye yerleştirilebilir; fakat suyun vadilere ve yolların drenaj ihtiyacına göre davranması zorlaşır. Gerçekçi tam akışkan simülasyonu ilk sürüm için şart değildir. **Editör-side flow analysis** yeterli bir ilk adımdır.
+
 
 **T14 neden önemli?** Forge Offroad'da yalnız iki nokta arasına eğri çizmek yeterli değildir. Kısa-zor ve uzun-güvenli güzergâh gibi **oynanış açısından farklı seçenekler** üretilmelidir. Maliyet haritası ve araç profili, bu özelliği rastgele çizimden ayırır.
 
+
 **T18 neden önemli?** Yapılar arazi üzerine rastgele serpiştirilmemelidir. Yola bakan giriş, çakışmasız bina parseli, ulaşılabilir depo avlusu ve uygun temel kotu gereklidir.
+
 
 ### 4.3. P2 — Görsel kalite, ölçek ve gelişmiş otomasyon
 
+
 | ID | Araç / modül | Önerilen özellikler |
 |---|---|---|
-| **T24** | **Advanced Biome Blending** | Orman/çayır/kayalık geçişleri, mevsim ve nem bantları |
+| **T24** | **Advanced Biome Blending** | Authored biyom ve çevre maskeleri; mevsimsel görünüm World Environment (WES) tarafından ayrı yönetilir |
 | **T25** | **Procedural Props / Rule Grammars** | Çit, elektrik direği, taş duvar, yol tabelası, yük istifi, sokak eşyası |
 | **T26** | **Cliff / Overhang Mesh Tools** | Heightfield'in üretemeyeceği dik/altı oyuk kaya, mağara ve kaya mesh geçişleri |
 | **T27** | **Terrain Material & Physical Surface Map** | Görsel paint'ten ayrı zemin tipi; daha sonra lastik tutuşu/batma/sürtünme sistemine bağlama |
@@ -227,9 +277,12 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 | **T32** | **World Templates & Presets** | Alp vadisi, orman köyü, ada, kırsal yerleşim, endüstriyel saha vb. reçeteler |
 | **T33** | **World Generation Profiler** | Aşama başına süre, üretilen instance, RAM/VRAM, frame/GPU ve en pahalı bölgeler |
 
+
 ### 4.4. Önce hangi araçları geliştirmek daha değerli?
 
+
 **Önerilen ilk teknik sıra:**
+
 
 1. **Recipe + Stage Runner + Stable IDs (T01, T02, T07)** — AI entegrasyonunun ortak temelini kur.
 2. **Non-destructive layers + spatial masks (T03, T04)** — bütün terrain işlemlerini güvenle birleştir.
@@ -240,13 +293,18 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 7. **Settlement + Biome Scatter (T18–T20)** — level'ı oynanabilir ve görsel olarak tamamla.
 8. **AI Reference Planner + Automated Review (T30–T31)** — görselden plan üretme ve sonuç denetimini üst katmana ekle.
 
+
 **P0/P1/P2 gerçek geliştirme takvimi değildir**; repo incelemesi ve prototip testleriyle yeniden sıralanmalıdır. Daha önce uygulanmış özellikler bu sıralamada yeni kod olarak değil, yeniden kullanılacak yetenek olarak ele alınmalıdır.
+
 
 ---
 
+
 ## 5. Önemli alt sistemlerin teknik gereksinimleri
 
+
 ### 5.1. Landscape ve terrain
+
 
 - World-space metre ve tile-space koordinat dönüşümleri ortak servis olmalı.
 - Height query, normal, slope, curvature ve material query aynı son yüzey sürümünü okumalı.
@@ -254,7 +312,9 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 - Büyük şekiller için **coarse-to-fine** yaklaşımı: düşük çözünürlükte kütle, sonra daha yüksek çözünürlükte detay.
 - Heightfield dik/altı boş geometriyi temsil edemez; cliff/mağara gibi bölgeler için ayrı mesh gerekebilir.
 
+
 ### 5.2. Yol sistemi
+
 
 - Hem **yol ağı grafı** (bağlantı) hem **spline/mesh geometrisi** (görsel) bulunmalı.
 - Segment profili: `roadClass`, `width`, `shoulder`, `surfaceType`, `maxSlope`, `minTurnRadius`, `allowedVehicleClasses`.
@@ -263,7 +323,9 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 - Köprü/menfez/sığ geçit, yol-su çakışmasının semantik çözümü olarak tanımlanmalı.
 - Sürüş testi, geometri testinden ayrı olmalı (özellikle ağır yük aracı için).
 
+
 ### 5.3. Nehir, göl ve su birikintisi
+
 
 - **Nehir:** spline/akış yönü, değişken genişlik, su seviyesi, yatak carve, kıyı blend, geçiş bölgeleri.
 - **Göl:** kapalı shoreline, sabit veya tanımlı su kotu, göl havzası, çevre kıyı maskesi.
@@ -271,7 +333,9 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 - **Ayrım:** Su görselleştirmesi, hydrology planı ve fiziksel su etkileşimi üç ayrı sorumluluktur. İlk aşamada yalnız görsel/authoring hedeflenebilir.
 - Terrain spline'ın altından geçiyor diye nehir geometrisi otomatik gerçek hidrolojik bağlantı anlamına gelmez; bağlantı grafı ve akış yönü saklanmalıdır.
 
+
 ### 5.4. Foliage, kayalar ve props
+
 
 - Scatter girdileri: biome/soil/height/slope/distance-to-road/distance-to-water/exclusion/density.
 - Büyük kayalar, ağaç kümeleri, otlar ve küçük taşlar farklı grid/yayılım çözünürlükleri kullanmalı.
@@ -279,20 +343,27 @@ Gerekli mekanizmalar: `dependencyGraph`, `dirtyBounds`, `generatedBy`, `stableId
 - Çarpışma gerekiyorsa yakın çevreyle sınırlı aktivasyon ve seyrek collider kullanımı değerlendirilmeli.
 - Köy/yol/oynanış alanları ve AI görüş/seyir hatları açık tutulmalı.
 
+
 ### 5.5. Yerleşim ve yapılar
+
 
 - **Makro:** Köy merkez noktası, yerleşim sınırı, ana yol bağlantısı, yüksekliğe ve su taşkınına göre alan seçimi.
 - **Mezo:** Yerel sokak ağı, parsel, ortak alan, depo, servis alanı.
 - **Mikro:** Bina placeholder, giriş, temel, kapı önü boşluğu, dekorasyon.
 - Fiziksel bina modelleri bulunmuyorsa semantik placeholder kullanılmalı; sonradan model değiştirilince ID ve giriş yönü korunmalı.
 
+
 ---
+
 
 ## 6. Codex / Claude ile çalışma sözleşmesi
 
+
 ### 6.1. AI'ın görevi
 
+
 AI'ın birincil görevleri:
+
 
 1. Referansı analiz etmek ve **gözlenen** unsurlarla **tahmin edilen** unsurları ayrı yazmak.
 2. Referans ölçeği, coğrafya ve kullanıcı kısıtlarından World Plan önermek.
@@ -301,9 +372,12 @@ AI'ın birincil görevleri:
 5. Hata/uyarı raporunu incelemek; kritik kusurları düzeltmek veya kullanıcı onayı istemek.
 6. Değişiklikleri ve test sonuçlarını raporlamak.
 
+
 **AI'ın yapmaması gerekenler:** Var olmayan motor özelliğini çalışıyor saymak; kullanıcı editlerini sessizce silmek; test edilmemiş su/zemin fiziğine dayalı gameplay sonucu bildirmek; referansta görünmeyen yerleri kesin gerçek olarak sunmak.
 
+
 ### 6.2. Önerilen komut yüzeyi — taslaktır, mevcut API değildir
+
 
 ```text
 world.inspectCapabilities()
@@ -322,11 +396,15 @@ world.rollback(transactionId)
 world.save(levelId)
 ```
 
+
 **Güvenli çalışma sırası:** inspect → plan → dry-run → validate → preview diff → execute → validate → save. Yazma yetkisi ve kapsam sınırlaması editör tarafında uygulanmalıdır.
+
 
 ### 6.3. Önerilen minimal World Recipe şeması
 
+
 Aşağıdaki JSON gerçek Forge dosya şeması değildir, şema tasarımına başlangıç örneğidir.
+
 
 ```json
 {
@@ -362,17 +440,24 @@ Aşağıdaki JSON gerçek Forge dosya şeması değildir, şema tasarımına ba�
 }
 ```
 
+
 Burada `512 × 512 m` yalnızca örnek konfigürasyondur; performans veya seçilmiş oyun dünya ölçüsü olarak kabul edilmez.
+
 
 ### 6.4. Codex'e verilecek ilk geliştirme görevi — örnek iş tanımı
 
+
 > Önce mevcut Forge repo ve `AGENTS.md` kurallarını incele. Landscape, spline, water, foliage, save/load ve mevcut büyük dünya veri yollarını envanterle. Kod değiştirmeden önce mevcut API'leri ve eksikleri belgeleyip önerilen World Recipe/Stage Runner mimarisiyle eşleştir. İlk iterasyonda yalnız veri sözleşmesi, sahne kapasitesi sorgusu, dry-run, stabil ID, üretim sonucu diff ve temel stage validation uygula. Mevcut editör sahnelerini, assetleri ve kayıt biçimlerini bozma. Yeni üretim API'lerini başta sınırlı bir test level'ında, mevcut testlerle birlikte doğrula. Açık dünya ve deformasyonun güncel kod durumunu 23 Ekim raporundan otomatik varsayma; mevcut commit'e göre yeniden kontrol et.
+
 
 ---
 
+
 ## 7. Doğrulama ve kabul kriterleri
 
+
 ### 7.1. Her aşamanın raporu
+
 
 ```text
 Stage ID | Input recipe hash | Generator version | Seed
@@ -382,7 +467,9 @@ Validation result | Manual overrides preserved?
 Preview screenshot(s) | Commit ID | Undo / rollback result
 ```
 
+
 ### 7.2. Önerilen test matrisi
+
 
 | Test | Beklenen kanıt |
 |---|---|
@@ -399,9 +486,12 @@ Preview screenshot(s) | Commit ID | Undo / rollback result
 | **WB-11 Runtime Drive Test** | Offroad aracı en az bir oluşturulmuş rotayı gerçekten geçiyor |
 | **WB-12 Performance** | Temsili dünyada FPS/frame, RAM/VRAM, collider ve yükleme maliyeti ölçülüyor |
 
+
 **Sayı hedefleri:** Harita boyutu, maksimum instance, izin verilen build süresi, minimum FPS ve bellek bütçeleri hedef cihaz ve güncel motor profili ölçüldükten sonra belirlenecektir.
 
+
 ### 7.3. Üretim kalitesi boyutları
+
 
 - **Yapısal:** Yol, su, POI, yerleşim bağıntıları doğru.
 - **Mekânsal:** Çakışma, diklik, su seviyesi, erişim, sınır dikişi doğru.
@@ -409,15 +499,21 @@ Preview screenshot(s) | Commit ID | Undo / rollback result
 - **Oynanış:** Rotalar, yük ve araç profilleriyle anlamlı seçenekler sunuyor.
 - **Teknik:** Runtime stabil, kayıt dosyası geçerli, bütçeler ölçülmüş.
 
+
 ---
+
 
 ## 8. İlk prototip: Mountain Delivery World Builder
 
+
 **Amaç:** Mevcut Forge açık dünya altyapısı ve geliştirilmekte olan spline/su araçları üzerinde **tek bir referans görselden, aşamalı ve düzenlenebilir bir küçük nakliye bölgesi** üretmek.
+
 
 **İçerik:** Bir vadi, iki yükselti bandı, bir nehir, bir köy placeholder alanı, bir lojistik depo, iki alternatif yol profili, bir köprü/su geçişi, basit orman/kaya dağılımı, en az bir AI/sürüş kontrol rotası.
 
+
 **Üretim sırası (prototip):**
+
 
 1. Referans ve semantik plan; 2–3 kontrol noktasıyla kullanıcı değerlendirmesi.
 2. World Recipe oluşturma, sahne/terrain setup.
@@ -428,15 +524,21 @@ Preview screenshot(s) | Commit ID | Undo / rollback result
 7. Foliage/kaya üretimi.
 8. Save/reload ve araçla sürüş testi.
 
+
 **İlk başarı tanımı:** Kullanıcı aynı referansla tutarlı bir level oluşturabiliyor; yol veya köy konumu değiştiğinde etkili bölge güvenle güncelleniyor; manuel override korunuyor; sahne kaydedilip sürülebiliyor. Görselin fotogerçekçi kopyası hedef değildir.
+
 
 ### 8.1. Daha büyük dünya aşaması
 
+
 İlk deneme başarılı olunca çoklu tile ve uzun mesafeli rota aynı tarif modeliyle denenir. Bu fazda özellikle streamer/LOD, collider aktivasyonu, foliage yoğunluğu, tile sınırı spline/su bağlantıları ve uzun sürüş bellek testi gerekir. Güncel kodda bunların ne kadarının hazır olduğu yeni repo incelemesiyle doğrulanır.
+
 
 ---
 
+
 ## 9. Uygulama fazları ve çıkış kapıları
+
 
 | Faz | Teslim edilecek iş | Çıkış kapısı |
 |---|---|---|
@@ -448,13 +550,18 @@ Preview screenshot(s) | Commit ID | Undo / rollback result
 | **F5 — AI Director** | Görselden semantik harita/recipe, screenshot karşılaştırma, düzeltme | Referans → test level uçtan uca tamamlanıyor |
 | **F6 — Scale/Optimization** | Tile streaming/LOD/QA profiler değerlendirmesi | Seçili hedef cihazda uzun sürüş ve kaynak bütçeleri ölçülmüş |
 
+
 > Çıkış kapısı karşılanmadan ilgili faz **tamamlandı** sayılmaz. Fazlar bağımlılığa göre paralel ilerleyebilir; takvim ve süre bu belgede taahhüt edilmez.
+
 
 ---
 
+
 ## 10. Açık tasarım kararları
 
+
 Aşağıdaki konular bilinçli olarak karara bağlanmadı:
+
 
 1. World Recipe Forge projesinin içindeki hangi dosyada/sidecar'da saklanacak?
 2. Katman birleştirme modeli: tam non-destructive çalışma mı, hibrit bake + kaynak recipe mi?
@@ -467,18 +574,24 @@ Aşağıdaki konular bilinçli olarak karara bağlanmadı:
 9. Prosedürel foliage/props output'unun ne kadarı instance, ne kadarı aktör olarak saklanacak?
 10. AI'ın write/commit yetkisi hangi onay ve geri alma politikasıyla sınırlandırılacak?
 
+
 ---
+
 
 ## 11. Kaynaklar ve tasarım gerekçesi
 
+
 **Proje içi dayanaklar**
+
 
 - `FORGE_OFFROAD_FORGE_TEKNIK_DURUM_RAPORU_2026-10-23.md` — 23 Ekim commit'inde teknik durum; güncel kodun yerine geçmez.
 - `FORGE_OFFROAD_GDD_PROJE_CERCEVESI_v0.3.md` — lojistik ve izole dağ yerleşimleri kararları.
 - `01_GAME_VISION_AND_PILLARS_v0.2.md` — rota, zemin, yük ve kurtarılabilir sorunlar tasarım ilkeleri.
 - 25 Ekim 2026 proje görüşmesi — açık dünya ve deformasyonun güncel kullanımı; spline yol, nehir, göl, su birikintisinin büyük landscape'e entegrasyonu.
 
+
 **Dış yöntem referansları (Forge'da hazır özellik kanıtı değildir)**
+
 
 1. SideFX — *Realistic terrain with heightfields*: kütle/massing, noise, erozyon ve çok kademeli çözünürlük akışı.  
    https://www.sidefx.com/docs/houdini/model/terrain_workflow.html
@@ -495,12 +608,88 @@ Aşağıdaki konular bilinçli olarak karara bağlanmadı:
 7. Epic Games — *World Partition*: büyük dünya için hücresel veri yönetimi ve streaming yaklaşımı.  
    https://dev.epicgames.com/documentation/unreal-engine/world-partition-in-unreal-engine
 
+
 ---
 
-## 12. Değişiklik kaydı
+
+## 12. World Environment System entegrasyonu — 26 Ekim 2026
+
+
+Bu ek, 25 Ekim World Builder tasarımını korur ve 26 Ekim tarihinde onaylanan çevre sistemi kararlarıyla ilişkilendirir. **World Builder ve WES henüz uygulanmış sayılmaz; WES'in teknik tasarımında öngörülen API ve dosya biçimleri K0 repo incelemesinde doğrulanacaktır.**
+
+
+### 12.1. Onaylanan ürün kararları
+
+
+1. **Kademeli ilk kapsam:** Dört mevsimi ve clear/cloudy/rain/snow/fog hava durumlarını manuel seçme, çalışır gün–gece döngüsü, editör preview/apply/revert. Otomatik hava ve yıllık döngü sonraya.
+2. **Seasonal Asset Family:** Uygun nesnede materyal varyantı; gerekirse mesh varyantı. Aynı ağacın stable ID, konum, collision bağlantısı ve kullanıcı override'ı korunacak. Dört GLB zorunlu değil.
+3. **Kar önce görsel:** Authoring sırasında boyanan grass/dirt/rock paint verisi bozulmadan dinamik snow/wetness render overlay. Fiziksel lastik tutuşu ve derin kar etkisi ayrı sonraki kapı; gölge shader'ı fizik davranışına eşitlenmez.
+4. **Önce masaüstü WebGL2:** Mevcut Three.js WebGLRenderer ile doğrulama ve ölçüm. Mobil eşdeğer performans/WebGPU migration ilk kapsam dışındadır.
+5. **Ürün sınırı:** WES, Forge'un genel Engine/Editor capability'si; World Builder'a veya yalnız Forge Offroad'a gömülmez.
+
+
+### 12.2. Sorumlulukların ayrılması
+
+
+| Alan | World Builder | WES |
+|---|---|---|
+| Arazi | Base height, authored paint, biome, geology | Base veriyi silmeden kar/ıslaklık görünümü |
+| Doğa varlıkları | Stable ID, asset family tags, yerleşim/scatter, exclusion | Mevsimsel materyal ve gerekli mesh varyantları, kar kaplanması |
+| Çevre | Dünya üretirken environment preset/ref önerisi | Manuel season/weather/time; güneş, gökyüzü, sis, yağış ve birikim |
+| Fizik | Authored surface/soil bilgisi | Gelecekte coverage/wetness read-only state; fizik sonuçları ayrı sistem |
+| Kaydetme | Recipe, authored world ve overrides | Uygulanmış çevre varsayılanı ve gerektiğinde runtime çevre state'i |
+
+
+**İlke:** Mevsim değiştirmek World Builder stage'lerini yeniden çalıştırmaz, authored paint byte'larını veya foliage scatter yerleşimini değiştirmez. WES özelliği olmayan eski level'lar eskisi gibi yüklenmelidir. World Recipe environment bağlantısının level içinde mi sidecar olarak mı saklanacağı henüz **[AÇIK/K0]**.
+
+
+### 12.3. Mevcut 13 aşamanın içine bağlantı
+
+
+| World Builder aşaması | WES bağlantısı |
+|---|---|
+| **01 — World Layout & Gameplay Blockout** | Yükseklik/biyom/iklim bölgesi semantiği; otomatik hava simülasyonu değil |
+| **02 — Scene & Environment Setup** | Editörün Environment panelinden manuel çevre preset/time tanımı; preview/apply ayrımı |
+| **07 — Terrain Detail & Surface Paint** | Base paint authored kalır, snow/wetness WES render overlay'dir |
+| **09 — Foliage & Rock Distribution** | Stable ID ve asset family/seasonal tags üretilir; her mevsimde scatter yeniden yapılmaz |
+| **12 — Final Lighting, Validation & Optimization** | Yaz/kış ve gün/gece sahne smoke, kar overlay doğrulaması, WebGL2 performans/asset bütçesi |
+
+
+Yeni bir World Builder stage eklemek zorunlu değildir. `environmentRef`, iklim presetleri ve family metadata alanları **örnek sözleşme adaylarıdır**, var olan Forge şeması değildir.
+
+
+### 12.4. Bağımlı WES uygulama kapıları
+
+
+- **K0 (WES-001):** Renderer, landscape/material, foliage/asset, schema, editor/Play, kaydetme ve testlerin yalnız analizi; kod değiştirme yok.
+- **K1:** WorldClock, manuel mevsim/hava state ve environment editor panel/atmosphere adapter.
+- **K2:** Kalıcı terrain paint'i değiştirmeyen snow/wetness overlay, hibrit ağaç family ve kış görünümü kabulü.
+- **K3:** Manuel yağmur/kar VFX ve görsel birikme/erime; ilk kullanıcı kapsamı test ve ölçümlerle kapanır.
+- **K4:** World Builder Stage Runner bağlantıları, büyük dünya/streaming ve save/load entegrasyonu. Ortak editor–world builder sınırının doğrulanacağı faz.
+- **K5/K6:** Otomatik mevsim/hava ve fiziksel zemin etkileri ayrıca ele alınır. Bunlar Forge Offroad'un mevcut ilk nakliye MVP'sine otomatik olarak eklenmiş değildir.
+
+
+**Çapraz kabul:** Legacy level geri uyumluluğu, save/reload, Preview/Apply/Revert, authored paint'in sabit kalması, ağaç stable ID/instancing korunumu, tile sınırı (K4), shader compile ve masaüstü WebGL2 kaynak ölçümleri.
+
+
+### 12.5. İlgili Drive belgeleri
+
+
+- [World Environment Teknik Tasarım ve Uygulama Planı v0.2](https://drive.google.com/file/d/1Ul_GlbWFJwfNIkt0VFiFGrmaWyf8QyON/view?usp=drivesdk)
+- [WES-001 / Codex K0 İnceleme Görevi](https://drive.google.com/file/d/1Y7cy7oV3MpTJCVbnftRWLekhrQbvEGZT/view?usp=drivesdk)
+- [World Builder v0.1 — özgün taslak](https://drive.google.com/file/d/1V1Tdqo6UwTk0mtyYGGku_AzojAGrOwsH/view?usp=drivesdk)
+
+
+---
+
+
+## 13. Değişiklik kaydı
+
 
 | Sürüm | Tarih | Not |
 |---|---|---|
+| **0.2** | 26.10.2026 | WES'in bağımsız Engine/Editor sahipliği, dört onaylı karar, World Builder stage bağlantıları, K0–K6 ve kaynak belgeler eklendi. Mevcut World Builder onay/plan statüleri korunur. |
 | **0.1** | 25.10.2026 | World Builder vizyonu, referanstan level akışı, 13 aşama, 33 araç önerisi, teknik mimari, fazlar ve kabul testleri oluşturuldu. Kullanıcının güncel açık dünya/deformasyon ve aktif spline/su geliştirme bilgisi işlendi. |
+
 
 **Belge bakım ilkesi:** Yeni kesin kararlar ve güncel repo doğrulamaları `Kesin / Kullanıcı bildirimi / Test edildi / Geliştiriliyor / Öneri` durumlarıyla kaydedilir. Kod uygulanmadan araç durumu “tamamlandı” yapılmaz. Bu belge Forge'un genel world building kabiliyetine ayrıdır; Forge Offroad görev ve hikâye GDD'siyle karıştırılmaz.

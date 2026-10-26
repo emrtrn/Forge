@@ -1,0 +1,1772 @@
+{
+  "date": "2026-10-26T12:48:14.290Z",
+  "browser": "149.0.7827.55",
+  "cpu": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
+  "platform": "win32",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "dpr": 1,
+  "scene": "assets/starter-content/Levels/LandscapeTest.level.json",
+  "note": "Current dirty checkout, Vite dev build, static diagnostic camera; not an original IMG camera. Software-renderer pilot, custom reduced-cost settings, 3 warm-up frames, up to 60 samples or 10 seconds per case; small-sample percentiles are exploratory.",
+  "modes": [
+    {
+      "mode": "editor",
+      "snapshot": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "gpuTimerAvailable": false,
+        "renderer": {
+          "outputColorSpace": "srgb",
+          "toneMapping": 4,
+          "exposure": 0.2,
+          "pixelRatio": 1,
+          "passes": [
+            {
+              "name": "RenderPass",
+              "enabled": true
+            },
+            {
+              "name": "_OutlinePass",
+              "enabled": true
+            },
+            {
+              "name": "OutputPass",
+              "enabled": true
+            }
+          ]
+        },
+        "layout": {
+          "riverWaters": [
+            {
+              "id": "river-water-1",
+              "landscapeRef": "landscape-1",
+              "splineRef": "spline-1",
+              "name": "River Water 1",
+              "coordinateSpace": "world",
+              "surfaceLevel": -39,
+              "reflectionMode": "sharedPlanar",
+              "reflectionQuality": "high"
+            }
+          ],
+          "waterBodies": [
+            {
+              "schema": 1,
+              "kind": "lake",
+              "mode": "fillExisting",
+              "coordinateSpace": "world",
+              "id": "lake-1",
+              "terrainRef": "landscape-1",
+              "bounds": {
+                "min": [
+                  -117,
+                  -59
+                ],
+                "max": [
+                  -75,
+                  -22
+                ]
+              },
+              "seed": [
+                -88.97107842096578,
+                -36.99812404457343
+              ],
+              "surfaceLevel": -5.390698153519612,
+              "bed": {
+                "points": [
+                  [
+                    -101.89455508615322,
+                    -29.449399423744694
+                  ],
+                  [
+                    -110.16164097622402,
+                    -37.04965756516276
+                  ],
+                  [
+                    -104.17365175817093,
+                    -48.23278951545194
+                  ],
+                  [
+                    -92.32916796308223,
+                    -52.89338117459755
+                  ],
+                  [
+                    -83.37392050054143,
+                    -45.775115395237606
+                  ],
+                  [
+                    -81.67969587577204,
+                    -35.53436885678104
+                  ],
+                  [
+                    -89.6153870549,
+                    -28.813478738564584
+                  ],
+                  [
+                    -98.98371817161302,
+                    -29.138773284266847
+                  ]
+                ],
+                "smooth": false,
+                "smoothness": 0.5,
+                "maxDepth": 3,
+                "shoreSlopeDegrees": 30,
+                "transitionWidth": 4
+              },
+              "name": "Lake 1"
+            },
+            {
+              "schema": 1,
+              "kind": "lake",
+              "mode": "fillExisting",
+              "coordinateSpace": "world",
+              "id": "lake-2",
+              "terrainRef": "landscape-1",
+              "bounds": {
+                "min": [
+                  -89,
+                  -88
+                ],
+                "max": [
+                  -24,
+                  -23
+                ]
+              },
+              "seed": [
+                -56.22687862062539,
+                -55.398207226491635
+              ],
+              "surfaceLevel": -6,
+              "name": "Lake 2"
+            },
+            {
+              "schema": 1,
+              "kind": "lake",
+              "mode": "fillExisting",
+              "coordinateSpace": "world",
+              "id": "lake-3",
+              "terrainRef": "landscape-1",
+              "bounds": {
+                "min": [
+                  12,
+                  -76
+                ],
+                "max": [
+                  77,
+                  -11
+                ]
+              },
+              "seed": [
+                44.16130877551078,
+                -43.94528225259613
+              ],
+              "surfaceLevel": -5,
+              "name": "Lake 3"
+            }
+          ],
+          "lights": [
+            {
+              "id": "sun",
+              "type": "directional",
+              "position": [
+                0,
+                5,
+                0
+              ],
+              "name": "Sun",
+              "rotation": [
+                -40,
+                60,
+                0
+              ],
+              "color": "#fef4d7",
+              "intensity": 5,
+              "castShadow": true,
+              "cascadedShadows": true
+            }
+          ],
+          "skyAtmosphere": {
+            "rayleigh": 1,
+            "turbidity": 2,
+            "exposure": 1,
+            "skyLightCapture": {
+              "intensity": 1
+            }
+          },
+          "heightFog": {
+            "mode": "exp",
+            "density": 0.000989
+          },
+          "cloudLayer": {
+            "density": 0.5,
+            "speed": 0.1
+          },
+          "postProcess": {
+            "toneMapping": "aces",
+            "antialias": "smaa",
+            "bloom": {
+              "enabled": true,
+              "threshold": 1,
+              "intensity": 1,
+              "radius": 1
+            },
+            "ao": {
+              "enabled": true,
+              "radius": 1,
+              "intensity": 1
+            }
+          }
+        },
+        "terrain": [
+          {
+            "tiles": 16,
+            "resident": 16,
+            "origin": [
+              -512,
+              0,
+              -512
+            ],
+            "spacing": 1,
+            "splines": [
+              {
+                "id": "spline-1",
+                "points": [
+                  {
+                    "id": "point-2",
+                    "position": [
+                      -0.02,
+                      -40,
+                      -194.13
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-3",
+                    "position": [
+                      -33.38,
+                      -40,
+                      -185.43
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-4",
+                    "position": [
+                      -46.91,
+                      -40,
+                      -180.27
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-5",
+                    "position": [
+                      -67.52,
+                      -40,
+                      -183.41
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-6",
+                    "position": [
+                      -87.03,
+                      -40,
+                      -199.45
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-7",
+                    "position": [
+                      -108.13,
+                      -40,
+                      -184.51
+                    ],
+                    "width": 12,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-8",
+                    "position": [
+                      -52.05,
+                      -40,
+                      -64.27
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  }
+                ],
+                "segments": [
+                  {
+                    "id": "segment-2",
+                    "startPointId": "point-2",
+                    "endPointId": "point-3",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-3",
+                    "startPointId": "point-3",
+                    "endPointId": "point-4",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-4",
+                    "startPointId": "point-4",
+                    "endPointId": "point-5",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-5",
+                    "startPointId": "point-5",
+                    "endPointId": "point-6",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-6",
+                    "startPointId": "point-6",
+                    "endPointId": "point-7",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  }
+                ],
+                "name": "Spline 1",
+                "smooth": true,
+                "coordinateSpace": "world"
+              }
+            ]
+          }
+        ],
+        "waters": [
+          {
+            "name": "River Water 1",
+            "visible": true,
+            "min": [
+              -115.24475860595703,
+              -39,
+              -205.65414428710938
+            ],
+            "max": [
+              1.4888588190078735,
+              -39,
+              -174.16070556640625
+            ],
+            "centre": [
+              -56.87794989347458,
+              -39,
+              -189.9074249267578
+            ],
+            "vertices": 4500,
+            "triangles": 8592,
+            "depthMin": 0,
+            "depthMax": 1,
+            "uniforms": {
+              "time": 26.63989999999851,
+              "flowSpeed": 0.35,
+              "normalScale": 1,
+              "hasNormalMap": 1,
+              "clipDryBed": 1,
+              "opacity": 0.82,
+              "bedVisibility": 0.05,
+              "absorptionDistance": 0.5,
+              "waveAmplitude": 0.04,
+              "waveLength": 3.5,
+              "foamOpacity": 0.92,
+              "shoreWaveSpacing": 5,
+              "shoreWaveSpeed": 0.34,
+              "shoreWaveReach": 0.36,
+              "shoreWaveBreakupScale": 1.25,
+              "hasFoamNoiseMap": 1,
+              "reflectionStrength": 0.34
+            }
+          },
+          {
+            "name": "Lake:lake-1",
+            "visible": true,
+            "min": [
+              -101.25344038009644,
+              -5.390698153519612,
+              -47.12072134017944
+            ],
+            "max": [
+              -81.77395820617676,
+              -5.390698153519612,
+              -28.842947959899902
+            ],
+            "centre": [
+              -91.5136992931366,
+              -5.390698153519612,
+              -37.98183465003967
+            ],
+            "vertices": 380,
+            "triangles": 628,
+            "depthMin": 0,
+            "depthMax": 3.000000238418579,
+            "uniforms": {
+              "time": 0,
+              "hasNormal": 1,
+              "rippleSpeed": 0.15,
+              "normalScale": 1,
+              "opacity": 0.82,
+              "bedVisibility": 0.05,
+              "absorptionDistance": 0.5,
+              "reflectionStrength": 0
+            }
+          },
+          {
+            "name": "Lake:lake-2",
+            "visible": true,
+            "min": [
+              -77.54777526855469,
+              -6,
+              -79.94437789916992
+            ],
+            "max": [
+              -28.71701431274414,
+              -6,
+              -32.66040229797363
+            ],
+            "centre": [
+              -53.132394790649414,
+              -6,
+              -56.30239009857178
+            ],
+            "vertices": 1738,
+            "triangles": 3156,
+            "depthMin": 0,
+            "depthMax": 7.463100433349609,
+            "uniforms": {
+              "time": 0,
+              "hasNormal": 1,
+              "rippleSpeed": 0.15,
+              "normalScale": 1,
+              "opacity": 0.82,
+              "bedVisibility": 0.05,
+              "absorptionDistance": 0.5,
+              "reflectionStrength": 0
+            }
+          }
+        ]
+      },
+      "cases": [
+        {
+          "kind": "river",
+          "camera": {
+            "position": [
+              -44.87794989347458,
+              -19,
+              -159.9074249267578
+            ],
+            "quaternion": [
+              -0.2686604858370802,
+              0.18189200434466835,
+              0.05173928210605057,
+              0.9444892211097031
+            ],
+            "target": [
+              -56.87794989347458,
+              -39,
+              -189.9074249267578
+            ],
+            "fov": 42,
+            "aspect": 0.8343558282208589,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": false,
+          "elapsedMs": 8514.10000000149,
+          "cpuSubmitMs": {
+            "n": 60,
+            "p50": 3,
+            "p95": 7.0999999940395355,
+            "p99": 31
+          },
+          "rafFrameMs": {
+            "n": 59,
+            "p50": 133.40000000000146,
+            "p95": 150.09999999999854,
+            "p99": 216.59999999999854
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 60,
+            "p50": 10,
+            "p95": 10,
+            "p99": 10
+          },
+          "memory": {
+            "geometries": 88,
+            "textures": 71
+          },
+          "reflectionDrawCalls": {
+            "n": 60,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "otherDrawCalls": {
+            "n": 60,
+            "p50": 10,
+            "p95": 10,
+            "p99": 10
+          },
+          "reflectionCaptures": 0,
+          "programs": 32,
+          "jsHeapBytes": 225000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": true,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": false,
+              "calls": 9,
+              "cpuInclusiveMs": 2.6999999955296516,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0.10000000149011612,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        },
+        {
+          "kind": "river",
+          "camera": {
+            "position": [
+              -44.87794989347458,
+              -19,
+              -159.9074249267578
+            ],
+            "quaternion": [
+              -0.2686604858370802,
+              0.18189200434466835,
+              0.05173928210605057,
+              0.9444892211097031
+            ],
+            "target": [
+              -56.87794989347458,
+              -39,
+              -189.9074249267578
+            ],
+            "fov": 42,
+            "aspect": 0.8343558282208589,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": true,
+          "elapsedMs": 10832.80000000447,
+          "cpuSubmitMs": {
+            "n": 24,
+            "p50": 10.799999997019768,
+            "p95": 13.300000004470348,
+            "p99": 25.799999997019768
+          },
+          "rafFrameMs": {
+            "n": 23,
+            "p50": 449.90000000000146,
+            "p95": 466.59999999999854,
+            "p99": 466.70000000000437
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 24,
+            "p50": 20,
+            "p95": 20,
+            "p99": 20
+          },
+          "memory": {
+            "geometries": 88,
+            "textures": 71
+          },
+          "reflectionDrawCalls": {
+            "n": 24,
+            "p50": 9,
+            "p95": 9,
+            "p99": 9
+          },
+          "otherDrawCalls": {
+            "n": 24,
+            "p50": 11,
+            "p95": 11,
+            "p99": 11
+          },
+          "reflectionCaptures": 24,
+          "programs": 33,
+          "jsHeapBytes": 225000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": true,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": true,
+              "calls": 9,
+              "cpuInclusiveMs": 4.299999997019768,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 10,
+              "cpuInclusiveMs": 9.799999997019768,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0.10000000149011612,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        },
+        {
+          "kind": "lake",
+          "camera": {
+            "position": [
+              -59.5136992931366,
+              18.60930184648039,
+              0.01816534996032715
+            ],
+            "quaternion": [
+              -0.2096014786483933,
+              0.33420426267637676,
+              0.0764977891864461,
+              0.9157089161993195
+            ],
+            "target": [
+              -91.5136992931366,
+              -5.390698153519612,
+              -37.98183465003967
+            ],
+            "fov": 42,
+            "aspect": 0.8343558282208589,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": false,
+          "elapsedMs": 10485,
+          "cpuSubmitMs": {
+            "n": 28,
+            "p50": 3.899999998509884,
+            "p95": 5.300000004470348,
+            "p99": 5.4000000059604645
+          },
+          "rafFrameMs": {
+            "n": 27,
+            "p50": 366.6999999999971,
+            "p95": 416.5,
+            "p99": 483.40000000000146
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 28,
+            "p50": 27,
+            "p95": 27,
+            "p99": 27
+          },
+          "memory": {
+            "geometries": 95,
+            "textures": 71
+          },
+          "reflectionDrawCalls": {
+            "n": 28,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "otherDrawCalls": {
+            "n": 28,
+            "p50": 27,
+            "p95": 27,
+            "p99": 27
+          },
+          "reflectionCaptures": 0,
+          "programs": 33,
+          "jsHeapBytes": 225000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": true,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": false,
+              "calls": 26,
+              "cpuInclusiveMs": 3.7000000029802322,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        },
+        {
+          "kind": "lake",
+          "camera": {
+            "position": [
+              -59.5136992931366,
+              18.60930184648039,
+              0.01816534996032715
+            ],
+            "quaternion": [
+              -0.2096014786483933,
+              0.33420426267637676,
+              0.0764977891864461,
+              0.9157089161993195
+            ],
+            "target": [
+              -91.5136992931366,
+              -5.390698153519612,
+              -37.98183465003967
+            ],
+            "fov": 42,
+            "aspect": 0.8343558282208589,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": true,
+          "elapsedMs": 10798.20000000298,
+          "cpuSubmitMs": {
+            "n": 29,
+            "p50": 3.7000000029802322,
+            "p95": 4.899999998509884,
+            "p99": 5.799999997019768
+          },
+          "rafFrameMs": {
+            "n": 28,
+            "p50": 366.6999999999971,
+            "p95": 400,
+            "p99": 416.6999999999971
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 29,
+            "p50": 29,
+            "p95": 29,
+            "p99": 29
+          },
+          "memory": {
+            "geometries": 97,
+            "textures": 71
+          },
+          "reflectionDrawCalls": {
+            "n": 29,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "otherDrawCalls": {
+            "n": 29,
+            "p50": 29,
+            "p95": 29,
+            "p99": 29
+          },
+          "reflectionCaptures": 0,
+          "programs": 34,
+          "jsHeapBytes": 225000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": true,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": false,
+              "calls": 28,
+              "cpuInclusiveMs": 3.2000000029802322,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0.09999999403953552,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "warnings": [
+        "[.WebGL-0x7354001b9400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+        "[.WebGL-0x7354001b9400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+        "[.WebGL-0x7354001b9400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+        "[.WebGL-0x7354001b9400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)",
+        "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+        "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+        "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ]
+    },
+    {
+      "mode": "runtime",
+      "snapshot": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "gpuTimerAvailable": false,
+        "renderer": {
+          "outputColorSpace": "srgb",
+          "toneMapping": 4,
+          "exposure": 0.2,
+          "pixelRatio": 0.7,
+          "passes": [
+            {
+              "name": "RenderPass",
+              "enabled": true
+            },
+            {
+              "name": "OutputPass",
+              "enabled": true
+            }
+          ]
+        },
+        "layout": {
+          "riverWaters": [
+            {
+              "id": "river-water-1",
+              "landscapeRef": "landscape-1",
+              "splineRef": "spline-1",
+              "name": "River Water 1",
+              "coordinateSpace": "world",
+              "surfaceLevel": -39,
+              "reflectionMode": "sharedPlanar",
+              "reflectionQuality": "high"
+            }
+          ],
+          "waterBodies": [
+            {
+              "schema": 1,
+              "kind": "lake",
+              "mode": "fillExisting",
+              "coordinateSpace": "world",
+              "id": "lake-1",
+              "terrainRef": "landscape-1",
+              "bounds": {
+                "min": [
+                  -117,
+                  -59
+                ],
+                "max": [
+                  -75,
+                  -22
+                ]
+              },
+              "seed": [
+                -88.97107842096578,
+                -36.99812404457343
+              ],
+              "surfaceLevel": -5.390698153519612,
+              "bed": {
+                "points": [
+                  [
+                    -101.89455508615322,
+                    -29.449399423744694
+                  ],
+                  [
+                    -110.16164097622402,
+                    -37.04965756516276
+                  ],
+                  [
+                    -104.17365175817093,
+                    -48.23278951545194
+                  ],
+                  [
+                    -92.32916796308223,
+                    -52.89338117459755
+                  ],
+                  [
+                    -83.37392050054143,
+                    -45.775115395237606
+                  ],
+                  [
+                    -81.67969587577204,
+                    -35.53436885678104
+                  ],
+                  [
+                    -89.6153870549,
+                    -28.813478738564584
+                  ],
+                  [
+                    -98.98371817161302,
+                    -29.138773284266847
+                  ]
+                ],
+                "smooth": false,
+                "smoothness": 0.5,
+                "maxDepth": 3,
+                "shoreSlopeDegrees": 30,
+                "transitionWidth": 4
+              },
+              "name": "Lake 1"
+            },
+            {
+              "schema": 1,
+              "kind": "lake",
+              "mode": "fillExisting",
+              "coordinateSpace": "world",
+              "id": "lake-2",
+              "terrainRef": "landscape-1",
+              "bounds": {
+                "min": [
+                  -89,
+                  -88
+                ],
+                "max": [
+                  -24,
+                  -23
+                ]
+              },
+              "seed": [
+                -56.22687862062539,
+                -55.398207226491635
+              ],
+              "surfaceLevel": -6,
+              "name": "Lake 2"
+            },
+            {
+              "schema": 1,
+              "kind": "lake",
+              "mode": "fillExisting",
+              "coordinateSpace": "world",
+              "id": "lake-3",
+              "terrainRef": "landscape-1",
+              "bounds": {
+                "min": [
+                  12,
+                  -76
+                ],
+                "max": [
+                  77,
+                  -11
+                ]
+              },
+              "seed": [
+                44.16130877551078,
+                -43.94528225259613
+              ],
+              "surfaceLevel": -5,
+              "name": "Lake 3"
+            }
+          ],
+          "lights": [
+            {
+              "id": "sun",
+              "type": "directional",
+              "position": [
+                0,
+                5,
+                0
+              ],
+              "name": "Sun",
+              "rotation": [
+                -40,
+                60,
+                0
+              ],
+              "color": "#fef4d7",
+              "intensity": 5,
+              "castShadow": true,
+              "cascadedShadows": true
+            }
+          ],
+          "skyAtmosphere": {
+            "rayleigh": 1,
+            "turbidity": 2,
+            "exposure": 1,
+            "skyLightCapture": {
+              "intensity": 1
+            }
+          },
+          "heightFog": {
+            "mode": "exp",
+            "density": 0.000989
+          },
+          "cloudLayer": {
+            "density": 0.5,
+            "speed": 0.1
+          },
+          "postProcess": {
+            "toneMapping": "aces",
+            "antialias": "smaa",
+            "bloom": {
+              "enabled": true,
+              "threshold": 1,
+              "intensity": 1,
+              "radius": 1
+            },
+            "ao": {
+              "enabled": true,
+              "radius": 1,
+              "intensity": 1
+            }
+          }
+        },
+        "terrain": [
+          {
+            "tiles": 16,
+            "resident": 3,
+            "origin": [
+              -512,
+              0,
+              -512
+            ],
+            "spacing": 1,
+            "splines": [
+              {
+                "id": "spline-1",
+                "points": [
+                  {
+                    "id": "point-2",
+                    "position": [
+                      -0.02,
+                      -40,
+                      -194.13
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-3",
+                    "position": [
+                      -33.38,
+                      -40,
+                      -185.43
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-4",
+                    "position": [
+                      -46.91,
+                      -40,
+                      -180.27
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-5",
+                    "position": [
+                      -67.52,
+                      -40,
+                      -183.41
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-6",
+                    "position": [
+                      -87.03,
+                      -40,
+                      -199.45
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-7",
+                    "position": [
+                      -108.13,
+                      -40,
+                      -184.51
+                    ],
+                    "width": 12,
+                    "falloff": 3
+                  },
+                  {
+                    "id": "point-8",
+                    "position": [
+                      -52.05,
+                      -40,
+                      -64.27
+                    ],
+                    "width": 6,
+                    "falloff": 3
+                  }
+                ],
+                "segments": [
+                  {
+                    "id": "segment-2",
+                    "startPointId": "point-2",
+                    "endPointId": "point-3",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-3",
+                    "startPointId": "point-3",
+                    "endPointId": "point-4",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-4",
+                    "startPointId": "point-4",
+                    "endPointId": "point-5",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-5",
+                    "startPointId": "point-5",
+                    "endPointId": "point-6",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  },
+                  {
+                    "id": "segment-6",
+                    "startPointId": "point-6",
+                    "endPointId": "point-7",
+                    "deform": {
+                      "enabled": true,
+                      "raiseTerrain": true,
+                      "lowerTerrain": true,
+                      "flatten": true
+                    }
+                  }
+                ],
+                "name": "Spline 1",
+                "smooth": true,
+                "coordinateSpace": "world"
+              }
+            ]
+          }
+        ],
+        "waters": [
+          {
+            "name": "River Water 1",
+            "visible": true,
+            "min": [
+              -115.24475860595703,
+              -39,
+              -205.65414428710938
+            ],
+            "max": [
+              1.4888588190078735,
+              -39,
+              -174.16070556640625
+            ],
+            "centre": [
+              -56.87794989347458,
+              -39,
+              -189.9074249267578
+            ],
+            "vertices": 4500,
+            "triangles": 8592,
+            "depthMin": 0,
+            "depthMax": 1,
+            "uniforms": {
+              "time": 0,
+              "flowSpeed": 0.35,
+              "normalScale": 1,
+              "hasNormalMap": 1,
+              "clipDryBed": 1,
+              "opacity": 0.82,
+              "bedVisibility": 0.05,
+              "absorptionDistance": 0.5,
+              "waveAmplitude": 0.04,
+              "waveLength": 3.5,
+              "foamOpacity": 0.92,
+              "shoreWaveSpacing": 5,
+              "shoreWaveSpeed": 0.34,
+              "shoreWaveReach": 0.36,
+              "shoreWaveBreakupScale": 1.25,
+              "hasFoamNoiseMap": 1,
+              "reflectionStrength": 0.34
+            }
+          },
+          {
+            "name": "Lake:lake-1",
+            "visible": true,
+            "min": [
+              -101.25344038009644,
+              -5.390698153519612,
+              -47.12072134017944
+            ],
+            "max": [
+              -81.77395820617676,
+              -5.390698153519612,
+              -28.842947959899902
+            ],
+            "centre": [
+              -91.5136992931366,
+              -5.390698153519612,
+              -37.98183465003967
+            ],
+            "vertices": 380,
+            "triangles": 628,
+            "depthMin": 0,
+            "depthMax": 3.000000238418579,
+            "uniforms": {
+              "time": 0,
+              "hasNormal": 1,
+              "rippleSpeed": 0.15,
+              "normalScale": 1,
+              "opacity": 0.82,
+              "bedVisibility": 0.05,
+              "absorptionDistance": 0.5,
+              "reflectionStrength": 0
+            }
+          },
+          {
+            "name": "Lake:lake-2",
+            "visible": true,
+            "min": [
+              -77.54777526855469,
+              -6,
+              -79.94437789916992
+            ],
+            "max": [
+              -28.71701431274414,
+              -6,
+              -32.66040229797363
+            ],
+            "centre": [
+              -53.132394790649414,
+              -6,
+              -56.30239009857178
+            ],
+            "vertices": 1738,
+            "triangles": 3156,
+            "depthMin": 0,
+            "depthMax": 7.463100433349609,
+            "uniforms": {
+              "time": 0,
+              "hasNormal": 1,
+              "rippleSpeed": 0.15,
+              "normalScale": 1,
+              "opacity": 0.82,
+              "bedVisibility": 0.05,
+              "absorptionDistance": 0.5,
+              "reflectionStrength": 0
+            }
+          },
+          {
+            "name": "Lake:lake-3",
+            "visible": true,
+            "min": [
+              39.286755084991455,
+              -5,
+              -66.71790885925293
+            ],
+            "max": [
+              48.52858304977417,
+              -5,
+              -23.788135528564453
+            ],
+            "centre": [
+              43.90766906738281,
+              -5,
+              -45.25302219390869
+            ],
+            "vertices": 459,
+            "triangles": 712,
+            "depthMin": 0,
+            "depthMax": 1.0226998329162598,
+            "uniforms": {
+              "time": 2.84410000000149,
+              "hasNormal": 1,
+              "rippleSpeed": 0.15,
+              "normalScale": 1,
+              "opacity": 0.82,
+              "bedVisibility": 0.05,
+              "absorptionDistance": 0.5,
+              "reflectionStrength": 0
+            }
+          }
+        ]
+      },
+      "cases": [
+        {
+          "kind": "river",
+          "camera": {
+            "position": [
+              -44.87794989347458,
+              -19,
+              -159.9074249267578
+            ],
+            "quaternion": [
+              -0.2686604858370802,
+              0.18189200434466835,
+              0.05173928210605057,
+              0.9444892211097031
+            ],
+            "target": [
+              -56.87794989347458,
+              -39,
+              -189.9074249267578
+            ],
+            "fov": 46,
+            "aspect": 1.6,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": false,
+          "elapsedMs": 11091.20000000298,
+          "cpuSubmitMs": {
+            "n": 15,
+            "p50": 2.899999998509884,
+            "p95": 6.200000002980232,
+            "p99": 6.200000002980232
+          },
+          "rafFrameMs": {
+            "n": 14,
+            "p50": 716.7999999999993,
+            "p95": 783.4000000000015,
+            "p99": 783.4000000000015
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 15,
+            "p50": 10,
+            "p95": 10,
+            "p99": 10
+          },
+          "memory": {
+            "geometries": 175,
+            "textures": 74
+          },
+          "reflectionDrawCalls": {
+            "n": 15,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "otherDrawCalls": {
+            "n": 15,
+            "p50": 10,
+            "p95": 10,
+            "p99": 10
+          },
+          "reflectionCaptures": 0,
+          "programs": 44,
+          "jsHeapBytes": 212000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": false,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": false,
+              "calls": 9,
+              "cpuInclusiveMs": 1.8999999985098839,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        },
+        {
+          "kind": "river",
+          "camera": {
+            "position": [
+              -44.87794989347458,
+              -19,
+              -159.9074249267578
+            ],
+            "quaternion": [
+              -0.2686604858370802,
+              0.18189200434466835,
+              0.05173928210605057,
+              0.9444892211097031
+            ],
+            "target": [
+              -56.87794989347458,
+              -39,
+              -189.9074249267578
+            ],
+            "fov": 46,
+            "aspect": 1.6,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": true,
+          "elapsedMs": 12403.10000000149,
+          "cpuSubmitMs": {
+            "n": 8,
+            "p50": 9.899999998509884,
+            "p95": 27.600000001490116,
+            "p99": 27.600000001490116
+          },
+          "rafFrameMs": {
+            "n": 7,
+            "p50": 1533.2000000000044,
+            "p95": 1583.4000000000015,
+            "p99": 1583.4000000000015
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 8,
+            "p50": 29,
+            "p95": 29,
+            "p99": 29
+          },
+          "memory": {
+            "geometries": 176,
+            "textures": 76
+          },
+          "reflectionDrawCalls": {
+            "n": 8,
+            "p50": 18,
+            "p95": 18,
+            "p99": 18
+          },
+          "otherDrawCalls": {
+            "n": 8,
+            "p50": 11,
+            "p95": 11,
+            "p99": 11
+          },
+          "reflectionCaptures": 8,
+          "programs": 45,
+          "jsHeapBytes": 212000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": true,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": true,
+              "calls": 18,
+              "cpuInclusiveMs": 3.2000000029802322,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 10,
+              "cpuInclusiveMs": 8.299999997019768,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0.10000000149011612,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        },
+        {
+          "kind": "lake",
+          "camera": {
+            "position": [
+              -59.5136992931366,
+              18.60930184648039,
+              0.01816534996032715
+            ],
+            "quaternion": [
+              -0.2096014786483933,
+              0.33420426267637676,
+              0.0764977891864461,
+              0.9157089161993195
+            ],
+            "target": [
+              -91.5136992931366,
+              -5.390698153519612,
+              -37.98183465003967
+            ],
+            "fov": 46,
+            "aspect": 1.6,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": false,
+          "elapsedMs": 14352.19999999553,
+          "cpuSubmitMs": {
+            "n": 6,
+            "p50": 3.600000001490116,
+            "p95": 4.5,
+            "p99": 4.5
+          },
+          "rafFrameMs": {
+            "n": 5,
+            "p50": 2383.199999999997,
+            "p95": 2416.5999999999985,
+            "p99": 2416.5999999999985
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 6,
+            "p50": 54,
+            "p95": 54,
+            "p99": 54
+          },
+          "memory": {
+            "geometries": 198,
+            "textures": 76
+          },
+          "reflectionDrawCalls": {
+            "n": 6,
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "otherDrawCalls": {
+            "n": 6,
+            "p50": 54,
+            "p95": 54,
+            "p99": 54
+          },
+          "reflectionCaptures": 0,
+          "programs": 46,
+          "jsHeapBytes": 212000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": true,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": false,
+              "calls": 53,
+              "cpuInclusiveMs": 2.399999998509884,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0.10000000149011612,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        },
+        {
+          "kind": "lake",
+          "camera": {
+            "position": [
+              -59.5136992931366,
+              18.60930184648039,
+              0.01816534996032715
+            ],
+            "quaternion": [
+              -0.2096014786483933,
+              0.33420426267637676,
+              0.0764977891864461,
+              0.9157089161993195
+            ],
+            "target": [
+              -91.5136992931366,
+              -5.390698153519612,
+              -37.98183465003967
+            ],
+            "fov": 46,
+            "aspect": 1.6,
+            "near": 0.1,
+            "far": 2000
+          },
+          "wet": true,
+          "elapsedMs": 13835.60000000149,
+          "cpuSubmitMs": {
+            "n": 4,
+            "p50": 11.600000001490116,
+            "p95": 14.5,
+            "p99": 14.5
+          },
+          "rafFrameMs": {
+            "n": 3,
+            "p50": 3416.5,
+            "p95": 3449.899999999994,
+            "p99": 3449.899999999994
+          },
+          "gpuFrameMs": {
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "gpuDisjointEvents": null,
+          "drawCalls": {
+            "n": 4,
+            "p50": 112,
+            "p95": 112,
+            "p99": 112
+          },
+          "memory": {
+            "geometries": 202,
+            "textures": 76
+          },
+          "reflectionDrawCalls": {
+            "n": 4,
+            "p50": 55,
+            "p95": 55,
+            "p99": 55
+          },
+          "otherDrawCalls": {
+            "n": 4,
+            "p50": 57,
+            "p95": 57,
+            "p99": 57
+          },
+          "reflectionCaptures": 4,
+          "programs": 46,
+          "jsHeapBytes": 212000000,
+          "reflectionGroups": 1,
+          "resources": [
+            {
+              "width": 512,
+              "height": 512,
+              "captured": true,
+              "minUpdateMs": 4
+            }
+          ],
+          "lastRenderPasses": [
+            {
+              "reflection": true,
+              "calls": 55,
+              "cpuInclusiveMs": 4.899999998509884,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 56,
+              "cpuInclusiveMs": 9.399999998509884,
+              "camera": "PerspectiveCamera"
+            },
+            {
+              "reflection": false,
+              "calls": 1,
+              "cpuInclusiveMs": 0.10000000149011612,
+              "camera": "OrthographicCamera"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "warnings": [
+        "THREE.WebGLRenderer: KHR_parallel_shader_compile extension not supported.",
+        "[hlod] assets/starter-content/Levels/LandscapeTest.level.json: unreadable HLOD index; far cells show no proxies ContentLoadError: assets/starter-content/Levels/LandscapeTest.hlod.json: invalid JSON\n    at readContentJson (http://127.0.0.1:5497/src/project/contentLoader.ts:18:13)\n    at async fetchHlodIndex (http://127.0.0.1:5497/src/scene/hlodProxies.ts:88:15)\n    at async RuntimeSceneApp.setupHlodProxies (http://127.0.0.1:5497/src/scene/RuntimeSceneApp.ts:4330:15)\n    at async RuntimeSceneApp.buildScene (http://127.0.0.1:5497/src/scene/RuntimeSceneApp.ts:2087:5)\n    at async RuntimeSceneApp.loadActiveProjectScene (http://127.0.0.1:5497/src/scene/RuntimeSceneApp.ts:1991:7)\n    at async RuntimeSceneApp.loadLevel (http://127.0.0.1:5497/src/scene/RuntimeSceneApp.ts:1184:5)\n    at async http://127.0.0.1:5497/__water-audit.js:6:9",
+        "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.uvw.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.uvw.json: invalid JSON",
+        "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.materials.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.materials.json: invalid JSON",
+        "[content:invalid-json] assets/vehicles/mercedes-sls/MercedesSLS.collision.json; using defaults. assets/vehicles/mercedes-sls/MercedesSLS.collision.json: invalid JSON",
+        "using deprecated parameters for the initialization function; pass a single object instead"
+      ]
+    }
+  ]
+}

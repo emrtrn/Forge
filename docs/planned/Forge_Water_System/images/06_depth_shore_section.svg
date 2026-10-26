@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 790">
+<defs><linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ac9c6" stop-opacity=".76"/><stop offset=".45" stop-color="#28849a" stop-opacity=".85"/><stop offset="1" stop-color="#0b4358" stop-opacity=".95"/></linearGradient><style>.h{font: bold 34px Arial; fill:#173a47}.t{font: 22px Arial;fill:#31535d}.b{font:bold 20px Arial;fill:#173a47}.muted{font:18px Arial;fill:#56717b}</style><marker id="arrow" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#e79b4c"/></marker></defs>
+<rect width="1400" height="790" fill="#f7fbfc"/><text x="55" y="63" class="h">Sığlık / derinlik temelli su görünümü</text><text x="55" y="102" class="t">Şematik kesit — ölçekli bir fizik modeli değil</text>
+<path d="M65 350 Q215 351 280 417 T450 528 T650 617 T930 630 T1200 474 T1335 350 L1335 718 L65 718 Z" fill="#968f6d" stroke="#756b53" stroke-width="4"/>
+<path d="M65 350 L1335 350 L1335 351 Q1200 474 930 630 T650 617 T450 528 T280 417 T65 350 Z" fill="url(#water)"/>
+<path d="M65 350 H1335" stroke="#2e8ea4" stroke-width="5" stroke-dasharray="19 10"/>
+<text x="80" y="317" class="b">Su seviyesi Hwater</text><path d="M290 314 L360 346" stroke="#2e8ea4" stroke-width="3"/>
+<path d="M470 351 V528" stroke="#e79b4c" stroke-width="5" marker-end="url(#arrow)"/><text x="350" y="407" class="b">d (sığ)</text>
+<path d="M825 351 V621" stroke="#e79b4c" stroke-width="5" marker-end="url(#arrow)"/><text x="848" y="450" class="b">d (derin)</text>
+<text x="115" y="458" class="b">Kıyı</text><text x="116" y="489" class="t">dip açık</text>
+<text x="680" y="548" class="b" fill="#ffffff">dip giderek kaybolur</text>
+<rect x="52" y="666" width="1294" height="84" rx="12" fill="#e8eff1"/><text x="77" y="699" class="b">d = max(0, Hwater − Hterrain)</text><text x="77" y="733" class="muted">Optik kalınlık için bakış yönü, kırılma ve absorpsiyon da hesaba katılmalı; yalnız derinlik farkı yeterli değildir.</text>
+</svg>

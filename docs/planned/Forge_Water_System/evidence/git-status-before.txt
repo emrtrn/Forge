@@ -1,0 +1,30 @@
+﻿ D docs/planned/FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.1.md
+ M docs/planned/OPEN_WORLD_PLAN.md
+ M docs/planned/WORLD_TERRAIN_WATER_BODY_PLAN.md
+ M editor/render-three/scenePicker.ts
+ M engine/scene/layout.ts
+ M engine/scene/waterBody.ts
+ M engine/terrain/terrainEdit.ts
+ M engine/terrain/terrainLakeWater.ts
+ M public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.global.bin
+ M public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json
+ M public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_1.tile.bin
+ M public/assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_1.tile.bin
+ M public/assets/starter-content/Levels/LandscapeTest.level.json
+ M src/editor/EditorUi.ts
+ M src/editor/editorUi.css
+ M src/editor/panels/details/lakeDetails.ts
+ M src/scene/SceneApp.ts
+ M tests/smoke/pages/terrain-lake-probe.ts
+ M tests/smoke/terrain-lake-editor.spec.ts
+ M tools/engine-tests.ts
+?? docs/planned/FORGE_WES_CODEX_K0_GOREV_TALIMATI_v0.1.md
+?? docs/planned/FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.2.md
+?? docs/planned/FORGE_WORLD_ENVIRONMENT_MEVSIM_HAVA_ZAMAN_TEKNIK_TASARIM_VE_UYGULAMA_PLANI_v0.2.md
+?? docs/planned/Forge_Water_System/
+?? engine/scene/lakeBed.ts
+?? engine/terrain/lakeTileReads.ts
+?? engine/terrain/terrainLakeBed.ts
+?? tests/engine/fixtures/lakeBedFixture.ts
+?? tests/engine/terrainLakeBed.test.ts
+?? tools/bench-lake-bed.mjs

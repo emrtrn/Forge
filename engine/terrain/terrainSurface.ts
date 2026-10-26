@@ -34,6 +34,8 @@ export interface TerrainSurfaceSource {
  * weight, the other fields their weight-averaged profile values.
  */
 export interface SurfaceDeformationSample {
+  /** Presentation-only, weight-blended water eligibility; absent means dry. */
+  readonly wetness?: number;
   readonly deformability: number;
   readonly maxDepth: number;
   readonly compaction: number;
@@ -138,6 +140,7 @@ export class TerrainSurfaceSampler {
     let digRate = 0;
     let recoveryRate = 0;
     let sinkResistance = 0;
+    let wetness = 0;
     this.weights.forEach((weight, index) => {
       if (!Number.isFinite(weight) || weight <= 0) return;
       total += weight;
@@ -149,6 +152,7 @@ export class TerrainSurfaceSampler {
       digRate += profile.digRate * weight;
       recoveryRate += profile.recoveryRate * weight;
       sinkResistance += profile.sinkResistance * weight;
+      wetness += profile.wetness * weight;
     });
     if (soft === 0) return null;
     return {
@@ -158,6 +162,7 @@ export class TerrainSurfaceSampler {
       digRate: digRate / soft,
       recoveryRate: recoveryRate / soft,
       sinkResistance: sinkResistance / soft,
+      wetness: wetness / total,
     };
   }
 

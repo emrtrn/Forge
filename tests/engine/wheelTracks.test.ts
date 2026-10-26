@@ -37,6 +37,7 @@ const SNOW = PHYSICAL_MATERIALS.snow!.deformation!;
 const mud: SurfaceDeformationSample = {
   deformability: 1, maxDepth: MUD.maxDepth, compaction: MUD.compaction, digRate: MUD.digRate,
   recoveryRate: MUD.recoveryRate, sinkResistance: MUD.sinkResistance,
+  wetness: MUD.wetness,
 };
 const snow: SurfaceDeformationSample = {
   deformability: 1, maxDepth: SNOW.maxDepth, compaction: SNOW.compaction, digRate: SNOW.digRate,
@@ -325,6 +326,8 @@ export function registerWheelTrackTests(check: Check): void {
     assert.ok(snapshot.activeCells > 0 && snapshot.maxDepth > 0.05, JSON.stringify(snapshot));
     // Eight wheels stamp, but the parked car is 200 m away: outside the window, so it leaves no cells.
     assert.equal(snapshot.stampedWheels, 8);
+    assert.ok(texture.water.state.sites.size > 0 && texture.water.state.impulses.length > 0, "wet wheel contacts feed the presentation field");
+    assert.equal(texture.water.state.previous.size, definition.wheels.length, "distant vehicles do not consume the local water budget");
     // The window centres on the mean hard point (the axles are not symmetric about the origin).
     const axleOffset = definition.wheels.reduce((sum, wheel) => sum + wheel.position[2], 0) / definition.wheels.length;
     close(snapshot.centre[1], z + axleOffset, 1e-9);

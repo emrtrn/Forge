@@ -168,6 +168,7 @@ uniform vec2 uTerrainExtent;
 uniform vec3 uTerrainLodCamera;
 uniform float uTerrainPatchQuads;
 uniform float uTerrainSkirtRatio;
+uniform float uTerrainPlanarPass;
 attribute vec4 terrainNodeA; // terrain-local node origin x/z, node size, slot (-1: global map)
 attribute vec4 terrainNodeB; // terrain-local tile origin x/z, morph start/end
 attribute float terrainNodeC; // 1: hang the skirt (this node or its neighbour stands in from the global map)
@@ -233,7 +234,7 @@ forgeH += forgeDisp.x;
 // Skirt vertices (position.y = 1) drop below the surface only on flagged nodes
 // and never on the terrain's outer border; otherwise they fold onto the edge.
 bool forgeBorder = forgeLocal.x <= 0.0 || forgeLocal.y <= 0.0 || forgeLocal.x >= forgeEdge.x || forgeLocal.y >= forgeEdge.y;
-if (position.y > 0.5 && terrainNodeC > 0.5 && !forgeBorder) forgeH -= terrainNodeA.z * uTerrainSkirtRatio;
+if (position.y > 0.5 && terrainNodeC > 0.5 && !forgeBorder && uTerrainPlanarPass < 0.5) forgeH -= terrainNodeA.z * uTerrainSkirtRatio;
 vec3 transformed = uTerrainOrigin + vec3(forgeLocal.x, forgeH, forgeLocal.y);
 vTerrainLocal = forgeLocal;
 vTerrainTile = vec4(terrainNodeA.w, terrainNodeB.xy, forgeH);
@@ -456,6 +457,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainLodCamera: { value: new Vector3() },
     uTerrainPatchQuads: { value: inputs.patchQuads },
     uTerrainSkirtRatio: { value: TERRAIN_SKIRT_RATIO },
+    uTerrainPlanarPass: { value: 0 },
     uTerrainView: { value: VIEW_MODE_INDEX[inputs.viewMode] },
     uTerrainActiveLayer: { value: inputs.activeLayer },
     uTerrainHeightRange: { value: inputs.heightRange },
@@ -485,6 +487,14 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)
       .replace("  nonPerturbedNormal = normal;\n}", `  nonPerturbedNormal = normal;\n${TERRAIN_DEFORMATION_NORMAL}}`);
   }, true);
+  // Leave room for the environment, BRDF lookup and one sun shadow. Eight
+  // paint layers on a minimum 16-unit GPU retain the existing sky-water path.
+  const compile = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    const waterSupported = samplers + 9 <= (renderer?.capabilities?.maxTextures ?? 16);
+    if (waterSupported) (shader.defines ??= {}).FORGE_TERRAIN_WATER = 1;
+    compile(shader, renderer);
+  };
   material.onBeforeRender = (renderer) => deformation.flush(renderer);
 
   const normalMaterial = new MeshNormalMaterial();

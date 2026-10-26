@@ -113,14 +113,17 @@ export function registerTerrainSurfaceTests(check: Check): void {
     const pureMud = sampler([0, 1, 0]).deformationAt([0, 0, 0])!;
     close(pureMud.digRate, mud.digRate);
     close(pureMud.sinkResistance, mud.sinkResistance);
+    close(pureMud.wetness!, mud.wetness);
     const blend = sampler([0, 0.5, 0.5]).deformationAt([0, 0, 0])!;
     close(blend.digRate, (mud.digRate + snow.digRate) / 2);
     close(blend.sinkResistance, (mud.sinkResistance + snow.sinkResistance) / 2);
+    close(blend.wetness!, (mud.wetness + snow.wetness) / 2);
     // Hard-layer weight affects participation, not the soft profile's rates.
     const partlySoft = sampler([0.5, 0.125, 0.375]).deformationAt([0, 0, 0])!;
     close(partlySoft.deformability, 0.5);
     close(partlySoft.digRate, mud.digRate * 0.25 + snow.digRate * 0.75);
     close(partlySoft.sinkResistance, mud.sinkResistance * 0.25 + snow.sinkResistance * 0.75);
+    close(partlySoft.wetness!, mud.wetness * 0.125 + snow.wetness * 0.375);
   });
 
   check("terrain surface: unpainted vertices are neutral, extra tile layers count as neutral weight", () => {

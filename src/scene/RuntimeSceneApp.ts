@@ -28,6 +28,7 @@ import { fetchHlodIndex, HlodProxies, loadHlodGeometry } from "./hlodProxies";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import { setTerrainTrackDetailLevels, terrainRendererOf, terrainTrackDetailStats } from "@engine/render-three/terrain/terrainRenderer";
+import { setTerrainWaterQuality } from "@engine/render-three/terrain/terrainWater";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, Sphere, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import {
   InstancedMesh,
@@ -2235,6 +2236,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyRuntimeShadowQuality();
     this.vfxCommands()?.setGlobalDensity(settings.particleDensity);
     setTerrainTrackDetailLevels(settings.terrainTrackDetailLevels);
+    setTerrainWaterQuality(settings.terrainWaterQuality);
     this.applyRuntimePostProcess();
   }
 

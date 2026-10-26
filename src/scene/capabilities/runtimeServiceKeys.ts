@@ -218,6 +218,11 @@ export const terrainSurfaceHostService = runtimeServiceKey<TerrainSurfaceHost>("
 
 /** The track field's state for `?debug` and browser smokes. */
 export interface TerrainDeformationSnapshot {
+  readonly water?: {
+    readonly quality: string; readonly resolution: number; readonly steps: number;
+    readonly groups: number; readonly captures: number; readonly sites: number;
+    readonly contacts: number; readonly renderCalls: number; readonly reversed: boolean;
+  };
   readonly activeCells: number;
   /** Deepest track in the window (m). */
   readonly maxDepth: number;

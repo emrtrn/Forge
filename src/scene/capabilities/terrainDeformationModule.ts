@@ -23,6 +23,8 @@ import { rutSlopeAhead, WheelTrackStamper } from "@engine/physics/surface/wheelT
 import type { VehicleState } from "@engine/physics/vehicle/vehicleTypes";
 import { sharedTerrainDeformation, type TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
 import { DeformationField } from "@engine/scene/deformationField";
+import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
+import type { TerrainWaterContact } from "@engine/render-three/terrain/terrainWaterState";
 
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeServices } from "./RuntimeServices";
@@ -126,6 +128,7 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
       active.recenter(focus[0], focus[1]);
     }
     stampedWheels = 0;
+    const waterContacts: TerrainWaterContact[] = [];
     for (const id of ids) {
       const state = vehicles.vehicleState(id);
       if (!state) {
@@ -136,7 +139,16 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
         id, state, vehicles.vehicleDefinition(id),
         (ground, point) => surface.deformationAt(ground, point), deltaSeconds,
       );
+      const definition = vehicles.vehicleDefinition(id);
+      state.wheels.forEach((wheel, index) => {
+        if (!wheel.inContact || !wheel.contactPoint || wheel.groundEntityId === null) return;
+        const profile = surface.deformationAt(wheel.groundEntityId, wheel.contactPoint);
+        const [x, y, z] = wheel.contactPoint;
+        waterContacts.push({ id: `${id}:${index}`, x, y, z, radius: wheel.radius,
+          rotation: wheel.rotation, width: vehicleWheelWidth(definition?.wheels[index] ?? wheel), wetness: profile?.wetness ?? 0 });
+      });
     }
+    texture.water.advance(deltaSeconds, waterContacts, centre, active);
     active.recover(deltaSeconds);
   };
 
@@ -167,7 +179,7 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
           if (!field) return null;
           const { activeCellCount, maxDepth } = field.stats();
           const { uploadedTexels, packMs } = texture.stats();
-          return { activeCells: activeCellCount, maxDepth, stampedWheels, uploadedTexels, packMs, centre: [...centre] };
+          return { activeCells: activeCellCount, maxDepth, stampedWheels, uploadedTexels, packMs, centre: [...centre], water: texture.water.stats() };
         },
       });
     },

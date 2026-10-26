@@ -63,6 +63,7 @@ import {
   type TerrainDeformationTexture,
 } from "./terrainDeformation";
 import { TerrainTextureUpdates } from "./terrainTextureUpdates";
+import { isPlanarReflectionCamera } from "../planarReflectionSource";
 
 /**
  * GPU CDLOD renderer for one terrain grid of tiles (OPEN_WORLD_PLAN Faz 2). One
@@ -374,7 +375,25 @@ export class TerrainRenderer {
     this.mesh.castShadow = false;
     this.mesh.userData.forgeTerrain = this;
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
-    this.mesh.onBeforeRender = (renderer) => this.textureUpdates.flush(renderer);
+    this.mesh.onBeforeRender = (renderer, scene, camera) => {
+      this.textureUpdates.flush(renderer);
+      const planar = isPlanarReflectionCamera(camera) ? 1 : 0;
+      this.materials.uniforms.uTerrainPlanarPass!.value = planar;
+      // Nested reflection renders must precede three's modelView/normal-matrix
+      // calculation for this mesh. A material callback runs too late and leaves
+      // the outer terrain draw with the reflected camera's object matrices.
+      if (this.mesh.material === this.materials.material && this.materials.litFragmentSamplers + 3 <= (renderer.capabilities?.maxTextures ?? 16)) {
+        this.deformation.flush(renderer);
+        try {
+          this.deformation.water.render(renderer, scene, camera,
+            this.deformation.uniforms.uDeformTex!.value as import("three").Texture | null,
+            this.deformation.uniforms.uDeformWindow!.value as import("three").Vector4,
+            this.deformation.uniforms.uDeformDepthRange!.value as number);
+        } finally {
+          this.materials.uniforms.uTerrainPlanarPass!.value = planar;
+        }
+      }
+    };
     this.updateBoundingVolumes();
     liveRenderers.add(this);
 

@@ -16,6 +16,27 @@ import {
 
 /** Reserved opt-out layer for editor helpers, UI meshes and reflection-only FX. */
 export const PLANAR_REFLECTION_EXCLUDED_LAYER = 31;
+const reflectionCameras = new WeakSet<Camera>();
+export function isPlanarReflectionCamera(camera: Camera): boolean { return reflectionCameras.has(camera); }
+
+/** Oblique near plane in either GL [-1,1] or reversed-Z [0,1] clip space.
+ * In reversed-Z the near inequality is w-z, rather than z+w. The inverse
+ * projection also handles orthographic cameras without perspective shortcuts. */
+export function applyPlanarObliqueClip(projection: Matrix4, plane: Vector4, reversed: boolean, bias = 0.003): void {
+  const q = new Vector4(Math.sign(plane.x), Math.sign(plane.y), reversed ? 0 : 1, 1)
+    .applyMatrix4(projection.clone().invert());
+  const dot = plane.dot(q);
+  if (Math.abs(dot) < 1e-8) return;
+  const c = plane.clone().multiplyScalar((reversed ? 1 : 2) / dot);
+  const e = projection.elements;
+  if (reversed) {
+    e[2] = e[3]! - c.x; e[6] = e[7]! - c.y;
+    e[10] = e[11]! - c.z + bias; e[14] = e[15]! - c.w;
+  } else {
+    e[2] = c.x - e[3]!; e[6] = c.y - e[7]!;
+    e[10] = c.z - e[11]! - bias; e[14] = c.w - e[15]!;
+  }
+}
 
 /** Keeps a source camera's normal visibility mask while removing the opt-out layer. */
 export function planarReflectionLayerMask(mask: number): number {
@@ -117,12 +138,14 @@ export class PlanarReflectionSource {
   /** Kept stable so a consumer can retain the matrix while the target changes. */
   readonly binding: PlanarReflectionBinding;
   private renderTarget: WebGLRenderTarget | null;
-  private readonly planeY: number;
+  private planeY: number;
   private readonly reflectionCameras = new WeakMap<Camera, Camera>();
   private readonly consumers = new Set<PlanarReflectionConsumer>();
   private minUpdateMs = Infinity;
   private lastUpdateAt = -Infinity;
   private rendering = false;
+  private captured = false;
+  get hasCapture(): boolean { return this.captured; }
   /** Scratch for the per-frame coverage gate, which must not allocate. */
   private readonly consumerBounds = new Box3();
   private readonly viewProjection = new Matrix4();
@@ -156,10 +179,20 @@ export class PlanarReflectionSource {
     this.consumers.delete(object);
   }
 
+  /** Moving local water films reuse their targets; only the projection/capture
+   * becomes invalid when their horizontal reference level changes. */
+  setPlaneHeight(planeY: number): void {
+    if (!Number.isFinite(planeY) || planeY === this.planeY) return;
+    this.planeY = planeY;
+    this.captured = false;
+    this.lastUpdateAt = -Infinity;
+  }
+
   dispose(): void {
     this.consumers.clear();
     this.renderTarget?.dispose();
     this.renderTarget = null;
+    this.captured = false;
   }
 
   /** Changes the runtime graphics tier without rebuilding the authored world. */
@@ -169,6 +202,7 @@ export class PlanarReflectionSource {
       if (!current) return;
       current.dispose();
       this.renderTarget = null;
+      this.captured = false;
       this.notifyConsumers(null);
       return;
     }
@@ -179,6 +213,7 @@ export class PlanarReflectionSource {
     }
     current?.dispose();
     this.renderTarget = this.createRenderTarget(quality);
+    this.captured = false;
     (this.binding as { texture: Texture }).texture = this.renderTarget.texture;
     this.minUpdateMs = settings.minUpdateMs;
     this.lastUpdateAt = -Infinity;
@@ -191,7 +226,7 @@ export class PlanarReflectionSource {
 
   /** Updates at most once per profile interval, even when several ribbons draw in one frame. */
   update(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
-    if (this.rendering || !this.renderTarget) return;
+    if (this.rendering || isPlanarReflectionCamera(camera) || !this.renderTarget) return;
     // Before the interval check, and without stamping `lastUpdateAt`: a frame
     // skipped for being invisible must not also postpone the frame after it.
     const coverage = this.screenCoverage(camera);
@@ -255,6 +290,9 @@ export class PlanarReflectionSource {
     };
     const sourcePerspective = camera as Camera & { far: number; projectionMatrix: Matrix4 };
     perspective.far = sourcePerspective.far;
+    // Camera.copy() copies the matrix but not this flag. Without it three's
+    // setProgram rebuilds the projection and discards our oblique plane.
+    (reflectionCamera as Camera & { _reversedDepth: boolean })._reversedDepth = camera.reversedDepth;
     perspective.projectionMatrix.copy(sourcePerspective.projectionMatrix);
     // Keep the caller's normal scene layers, but never render opt-out helpers
     // into water. Runtime UI is DOM-based today; this reserved Three layer covers
@@ -276,17 +314,8 @@ export class PlanarReflectionSource {
       reflectorPlane.constant,
     );
     const projection = perspective.projectionMatrix;
-    const q = new Vector4(
-      (Math.sign(clipPlane.x) + projection.elements[8]!) / projection.elements[0]!,
-      (Math.sign(clipPlane.y) + projection.elements[9]!) / projection.elements[5]!,
-      -1,
-      (1 + projection.elements[10]!) / projection.elements[14]!,
-    );
-    clipPlane.multiplyScalar(2 / clipPlane.dot(q));
-    projection.elements[2] = clipPlane.x;
-    projection.elements[6] = clipPlane.y;
-    projection.elements[10] = clipPlane.z + 1 - 0.003;
-    projection.elements[14] = clipPlane.w;
+    applyPlanarObliqueClip(projection, clipPlane, camera.reversedDepth);
+    reflectionCamera.projectionMatrixInverse.copy(projection).invert();
 
     const hidden = [...this.consumers].map((consumer) => [consumer, consumer.visible] as const);
     for (const [consumer] of hidden) consumer.visible = false;
@@ -302,6 +331,7 @@ export class PlanarReflectionSource {
       renderer.state.buffers.depth.setMask(true);
       if (renderer.autoClear === false) renderer.clear();
       renderer.render(scene, reflectionCamera);
+      this.captured = true;
     } finally {
       renderer.xr.enabled = previousXrEnabled;
       renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
@@ -315,6 +345,7 @@ export class PlanarReflectionSource {
     let reflectionCamera = this.reflectionCameras.get(camera);
     if (!reflectionCamera) {
       reflectionCamera = camera.clone();
+      reflectionCameras.add(reflectionCamera);
       this.reflectionCameras.set(camera, reflectionCamera);
     }
     return reflectionCamera;

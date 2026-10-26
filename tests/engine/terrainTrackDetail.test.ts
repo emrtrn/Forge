@@ -17,6 +17,7 @@ import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { tileKey, type TerrainTileData } from "../../engine/terrain/terrainTypes";
 import { formatTerrainTrackDetailDebug } from "../../src/scene/debugStats";
+import { registerTerrainWaterTests } from "./terrainWater.test";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -82,6 +83,7 @@ function compiled(material: Material, base: { vertexShader: string; fragmentShad
 }
 
 export function registerTerrainTrackDetailTests(check: Check): void {
+  registerTerrainWaterTests(check);
   check("terrain wet layers: all eight albedos and material roughness reach the lit shader with puddle shading", () => {
     const textures = Array.from({ length: 8 }, () => new Texture());
     const source = worldTerrainRenderSource({ tileQuads: Q, spacing: 1, tilesX: 1, tilesZ: 1 }, new Map([["0_0", tiles().get("0_0")!]]));
@@ -279,6 +281,7 @@ export function registerTerrainTrackDetailTests(check: Check): void {
     for (const shader of [lit, normal, depth]) {
       assert.match(shader.vertexShader, /vec2 forgeDeformDisplacement\(vec2 world\)/);
       assert.match(shader.vertexShader, /forgeH \+= forgeDisp\.x;/);
+      assert.match(shader.vertexShader, /!forgeBorder && uTerrainPlanarPass < 0.5/, "skirts never occlude the mirrored view from below terrain");
       assert.match(shader.vertexShader, /f\.x \+ f\.y <= 1\.0/, "triangle-exact tile heights");
       assert.equal(shader.uniforms.uDeformTex, texture.uniforms.uDeformTex, "one shared track texture");
     }

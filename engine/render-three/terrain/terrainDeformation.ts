@@ -13,6 +13,7 @@ import { DEFORMATION_DEPTH_SCALE, type DeformationDirtyRect, type DeformationFie
 import { TERRAIN_RENDER_LAYERS } from "@engine/terrain/terrainRenderData";
 
 import { TerrainTextureUpdates } from "./terrainTextureUpdates";
+import { TerrainWater, TERRAIN_WATER_PARS, TERRAIN_WATER_REFLECTION } from "./terrainWater";
 
 type TerrainUniforms = Record<string, { value: unknown }>;
 
@@ -63,7 +64,9 @@ export interface TerrainDeformationStats {
 }
 
 export class TerrainDeformationTexture {
+  readonly water = new TerrainWater();
   readonly uniforms: TerrainUniforms = {
+    ...this.water.uniforms,
     uDeformTex: { value: null },
     /** World X/Z of the window's min corner, window size, cell size (m). */
     uDeformWindow: { value: new Vector4(0, 0, 1, 1) },
@@ -149,6 +152,7 @@ export class TerrainDeformationTexture {
     if (this.field) this.windowRevision += 1;
     this.field = null;
     this.uniforms.uDeformActive!.value = 0;
+    this.water.reset();
   }
 
   stats(): TerrainDeformationStats {
@@ -157,6 +161,7 @@ export class TerrainDeformationTexture {
 
   dispose(): void {
     this.detach();
+    this.water.dispose();
     this.disposeTexture();
   }
 
@@ -318,12 +323,14 @@ vec2 forgeDeformDisplacement(vec2 world) {
 export const TERRAIN_DEFORMATION_VERTEX_PARS = /* glsl */ `
 varying vec2 vForgeDeformWorld;
 varying float vForgeDeformBerm;
+varying float vForgeDeformBaseY;
 `;
 
 /** After `transformed` is set: the deformation lookup works in world X/Z. */
 export const TERRAIN_DEFORMATION_VERTEX = /* glsl */ `
 vForgeDeformWorld = (modelMatrix * vec4(transformed, 1.0)).xz;
 vForgeDeformBerm = forgeDisp.y;
+vForgeDeformBaseY = (modelMatrix * vec4(transformed, 1.0)).y - forgeDisp.x * modelMatrix[1].y;
 `;
 
 export const TERRAIN_DEFORMATION_FRAGMENT_PARS = /* glsl */ `
@@ -363,6 +370,7 @@ vec3 forgeDeformedWorldNormal(vec3 baseNormal) {
   return normalize(vec3(baseNormal.x / max(0.05, baseNormal.y) - forgeDeform.z,
     1.0, baseNormal.z / max(0.05, baseNormal.y) - forgeDeform.w));
 }
+${TERRAIN_WATER_PARS}
 `;
 
 /**
@@ -416,6 +424,7 @@ if (forgePuddle > 0.0) {
   outgoingLight = mix(outgoingLight, forgeSky, forgePuddle * (0.04 + 0.55 * forgeFresnel));
 }
 #endif
+${TERRAIN_WATER_REFLECTION}
 `;
 
 /**
@@ -426,7 +435,8 @@ if (forgePuddle > 0.0) {
 export const TERRAIN_DEFORMATION_NORMAL = /* glsl */ `
   if (forgeDeform.y > 0.0 || forgeDeform.x > 0.0 || vForgeDeformBerm > 0.0) {
     normal = mat3(viewMatrix) * forgeDeformedWorldNormal(inverseTransformDirection(normal, viewMatrix));
-    normal = normalize(mix(normal, mat3(viewMatrix) * vec3(0.0, 1.0, 0.0), forgePuddle));
+    if (forgePuddle > 0.0) forgeSampleWater();
+    normal = normalize(mix(normal, mat3(viewMatrix) * normalize(vec3(-forgeWaterGradient.x, 1.0, -forgeWaterGradient.y)), forgePuddle));
     nonPerturbedNormal = normal;
   }
 `;

@@ -325,8 +325,8 @@ export function registerTerrainRenderTests(check: Check): void {
   });
 
   check("terrain renderer: the lit fragment shader samples only the terrain's layers, as the cascade budget counts", () => {
-    // Normals ×2, weights ×2 and the track field, whatever the layers.
-    assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 5);
+    // Normals ×2, weights ×2, track field and the shared water array.
+    assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 6);
     const data = legacyData(65, 65, 1, 1);
     for (const layerCount of [1, 5, 6, 8]) {
       const layers = Array.from({ length: layerCount }, (_, index) => ({ texture: null, color: `#${(index + 1).toString(16).repeat(6)}`, scale: 1 }));
@@ -334,10 +334,16 @@ export function registerTerrainRenderTests(check: Check): void {
       const material = (terrain as unknown as { materials: { material: MeshBasicMaterial } }).materials.material;
       const shader = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
       material.onBeforeCompile(shader, {} as WebGLRenderer);
+      assert.equal(Boolean(shader.defines?.FORGE_TERRAIN_WATER), layerCount <= 7, "minimum GPU keeps room for sky and sun shadow");
+      if (layerCount === 8) {
+        const capable = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
+        material.onBeforeCompile(capable, { capabilities: { maxTextures: 32 } } as WebGLRenderer);
+        assert.equal(capable.defines?.FORGE_TERRAIN_WATER, 1, "larger GPUs keep water with all eight paint layers");
+      }
       // three's own samplers sit behind #includes; every sampler line here is the terrain's.
       const own = shader.fragmentShader.match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm) ?? [];
       assert.equal(own.length, terrainLitFragmentSamplers(layerCount), `${layerCount} layers`);
-      assert.equal(terrain.litFragmentSamplers, 5 + layerCount);
+      assert.equal(terrain.litFragmentSamplers, 6 + layerCount);
       assert.equal(material.customProgramCacheKey(), `forge-terrain-cdlod-l${layerCount}`, "a new layer count is a new program");
       // Layers past the terrain's draw their colour, without a sampler.
       if (layerCount < 8) {

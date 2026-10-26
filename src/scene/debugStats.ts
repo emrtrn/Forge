@@ -484,7 +484,10 @@ function terrainDeformationText(app: RuntimeStatsApp): string {
   const snapshot = app.getTerrainDeformationSnapshot?.();
   if (!snapshot) return "";
   const detail = app.getTerrainTrackDetailSnapshot?.();
-  return `\n${formatTerrainDeformationDebug(snapshot)}${detail ? `\n${formatTerrainTrackDetailDebug(detail)}` : ""}`;
+  const water = snapshot.water;
+  const waterText = water ? `\nterrain water: ${water.quality} waves ${water.resolution} sites ${water.sites} contacts ${water.contacts}`
+    + ` groups ${water.groups} captures ${water.captures} draws ${water.renderCalls} reversed ${Number(water.reversed)}` : "";
+  return `\n${formatTerrainDeformationDebug(snapshot)}${detail ? `\n${formatTerrainTrackDetailDebug(detail)}` : ""}${waterText}`;
 }
 
 function vehicleSurfaceText(app: RuntimeStatsApp): string {

@@ -1873,6 +1873,16 @@
       "name": "Landscape"
     }
   ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "landscapeRef": "landscape-1",
+      "splineRef": "spline-1",
+      "name": "River Water 1",
+      "coordinateSpace": "world",
+      "surfaceLevel": -38.7
+    }
+  ],
   "waterBodies": [
     {
       "schema": 1,
@@ -1921,59 +1931,6 @@
       ],
       "surfaceLevel": -45,
       "name": "Lake 1"
-    },
-    {
-      "schema": 1,
-      "kind": "lake",
-      "mode": "fillExisting",
-      "coordinateSpace": "world",
-      "id": "lake-2",
-      "terrainRef": "landscape-1",
-      "bounds": {
-        "min": [
-          163,
-          -197
-        ],
-        "max": [
-          228,
-          -132
-        ]
-      },
-      "seed": [
-        195.06272436488666,
-        -164.00335930317118
-      ],
-      "surfaceLevel": -40,
-      "name": "Lake 2"
-    },
-    {
-      "schema": 1,
-      "kind": "lake",
-      "mode": "fillExisting",
-      "coordinateSpace": "world",
-      "id": "lake-4",
-      "terrainRef": "landscape-1",
-      "bounds": {
-        "min": [
-          210,
-          -173
-        ],
-        "max": [
-          360,
-          -23
-        ]
-      },
-      "seed": [
-        242.25958485918073,
-        -140.77171767958723
-      ],
-      "surfaceLevel": -40,
-      "name": "Lake 4",
-      "appearance": {
-        "opacity": 0.5,
-        "absorptionDistance": 0.1,
-        "reflectionMode": "sharedPlanar"
-      }
     }
   ],
   "actors": []

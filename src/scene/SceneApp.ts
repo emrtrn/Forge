@@ -10448,8 +10448,8 @@ export class SceneApp {
       landscapeRef: landscape.id,
       splineRef: spline.id,
       ...(this.worldTerrains.has(landscape.id) ? { coordinateSpace: "world" as const } : {}),
-      // Begin 0.1 units above the first point's authored bed elevation; Surface
-      // Level remains the explicit horizontal-water override thereafter.
+      // Begin 0.1 units above the first point's authored bed elevation; the
+      // ribbon preserves this offset along the spline's elevation profile.
       surfaceLevel: Number((firstPoint.position[1] + 0.1).toFixed(3)),
     };
     const hadRiverWaters = this.layout?.riverWaters !== undefined;

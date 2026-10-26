@@ -103,12 +103,12 @@
     },
     {
       "key": "2_2",
-      "minHeight": -72.09822845458984,
+      "minHeight": -72.87889862060547,
       "maxHeight": 4.976526260375977
     },
     {
       "key": "3_2",
-      "minHeight": -53.59406280517578,
+      "minHeight": -54.49810028076172,
       "maxHeight": 49.91484451293945
     },
     {
@@ -123,7 +123,7 @@
     },
     {
       "key": "2_3",
-      "minHeight": -81.64764404296875,
+      "minHeight": -81.3197021484375,
       "maxHeight": -15.59986686706543
     },
     {
@@ -133,5 +133,278 @@
     }
   ],
   "collision": true,
-  "splines": []
+  "splines": [
+    {
+      "id": "spline-1",
+      "points": [
+        {
+          "id": "point-1",
+          "position": [
+            300.22,
+            -39,
+            -8.44
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-2",
+          "position": [
+            279.23,
+            -46,
+            57.8
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-3",
+          "position": [
+            233.59,
+            -60,
+            151.82
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-4",
+          "position": [
+            172.71,
+            -72,
+            235.82
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-5",
+          "position": [
+            148.4,
+            -72,
+            281.85
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-6",
+          "position": [
+            108.64,
+            -72,
+            322.9
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-7",
+          "position": [
+            52.68,
+            -73,
+            347.19
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-8",
+          "position": [
+            8.55,
+            -80,
+            368.05
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-9",
+          "position": [
+            -29.07,
+            -84,
+            423.22
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-10",
+          "position": [
+            -46.76,
+            -86,
+            494.71
+          ],
+          "width": 6,
+          "falloff": 3
+        }
+      ],
+      "segments": [
+        {
+          "id": "segment-1",
+          "startPointId": "point-1",
+          "endPointId": "point-2",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-2",
+          "startPointId": "point-2",
+          "endPointId": "point-3",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-3",
+          "startPointId": "point-3",
+          "endPointId": "point-4",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-4",
+          "startPointId": "point-4",
+          "endPointId": "point-5",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-5",
+          "startPointId": "point-5",
+          "endPointId": "point-6",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-6",
+          "startPointId": "point-6",
+          "endPointId": "point-7",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-7",
+          "startPointId": "point-7",
+          "endPointId": "point-8",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-8",
+          "startPointId": "point-8",
+          "endPointId": "point-9",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-9",
+          "startPointId": "point-9",
+          "endPointId": "point-10",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "layer-1",
+            "strength": 1
+          }
+        }
+      ],
+      "name": "Spline 1",
+      "smooth": true,
+      "coordinateSpace": "world"
+    },
+    {
+      "id": "spline-2",
+      "points": [
+        {
+          "id": "point-1",
+          "position": [
+            300.62,
+            -41.26,
+            20.2
+          ],
+          "width": 6,
+          "falloff": 3
+        }
+      ],
+      "segments": [],
+      "name": "Spline 2",
+      "coordinateSpace": "world"
+    }
+  ]
 }

@@ -37,6 +37,7 @@ export interface RiverWaterRibbonData {
 }
 
 export interface BuildRiverWaterRibbonOptions {
+  /** Height at the first authored point; the ribbon follows spline Y from there. */
   surfaceLevel: number;
   widthScale: number;
   /** Maximum centreline spacing in world units. */
@@ -150,6 +151,7 @@ export function buildRiverWaterRibbon(
     * options.widthScale * 2 / sampleSpacing) + 1) : 5;
   const tileLength = Math.max(EPSILON, options.normalTileLength ?? DEFAULT_NORMAL_TILE_LENGTH);
   const profiles = new Map((options.segmentProfiles ?? []).map((profile) => [profile.splineSegmentRef, profile]));
+  const referenceHeight = spline.points[0]?.position[1] ?? 0;
   let vertexBase = 0;
   for (const chain of riverChains(spline, sampleSpacing)) {
     if (positions.length / 3 + chain.length * width > MAX_RIVER_VERTICES) throw new Error("River Water exceeds the ribbon vertex budget");
@@ -176,20 +178,23 @@ export function buildRiverWaterRibbon(
       const flowSpeedMultiplier = profile?.flowSpeedMultiplier ?? 1;
       const sideX = -flowZ;
       const sideZ = flowX;
+      // Keep the saved start height while preserving the spline's elevation
+      // changes, including curved samples and independently chained branches.
+      const surfaceHeight = options.surfaceLevel + (sample.position[1] - referenceHeight);
       for (let lateral = 0; lateral < width; lateral += 1) {
         const v = lateral / (width - 1);
         const offset = (v - 0.5) * 2 * sample.width * options.widthScale;
         const x = sample.position[0] + sideX * offset;
         const z = sample.position[2] + sideZ * offset;
-        positions.push(x, options.surfaceLevel, z);
+        positions.push(x, surfaceHeight, z);
         uvs.push(sample.distance / tileLength, v);
         flowDirections.push(flowX, flowZ);
         shoreDistances.push(Math.abs(v - 0.5) * 2);
         const terrainHeight = options.heightAt ? options.heightAt(x, z) : options.landscapeData
           ? landscapeHeightAtLocal(options.landscapeData, x, z)
-          : options.surfaceLevel - 1;
+          : surfaceHeight - 1;
         valid.push(terrainHeight !== null);
-        waterDepths.push(terrainHeight === null ? 0 : Math.max(0, options.surfaceLevel - terrainHeight));
+        waterDepths.push(terrainHeight === null ? 0 : Math.max(0, surfaceHeight - terrainHeight));
         rapidness.push(segmentRapidness);
         foamMasks.push(0);
         flowSpeedMultipliers.push(flowSpeedMultiplier);

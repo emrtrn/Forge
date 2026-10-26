@@ -244,8 +244,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <div class="detail-hint">Water presentation is linked to this Landscape's spline; terrain shape remains authored by Landscape Splines.</div>
         <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-delete ${lockedAttr}>Delete River Water</button></div>
         <div class="detail-subsection-title">Surface</div>
-        <label class="detail-row"><span>Water Height (${activeRiverWater.coordinateSpace === "world" ? "World" : "Local"} Y)</span><input data-river-water-number="surfaceLevel" type="number" step="0.1" value="${activeRiverWater.surfaceLevel}" ${lockedAttr} /></label>
-        <div class="detail-hint">${activeRiverWater.coordinateSpace === "world" ? "This is the horizontal water height in world space." : "This is the horizontal water height in Landscape-local space. Moving the Landscape moves the water with it."}</div>
+        <label class="detail-row"><span>Start Water Height (${activeRiverWater.coordinateSpace === "world" ? "World" : "Local"} Y)</span><input data-river-water-number="surfaceLevel" type="number" step="0.1" value="${activeRiverWater.surfaceLevel}" ${lockedAttr} /></label>
+        <div class="detail-hint">Water height at the first spline point; the surface follows the spline's elevation changes. Changing this value raises or lowers the whole river.</div>
         <label class="detail-row"><span>Width Scale</span><input data-river-water-number="widthScale" type="number" min="0.05" max="10" step="0.05" value="${activeRiverWater.widthScale}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Deep Color</span><input data-river-water-color="deepColor" type="color" value="${escapeHtml(activeRiverWater.deepColor)}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Shallow Color</span><input data-river-water-color="shallowColor" type="color" value="${escapeHtml(activeRiverWater.shallowColor)}" ${lockedAttr} /></label>

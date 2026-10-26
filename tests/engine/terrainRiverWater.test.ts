@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { buildRiverWaterRibbon, createRiverWaterObject } from "../../engine/render-three/riverWater";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
+import { splineToPolyline } from "../../engine/scene/landscape";
 import { applyTerrainUndoPatches, createTerrainEditWorld, revertTerrainUndoPatches } from "../../engine/terrain/terrainEdit";
 import { terrainHeightAt, terrainHeightAtSmooth } from "../../engine/terrain/terrainHeightQuery";
 import { prepareTerrainRiverWaterSource } from "../../engine/terrain/terrainRiverWater";
@@ -29,6 +30,49 @@ function fixture() {
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain river: descending and rising spline Y drive surface and dry-bed depth in world and local frames", async () => {
+    const doc = fixture();
+    doc.def.splines![0]!.points.forEach((point, i) => { point.position[1] = [11.5, 3.5, 7.5][i]!; });
+    doc.water.surfaceLevel = 13;
+    const source = await prepareTerrainRiverWaterSource(doc, doc.water);
+    const ribbon = buildRiverWaterRibbon(source.spline, { ...source, widthScale: 1 });
+    for (let i = 0; i < ribbon.waterDepths.length; i++) {
+      const x = ribbon.positions[i * 3]!;
+      const expectedY = x <= -32 ? 5.5 - (x + 56) / 3 : -2.5 + (x + 32) / 6;
+      assert.ok(Math.abs(ribbon.positions[i * 3 + 1]! - expectedY) < 1e-9);
+      assert.ok(Math.abs(ribbon.waterDepths[i]! - Math.max(0, expectedY)) < 1e-9);
+    }
+    assert.ok(ribbon.waterDepths.includes(0), "elevated bed stays dry where the spline dips below it");
+    const object = createRiverWaterObject({ ...doc.water, ...source, foamNoiseMap: null }, null);
+    const positions = object.geometry.getAttribute("position");
+    assert.equal(object.position.y + positions.getY(0), 13);
+    assert.equal(object.position.y + positions.getY(positions.count - 1), 9);
+    object.dispose();
+    // The same saved height in legacy local coordinates must produce the same ribbon.
+    const { coordinateSpace: _space, ...localWater } = doc.water;
+    const localSource = await prepareTerrainRiverWaterSource(doc, { ...localWater, surfaceLevel: source.surfaceLevel });
+    assert.deepEqual(buildRiverWaterRibbon(localSource.spline, { ...localSource, widthScale: 1 }), ribbon);
+  });
+
+  await checkAsync("terrain river: curved samples and disconnected chains retain a common height offset", async () => {
+    const doc = fixture();
+    const source = await prepareTerrainRiverWaterSource(doc, doc.water);
+    const spline = source.spline;
+    spline.smooth = true;
+    spline.points.forEach((point, i) => { point.position[1] = [10, 4, 7][i]!; });
+    spline.points[1]!.position[2] += 8;
+    spline.points.push({ id: "branch-a", position: [0, 15, 0], width: 2, falloff: 1 },
+      { id: "branch-b", position: [8, 12, 0], width: 2, falloff: 1 });
+    spline.segments.push({ id: "branch", startPointId: "branch-a", endPointId: "branch-b" });
+    const ribbon = buildRiverWaterRibbon(spline, { surfaceLevel: 10.5, widthScale: 1 });
+    const centres = Array.from({ length: ribbon.waterDepths.length / 5 }, (_, row) => ribbon.positions.slice((row * 5 + 2) * 3, (row * 5 + 3) * 3));
+    for (const sub of splineToPolyline(spline, 24)) for (const sample of [sub.start, sub.end]) {
+      assert.ok(centres.some((point) => Math.hypot(point[0]! - sample.position[0],
+        point[1]! - sample.position[1] - 0.5, point[2]! - sample.position[2]) < 1e-9));
+    }
+    assert.ok(ribbon.waterDepths.every((depth) => Math.abs(depth - 1) < 1e-9), "fallback depth follows the surface too");
+  });
+
   await checkAsync("terrain river: world height, exact triangle depth, flow and foam share a stable local frame", async () => {
     const doc = fixture(), before = structuredClone(doc.def);
     // Saddle cell separates the exact triangle height from bilinear interpolation.

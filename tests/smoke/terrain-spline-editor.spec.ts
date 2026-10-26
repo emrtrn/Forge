@@ -106,6 +106,43 @@ const readDef = async (): Promise<WorldTerrainDef> => JSON.parse(await readFile(
 const readTile = async (key: string) => decodeTerrainTile(await readFile(smokePublicPath(terrainTilePath(TERRAIN, key))));
 const riverSnapshot = (page: Page) => page.evaluate(() => (window as any).__riverQA.snapshot());
 
+test("multi-tile river follows edited spline Y through undo, reload and runtime", async ({ page, request }, info) => {
+  const { errors } = await setup(page, request, false, true, false, true);
+  await page.locator('[data-landscape-spline="spline-1"]').click();
+  await page.locator('[data-landscape-spline-point="point-2"]').click();
+  const pointY = page.locator('[data-landscape-spline-point-axis="y"]');
+  await pointY.fill("9"); await pointY.press("Enter");
+  await page.locator("[data-river-water-create]").click();
+  const endHeight = async () => (await riverSnapshot(page)).waters[0]?.samples.at(-1)?.y ?? 0;
+  await expect.poll(endHeight).toBeCloseTo(9.1, 5);
+  const height = page.locator('[data-river-water-number="surfaceLevel"]');
+  await height.fill("7"); await height.press("Enter");
+  await expect.poll(endHeight).toBeCloseTo(11, 5);
+  await pointY.fill("7"); await pointY.press("Enter");
+  await expect.poll(endHeight).toBeCloseTo(9, 5);
+  await page.getByTestId("editor-undo").click();
+  await expect.poll(endHeight).toBeCloseTo(11, 5);
+  await page.getByTestId("editor-redo").click();
+  await expect.poll(endHeight).toBeCloseTo(9, 5);
+  await save(page);
+  const editor = (await riverSnapshot(page)).waters[0];
+  for (const sample of editor.samples) {
+    expect(sample.y).toBeCloseTo(7 + (sample.x + 12) / 12, 5);
+    expect(sample.depth).toBeCloseTo(sample.y - 5, 5);
+  }
+  await page.screenshot({ path: info.outputPath("river-spline-height-editor.png") });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 });
+  await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.samples).toEqual(editor.samples);
+  await page.goto("/tests/smoke/pages/terrain-spline-runtime.html", { waitUntil: "domcontentloaded" });
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).__riverQA)), { timeout: 90_000 }).toBe(true);
+  const runtime = (await riverSnapshot(page)).waters[0];
+  expect(runtime.samples).toEqual(editor.samples);
+  await page.evaluate(() => (window as any).__riverQA.frame());
+  await page.screenshot({ path: info.outputPath("river-spline-height-runtime.png") });
+  await writeFile(info.outputPath("river-spline-height.json"), JSON.stringify({ editor, runtime }, null, 2));
+  expect(errors).toEqual([]);
+});
+
 test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/Reload and runtime", async ({ page, request }, info) => {
   test.setTimeout(480_000);
   page.setDefaultTimeout(20_000);

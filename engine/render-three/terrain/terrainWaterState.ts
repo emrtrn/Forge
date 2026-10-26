@@ -13,6 +13,8 @@ export interface TerrainWaterContact {
 }
 
 export interface TerrainWaterImpulse { x: number; z: number; radius: number; strength: number }
+/** A short-lived, world-anchored wavefront, independent of simulation amplitude. */
+export interface TerrainWaterRipple { x: number; z: number; age: number; strength: number }
 export interface TerrainWaterSite { x: number; z: number; y: number }
 export interface TerrainWaterGroup {
   level: number;
@@ -25,6 +27,8 @@ export const TERRAIN_WATER_SIZE = 32;
 export const TERRAIN_WATER_MASK_SIZE = 256;
 export const TERRAIN_WATER_STEP = 1 / 60;
 export const TERRAIN_WATER_MAX_IMPULSES = 64;
+export const TERRAIN_WATER_MAX_RIPPLES = 24;
+export const TERRAIN_WATER_RIPPLE_LIFETIME = 1.6;
 
 /** Bilinear RG8 depth lookup at world cell centres, matching the uploaded,
  * render-filtered field rather than the authoritative physics depth. */
@@ -40,20 +44,26 @@ export class TerrainWaterState {
   /** RGBA: wetness, undeformed world ground Y, reserved, reserved. */
   readonly mask = new Float32Array(TERRAIN_WATER_MASK_SIZE ** 2 * 4);
   readonly impulses: TerrainWaterImpulse[] = [];
+  readonly ripples: TerrainWaterRipple[] = [];
   readonly sites = new Map<string, TerrainWaterSite>();
   readonly previous = new Map<string, TerrainWaterContact>();
   minX = -16;
   minZ = -16;
   revision = 0;
   seconds = 0;
-  private time = 0;
+  private readonly rippleCooldown = new Map<string, number>();
   private readonly cell = TERRAIN_WATER_SIZE / TERRAIN_WATER_MASK_SIZE;
 
   advance(dt: number, contacts: readonly TerrainWaterContact[], centre: readonly [number, number]): void {
     if (!Number.isFinite(dt) || dt <= 0 || !centre.every(Number.isFinite)) return;
     this.seconds = Math.min(4 * TERRAIN_WATER_STEP, this.seconds + dt);
-    this.time += dt;
     this.recenter(centre[0], centre[1]);
+    for (let i = this.ripples.length - 1; i >= 0; i--) {
+      const ripple = this.ripples[i]!;
+      ripple.age += dt;
+      if (ripple.age >= TERRAIN_WATER_RIPPLE_LIFETIME || ripple.x < this.minX || ripple.x >= this.minX + TERRAIN_WATER_SIZE
+        || ripple.z < this.minZ || ripple.z >= this.minZ + TERRAIN_WATER_SIZE) this.ripples.splice(i, 1);
+    }
     const seen = new Set<string>();
     for (const contact of contacts) {
       if (![contact.x, contact.y, contact.z, contact.width, contact.rotation, contact.radius, contact.wetness].every(Number.isFinite)
@@ -74,6 +84,12 @@ export class TerrainWaterState {
       const slip = contact.tractionSlip === undefined ? undefined : Math.max(0, Math.min(1, contact.tractionSlip));
       const spin = continuous && slip === undefined ? Math.abs(contact.rotation - old.rotation) * contact.radius : 0;
       const energy = continuous ? Math.min(1, Math.max(Math.max(distance, spin) / dt / 6, (slip ?? 0) * 0.6)) : 0;
+      const cooldown = Math.max(0, (this.rippleCooldown.get(contact.id) ?? 0) - dt);
+      this.rippleCooldown.set(contact.id, cooldown);
+      if (contact.wetness > 0.4 && energy > 0.02 && cooldown <= 1e-8) {
+        this.ripples.push({ x: contact.x, z: contact.z, age: 0, strength: energy });
+        this.rippleCooldown.set(contact.id, 0.12);
+      }
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const x = from.x + (contact.x - from.x) * t;
@@ -91,8 +107,12 @@ export class TerrainWaterState {
         this.sites.set(key, { x: contact.x, z: contact.z, y: contact.y });
       }
     }
-    for (const id of this.previous.keys()) if (!seen.has(id)) this.previous.delete(id);
+    for (const id of this.previous.keys()) if (!seen.has(id)) {
+      this.previous.delete(id);
+      this.rippleCooldown.delete(id);
+    }
     if (this.impulses.length > TERRAIN_WATER_MAX_IMPULSES) this.impulses.splice(0, this.impulses.length - TERRAIN_WATER_MAX_IMPULSES);
+    if (this.ripples.length > TERRAIN_WATER_MAX_RIPPLES) this.ripples.splice(0, this.ripples.length - TERRAIN_WATER_MAX_RIPPLES);
     for (const [id, site] of this.sites) {
       if (site.x < this.minX || site.x >= this.minX + 32 || site.z < this.minZ || site.z >= this.minZ + 32) this.sites.delete(id);
     }
@@ -118,8 +138,8 @@ export class TerrainWaterState {
   }
 
   clear(): void {
-    this.mask.fill(0); this.impulses.length = 0; this.sites.clear(); this.previous.clear();
-    this.seconds = 0; this.revision++; this.time = 0;
+    this.mask.fill(0); this.impulses.length = 0; this.ripples.length = 0; this.sites.clear(); this.previous.clear();
+    this.rippleCooldown.clear(); this.seconds = 0; this.revision++;
   }
 
   private recenter(x: number, z: number): void {

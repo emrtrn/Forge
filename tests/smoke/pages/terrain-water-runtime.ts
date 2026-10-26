@@ -6,7 +6,8 @@ import { updateLandscapeLod, type LandscapeObject } from "@engine/render-three/l
 import { sharedTerrainDeformation } from "@engine/render-three/terrain/terrainDeformation";
 import type { DeformationField } from "@engine/scene/deformationField";
 import type { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
-import type { Object3D, PerspectiveCamera, Scene, Texture, Vector4, WebGLRenderer } from "three";
+import type { TerrainWaterContact } from "@engine/render-three/terrain/terrainWaterState";
+import type { Object3D, PerspectiveCamera, Scene, ShaderMaterial, Texture, Vector4, WebGLRenderer } from "three";
 
 // Real shell/modules/physics/vehicle/lighting, with test-only readback. No debug
 // physics wires and no production globals or authored-content writes.
@@ -16,6 +17,8 @@ await forge.loadLevel("assets/starter-content/Levels/LandscapeTest.level.json");
 forge.start();
 let reflectedPixels: Uint8Array | null = null;
 let captureSerial = 0;
+let realWaterContacts: TerrainWaterContact[] = [];
+let calmRipplePixels: Uint8Array | null = null;
 (window as any).__terrainWaterRuntime = {
   ready: true,
   snapshot: () => forge.app.getTerrainDeformationSnapshot(),
@@ -27,6 +30,7 @@ let captureSerial = 0;
     const deformation = sharedTerrainDeformation();
     const field = (deformation.water as unknown as { field: DeformationField }).field;
     const wheels = [...deformation.water.state.previous.values()];
+    realWaterContacts = wheels;
     // The physics/contact bridge was checked above. Extend its real wheel
     // footprints only in this disposable scene, making an 8 m rut visible
     // without waiting for a bogged truck to cover that distance in software GL.
@@ -47,6 +51,47 @@ let captureSerial = 0;
     else internal.renderer.render(internal.scene, internal.camera);
     return { physicalSnapshot, snapshot: forge.app.getTerrainDeformationSnapshot(), reversed: internal.camera.reversedDepth,
       textures: internal.renderer.info.memory.textures };
+  },
+  wheelRippleAppearance(on: boolean) {
+    const internal = forge.app as unknown as { renderer: WebGLRenderer; scene: Scene; camera: PerspectiveCamera;
+      landscapeObjects: LandscapeObject[]; postProcessPipeline: { render(dt: number): void } | null };
+    const deformation = sharedTerrainDeformation();
+    const water = deformation.water;
+    if (!on) {
+      const wheel = realWaterContacts.reduce((closest, item) => item.x > closest.x ? item : closest);
+      internal.camera.fov = 50; internal.camera.updateProjectionMatrix();
+      internal.camera.position.set(wheel.x + 2, wheel.y + 0.85, wheel.z + 1.2);
+      internal.camera.lookAt(wheel.x, wheel.y - 0.12, wheel.z); internal.camera.updateMatrixWorld(true);
+      for (const object of internal.landscapeObjects) updateLandscapeLod(object, internal.camera);
+      const field = (water as unknown as { field: DeformationField }).field;
+      const centre = forge.app.getTerrainDeformationSnapshot()!.centre;
+      const contacts = realWaterContacts.map((contact) => ({ ...contact, tractionSlip: 0.8 }));
+      for (let i = 0; i < 24; i++) {
+        water.advance(1 / 60, contacts, centre, field);
+        water.render(internal.renderer, internal.scene, internal.camera, deformation.uniforms.uDeformTex!.value as Texture,
+          deformation.uniforms.uDeformWindow!.value as Vector4, deformation.uniforms.uDeformDepthRange!.value as number);
+      }
+    }
+    (water as unknown as { copy: ShaderMaterial }).copy.uniforms.rippleStrength!.value = on ? 1 : 0;
+    // Compare only wavefronts: both images keep the same reflection capture.
+    const groups = (water as unknown as { groups: { source: PlanarReflectionSource }[] }).groups;
+    const updates = groups.map((group) => group.source.update);
+    groups.forEach((group) => { group.source.update = () => {}; });
+    try {
+      if (internal.postProcessPipeline) internal.postProcessPipeline.render(0);
+      else internal.renderer.render(internal.scene, internal.camera);
+    } finally { groups.forEach((group, i) => { group.source.update = updates[i]!; }); }
+    const gl = internal.renderer.getContext();
+    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    let changed = 0, maxDifference = 0;
+    if (!on) calmRipplePixels = pixels;
+    else if (calmRipplePixels) for (let i = 0; i < pixels.length; i += 4) {
+      const delta = Math.max(...[0, 1, 2].map((channel) => Math.abs(pixels[i + channel]! - calmRipplePixels![i + channel]!)));
+      maxDifference = Math.max(maxDifference, delta);
+      if (delta >= 8) changed++;
+    }
+    return { changed, maxDifference, wavefronts: water.state.ripples.length };
   },
   vehicleReflection(withVehicle: boolean) {
     const internal = forge.app as unknown as { renderer: WebGLRenderer; scene: Scene; camera: PerspectiveCamera;

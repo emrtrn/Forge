@@ -1,24 +1,26 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { PerspectiveCamera } from "three";
-import { createFlatTerrainTile, terrainGlobalMapPath, terrainTilePath, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
+import { createFlatTerrainTile, terrainGlobalMapPath, terrainTilePath, terrainTileHeightRange, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { encodeTerrainTile, decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { worldTerrainActorPosition } from "../../engine/terrain/worldTerrainActor";
 import { expect, test, type Page, type APIRequestContext } from "./test";
-import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
+import { SMOKE_ROAD_SIDECAR, SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
 // QA: real Draw/Edit/gizmo input; seam bake and exact undo/redo; metadata-only
 // saves; reload; locked controls; a remote tile failure and successful retry.
-// Screenshots cover the edited overlay. Mesh/water output is a later phase.
+// Screenshots cover editing plus road mesh output; river output remains 8A5.
 test.setTimeout(240_000);
 const LEVEL = "layouts/__playwright-spline-world.level.json";
 const TERRAIN = "landscapes/__playwright-spline-world.terrain.json";
 
-async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false) {
+async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false, road = false) {
   const n = streamed ? 12 : 2, q = streamed ? 32 : 64;
-  const def: WorldTerrainDef = { schema: 1, type: "worldTerrain", name: "Spline World", tilesX: n, tilesZ: n,
+  // 12 x 4 exceeds the real 36-tile streaming threshold and keeps the remote
+  // corridor, without 96 unrelated files in every definition-commit cross-check.
+  const def: WorldTerrainDef = { schema: 1, type: "worldTerrain", name: "Spline World", tilesX: n, tilesZ: streamed ? 4 : n,
     tileQuads: q, spacing: 1, origin: [-n * q / 2, 5, -n * q / 2], heightMin: -64, heightMax: 64, collision: true,
     layers: [{ id: "grass", name: "Grass", color: "#51823a" }, { id: "rock", name: "Rock", color: "#888888" }], tiles: [] };
   const tiles = new Map<string, TerrainTileData>();
@@ -26,10 +28,14 @@ async function setup(page: Page, request: APIRequestContext, streamed = false, s
     await mkdir(dirname(smokePublicPath(path)), { recursive: true });
     await writeFile(smokePublicPath(path), data);
   };
-  for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) {
+  for (let z = 0; z < def.tilesZ; z++) for (let x = 0; x < n; x++) {
     const tile = createFlatTerrainTile(def, x, z);
+    if (road) for (let iz = 0; iz < tile.size; iz++) for (let ix = 0; ix < tile.size; ix++) {
+      tile.heights[iz * tile.size + ix] = (z * q + iz - n * q / 2 + 16) * 0.12;
+    }
     const key = tileKey(x, z);
-    tiles.set(key, tile); def.tiles.push({ key, minHeight: 0, maxHeight: 0 });
+    const range = terrainTileHeightRange(tile);
+    tiles.set(key, tile); def.tiles.push({ key, minHeight: range.min, maxHeight: range.max });
     await write(terrainTilePath(TERRAIN, key), encodeTerrainTile(tile, { heightMin: -64, heightMax: 64, heightFormat: "f32" }));
   }
   if (streamed || seeded) def.splines = [{ id: "spline-1", coordinateSpace: "world", points: [
@@ -44,6 +50,12 @@ async function setup(page: Page, request: APIRequestContext, streamed = false, s
   level.instances = level.instances.filter((group: { assetId: string }) => group.assetId === "marker:playerStart");
   level.landscapes = [{ id: "world", name: "Spline World", position: worldTerrainActorPosition(def), dataRef: TERRAIN }];
   level.riverWaters = [];
+  if (road) {
+    level.instances[0].placements[0].position = [-8, 9, -16];
+    // A legacy actor after World Terrain catches compressed-data-array indexing
+    // that used to attach the second actor's meshes to the first terrain.
+    level.landscapes.push({ id: "legacy-road", name: "Legacy Road", position: [120, 5, 0], dataRef: SMOKE_ROAD_SIDECAR });
+  }
   await write(LEVEL, JSON.stringify(level));
   expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
   const camera = new PerspectiveCamera();
@@ -75,11 +87,17 @@ async function setup(page: Page, request: APIRequestContext, streamed = false, s
 
 async function save(page: Page) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const done = page.waitForResponse((response) => response.url().endsWith("/__save-layout") && response.request().method() === "POST");
-    await page.getByTestId("editor-save").click();
+    const button = page.getByTestId("editor-save");
+    await expect(button).toBeEnabled({ timeout: 120_000 });
+    const done = page.waitForResponse((response) => response.url().endsWith("/__save-layout") && response.request().method() === "POST", { timeout: 120_000 });
+    await button.click();
     expect((await done).ok()).toBeTruthy();
+    // Autosave and manual Save share a serial queue. The first layout response
+    // can belong to an earlier snapshot; the manual button stays busy until
+    // its own entire save (including sidecars and prune) has completed.
+    await expect(button).toBeEnabled({ timeout: 120_000 });
     const status = page.getByTestId("editor-status");
-    await expect(status).toContainText("Saved");
+    await expect(status).toContainText("Saved", { timeout: 30_000 });
     if (!(await status.innerText()).includes("pending")) return;
   }
   throw new Error("Sidecar edits remained pending after three Save actions");
@@ -200,8 +218,8 @@ test("streamed spline bake rejects a missing remote tile without partial writes 
     const save = req.url().match(/__save-terrain-tile\?.*key=(\d+_\d+)/);
     if (save) written.push(save[1]!);
   });
-  const { errors } = await setup(page, request, true);
-  expect(requested.size).toBeLessThan(144);
+  const { errors, def } = await setup(page, request, true);
+  expect(requested.size).toBeLessThan(def.tiles.length);
   expect(requested.has("10_0")).toBe(false);
   await page.locator('[data-landscape-spline="spline-1"]').click();
   await page.route("**/__playwright-spline-world.tiles/10_0.tile.bin", (route) => route.fulfill({ status: 503, body: "unavailable" }));
@@ -219,4 +237,74 @@ test("streamed spline bake rejects a missing remote tile without partial writes 
   expect((await readTile("10_1")).heights.some((height) => height === 2)).toBe(true);
   await page.screenshot({ path: info.outputPath("streamed-spline-baked.png") });
   expect(errors).toEqual([expect.stringMatching(/503/)]);
+});
+
+test("multi-tile road mesh controls persist and Play collides with the rendered banked road across the seam", async ({ page, request }, info) => {
+  test.setTimeout(480_000);
+  const { errors } = await setup(page, request, false, true, true);
+  await page.locator('[data-landscape-spline="spline-1"]').click();
+  for (const point of ["point-1", "point-2"]) {
+    await page.locator(`[data-landscape-spline-point="${point}"]`).click();
+    const y = page.locator('[data-landscape-spline-point-axis="y"]');
+    await y.fill("8"); await y.press("Enter");
+  }
+  await page.locator('[data-landscape-spline-segment="segment-1"]').click();
+  const flag = (key: string) => page.locator(`[data-landscape-segment-flag="mesh.${key}"]`);
+  await expect(flag("enabled")).toBeDisabled();
+  await page.locator("[data-landscape-segment-mesh]").selectOption("sm-road-asphalt");
+  await flag("enabled").check();
+  await flag("enabled").uncheck(); await flag("enabled").check();
+  await flag("alignToTerrain").check(); await flag("alignToTerrain").uncheck(); await flag("alignToTerrain").check();
+  await page.screenshot({ path: info.outputPath("world-road-rigid-editor.png") });
+  await flag("deform").check();
+  for (const [key, value] of [["spacing", "3"], ["yawOffset", "15"], ["bank", "10"]]) {
+    const input = page.locator(`[data-landscape-segment-number="mesh.${key}"]`);
+    await input.fill(value!); await input.press("Enter");
+    await input.fill(key === "spacing" ? "2" : "0"); await input.press("Enter");
+  }
+  await flag("fitToLength").uncheck(); await flag("fitToLength").check();
+  await flag("collision").uncheck(); await save(page);
+  expect((await readDef()).splines![0]!.segments[0]!.mesh!.collision).toBe(false);
+  await flag("collision").check();
+  await save(page);
+  const saved = await readDef();
+  const mesh = saved.splines![0]!.segments[0]!.mesh!;
+  expect(mesh.enabled && mesh.deform && mesh.alignToTerrain).toBe(true);
+  expect(mesh.fitToLength).not.toBe(false); expect(mesh.collision).not.toBe(false);
+  await page.locator("[data-landscape-segment-mesh]").selectOption("");
+  await expect(flag("enabled")).toBeDisabled();
+  await save(page); expect((await readDef()).splines![0]!.segments[0]!.mesh).toBeUndefined();
+  await page.getByTestId("editor-undo").click();
+  await save(page);
+  const lock = page.locator('[data-detail-toggle="locked"]');
+  await lock.check(); await expect(flag("enabled")).toBeDisabled();
+  await lock.uncheck(); await expect(flag("enabled")).toBeEnabled();
+  await page.locator('[data-landscape-spline-tool="edit"]').click();
+  await page.locator("[data-viewport-host]").click({ position: { x: 15, y: 15 } });
+  await page.screenshot({ path: info.outputPath("world-road-editor.png") });
+  await page.reload();
+  await page.getByTestId("outliner-row").filter({ hasText: "Spline World" }).first().click();
+  await page.locator("[data-landscape-mode]").selectOption("splines");
+  await page.locator('[data-landscape-spline="spline-1"]').click();
+  await expect(flag("deform")).toBeChecked(); await expect(flag("collision")).toBeChecked();
+  await page.goto("/tests/smoke/pages/terrain-spline-runtime.html", { waitUntil: "domcontentloaded" });
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).__splineRoad?.ready)), { timeout: 90_000 }).toBe(true);
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyD"); await page.waitForTimeout(500); await page.keyboard.up("KeyD");
+  const snapshot = await page.evaluate(() => (window as any).__splineRoad.capture());
+  await writeFile(info.outputPath("world-road-runtime.json"), JSON.stringify(snapshot, null, 2));
+  expect(snapshot.meshCount).toBeGreaterThan(0);
+  expect(snapshot.bounds.min[0]).toBeLessThan(-10); expect(snapshot.bounds.max[0]).toBeGreaterThan(10);
+  expect(snapshot.colliders).toContain("landscape-splines:world");
+  expect(snapshot.colliders).toContain("landscape-splines:legacy-road");
+  expect(snapshot.parents).toEqual([{ position: [0, 5, 0], road: true }, { position: [120, 5, 0], road: true }]);
+  for (const sample of snapshot.samples) {
+    expect(sample.renderY).toBeGreaterThan(7.5);
+    expect(Math.abs(sample.renderY - sample.physicsY)).toBeLessThan(0.01);
+  }
+  await page.screenshot({ path: info.outputPath("world-road-runtime.png") });
+  await page.setViewportSize({ width: 1100, height: 720 });
+  await page.evaluate(() => (window as any).__splineRoad.capture());
+  await page.screenshot({ path: info.outputPath("world-road-runtime-small.png") });
+  expect(errors).toEqual([]);
 });

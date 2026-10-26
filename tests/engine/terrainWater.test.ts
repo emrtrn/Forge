@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TerrainWaterState, terrainWaterRenderDepth, TERRAIN_WATER_MAX_IMPULSES, type TerrainWaterContact } from "../../engine/render-three/terrain/terrainWaterState";
+import { TerrainWaterState, terrainWaterRenderDepth, TERRAIN_WATER_MAX_IMPULSES, TERRAIN_WATER_MAX_RIPPLES, TERRAIN_WATER_RIPPLE_LIFETIME, type TerrainWaterContact } from "../../engine/render-three/terrain/terrainWaterState";
 import { TerrainWater, setTerrainWaterQuality } from "../../engine/render-three/terrain/terrainWater";
 import { normalizeGraphicsPreferences, QUALITY_PROFILES } from "../../engine/perf/qualityProfiles";
 import { BoxGeometry, Mesh, MeshBasicMaterial, OrthographicCamera, PerspectiveCamera, Scene, Vector4, WebGLRenderTarget, type WebGLRenderer } from "three";
@@ -98,6 +98,28 @@ export function registerTerrainWaterTests(check: (name: string, fn: () => void) 
     });
     assert.ok(energies[0]! > 0);
     assert.ok(Math.max(...energies) - Math.min(...energies) < 1e-9);
+  });
+  check("terrain water: visible wavefronts stay anchored, stop emitting at rest and expire after contact loss", () => {
+    const state = new TerrainWaterState();
+    state.advance(1 / 60, [contact()], [0, 0]);
+    state.advance(1 / 60, [contact({ tractionSlip: 0.8 })], [0, 0]);
+    assert.equal(state.ripples.length, 1);
+    const ripple = state.ripples[0]!;
+    state.advance(1 / 60, [contact({ tractionSlip: 0.8 })], [0.5, -0.5]);
+    assert.deepEqual([ripple.x, ripple.z], [0, 0], "moving the window doesn't drag the wavefront");
+    assert.ok(ripple.age > 0);
+    for (let i = 0; i < 12; i++) state.advance(1 / 60, [contact({ tractionSlip: 0 })], [0, 0]);
+    assert.equal(state.ripples.length, 1, "rest does not seed more rings");
+    state.advance(TERRAIN_WATER_RIPPLE_LIFETIME, [], [0, 0]);
+    assert.equal(state.ripples.length, 0);
+    state.advance(1 / 60, [contact({ tractionSlip: 0.8 })], [0, 0]);
+    assert.equal(state.ripples.length, 0, "landing starts a fresh history");
+    for (let i = 0; i < 120; i++) state.advance(1 / 60, [contact({ tractionSlip: 1 })], [0, 0]);
+    assert.ok(state.ripples.length > 0 && state.ripples.length <= TERRAIN_WATER_MAX_RIPPLES);
+    state.advance(1 / 60, [], [40, 0]);
+    assert.equal(state.ripples.length, 0, "leaving the window releases old wavefronts");
+    state.clear();
+    assert.equal(state.ripples.length, 0);
   });
   check("terrain water: impulses are time-scaled, bounded, and water planes are grouped by level", () => {
     const energies: number[] = [];

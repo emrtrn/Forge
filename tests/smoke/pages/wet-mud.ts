@@ -131,6 +131,7 @@ const marker = new Mesh(new BoxGeometry(0.8, 1.2, 0.8), new MeshBasicMaterial({ 
 marker.position.set(-1.1, 0.6, -2);
 const emptyScene = new Scene();
 let spin = 0;
+let calmAppearance: Uint8Array | null = null;
 function enableDynamics(quality: TerrainWaterQuality) {
   deformation.water.setQuality(quality);
   scene.add(marker);
@@ -188,6 +189,24 @@ function waveEnergy() {
   for (let i = 0; i < pixels.length; i += 4) if (pixels[i + 2] === 255) energy += pixels[i]! + pixels[i + 1]!;
   debug.value = 0; draw();
   return energy;
+}
+/** Compare final lit pixels, with no normal/depth debug colouring. */
+function rippleAppearance(on: boolean) {
+  const copy = (deformation.water as unknown as { copy: ShaderMaterial }).copy;
+  copy.uniforms.rippleStrength!.value = on ? 1 : 0;
+  debug.value = 0;
+  draw();
+  const gl = renderer.getContext();
+  const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+  gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  let changed = 0, maxDifference = 0;
+  if (!on) calmAppearance = pixels;
+  else if (calmAppearance) for (let i = 0; i < pixels.length; i += 4) {
+    const delta = Math.max(...[0, 1, 2].map((channel) => Math.abs(pixels[i + channel]! - calmAppearance![i + channel]!)));
+    maxDifference = Math.max(maxDifference, delta);
+    if (delta >= 8) changed++;
+  }
+  return { changed, maxDifference };
 }
 function reflectionColor(red: boolean) {
   marker.material.color.set(red ? "#ff1600" : "#0033ff");
@@ -270,7 +289,7 @@ function showCapture() {
 let frame = 0;
 function loop() { draw(); if (++frame < 20) requestAnimationFrame(loop); else {
   (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks,
-    enableDynamics, pumpWater, waveEnergy, waveSamples, reflectionColor, benchmarkFrames, groundColor, skyLight, shiftDynamics, showCapture,
+    enableDynamics, pumpWater, waveEnergy, waveSamples, rippleAppearance, reflectionColor, benchmarkFrames, groundColor, skyLight, shiftDynamics, showCapture,
     restoreView: draw,
     reverseDepth: () => { const mode = setSceneDepthMode(renderer, "reversed", { scene, cameras: [camera] }); draw(); return mode; },
     environmentId: () => scene.environment?.uuid,

@@ -331,6 +331,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   const segmentMeshOptions = [`<option value="" ${activeSegment?.mesh.assetId ? "" : "selected"}>None</option>`]
     .concat(meshAssets.map((asset) => `<option value="${escapeHtml(asset.id)}" ${activeSegment?.mesh.assetId === asset.id ? "selected" : ""}>${escapeHtml(asset.displayName ?? asset.name)}</option>`))
     .join("");
+  const meshLockedAttr = lockedAttr || (activeSegment?.mesh.assetId ? "" : "disabled");
   const splineSegmentMarkup = activeSegment
     ? `<div class="detail-subsection-title">Segment Effects</div>
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="deform.enabled" ${activeSegment.deform.enabled ? "checked" : ""} ${lockedAttr} /><span>Deform Terrain</span></label>
@@ -341,16 +342,17 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="paint.enabled" ${activeSegment.paint.enabled ? "checked" : ""} ${lockedAttr} /><span>Paint Layer</span></label>
       <label class="detail-row"><span>Layer</span><select data-landscape-segment-layer ${lockedAttr}>${segmentLayerOptions}</select></label>
       <label class="detail-row"><span>Paint Strength</span><input data-landscape-segment-number="paint.strength" type="number" min="0" max="1" step="0.05" value="${activeSegment.paint.strength}" ${lockedAttr} /></label>
-      ${worldTerrain ? `<div class="detail-hint">Spline mesh output will be available in a later update.</div>` : `
-      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.enabled" ${activeSegment.mesh.enabled ? "checked" : ""} ${lockedAttr} /><span>Spline Mesh</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.enabled" ${activeSegment.mesh.enabled ? "checked" : ""} ${meshLockedAttr} /><span>Spline Mesh</span></label>
       <label class="detail-row"><span>Mesh</span><select data-landscape-segment-mesh ${lockedAttr}>${segmentMeshOptions}</select></label>
-      <label class="detail-row"><span>Mesh Spacing</span><input data-landscape-segment-number="mesh.spacing" type="number" min="0.01" step="0.1" value="${activeSegment.mesh.spacing}" ${lockedAttr} /></label>
-      <label class="detail-row"><span>Mesh Yaw</span><input data-landscape-segment-number="mesh.yawOffset" type="number" step="15" value="${activeSegment.mesh.yawOffset}" ${lockedAttr} /></label>
-      <label class="detail-row"><span>Mesh Bank</span><input data-landscape-segment-number="mesh.bank" type="number" step="5" value="${activeSegment.mesh.bank}" ${lockedAttr} /></label>
-      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.fitToLength" ${activeSegment.mesh.fitToLength ? "checked" : ""} ${lockedAttr} /><span>Fit Mesh To Segment</span></label>
-      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.alignToTerrain" ${activeSegment.mesh.alignToTerrain ? "checked" : ""} ${lockedAttr} /><span>Align To Terrain</span></label>
-      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.deform" ${activeSegment.mesh.deform ? "checked" : ""} ${lockedAttr} /><span>Deform Mesh Along Curve</span></label>
-      <div class="detail-hint">Mesh length runs along local +Z. Deform Mesh creates curved geometry; it is more expensive than fitted instances.</div>`}
+      <label class="detail-row"><span>Mesh Spacing</span><input data-landscape-segment-number="mesh.spacing" type="number" min="0.01" step="0.1" value="${activeSegment.mesh.spacing}" ${meshLockedAttr} /></label>
+      <label class="detail-row"><span>Mesh Yaw</span><input data-landscape-segment-number="mesh.yawOffset" type="number" step="15" value="${activeSegment.mesh.yawOffset}" ${meshLockedAttr} /></label>
+      <label class="detail-row"><span>Mesh Bank</span><input data-landscape-segment-number="mesh.bank" type="number" step="5" value="${activeSegment.mesh.bank}" ${meshLockedAttr} /></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.fitToLength" ${activeSegment.mesh.fitToLength ? "checked" : ""} ${meshLockedAttr} /><span>Fit Mesh To Segment</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.alignToTerrain" ${activeSegment.mesh.alignToTerrain ? "checked" : ""} ${meshLockedAttr} /><span>Align To Terrain</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.deform" ${activeSegment.mesh.deform ? "checked" : ""} ${meshLockedAttr} /><span>Deform Mesh Along Curve</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.collision" ${activeSegment.mesh.collision ? "checked" : ""} ${meshLockedAttr} /><span>Mesh Collision</span></label>
+      ${activeSegment.mesh.assetId ? "" : `<div class="detail-hint">Choose a mesh to enable spline mesh output.</div>`}
+      <div class="detail-hint">Mesh length runs along local +Z. Deform Mesh creates curved geometry; it is more expensive than fitted instances. Collision is rebuilt on Play.</div>
       <div class="landscape-heightmap-actions">
         <button type="button" class="detail-action-button" data-landscape-spline-apply-deform ${lockedAttr}>Apply Deform</button>
         <button type="button" class="detail-action-button" data-landscape-spline-apply-paint ${lockedAttr}>Apply Paint</button>
@@ -600,7 +602,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const key = input.dataset.landscapeSegmentFlag as
         | `deform.${"enabled" | "flatten" | "raiseTerrain" | "lowerTerrain"}`
         | `paint.enabled`
-        | `mesh.${"enabled" | "fitToLength" | "alignToTerrain" | "deform"}`
+        | `mesh.${"enabled" | "fitToLength" | "alignToTerrain" | "deform" | "collision"}`
         | undefined;
       if (!segmentId || !key) return;
       const [group, flag] = key.split(".") as [string, string];
@@ -1141,7 +1143,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing and terrain effects; spline mesh output, River Water and resizing are not available for a multi-tile Landscape yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing, terrain effects and mesh output. River Water and resizing are not available for a multi-tile Landscape yet.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Others</div>

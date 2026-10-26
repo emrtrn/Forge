@@ -126,6 +126,83 @@ function worldTerrainFixture() {
 }
 
 export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("editor save: edit bursts and manual Save share one pending snapshot behind an active write", async () => {
+    const f = fixture();
+    const started = deferred(), release = deferred();
+    const saver = f.host.layoutSaver;
+    let calls = 0;
+    f.host.layoutSaver = async (payload) => {
+      calls++;
+      if (calls === 1) { started.resolve(); await release.promise; }
+      const result = await saver(payload);
+      return calls === 2 ? { ...result, warnings: ["shared warning"] } : result;
+    };
+    f.edit("landscape", 1);
+    await withFetch(f.fetch, async () => {
+      const active = f.host.saveLayout();
+      await started.promise;
+      const pending: Promise<void>[] = [];
+      for (let edit = 2; edit <= 50; edit++) {
+        f.host.layout.name = `edit-${edit}`;
+        f.edit("landscape", edit);
+        pending.push(f.host.saveLayout());
+      }
+      const manual = f.host.saveLayout();
+      assert.equal(calls, 1, "no pending request may overlap the active snapshot");
+      release.resolve();
+      await Promise.all([active, manual, ...pending]);
+    });
+    assert.equal(calls, 2, "49 edits plus manual Save need only one additional layout write");
+    assert.deepEqual(f.writes.filter((write) => write.path === LEVEL).map((write) => write.value), ["before", "edit-50"]);
+    assert.deepEqual(f.writes.filter((write) => write.path !== LEVEL).map((write) => write.value), [1, 50]);
+    assert.equal(f.revision("landscape").dirty, false);
+    assert.equal(f.statuses.length, 2, "shared callers do not replace warnings with empty success results");
+    assert.match(f.statuses.at(-1)!.message, /shared warning/);
+  });
+
+  await checkAsync("editor save: a coalesced failure rejects every waiter and leaves retries available", async () => {
+    const f = fixture();
+    const saver = f.host.layoutSaver;
+    let calls = 0;
+    f.host.layoutSaver = async (payload) => {
+      calls++;
+      if (calls === 1) throw new Error("disk unavailable");
+      return saver(payload);
+    };
+    await withFetch(f.fetch, async () => {
+      const results = await Promise.allSettled(Array.from({ length: 10 }, () => f.host.saveLayout()));
+      assert.equal(calls, 1);
+      assert.ok(results.every((result) => result.status === "rejected" && /disk unavailable/.test(String(result.reason))));
+      f.host.layout.name = "retry";
+      await f.host.saveLayout();
+    });
+    assert.equal(calls, 2);
+    assert.deepEqual(f.writes.map((write) => write.value), ["retry"]);
+  });
+
+  await checkAsync("editor save: replacing the level does not coalesce its request into an older queued turn", async () => {
+    const f = fixture();
+    const started = deferred(), release = deferred();
+    const saver = f.host.layoutSaver;
+    let calls = 0;
+    f.host.layoutSaver = async (payload) => {
+      calls++;
+      if (calls === 1) { started.resolve(); await release.promise; }
+      return saver(payload);
+    };
+    await withFetch(f.fetch, async () => {
+      const active = f.host.saveLayout();
+      await started.promise;
+      const oldLevelTurn = f.host.saveLayout();
+      Object.assign(f.host, { layout: { ...structuredClone(f.host.layout), name: "replacement" } });
+      const newLevelTurn = f.host.saveLayout();
+      release.resolve();
+      await Promise.all([active, oldLevelTurn, newLevelTurn]);
+    });
+    assert.equal(calls, 3, "the replacement gets its own queued save and acknowledgement");
+    assert.equal(f.writes.at(-1)!.value, "replacement");
+  });
+
   await checkAsync("terrain ownership: full level paths and escaped actor IDs cannot alias definitions or tiles", async () => {
     const paths = [
       levelTerrainPath("levels/A/Terrain.level.json", "landscape-1"),

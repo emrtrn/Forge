@@ -50,5 +50,13 @@ test("terrain water runtime: LandscapeTest GAZ-52 contacts reach the planar rend
   expect(difference.changed).toBeGreaterThan(25);
   expect(snapshot.snapshot.water.resolution).toBe(512);
   expect(snapshot.snapshot.water.captures).toBeGreaterThan(0);
+  await page.evaluate(() => (window as any).__terrainWaterRuntime.wheelRippleAppearance(false));
+  await page.screenshot({ path: info.outputPath("terrain-water-wheel-calm.png") });
+  const ripples = await page.evaluate(() => (window as any).__terrainWaterRuntime.wheelRippleAppearance(true));
+  await page.screenshot({ path: info.outputPath("terrain-water-wheel-ripples.png") });
+  await writeFile(info.outputPath("terrain-water-wheel-ripples.json"), JSON.stringify(ripples, null, 2));
+  expect(ripples.wavefronts).toBeGreaterThan(0);
+  expect(ripples.changed).toBeGreaterThan(100);
+  expect(ripples.maxDifference).toBeGreaterThanOrEqual(30);
   expect(errors).toEqual([]);
 });

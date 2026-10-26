@@ -27,6 +27,7 @@ import { decodeHeightmapPng, encodeHeightmapPng16 } from "@engine/terrain/height
 import { legacyTerrainHeightRange } from "@engine/terrain/terrainLegacy";
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
 import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineData";
+import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
 import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
@@ -438,6 +439,7 @@ import {
 import {
   applySceneBackgroundAndAmbient,
   buildLandscapeSplineMeshGroup,
+  disposeLandscapeSplineMeshGroup,
   buildSplineInstanceGeneratorGroup,
   disposeSplineGeneratedGroup,
   buildSceneCharacterObject,
@@ -846,7 +848,7 @@ export interface LandscapeSplineSegmentView {
   endPointId: string;
   deform: { enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number };
   paint: { enabled: boolean; layerId: string; strength: number };
-  mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number; deform: boolean };
+  mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number; deform: boolean; collision: boolean };
 }
 
 /** Editable water-body presentation exposed from the selected Landscape Details panel. */
@@ -945,7 +947,7 @@ type SplineTangentHandle = Exclude<SplinePointGizmoTarget["handle"], "point">;
 export interface LandscapeSplineSegmentPatch {
   deform?: Partial<{ enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number }>;
   paint?: Partial<{ enabled: boolean; layerId: string; strength: number }>;
-  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number; deform: boolean }>;
+  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number; deform: boolean; collision: boolean }>;
 }
 
 /**
@@ -1335,6 +1337,7 @@ export class SceneApp {
   private readonly riverWaterTextures = new Map<string, Texture>();
   /** Instanced spline-mesh groups (Faz 6 Road Tool) parented under each landscape, by index. */
   private landscapeSplineMeshGroups: (Group | null)[] = [];
+  private readonly landscapeSplineMeshBuilds = new WeakMap<Group, number>();
   /** Editor-only spline control-point/segment overlay, parented under each landscape, by index. */
   private landscapeSplineOverlays: (Group | null)[] = [];
   /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
@@ -6823,41 +6826,57 @@ export class SceneApp {
   private async rebuildLandscapeSplineMeshes(index: number): Promise<void> {
     const actor = this.layout?.landscapes?.[index];
     const object = this.landscapeObjects[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    const source = actor ? this.landscapeData.get(actor.id) ?? document?.def : undefined;
     const previous = this.landscapeSplineMeshGroups[index];
     if (previous) {
-      previous.removeFromParent();
+      disposeLandscapeSplineMeshGroup(previous);
       this.landscapeSplineMeshGroups[index] = null;
     }
-    if (!actor || !object || !data) return;
-    const assetIds = landscapeSplineMeshAssetIds(data);
+    if (!actor || !object || !source) return;
+    const build = (this.landscapeSplineMeshBuilds.get(object) ?? 0) + 1;
+    this.landscapeSplineMeshBuilds.set(object, build);
+    const current = () => this.landscapeObjects[index] === object && Boolean(object.parent)
+      && this.landscapeSplineMeshBuilds.get(object) === build;
+    const assetIds = landscapeSplineMeshAssetIds(source);
     if (assetIds.length === 0) return;
-    await Promise.all(assetIds.map((assetId) => this.ensureAssetLoaded(assetId)));
-    // The landscape object may have been rebuilt/removed while assets loaded.
-    if (this.landscapeObjects[index] !== object || !object.parent) return;
-    const built = buildLandscapeSplineMeshGroup({
-      data,
-      models: this.models,
-      castShadow: this.staticObjectsCastShadow(),
-      receiveShadow: this.staticObjectsReceiveShadow(),
-      applyMaterialSlots: (assetId, assetGroup) => {
-        const slots = this.resolveAssetMaterialSlots(assetId);
-        if (slots) {
-          applyMaterialSlotOverrides(assetGroup, slots, (materialId) => this.materialCache.get(materialId));
-        }
-      },
-    });
-    if (!built) return;
-    built.group.userData.landscapeIndex = index;
-    // Spline meshes are non-authored previews: exclude them from picking so a
-    // click resolves to the landscape/terrain, not a phantom placement.
-    built.group.traverse((child) => {
-      child.userData.landscapeIndex = index;
-      child.raycast = () => {};
-    });
-    object.add(built.group);
-    this.applyWireframeToLevelObject(built.group);
-    this.landscapeSplineMeshGroups[index] = built.group;
+    try {
+      await Promise.all(assetIds.map((assetId) => this.ensureAssetLoaded(assetId)));
+      // The landscape object may have been rebuilt/removed while assets loaded.
+      if (!current()) return;
+      const data = document ? await prepareTerrainSplineMeshSource(document, async (key) => {
+        const path = terrainTilePath(actor.dataRef, key);
+        const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+        if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+        return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+      }) : this.landscapeData.get(actor.id)!;
+      if (!current()) return;
+      const built = buildLandscapeSplineMeshGroup({
+        data,
+        models: this.models,
+        castShadow: this.staticObjectsCastShadow(),
+        receiveShadow: this.staticObjectsReceiveShadow(),
+        applyMaterialSlots: (assetId, assetGroup) => {
+          const slots = this.resolveAssetMaterialSlots(assetId);
+          if (slots) {
+            applyMaterialSlotOverrides(assetGroup, slots, (materialId) => this.materialCache.get(materialId));
+          }
+        },
+      });
+      if (!built) return;
+      built.group.userData.landscapeIndex = index;
+      // Spline meshes are non-authored previews: exclude them from picking so a
+      // click resolves to the landscape/terrain, not a phantom placement.
+      built.group.traverse((child) => {
+        child.userData.landscapeIndex = index;
+        child.raycast = () => {};
+      });
+      object.add(built.group);
+      this.applyWireframeToLevelObject(built.group);
+      this.landscapeSplineMeshGroups[index] = built.group;
+    } catch (error) {
+      if (current()) this.onStatus?.(`Spline mesh failed: ${error instanceof Error ? error.message : String(error)}`, "warning");
+    }
   }
 
   private disposeSplineOverlayGroup(group: Group): void {
@@ -9611,6 +9630,7 @@ export class SceneApp {
         const dirty = (side === "after" ? applyTerrainUndoPatches : revertTerrainUndoPatches)(session.world, patches);
         session.markTiles(dirty.keys());
         updateWorldTerrainObjectTiles(object, dirty);
+        void this.rebuildLandscapeSplineMeshes(index);
         if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
         this.scheduleLandscapeFoliageRebuild(landscapeId);
       } else {
@@ -10199,6 +10219,7 @@ export class SceneApp {
         alignToTerrain: segment.mesh?.alignToTerrain ?? false,
         bank: segment.mesh?.bank ?? 0,
         deform: segment.mesh?.deform ?? false,
+        collision: segment.mesh?.collision !== false,
       },
     }));
   }
@@ -10241,20 +10262,21 @@ export class SceneApp {
       const assetId = patch.mesh.assetId ?? current.assetId;
       const yawOffset = round(patch.mesh.yawOffset ?? current.yawOffset ?? 0);
       const bank = round(patch.mesh.bank ?? current.bank ?? 0);
-      segment.mesh = {
+      if (!assetId) delete segment.mesh;
+      else segment.mesh = {
         enabled: patch.mesh.enabled ?? current.enabled,
         assetId,
         ...(patch.mesh.spacing ?? current.spacing
           ? { spacing: Math.max(0.01, round(patch.mesh.spacing ?? current.spacing ?? 2)) }
           : {}),
         ...(yawOffset ? { yawOffset } : {}),
-        ...(patch.mesh.fitToLength === false ? { fitToLength: false } : current.fitToLength === false ? { fitToLength: false } : {}),
+        ...((patch.mesh.fitToLength ?? current.fitToLength) === false ? { fitToLength: false } : {}),
         ...(current.scale ? { scale: current.scale } : {}),
         ...(current.offset ? { offset: current.offset } : {}),
         ...((patch.mesh.alignToTerrain ?? current.alignToTerrain) ? { alignToTerrain: true } : {}),
         ...(bank ? { bank } : {}),
         ...((patch.mesh.deform ?? current.deform) ? { deform: true } : {}),
-        ...(current.collision !== undefined ? { collision: current.collision } : {}),
+        ...((patch.mesh.collision ?? current.collision) === false ? { collision: false } : {}),
       };
     }
     this.applySelectedLandscapeSplines(index, actor.id, before, after, "Edit Landscape Spline Segment", this.landscapeSculptSettings.activeSplineId, this.landscapeSculptSettings.activeSplinePointId, segmentId);

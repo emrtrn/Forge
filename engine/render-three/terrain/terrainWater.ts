@@ -7,7 +7,7 @@ import {
 } from "three";
 import type { DeformationField } from "@engine/scene/deformationField";
 import { PlanarReflectionSource, isPlanarReflectionCamera } from "../planarReflectionSource";
-import { TerrainWaterState, terrainWaterRenderDepth, TERRAIN_WATER_MASK_SIZE, TERRAIN_WATER_SIZE, TERRAIN_WATER_STEP, TERRAIN_WATER_MAX_IMPULSES } from "./terrainWaterState";
+import { TerrainWaterState, terrainWaterRenderDepth, TERRAIN_WATER_MASK_SIZE, TERRAIN_WATER_SIZE, TERRAIN_WATER_STEP, TERRAIN_WATER_MAX_IMPULSES, TERRAIN_WATER_MAX_RIPPLES } from "./terrainWaterState";
 import type { TerrainWaterContact, TerrainWaterGroup } from "./terrainWaterState";
 
 export type TerrainWaterQuality = "low" | "medium" | "high";
@@ -65,16 +65,46 @@ void main(){
     // A depression with a positive ring, rather than adding permanent water.
     height+=impulses[i].w*(exp(-d*d*1.5)*0.45-exp(-d*d*6.0));
   }
-  gl_FragColor=vec4(clamp(height,-0.015,0.015)*mask,clamp(velocity,-0.3,0.3)*mask,0.0,1.0);
+  // Keep connectivity and calm film elevation for the visible wavefront pass.
+  gl_FragColor=vec4(clamp(height,-0.015,0.015)*mask,clamp(velocity,-0.3,0.3)*mask,film.y,mask);
 }`;
 const COPY = /* glsl */ `
 varying vec2 vUv; uniform sampler2D source; uniform float normalPass; uniform float cellSize;
+uniform vec2 origin;
+uniform vec4 ripples[${TERRAIN_WATER_MAX_RIPPLES}];
+uniform int rippleCount;
+uniform float rippleStrength;
 void main(){
  if(normalPass>0.5){
+  vec4 centre=texture2D(source,vUv);
   vec2 e=vec2(cellSize/32.0,0.0);
   vec2 gradient=vec2(texture2D(source,vUv+e).r-texture2D(source,vUv-e).r,
     texture2D(source,vUv+e.yx).r-texture2D(source,vUv-e.yx).r)/(2.0*cellSize);
-  gl_FragColor=vec4(gradient,texture2D(source,vUv).r,1.0);
+  float crest=0.0;
+  if(centre.a>0.1 && rippleStrength>0.0) for(int i=0;i<${TERRAIN_WATER_MAX_RIPPLES};i++) {
+    if(i>=rippleCount) break;
+    vec4 ripple=ripples[i];
+    vec2 offset=origin+vUv*32.0-ripple.xy;
+    float distanceToContact=length(offset);
+    float front=0.06+ripple.z*0.7;
+    float band=distanceToContact-front;
+    if(abs(band)>0.3 || distanceToContact>1.3) continue;
+    // Check the calm film between contact and pixel: a ring must not jump
+    // the dry gap into another puddle, even if both have the same elevation.
+    float connected=centre.a;
+    for(int j=1;j<=8;j++) {
+      vec4 path=texture2D(source,vUv-offset/32.0*(float(j)/8.0));
+      connected*=step(0.1,path.a)*(1.0-smoothstep(0.025,0.06,abs(path.b-centre.b)));
+    }
+    if(connected<0.01) continue;
+    float envelope=exp(-band*band/0.0256)*exp(-ripple.z*1.8)
+      *smoothstep(0.0,0.07,ripple.z)*ripple.w*connected*rippleStrength;
+    float phase=band*26.18;
+    float slope=0.035*envelope*(26.18*cos(phase)-band/0.0128*sin(phase));
+    gradient+=offset/max(distanceToContact,0.01)*slope;
+    crest+=max(0.0,cos(phase))*envelope;
+  }
+  gl_FragColor=vec4(clamp(gradient,vec2(-0.6),vec2(0.6)),min(crest,1.0),centre.a);
  } else gl_FragColor=texture2D(source,vUv);
 }`;
 
@@ -108,7 +138,9 @@ export class TerrainWater {
       impulses: { value: Array.from({ length: TERRAIN_WATER_MAX_IMPULSES }, () => new Vector4()) }, impulseCount: { value: 0 } } });
   private readonly copy = new ShaderMaterial({ vertexShader: VERTEX, fragmentShader: COPY,
     depthTest: false, depthWrite: false, blending: NoBlending,
-    uniforms: { source: { value: null }, normalPass: { value: 0 }, cellSize: { value: 0.125 } } });
+    uniforms: { source: { value: null }, normalPass: { value: 0 }, cellSize: { value: 0.125 },
+      origin: { value: new Vector2() }, rippleCount: { value: 0 }, rippleStrength: { value: 1 },
+      ripples: { value: Array.from({ length: TERRAIN_WATER_MAX_RIPPLES }, () => new Vector4()) } } });
   private readonly quad = new Mesh(new PlaneGeometry(2, 2), this.simulation);
   private groups: ReflectionGroup[] = [];
   private readonly proxyGeometry = new BoxGeometry(1, 0.02, 1);
@@ -185,6 +217,10 @@ export class TerrainWater {
       }
       if (steps > 0) this.state.impulses.length = 0;
       this.copy.uniforms.cellSize!.value = 32 / atlas.width;
+      (this.copy.uniforms.origin!.value as Vector2).copy(this.previousOrigin);
+      this.copy.uniforms.rippleCount!.value = this.state.ripples.length;
+      this.state.ripples.forEach((ripple, i) => (this.copy.uniforms.ripples!.value as Vector4[])[i]!
+        .set(ripple.x, ripple.z, ripple.age, ripple.strength));
       this.copyLayer(renderer, targets[0].texture, 0, true);
       this.uniforms.uTerrainWaterWindow.value.set(this.previousOrigin.x, this.previousOrigin.y, 32, 1);
       this.syncGroups(camera, deformation, window, depthRange);
@@ -282,15 +318,19 @@ uniform mat4 uTerrainWaterMatrices[2];
 uniform float uTerrainWaterReflectionPass;
 varying float vForgeDeformBaseY;
 vec2 forgeWaterGradient=vec2(0.0);
+float forgeWaterCrest=0.0;
 vec2 forgeWaterUv(){ return (vForgeDeformWorld-uTerrainWaterWindow.xy)/uTerrainWaterWindow.z; }
 void forgeSampleWater(){
  if(uTerrainWaterWindow.w<0.5) return;
  vec2 uv=forgeWaterUv();
  if(any(lessThan(uv,vec2(0.0)))||any(greaterThan(uv,vec2(1.0)))) return;
- forgeWaterGradient=texture(uTerrainWaterTex,vec3(uv,0.0)).rg;
+ vec3 waves=texture(uTerrainWaterTex,vec3(uv,0.0)).rgb;
+ forgeWaterGradient=waves.rg;
+ forgeWaterCrest=waves.b;
 }
 #else
 vec2 forgeWaterGradient=vec2(0.0);
+float forgeWaterCrest=0.0;
 void forgeSampleWater() {}
 #endif
 `;
@@ -315,7 +355,7 @@ if(forgePuddle>0.0 && uTerrainWaterWindow.w>0.5 && uTerrainWaterReflectionPass<0
   if(plane.y<0.5 || abs(filmY-plane.x)>0.065) continue;
   vec4 projected=uTerrainWaterMatrices[i]*vec4(vForgeDeformWorld.x,plane.x,vForgeDeformWorld.y,1.0);
   vec2 uv=projected.xy/max(projected.w,0.0001);
-  uv+=forgeWaterGradient*0.035;
+  uv+=forgeWaterGradient*0.055;
   if(projected.w<=0.0||any(lessThan(uv,vec2(0.0)))||any(greaterThan(uv,vec2(1.0)))) continue;
   vec3 reflected=texture(uTerrainWaterTex,vec3(uv,float(i+1))).rgb;
   float fresnel=0.02+0.98*pow(1.0-clamp(dot(normalize(vViewPosition),normal),0.0,1.0),5.0);

@@ -253,6 +253,7 @@ export interface ForgeLandscapeData {
 /** One resolved static-mesh instance placed along a spline (landscape-local). */
 export interface LandscapeSplineMeshInstance {
   assetId: string;
+  collision: boolean;
   /** Landscape-local position (matches the height/point coordinate frame). */
   position: Vec3;
   /** Euler degrees retained for inspectability and legacy callers. */
@@ -265,6 +266,7 @@ export interface LandscapeSplineMeshInstance {
 /** One authored spline segment, oriented as it appears in a weldable mesh chain. */
 export interface LandscapeSplineMeshChainSegment {
   id: string;
+  collision: boolean;
   /** Sampled landscape-local centerline, with its direction aligned to the chain. */
   points: Vec3[];
   /** Arc length at the beginning of this segment within its chain. */
@@ -279,6 +281,7 @@ export interface LandscapeSplineMeshChainSegment {
  */
 export interface LandscapeSplineMeshChain {
   assetId: string;
+  collision: boolean;
   scale: Vec3;
   offset: Vec3;
   yawOffset: number;
@@ -294,6 +297,8 @@ export interface LandscapeSplineMeshChain {
 export interface ComputeLandscapeSplineMeshInstancesOptions {
   /** Landscape data used only when a mesh opts into terrain-normal alignment. */
   landscape?: ForgeLandscapeData;
+  /** Exact normal in the same frame as the spline, for tiled terrain hosts. */
+  normalAt?: (x: number, z: number) => Vec3;
   /** Base-model local +Z lengths, supplied by the render host from loaded bounds. */
   meshForwardLengths?: ReadonlyMap<string, number>;
 }
@@ -402,6 +407,7 @@ export function resolveLandscapeSplineMeshChains(
         const length = splinePathLength(oriented);
         chainSegments.push({
           id: next.segment.id,
+          collision: next.segment.mesh?.collision !== false,
           points: oriented,
           distanceStart: totalLength,
           distanceEnd: totalLength + length,
@@ -422,6 +428,7 @@ export function resolveLandscapeSplineMeshChains(
       }
       chains.push({
         assetId: mesh.assetId,
+        collision: chainSegments.some((segment) => segment.collision),
         scale: mesh.scale ?? [1, 1, 1],
         offset: mesh.offset ?? [0, 0, 0],
         yawOffset: mesh.yawOffset ?? 0,
@@ -541,13 +548,15 @@ export function computeLandscapeSplineMeshInstances(
           [dx / length, dy / length, dz / length],
           yawOffset,
           bank,
-          mesh.alignToTerrain === true && options.landscape
-            ? landscapeNormalAtLocal(options.landscape, (start[0] + end[0]) / 2, (start[2] + end[2]) / 2)
+          mesh.alignToTerrain === true && (options.normalAt || options.landscape)
+            ? options.normalAt?.((start[0] + end[0]) / 2, (start[2] + end[2]) / 2)
+              ?? landscapeNormalAtLocal(options.landscape!, (start[0] + end[0]) / 2, (start[2] + end[2]) / 2)
             : [0, 1, 0],
         );
         const fitScaleZ = fitToLength ? pieceLength / forwardLength! : 1;
         instances.push({
           assetId: mesh.assetId,
+          collision: mesh.collision !== false,
           position: [
             Number(((start[0] + end[0]) / 2 + offset[0]).toFixed(3)),
             Number(((start[1] + end[1]) / 2 + offset[1]).toFixed(3)),

@@ -425,6 +425,9 @@ if (forgePuddle > 0.0) {
 }
 #endif
 ${TERRAIN_WATER_REFLECTION}
+// A restrained muddy crest remains readable under a vehicle's dark reflection.
+// Its mask uses the calm surface; animated normals never move the shoreline.
+outgoingLight += vec3(0.50, 0.44, 0.32) * forgeWaterCrest * forgePuddle;
 `;
 
 /**

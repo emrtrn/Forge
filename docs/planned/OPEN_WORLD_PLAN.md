@@ -2233,13 +2233,22 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       8 yeni regresyon, tam `build:verify` (1.925 engine kontrolü) ve nehirli
       migrasyon/Save/Reload/Play Chromium smoke'u (2/2) geçti. Çok-tile editör
       bağlantısı (8A3), yol çıktısı (8A4), nehir aktarımı (8A5) ve bunların
-      görsel/performans kabulü açık.
+      görsel/performans kabulü 8A2 sonunda açıktı.
       **8A3 devir (2026-10-26):** Çok-tile spline editör kodu eklendi; son
       tarayıcı kabulü tamamlanmadı. Kullanıcı isteğiyle commit/push noktasında
       sonlandırıldı; detay ve devam adımları alt plan §11.7'dedir. Koordinat, kimlik,
       eksik tile ve undo sözleşmesi ile 8A0–8A5
       iş sırası [Water Body alt planı §11](WORLD_TERRAIN_WATER_BODY_PLAN.md#11-uygulama-başlangıcı--2026-10-25)
       içinde kayıtlıdır. Bu ana madde uçtan uca aktarım kabulüne kadar açık kalır.
+      **8A3 + 8A4 tamam (2026-10-26):** Çok-tile Draw/Edit/gizmo/snap,
+      deform/boya undo/redo ve Save/Reload; dünya spline yol mesh'i, kesin
+      terrain normal hizalaması ve çizim geometrisinden runtime çarpışması.
+      Yoğun düzenlemelerde manuel Save'i bekleten autosave kuyruğu, çalışan
+      snapshot + tek bekleyen son snapshot olarak birleştirildi. Yedi yeni
+      motor regresyonu ve tam `build:verify` (1.946 kontrol), son çok-tile
+      Chromium kabulü (4/4) geçti; görüntüler incelendi. Nehir aktarımı (8A5),
+      yol geometri/collider streaming'i ve büyük dünya performans kabulü açık.
+      Ayrıntılar ve kanıtlar alt plan §11.8'de.
 - [ ] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
       prosedürel çim maddesi bittikten sonra 1×1 de çok-tile ile aynı yoldan
       (`terrainEdit.ts`, `worldTerrainActor.ts`) düzenlenir;

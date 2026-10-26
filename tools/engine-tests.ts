@@ -3,6 +3,7 @@ import { registerTerrainErosionTests } from "../tests/engine/terrainErosion.test
 import { registerTerrainSplineTests } from "../tests/engine/terrainSplines.test";
 import { registerTerrainSplineDataTests, registerTerrainSplineDataAsyncTests } from "../tests/engine/terrainSplineData.test";
 import { registerTerrainSplineEditingTests } from "../tests/engine/terrainSplineEditing.test";
+import { registerTerrainSplineMeshTests } from "../tests/engine/terrainSplineMeshes.test";
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
 import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
@@ -1245,6 +1246,7 @@ registerTerrainSplineTests(check);
 registerTerrainSplineDataTests(check);
 await registerTerrainSplineDataAsyncTests(checkAsync);
 await registerTerrainSplineEditingTests(check, checkAsync);
+await registerTerrainSplineMeshTests(checkAsync);
 registerTerrainImportTests(check);
 registerStreamingPolicyTests(check);
 await registerWorldStreamingTests(check, checkAsync);

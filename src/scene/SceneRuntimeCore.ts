@@ -77,6 +77,7 @@ import {
   type SplineGeneratorRegistry,
 } from "@engine/scene/splineGenerator";
 import { cloneSplineActor } from "@engine/scene/splineActor";
+import type { TerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
 import { buildSplineDeformMeshGroup } from "@engine/render-three/splineDeformMesh";
 import { buildSplineCurveCache } from "@engine/scene/splineCurve";
 import type { Entity } from "@engine/scene/entity";
@@ -529,7 +530,7 @@ export function disposeSplineGeneratedGroup(group: Group): void {
  * referenced assets are loaded). Assets absent from `models` are skipped.
  */
 export function buildLandscapeSplineMeshGroup(options: {
-  data: ForgeLandscapeData;
+  data: ForgeLandscapeData | TerrainSplineMeshSource;
   models: ReadonlyMap<string, GLTF>;
   castShadow: boolean;
   receiveShadow: boolean;
@@ -542,7 +543,7 @@ export function buildLandscapeSplineMeshGroup(options: {
    */
   applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
 }): { group: Group; meshes: InstancedMesh[] } | null {
-  const itemsByAsset = new Map<string, InstanceRenderItem[]>();
+  const itemsByAsset = new Map<string, { assetId: string; collision: boolean; items: InstanceRenderItem[] }>();
   const deformChains: LandscapeSplineMeshChain[] = [];
   const meshForwardLengths = new Map<string, number>();
   for (const [assetId, gltf] of options.models) {
@@ -552,10 +553,14 @@ export function buildLandscapeSplineMeshGroup(options: {
     if (length > 1e-6) meshForwardLengths.set(assetId, length);
   }
   for (const spline of options.data.splines ?? []) {
+    if (spline.hidden) continue;
     deformChains.push(...resolveLandscapeSplineMeshChains(spline, spline.smooth ? 32 : 1));
-    for (const instance of computeLandscapeSplineMeshInstances(spline, { landscape: options.data, meshForwardLengths })) {
-      const list = itemsByAsset.get(instance.assetId) ?? [];
-      list.push({
+    for (const instance of computeLandscapeSplineMeshInstances(spline, {
+      ...("normalAt" in options.data ? { normalAt: options.data.normalAt } : { landscape: options.data }), meshForwardLengths,
+    })) {
+      const key = `${instance.assetId}:${instance.collision}`;
+      const batch = itemsByAsset.get(key) ?? { assetId: instance.assetId, collision: instance.collision, items: [] };
+      batch.items.push({
         matrix: new Matrix4().compose(
           new Vector3(...instance.position),
           new Quaternion(...instance.orientation),
@@ -563,7 +568,7 @@ export function buildLandscapeSplineMeshGroup(options: {
         ),
         hidden: false,
       });
-      itemsByAsset.set(instance.assetId, list);
+      itemsByAsset.set(key, batch);
     }
   }
   if (itemsByAsset.size === 0 && deformChains.length === 0) return null;
@@ -571,7 +576,7 @@ export function buildLandscapeSplineMeshGroup(options: {
   const group = new Group();
   group.name = "LandscapeSplineMeshes";
   const meshes: InstancedMesh[] = [];
-  for (const [assetId, items] of itemsByAsset) {
+  for (const { assetId, collision, items } of itemsByAsset.values()) {
     const gltf = options.models.get(assetId);
     if (!gltf) continue;
     const built = createInstancedModelGroup({
@@ -582,6 +587,7 @@ export function buildLandscapeSplineMeshGroup(options: {
       receiveShadow: options.receiveShadow,
     });
     options.applyMaterialSlots?.(assetId, built.group);
+    built.group.traverse((child) => { child.userData.splineCollision = collision; child.userData.landscapeSplineMesh = true; });
     group.add(built.group);
     meshes.push(...built.meshes);
   }
@@ -603,6 +609,10 @@ export function buildLandscapeSplineMeshGroup(options: {
     gltf.scene.traverse((object) => {
       if (!(object instanceof Mesh)) return;
       const geometries: BufferGeometry[] = [];
+      // A collision toggle must not split the visual chain's shared frames/UVs.
+      // Only mixed chains need a separate CPU triangle subset before welding.
+      const collisionSubset = chain.collision && chain.segments.some((segment) => !segment.collision)
+        ? { vertices: [] as Vec3[], indices: [] as number[] } : null;
       for (const segment of chain.segments) {
         const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
         const deformed = deformSplineMeshGeometry(geometry, {
@@ -620,6 +630,13 @@ export function buildLandscapeSplineMeshGroup(options: {
         // needed, avoiding a stale normal-map frame at a chain join.
         deformed.deleteAttribute("normal");
         deformed.deleteAttribute("tangent");
+        if (collisionSubset && segment.collision) {
+          const positions = deformed.getAttribute("position");
+          const base = collisionSubset.vertices.length;
+          for (let i = 0; i < positions.count; i++) collisionSubset.vertices.push([positions.getX(i), positions.getY(i), positions.getZ(i)]);
+          const indices = deformed.index;
+          for (let i = 0; i < (indices?.count ?? positions.count); i++) collisionSubset.indices.push(base + (indices ? indices.getX(i) : i));
+        }
         geometries.push(deformed);
       }
       const deformed = mergeAndWeldSplineGeometries(geometries);
@@ -632,6 +649,10 @@ export function buildLandscapeSplineMeshGroup(options: {
       mesh.castShadow = options.castShadow;
       mesh.receiveShadow = options.receiveShadow;
       mesh.userData.assetId = chain.assetId;
+      mesh.userData.splineCollision = chain.collision;
+      if (collisionSubset) mesh.userData.splineCollisionSubset = collisionSubset;
+      mesh.userData.landscapeSplineMesh = true;
+      mesh.userData.landscapeSplineGeometry = true;
       assetGroup!.add(mesh);
       primitiveIndex += 1;
     });
@@ -665,6 +686,11 @@ export function landscapeSplineMeshColliderPrimitive(
   const max: Vec3 = [-Infinity, -Infinity, -Infinity];
   const point = new Vector3();
   const instanceMatrix = new Matrix4();
+  const pushVertex = (point: Vector3): void => {
+    vertices.push([point.x, point.y, point.z]);
+    min[0] = Math.min(min[0], point.x); min[1] = Math.min(min[1], point.y); min[2] = Math.min(min[2], point.z);
+    max[0] = Math.max(max[0], point.x); max[1] = Math.max(max[1], point.y); max[2] = Math.max(max[2], point.z);
+  };
   const pushGeometry = (geometry: BufferGeometry, matrix: Matrix4 | null): void => {
     const position = geometry.getAttribute("position");
     if (!position) return;
@@ -672,9 +698,7 @@ export function landscapeSplineMeshColliderPrimitive(
     for (let index = 0; index < position.count; index += 1) {
       point.fromBufferAttribute(position, index);
       if (matrix) point.applyMatrix4(matrix);
-      vertices.push([point.x, point.y, point.z]);
-      min[0] = Math.min(min[0], point.x); min[1] = Math.min(min[1], point.y); min[2] = Math.min(min[2], point.z);
-      max[0] = Math.max(max[0], point.x); max[1] = Math.max(max[1], point.y); max[2] = Math.max(max[2], point.z);
+      pushVertex(point);
     }
     const source = geometry.index;
     const count = source ? source.count : position.count;
@@ -683,7 +707,14 @@ export function landscapeSplineMeshColliderPrimitive(
   group.traverse((child) => {
     if (!(child instanceof Mesh)) return;
     const assetId = child.userData.assetId;
-    if (typeof assetId !== "string" || !collidable(assetId)) return;
+    if (typeof assetId !== "string" || child.userData.splineCollision === false || !collidable(assetId)) return;
+    const subset = child.userData.splineCollisionSubset as { vertices: Vec3[]; indices: number[] } | undefined;
+    if (subset) {
+      const base = vertices.length;
+      for (const vertex of subset.vertices) pushVertex(point.set(...vertex));
+      for (const index of subset.indices) indices.push(base + index);
+      return;
+    }
     const instanced = child as Mesh & Partial<InstancedMesh>;
     if (instanced.isInstancedMesh) {
       for (let index = 0; index < instanced.count!; index += 1) {
@@ -702,6 +733,14 @@ export function landscapeSplineMeshColliderPrimitive(
     size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
     center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
   };
+}
+
+/** Dispose owned bent geometry; rigid instances and source materials are shared. */
+export function disposeLandscapeSplineMeshGroup(group: Group): void {
+  group.removeFromParent();
+  group.traverse((child) => {
+    if (child instanceof Mesh && child.userData.landscapeSplineGeometry) child.geometry.dispose();
+  });
 }
 
 export interface LandscapeSplineMeshDeformPath {
@@ -739,7 +778,7 @@ interface DeformPathSample {
 export function deformSplineMeshGeometry(
   geometry: BufferGeometry,
   path: LandscapeSplineMeshDeformPath,
-  landscape: ForgeLandscapeData,
+  landscape: ForgeLandscapeData | TerrainSplineMeshSource,
 ): BufferGeometry | null {
   const positions = geometry.getAttribute("position");
   if (!positions) return null;
@@ -907,7 +946,8 @@ function sampleDeformPathAtDistance(
   return null;
 }
 
-function terrainNormalAt(landscape: ForgeLandscapeData, x: number, z: number): Vector3 {
+function terrainNormalAt(landscape: ForgeLandscapeData | TerrainSplineMeshSource, x: number, z: number): Vector3 {
+  if ("normalAt" in landscape) return new Vector3(...landscape.normalAt(x, z));
   const step = Math.max(landscape.size.spacing, 0.001);
   return new Vector3(
     landscapeHeightAtLocal(landscape, x - step, z) - landscapeHeightAtLocal(landscape, x + step, z),

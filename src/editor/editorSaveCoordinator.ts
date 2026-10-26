@@ -128,6 +128,8 @@ export class EditorSaveSession {
    */
   private readonly unwrittenLandscapes = new WeakSet<ForgeLandscapeData>();
   private readonly queue = new EditorSaveCoordinator();
+  /** Calls waiting for the next snapshot share one operation; active saves never do. */
+  private queuedLayoutSave: { layout: EditorSaveSource["layout"]; operation: Promise<void> } | null = null;
   /**
    * The foliage cell files on disk (null: one sidecar, or none). A save
    * re-partitions when they do not match the level's partition settings, even
@@ -162,8 +164,22 @@ export class EditorSaveSession {
   }
 
   async saveLayout(): Promise<void> {
+    const layout = this.source().layout;
+    if (this.queuedLayoutSave?.layout === layout) return this.queuedLayoutSave.operation;
+    const queued = { layout, operation: Promise.resolve() };
+    this.queuedLayoutSave = queued;
+    queued.operation = this.writeLayout(() => {
+      if (this.queuedLayoutSave === queued) this.queuedLayoutSave = null;
+    });
+    return queued.operation;
+  }
+
+  private async writeLayout(started: () => void): Promise<void> {
     let result: LayoutSaveResult = {};
     await this.queue.save(() => {
+      // Clear before taking the snapshot: later edits need one more save, but
+      // every caller already queued for this turn observes the same result.
+      started();
       const source = this.source();
       // Capture the whole batch before awaiting the first response. Later edits
       // belong to a later save, even for sidecars not written yet.

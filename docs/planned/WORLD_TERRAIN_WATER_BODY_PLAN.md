@@ -1,7 +1,7 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
 Tarih: 2026-10-25  
-Durum: 8A0–8A2 tamamlandı. 8A3 editör kodu hazır; tarayıcı kabulü açık. Kullanıcı isteğiyle 2026-10-26 tarihinde bu noktada sonlandırıldı.
+Durum: 8A0–8A4 tamamlandı (2026-10-26). Çok-tile spline editörü ve yol mesh/çarpışması kabul edildi. Sonraki dilim 8A5 nehir aktarımıdır; Lake/Puddle/Ocean henüz uygulanmadı.
 Ana plan: [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md)
 
 ## 1. Amaç ve karar durumu
@@ -293,9 +293,9 @@ araçlarının ayrıntılı alt planıdır. Yukarıdaki ilk görüşme kaydı ta
   dikiş, eksik tile, delik, datum, yön kısıtları, undo/redo ve tile codec kontrolleri.
 - [x] **8A2 / veri:** Dünya spline şeması ve açık migrasyon; runtime/save ortak
   validator, 1×1 uyumluluk, save/reload; mevcut referansların korunması.
-- [ ] **8A3 / yol editörü:** Draw/Edit, kontrol noktası gizmo'su, terrain'e
+- [x] **8A3 / yol editörü:** Draw/Edit, kontrol noktası gizmo'su, terrain'e
   bağlama, tile yükleme/sabitleme, tek undo komutu ve kirli kayıt bağlantısı.
-- [ ] **8A4 / yol çıktısı:** Dünya spline mesh'i, terrain normal hizalaması,
+- [x] **8A4 / yol çıktısı:** Dünya spline mesh'i, terrain normal hizalaması,
   çarpışma ve tarayıcıda iki tile'ı geçen yol kabulü.
 - [ ] **8A5 / nehir:** Dünya koordinatlı nehir yatağı/yüzeyi, kesin derinlik,
   akış, sculpt sonrası güncelleme ve eksik tile davranışı; tarayıcı kabulü.
@@ -463,3 +463,98 @@ eşzamanlı yükte tamamla ve görüntüleri incele; gerekiyorsa bekleyen kayıt
 kök nedenini araştır. Sonra 8A3'ü kapat ve 8A4 yol mesh/çarpışmasına geç.
 Diğer oturumun terrain/water, renderer, fizik, kaynak sahne ve tile değişiklikleri
 bu oturumun commit kapsamına alınmaz. Codex Security taraması çalıştırılmadı.
+
+### 11.8. 8A3 kabulünün tamamlanması ve 8A4 uygulaması — 2026-10-26
+
+Kullanıcı 8A3'ün tamamlanmasını ve ardından 8A4'e devam edilmesini onayladı.
+
+**8A3 teşhisi:** Son iz kaydında uzak tile ret/retry ve bake başarılıydı;
+bekleme Save'in tanım yayımlama adımındaydı. Gerçek `/__save-terrain`, listelenen
+bütün tile dosyalarını sırayla okuyup doğrular. 144 tile'lı eski fixture'da bu
+iş, önceki adımlarla birlikte 240 saniyelik test sınırını aştı. Doğrulama
+gevşetilmedi ve endpoint taklit edilmedi. Fixture, gerçek 36-tile streaming
+eşiğini aşan 12×4 / 48 tile'a indirildi; aynı uzak koridor, 503 ret/retry ve
+gerçek Save/Reload korunuyor. Üç 8A3 senaryosu ayrı koşularda geçti.
+Toplu koşu ayrıca test yardımcısının önceki autosave yanıtını manuel Save'in
+yanıtı sanabildiğini gösterdi: dosya yazıları sürerken 10 saniyelik durum
+beklentisi doluyordu. Yardımcı artık gerçek yanıtla birlikte manuel Save
+düğmesinin yeniden etkinleşmesini, yani kendi kuyruklu işleminin tamamlanmasını
+bekler. Sabit gecikme veya sahte kayıt yanıtı eklenmedi.
+
+Sonraki koşuda bu doğru bekleme, gerçek bir kuyruk büyümesini de görünür kıldı:
+uzun Save sırasında her düzenleme yeni bir autosave ekliyordu; iz kaydında
+aynı layout/prune çiftinin art arda yazılması manuel Save'i 120 saniyeden fazla
+bekletti. `EditorSaveSession` artık aynı canlı layout için henüz snapshot'ı
+başlamamış talepleri tek işlemde birleştirir. Çalışan snapshot korunur;
+sonraki düzenlemeler en fazla bir bekleyen, en güncel snapshot'ta toplanır.
+Snapshot başladıktan sonraki düzenleme yeni bir sonraki kayıt ister. Ortak
+başarı/uyarı/hata sonucu paylaşılır; level nesnesi değişince talepler
+birleştirilmez. Doğrulama ve dosya sırası değişmez. Üç ek engine regresyonu
+49 düzenleme + manuel Save'i, ortak hatadan sonra retry'ı ve level değişimini
+kapsar. Bu kayıt akışı değişikliği için Codex Security diff incelemesi önerilir;
+kullanıcı scan onayı olmadan tarama çalıştırılmadı.
+
+**8A4 kodu:**
+
+- `terrainSplineMeshes.ts`, işaretli dünya spline'larını terrain merkezi
+  çevresindeki yerel üretim koordinatlarına çevirir. Büyük dünya konumu,
+  Float32 geometriye gömülmez; actor transform'u yalnız bir kez uygulanır.
+- Rigid instance ve kaynaklı deforme yol zincirleri ortak üreticiyi kullanır.
+  World Terrain hizalaması kesin `terrainFaceNormalAt` sorgusuna bağlıdır.
+  Gerekli normal tile'ları koridorla sınırlı, terrain başına en fazla dört eşzamanlı okumayla
+  hazırlanır. Bu geçici okumalar terrain streaming aktivasyonunu, collider
+  halkasını, undo pin'lerini veya kirli kayıt revizyonlarını değiştirmez.
+  Eksik dosya/hole için düz normal uydurulmaz.
+- Çok-tile Details'ta mesh seçimi, enable, spacing, yaw, bank, fit, normal
+  hizalaması, deform ve collision kontrolleri açıldı. Mesh seçilmeden ilgili
+  kontroller kapalıdır; None mesh verisini kaldırır. Boş asset kimliğinin
+  autosave'de 400 üretmesi ve Fit off→on değerinin takılı kalması düzeltildi.
+  Undo/redo ve mevcut kayıt şeması kullanılır; validator gevşetilmedi.
+- Editör, geç tamamlanan eski async üretimleri actor/build kimliğiyle eler;
+  terrain patch/undo/redo sonrasında normal hizalamasını yeniler. Ayrılan
+  deforme geometri serbest bırakılır; ortak kaynak GLTF geometri/materyalleri
+  editör yeniden üretiminde dispose edilmez.
+- Runtime, legacy ve World Terrain kaynaklarını actor ile birlikte taşır;
+  karışık sahnede sıkıştırılmış veri dizisinin yanlış actor indeksini
+  kullanması giderildi. Yol collider'ı çizim geometrisinden üretilir ve World
+  Terrain tanımının merkezinde yerleşir. Actor/asset/segment collision
+  kapatmaları korunur. Segment collision değişikliği görsel zinciri,
+  ortak uç çerçevesini veya UV fazını bölmez; yalnız çarpışma üçgenlerini süzer.
+
+**Kabul sınırı:** Bu dilim yol geometri/collider streaming'i veya büyük dünya
+performans kabulü sağlamaz. Yol çıktısı runtime açılışında hazırlanır; geçici
+normal verisi yalnız üretim sırasında tutulur. Tanım Save'i bütün tile
+dosyalarını doğrulamayı sürdürür; büyük terrain'lerdeki disk maliyeti bu
+dilimde optimize edilmedi. Mevcut Landscape'i genişletme
+aracı spline migrasyonunu hâlâ engeller; bunun uyarısı yeni mesh desteğiyle
+çelişmeyecek şekilde düzeltildi. Çok-tile River Water, nehir yatağı/yüzeyi/akışı
+8A5 olarak; Lake/Puddle/Ocean sonraki W dilimleri olarak açık kalır.
+
+**Doğrulama:** Dört yeni engine regresyonu; büyük origin, seam kaynağı, normal
+hizalaması, eksik tile/hole, geçici okuma, rigid/deform collision filtreleri,
+collision değişirken aynı görsel geometri/UV ve gerçek Rapier/render yüzey
+eşleşmesini kapsar. Ayrı 8A4 Chromium koşusunda mesh kontrolleri, None/undo,
+lock/unlock, Save/Reload ve runtime yüzey eşleşmesi geçti. Ana TypeScript,
+smoke tip kontrolü ve yeni engine dosyasının ayrı TypeScript kontrolü geçti.
+Son kayıt kuyruğu düzeltmesiyle tam `build:verify` **1.946 engine kontrolü**,
+üretim derlemesi, strict dist ve world-data dahil geçti. Bu kapı, diğer
+oturumun mevcut değişikliklerini de içeren paylaşılan çalışma ağacına aittir.
+`terrain-spline-editor.spec.ts` son kodla tek worker'da **4/4 geçti (9,9 dakika)**:
+üç 8A3 senaryosu ve karışık legacy/World Terrain sahneli 8A4 akışı. Önceki
+başarısız koşular kabul olarak sayılmaz. Editör/rigid yol ve 1440×900,
+1100×720 runtime görüntüleri incelendi; dikiş kopması, çift konum ofseti veya
+beklenmeyen tarayıcı hatası görülmedi. Runtime'da sınırın iki yanındaki dört
+probe'da çizim ve Rapier yüzeyi arasındaki en büyük fark yaklaşık 0,0000011 m
+oldu; test toleransı 0,01 m'dir. Bu görüntü/uyum kabulü performans kabulü değildir.
+
+Kanıtlar: `.dev-server/spline-completed.log`,
+`.dev-server/spline-completed-results/`,
+`.dev-server/spline-final-build-verify.log`. Eski tek-tile bake ve asfalt zincir
+regresyonları da son kayıt koduyla **2/2 geçti (2,2 dakika)**; kanıtlar
+`.dev-server/spline-legacy-final.log` ve `.dev-server/spline-legacy-final-results/`
+içindedir. Kaynak sahne/tile dosyaları değiştirilmedi; diğer oturumun
+terrain/water çalışmasına müdahale edilmedi. Bu oturumda commit/push yapılmadı.
+
+**Devam noktası: 8A5.** Dünya koordinatlı nehir yatağı/yüzeyi, kesin derinlik ve
+akış; sculpt sonrası güncelleme ve eksik tile davranışı. Göl aracına geçmeden
+önce W0-Lake kararları ayrıca kesinleştirilecektir.

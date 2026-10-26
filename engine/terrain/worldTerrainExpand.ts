@@ -33,7 +33,7 @@ export function worldTerrainExpandProblems(
   if (![65, 129, 257].includes(verticesX) || ![65, 129, 257].includes(verticesZ)) {
     problems.push("Landscape must have 64, 128 or 256 quads per side (65, 129 or 257 vertices).");
   }
-  if (data.splines?.length) problems.push("Remove Landscape splines first: spline mesh output is not available on multi-tile terrain yet.");
+  if (data.splines?.length) problems.push("Remove Landscape splines first: expansion does not migrate existing splines yet.");
   if (rivers.some((water) => water.landscapeRef === actor.id)) problems.push("Remove River Water bodies first: local-frame water is not drawn on multi-tile terrain yet.");
   if (!(spacing >= 0.01 && spacing <= 100) || !Number.isFinite(heightScale) || !actor.position.every(Number.isFinite)) {
     problems.push("Landscape spacing, height scale and actor position must be valid finite terrain values.");

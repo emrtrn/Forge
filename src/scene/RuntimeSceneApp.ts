@@ -273,8 +273,11 @@ import {
 } from "@engine/render-three/landscape";
 import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
+import { validateTerrainTile } from "@engine/terrain/terrainLoader";
+import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
+import { terrainTilePath } from "@engine/terrain/terrainTypes";
 import {
-  landscapeColliderActorId, worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues,
+  landscapeColliderActorId, worldTerrainActorPosition, worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues,
 } from "@engine/terrain/worldTerrainActor";
 import {
   createTerrainSurfaceProvider, landscapeSurfaceSource, TerrainSurfaceSampler, worldTerrainSurfaceSource,
@@ -5864,7 +5867,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
-    const datas: ForgeLandscapeData[] = [];
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
@@ -5874,7 +5876,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         continue;
       }
       const data = loaded.data;
-      datas.push(data);
       // River Water resolves its shape from a Landscape spline, so the data has
       // to outlive this pass rather than being re-fetched per water body.
       this.landscapeDataById.set(actor.id, data);
@@ -5891,7 +5892,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.addColliderDebugWire(colliderEntity);
       }
     }
-    await this.buildRuntimeLandscapeSplineMeshes(datas);
+    await this.buildRuntimeLandscapeSplineMeshes();
   }
 
   /** One multi-tile World Terrain: drawn from its tiles, one static heightfield collider per tile. */
@@ -5901,7 +5902,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const surface = worldTerrainSurfaceSource(document);
     if (surface) this.terrainSurfaceSamplers.set(actor.id, new TerrainSurfaceSampler(surface));
     for (const issue of worldTerrainPlacementIssues(actor, def)) console.warn(`[terrain] ${actor.id}: ${issue}`);
-    if (def.splines?.length) console.warn(`[terrain] ${actor.id}: splines are not drawn on a multi-tile World Terrain yet`);
     const resolved = resolveLandscape(actor);
     const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(def.layers, worldTerrainExtent(def)[0]);
     const object = createWorldTerrainObject({
@@ -6147,9 +6147,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /** Loads spline mesh assets (Faz 6) and parents their instanced groups under each landscape. */
-  private async buildRuntimeLandscapeSplineMeshes(datas: readonly ForgeLandscapeData[]): Promise<void> {
+  private async buildRuntimeLandscapeSplineMeshes(): Promise<void> {
+    const sources = await Promise.all((this.layout?.landscapes ?? []).map(async (actor, index) => {
+      const document = this.worldTerrainDocuments.get(actor.id);
+      const data = document ? await prepareTerrainSplineMeshSource(document, async (key) => {
+        const path = terrainTilePath(actor.dataRef, key);
+        const response = await fetch(projectFileUrl(path));
+        if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+        return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+      }) : this.landscapeDataById.get(actor.id);
+      return { actor, object: this.landscapeObjects[index], data };
+    }));
     const splineAssetIds = new Set<string>();
-    for (const data of datas) {
+    for (const { data } of sources) {
+      if (!data) continue;
       for (const assetId of landscapeSplineMeshAssetIds(data)) splineAssetIds.add(assetId);
     }
     if (splineAssetIds.size === 0) return;
@@ -6178,9 +6189,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         }),
       );
     }
-    datas.forEach((data, index) => {
-      const object = this.landscapeObjects[index];
-      if (!object) return;
+    for (const { actor, data, object } of sources) {
+      if (!object || !data) continue;
       const built = buildLandscapeSplineMeshGroup({
         data,
         models: this.models,
@@ -6193,15 +6203,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           }
         },
       });
-      if (!built) return;
+      if (!built) continue;
       object.add(built.group);
-      const actor = this.layout?.landscapes?.[index];
-      const colliderEntity = actor ? this.landscapeSplineColliderEntity(actor, data, built.group, manifest) : null;
+      const colliderEntity = this.landscapeSplineColliderEntity(actor, built.group, manifest);
       if (colliderEntity) {
         this.landscapeColliderEntities.push(colliderEntity);
         this.addColliderDebugWire(colliderEntity);
       }
-    });
+    }
   }
 
   /**
@@ -6211,11 +6220,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private landscapeSplineColliderEntity(
     actor: LayoutLandscape,
-    data: ForgeLandscapeData,
     group: Group,
     manifest: AssetManifest | null,
   ): Entity | null {
-    const item = this.landscapeItem(actor, data);
+    const item = resolveLandscape(actor);
     if (!item.collision) return null;
     const primitive = landscapeSplineMeshColliderPrimitive(group, (assetId) =>
       manifest?.assets.find((entry) => entry.id === assetId)?.runtime.collision !== false);
@@ -6234,8 +6242,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       name: `${item.name} Spline Mesh Collider`,
       components: {
         [TRANSFORM_COMPONENT]: {
-          position: [...actor.position] as [number, number, number],
-          rotation: [...item.rotation] as [number, number, number],
+          position: this.worldTerrainDocuments.has(actor.id)
+            ? worldTerrainActorPosition(this.worldTerrainDocuments.get(actor.id)!.def) : [...actor.position] as Vec3,
+          rotation: this.worldTerrainDocuments.has(actor.id) ? [0, 0, 0] : readRotation(actor),
           scale: [1, 1, 1],
         },
         [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,

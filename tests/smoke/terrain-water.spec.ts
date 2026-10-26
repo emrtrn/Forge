@@ -16,6 +16,11 @@ test("physics wheelspin excites water without wheel rotation, stays inside its p
   const moving = await page.evaluate(() => (window as any).__wetMudQa.waveEnergy());
   const waves = await page.evaluate(() => (window as any).__wetMudQa.waveSamples());
   const movingProfile = await page.evaluate(() => (window as any).__wetMudQa.profile());
+  await page.evaluate(() => (window as any).__wetMudQa.rippleAppearance(false));
+  await page.screenshot({ path: info.outputPath("terrain-water-without-wavefronts.png") });
+  const appearance = await page.evaluate(() => (window as any).__wetMudQa.rippleAppearance(true));
+  expect(appearance.changed).toBeGreaterThan(100);
+  expect(appearance.maxDifference).toBeGreaterThan(35);
   expect(moving).toBeGreaterThan(calm + 100);
   expect(waves.left).toBeGreaterThan(0.001);
   expect(waves.right).toBe(0);
@@ -30,7 +35,7 @@ test("physics wheelspin excites water without wheel rotation, stays inside its p
   const settled = await page.evaluate(() => (window as any).__wetMudQa.waveEnergy());
   expect(settled).toBeLessThan(moving * 0.3);
   await page.screenshot({ path: info.outputPath("terrain-water-physics-slip-settled.png") });
-  await writeFile(info.outputPath("terrain-water-physics-slip.json"), JSON.stringify({ calm, moving, settled, waves, shifted, calmProfile, movingProfile }, null, 2));
+  await writeFile(info.outputPath("terrain-water-physics-slip.json"), JSON.stringify({ calm, moving, settled, waves, shifted, appearance, calmProfile, movingProfile }, null, 2));
   expect(errors).toEqual([]);
 });
 

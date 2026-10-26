@@ -291,6 +291,10 @@ export function disposeLandscapeObject(object: LandscapeObject): void {
   landscapeTerrain(object)?.dispose();
   object.traverse((child) => {
     if (terrainRendererOf(child) || !(child instanceof Mesh)) return;
+    if (child.userData.landscapeSplineMesh) {
+      if (child.userData.landscapeSplineGeometry) child.geometry.dispose();
+      return;
+    }
     child.geometry.dispose();
     for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
       if (disposedMaterials.has(material)) continue;

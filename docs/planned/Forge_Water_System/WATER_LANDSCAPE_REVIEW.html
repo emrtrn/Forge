@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LandscapeTest · Su incelemesi</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101820;color:#e6edf2;font:16px/1.6 system-ui,sans-serif}main{max-width:1280px;margin:auto;padding:32px 24px 56px}h1{font-size:clamp(26px,4vw,42px);line-height:1.2;margin:8px 0 16px}h2{font-size:21px;margin-top:32px}.eyebrow{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#8dc8c3}.intro{max-width:850px;color:#b7c8d3}.status{display:inline-block;padding:5px 11px;background:#403528;border:1px solid #aa8650;border-radius:5px;color:#ffe0a3;font-size:13px}a{color:#8fd5d0}.toolbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:24px 0 14px}label{display:flex;gap:10px;align-items:center}select,button{font:inherit;background:#1c2a36;color:#e6edf2;border:1px solid #456071;border-radius:5px;padding:8px 11px}button{cursor:pointer}button:hover{background:#2b424e}.comparison{position:relative;overflow:hidden;border:1px solid #456071;border-radius:8px;background:#070c10}.comparison img{display:block;width:100%;height:auto}.comparison .after{position:absolute;inset:0;clip-path:inset(0 50% 0 0)}.divider{position:absolute;inset:0 auto 0 50%;width:2px;background:#ecf5ff;box-shadow:0 0 0 1px #17212b}.caption{position:absolute;top:14px;padding:4px 10px;border-radius:4px;font-size:13px;background:#101820d9}.left{left:14px}.right{right:14px}.scrub{width:100%;margin:14px 0;accent-color:#8fd5d0}.note{padding:14px 18px;background:#1b2a34;border-left:3px solid #8fd5d0;color:#d4e1e8}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{padding:20px;background:#192630;border:1px solid #334b5c;border-radius:7px}.card h2{margin-top:0}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:9px 12px;text-align:left;border-bottom:1px solid #334b5c}th{color:#9fbbc9}.small{font-size:13px;color:#a9bdca}ul{padding-left:22px}footer{margin-top:32px;color:#9aafbd;font-size:13px}@media(max-width:760px){main{padding:24px 14px}.grid{grid-template-columns:1fr}.toolbar{gap:8px}label{flex-wrap:wrap}select{max-width:100%}.caption{top:8px;font-size:11px}.left{left:8px}.right{right:8px}th,td{padding:8px 5px;font-size:12px}}
+</style></head>
+<body><main>
+<div class="eyebrow">Forge · 26 Ekim 2026 · RTX 3060</div>
+<h1>LandscapeTest su incelemesi</h1>
+<span class="status">Karar: görsel revizyon gerekli</span>
+<p class="intro">Nehir prototipi sığ kenarı yumuşatıyor ve üstten bakıştaki aşırı yansımayı azaltıyor. Doğal su hissi için eğimli nehrin yansıma yolu ve gölün optiği üzerinde çalışma gerekiyor. Aşağıdaki görüntüler aynı sahne, kamera ve ışıkta alındı.</p>
+<div class="toolbar">
+ <label>Kadraj <select id="view">
+  <option value="river-bank">Nehir — kıyıdan</option><option value="river-upper">Nehir — üst bölüm</option>
+  <option value="river-flat">Nehir — alt bölüm</option><option value="river-top">Nehir — üstten</option>
+  <option value="lake-overview">Göl — genel</option><option value="lake-shore">Göl — kıyıdan</option><option value="lake-top">Göl — üstten</option>
+ </select></label>
+ <button id="before">Önceki görüntü</button><button id="split">Karşılaştır</button><button id="after">Güncel görüntü</button>
+</div>
+<div class="comparison">
+ <img id="old-image" alt="Önceki nehir shader görüntüsü">
+ <img id="new-image" class="after" alt="Nehir prototipi görüntüsü">
+ <div class="divider"></div><span id="left-label" class="caption left">Prototip</span><span id="right-label" class="caption right">Önceki nehir</span>
+</div>
+<input id="slider" class="scrub" type="range" min="0" max="100" value="50" aria-label="Görüntü karşılaştırma sınırı">
+<div id="note" class="note"></div>
+<p class="small">Nehir: önceki shader ile prototip. Göl: su kapalı ile mevcut göl; bu çalışmada göl shader’ı değiştirilmedi. PNG’lere renk veya ışık düzeltmesi uygulanmadı.</p>
+<div class="grid">
+ <section class="card"><h2>Görsel değerlendirmem</h2><ul>
+  <li>Sığ kenar geçişi daha yumuşak; derin su hâlâ koyu ve tek renkli okunuyor.</li>
+  <li>Nehirde 47 metre kot farkı var. Tek yatay yansıma düzlemi, nehir boyunca kamera hareketine uygun çalışmıyor.</li>
+  <li>Gölün sınırı terrain’e oturuyor; sığ dip ve açıya bağlı yansıma ipuçları zayıf kalıyor.</li>
+ </ul></section>
+ <section class="card"><h2>Gerçek GPU ölçümü</h2><p>Chrome / Direct3D 11, 1280×748 canvas, DPR 1. Sahnenin mevcut postprocess ve ışıkları açık.</p>
+ <div id="metrics"><table><thead><tr><th>Göl kadrajı</th><th>GPU p50</th><th>GPU p95</th></tr></thead><tbody>
+ <tr><td>Su kapalı</td><td>5,46–5,48 ms</td><td>6,24–7,03 ms</td></tr>
+ <tr><td>Yansıma kapalı</td><td>5,48 ms</td><td>6,13–6,26 ms</td></tr>
+ <tr><td>Medium</td><td>7,92–8,47 ms</td><td>10,10–12,56 ms</td></tr>
+ <tr><td>High</td><td>10,92–11,83 ms</td><td>19,85–20,91 ms</td></tr>
+ </tbody></table></div>
+ <p class="small">Değerler toplam kare GPU süresidir. İki tur, koşul başına 120 örnek; kesin FPS veya tüm donanımlar için performans garantisi değildir.</p></section>
+</div>
+<h2>Önerdiğim sonraki düzeltme</h2>
+<p>Eğimli nehirde tek yatay planar yansıma yerine uygun çevre yansıması fallback’ini kurmak; yatay gölde bütçeli planar yansımayı korumak. Ardından aynı kadrajlarda renk ve dip görünürlüğünü yeniden değerlendirmek.</p>
+<footer><a href="WATER_LANDSCAPE_REVIEW.md">Teknik rapor</a> · <a href="evidence/landscape-review/review.json">Ölçüm ve kamera kayıtları</a></footer>
+</main>
+<script>
+const path='evidence/landscape-review/';
+const notes={
+ 'river-bank':'Kıyı kamerasında önceki güçlü yansıma azalıyor. Ancak kamera nehrin yatay reflection düzleminin altına indiğinde capture yenilenmiyor; bu yüzden bu kadraj nihai yansıma kabulü değildir.',
+ 'river-upper':'Aynı ışıkta değişim sınırlı. Kıyı daha yumuşak; derin su yüzeyinin koyuluğu ve akış karakteri hâlâ iyileştirilmeli.',
+ 'river-flat':'Öndeki arazi engeli kaldırılmış kadraj. Kaya/su birleşimi ve sığ geçiş burada incelenebilir.',
+ 'river-top':'Üstten görünümde şerit kenarına zorlanan açık renk azalıyor; gerçek yatak derinliğine bağlı geçiş korunuyor.',
+ 'lake-overview':'Mevcut göl shader’ı değişmedi. Genel sahneyle uyumlu sınır var; açıya bağlı yansıma ve sığ dip okuması zayıf.',
+ 'lake-shore':'Göl kıyısının yakın görünümü. Sol tarafta mevcut göl, sağ tarafta su kapalı referans görüntüsü bulunur.',
+ 'lake-top':'Mevcut gölün havza sınırı. Sadece 0–0,76 metre derinliğe rağmen suyun büyük bölümü opak görünüyor.'
+};
+const slider=document.querySelector('#slider');
+function scrub(value){slider.value=String(value);document.querySelector('.after').style.clipPath=`inset(0 ${100-value}% 0 0)`;document.querySelector('.divider').style.left=value+'%';document.querySelector('.divider').style.display=value===0||value===100?'none':'block';document.querySelector('#left-label').style.display=value===0?'none':'block';document.querySelector('#right-label').style.display=value===100?'none':'block';}
+function change(){const v=document.querySelector('#view').value,lake=v.startsWith('lake');document.querySelector('#old-image').src=path+v+(lake?'-off.png':'-before.png');document.querySelector('#new-image').src=path+v+'-after.png';document.querySelector('#left-label').textContent=lake?'Mevcut göl':'Prototip';document.querySelector('#right-label').textContent=lake?'Su kapalı':'Önceki nehir';document.querySelector('#old-image').alt=lake?'Su kapalı referans':'Önceki nehir shader görüntüsü';document.querySelector('#new-image').alt=lake?'Mevcut göl görüntüsü':'Nehir prototipi görüntüsü';document.querySelector('#before').textContent=lake?'Su kapalı':'Önceki görüntü';document.querySelector('#after').textContent=lake?'Mevcut göl':'Prototip';document.querySelector('#note').textContent=notes[v];scrub(50);}
+slider.addEventListener('input',()=>scrub(Number(slider.value)));document.querySelector('#view').addEventListener('change',change);document.querySelector('#before').addEventListener('click',()=>scrub(0));document.querySelector('#split').addEventListener('click',()=>scrub(50));document.querySelector('#after').addEventListener('click',()=>scrub(100));change();
+</script></body></html>

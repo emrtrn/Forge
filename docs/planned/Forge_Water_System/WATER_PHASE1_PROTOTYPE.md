@@ -1,5 +1,7 @@
 # Forge Water — ilk nehir optik prototipi
 
+Sonraki çalışma: [LandscapeTest gerçek sahne/GPU incelemesi](WATER_LANDSCAPE_REVIEW.md) tamamlandı; [kaydırmalı görüntü karşılaştırması](WATER_LANDSCAPE_REVIEW.html). Aşağıdaki kayıt ilk prototip oturumunun sonuçlarını korur.
+
 Tarih: 26 Ekim 2026. Başlangıç: `main`, HEAD `6486120bb178e3bf98871c8aa8912c2826354ca2`.
 Kullanıcının “Önerilen ilk adımla başla” talebiyle kontrollü test sahnesi ve sınırlı nehir shader prototipi uygulandı. Bu, bütün Water v2 sisteminin veya Faz 1'in nihai görsel/performance kabulü değildir.
 

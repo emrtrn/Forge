@@ -1,0 +1,128 @@
+[
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.level.json",
+    "snapshot": "4ea3ad695afd84ab8c1160f1f9657a3ef1992180188924a4702058a6c045f591",
+    "current": "4ea3ad695afd84ab8c1160f1f9657a3ef1992180188924a4702058a6c045f591",
+    "currentEnd": "4ea3ad695afd84ab8c1160f1f9657a3ef1992180188924a4702058a6c045f591"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.foliage.json",
+    "snapshot": "dc6478112fd977a2b4215bea5ebdd40d19bd9106ed6829798f967953930b02df",
+    "current": "dc6478112fd977a2b4215bea5ebdd40d19bd9106ed6829798f967953930b02df",
+    "currentEnd": "dc6478112fd977a2b4215bea5ebdd40d19bd9106ed6829798f967953930b02df"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.meshpaint.json",
+    "snapshot": "9753d1d54dbcfe96d912943ab2149c9a5130f336abe31cf165bbd3c45e31925c",
+    "current": "9753d1d54dbcfe96d912943ab2149c9a5130f336abe31cf165bbd3c45e31925c",
+    "currentEnd": "9753d1d54dbcfe96d912943ab2149c9a5130f336abe31cf165bbd3c45e31925c"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json",
+    "snapshot": "4963c82ad555686c9efdbb4848f517357de4fe8ed5229ab4b97540fa02508838",
+    "current": "4963c82ad555686c9efdbb4848f517357de4fe8ed5229ab4b97540fa02508838",
+    "currentEnd": "4963c82ad555686c9efdbb4848f517357de4fe8ed5229ab4b97540fa02508838"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.global.bin",
+    "snapshot": "59c81f3ff9636958894678b22f3333eda6aae1a23a5cb5627e9cac4c5fc207d9",
+    "current": "59c81f3ff9636958894678b22f3333eda6aae1a23a5cb5627e9cac4c5fc207d9",
+    "currentEnd": "59c81f3ff9636958894678b22f3333eda6aae1a23a5cb5627e9cac4c5fc207d9"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_0.tile.bin",
+    "snapshot": "2a734e2112c4e765db1fcbc9a9c8a3398e581eaafb8bd583b60acffc6d2b55bc",
+    "current": "2a734e2112c4e765db1fcbc9a9c8a3398e581eaafb8bd583b60acffc6d2b55bc",
+    "currentEnd": "2a734e2112c4e765db1fcbc9a9c8a3398e581eaafb8bd583b60acffc6d2b55bc"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_1.tile.bin",
+    "snapshot": "28ae36754a2ee2647bb1d615c886ccff123db14609eab8ce4adf678aa29c8233",
+    "current": "28ae36754a2ee2647bb1d615c886ccff123db14609eab8ce4adf678aa29c8233",
+    "currentEnd": "28ae36754a2ee2647bb1d615c886ccff123db14609eab8ce4adf678aa29c8233"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_2.tile.bin",
+    "snapshot": "07b3b9a7df7c895cac981d714410cfbdc2cac335cdbd7618a3285bb3c5f5d6a6",
+    "current": "07b3b9a7df7c895cac981d714410cfbdc2cac335cdbd7618a3285bb3c5f5d6a6",
+    "currentEnd": "07b3b9a7df7c895cac981d714410cfbdc2cac335cdbd7618a3285bb3c5f5d6a6"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/0_3.tile.bin",
+    "snapshot": "82a2011d60565c986affd498efea24dd69f3b2b2bffa3dd0332f5e38f48b69a9",
+    "current": "82a2011d60565c986affd498efea24dd69f3b2b2bffa3dd0332f5e38f48b69a9",
+    "currentEnd": "82a2011d60565c986affd498efea24dd69f3b2b2bffa3dd0332f5e38f48b69a9"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_0.tile.bin",
+    "snapshot": "b09364c22d85d8b6299c3a7e00c31420587fd67a68aee95143ae2985fbd6212a",
+    "current": "b09364c22d85d8b6299c3a7e00c31420587fd67a68aee95143ae2985fbd6212a",
+    "currentEnd": "b09364c22d85d8b6299c3a7e00c31420587fd67a68aee95143ae2985fbd6212a"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_1.tile.bin",
+    "snapshot": "e3c47c6fa52f0aa4e27ef6d5fa3f965bea4ad9aade44d736dd8ccd30c9e57270",
+    "current": "e3c47c6fa52f0aa4e27ef6d5fa3f965bea4ad9aade44d736dd8ccd30c9e57270",
+    "currentEnd": "e3c47c6fa52f0aa4e27ef6d5fa3f965bea4ad9aade44d736dd8ccd30c9e57270"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_2.tile.bin",
+    "snapshot": "4e2443ad172f9a9147ce0d99164fa64caf669f2056f01e04f08b2d98ff0bb27b",
+    "current": "4e2443ad172f9a9147ce0d99164fa64caf669f2056f01e04f08b2d98ff0bb27b",
+    "currentEnd": "4e2443ad172f9a9147ce0d99164fa64caf669f2056f01e04f08b2d98ff0bb27b"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/1_3.tile.bin",
+    "snapshot": "78a6933c80ed54bf455dc72f0acba55938fe9710600cf9c663725d681f5d2fa3",
+    "current": "78a6933c80ed54bf455dc72f0acba55938fe9710600cf9c663725d681f5d2fa3",
+    "currentEnd": "78a6933c80ed54bf455dc72f0acba55938fe9710600cf9c663725d681f5d2fa3"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_0.tile.bin",
+    "snapshot": "862b4cb2d3b90c5c9099c0768927237e196a1bd8f39780c7d1118b3d48023e38",
+    "current": "862b4cb2d3b90c5c9099c0768927237e196a1bd8f39780c7d1118b3d48023e38",
+    "currentEnd": "862b4cb2d3b90c5c9099c0768927237e196a1bd8f39780c7d1118b3d48023e38"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_1.tile.bin",
+    "snapshot": "da52bab721b9fab111e4b9e0e7a2db5c793fbb328701b9a3612216892e91deac",
+    "current": "da52bab721b9fab111e4b9e0e7a2db5c793fbb328701b9a3612216892e91deac",
+    "currentEnd": "da52bab721b9fab111e4b9e0e7a2db5c793fbb328701b9a3612216892e91deac"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_2.tile.bin",
+    "snapshot": "bebcc369537419307149f04433b92ca4f07edc4f773e0da5e83dda3a87536b74",
+    "current": "bebcc369537419307149f04433b92ca4f07edc4f773e0da5e83dda3a87536b74",
+    "currentEnd": "bebcc369537419307149f04433b92ca4f07edc4f773e0da5e83dda3a87536b74"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/2_3.tile.bin",
+    "snapshot": "5694d76f4830122a50475d5303245e3897c5454f1f6ff6880b52f0482ca9843d",
+    "current": "5694d76f4830122a50475d5303245e3897c5454f1f6ff6880b52f0482ca9843d",
+    "currentEnd": "5694d76f4830122a50475d5303245e3897c5454f1f6ff6880b52f0482ca9843d"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_0.tile.bin",
+    "snapshot": "12d3dee18aea74219c59038d4f83c2505158a1b9d169424238fa755383ecf7bf",
+    "current": "12d3dee18aea74219c59038d4f83c2505158a1b9d169424238fa755383ecf7bf",
+    "currentEnd": "12d3dee18aea74219c59038d4f83c2505158a1b9d169424238fa755383ecf7bf"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_1.tile.bin",
+    "snapshot": "34ea288b7430afe29a9a2e0ba87fe344f4194c79541074b9226fb62ad5b4b250",
+    "current": "34ea288b7430afe29a9a2e0ba87fe344f4194c79541074b9226fb62ad5b4b250",
+    "currentEnd": "34ea288b7430afe29a9a2e0ba87fe344f4194c79541074b9226fb62ad5b4b250"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_2.tile.bin",
+    "snapshot": "f61df7c6364bf6167b17e8ff7eed125671581f80fca34ba15b3b006e8a78753f",
+    "current": "f61df7c6364bf6167b17e8ff7eed125671581f80fca34ba15b3b006e8a78753f",
+    "currentEnd": "f61df7c6364bf6167b17e8ff7eed125671581f80fca34ba15b3b006e8a78753f"
+  },
+  {
+    "file": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.tiles/3_3.tile.bin",
+    "snapshot": "ca57835449fbeabb6ccb7a036481da9f7e7f67eacf50ce12418e51816b819c64",
+    "current": "ca57835449fbeabb6ccb7a036481da9f7e7f67eacf50ce12418e51816b819c64",
+    "currentEnd": "ca57835449fbeabb6ccb7a036481da9f7e7f67eacf50ce12418e51816b819c64"
+  }
+]

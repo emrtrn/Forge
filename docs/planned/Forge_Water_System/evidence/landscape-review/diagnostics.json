@@ -1,0 +1,574 @@
+{
+  "cold": {
+    "view": "river-bank",
+    "variant": "after",
+    "motion": false,
+    "fixedTime": 12,
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+    "gpuTimer": true,
+    "viewport": {
+      "width": 1280,
+      "height": 748,
+      "dpr": 1
+    },
+    "camera": {
+      "position": [
+        269.23,
+        -40.7,
+        70.8
+      ],
+      "quaternion": [
+        -0.1395618576160883,
+        -0.31848828802779205,
+        -0.047468050695452596,
+        0.9363944053928596
+      ],
+      "fov": 48,
+      "near": 0.1,
+      "far": 2000
+    },
+    "exposure": 0.2,
+    "toneMapping": 4,
+    "postProcess": true,
+    "environment": {
+      "sky": true,
+      "map": true,
+      "fog": true
+    },
+    "glError": 0,
+    "textureUnits": 16,
+    "reflectionSources": [
+      {
+        "planeY": -38.7,
+        "captured": false,
+        "resolution": 256,
+        "witness": {
+          "total": 2,
+          "camera": [
+            251.23000000000002,
+            -21.700000000000003,
+            35.8
+          ]
+        }
+      },
+      {
+        "planeY": -5,
+        "captured": false,
+        "resolution": 256,
+        "witness": null
+      }
+    ],
+    "samplerWarnings": [
+      {
+        "count": 36,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "after"
+      },
+      {
+        "count": 36,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "after"
+      },
+      {
+        "count": 19,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "low"
+      },
+      {
+        "count": 19,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "low"
+      }
+    ],
+    "waters": [
+      {
+        "name": "River Water 1",
+        "visible": true,
+        "vertices": 9685,
+        "triangles": 17856,
+        "bounds": {
+          "min": [
+            -52.593284606933594,
+            -85.69999694824219,
+            -10.227360725402832
+          ],
+          "max": [
+            305.9476013183594,
+            -38.70000076293945,
+            496.11456298828125
+          ]
+        },
+        "minDepth": 0,
+        "maxDepth": 2.549865484237671,
+        "wet": 5641,
+        "shallow": 3981,
+        "uniforms": {
+          "time": 12,
+          "flowSpeed": 0.35,
+          "normalScale": 1,
+          "hasNormalMap": 1,
+          "clipDryBed": 1,
+          "opacity": 0.82,
+          "bedVisibility": 0.05,
+          "absorptionDistance": 0.5,
+          "waveAmplitude": 0.04,
+          "waveLength": 3.5,
+          "foamOpacity": 0.92,
+          "shoreWaveSpacing": 5,
+          "shoreWaveSpeed": 0.34,
+          "shoreWaveReach": 0.36,
+          "shoreWaveBreakupScale": 1.25,
+          "hasFoamNoiseMap": 1,
+          "reflectionStrength": 0.34
+        }
+      },
+      {
+        "name": "Lake:lake-3",
+        "visible": true,
+        "vertices": 742,
+        "triangles": 1228,
+        "bounds": {
+          "min": [
+            29.998825073242188,
+            -5,
+            -66.71790885925293
+          ],
+          "max": [
+            49.85216569900513,
+            -5,
+            -19.744815826416016
+          ]
+        },
+        "minDepth": 0,
+        "maxDepth": 0.7589998245239258,
+        "wet": 487,
+        "shallow": 67,
+        "uniforms": {
+          "time": 0,
+          "hasNormal": 1,
+          "rippleSpeed": 0.5,
+          "normalScale": 2,
+          "opacity": 0.5,
+          "bedVisibility": 0.05,
+          "absorptionDistance": 1,
+          "reflectionStrength": 0.1
+        }
+      }
+    ],
+    "lakes": [
+      {
+        "id": "lake-3",
+        "status": "ready",
+        "message": "Lake ready"
+      }
+    ],
+    "terrain": [
+      {
+        "id": "landscape-1",
+        "tiles": 16,
+        "expected": 16
+      }
+    ],
+    "resources": {
+      "geometries": 144,
+      "textures": 99,
+      "programs": 77,
+      "reflectionSources": 2
+    }
+  },
+  "warm": {
+    "view": "lake-overview",
+    "variant": "after",
+    "motion": false,
+    "fixedTime": 12,
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+    "gpuTimer": true,
+    "viewport": {
+      "width": 1280,
+      "height": 748,
+      "dpr": 1
+    },
+    "camera": {
+      "position": [
+        87,
+        27,
+        4
+      ],
+      "quaternion": [
+        -0.21334290635497122,
+        0.34774443397544774,
+        0.08158517498642968,
+        0.9093417796238898
+      ],
+      "fov": 48,
+      "near": 0.1,
+      "far": 2000
+    },
+    "exposure": 0.2,
+    "toneMapping": 4,
+    "postProcess": true,
+    "environment": {
+      "sky": true,
+      "map": true,
+      "fog": true
+    },
+    "glError": 0,
+    "textureUnits": 16,
+    "reflectionSources": [
+      {
+        "planeY": -38.7,
+        "captured": true,
+        "resolution": 256,
+        "witness": {
+          "total": 13,
+          "camera": [
+            87,
+            27,
+            4
+          ]
+        }
+      },
+      {
+        "planeY": -5,
+        "captured": true,
+        "resolution": 256,
+        "witness": {
+          "total": 11,
+          "camera": [
+            87,
+            27,
+            4
+          ]
+        }
+      }
+    ],
+    "samplerWarnings": [
+      {
+        "count": 91,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "after"
+      },
+      {
+        "count": 91,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "after"
+      },
+      {
+        "count": 19,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "low"
+      },
+      {
+        "count": 19,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "low"
+      }
+    ],
+    "waters": [
+      {
+        "name": "River Water 1",
+        "visible": true,
+        "vertices": 9685,
+        "triangles": 17856,
+        "bounds": {
+          "min": [
+            -52.593284606933594,
+            -85.69999694824219,
+            -10.227360725402832
+          ],
+          "max": [
+            305.9476013183594,
+            -38.70000076293945,
+            496.11456298828125
+          ]
+        },
+        "minDepth": 0,
+        "maxDepth": 2.549865484237671,
+        "wet": 5641,
+        "shallow": 3981,
+        "uniforms": {
+          "time": 12,
+          "flowSpeed": 0.35,
+          "normalScale": 1,
+          "hasNormalMap": 1,
+          "clipDryBed": 1,
+          "opacity": 0.82,
+          "bedVisibility": 0.05,
+          "absorptionDistance": 0.5,
+          "waveAmplitude": 0.04,
+          "waveLength": 3.5,
+          "foamOpacity": 0.92,
+          "shoreWaveSpacing": 5,
+          "shoreWaveSpeed": 0.34,
+          "shoreWaveReach": 0.36,
+          "shoreWaveBreakupScale": 1.25,
+          "hasFoamNoiseMap": 1,
+          "reflectionStrength": 0.34
+        }
+      },
+      {
+        "name": "Lake:lake-3",
+        "visible": true,
+        "vertices": 742,
+        "triangles": 1228,
+        "bounds": {
+          "min": [
+            29.998825073242188,
+            -5,
+            -66.71790885925293
+          ],
+          "max": [
+            49.85216569900513,
+            -5,
+            -19.744815826416016
+          ]
+        },
+        "minDepth": 0,
+        "maxDepth": 0.7589998245239258,
+        "wet": 487,
+        "shallow": 67,
+        "uniforms": {
+          "time": 12,
+          "hasNormal": 1,
+          "rippleSpeed": 0.5,
+          "normalScale": 2,
+          "opacity": 0.5,
+          "bedVisibility": 0.05,
+          "absorptionDistance": 1,
+          "reflectionStrength": 0.1
+        }
+      }
+    ],
+    "lakes": [
+      {
+        "id": "lake-3",
+        "status": "ready",
+        "message": "Lake ready"
+      }
+    ],
+    "terrain": [
+      {
+        "id": "landscape-1",
+        "tiles": 16,
+        "expected": 16
+      }
+    ],
+    "resources": {
+      "geometries": 147,
+      "textures": 101,
+      "programs": 80,
+      "reflectionSources": 2
+    }
+  },
+  "returned": {
+    "view": "river-bank",
+    "variant": "after",
+    "motion": false,
+    "fixedTime": 12,
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+    "gpuTimer": true,
+    "viewport": {
+      "width": 1280,
+      "height": 748,
+      "dpr": 1
+    },
+    "camera": {
+      "position": [
+        269.23,
+        -40.7,
+        70.8
+      ],
+      "quaternion": [
+        -0.1395618576160883,
+        -0.31848828802779205,
+        -0.047468050695452596,
+        0.9363944053928596
+      ],
+      "fov": 48,
+      "near": 0.1,
+      "far": 2000
+    },
+    "exposure": 0.2,
+    "toneMapping": 4,
+    "postProcess": true,
+    "environment": {
+      "sky": true,
+      "map": true,
+      "fog": true
+    },
+    "glError": 0,
+    "textureUnits": 16,
+    "reflectionSources": [
+      {
+        "planeY": -38.7,
+        "captured": true,
+        "resolution": 256,
+        "witness": {
+          "total": 14,
+          "camera": [
+            87,
+            27,
+            4
+          ]
+        }
+      },
+      {
+        "planeY": -5,
+        "captured": true,
+        "resolution": 256,
+        "witness": {
+          "total": 12,
+          "camera": [
+            87,
+            27,
+            4
+          ]
+        }
+      }
+    ],
+    "samplerWarnings": [
+      {
+        "count": 125,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "after"
+      },
+      {
+        "count": 125,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "after"
+      },
+      {
+        "count": 19,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "low"
+      },
+      {
+        "count": 19,
+        "object": "landscape-terrain",
+        "material": "",
+        "type": "MeshStandardMaterial",
+        "variant": "low"
+      }
+    ],
+    "waters": [
+      {
+        "name": "River Water 1",
+        "visible": true,
+        "vertices": 9685,
+        "triangles": 17856,
+        "bounds": {
+          "min": [
+            -52.593284606933594,
+            -85.69999694824219,
+            -10.227360725402832
+          ],
+          "max": [
+            305.9476013183594,
+            -38.70000076293945,
+            496.11456298828125
+          ]
+        },
+        "minDepth": 0,
+        "maxDepth": 2.549865484237671,
+        "wet": 5641,
+        "shallow": 3981,
+        "uniforms": {
+          "time": 12,
+          "flowSpeed": 0.35,
+          "normalScale": 1,
+          "hasNormalMap": 1,
+          "clipDryBed": 1,
+          "opacity": 0.82,
+          "bedVisibility": 0.05,
+          "absorptionDistance": 0.5,
+          "waveAmplitude": 0.04,
+          "waveLength": 3.5,
+          "foamOpacity": 0.92,
+          "shoreWaveSpacing": 5,
+          "shoreWaveSpeed": 0.34,
+          "shoreWaveReach": 0.36,
+          "shoreWaveBreakupScale": 1.25,
+          "hasFoamNoiseMap": 1,
+          "reflectionStrength": 0.34
+        }
+      },
+      {
+        "name": "Lake:lake-3",
+        "visible": true,
+        "vertices": 742,
+        "triangles": 1228,
+        "bounds": {
+          "min": [
+            29.998825073242188,
+            -5,
+            -66.71790885925293
+          ],
+          "max": [
+            49.85216569900513,
+            -5,
+            -19.744815826416016
+          ]
+        },
+        "minDepth": 0,
+        "maxDepth": 0.7589998245239258,
+        "wet": 487,
+        "shallow": 67,
+        "uniforms": {
+          "time": 12,
+          "hasNormal": 1,
+          "rippleSpeed": 0.5,
+          "normalScale": 2,
+          "opacity": 0.5,
+          "bedVisibility": 0.05,
+          "absorptionDistance": 1,
+          "reflectionStrength": 0.1
+        }
+      }
+    ],
+    "lakes": [
+      {
+        "id": "lake-3",
+        "status": "ready",
+        "message": "Lake ready"
+      }
+    ],
+    "terrain": [
+      {
+        "id": "landscape-1",
+        "tiles": 16,
+        "expected": 16
+      }
+    ],
+    "resources": {
+      "geometries": 147,
+      "textures": 101,
+      "programs": 80,
+      "reflectionSources": 2
+    }
+  }
+}

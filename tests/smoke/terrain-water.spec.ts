@@ -1,6 +1,39 @@
 import { writeFile } from "node:fs/promises";
 import { expect, test } from "./test";
 
+test("physics wheelspin excites water without wheel rotation, stays inside its puddle and leaves the shoreline stable", async ({ page }, info) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.goto("/tests/smoke/pages/wet-mud.html", { waitUntil: "domcontentloaded" });
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).__wetMudQa?.ready)), { timeout: 120_000 }).toBe(true);
+  await page.evaluate(() => (window as any).__wetMudQa.enableDynamics("low"));
+  const calmProfile = await page.evaluate(() => (window as any).__wetMudQa.profile());
+  const calm = await page.evaluate(() => (window as any).__wetMudQa.waveEnergy());
+  await page.evaluate(() => (window as any).__wetMudQa.pumpWater(24, "traction"));
+  const moving = await page.evaluate(() => (window as any).__wetMudQa.waveEnergy());
+  const waves = await page.evaluate(() => (window as any).__wetMudQa.waveSamples());
+  const movingProfile = await page.evaluate(() => (window as any).__wetMudQa.profile());
+  expect(moving).toBeGreaterThan(calm + 100);
+  expect(waves.left).toBeGreaterThan(0.001);
+  expect(waves.right).toBe(0);
+  expect(waves.dry).toBe(0);
+  expect(movingProfile.map((probe: { puddle: number }) => probe.puddle)).toEqual(calmProfile.map((probe: { puddle: number }) => probe.puddle));
+  await page.screenshot({ path: info.outputPath("terrain-water-physics-slip.png") });
+  await page.evaluate(() => (window as any).__wetMudQa.shiftDynamics());
+  const shifted = await page.evaluate(() => (window as any).__wetMudQa.waveSamples());
+  expect(Math.abs(shifted.centreX - waves.centreX)).toBeLessThan(0.13);
+  expect(Math.abs(shifted.centreZ - waves.centreZ)).toBeLessThan(0.13);
+  await page.evaluate(() => (window as any).__wetMudQa.pumpWater(180, false));
+  const settled = await page.evaluate(() => (window as any).__wetMudQa.waveEnergy());
+  expect(settled).toBeLessThan(moving * 0.3);
+  await page.screenshot({ path: info.outputPath("terrain-water-physics-slip-settled.png") });
+  await writeFile(info.outputPath("terrain-water-physics-slip.json"), JSON.stringify({ calm, moving, settled, waves, shifted, calmProfile, movingProfile }, null, 2));
+  expect(errors).toEqual([]);
+});
+
 test("terrain water ripples respond to wheels, settle, and reflect scene objects across three quality tiers", async ({ page }, info) => {
   test.setTimeout(300_000);
   const errors: string[] = [];

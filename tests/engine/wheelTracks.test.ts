@@ -292,12 +292,16 @@ export function registerWheelTrackTests(check: Check): void {
     const definition = createReferenceCarDefinition();
     let z = 0;
     let soft = true;
+    let tractionSlip = 0;
     const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
     let groundSink: VehicleGroundSinkProvider | null = null;
     let physicsStep: ((dt: number) => void) | null = null;
     const vehicles: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "possessedEntityId" | "setGroundSinkProvider" | "onPhysicsStep"> = {
       vehicleIds: () => ["parked", "car"],
-      vehicleState: (id) => carState(definition, id === "car" ? 0 : 200, id === "car" ? z : 0),
+      vehicleState: (id) => {
+        const state = carState(definition, id === "car" ? 0 : 200, id === "car" ? z : 0);
+        return { ...state, wheels: state.wheels.map((wheel) => ({ ...wheel, tractionSlip })) };
+      },
       vehicleDefinition: () => definition,
       possessedEntityId: () => "car",
       setGroundSinkProvider: (provider) => { groundSink = provider; },
@@ -328,6 +332,14 @@ export function registerWheelTrackTests(check: Check): void {
     assert.equal(snapshot.stampedWheels, 8);
     assert.ok(texture.water.state.sites.size > 0 && texture.water.state.impulses.length > 0, "wet wheel contacts feed the presentation field");
     assert.equal(texture.water.state.previous.size, definition.wheels.length, "distant vehicles do not consume the local water budget");
+    texture.water.state.impulses.length = 0;
+    tick();
+    assert.equal(texture.water.state.impulses.length, 0, "stationary unpowered wheels leave the water calm");
+    tractionSlip = 0.8;
+    tick();
+    assert.ok(texture.water.state.impulses.length > 0, "physics slip reaches water without position or rotation changes");
+    assert.ok([...texture.water.state.previous.values()].every((wheel) => wheel.tractionSlip === 0.8));
+    tractionSlip = 0;
     // The window centres on the mean hard point (the axles are not symmetric about the origin).
     const axleOffset = definition.wheels.reduce((sum, wheel) => sum + wheel.position[2], 0) / definition.wheels.length;
     close(snapshot.centre[1], z + axleOffset, 1e-9);

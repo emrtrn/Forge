@@ -145,7 +145,8 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
         const profile = surface.deformationAt(wheel.groundEntityId, wheel.contactPoint);
         const [x, y, z] = wheel.contactPoint;
         waterContacts.push({ id: `${id}:${index}`, x, y, z, radius: wheel.radius,
-          rotation: wheel.rotation, width: vehicleWheelWidth(definition?.wheels[index] ?? wheel), wetness: profile?.wetness ?? 0 });
+          rotation: wheel.rotation, tractionSlip: wheel.tractionSlip,
+          width: vehicleWheelWidth(definition?.wheels[index] ?? wheel), wetness: profile?.wetness ?? 0 });
       });
     }
     texture.water.advance(deltaSeconds, waterContacts, centre, active);

@@ -8,6 +8,8 @@ export interface TerrainWaterContact {
   rotation: number;
   radius: number;
   wetness: number;
+  /** Physics traction demand (0..1); authoritative when supplied by a vehicle. */
+  tractionSlip?: number | undefined;
 }
 
 export interface TerrainWaterImpulse { x: number; z: number; radius: number; strength: number }
@@ -55,6 +57,7 @@ export class TerrainWaterState {
     const seen = new Set<string>();
     for (const contact of contacts) {
       if (![contact.x, contact.y, contact.z, contact.width, contact.rotation, contact.radius, contact.wetness].every(Number.isFinite)
+        || (contact.tractionSlip !== undefined && !Number.isFinite(contact.tractionSlip))
         || contact.width <= 0 || contact.radius <= 0) continue;
       if (contact.x < this.minX || contact.x >= this.minX + 32 || contact.z < this.minZ || contact.z >= this.minZ + 32) continue;
       seen.add(contact.id);
@@ -64,17 +67,22 @@ export class TerrainWaterState {
       const continuous = old && distance <= 2;
       const from = continuous ? old : contact;
       const steps = Math.max(1, Math.ceil((continuous ? distance : 0) / Math.max(0.06, contact.width * 0.4)));
-      // Stationary wheels don't inject energy. Actual angular travel also covers
-      // wheelspin; airborne/removed wheels have their history forgotten below.
-      const spin = continuous ? Math.abs(contact.rotation - old.rotation) * contact.radius : 0;
-      const energy = continuous ? Math.min(1, Math.max(distance, spin) / dt / 6) : 0;
+      // Rapier's rotation can follow ground speed even while a tyre spins in
+      // place. Match the surface FX's standstill agitation from physics slip;
+      // retain angular travel only for providers without that signal. An
+      // authoritative zero also suppresses rotation resets on a parked tyre.
+      const slip = contact.tractionSlip === undefined ? undefined : Math.max(0, Math.min(1, contact.tractionSlip));
+      const spin = continuous && slip === undefined ? Math.abs(contact.rotation - old.rotation) * contact.radius : 0;
+      const energy = continuous ? Math.min(1, Math.max(Math.max(distance, spin) / dt / 6, (slip ?? 0) * 0.6)) : 0;
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const x = from.x + (contact.x - from.x) * t;
         const z = from.z + (contact.z - from.z) * t;
         this.stamp(x, z, contact.width / 2 + this.cell, contact.wetness, contact.y);
         if (contact.wetness > 0.4 && energy > 0.005) {
-          this.impulses.push({ x, z, radius: Math.max(0.15, contact.width * 0.7), strength: energy * dt / steps * 0.12 });
+          // A long stalled frame must not queue more energy than the four
+          // fixed steps the GPU is allowed to catch up on.
+          this.impulses.push({ x, z, radius: Math.max(0.15, contact.width * 0.7), strength: energy * Math.min(dt, 4 * TERRAIN_WATER_STEP) / steps * 0.12 });
         }
       }
       if (contact.wetness > 0.4) {

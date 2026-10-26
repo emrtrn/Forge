@@ -62,6 +62,43 @@ export function registerTerrainWaterTests(check: (name: string, fn: () => void) 
     assert.equal(state.previous.size, 0);
     assert.equal(state.seconds, 0);
   });
+  check("terrain water: physics slip stirs a stationary wheel and authoritative zero ignores rotation resets", () => {
+    const state = new TerrainWaterState();
+    const step = (patch: Partial<TerrainWaterContact> = {}, dt = 1 / 60) => {
+      state.impulses.length = 0;
+      state.advance(dt, [contact({ tractionSlip: 0, ...patch })], [0, 0]);
+      return state.impulses.reduce((sum, impulse) => sum + impulse.strength, 0);
+    };
+    step();
+    assert.equal(step(), 0, "parked wheel stays calm");
+    const spinning = step({ tractionSlip: 0.8 });
+    assert.ok(spinning > 0, "unchanged position and rotation still stir from physics slip");
+    assert.equal(step({ rotation: 100 }), 0, "physics zero overrides discontinuous rotation");
+    assert.ok(step({ x: 0.1, rotation: 100 }) > 0, "a rolling tyre still leaves a wake with zero slip");
+    assert.equal(step({ tractionSlip: 0.8, wetness: 0.1 }), 0, "dry slip never excites water");
+    assert.equal(step({ tractionSlip: NaN }), 0);
+    assert.equal(state.previous.size, 0, "invalid contacts lose their history");
+    assert.equal(step({ tractionSlip: 0.8 }), 0, "returning contacts don't join invalid history");
+    assert.ok(step({ tractionSlip: 0.8 }, 10) <= spinning * 4 + 1e-9, "stalls respect the GPU catch-up budget");
+    state.advance(1 / 60, [], [0, 0]);
+    assert.equal(step({ tractionSlip: 0.8 }), 0, "landing starts a fresh contact");
+    assert.equal(step({ x: 10, tractionSlip: 0.8 }), 0, "teleport starts a fresh contact");
+  });
+  check("terrain water: stationary physics slip adds the same energy at 30, 60 and 144 Hz", () => {
+    const energies = [30, 60, 144].map((hz) => {
+      const state = new TerrainWaterState();
+      state.advance(1 / hz, [contact({ tractionSlip: 0.7 })], [0, 0]);
+      let energy = 0;
+      for (let i = 0; i < hz; i++) {
+        state.advance(1 / hz, [contact({ tractionSlip: 0.7 })], [0, 0]);
+        energy += state.impulses.reduce((sum, impulse) => sum + impulse.strength, 0);
+        state.impulses.length = 0;
+      }
+      return energy;
+    });
+    assert.ok(energies[0]! > 0);
+    assert.ok(Math.max(...energies) - Math.min(...energies) < 1e-9);
+  });
   check("terrain water: impulses are time-scaled, bounded, and water planes are grouped by level", () => {
     const energies: number[] = [];
     for (const hz of [30, 60, 144]) {

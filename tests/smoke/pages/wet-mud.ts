@@ -1,4 +1,4 @@
-import { AmbientLight, BoxGeometry, Color, DirectionalLight, Mesh, MeshBasicMaterial, OrthographicCamera, PerspectiveCamera, PlaneGeometry, PMREMGenerator, Scene, ShaderMaterial, Vector3, Vector4, WebGLRenderer } from "three";
+import { AmbientLight, BoxGeometry, Color, DataUtils, DirectionalLight, Mesh, MeshBasicMaterial, OrthographicCamera, PerspectiveCamera, PlaneGeometry, PMREMGenerator, Scene, ShaderMaterial, Vector3, Vector4, WebGLRenderer, type WebGLRenderTarget } from "three";
 import { loadForgeMaterialLayer } from "@/scene/materialAssets";
 import { TerrainRenderer } from "@engine/render-three/terrain/terrainRenderer";
 import { TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
@@ -143,12 +143,12 @@ function enableDynamics(quality: TerrainWaterQuality) {
   draw();
   return deformation.water.stats();
 }
-function pumpWater(frames: number, spinning: boolean) {
+function pumpWater(frames: number, spinning: boolean | "traction") {
   const before = performance.now();
   for (let i = 0; i < frames; i++) {
-    if (spinning) spin += 0.3;
+    if (spinning === true) spin += 0.3;
     deformation.water.advance(1 / 60, [{ id: "wheel", x: -1.1, y: 0, z: 0, rotation: spin,
-      width: 0.55, radius: 0.5, wetness: 0.9 }], [0, 0], field);
+      width: 0.55, radius: 0.5, wetness: 0.9, tractionSlip: spinning === "traction" ? 0.8 : undefined }], [0, 0], field);
     deformation.water.render(renderer, emptyScene, camera,
       deformation.uniforms.uDeformTex!.value as import("three").Texture,
       deformation.uniforms.uDeformWindow!.value as Vector4, deformation.uniforms.uDeformDepthRange!.value as number);
@@ -157,6 +157,27 @@ function pumpWater(frames: number, spinning: boolean) {
   const elapsed = performance.now() - before;
   draw();
   return { elapsed, frames, ...deformation.water.stats() };
+}
+/** Read the actual half-float simulation, including dry cells hidden by the
+ * surface shader. A visible-mask-only assertion could miss leaking waves. */
+function waveSamples() {
+  const targets = (deformation.water as unknown as { targets: [WebGLRenderTarget, WebGLRenderTarget] }).targets;
+  const target = targets[0];
+  const n = target.width;
+  const pixels = new Uint16Array(n * n * 4);
+  renderer.readRenderTargetPixels(target, 0, 0, n, n, pixels);
+  const window = deformation.water.uniforms.uTerrainWaterWindow.value;
+  let left = 0, right = 0, dry = 0, weightedX = 0, weightedZ = 0, peak = 0;
+  for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) {
+    const wx = window.x + (x + 0.5) * 32 / n, wz = window.y + (z + 0.5) * 32 / n;
+    const height = Math.abs(DataUtils.fromHalfFloat(pixels[(z * n + x) * 4]!));
+    peak = Math.max(peak, height);
+    if (wx < 0) left += height; else right += height;
+    if (Math.abs(wx) < 0.5 || Math.abs(wx) > 1.7) dry += height;
+    weightedX += wx * height; weightedZ += wz * height;
+  }
+  const total = left + right;
+  return { left, right, dry, peak, centreX: total ? weightedX / total : null, centreZ: total ? weightedZ / total : null };
 }
 function waveEnergy() {
   debug.value = 3; draw();
@@ -249,7 +270,7 @@ function showCapture() {
 let frame = 0;
 function loop() { draw(); if (++frame < 20) requestAnimationFrame(loop); else {
   (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks,
-    enableDynamics, pumpWater, waveEnergy, reflectionColor, benchmarkFrames, groundColor, skyLight, shiftDynamics, showCapture,
+    enableDynamics, pumpWater, waveEnergy, waveSamples, reflectionColor, benchmarkFrames, groundColor, skyLight, shiftDynamics, showCapture,
     restoreView: draw,
     reverseDepth: () => { const mode = setSceneDepthMode(renderer, "reversed", { scene, cameras: [camera] }); draw(); return mode; },
     environmentId: () => scene.environment?.uuid,

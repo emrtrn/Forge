@@ -1165,6 +1165,10 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (typeof input.nodeId === "string") water.nodeId = input.nodeId;
   if (typeof input.parentId === "string") water.parentId = input.parentId;
   const surfaceLevel = validateOptionalNumber(input.surfaceLevel, "river water surfaceLevel", -10000, 10000);
+  if (input.coordinateSpace !== undefined && input.coordinateSpace !== "world") {
+    throw new Error("river water coordinateSpace must be world or absent");
+  }
+  if (input.coordinateSpace === "world") water.coordinateSpace = "world";
   if (surfaceLevel !== undefined) water.surfaceLevel = Number(surfaceLevel.toFixed(3));
   const widthScale = validateOptionalNumber(input.widthScale, "river water widthScale", 0.05, 10);
   if (widthScale !== undefined) water.widthScale = Number(widthScale.toFixed(3));

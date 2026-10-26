@@ -45,6 +45,8 @@ export interface BuildRiverWaterRibbonOptions {
   normalTileLength?: number;
   /** Optional Landscape data used to bake shallow/deep water into the ribbon. */
   landscapeData?: ForgeLandscapeData;
+  /** Exact bed height in ribbon-local coordinates; null clips real terrain holes. */
+  heightAt?: (x: number, z: number) => number | null;
   /** Legacy strip data is accepted for saved-layout compatibility, but ignored. */
   foamStamps?: readonly LayoutRiverWaterFoamStamp[];
   /** Per-segment flow/rapid overrides keyed by the Landscape spline segment id. */
@@ -62,6 +64,7 @@ interface RiverSample extends RiverPolylineSample {
 const EPSILON = 1e-5;
 const DEFAULT_SAMPLE_SPACING = 1.25;
 const DEFAULT_NORMAL_TILE_LENGTH = 3;
+const MAX_RIVER_VERTICES = 1_048_576;
 
 /**
  * Resolves the common directed Landscape-spline case into continuous chains.
@@ -77,6 +80,7 @@ function riverChains(spline: ForgeLandscapeSpline, sampleSpacing: number): River
     const dy = sub.end.position[1] - sub.start.position[1];
     const dz = sub.end.position[2] - sub.start.position[2];
     const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy, dz) / sampleSpacing));
+    if (pieces.length + steps > MAX_RIVER_VERTICES) throw new Error("River Water exceeds the ribbon vertex budget");
     for (let step = 1; step <= steps; step += 1) {
       const t = step / steps;
       pieces.push({
@@ -138,15 +142,17 @@ export function buildRiverWaterRibbon(
   const foamMasks: number[] = [];
   const flowSpeedMultipliers: number[] = [];
   const indices: number[] = [];
+  const valid: boolean[] = [];
   // Strip Foam has been retired. Keep the legacy data loadable, but do not
   // allocate mask resolution or render it into newly built river ribbons.
-  const width = 5;
+  const sampleSpacing = Math.max(options.heightAt ? 0.001 : 0.25, options.sampleSpacing ?? DEFAULT_SAMPLE_SPACING);
+  const width = options.heightAt ? Math.max(5, Math.ceil(spline.points.reduce((max, point) => Math.max(max, point.width), 0)
+    * options.widthScale * 2 / sampleSpacing) + 1) : 5;
   const tileLength = Math.max(EPSILON, options.normalTileLength ?? DEFAULT_NORMAL_TILE_LENGTH);
   const profiles = new Map((options.segmentProfiles ?? []).map((profile) => [profile.splineSegmentRef, profile]));
   let vertexBase = 0;
-  const requestedSpacing = options.sampleSpacing ?? DEFAULT_SAMPLE_SPACING;
-  const sampleSpacing = requestedSpacing;
-  for (const chain of riverChains(spline, Math.max(0.25, sampleSpacing))) {
+  for (const chain of riverChains(spline, sampleSpacing)) {
+    if (positions.length / 3 + chain.length * width > MAX_RIVER_VERTICES) throw new Error("River Water exceeds the ribbon vertex budget");
     for (let index = 0; index < chain.length; index += 1) {
       const sample = chain[index]!;
       const previous = chain[Math.max(0, index - 1)]!;
@@ -179,10 +185,11 @@ export function buildRiverWaterRibbon(
         uvs.push(sample.distance / tileLength, v);
         flowDirections.push(flowX, flowZ);
         shoreDistances.push(Math.abs(v - 0.5) * 2);
-        const terrainHeight = options.landscapeData
+        const terrainHeight = options.heightAt ? options.heightAt(x, z) : options.landscapeData
           ? landscapeHeightAtLocal(options.landscapeData, x, z)
           : options.surfaceLevel - 1;
-        waterDepths.push(Math.max(0, options.surfaceLevel - terrainHeight));
+        valid.push(terrainHeight !== null);
+        waterDepths.push(terrainHeight === null ? 0 : Math.max(0, options.surfaceLevel - terrainHeight));
         rapidness.push(segmentRapidness);
         foamMasks.push(0);
         flowSpeedMultipliers.push(flowSpeedMultiplier);
@@ -192,7 +199,8 @@ export function buildRiverWaterRibbon(
       for (let lateral = 0; lateral < width - 1; lateral += 1) {
         const a = vertexBase + row * width + lateral;
         const b = a + width;
-        indices.push(a, b, a + 1, b, b + 1, a + 1);
+        if (valid[a] && valid[b] && valid[a + 1]) indices.push(a, b, a + 1);
+        if (valid[b] && valid[b + 1] && valid[a + 1]) indices.push(b, b + 1, a + 1);
       }
     }
     vertexBase += chain.length * width;
@@ -241,6 +249,7 @@ uniform float time;
 uniform float flowSpeed;
 uniform float normalScale;
 uniform float hasNormalMap;
+uniform float clipDryBed;
 uniform vec3 deepColor;
 uniform vec3 shallowColor;
 uniform float opacity;
@@ -283,6 +292,7 @@ float foamNoise(vec2 point) {
   return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
 }
 void main() {
+  if (clipDryBed > 0.5 && vWaterDepth <= 0.001) discard;
   vec2 baseUv = vec2(vRiverUv.x * normalScale, vRiverUv.y * normalScale);
   vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed * vFlowSpeedMultiplier, 0.0)).xy * 2.0 - 1.0;
   vec2 normalB = texture2D(normalMap, baseUv * 1.37 + vec2(0.37, 0.61) - vec2(time * flowSpeed * vFlowSpeedMultiplier * 0.73, 0.0)).xy * 2.0 - 1.0;
@@ -342,7 +352,9 @@ void main() {
 
 export interface RiverWaterRenderItem extends ResolvedRiverWater {
   spline: ForgeLandscapeSpline;
-  landscapeData: ForgeLandscapeData;
+  landscapeData?: ForgeLandscapeData;
+  heightAt?: (x: number, z: number) => number | null;
+  sampleSpacing?: number;
   position: Vec3;
   rotation: Vec3;
   /** Repeating grayscale noise used to break up inward shore-wave fronts. */
@@ -359,7 +371,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const ribbon = buildRiverWaterRibbon(item.spline, {
       surfaceLevel: item.surfaceLevel,
       widthScale: item.widthScale,
-      landscapeData: item.landscapeData,
+      ...(item.landscapeData ? { landscapeData: item.landscapeData } : {}),
+      ...(item.heightAt ? { heightAt: item.heightAt } : {}),
+      ...(item.sampleSpacing !== undefined ? { sampleSpacing: item.sampleSpacing } : {}),
       foamStamps: item.foamStamps,
       segmentProfiles: item.segmentProfiles,
     });
@@ -383,6 +397,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         flowSpeed: { value: item.flowSpeed },
         normalScale: { value: item.normalScale },
         hasNormalMap: { value: normalMap ? 1 : 0 },
+        clipDryBed: { value: item.heightAt ? 1 : 0 },
         deepColor: { value: new Color(item.deepColor) },
         shallowColor: { value: new Color(item.shallowColor) },
         opacity: { value: item.opacity },
@@ -430,9 +445,10 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       this.add(createRiverWaterRadialFoamObject(stamp, item));
     }
     item.reflectionSource?.addConsumer(this);
+    const reflectionSource = item.reflectionSource;
     this.onBeforeRender = (renderer, scene, camera) => {
       this.material.uniforms["time"]!.value = performance.now() / 1000;
-      item.reflectionSource?.update(renderer, scene, camera);
+      reflectionSource?.update(renderer, scene, camera);
     };
   }
 

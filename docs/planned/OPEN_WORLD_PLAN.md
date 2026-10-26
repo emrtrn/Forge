@@ -2249,6 +2249,15 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       Chromium kabulü (4/4) geçti; görüntüler incelendi. Nehir aktarımı (8A5),
       yol geometri/collider streaming'i ve büyük dünya performans kabulü açık.
       Ayrıntılar ve kanıtlar alt plan §11.8'de.
+      **8A5 tamam (2026-10-26):** Dünya koordinatlı nehir yüzeyi ve köpük,
+      kesin terrain üçgen yüksekliğinden derinlik, mevcut spline yatağı
+      deform/boya ve sculpt/undo sonrası yenileme; koridorla sınırlı geçici
+      tile okumaları, eksik dosyada gövde reddi ve gerçek deliklerde kırpma.
+      Tam `build:verify` (1.951 kontrol), iki yeni nehir Chromium senaryosu
+      ve üç eski bake/migrasyon/endpoint regresyonu geçti; görüntüler incelendi.
+      Nehir aktarımı kapatıldı; su/yol geometri streaming'i ve büyük dünya
+      performans kabulü açık. Sonraki su dilimi W0-Lake tasarımıdır; ayrıntı
+      ve kanıtlar Water Body alt planı §11.9'da.
 - [ ] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
       prosedürel çim maddesi bittikten sonra 1×1 de çok-tile ile aynı yoldan
       (`terrainEdit.ts`, `worldTerrainActor.ts`) düzenlenir;

@@ -939,7 +939,9 @@ export interface LayoutRiverWater {
   landscapeRef: string;
   /** Id of a spline in that Landscape's `*.landscape.json` sidecar. */
   splineRef: string;
-  /** Landscape-local, horizontal water height. */
+  /** Explicit world coordinates for surface/foam; absent preserves Landscape-local data. */
+  coordinateSpace?: "world";
+  /** Horizontal water height in the body's coordinate space. */
   surfaceLevel?: number;
   /** Multiplier over each Landscape spline point's authored width. */
   widthScale?: number;

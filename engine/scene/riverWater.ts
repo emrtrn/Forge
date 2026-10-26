@@ -11,6 +11,7 @@ export interface ResolvedRiverWater {
   hidden: boolean;
   landscapeRef: string;
   splineRef: string;
+  coordinateSpace?: "world";
   surfaceLevel: number;
   widthScale: number;
   flowSpeed: number;
@@ -83,6 +84,7 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     hidden: actor?.hidden === true,
     landscapeRef: actor?.landscapeRef ?? defaults.landscapeRef,
     splineRef: actor?.splineRef ?? defaults.splineRef,
+    ...(actor?.coordinateSpace === "world" ? { coordinateSpace: "world" as const } : {}),
     surfaceLevel: actor?.surfaceLevel ?? defaults.surfaceLevel,
     widthScale: actor?.widthScale ?? defaults.widthScale,
     flowSpeed: actor?.flowSpeed ?? defaults.flowSpeed,

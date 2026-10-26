@@ -244,8 +244,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <div class="detail-hint">Water presentation is linked to this Landscape's spline; terrain shape remains authored by Landscape Splines.</div>
         <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-delete ${lockedAttr}>Delete River Water</button></div>
         <div class="detail-subsection-title">Surface</div>
-        <label class="detail-row"><span>Water Height (Local Y)</span><input data-river-water-number="surfaceLevel" type="number" step="0.1" value="${activeRiverWater.surfaceLevel}" ${lockedAttr} /></label>
-        <div class="detail-hint">This is the horizontal water height in Landscape-local space. Moving the Landscape moves the water with it.</div>
+        <label class="detail-row"><span>Water Height (${activeRiverWater.coordinateSpace === "world" ? "World" : "Local"} Y)</span><input data-river-water-number="surfaceLevel" type="number" step="0.1" value="${activeRiverWater.surfaceLevel}" ${lockedAttr} /></label>
+        <div class="detail-hint">${activeRiverWater.coordinateSpace === "world" ? "This is the horizontal water height in world space." : "This is the horizontal water height in Landscape-local space. Moving the Landscape moves the water with it."}</div>
         <label class="detail-row"><span>Width Scale</span><input data-river-water-number="widthScale" type="number" min="0.05" max="10" step="0.05" value="${activeRiverWater.widthScale}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Deep Color</span><input data-river-water-color="deepColor" type="color" value="${escapeHtml(activeRiverWater.deepColor)}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Shallow Color</span><input data-river-water-color="shallowColor" type="color" value="${escapeHtml(activeRiverWater.shallowColor)}" ${lockedAttr} /></label>
@@ -483,8 +483,9 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           <span>Lock Movement</span>
         </label>
       </div>
-      ${worldTerrain ? "" : `${riverWaterMarkup}
+      ${riverWaterMarkup}
       ${riverWaterCreateMarkup}
+      ${worldTerrain ? "" : `
       <div class="detail-section">
         <div class="detail-section-title">Landscape Size</div>
         <label class="detail-row">
@@ -1143,7 +1144,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing, terrain effects and mesh output. River Water and resizing are not available for a multi-tile Landscape yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing, terrain effects, mesh output and River Water. Resizing is not available for a multi-tile Landscape yet.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Others</div>

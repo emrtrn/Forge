@@ -275,6 +275,7 @@ import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-th
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { validateTerrainTile } from "@engine/terrain/terrainLoader";
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
+import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { terrainTilePath } from "@engine/terrain/terrainTypes";
 import {
   landscapeColliderActorId, worldTerrainActorPosition, worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues,
@@ -949,6 +950,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly terrainSurfaceSamplers = new Map<string, TerrainSurfaceSampler>();
   /** Live river-water ribbons, and the planar reflections they share. */
   private riverWaterObjects: RiverWaterObjectLike[] = [];
+  private riverWaterBuild = 0;
   private riverReflectionSources: PlanarReflectionSource[] = [];
   private readonly riverWaterTextures = new Map<string, Texture>();
   /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
@@ -1930,6 +1932,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.riverWaterBuild += 1;
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -3453,6 +3456,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.riverWaterBuild += 1;
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -5867,6 +5871,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
+    this.riverWaterBuild += 1;
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
@@ -5955,6 +5960,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * reflection group also share one planar-reflection render.
    */
   private async buildRuntimeRiverWaters(): Promise<void> {
+    const build = ++this.riverWaterBuild;
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
@@ -5967,44 +5973,56 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (waters.length === 0) return;
     const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
     for (const actor of waters) {
-      const resolved = resolveRiverWater(actor);
-      const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
-      const data = landscape ? this.landscapeDataById.get(landscape.id) : undefined;
-      const spline = data?.splines?.find((candidate) => candidate.id === resolved.splineRef);
-      if (!landscape || !data || !spline) {
-        console.warn(
-          `[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`,
-        );
-        continue;
-      }
-      let reflectionSource: PlanarReflectionSource | null = null;
-      const planeY = landscape.position[1] + resolved.surfaceLevel;
-      const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
-      if (reflectionKey && resolved.reflectionQuality !== "low") {
-        reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
-        if (!reflectionSource) {
-          reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
-          reflectionSourceByKey.set(reflectionKey, reflectionSource);
-          this.riverReflectionSources.push(reflectionSource);
+      try {
+        const resolved = resolveRiverWater(actor);
+        const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
+        const document = landscape ? this.worldTerrainDocuments.get(landscape.id) : undefined;
+        const data = landscape ? this.landscapeDataById.get(landscape.id) : undefined;
+        const spline = (document?.def ?? data)?.splines?.find((candidate) => candidate.id === resolved.splineRef);
+        if (!landscape || !spline || (!document && !data)) {
+          console.warn(
+            `[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`,
+          );
+          continue;
         }
+        const source = document ? await prepareTerrainRiverWaterSource(document, resolved, async (key) => {
+          const path = terrainTilePath(landscape.dataRef, key);
+          const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+          if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+          return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+        }) : { spline, landscapeData: data!, surfaceLevel: resolved.surfaceLevel,
+          foamStamps: resolved.foamStamps, position: [...landscape.position] as Vec3,
+          rotation: landscape.rotation ? [...landscape.rotation] as Vec3 : [0, 0, 0] as Vec3 };
+        const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
+        const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
+        if (build !== this.riverWaterBuild) return;
+        let reflectionSource: PlanarReflectionSource | null = null;
+        const planeY = source.position[1] + source.surfaceLevel;
+        const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+        if (reflectionKey && resolved.reflectionQuality !== "low") {
+          reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
+          if (!reflectionSource) {
+            reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+            reflectionSourceByKey.set(reflectionKey, reflectionSource);
+            this.riverReflectionSources.push(reflectionSource);
+          }
+        }
+        const object = createRiverWaterObject(
+          {
+            ...resolved,
+            ...source,
+            foamNoiseMap,
+            reflectionSource,
+          },
+          normalMap,
+        );
+        object.raycast = () => {};
+        this.scene.add(tagSceneSource(object, "river-water"));
+        this.riverWaterObjects.push(object);
+      } catch (error) {
+        if (build !== this.riverWaterBuild) return;
+        console.warn(`[river-water] Failed ${actor.id}:`, error);
       }
-      const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
-      const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
-      const object = createRiverWaterObject(
-        {
-          ...resolved,
-          spline,
-          landscapeData: data,
-          position: [...landscape.position],
-          rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
-          foamNoiseMap,
-          reflectionSource,
-        },
-        normalMap,
-      );
-      object.raycast = () => {};
-      this.scene.add(tagSceneSource(object, "river-water"));
-      this.riverWaterObjects.push(object);
     }
   }
 

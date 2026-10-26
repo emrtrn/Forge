@@ -38,7 +38,7 @@ export function pickWorldTerrainOptions(initial: WorldTerrainCreateOptions = WOR
           <label><span>Base Height (m)</span><input data-field="baseHeight" type="number" min="${-WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT}" max="${WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT}" step="0.5" /></label>
           <div class="world-terrain-summary" data-world-terrain-summary></div>
           <ul class="world-terrain-problems" data-world-terrain-problems></ul>
-          <div class="detail-hint" data-world-terrain-multitile hidden>Multi-tile Splines support editing, terrain effects and mesh output. River Water is available on single-tile Landscapes for now.</div>
+          <div class="detail-hint" data-world-terrain-multitile hidden>Multi-tile Splines support editing, terrain effects, mesh output and River Water.</div>
           <div class="detail-hint">Flat and centred on the world origin, with the default Grass/Dirt/Rock/Snow layers. Save writes the tiles into this level's terrain folder.</div>
         </form>
         <footer class="parent-class-foot">

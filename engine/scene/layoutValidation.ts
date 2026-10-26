@@ -53,6 +53,9 @@ export function readRoomLayout(value: unknown, path: string): RoomLayout {
       if (key === "riverWaters") {
         requireString(item.landscapeRef, `${at}.landscapeRef`);
         requireString(item.splineRef, `${at}.splineRef`);
+        if (item.coordinateSpace !== undefined && item.coordinateSpace !== "world") {
+          throw new ContentLoadError(`${at}.coordinateSpace`, "invalid-data", "must be world or absent");
+        }
       }
       if (key === "lights" && !["directional", "point", "spot"].includes(String(item.type))) {
         throw new ContentLoadError(`${at}.type`, "invalid-data", "unknown light type");

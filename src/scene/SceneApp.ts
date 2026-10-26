@@ -28,6 +28,7 @@ import { legacyTerrainHeightRange } from "@engine/terrain/terrainLegacy";
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
 import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineData";
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
+import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
 import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
@@ -853,6 +854,7 @@ export interface LandscapeSplineSegmentView {
 
 /** Editable water-body presentation exposed from the selected Landscape Details panel. */
 export interface RiverWaterDetailsView {
+  coordinateSpace?: "world";
   id: string;
   name: string;
   splineRef: string;
@@ -1331,6 +1333,7 @@ export class SceneApp {
   private landscapeObjects: LandscapeObject[] = [];
   /** Visible spline-water ribbons, index-aligned with `layout.riverWaters`. */
   private riverWaterObjects: RiverWaterObjectLike[] = [];
+  private riverWaterBuild = 0;
   /** Shared planar reflection sources, one per River Water Body plane/group. */
   private riverReflectionSources: PlanarReflectionSource[] = [];
   /** Loaded normal maps owned by the editor water preview. */
@@ -6978,6 +6981,7 @@ export class SceneApp {
     if (stamps.length === 0) return;
     const overlay = new Group();
     overlay.name = "river-water-foam-overlay";
+    if (water.coordinateSpace === "world") overlay.position.copy(object.position).negate();
     const activeId = this.landscapeSculptSettings.activeRiverWaterFoamStampId;
     for (const stamp of stamps) {
       const active = stamp.id === activeId;
@@ -7012,6 +7016,7 @@ export class SceneApp {
    * freshly authored landscape whose sidecar hasn't been saved).
    */
   private async buildLandscapes(): Promise<void> {
+    this.riverWaterBuild += 1;
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
       disposeLandscapeObject(object);
@@ -7059,6 +7064,7 @@ export class SceneApp {
    * creates a collider or navigation rule.
    */
   private async buildRiverWaters(): Promise<void> {
+    const build = ++this.riverWaterBuild;
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
@@ -7069,41 +7075,53 @@ export class SceneApp {
     const waters = this.layout?.riverWaters ?? [];
     const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
     for (const actor of waters) {
-      const resolved = resolveRiverWater(actor);
-      const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
-      const data = landscape ? this.landscapeData.get(landscape.id) : null;
-      const spline = data?.splines?.find((candidate) => candidate.id === resolved.splineRef);
-      if (!landscape || !data || !spline) {
-        console.warn(`[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`);
-        continue;
-      }
-      let reflectionSource: PlanarReflectionSource | null = null;
-      const planeY = landscape.position[1] + resolved.surfaceLevel;
-      const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
-      if (reflectionKey && resolved.reflectionQuality !== "low") {
-        reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
-        if (!reflectionSource) {
-          reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
-          reflectionSourceByKey.set(reflectionKey, reflectionSource);
-          this.riverReflectionSources.push(reflectionSource);
+      try {
+        const resolved = resolveRiverWater(actor);
+        const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
+        const document = landscape ? this.worldTerrains.get(landscape.id) : undefined;
+        const data = landscape ? this.landscapeData.get(landscape.id) : null;
+        const spline = (document?.def ?? data)?.splines?.find((candidate) => candidate.id === resolved.splineRef);
+        if (!landscape || !spline || (!document && !data)) {
+          console.warn(`[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`);
+          continue;
         }
+        const source = document ? await prepareTerrainRiverWaterSource(document, resolved, async (key) => {
+          const path = terrainTilePath(landscape.dataRef, key);
+          const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+          if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+          return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+        }) : { spline, landscapeData: data!, surfaceLevel: resolved.surfaceLevel,
+          foamStamps: resolved.foamStamps, position: [...landscape.position] as Vec3,
+          rotation: landscape.rotation ? [...landscape.rotation] as Vec3 : [0, 0, 0] as Vec3 };
+        const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
+        const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
+        if (build !== this.riverWaterBuild) return;
+        let reflectionSource: PlanarReflectionSource | null = null;
+        const planeY = source.position[1] + source.surfaceLevel;
+        const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+        if (reflectionKey && resolved.reflectionQuality !== "low") {
+          reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
+          if (!reflectionSource) {
+            reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+            reflectionSourceByKey.set(reflectionKey, reflectionSource);
+            this.riverReflectionSources.push(reflectionSource);
+          }
+        }
+        const item: RiverWaterRenderItem = {
+          ...resolved,
+          ...source,
+          foamNoiseMap,
+          reflectionSource,
+        };
+        const object = createRiverWaterObject(item, normalMap);
+        object.raycast = () => {};
+        object.userData.riverWaterId = resolved.id;
+        this.scene.add(object);
+        this.riverWaterObjects.push(object);
+      } catch (error) {
+        if (build !== this.riverWaterBuild) return;
+        this.onStatus?.(`River Water ${actor.id} failed: ${error instanceof Error ? error.message : String(error)}`, "warning");
       }
-      const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
-      const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
-      const item: RiverWaterRenderItem = {
-        ...resolved,
-        spline,
-        landscapeData: data,
-        position: [...landscape.position],
-        rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
-        foamNoiseMap,
-        reflectionSource,
-      };
-      const object = createRiverWaterObject(item, normalMap);
-      object.raycast = () => {};
-      object.userData.riverWaterId = resolved.id;
-      this.scene.add(object);
-      this.riverWaterObjects.push(object);
     }
     this.refreshAllRiverWaterFoamOverlays();
   }
@@ -9077,7 +9095,9 @@ export class SceneApp {
     let best: { stampId: string; anchor: RiverWaterFoamStampAnchor; distance: number } | null = null;
     for (const stamp of resolved.foamStamps) {
       if (stamp.kind !== "point") continue;
-      projected.set(stamp.position[0], stamp.position[1] + 0.2, stamp.position[2]).applyMatrix4(object.matrixWorld).project(camera);
+      projected.set(stamp.position[0], stamp.position[1] + 0.2, stamp.position[2]);
+      if (water.coordinateSpace !== "world") projected.applyMatrix4(object.matrixWorld);
+      projected.project(camera);
       if (projected.z < -1 || projected.z > 1) continue;
       const distance = Math.hypot(
         (projected.x * 0.5 + 0.5) * rect.width - px,
@@ -9109,7 +9129,8 @@ export class SceneApp {
       stampId: stamp.id,
       anchor: "start",
       object,
-      world: new Vector3(stamp.position[0], stamp.position[1], stamp.position[2]).applyMatrix4(object.matrixWorld),
+      world: water?.coordinateSpace === "world" ? new Vector3(...stamp.position)
+        : new Vector3(...stamp.position).applyMatrix4(object.matrixWorld),
     };
   }
 
@@ -9124,12 +9145,14 @@ export class SceneApp {
     if (!landscape || !water || !hit || hit.landscapeIndex !== index) return false;
     const resolved = resolveRiverWater(water);
     const used = new Set(resolved.foamStamps.map((stamp) => stamp.id));
+    const point = hit.local.clone();
+    if (water.coordinateSpace === "world") this.landscapeObjects[index]!.localToWorld(point);
     let number = 1;
     while (used.has(`foam-${number}`)) number += 1;
     const stamp: LayoutRiverWaterFoamStamp = {
       id: `foam-${number}`,
       kind: "point",
-      position: [round(hit.local.x), resolved.surfaceLevel, round(hit.local.z)],
+      position: [round(point.x), resolved.surfaceLevel, round(point.z)],
       radius: 2,
       intensity: 0.7,
     };
@@ -9631,6 +9654,7 @@ export class SceneApp {
         session.markTiles(dirty.keys());
         updateWorldTerrainObjectTiles(object, dirty);
         void this.rebuildLandscapeSplineMeshes(index);
+        void this.buildRiverWaters();
         if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
         this.scheduleLandscapeFoliageRebuild(landscapeId);
       } else {
@@ -9914,7 +9938,7 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape") return [];
     const landscape = this.layout?.landscapes?.[this.selection.index];
     if (!landscape) return [];
-    const data = this.landscapeData.get(landscape.id);
+    const data = this.landscapeSplineSource(landscape.id);
     return (this.layout?.riverWaters ?? [])
       .filter((water) => water.landscapeRef === landscape.id)
       .map((water) => {
@@ -9922,6 +9946,7 @@ export class SceneApp {
         const spline = data?.splines?.find((entry) => entry.id === resolved.splineRef);
         return {
           id: resolved.id,
+          ...(resolved.coordinateSpace ? { coordinateSpace: resolved.coordinateSpace } : {}),
           name: resolved.name,
           splineRef: resolved.splineRef,
           surfaceLevel: resolved.surfaceLevel,
@@ -10102,7 +10127,7 @@ export class SceneApp {
   createSelectedLandscapeRiverWater(splineId: string): void {
     if (this.selection?.kind !== "landscape") return;
     const landscape = this.layout?.landscapes?.[this.selection.index];
-    const data = landscape ? this.landscapeData.get(landscape.id) : null;
+    const data = landscape ? this.landscapeSplineSource(landscape.id) : null;
     if (!landscape || landscape.locked || !data) return;
     const spline = data.splines?.find((entry) => entry.id === splineId);
     if (!spline || spline.points.length < 2 || spline.segments.length < 1) return;
@@ -10115,7 +10140,8 @@ export class SceneApp {
       name: `River Water ${existing.filter((entry) => entry.landscapeRef === landscape.id).length + 1}`,
       landscapeRef: landscape.id,
       splineRef: spline.id,
-      // Begin 0.1 units above the first point's local bed elevation; Surface
+      ...(this.worldTerrains.has(landscape.id) ? { coordinateSpace: "world" as const } : {}),
+      // Begin 0.1 units above the first point's authored bed elevation; Surface
       // Level remains the explicit horizontal-water override thereafter.
       surfaceLevel: Number((firstPoint.position[1] + 0.1).toFixed(3)),
     };
@@ -12938,7 +12964,7 @@ export class SceneApp {
       stampId: stamp.stampId,
       anchor: stamp.anchor,
       before: cloneRiverWater(water),
-      objectMatrixInverse: stamp.object.matrixWorld.clone().invert(),
+      objectMatrixInverse: water.coordinateSpace === "world" ? new Matrix4() : stamp.object.matrixWorld.clone().invert(),
     };
     this.pointerDrag = createGizmoPointerDrag({
       handle,
@@ -13075,7 +13101,8 @@ export class SceneApp {
     if (!drag || !object || !stamp) return null;
     object.updateWorldMatrix(true, false);
     const position = drag.anchor === "end" ? stamp.endPosition ?? stamp.position : stamp.position;
-    const world = new Vector3(...position).applyMatrix4(object.matrixWorld);
+    const world = new Vector3(...position);
+    if (drag.before.coordinateSpace !== "world") world.applyMatrix4(object.matrixWorld);
     return [world.x, world.y, world.z];
   }
 

@@ -1,7 +1,7 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
 Tarih: 2026-10-25  
-Durum: 8A0–8A4 tamamlandı (2026-10-26). Çok-tile spline editörü ve yol mesh/çarpışması kabul edildi. Sonraki dilim 8A5 nehir aktarımıdır; Lake/Puddle/Ocean henüz uygulanmadı.
+Durum: 8A0–8A5 tamamlandı (2026-10-26). Çok-tile spline editörü, yol mesh/çarpışması ve nehir aktarımı kabul edildi. Sonraki dilim W0-Lake tasarımıdır; Lake/Puddle/Ocean henüz uygulanmadı.
 Ana plan: [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md)
 
 ## 1. Amaç ve karar durumu
@@ -297,7 +297,7 @@ araçlarının ayrıntılı alt planıdır. Yukarıdaki ilk görüşme kaydı ta
   bağlama, tile yükleme/sabitleme, tek undo komutu ve kirli kayıt bağlantısı.
 - [x] **8A4 / yol çıktısı:** Dünya spline mesh'i, terrain normal hizalaması,
   çarpışma ve tarayıcıda iki tile'ı geçen yol kabulü.
-- [ ] **8A5 / nehir:** Dünya koordinatlı nehir yatağı/yüzeyi, kesin derinlik,
+- [x] **8A5 / nehir:** Dünya koordinatlı nehir yatağı/yüzeyi, kesin derinlik,
   akış, sculpt sonrası güncelleme ve eksik tile davranışı; tarayıcı kabulü.
 - [ ] **W0-Lake + W1:** Göl şeması, başlangıç noktası/kapalı sınır davranışı,
   kıyı üretimi, hedef sahne ve ölçülmüş performans bütçesini kesinleştir;
@@ -558,3 +558,58 @@ terrain/water çalışmasına müdahale edilmedi. Bu oturumda commit/push yapıl
 **Devam noktası: 8A5.** Dünya koordinatlı nehir yatağı/yüzeyi, kesin derinlik ve
 akış; sculpt sonrası güncelleme ve eksik tile davranışı. Göl aracına geçmeden
 önce W0-Lake kararları ayrıca kesinleştirilecektir.
+
+### 11.9. 8A5 nehir aktarımı ve kabulü — 2026-10-26
+
+- Mevcut çalışma ağacı `8a10d198` ile main'e commit/push edildi. Bundan sonraki
+  değişiklikler 8A5 nehir aktarımına aittir.
+- Yeni çok-tile nehirler `coordinateSpace: "world"` taşır. `surfaceLevel` ve
+  köpük noktaları mutlak dünya koordinatıdır; işaretsiz eski verinin yerel anlamı
+  korunur. Save validator alanı açıkça kabul eder; bilinmeyen işaret reddedilir.
+- Nehir yatağı mevcut 8A3 deform/boya patch ve tek undo yolu ile düzenlenir.
+  Su yüzeyi mevcut yatay yükseklik kontrolünü, spline genişliğini, akış ve
+  segment profillerini kullanır; hidrolojik akış çözümü eklenmez.
+- Ribbon üretimi terrain merkezine yakın yerel koordinatta yapılır. Derinlik
+  kesin üçgen yüksekliğinden hesaplanır. Gerekli koridor tile'ları geçici okunur;
+  streaming aktivasyonu, collider, undo pin ve kirli kayıt durumu değişmez.
+  Tanımlı tile'ın okunamaması tüm su gövdesini reddeder; gerçek deliklerde
+  üçgen üretilmez. Sculpt ve undo/redo bitiminde derinlik yeniden üretilir.
+- Tarayıcı kabulü oluşturma, yatak bake/sculpt ve undo, dünya köpük noktası,
+  akış/yansıma kontrolleri, Save/Reload, editör/runtime eşleşmesi ve uzaktaki
+  tile için 503/retry davranışını kapsar. Büyük dünya performansı ve
+  su geometri streaming'i bu dilimin kabulü değildir.
+
+**Doğrulama:**
+
+- Beş yeni engine regresyonu: büyük origin'de yüzey/derinlik/akış/köpük,
+  koridor okumaları ve başarısızlık/retry, gerçek delik kırpması, iki tile'da
+  yatak bake ve tam undo/redo, koordinat işareti ve eski yerel veri uyumluluğu.
+- Son tam `build:verify` **1.951 engine kontrolü**, TypeScript, smoke/content/UI
+  tip kontrolleri, üretim build'i, strict dist ve world-data dahil geçti.
+  Son UI açıklaması düzeltmesinden sonra ana ve smoke TypeScript tekrar geçti.
+  Yeni engine dosyası ayrıca TypeScript ile denetlendi.
+- Chromium'da ana nehir UI/sculpt/foam/Save/Reload/runtime senaryosu **1/1
+  geçti (2,3 dakika)**. Son kaynakla streaming 503/retry **1/1 geçti (53,5 sn)**;
+  geçici nehir okumaları resident tile sayısını değiştirmedi ve tile kaydetmedi.
+- Tek-tile bake/paint/undo, terrain endpoint doğrulaması ve eski yol/nehir
+  kimliklerini koruyan migrasyon/reload/Play regresyonları **3/3 geçti (2,5 dk)**.
+- Editör ve 1440×900 / 1100×720 runtime görüntüleri incelendi. Tile sınırında
+  kopma veya çift konum ofseti görülmedi. Editör ve runtime vertex konumları,
+  derinlik/akış verileri ve köpük dünya konumları birebir eşleşti. Ana senaryoda
+  beklenmeyen konsol hatası yoktu; 503 fixture'ında yalnız kasıtlı HTTP hatası vardı.
+
+Kanıtlar: `.dev-server/river-8a5-final-build.log`,
+`.dev-server/river-8a5-author.log` ve `river-8a5-author-results/`,
+`.dev-server/river-8a5-stream-final.log` ve `river-8a5-stream-final-results/`,
+`.dev-server/river-8a5-legacy.log` ve `river-8a5-legacy-results/`.
+Sandbox soket engeli, yanlış test düğmesi seçicisi ve ilk sayfanın kısa navigasyon
+süresiyle duran önceki koşular kabul olarak sayılmadı. Son koşular gerçek
+Save/Reload endpoint'leri ve izole smoke projesiyle yapıldı.
+
+Kaynak sahne/tile dosyaları değiştirilmedi. Başlangıçtaki tüm değişiklikler
+`8a10d198` ile push edildi; yeni 8A5 değişiklikleri çalışma ağacında bırakıldı.
+Kayıt/veri okuma değişiklikleri için Codex Security diff incelemesi önerildi;
+kullanıcı scan onayı olmadan çalıştırılmadı.
+
+**Devam noktası: W0-Lake.** Göl şeması, başlangıç noktası/kapalı kıyı sınırı,
+hedef sahne ve ölçülmüş performans bütçesi kesinleştirildikten sonra W1'e geçilir.

@@ -5,6 +5,7 @@ import { createGameModule } from "@/game/gameModule";
 import type { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { updateLandscapeLod } from "@engine/render-three/landscape";
 import type { Entity } from "@engine/scene/entity";
+import { installRiverProbe } from "./terrain-river-probe";
 
 // Test-only readback of the real shell, rendering and Rapier bodies. Authoring
 // uses the normal editor page, user controls and real disk save endpoints.
@@ -12,6 +13,7 @@ const forge = await createForgeRuntime({ canvas: document.querySelector("canvas"
   modules: createDefaultRuntimeModules(), gameModules: [createGameModule()] });
 await forge.loadLevel("layouts/__playwright-spline-world.level.json");
 forge.start();
+installRiverProbe(forge.app);
 const internal = forge.app as unknown as { frameHandle: number; camera: PerspectiveCamera; scene: Scene;
   renderer: WebGLRenderer; landscapeObjects: Group[]; landscapeColliderEntities: Entity[]; physicsSubsystem: PhysicsSubsystem;
   postProcessPipeline: { render(dt: number): void } | null };

@@ -11,12 +11,12 @@ import { SMOKE_ROAD_SIDECAR, SMOKE_SPLINE_SCENE, smokePublicPath } from "./smoke
 
 // QA: real Draw/Edit/gizmo input; seam bake and exact undo/redo; metadata-only
 // saves; reload; locked controls; a remote tile failure and successful retry.
-// Screenshots cover editing plus road mesh output; river output remains 8A5.
+// Screenshots cover editing, road meshes and 8A5 river authoring/runtime output.
 test.setTimeout(240_000);
 const LEVEL = "layouts/__playwright-spline-world.level.json";
 const TERRAIN = "landscapes/__playwright-spline-world.terrain.json";
 
-async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false, road = false) {
+async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false, road = false, river = false) {
   const n = streamed ? 12 : 2, q = streamed ? 32 : 64;
   // 12 x 4 exceeds the real 36-tile streaming threshold and keeps the remote
   // corridor, without 96 unrelated files in every definition-commit cross-check.
@@ -75,7 +75,7 @@ async function setup(page: Page, request: APIRequestContext, streamed = false, s
   // can monopolize disk IO during concurrent authoring/tests. Keep that unrelated
   // read deterministic; terrain definitions, tiles and every save stay real.
   await page.route("**/__project-dir/assets", (route) => route.fulfill({ json: { root: "assets", children: [] } }));
-  await page.goto("/?editor");
+  await page.goto(river ? "/tests/smoke/pages/terrain-river-editor.html?editor" : "/?editor", { waitUntil: "domcontentloaded", timeout: 90_000 });
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Spline World" }).first().click();
   await page.locator("[data-landscape-mode]").selectOption("splines");
@@ -104,6 +104,103 @@ async function save(page: Page) {
 }
 const readDef = async (): Promise<WorldTerrainDef> => JSON.parse(await readFile(smokePublicPath(TERRAIN), "utf8"));
 const readTile = async (key: string) => decodeTerrainTile(await readFile(smokePublicPath(terrainTilePath(TERRAIN, key))));
+const riverSnapshot = (page: Page) => page.evaluate(() => (window as any).__riverQA.snapshot());
+
+test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/Reload and runtime", async ({ page, request }, info) => {
+  test.setTimeout(480_000);
+  page.setDefaultTimeout(20_000);
+  const { errors } = await setup(page, request, false, true, false, true);
+  await page.locator('[data-landscape-spline="spline-1"]').click();
+  await page.locator("[data-river-water-create]").click();
+  await expect.poll(async () => (await riverSnapshot(page)).waters.length).toBe(1);
+  await page.getByTestId("editor-undo").click();
+  await expect.poll(async () => (await riverSnapshot(page)).waters.length).toBe(0);
+  await page.getByTestId("editor-redo").click();
+  const height = page.locator('[data-river-water-number="surfaceLevel"]');
+  await height.fill("7"); await height.press("Enter");
+  const flow = page.locator('[data-river-water-number="flowSpeed"]');
+  await flow.fill("1.2"); await flow.press("Enter");
+  await page.locator('[data-river-water-reflection="reflectionMode"]').selectOption("sharedPlanar");
+  await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.samples[0]?.y).toBe(7);
+  await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.reflection).toBeGreaterThan(0);
+  const initial = (await riverSnapshot(page)).waters[0];
+  expect(initial.position).toEqual([0, 5, 0]); expect(initial.flowSpeed).toBe(1.2);
+  expect(initial.samples.every((sample: any) => sample.depth === 2 && sample.flow[0] === 1)).toBe(true);
+
+  // The river bed uses the existing multi-tile patch/undo path.
+  const offset = page.locator('[data-landscape-segment-number="deform.targetOffset"]');
+  await offset.fill("-1"); await offset.press("Enter");
+  await page.locator("[data-landscape-spline-apply-deform]").click();
+  await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBe(3);
+  await page.getByTestId("editor-undo").click();
+  await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBe(2);
+  await page.getByTestId("editor-redo").click();
+  await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBe(3);
+
+  // A real sculpt stroke must invalidate the cached bed too, without changing the water plane.
+  await page.locator("[data-landscape-mode]").selectOption("sculpt");
+  await page.locator('[data-landscape-tool="lower"]').click();
+  const view = (await page.locator("[data-viewport-host]").boundingBox())!;
+  await page.mouse.move(view.x + view.width * 0.5, view.y + view.height * 0.5);
+  await page.mouse.down(); await page.waitForTimeout(300); await page.mouse.up();
+  await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBeGreaterThan(3);
+  await page.getByTestId("editor-undo").click();
+  await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBe(3);
+  await page.locator("[data-landscape-mode]").selectOption("splines");
+  await page.locator('[data-river-water-foam-add="ring"]').click();
+  await page.mouse.click(view.x + view.width * 0.5, view.y + view.height * 0.5);
+  await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.foam.length).toBe(1);
+  const lock = page.locator('[data-detail-toggle="locked"]');
+  await lock.check(); await expect(height).toBeDisabled();
+  await lock.uncheck(); await expect(height).toBeEnabled();
+  await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.riverWaters[0].coordinateSpace).toBe("world"); expect(saved.riverWaters[0].surfaceLevel).toBe(7);
+  const editor = (await riverSnapshot(page)).waters[0];
+  expect(editor.foam[0].world[1]).toBeCloseTo(7.025, 5);
+  const time = editor.time;
+  await expect.poll(async () => (await riverSnapshot(page)).waters[0].time).toBeGreaterThan(time + 0.2);
+  await page.screenshot({ path: info.outputPath("world-river-editor.png") });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 });
+  await page.getByTestId("outliner-row").filter({ hasText: "Spline World" }).first().click();
+  await page.locator("[data-landscape-mode]").selectOption("splines");
+  await expect(height).toHaveValue("7"); await expect(flow).toHaveValue("1.2");
+  await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.triangles).toBe(editor.triangles);
+  await page.goto("/tests/smoke/pages/terrain-spline-runtime.html", { waitUntil: "domcontentloaded" });
+  await expect.poll(async () => page.evaluate(() => Boolean((window as any).__riverQA)), { timeout: 90_000 }).toBe(true);
+  const runtime = (await riverSnapshot(page)).waters[0];
+  expect(runtime.samples).toEqual(editor.samples); expect(runtime.foam).toEqual(editor.foam);
+  expect(runtime.position).toEqual(editor.position); expect(runtime.reflection).toBeGreaterThan(0);
+  await page.evaluate(() => (window as any).__riverQA.frame());
+  await page.screenshot({ path: info.outputPath("world-river-runtime.png") });
+  await page.setViewportSize({ width: 1100, height: 720 });
+  await page.evaluate(() => (window as any).__riverQA.frame());
+  await page.screenshot({ path: info.outputPath("world-river-runtime-small.png") });
+  await writeFile(info.outputPath("world-river.json"), JSON.stringify({ editor, runtime }, null, 2));
+  expect(errors).toEqual([]);
+});
+
+test("streamed river rejects an unreadable remote bed without invented water and rebuilds on retry", async ({ page, request }, info) => {
+  const { errors, def } = await setup(page, request, true, false, false, true);
+  const before = await riverSnapshot(page); expect(before.resident[0]).toBeLessThan(def.tiles.length);
+  const writes: string[] = [];
+  page.on("request", (req) => { if (req.url().includes("/__save-terrain-tile")) writes.push(req.url()); });
+  await page.route("**/__playwright-spline-world.tiles/10_0.tile.bin", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+  await page.locator("[data-river-water-create]").click();
+  await expect(page.getByTestId("editor-status")).toContainText("River Water river-water-1 failed", { timeout: 30_000 });
+  expect((await riverSnapshot(page)).waters).toEqual([]); expect(writes).toEqual([]);
+  await page.unroute("**/__playwright-spline-world.tiles/10_0.tile.bin");
+  const height = page.locator('[data-river-water-number="surfaceLevel"]');
+  await height.fill("7"); await height.press("Enter");
+  await expect.poll(async () => (await riverSnapshot(page)).waters.length, { timeout: 30_000 }).toBe(1);
+  const snapshot = await riverSnapshot(page);
+  expect(snapshot.resident).toEqual(before.resident);
+  expect(snapshot.waters[0].samples.every((sample: any) => sample.y === 7 && sample.depth === 2)).toBe(true);
+  expect(writes).toEqual([]);
+  await page.screenshot({ path: info.outputPath("streamed-river-retry.png") });
+  await writeFile(info.outputPath("streamed-river.json"), JSON.stringify(snapshot, null, 2));
+  expect(errors).toEqual([expect.stringMatching(/503/)]);
+});
 
 test("multi-tile spline Draw, point gizmo and snap survive Save and reload", async ({ page, request }, info) => {
   const writes: string[] = [];

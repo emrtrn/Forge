@@ -2,7 +2,7 @@
 // keeps them in the dev-only editor chunk, out of the production game build.
 import type { QualityLevel } from "@engine/perf/qualityProfiles";
 import "./editorUi.css";
-import { renderLakeDetails } from "./panels/details/lakeDetails";
+import { renderWaterSystemDetails } from "./panels/details/waterSystemDetails";
 import {
   assetPath,
   assetRecordById,
@@ -4432,7 +4432,7 @@ export class EditorUi {
   private renderDetails(selection: EditableSelection | null): void {
     const lakeState = this.app.getLakeEditorState();
     if (selection && (selection.kind === "lake" || lakeState.draft || lakeState.picking)) {
-      renderLakeDetails(this.detailsBody, this.app, true); this.finalizeDetailsRender(selection);
+      renderWaterSystemDetails(this.detailsBody, this.app); this.finalizeDetailsRender(selection);
       if (lakeState.leaving || lakeState.picking) this.detailsBody.querySelector("[data-lake-workflow]")?.scrollIntoView({ block: "start" });
       return;
     }
@@ -4512,8 +4512,9 @@ export class EditorUi {
       return;
     }
     if (selection.kind === "landscape") {
-      renderLandscapeDetails(this.specialActorDetailsOptions(selection));
-      renderLakeDetails(this.detailsBody, this.app);
+      if (this.app.getLandscapeSculptSettings().editMode === "water") {
+        renderWaterSystemDetails(this.detailsBody, this.app, this.specialActorDetailsOptions(selection));
+      } else renderLandscapeDetails(this.specialActorDetailsOptions(selection));
       this.finalizeDetailsRender(selection);
       return;
     }

@@ -387,24 +387,6 @@
       "name": "Spline 1",
       "smooth": true,
       "coordinateSpace": "world"
-    },
-    {
-      "id": "spline-2",
-      "points": [
-        {
-          "id": "point-1",
-          "position": [
-            300.62,
-            -41.26,
-            20.2
-          ],
-          "width": 6,
-          "falloff": 3
-        }
-      ],
-      "segments": [],
-      "name": "Spline 2",
-      "coordinateSpace": "world"
     }
   ]
 }

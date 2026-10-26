@@ -29,8 +29,12 @@ async function number(page: Page, key: string, value: number) {
   if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
   const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
 }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false) {
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false) {
   const doc = createLakeFixture();
+  if (waterSystem) doc.def.splines = [{ id: "water-path", coordinateSpace: "world", points: [
+    { id: "a", position: [-20, 12, -12], width: 4, falloff: 2 },
+    { id: "b", position: [20, 12, -12], width: 4, falloff: 2 },
+  ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }] }];
   if (bed) doc.lake.bed = createLakeBedFixture().lake.bed!;
   if (streamed) {
     const original = new Map(doc.tiles); doc.def.tilesX = 12; doc.def.tilesZ = 4; doc.def.tiles = []; doc.tiles.clear();
@@ -65,6 +69,7 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   await page.goto("/tests/smoke/pages/terrain-lake-editor.html?editor", { waitUntil: "domcontentloaded", timeout: 90_000 });
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Lake QA Terrain" }).first().click();
+  await page.locator("[data-landscape-mode]").selectOption("water");
   return { doc, errors };
 }
 async function terrainHash() {
@@ -179,7 +184,65 @@ test("Streamed Lake rejects a remote 503 and retries without activating or savin
 });
 
 const editorSnapshot = (page: Page) => page.evaluate(() => (window as any).__lakeQA.editor());
+
+// QA: shared River/Lake navigation, mode roundtrip, no sculpt in Water System,
+// retained river accordions, no eligible spline, pick cancellation, compact fit.
+test("Water System groups rivers and lakes and keeps terrain edits in Sculpt", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  page.setDefaultTimeout(20_000);
+  const { errors } = await setup(page, request, true, false, false, false, true);
+  await ready(page);
+  const terrain = (await editorSnapshot(page)).terrain;
+  await expect(page.locator('[data-landscape-mode]')).toHaveValue("water");
+  await expect(page.locator('[data-lake-begin]')).toHaveText("Add Lake");
+  await expect(page.locator('[data-river-water-create]')).toHaveText("Add River");
+  await expect(page.locator('[data-landscape-tool], [data-landscape-spline-tool]')).toHaveCount(0);
+  await clickWorld(page, [0, 10, -12]);
+  expect((await editorSnapshot(page)).terrain).toEqual(terrain);
+  // Water System keeps ordinary picking: this click may select the existing Lake.
+  await page.locator('[data-object-id="landscape:0"]').click();
+  await page.locator('[data-river-water-create]').click();
+  await expect(page.locator('[data-water-body][data-water-kind="river"]')).toHaveCount(1);
+  await expect(page.locator('[data-water-body][data-water-kind="lake"]')).toHaveCount(1);
+  await expect(page.locator('[data-river-water-create]')).toBeDisabled();
+  await page.screenshot({ path: info.outputPath("water-system-river-and-lake.png") });
+  const surface = page.locator('[data-detail-section="river-surface"]');
+  await surface.locator('.detail-section-toggle').click();
+  const flow = page.locator('[data-river-water-number="flowSpeed"]');
+  await flow.fill("1.4"); await flow.press("Tab");
+  await expect(surface).toHaveClass(/collapsed/);
+  await page.locator('[data-water-kind="lake"]').click();
+  await expect(page.locator('[data-lake-number="surfaceLevel"]')).toBeVisible();
+  await expect(page.locator('[data-landscape-mode]')).toHaveValue("water");
+  await expect(page.locator('[data-water-kind="lake"]')).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: info.outputPath("water-system-lake-selected.png") });
+  await page.locator('[data-water-kind="river"]').click();
+  await expect(flow).toHaveValue("1.4");
+  await expect(surface).toHaveClass(/collapsed/);
+  await page.locator('[data-landscape-mode]').selectOption("sculpt");
+  await expect(page.locator('[data-landscape-tool="raise"]')).toBeVisible();
+  await expect(page.locator('[data-river-water-create], [data-lake-begin]')).toHaveCount(0);
+  await page.locator('[data-landscape-mode]').selectOption("water");
+  await page.locator('[data-lake-begin]').click();
+  await expect(page.locator('[data-landscape-mode]')).toBeDisabled();
+  await expect(page.locator('[data-water-body]').first()).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-lake-begin]')).toBeEnabled();
+  await page.setViewportSize({ width: 1100, height: 720 });
+  await page.locator('[data-lake-begin]').scrollIntoViewIfNeeded();
+  await expect(page.locator('[data-river-water-create]')).toBeInViewport();
+  await expect(page.locator('[data-lake-begin]')).toBeInViewport();
+  await page.screenshot({ path: info.outputPath("water-system-small.png") });
+  await page.locator('[data-water-create-spline]').click();
+  await expect(page.locator('[data-landscape-mode]')).toHaveValue("splines");
+  await expect(page.locator('[data-landscape-spline-tool="draw"]')).toBeVisible();
+  await expect(page.locator('[data-river-water-number]')).toHaveCount(0);
+  expect((await editorSnapshot(page)).terrain).toEqual(terrain);
+  expect(errors).toEqual([]);
+});
+
 async function draftLake(page: Page) {
+  await page.locator("[data-landscape-mode]").selectOption("water");
   await page.locator("[data-lake-begin]").click(); await clickWorld(page, [-20, 10, -12]);
   for (const [key, value] of [["minX", -48], ["minZ", -48], ["maxX", 48], ["maxZ", 48], ["surfaceLevel", 12]] as const) await number(page, key, value);
   await ready(page);
@@ -191,7 +254,7 @@ async function draftLake(page: Page) {
 // smaller viewport fit; legacy metadata roundtrip; no terrain edits in any flow.
 test("Lake UX preserves a draft on Escape and exits to normal viewport selection", async ({ page, request }, info) => {
   test.setTimeout(300_000); const { errors } = await setup(page, request, false, false, false, true), hash = await terrainHash();
-  await expect(page.locator("[data-lake-panel] button")).toHaveCount(1);
+  await expect(page.locator("[data-lake-begin]")).toHaveText("Add Lake");
   await expect(page.locator("[data-lake-bed-begin], [data-lake-bed-draw], [data-lake-bed-apply]")).toHaveCount(0);
   const foregroundPoint = [-12, 17, -12];
   // Leave Landscape's sculpt mode before checking ordinary object picking.
@@ -226,7 +289,9 @@ test("Lake UX preserves a draft on Escape and exits to normal viewport selection
   expect((await editorSnapshot(page)).selection?.assetId).toBe("shape:cube");
   await page.locator('[data-object-id="lake:0"]').click();
   await page.setViewportSize({ width: 1100, height: 720 });
-  await page.locator("[data-lake-workflow]").scrollIntoViewIfNeeded();
+  // The shared Water System navigation now precedes the Lake editor. Bring its
+  // whole editing panel into view before checking the core controls together.
+  await page.locator("[data-lake-panel]").scrollIntoViewIfNeeded();
   const fit = await page.locator("[data-lake-panel]").evaluate((panel) => {
     const controls = [...panel.querySelectorAll<HTMLElement>("[data-lake-workflow] button, [data-lake-locked], [data-lake-hidden]")];
     const bounds = panel.getBoundingClientRect();

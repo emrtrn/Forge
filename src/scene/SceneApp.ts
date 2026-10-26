@@ -727,7 +727,7 @@ export interface SplineReference {
 }
 
 export type LandscapeSculptTool = TerrainSculptTool;
-export type LandscapeEditMode = "sculpt" | "paint" | "splines";
+export type LandscapeEditMode = "sculpt" | "paint" | "splines" | "water";
 export type LandscapePaintTool = "paint" | "erase" | "smoothWeights";
 /**
  * Splines sub-mode (Faz 6.1). "draw" authors the spline (click terrain to add a
@@ -2208,9 +2208,21 @@ export class SceneApp {
     });
   }
 
-  selectSceneObject(id: string, options: { additive?: boolean } = {}): void {
+  selectSceneObject(id: string, options: { additive?: boolean; rangeIds?: readonly string[] } = {}): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
+    if (options.rangeIds) {
+      const selections = options.additive ? this.getSelectedSelections() : [];
+      const ids = new Set(selections.map(selectionId));
+      for (const rangeId of [...options.rangeIds, id]) {
+        const entry = parseSelectionId(rangeId);
+        if (!entry || !this.hasSelection(entry) || ids.has(rangeId)) continue;
+        ids.add(rangeId);
+        selections.push(entry);
+      }
+      this.selectMany(selections, selection);
+      return;
+    }
     if (options.additive) this.toggleSelection(selection);
     else this.select(selection);
   }
@@ -2343,7 +2355,7 @@ export class SceneApp {
     // World Terrain layers may use ids of their own.
     for (const world of this.worldTerrains.values()) for (const layer of world.def.layers) layerIds.add(layer.id);
     this.landscapeSculptSettings = {
-      editMode: ["sculpt", "paint", "splines"].includes(next.editMode) ? next.editMode : "sculpt",
+      editMode: ["sculpt", "paint", "splines", "water"].includes(next.editMode) ? next.editMode : "sculpt",
       tool: ["raise", "lower", "smooth", "flatten", "noise", "ramp", "terrace", "erosion"].includes(next.tool) ? next.tool : "raise",
       paintTool: ["paint", "erase", "smoothWeights"].includes(next.paintTool)
         ? next.paintTool
@@ -2378,7 +2390,7 @@ export class SceneApp {
         ? next.activeRiverWaterId
         : null,
       riverWaterRingFoamPlacementId:
-        typeof next.riverWaterRingFoamPlacementId === "string" && next.riverWaterRingFoamPlacementId.length > 0
+        next.editMode === "water" && typeof next.riverWaterRingFoamPlacementId === "string" && next.riverWaterRingFoamPlacementId.length > 0
           ? next.riverWaterRingFoamPlacementId
           : null,
       activeRiverWaterFoamStampId:
@@ -2401,7 +2413,9 @@ export class SceneApp {
     } else if (previousLayerId !== this.landscapeSculptSettings.activeLayerId) {
       this.refreshAllLandscapeGeometry();
     }
-    const mode = this.landscapeSculptSettings.editMode === "splines"
+    const mode = this.landscapeSculptSettings.editMode === "water"
+      ? "Water System"
+      : this.landscapeSculptSettings.editMode === "splines"
       ? "Splines"
       : this.landscapeSculptSettings.editMode === "paint"
         ? this.landscapeSculptSettings.paintTool
@@ -6994,7 +7008,7 @@ export class SceneApp {
     if (!object || !landscape) return;
     const existing = object.getObjectByName("river-water-foam-overlay");
     if (existing instanceof Group) this.disposeSplineOverlayGroup(existing);
-    if (this.selection?.kind !== "landscape" || this.selection.index !== index) return;
+    if (this.selection?.kind !== "landscape" || this.selection.index !== index || this.landscapeSculptSettings.editMode !== "water") return;
     const waterId = this.landscapeSculptSettings.activeRiverWaterId;
     const water = this.layout?.riverWaters?.find((entry) => entry.id === waterId && entry.landscapeRef === landscape.id);
     if (!water) return;
@@ -7147,6 +7161,52 @@ export class SceneApp {
     return { source: source ? structuredClone(source) : null, result: source ? this.lakes?.results.get(source.id) ?? null : null,
       leaving: !!this.lakePendingSelection,
       draft: !!this.lakeDraft, picking: !!this.lakePick, available: !!(actor && !actor.locked && this.lakeDocument(actor.id)) };
+  }
+
+  /** Context shared by the Landscape water panel and a selected Lake inspector. */
+  getWaterSystemContext() {
+    const lake = this.getLakeEditorState();
+    const terrainId = lake.source?.terrainRef ?? this.lakePick?.terrainRef;
+    const index = this.selection?.kind === "landscape" ? this.selection.index
+      : this.layout?.landscapes?.findIndex((actor) => actor.id === terrainId) ?? -1;
+    const terrain = this.layout?.landscapes?.[index];
+    if (!terrain) return null;
+    const rivers = (this.layout?.riverWaters ?? []).filter((water) => water.landscapeRef === terrain.id);
+    const activeRiver = rivers.find((water) => water.id === this.landscapeSculptSettings.activeRiverWaterId) ?? rivers[0];
+    return {
+      index, name: terrain.name ?? terrain.id, locked: !!terrain.locked,
+      busy: lake.draft || lake.picking,
+      bodies: [
+        ...rivers.map((water) => ({ id: water.id, name: water.name ?? water.id, kind: "river" as const,
+          active: !lake.source && water.id === activeRiver?.id })),
+        ...(this.layout?.waterBodies ?? []).filter((water) => water.terrainRef === terrain.id)
+          .map((water) => ({ id: water.id, name: water.name ?? water.id, kind: "lake" as const, active: water.id === lake.source?.id })),
+      ],
+    };
+  }
+
+  selectWaterSystemTerrain(editMode: LandscapeEditMode = "water"): boolean {
+    const context = this.getWaterSystemContext();
+    if (!context || context.busy) return false;
+    this.setLandscapeSculptSettings({ editMode });
+    this.select({ kind: "landscape", index: context.index });
+    return true;
+  }
+
+  selectWaterSystemBody(kind: "river" | "lake", id: string): void {
+    const context = this.getWaterSystemContext();
+    if (!context || context.busy || !context.bodies.some((body) => body.kind === kind && body.id === id)) return;
+    if (kind === "river") {
+      this.setLandscapeSculptSettings({ editMode: "water", activeRiverWaterId: id,
+        activeRiverWaterFoamStampId: null, activeRiverWaterFoamStampAnchor: null });
+      this.select({ kind: "landscape", index: context.index });
+    } else {
+      const index = this.layout?.waterBodies?.findIndex((water) => water.id === id) ?? -1;
+      if (index >= 0) {
+        this.setLandscapeSculptSettings({ editMode: "water", riverWaterRingFoamPlacementId: null });
+        this.select({ kind: "lake", index });
+      }
+    }
   }
 
   beginLakeFill(): void {
@@ -9241,7 +9301,7 @@ export class SceneApp {
 
   private updateLandscapeBrushHover(clientX: number, clientY: number): void {
     // Foliage mode owns the brush cursor; never show the landscape sculpt ring too.
-    if (this.foliageModeActive || this.meshPaintModeActive || this.landscapeSculptSettings.editMode === "splines") {
+    if (this.foliageModeActive || this.meshPaintModeActive || this.landscapeSculptSettings.editMode === "splines" || this.landscapeSculptSettings.editMode === "water") {
       this.clearLandscapeBrushHover();
       return;
     }
@@ -9271,23 +9331,21 @@ export class SceneApp {
     if (this.foliageModeActive || this.meshPaintModeActive) return false;
     // Alt+left is a temporary sculpt tool; other terrain modes keep camera orbit.
     if (event.altKey && this.landscapeSculptSettings.editMode !== "sculpt") return false;
+    if (this.landscapeSculptSettings.editMode === "water") {
+      if (this.landscapeSculptSettings.riverWaterRingFoamPlacementId) return this.placeRiverWaterRingFoamAtPointer(event);
+      const marker = this.pickRiverWaterFoamStamp(event.clientX, event.clientY);
+      if (marker) {
+        this.setLandscapeSculptSettings({ activeRiverWaterId: marker.waterId,
+          activeRiverWaterFoamStampId: marker.stampId, activeRiverWaterFoamStampAnchor: marker.anchor });
+        this.emitSelectionChanged();
+        this.updateGizmo();
+        return true;
+      }
+      return false;
+    }
     if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)
       && this.landscapeSculptSettings.editMode !== "splines") {
       return this.beginTerrainStroke(event);
-    }
-    if (this.landscapeSculptSettings.riverWaterRingFoamPlacementId) {
-      return this.placeRiverWaterRingFoamAtPointer(event);
-    }
-    const ringMarker = this.pickRiverWaterFoamStamp(event.clientX, event.clientY);
-    if (ringMarker) {
-      this.setLandscapeSculptSettings({
-        activeRiverWaterId: ringMarker.waterId,
-        activeRiverWaterFoamStampId: ringMarker.stampId,
-        activeRiverWaterFoamStampAnchor: ringMarker.anchor,
-      });
-      this.emitSelectionChanged();
-      this.updateGizmo();
-      return true;
     }
     if (this.landscapeSculptSettings.editMode === "splines") {
       return this.addLandscapeSplinePointAtPointer(event);
@@ -9376,7 +9434,7 @@ export class SceneApp {
     clientX: number,
     clientY: number,
   ): { waterId: string; stampId: string; anchor: RiverWaterFoamStampAnchor } | null {
-    if (this.selection?.kind !== "landscape") return null;
+    if (this.selection?.kind !== "landscape" || this.landscapeSculptSettings.editMode !== "water") return null;
     const index = this.selection.index;
     const landscape = this.layout?.landscapes?.[index];
     const object = this.landscapeObjects[index];
@@ -9412,7 +9470,7 @@ export class SceneApp {
 
   /** Resolves the active Radial Foam point to the shared move-gizmo target. */
   private activeRiverWaterFoamStamp(): RiverWaterFoamStampGizmoTarget | null {
-    if (this.selection?.kind !== "landscape") return null;
+    if (this.selection?.kind !== "landscape" || this.landscapeSculptSettings.editMode !== "water") return null;
     const { activeRiverWaterId, activeRiverWaterFoamStampId } = this.landscapeSculptSettings;
     if (!activeRiverWaterId || !activeRiverWaterFoamStampId) return null;
     const index = this.selection.index;
@@ -9666,6 +9724,7 @@ export class SceneApp {
    * renderer, splines, foliage and Save still read.
    */
   private beginTerrainStroke(event: PointerEvent): boolean {
+    if (this.landscapeSculptSettings.editMode === "water") return false;
     if (this.terrainStrokePending) {
       this.onStatus?.("Loading terrain for the previous sculpt operation…", "info");
       return true;
@@ -13050,7 +13109,7 @@ export class SceneApp {
         if (
           event.ctrlKey && this.selectedEditableLandscapeIndex() !== null &&
           !this.foliageModeActive && !this.meshPaintModeActive &&
-          this.landscapeSculptSettings.editMode !== "splines"
+          this.landscapeSculptSettings.editMode !== "splines" && this.landscapeSculptSettings.editMode !== "water"
         ) {
           event.preventDefault();
           if (event.deltaY === 0) return;

@@ -112,12 +112,14 @@ test("multi-tile river follows edited spline Y through undo, reload and runtime"
   await page.locator('[data-landscape-spline-point="point-2"]').click();
   const pointY = page.locator('[data-landscape-spline-point-axis="y"]');
   await pointY.fill("9"); await pointY.press("Enter");
+  await page.locator("[data-landscape-mode]").selectOption("water");
   await page.locator("[data-river-water-create]").click();
   const endHeight = async () => (await riverSnapshot(page)).waters[0]?.samples.at(-1)?.y ?? 0;
   await expect.poll(endHeight).toBeCloseTo(9.1, 5);
   const height = page.locator('[data-river-water-number="surfaceLevel"]');
   await height.fill("7"); await height.press("Enter");
   await expect.poll(endHeight).toBeCloseTo(11, 5);
+  await page.locator("[data-landscape-mode]").selectOption("splines");
   await pointY.fill("7"); await pointY.press("Enter");
   await expect.poll(endHeight).toBeCloseTo(9, 5);
   await page.getByTestId("editor-undo").click();
@@ -148,6 +150,7 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   page.setDefaultTimeout(20_000);
   const { errors } = await setup(page, request, false, true, false, true);
   await page.locator('[data-landscape-spline="spline-1"]').click();
+  await page.locator("[data-landscape-mode]").selectOption("water");
   await page.locator("[data-river-water-create]").click();
   await expect.poll(async () => (await riverSnapshot(page)).waters.length).toBe(1);
   await page.getByTestId("editor-undo").click();
@@ -165,6 +168,7 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   expect(initial.samples.every((sample: any) => sample.depth === 2 && sample.flow[0] === 1)).toBe(true);
 
   // The river bed uses the existing multi-tile patch/undo path.
+  await page.locator("[data-landscape-mode]").selectOption("splines");
   const offset = page.locator('[data-landscape-segment-number="deform.targetOffset"]');
   await offset.fill("-1"); await offset.press("Enter");
   await page.locator("[data-landscape-spline-apply-deform]").click();
@@ -184,6 +188,7 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await page.getByTestId("editor-undo").click();
   await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBe(3);
   await page.locator("[data-landscape-mode]").selectOption("splines");
+  await page.locator("[data-landscape-mode]").selectOption("water");
   await page.locator('[data-river-water-foam-add="ring"]').click();
   await page.mouse.click(view.x + view.width * 0.5, view.y + view.height * 0.5);
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.foam.length).toBe(1);
@@ -201,6 +206,7 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Spline World" }).first().click();
   await page.locator("[data-landscape-mode]").selectOption("splines");
+  await page.locator("[data-landscape-mode]").selectOption("water");
   await expect(height).toHaveValue("7"); await expect(flow).toHaveValue("1.2");
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.triangles).toBe(editor.triangles);
   await page.goto("/tests/smoke/pages/terrain-spline-runtime.html", { waitUntil: "domcontentloaded" });
@@ -225,6 +231,7 @@ test("streamed river rejects an unreadable remote bed without invented water and
   page.on("request", (req) => { if (req.url().includes("/__save-terrain-tile")) writes.push(req.url()); });
   await page.route("**/__playwright-spline-world.tiles/10_0.tile.bin", (route) => route.fulfill({ status: 503, body: "unavailable" }));
   const failedTile = page.waitForResponse((response) => response.url().endsWith("/__playwright-spline-world.tiles/10_0.tile.bin") && response.status() === 503);
+  await page.locator("[data-landscape-mode]").selectOption("water");
   await page.locator("[data-river-water-create]").click();
   // Autosave may replace the transient status text before a polling assertion.
   // The controlled 503 and absent body are durable witnesses of the failure.
@@ -305,6 +312,7 @@ test("multi-tile spline seam bake supports exact undo/redo and persists after re
 
   const flag = (key: string) => page.locator(`[data-landscape-segment-flag="${key}"]`);
   await flag("deform.enabled").check();
+  await page.locator("[data-landscape-mode]").selectOption("splines");
   const offset = page.locator('[data-landscape-segment-number="deform.targetOffset"]');
   await offset.fill("2"); await offset.press("Enter");
   await flag("paint.enabled").check();

@@ -1880,7 +1880,8 @@
       "splineRef": "spline-1",
       "name": "River Water 1",
       "coordinateSpace": "world",
-      "surfaceLevel": -38.7
+      "surfaceLevel": -38.7,
+      "reflectionMode": "sharedPlanar"
     }
   ],
   "waterBodies": [
@@ -1906,31 +1907,16 @@
         -43.94528225259613
       ],
       "surfaceLevel": -5,
-      "name": "Lake 3"
-    },
-    {
-      "schema": 1,
-      "kind": "lake",
-      "mode": "fillExisting",
-      "coordinateSpace": "world",
-      "id": "lake-1",
-      "terrainRef": "landscape-1",
-      "bounds": {
-        "min": [
-          214,
-          -160
-        ],
-        "max": [
-          279,
-          -95
-        ]
-      },
-      "seed": [
-        246.00873652116775,
-        -127.56770257239307
-      ],
-      "surfaceLevel": -45,
-      "name": "Lake 1"
+      "name": "Lake 3",
+      "hidden": false,
+      "appearance": {
+        "opacity": 0.5,
+        "absorptionDistance": 1,
+        "normalScale": 2,
+        "rippleSpeed": 0.5,
+        "reflectionStrength": 0.1,
+        "reflectionMode": "sharedPlanar"
+      }
     }
   ],
   "actors": []

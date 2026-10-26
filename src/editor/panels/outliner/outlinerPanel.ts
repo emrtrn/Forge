@@ -15,13 +15,16 @@ export const OUTLINER_FILTER_TYPES = [
 
 export type OutlinerFilterType = (typeof OUTLINER_FILTER_TYPES)[number]["type"];
 
+// The list element survives row rebuilds after selection, filtering, and edits.
+const selectionAnchors = new WeakMap<HTMLElement, string>();
+
 export interface OutlinerPanelOptions {
   body: HTMLElement;
   summary: HTMLElement;
   objects: readonly EditableSceneObject[];
   filter: string;
   visibleTypes: ReadonlySet<OutlinerFilterType>;
-  selectSceneObject: (id: string, options?: { additive?: boolean }) => void;
+  selectSceneObject: (id: string, options?: { additive?: boolean; rangeIds?: readonly string[] }) => void;
   renameSceneObject: (id: string, name: string) => void;
   setSceneObjectHidden: (id: string, hidden: boolean) => void;
   setSceneObjectLocked: (id: string, locked: boolean) => void;
@@ -84,6 +87,10 @@ function replaceOutlinerRows(
   entries: Array<{ object: EditableSceneObject; depth: number }>,
   totalCount: number,
 ): void {
+  const anchorId = selectionAnchors.get(options.body);
+  if (!entries.some(({ object }) => object.id === anchorId && object.selected)) {
+    selectionAnchors.delete(options.body);
+  }
   if (entries.length === 0) {
     options.body.innerHTML = `
         <div class="empty-details">
@@ -94,10 +101,30 @@ function replaceOutlinerRows(
     return;
   }
 
+  const selectRow = (object: EditableSceneObject, event: MouseEvent): void => {
+    const additive = event.ctrlKey || event.metaKey;
+    if (event.shiftKey) {
+      const anchorId = selectionAnchors.get(options.body)
+        ?? entries.find(({ object }) => object.selected)?.object.id
+        ?? object.id;
+      const start = entries.findIndex(({ object }) => object.id === anchorId);
+      const end = entries.findIndex((entry) => entry.object.id === object.id);
+      selectionAnchors.set(options.body, anchorId);
+      options.selectSceneObject(object.id, {
+        additive,
+        rangeIds: entries.slice(Math.min(start, end), Math.max(start, end) + 1)
+          .map(({ object }) => object.id),
+      });
+      return;
+    }
+    selectionAnchors.set(options.body, object.id);
+    options.selectSceneObject(object.id, { additive });
+  };
+
   let dragIds: string[] = [];
   options.body.replaceChildren(
     ...entries.map((entry) =>
-      buildOutlinerRow(options, entry.object, entry.depth, () => dragIds, (next) => {
+      buildOutlinerRow(options, entry.object, entry.depth, selectRow, () => dragIds, (next) => {
         dragIds = next;
       }),
     ),
@@ -108,6 +135,7 @@ function buildOutlinerRow(
   options: OutlinerPanelOptions,
   object: EditableSceneObject,
   depth: number,
+  selectRow: (object: EditableSceneObject, event: MouseEvent) => void,
   getDragIds: () => readonly string[],
   setDragIds: (ids: string[]) => void,
 ): HTMLDivElement {
@@ -136,9 +164,7 @@ function buildOutlinerRow(
     `;
   row.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest(".outliner-actions")) return;
-    options.selectSceneObject(object.id, {
-      additive: event.ctrlKey || event.shiftKey,
-    });
+    selectRow(object, event);
   });
   row.addEventListener("contextmenu", (event) => {
     event.preventDefault();

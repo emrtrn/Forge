@@ -1,4 +1,89 @@
-import { expect, test } from "./test";
+import { readFile, writeFile } from "node:fs/promises";
+import { expect, test, type Page } from "./test";
+import { SMOKE_SCENE, smokePublicPath } from "./smokeProject.mjs";
+
+async function openRangeSelectionScene(page: Page, hierarchical = false): Promise<void> {
+  const path = smokePublicPath(SMOKE_SCENE);
+  const scene = JSON.parse(await readFile(path, "utf8"));
+  scene.instances = [{
+    assetId: "shape:cube",
+    placements: Array.from({ length: 150 }, (_, index) => ({
+      name: `Range ${String(index + 1).padStart(3, "0")}`,
+      nodeId: `range-${index + 1}`,
+      ...(hierarchical && index === 139 ? { parentId: "range-6" } : {}),
+      position: [index * 2, 0, 0],
+      scale: 1,
+    })),
+  }];
+  await writeFile(path, JSON.stringify(scene));
+  await page.goto("/?editor");
+  await expect(page.getByTestId("outliner-row").filter({ hasText: "Range 150" })).toBeAttached({ timeout: 30_000 });
+}
+
+test("scene outliner Shift selects, shrinks, and reverses a 6-to-140 range", async ({ page }) => {
+  await openRangeSelectionScene(page);
+  await page.locator("[data-outliner-search]").fill("Range ");
+  const rows = page.getByTestId("outliner-row");
+  await expect(rows).toHaveCount(150);
+  const ids = await rows.evaluateAll((entries) => entries.map((entry) => (entry as HTMLElement).dataset.objectId));
+  const selectedIds = () => page.locator('[data-testid="outliner-row"].active').evaluateAll((entries) => entries.map((entry) => (entry as HTMLElement).dataset.objectId));
+
+  await rows.nth(5).click();
+  await rows.nth(139).click({ modifiers: ["Shift"] });
+  await expect.poll(selectedIds).toEqual(ids.slice(5, 140));
+  await expect(page.getByTestId("outliner-summary")).toContainText("135 selected");
+
+  // Repeated Shift clicks retain the original anchor while replacing the range.
+  await rows.nth(19).click({ modifiers: ["Shift"] });
+  await expect.poll(selectedIds).toEqual(ids.slice(5, 20));
+  await rows.nth(139).click();
+  await rows.nth(5).click({ modifiers: ["Shift"] });
+  await expect.poll(selectedIds).toEqual(ids.slice(5, 140));
+  await rows.nth(19).click({ modifiers: ["Shift"] });
+  await expect.poll(selectedIds).toEqual(ids.slice(19, 140));
+
+  await rows.nth(0).click();
+  await expect.poll(selectedIds).toEqual(ids.slice(0, 1));
+});
+
+test("scene outliner keeps Ctrl toggles and adds ranges with Ctrl+Shift", async ({ page }) => {
+  await openRangeSelectionScene(page);
+  const rows = page.getByTestId("outliner-row");
+  const actor = (number: number) => rows.filter({ hasText: `Range ${String(number).padStart(3, "0")}` });
+  const selected = page.locator('[data-testid="outliner-row"].active');
+  await actor(1).click();
+  await actor(6).click({ modifiers: ["Control"] });
+  await expect(selected).toHaveCount(2);
+  await actor(10).click({ modifiers: ["Control", "Shift"] });
+  await expect(selected.locator("strong")).toHaveText(["Range 001", "Range 006", "Range 007", "Range 008", "Range 009", "Range 010"]);
+  await actor(8).click({ modifiers: ["Control"] });
+  await expect(selected).toHaveCount(5);
+  await expect(actor(8)).not.toHaveClass(/active/);
+});
+
+test("scene outliner ranges follow visible hierarchy and reset a filtered-out anchor", async ({ page }) => {
+  await openRangeSelectionScene(page, true);
+  const rows = page.getByTestId("outliner-row");
+  const actor = (number: number) => rows.filter({ hasText: `Range ${String(number).padStart(3, "0")}` });
+  const selected = page.locator('[data-testid="outliner-row"].active');
+
+  // Range 140 is a child of Range 006, so it appears before Range 007.
+  await actor(6).click();
+  await actor(7).click({ modifiers: ["Shift"] });
+  await expect(selected.locator("strong")).toHaveText(["Range 006", "Range 140", "Range 007"]);
+
+  await page.locator("[data-outliner-search]").fill("Range 14");
+  await expect(rows).toHaveCount(10);
+  await actor(142).click();
+  await actor(146).click({ modifiers: ["Shift"] });
+  await expect(selected.locator("strong")).toHaveText(["Range 142", "Range 143", "Range 144", "Range 145", "Range 146"]);
+  await expect(page.getByTestId("outliner-summary")).toContainText("5 selected");
+
+  await page.locator("[data-outliner-search]").fill("Range 00");
+  await actor(3).click({ modifiers: ["Shift"] });
+  await expect(selected.locator("strong")).toHaveText(["Range 003"]);
+  await expect(page.getByTestId("outliner-summary")).toContainText("1 selected");
+});
 
 test("scene outliner uses the extensible inspector tab shell", async ({ page }) => {
   await page.goto("/?editor");

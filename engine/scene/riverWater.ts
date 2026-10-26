@@ -69,9 +69,8 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   reflectionMode: "off",
   reflectionGroup: null,
   reflectionQuality: "medium",
-  // Subtle by default: the shader multiplies this by a depth term (<= 0.35) and
-  // fades it under foam, so a full-strength mirror is never what an author gets
-  // by only switching Mode on. Raise it per body when the reflection should read.
+  // Scales the angle-dependent Fresnel reflection and fades it under visible
+  // foam. The default remains subtle head-on and stronger at grazing angles.
   reflectionStrength: 0.34,
 };
 

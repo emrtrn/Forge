@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Mesh, Vector3 } from "three";
 import { buildRiverWaterRibbon, createRiverWaterObject } from "../../engine/render-three/riverWater";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
 import { splineToPolyline } from "../../engine/scene/landscape";
@@ -30,6 +31,44 @@ function fixture() {
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain river: optical rendering preserves transformed slope, point stamps and resource disposal", async () => {
+    const spline = { id: "sloped", points: [
+      { id: "a", position: [-2, 3, 0] as [number, number, number], width: 1, falloff: 0 },
+      { id: "b", position: [2, 5, 0] as [number, number, number], width: 1, falloff: 0 },
+    ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }] };
+    const water = resolveRiverWater({ id: "optics", landscapeRef: "terrain", splineRef: "sloped", surfaceLevel: 3,
+      foamStamps: [{ id: "point", kind: "point", position: [-1, 3.5, 0], radius: 0.5, intensity: 0.7 }] });
+    const before = structuredClone({ spline, water });
+    const object = createRiverWaterObject({ ...water, spline, heightAt: () => 1,
+      position: [20, 7, -30], rotation: [0, 90, 0], foamNoiseMap: null }, null);
+    object.updateMatrixWorld(true);
+    const positions = object.geometry.getAttribute("position");
+    const first = new Vector3().fromBufferAttribute(positions, 0).applyMatrix4(object.matrixWorld);
+    const last = new Vector3().fromBufferAttribute(positions, positions.count - 1).applyMatrix4(object.matrixWorld);
+    assert.ok(first.distanceTo(new Vector3(19, 10, -28)) < 1e-6);
+    assert.ok(last.distanceTo(new Vector3(21, 12, -32)) < 1e-6);
+    assert.equal(object.geometry.getAttribute("waterDepth").getX(0), 2);
+    assert.equal(object.geometry.getAttribute("waterDepth").getX(positions.count - 1), 4);
+    assert.equal(object.geometry.getAttribute("flowDirection").getX(0), 1);
+    assert.equal(object.geometry.getAttribute("flowDirection").getY(0), 0);
+    assert.equal(object.children.length, 1);
+    const stamp = object.children[0]!;
+    assert.ok(stamp instanceof Mesh);
+    assert.ok(!Array.isArray(stamp.material));
+    assert.equal(stamp.name, "radial-foam:point");
+    assert.deepEqual(stamp.position.toArray(), [-1, 3.525, 0]);
+    assert.equal(object.material.depthWrite, false);
+    assert.equal(object.material.uniforms.reflectionStrength!.value, 0, "Off / Low uses no reflection source");
+    let geometryDisposals = 0, materialDisposals = 0;
+    object.geometry.addEventListener("dispose", () => { geometryDisposals++; });
+    stamp.geometry.addEventListener("dispose", () => { geometryDisposals++; });
+    object.material.addEventListener("dispose", () => { materialDisposals++; });
+    stamp.material.addEventListener("dispose", () => { materialDisposals++; });
+    object.dispose();
+    assert.equal(geometryDisposals, 2); assert.equal(materialDisposals, 2);
+    assert.deepEqual({ spline, water }, before);
+  });
+
   await checkAsync("terrain river: descending and rising spline Y drive surface and dry-bed depth in world and local frames", async () => {
     const doc = fixture();
     doc.def.splines![0]!.points.forEach((point, i) => { point.position[1] = [11.5, 3.5, 7.5][i]!; });

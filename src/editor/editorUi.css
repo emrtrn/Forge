@@ -1855,6 +1855,22 @@
   color: #f5d98e;
 }
 
+.landscape-point-grid {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.landscape-segment-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.landscape-point-grid button,
+.landscape-segment-grid button {
+  justify-content: center;
+  padding: 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
 .landscape-layer-swatch {
   width: 14px;
   height: 14px;

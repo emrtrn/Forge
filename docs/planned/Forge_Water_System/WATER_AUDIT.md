@@ -1,5 +1,7 @@
 # Forge Water v2 — Faz 0 denetimi
 
+Sonraki çalışma: Kullanıcının 26 Ekim 2026 tarihli uygulama talebiyle ilk kontrollü test ve nehir shader prototipi yapıldı; [Faz 1 prototip kaydı](WATER_PHASE1_PROTOTYPE.md). Aşağıdaki içerik Faz 0'ın tarihsel denetim kaydıdır.
+
 Tarih: 26 Ekim 2026. Başlangıç branch: `main`. HEAD: `4d00aeaf5cf95f570cfb87adc18419f85377b963`.
 Kapsam: mevcut kodun denetimi, görsel kaynakların değerlendirilmesi, izole tarayıcı ölçümü ve Faz 1 planı. **Faz 1 uygulanmadı.**
 

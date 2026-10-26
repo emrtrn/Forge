@@ -227,6 +227,8 @@ varying float vRapidness;
 varying float vFoamMask;
 varying float vFlowSpeedMultiplier;
 varying vec4 vReflectionUv;
+varying vec3 vWorldPosition;
+varying vec3 vFlowTangent;
 uniform float time;
 uniform float flowSpeed;
 uniform float waveAmplitude;
@@ -244,7 +246,10 @@ void main() {
   float wave = sin(wavePhase) + sin(wavePhase * 1.73 + uv.y * 5.0) * 0.35;
   vec3 displaced = position;
   displaced.y += wave * waveAmplitude * centreWeight * (0.65 + rapidness * 0.35);
-  vReflectionUv = reflectionTextureMatrix * modelMatrix * vec4(displaced, 1.0);
+  vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
+  vWorldPosition = worldPosition.xyz;
+  vFlowTangent = mat3(modelMatrix) * vec3(flowDirection.x, 0.0, flowDirection.y);
+  vReflectionUv = reflectionTextureMatrix * worldPosition;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
 }`;
 
@@ -277,6 +282,8 @@ varying float vRapidness;
 varying float vFoamMask;
 varying float vFlowSpeedMultiplier;
 varying vec4 vReflectionUv;
+varying vec3 vWorldPosition;
+varying vec3 vFlowTangent;
 
 // Two inexpensive value-noise layers prevent foam from reading as even,
 // repeating stripes. vRiverUv.x advances along the authored spline, so the
@@ -297,18 +304,34 @@ float foamNoise(vec2 point) {
   return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
 }
 void main() {
+  // Derivatives include spline slope, vertex waves and the object's transform.
+  // Evaluate them before discard so shoreline quads retain valid derivatives.
+  vec3 surfaceNormal = cross(dFdx(vWorldPosition), dFdy(vWorldPosition));
+  float normalLength = length(surfaceNormal);
+  surfaceNormal = normalLength > 0.000001 ? surfaceNormal / normalLength : vec3(0.0, 1.0, 0.0);
+  if (surfaceNormal.y < 0.0) surfaceNormal = -surfaceNormal;
+  vec3 viewDirection = isOrthographic
+    ? vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2])
+    : cameraPosition - vWorldPosition;
+  viewDirection /= max(length(viewDirection), 0.000001);
   if (clipDryBed > 0.5 && vWaterDepth <= 0.001) discard;
   vec2 baseUv = vec2(vRiverUv.x * normalScale, vRiverUv.y * normalScale);
   vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed * vFlowSpeedMultiplier, 0.0)).xy * 2.0 - 1.0;
   vec2 normalB = texture2D(normalMap, baseUv * 1.37 + vec2(0.37, 0.61) - vec2(time * flowSpeed * vFlowSpeedMultiplier * 0.73, 0.0)).xy * 2.0 - 1.0;
   float phase = 0.5 + 0.5 * sin(time * flowSpeed * vFlowSpeedMultiplier * 1.4);
-  float ripple = hasNormalMap * dot(mix(normalA, normalB, phase), vec2(0.07));
+  vec2 flowingNormal = mix(normalA, normalB, phase);
+  float ripple = hasNormalMap * dot(flowingNormal, vec2(0.07));
+  vec3 tangent = vFlowTangent - surfaceNormal * dot(vFlowTangent, surfaceNormal);
+  tangent /= max(length(tangent), 0.000001);
+  vec3 bitangent = cross(surfaceNormal, tangent);
+  vec3 opticalNormal = normalize(surfaceNormal + hasNormalMap * 0.18
+    * (tangent * flowingNormal.x + bitangent * flowingNormal.y));
+  float viewCosine = clamp(abs(dot(opticalNormal, viewDirection)), 0.0, 1.0);
+  // Air/water F0 is approximately 0.02. Strength remains an authored multiplier.
+  float fresnel = 0.02 + 0.98 * pow(1.0 - viewCosine, 5.0);
   float depth = clamp(vWaterDepth / 2.2, 0.0, 1.0);
-  // A ribbon edge can sit over terrain that is already well below the water
-  // plane, so waterDepth alone cannot make a readable shallow bank. Blend the
-  // explicit shore coordinate into the colour/alpha transition as well.
-  float shore = smoothstep(0.38, 0.98, vShoreDistance);
-  float shallow = max(1.0 - depth, shore * 0.78);
+  // Ribbon width is not a measurement of bed depth or distance to a rock.
+  float shallow = 1.0 - depth;
   vec3 color = mix(deepColor, shallowColor, shallow) + ripple;
   float flowStreak = 0.5 + 0.5 * sin(vRiverUv.x * 13.0 - time * flowSpeed * vFlowSpeedMultiplier * 5.0 + normalA.x * 4.0);
   color += (flowStreak - 0.5) * (0.012 + depth * 0.008);
@@ -335,24 +358,34 @@ void main() {
   float shoreZone = 1.0 - smoothstep(shoreFadeStart, max(shoreFadeStart + 0.01, shoreWaveReach), inwardDistance);
   float shorePhase = fract(inwardDistance * shoreWaveSpacing - time * shoreWaveSpeed + shoreBreakup * 0.24);
   float shoreBands = smoothstep(0.78, 0.96, shorePhase);
-  float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup);
+  float shallowContact = smoothstep(0.0, 0.08, vWaterDepth)
+    * (1.0 - smoothstep(0.08, 0.8, vWaterDepth));
+  float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup) * shallowContact;
   float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.28 + 0.72 * foamBreakup);
   float foam = clamp(shoreFoam + rapidFoam, 0.0, 1.0);
   color = mix(color, foamColor, foam * foamOpacity);
   vec2 reflectionUv = vReflectionUv.xy / max(vReflectionUv.w, 0.0001);
-  reflectionUv += mix(normalA, normalB, phase) * 0.025;
+  reflectionUv += flowingNormal * hasNormalMap * 0.025;
   vec3 reflected = texture2D(reflectionTexture, reflectionUv).rgb;
-  float reflectionAmount = reflectionStrength * (0.15 + depth * 0.2) * (1.0 - foam * 0.65);
-  color = mix(color, reflected, clamp(reflectionAmount, 0.0, 0.45));
-  // Overall opacity alone cannot conceal the terrain where a river is shallow:
-  // alpha is deliberately reduced there for a readable bank. This separate
-  // Beer-Lambert-style transmission term gives authors an explicit clear-water
-  // control. At Bed Visibility 0 the riverbed is fully hidden, even at the
-  // shallow edge; deeper terrain is absorbed increasingly quickly.
-  float bedTransmission = clamp(bedVisibility, 0.0, 1.0) * exp(-max(vWaterDepth, 0.0) / max(absorptionDistance, 0.01));
+  // Underwater capture is unsupported. Do not reuse a stale above-water mirror
+  // on the underside; retain bounded tint/transmission as the fallback.
+  float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
+  float reflectionAmount = clamp(reflectionStrength * fresnel * aboveSurface
+    * (1.0 - foam * foamOpacity * 0.65), 0.0, 1.0);
+  color = mix(color, reflected, reflectionAmount);
+  // Vertical terrain depth only approximates the optical path. The bounded
+  // oblique factor avoids infinite absorption at the horizon. Blend the
+  // authored visibility in over the first 35 cm so even opaque presets meet
+  // the real bed softly, without inventing a shallow ribbon border.
+  float wetness = smoothstep(0.0, 0.35, vWaterDepth);
+  float pathDepth = max(vWaterDepth, 0.0) / max(abs(dot(surfaceNormal, viewDirection)), 0.12);
+  float bedTransmission = mix(1.0, clamp(bedVisibility, 0.0, 1.0), wetness)
+    * exp(-pathDepth / max(absorptionDistance, 0.01));
   float bedOpacity = 1.0 - bedTransmission;
-  float alpha = max(opacity * mix(0.62, 1.0, depth) * mix(1.0, 0.7, shore), bedOpacity);
+  float alpha = clamp(max(max(opacity * wetness, bedOpacity), reflectionAmount), 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 export interface RiverWaterRenderItem extends ResolvedRiverWater {
@@ -511,6 +544,8 @@ void main() {
   float alpha = radialZone * radialBands * smoothstep(0.34, 0.66, breakup) * intensity * foamOpacity;
   if (alpha <= 0.002) discard;
   gl_FragColor = vec4(foamColor, alpha);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 /**

@@ -16,7 +16,7 @@ test.setTimeout(240_000);
 const LEVEL = "layouts/__playwright-spline-world.level.json";
 const TERRAIN = "landscapes/__playwright-spline-world.terrain.json";
 
-async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false, road = false, river = false) {
+async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false, road = false, river = false, grid = false) {
   const n = streamed ? 12 : 2, q = streamed ? 32 : 64;
   // 12 x 4 exceeds the real 36-tile streaming threshold and keeps the remote
   // corridor, without 96 unrelated files in every definition-commit cross-check.
@@ -43,6 +43,10 @@ async function setup(page: Page, request: APIRequestContext, streamed = false, s
     { id: "point-2", position: streamed ? [140, 5, -160] : [12, 5, -16], width: 6, falloff: 3 },
   ], segments: [{ id: "segment-1", startPointId: "point-1", endPointId: "point-2",
     deform: { enabled: true, flatten: true, raiseTerrain: true, lowerTerrain: true, targetOffset: 2 } }] }];
+  if (grid) def.splines = [{ id: "spline-1", coordinateSpace: "world", points: Array.from({ length: 24 }, (_, i) => ({
+    id: `point-${i + 1}`, position: [-24 + i * 2, 5 + i % 2, -16], width: 6, falloff: 3,
+  })), segments: Array.from({ length: 23 }, (_, i) => ({ id: `segment-${i + 1}`, startPointId: `point-${i + 1}`, endPointId: `point-${i + 2}`,
+    deform: { enabled: i % 2 === 0, flatten: true, raiseTerrain: true, lowerTerrain: true, targetOffset: i % 2 } })) }];
   await write(TERRAIN, JSON.stringify(def));
   await write(terrainGlobalMapPath(TERRAIN), encodeTerrainGlobalMap(def, buildTerrainGlobalAttributes(worldTerrainRenderSource(def, tiles))));
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
@@ -105,6 +109,71 @@ async function save(page: Page) {
 const readDef = async (): Promise<WorldTerrainDef> => JSON.parse(await readFile(smokePublicPath(TERRAIN), "utf8"));
 const readTile = async (key: string) => decodeTerrainTile(await readFile(smokePublicPath(terrainTilePath(TERRAIN, key))));
 const riverSnapshot = (page: Page) => page.evaluate(() => (window as any).__riverQA.snapshot());
+
+// QA: mode visibility, 10/4-column grids, Ctrl toggle, Shift range, mixed values,
+// unrelated coordinates preserved, one-step bulk undo/redo, save and accordion state.
+test("Landscape Details supports compact multi-selection and atomic bulk edits", async ({ page, request }, info) => {
+  const { errors } = await setup(page, request, false, true, false, false, true);
+  await page.locator('[data-landscape-spline="spline-1"]').click();
+  const points = page.locator('[data-detail-section="landscape-control-points"]');
+  const segments = page.locator('[data-detail-section="landscape-segments"]');
+  await expect(points.locator('.detail-section-toggle')).toHaveText('Control Points');
+  await expect(segments.locator('.detail-section-toggle')).toHaveText('Segments');
+  await expect(page.locator('[data-landscape-number], [data-landscape-view], [data-heightmap-import], [data-world-terrain]')).toHaveCount(0);
+  const point = (n: number) => page.locator(`[data-landscape-spline-point="point-${n}"]`);
+  const segment = (n: number) => page.locator(`[data-landscape-spline-segment="segment-${n}"]`);
+  await expect(point(1)).toHaveText('1'); await expect(segment(1)).toHaveText('1 > 2');
+  const rows = async (selector: string) => page.locator(selector).evaluateAll((buttons) => buttons.map((b) => Math.round(b.getBoundingClientRect().top)));
+  const pointRows = await rows('[data-landscape-spline-point]');
+  expect(new Set(pointRows.slice(0, 10)).size).toBe(1); expect(pointRows[10]).toBeGreaterThan(pointRows[0]!);
+  const segmentRows = await rows('[data-landscape-spline-segment]');
+  expect(new Set(segmentRows.slice(0, 4)).size).toBe(1); expect(segmentRows[4]).toBeGreaterThan(segmentRows[0]!);
+  await point(1).click(); await point(3).click({ modifiers: ['Control'] });
+  await expect(page.locator('[data-landscape-spline-point][aria-pressed="true"]')).toHaveCount(2);
+  await point(3).click({ modifiers: ['Control'] });
+  await expect(page.locator('[data-landscape-spline-point][aria-pressed="true"]')).toHaveCount(1);
+  await point(1).click(); await point(10).click({ modifiers: ['Shift'] });
+  await expect(page.locator('[data-landscape-spline-point][aria-pressed="true"]')).toHaveCount(10);
+  const y = page.locator('[data-landscape-spline-point-axis="y"]');
+  await expect(y).toHaveValue(''); await expect(y).toHaveAttribute('placeholder', 'Mixed');
+  await y.fill('12'); await y.press('Tab');
+  await expect(y).toHaveValue('12');
+  await page.getByTestId('editor-undo').click(); await expect(y).toHaveValue('');
+  await page.getByTestId('editor-redo').click(); await expect(y).toHaveValue('12');
+  await segments.locator('.detail-section-toggle').click();
+  await point(2).click({ modifiers: ['Control'] });
+  await expect(segments).toHaveClass(/collapsed/);
+  await segments.locator('.detail-section-toggle').click();
+  await segment(1).click(); await segment(3).click({ modifiers: ['Control'] });
+  await expect(page.locator('[data-landscape-spline-segment][aria-pressed="true"]')).toHaveCount(2);
+  await segment(1).click(); await segment(8).click({ modifiers: ['Shift'] });
+  const offset = page.locator('[data-landscape-segment-number="deform.targetOffset"]');
+  await expect(offset).toHaveValue('');
+  const enabled = page.locator('[data-landscape-segment-flag="deform.enabled"]');
+  expect(await enabled.evaluate((e: HTMLInputElement) => e.indeterminate)).toBe(true);
+  await enabled.check();
+  await offset.fill('3'); await offset.press('Tab');
+  await page.getByTestId('editor-undo').click(); await expect(offset).toHaveValue('');
+  await page.getByTestId('editor-redo').click(); await expect(offset).toHaveValue('3');
+  await page.screenshot({ path: info.outputPath('landscape-details-spline-selection.png') });
+  await save(page);
+  const spline = (await readDef()).splines![0]!;
+  expect(spline.points.slice(0, 10).every((p) => p.position[1] === 12)).toBe(true);
+  expect(spline.points[10]!.position[1]).toBe(5);
+  expect(spline.points.map((p) => p.position[0])).toEqual(Array.from({ length: 24 }, (_, i) => -24 + i * 2));
+  expect(spline.points.every((p) => p.position[2] === -16)).toBe(true);
+  expect(spline.segments.slice(0, 8).every((s) => s.deform?.targetOffset === 3 && s.deform.enabled)).toBe(true);
+  expect(spline.segments[8]!.deform?.targetOffset ?? 0).toBe(0);
+  await page.locator('[data-landscape-mode]').selectOption('paint');
+  await expect(page.locator('[data-landscape-paint-tool="smoothWeights"]')).toHaveText('Weights');
+  await expect(page.locator('[data-world-terrain], [data-landscape-collision], [data-landscape-spline-point]')).toHaveCount(0);
+  await expect(page.locator('[data-landscape-add-layer]')).toHaveAttribute('title', /6th layer/);
+  await page.screenshot({ path: info.outputPath('landscape-details-paint.png') });
+  await page.locator('[data-landscape-mode]').selectOption('sculpt');
+  await expect(page.locator('[data-world-terrain]')).toBeVisible();
+  await expect(page.locator('[data-heightmap-export="png"]')).toBeVisible();
+  expect(errors).toEqual([]);
+});
 
 test("multi-tile river follows edited spline Y through undo, reload and runtime", async ({ page, request }, info) => {
   const { errors } = await setup(page, request, false, true, false, true);

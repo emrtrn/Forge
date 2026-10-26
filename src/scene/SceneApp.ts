@@ -2414,7 +2414,7 @@ export class SceneApp {
       this.refreshAllLandscapeGeometry();
     }
     const mode = this.landscapeSculptSettings.editMode === "water"
-      ? "Water System"
+      ? "Water"
       : this.landscapeSculptSettings.editMode === "splines"
       ? "Splines"
       : this.landscapeSculptSettings.editMode === "paint"
@@ -10616,62 +10616,66 @@ export class SceneApp {
     }));
   }
 
-  /** Updates one spline segment's deform/paint/mesh config (undoable). */
-  setSelectedLandscapeSplineSegment(segmentId: string, patch: LandscapeSplineSegmentPatch): void {
+  /** Updates the supplied segments together as one undoable deform/paint/mesh edit. */
+  setSelectedLandscapeSplineSegment(segmentId: string | readonly string[], patch: LandscapeSplineSegmentPatch): void {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
     const data = actor ? this.landscapeSplineSource(actor.id) : null;
-    if (!actor || !data) return;
+    if (!actor || actor.locked || !data || this.worldTerrainSplineBusy) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = cloneLandscapeSplines(before);
-    const segment = after
+    const ids = new Set(typeof segmentId === "string" ? [segmentId] : segmentId);
+    const segments = after
       .find((spline) => spline.id === this.landscapeSculptSettings.activeSplineId)
-      ?.segments.find((entry) => entry.id === segmentId);
-    if (!segment) return;
-    if (patch.deform) {
-      const current = segment.deform ?? { enabled: false, raiseTerrain: true, lowerTerrain: true, flatten: true };
-      segment.deform = {
-        enabled: patch.deform.enabled ?? current.enabled,
-        raiseTerrain: patch.deform.raiseTerrain ?? current.raiseTerrain,
-        lowerTerrain: patch.deform.lowerTerrain ?? current.lowerTerrain,
-        flatten: patch.deform.flatten ?? current.flatten,
-        ...(patch.deform.targetOffset ?? current.targetOffset
-          ? { targetOffset: round(patch.deform.targetOffset ?? current.targetOffset ?? 0) }
-          : {}),
-      };
+      ?.segments.filter((entry) => ids.has(entry.id)) ?? [];
+    if (!segments.length) return;
+    for (const segment of segments) {
+      if (patch.deform) {
+        const current = segment.deform ?? { enabled: false, raiseTerrain: true, lowerTerrain: true, flatten: true };
+        segment.deform = {
+          enabled: patch.deform.enabled ?? current.enabled,
+          raiseTerrain: patch.deform.raiseTerrain ?? current.raiseTerrain,
+          lowerTerrain: patch.deform.lowerTerrain ?? current.lowerTerrain,
+          flatten: patch.deform.flatten ?? current.flatten,
+          ...(patch.deform.targetOffset ?? current.targetOffset
+            ? { targetOffset: round(patch.deform.targetOffset ?? current.targetOffset ?? 0) }
+            : {}),
+        };
+      }
+      if (patch.paint) {
+        const current = segment.paint ?? { enabled: false, layerId: this.defaultLandscapeSplinePaintLayer(), strength: 1 };
+        segment.paint = {
+          enabled: patch.paint.enabled ?? current.enabled,
+          layerId: patch.paint.layerId ?? current.layerId,
+          strength: Math.min(1, Math.max(0, round(patch.paint.strength ?? current.strength))),
+        };
+      }
+      if (patch.mesh) {
+        const current = segment.mesh ?? { enabled: false, assetId: "" };
+        const assetId = patch.mesh.assetId ?? current.assetId;
+        const yawOffset = round(patch.mesh.yawOffset ?? current.yawOffset ?? 0);
+        const bank = round(patch.mesh.bank ?? current.bank ?? 0);
+        if (!assetId) delete segment.mesh;
+        else segment.mesh = {
+          enabled: patch.mesh.enabled ?? current.enabled,
+          assetId,
+          ...(patch.mesh.spacing ?? current.spacing
+            ? { spacing: Math.max(0.01, round(patch.mesh.spacing ?? current.spacing ?? 2)) }
+            : {}),
+          ...(yawOffset ? { yawOffset } : {}),
+          ...((patch.mesh.fitToLength ?? current.fitToLength) === false ? { fitToLength: false } : {}),
+          ...(current.scale ? { scale: current.scale } : {}),
+          ...(current.offset ? { offset: current.offset } : {}),
+          ...((patch.mesh.alignToTerrain ?? current.alignToTerrain) ? { alignToTerrain: true } : {}),
+          ...(bank ? { bank } : {}),
+          ...((patch.mesh.deform ?? current.deform) ? { deform: true } : {}),
+          ...((patch.mesh.collision ?? current.collision) === false ? { collision: false } : {}),
+        };
+      }
     }
-    if (patch.paint) {
-      const current = segment.paint ?? { enabled: false, layerId: this.defaultLandscapeSplinePaintLayer(), strength: 1 };
-      segment.paint = {
-        enabled: patch.paint.enabled ?? current.enabled,
-        layerId: patch.paint.layerId ?? current.layerId,
-        strength: Math.min(1, Math.max(0, round(patch.paint.strength ?? current.strength))),
-      };
-    }
-    if (patch.mesh) {
-      const current = segment.mesh ?? { enabled: false, assetId: "" };
-      const assetId = patch.mesh.assetId ?? current.assetId;
-      const yawOffset = round(patch.mesh.yawOffset ?? current.yawOffset ?? 0);
-      const bank = round(patch.mesh.bank ?? current.bank ?? 0);
-      if (!assetId) delete segment.mesh;
-      else segment.mesh = {
-        enabled: patch.mesh.enabled ?? current.enabled,
-        assetId,
-        ...(patch.mesh.spacing ?? current.spacing
-          ? { spacing: Math.max(0.01, round(patch.mesh.spacing ?? current.spacing ?? 2)) }
-          : {}),
-        ...(yawOffset ? { yawOffset } : {}),
-        ...((patch.mesh.fitToLength ?? current.fitToLength) === false ? { fitToLength: false } : {}),
-        ...(current.scale ? { scale: current.scale } : {}),
-        ...(current.offset ? { offset: current.offset } : {}),
-        ...((patch.mesh.alignToTerrain ?? current.alignToTerrain) ? { alignToTerrain: true } : {}),
-        ...(bank ? { bank } : {}),
-        ...((patch.mesh.deform ?? current.deform) ? { deform: true } : {}),
-        ...((patch.mesh.collision ?? current.collision) === false ? { collision: false } : {}),
-      };
-    }
-    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Edit Landscape Spline Segment", this.landscapeSculptSettings.activeSplineId, this.landscapeSculptSettings.activeSplinePointId, segmentId);
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Edit Landscape Spline Segments", this.landscapeSculptSettings.activeSplineId, this.landscapeSculptSettings.activeSplinePointId, typeof segmentId === "string" ? segmentId : this.landscapeSculptSettings.activeSplineSegmentId ?? segments[0]!.id);
   }
 
   /** Destructively bakes the active spline's deform config into the heightfield (undoable). */
@@ -10806,20 +10810,32 @@ export class SceneApp {
   }
 
   setSelectedLandscapeSplinePointPosition(pointId: string, position: Vec3): void {
-    if (this.selection?.kind !== "landscape" || !Number.isFinite(position[0]) || !Number.isFinite(position[1]) || !Number.isFinite(position[2])) return;
+    this.setSelectedLandscapeSplinePoints([pointId], { x: position[0], y: position[1], z: position[2] });
+  }
+
+  /** Changes only the supplied fields, across all selected points, in one undo step. */
+  setSelectedLandscapeSplinePoints(pointIds: readonly string[], patch: { x?: number; y?: number; z?: number; width?: number; falloff?: number }): void {
+    if (this.selection?.kind !== "landscape" || Object.values(patch).some((value) => !Number.isFinite(value))) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
     const data = actor ? this.landscapeSplineSource(actor.id) : null;
     const splineId = this.landscapeSculptSettings.activeSplineId;
-    if (!actor || !data || !splineId) return;
+    if (!actor || actor.locked || !data || !splineId || this.worldTerrainSplineBusy) return;
     const before = cloneLandscapeSplines(data.splines ?? []);
     const after = cloneLandscapeSplines(before);
-    const point = after.find((spline) => spline.id === splineId)?.points.find((entry) => entry.id === pointId);
-    if (!point) return;
-    const next: Vec3 = [round(position[0]), round(position[1]), round(position[2])];
-    if (point.position.every((value, axis) => value === next[axis])) return;
-    point.position = next;
-    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Move Landscape Spline Point", splineId, pointId);
+    const ids = new Set(pointIds);
+    const points = after.find((spline) => spline.id === splineId)?.points.filter((entry) => ids.has(entry.id)) ?? [];
+    if (!points.length) return;
+    for (const point of points) {
+      for (const [axis, key] of (["x", "y", "z"] as const).entries()) {
+        if (patch[key] !== undefined) point.position[axis] = round(patch[key]!);
+      }
+      if (patch.width !== undefined) point.width = round(clamp(patch.width, 0.1, 10000));
+      if (patch.falloff !== undefined) point.falloff = round(clamp(patch.falloff, 0, 10000));
+    }
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Edit Landscape Spline Points", splineId,
+      this.landscapeSculptSettings.activeSplinePointId ?? points[0]!.id, this.landscapeSculptSettings.activeSplineSegmentId);
   }
 
   async snapSelectedLandscapeSplinePoint(): Promise<void> {
@@ -10842,6 +10858,7 @@ export class SceneApp {
         || JSON.stringify(document.def.splines) !== revision) return;
       const height = terrainHeightAt(document.def, { tile: (x, z) => document.tiles.get(tileKey(x, z)) }, position[0], position[2]);
       if (height === null) throw new Error("Exact terrain is unavailable at this point");
+      this.worldTerrainSplineBusy = false;
       this.setSelectedLandscapeSplinePointPosition(pointId, [position[0], height, position[2]]);
     } catch (error) { this.onStatus?.(`Snap to terrain failed: ${error instanceof Error ? error.message : String(error)}`, "error"); }
     finally { streaming?.release(keys); this.worldTerrainSplineBusy = false; }

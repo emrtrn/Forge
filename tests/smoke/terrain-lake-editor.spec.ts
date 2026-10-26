@@ -205,6 +205,12 @@ test("Water System groups rivers and lakes and keeps terrain edits in Sculpt", a
   await expect(page.locator('[data-water-body][data-water-kind="river"]')).toHaveCount(1);
   await expect(page.locator('[data-water-body][data-water-kind="lake"]')).toHaveCount(1);
   await expect(page.locator('[data-river-water-create]')).toBeDisabled();
+  await expect(page.locator('[data-landscape-mode] option:checked')).toHaveText("Water");
+  const deleteRiver = page.locator('[data-river-water-delete]');
+  await expect(deleteRiver).toHaveText("Delete River");
+  expect(await deleteRiver.evaluate((e) => e.closest('.detail-section'))).toBeNull();
+  await expect(page.locator('[data-river-water-number="surfaceLevel"]')).toHaveAttribute('title', /yüksekliği/);
+  await expect(page.locator('[data-river-water-number="flowSpeed"]')).toHaveAttribute('title', /akış/);
   await page.screenshot({ path: info.outputPath("water-system-river-and-lake.png") });
   const surface = page.locator('[data-detail-section="river-surface"]');
   await surface.locator('.detail-section-toggle').click();
@@ -215,6 +221,17 @@ test("Water System groups rivers and lakes and keeps terrain edits in Sculpt", a
   await expect(page.locator('[data-lake-number="surfaceLevel"]')).toBeVisible();
   await expect(page.locator('[data-landscape-mode]')).toHaveValue("water");
   await expect(page.locator('[data-water-kind="lake"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-lake-workflow], [data-lake-finish]')).toHaveCount(0);
+  const deleteLake = page.locator('[data-lake-delete]');
+  await expect(deleteLake).toHaveText('Delete Lake');
+  expect(await deleteLake.evaluate((e) => e.closest('.detail-section'))).toBeNull();
+  await expect(page.locator('[data-lake-number="surfaceLevel"]')).toHaveAttribute('title', /yüksekliği/);
+  await expect(page.locator('[data-detail-section="lake-basic"] .detail-section-toggle')).toHaveText('Surface');
+  await expandLake(page, 'appearance');
+  await expect(page.locator('[data-lake-number="opacity"]')).toHaveAttribute('title', /opaklığı/);
+  await expandLake(page);
+  await expect(page.locator('[data-lake-reflection]')).toHaveAttribute('title', /yansımayı/i);
+  await page.locator('[data-detail-section="lake-advanced"] .detail-section-toggle').click();
   await page.screenshot({ path: info.outputPath("water-system-lake-selected.png") });
   await page.locator('[data-water-kind="river"]').click();
   await expect(flow).toHaveValue("1.4");
@@ -267,7 +284,7 @@ test("Lake UX preserves a draft on Escape and exits to normal viewport selection
   const original = await editorSnapshot(page);
   await page.locator('[data-detail-section="lake-advanced"] .detail-section-toggle').click();
   await page.locator("[data-lake-workflow]").scrollIntoViewIfNeeded();
-  await expect(page.locator("[data-lake-stage]")).toHaveText("Taslak önizleme");
+  await expect(page.locator("[data-lake-stage]")).toHaveText("Draft Preview");
   await expect(page.locator('[data-detail-section="lake-appearance"]')).toHaveClass(/collapsed/);
   await page.screenshot({ path: info.outputPath("lake-draft.png") });
   await page.locator('[data-lake-number="surfaceLevel"]').focus(); await page.keyboard.press("Escape");
@@ -275,13 +292,14 @@ test("Lake UX preserves a draft on Escape and exits to normal viewport selection
   expect((await editorSnapshot(page)).state.source).toEqual(original.state.source);
   expect((await snapshot(page)).objects).toBe(1);
   await page.locator("[data-lake-resume]").click();
-  await expect(page.locator("[data-lake-stage]")).toHaveText("Taslak önizleme");
+  await expect(page.locator("[data-lake-stage]")).toHaveText("Draft Preview");
   await page.locator("[data-lake-finish]").click();
-  await expect(page.locator("[data-lake-create]")).toHaveText("Gölü oluştur ve geç");
+  await expect(page.locator("[data-lake-create]")).toHaveText("Create Lake and Continue");
   await page.locator("[data-lake-create]").click(); await ready(page);
   expect((await editorSnapshot(page)).selection).toBeNull();
   await page.locator('[data-object-id="lake:0"]').click();
-  await expect(page.locator("[data-lake-stage]")).toHaveText("Oluşturulmuş göl");
+  await expect(page.locator("[data-lake-workflow]")).toHaveCount(0);
+  await expect(page.locator("[data-lake-delete]")).toBeVisible();
   await page.keyboard.press("Escape");
   expect((await snapshot(page)).objects).toBe(1); expect((await editorSnapshot(page)).selection).toBeNull();
   // A mesh above the water must remain selectable in front of the Lake.
@@ -306,7 +324,7 @@ test("Lake UX preserves a draft on Escape and exits to normal viewport selection
   await page.screenshot({ path: info.outputPath("lake-appearance.png") });
   await expandLake(page); await page.locator("[data-lake-group]").scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath("lake-advanced.png") });
-  await page.locator("[data-lake-workflow]").scrollIntoViewIfNeeded(); await page.locator("[data-lake-finish]").click();
+  await page.locator("[data-lake-delete]").focus(); await page.keyboard.press("Escape");
   expect((await editorSnapshot(page)).selection).toBeNull(); expect(await terrainHash()).toBe(hash);
   await save(page); expect(errors).toEqual([]);
 });

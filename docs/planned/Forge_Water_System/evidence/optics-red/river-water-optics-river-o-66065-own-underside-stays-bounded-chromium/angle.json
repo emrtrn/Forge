@@ -1,0 +1,641 @@
+{
+  "top": {
+    "red": {
+      "options": {
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 2.2,
+        "reflection": "red",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 2,
+        "opacity": 1,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2
+      },
+      "centre": [
+        [
+          57,
+          1,
+          8.666666666666666
+        ],
+        [
+          55,
+          0,
+          6
+        ],
+        [
+          56,
+          0,
+          6.666666666666667
+        ],
+        [
+          57,
+          1,
+          9
+        ],
+        [
+          56,
+          0,
+          6
+        ],
+        [
+          55.333333333333336,
+          0,
+          6
+        ]
+      ],
+      "edge": [
+        [
+          51.666666666666664,
+          26,
+          30
+        ],
+        [
+          50,
+          24,
+          28.88888888888889
+        ],
+        [
+          50.77777777777778,
+          25,
+          29
+        ],
+        [
+          52,
+          26,
+          30
+        ],
+        [
+          50.111111111111114,
+          24.666666666666668,
+          29
+        ],
+        [
+          50,
+          24.333333333333332,
+          29
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 3
+    },
+    "blue": {
+      "options": {
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 2.2,
+        "reflection": "blue",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 2,
+        "opacity": 1,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2
+      },
+      "centre": [
+        [
+          0,
+          3,
+          66
+        ],
+        [
+          0,
+          1,
+          64.33333333333333
+        ],
+        [
+          0,
+          1.3333333333333333,
+          65
+        ],
+        [
+          0,
+          3,
+          66
+        ],
+        [
+          0,
+          1,
+          65
+        ],
+        [
+          0,
+          1,
+          65
+        ]
+      ],
+      "edge": [
+        [
+          0,
+          25,
+          67
+        ],
+        [
+          0,
+          23.88888888888889,
+          66
+        ],
+        [
+          0,
+          24,
+          66.22222222222223
+        ],
+        [
+          0,
+          25,
+          67
+        ],
+        [
+          0,
+          24,
+          66
+        ],
+        [
+          0,
+          24,
+          66
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 5
+    },
+    "signal": 56.05555555555555
+  },
+  "grazing": {
+    "red": {
+      "options": {
+        "angle": "grazing",
+        "pipeline": "composer",
+        "depth": 2.2,
+        "reflection": "red",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 2,
+        "opacity": 1,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2
+      },
+      "centre": [
+        [
+          57,
+          0.7777777777777778,
+          8.222222222222221
+        ],
+        [
+          55,
+          0,
+          6
+        ],
+        [
+          56,
+          0,
+          7
+        ],
+        [
+          57,
+          1,
+          9
+        ],
+        [
+          55.888888888888886,
+          0,
+          6.333333333333333
+        ],
+        [
+          55.22222222222222,
+          0,
+          6
+        ]
+      ],
+      "edge": [
+        [
+          50.666666666666664,
+          26,
+          30
+        ],
+        [
+          44.333333333333336,
+          25.333333333333332,
+          29.666666666666668
+        ],
+        [
+          50.77777777777778,
+          24.555555555555557,
+          28.666666666666668
+        ],
+        [
+          52,
+          25.666666666666668,
+          29.88888888888889
+        ],
+        [
+          50.666666666666664,
+          24.333333333333332,
+          28.666666666666668
+        ],
+        [
+          45,
+          25.333333333333332,
+          29.666666666666668
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          1.2,
+          12
+        ],
+        "quaternion": [
+          -0.04981370188015976,
+          0,
+          0,
+          0.9987585269247989
+        ],
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 5
+    },
+    "blue": {
+      "options": {
+        "angle": "grazing",
+        "pipeline": "composer",
+        "depth": 2.2,
+        "reflection": "blue",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 2,
+        "opacity": 1,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2
+      },
+      "centre": [
+        [
+          0,
+          3,
+          66
+        ],
+        [
+          0,
+          1,
+          64.22222222222223
+        ],
+        [
+          0,
+          1.5555555555555556,
+          65
+        ],
+        [
+          0,
+          3,
+          66
+        ],
+        [
+          0,
+          1.1111111111111112,
+          65
+        ],
+        [
+          0,
+          1,
+          64.55555555555556
+        ]
+      ],
+      "edge": [
+        [
+          0,
+          25,
+          66.33333333333333
+        ],
+        [
+          0,
+          24.666666666666668,
+          62
+        ],
+        [
+          0,
+          23.666666666666668,
+          66.77777777777777
+        ],
+        [
+          0,
+          25.333333333333332,
+          67.33333333333333
+        ],
+        [
+          0,
+          23.666666666666668,
+          66.33333333333333
+        ],
+        [
+          0,
+          24.666666666666668,
+          62.333333333333336
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          1.2,
+          12
+        ],
+        "quaternion": [
+          -0.04981370188015976,
+          0,
+          0,
+          0.9987585269247989
+        ],
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 5
+    },
+    "signal": 56.018518518518526
+  },
+  "below": {
+    "red": {
+      "options": {
+        "angle": "below",
+        "pipeline": "composer",
+        "depth": 2.2,
+        "reflection": "red",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 2,
+        "opacity": 1,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2
+      },
+      "centre": [
+        [
+          57,
+          1,
+          8.555555555555555
+        ],
+        [
+          55.111111111111114,
+          0,
+          6
+        ],
+        [
+          56,
+          0,
+          6.888888888888889
+        ],
+        [
+          57,
+          1,
+          9
+        ],
+        [
+          55.666666666666664,
+          0,
+          6.111111111111111
+        ],
+        [
+          55.55555555555556,
+          0,
+          6.111111111111111
+        ]
+      ],
+      "edge": [
+        [
+          51.333333333333336,
+          26,
+          30.333333333333332
+        ],
+        [
+          50,
+          24.333333333333332,
+          28.666666666666668
+        ],
+        [
+          50.44444444444444,
+          24.88888888888889,
+          29.11111111111111
+        ],
+        [
+          51.666666666666664,
+          26,
+          30.333333333333332
+        ],
+        [
+          50.333333333333336,
+          24.666666666666668,
+          29
+        ],
+        [
+          50,
+          24.666666666666668,
+          28.666666666666668
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          -1.2,
+          12
+        ],
+        "quaternion": [
+          0.04981370188015976,
+          0,
+          0,
+          0.9987585269247989
+        ],
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 5
+    },
+    "blue": {
+      "options": {
+        "angle": "below",
+        "pipeline": "composer",
+        "depth": 2.2,
+        "reflection": "blue",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 2,
+        "opacity": 1,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2
+      },
+      "centre": [
+        [
+          0,
+          3,
+          66
+        ],
+        [
+          0,
+          1,
+          64.55555555555556
+        ],
+        [
+          0,
+          1.4444444444444444,
+          65
+        ],
+        [
+          0,
+          3,
+          66
+        ],
+        [
+          0,
+          1,
+          65
+        ],
+        [
+          0,
+          1,
+          64.88888888888889
+        ]
+      ],
+      "edge": [
+        [
+          0,
+          25.333333333333332,
+          67
+        ],
+        [
+          0,
+          23.666666666666668,
+          66
+        ],
+        [
+          0,
+          24.22222222222222,
+          66.44444444444444
+        ],
+        [
+          0,
+          25.666666666666668,
+          67
+        ],
+        [
+          0,
+          24,
+          66
+        ],
+        [
+          0,
+          23.666666666666668,
+          66
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          -1.2,
+          12
+        ],
+        "quaternion": [
+          0.04981370188015976,
+          0,
+          0,
+          0.9987585269247989
+        ],
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 5
+    },
+    "signal": 56.05555555555555
+  }
+}

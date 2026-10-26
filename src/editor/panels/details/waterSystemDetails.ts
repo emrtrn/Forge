@@ -1,6 +1,7 @@
 import type { SceneApp } from "@/scene/SceneApp";
 import type { SpecialActorDetailsOptions } from "./specialActorDetails";
 import { LANDSCAPE_EDIT_MODES, landscapeModeSelect } from "./specialActorDetails";
+import { applyWaterTooltips } from "./waterTooltips";
 import { renderLakeDetails } from "./lakeDetails";
 import type { LandscapeEditMode, RiverWaterDetailsPatch, RiverWaterDetailsView } from "@/scene/SceneApp";
 
@@ -19,8 +20,8 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
       ${options ? `<label class="detail-toggle"><input type="checkbox" data-detail-toggle="locked" ${context.locked ? "checked" : ""} /><span>Lock Movement</span></label>` : ""}
     </div>`;
   if (options) renderRiverWaterDetails(options, app.getLakeEditorState().available);
-  else body.insertAdjacentHTML("beforeend", `<div class="detail-section"><div class="detail-section-title">Water System</div>
-    <button type="button" class="detail-action-button" data-water-terrain ${context.busy ? "disabled" : ""}>Back to Water System</button>
+  else body.insertAdjacentHTML("beforeend", `<div class="detail-section"><div class="detail-section-title">Water</div>
+    <button type="button" class="detail-action-button" data-water-terrain ${context.busy ? "disabled" : ""}>Back to Water</button>
     ${context.busy ? '<div class="detail-hint">Finish point selection, then create or discard the Lake draft before switching tools.</div>' : ""}
     </div><div data-water-bodies-slot></div>`);
   const slot = body.querySelector("[data-water-bodies-slot]");
@@ -57,20 +58,14 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
   const riverSourceSpline = availableRiverSplines.find((spline) => spline.id === settings.activeSplineId) ?? availableRiverSplines[0];
   const activeRiverWater = riverWaters.find((water) => water.id === settings.activeRiverWaterId) ?? riverWaters[0];
   const riverWaterMarkup = activeRiverWater
-    ? `<div class="detail-section river-water-details">
-        <div class="detail-section-title">River Water</div>
-        <div class="detail-hint">Water presentation is linked to this Landscape's spline; terrain shape remains authored by Landscape Splines.</div>
-        <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-delete ${lockedAttr}>Delete River Water</button></div>
-      </div><div class="detail-section" data-detail-section="river-surface"><div class="detail-section-title">Surface</div>
+    ? `<div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-delete ${lockedAttr}>Delete River</button></div><div class="detail-section" data-detail-section="river-surface"><div class="detail-section-title">Surface</div>
         <label class="detail-row"><span>Start Water Height (${activeRiverWater.coordinateSpace === "world" ? "World" : "Local"} Y)</span><input data-river-water-number="surfaceLevel" type="number" step="0.1" value="${activeRiverWater.surfaceLevel}" ${lockedAttr} /></label>
-        <div class="detail-hint">Water height at the first spline point; the surface follows the spline's elevation changes. Changing this value raises or lowers the whole river.</div>
         <label class="detail-row"><span>Width Scale</span><input data-river-water-number="widthScale" type="number" min="0.05" max="10" step="0.05" value="${activeRiverWater.widthScale}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Deep Color</span><input data-river-water-color="deepColor" type="color" value="${escapeHtml(activeRiverWater.deepColor)}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Shallow Color</span><input data-river-water-color="shallowColor" type="color" value="${escapeHtml(activeRiverWater.shallowColor)}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Opacity</span><input data-river-water-number="opacity" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.opacity}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Bed Visibility</span><input data-river-water-number="bedVisibility" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.bedVisibility}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Absorption Distance</span><input data-river-water-number="absorptionDistance" type="number" min="0.01" max="100" step="0.05" value="${activeRiverWater.absorptionDistance}" ${lockedAttr} /></label>
-        <div class="detail-hint">Bed Visibility 0 hides the riverbed; 1 leaves it clear. Lower Absorption Distance makes deeper water opaque sooner.</div>
       </div><div class="detail-section" data-detail-section="river-flow"><div class="detail-section-title">Flow & Waves</div>
         <label class="detail-row"><span>Flow Speed</span><input data-river-water-number="flowSpeed" type="number" min="0" max="10" step="0.05" value="${activeRiverWater.flowSpeed}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Normal Scale</span><input data-river-water-number="normalScale" type="number" min="0.05" max="20" step="0.05" value="${activeRiverWater.normalScale}" ${lockedAttr} /></label>
@@ -83,7 +78,6 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
         <label class="detail-row"><span>Inward Speed</span><input data-river-water-number="shoreWaveSpeed" type="number" min="0" max="10" step="0.05" value="${activeRiverWater.shoreWaveSpeed}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Shore Wave Reach</span><input data-river-water-number="shoreWaveReach" type="number" min="0.05" max="1" step="0.05" value="${activeRiverWater.shoreWaveReach}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Breakup Scale</span><input data-river-water-number="shoreWaveBreakupScale" type="number" min="0.1" max="10" step="0.05" value="${activeRiverWater.shoreWaveBreakupScale}" ${lockedAttr} /></label>
-        <div class="detail-hint">Radial Foam uses the same color, opacity, band spacing, speed, reach and breakup as shore waves.</div>
         <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-foam-add="ring" ${lockedAttr}>+ Add Radial Foam</button></div>
         <div class="landscape-layer-list">${activeRiverWater.foamStamps.filter((stamp) => stamp.kind === "point").map((stamp) => {
           const id = escapeHtml(stamp.id);
@@ -94,19 +88,17 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
         <label class="detail-row"><span>Group</span><input data-river-water-reflection="reflectionGroup" type="text" value="${escapeHtml(activeRiverWater.reflectionGroup)}" placeholder="river" ${lockedAttr} /></label>
         <label class="detail-row"><span>Quality</span><select data-river-water-reflection="reflectionQuality" ${lockedAttr}>${["low", "medium", "high"].map((quality) => `<option value="${quality}" ${activeRiverWater.reflectionQuality === quality ? "selected" : ""}>${quality}</option>`).join("")}</select></label>
         <label class="detail-row"><span>Strength</span><input data-river-water-number="reflectionStrength" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.reflectionStrength}" ${lockedAttr} /></label>
-        <div class="detail-hint">Quality only buys resolution and update rate. Strength is what makes the reflection visible; the surface still fades it in shallow water and under foam.</div>
       </div>`
     : `<div class="detail-section"><div class="detail-section-title">River Water</div><div class="detail-hint">Create a River Water Body from a completed Landscape spline. It will immediately use the spline's width and first control point height.</div></div>`;
   const riverWaterCreateMarkup = `<div class="detail-section">
-      <div class="detail-section-title">Water System</div>
+      <div class="detail-section-title">Water</div>
       <label class="detail-row"><span>Source Spline</span><select data-river-water-create-spline ${availableRiverSplines.length ? lockedAttr : "disabled"}>${availableRiverSplines.map((spline) => `<option value="${escapeHtml(spline.id)}" ${riverSourceSpline?.id === spline.id ? "selected" : ""}>${escapeHtml(spline.name)} (${spline.segmentCount} segments)</option>`).join("") || "<option value=\"\">No completed unbound spline</option>"}</select></label>
       <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-create ${availableRiverSplines.length ? lockedAttr : "disabled"}>Add River</button>
       <button type="button" class="detail-action-button" data-lake-begin ${canAddLake ? lockedAttr : "disabled"}>Add Lake</button></div>
       ${availableRiverSplines.length ? "" : `<button type="button" class="detail-action-button" data-water-create-spline ${lockedAttr}>Create Spline</button>`}
-      <div class="detail-hint">A spline needs at least two connected control points. One water body can own each spline.</div>
-      <div class="detail-hint">Lake: click inside a sculpted basin, adjust the water level and confirm the preview.${canAddLake ? "" : " Lake creation requires an unlocked, supported Terrain."}</div>
     </div>`;
   body.insertAdjacentHTML("beforeend", riverWaterCreateMarkup + '<div data-water-bodies-slot></div>' + riverWaterMarkup);
+  applyWaterTooltips(body);
   body.querySelector("[data-water-create-spline]")?.addEventListener("click", () => {
     options.setLandscapeSculptSettings({ editMode: "splines", splineTool: "draw" });
     options.createSelectedLandscapeSpline();

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>River water optics fixture</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #182029; color: #e8edf2; font: 14px system-ui; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    form { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+    label { display: flex; align-items: center; gap: 6px; }
+    canvas { display: block; width: min(800px, 100%); height: auto; }
+    output { display: block; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>River water optics</h1>
+  <p>Fixed unlit bed, deterministic time, constant linear reflection input. No authored scene is loaded.</p>
+  <form>
+    <label>Camera <select id="angle"><option value="top">Top</option><option value="grazing">Grazing</option><option value="below">Below</option></select></label>
+    <label>Output <select id="pipeline"><option value="direct">Direct</option><option value="composer">Composer</option></select></label>
+    <label>Depth <select id="depth"><option>0</option><option>0.1</option><option selected>1</option><option>2.2</option><option>5</option></select> m</label>
+    <label>Reflection <select id="reflection"><option value="off">Off / Low</option><option value="red">Red input</option><option value="blue">Blue input</option></select></label>
+    <label><input type="checkbox" id="visible" checked> Water</label>
+  </form>
+  <canvas width="800" height="480"></canvas>
+  <output id="status"></output>
+  <script type="module" src="./river-water-optics.ts"></script>
+</body>
+</html>

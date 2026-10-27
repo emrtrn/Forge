@@ -1203,7 +1203,7 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       capture, blocking volume, target point ve world widget'ta; yalnız `false`
       yazılır. Save validator + klon yardımcıları + serializasyon kayması
       testleri kapsıyor. Editör UI'ı yok.
-- [ ] Hücre dosya formatı (`worldCell`, schema 1); validator mevcut layout
+- [x] Hücre dosya formatı (`worldCell`, schema 1); validator mevcut layout
       validator'larını yeniden kullanır.
       *Saf çekirdek hazır (2026-10-23):* `engine/world/worldPartition.ts` —
       `WorldCellDocument`, `<Level>.cells/main/<x_z>.cell.json` yolu,
@@ -1708,22 +1708,28 @@ taşır).
 
 ## Faz 7 — Uzak görünüm: gölge, görüş mesafesi, LOD, HLOD
 
-- [ ] Kamera far/near World Settings `viewDistance` × kalite çarpanı;
+- [x] Kamera far/near World Settings `viewDistance` × kalite çarpanı;
       spring arm `farClip` buna bağlanır; K7 kararı uygulanır.
+      *Tamam (2026-10-24, 7a + 7b):* ayrıntı aşağıdaki "7a tamam".
 - [x] Gölge: `fitDirectionalShadowToBounds` yerine kameraya bağlı
       **cascaded shadow maps** (3–4 kaskad high/ultra, 2 low), texel'e
       hizalı kaydırma, gölge solma mesafesi. Splat ve foliage
       malzemeleriyle uyum.
       *Tamam (2026-10-25, 7c1 + 7c2):* ayrıntı aşağıdaki "7c2 ilerleme".
-- [ ] Height Fog ve Sky Atmosphere uzak mesafeyi ve akış kenarını gizleyecek
+- [x] Height Fog ve Sky Atmosphere uzak mesafeyi ve akış kenarını gizleyecek
       varsayılanlar (dünya ayarına bağlı).
-- [ ] Actor LOD: mevcut `distanceLod.ts` + hücre bazlı küçük-nesne culling
+      *Tamam (2026-10-24, 7d):* ayrıntı aşağıdaki "7d tamam".
+- [x] Actor LOD: mevcut `distanceLod.ts` + hücre bazlı küçük-nesne culling
       mesafesi (asset bounds'a göre).
-- [ ] **HLOD:** `npm run world:build` hücre başına statik mesh'leri tek bir
+      *Tamam (2026-10-24, 7e):* ayrıntı aşağıdaki "7e tamam".
+- [x] **HLOD:** `npm run world:build` hücre başına statik mesh'leri tek bir
       sadeleştirilmiş GLB'de birleştirir (gltf-transform + meshoptimizer
       simplify). Yüklü olmayan `main` hücreleri yerine HLOD gösterilir.
       Dev'de HLOD yoksa uyarı, oyun yine çalışır.
-- [ ] `perf:assets` ve `verify:dist` hücre/tile/HLOD dosyalarını kapsar.
+      *Tamam (2026-10-24, 7f):* ayrıntı aşağıdaki "7f tamam".
+- [x] `perf:assets` ve `verify:dist` hücre/tile/HLOD dosyalarını kapsar.
+      *Tamam (2026-10-24, 7g + 7f):* denetim `verify:world-data` olarak
+      ayrı adım (build:verify ve CI'da); HLOD dizini 7f ile eklendi.
 
 ### Faz 7 tasarımı (2026-10-24, kullanıcı onayladı)
 

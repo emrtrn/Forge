@@ -26,11 +26,28 @@
   ],
   "characters": [],
   "worldSettings": {
+    "partition": {
+      "enabled": true,
+      "grids": {
+        "main": {
+          "cellSize": 128,
+          "loadRange": 384
+        },
+        "foliage": {
+          "cellSize": 64,
+          "loadRange": 256
+        }
+      }
+    },
     "backgroundColor": "#a9c9df",
     "ambientColor": "#cfdeed",
     "ambientIntensity": 0.55,
+    "viewDistance": 600,
     "gameMode": "forge.vehicle"
   },
+  "worldCells": [
+    "0_0"
+  ],
   "skyAtmosphere": {
     "rayleigh": 1.4,
     "turbidity": 3,
@@ -87,15 +104,5 @@
       "surfaceLevel": 0
     }
   ],
-  "actors": [
-    {
-      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
-      "position": [
-        93.62,
-        0,
-        127
-      ],
-      "rotationYDeg": 0
-    }
-  ]
+  "actors": []
 }

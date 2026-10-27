@@ -81,6 +81,7 @@
     "-1_0",
     "0_0",
     "1_0",
+    "2_0",
     "-4_1",
     "-3_1",
     "-2_1",
@@ -1881,7 +1882,9 @@
       "name": "River Water 1",
       "coordinateSpace": "world",
       "surfaceLevel": -38.7,
-      "reflectionMode": "environment"
+      "flowSpeed": 0.5,
+      "reflectionMode": "environment",
+      "reflectionQuality": "high"
     }
   ],
   "waterBodies": [

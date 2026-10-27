@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "2_0",
+  "reflectionCaptures": [
+    {
+      "id": "reflection-capture-1",
+      "position": [
+        288.65,
+        -40,
+        28.84
+      ],
+      "name": "Sphere Reflection Capture",
+      "radius": 20,
+      "parallax": true
+    }
+  ]
+}

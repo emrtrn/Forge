@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "0_0",
+  "actors": [
+    {
+      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
+      "position": [
+        93.62,
+        0,
+        127
+      ],
+      "rotationYDeg": 0
+    }
+  ]
+}

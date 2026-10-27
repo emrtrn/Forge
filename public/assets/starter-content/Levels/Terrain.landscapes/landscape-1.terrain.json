@@ -2,14 +2,14 @@
   "schema": 1,
   "type": "worldTerrain",
   "name": "Landscape",
-  "tileQuads": 64,
-  "spacing": 8,
+  "tileQuads": 256,
+  "spacing": 1,
   "tilesX": 2,
   "tilesZ": 2,
   "origin": [
-    -512,
+    -256,
     0,
-    -512
+    -256
   ],
   "heightMin": -256,
   "heightMax": 256,
@@ -17,8 +17,7 @@
     {
       "id": "grass",
       "name": "Grass",
-      "color": "#5f9449",
-      "material": "starter-mat-grass"
+      "color": "#5f9449"
     },
     {
       "id": "dirt",
@@ -33,9 +32,7 @@
     {
       "id": "snow",
       "name": "Snow",
-      "color": "#dce7ec",
-      "material": "lt-snow",
-      "physicalMaterial": "snow"
+      "color": "#dce7ec"
     }
   ],
   "tiles": [

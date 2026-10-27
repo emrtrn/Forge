@@ -62,6 +62,13 @@ export class WorldTerrainEditSession {
     return [...this.revisions].filter(([key, revision]) => this.saved.get(key) !== revision).map(([key]) => key);
   }
 
+  /** Grows with every edit (tiles or definition): a cheap "terrain changed" signal for views. */
+  get editRevision(): number {
+    let total = this.definitionRevision;
+    for (const revision of this.revisions.values()) total += revision;
+    return total;
+  }
+
   get dirty(): boolean {
     return this.definitionRevision !== this.savedDefinitionRevision || this.dirtyKeys().length > 0;
   }

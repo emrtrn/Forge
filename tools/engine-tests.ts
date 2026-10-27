@@ -1040,6 +1040,7 @@ import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellSt
 import { registerFoliageRingTests } from "../tests/engine/foliageRing.test";
 import { registerViewDistanceTests } from "../tests/engine/viewDistance.test";
 import { registerOpenWorldSetupTests } from "../tests/engine/openWorldSetup.test";
+import { registerWorldMapViewTests } from "../tests/engine/worldMapView.test";
 import { registerFollowShadowTests } from "../tests/engine/followShadow.test";
 import { registerCameraFarOverrideTests } from "../tests/engine/cameraFarOverride.test";
 import { registerSunFollowShadowTests } from "../tests/engine/sunFollowShadow.test";
@@ -1277,6 +1278,7 @@ registerFoliageCellFootprintTests(check);
 registerFoliageRingTests(check);
 registerViewDistanceTests(check);
 registerOpenWorldSetupTests(check);
+registerWorldMapViewTests(check);
 registerFollowShadowTests(check);
 registerCameraFarOverrideTests(check);
 registerSunFollowShadowTests(check);

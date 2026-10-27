@@ -147,6 +147,7 @@ import {
   type EnvironmentDetailsOptions,
 } from "./panels/details/environmentDetails";
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
+import { WorldPartitionPanel } from "./panels/world/worldPartitionPanel";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
 import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
 import { createFoliageType } from "@engine/scene/foliage";
@@ -390,6 +391,9 @@ export class EditorUi {
   private meshPaintBody!: HTMLDivElement;
   private foliageBody!: HTMLDivElement;
   private inspectorTab: InspectorTab = "details";
+  private worldPartitionPanel: WorldPartitionPanel | null = null;
+  /** Polls the World Partition view while its tab is open. */
+  private worldPartitionTimer: number | null = null;
   private statusText: HTMLElement;
   private statusToast: HTMLElement;
   private statusToastText: HTMLElement;
@@ -594,6 +598,15 @@ export class EditorUi {
             aria-selected="true"
             aria-controls="scene-outliner-pane"
           >Scene Outliner</button>
+          <button
+            type="button"
+            class="inspector-tab outliner-tab"
+            data-outliner-tab="worldPartition"
+            data-testid="world-partition-tab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="world-partition-pane"
+          >World Partition</button>
         </div>
         <div class="outliner-pane" id="scene-outliner-pane" data-outliner-pane="scene" role="tabpanel">
           <div class="outliner-search-row">
@@ -618,6 +631,9 @@ export class EditorUi {
           </div>
           <div class="outliner-list" data-outliner-list></div>
           <div class="outliner-summary" data-outliner-summary data-testid="outliner-summary"></div>
+        </div>
+        <div class="outliner-pane" id="world-partition-pane" data-outliner-pane="worldPartition" role="tabpanel" hidden>
+          <div class="world-partition-body" data-world-partition-body></div>
         </div>
       </aside>
       <aside class="editor-panel editor-details">
@@ -1180,6 +1196,13 @@ export class EditorUi {
         if (tab === "details" || tab === "meshPaint" || tab === "foliage") {
           this.setInspectorTab(tab);
         }
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-outliner-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.outlinerTab;
+        if (tab === "scene" || tab === "worldPartition") this.setOutlinerTab(tab);
       });
     });
 
@@ -4131,6 +4154,33 @@ export class EditorUi {
     const redoTip = state.redoLabel ? `Redo ${state.redoLabel}` : "Redo";
     this.undoButton.setAttribute("aria-label", undoTip);
     this.redoButton.setAttribute("aria-label", redoTip);
+  }
+
+  /**
+   * Scene Outliner or World Partition. The World Partition map polls the scene
+   * only while its tab is open (residency and the camera change every frame).
+   */
+  private setOutlinerTab(tab: "scene" | "worldPartition"): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-outliner-tab]").forEach((button) => {
+      const active = button.dataset.outlinerTab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    this.root.querySelectorAll<HTMLElement>("[data-outliner-pane]").forEach((pane) => {
+      pane.hidden = pane.dataset.outlinerPane !== tab;
+    });
+    if (tab !== "worldPartition") {
+      if (this.worldPartitionTimer !== null) window.clearInterval(this.worldPartitionTimer);
+      this.worldPartitionTimer = null;
+      return;
+    }
+    this.worldPartitionPanel ??= new WorldPartitionPanel({
+      body: requireElement(this.root, "[data-world-partition-body]"),
+      focus: (x, z) => this.app.focusWorldMapPoint(x, z),
+    });
+    const refresh = () => this.worldPartitionPanel?.update(this.app.getWorldPartitionView());
+    refresh();
+    this.worldPartitionTimer ??= window.setInterval(refresh, 400);
   }
 
   private setInspectorTab(tab: InspectorTab): void {

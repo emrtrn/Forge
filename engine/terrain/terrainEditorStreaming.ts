@@ -95,6 +95,16 @@ export class TerrainEditorStreaming {
     return this.inFlight.size;
   }
 
+  /** Load radius around the editor camera, in metres. */
+  get loadRange(): number {
+    return this.settings.loadRange;
+  }
+
+  /** A read of `key` is in flight (World Partition panel). */
+  isLoading(key: string): boolean {
+    return this.inFlight.has(key);
+  }
+
   get allResident(): boolean {
     return [...this.declared].every((key) => this.world.tiles.has(key));
   }

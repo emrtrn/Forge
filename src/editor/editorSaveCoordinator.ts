@@ -24,6 +24,11 @@ export class SaveRevision {
     return this.revision !== this.savedRevision;
   }
 
+  /** Grows with every change: a cheap "document changed" signal for views. */
+  get current(): number {
+    return this.revision;
+  }
+
   markDirty(): void {
     this.revision += 1;
   }

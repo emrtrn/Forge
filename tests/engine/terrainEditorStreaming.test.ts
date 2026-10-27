@@ -61,8 +61,12 @@ export async function registerTerrainEditorStreamingTests(check: Check, checkAsy
       fetch: async (key) => { fetched.push(key); return copy(disk.get(key)!); },
       changed: (key) => changed.push(key), pinned: (key) => pinned.has(key), warn: (message) => assert.fail(message),
     }, { rangeTiles: 1, maxConcurrentFetches: 4 });
+    assert.equal(streaming.loadRange, 32, "one 32 m tile around the camera");
     streaming.update([{ position: [16, 16] }]);
     assert.equal(streaming.loading, 4, "concurrency limit");
+    // The World Partition panel shows reads in flight per tile.
+    assert.equal(streaming.isLoading("0_0"), true);
+    assert.equal(streaming.isLoading("7_7"), false);
     for (let i = 0; i < 4; i += 1) { await settle(); streaming.update([{ position: [16, 16] }]); }
     assert.deepEqual([...world.tiles.keys()].sort(), ["0_0", "0_1", "1_0", "1_1"]);
     assert.ok(!fetched.includes("3_3"), "a hole is never read");

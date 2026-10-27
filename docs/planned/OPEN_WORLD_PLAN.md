@@ -2272,6 +2272,26 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
 - [ ] **World Partition paneli:** heightmap'ten üretilmiş minimap, hücre
       grid'i, bölge seçip yükle/boşalt, kalıcı "pinned" bölgeler; editör
       kamerası etrafında otomatik yükleme (runtime'dan geniş menzil).
+      *İlk dilim tamam (2026-10-27):* sol panelde Scene Outliner'ın yanında
+      **World Partition** sekmesi (`src/editor/panels/world/worldPartitionPanel.ts`).
+      Canvas'ta global yükseklik haritasından gölgeli minimap (1×1 Landscape:
+      kendi yükseklikleri; döndürülmüşse yalnız ayak izi), tile'lar editör
+      durumuna göre (yüklü / yükleniyor / yüklü değil karartılmış), kaydedilmemiş
+      tile'lar turuncu çerçeveli, dolu partition hücreleri öğe sayısıyla, kamera
+      işareti ve akışlı arazide yükleme menzili. Üzerine gelince tile, hücre ve
+      koordinat; tıklama editör kamerasını aynı yön ve yerden yükseklikle oraya
+      götürür, akış o bölgeyi yükler. Sekme açıkken 400 ms'de bir yoklar.
+      Saf çekirdek `engine/world/worldMapView.ts` (çerçeve, piksel dönüşümü,
+      gölgeleme, odak pozu); `TerrainEditorStreaming.isLoading/loadRange`,
+      `WorldTerrainEditSession.editRevision`. Yeni/genişletilmiş çok-tile arazi
+      artık yükleyici gibi global haritasını kurar (minimap'te de görünür).
+      Doğrulama: engine `world map view` + akış okuyucuları; smoke
+      `world-partition-panel.spec.ts` (12×12 akışlı dünya: özet, hücre sayıları,
+      hover metinleri, yüklü/yüklü olmayan parlaklık farkı, tıklayınca uzak
+      köşe yüklenir ve eski bölge boşalır). **Açık (sonraki dilim):** bölge
+      seçip yükle/boşalt, kalıcı sabitlenmiş bölgeler, hücre başına içerik
+      sayımının level revizyonuna göre önbelleklenmesi (bugün her yoklamada
+      bütün level taranıyor).
 - [ ] Outliner: yalnız yüklü actor'ler + "yüklü olmayan hücrede" filtresi;
       bir actor'e gitmek hücresini yükler.
 - [ ] Landscape splines ve River Water dünya uzayına taşınır (`landscapeRef`
@@ -2371,7 +2391,11 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       *Tamam (editör tile akışı ilk dilimi, yukarıda):* dikiş kenarları iki
       tile'a yazılır; iz + yumuşatma payı yüklü değilse dab atlanır, tile'lar
       istenir ve vuruş bitene kadar tutulur. Tarayıcıda denenmedi (engine testli).
-- [ ] Kirli tile/hücre göstergesi, Save yalnız kirlileri yazar.
+- [x] Kirli tile/hücre göstergesi, Save yalnız kirlileri yazar.
+      *Tamam (2026-10-27):* Save yalnız kirlileri yazıyordu; Details'teki
+      `[data-world-terrain-residency]` sayacı vardı; World Partition paneli
+      kaydedilmemiş tile'ları haritada turuncu çerçeveyle gösterir. Hücre
+      dosyaları Save'de kendi değişiklik karşılaştırmasıyla yazılır (gösterge yok).
 - [ ] Editör smoke'u: yeni dünya oluştur → iki tile arasında sculpt → kaydet
       → yeniden aç → aynı yükseklik.
 

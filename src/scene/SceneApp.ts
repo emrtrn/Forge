@@ -4,9 +4,11 @@ import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionReg
 import { validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
 import { legacyLandscapeToWorldTerrain } from "@engine/terrain/terrainLegacy";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
-import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
+import { normalizeWorldPartitionSettings, worldPartitionCellContents, type WorldPartitionSettings } from "@engine/world/worldPartition";
+import { parseWorldCellKey } from "@engine/world/worldGrid";
+import { worldMapHeightAt, worldMapFocusPosition, type WorldMapHeights, type WorldMapRect } from "@engine/world/worldMapView";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
-import { levelTerrainPath, terrainTilePath, terrainTileWorldSize, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
+import { levelTerrainPath, parseTileKey, terrainTilePath, terrainTileWorldSize, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
 import { applyTerrainLayerState, createTerrainLayerAddition, createTerrainLayerRemoval } from "@engine/terrain/terrainLayers";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
@@ -809,6 +811,41 @@ export interface MeshPaintToolSettings {
 }
 
 export type MeshPaintColorView = "off" | "rgb" | "alpha" | "r" | "g" | "b";
+
+/** A terrain tile in the World Partition panel: residency in the editor and unsaved edits. */
+export interface WorldPartitionTileView {
+  key: string;
+  x: number;
+  z: number;
+  state: "resident" | "loading" | "unloaded";
+  unsaved: boolean;
+}
+
+/** What the World Partition panel draws (OPEN_WORLD_PLAN Faz 8). */
+export interface WorldPartitionView {
+  terrain: {
+    name: string;
+    /** World X/Z the terrain covers (a rotated 1x1 Landscape: its unrotated footprint). */
+    rect: WorldMapRect;
+    tileSize: number;
+    tilesX: number;
+    tilesZ: number;
+    /** Tiles load around the editor camera (more than 6x6 tiles). */
+    streams: boolean;
+    /** Editor load radius around the camera while streaming, in metres. */
+    loadRange: number | null;
+    tiles: WorldPartitionTileView[];
+    /** Heights over `rect` for the minimap; null for a rotated 1x1 Landscape. */
+    map: WorldMapHeights | null;
+    metresPerSample: number;
+    /** Changes whenever the heights may have: redraw the minimap. */
+    mapRevision: string;
+  } | null;
+  partition: WorldPartitionSettings;
+  /** Occupied `main` cells with their element count (empty while partition is off). */
+  cells: { key: string; x: number; z: number; count: number }[];
+  camera: { x: number; z: number; forwardX: number; forwardZ: number };
+}
 
 /** A Foliage Type row surfaced to the editor panel (asset id + resolved def). */
 export interface FoliageTypeView {
@@ -2500,6 +2537,94 @@ export class SceneApp {
 
   getSnapSettings(): EditorSnapSettings {
     return { ...this.snapSettings };
+  }
+
+  /**
+   * The World Partition panel's snapshot: the level's terrain (tile residency,
+   * unsaved tiles and its live height map), the occupied partition cells and
+   * the editor camera. Cheap enough to poll while the panel is open.
+   */
+  getWorldPartitionView(): WorldPartitionView {
+    const camera = this.editorViewportCamera();
+    const forward = camera.getWorldDirection(new Vector3());
+    const partition = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
+    const cells = this.layout
+      ? [...worldPartitionCellContents(this.layout, partition)].map(([key, contents]) => {
+        const coord = parseWorldCellKey(key)!;
+        const count = Object.values(contents).reduce((sum, items) => sum + items.length, 0);
+        return { key, x: coord.x, z: coord.z, count };
+      })
+      : [];
+    return {
+      terrain: this.worldPartitionTerrainView(),
+      partition,
+      cells,
+      camera: { x: camera.position.x, z: camera.position.z, forwardX: forward.x, forwardZ: forward.z },
+    };
+  }
+
+  private worldPartitionTerrainView(): WorldPartitionView["terrain"] {
+    const actor = this.layout?.landscapes?.[0];
+    if (!actor) return null;
+    const document = this.worldTerrains.get(actor.id);
+    if (document) {
+      const { def } = document;
+      const size = terrainTileWorldSize(def);
+      const rect = { minX: def.origin[0], minZ: def.origin[2], maxX: def.origin[0] + def.tilesX * size, maxZ: def.origin[2] + def.tilesZ * size };
+      const streaming = this.worldTerrainStreams.get(document);
+      const session = this.worldTerrainSessions.get(document);
+      const unsaved = new Set(session?.dirtyKeys() ?? []);
+      const tiles = def.tiles.map(({ key }): WorldPartitionTileView => {
+        const coord = parseTileKey(key)!;
+        const state = document.tiles.has(key) ? "resident" : streaming?.isLoading(key) ? "loading" : "unloaded";
+        return { key, x: coord.x, z: coord.z, state, unsaved: unsaved.has(key) };
+      });
+      const map = document.globalAttributes?.map ?? null;
+      return {
+        name: actor.name || def.name, rect, tileSize: size, tilesX: def.tilesX, tilesZ: def.tilesZ,
+        streams: Boolean(streaming), loadRange: streaming?.loadRange ?? null, tiles,
+        map, metresPerSample: map ? (def.tilesX * size) / (map.width - 1) : def.spacing,
+        mapRevision: `${actor.id}:${session?.editRevision ?? 0}:${document.tiles.size}`,
+      };
+    }
+    const data = this.landscapeData.get(actor.id);
+    if (!data) return null;
+    const { verticesX, verticesZ, spacing } = data.size;
+    const scale = data.size.heightScale === 0 ? 1 : data.size.heightScale;
+    const [x, y, z] = actor.position;
+    const width = (verticesX - 1) * spacing;
+    const depth = (verticesZ - 1) * spacing;
+    const rotated = (actor.rotation ?? [0, 0, 0]).some((angle) => angle !== 0);
+    const revision = this.editorSaves.landscapeSaveRevisions.get(actor.id);
+    return {
+      name: actor.name || "Landscape",
+      rect: { minX: x - width / 2, minZ: z - depth / 2, maxX: x + width / 2, maxZ: z + depth / 2 },
+      tileSize: Math.max(width, depth), tilesX: 1, tilesZ: 1, streams: false, loadRange: null,
+      tiles: [{ key: "0_0", x: 0, z: 0, state: "resident", unsaved: Boolean(revision?.dirty) }],
+      map: rotated ? null : { width: verticesX, height: verticesZ, heights: Float32Array.from(data.heights, (height) => y + height * scale) },
+      metresPerSample: spacing,
+      mapRevision: `${actor.id}:${revision?.current ?? 0}`,
+    };
+  }
+
+  /**
+   * Moves the editor camera to look at world (`x`, `z`) from the same height
+   * above the ground along its current view direction (World Partition panel).
+   * A streaming terrain then loads the tiles around it.
+   */
+  focusWorldMapPoint(x: number, z: number): void {
+    const view = this.worldPartitionTerrainView();
+    const ground = view?.map ? worldMapHeightAt(view.map, view.rect, x, z) : null;
+    const camera = this.editorViewportCamera();
+    const forward = camera.getWorldDirection(new Vector3());
+    const target = new Vector3(x, ground ?? 0, z);
+    const position = worldMapFocusPosition(camera.position.toArray(), forward.toArray(), target.toArray());
+    camera.position.set(position[0], position[1], position[2]);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(target);
+    this.cameraController.markViewChanged();
+    this.cameraController.syncAnglesFromCurrentView();
+    this.onStatus?.(`Moved the camera to ${Math.round(x)}, ${Math.round(z)}.`, "info");
   }
 
   getWorldSettings(): EditorWorldSettings {
@@ -9138,7 +9263,11 @@ export class SceneApp {
       const format = (tile as Partial<DecodedTerrainTile>).heightFormat ?? newTileFormat;
       if (format) formats.set(key, format);
     }
-    const document: WorldTerrainDocument = { def: world.def, tiles: world.tiles, globalAttributes: loaded.globalAttributes };
+    // A new or expanded terrain has no global map yet; build it as the loader
+    // does, so the renderer updates this shared copy (World Partition minimap).
+    const globalAttributes = loaded.globalAttributes
+      ?? (loaded.tiles.size === loaded.def.tiles.length ? buildTerrainGlobalAttributes(worldTerrainRenderSource(world.def, world.tiles)) : undefined);
+    const document: WorldTerrainDocument = { def: world.def, tiles: world.tiles, globalAttributes };
     const session = new WorldTerrainEditSession(path, world, formats, () => document.globalAttributes);
     this.worldTerrainSessions.set(document, session);
     // The loader left tiles out: this terrain is too large to hold whole.

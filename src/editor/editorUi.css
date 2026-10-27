@@ -816,6 +816,42 @@
   padding: 10px 9px 18px;
 }
 
+.outliner-pane[hidden] { display: none; }
+
+/* World Partition tab (OPEN_WORLD_PLAN Faz 8): top-down map of the level. */
+.outliner-pane[data-outliner-pane="worldPartition"] { display: block; overflow-y: auto; }
+.outliner-pane[data-outliner-pane="worldPartition"][hidden] { display: none; }
+.world-partition-panel { display: grid; gap: 8px; }
+.world-partition-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
+.world-partition-summary strong { color: var(--forge-text); font-weight: 600; }
+.world-partition-map {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--forge-border-mid);
+  border-radius: 4px;
+  cursor: crosshair;
+}
+.world-partition-hover { min-height: 16px; color: var(--forge-text-secondary); font-size: 11px; }
+.world-partition-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--forge-text-secondary);
+  font-size: 11px;
+}
+.world-partition-legend li { display: flex; align-items: center; gap: 5px; }
+.world-partition-legend i { width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(255, 255, 255, 0.25); }
+.world-partition-legend .is-loaded { background: #6f8a6a; }
+.world-partition-legend .is-loading { background: rgba(240, 180, 60, 0.7); }
+.world-partition-legend .is-unloaded { background: #22272b; }
+.world-partition-legend .is-unsaved { background: transparent; border: 2px solid #ff9b52; }
+.world-partition-legend .is-cell { background: rgba(110, 200, 230, 0.4); }
+.world-partition-legend .is-camera { background: #ffffff; border-radius: 50%; }
+
 .editor-shell .outliner-filter-button {
   width: 30px;
   min-width: 30px;

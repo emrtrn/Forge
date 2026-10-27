@@ -848,7 +848,7 @@ import {
   clonePlacement,
 } from "../editor/core/layoutSnapshots";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
-import { collisionWireboxes, collisionSurfaceTriangles } from "../engine/render-three/collisionView";
+import { collisionWireEntries, collisionWireboxes, collisionSurfaceTriangles } from "../engine/render-three/collisionView";
 import { attachActorLight } from "../engine/render-three/lights";
 import {
   applySkyToneMapping,
@@ -2162,6 +2162,42 @@ check("collisionWireboxes ignore rotation and grow only with scale", () => {
   assert.ok(Math.abs((scaledSize[0] ?? 0) - 4) < 1e-9);
   assert.ok(Math.abs((scaledSize[1] ?? 0) - 2) < 1e-9);
   assert.ok(Math.abs((scaledSize[2] ?? 0) - 0.6) < 1e-9);
+});
+
+// The overlay refreshes on every drag step, so its per-owner lines are reused
+// while an owner is unchanged and rebuilt only for the one that moved.
+check("collisionWireEntries match collisionWireboxes and rebuild only the changed owner", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "collision-wire-entries",
+    loadGroups: [],
+    instances: [{
+      assetId: "wall",
+      placements: [
+        { position: [0, 0, 0] },
+        { position: [3, 0, 0], collision: false },
+        { position: [6, 0, 0], sensor: true },
+      ],
+    }],
+    characters: [{ assetId: "wall", position: [0, 0, 5] }],
+    lights: [],
+  };
+  const bounds = new Map([["wall", new Box3(new Vector3(-1, 0, -0.1), new Vector3(1, 2, 0.1))]]);
+  const flat = (points: Vec3[]) => Array.from(new Float32Array(points.flat()));
+  const first = collisionWireEntries(layout, bounds);
+  assert.deepEqual(first.map(({ key, chunk, sensor }) => [key, chunk, sensor]), [
+    ["i0:0", "i0:0", false],
+    ["i0:2", "i0:0", true],
+    ["c:0", "c:0", false],
+  ]);
+  assert.deepEqual(first.map((entry) => Array.from(entry.positions)), collisionWireboxes(layout, bounds).map((box) => flat(box.segments)));
+
+  layout.instances[0]!.placements[2]!.position = [6, 1, 0];
+  const second = collisionWireEntries(layout, bounds, undefined, undefined, new Map(first.map((entry) => [entry.key, entry])));
+  assert.equal(second[0], first[0], "unchanged owner reuses its lines");
+  assert.equal(second[2], first[2], "unchanged character reuses its lines");
+  assert.notEqual(second[1], first[1], "moved owner rebuilds");
+  assert.deepEqual(Array.from(second[1]!.positions), flat(collisionWireboxes(layout, bounds)[1]!.segments));
 });
 
 check("floorSnapPosition places the world-box bottom on y=0", () => {

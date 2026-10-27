@@ -11,7 +11,8 @@ import type { PlanarReflectionSource } from "@engine/render-three/planarReflecti
 import type { RoomLayout } from "@engine/scene/layout";
 import { WATER_OPTICS_GLSL } from "@engine/render-three/waterOptics";
 import { WATER_ENVIRONMENT_GLSL } from "@engine/render-three/waterEnvironment";
-import baselineShaders from "./water-surface-v3-shaders.json";
+import { WATER_SCENE_GLSL } from "@engine/render-three/waterSceneSnapshot";
+import baselineShaders from "./water-surface-v4-shaders.json";
 
 type Variant = "off" | "before" | "after" | "low" | "high";
 interface ReviewApp {
@@ -44,7 +45,8 @@ let fixedTime = 12;
 const currentShaders = new Map([...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]
   .map((water) => [water, { vertex: water.material.vertexShader, fragment: water.material.fragmentShader }]));
 const expand = (shader: string) => shader.replaceAll("${WATER_OPTICS_GLSL}", WATER_OPTICS_GLSL)
-  .replaceAll("${WATER_ENVIRONMENT_GLSL}", WATER_ENVIRONMENT_GLSL);
+  .replaceAll("${WATER_ENVIRONMENT_GLSL}", WATER_ENVIRONMENT_GLSL)
+  .replaceAll("${WATER_SCENE_GLSL}", WATER_SCENE_GLSL);
 let currentDraw: { object: string; material: string; type: string } | null = null;
 const samplerWarnings = new Map<string, { count: number; object: string; material: string; type: string; variant: Variant }>();
 const originalDraw = renderer.renderBufferDirect.bind(renderer);
@@ -96,7 +98,7 @@ function setVariant(next: Variant) {
   variant = next;
   for (const source of sources) source.setQuality(next === "low" ? null : next === "high" ? "high" : "medium");
   for (const water of [...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]) water.visible = next !== "off";
-  for (const water of internal.lakes?.objects.values() ?? []) water.userData.waterSceneTransmission = next !== "before" && next !== "off";
+  for (const water of internal.lakes?.objects.values() ?? []) water.userData.waterSceneTransmission = next !== "off";
   for (const [water, current] of currentShaders) {
     const shaders = next === "before" ? ("isRiverWaterObject" in water ? baselineShaders.river : baselineShaders.lake) : current;
     const vertex = expand(shaders.vertex), fragment = expand(shaders.fragment);
@@ -183,7 +185,7 @@ function diagnoseLake(mode: "opaque" | "no-effects" | "no-reflection" | "ao-surf
   if (mode === "no-scene") for (const water of internal.lakes?.objects.values() ?? []) water.userData.waterSceneTransmission = false;
   if (mode === "baked-path" || mode === "scalar-loss") for (const water of internal.lakes?.objects.values() ?? []) {
     water.material.fragmentShader = mode === "baked-path"
-      ? water.material.fragmentShader.replace("float path=min(length(bedPosition-surfacePosition),100.);", "float path=waterPath(d,abs(viewDirection.y));")
+      ? water.material.fragmentShader.replace("path=min(length(waterColumn),100.);", "path=waterPath(d,abs(viewDirection.y));")
       : water.material.fragmentShader.replace("vec3 extinction=(vec3(1.)+(vec3(1.)-tint)*2.)/max(absorptionDistance,.01);", "vec3 extinction=vec3(1./max(absorptionDistance,.01));");
     water.material.needsUpdate = true;
   }

@@ -211,3 +211,28 @@ test("lake optics: scene depth transmission preserves shallows, filters colour a
   }
   await evidence(info, "lake-scene-depth", shots);
 });
+
+test("lake optics: the visible shoreline fades to the real bed despite deeper baked geometry", async ({ page }, info) => {
+  const measurements = [];
+  for (const orthographic of [false, true]) {
+    const off = await frame(page, { kind: "lake", sceneTransmission: true, pipeline: "composer",
+      orthographic, depth: 5, sceneBedDepth: 0, visible: false, reflection: "off",
+      opacity: 0.35, bedVisibility: 0.9, absorptionDistance: 4 });
+    const shots = [];
+    for (const sceneBedDepth of [0, 0.005, 0.02, 0.1, 0.5, 2, 5]) {
+      const on = await frame(page, { visible: true, sceneBedDepth });
+      shots.push(on);
+      expect(on.sceneTransmission).toBe(1);
+      expect(on.glError).toBe(0);
+    }
+    const difference = (a: Snapshot, b: Snapshot) => Math.max(...a.centre.flatMap((p, i) => p.map((v, c) => Math.abs(v - b.centre[i]![c]!))));
+    expect(difference(shots[0]!, off)).toBeLessThan(2);
+    // Millimetres of water must not immediately acquire the deep mesh's colour
+    // or opacity floor. The real bed can differ from the authored triangle.
+    expect(difference(shots[1]!, off)).toBeLessThan(3);
+    expect(contrast(shots[3]!)).toBeGreaterThan(contrast(shots[6]!) + 20);
+    measurements.push({ orthographic, off, shots });
+    await page.screenshot({ path: info.outputPath(`lake-shore-${orthographic ? "ortho" : "perspective"}.png`) });
+  }
+  await evidence(info, "lake-shore-thickness", measurements);
+});

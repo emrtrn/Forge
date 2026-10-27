@@ -6,8 +6,10 @@ import sharp from "sharp";
 
 // Run against the isolated server documented in WATER_LANDSCAPE_REVIEW.md.
 // This driver never calls a save endpoint or touches authored scene data.
-const base = process.env.FORGE_WATER_REVIEW_URL ?? "http://127.0.0.1:5488";
-const output = resolve(process.env.FORGE_WATER_REVIEW_OUTPUT ?? "docs/planned/Forge_Water_System/evidence/landscape-review");
+const argument = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
+const base = argument("url") ?? process.env.FORGE_WATER_REVIEW_URL ?? "http://127.0.0.1:5488";
+const output = resolve(argument("output") ?? process.env.FORGE_WATER_REVIEW_OUTPUT ?? "docs/planned/Forge_Water_System/evidence/landscape-review");
+const lakesOnly = process.argv.includes("--lakes-only");
 await mkdir(output, { recursive: true });
 // HMR is disabled, but another editor session may still change files while a
 // page is loading. Keep the complete engine/app source boundary reviewable.
@@ -16,7 +18,7 @@ async function sourceSnapshot() {
   for (const root of ["engine", "src"]) for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
     if (entry.isFile() && /\.(ts|js|glsl)$/.test(entry.name)) files.push(join(entry.parentPath, entry.name));
   }
-  files.push("tests/smoke/pages/water-landscape-review.ts", "tests/smoke/pages/water-surface-v3-shaders.json");
+  files.push("tests/smoke/pages/water-landscape-review.ts", "tests/smoke/pages/water-surface-v4-shaders.json");
   const result = {};
   for (const file of files.sort()) result[file] = createHash("sha256").update(await readFile(file)).digest("hex");
   return result;
@@ -51,7 +53,7 @@ try {
   if (initial.terrain.some((t) => t.tiles !== t.expected) || initial.lakes.some((l) => l.status !== "ready")
     || initial.waters.some((w) => !w.vertices || !w.triangles)) throw new Error("Incomplete scene/water geometry");
   await page.waitForTimeout(2000);
-  const views = refine ? ["river-flat", "lake-shore"] : process.argv.includes("--pilot") ? ["river-upper", "river-bank", "lake-overview"] :
+  const views = lakesOnly ? ["lake-overview", "lake-shore", "lake-top", "lake-low", "lake-1", "lake-1-low"] : refine ? ["river-flat", "lake-shore"] : process.argv.includes("--pilot") ? ["river-upper", "river-bank", "lake-overview"] :
     ["river-upper", "river-bank", "river-flat", "river-top", "lake-overview", "lake-shore", "lake-top", "lake-low", "lake-1", "lake-1-low"];
   for (const view of views) {
     await page.selectOption("#review-view", view);
@@ -66,7 +68,7 @@ try {
       captures.push({ ...await page.evaluate(() => window.__waterLandscape.metadata()), imageStats });
     }
   }
-  if (!baseline) for (const view of ["river-bank", "lake-low"]) {
+  if (!baseline) for (const view of lakesOnly ? ["lake-1-low", "lake-low"] : ["river-bank", "lake-low"]) {
     await page.selectOption("#review-view", view);
     await page.selectOption("#review-variant", "after");
     await page.evaluate(() => window.__waterLandscape.setTime(14));
@@ -75,7 +77,7 @@ try {
     await page.evaluate(() => window.__waterLandscape.setTime(12));
   }
   if (!process.argv.includes("--pilot") && !captureOnly) {
-    for (const view of refine ? ["river-flat"] : ["river-bank", "river-flat", "lake-overview", "lake-1"]) {
+    for (const view of lakesOnly ? ["lake-overview", "lake-1"] : refine ? ["river-flat"] : ["river-bank", "river-flat", "lake-overview", "lake-1"]) {
       await page.selectOption("#review-view", view);
       await page.waitForTimeout(1800);
       const result = await page.evaluate(() => window.__waterLandscape.benchmark(120));
@@ -99,7 +101,7 @@ try {
   const sourceEnd = await sourceSnapshot();
   const changedSources = [...new Set([...Object.keys(sourceStart), ...Object.keys(sourceEnd)])].filter(file => sourceStart[file] !== sourceEnd[file]);
   const report = { date: new Date().toISOString(), pilot: process.argv.includes("--pilot"), sourceStart, sourceEnd, changedSources,
-    baselineCommit: "18f2307c", baseline, initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
+    baselineCommit: "35ac2ade", baseline, initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
   if (refine) {
     report.initial = previousReport.initial;
     report.captures = [...previousReport.captures.filter((c) => !views.includes(c.view)), ...captures];

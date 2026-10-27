@@ -24,6 +24,35 @@ export type OutlinerFilterType = (typeof OUTLINER_FILTER_TYPES)[number]["type"];
 // The list element survives row rebuilds after selection, filtering, and edits.
 const selectionAnchors = new WeakMap<HTMLElement, string>();
 
+type OutlinerEntry = { object: EditableSceneObject; depth: number };
+
+/** What the rendered rows read on interaction; swapped in place by a patch render. */
+interface OutlinerRowsView {
+  options: OutlinerPanelOptions;
+  entries: OutlinerEntry[];
+  byId: Map<string, EditableSceneObject>;
+}
+
+interface RenderedOutlinerRow {
+  row: HTMLDivElement;
+  detail: HTMLElement;
+  selected: boolean;
+  detailText: string;
+}
+
+/**
+ * Rows built for a list, keyed by their structural signature. Selection and
+ * position changes (every click, every gizmo drag step) keep the signature, so
+ * they patch the live rows instead of rebuilding thousands of them.
+ */
+interface RenderedOutlinerRows {
+  key: string;
+  view: OutlinerRowsView;
+  rows: Map<string, RenderedOutlinerRow>;
+}
+
+const renderedRows = new WeakMap<HTMLElement, RenderedOutlinerRows>();
+
 export interface OutlinerPanelOptions {
   body: HTMLElement;
   summary: HTMLElement;
@@ -95,7 +124,7 @@ function orderOutlinerTree(
 
 function replaceOutlinerRows(
   options: OutlinerPanelOptions,
-  entries: Array<{ object: EditableSceneObject; depth: number }>,
+  entries: OutlinerEntry[],
   totalCount: number,
 ): void {
   const anchorId = selectionAnchors.get(options.body);
@@ -103,6 +132,7 @@ function replaceOutlinerRows(
     selectionAnchors.delete(options.body);
   }
   if (entries.length === 0) {
+    renderedRows.delete(options.body);
     options.body.innerHTML = `
         <div class="empty-details">
           <strong>${totalCount === 0 ? "No objects" : "No matches"}</strong>
@@ -112,7 +142,23 @@ function replaceOutlinerRows(
     return;
   }
 
+  const view: OutlinerRowsView = {
+    options,
+    entries,
+    byId: new Map(entries.map(({ object }) => [object.id, object])),
+  };
+  const key = entries.map((entry) => outlinerRowKey(options, entry)).join("\n");
+  const rendered = renderedRows.get(options.body);
+  if (rendered?.key === key && rendered.rows.values().next().value?.row.parentElement === options.body) {
+    rendered.view = view;
+    for (const { object } of entries) patchOutlinerRow(rendered.rows.get(object.id)!, object);
+    return;
+  }
+
+  const state: RenderedOutlinerRows = { key, view, rows: new Map() };
+  let dragIds: string[] = [];
   const selectRow = (object: EditableSceneObject, event: MouseEvent): void => {
+    const { options, entries } = state.view;
     const additive = event.ctrlKey || event.metaKey;
     if (event.shiftKey) {
       const anchorId = selectionAnchors.get(options.body)
@@ -132,44 +178,87 @@ function replaceOutlinerRows(
     options.selectSceneObject(object.id, { additive });
   };
 
-  let dragIds: string[] = [];
   options.body.replaceChildren(
-    ...entries.map((entry) =>
-      buildOutlinerRow(options, entry.object, entry.depth, selectRow, () => dragIds, (next) => {
+    ...entries.map((entry) => {
+      const built = buildOutlinerRow(state, entry.object, entry.depth, selectRow, () => dragIds, (next) => {
         dragIds = next;
-      }),
-    ),
+      });
+      state.rows.set(entry.object.id, built);
+      return built.row;
+    }),
   );
+  renderedRows.set(options.body, state);
+}
+
+/** Everything a row's markup depends on apart from its selection and position. */
+function outlinerRowKey(options: OutlinerPanelOptions, { object, depth }: OutlinerEntry): string {
+  const cell = options.partition
+    ? `${options.partition.cells.get(object.id) ?? ""}:${outlinerPartitionState(options.partition, object.id)}`
+    : "";
+  return [
+    object.id,
+    depth,
+    object.kind,
+    object.label,
+    object.assetId,
+    object.hidden ? 1 : 0,
+    object.locked ? 1 : 0,
+    object.groupId ?? "",
+    cell,
+  ].join("|");
+}
+
+function outlinerDetailText(object: EditableSceneObject): string {
+  return `${object.assetId} - ${formatPosition(object.position)}`;
+}
+
+function patchOutlinerRow(rendered: RenderedOutlinerRow, object: EditableSceneObject): void {
+  const selected = Boolean(object.selected);
+  if (rendered.selected !== selected) {
+    rendered.selected = selected;
+    rendered.row.classList.toggle("active", selected);
+  }
+  const detailText = outlinerDetailText(object);
+  if (rendered.detailText !== detailText) {
+    rendered.detailText = detailText;
+    rendered.detail.textContent = detailText;
+  }
 }
 
 function buildOutlinerRow(
-  options: OutlinerPanelOptions,
+  state: RenderedOutlinerRows,
   object: EditableSceneObject,
   depth: number,
   selectRow: (object: EditableSceneObject, event: MouseEvent) => void,
   getDragIds: () => readonly string[],
   setDragIds: (ids: string[]) => void,
-): HTMLDivElement {
+): RenderedOutlinerRow {
+  const { options } = state.view;
+  const id = object.id;
+  // Handlers outlive patch renders, so they read the latest object and options.
+  const live = (): EditableSceneObject => state.view.byId.get(id) ?? object;
+  const liveOptions = (): OutlinerPanelOptions => state.view.options;
   const row = document.createElement("div");
   row.className = "outliner-row";
-  row.dataset.objectId = object.id;
+  row.dataset.objectId = id;
   row.dataset.outlinerType = outlinerFilterType(object);
   row.dataset.testid = "outliner-row";
   row.draggable = true;
   if (object.selected) row.classList.add("active");
   if (object.hidden) row.classList.add("is-hidden");
   if (object.groupId) row.classList.add("is-grouped");
-  const cellBadge = options.partition ? outlinerCellBadge(options.partition, object.id) : "";
+  const cellBadge = options.partition ? outlinerCellBadge(options.partition, id) : "";
   if (cellBadge) row.classList.add("has-cell");
-  if (options.partition && outlinerPartitionState(options.partition, object.id) === "unloaded") {
+  if (options.partition && outlinerPartitionState(options.partition, id) === "unloaded") {
     row.classList.add("is-unloaded-cell");
   }
   row.style.paddingLeft = `${8 + depth * 14}px`;
+  const detailText = outlinerDetailText(object);
   row.innerHTML = `
       <span class="outliner-kind" aria-hidden="true">${ACTOR_TYPE_ICONS[outlinerIcon(object)]}</span>
       <span class="outliner-meta">
         <strong>${object.label}</strong>
-        <small>${object.assetId} - ${formatPosition(object.position)}</small>
+        <small>${detailText}</small>
       </span>
       ${cellBadge}
       <span class="outliner-actions">
@@ -181,33 +270,33 @@ function buildOutlinerRow(
     `;
   row.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest(".outliner-actions")) return;
-    selectRow(object, event);
+    selectRow(live(), event);
   });
   row.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    options.openOutlinerContextMenu(event, object);
+    liveOptions().openOutlinerContextMenu(event, live());
   });
   row.addEventListener("dblclick", (event) => {
     if ((event.target as HTMLElement).closest(".outliner-actions")) return;
-    const nextName = window.prompt("Rename object", object.label);
+    const nextName = window.prompt("Rename object", live().label);
     if (nextName === null) return;
-    options.renameSceneObject(object.id, nextName);
+    liveOptions().renameSceneObject(id, nextName);
   });
   row.querySelector<HTMLButtonElement>('[data-action="hidden"]')?.addEventListener("click", () => {
-    options.setSceneObjectHidden(object.id, !object.hidden);
+    liveOptions().setSceneObjectHidden(id, !live().hidden);
   });
   row.querySelector<HTMLButtonElement>('[data-action="locked"]')?.addEventListener("click", () => {
-    options.setSceneObjectLocked(object.id, !object.locked);
+    liveOptions().setSceneObjectLocked(id, !live().locked);
   });
 
   // Drag-and-drop parenting: drag a row (or the whole multi-selection if the
   // dragged row is part of it) onto another row to parent it there.
   row.addEventListener("dragstart", (event) => {
-    const selectedIds = options.objects
+    const selectedIds = liveOptions().objects
       .filter((entry) => entry.selected)
       .map((entry) => entry.id);
-    const nextDragIds = object.selected && selectedIds.length > 1 ? selectedIds : [object.id];
+    const nextDragIds = live().selected && selectedIds.length > 1 ? selectedIds : [id];
     setDragIds(nextDragIds);
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
@@ -218,14 +307,14 @@ function buildOutlinerRow(
   row.addEventListener("dragend", () => {
     setDragIds([]);
     row.classList.remove("is-dragging");
-    for (const el of options.body.querySelectorAll(".drop-target")) {
+    for (const el of liveOptions().body.querySelectorAll(".drop-target")) {
       el.classList.remove("drop-target");
     }
   });
   row.addEventListener("dragover", (event) => {
     const dragIds = getDragIds();
     if (dragIds.length === 0) return;
-    if (dragIds.includes(object.id)) return;
+    if (dragIds.includes(id)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     row.classList.add("drop-target");
@@ -236,11 +325,11 @@ function buildOutlinerRow(
   row.addEventListener("drop", (event) => {
     event.preventDefault();
     row.classList.remove("drop-target");
-    const childIds = getDragIds().filter((id) => id !== object.id);
+    const childIds = getDragIds().filter((childId) => childId !== id);
     setDragIds([]);
-    if (childIds.length > 0) options.parentObjectsTo(childIds, object.id);
+    if (childIds.length > 0) liveOptions().parentObjectsTo(childIds, id);
   });
-  return row;
+  return { row, detail: row.querySelector<HTMLElement>(".outliner-meta small")!, selected: Boolean(object.selected), detailText };
 }
 
 /** World Partition cell (or "persistent") of a row; dimmed rows sit in cells unloaded at the camera. */

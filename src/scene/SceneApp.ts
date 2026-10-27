@@ -68,6 +68,7 @@ import { resampleSingleTileTerrain, resizeSingleTileTerrain } from "@engine/terr
 import {
   Box3,
   BoxGeometry,
+  BufferAttribute,
   BufferGeometry,
   CanvasTexture,
   DirectionalLight,
@@ -191,9 +192,11 @@ import {
   composePlacementMatrix,
 } from "@engine/render-three/transforms";
 import {
+  collisionWireEntries,
   collisionWireboxes,
   collisionSurfaceTriangles,
-  heightfieldWireSegments,
+  heightfieldWireGeometry,
+  type CollisionWireEntry,
 } from "@engine/render-three/collisionView";
 import {
   createAiNavigationView,
@@ -1193,6 +1196,9 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   Space: "jump",
 };
 
+/** Selections whose edits never change terrain heights (see `updateSelectionBox`). */
+const TERRAIN_NEUTRAL_SELECTION_KINDS: ReadonlySet<Selection["kind"]> = new Set(["instance", "character", "actor", "light"]);
+
 const AI_NAV_DEBUG_CELL_SIZE = 0.5;
 const AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS = AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS;
 const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING;
@@ -1586,6 +1592,8 @@ export class SceneApp {
   private readonly keptTerrainTiles: KeptTerrainTilesStore | null;
   /** Grows on every scene structure change: the World Partition cell counts cache on it. */
   private sceneObjectsRevision = 0;
+  /** A gizmo drag held back the Outliner refresh; the drag end emits it. */
+  private sceneObjectsDeferredByDrag = false;
   private worldPartitionCellCache: {
     key: string;
     objectCells: Map<string, string>;
@@ -1595,6 +1603,11 @@ export class SceneApp {
   private readonly picker: ScenePicker;
 
   private manifest: AssetManifest | null = null;
+  private assetCategoryIndex: {
+    assets: AssetManifest["assets"];
+    length: number;
+    categories: Map<string, string>;
+  } | null = null;
   private metadataSchema: MetadataSchema | null = null;
   private layout: RoomLayout | null = null;
   private models = new Map<string, GLTF>();
@@ -1644,7 +1657,13 @@ export class SceneApp {
   /** Unit sphere reused as the selection-outline proxy for capture probes (scaled by the helper's radius). */
   private readonly captureOutlineGeometry = new SphereGeometry(1, 24, 16);
   /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
-  private readonly collisionBoxes: LineSegments[] = [];
+  /** Placement/character collider lines of the overlay, reused per owner while unchanged. */
+  private collisionWireEntryCache = new Map<string, CollisionWireEntry>();
+  /** One line buffer per chunk of owners (and colour), rebuilt only when a member changed. */
+  private readonly collisionWireChunks = new Map<string, { signature: string; helper: LineSegments }>();
+  /** Terrain heightfield wires of the Collision overlay, kept while their heights and placement hold. */
+  private readonly landscapeCollisionWires = new Map<string, { signature: string; helper: LineSegments }>();
+  private collisionWireMaterials: { solid: LineBasicMaterial; sensor: LineBasicMaterial } | null = null;
   private showCollision = false;
   /** Coalesces streamed tile arrivals/departures into one overlay rebuild per frame. */
   private worldTerrainCollisionWiresDirty = false;
@@ -1834,6 +1853,7 @@ export class SceneApp {
       getOrbitTarget: () => this.getCameraOrbitTarget(),
       onInteractionStart: () => {
         this.pointerDrag = null;
+        this.flushDragDeferredSceneObjects();
         this.endAssetDragPreview();
       },
       onStatus: (message, tone) => this.onStatus?.(message, tone),
@@ -3423,7 +3443,18 @@ export class SceneApp {
 
   /** Resolves an asset's manifest category for Details display. */
   private assetCategory(assetId: string): string {
-    return this.manifest?.assets.find((entry) => entry.id === assetId)?.category ?? "";
+    const assets = this.manifest?.assets;
+    if (!assets) return "";
+    // The Outliner asks once per scene object; a linear manifest scan each made
+    // every refresh of a large level quadratic.
+    if (this.assetCategoryIndex?.assets !== assets || this.assetCategoryIndex.length !== assets.length) {
+      const categories = new Map<string, string>();
+      for (const entry of assets) {
+        if (!categories.has(entry.id)) categories.set(entry.id, entry.category ?? "");
+      }
+      this.assetCategoryIndex = { assets, length: assets.length, categories };
+    }
+    return this.assetCategoryIndex.categories.get(assetId) ?? "";
   }
 
   private isMaterialAsset(assetId: string): boolean {
@@ -4589,6 +4620,9 @@ export class SceneApp {
     const previous = this.instanceGroups.get(assetId);
     if (previous) {
       previous.traverse((child) => {
+        // Geometry and materials are the shared GLTF ones, but each group owns
+        // its instance buffers; without this every rebuild leaked them on the GPU.
+        if ((child as InstancedMesh).isInstancedMesh) (child as InstancedMesh).dispose();
         if (!isRenderableMesh(child) || child.geometry.userData.forgeMeshPaintClone !== true) return;
         child.geometry.dispose();
       });
@@ -4631,8 +4665,44 @@ export class SceneApp {
     return removed ? clonePlacement(removed) : null;
   }
 
+  /**
+   * Re-places one placement inside its live instance group without rebuilding
+   * it, so a gizmo drag step costs one matrix instead of the whole asset group.
+   * Clone routing and probe coverage stay as built; the drag commit rebuilds the
+   * group and settles them. False when the group can't be patched.
+   */
+  private moveInstancePlacementInPlace(assetId: string, placementIndex: number): boolean {
+    const placement = this.layout?.instances.find((entry) => entry.assetId === assetId)?.placements[placementIndex];
+    if (!placement) return false;
+    const matrix = composePlacementMatrix(placement);
+    const separate = this.markerObjects.get(assetId)?.[placementIndex]
+      ?? this.instanceOverrideObjects.get(assetId)?.find((object) => object.userData.placementIndex === placementIndex);
+    if (separate) {
+      separate.matrix.copy(matrix);
+      separate.matrixWorldNeedsUpdate = true;
+      return true;
+    }
+    const meshes = this.instanceMeshes.get(assetId);
+    if (!meshes || meshes.length === 0 || meshes.some((mesh) => placementIndex >= mesh.count)) return false;
+    // A hidden placement keeps its collapsed matrix; there is nothing to move.
+    if (placement.hidden) return true;
+    const instanceMatrix = new Matrix4();
+    for (const mesh of meshes) {
+      const source = mesh.userData.sourceMatrix;
+      instanceMatrix.copy(matrix);
+      if (source instanceof Matrix4) instanceMatrix.multiply(source);
+      mesh.setMatrixAt(placementIndex, instanceMatrix);
+      mesh.instanceMatrix.needsUpdate = true;
+      // Picking recomputes these lazily from the moved instance.
+      mesh.boundingBox = null;
+      mesh.boundingSphere = null;
+    }
+    return true;
+  }
+
   private refreshSelectionObject(selection: Selection): void {
     if (selection.kind === "instance") {
+      if (this.pointerDrag && this.moveInstancePlacementInPlace(selection.assetId, selection.placementIndex)) return;
       this.rebuildInstanceGroup(selection.assetId);
       return;
     }
@@ -13520,7 +13590,10 @@ export class SceneApp {
       updateMoveDrag: (event, selected) => this.updateMoveDrag(event, selected),
       updateRotateDrag: (event) => this.updateRotateDrag(event),
       updateScaleDrag: (event) => this.updateScaleDrag(event),
-      commitPointerDrag: (drag) => this.commitPointerDrag(drag),
+      commitPointerDrag: (drag) => {
+        this.commitPointerDrag(drag);
+        this.flushDragDeferredSceneObjects();
+      },
       updateGizmo: () => this.updateGizmo(),
       onAssetDragOver: (clientX, clientY) => this.updateAssetDragPreview(clientX, clientY),
       onAssetDragLeave: () => this.hideAssetDragPreview(),
@@ -14516,8 +14589,14 @@ export class SceneApp {
     // Probe influence spheres follow selection (like the light wireframes).
     this.updateReflectionCaptureHelperVisibility();
     // Collision overlay refreshes with the same cadence as selection boxes, so it
-    // tracks live transform edits (drag/cascade all route through here).
-    this.updateCollisionBoxes();
+    // tracks live transform edits (drag/cascade all route through here). Placed
+    // meshes, characters, actors and lights cannot reshape a terrain, so while
+    // only they are selected the terrain wire check (a pass over every height
+    // sample) is skipped; terrain edits select their landscape when they commit.
+    const selected = this.getSelectedSelections();
+    this.updateCollisionBoxes({
+      terrain: selected.length === 0 || selected.some((selection) => !TERRAIN_NEUTRAL_SELECTION_KINDS.has(selection.kind)),
+    });
     this.updateAiNavigationView();
     if (!this.layout || !this.selectionOutline) return;
 
@@ -14843,28 +14922,67 @@ export class SceneApp {
    * colliders draw green, sensors amber; both match the collider physics derives
    * (see `collisionWireboxes`). A no-op (after clearing) while the overlay is off.
    */
-  private updateCollisionBoxes(): void {
-    this.removeCollisionBoxes();
-    if (!this.showCollision || !this.layout) return;
-    for (const { box, segments, sensor } of collisionWireboxes(
+  private updateCollisionBoxes(options: { terrain?: boolean } = {}): void {
+    if (!this.showCollision || !this.layout) {
+      this.removeCollisionBoxes();
+      this.removeLandscapeCollisionWires();
+      return;
+    }
+    // The overlay refreshes on every selection change and drag step. Owners whose
+    // lines did not change are reused, and each chunk of owners shares one line
+    // buffer, so a drag step rebuilds and re-uploads one chunk instead of a
+    // helper per collider (thousands of draw calls on an open-world level).
+    const entries = collisionWireEntries(
       this.layout,
       this.localBounds,
       this.collisionDefs,
       this.complexCollisionMeshes,
-    )) {
-      if (box.isEmpty() || segments.length === 0) continue;
-      const geometry = new BufferGeometry();
-      geometry.setAttribute(
-        "position",
-        new Float32BufferAttribute(segments.flatMap((point) => point), 3),
-      );
-      const material = new LineBasicMaterial({ color: sensor ? 0xffb454 : 0x4cd07d });
-      const helper = new LineSegments(geometry, material);
-      helper.name = "editor-collision-box";
-      this.collisionBoxes.push(helper);
-      this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
+      this.collisionWireEntryCache,
+    );
+    this.collisionWireEntryCache = new Map(entries.map((entry) => [entry.key, entry]));
+    const chunks = new Map<string, CollisionWireEntry[]>();
+    for (const entry of entries) {
+      const key = `${entry.chunk}:${entry.sensor ? "sensor" : "solid"}`;
+      const members = chunks.get(key);
+      if (members) members.push(entry);
+      else chunks.set(key, [entry]);
     }
-    this.updateLandscapeCollisionWires();
+    for (const [key, members] of chunks) {
+      const signature = members.map((entry) => entry.signature).join("\n");
+      const cached = this.collisionWireChunks.get(key);
+      if (cached?.signature === signature) {
+        if (cached.helper.parent !== this.scene) this.scene.add(cached.helper);
+        continue;
+      }
+      if (cached) disposeCollisionWire(cached.helper);
+      const positions = new Float32Array(members.reduce((total, entry) => total + entry.positions.length, 0));
+      let offset = 0;
+      for (const entry of members) {
+        positions.set(entry.positions, offset);
+        offset += entry.positions.length;
+      }
+      const geometry = new BufferGeometry();
+      geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+      const helper = new LineSegments(geometry, this.collisionWireMaterial(members[0]!.sensor ? "sensor" : "solid"));
+      helper.name = "editor-collision-box";
+      this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
+      this.collisionWireChunks.set(key, { signature, helper });
+    }
+    for (const [key, { helper }] of this.collisionWireChunks) {
+      if (chunks.has(key)) continue;
+      disposeCollisionWire(helper);
+      this.collisionWireChunks.delete(key);
+    }
+    if (options.terrain !== false) this.updateLandscapeCollisionWires();
+  }
+
+  /** Shared overlay line materials; kept for the editor's lifetime so a refresh never recompiles them. */
+  private collisionWireMaterial(kind: "solid" | "sensor"): LineBasicMaterial {
+    this.collisionWireMaterials ??= {
+      solid: new LineBasicMaterial({ color: 0x4cd07d }),
+      sensor: new LineBasicMaterial({ color: 0xffb454 }),
+    };
+    return this.collisionWireMaterials[kind];
   }
 
   /**
@@ -14875,46 +14993,76 @@ export class SceneApp {
    * mesh, so this reveals exactly the surface characters walk on. Built in the
    * body frame and positioned like the collider body, matching
    * `applyLandscapeTransform` (there is no landscape transform scale).
+   *
+   * A wire is rebuilt only when its heights or placement changed: the overlay
+   * refreshes on every selection change and drag step, and rebuilding a 4×4
+   * tile terrain each time stalled the editor for seconds. Sculpt, undo and
+   * streaming all change the heights, so the signature catches them.
    */
   private updateLandscapeCollisionWires(): void {
-    if (!this.layout) return;
-    for (const actor of this.layout.landscapes ?? []) {
+    const keep = new Set<string>();
+    const use = (
+      key: string,
+      signature: string,
+      build: () => { field: ColliderHeightfield; position: Vec3; rotation: Vec3 },
+    ): void => {
+      keep.add(key);
+      const cached = this.landscapeCollisionWires.get(key);
+      if (cached?.signature === signature) {
+        if (cached.helper.parent !== this.scene) this.scene.add(cached.helper);
+        return;
+      }
+      if (cached) disposeCollisionWire(cached.helper);
+      this.landscapeCollisionWires.delete(key);
+      const { field, position, rotation } = build();
+      const helper = this.createLandscapeCollisionWire(field, position, rotation);
+      if (helper) this.landscapeCollisionWires.set(key, { signature, helper });
+    };
+    for (const actor of this.layout?.landscapes ?? []) {
       if (!resolveLandscape(actor).collision) continue;
       const world = this.worldTerrains.get(actor.id);
       if (world) {
-        for (const tile of world.tiles.values()) {
-          const { translation, primitive } = terrainTileHeightfield(world.def, tile);
-          this.addLandscapeCollisionWire(primitive.heightfield!, translation, [0, 0, 0]);
+        const { tileQuads, spacing, origin } = world.def;
+        for (const [key, tile] of world.tiles) {
+          use(`${actor.id}:${key}`, `${tileQuads}:${spacing}:${origin.join(",")}:${heightsSignature(tile.heights)}`, () => {
+            const { translation, primitive } = terrainTileHeightfield(world.def, tile);
+            return { field: primitive.heightfield!, position: translation, rotation: [0, 0, 0] };
+          });
         }
         continue;
       }
       const item = this.landscapeItem(actor);
-      this.addLandscapeCollisionWire(createLandscapeHeightfieldPrimitive(item.data).heightfield!, actor.position, item.rotation);
+      const field = createLandscapeHeightfieldPrimitive(item.data).heightfield!;
+      use(
+        actor.id,
+        `${field.quadsX}x${field.quadsZ}:${field.spacing}:${actor.position.join(",")}:${item.rotation.join(",")}:${heightsSignature(field.heights)}`,
+        () => ({ field, position: actor.position, rotation: item.rotation }),
+      );
+    }
+    for (const [key, { helper }] of this.landscapeCollisionWires) {
+      if (keep.has(key)) continue;
+      disposeCollisionWire(helper);
+      this.landscapeCollisionWires.delete(key);
     }
   }
 
   /** One terrain heightfield wire for the "Show > Collision" overlay, placed like its collider body. */
-  private addLandscapeCollisionWire(
+  private createLandscapeCollisionWire(
     field: ColliderHeightfield,
     position: Vec3,
     rotation: Vec3,
-  ): void {
-    const segments = heightfieldWireSegments(field);
-    if (segments.length === 0) return;
+  ): LineSegments | null {
+    const { positions, indices } = heightfieldWireGeometry(field);
+    if (indices.length === 0) return null;
     const geometry = new BufferGeometry();
-    geometry.setAttribute(
-      "position",
-      new Float32BufferAttribute(segments.flatMap((point) => point), 3),
-    );
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setIndex(new BufferAttribute(indices, 1));
     // Depth-tested (like the other editor collision wireboxes): the terrain
     // occludes edges behind its surface, so the overlay stays readable and
     // doesn't draw over the actors in front of it. The runtime's Play wire
     // uses depthTest:false for an always-on-top debug look; the editor
     // authoring overlay deliberately does not.
-    const helper = new LineSegments(
-      geometry,
-      new LineBasicMaterial({ color: 0x4cd07d }),
-    );
+    const helper = new LineSegments(geometry, this.collisionWireMaterial("solid"));
     helper.name = "editor-collision-box";
     helper.position.set(position[0], position[1], position[2]);
     helper.rotation.set(
@@ -14923,8 +15071,13 @@ export class SceneApp {
       (rotation[2] * Math.PI) / 180,
       "XYZ",
     );
-    this.collisionBoxes.push(helper);
     this.scene.add(tagSceneSource(helper, EDITOR_OVERLAY_SOURCE));
+    return helper;
+  }
+
+  private removeLandscapeCollisionWires(): void {
+    for (const { helper } of this.landscapeCollisionWires.values()) disposeCollisionWire(helper);
+    this.landscapeCollisionWires.clear();
   }
 
   private updateAiNavigationView(): void {
@@ -15231,15 +15384,10 @@ export class SceneApp {
   }
 
   private removeCollisionBoxes(): void {
-    for (const collisionBox of this.collisionBoxes) {
-      this.scene.remove(collisionBox);
-      collisionBox.geometry.dispose();
-      const materials = Array.isArray(collisionBox.material)
-        ? collisionBox.material
-        : [collisionBox.material];
-      for (const material of materials) material.dispose();
-    }
-    this.collisionBoxes.length = 0;
+    // Materials are the shared collisionWireMaterial ones.
+    for (const { helper } of this.collisionWireChunks.values()) disposeCollisionWire(helper);
+    this.collisionWireChunks.clear();
+    this.collisionWireEntryCache.clear();
   }
 
   private removeAiNavigationView(): void {
@@ -15543,10 +15691,22 @@ export class SceneApp {
   private emitSelectionChanged(): void {
     this.applyMeshPaintColorView();
     this.onSelectionChanged?.(this.getSelected());
+    // A gizmo drag emits on every pointer move; listing every scene object per
+    // step stalled large levels, so the Outliner catches up once the drag ends.
+    if (this.pointerDrag) {
+      this.sceneObjectsDeferredByDrag = true;
+      return;
+    }
     this.emitSceneObjectsChanged();
   }
 
+  /** Emits the scene-object refresh a gizmo drag held back, unless one already ran. */
+  private flushDragDeferredSceneObjects(): void {
+    if (this.sceneObjectsDeferredByDrag) this.emitSceneObjectsChanged();
+  }
+
   private emitSceneObjectsChanged(): void {
+    this.sceneObjectsDeferredByDrag = false;
     this.sceneObjectsRevision += 1;
     this.onSceneObjectsChanged?.(this.getSceneObjects());
     // Any structural change (add/delete/edit of a collider, placement or nav
@@ -15745,6 +15905,23 @@ function normalizedAttributeComponent(
   if (array instanceof Int8Array) return clampUnit((value + 128) / 255);
   if (array instanceof Int16Array) return clampUnit((value + 32768) / 65535);
   return clampUnit(value);
+}
+
+/** Cheap content key for a height grid: changes when any sample does (sculpt, undo, streaming). */
+function heightsSignature(heights: Float32Array): string {
+  let sum = 0;
+  let weighted = 0;
+  for (let index = 0; index < heights.length; index += 1) {
+    const height = heights[index]!;
+    sum += height;
+    weighted += height * ((index % 1021) + 1);
+  }
+  return `${heights.length}:${sum}:${weighted}`;
+}
+
+function disposeCollisionWire(helper: LineSegments): void {
+  helper.removeFromParent();
+  helper.geometry.dispose();
 }
 
 function clampUnit(value: unknown): number {

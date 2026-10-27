@@ -12,7 +12,7 @@ import type { Vec3 } from "../../engine/scene/layout";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { createFlatTerrainTile, terrainTileHeightRange, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { terrainTileHeightfield, worldTerrainColliderEntities } from "../../engine/terrain/worldTerrainActor";
-import { heightfieldWireSegments } from "../../engine/render-three/collisionView";
+import { heightfieldWireGeometry, heightfieldWireSegments } from "../../engine/render-three/collisionView";
 import { landscapeTrimesh, terrainTileTrimesh } from "./terrainTrimeshReference";
 
 type Check = (label: string, fn: () => void) => void;
@@ -495,6 +495,28 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
       const mesh = terrainTileTrimesh(document.def, tile);
       assert.deepEqual(field.translation, mesh.translation);
       assert.deepEqual(heightfieldWireSegments(field.primitive.heightfield!), edges(mesh.primitive));
+    }
+  });
+
+  check("terrain heightfield collision overlay: the indexed wire draws every triangle edge exactly once", () => {
+    const key = (p: ArrayLike<number>): string => Array.from(p, (value) => Math.fround(value)).join(",");
+    const edgeKey = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
+    const fields = [
+      createLandscapeHeightfieldPrimitive(landscape(65, 33, 2)).heightfield!,
+      ...[...terrain(1.5, [3, -2, 7]).tiles.values()].map((tile) => terrainTileHeightfield(terrain(1.5, [3, -2, 7]).def, tile).primitive.heightfield!),
+    ];
+    for (const field of fields) {
+      const segments = heightfieldWireSegments(field);
+      const expected = new Set<string>();
+      for (let i = 0; i < segments.length; i += 2) expected.add(edgeKey(key(segments[i]!), key(segments[i + 1]!)));
+      const { positions, indices } = heightfieldWireGeometry(field);
+      const drawn = new Set<string>();
+      for (let i = 0; i < indices.length; i += 2) {
+        const a = indices[i]!, b = indices[i + 1]!;
+        drawn.add(edgeKey(key(positions.subarray(a * 3, a * 3 + 3)), key(positions.subarray(b * 3, b * 3 + 3))));
+      }
+      assert.equal(indices.length / 2, drawn.size, "no edge is drawn twice");
+      assert.deepEqual([...drawn].sort(), [...expected].sort());
     }
   });
 }

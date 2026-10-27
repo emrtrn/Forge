@@ -54,50 +54,134 @@ export function collisionWireboxes(
   complexMeshes?: ReadonlyMap<string, ComplexCollisionMesh>,
 ): CollisionWirebox[] {
   const boxes: CollisionWirebox[] = [];
-  const emit = (
-    source: ColliderSource,
-    assetId: string,
-    sensor: boolean,
-  ): void => {
-    if (source.collision === false && source.simulatePhysics !== true) return;
-    const def = collisionDefs?.get(assetId);
-    const navigationRole = source.navigationRole ?? def?.navigationRole ?? "auto";
-    // `complexAsSimple` uses the render mesh: draw its triangle edges so the
-    // overlay shows the actual collision shape (e.g. an L-corner), not a box.
-    const complexMesh = complexMeshes?.get(assetId);
-    if (def?.complexity === "complexAsSimple" && complexMesh) {
-      boxes.push(complexWirebox(source, complexMesh, sensor, navigationRole));
-      return;
-    }
-    // Authored simple-collision primitives (from the Static Mesh editor's
-    // sidecar) replace the auto bounding box when present.
-    if (def && def.primitives.length > 0) {
-      for (const primitive of def.primitives) {
-        boxes.push(authoredWirebox(source, primitive, sensor, navigationRole));
-      }
-      return;
-    }
-    const bounds = localBounds.get(assetId);
-    if (!bounds || bounds.isEmpty()) return;
-    const collider = colliderBoxFromBounds(bounds, source);
-    boxes.push({
-      box: boxFromColliderBox(source.position, collider),
-      segments: wireboxSegments(source.position, readRotation(source), collider),
-      size: [...collider.size],
-      sensor,
-      navigationRole,
-    });
-  };
-
-  for (const instance of layout.instances) {
-    for (const placement of instance.placements) {
-      emit(placement, instance.assetId, placement.sensor === true);
-    }
-  }
-  for (const character of layout.characters) {
-    emit(character, character.assetId, character.sensor === true);
-  }
+  forEachColliderSource(layout, (source, assetId, sensor) => {
+    boxes.push(...sourceWireboxes(source, assetId, sensor, localBounds, collisionDefs, complexMeshes));
+  });
   return boxes;
+}
+
+/** One collider owner's overlay lines, keyed so a refresh can reuse unchanged ones. */
+export interface CollisionWireEntry {
+  /** Stable per owner: instance group + placement index, or character index. */
+  key: string;
+  /** Neighbouring owners drawn from one line buffer. */
+  chunk: string;
+  /** Everything the lines derive from; equal signatures mean equal lines. */
+  signature: string;
+  sensor: boolean;
+  /** World-space segment endpoints, `xyz` pairs. */
+  positions: Float32Array;
+}
+
+/** Owners per overlay draw buffer: one edit re-uploads one chunk, not the whole level. */
+export const COLLISION_WIRE_CHUNK_SIZE = 64;
+
+/**
+ * The "Show > Collision" overlay lines of {@link collisionWireboxes}, per owner,
+ * reusing `previous` entries whose signature is unchanged. The overlay refreshes
+ * on every selection change and drag step; rebuilding every owner each time
+ * (thousands of `complexAsSimple` meshes on an open-world level) stalled the
+ * editor, while a drag step changes one owner.
+ */
+export function collisionWireEntries(
+  layout: RoomLayout,
+  localBounds: ReadonlyMap<string, Box3>,
+  collisionDefs?: ReadonlyMap<string, AssetCollisionDef>,
+  complexMeshes?: ReadonlyMap<string, ComplexCollisionMesh>,
+  previous?: ReadonlyMap<string, CollisionWireEntry>,
+): CollisionWireEntry[] {
+  const entries: CollisionWireEntry[] = [];
+  forEachColliderSource(layout, (source, assetId, sensor, owner, index) => {
+    if (source.collision === false && source.simulatePhysics !== true) return;
+    const key = `${owner}:${index}`;
+    const bounds = localBounds.get(assetId);
+    const signature = [
+      assetId,
+      source.position.join(","),
+      readRotation(source).join(","),
+      readScale(source).join(","),
+      sensor ? 1 : 0,
+      identityOf(collisionDefs?.get(assetId)),
+      identityOf(complexMeshes?.get(assetId)),
+      bounds ? `${bounds.min.toArray().join(",")}/${bounds.max.toArray().join(",")}` : "",
+    ].join("|");
+    const reused = previous?.get(key);
+    if (reused?.signature === signature) {
+      entries.push(reused);
+      return;
+    }
+    const lines = sourceWireboxes(source, assetId, sensor, localBounds, collisionDefs, complexMeshes)
+      .filter(({ box, segments }) => !box.isEmpty() && segments.length > 0)
+      .flatMap(({ segments }) => segments);
+    if (lines.length === 0) return;
+    const positions = new Float32Array(lines.length * 3);
+    lines.forEach((point, offset) => positions.set(point, offset * 3));
+    entries.push({ key, chunk: `${owner}:${Math.floor(index / COLLISION_WIRE_CHUNK_SIZE)}`, signature, sensor, positions });
+  });
+  return entries;
+}
+
+/** Collider owners in overlay order: instance placements per group, then characters. */
+function forEachColliderSource(
+  layout: RoomLayout,
+  visit: (source: ColliderSource, assetId: string, sensor: boolean, owner: string, index: number) => void,
+): void {
+  layout.instances.forEach((instance, group) => {
+    instance.placements.forEach((placement, index) => {
+      visit(placement, instance.assetId, placement.sensor === true, `i${group}`, index);
+    });
+  });
+  layout.characters.forEach((character, index) => {
+    visit(character, character.assetId, character.sensor === true, "c", index);
+  });
+}
+
+function sourceWireboxes(
+  source: ColliderSource,
+  assetId: string,
+  sensor: boolean,
+  localBounds: ReadonlyMap<string, Box3>,
+  collisionDefs?: ReadonlyMap<string, AssetCollisionDef>,
+  complexMeshes?: ReadonlyMap<string, ComplexCollisionMesh>,
+): CollisionWirebox[] {
+  if (source.collision === false && source.simulatePhysics !== true) return [];
+  const def = collisionDefs?.get(assetId);
+  const navigationRole = source.navigationRole ?? def?.navigationRole ?? "auto";
+  // `complexAsSimple` uses the render mesh: draw its triangle edges so the
+  // overlay shows the actual collision shape (e.g. an L-corner), not a box.
+  const complexMesh = complexMeshes?.get(assetId);
+  if (def?.complexity === "complexAsSimple" && complexMesh) {
+    return [complexWirebox(source, complexMesh, sensor, navigationRole)];
+  }
+  // Authored simple-collision primitives (from the Static Mesh editor's
+  // sidecar) replace the auto bounding box when present.
+  if (def && def.primitives.length > 0) {
+    return def.primitives.map((primitive) => authoredWirebox(source, primitive, sensor, navigationRole));
+  }
+  const bounds = localBounds.get(assetId);
+  if (!bounds || bounds.isEmpty()) return [];
+  const collider = colliderBoxFromBounds(bounds, source);
+  return [{
+    box: boxFromColliderBox(source.position, collider),
+    segments: wireboxSegments(source.position, readRotation(source), collider),
+    size: [...collider.size],
+    sensor,
+    navigationRole,
+  }];
+}
+
+const objectIdentities = new WeakMap<object, number>();
+let nextObjectIdentity = 1;
+
+/** A stable number per object, so a signature notices a replaced definition or mesh. */
+function identityOf(value: object | undefined): string {
+  if (!value) return "";
+  let identity = objectIdentities.get(value);
+  if (identity === undefined) {
+    identity = nextObjectIdentity++;
+    objectIdentities.set(value, identity);
+  }
+  return String(identity);
 }
 
 /** A world-space walkable surface triangle (`normalY` = signed unit normal.y, up-facing > 0). */
@@ -191,6 +275,49 @@ export function heightfieldWireSegments(field: ColliderHeightfield): Vec3[] {
     segments.push(a, b, b, c, c, a);
   });
   return segments;
+}
+
+/**
+ * {@link heightfieldWireSegments} as indexed line geometry for the overlay: every
+ * sample once and every triangle edge once (an interior edge borders two
+ * triangles). A 257² terrain tile is ~197 k edges here; as segment pairs it was
+ * ~787 k `Vec3` arrays rebuilt on every overlay refresh.
+ */
+export function heightfieldWireGeometry(field: ColliderHeightfield): {
+  positions: Float32Array;
+  indices: Uint32Array;
+} {
+  const { quadsX, quadsZ, spacing, heights } = field;
+  const columns = quadsX + 1;
+  const halfX = (quadsX * spacing) / 2;
+  const halfZ = (quadsZ * spacing) / 2;
+  const positions = new Float32Array(columns * (quadsZ + 1) * 3);
+  for (let z = 0; z <= quadsZ; z += 1) {
+    for (let x = 0; x <= quadsX; x += 1) {
+      const sample = z * columns + x;
+      positions[sample * 3] = x * spacing - halfX;
+      positions[sample * 3 + 1] = heights[sample]!;
+      positions[sample * 3 + 2] = z * spacing - halfZ;
+    }
+  }
+  // Per quad (a, b, c, d) = (x,z)(x+1,z)(x,z+1)(x+1,z+1): its top, left and
+  // diagonal edges; the right/bottom ones belong to the next quad except on the
+  // grid's last column/row.
+  const indices = new Uint32Array((quadsX * quadsZ * 3 + quadsX + quadsZ) * 2);
+  let next = 0;
+  for (let z = 0; z < quadsZ; z += 1) {
+    for (let x = 0; x < quadsX; x += 1) {
+      const a = z * columns + x;
+      const b = a + 1;
+      const c = a + columns;
+      indices[next++] = a; indices[next++] = b;
+      indices[next++] = a; indices[next++] = c;
+      indices[next++] = b; indices[next++] = c;
+      if (x === quadsX - 1) { indices[next++] = b; indices[next++] = c + 1; }
+      if (z === quadsZ - 1) { indices[next++] = c; indices[next++] = c + 1; }
+    }
+  }
+  return { positions, indices };
 }
 
 /** Placement/character fields the wirebox builder reads. */

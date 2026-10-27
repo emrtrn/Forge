@@ -28,7 +28,7 @@ import {
   WORLD_TERRAIN_CREATE_DEFAULTS,
   createFlatWorldTerrain,
   estimateWorldTerrain,
-  worldTerrainCreateProblems, worldTerrainHeightStep } from "../../engine/terrain/worldTerrainCreate";
+  worldTerrainCreateProblems, worldTerrainHeightStep, createWorldTerrainFromHeightmap, worldTerrainGridForHeightmap, worldTerrainHeightmapProblems } from "../../engine/terrain/worldTerrainCreate";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { terrainTileTrimesh } from "./terrainTrimeshReference";
 import { fetchLandscapeDocument, fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
@@ -363,6 +363,57 @@ export function registerWorldTerrainCreateTests(check: Check): void {
       assert.match(worldTerrainCreateProblems({ ...base, ...range }).join(" "), /Height range/, JSON.stringify(range));
     }
     assert.deepEqual(worldTerrainCreateProblems({ ...base, heightMin: 0, heightMax: 10 }), [], "a range may start at the datum");
+  });
+
+  check("world terrain create: a heightmap picks the grid it fills exactly, preferred resolution first, never resampled", () => {
+    assert.deepEqual(worldTerrainGridForHeightmap(1025, 513), { tilesX: 4, tilesZ: 2, tileQuads: 256 });
+    assert.deepEqual(worldTerrainGridForHeightmap(1025, 513, 128), { tilesX: 8, tilesZ: 4, tileQuads: 128 });
+    assert.deepEqual(worldTerrainGridForHeightmap(129, 129), { tilesX: 1, tilesZ: 1, tileQuads: 128 });
+    assert.deepEqual(worldTerrainGridForHeightmap(193, 65), { tilesX: 3, tilesZ: 1, tileQuads: 64 });
+    assert.equal(worldTerrainGridForHeightmap(1000, 1000), null, "no resolution divides 999");
+    assert.equal(worldTerrainGridForHeightmap(4097, 4097), null, "over the editor's vertex limit");
+  });
+
+  check("world terrain create: a heightmap start keeps its u16 codes, seams, default layers and range", () => {
+    const options = { ...WORLD_TERRAIN_CREATE_DEFAULTS, name: "Hills", tilesX: 2, tilesZ: 1, tileQuads: 64 as const, spacing: 2, baseHeight: 5 };
+    const [width, height] = [129, 65];
+    const codes = new Uint16Array(width * height);
+    for (let z = 0; z < height; z += 1) for (let x = 0; x < width; x += 1) codes[z * width + x] = (x * 509 + z * 131) % 65536;
+    const little = new Uint8Array(codes.buffer.slice(0));
+    const big = new Uint8Array(little.length);
+    for (let i = 0; i < little.length; i += 2) [big[i], big[i + 1]] = [little[i + 1]!, little[i]!];
+    const source = { bytes: little, width, height, endianness: "little" as const, heightMin: -20, heightMax: 300 };
+    assert.deepEqual(worldTerrainHeightmapProblems(options, source), []);
+    const { def, tiles } = createWorldTerrainFromHeightmap({ ...options, heightMin: -1, heightMax: 1 }, source);
+    assert.deepEqual([def.heightMin, def.heightMax], [-20, 300], "the heightmap's range, not the dialog's");
+    assert.deepEqual(def.origin, [-128, 5, -64]);
+    assert.deepEqual(normalizeWorldTerrain(structuredClone(def)), def);
+    assert.deepEqual(def.layers.map((layer) => layer.id), ["grass", "dirt", "rock", "snow"]);
+    const range = def.heightMax - def.heightMin;
+    for (const [key, tile] of tiles) {
+      assert.equal(terrainTileLayerWeight(tile, 0, 0), 1, `${key} layer 0`);
+      const encoded = encodeTerrainTile(tile, { heightMin: def.heightMin, heightMax: def.heightMax });
+      const decoded = validateTerrainTile(def, key, encoded);
+      for (let vz = 0; vz < tile.size; vz += 1) {
+        for (let vx = 0; vx < tile.size; vx += 1) {
+          const code = codes[vz * width + tile.x * 64 + vx]!;
+          assert.equal(tile.heights[vz * tile.size + vx], Math.fround(def.heightMin + code / 65535 * range));
+          assert.equal(new DataView(encoded.buffer, encoded.byteOffset).getUint16(32 + (vz * tile.size + vx) * 2, true), code, "u16 save writes the source code back");
+        }
+      }
+      assert.equal(decoded.heightFormat, "u16");
+    }
+    const [left, right] = [tiles.get("0_0")!, tiles.get("1_0")!];
+    for (let vz = 0; vz < 65; vz += 1) assert.equal(left.heights[vz * 65 + 64], right.heights[vz * 65], `seam row ${vz}`);
+    const fromBig = createWorldTerrainFromHeightmap(options, { ...source, bytes: big, endianness: "big" });
+    assert.deepEqual(fromBig.tiles.get("1_0")!.heights, right.heights, "big-endian RAW");
+    // The size must match the grid; a 1x1 grid feeds the classic Landscape adapter.
+    assert.match(worldTerrainHeightmapProblems({ ...options, tilesX: 3 }, source).join(" "), /needs exactly 193 × 65/);
+    assert.match(worldTerrainHeightmapProblems(options, { ...source, heightMax: -30 }).join(" "), /max above min/);
+    assert.throws(() => createWorldTerrainFromHeightmap({ ...options, tilesX: 3 }, source), /needs exactly/);
+    const single = createWorldTerrainFromHeightmap({ ...options, tilesX: 1 }, { ...source, width: 65, bytes: little.slice(0, 65 * 65 * 2), height: 65 });
+    const data = terrainDocumentToLandscape(single);
+    assert.equal(data.heights[64], Math.fround(-20 + ((64 * 509) % 65536) / 65535 * 320));
   });
 }
 

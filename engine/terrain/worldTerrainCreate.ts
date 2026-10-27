@@ -1,6 +1,7 @@
 import { LANDSCAPE_DEFAULT_LAYERS } from "../scene/landscape";
 import type { WorldTerrainDocument } from "./terrainLoader";
-import { terrainTileByteLength } from "./terrainTileCodec";
+import { importRawHeightmap } from "./terrainImport";
+import { decodeTerrainTile, terrainTileByteLength } from "./terrainTileCodec";
 import {
   TERRAIN_DEFAULT_HEIGHT_MAX,
   TERRAIN_DEFAULT_HEIGHT_MIN,
@@ -137,4 +138,81 @@ export function createFlatWorldTerrain(options: WorldTerrainCreateOptions): Worl
     }
   }
   return { def, tiles };
+}
+
+/** A 16-bit heightmap the New Landscape dialog starts a terrain from (OPEN_WORLD_PLAN Faz 8). */
+export interface WorldTerrainHeightmapSource {
+  /** Row-major u16 samples, rows along +Z (a PNG is converted to little-endian RAW first). */
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  endianness: "little" | "big";
+  /** Metres above the base height that samples 0 and 65535 stand for. */
+  heightMin: number;
+  heightMax: number;
+}
+
+/**
+ * The tile grid a `width` × `height` heightmap fills exactly (`(size − 1)` a
+ * multiple of the tile resolution, within the tile and vertex limits), trying
+ * `preferredQuads` first and then the finest tiles. Null when none fits: the
+ * heightmap is never resampled.
+ */
+export function worldTerrainGridForHeightmap(
+  width: number,
+  height: number,
+  preferredQuads?: WorldTerrainCreateTileQuads,
+): Pick<WorldTerrainCreateOptions, "tilesX" | "tilesZ" | "tileQuads"> | null {
+  const order = [preferredQuads, ...[...WORLD_TERRAIN_CREATE_TILE_QUADS].reverse()]
+    .filter((quads): quads is WorldTerrainCreateTileQuads => quads !== undefined);
+  for (const tileQuads of order) {
+    const tilesX = (width - 1) / tileQuads;
+    const tilesZ = (height - 1) / tileQuads;
+    if (![tilesX, tilesZ].every((tiles) => Number.isInteger(tiles) && tiles >= 1 && tiles <= TERRAIN_MAX_TILES_PER_AXIS)) continue;
+    if (width * height > WORLD_TERRAIN_CREATE_MAX_VERTICES) continue;
+    return { tilesX, tilesZ, tileQuads };
+  }
+  return null;
+}
+
+/** Problems that block starting `options` from `source`; empty when valid. */
+export function worldTerrainHeightmapProblems(options: WorldTerrainCreateOptions, source: WorldTerrainHeightmapSource): string[] {
+  const problems: string[] = [];
+  const width = options.tilesX * options.tileQuads + 1;
+  const height = options.tilesZ * options.tileQuads + 1;
+  if (source.width !== width || source.height !== height) {
+    problems.push(`The heightmap is ${source.width} × ${source.height}; this grid needs exactly ${width} × ${height} samples (no resampling).`);
+  }
+  if (source.bytes.byteLength !== source.width * source.height * 2) {
+    problems.push(`The heightmap holds ${source.bytes.byteLength} bytes; ${source.width} × ${source.height} 16-bit samples need ${source.width * source.height * 2}.`);
+  }
+  if (!(Number.isFinite(source.heightMin) && Number.isFinite(source.heightMax) && source.heightMax > source.heightMin)
+    || Math.abs(source.heightMin) > WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE || Math.abs(source.heightMax) > WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE) {
+    problems.push(`Heightmap min and max must be within ±${WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE} m, max above min.`);
+  }
+  return problems;
+}
+
+/**
+ * A World Terrain shaped like {@link createFlatWorldTerrain} (default layers,
+ * layer 0 at full weight, centred on the origin at `baseHeight`) whose heights
+ * come from `source`. Its encoding range is the heightmap's own min/max, so
+ * saving as u16 writes the source codes back unchanged; the dialog's height
+ * range does not apply.
+ */
+export function createWorldTerrainFromHeightmap(options: WorldTerrainCreateOptions, source: WorldTerrainHeightmapSource): WorldTerrainDocument {
+  const { heightMin: _heightMin, heightMax: _heightMax, ...grid } = options;
+  const problems = [...worldTerrainCreateProblems(grid), ...worldTerrainHeightmapProblems(grid, source)];
+  if (problems.length > 0) throw new Error(problems.join(" "));
+  const flat = createFlatWorldTerrain(grid);
+  const imported = importRawHeightmap({
+    bytes: source.bytes, width: source.width, height: source.height, endianness: source.endianness,
+    heightMin: source.heightMin, heightMax: source.heightMax,
+    tileQuads: grid.tileQuads, spacing: grid.spacing, origin: flat.def.origin,
+  });
+  for (const [key, bytes] of imported.tiles) flat.tiles.get(key)!.heights.set(decodeTerrainTile(bytes).heights);
+  flat.def.heightMin = imported.def.heightMin;
+  flat.def.heightMax = imported.def.heightMax;
+  flat.def.tiles = imported.def.tiles.map((summary) => ({ ...summary }));
+  return flat;
 }

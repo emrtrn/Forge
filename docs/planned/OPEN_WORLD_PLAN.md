@@ -2265,8 +2265,23 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       `open world setup` + `world terrain create` yükseklik aralığı testleri;
       smoke `terrain-create.spec.ts` ikinci senaryo (diyalog, öneri, notlar,
       geçersiz görüş mesafesi, Create sonrası level/tanım alanları, tek undo
-      hepsini geri alır, redo geri getirir). **Açık:** heightmap'ten başlatma
-      (bugün oluşturduktan sonra Details → Heightmap import).
+      hepsini geri alır, redo geri getirir).
+      *Heightmap'ten başlatma (2026-10-27):* diyalogda isteğe bağlı
+      **Heightmap** bölümü (16-bit PNG ya da RAW). Dosya seçilince grid onun
+      boyutuna uydurulur (`worldTerrainGridForHeightmap`: önce seçili çözünürlük,
+      sonra 256/128/64; yeniden örnekleme yok, uymayan boyut gerekçeyle
+      reddedilir); RAW başlıksız olduğu için kare kabul edilir, değilse mevcut
+      grid'e uymalıdır. "Min Height (0) / Max Height (65535)" Details import'uyla
+      aynı anlamda ve dünyanın kodlama aralığı olur, böylece u16 kayıt PNG
+      kodlarını aynen geri yazar; Open World'ün yükseklik aralığı satırları
+      gizlenir. `createWorldTerrainFromHeightmap` düz dünya gibi varsayılan
+      katmanlar + katman 0 tam ağırlık kurar, yükseklikleri `importRawHeightmap`
+      ile doldurur; 1×1 köprüye de gider. Oluşturma ile aynı tek undo adımı.
+      Doğrulama: engine `world terrain create` (grid uydurma, kod korunumu,
+      dikiş, big-endian, boyut/aralık ret, 1×1); smoke `terrain-create.spec.ts`
+      dördüncü senaryo (100×100 reddedilir; 129×65 → 2×1 × 64 quad, grid
+      değişince Create kilitlenir, kaydedilen tile'lar PNG kodlarını 0 farkla
+      taşır, tek undo kaldırır).
 - [ ] Büyük heightmap import (ör. 4097² 16-bit PNG/RAW) worker'da *(ertelendi, Faz 2 maddesindeki ölçüm)*, ilerleme
       çubuğuyla; export aynı.
 - [ ] **World Partition paneli:** heightmap'ten üretilmiş minimap, hücre

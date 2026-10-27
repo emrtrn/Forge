@@ -3833,7 +3833,7 @@ export class EditorUi {
   private async addLandscape(): Promise<void> {
     const { pickWorldTerrainOptions } = await import("@/editor/worldTerrainDialog");
     const choice = await pickWorldTerrainOptions(this.app.getWorldSettings());
-    if (choice) this.app.addLandscape(choice.terrain, choice.world);
+    if (choice) this.app.addLandscape(choice.terrain, choice.world, choice.heightmap);
   }
 
   private async expandLandscapeToWorldTerrain(): Promise<void> {

@@ -38,7 +38,7 @@ import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMes
 import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
 import { terrainHeightAt, raycastTerrain } from "@engine/terrain/terrainHeightQuery";
-import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
+import { createFlatWorldTerrain, createWorldTerrainFromHeightmap, type WorldTerrainCreateOptions, type WorldTerrainHeightmapSource } from "@engine/terrain/worldTerrainCreate";
 import { openWorldFogPatch, openWorldPartitionSettings, type OpenWorldSetup } from "@engine/world/openWorldSetup";
 import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@engine/terrain/worldTerrainExpand";
 import {
@@ -10302,9 +10302,14 @@ export class SceneApp {
    * adapter; more tiles make a multi-tile World Terrain. Either way the next
    * Save writes the level's terrain folder before the level that references it.
    * `world` (New Open World, Faz 8) sets the level's partition and view
-   * distance and fits the Height Fog in the same undo step.
+   * distance and fits the Height Fog in the same undo step; `heightmap` gives
+   * the new terrain its heights instead of a flat grid.
    */
-  addLandscape(options: WorldTerrainCreateOptions, world: OpenWorldSetup | null = null): void {
+  addLandscape(
+    options: WorldTerrainCreateOptions,
+    world: OpenWorldSetup | null = null,
+    heightmap: WorldTerrainHeightmapSource | null = null,
+  ): void {
     if (!this.layout || !this.activeProject) return;
     const landscapes = this.layout.landscapes ?? [];
     if (landscapes.length > 0) {
@@ -10313,7 +10318,7 @@ export class SceneApp {
     }
     let loaded: WorldTerrainDocument;
     try {
-      loaded = createFlatWorldTerrain(options);
+      loaded = heightmap ? createWorldTerrainFromHeightmap(options, heightmap) : createFlatWorldTerrain(options);
     } catch (error) {
       this.onStatus?.(error instanceof Error ? error.message : String(error), "error");
       return;
@@ -10376,7 +10381,7 @@ export class SceneApp {
       settingsChange ? "world settings" : "",
       fogChange ? (previousFog ? "fitted Height Fog" : "added Height Fog") : "",
     ].filter(Boolean);
-    this.onStatus?.(`Added Landscape: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m${
+    this.onStatus?.(`Added Landscape${heightmap ? " from a heightmap" : ""}: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m${
       extras.length > 0 ? `; updated ${extras.join(" and ")}` : ""}.`, "info");
   }
 

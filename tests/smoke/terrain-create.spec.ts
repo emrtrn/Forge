@@ -2,6 +2,7 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { PerspectiveCamera } from "three";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
+import { encodeHeightmapPng16 } from "../../engine/terrain/heightmapPng";
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { openWorldFogPatch } from "../../engine/world/openWorldSetup";
@@ -20,6 +21,7 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 const LEVEL = "layouts/__playwright-terrain-create.level.json";
 const OPEN_WORLD_LEVEL = "layouts/__playwright-open-world-create.level.json";
 const ROUND_TRIP_LEVEL = "layouts/__playwright-terrain-round-trip.level.json";
+const HEIGHTMAP_LEVEL = "layouts/__playwright-terrain-heightmap-create.level.json";
 const BASE_HEIGHT = 2;
 
 async function exists(path: string): Promise<boolean> {
@@ -359,5 +361,90 @@ test("a world created in the editor keeps a seam stroke's heights through Save a
   console.log(`[terrain-round-trip] editor heights after reopen ${JSON.stringify(after)}`);
   const halfStep = (definition.heightMax - definition.heightMin) / 65535 / 2;
   after.forEach((height, index) => expect(Math.abs(height! - before[index]!), `probe ${probes[index]}`).toBeLessThanOrEqual(halfStep + 1e-4));
+  expect(errors).toEqual([]);
+});
+
+/**
+ * New Landscape from a heightmap (OPEN_WORLD_PLAN Faz 8): picking a 16-bit PNG
+ * fits the grid to its size (or refuses a size no grid fills), and the created
+ * terrain carries the PNG's codes as its u16 tiles over the chosen 0/65535
+ * metres, all in the one Add Landscape undo step.
+ */
+test("New Landscape starts from a 16-bit PNG heightmap: the grid fits its size and the tiles keep its codes", async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await writeLevel(HEIGHTMAP_LEVEL);
+  expect((await request.post("/__open-level", { data: { path: HEIGHTMAP_LEVEL } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/?editor&heightmap=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("add-actor-button").hover();
+  await page.getByRole("button", { name: /^Terrain/ }).hover();
+  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape", exact: true }).click();
+  const dialog = page.locator("[data-world-terrain-dialog]");
+  const status = dialog.locator("[data-heightmap-status]");
+  const create = dialog.locator("[data-world-terrain-create]");
+  await expect(dialog.locator('[data-heightmap-min]')).toBeHidden();
+
+  // A size no grid fills is refused, never resampled.
+  const ramp = (width: number, height: number) => {
+    const samples = new Uint16Array(width * height);
+    for (let z = 0; z < height; z += 1) for (let x = 0; x < width; x += 1) samples[z * width + x] = (x * 509 + z * 131) % 65536;
+    return samples;
+  };
+  const odd = await encodeHeightmapPng16(100, 100, ramp(100, 100));
+  await dialog.locator("[data-heightmap-file]").setInputFiles({ name: "odd.png", mimeType: "image/png", buffer: Buffer.from(odd) });
+  await expect(status).toContainText("odd.png: 100 × 100 samples fit no tile grid");
+  await expect(create).toBeDisabled();
+
+  // 129 × 65: two 64-quad tiles side by side.
+  const samples = ramp(129, 65);
+  const png = await encodeHeightmapPng16(129, 65, samples);
+  await dialog.locator("[data-heightmap-file]").setInputFiles({ name: "hills.png", mimeType: "image/png", buffer: Buffer.from(png) });
+  await expect(status).toContainText("hills.png: 129 × 65 samples → 2 × 1 tiles of 64 quads");
+  await expect(dialog.locator('[data-field="tilesX"]')).toHaveValue("2");
+  await expect(dialog.locator('[data-field="tilesZ"]')).toHaveValue("1");
+  await expect(dialog.locator('[data-field="tileQuads"]')).toHaveValue("64");
+  await expect(dialog.locator("[data-heightmap-raw]")).toBeHidden();
+  await expect(dialog.locator('[data-field="heightMin"]')).toBeHidden();
+  await dialog.locator("[data-heightmap-min]").fill("-10");
+  await dialog.locator("[data-heightmap-max]").fill("90");
+  await expect(dialog.locator("[data-open-world-notes]")).toContainText("(the heightmap's range)");
+  // Changing the grid away from the heightmap blocks Create with the size it needs.
+  await dialog.locator('[data-field="tilesX"]').fill("3");
+  await expect(dialog.locator("[data-world-terrain-problems]")).toContainText("needs exactly 193 × 65");
+  await expect(create).toBeDisabled();
+  await dialog.locator('[data-field="tilesX"]').fill("2");
+  await expect(create).toBeEnabled();
+  await dialog.screenshot({ path: testInfo.outputPath("heightmap-dialog.png") });
+
+  const terrainSave = saved(page, "/__save-terrain");
+  const layoutSave = saved(page, "/__save-layout");
+  await create.click();
+  expect((await terrainSave).ok()).toBeTruthy();
+  expect((await layoutSave).ok()).toBeTruthy();
+  const level = JSON.parse(await readFile(smokePublicPath(HEIGHTMAP_LEVEL), "utf8"));
+  const definitionPath = levelTerrainPath(HEIGHTMAP_LEVEL, level.landscapes[0].id);
+  const definition = normalizeWorldTerrain(JSON.parse(await readFile(smokePublicPath(definitionPath), "utf8")));
+  expect([definition.tilesX, definition.tilesZ, definition.tileQuads, definition.heightMin, definition.heightMax]).toEqual([2, 1, 64, -10, 90]);
+  for (const x of [0, 1]) {
+    const bytes = await readFile(smokePublicPath(terrainTilePath(definitionPath, `${x}_0`)));
+    const tile = decodeTerrainTile(bytes);
+    expect(tile.heightFormat).toBe("u16");
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let mismatches = 0;
+    for (let vz = 0; vz < 65; vz += 1) {
+      for (let vx = 0; vx < 65; vx += 1) {
+        if (view.getUint16(32 + (vz * 65 + vx) * 2, true) !== samples[vz * 129 + x * 64 + vx]) mismatches += 1;
+      }
+    }
+    expect(mismatches, `tile ${x}_0 codes`).toBe(0);
+  }
+  // One undo removes the whole terrain.
+  await page.getByTestId("editor-undo").click();
+  await expect(page.getByTestId("outliner-row").filter({ hasText: "Landscape" })).toHaveCount(0);
   expect(errors).toEqual([]);
 });

@@ -2321,8 +2321,22 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       tutulan küme) + `kept terrain tiles`; smoke ikinci senaryo (sürükle →
       Load → uzak köşe kamera uzaktayken yüklü ve "kept", yeniden açılışta
       geri gelir, Unload → boşalır ve depo temizlenir).
-- [ ] Outliner: yalnız yüklü actor'ler + "yüklü olmayan hücrede" filtresi;
+- [x] Outliner: yalnız yüklü actor'ler + "yüklü olmayan hücrede" filtresi;
       bir actor'e gitmek hücresini yükler.
+      *Tamam (2026-10-27, kullanıcı kararı):* editör bütün actor'leri yüklü
+      tuttuğu için "yüklü" = pawn editör kamerasında dursa Play'in yükleyeceği:
+      persistent öğeler + kameraya `main` yükleme menzili içindeki hücreler
+      (runtime kuralı, histerezissiz). Partition açıkken her satırda hücre
+      rozeti (`3_-1`, persistent `P`), menzil dışındakiler soluk; filtre
+      menüsünde **World Partition** bölümü: All / Loaded around the camera /
+      In unloaded cells / Persistent only. Kamera 500 ms'de bir yoklanır,
+      yüklü hücre kümesi değişince Outliner yeniden çizilir. Bağlam menüsünde
+      **Go To**: seçip kamerayı actor'e götürür, arazi tile'ları oraya akar.
+      Saf çekirdek `editor/core/worldPartitionOutliner.ts` (save yönlendirmesiyle
+      id → hücre; tekrarlanan asset grubunda editör gibi ilk grup).
+      Doğrulama: engine `world partition outliner` (4); smoke
+      `world-partition-panel.spec.ts` üçüncü senaryo (rozetler, dört filtre,
+      Go To sonrası filtrenin tersine dönmesi, uzak tile'ın yüklenmesi).
 - [ ] Landscape splines ve River Water dünya uzayına taşınır (`landscapeRef`
       yerine terrain'e bağlı dünya spline'ı); deform/paint birden çok tile'a
       uygulanır.

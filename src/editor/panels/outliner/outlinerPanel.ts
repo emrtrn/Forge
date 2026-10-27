@@ -1,4 +1,10 @@
 import type { EditableSceneObject } from "@editor/core/editableScene";
+import {
+  matchesOutlinerPartitionFilter,
+  outlinerPartitionState,
+  type OutlinerPartitionFilter,
+  type OutlinerPartitionView,
+} from "@editor/core/worldPartitionOutliner";
 import { ACTOR_TYPE_ICONS, UI_ICONS, type ActorTypeIcon } from "../../editorIcons";
 
 /** Broad actor families exposed by the Outliner's type-filter popover. */
@@ -24,6 +30,9 @@ export interface OutlinerPanelOptions {
   objects: readonly EditableSceneObject[];
   filter: string;
   visibleTypes: ReadonlySet<OutlinerFilterType>;
+  /** Null while the level's World Partition is off: no cell badges, no partition filter. */
+  partition: OutlinerPartitionView | null;
+  partitionFilter: OutlinerPartitionFilter;
   selectSceneObject: (id: string, options?: { additive?: boolean; rangeIds?: readonly string[] }) => void;
   renameSceneObject: (id: string, name: string) => void;
   setSceneObjectHidden: (id: string, hidden: boolean) => void;
@@ -33,8 +42,10 @@ export interface OutlinerPanelOptions {
 }
 
 export function renderOutlinerPanel(options: OutlinerPanelOptions): void {
-  const { objects, filter, visibleTypes } = options;
-  const typeMatches = objects.filter((object) => visibleTypes.has(outlinerFilterType(object)));
+  const { objects, filter, visibleTypes, partition, partitionFilter } = options;
+  const typeMatches = objects.filter((object) =>
+    visibleTypes.has(outlinerFilterType(object))
+    && (!partition || matchesOutlinerPartitionFilter(partition, object.id, partitionFilter)));
   options.summary.textContent = `${objects.length} actors (${objects.filter((object) => object.selected).length} selected)`;
 
   if (filter) {
@@ -148,6 +159,11 @@ function buildOutlinerRow(
   if (object.selected) row.classList.add("active");
   if (object.hidden) row.classList.add("is-hidden");
   if (object.groupId) row.classList.add("is-grouped");
+  const cellBadge = options.partition ? outlinerCellBadge(options.partition, object.id) : "";
+  if (cellBadge) row.classList.add("has-cell");
+  if (options.partition && outlinerPartitionState(options.partition, object.id) === "unloaded") {
+    row.classList.add("is-unloaded-cell");
+  }
   row.style.paddingLeft = `${8 + depth * 14}px`;
   row.innerHTML = `
       <span class="outliner-kind" aria-hidden="true">${ACTOR_TYPE_ICONS[outlinerIcon(object)]}</span>
@@ -155,6 +171,7 @@ function buildOutlinerRow(
         <strong>${object.label}</strong>
         <small>${object.assetId} - ${formatPosition(object.position)}</small>
       </span>
+      ${cellBadge}
       <span class="outliner-actions">
         <button type="button" class="outliner-toggle${object.hidden ? " on" : ""}"
           data-action="hidden" title="${object.hidden ? "Show object" : "Hide object"}" aria-label="${object.hidden ? "Show object" : "Hide object"}">${object.hidden ? UI_ICONS.eyeOff : UI_ICONS.eye}</button>
@@ -224,6 +241,16 @@ function buildOutlinerRow(
     if (childIds.length > 0) options.parentObjectsTo(childIds, object.id);
   });
   return row;
+}
+
+/** World Partition cell (or "persistent") of a row; dimmed rows sit in cells unloaded at the camera. */
+function outlinerCellBadge(partition: OutlinerPartitionView, id: string): string {
+  const state = outlinerPartitionState(partition, id);
+  const cell = partition.cells.get(id);
+  const title = state === "persistent"
+    ? "Persistent: always loaded"
+    : `World Partition cell ${cell}: ${state === "loaded" ? "loaded" : "not loaded"} with the pawn at the camera`;
+  return `<span class="outliner-cell is-${state}" data-outliner-cell="${cell ?? "persistent"}" title="${title}">${cell ?? "P"}</span>`;
 }
 
 function formatPosition(position: [number, number, number]): string {

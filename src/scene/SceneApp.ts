@@ -4,7 +4,7 @@ import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionReg
 import { validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
 import { legacyLandscapeToWorldTerrain } from "@engine/terrain/terrainLegacy";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
-import { normalizeWorldPartitionSettings, worldPartitionCellContents, type WorldPartitionSettings } from "@engine/world/worldPartition";
+import { compareWorldCellKeys, normalizeWorldPartitionSettings, type WorldPartitionSettings } from "@engine/world/worldPartition";
 import { parseWorldCellKey } from "@engine/world/worldGrid";
 import { worldMapHeightAt, worldMapFocusPosition, type WorldMapHeights, type WorldMapRect } from "@engine/world/worldMapView";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
@@ -655,6 +655,11 @@ import {
   groupedSelections,
 } from "@editor/core/hierarchy";
 import { uniqueEditorId } from "@editor/core/ids";
+import {
+  worldPartitionCellsInRange,
+  worldPartitionObjectCells,
+  type OutlinerPartitionView,
+} from "@editor/core/worldPartitionOutliner";
 import {
   cloneSelection,
   parseSelectionId,
@@ -1579,7 +1584,11 @@ export class SceneApp {
   private readonly keptTerrainTiles: KeptTerrainTilesStore | null;
   /** Grows on every scene structure change: the World Partition cell counts cache on it. */
   private sceneObjectsRevision = 0;
-  private worldPartitionCellCache: { key: string; cells: WorldPartitionView["cells"] } | null = null;
+  private worldPartitionCellCache: {
+    key: string;
+    objectCells: Map<string, string>;
+    cells: WorldPartitionView["cells"];
+  } | null = null;
   /** Editor viewport raycasting (selection / gizmo / surface picks). */
   private readonly picker: ScenePicker;
 
@@ -2559,26 +2568,49 @@ export class SceneApp {
   getWorldPartitionView(): WorldPartitionView {
     const camera = this.editorViewportCamera();
     const forward = camera.getWorldDirection(new Vector3());
-    const partition = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
-    // Routing walks the whole level; redo it only when the scene or the grid changed.
-    const cacheKey = `${this.sceneObjectsRevision}:${JSON.stringify(partition)}`;
-    if (this.worldPartitionCellCache?.key !== cacheKey) {
-      const cells = this.layout
-        ? [...worldPartitionCellContents(this.layout, partition)].map(([key, contents]) => {
-          const coord = parseWorldCellKey(key)!;
-          const count = Object.values(contents).reduce((sum, items) => sum + items.length, 0);
-          return { key, x: coord.x, z: coord.z, count };
-        })
-        : [];
-      this.worldPartitionCellCache = { key: cacheKey, cells };
-    }
-    const cells = this.worldPartitionCellCache.cells;
+    const { partition, cells } = this.worldPartitionCells();
     return {
       terrain: this.worldPartitionTerrainView(),
       partition,
       cells,
       camera: { x: camera.position.x, z: camera.position.z, forwardX: forward.x, forwardZ: forward.z },
     };
+  }
+
+  /**
+   * The Outliner's World Partition view: each streamed object's `main` cell
+   * and the occupied cells a pawn at the editor camera would load. Null while
+   * the level's partition is off.
+   */
+  getOutlinerPartitionView(): OutlinerPartitionView | null {
+    const { partition, objectCells, cells } = this.worldPartitionCells();
+    if (!partition.enabled) return null;
+    const camera = this.editorViewportCamera().position;
+    return {
+      cells: objectCells,
+      loadedCells: worldPartitionCellsInRange(partition, cells.map(({ key }) => key), camera.x, camera.z),
+    };
+  }
+
+  /** Routing walks the whole level; redo it only when the scene or the grid changed. */
+  private worldPartitionCells(): {
+    partition: WorldPartitionSettings;
+    objectCells: Map<string, string>;
+    cells: WorldPartitionView["cells"];
+  } {
+    const partition = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
+    const cacheKey = `${this.sceneObjectsRevision}:${JSON.stringify(partition)}`;
+    if (this.worldPartitionCellCache?.key !== cacheKey) {
+      const objectCells = this.layout ? worldPartitionObjectCells(this.layout, partition) : new Map<string, string>();
+      const counts = new Map<string, number>();
+      for (const key of objectCells.values()) counts.set(key, (counts.get(key) ?? 0) + 1);
+      const cells = [...counts].sort(([a], [b]) => compareWorldCellKeys(a, b)).map(([key, count]) => {
+        const coord = parseWorldCellKey(key)!;
+        return { key, x: coord.x, z: coord.z, count };
+      });
+      this.worldPartitionCellCache = { key: cacheKey, objectCells, cells };
+    }
+    return { partition, ...this.worldPartitionCellCache };
   }
 
   private worldPartitionTerrainView(): WorldPartitionView["terrain"] {

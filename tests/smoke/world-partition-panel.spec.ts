@@ -183,3 +183,70 @@ test("World Partition Load Region keeps a far region loaded across a reload, and
   await expect(page.locator("[data-wp-clear]")).toBeDisabled();
   expect(errors).toEqual([]);
 });
+
+test("Outliner shows each actor's World Partition cell, filters by what loads at the camera, and Go To streams the actor's area in", async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await writeWorld();
+  expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(({ key, pose }) => {
+    localStorage.clear();
+    localStorage.setItem(key, pose);
+  }, { key: `forge.editor.cameraPose.${encodeURIComponent(LEVEL)}`, pose: JSON.stringify(cameraPose(0, 100)) });
+  await page.goto(`/?editor&worldPartitionOutliner=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  const rows = page.getByTestId("outliner-row");
+  const row = (name: string) => rows.filter({ hasText: name });
+  await expect(row("World Terrain").first()).toBeVisible({ timeout: 60_000 });
+
+  // Points 0 and 1 sit in cell 0_0 next to the camera; Point 2's cell -3_-3 is 443 m away (range 384 m).
+  await expect(row("Point 0").locator("[data-outliner-cell]")).toHaveText("0_0");
+  await expect(row("Point 0").locator(".outliner-cell")).toHaveClass(/is-loaded/);
+  await expect(row("Point 2").locator("[data-outliner-cell]")).toHaveText("-3_-3");
+  await expect(row("Point 2")).toHaveClass(/is-unloaded-cell/);
+  await expect(row("World Terrain").first().locator("[data-outliner-cell]")).toHaveAttribute("data-outliner-cell", "persistent");
+
+  await page.getByTestId("outliner-filter").click();
+  const section = page.locator("[data-outliner-partition-section]");
+  await expect(section).toBeVisible();
+  const pick = async (filter: string) => {
+    await page.locator(`[data-outliner-partition-filter="${filter}"]`).check();
+  };
+  await pick("unloaded");
+  await expect(page.getByTestId("outliner-filter")).toHaveClass(/is-filtered/);
+  await expect(rows).toHaveCount(1);
+  await expect(row("Point 2")).toHaveCount(1);
+  await pick("loaded");
+  await expect(row("Point 2")).toHaveCount(0);
+  await expect(row("Point 0")).toHaveCount(1);
+  await expect(row("World Terrain")).not.toHaveCount(0);
+  await pick("persistent");
+  await expect(rows.filter({ hasText: "Point" })).toHaveCount(0);
+  await expect(row("World Terrain")).not.toHaveCount(0);
+  await pick("unloaded");
+  await page.locator("[data-outliner-search]").click();
+  await expect(section).toBeHidden();
+  await page.locator("#scene-outliner-pane").screenshot({ path: testInfo.outputPath("outliner-unloaded-filter.png") });
+
+  // Go To moves the camera to Point 2: its cell now loads there, so the filter drops it
+  // and the cell around the old camera position becomes the unloaded one.
+  await row("Point 2").click({ button: "right" });
+  await page.locator(".context-menu button", { hasText: "Go To" }).click();
+  await expect(rows.filter({ hasText: "Point 2" })).toHaveCount(0, { timeout: 10_000 });
+  await expect(row("Point 0")).toHaveCount(1);
+  await expect(row("Point 1")).toHaveCount(1);
+  await page.getByTestId("outliner-filter").click();
+  await pick("all");
+  await page.locator("[data-outliner-search]").click();
+  await expect(page.getByTestId("outliner-filter")).not.toHaveClass(/is-filtered/);
+  await expect(row("Point 2")).not.toHaveClass(/is-unloaded-cell/);
+  await expect(row("Point 0")).toHaveClass(/is-unloaded-cell/);
+
+  // The terrain around Point 2 streamed in with the camera.
+  await page.getByTestId("world-partition-tab").click();
+  await expect.poll(() => hoverText(page, -300, -300), { timeout: 30_000 }).toContain("Tile 1_1 · loaded");
+  expect(errors).toEqual([]);
+});

@@ -156,6 +156,7 @@ import {
   renderOutlinerPanel,
   type OutlinerFilterType,
 } from "./panels/outliner/outlinerPanel";
+import { OUTLINER_PARTITION_FILTERS, type OutlinerPartitionFilter } from "@editor/core/worldPartitionOutliner";
 import {
   CONTENT_FILTER_ALL,
   contentItemMatchesQuery,
@@ -448,6 +449,9 @@ export class EditorUi {
   private outlinerVisibleTypes = new Set<OutlinerFilterType>(
     OUTLINER_FILTER_TYPES.map(({ type }) => type),
   );
+  private outlinerPartitionFilter: OutlinerPartitionFilter = "all";
+  /** Cells loaded at the camera when the Outliner last rendered; a change re-renders it. */
+  private outlinerLoadedCells = "";
   private selected: EditableSelection | null = null;
   /** Cached skeletal clip names per asset id, for the character Animation dropdown. */
   private readonly characterClipCache = new Map<string, readonly string[]>();
@@ -626,6 +630,10 @@ export class EditorUi {
               <div class="outliner-filter-popover" data-outliner-filter-popover hidden>
                 <strong>Show types</strong>
                 ${OUTLINER_FILTER_TYPES.map(({ type, label }) => `<label><input type="checkbox" data-outliner-type-filter="${type}" checked />${label}</label>`).join("")}
+                <div class="outliner-filter-section" data-outliner-partition-section hidden>
+                  <strong>World Partition</strong>
+                  ${OUTLINER_PARTITION_FILTERS.map(({ filter, label }) => `<label><input type="radio" name="outliner-partition-filter" data-outliner-partition-filter="${filter}"${filter === "all" ? " checked" : ""} />${label}</label>`).join("")}
+                </div>
               </div>
             </div>
           </div>
@@ -1337,13 +1345,21 @@ export class EditorUi {
         if (!type || !OUTLINER_FILTER_TYPES.some((entry) => entry.type === type)) return;
         if (input.checked) this.outlinerVisibleTypes.add(type);
         else this.outlinerVisibleTypes.delete(type);
-        outlinerFilterButton?.classList.toggle(
-          "is-filtered",
-          this.outlinerVisibleTypes.size !== OUTLINER_FILTER_TYPES.length,
-        );
+        this.refreshOutlinerFilterButton();
         this.renderOutliner(this.outlinerObjects);
       });
     });
+    this.root.querySelectorAll<HTMLInputElement>("[data-outliner-partition-filter]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const filter = input.dataset.outlinerPartitionFilter as OutlinerPartitionFilter | undefined;
+        if (!input.checked || !filter || !OUTLINER_PARTITION_FILTERS.some((entry) => entry.filter === filter)) return;
+        this.outlinerPartitionFilter = filter;
+        this.refreshOutlinerFilterButton();
+        this.renderOutliner(this.outlinerObjects);
+      });
+    });
+    // Moving the camera changes which cells a pawn there would load.
+    window.setInterval(() => this.refreshOutlinerPartition(), 500);
     window.addEventListener("pointerdown", (event) => {
       if (!outlinerFilterPopover || outlinerFilterPopover.hidden) return;
       if (!this.root.contains(event.target as Node)) return;
@@ -3487,12 +3503,19 @@ export class EditorUi {
 
   private renderOutliner(objects: EditableSceneObject[]): void {
     this.outlinerObjects = objects;
+    const partition = this.app.getOutlinerPartitionView();
+    this.outlinerLoadedCells = partition ? [...partition.loadedCells].join(",") : "";
+    const section = this.root.querySelector<HTMLElement>("[data-outliner-partition-section]");
+    if (section) section.hidden = !partition;
+    this.refreshOutlinerFilterButton(partition !== null);
     renderOutlinerPanel({
       body: this.outlinerList,
       summary: this.outlinerSummary,
       objects,
       filter: this.outlinerFilter,
       visibleTypes: this.outlinerVisibleTypes,
+      partition,
+      partitionFilter: this.outlinerPartitionFilter,
       selectSceneObject: (id, options) => this.app.selectSceneObject(id, options),
       renameSceneObject: (id, name) => this.app.renameSceneObject(id, name),
       setSceneObjectHidden: (id, hidden) => this.app.setSceneObjectHidden(id, hidden),
@@ -3501,6 +3524,24 @@ export class EditorUi {
       openOutlinerContextMenu: (event, object) => this.openOutlinerContextMenu(event, object),
     });
     this.revealSelectedOutlinerRow();
+  }
+
+  /** Highlights the filter button while any type is hidden or an active partition filter narrows the list. */
+  private refreshOutlinerFilterButton(partitionEnabled = this.app.getOutlinerPartitionView() !== null): void {
+    this.root.querySelector("[data-outliner-filter-button]")?.classList.toggle(
+      "is-filtered",
+      this.outlinerVisibleTypes.size !== OUTLINER_FILTER_TYPES.length
+        || (partitionEnabled && this.outlinerPartitionFilter !== "all"),
+    );
+  }
+
+  /** Re-renders the Outliner when the camera moved far enough to change the loaded cells. */
+  private refreshOutlinerPartition(): void {
+    const pane = this.root.querySelector<HTMLElement>('[data-outliner-pane="scene"]');
+    if (pane?.hidden) return;
+    const partition = this.app.getOutlinerPartitionView();
+    const loaded = partition ? [...partition.loadedCells].join(",") : "";
+    if (loaded !== this.outlinerLoadedCells) this.renderOutliner(this.outlinerObjects);
   }
 
   /** Reveals a scene-picked actor after its fresh Outliner row has rendered. */
@@ -3527,6 +3568,15 @@ export class EditorUi {
     };
 
     const items: ContextMenuItem[] = [
+      {
+        // Moving the camera there also streams that area's terrain tiles in.
+        label: "Go To",
+        enabled: true,
+        run: () => {
+          this.app.selectSceneObject(object.id);
+          this.app.focusSelected();
+        },
+      },
       {
         label: "Rename",
         enabled: true,

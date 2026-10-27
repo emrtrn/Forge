@@ -29,6 +29,7 @@ import {
   TERRAIN_DEFORMATION_WATER,
   type TerrainDeformationTexture,
 } from "./terrainDeformation";
+import { createTerrainLayerArray } from "./terrainLayerArray";
 
 /**
  * CDLOD terrain materials (OPEN_WORLD_PLAN Faz 2, from the Faz 0 S2 spike). The
@@ -154,6 +155,8 @@ export interface TerrainMaterials {
   uniforms: TerrainUniforms;
   /** Texture units the lit material's fragment stage takes for itself ({@link terrainLitFragmentSamplers}). */
   litFragmentSamplers: number;
+  /** The paint layers' albedos packed for the lit material; owned (disposed) with the materials. */
+  layerArray: DataArrayTexture | null;
 }
 
 const VERTEX_PARS = /* glsl */ `
@@ -293,20 +296,20 @@ const FRAGMENT_NORMAL = /* glsl */ `
 `;
 
 /**
- * Paint layer declarations. Only the first `samplers` layers get a texture
- * sampler (the terrain's layer count): every declared sampler is a texture unit
- * whether or not a texture is bound, and units are what the sun's shadow
- * cascades compete for. Layers past it draw their colour.
+ * Paint layer declarations. Every textured layer is one layer of
+ * `uLayerTexArray` (`terrainLayerArray.ts`), so the layer textures take one
+ * texture unit: units are what the sun's shadow cascades compete for. A
+ * terrain with no layer texture declares no sampler at all.
  */
-const fragmentColorPars = (samplers: number): string => /* glsl */ `
+const fragmentColorPars = (textured: boolean): string => /* glsl */ `
 uniform highp sampler2DArray uTerrainWeights;
 uniform highp sampler2DArray uTerrainGlobalWeights;
 uniform float uTerrainView;
 uniform vec2 uTerrainHeightRange;
 uniform float uTerrainActiveLayer;
 uniform vec3 uLayerColors[${TERRAIN_RENDER_LAYERS}];
-${Array.from({ length: samplers }, (_, i) => `uniform sampler2D uLayerTex${i};`).join("\n")}
-uniform float uLayerHasTex[${TERRAIN_RENDER_LAYERS}];
+${textured ? "uniform mediump sampler2DArray uLayerTexArray;" : ""}
+uniform float uLayerTexIndex[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerScale[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerRoughness[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerRoughnessInAlpha[${TERRAIN_RENDER_LAYERS}];
@@ -314,7 +317,7 @@ float forgeLayerRoughness = 1.0;
 `;
 
 // The Landscape look: weighted layer colours/textures, or a debug view.
-const fragmentColor = (samplers: number): string => /* glsl */ `
+const fragmentColor = (textured: boolean): string => /* glsl */ `
 #include <color_fragment>
 {
   vec2 forgeUv = forgeTerrainUv();
@@ -329,8 +332,8 @@ const fragmentColor = (samplers: number): string => /* glsl */ `
   vec3 forgeColor;
   if (uTerrainView < 0.5) {
     vec2 forgeP = vTerrainLocal;
-    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec4 forgeS${i} = ${i < samplers
-      ? `uLayerHasTex[${i}] > 0.5 ? texture(uLayerTex${i}, forgeP * uLayerScale[${i}]) : vec4(uLayerColors[${i}], 1.0)`
+    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec4 forgeS${i} = ${textured
+      ? `uLayerTexIndex[${i}] >= 0.0 ? texture(uLayerTexArray, vec3(forgeP * uLayerScale[${i}], uLayerTexIndex[${i}])) : vec4(uLayerColors[${i}], 1.0)`
       : `vec4(uLayerColors[${i}], 1.0)`};
     vec3 forgeC${i} = forgeS${i}.rgb;
     float forgeR${i} = uLayerRoughness[${i}] * mix(1.0, forgeS${i}.a, uLayerRoughnessInAlpha[${i}]);`).join("\n    ")}
@@ -365,24 +368,20 @@ const SAMPLER_DECLARATION = /^uniform\s+(?:\w+\s+)?sampler\w*\s/gm;
  * Texture units the lit terrain's fragment shader takes for itself regardless
  * of its layers: normals, weights (tile + global each) and the track field.
  */
-export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(0), TERRAIN_DEFORMATION_FRAGMENT_PARS]
+export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(false), TERRAIN_DEFORMATION_FRAGMENT_PARS]
   .join("\n")
   .match(SAMPLER_DECLARATION)!.length;
 
-/** Paint layers that get a texture sampler: the terrain's layer count, 1..8. */
-export function terrainLayerSamplers(layerCount: number): number {
-  return Math.max(1, Math.min(TERRAIN_RENDER_LAYERS, Math.floor(layerCount)));
-}
-
 /**
  * Texture units the lit terrain's fragment shader takes for itself (the fixed
- * ones + one per paint layer), before three adds the environment map, its BRDF
- * table and one shadow map per shadowed light. WebGL2 GPUs may offer only 16
- * (ANGLE on D3D11): past that the program fails to link and the terrain is not
- * drawn at all, so the sun's cascade count is budgeted against it.
+ * ones + the layer array when any layer is textured), before three adds the
+ * environment map, its BRDF table and one shadow map per shadowed light. WebGL2
+ * GPUs may offer only 16 (ANGLE on D3D11): past that the program fails to link
+ * and the terrain is not drawn at all, so the sun's cascade count is budgeted
+ * against it.
  */
-export function terrainLitFragmentSamplers(layerCount: number): number {
-  return TERRAIN_LIT_FIXED_SAMPLERS + terrainLayerSamplers(layerCount);
+export function terrainLitFragmentSamplers(textured: boolean): number {
+  return TERRAIN_LIT_FIXED_SAMPLERS + (textured ? 1 : 0);
 }
 
 function injectVertex(shader: WebGLProgramParametersWithUniforms, lit = false): void {
@@ -421,23 +420,18 @@ function patch(
   material.customProgramCacheKey = () => key;
 }
 
-function layerUniforms(uniforms: TerrainUniforms, layers: TerrainLayerInput[], samplers: number): void {
-  const hasTex: number[] = [];
-  const scale: number[] = [];
-  for (let index = 0; index < TERRAIN_RENDER_LAYERS; index += 1) {
-    const layer = layers[index];
-    if (index < samplers) uniforms[`uLayerTex${index}`] = { value: layer?.texture ?? null };
-    hasTex.push(layer?.texture ? 1 : 0);
-    scale.push(layer?.scale ?? 1);
-  }
-  uniforms.uLayerHasTex = { value: hasTex };
-  uniforms.uLayerScale = { value: scale };
+function layerUniforms(uniforms: TerrainUniforms, layers: TerrainLayerInput[]): DataArrayTexture | null {
+  const array = createTerrainLayerArray(layers.slice(0, TERRAIN_RENDER_LAYERS).map((layer) => layer.texture));
+  if (array.texture) uniforms.uLayerTexArray = { value: array.texture };
+  uniforms.uLayerTexIndex = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => array.index[i] ?? -1) };
+  uniforms.uLayerScale = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.scale ?? 1) };
   uniforms.uLayerRoughness = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.roughness ?? 1) };
   uniforms.uLayerRoughnessInAlpha = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.roughnessInAlpha ? 1 : 0) };
   const fallback = layers[0]?.color ?? "#808080";
   uniforms.uLayerColors = {
     value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, index) => new Color(layers[index]?.color ?? fallback)),
   };
+  return array.texture;
 }
 
 export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMaterials {
@@ -462,8 +456,9 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainActiveLayer: { value: inputs.activeLayer },
     uTerrainHeightRange: { value: inputs.heightRange },
   };
-  const samplers = terrainLayerSamplers(inputs.layers.length);
-  layerUniforms(uniforms, inputs.layers, samplers);
+  const layerArray = layerUniforms(uniforms, inputs.layers);
+  const textured = layerArray !== null;
+  const litFragmentSamplers = terrainLitFragmentSamplers(textured);
   // Runtime tracks (TERRAIN_DEFORMATION Faz 2/3): always compiled in; the
   // shared texture's `uDeformActive` skips the block until a runtime module
   // attaches a field, so the editor and track-free levels pay a uniform branch
@@ -477,21 +472,22 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   };
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
-  patch(material, litUniforms, `forge-terrain-cdlod-l${samplers}`, (shader) => {
+  patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}`, (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
-      FRAGMENT_MAIN, `${fragmentColorPars(samplers)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${FRAGMENT_MAIN}`);
+      FRAGMENT_MAIN, `${fragmentColorPars(textured)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(samplers)}`)
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(textured)}`)
       .replace("#include <roughnessmap_fragment>", TERRAIN_DEFORMATION_ROUGHNESS)
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)
       .replace("  nonPerturbedNormal = normal;\n}", `  nonPerturbedNormal = normal;\n${TERRAIN_DEFORMATION_NORMAL}}`);
   }, true);
-  // Leave room for the environment, BRDF lookup and one sun shadow. Eight
-  // paint layers on a minimum 16-unit GPU retain the existing sky-water path.
+  // The water array, environment and BRDF lookup must fit beside the terrain's
+  // own units (the same check gates the water render in `TerrainRenderer`); on
+  // a 16-unit GPU they do now that the layer textures share one sampler.
   const compile = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
-    const waterSupported = samplers + 9 <= (renderer?.capabilities?.maxTextures ?? 16);
+    const waterSupported = litFragmentSamplers + 3 <= (renderer?.capabilities?.maxTextures ?? 16);
     if (waterSupported) (shader.defines ??= {}).FORGE_TERRAIN_WATER = 1;
     compile(shader, renderer);
   };
@@ -505,5 +501,5 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   depthMaterial.blending = NoBlending;
   patch(depthMaterial, uniforms, "forge-terrain-cdlod-depth", injectFragmentBase);
 
-  return { material, normalMaterial, depthMaterial, uniforms, litFragmentSamplers: TERRAIN_LIT_FIXED_SAMPLERS + samplers };
+  return { material, normalMaterial, depthMaterial, uniforms, litFragmentSamplers, layerArray };
 }

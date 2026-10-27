@@ -16,6 +16,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { affordableSunCascades, createSunCascadeLightsChunk, SunCascadeShadow, type SunCascadeUpdate } from "../../engine/render-three/sunCascadeShadow";
+import { terrainLitFragmentSamplers } from "../../engine/render-three/terrain/terrainMaterial";
 
 type Check = (label: string, fn: () => void) => void;
 type ShaderPatch = Parameters<Material["onBeforeCompile"]>[0];
@@ -89,15 +90,17 @@ export function registerSunCascadeShadowTests(check: Check): void {
   });
 
   check("sun cascade shadow: terrain levels keep the lit terrain within the GPU's texture units", () => {
-    // Terrain samplers (5 + one per paint layer) + environment map + BRDF table +
-    // one shadow map per cascade must fit, or the terrain program fails to link
-    // and the ground disappears. ANGLE on D3D11 has 16.
-    assert.equal(affordableSunCascades(4, 16, 5 + 5), 4, "5 layers: Ultra fits");
-    assert.equal(affordableSunCascades(4, 16, 5 + 6), 3, "6 layers: one cascade fewer");
-    assert.equal(affordableSunCascades(4, 16, 5 + 7), 2);
-    assert.equal(affordableSunCascades(4, 16, 5 + 8), 1, "8 layers: no cascades");
-    assert.equal(affordableSunCascades(3, 16, 5 + 5), 3, "never more than the profile asks");
-    assert.equal(affordableSunCascades(4, 32, 5 + 8), 4);
+    // The lit terrain's own samplers + environment map + BRDF table + one shadow
+    // map per cascade must fit, or the terrain program fails to link and the
+    // ground disappears. ANGLE on D3D11 has 16. Paint layers share one array
+    // sampler, so a textured terrain of any layer count keeps Ultra's four.
+    assert.equal(affordableSunCascades(4, 16, terrainLitFragmentSamplers(true)), 4, "textured terrain: Ultra fits");
+    assert.equal(affordableSunCascades(4, 16, terrainLitFragmentSamplers(false)), 4, "untextured terrain");
+    assert.equal(affordableSunCascades(3, 16, terrainLitFragmentSamplers(true)), 3, "never more than the profile asks");
+    // A heavier material still caps the count (the budget itself is unchanged).
+    assert.equal(affordableSunCascades(4, 16, 11), 3);
+    assert.equal(affordableSunCascades(4, 16, 13), 1);
+    assert.equal(affordableSunCascades(4, 32, 13), 4);
     assert.equal(affordableSunCascades(4, 16, 0), 4, "no terrain");
   });
 

@@ -1095,6 +1095,7 @@ import { registerDeformationFieldTests } from "../tests/engine/deformationField.
 import { registerDeformationPersistenceTests } from "../tests/engine/deformationPersistence.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 import { registerTerrainRenderTests } from "../tests/engine/terrainRender.test";
+import { registerTerrainLayerArrayTests } from "../tests/engine/terrainLayerArray.test";
 import { registerTerrainEditTests } from "../tests/engine/terrainEdit.test";
 import { registerHeightmapPngTests } from "../tests/engine/heightmapPng.test";
 import { registerTerrainImportTests } from "../tests/engine/terrainImport.test";
@@ -1242,6 +1243,7 @@ registerDeformationFieldTests(check);
 registerDeformationPersistenceTests(check);
 registerTerrainLodTests(check);
 registerTerrainRenderTests(check);
+registerTerrainLayerArrayTests(check);
 registerTerrainEditTests(check);
 await registerHeightmapPngTests(checkAsync);
 registerTerrainErosionTests(check);

@@ -89,7 +89,7 @@ test("Cascaded Shadows: the sun's Details toggle previews cascades in the viewpo
   expect(errors).toEqual([]);
 });
 
-test("Cascaded Shadows: on a 16-texture-unit GPU a 5-layer terrain level keeps its cascades and its terrain program fits", async ({ page }) => {
+test("Cascaded Shadows: on a 16-texture-unit GPU a textured 5-layer terrain level keeps all four Ultra cascades and its terrain program fits", async ({ page }) => {
   const errors: string[] = [];
   const messages: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -118,7 +118,7 @@ test("Cascaded Shadows: on a 16-texture-unit GPU a 5-layer terrain level keeps i
     localStorage.setItem("forge.userSettings", JSON.stringify({
       schema: 1,
       updatedAt: new Date().toISOString(),
-      payload: { graphics: { selectedQualityLevel: "high", manuallySelected: true, adaptiveOptimizationEnabled: false } },
+      payload: { graphics: { selectedQualityLevel: "ultra", manuallySelected: true, adaptiveOptimizationEnabled: false } },
     }));
     // ANGLE on D3D11 offers 16 fragment texture units; the headless GPU offers 32.
     const getParameter = WebGL2RenderingContext.prototype.getParameter;
@@ -149,30 +149,40 @@ test("Cascaded Shadows: on a 16-texture-unit GPU a 5-layer terrain level keeps i
     const gl = renderer.getContext() as WebGL2RenderingContext;
     const samplerTypes = new Set<number>([gl.SAMPLER_2D, gl.SAMPLER_2D_SHADOW, gl.SAMPLER_2D_ARRAY, gl.SAMPLER_CUBE, gl.SAMPLER_3D]);
     let terrainSamplers = -1;
+    let samplerNames: string[] = [];
     for (const program of renderer.info.programs ?? []) {
       const key = String(program.cacheKey);
       // three's program key ends with the material's own key.
       if (!/forge-terrain-cdlod-l\d/.test(key)) continue;
       const handle = program.program;
       let count = 0;
+      const names: string[] = [];
       const active = gl.getProgramParameter(handle, gl.ACTIVE_UNIFORMS) as number;
       for (let index = 0; index < active; index += 1) {
         const info = gl.getActiveUniform(handle, index);
-        if (info && samplerTypes.has(info.type)) count += info.size;
+        if (info && samplerTypes.has(info.type)) {
+          count += info.size;
+          names.push(info.name);
+        }
       }
+      if (count > terrainSamplers) samplerNames = names.sort();
       terrainSamplers = Math.max(terrainSamplers, count);
     }
-    return { cascades, terrainSamplers, maxTextures: renderer.capabilities.maxTextures };
+    return { cascades, terrainSamplers, samplerNames, maxTextures: renderer.capabilities.maxTextures };
   });
-  await expect.poll(async () => (await probe()).cascades, { timeout: 60_000 }).toBe(3);
+  await expect.poll(async () => (await probe()).cascades, { timeout: 60_000 }).toBe(4);
   await expect.poll(async () => (await probe()).terrainSamplers, { timeout: 60_000 }).toBeGreaterThan(0);
   const result = await probe();
   console.log(`[cascade-budget] ${JSON.stringify(result)}`);
   expect(result.maxTextures).toBe(16);
-  // 5 fixed + 5 layers + environment map + BRDF table + 3 cascades = 15 in the
-  // fragment stage. The program's active samplers are counted over both stages,
-  // and the tile and global height lookups are vertex-only.
-  expect(result.terrainSamplers - 2).toBe(15);
+  // 6 fixed (normals and weights ×2, track field, water array) + the paint layer
+  // array + environment map + BRDF table + 4 cascades = 13 in the fragment
+  // stage: the five layer textures take one unit, not five. The program's
+  // active samplers are counted over both stages, and the tile and global
+  // height lookups are vertex-only.
+  expect(result.terrainSamplers - 2).toBe(13);
+  expect(result.samplerNames).toContain("uLayerTexArray");
+  expect(result.samplerNames.filter((name) => /^uLayerTex\d/.test(name))).toEqual([]);
   expect(messages.some((message) => message.includes("[shadows] Cascaded Shadows"))).toBe(false);
 
   expect(errors).toEqual([]);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Texture } from "three";
+import { DataTexture, Texture, type DataArrayTexture } from "three";
 import { PerspectiveCamera, ShaderLib, Vector3, type BufferAttribute, type InstancedBufferGeometry, type Material, type WebGLProgramParametersWithUniforms, type WebGLRenderer } from "three";
 import {
   TerrainDeformationTexture,
@@ -85,18 +85,24 @@ function compiled(material: Material, base: { vertexShader: string; fragmentShad
 export function registerTerrainTrackDetailTests(check: Check): void {
   registerTerrainWaterTests(check);
   check("terrain wet layers: all eight albedos and material roughness reach the lit shader with puddle shading", () => {
-    const textures = Array.from({ length: 8 }, () => new Texture());
+    const textures = Array.from({ length: 8 }, (_, i) => {
+      const texture = new DataTexture(new Uint8Array([i * 20, 40, 60, 200]), 1, 1);
+      texture.needsUpdate = true;
+      return texture;
+    });
     const source = worldTerrainRenderSource({ tileQuads: Q, spacing: 1, tilesX: 1, tilesZ: 1 }, new Map([["0_0", tiles().get("0_0")!]]));
     const terrain = new TerrainRenderer(source, { viewMode: "lit", activeLayer: 4, origin: new Vector3(),
       layers: textures.map((texture, i) => ({ texture, color: "#493226", scale: 0.125, roughness: i === 4 ? 0.22 : 0.95, roughnessInAlpha: i === 4, physicalMaterial: i === 4 ? "mud" : null })) });
     try {
       const shader = compiled(terrain.mesh.material, ShaderLib.standard);
-      assert.equal(shader.uniforms.uLayerTex4!.value, textures[4]);
-      assert.equal(shader.uniforms.uLayerTex7!.value, textures[7]);
+      const array = shader.uniforms.uLayerTexArray!.value as DataArrayTexture;
+      assert.equal(array.image.depth, 8);
+      assert.deepEqual(shader.uniforms.uLayerTexIndex!.value, [0, 1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(Array.from((array.image.data as Uint8Array).subarray(4 * 4, 4 * 5)), [80, 40, 60, 200], "layer 4's albedo and packed roughness");
       assert.equal((shader.uniforms.uLayerRoughness!.value as number[])[4], 0.22);
       assert.deepEqual(shader.uniforms.uLayerRoughnessInAlpha!.value, [0, 0, 0, 0, 1, 0, 0, 0]);
-      assert.match(shader.fragmentShader, /texture\(uLayerTex4,/);
-      assert.match(shader.fragmentShader, /texture\(uLayerTex7,/);
+      assert.match(shader.fragmentShader, /texture\(uLayerTexArray, vec3\(forgeP \* uLayerScale\[4\], uLayerTexIndex\[4\]\)\)/);
+      assert.match(shader.fragmentShader, /texture\(uLayerTexArray, vec3\(forgeP \* uLayerScale\[7\], uLayerTexIndex\[7\]\)\)/);
       assert.match(shader.fragmentShader, /roughnessFactor = mix\(roughnessFactor, 0.16, forgePuddle\)/);
       assert.match(shader.fragmentShader, /outgoingLight = mix\(outgoingLight, forgeSky/);
     } finally { terrain.dispose(); textures.forEach((texture) => texture.dispose()); }

@@ -133,12 +133,11 @@ const LIT_ENVIRONMENT_SAMPLERS = 2;
 /**
  * The cascade count to use: the profile's request, capped by the texture units
  * the GPU leaves once the costliest lit material has its own (`materialSamplers`,
- * e.g. the lit terrain's conservative budget: 6 + one per paint layer; 0
- * when nothing heavy is in the level) plus the environment map and its BRDF
- * table. On a 16-unit GPU a 5-layer terrain leaves 3 cascades, 6 layers 2.
- * Eight layers omit the optional water sampler to retain one sun map;
- * past the limit the terrain program fails to link and the ground
- * disappears.
+ * e.g. the lit terrain's: 6, plus 1 for its layer texture array when any paint
+ * layer is textured; 0 when nothing heavy is in the level) plus the
+ * environment map and its BRDF table. On a 16-unit GPU a textured terrain
+ * leaves 7 units, so every profile keeps its cascades; past the limit the
+ * terrain program fails to link and the ground disappears.
  */
 export function affordableSunCascades(requested: number, maxTextureUnits: number, materialSamplers: number): number {
   const reserved = materialSamplers > 0 ? materialSamplers + LIT_ENVIRONMENT_SAMPLERS : 0;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  Box3, BufferAttribute, BufferGeometry, Color, Frustum, Group, Matrix3, Matrix4,
+  Box3, BufferAttribute, BufferGeometry, Color, DataTexture, Frustum, Group, Matrix3, Matrix4,
   Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, ShaderLib, Vector2, Vector3,
   type WebGLProgramParametersWithUniforms, type WebGLRenderer,
 } from "three";
@@ -20,6 +20,15 @@ import type { LayoutLandscape } from "../../engine/scene/layout";
 import { EditorSelectionOutline } from "../../src/scene/editorSelectionOutline";
 
 type Check = (label: string, fn: () => void) => void;
+
+/** A filled RGBA8 data texture, readable by the layer-array packer without a canvas. */
+function rgbaTexture(width: number, height: number, rgba: readonly number[]): DataTexture {
+  const data = new Uint8Array(width * height * 4);
+  for (let i = 0; i < data.length; i += 4) data.set(rgba, i);
+  const texture = new DataTexture(data, width, height);
+  texture.needsUpdate = true;
+  return texture;
+}
 
 /** A non-square, non-power-of-two legacy grid with six paint layers and relief. */
 function legacyData(verticesX = 65, verticesZ = 97, spacing = 0.5, heightScale = 2): ForgeLandscapeData {
@@ -324,33 +333,42 @@ export function registerTerrainRenderTests(check: Check): void {
     terrain.dispose();
   });
 
-  check("terrain renderer: the lit fragment shader samples only the terrain's layers, as the cascade budget counts", () => {
+  check("terrain renderer: the paint layers share one array sampler, as the cascade budget counts", () => {
     // Normals ×2, weights ×2, track field and the shared water array.
     assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 6);
     const data = legacyData(65, 65, 1, 1);
-    for (const layerCount of [1, 5, 6, 8]) {
-      const layers = Array.from({ length: layerCount }, (_, index) => ({ texture: null, color: `#${(index + 1).toString(16).repeat(6)}`, scale: 1 }));
-      const terrain = new TerrainRenderer(landscapeRenderSource(data), { origin: new Vector3(), viewMode: "lit", activeLayer: 0, layers });
-      const material = (terrain as unknown as { materials: { material: MeshBasicMaterial } }).materials.material;
+    const compile = (material: MeshBasicMaterial, renderer: WebGLRenderer) => {
       const shader = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
-      material.onBeforeCompile(shader, {} as WebGLRenderer);
-      assert.equal(Boolean(shader.defines?.FORGE_TERRAIN_WATER), layerCount <= 7, "minimum GPU keeps room for sky and sun shadow");
-      if (layerCount === 8) {
-        const capable = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
-        material.onBeforeCompile(capable, { capabilities: { maxTextures: 32 } } as WebGLRenderer);
-        assert.equal(capable.defines?.FORGE_TERRAIN_WATER, 1, "larger GPUs keep water with all eight paint layers");
+      material.onBeforeCompile(shader, renderer);
+      return shader;
+    };
+    for (const layerCount of [1, 5, 8]) {
+      for (const textured of [false, true]) {
+        const layers = Array.from({ length: layerCount }, (_, index) => ({
+          texture: textured ? rgbaTexture(4, 4, [index * 30, 0, 0, 255]) : null,
+          color: `#${(index + 1).toString(16).repeat(6)}`,
+          scale: 1,
+        }));
+        const terrain = new TerrainRenderer(landscapeRenderSource(data), { origin: new Vector3(), viewMode: "lit", activeLayer: 0, layers });
+        const material = (terrain as unknown as { materials: { material: MeshBasicMaterial } }).materials.material;
+        const shader = compile(material, {} as WebGLRenderer);
+        // 16 units (three's default when the renderer is unknown) keep the water path at any layer count.
+        assert.equal(shader.defines?.FORGE_TERRAIN_WATER, 1, `${layerCount} layers, textured ${textured}`);
+        // three's own samplers sit behind #includes; every sampler line here is the terrain's.
+        const own = shader.fragmentShader.match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm) ?? [];
+        assert.equal(own.length, terrainLitFragmentSamplers(textured), `${layerCount} layers, textured ${textured}`);
+        assert.equal(terrain.litFragmentSamplers, textured ? 7 : 6);
+        assert.equal(material.customProgramCacheKey(), `forge-terrain-cdlod-l${textured ? 1 : 0}`, "the layer count is not part of the program");
+        assert.ok(!/uLayerTex\d/.test(shader.fragmentShader), "no per-layer samplers");
+        if (textured) {
+          assert.ok(shader.fragmentShader.includes(`texture(uLayerTexArray, vec3(forgeP * uLayerScale[${layerCount - 1}], uLayerTexIndex[${layerCount - 1}]))`));
+          assert.equal((shader.uniforms.uLayerTexArray!.value as { image: { depth: number } }).image.depth, layerCount);
+        } else {
+          assert.ok(!shader.fragmentShader.includes("uLayerTexArray"));
+          assert.ok(shader.fragmentShader.includes("vec4 forgeS0 = vec4(uLayerColors[0], 1.0);"));
+        }
+        terrain.dispose();
       }
-      // three's own samplers sit behind #includes; every sampler line here is the terrain's.
-      const own = shader.fragmentShader.match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm) ?? [];
-      assert.equal(own.length, terrainLitFragmentSamplers(layerCount), `${layerCount} layers`);
-      assert.equal(terrain.litFragmentSamplers, 6 + layerCount);
-      assert.equal(material.customProgramCacheKey(), `forge-terrain-cdlod-l${layerCount}`, "a new layer count is a new program");
-      // Layers past the terrain's draw their colour, without a sampler.
-      if (layerCount < 8) {
-        assert.ok(shader.fragmentShader.includes(`vec4 forgeS${layerCount} = vec4(uLayerColors[${layerCount}], 1.0);`));
-        assert.ok(!shader.fragmentShader.includes(`uLayerTex${layerCount}`));
-      }
-      terrain.dispose();
     }
   });
 

@@ -548,6 +548,7 @@ export class TerrainRenderer {
     this.materials.material.dispose();
     this.materials.normalMaterial.dispose();
     this.materials.depthMaterial.dispose();
+    this.materials.layerArray?.dispose();
     for (const texture of [
       this.heightTexture, this.normalTexture, this.weightTexture,
       this.globalHeightTexture, this.globalNormalTexture, this.globalWeightTexture,

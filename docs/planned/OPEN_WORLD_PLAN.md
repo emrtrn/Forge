@@ -731,7 +731,7 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       geçişinde ışık/boya kaymıyor). Delik yükseklikleri GPU'da komşudan
       dolduruluyor, delik üç materyalde de `discard` ediliyor.
 - [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
-      splat, `sampler2DArray` katmanlar, uzak tekrar kırma, view mode'lar,
+      splat, `sampler2DArray` katmanlar *(tamam 2026-10-27, 7c2 notu)*, uzak tekrar kırma, view mode'lar,
       gölge alma, kalite profiline bağlı kendine gölge.
       *İlk dilim tamam (2026-10-23, `engine/render-three/terrain/`):* tek slot
       (1×1 Landscape) için instanced patch + morph, R32F yükseklik (`texelFetch`,
@@ -2210,9 +2210,23 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
   `TERRAIN_LIT_FRAGMENT_SAMPLERS` shader kaynağından sayılır, engine testi
   derlenen arazi shader'ına bağlar. Smoke `sun-cascaded-shadows.spec.ts`
   sınırı 16'ya düşürüp arazi programının aktif sampler'larını sayar.
-  **Açık:** 8 katman dokusunu tek `sampler2DArray`'e toplamak (Faz 2 renderer
-  maddesindeki plan) 7 birim kazandırır ve 16 birimli GPU'larda arazili
-  level'lara 4 kaskadı geri getirir.
+  *Katman dizisi (2026-10-27):* boya katmanı dokuları artık tek
+  `sampler2DArray` (`uLayerTexArray`, `terrainLayerArray.ts`); dokulu arazi
+  katman sayısından bağımsız 1 birim alır (lit arazi 6 + 1 = 7), 16 birimli
+  GPU'da Ultra'nın 4 kaskadı ve su yolu birlikte sığar. Dizi katmanları ortak
+  boyuttadır: en büyük katmanın uzun kenarı (üst sınır 2048); küçük ya da kare
+  olmayan doku yeniden örneklenir (UV tüm resmi kaplar, görünüm aynı, yalnız
+  texel yoğunluğu değişir). Satırlar kaynağın `flipY`'sine göre GL sırasında,
+  RGB sRGB / alfa doğrusal (paketli roughness); mipmap ve en yüksek anizotropi
+  korunur. Okunamayan doku (görüntü yok, RGBA8 olmayan veri) rengini çizer.
+  Program anahtarı artık katman sayısı değil, dokulu olup olmaması
+  (`forge-terrain-cdlod-l0/l1`). Doğrulama: `terrainLayerArray` engine testleri
+  (boyut, wrap'li bilineer, flipY, sıra/-1, ayarlar, önbellek), sekiz katmanlı
+  ıslak katman testi dizi içeriğini okur; smoke `sun-cascaded-shadows.spec.ts`
+  16 birimde 5 katmanlı LandscapeTest arazisinde Ultra'yla 4 kaskad, 13 aktif
+  fragment sampler'ı ve `uLayerTexN` olmadığını doğrular. Görsel eşdeğerlik
+  (eski/yeni build, editör, üç kamera pozu): ortalama fark 0,40–0,67 seviye,
+  >8 seviye değişen piksel ≤ %0,115, build içi gürültü 0.
 
 ## Faz 8 — Editör dünya araçları
 

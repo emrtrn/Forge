@@ -1,14 +1,10 @@
-import type { ForgeLandscapeData } from "@engine/scene/landscape";
-import type { LayoutLandscape, LayoutRiverWater } from "@engine/scene/layout";
 import { TERRAIN_MAX_TILES_PER_AXIS } from "@engine/terrain/terrainTypes";
 import {
-  WORLD_TERRAIN_EXPAND_DEFAULTS, worldTerrainExpandProblems, type WorldTerrainExpandOptions,
+  WORLD_TERRAIN_EXPAND_DEFAULTS, type WorldTerrainExpandOptions, type WorldTerrainExpansionSource,
 } from "@engine/terrain/worldTerrainExpand";
 
 /** Same overlay/form pattern as the new World Terrain dialog, without adaptation choices. */
-export function pickWorldTerrainExpansion(
-  actor: LayoutLandscape, data: ForgeLandscapeData, rivers: readonly Pick<LayoutRiverWater, "landscapeRef">[],
-): Promise<WorldTerrainExpandOptions | null> {
+export function pickWorldTerrainExpansion(source: WorldTerrainExpansionSource): Promise<WorldTerrainExpandOptions | null> {
   return new Promise((resolvePick) => {
     const overlay = document.createElement("div");
     overlay.className = "parent-class-overlay";
@@ -44,12 +40,12 @@ export function pickWorldTerrainExpansion(
       };
       field("originalX").max = String(options.tilesX - 1);
       field("originalZ").max = String(options.tilesZ - 1);
-      const problems = worldTerrainExpandProblems(actor, data, options, rivers);
+      const problems = source.problems(options);
       problemList.replaceChildren(...problems.map((problem) => Object.assign(document.createElement("li"), { textContent: problem })));
       expand.disabled = problems.length > 0;
-      const edge = (data.size.verticesX - 1) * data.size.spacing;
+      const edge = source.tileEdge;
       summary.textContent = Number.isFinite(options.tilesX * options.tilesZ)
-        ? `${Number((edge * options.tilesX).toFixed(2))} m × ${Number((edge * options.tilesZ).toFixed(2))} m · ${options.tilesX * options.tilesZ} tiles · ${data.size.verticesX - 1} quads per tile edge`
+        ? `${Number((edge * options.tilesX).toFixed(2))} m × ${Number((edge * options.tilesZ).toFixed(2))} m · ${options.tilesX * options.tilesZ} tiles · ${source.tileQuads} quads per tile edge`
         : "Enter the tile grid size.";
       return problems.length ? null : options;
     };

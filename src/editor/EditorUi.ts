@@ -3915,8 +3915,8 @@ export class EditorUi {
     const source = this.app.getSelectedLandscapeExpansionSource();
     if (!source) return;
     const { pickWorldTerrainExpansion } = await import("@/editor/worldTerrainExpandDialog");
-    const options = await pickWorldTerrainExpansion(source.actor, source.data, source.rivers);
-    if (options) this.app.expandSelectedLandscapeToWorldTerrain(source.actor.id, options);
+    const options = await pickWorldTerrainExpansion(source);
+    if (options) this.app.expandSelectedLandscapeToWorldTerrain(source.actorId, options);
   }
 
   /**

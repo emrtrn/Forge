@@ -2410,8 +2410,15 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       `[data-world-terrain-residency]` sayacı vardı; World Partition paneli
       kaydedilmemiş tile'ları haritada turuncu çerçeveyle gösterir. Hücre
       dosyaları Save'de kendi değişiklik karşılaştırmasıyla yazılır (gösterge yok).
-- [ ] Editör smoke'u: yeni dünya oluştur → iki tile arasında sculpt → kaydet
+- [x] Editör smoke'u: yeni dünya oluştur → iki tile arasında sculpt → kaydet
       → yeniden aç → aynı yükseklik.
+      *Tamam (2026-10-27):* `terrain-create.spec.ts` üçüncü senaryo. Diyalogla
+      2×2 dünya, x = 0 dikişinde Raise; autosave yalnız `0_1` + `1_1`'i yazar,
+      diskte dikiş sütunu iki tarafta birebir eşit. Yükseklik editörün kendi
+      sorgusundan (terrain mesh'inin CPU yükseklik alanı raycast'i) dört
+      noktada okunur; yeniden açılan editör aynı noktalarda u16 yarım adımı
+      (512 m aralıkta 3,9 mm) içinde aynı yüksekliği görür (ölçülen 2,2–3,9 mm;
+      dokunulmamış tile da oluşturulurken u16 yazıldığı için aynı payla kayar).
 
 ## Faz 9 — Yapay zekâ navigasyonu (tile'lı nav)
 

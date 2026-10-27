@@ -1,5 +1,6 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { PerspectiveCamera } from "three";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
@@ -18,6 +19,7 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
 const LEVEL = "layouts/__playwright-terrain-create.level.json";
 const OPEN_WORLD_LEVEL = "layouts/__playwright-open-world-create.level.json";
+const ROUND_TRIP_LEVEL = "layouts/__playwright-terrain-round-trip.level.json";
 const BASE_HEIGHT = 2;
 
 async function exists(path: string): Promise<boolean> {
@@ -26,7 +28,7 @@ async function exists(path: string): Promise<boolean> {
 
 async function writeLevel(path = LEVEL): Promise<void> {
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
-  level.name = path === LEVEL ? "__playwright-terrain-create" : "__playwright-open-world-create";
+  level.name = `__playwright-${path.slice("layouts/__playwright-".length, -".level.json".length)}`;
   level.instances = level.instances.filter((group: { assetId: string }) => group.assetId === "marker:playerStart");
   const start = level.instances[0];
   if (!start) throw new Error("smoke spline level has no Player Start");
@@ -239,5 +241,123 @@ test("New Landscape's Open World section sets partition, view distance, fog and 
   await expect.poll(() => settled((current) => [
     current.landscapes?.length ?? 0, current.worldSettings?.viewDistance ?? null, current.heightFog?.mode ?? null,
   ]), { timeout: 30_000 }).toEqual([1, 1500, "exp"]);
+  expect(errors).toEqual([]);
+});
+
+/**
+ * OPEN_WORLD_PLAN Faz 8 editor acceptance: a new world created in the editor,
+ * a Raise stroke across a tile seam, Save, and a reopened editor that sees
+ * the same heights. The editor's own height query (the terrain mesh's CPU
+ * heightfield raycast) is read before and after the reload; the saved tiles
+ * are u16, so the reopened surface may differ by half a height step.
+ */
+test("a world created in the editor keeps a seam stroke's heights through Save and a reopen", async ({ page, request }) => {
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await writeLevel(ROUND_TRIP_LEVEL);
+  expect((await request.post("/__open-level", { data: { path: ROUND_TRIP_LEVEL } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 860 });
+  // 2x2 tiles of 64 quads at 1 m, centred on the origin: the x = 0 seam runs between tiles 0_1 and 1_1 at z = 20.
+  const seam = [0, BASE_HEIGHT, 20] as const;
+  const camera = new PerspectiveCamera();
+  camera.position.set(seam[0] - 18, seam[1] + 14, seam[2] + 18);
+  camera.lookAt(...seam);
+  const pose = { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), up: [0, 1, 0] };
+  await page.addInitScript(({ key, value }) => {
+    localStorage.clear();
+    localStorage.setItem(key, value);
+    const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __roundTripScenes: unknown[] };
+    w.__roundTripScenes = [];
+    w.__THREE_DEVTOOLS__ = new EventTarget();
+    w.__THREE_DEVTOOLS__.addEventListener("observe", (event) => {
+      const object = (event as CustomEvent).detail;
+      if (object?.isScene) w.__roundTripScenes.push(object);
+    });
+  }, { key: `forge.editor.cameraPose.${encodeURIComponent(ROUND_TRIP_LEVEL)}`, value: JSON.stringify(pose) });
+  const row = page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first();
+  const openEditor = async () => {
+    await page.goto(`/?editor&roundTrip=${Date.now()}`);
+    await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 60_000 });
+  };
+  /** World Y the editor's terrain reports straight below each X/Z (its picking raycast). */
+  const editorHeights = (points: readonly (readonly [number, number])[]) => page.evaluate((probes) => {
+    const w = window as unknown as { __roundTripScenes: { traverse(fn: (node: any) => void): void }[] };
+    let terrain: any = null;
+    for (const scene of w.__roundTripScenes) scene.traverse((node) => { if (node.userData?.forgeTerrain) terrain = node; });
+    if (!terrain) return null;
+    const Vector = terrain.position.constructor;
+    return probes.map(([x, z]) => {
+      const hits: { point: { y: number } }[] = [];
+      terrain.raycast({ ray: { origin: new Vector(x, 1000, z), direction: new Vector(0, -1, 0) }, near: 0, far: Infinity }, hits);
+      return hits[0]?.point.y ?? null;
+    });
+  }, points);
+
+  await openEditor();
+  await page.getByTestId("add-actor-button").hover();
+  await page.getByRole("button", { name: /^Terrain/ }).hover();
+  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape", exact: true }).click();
+  const dialog = page.locator("[data-world-terrain-dialog]");
+  await dialog.locator('[data-field="tilesX"]').fill("2");
+  await dialog.locator('[data-field="tilesZ"]').fill("2");
+  await dialog.locator('[data-field="tileQuads"]').selectOption("64");
+  await dialog.locator('[data-field="spacing"]').fill("1");
+  await dialog.locator('[data-field="baseHeight"]').fill(String(BASE_HEIGHT));
+  const created = saved(page, "/__save-terrain");
+  const createdLevel = saved(page, "/__save-layout");
+  await dialog.locator("[data-world-terrain-create]").click();
+  expect((await created).ok()).toBeTruthy();
+  expect((await createdLevel).ok()).toBeTruthy();
+  const level = JSON.parse(await readFile(smokePublicPath(ROUND_TRIP_LEVEL), "utf8"));
+  const definitionPath = levelTerrainPath(ROUND_TRIP_LEVEL, level.landscapes[0].id);
+
+  // Raise across the seam at the viewport centre; autosave writes the terrain.
+  await row.click();
+  await page.locator("[data-world-terrain-tools] [data-landscape-mode]").selectOption("sculpt");
+  await page.locator('[data-world-terrain-tools] [data-landscape-tool="raise"]').click();
+  await page.locator('[data-landscape-number="brushSize"]').fill("6");
+  await page.locator('[data-landscape-number="brushSize"]').press("Enter");
+  await page.locator('[data-landscape-number="strength"]').fill("0.5");
+  await page.locator('[data-landscape-number="strength"]').press("Enter");
+  const written: string[] = [];
+  page.on("request", (req) => {
+    const tile = req.url().match(/__save-terrain-tile\?.*key=(\d+_\d+)/);
+    if (tile) written.push(tile[1]!);
+  });
+  const viewport = (await page.locator("[data-viewport-host]").boundingBox())!;
+  const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
+  const stroke = saved(page, "/__save-terrain");
+  await page.mouse.move(centre.x, centre.y);
+  await page.mouse.down();
+  await page.mouse.move(centre.x + 3, centre.y + 1, { steps: 3 });
+  await page.mouse.up();
+  expect((await stroke).ok()).toBeTruthy();
+  expect([...new Set(written)].sort(), "only the two seam tiles").toEqual(["0_1", "1_1"]);
+
+  const probes = [[0, 20], [-2, 20], [2, 21], [-40, -40]] as const;
+  const before = (await editorHeights(probes))!;
+  console.log(`[terrain-round-trip] editor heights before reopen ${JSON.stringify(before)}`);
+  expect(before.every((height) => height !== null)).toBe(true);
+  expect(before[0]!).toBeGreaterThan(BASE_HEIGHT + 0.05);
+  expect(Math.abs(before[3]! - BASE_HEIGHT), "an untouched tile stays flat").toBeLessThan(0.01);
+
+  // On disk the seam column is written identically on both sides.
+  const definition = normalizeWorldTerrain(JSON.parse(await readFile(smokePublicPath(definitionPath), "utf8")));
+  const [left, right] = await Promise.all(["0_1", "1_1"].map(async (key) =>
+    decodeTerrainTile(await readFile(smokePublicPath(terrainTilePath(definitionPath, key))))));
+  const size = definition.tileQuads + 1;
+  for (let z = 0; z < size; z += 1) expect(left!.heights[z * size + size - 1], `seam row ${z}`).toBe(right!.heights[z * size]);
+
+  // A reopened editor reads the same surface, within the u16 half step.
+  await openEditor();
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  await expect.poll(async () => (await editorHeights(probes))?.every((height) => height !== null) ?? false, { timeout: 30_000 }).toBe(true);
+  const after = (await editorHeights(probes))!;
+  console.log(`[terrain-round-trip] editor heights after reopen ${JSON.stringify(after)}`);
+  const halfStep = (definition.heightMax - definition.heightMin) / 65535 / 2;
+  after.forEach((height, index) => expect(Math.abs(height! - before[index]!), `probe ${probes[index]}`).toBeLessThanOrEqual(halfStep + 1e-4));
   expect(errors).toEqual([]);
 });

@@ -2397,6 +2397,27 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       `terrainLandscapeBridge.ts` ve `engine/scene/landscape.ts`'in köprüye ait
       kısmı (veri tipi, fırça, spline adaptörü, foliage kuralları) silinir. Expand
       ve tek-tile/çok-tile ayrımı (Details, spline uyarıları) bununla kalkar.
+      **Kararlar (kullanıcı onaylı, 2026-10-27):** (1) Dönüşü kayıplı eski veri
+      (döndürülmüş, kare olmayan, 2'nin kuvveti olmayan grid) editör ve runtime'da
+      açık hata verir, sessizce uyarlanmaz; kayıpsız eski dosya (kare, döndürülmemiş,
+      geçerli tile boyu; `heightScale` yüksekliklere katlanır) okumada 1×1 World
+      Terrain'e dönüşür. Kayıplı olanları `npm run terrain:migrate`
+      (`--check` / `--write`) uyarlamaları raporlayarak dönüştürür. (2) Her World
+      Terrain (1×1 ve çok-tile) gizmo ile **taşınabilir**: taşıma tanımın `origin`'ini
+      değiştirir (undo'lu); döndürme/ölçek kapalı kalır. (3) Yalnız 1×1'de olan
+      Resample preset'leri ve "Import PNG (resample)" tek tile'lı World Terrain'e
+      taşınır, çok-tile'da kapalı kalır. (4) Eski okuyucu için geçiş süresi yok:
+      tek aktif fork (minigolf) arazi kullanmıyor, ThreeAges kapandı; migrate
+      komutu + upstream notundan sonra okuyucu aynı seride kalkar.
+      **Dilimler:** K1 World Terrain taşıma → K2 1×1 World Terrain'de resample ve
+      PNG resample → K3 1×1 World Terrain'de eksik kalan 1×1 özelliklerinin
+      tamamlanması (spline/nehir/foliage kuralları/overlay/Expand) → K4 okuma yolu:
+      1×1 `.terrain.json` ve kayıpsız eski dosya `{ kind: "world" }`, kayıplı eski
+      dosya açık hata; smoke fikstürleri yeni biçime → K5 köprü ve 1×1 dallarının
+      silinmesi → K6 `terrain:migrate` + upstream notu → eski okuyucunun emekliliği
+      (aşağıdaki madde). Eşzamanlı oturum `SceneApp`/`EditorUi` üzerinde
+      çalıştığı için dilimler ayrı worktree dalında yapılır, her yeşil dilim
+      `main`'e birleştirilir.
 - [ ] Eski `.landscape.json` okuyucusu emekliye ayrılır: fork'lar için toplu
       migrasyon komutu (`terrain:repair` gibi, `--check` ile CI'da), upstream
       notu, bir geçiş süresi; sonra okuma dönüşümü (`terrainLegacy.ts`),

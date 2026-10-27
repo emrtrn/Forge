@@ -336,7 +336,12 @@ const fragmentColor = (textured: boolean): string => /* glsl */ `
       ? `uLayerTexIndex[${i}] >= 0.0 ? texture(uLayerTexArray, vec3(forgeP * uLayerScale[${i}], uLayerTexIndex[${i}])) : vec4(uLayerColors[${i}], 1.0)`
       : `vec4(uLayerColors[${i}], 1.0)`};
     vec3 forgeC${i} = forgeS${i}.rgb;
-    float forgeR${i} = uLayerRoughness[${i}] * mix(1.0, forgeS${i}.a, uLayerRoughnessInAlpha[${i}]);`).join("\n    ")}
+    float forgeR${i} = uLayerRoughness[${i}] * mix(1.0, forgeS${i}.a, uLayerRoughnessInAlpha[${i}]);
+    // Packed wet soil has no layer micro-normal: very smooth texels otherwise
+    // form a white sun lobe on the terrain's coarse normal. Keep the rougher
+    // texture detail and blend this floor by the layer's paint weight. Dry
+    // profiles/unpacked layers are unchanged; track water overrides it later.
+    forgeR${i} = max(forgeR${i}, 0.45 * step(0.5, uDeformLayerWet[${i}]) * uLayerRoughnessInAlpha[${i}]);`).join("\n    ")}
     vec3 forgeSum = forgeC0 * forgeW0.x + forgeC1 * forgeW0.y + forgeC2 * forgeW0.z + forgeC3 * forgeW0.w
       + forgeC4 * forgeW1.x + forgeC5 * forgeW1.y + forgeC6 * forgeW1.z + forgeC7 * forgeW1.w;
     float forgeTotal = dot(forgeW0, vec4(1.0)) + dot(forgeW1, vec4(1.0));

@@ -47,10 +47,14 @@ let wet: number[] | undefined;
 let roughnessInAlpha: number[] | undefined;
 const compile = terrain.mesh.material.onBeforeCompile;
 const debug = { value: 0 };
+const bedBaseline = { value: 0 };
 terrain.mesh.material.onBeforeCompile = (shader, renderer) => {
   compile(shader, renderer);
   shader.uniforms.uWetMudDebug = debug;
-  shader.fragmentShader = `uniform float uWetMudDebug;\n${shader.fragmentShader}`.replace("#include <opaque_fragment>", `
+  shader.uniforms.uBedBaseline = bedBaseline;
+  shader.fragmentShader = `uniform float uBedBaseline;\nuniform float uWetMudDebug;\n${shader.fragmentShader}`
+    .replace(/(forgeR\d = max\(forgeR\d, 0\.45 \* step\(0\.5, uDeformLayerWet\[\d\]\) \* uLayerRoughnessInAlpha\[\d\]\);)/g, "if (uBedBaseline < 0.5) $1")
+    .replace("#include <opaque_fragment>", `
     if (uWetMudDebug > 2.5) {
       gl_FragColor = vec4(abs(forgeWaterGradient)*10.0, 1.0, 1.0); return;
     }
@@ -289,6 +293,10 @@ function showCapture() {
 let frame = 0;
 function loop() { draw(); if (++frame < 20) requestAnimationFrame(loop); else {
   (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks,
+    bedGlare(original: boolean, wetProfile = 0.9, packed = true) {
+      bedBaseline.value = original ? 1 : 0; wet![4] = wetProfile; roughnessInAlpha![4] = packed ? 1 : 0;
+      draw(); return { color: surfaceProbes(), profile: profile() };
+    },
     enableDynamics, pumpWater, waveEnergy, waveSamples, rippleAppearance, reflectionColor, benchmarkFrames, groundColor, skyLight, shiftDynamics, showCapture,
     restoreView: draw,
     reverseDepth: () => { const mode = setSceneDepthMode(renderer, "reversed", { scene, cameras: [camera] }); draw(); return mode; },

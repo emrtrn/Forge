@@ -1,4 +1,4 @@
-import { Box3, Mesh, ShaderMaterial, Vector3, type Group, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
+import { Box3, Mesh, MeshStandardMaterial, ShaderMaterial, Vector3, type Group, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
 import { SceneApp } from "@/scene/SceneApp";
 import type { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
 import type { RiverWaterObject } from "@engine/render-three/riverWater";
@@ -15,6 +15,7 @@ import { WATER_SCENE_GLSL } from "@engine/render-three/waterSceneSnapshot";
 import lakeBaseline from "./water-surface-v4-shaders.json";
 import riverBaseline from "./river-shadow-baseline-shaders.json";
 const riverReview = new URLSearchParams(location.search).has("riverReview");
+const bedReview = new URLSearchParams(location.search).has("bedReview");
 const baselineShaders = riverReview ? riverBaseline : lakeBaseline;
 
 type Variant = "off" | "before" | "after" | "low" | "high";
@@ -46,6 +47,46 @@ while ([...internal.worldTerrains.values()].some(d => d.tiles.size !== d.def.til
 }
 await new Promise(resolve => setTimeout(resolve, 2000));
 const { renderer, scene, camera } = internal;
+// In-memory terrain counterfactuals: no save, light, exposure or source texture edits.
+const bedDiagnostic = { value: 0 };
+const bedBaseline = { value: 0 };
+const bedMaterials = new Set<MeshStandardMaterial>();
+scene.traverse(object => {
+  if (!(object instanceof Mesh)) return;
+  const materials = Array.isArray(object.material) ? object.material : [object.material];
+  for (const material of materials) {
+    if (!(material instanceof MeshStandardMaterial) || !object.name.includes("terrain") || bedMaterials.has(material)) continue;
+    bedMaterials.add(material);
+    const compile = material.onBeforeCompile, cacheKey = material.customProgramCacheKey.bind(material);
+    material.onBeforeCompile = (shader, renderer) => {
+      compile.call(material, shader, renderer);
+      shader.uniforms.reviewBedDiagnostic = bedDiagnostic;
+      shader.uniforms.reviewBedBaseline = bedBaseline;
+      shader.fragmentShader = shader.fragmentShader
+        .replace("void main() {", "uniform float reviewBedDiagnostic;\nuniform float reviewBedBaseline;\nvoid main() {")
+        .replace(/(forgeR\d = max\(forgeR\d, 0\.45 \* step\(0\.5, uDeformLayerWet\[\d\]\) \* uLayerRoughnessInAlpha\[\d\]\);)/g, "if (reviewBedBaseline < 0.5) $1")
+        .replace("diffuseColor.rgb = forgeColor;", "diffuseColor.rgb = reviewBedDiagnostic == 4.0 ? vec3(0.18) : forgeColor;")
+        .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nif (reviewBedDiagnostic == 5.0) normal = normalize(vTerrainAxisY);")
+        .replace("#include <lights_physical_fragment>", `if (reviewBedDiagnostic == 6.0 || reviewBedDiagnostic == 11.0) roughnessFactor = 1.0;
+if (reviewBedDiagnostic == 8.0) roughnessFactor = max(roughnessFactor, 0.32);
+if (reviewBedDiagnostic == 9.0) roughnessFactor = max(roughnessFactor, 0.45);
+if (reviewBedDiagnostic == 10.0) roughnessFactor = max(roughnessFactor, 0.6);
+#include <lights_physical_fragment>`)
+        .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>
+if (reviewBedDiagnostic == 1.0 || reviewBedDiagnostic == 3.0) reflectedLight.directSpecular = vec3(0.0);
+if (reviewBedDiagnostic == 2.0 || reviewBedDiagnostic == 3.0) reflectedLight.indirectSpecular = vec3(0.0);`)
+        .replace("#include <opaque_fragment>", "#include <opaque_fragment>\nif (reviewBedDiagnostic == 7.0) gl_FragColor.rgb = diffuseColor.rgb;");
+    };
+    material.customProgramCacheKey = () => `${cacheKey()}:review-bed`;
+    material.needsUpdate = true;
+  }
+});
+function diagnoseBed(mode: number) {
+  if (!Number.isInteger(mode) || mode < 0 || mode > 11) throw new Error("Invalid bed diagnostic");
+  bedDiagnostic.value = mode;
+  return { mode, materials: bedMaterials.size };
+}
+function setBedBaseline(original: boolean) { bedBaseline.value = original ? 1 : 0; }
 const sources = [...new Set([...internal.riverReflectionSources,
   ...((internal.lakes as unknown as { reflection: Map<string, PlanarReflectionSource> } | null)?.reflection.values() ?? [])])];
 let reflectionDraws = 0, reflectionCaptures = 0, motion = false;
@@ -107,11 +148,12 @@ for (const source of sources) {
 }
 function setVariant(next: Variant) {
   variant = next;
+  if (bedReview) setBedBaseline(next === "before");
   for (const source of sources) source.setQuality(next === "low" ? null : next === "high" ? "high" : "medium");
   for (const water of [...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]) water.visible = next !== "off";
   for (const water of internal.lakes?.objects.values() ?? []) water.userData.waterSceneTransmission = next !== "off";
   for (const [water, current] of currentShaders) {
-    const shaders = next === "before" ? ("isRiverWaterObject" in water ? baselineShaders.river : radialObjects.includes(water) ? riverBaseline.radial : riverReview ? current : baselineShaders.lake) : current;
+    const shaders = next === "before" && !bedReview ? ("isRiverWaterObject" in water ? baselineShaders.river : radialObjects.includes(water) ? riverBaseline.radial : riverReview ? current : baselineShaders.lake) : current;
     const vertex = expand(shaders.vertex), fragment = expand(shaders.fragment);
     if (water.material.fragmentShader !== fragment || water.material.vertexShader !== vertex) {
       water.material.vertexShader = vertex; water.material.fragmentShader = fragment; water.material.needsUpdate = true;
@@ -126,6 +168,7 @@ const cameras: Record<string, { target: number[]; offset: number[]; fov: number 
   "river-bank": { target: [279.23, -45.7, 57.8], offset: [-10, 5, 13], fov: 48 },
   "river-flat": { target: [148.4, -71.7, 281.85], offset: [-8, 22, -6], fov: 48 },
   "river-rock-low": { target: [155.341, -71.7, 269.99], offset: [-6, 3, 6], fov: 48 },
+  "river-rock-top": { target: [155.341, -71.7, 269.99], offset: [0, 26, 0.01], fov: 48 },
   "river-top": { target: [233.59, -59.7, 151.82], offset: [0, 55, 0.01], fov: 48 },
   "lake-overview": { target: [44, -5, -44], offset: [43, 32, 48], fov: 48 },
   "lake-shore": { target: [40, -5, -42], offset: [-1, 8, 20], fov: 48 },
@@ -163,7 +206,7 @@ function metadataSnapshotCopies() {
 }
 function metadata() {
   const gl = renderer.getContext(), debug = gl.getExtension("WEBGL_debug_renderer_info");
-  return { view, variant, motion, fixedTime,
+  return { view, variant, motion, fixedTime, bedDiagnostic: bedDiagnostic.value, bedBaseline: bedBaseline.value,
     renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) as string : gl.getParameter(gl.RENDERER) as string,
     browser: navigator.userAgent, gpuTimer: !!gl.getExtension("EXT_disjoint_timer_query_webgl2"),
     viewport: { width: renderer.domElement.width, height: renderer.domElement.height, dpr: renderer.getPixelRatio() },
@@ -263,7 +306,9 @@ async function benchmark(samples = 120) {
   const results = [];
   try {
     // Reverse the order in the second round to expose drift/capture cadence.
-    for (const [round, order] of [[0, ["off", "before", "low", "after", "high"]], [1, ["high", "after", "low", "before", "off"]]] as const) {
+    for (const [round, order] of (bedReview
+      ? [[0, ["off", "before", "after"]], [1, ["after", "before", "off"]]]
+      : [[0, ["off", "before", "low", "after", "high"]], [1, ["high", "after", "low", "before", "off"]]]) as [number, Variant[]][]) {
       for (const next of order) {
         setVariant(next);
         for (let i = 0; i < 30; i++) await nextFrame();
@@ -298,7 +343,13 @@ document.querySelector("#review-variant")!.addEventListener("change", (e) => set
 document.querySelector("#review-view")!.addEventListener("change", (e) => setView((e.target as HTMLSelectElement).value));
 document.querySelector("#review-motion")!.addEventListener("change", (e) => { motion = (e.target as HTMLInputElement).checked; status(); });
 declare global { interface Window { __waterLandscape: {
-  ready: boolean; metadata: typeof metadata; setView: typeof setView; setVariant: typeof setVariant; benchmark: typeof benchmark; setTime: typeof setTime; diagnoseLake: typeof diagnoseLake;
+  ready: boolean; metadata: typeof metadata; setView: typeof setView; setVariant: typeof setVariant; benchmark: typeof benchmark; setTime: typeof setTime; diagnoseLake: typeof diagnoseLake; diagnoseBed: typeof diagnoseBed; setBedBaseline: typeof setBedBaseline;
 }; } }
-window.__waterLandscape = { ready: true, metadata, setView, setVariant, benchmark, setTime, diagnoseLake };
+window.__waterLandscape = { ready: true, metadata, setView, setVariant, benchmark, setTime, diagnoseLake, diagnoseBed, setBedBaseline };
+const extraView = document.createElement("option"); extraView.value = "river-rock-top"; extraView.textContent = "Nehir · Kaya üstten";
+document.querySelector("#review-view")!.append(extraView);
+if (bedReview) {
+  document.querySelector('option[value="before"]')!.textContent = "Önce · Islak zemin";
+  document.querySelector('option[value="after"]')!.textContent = "Sonra · Islak zemin";
+}
 setView("river-upper");

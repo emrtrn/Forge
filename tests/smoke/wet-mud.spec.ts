@@ -54,6 +54,33 @@ test("wet mud fifth layer renders reflective water on track floors", async ({ pa
   expect(errors).toEqual([]);
 });
 
+test("wet soil bed glare is bounded without changing dry profiles, unpacked layers or puddle floors", async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", e => errors.push(e.message));
+  page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/tests/smoke/pages/wet-mud.html");
+  await page.waitForFunction(() => (window as any).__wetMudQa?.ready);
+  type Shot = { color: number[]; profile: { offset: number; puddle: number; roughness: number; normalY: number }[] };
+  const shot = (original: boolean, wet: number, packed = true): Promise<Shot> => page.evaluate(
+    ([b, w, p]) => (window as any).__wetMudQa.bedGlare(b, w, p), [original, wet, packed] as const);
+  const before = await shot(true, 0.9);
+  await page.screenshot({ path: info.outputPath("wet-bed-before.png") });
+  const after = await shot(false, 0.9);
+  await page.screenshot({ path: info.outputPath("wet-bed-after.png") });
+  expect(after.color.filter((v, i) => Math.abs(v - before.color[i]!) > 2).length).toBeGreaterThan(10);
+  const beforeFloor = before.profile.find(p => p.offset === 0)!;
+  const afterFloor = after.profile.find(p => p.offset === 0)!;
+  expect(afterFloor.puddle).toBeGreaterThan(0.8);
+  expect(afterFloor).toEqual(beforeFloor);
+  expect(after.profile.map(p => [p.puddle, p.normalY])).toEqual(before.profile.map(p => [p.puddle, p.normalY]));
+  for (const wet of [0, 0.1]) expect(await shot(false, wet)).toEqual(await shot(true, wet));
+  expect(await shot(false, 0.9, false)).toEqual(await shot(true, 0.9, false));
+  expect(await shot(true, 0.9)).toEqual(before);
+  await writeFile(info.outputPath("bed-glare.json"), JSON.stringify({ before, after }, null, 2));
+  expect(errors).toEqual([]);
+});
+
 test("editor adds a fifth World Terrain layer with undo, paints wet mud, saves every tile and reloads", async ({ page, request }) => {
   test.setTimeout(180_000);
   const errors: string[] = [];

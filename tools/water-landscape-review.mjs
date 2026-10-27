@@ -10,6 +10,7 @@ const argument = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=
 const base = argument("url") ?? process.env.FORGE_WATER_REVIEW_URL ?? "http://127.0.0.1:5488";
 const output = resolve(argument("output") ?? process.env.FORGE_WATER_REVIEW_OUTPUT ?? "docs/planned/Forge_Water_System/evidence/landscape-review");
 const riversOnly = process.argv.includes("--rivers-only");
+const bedGlare = process.argv.includes("--bed-glare");
 const lakesOnly = process.argv.includes("--lakes-only");
 await mkdir(output, { recursive: true });
 // HMR is disabled, but another editor session may still change files while a
@@ -47,20 +48,21 @@ await page.route("**/*", async (route) => {
 });
 const captures = [], benchmarks = [];
 try {
-  await page.goto(`${base}/tests/smoke/pages/water-landscape-review.html?editor${riversOnly ? "&riverReview" : ""}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await page.goto(`${base}/tests/smoke/pages/water-landscape-review.html?editor${riversOnly || bedGlare ? "&riverReview" : ""}${bedGlare ? "&bedReview" : ""}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
   await page.waitForFunction(() => window.__waterLandscape?.ready, null, { timeout: 180_000 });
   const initial = await page.evaluate(() => window.__waterLandscape.metadata());
   if (!initial.renderer.includes("NVIDIA") || !initial.gpuTimer) throw new Error(`Expected hardware GPU: ${JSON.stringify(initial)}`);
   if (initial.terrain.some((t) => t.tiles !== t.expected) || initial.lakes.some((l) => l.status !== "ready")
     || initial.waters.some((w) => !w.vertices || !w.triangles)) throw new Error("Incomplete scene/water geometry");
   await page.waitForTimeout(2000);
-  const views = riversOnly ? ["river-upper", "river-bank", "river-flat", "river-top", "river-rock-low"] : lakesOnly ? ["lake-overview", "lake-shore", "lake-top", "lake-low", "lake-1", "lake-1-low"] : refine ? ["river-flat", "lake-shore"] : process.argv.includes("--pilot") ? ["river-upper", "river-bank", "lake-overview"] :
+  const views = bedGlare ? ["river-upper", "river-bank", "river-flat", "river-top", "river-rock-low", "river-rock-top"] : riversOnly ? ["river-upper", "river-bank", "river-flat", "river-top", "river-rock-low"] : lakesOnly ? ["lake-overview", "lake-shore", "lake-top", "lake-low", "lake-1", "lake-1-low"] : refine ? ["river-flat", "lake-shore"] : process.argv.includes("--pilot") ? ["river-upper", "river-bank", "lake-overview"] :
     ["river-upper", "river-bank", "river-flat", "river-top", "lake-overview", "lake-shore", "lake-top", "lake-low", "lake-1", "lake-1-low"];
   for (const view of views) {
     await page.selectOption("#review-view", view);
     await page.waitForTimeout(1800);
-    for (const variant of baseline ? ["off", "before"] : ["off", "before", "after"]) {
-      await page.selectOption("#review-variant", variant);
+    for (const variant of bedGlare ? ["before", "after", "off-before", "off"] : baseline ? ["off", "before"] : ["off", "before", "after"]) {
+      await page.selectOption("#review-variant", variant === "off-before" ? "off" : variant);
+      if (variant === "off-before") await page.evaluate(() => window.__waterLandscape.setBedBaseline(true));
       await page.waitForTimeout(250);
       const png = await page.locator("canvas").screenshot({ path: resolve(output, `${view}-${variant}.png`) });
       const stats = await sharp(png).stats();
@@ -69,7 +71,7 @@ try {
       captures.push({ ...await page.evaluate(() => window.__waterLandscape.metadata()), imageStats });
     }
   }
-  if (!baseline) for (const view of riversOnly ? ["river-bank", "river-flat"] : lakesOnly ? ["lake-1-low", "lake-low"] : ["river-bank", "lake-low"]) {
+  if (!baseline) for (const view of riversOnly || bedGlare ? ["river-bank", "river-flat"] : lakesOnly ? ["lake-1-low", "lake-low"] : ["river-bank", "lake-low"]) {
     await page.selectOption("#review-view", view);
     await page.selectOption("#review-variant", "after");
     await page.evaluate(() => window.__waterLandscape.setTime(14));
@@ -78,7 +80,7 @@ try {
     await page.evaluate(() => window.__waterLandscape.setTime(12));
   }
   if (!process.argv.includes("--pilot") && !captureOnly) {
-    for (const view of riversOnly ? ["river-bank", "river-flat"] : lakesOnly ? ["lake-overview", "lake-1"] : refine ? ["river-flat"] : ["river-bank", "river-flat", "lake-overview", "lake-1"]) {
+    for (const view of riversOnly || bedGlare ? ["river-bank", "river-flat"] : lakesOnly ? ["lake-overview", "lake-1"] : refine ? ["river-flat"] : ["river-bank", "river-flat", "lake-overview", "lake-1"]) {
       await page.selectOption("#review-view", view);
       await page.waitForTimeout(1800);
       const result = await page.evaluate(() => window.__waterLandscape.benchmark(120));
@@ -102,7 +104,7 @@ try {
   const sourceEnd = await sourceSnapshot();
   const changedSources = [...new Set([...Object.keys(sourceStart), ...Object.keys(sourceEnd)])].filter(file => sourceStart[file] !== sourceEnd[file]);
   const report = { date: new Date().toISOString(), pilot: process.argv.includes("--pilot"), sourceStart, sourceEnd, changedSources,
-    baselineCommit: riversOnly ? "e5c1fa40 (river shader and stamp snapshot)" : "35ac2ade", baseline, initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
+    baselineCommit: bedGlare ? "f9aa05ff terrain roughness expression only; current water shaders in both conditions" : riversOnly ? "e5c1fa40 (river shader and stamp snapshot)" : "35ac2ade", baseline, initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
   if (refine) {
     report.initial = previousReport.initial;
     report.captures = [...previousReport.captures.filter((c) => !views.includes(c.view)), ...captures];

@@ -2246,8 +2246,12 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
 - [x] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,
       yükseklik aralığı, hücre boyları; boş ya da heightmap'ten.
       *Tamam (2026-10-27, boş dünya):* ayrı bir menü girdisi yok (tek
-      Landscape girişi kararı); Add Actor → Landscape diyaloğunda çok-tile
-      seçilince **Open World** bölümü açılır: yükseklik aralığı (u16 adımı
+      Landscape girişi kararı); Add Actor → Landscape diyaloğundaki **Open
+      World** bölümü her grid boyutunda açıktır (1×1 tile 8 m aralıkla 2 km'ye
+      çıkar; partition/görüş mesafesi/sis level ayarıdır). Yalnız yükseklik
+      aralığı çok-tile'a özeldir: çok-tile u16 saklar ve aralık adımı belirler,
+      1×1 köprüsü Float32 kaydeder ve aralığı veriden genişletir
+      (`captureTerrainSnapshot`). Alanlar: yükseklik aralığı (u16 adımı
       gösterilir; düz başlangıcı, yani 0'ı içermeli, ±10 km), World Partition
       açık/kapalı + `main` hücre boyu ve yükleme menzili, görüş mesafesi ve
       "Fit Height Fog to the view distance". Level'ın mevcut değerleriyle açılır;

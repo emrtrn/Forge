@@ -24,21 +24,23 @@ import { FAR_VIEW_MODE_THRESHOLD, VIEW_DISTANCE_MAX, VIEW_DISTANCE_MIN } from "@
 const megabytes = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const metres = (value: number): string => `${Number(value.toFixed(2))} m`;
 
-/** What the dialog creates: the terrain grid, and for a multi-tile grid the level's open world settings. */
+/** What the dialog creates: the terrain grid and the level's open world settings. */
 export interface NewLandscapeChoice {
   terrain: WorldTerrainCreateOptions;
-  /** Null for a 1x1 Landscape: the level's settings stay as they are. */
-  world: OpenWorldSetup | null;
+  /** Seeded from the level, so leaving the section alone changes nothing. */
+  world: OpenWorldSetup;
 }
 
 /**
  * Asks for a new Landscape's tile grid (Add Actor → Landscape; 1x1 is the
  * classic single-grid Landscape). Shows the resulting world size and cost while
  * typing and only enables Create for options `createFlatWorldTerrain` accepts.
- * A multi-tile grid also opens the Open World section (OPEN_WORLD_PLAN Faz 8):
- * height range, World Partition, view distance and a fitted Height Fog, seeded
- * from the level's world settings and applied with the terrain as one undo
- * step. Resolves null on cancel.
+ * The Open World section (OPEN_WORLD_PLAN Faz 8) sets World Partition, the
+ * view distance and a fitted Height Fog for any grid (a 1x1 tile reaches 2 km at
+ * 8 m spacing), seeded from the level's world settings and applied with the
+ * terrain as one undo step. The height range is multi-tile only: those tiles
+ * store u16 heights whose step it sets, while a 1x1 Landscape saves Float32 and
+ * its range only follows the data. Resolves null on cancel.
  */
 export function pickWorldTerrainOptions(
   levelSettings: { partition?: unknown; viewDistance?: number | undefined },
@@ -61,10 +63,10 @@ export function pickWorldTerrainOptions(
           <label><span>Vertex Spacing (m)</span><input data-field="spacing" type="number" min="${WORLD_TERRAIN_CREATE_MIN_SPACING}" max="${WORLD_TERRAIN_CREATE_MAX_SPACING}" step="0.25" /></label>
           <label><span>Base Height (m)</span><input data-field="baseHeight" type="number" min="${-WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT}" max="${WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT}" step="0.5" /></label>
           <div class="world-terrain-summary" data-world-terrain-summary></div>
-          <fieldset class="world-terrain-open-world" data-open-world hidden>
+          <fieldset class="world-terrain-open-world" data-open-world>
             <legend>Open World</legend>
-            <label><span>Height Min (m)</span><input data-field="heightMin" type="number" min="${-WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE}" max="0" step="1" /></label>
-            <label><span>Height Max (m)</span><input data-field="heightMax" type="number" min="0" max="${WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE}" step="1" /></label>
+            <label data-height-range><span>Height Min (m)</span><input data-field="heightMin" type="number" min="${-WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE}" max="0" step="1" /></label>
+            <label data-height-range><span>Height Max (m)</span><input data-field="heightMax" type="number" min="0" max="${WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE}" step="1" /></label>
             <label class="world-terrain-check"><input data-world="partition" type="checkbox" /><span>World Partition: stream actors by cell</span></label>
             <label><span>Cell Size (m)</span><input data-world="cellSize" type="number" min="1" step="any" /></label>
             <label><span>Loading Range (m)</span><input data-world="loadRange" type="number" min="1" step="any" /></label>
@@ -106,7 +108,7 @@ export function pickWorldTerrainOptions(
     const summary = overlay.querySelector<HTMLElement>("[data-world-terrain-summary]")!;
     const problemList = overlay.querySelector<HTMLElement>("[data-world-terrain-problems]")!;
     const multiTileNote = overlay.querySelector<HTMLElement>("[data-world-terrain-multitile]")!;
-    const openWorld = overlay.querySelector<HTMLFieldSetElement>("[data-open-world]")!;
+    const heightRows = [...overlay.querySelectorAll<HTMLElement>("[data-height-range]")];
     const notes = overlay.querySelector<HTMLElement>("[data-open-world-notes]")!;
 
     const multiTile = (): boolean => Number(field<HTMLInputElement>("tilesX").value) * Number(field<HTMLInputElement>("tilesZ").value) > 1;
@@ -123,8 +125,7 @@ export function pickWorldTerrainOptions(
         heightMax: Number(field<HTMLInputElement>("heightMax").value),
       } : {}),
     });
-    const readWorld = (): OpenWorldSetup | null => {
-      if (!multiTile()) return null;
+    const readWorld = (): OpenWorldSetup => {
       const viewDistance = worldField("viewDistance").value.trim();
       return {
         partition: {
@@ -139,11 +140,11 @@ export function pickWorldTerrainOptions(
     const refresh = (): NewLandscapeChoice | null => {
       const options = read();
       const world = readWorld();
-      const problems = [...worldTerrainCreateProblems(options), ...(world ? openWorldSetupProblems(world) : [])];
+      const problems = [...worldTerrainCreateProblems(options), ...openWorldSetupProblems(world)];
       problemList.replaceChildren(...problems.map((problem) => Object.assign(document.createElement("li"), { textContent: problem })));
       create.disabled = problems.length > 0;
       multiTileNote.hidden = !multiTile();
-      openWorld.hidden = !multiTile();
+      for (const row of heightRows) row.hidden = !multiTile();
       const partitionOn = worldField("partition").checked;
       worldField("cellSize").disabled = !partitionOn;
       worldField("loadRange").disabled = !partitionOn;
@@ -155,10 +156,10 @@ export function pickWorldTerrainOptions(
       const estimate = estimateWorldTerrain(options);
       summary.textContent = `${metres(estimate.extent[0])} × ${metres(estimate.extent[1])} · ${estimate.tileCount} tile${estimate.tileCount === 1 ? "" : "s"} of ${metres(options.tileQuads * options.spacing)} · ` +
         `${(estimate.vertices / 1e6).toFixed(2)} M vertices · ~${megabytes(estimate.diskBytes)} on disk · ~${megabytes(estimate.memoryBytes)} in editor memory`;
-      const lines = world ? [
-        `Heights are stored in ${(worldTerrainHeightStep(options) * 100).toFixed(1)} cm steps; sculpting past the range widens it on Save.`,
+      const lines = [
+        ...(multiTile() ? [`Heights are stored in ${(worldTerrainHeightStep(options) * 100).toFixed(1)} cm steps; sculpting past the range widens it on Save.`] : []),
         ...openWorldSetupNotes(world, estimate.extent),
-      ] : [];
+      ];
       notes.replaceChildren(...lines.map((line) => Object.assign(document.createElement("li"), { textContent: line })));
       return { terrain: options, world };
     };

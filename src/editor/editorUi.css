@@ -3971,7 +3971,7 @@
 .world-terrain-problems { margin: 0; padding-left: 18px; color: #f0a07a; font-size: 12px; }
 .world-terrain-problems:empty { display: none; }
 .world-terrain-open-world { display: grid; gap: 8px; margin: 0; padding: 8px 10px 10px; border: 1px solid var(--forge-border-mid); border-radius: 4px; }
-.world-terrain-open-world[hidden] { display: none; }
+.world-terrain-form label[hidden] { display: none; }
 .world-terrain-open-world legend { padding: 0 4px; color: #c9d1d6; font-size: 12px; }
 .world-terrain-form label.world-terrain-check { grid-template-columns: auto 1fr; }
 .world-terrain-form .world-terrain-check input { height: auto; }

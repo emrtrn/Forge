@@ -3806,7 +3806,7 @@ export class EditorUi {
     });
   }
 
-  /** Add Actor → Landscape: tile grid (1x1 by default) and, for more tiles, open world settings; then one undoable add. */
+  /** Add Actor → Landscape: tile grid (1x1 by default) and the level's open world settings; then one undoable add. */
   private async addLandscape(): Promise<void> {
     const { pickWorldTerrainOptions } = await import("@/editor/worldTerrainDialog");
     const choice = await pickWorldTerrainOptions(this.app.getWorldSettings());

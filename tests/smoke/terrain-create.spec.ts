@@ -144,9 +144,10 @@ test("Add Actor → Landscape creates a flat multi-tile terrain that saves, undo
 });
 
 /**
- * New Open World (OPEN_WORLD_PLAN Faz 8): a multi-tile grid opens the dialog's
- * Open World section. Height range, World Partition, view distance and a
- * fitted Height Fog are created with the terrain as one undo step.
+ * New Open World (OPEN_WORLD_PLAN Faz 8): the dialog's Open World section sets
+ * World Partition, view distance and a fitted Height Fog for any grid, and the
+ * u16 height range for a multi-tile one, all created with the terrain as one
+ * undo step.
  */
 test("New Landscape's Open World section sets partition, view distance, fog and height range in one undo step", async ({ page, request }, testInfo) => {
   test.setTimeout(180_000);
@@ -169,12 +170,16 @@ test("New Landscape's Open World section sets partition, view distance, fog and 
   const section = dialog.locator("[data-open-world]");
   const notes = dialog.locator("[data-open-world-notes]");
   const create = dialog.locator("[data-world-terrain-create]");
-  await expect(section).toBeHidden();
+  // A 1x1 Landscape is an open world too; only the u16 height range is multi-tile.
+  await expect(section).toBeVisible();
+  await expect(section.locator('[data-world="partition"]')).toBeVisible();
+  await expect(section.locator('[data-field="heightMin"]')).toBeHidden();
+  await expect(notes).not.toContainText("cm steps");
   await dialog.locator('[data-field="tilesX"]').fill("4");
   await dialog.locator('[data-field="tilesZ"]').fill("2");
   await dialog.locator('[data-field="tileQuads"]').selectOption("64");
   await dialog.locator('[data-field="spacing"]').fill("2");
-  await expect(section).toBeVisible();
+  await expect(section.locator('[data-field="heightMin"]')).toBeVisible();
   // Seeded from the level: nothing switched on.
   await expect(section.locator('[data-world="partition"]')).not.toBeChecked();
   await expect(section.locator('[data-world="cellSize"]')).toBeDisabled();

@@ -23,8 +23,8 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
 /**
  * A Landscape actor that references a multi-tile World Terrain (OPEN_WORLD_PLAN
- * Faz 2) loads in the editor and in Play: it is drawn, picked and focused, its
- * transform stays locked, an unedited Save leaves its files alone, a sculpt
+ * Faz 2) loads in the editor and in Play: it is drawn, picked and focused, it
+ * moves but never rotates, an unedited Save leaves its files alone, a sculpt
  * stroke across a tile seam writes only the touched tiles (seam rows equal),
  * undo restores their exact bytes, and it collides per tile so the pawn stands
  * on it.
@@ -204,7 +204,11 @@ test("multi-tile World Terrain loads, sculpts across a tile seam, saves only edi
   await expect(page.locator("[data-world-terrain-limits]")).not.toContainText("Foliage painting");
   // Sculpt, Paint, Splines and Water.
   await expect(page.locator("[data-world-terrain-tools] [data-landscape-mode] option")).toHaveCount(4);
-  for (const input of await page.locator('input[data-detail="pr"]').all()) await expect(input).toBeDisabled();
+  // A World Terrain moves (its definition origin) but never rotates.
+  for (const axis of ["x", "y", "z"]) {
+    await expect(page.locator(`input[name="p${axis}"]`)).toBeEnabled();
+    await expect(page.locator(`input[name="r${axis}"]`)).toBeDisabled();
+  }
   await page.keyboard.press("f");
   await expect(page.getByTestId("editor-status")).toContainText("Focused World Terrain");
   await page.waitForTimeout(1_000);
@@ -550,5 +554,92 @@ test("World Terrain foliage tools paint across a seam, save exact surface height
   // Play thins the ring by the profile's grassDensity (high: 0.8).
   await expect.poll(ringCount, { timeout: 30_000 }).toBe(expectedRing(0.8));
   expect(messages.some((message) => message.includes("Foliage worker failed"))).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test("World Terrain moves by its definition origin: tiles stay untouched, undo/redo restore it, and Play stands on the moved terrain", async ({ page, request }, testInfo) => {
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  const messages: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    messages.push(message.text());
+    if (message.type() === "error") errors.push(message.text());
+  });
+  await writeFixture();
+  // Drop the pawn from well above any height the move can bring the ground to.
+  const level = JSON.parse((await fileBytes(LEVEL)).toString("utf8"));
+  level.instances[0].placements[0].position = [SPAWN[0], SPAWN_GROUND + 12, SPAWN[1]];
+  await writeFile(smokePublicPath(LEVEL), JSON.stringify(level, null, 2));
+  const tilePaths = world.def.tiles.map(({ key }) => terrainTilePath(TERRAIN, key));
+  const tileBytes = new Map(await Promise.all(tilePaths.map(async (path) => [path, await fileBytes(path)] as const)));
+  expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 860 });
+  await page.addInitScript(({ key, pose }) => {
+    localStorage.clear();
+    localStorage.setItem(key, pose);
+  }, { key: `forge.editor.cameraPose.${encodeURIComponent(LEVEL)}`, pose: JSON.stringify(OVERVIEW_POSE) });
+  await page.goto(`/?editor&terrainMove=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  const row = page.getByTestId("outliner-row").filter({ hasText: "World Terrain" }).first();
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  await page.waitForLoadState("networkidle");
+  await row.click();
+
+  const DELTA: [number, number, number] = [20, 1.5, 10];
+  const moved = CENTRE.map((value, axis) => value + DELTA[axis]!) as [number, number, number];
+  const definition = async () => JSON.parse((await fileBytes(TERRAIN)).toString("utf8")) as WorldTerrainDef;
+  const savedLevel = async () => (await (await request.get(`/${LEVEL}?t=${Date.now()}`)).json()) as { landscapes: { position: number[] }[] };
+  const terrainSaved = () => page.waitForResponse((response) => response.url().endsWith("/__save-terrain") && response.request().method() === "POST", { timeout: 20_000 });
+  const expectSavedAt = async (origin: readonly number[], centre: readonly number[]) => {
+    await expect.poll(async () => (await definition()).origin, { timeout: 20_000 }).toEqual(origin);
+    await expect.poll(async () => (await savedLevel()).landscapes[0]!.position, { timeout: 20_000 }).toEqual(centre);
+    for (const [path, bytes] of tileBytes) expect((await fileBytes(path)).equals(bytes), `${path} untouched`).toBe(true);
+  };
+
+  let saved = terrainSaved();
+  for (const [axis, value] of [["x", moved[0]], ["y", moved[1]], ["z", moved[2]]] as const) {
+    const input = page.locator(`input[name="p${axis}"]`);
+    await input.fill(String(value));
+    await input.press("Enter");
+  }
+  // A move is a plain transform: like any other, it is written by Save, not autosaved.
+  await page.getByTestId("editor-save").click();
+  expect((await saved).ok()).toBeTruthy();
+  const origin = world.def.origin.map((value, axis) => value + DELTA[axis]!);
+  await expectSavedAt(origin, moved);
+  await expect(page.locator('input[name="px"]')).toHaveValue(String(moved[0]));
+  await page.keyboard.press("f");
+  await page.waitForTimeout(1_000);
+  await writeFile(testInfo.outputPath("moved.png"), await viewportShot(page));
+
+  // Undo and redo the last axis move: the definition follows each step.
+  saved = terrainSaved();
+  await page.getByTestId("editor-undo").click();
+  await page.getByTestId("editor-save").click();
+  expect((await saved).ok()).toBeTruthy();
+  await expectSavedAt([origin[0]!, origin[1]!, world.def.origin[2]], [moved[0], moved[1], CENTRE[2]]);
+  saved = terrainSaved();
+  await page.getByTestId("editor-redo").click();
+  await page.getByTestId("editor-save").click();
+  expect((await saved).ok()).toBeTruthy();
+  await expectSavedAt(origin, moved);
+
+  // Play draws and collides at the moved origin.
+  const movedDef = { ...world.def, origin: origin as [number, number, number] };
+  await page.goto(`/?debug&terrainMove=${Date.now()}`);
+  await expect.poll(() => messages.some((message) => message.includes("[runtime] scene loaded")), { timeout: 60_000 }).toBeTruthy();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText(/movement: walking \(grounded\)/, { timeout: 30_000 });
+  await page.waitForTimeout(1_500);
+  const text = (await stats.textContent()) ?? "";
+  const match = text.match(/pos: (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/);
+  if (!match) throw new Error(`no pawn position in the overlay:\n${text}`);
+  const [x, y, z] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const ground = terrainHeightAt(movedDef, lookup, x, z);
+  console.log(`[terrain-move] pawn ${x} ${y} ${z}, moved terrain ${ground}`);
+  expect(ground).not.toBeNull();
+  expect(Math.abs(y - ground!)).toBeLessThan(0.2);
   expect(errors).toEqual([]);
 });

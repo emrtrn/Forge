@@ -8,7 +8,7 @@ import { compareWorldCellKeys, normalizeWorldPartitionSettings, type WorldPartit
 import { parseWorldCellKey } from "@engine/world/worldGrid";
 import { worldMapHeightAt, worldMapFocusPosition, type WorldMapHeights, type WorldMapRect } from "@engine/world/worldMapView";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
-import { levelTerrainPath, parseTileKey, terrainTilePath, terrainTileWorldSize, terrainWeightBlockCount, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
+import { levelTerrainPath, parseTileKey, terrainTilePath, terrainTileWorldSize, terrainWeightBlockCount, tileKey, type TerrainTileData, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
 import { applyTerrainLayerState, createTerrainLayerAddition, createTerrainLayerRemoval } from "@engine/terrain/terrainLayers";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
@@ -56,6 +56,8 @@ import {
   worldTerrainExtent,
   worldTerrainPlacementIssues,
 } from "@engine/terrain/worldTerrainActor";
+import { isZeroMove, moveWorldTerrain, worldTerrainMoveDelta } from "@engine/terrain/worldTerrainMove";
+import { resampleSingleTileTerrain, resizeSingleTileTerrain } from "@engine/terrain/terrainResample";
 ﻿/**
  * SceneApp - the single render-layer orchestrator (L11 boundary).
  *
@@ -7005,8 +7007,15 @@ export class SceneApp {
    */
   private transformBlockedReason(selection: Selection): string | null {
     if (this.isSelectionLocked(selection)) return "Selected object is locked.";
-    if (this.isWorldTerrainSelection(selection)) {
-      return "A multi-tile Landscape is placed by its terrain definition; moving or rotating it is not supported yet.";
+    return null;
+  }
+
+  /** A World Terrain moves but never rotates or scales, so only the move gizmo acts on it. */
+  private gizmoBlockedReason(selection: Selection): string | null {
+    const blocked = this.transformBlockedReason(selection);
+    if (blocked) return blocked;
+    if (this.isWorldTerrainSelection(selection) && (this.activeTool === "rotate" || this.activeTool === "scale")) {
+      return "A Landscape can only be moved; rotating or scaling it is not supported.";
     }
     return null;
   }
@@ -9469,10 +9478,39 @@ export class SceneApp {
     const object = this.landscapeObjects[index];
     if (!actor || !object) return;
     const world = this.worldTerrains.get(actor.id);
+    // A World Terrain follows its actor while dragged; `syncWorldTerrainPlacement`
+    // moves the definition (and what is authored on it) when the move commits.
     applyLandscapeTransform(object, world
-      ? { position: worldTerrainActorPosition(world.def), rotation: [0, 0, 0], hidden: resolveLandscape(actor).hidden }
+      ? { position: actor.position, rotation: [0, 0, 0], hidden: resolveLandscape(actor).hidden }
       : this.landscapeItem(actor));
     this.syncRiverWaterTransformsForLandscape(actor);
+  }
+
+  /**
+   * Moves a World Terrain's definition to where its actor now is (OPEN_WORLD_PLAN
+   * Faz 8, K1): shifts `origin`, its world-frame splines and its lakes by the
+   * same delta, then rebuilds what is drawn from them. Tiles are untouched.
+   * Runs at every committed transform (gizmo release, Details, undo/redo).
+   */
+  private syncWorldTerrainPlacement(index: number): void {
+    const actor = this.layout?.landscapes?.[index];
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    if (!this.layout || !actor || !document) return;
+    delete actor.rotation;
+    const delta = worldTerrainMoveDelta(document.def, actor.position);
+    if (isZeroMove(delta)) return;
+    const moved = moveWorldTerrain(document.def, actor.id, this.layout.waterBodies ?? [], delta, this.layout.riverWaters ?? []);
+    document.def.origin = moved.origin;
+    if (moved.splines) document.def.splines = moved.splines;
+    if (this.layout.waterBodies) this.layout.waterBodies = moved.lakes;
+    if (this.layout.riverWaters) this.layout.riverWaters = moved.rivers;
+    actor.position = worldTerrainActorPosition(document.def);
+    this.worldTerrainSessions.get(document)?.markDefinitionDirty();
+    this.worldTerrainStreams.get(document)?.syncFrame();
+    if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
+    this.rebuildLandscapeObject(index);
+    this.rebuildLakes();
+    this.rebuildGeneratedFoliageForLandscape(actor.id);
   }
 
   /** Keeps water ribbons visually attached while a Landscape is moved or rotated in the editor. */
@@ -10477,6 +10515,44 @@ export class SceneApp {
     ].filter(Boolean);
     this.onStatus?.(`Added Landscape${heightmap ? " from a heightmap" : ""}: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m${
       extras.length > 0 ? `; updated ${extras.join(" and ")}` : ""}.`, "info");
+  }
+
+  /**
+   * A World Terrain of exactly one tile, with that tile: the terrain the
+   * single-tile Resolution, World Size and resampling PNG import act on
+   * (OPEN_WORLD_PLAN Faz 8, bridge removal K2). Null for a multi-tile one.
+   */
+  private singleTileWorldTerrain(id: string): { document: WorldTerrainDocument; tile: TerrainTileData } | null {
+    const document = this.worldTerrains.get(id);
+    if (!document || document.def.tilesX !== 1 || document.def.tilesZ !== 1) return null;
+    const tile = document.tiles.get(tileKey(0, 0));
+    return tile ? { document, tile } : null;
+  }
+
+  /**
+   * Swaps a World Terrain's whole document (grid changes: resolution, world
+   * size) in one undo step; undo puts the previous document object back, and
+   * either way the next Save writes the definition and every tile.
+   */
+  private replaceWorldTerrainDocument(index: number, label: string, next: WorldTerrainDocument, status: string): void {
+    const actor = this.layout?.landscapes?.[index];
+    const previous = actor ? this.worldTerrains.get(actor.id) : undefined;
+    if (!actor || !previous) return;
+    const before = cloneLandscape(actor);
+    const document = this.editableWorldTerrain(actor.dataRef, next, "f32");
+    const after = { ...cloneLandscape(actor), position: worldTerrainActorPosition(document.def) };
+    const swap = (landscape: LayoutLandscape, terrain: WorldTerrainDocument): void => {
+      this.removeLandscapeAt(index);
+      this.insertLandscape(index, landscape, { kind: "world", document: terrain });
+      this.worldTerrainSessions.get(terrain)?.markDefinitionDirty();
+      void this.buildRiverWaters();
+      this.rebuildLakes();
+      this.select({ kind: "landscape", index });
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label, redo: () => swap(after, document), undo: () => swap(before, previous) });
+    this.onStatus?.(status, "info");
   }
 
   /** The selected 1x1 source, for the editor-only expansion dialog. */
@@ -11566,6 +11642,23 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape") return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
+    const single = actor ? this.singleTileWorldTerrain(actor.id) : null;
+    if (actor && single) {
+      const session = this.worldTerrainSessions.get(single.document);
+      if (!session || this.isSelectionLocked(this.selection)) return;
+      const size = single.document.def.tileQuads + 1;
+      try {
+        const samples = resampleLandscapeHeightmap(rgba, width, height, { verticesX: size, verticesZ: size }, 1);
+        const heights = Float32Array.from(samples, (sample) => Math.round(sample * heightRange * 1_000_000) / 1_000_000);
+        const patches = createTerrainHeightmapPatches(session.world, new Map([[tileKey(0, 0), heights]]));
+        this.lastLandscapeImportHeight = heightRange;
+        this.executeTerrainPatchCommand("Import Landscape Heightmap", actor.id, single.document, patches);
+        this.onStatus?.(`Imported ${width} x ${height} heightmap.`, "info");
+      } catch (error) {
+        this.onStatus?.(error instanceof Error ? error.message : "Heightmap import failed.", "error");
+      }
+      return;
+    }
     const data = actor ? this.landscapeData.get(actor.id) : null;
     if (!actor || !data) return;
     let samples: number[];
@@ -11761,6 +11854,11 @@ export class SceneApp {
   getSelectedLandscapeResolution(): { verticesX: number; verticesZ: number; worldSize: number } | null {
     if (this.selection?.kind !== "landscape") return null;
     const actor = this.layout?.landscapes?.[this.selection.index];
+    const single = actor ? this.singleTileWorldTerrain(actor.id) : null;
+    if (single) {
+      const { tileQuads, spacing } = single.document.def;
+      return { verticesX: tileQuads + 1, verticesZ: tileQuads + 1, worldSize: tileQuads * spacing };
+    }
     const data = actor ? this.landscapeData.get(actor.id) : null;
     return data
       ? {
@@ -11776,9 +11874,23 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape") return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
+    const target = landscapeSizeForPreset(preset);
+    const single = actor ? this.singleTileWorldTerrain(actor.id) : null;
+    if (single) {
+      const { document, tile } = single;
+      if (document.def.tileQuads + 1 === target.verticesX) return;
+      try {
+        const resampled = resampleSingleTileTerrain(document.def, tile, target.verticesX - 1);
+        this.replaceWorldTerrainDocument(index, "Resample Landscape Resolution",
+          { def: resampled.def, tiles: new Map([[tileKey(0, 0), resampled.tile]]) },
+          `Landscape resampled to ${target.verticesX} x ${target.verticesZ}.`);
+      } catch (error) {
+        this.onStatus?.(`Resample failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+      }
+      return;
+    }
     const data = actor ? this.landscapeData.get(actor.id) : null;
     if (!actor || !data) return;
-    const target = landscapeSizeForPreset(preset);
     if (data.size.verticesX === target.verticesX && data.size.verticesZ === target.verticesZ) return;
     const before: ForgeLandscapeData = {
       schema: 1,
@@ -11812,6 +11924,21 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !Number.isFinite(worldSize)) return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];
+    const single = actor ? this.singleTileWorldTerrain(actor.id) : null;
+    if (single) {
+      const { document, tile } = single;
+      if (Math.abs(worldSize - document.def.tileQuads * document.def.spacing) < 0.000001) return;
+      try {
+        const def = resizeSingleTileTerrain(document.def, worldSize);
+        // The resized copy gets its own tile object: undo keeps the old document whole.
+        const copy = { ...tile, heights: tile.heights.slice(), weights: tile.weights.slice() };
+        this.replaceWorldTerrainDocument(index, "Resize Landscape", { def, tiles: new Map([[tileKey(0, 0), copy]]) },
+          `Landscape resized to ${worldSize} m.`);
+      } catch (error) {
+        this.onStatus?.(error instanceof Error ? error.message : String(error), "error");
+      }
+      return;
+    }
     const data = actor ? this.landscapeData.get(actor.id) : null;
     if (!actor || !data) return;
     const spacing = worldSize / Math.max(1, data.size.verticesX - 1);
@@ -13499,7 +13626,7 @@ export class SceneApp {
       if (handle.tool === "move") this.startLandscapeSplinePointDrag(handle, event, splinePoint);
       return;
     }
-    const blocked = this.transformBlockedReason(this.selection);
+    const blocked = this.gizmoBlockedReason(this.selection);
     if (blocked) {
       this.onStatus?.(blocked, "warning");
       return;
@@ -15190,7 +15317,7 @@ export class SceneApp {
     // In pivot-edit mode the move gizmo is shown even under the Select tool.
     const pivotEditing = this.pivotEditMode && this.selection.kind !== "light";
     if (!selected || (this.activeTool === "select" && !pivotEditing)) return;
-    if (this.selection && this.transformBlockedReason(this.selection)) return;
+    if (this.selection && this.gizmoBlockedReason(this.selection)) return;
 
     this.gizmoGroup.visible = true;
     const pivotWorld = this.getSelectionPivotWorld(this.selection);
@@ -15327,6 +15454,7 @@ export class SceneApp {
       writeScale(transform, values.scale);
     }
     this.refreshSelectionObject(selection);
+    if (selection.kind === "landscape") this.syncWorldTerrainPlacement(selection.index);
     // The immediate sync above keeps the ribbon under the gizmo; rebuild at the
     // committed transform boundary so shared reflection sources get the new plane.
     if (selection.kind === "landscape") void this.buildRiverWaters();

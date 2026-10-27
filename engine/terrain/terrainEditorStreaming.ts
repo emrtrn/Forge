@@ -93,8 +93,8 @@ export interface TerrainEditorStreamingOptions {
  */
 export class TerrainEditorStreaming {
   private readonly declared: Set<string>;
-  private readonly settings: GridStreamingSettings;
-  private readonly bounds;
+  private settings: GridStreamingSettings;
+  private bounds: { minX: number; minZ: number; maxX: number; maxZ: number };
   private readonly maxConcurrent: number;
   private readonly inFlight = new Map<string, { controller: AbortController; done: Promise<void> }>();
   /** Requested by a brush stroke or a whole-terrain operation; kept until released. */
@@ -117,6 +117,14 @@ export class TerrainEditorStreaming {
     this.settings = { cellSize: size, origin: [def.origin[0], def.origin[2]], loadRange: size * (options.rangeTiles ?? 3) };
     this.bounds = { minX: def.origin[0], minZ: def.origin[2], maxX: def.origin[0] + def.tilesX * size, maxZ: def.origin[2] + def.tilesZ * size };
     this.maxConcurrent = options.maxConcurrentFetches ?? 6;
+  }
+
+  /** Re-reads the definition's world frame after the terrain moved; tile keys are unchanged. */
+  syncFrame(): void {
+    const { def } = this.world;
+    const size = this.settings.cellSize;
+    this.settings = { ...this.settings, origin: [def.origin[0], def.origin[2]] };
+    this.bounds = { minX: def.origin[0], minZ: def.origin[2], maxX: def.origin[0] + def.tilesX * size, maxZ: def.origin[2] + def.tilesZ * size };
   }
 
   get loading(): number {

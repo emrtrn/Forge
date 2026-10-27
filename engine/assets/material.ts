@@ -86,6 +86,8 @@ export interface ForgeMaterialLayerBlend {
 }
 
 export interface ForgeMaterialDef {
+  /** Optional terrain-only isotropic texture footprint in world metres. */
+  terrainMetersPerRepeat?: number;
   schema: 1;
   type: "material";
   materialType: ForgeMaterialType;
@@ -251,6 +253,8 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     emissiveTexture: textureRefOrNull(input.emissiveTexture),
     ormTexture: textureRefOrNull(input.ormTexture) ?? (legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
+    ...(typeof input.terrainMetersPerRepeat === "number" && Number.isFinite(input.terrainMetersPerRepeat)
+      ? { terrainMetersPerRepeat: Math.max(0.05, Math.min(1000, input.terrainMetersPerRepeat)) } : {}),
     // Opt-out, not opt-in: every material authored before this field existed was
     // rendering with three.js' flipped default, so absent must keep meaning `true`.
     flipY: input.flipY !== false,

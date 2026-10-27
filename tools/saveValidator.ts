@@ -3274,6 +3274,9 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissiveTexture: validateTextureRef(input.emissiveTexture, "material.emissiveTexture"),
     ormTexture,
     uvTiling: validateUvTiling(input.uvTiling, "material.uvTiling"),
+    ...(input.terrainMetersPerRepeat !== undefined ? {
+      terrainMetersPerRepeat: validateOptionalNumber(input.terrainMetersPerRepeat, "material.terrainMetersPerRepeat", 0.05, 1000),
+    } : {}),
     // Mirrors `normalizeForgeMaterialDef`: absent means three.js' flipped default,
     // so only an explicit `false` opts a glTF-UV material out.
     flipY: input.flipY !== false,

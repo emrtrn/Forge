@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   Box3, BufferAttribute, BufferGeometry, Color, DataTexture, Frustum, Group, Matrix3, Matrix4,
-  Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, ShaderLib, Vector2, Vector3,
+  DirectionalLight, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, Scene, ShaderLib, Vector2, Vector3,
   type WebGLProgramParametersWithUniforms, type WebGLRenderer,
 } from "three";
 import { buildTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMap";
@@ -18,6 +18,7 @@ import { TERRAIN_LIT_FIXED_SAMPLERS, terrainLitFragmentSamplers, type TerrainUni
 import { createLandscapeObject, disposeLandscapeObject, resolveLandscape, updateLandscapeObjectGeometry } from "../../engine/render-three/landscape";
 import type { LayoutLandscape } from "../../engine/scene/layout";
 import { EditorSelectionOutline } from "../../src/scene/editorSelectionOutline";
+import { SunCascadeShadow } from "../../engine/render-three/sunCascadeShadow";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -334,8 +335,8 @@ export function registerTerrainRenderTests(check: Check): void {
   });
 
   check("terrain renderer: the paint layers share one array sampler, as the cascade budget counts", () => {
-    // Normals ×2, weights ×2, track field and the shared water array.
-    assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 6);
+    // Normals ×2, weights ×2, track field, shared water array and connected Lake faces.
+    assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 7);
     const data = legacyData(65, 65, 1, 1);
     const compile = (material: MeshBasicMaterial, renderer: WebGLRenderer) => {
       const shader = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
@@ -357,7 +358,7 @@ export function registerTerrainRenderTests(check: Check): void {
         // three's own samplers sit behind #includes; every sampler line here is the terrain's.
         const own = shader.fragmentShader.match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm) ?? [];
         assert.equal(own.length, terrainLitFragmentSamplers(textured), `${layerCount} layers, textured ${textured}`);
-        assert.equal(terrain.litFragmentSamplers, textured ? 7 : 6);
+        assert.equal(terrain.litFragmentSamplers, textured ? 8 : 7);
         assert.equal(material.customProgramCacheKey(), `forge-terrain-cdlod-l${textured ? 1 : 0}`, "the layer count is not part of the program");
         assert.ok(!/uLayerTex\d/.test(shader.fragmentShader), "no per-layer samplers");
         if (textured) {
@@ -370,6 +371,29 @@ export function registerTerrainRenderTests(check: Check): void {
         terrain.dispose();
       }
     }
+  });
+
+  check("terrain caustics: micro-normal array and cascaded shadow patches compose and release together", () => {
+    const texture = rgbaTexture(2, 2, [128, 180, 240, 255]);
+    const terrain = new TerrainRenderer(landscapeRenderSource(legacyData(65, 65)), {
+      origin: new Vector3(), viewMode: "lit", activeLayer: 0, layers: [{ texture: null, normalTexture: texture, color: "#aaaaaa", scale: 1 }],
+    });
+    const materials = (terrain as any).materials;
+    assert.equal(materials.normalArray.colorSpace, "");
+    assert.equal(terrain.litFragmentSamplers, terrainLitFragmentSamplers(false, true));
+    const scene = new Scene(), sun = new DirectionalLight(), camera = new PerspectiveCamera(60, 1.5, 0.1, 1000);
+    sun.position.set(20, 50, 20); camera.position.set(0, 50, 60); camera.lookAt(0, 0, 0);
+    scene.add(sun, sun.target, terrain.mesh); scene.updateMatrixWorld(true);
+    const cascades = new SunCascadeShadow(scene);
+    cascades.update({ sun, camera, count: 3, stagger: false, mapSize: 512, distance: 100 });
+    const shader = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
+    materials.material.onBeforeCompile(shader, {} as WebGLRenderer);
+    assert.ok(shader.uniforms.forgeSunShadowFade, "the terrain callback must leave the cascade include available");
+    assert.ok(shader.uniforms.uLayerNormalArray);
+    assert.match(shader.fragmentShader, /forgeSunShadow = forgeAccum \+ forgeRemaining/);
+    assert.match(shader.fragmentShader, /#define getDirectionalLightInfo forgeCausticDirectionalLightInfo/);
+    let disposed = 0; materials.normalArray.addEventListener("dispose", () => disposed++);
+    terrain.dispose(); cascades.dispose(); texture.dispose(); assert.equal(disposed, 1);
   });
 
   check("landscape binding: cloud sculpt and tint cases retain the actor and dispose spline geometry", () => {

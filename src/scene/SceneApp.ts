@@ -2118,7 +2118,7 @@ export class SceneApp {
       this.landscapeRampPreview.material.dispose();
       this.landscapeRampPreview = null;
     }
-    for (const layer of this.landscapeLayerMaterialCache.values()) layer.texture?.dispose();
+    for (const layer of this.landscapeLayerMaterialCache.values()) { layer.texture?.dispose(); layer.normalTexture?.dispose(); }
     this.landscapeLayerMaterialCache.clear();
     for (const water of this.riverWaterObjects) {
       this.scene.remove(water);
@@ -7037,6 +7037,7 @@ export class SceneApp {
     return {
       ...resolveLandscape(actor),
       document,
+      terrainRef: actor.id,
       viewMode: this.landscapeSculptSettings.viewMode,
       activeLayerId: this.landscapeSculptSettings.activeLayerId,
       layerColors: this.resolveLandscapeLayerColors(layers),
@@ -7121,6 +7122,8 @@ export class SceneApp {
       return {
         id: layer.id,
         texture: cached?.texture ?? null,
+        normalTexture: cached?.normalTexture ?? null,
+        ...(cached?.textureScale ? { textureScale: cached.textureScale } : {}),
         color: cached?.baseColor ?? presetColor,
         roughness: cached?.roughness ?? 1,
         roughnessInAlpha: cached?.roughnessInAlpha ?? false,

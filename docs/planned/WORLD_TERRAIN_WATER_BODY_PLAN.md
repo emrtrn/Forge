@@ -1,5 +1,170 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel ek — Küçük taşlı kum ve caustics — 2026-10-27
+
+Kullanıcı araştırma önerisini onayladı ve dokümana eklenmesinin ardından
+uygulamanın başlamasını istedi. **İlk teslim:** boyanabilir ortak göl/nehir dip
+materyali, terrain katmanlarında normal map desteği ve Lake caustics. River
+caustics entegrasyonu sonraki dilimdir. Bu ek W2 göl yatağı oyma aracını geri
+getirmez. Mevcut authored terrain/sahne verisi bu teslimin kapsamı dışındadır.
+
+**Güncel durum:** C1/C2/C3/C5 ilk teslim işlevleri ve tarayıcı kabulü tamamlandı.
+C4 River caustics ve GPU performans bütçesi açık. Son donanım pilotunda ek GPU
+p95 yaklaşık 3,72 ms; 1 ms hedefi karşılanmadı. Ayrıntılar ve kullanım:
+[sığ su zemini / caustics raporu](../reports/SHALLOW_WATER_BED_CAUSTICS_2026-10-27.md).
+
+Caustics, hareketli su yüzeyinde kırılıp yoğunlaşan güneş ışığının dipte
+oluşturduğu ağ desenidir. Dip materyali ile su efektinin sorumlulukları ayrıdır:
+kum/taş katmanı kuru kıyıda da kullanılabilir, ışık deseni yalnız geçerli suyun
+altında ve güneş alan dipte görünür. Materyal boyamak su veya fizik oluşturmaz.
+
+### Görsel hedef ve kaynaklar
+
+- Açık bej/gri kum, seyrek yuvarlanmış küçük taşlar, hafif kum dalgaları.
+  Başlangıç taş ölçeği yaklaşık 0,5–3 cm; sahnede görsel olarak ayarlanır.
+- Renk + OpenGL normal + roughness haritaları; 1K–2K başlangıç çözünürlüğü.
+  Işık/desen renk dokusuna gömülmez. Ayrı taş mesh'leri ilk teslim dışındadır.
+- CC0 PBR adayları: [Gravelly Sand](https://polyhaven.com/a/gravelly_sand),
+  [Sandy Gravel](https://polyhaven.com/a/sandy_gravel),
+  [Ganges River Pebbles](https://polyhaven.com/a/ganges_river_pebbles).
+  [Poly Haven lisansı](https://polyhaven.com/license). İndirilen kaynak,
+  lisans ve materyal kimlikleri uygulama kaydında tutulur.
+- Projedeki `DevelopmentContent/Textures/LightMasks/*/water_caustics_*.png`
+  desenlerinin manifest lisansı Unknown olduğundan bunlar teslim varlığı olarak
+  kullanılmaz; özgün prosedürel desen veya kaynağı doğrulanmış doku kullanılır.
+- Araştırma: [Epic Light Functions](https://dev.epicgames.com/documentation/unreal-engine/using-light-functions-in-unreal-engine?lang=en-US),
+  [NVIDIA Rendering Water Caustics](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics).
+
+### Uygulama sırası
+
+- [x] **C1 — Dip materyali:** `M_Shallow_Water_Bed`; renk, normal ve roughness.
+  Landscape materyal seçicisinden kullanılabilir, var olan katmanlarla karışır;
+  aynı asset Lake/River için kullanılabilir. Kaynak sahneye otomatik boyama yok.
+- [x] **C2 — Terrain normal desteği:** loader, editor/runtime binding, lineer
+  normal doku dizisi, ağırlıklı yüzey-normal karışımı, kaynakların dispose'u.
+  Normal içermeyen materyallerin görünümü korunur. Doku birimi hesabı, CSM ve
+  mevcut deform/ıslak iz çizimi beraber doğrulanır; yeni normal array'in bellek
+  maliyeti ayrıca raporlanır.
+- [x] **C3 — Lake caustics:** dünya koordinatına bağlı, farklı ölçek/yönlerde
+  hareket eden ve bükülen ışık ağı. Geçerli bağlı göl geometrisinden maske;
+  bounds veya yalnız su kotu kullanılmaz. Ada, kuru kıyı ve bağlantısız çukur
+  ışıldamaz. Derinlikte sönme, güneş/gölge etkisi ve kıyıda yumuşak geçiş.
+  Terrain'in mevcut çiziminde uygulanır; her kare CPU geometri üretimi veya
+  ek sahne capture hedeflenmez. Maskeler bounded'dır ve yaşam döngüsünde silinir.
+- [ ] **C4 — River:** aynı çekirdek; yerel nehir yüzey yüksekliği ve akış yönü.
+  Eğimli nehirlerde tek dünya su kotu varsayılmaz. Lake teslimine dahil değildir.
+- [x] **C5 — Kontroller/kabul:** Lake Details'ta aç/kapat, şiddet, metre cinsinden
+  desen boyutu, hız ve derinlikte sönme. Eski kayıtlarda efekt kapalı; ortak
+  runtime/save allowlist, undo/redo, Save/Reload/Play ve editör/runtime eşleşmesi.
+- [ ] **GPU bütçesi / büyük dünya:** 1 ms ek GPU hedefi, tam ekran runtime ve
+  büyük dünya kabulü kapanmadı; ölçüm sınırı aşağıdaki son kabul kaydındadır.
+
+### Kabul ve QA envanteri
+
+İzole fixture: iki tile sınırı, ada, ayrı çukur, kuru kıyı, sığ/derin bölge;
+güneşli ve gölgeli dip. Normal haritası açık/kapalı ile taş kabartısı, farklı
+paint ağırlıkları, eksik normal asset ve normal içermeyen katman denenir.
+Caustics açık/kapalı ve iki sabit zaman örneğiyle animasyon, kamera hareketinde
+dünya sabitliği, seam sürekliliği, derinlik sönmesi, gece/gölge ve gizle/sil/rebuild
+sonrasında eski maskenin kalmaması kontrol edilir. Sculpt/undo yenilenmesi,
+başarısız tile okuması ve Save/Reload/Play ayrı kabul maddeleridir.
+
+`npx.cmd tsc --noEmit`, engine regresyonları ve `npm.cmd run build:verify`;
+repo Playwright testleriyle gerçek WebGL derlemesi ve görüntü incelemesi.
+Gerçek GPU'da aynı kamera/ışıkta açık/kapalı p95 maliyeti, draw/capture sayıları
+ve bellek kaydedilir; ölçülmeyen performans tamamlandı sayılmaz. Save/load alan
+değişiklikleri için Codex Security diff scan önerilir, ayrıca onay verilmeden
+çalıştırılmaz. Bu planın onayı scan onayı olarak yorumlanmaz.
+
+### Son uygulama ve kabul — 2026-10-27
+
+- `M_Shallow_Water_Bed`, 2,4 m sabit dünya ölçeği ve lineer terrain normal map
+  desteği teslim edildi. Kaynak haritaların MD5'leri orijinallerle eşleşiyor.
+- Son caustics sürümü, özgün periyodik ışık/warp verisini maske dokusunun B/A
+  kanallarında tutar; RG kaynak üçgen bayrakları level-0 `texelFetch` ile okunur.
+  Desen mipmap ile filtrelenir; ek sampler/capture/çizim geçişi eklenmez.
+  Yalnız etkin caustics gölü sayısına ait shader alanları derlenir.
+- Son `npm.cmd run build:verify` **çıkış 0**: TypeScript, 2.009 engine kontrolü,
+  smoke/content/UI tipleri, production build, strict dist ve world-data geçti.
+  Kanıt: `.dev-server/caustics-final-gate.log`. Ek engine/smoke tip kontrolü de
+  geçti: `caustics-final-qa-types.log`; önceki geçici test engeli artık yoktur.
+- Chrome/D3D11/RTX 3060: Lake caustics normal/animasyon/gece, kuru kıyı/ada/ayrı
+  çukur, dört CSM kademesi, UI/undo, gerçek Save/Reload ve runtime kabulü geçti.
+  Altı Lake sculpt/uzak tile Retry, River UI/Retry ve wet-mud regresyonu geçti.
+  Son sığ kıyı yakın planı dahil görsel tur da geçti; konsol/GL hatası yoktu.
+  Kanıtlar: `.dev-server/caustics-gpu-bounded-results/`,
+  `caustics-regression-results/`, `caustics-final-visual-results/` ve ilgili loglar.
+- **Performans açık:** beş warm-up + 300 çift örnek, 704×752 editor canvas,
+  doğrudan renderer pilotu. RTX 3060/D3D11 baseline p95 0,229 ms, caustics açık
+  p95 3,941 ms, çift farkının p95'i **3,719 ms**, ek draw **0**. 1 ms hedefi
+  sağlanmadı; tam ekran runtime/çok gövdeli büyük dünya/heap kabulü değildir.
+  `.dev-server/caustics-gpu-bounded-results/` altındaki `caustics.json` ölçüm
+  kaydıdır. Önceki SwiftShader/yarım/zaman aşımı koşuları bu kabul yerine sayılmaz.
+- Testler yalnız izole smoke projelerine yazdı. 69 authored dosyanın başlangıç
+  snapshot'ına göre çalışma sırasında beş dosya dışarıdan değişmiş görüldü;
+  temiz/hash-eşit authored sahne iddiası yoktur. Bu değişiklikler korunur ve
+  kaynak sahnelerin görsel kabulü olarak fixture sonuçları gösterilmez.
+- Kullanım, kalıcı yakın plan ve kaynak bütçesi
+  [teslim raporundadır](../reports/SHALLOW_WATER_BED_CAUSTICS_2026-10-27.md).
+  C4 sonraki iştir. Security scan yapılmadı.
+
+### Önceki uygulama/devir kaydı (tarihsel)
+
+**2026-10-27 — Kullanıcı isteğiyle ara verildi.** Diğer oturumlar bittikten sonra
+devam edilecek. İlk teslim kodu diskte; nihai kabul tamamlanmış sayılmaz.
+
+- C1: `M_Shallow_Water_Bed` ve üç Poly Haven CC0 haritası manifest'e eklendi.
+  Kaynak/lisans/MD5 kaydı `starter-content/Textures/SHALLOW_WATER_BED_SOURCE.md`.
+  `terrainMetersPerRepeat: 2.4` runtime normalizer ve save validator'da korunur.
+- C2: editor/runtime normal map yükleme, lineer normal array, ağırlıklı normal
+  karışımı ve dispose bağlantıları uygulandı. Eksik normalde renk katmanı kalır.
+- C3: `terrainCaustics.ts` gölün bağlı kaynak üçgenlerini RG8 doku dizisinde
+  tutar; ada/ayrı çukur, terrain referansı, gizleme ve silme ele alınır. Özgün
+  prosedürel desen, güneş doğrultusunda projeksiyon, kıyı/derinlik sönmesi vardır.
+  Kademeli güneş gölgesi include'u korunur; ışık hook'u onunla birlikte çalışır.
+- C5: Lake Details'a caustics aç/kapat, şiddet, metre ölçeği, hız, sönme ve
+  mevcut su görünümü için Absorption Distance alanı eklendi. Eski kayıtlarda
+  caustics kapalıdır. Genel Lake edit/undo/save yolu kullanılır.
+- Kullanıcı sahnesine katman ekleme/boyama yapılmadı. River caustics (C4)
+  uygulanmadı; yeni dip materyali iki su türünün altında da kullanılabilir.
+
+**Doğrulama sınırı:** İlk odaklı 25 engine kontrolü geçti. Ardından 2.007
+  kontrol içeren tam engine koşusu ve production build geçti; bunlar sonraki
+  güneş-gölgesi hook düzeltmesinin nihai gate'i değildir. Son hook ile dört
+  odaklı caustics kontrolü (gerçek terrain/CSM patch birleşimi dahil) geçti:
+  `.dev-server/caustics-shadow-regression.log`. Son yeni engine/smoke dosyaları,
+  `.dev-server/caustics-qa.tsconfig.json` ile tip denetiminden geçti. Bu özel
+  konfigürasyon yalnız diğer oturumun `tests/smoke/__perf-probe.spec.ts`
+  dosyasını dışarıda bırakır; tam gate yerine geçmez.
+
+Tam `build:verify`, diğer oturumun `__perf-probe.spec.ts:46` dosyasındaki dört
+TypeScript hatasında durdu (`.dev-server/caustics-build-verify.log`); dosyaya
+dokunulmadı. İlk browser koşularında efekt/animasyon/normal farkı ve gece
+sönmesi, UI toggle/undo ve gerçek kayıt alanları geçti. Runtime test yardımcısı
+canvas referansı düzeltildi. Sonraki reload, yerel HTTP isteklerinin sırayla
+13–16 saniye sürmesi nedeniyle 60 saniyelik hazır olma sınırına takıldı; kayıtlı
+JSON doğruydu. Bu koşular tam browser kabulü sayılmaz.
+
+Son koşu: `.dev-server/caustics-acceptance.log` ve
+`.dev-server/caustics-acceptance-results/`. Gölün gerçek hazırlanmasını daha
+uzun bekleyen, gölgeleri açık test kullanıcı ara isteğinde durduruldu; nihai
+başarı iddiası yoktur. Önceki görüntüler `caustics-browser-results/` ve
+`caustics-browser-final-results/` altındadır; caustics açık/kapalı/hareket ve
+yakın dip görüntüleri incelenmek üzere saklandı. SwiftShader GPU timer
+sunmadığından gerçek donanım GPU kabulü **açık**; CPU/IO yavaşlıkları GPU maliyeti
+olarak yorumlanmaz. İlgili loglar `.dev-server/caustics-*` altındadır.
+
+**Devam sırası:** Eşzamanlı Git farkını koruyarak yeniden incele → son kaynakla
+yeni Lake caustics Playwright senaryosunu tamamla, runtime ve gölge/ada/kuru kıyı
+görüntülerini incele → tam `tsc` / engine / `build:verify` → mevcut Lake sculpt,
+uzak tile Retry ve River/wet-mud regresyonları → mümkünse gerçek GPU A/B ölçümü.
+Kaynak henüz finalize edilmedi; commit/push ve Security scan yapılmadı.
+
+Uygulama başlangıcında önceden değişmiş
+`SceneApp.ts`, `collisionView.ts`, `terrainHeightfieldPhysics.test.ts`,
+`editorUi.css`, `debug.log` ve `output/` korundu. Çalışma sırasında diğer
+oturumlardan gelen LandscapeTest cell/tile ve test değişiklikleri de korunur.
+
 Tarih: 2026-10-25  
 Durum: 8A0–8A5 ve W1 Lake işlevleri tamamlandı. **2026-10-26 güncel kullanıcı kararı:** Göl yatağı çizme/oyma aracı editörden kaldırıldı; göl, Sculpt ile hazırlanmış çukura tıklanarak eklenir. §14 önceki W2 çalışmasının tarihsel kaydıdır; editör akışı için geçerli değildir. W1 kanıtları §13'te; donanım GPU, browser tepe bellek/ana thread ve büyük dünya performans kabulü açık. Puddle/Ocean uygulanmadı. Commit/push yok.
 Ana plan: [OPEN_WORLD_PLAN.md](OPEN_WORLD_PLAN.md)

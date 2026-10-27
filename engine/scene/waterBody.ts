@@ -50,7 +50,12 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
       }
     }
     const ranges = { opacity: [0, 1], bedVisibility: [0, 1], absorptionDistance: [0.01, 100],
-      normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1] } as const;
+      normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1],
+      causticsStrength: [0, 3], causticsScale: [0.1, 10], causticsSpeed: [0, 3], causticsDepthFade: [0.1, 30] } as const;
+    if (source.causticsEnabled !== undefined) {
+      if (typeof source.causticsEnabled !== "boolean") throw new Error("Invalid Lake causticsEnabled");
+      appearance.causticsEnabled = source.causticsEnabled;
+    }
     for (const key of Object.keys(ranges) as Array<keyof typeof ranges>) if (source[key] !== undefined) {
       const v = number(source[key]);
       if (v < ranges[key][0] || v > ranges[key][1]) throw new Error(`Invalid Lake ${key}`);
@@ -89,5 +94,6 @@ export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
     bedVisibility: 0.9, absorptionDistance: 4, normalTexture: d.normalTexture,
     normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
     reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high",
-    reflectionStrength: d.reflectionStrength, ...lake.appearance };
+    reflectionStrength: d.reflectionStrength, causticsEnabled: false, causticsStrength: 0.85,
+    causticsScale: 1.5, causticsSpeed: 0.25, causticsDepthFade: 4, ...lake.appearance };
 }

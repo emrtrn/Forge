@@ -30,6 +30,7 @@ import {
   type TerrainDeformationTexture,
 } from "./terrainDeformation";
 import { createTerrainLayerArray } from "./terrainLayerArray";
+import { createTerrainCausticsUniforms, TERRAIN_CAUSTICS_PARS, TERRAIN_CAUSTICS_VERTEX_PARS, TERRAIN_CAUSTICS_VERTEX } from "./terrainCaustics";
 
 /**
  * CDLOD terrain materials (OPEN_WORLD_PLAN Faz 2, from the Faz 0 S2 spike). The
@@ -103,6 +104,7 @@ export function terrainSlotHeight(
 }
 
 export interface TerrainLayerInput {
+  normalTexture?: Texture | null;
   texture: Texture | null;
   color: string;
   /** Texture repeats per metre. */
@@ -157,6 +159,7 @@ export interface TerrainMaterials {
   litFragmentSamplers: number;
   /** The paint layers' albedos packed for the lit material; owned (disposed) with the materials. */
   layerArray: DataArrayTexture | null;
+  normalArray: DataArrayTexture | null;
 }
 
 const VERTEX_PARS = /* glsl */ `
@@ -247,7 +250,7 @@ vTerrainAxisZ = normalMatrix * vec3(0.0, 0.0, 1.0);
 `;
 
 /** The lit material's vertex additions: world X/Z for the track lookup. */
-const LIT_VERTEX_BEGIN = `${VERTEX_BEGIN}${TERRAIN_DEFORMATION_VERTEX}`;
+const LIT_VERTEX_BEGIN = `${VERTEX_BEGIN}${TERRAIN_DEFORMATION_VERTEX}${TERRAIN_CAUSTICS_VERTEX}`;
 
 const FRAGMENT_TERRAIN_PARS = /* glsl */ `
 uniform highp sampler2DArray uTerrainNormals;
@@ -301,7 +304,7 @@ const FRAGMENT_NORMAL = /* glsl */ `
  * texture unit: units are what the sun's shadow cascades compete for. A
  * terrain with no layer texture declares no sampler at all.
  */
-const fragmentColorPars = (textured: boolean): string => /* glsl */ `
+const fragmentColorPars = (textured: boolean, normalMapped = false): string => /* glsl */ `
 uniform highp sampler2DArray uTerrainWeights;
 uniform highp sampler2DArray uTerrainGlobalWeights;
 uniform float uTerrainView;
@@ -309,6 +312,7 @@ uniform vec2 uTerrainHeightRange;
 uniform float uTerrainActiveLayer;
 uniform vec3 uLayerColors[${TERRAIN_RENDER_LAYERS}];
 ${textured ? "uniform mediump sampler2DArray uLayerTexArray;" : ""}
+${normalMapped ? "uniform mediump sampler2DArray uLayerNormalArray;\nuniform float uLayerNormalIndex[8];\nvec3 forgeLayerNormal = vec3(0.0, 0.0, 1.0);" : ""}
 uniform float uLayerTexIndex[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerScale[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerRoughness[${TERRAIN_RENDER_LAYERS}];
@@ -317,7 +321,7 @@ float forgeLayerRoughness = 1.0;
 `;
 
 // The Landscape look: weighted layer colours/textures, or a debug view.
-const fragmentColor = (textured: boolean): string => /* glsl */ `
+const fragmentColor = (textured: boolean, normalMapped = false): string => /* glsl */ `
 #include <color_fragment>
 {
   vec2 forgeUv = forgeTerrainUv();
@@ -346,6 +350,9 @@ const fragmentColor = (textured: boolean): string => /* glsl */ `
       + forgeC4 * forgeW1.x + forgeC5 * forgeW1.y + forgeC6 * forgeW1.z + forgeC7 * forgeW1.w;
     float forgeTotal = dot(forgeW0, vec4(1.0)) + dot(forgeW1, vec4(1.0));
     forgeColor = forgeTotal > 0.0001 ? forgeSum / forgeTotal : uLayerColors[0];
+    ${normalMapped ? `vec3 forgeNormalSum = vec3(0.0);
+    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `forgeNormalSum += (uLayerNormalIndex[${i}] >= 0.0 ? texture(uLayerNormalArray, vec3(forgeP * uLayerScale[${i}], uLayerNormalIndex[${i}])).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0)) * ${i < 4 ? `forgeW0[${i}]` : `forgeW1[${i - 4}]`};`).join("\n    ")}
+    forgeLayerNormal = forgeTotal > 0.0001 ? normalize(forgeNormalSum + vec3(0.0, 0.0, 0.00001)) : vec3(0.0, 0.0, 1.0);` : ""}
     forgeLayerRoughness = forgeTotal > 0.0001 ? (
       dot(vec4(forgeR0, forgeR1, forgeR2, forgeR3), forgeW0)
       + dot(vec4(forgeR4, forgeR5, forgeR6, forgeR7), forgeW1)) / forgeTotal : 1.0;
@@ -373,7 +380,7 @@ const SAMPLER_DECLARATION = /^uniform\s+(?:\w+\s+)?sampler\w*\s/gm;
  * Texture units the lit terrain's fragment shader takes for itself regardless
  * of its layers: normals, weights (tile + global each) and the track field.
  */
-export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(false), TERRAIN_DEFORMATION_FRAGMENT_PARS]
+export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(false), TERRAIN_DEFORMATION_FRAGMENT_PARS, TERRAIN_CAUSTICS_PARS]
   .join("\n")
   .match(SAMPLER_DECLARATION)!.length;
 
@@ -385,13 +392,13 @@ export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorP
  * and the terrain is not drawn at all, so the sun's cascade count is budgeted
  * against it.
  */
-export function terrainLitFragmentSamplers(textured: boolean): number {
-  return TERRAIN_LIT_FIXED_SAMPLERS + (textured ? 1 : 0);
+export function terrainLitFragmentSamplers(textured: boolean, normalMapped = false): number {
+  return TERRAIN_LIT_FIXED_SAMPLERS + (textured ? 1 : 0) + (normalMapped ? 1 : 0);
 }
 
 function injectVertex(shader: WebGLProgramParametersWithUniforms, lit = false): void {
   shader.vertexShader = shader.vertexShader
-    .replace("#include <common>", `#include <common>\n${VERTEX_PARS}${lit ? TERRAIN_DEFORMATION_VERTEX_PARS : ""}`)
+    .replace("#include <common>", `#include <common>\n${VERTEX_PARS}${lit ? TERRAIN_DEFORMATION_VERTEX_PARS + TERRAIN_CAUSTICS_VERTEX_PARS : ""}`)
     .replace("#include <beginnormal_vertex>", "vec3 objectNormal = vec3(0.0, 1.0, 0.0);")
     .replace("#include <begin_vertex>", lit ? LIT_VERTEX_BEGIN : VERTEX_BEGIN);
 }
@@ -462,8 +469,15 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainHeightRange: { value: inputs.heightRange },
   };
   const layerArray = layerUniforms(uniforms, inputs.layers);
+  const normals = createTerrainLayerArray(inputs.layers.slice(0, TERRAIN_RENDER_LAYERS).map((layer) => layer.normalTexture), true);
+  const normalMapped = normals.texture !== null;
+  if (normals.texture) {
+    uniforms.uLayerNormalArray = { value: normals.texture };
+    uniforms.uLayerNormalIndex = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => normals.index[i] ?? -1) };
+  }
+  Object.assign(uniforms, createTerrainCausticsUniforms());
   const textured = layerArray !== null;
-  const litFragmentSamplers = terrainLitFragmentSamplers(textured);
+  const litFragmentSamplers = terrainLitFragmentSamplers(textured, normalMapped);
   // Runtime tracks (TERRAIN_DEFORMATION Faz 2/3): always compiled in; the
   // shared texture's `uDeformActive` skips the block until a runtime module
   // attaches a field, so the editor and track-free levels pay a uniform branch
@@ -477,15 +491,25 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   };
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
-  patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}`, (shader) => {
+  (material.defines ??= {}).FORGE_TERRAIN_CAUSTIC_BODIES = 0;
+  patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}${normalMapped ? "-n1" : ""}`, (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
-      FRAGMENT_MAIN, `${fragmentColorPars(textured)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${FRAGMENT_MAIN}`);
+      FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(textured)}`)
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(textured, normalMapped)}`)
       .replace("#include <roughnessmap_fragment>", TERRAIN_DEFORMATION_ROUGHNESS)
+      .replace("#include <lights_fragment_begin>", "forgePrepareCaustics();\n#include <lights_fragment_begin>")
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)
-      .replace("  nonPerturbedNormal = normal;\n}", `  nonPerturbedNormal = normal;\n${TERRAIN_DEFORMATION_NORMAL}}`);
+      .replace("  nonPerturbedNormal = normal;\n}", `${normalMapped ? `
+  if (uTerrainView < 0.5) {
+    vec3 base = forgeTerrainLocalNormal();
+    vec3 tangent = normalize(vec3(1.0, 0.0, 0.0) - base * base.x + vec3(0.0, 0.0, 0.000001));
+    vec3 bitangent = normalize(cross(tangent, base));
+    vec3 detail = normalize(tangent * forgeLayerNormal.x + bitangent * forgeLayerNormal.y + base * max(forgeLayerNormal.z, 0.05));
+    normal = normalize(vTerrainAxisX * detail.x + vTerrainAxisY * detail.y + vTerrainAxisZ * detail.z);
+  }` : ""}
+  nonPerturbedNormal = normal;\n${TERRAIN_DEFORMATION_NORMAL}}`);
   }, true);
   // The water array, environment and BRDF lookup must fit beside the terrain's
   // own units (the same check gates the water render in `TerrainRenderer`); on
@@ -506,5 +530,5 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   depthMaterial.blending = NoBlending;
   patch(depthMaterial, uniforms, "forge-terrain-cdlod-depth", injectFragmentBase);
 
-  return { material, normalMaterial, depthMaterial, uniforms, litFragmentSamplers, layerArray };
+  return { material, normalMaterial, depthMaterial, uniforms, litFragmentSamplers, layerArray, normalArray: normals.texture };
 }

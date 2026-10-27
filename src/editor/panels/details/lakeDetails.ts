@@ -47,8 +47,16 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${(["deepColor", "shallowColor"] as const).map((key) => `<label class="detail-row"><span>${key === "deepColor" ? "Deep Color" : "Shallow Color"}</span><input type="color" aria-label="${key === "deepColor" ? "Deep Color" : "Shallow Color"}" data-lake-color="${key}" value="${a[key]}" ${disabled}></label>`).join("")}
       ${field("Opacity", "opacity", a.opacity, "0.05", 'min="0" max="1"')}
       ${field("Bed Visibility", "bedVisibility", a.bedVisibility, "0.05", 'min="0" max="1"')}
+      ${field("Absorption Distance (m)", "absorptionDistance", a.absorptionDistance, "0.25", 'min="0.01" max="100"')}
       ${field("Normal Scale", "normalScale", a.normalScale)}
       ${field("Ripple Speed", "rippleSpeed", a.rippleSpeed)}
+    `, true));
+    section.insertAdjacentHTML("beforeend", group("caustics", "Caustics", `
+      <label class="detail-toggle"><input type="checkbox" data-lake-caustics aria-label="Caustics Enabled" ${a.causticsEnabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${field("Caustics Strength", "causticsStrength", a.causticsStrength, "0.05", 'min="0" max="3"')}
+      ${field("Pattern Size (m)", "causticsScale", a.causticsScale, "0.1", 'min="0.1" max="10"')}
+      ${field("Caustics Speed", "causticsSpeed", a.causticsSpeed, "0.05", 'min="0" max="3"')}
+      ${field("Depth Fade (m)", "causticsDepthFade", a.causticsDepthFade, "0.1", 'min="0.1" max="30"')}
     `, true));
     section.insertAdjacentHTML("beforeend", group("advanced", "Advanced", `
       <div class="detail-subhead" title="Mavi çerçeve suyun hesaplanacağı alanı sınırlar; gölün kıyısı değildir. Mavi tutamaçları sürükleyerek alanı değiştirebilirsiniz.">Calculation Bounds</div>
@@ -93,6 +101,7 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   });
   for (const input of section.querySelectorAll<HTMLInputElement>("[data-lake-color]")) input.addEventListener("change", () => app.editLake({ appearance: { ...lake.appearance, [input.dataset.lakeColor!]: input.value } }));
   for (const key of ["hidden", "locked"] as const) section.querySelector<HTMLInputElement>(`[data-lake-${key}]`)?.addEventListener("change", (e) => app.editLake({ [key]: (e.target as HTMLInputElement).checked }));
+  section.querySelector<HTMLInputElement>("[data-lake-caustics]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, causticsEnabled: (e.target as HTMLInputElement).checked } }));
   const reflection = section.querySelector<HTMLSelectElement>("[data-lake-reflection]")!;
   reflection.value = resolveLakeAppearance(lake).reflectionMode;
   reflection.addEventListener("change", () => app.editLake({ appearance: { ...lake.appearance, reflectionMode: reflection.value as "off" | "sharedPlanar" } }));

@@ -82,6 +82,8 @@ export type LandscapeLayerColors = Record<string, string>;
  * "lit" view; `color` is the fallback tint (and the debug-view look).
  */
 export interface LandscapeLayerTexture {
+  textureScale?: number;
+  normalTexture?: Texture | null;
   roughness?: number;
   roughnessInAlpha?: boolean;
   id: string;
@@ -107,6 +109,7 @@ export interface LandscapeRenderItem extends ResolvedLandscape {
 
 /** A World Terrain actor's render inputs: the tiles are drawn as they are, with no editing adapter. */
 export interface WorldTerrainRenderItem extends ResolvedLandscape {
+  terrainRef?: string;
   document: WorldTerrainDocument;
   viewMode?: LandscapeViewMode;
   activeLayerId?: string;
@@ -140,7 +143,8 @@ function terrainLayerInputs(
     const texture = layerTextures?.[index];
     // `tiling` repeats across the grid's X width, from its min corner.
     return {
-      texture: texture?.texture ?? null, color, scale: (texture?.tiling ?? 1) / worldSize,
+      texture: texture?.texture ?? null, color, scale: texture?.textureScale ?? (texture?.tiling ?? 1) / worldSize,
+      normalTexture: texture?.normalTexture ?? null,
       physicalMaterial: layers[index]?.physicalMaterial ?? null,
       roughness: texture?.roughness ?? 1,
       roughnessInAlpha: texture?.roughnessInAlpha ?? false,
@@ -188,6 +192,7 @@ export function createWorldTerrainObject(item: WorldTerrainRenderItem): Landscap
   group.name = item.name;
   const [width, depth] = worldTerrainExtent(def);
   const terrain = new TerrainRenderer(worldTerrainRenderSource(def, tiles, item.document.globalAttributes), {
+    ...(item.terrainRef ? { terrainRef: item.terrainRef } : {}),
     viewMode: item.viewMode ?? "lit",
     activeLayer: terrainActiveLayer(def.layers, item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id),
     layers: terrainLayerInputs(def.layers, width, item.layerColors, item.layerTextures),

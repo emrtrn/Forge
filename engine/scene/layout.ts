@@ -1024,6 +1024,8 @@ export interface LayoutLakeWaterBody {
   appearance?: {
     deepColor?: string; shallowColor?: string; opacity?: number; bedVisibility?: number;
     absorptionDistance?: number; normalTexture?: string; normalScale?: number; rippleSpeed?: number;
+    causticsEnabled?: boolean; causticsStrength?: number; causticsScale?: number;
+    causticsSpeed?: number; causticsDepthFade?: number;
     reflectionMode?: "off" | "sharedPlanar"; reflectionGroup?: string;
     reflectionQuality?: "low" | "medium" | "high"; reflectionStrength?: number;
   };

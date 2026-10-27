@@ -7,6 +7,7 @@ import type { TerrainTileData } from "@engine/terrain/terrainTypes";
 import { LakeWaterObject } from "@engine/render-three/lakeWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import type { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
+import { registerLakeCaustics } from "@engine/render-three/terrain/terrainCaustics";
 
 export interface LakeWaterContext {
   scene: Scene;
@@ -73,6 +74,7 @@ export class LakeWaterController {
           object.visible = !lake.hidden;
           if (!this.context.editor) object.raycast = () => {};
           this.objects.set(lake.id, object); this.context.scene.add(object);
+          object.addEventListener("removed", registerLakeCaustics(this.context.scene, lake, result, object));
         }
         if (this.context.editor) this.addHelper(lake, result);
         this.context.changed?.();

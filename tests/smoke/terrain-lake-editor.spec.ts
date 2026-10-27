@@ -29,8 +29,12 @@ async function number(page: Page, key: string, value: number) {
   if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
   const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
 }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false) {
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false) {
   const doc = createLakeFixture();
+  if (caustics) {
+    doc.def.layers[0]!.material = "m-shallow-water-bed";
+    doc.lake.appearance = { causticsEnabled: true, causticsStrength: 1.5, causticsScale: 1.5, causticsDepthFade: 6 };
+  }
   if (waterSystem) doc.def.splines = [{ id: "water-path", coordinateSpace: "world", points: [
     { id: "a", position: [-20, 12, -12], width: 4, falloff: 2 },
     { id: "b", position: [20, 12, -12], width: 4, falloff: 2 },
@@ -53,7 +57,8 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
   level.instances = level.instances.filter((g: { assetId: string }) => g.assetId === "marker:playerStart");
   level.instances[0].placements[0].position = [-20, 15, -12];
-  if (foreground) level.instances.push({ assetId: "shape:cube", placements: [{ name: "Lake foreground cube", position: [-12, 17, -12], scale: [4, 4, 4] }] });
+  if (foreground || caustics) level.instances.push({ assetId: "shape:cube", placements: [{ name: "Lake foreground cube", position: [-12, 17, -12], scale: [4, 4, 4] }] });
+  if (caustics) { level.lights[0].castShadow = true; level.lights[0].cascadedShadows = true; }
   level.landscapes = [{ id: "terrain", name: "Lake QA Terrain", position: worldTerrainActorPosition(doc.def), dataRef: TERRAIN }];
   level.riverWaters = []; level.waterBodies = seeded ? [doc.lake] : [];
   level.actors = []; level.characters = [];
@@ -66,7 +71,7 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await page.route("**/__project-dir/assets", (route) => route.fulfill({ json: { root: "assets", children: [] } }));
-  await page.goto("/tests/smoke/pages/terrain-lake-editor.html?editor", { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await page.goto("/tests/smoke/pages/terrain-lake-editor.html?editor", { waitUntil: "domcontentloaded", timeout: caustics ? 180_000 : 90_000 });
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Lake QA Terrain" }).first().click();
   await page.locator("[data-landscape-mode]").selectOption("water");
@@ -77,12 +82,58 @@ async function terrainHash() {
   for (const key of ["0_0", "1_0", "0_1", "1_1"]) hash.update(await readFile(smokePublicPath(terrainTilePath(TERRAIN, key))));
   return hash.digest("hex");
 }
-async function ready(page: Page) { await expect.poll(async () => (await snapshot(page)).results[0]?.status, { timeout: 60_000 }).toBe("ready"); }
+async function ready(page: Page, timeout = 60_000) { await expect.poll(async () => (await snapshot(page)).results[0]?.status, { timeout }).toBe("ready"); }
 async function save(page: Page) {
   const button = page.getByTestId("editor-save"); await expect(button).toBeEnabled({ timeout: 120_000 });
   const response = page.waitForResponse((r) => r.url().endsWith("/__save-layout") && r.request().method() === "POST", { timeout: 120_000 });
   await button.click(); expect((await response).ok()).toBeTruthy(); await expect(button).toBeEnabled({ timeout: 120_000 });
 }
+
+test("Lake caustics and sandy pebble normals animate, persist through UI Save/Reload and render in runtime", async ({ page, request }, info) => {
+  test.setTimeout(600_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true);
+  await ready(page, 180_000);
+  const capture = (enabled = true, time = 0, detail = true, night = false, close = false, wide = false) => page.evaluate(
+    args => (window as any).__lakeQA.causticsFrame(...args), [enabled, time, detail, night, close, wide]);
+  await expect.poll(async () => (await capture()).normalLayers, { timeout: 90_000 }).toBe(1);
+  const off = await capture(false), on = await capture(true), moved = await capture(true, 6), flat = await capture(true, 0, false);
+  const differences = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]!) > 3).length;
+  const changes = { caustics: differences(off.samples, on.samples), animation: differences(on.samples, moved.samples), normals: differences(on.samples, flat.samples) };
+  expect(changes.caustics).toBeGreaterThan(30); expect(changes.animation).toBeGreaterThan(30); expect(changes.normals).toBeGreaterThan(30);
+  const nightOff = await capture(false, 0, true, true), nightOn = await capture(true, 0, true, true);
+  expect(differences(nightOff.samples, nightOn.samples)).toBe(0);
+  expect(on.calls).toBe(off.calls); expect(on.glError).toBe(0);
+  expect(on.shadows.enabled).toBe(true); expect(on.shadows.cascades).toBeGreaterThan(0);
+  await capture(false); await page.screenshot({ path: info.outputPath("lake-caustics-off.png") });
+  await capture(true); await page.screenshot({ path: info.outputPath("lake-caustics-on.png") });
+  await capture(true, 6); await page.screenshot({ path: info.outputPath("lake-caustics-moving.png") });
+  await capture(true, 0, true, false, true); await page.screenshot({ path: info.outputPath("lake-bed-close.png") });
+  const wideOff = await capture(false, 0, true, false, false, true), wideOn = await capture(true, 0, true, false, false, true);
+  for (const key of ["dry", "island", "separate"]) {
+    expect(wideOn.probes[key], `${key} must be in the wide camera`).not.toBeNull(); expect(wideOn.probes[key], key).toEqual(wideOff.probes[key]);
+  }
+  await page.screenshot({ path: info.outputPath("lake-caustics-island-dry-shore.png") });
+  await capture();
+  const gpu = await page.evaluate(() => (window as any).__lakeQA.causticsGpuPilot());
+  await writeFile(info.outputPath("caustics-render.json"), JSON.stringify({ changes, gpu, calls: { off: off.calls, on: on.calls }, textures: on.textures, shadows: on.shadows, dryProbes: wideOn.probes, errors }, null, 2));
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "caustics");
+  const toggle = page.locator("[data-lake-caustics]"); await expect(toggle).toBeChecked();
+  await toggle.uncheck(); await expect.poll(async () => (await capture()).count).toBe(0);
+  await page.getByTestId("editor-undo").click(); await expect.poll(async () => (await capture()).count).toBe(1);
+  const size = page.locator('[data-lake-number="causticsScale"]'); await size.fill("1.8"); await size.press("Tab");
+  await ready(page); await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance.causticsEnabled).toBe(true); expect(saved.waterBodies[0].appearance.causticsScale).toBe(1.8);
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 }); await ready(page, 180_000);
+  await expect.poll(async () => (await capture()).count).toBe(1);
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA), null, { timeout: 180_000 }); await ready(page, 180_000);
+  await expect.poll(async () => (await capture()).normalLayers, { timeout: 90_000 }).toBe(1);
+  const runtime = await capture(); expect(runtime.count).toBe(1); expect(runtime.glError).toBe(0);
+  await page.screenshot({ path: info.outputPath("lake-caustics-runtime.png") });
+  await writeFile(info.outputPath("caustics.json"), JSON.stringify({ changes, calls: { off: off.calls, on: on.calls }, textures: on.textures, gpu, runtime: { count: runtime.count, normalLayers: runtime.normalLayers }, errors }, null, 2));
+  expect(errors).toEqual([]);
+});
 
 // QA inventory: click/create/cancel; world level, four bounds and drag handles;
 // island/isolated basin + escape rejection; selection/flags/delete/undo;

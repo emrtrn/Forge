@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_Shallow_Water_Bed",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "t-shallow-water-bed-bc",
+  "normalTexture": "t-shallow-water-bed-n",
+  "roughnessTexture": "t-shallow-water-bed-r",
+  "terrainMetersPerRepeat": 2.4,
+  "uvTiling": { "x": 1, "y": 1 },
+  "roughness": 0.9,
+  "metalness": 0,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "side": "front"
+}

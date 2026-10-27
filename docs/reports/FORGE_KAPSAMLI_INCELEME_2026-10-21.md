@@ -74,7 +74,7 @@ flowchart TD
 | Editör/runtime ayrımı | `?editor` ve DEV arkasında dinamik import; editör UI kodunun üretimden çıkarılması | [main.ts](../../src/main.ts), [verify-dist](../../builder/web/verify-dist.mjs) |
 | Tek sahne hattı | Ortam, ışık, geometri ve içerik kurulumu için LevelRuntime; parity kontrolleri | [LevelRuntime](../../src/scene/LevelRuntime.ts), [parity testleri](../../tests/engine/buildManifestParity.test.ts) |
 | Oyun bağımsızlığı | Oyun modülleri ve servis enjeksiyonu; capability'leri çıkararak farklı oyun türü oluşturma | [ForgeGameModule](../../src/scene/ForgeGameModule.ts), [defaultRuntimeModules](../../src/scene/capabilities/defaultRuntimeModules.ts) |
-| Fizik/araç | Sabit fizik adımı, araç verisi, drivetrain, bin/in, kayıt ve spline AI için uygulanmış dilimler | [araç planı](../planned/VEHICLE_PHYSICS_PLAN.md), [araç testleri](../../tests/engine/vehicleRuntime.test.ts) |
+| Fizik/araç | Sabit fizik adımı, araç verisi, drivetrain, bin/in, kayıt ve spline AI için uygulanmış dilimler | araç planı (`VEHICLE_PHYSICS_PLAN.md`, arşivlendi), [araç testleri](../../tests/engine/vehicleRuntime.test.ts) |
 | Kayıt verisi ayrımı | Layout ile save-game ayrımı; slot namespace, storage hatası toleransı ve opt-in persistent state | [saveGameStore](../../engine/persistence/saveGameStore.ts), [saveGameState](../../engine/persistence/saveGameState.ts) |
 | Veri kaybı uyarısı | Save validator'ın düşürdüğü alanları bildirme ve bazı normalizer/save round-trip kontrolleri | [droppedFields](../../tools/droppedFields.ts), [serializationDrift](../../tests/engine/serializationDrift.test.ts) |
 | Ölçüm altyapısı | Asset perf, frame bölgeleri, GPU sweep, kalite matrisi ve tarayıcı perf araçları mevcut | [engine/perf](../../engine/perf), [quality-matrix](../../tools/quality-matrix-report.mjs) |
@@ -274,7 +274,7 @@ Fiziksel satır sayımı; boş satırlar dahil. `engine`, `editor`, `src`, `tool
 | [tools/saveValidator.ts](../../tools/saveValidator.ts) | **4.552** |
 | [src/editor/SkeletalMeshEditor.ts](../../src/editor/SkeletalMeshEditor.ts) | 3.502 |
 
-Satır sayısı tek başına hata değildir. Ancak `SceneApp` içinde landscape paint/sculpt/spline, sidecar kayıtları, seçim/render ve editör lifecycle sorumluluklarının bir arada bulunması, dar bir değişiklikte inceleme ve regresyon alanını büyütüyor. Engine suite'in 1,3 saniyede çalışması nedeniyle test bölmenin ana gerekçesi hız değil bakım ve fixture izolasyonudur; mevcut [bölme planı](../planned/ENGINE_TESTS_SPLIT_PLAN.md) da bunu söylüyor.
+Satır sayısı tek başına hata değildir. Ancak `SceneApp` içinde landscape paint/sculpt/spline, sidecar kayıtları, seçim/render ve editör lifecycle sorumluluklarının bir arada bulunması, dar bir değişiklikte inceleme ve regresyon alanını büyütüyor. Engine suite'in 1,3 saniyede çalışması nedeniyle test bölmenin ana gerekçesi hız değil bakım ve fixture izolasyonudur; mevcut bölme planı (`ENGINE_TESTS_SPLIT_PLAN.md`, arşivlendi) da bunu söylüyor.
 
 Ek kapsam boşluğu: [tsconfig.json](../../tsconfig.json) `tools` ve `tests` köklerini doğrudan include etmiyor. Test çalıştırıcısının esbuild ile bundle etmesi, bu dosyaların tamamında TypeScript tip kontrolü yapıldığı anlamına gelmez. Uygulama üzerinden import edilen araç dosyaları kapsama girebilir; “tools'ın hiçbiri type-check edilmez” iddiası kurulamaz.
 
@@ -332,7 +332,7 @@ Somut örnekler:
 
 - [SAVE_GAME_CONTRACT](../architecture/SAVE_GAME_CONTRACT.md) payload sahibini `src/game/saveGame.ts` olarak gösteriyor. Güncel kod [engine/persistence/saveGameState.ts](../../engine/persistence/saveGameState.ts) altında. Belgedeki “yalnız transform/flags, araç hızı yok” anlatımı güncel araç position/rotation/linearVelocity/angularVelocity/drivetrain ve drivingVehicleId alanlarını kapsamıyor.
 - [Katmanlı runtime planı](../architecture/FORGE_LAYERED_RUNTIME_PLAN.md) başta Faz A–D tamam / uygulanıyor diyor; ileride E–I tamam kayıtları ve yalnız kalan kabul maddesi var. “İlk oturumda Faz A'yı uygula” bölümü hâlâ duruyor.
-- [Eski yeterlilik analizi](../planned/FORGE_YETERLILIK_ANALIZI.md) 5–17. alanları “incelenmedi” şablonunda bırakmış. İlk dört alandaki eski sayılar ve kararlar güncel tüm sistem değerlendirmesi olarak okunmamalı.
+- Eski yeterlilik analizi (`FORGE_YETERLILIK_ANALIZI.md`, arşivlendi) 5–17. alanları “incelenmedi” şablonunda bırakmış. İlk dört alandaki eski sayılar ve kararlar güncel tüm sistem değerlendirmesi olarak okunmamalı.
 - [Skeletal facing backlog](../backlog/SKELETAL_FACING_OVERRIDE_BACKLOG.md) eski `src/game/playerMovement.ts` yoluna işaret ediyor. Kapsamı/aktivasyon kuralı ise hâlâ değerli; yalnız dosya yolları güncellenmeli.
 - Araç planında kod tamam ve 60/144 Hz kullanıcı kabulü açık durumu doğru ayrılıyor. Bu ayrım korunmalı; otomatik test başarısı manuel kabul yerine işaretlenmemeli.
 
@@ -342,7 +342,7 @@ Somut örnekler:
 
 ### 5.14 F14 — Onboarding ve gerçek donanım kabulü tekrarlanabilir hale gelebilir
 
-[Fork rehberi](../planned/GAME_FORK_WORKFLOW.md), starter README'leri ve [sync aracı](../../tools/sync-forge-to-games.ps1) var. “Fork iş akışı yok” demek doğru olmaz. Manuel adımlar ve makineye özgü varsayılan yollar, yeni ekip/cihaz kurulumu için ek emek yaratıyor. package sürümü `0.1.0`; bu tek başına API kararlılığı veya release politikası beyanı değil.
+[Fork rehberi](../planned/FORGE_GAME_PROJECT_WORKFLOW.md), starter README'leri ve [sync aracı](../../tools/sync-forge-to-games.ps1) var. “Fork iş akışı yok” demek doğru olmaz. Manuel adımlar ve makineye özgü varsayılan yollar, yeni ekip/cihaz kurulumu için ek emek yaratıyor. package sürümü `0.1.0`; bu tek başına API kararlılığı veya release politikası beyanı değil.
 
 **Öneri:** İhtiyaç varsa mevcut fork modelini koruyan küçük bir yerel başlangıç kontrolü/kurulum yardımcısı ekleyin: proje adı ve save namespace, başlangıç level'ı, asset kökleri, modül listesi, doğrulama komutları. Scaffold aracı yeni bir launcher veya monorepo gerekçesi olmamalı. Değişen veri/API sözleşmeleri için kısa migration notları hazırlayın.
 
@@ -386,7 +386,7 @@ Somut örnekler:
 
 Bu maddeler platformun bugünkü kapsamındaki bilinen sınırlamalardır; her biri hemen uygulanması gereken hata değildir:
 
-- **Araç AI:** Spline takibi var; trafik/engel kaçınma, sollama ve sıkışınca geri manevra ile kurtulma yok. Gerçek yarış/trafik oyunu seçilirse ayrı kabul dilimleri gerekir. [Araç planının 4e sınırları](../planned/VEHICLE_PHYSICS_PLAN.md)
+- **Araç AI:** Spline takibi var; trafik/engel kaçınma, sollama ve sıkışınca geri manevra ile kurtulma yok. Gerçek yarış/trafik oyunu seçilirse ayrı kabul dilimleri gerekir. Araç planının 4e sınırları (`VEHICLE_PHYSICS_PLAN.md`, arşivlendi)
 - **Arazi authoring:** `SceneApp.addLandscape` bir seviyede yalnız bir Landscape'e izin veriyor. Çoklu arazi/çok büyük dünya ihtiyacı gelirse veri, picking, sidecar ve render bütçesi birlikte tasarlanmalı. Bugünkü küçük oyun hedefi için doğrudan yetersizlik sayılmamalı. [SceneApp](../../src/scene/SceneApp.ts)
 - **Skeletal facing:** `+z` local-forward sözleşmesi var; ters-forward asset için authored override bilinçli backlog. İlk gerçek ters-forward asset ihtiyacı tetikleyici olmalı. [Facing backlog](../backlog/SKELETAL_FACING_OVERRIDE_BACKLOG.md)
 - **Material authoring:** Material Editor normal alanındaki Constant3Vector yazımı desteklenmeyen durumda açıkça belirtiliyor. İlgili malzeme ihtiyacı doğarsa dar bir form/normalizer/validator dilimi olarak ele alınabilir; tam shader graph zorunlu değil. [MaterialEditor.ts](../../src/editor/MaterialEditor.ts), satır 446 civarı.

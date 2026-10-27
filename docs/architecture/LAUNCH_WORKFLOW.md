@@ -52,7 +52,7 @@ the automated mirror of the local pre-`[x]` gate:
 Runs on the same ref cancel in-flight predecessors (`concurrency`). A deliberate
 type error or a leaked editor string turns CI red; fixing it turns it green.
 Deploy is intentionally **not** part of CI — each game fork picks its own deploy
-target (see `docs/planned/GAME_FORK_WORKFLOW.md`).
+target (see `docs/planned/FORGE_GAME_PROJECT_WORKFLOW.md`).
 
 Locally you can run the identical gate any time with `npm run build:verify`
 (add `npm run check:assets` for the asset check).

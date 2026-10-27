@@ -52,7 +52,7 @@ tanım yeniden yazılır, eklenen tile dosyaları `.tiles/` altında sahipsiz ka
 > [WORLD_TERRAIN_WATER_BODY_PLAN.md](WORLD_TERRAIN_WATER_BODY_PLAN.md)
 > (yol/nehir aktarımı, eski arazi emekliliği ve göl/birikinti/deniz araçları;
 > sohbet kaydı ve önerilen geliştirme sırası),
-> [VEHICLE_PHYSICS_PLAN.md](VEHICLE_PHYSICS_PLAN.md),
+> `VEHICLE_PHYSICS_PLAN.md` (arşivlendi),
 > [SAVE_GAME_CONTRACT.md](../architecture/SAVE_GAME_CONTRACT.md),
 > [CONTENT_LOADING_CONTRACT.md](../architecture/CONTENT_LOADING_CONTRACT.md),
 > adaptif kalite (`engine/perf/qualityProfiles.ts`).

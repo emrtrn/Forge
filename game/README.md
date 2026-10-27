@@ -3,7 +3,7 @@
 **Game code lives in `src/game`, not here.** That is the ownership home for
 project-specific runtime code (game rules, modes, scoring, missions, save model,
 runtime UI). `src/game` is also the fork-owned area (see
-`docs/planned/GAME_FORK_WORKFLOW.md`): each game fork edits `src/game` + `public/`
+`docs/planned/FORGE_GAME_PROJECT_WORKFLOW.md`): each game fork edits `src/game` + `public/`
 and pulls platform updates from upstream.
 
 This top-level `game/` is a **reserved placeholder**, kept intentionally empty:

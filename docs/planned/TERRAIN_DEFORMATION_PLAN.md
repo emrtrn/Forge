@@ -11,7 +11,7 @@
 > Referans his: SnowRunner / Expeditions. Hedef, o hissin web'de ulaşılabilir
 > %70–80'i; tam çamur simülasyonu hedeflenmiyor.
 >
-> Bağlı planlar: [VEHICLE_PHYSICS_PLAN.md](VEHICLE_PHYSICS_PLAN.md) (Rapier
+> Bağlı planlar: `VEHICLE_PHYSICS_PLAN.md` (arşivlendi; Rapier
 > raycast vehicle, Faz 0–5 tamam), [SAVE_GAME_CONTRACT.md](../architecture/SAVE_GAME_CONTRACT.md)
 > (Faz 5), adaptif kalite profilleri (`engine/perf/qualityProfiles.ts`).
 >
@@ -42,7 +42,7 @@
 > asla `heightAtSmooth`'u kullanmaz.
 
 > **Araştırma kararları (2026-10-23, kullanıcı onaylı):** ayrıntı ve gerekçe
-> [OFFROAD_ARAZI_DEFORMASYON_TEKNIKLERI_ARASTIRMA_v0.1.md](OFFROAD_ARAZI_DEFORMASYON_TEKNIKLERI_ARASTIRMA_v0.1.md).
+> `OFFROAD_ARAZI_DEFORMASYON_TEKNIKLERI_ARASTIRMA_v0.1.md` (arşivlendi, bkz. `docs/COMPLETED_WORK_INDEX.md`).
 > (1) **Kalıcılık kademeli:** M2 kalıcılık olmadan biter; pencere dışı izler 1 m
 > kaba katmana (yalnız görsel) düşer; seyrek blok deposu ve save-game kalıcılığı
 > M2 oynama testinden sonra karara bağlanır. (2) **Malzeme modeli düzeltilmiş

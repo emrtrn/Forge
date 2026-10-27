@@ -75,7 +75,7 @@ engine/editor.
   tagged `checkSlow` — an *expensive tests* bucket, not an unimportant one.
   A filtered run always includes slow checks, so narrowing to a subject cannot
   hide that subject's expensive ones. Rationale and the split plan this belongs
-  to: `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md`.
+  to: `ENGINE_TESTS_SPLIT_PLAN.md` (archived, see `docs/COMPLETED_WORK_INDEX.md`).
 - **CI** (`.github/workflows/ci.yml`) runs `build:verify`
   (`tsc --noEmit` + `vite build` + `test:engine:slow` + `verify:dist --strict` +
   `verify:world-data`, which fails when a shipped level references a missing

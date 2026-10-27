@@ -13,7 +13,7 @@ before changing code.
 > development will use one authoritative Forge engine/editor source and a
 > separate game repository, rather than maintaining an editable platform copy
 > inside the game fork. See
-> [Shared Forge / independent game project plan](../planned/SHARED_FORGE_GAME_PROJECT_WORKFLOW.md).
+> [Shared Forge / independent game project plan](../planned/FORGE_GAME_PROJECT_WORKFLOW.md).
 > The fork-based ownership and repo-local paths below describe the existing
 > implementation until that plan's acceptance gate passes. The new plan governs
 > this targeted project-loading change; generic engine/editor ownership and
@@ -40,7 +40,7 @@ scene/runtime helpers:
   the fork sets `upstream` to Forge, keeps all game-specific code and data
   confined to `public/` + `src/game`, and pulls platform improvements with
   `git fetch upstream && git merge upstream/main`. See
-  `docs/planned/GAME_FORK_WORKFLOW.md` for the full fork/sync workflow.
+  `docs/planned/FORGE_GAME_PROJECT_WORKFLOW.md` for the full fork/sync workflow.
 - The editor travels with each game during development, but is gated behind the
   dev-only `?editor` dynamic import and is excluded from production builds.
 - The stable reference repo is `C:\Users\emret\Desktop\3DGameDev`; use it to
@@ -450,4 +450,4 @@ boundary that owns it; do not introduce empty architecture for its own sake.
 - reviving the former Project Browser / Studio external-project system. Targeted
   independent game loading through shared Forge source is a separately accepted,
   not-yet-implemented scope in
-  [the shared-source plan](../planned/SHARED_FORGE_GAME_PROJECT_WORKFLOW.md).
+  [the shared-source plan](../planned/FORGE_GAME_PROJECT_WORKFLOW.md).

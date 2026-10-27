@@ -7,7 +7,7 @@
 > Açık kabul: §7 madde 1 için ikiz metotların kaynak denetimi yapılmadı;
 > parity testi tek başına bu maddeyi kapatmaz. Kullanıcı/görsel/donanım kabulü
 > otomatik testlerle tamamlanmış sayılmaz.
-> Güncel iş sırası: [güvenilirlik aktif planı](../planned/FORGE_RELIABILITY_ACTIVE_PLAN.md).
+> Güncel iş sırası: `FORGE_RELIABILITY_ACTIVE_PLAN.md` (arşivlendi, bkz. `docs/COMPLETED_WORK_INDEX.md`).
 > Aşağıdaki faz görevleri ve uygulama kayıtları tarihçedir; yeniden açılmaz.
 > Faz A–D tamamlandı (browser kabulleri dahil).
 > **Faz E tamamlandı** (E/1 bağlanma mekanizması + moving-platform +
@@ -1187,8 +1187,8 @@ fazlarını yeniden başlatma talimatı değildir; güncel sıra aktif plandadı
 
 ## 9. Devam eden çalışma için başlangıç noktası
 
-Güncel işleri [FORGE_RELIABILITY_ACTIVE_PLAN](../planned/FORGE_RELIABILITY_ACTIVE_PLAN.md)
-üzerinden seç. Bu belgenin A–I uygulama kayıtları ve tarihli test sayıları
+Güncel işleri `FORGE_RELIABILITY_ACTIVE_PLAN.md` (arşivlendi,
+`docs/COMPLETED_WORK_INDEX.md`) üzerinden seç. Bu belgenin A–I uygulama kayıtları ve tarihli test sayıları
 geçmiş kanıtlardır. §7 madde 1 açık kalır; bu belge güncellemesinde ayrıca
 kaynak denetimi yapılmadı. Yeni kod değişikliğinde güncel kapılar ve ilgili
 browser akışları yeniden çalıştırılır.

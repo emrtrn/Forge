@@ -10,4 +10,4 @@ Pure engine physics layer.
 - `vehicle/`: ray-cast wheeled vehicles (`Vehicle` component → Rapier
   `DynamicRayCastVehicleController`) plus the pure pedal/steer mapping.
 - `fixedStep.ts`: the fixed-timestep accumulator (`FixedStepClock`) and the
-  pose blend helpers it drives. See `docs/planned/VEHICLE_PHYSICS_PLAN.md` Faz 0.
+  pose blend helpers it drives. See `VEHICLE_PHYSICS_PLAN.md` Faz 0 (archived, see `docs/COMPLETED_WORK_INDEX.md`).

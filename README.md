@@ -65,7 +65,7 @@ A game is a **fork** of this repository, not a throwaway copy. The fork keeps al
 game-specific code and data confined to `public/` + `src/game`, sets `upstream`
 to Forge, and pulls platform improvements with
 `git fetch upstream && git merge upstream/main`. See
-[`docs/planned/GAME_FORK_WORKFLOW.md`](docs/planned/GAME_FORK_WORKFLOW.md) for the
+[`docs/planned/FORGE_GAME_PROJECT_WORKFLOW.md`](docs/planned/FORGE_GAME_PROJECT_WORKFLOW.md) for the
 full fork/sync workflow.
 
 ## Documentation

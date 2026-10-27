@@ -22,7 +22,14 @@ const COLORS = {
   cellText: "#d8f3ff",
   camera: "#ffffff",
   range: "rgba(255, 255, 255, 0.55)",
+  kept: "#b48cff",
+  selection: "#ffffff",
+  selectionFill: "rgba(255, 255, 255, 0.10)",
 } as const;
+
+/** A press that moves less than this many CSS pixels is a click (focus), not a region drag. */
+const DRAG_THRESHOLD = 4;
+const HINT = "Click the map to move the camera there; drag to select a region.";
 
 const TILE_STATE_LABEL: Record<WorldPartitionTileView["state"], string> = {
   resident: "loaded",
@@ -34,15 +41,19 @@ export interface WorldPartitionPanelOptions {
   body: HTMLElement;
   /** Moves the editor camera to look at world X/Z. */
   focus(x: number, z: number): void;
+  /** Keeps the region's terrain tiles loaded (`load`) or stops keeping them. */
+  setRegionLoaded(rect: WorldMapRect, load: boolean): void;
 }
 
 /**
- * World Partition panel (OPEN_WORLD_PLAN Faz 8, first slice): a top-down map
- * of the level — the terrain's hill-shaded global height map, its tiles by
- * editor residency (loaded / loading / not loaded) with unsaved tiles
- * outlined, the occupied partition cells with their element counts, and the
- * editor camera with its terrain load radius. Clicking the map moves the
- * camera there, which streams the tiles around it in.
+ * World Partition panel (OPEN_WORLD_PLAN Faz 8): a top-down map of the level
+ * — the terrain's hill-shaded global height map, its tiles by editor residency
+ * (loaded / loading / not loaded) with unsaved and kept tiles outlined, the
+ * occupied partition cells with their element counts, and the editor camera
+ * with its terrain load radius. Clicking the map moves the camera there, which
+ * streams the tiles around it in; dragging selects a region whose tiles Load
+ * Region keeps loaded wherever the camera goes (remembered per terrain) and
+ * Unload Region lets go again.
  */
 export class WorldPartitionPanel {
   private readonly canvas: HTMLCanvasElement;
@@ -50,20 +61,30 @@ export class WorldPartitionPanel {
   private readonly hover: HTMLElement;
   private readonly shaded = document.createElement("canvas");
   private shadedRevision: string | null = null;
+  private readonly regionButtons: HTMLButtonElement[];
   private view: WorldPartitionView | null = null;
   private frame: WorldMapRect = worldMapFrame([]);
+  /** Selected region in world X/Z; survives redraws until cleared. */
+  private selection: WorldMapRect | null = null;
+  private drag: { pointer: number; startX: number; startY: number; moved: boolean } | null = null;
 
   constructor(options: WorldPartitionPanelOptions) {
     options.body.innerHTML = `
       <div class="world-partition-panel" data-world-partition>
         <div class="world-partition-summary" data-wp-summary></div>
         <canvas class="world-partition-map" data-wp-map width="${MAP_SIZE}" height="${MAP_SIZE}" role="img" aria-label="World map"></canvas>
-        <div class="world-partition-hover" data-wp-hover>Click the map to move the camera there.</div>
+        <div class="world-partition-hover" data-wp-hover>${HINT}</div>
+        <div class="world-partition-region">
+          <button type="button" class="forge-btn-ghost" data-wp-load disabled>Load Region</button>
+          <button type="button" class="forge-btn-ghost" data-wp-unload disabled>Unload Region</button>
+          <button type="button" class="forge-btn-ghost" data-wp-clear disabled>Clear</button>
+        </div>
         <ul class="world-partition-legend">
           <li><i class="is-loaded"></i>Loaded tile</li>
           <li><i class="is-loading"></i>Loading</li>
           <li><i class="is-unloaded"></i>Not loaded</li>
           <li><i class="is-unsaved"></i>Unsaved edits</li>
+          <li><i class="is-kept"></i>Kept loaded</li>
           <li><i class="is-cell"></i>Partition cell</li>
           <li><i class="is-camera"></i>Camera</li>
         </ul>
@@ -72,17 +93,42 @@ export class WorldPartitionPanel {
     this.canvas = options.body.querySelector<HTMLCanvasElement>("[data-wp-map]")!;
     this.summary = options.body.querySelector<HTMLElement>("[data-wp-summary]")!;
     this.hover = options.body.querySelector<HTMLElement>("[data-wp-hover]")!;
-    this.canvas.addEventListener("click", (event) => {
-      const [x, z] = this.eventWorld(event);
+    const [load, unload, clear] = (["[data-wp-load]", "[data-wp-unload]", "[data-wp-clear]"] as const)
+      .map((selector) => options.body.querySelector<HTMLButtonElement>(selector)!);
+    this.regionButtons = [load!, unload!, clear!];
+    load!.addEventListener("click", () => { if (this.selection) options.setRegionLoaded(this.selection, true); });
+    unload!.addEventListener("click", () => { if (this.selection) options.setRegionLoaded(this.selection, false); });
+    clear!.addEventListener("click", () => {
+      this.selection = null;
+      this.refreshRegionButtons();
+      if (this.view) this.draw(this.view);
+    });
+    this.canvas.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      this.canvas.setPointerCapture(event.pointerId);
+      this.drag = { pointer: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
+    });
+    this.canvas.addEventListener("pointermove", (event) => {
+      const [x, z] = this.clientWorld(event.clientX, event.clientY);
+      this.hover.textContent = this.describe(x, z);
+      const drag = this.drag;
+      if (!drag || drag.pointer !== event.pointerId) return;
+      if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < DRAG_THRESHOLD) return;
+      drag.moved = true;
+      this.selection = this.dragRect(drag.startX, drag.startY, event.clientX, event.clientY);
+      this.refreshRegionButtons();
+      if (this.view) this.draw(this.view);
+    });
+    this.canvas.addEventListener("pointerup", (event) => {
+      const drag = this.drag;
+      if (!drag || drag.pointer !== event.pointerId) return;
+      this.drag = null;
+      if (drag.moved) return;
+      const [x, z] = this.clientWorld(event.clientX, event.clientY);
       options.focus(x, z);
     });
-    this.canvas.addEventListener("mousemove", (event) => {
-      const [x, z] = this.eventWorld(event);
-      this.hover.textContent = this.describe(x, z);
-    });
-    this.canvas.addEventListener("mouseleave", () => {
-      this.hover.textContent = "Click the map to move the camera there.";
-    });
+    this.canvas.addEventListener("pointercancel", () => { this.drag = null; });
+    this.canvas.addEventListener("pointerleave", () => { this.hover.textContent = HINT; });
   }
 
   update(view: WorldPartitionView): void {
@@ -94,7 +140,20 @@ export class WorldPartitionPanel {
     if (rects.length === 0) rects.push({ minX: view.camera.x - 128, minZ: view.camera.z - 128, maxX: view.camera.x + 128, maxZ: view.camera.z + 128 });
     this.frame = worldMapFrame(rects);
     this.summary.innerHTML = this.summaryMarkup(view);
+    this.refreshRegionButtons();
     this.draw(view);
+  }
+
+  /** Region buttons work on a streaming terrain with a selection; Clear on any selection. */
+  private refreshRegionButtons(): void {
+    const [load, unload, clear] = this.regionButtons;
+    const streams = Boolean(this.view?.terrain?.streams);
+    load!.disabled = !this.selection || !streams;
+    unload!.disabled = !this.selection || !streams;
+    clear!.disabled = !this.selection;
+    const title = streams ? "" : "This terrain keeps every tile in memory";
+    load!.title = title;
+    unload!.title = title;
   }
 
   private summaryMarkup(view: WorldPartitionView): string {
@@ -107,8 +166,12 @@ export class WorldPartitionPanel {
       const width = Math.round(terrain.rect.maxX - terrain.rect.minX);
       const depth = Math.round(terrain.rect.maxZ - terrain.rect.minZ);
       lines.push(`<strong>${escapeHtml(terrain.name)}</strong> · ${terrain.tilesX} × ${terrain.tilesZ} tiles · ${width} m × ${depth} m`);
+      const kept = terrain.tiles.filter((tile) => tile.kept).length;
       lines.push(`<span data-wp-tiles>${loaded}/${terrain.tiles.length} loaded${loading > 0 ? ` · ${loading} loading` : ""} · ${unsaved} unsaved</span>`
         + (terrain.streams ? ` · streams around the camera (${Math.round(terrain.loadRange ?? 0)} m)` : " · all tiles in memory"));
+      if (terrain.streams) {
+        lines.push(`<span data-wp-kept>${kept} kept loaded${kept > 0 ? ` (~${formatBytes(kept * terrain.tileBytes)} in editor memory)` : ""}</span>`);
+      }
     } else {
       lines.push("No Landscape in this level.");
     }
@@ -153,6 +216,12 @@ export class WorldPartitionPanel {
         }
       }
       for (const tile of terrain.tiles) {
+        if (!tile.kept) continue;
+        context.strokeStyle = COLORS.kept;
+        context.lineWidth = 2;
+        context.strokeRect(x0 + tile.x * tileW + 3, y0 + tile.z * tileH + 3, tileW - 6, tileH - 6);
+      }
+      for (const tile of terrain.tiles) {
         if (!tile.unsaved) continue;
         context.strokeStyle = COLORS.unsaved;
         context.lineWidth = 2;
@@ -160,6 +229,17 @@ export class WorldPartitionPanel {
       }
     }
     if (view.partition.enabled) this.drawCells(context, view);
+    if (this.selection) {
+      const [sx0, sy0] = this.pixel(this.selection.minX, this.selection.minZ);
+      const [sx1, sy1] = this.pixel(this.selection.maxX, this.selection.maxZ);
+      context.fillStyle = COLORS.selectionFill;
+      context.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+      context.strokeStyle = COLORS.selection;
+      context.setLineDash([5, 3]);
+      context.lineWidth = 1.5;
+      context.strokeRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+      context.setLineDash([]);
+    }
     this.drawCamera(context, view);
   }
 
@@ -236,7 +316,9 @@ export class WorldPartitionPanel {
       const tx = Math.floor((x - terrain.rect.minX) / terrain.tileSize);
       const tz = Math.floor((z - terrain.rect.minZ) / terrain.tileSize);
       const tile = terrain.tiles.find((entry) => entry.x === tx && entry.z === tz);
-      parts.push(tile ? `Tile ${tile.key} · ${TILE_STATE_LABEL[tile.state]}${tile.unsaved ? " · unsaved" : ""}` : `Tile ${tx}_${tz} · hole`);
+      parts.push(tile
+        ? `Tile ${tile.key} · ${TILE_STATE_LABEL[tile.state]}${tile.kept ? " · kept" : ""}${tile.unsaved ? " · unsaved" : ""}`
+        : `Tile ${tx}_${tz} · hole`);
     }
     if (view.partition.enabled) {
       const size = view.partition.grids.main.cellSize;
@@ -253,12 +335,22 @@ export class WorldPartitionPanel {
     return worldToMapPixel(this.frame, MAP_SIZE, x, z);
   }
 
-  private eventWorld(event: MouseEvent): [number, number] {
+  private clientWorld(clientX: number, clientY: number): [number, number] {
     const bounds = this.canvas.getBoundingClientRect();
-    const px = ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * MAP_SIZE;
-    const py = ((event.clientY - bounds.top) / Math.max(1, bounds.height)) * MAP_SIZE;
+    const px = ((clientX - bounds.left) / Math.max(1, bounds.width)) * MAP_SIZE;
+    const py = ((clientY - bounds.top) / Math.max(1, bounds.height)) * MAP_SIZE;
     return mapPixelToWorld(this.frame, MAP_SIZE, px, py);
   }
+
+  private dragRect(ax: number, ay: number, bx: number, by: number): WorldMapRect {
+    const [x0, z0] = this.clientWorld(ax, ay);
+    const [x1, z1] = this.clientWorld(bx, by);
+    return { minX: Math.min(x0, x1), minZ: Math.min(z0, z1), maxX: Math.max(x0, x1), maxZ: Math.max(z0, z1) };
+  }
+}
+
+function formatBytes(bytes: number): string {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function escapeHtml(value: string): string {

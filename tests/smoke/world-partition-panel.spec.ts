@@ -118,3 +118,68 @@ test("World Partition tab maps tile residency, partition cells and the camera, a
   await expect(page.locator("#world-partition-pane")).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test("World Partition Load Region keeps a far region loaded across a reload, and Unload Region lets it go", async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await writeWorld();
+  expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Storage is cleared once per test, not per navigation: the kept region must survive the reload.
+  await page.addInitScript(({ key, pose }) => {
+    if (!sessionStorage.getItem("__wpStarted")) {
+      localStorage.clear();
+      sessionStorage.setItem("__wpStarted", "1");
+    }
+    localStorage.setItem(key, pose);
+  }, { key: `forge.editor.cameraPose.${encodeURIComponent(LEVEL)}`, pose: JSON.stringify(cameraPose(0, 100)) });
+  const open = async () => {
+    await page.goto(`/?editor&worldPartitionRegion=${Date.now()}`);
+    await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("outliner-row").filter({ hasText: "World Terrain" }).first()).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("world-partition-tab").click();
+    await expect(page.locator("[data-wp-tiles]")).toContainText("/144 loaded");
+  };
+  await open();
+  const kept = page.locator("[data-wp-kept]");
+  await expect(kept).toHaveText("0 kept loaded");
+  await expect(page.locator("[data-wp-load]")).toBeDisabled();
+
+  // Drag over the far corner: tiles 0..1 × 0..1 (64 m tiles from −384 m).
+  const from = await mapPoint(page, -380, -380);
+  const to = await mapPoint(page, -260, -260);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.locator("[data-wp-load]")).toBeEnabled();
+  await page.locator("[data-wp-load]").click();
+  await expect(kept).toContainText("4 kept loaded");
+  // The camera stayed near the seam; the region loads anyway and stays.
+  await expect.poll(() => hoverText(page, ...FAR), { timeout: 30_000 }).toContain("Tile 0_0 · loaded · kept");
+  expect(await hoverText(page, ...NEAR)).toContain("Tile 6_7 · loaded");
+  expect(await hoverText(page, -200, -200)).toContain("Tile 2_2 · not loaded");
+  await page.locator("[data-world-partition]").screenshot({ path: testInfo.outputPath("world-partition-kept.png") });
+
+  // A reload streams the kept region in again, from this machine's editor storage only.
+  await open();
+  await expect(kept).toContainText("4 kept loaded");
+  await expect.poll(() => hoverText(page, ...FAR), { timeout: 30_000 }).toContain("Tile 0_0 · loaded · kept");
+  const stored = await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("forge.editor.keptTerrainTiles.")));
+  expect(stored).toHaveLength(1);
+
+  // Unload Region: the tiles leave once the camera is not near them.
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.mouse.up();
+  await page.locator("[data-wp-unload]").click();
+  await expect(kept).toHaveText("0 kept loaded");
+  await expect.poll(() => hoverText(page, ...FAR), { timeout: 30_000 }).toContain("Tile 0_0 · not loaded");
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("forge.editor.keptTerrainTiles.")))).toEqual([]);
+  await page.locator("[data-wp-clear]").click();
+  await expect(page.locator("[data-wp-clear]")).toBeDisabled();
+  expect(errors).toEqual([]);
+});

@@ -2288,10 +2288,24 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       Doğrulama: engine `world map view` + akış okuyucuları; smoke
       `world-partition-panel.spec.ts` (12×12 akışlı dünya: özet, hücre sayıları,
       hover metinleri, yüklü/yüklü olmayan parlaklık farkı, tıklayınca uzak
-      köşe yüklenir ve eski bölge boşalır). **Açık (sonraki dilim):** bölge
-      seçip yükle/boşalt, kalıcı sabitlenmiş bölgeler, hücre başına içerik
-      sayımının level revizyonuna göre önbelleklenmesi (bugün her yoklamada
-      bütün level taranıyor).
+      köşe yüklenir ve eski bölge boşalır).
+      *İkinci dilim tamam (2026-10-27):* haritada sürükleyerek bölge seçimi
+      (tıklama yine kamerayı götürür, 4 px eşik); **Load Region** bölgenin
+      tile'larını kamera nereye giderse gitsin yüklü tutar, **Unload Region**
+      bırakır (kamera yakınındaki ve kaydedilmemiş tile'lar zaten kalır),
+      **Clear** seçimi siler. Tutulan tile'lar mor çerçeveli; özet sayıyı ve
+      tahmini editör belleğini gösterir. Akışta `held`'den ayrı bir küme
+      (`keepLoaded`/`releaseKept`/`isKept`): fırça vuruşu ya da import'un
+      argümansız `release()`'i tutulanları bırakmaz. Kalıcılık kamera pozu
+      gibi `localStorage`'da, terrain yolu başına
+      (`editor/scene/keptTerrainTiles.ts`); level dosyasına yazılmaz,
+      yeniden açılışta bölge tekrar yüklenir. Hücre sayımı sahne değişiklik
+      sayacı + partition ayarına göre önbellekli. Bölge yalnız arazi
+      tile'larına uygulanır: editör actor hücrelerinin hepsini zaten tutuyor.
+      Doğrulama: engine `editor terrain streaming` (dikdörtgen anahtarları,
+      tutulan küme) + `kept terrain tiles`; smoke ikinci senaryo (sürükle →
+      Load → uzak köşe kamera uzaktayken yüklü ve "kept", yeniden açılışta
+      geri gelir, Unload → boşalır ve depo temizlenir).
 - [ ] Outliner: yalnız yüklü actor'ler + "yüklü olmayan hücrede" filtresi;
       bir actor'e gitmek hücresini yükler.
 - [ ] Landscape splines ve River Water dünya uzayına taşınır (`landscapeRef`

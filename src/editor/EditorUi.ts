@@ -4177,6 +4177,7 @@ export class EditorUi {
     this.worldPartitionPanel ??= new WorldPartitionPanel({
       body: requireElement(this.root, "[data-world-partition-body]"),
       focus: (x, z) => this.app.focusWorldMapPoint(x, z),
+      setRegionLoaded: (rect, load) => this.app.setWorldMapRegionLoaded(rect, load),
     });
     const refresh = () => this.worldPartitionPanel?.update(this.app.getWorldPartitionView());
     refresh();

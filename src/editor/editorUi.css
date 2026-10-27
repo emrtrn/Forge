@@ -850,6 +850,10 @@
 .world-partition-legend .is-unloaded { background: #22272b; }
 .world-partition-legend .is-unsaved { background: transparent; border: 2px solid #ff9b52; }
 .world-partition-legend .is-cell { background: rgba(110, 200, 230, 0.4); }
+.world-partition-legend .is-kept { background: transparent; border: 2px solid #b48cff; }
+.world-partition-region { display: flex; flex-wrap: wrap; gap: 6px; }
+.world-partition-region button { height: 26px; padding: 0 10px; font-size: 12px; }
+.world-partition-map { touch-action: none; }
 .world-partition-legend .is-camera { background: #ffffff; border-radius: 50%; }
 
 .editor-shell .outliner-filter-button {

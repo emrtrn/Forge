@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
-import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "../../engine/terrain/terrainEditorStreaming";
+import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys, terrainTileKeysInRect } from "../../engine/terrain/terrainEditorStreaming";
 import { decodeTerrainGlobalMap, encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { decodeTerrainTile, encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
@@ -49,6 +49,41 @@ export async function registerTerrainEditorStreamingTests(check: Check, checkAsy
     assert.deepEqual(terrainBrushTileKeys(def, 30.5, 16, 0), ["0_0", "1_0"]);
     assert.ok(!terrainBrushTileKeys(def, 112, 112, 20).includes("3_3"), "the hole is never demanded");
     assert.deepEqual(terrainBrushTileKeys(def, -50, -50, 4), [], "outside the grid");
+  });
+
+  check("editor terrain streaming region keys cover every tile a rectangle touches, either corner order, never holes", () => {
+    const { def } = fixture();
+    assert.deepEqual(terrainTileKeysInRect(def, { minX: 10, minZ: 10, maxX: 40, maxZ: 20 }), ["0_0", "1_0"]);
+    assert.deepEqual(terrainTileKeysInRect(def, { minX: 40, minZ: 20, maxX: 10, maxZ: 10 }), ["0_0", "1_0"], "dragged right to left");
+    // 3_3 is a hole; the edge at x = 128 touches tile 4.
+    assert.deepEqual(terrainTileKeysInRect(def, { minX: 100, minZ: 100, maxX: 128, maxZ: 100 }), ["4_3"]);
+    assert.deepEqual(terrainTileKeysInRect(def, { minX: -50, minZ: -50, maxX: -10, maxZ: -10 }), [], "outside the grid");
+    assert.equal(terrainTileKeysInRect(def, { minX: -1000, minZ: -1000, maxX: 1000, maxZ: 1000 }).length, 63);
+  });
+
+  await checkAsync("editor terrain streaming keeps a region loaded away from the camera until released, independent of held tiles", async () => {
+    const { def, disk, copy } = fixture();
+    const world = createTerrainEditWorld(def, []);
+    const streaming = new TerrainEditorStreaming(world, {
+      fetch: async (key) => copy(disk.get(key)!), changed: () => {}, pinned: () => false, warn: (message) => assert.fail(message),
+    }, { rangeTiles: 0 });
+    await streaming.keepLoaded(["7_7", "6_7", "3_3"]);
+    assert.deepEqual(streaming.keptKeys(), ["7_7", "6_7"], "a hole is never kept");
+    assert.ok(streaming.isKept("7_7") && !streaming.isKept("0_0"));
+    streaming.update([{ position: [16, 16] }]);
+    await settle();
+    streaming.update([{ position: [16, 16] }]);
+    assert.ok(world.tiles.has("7_7") && world.tiles.has("6_7"), "kept far from the camera");
+    // A stroke's or import's wholesale release leaves the region alone.
+    await streaming.demand(["5_5"]);
+    streaming.release();
+    streaming.update([{ position: [16, 16] }]);
+    assert.ok(world.tiles.has("7_7") && !world.tiles.has("5_5"));
+    streaming.releaseKept(["7_7"]);
+    streaming.update([{ position: [16, 16] }]);
+    assert.ok(!world.tiles.has("7_7") && world.tiles.has("6_7"));
+    streaming.dispose();
+    assert.deepEqual(streaming.keptKeys(), []);
   });
 
   await checkAsync("editor terrain streaming loads around the camera, drops past hysteresis, keeps pinned tiles and never re-reads over an edit", async () => {

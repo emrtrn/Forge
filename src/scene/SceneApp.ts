@@ -8,11 +8,11 @@ import { normalizeWorldPartitionSettings, worldPartitionCellContents, type World
 import { parseWorldCellKey } from "@engine/world/worldGrid";
 import { worldMapHeightAt, worldMapFocusPosition, type WorldMapHeights, type WorldMapRect } from "@engine/world/worldMapView";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
-import { levelTerrainPath, parseTileKey, terrainTilePath, terrainTileWorldSize, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
+import { levelTerrainPath, parseTileKey, terrainTilePath, terrainTileWorldSize, terrainWeightBlockCount, tileKey, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
 import { applyTerrainLayerState, createTerrainLayerAddition, createTerrainLayerRemoval } from "@engine/terrain/terrainLayers";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { validateTerrainTile, type WorldTerrainDocument } from "@engine/terrain/terrainLoader";
-import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys } from "@engine/terrain/terrainEditorStreaming";
+import { editorStreamsTerrain, TerrainEditorStreaming, terrainBrushTileKeys, terrainTileKeysInRect } from "@engine/terrain/terrainEditorStreaming";
 import { DEFAULT_TERRAIN_SCULPT_SETTINGS, type TerrainSculptSettings, type TerrainSculptTool, type TerrainRamp } from "@engine/terrain/terrainSculpt";
 import {
   applyTerrainBrush,
@@ -688,6 +688,7 @@ import {
 import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
 import { EditorCameraPoseStore } from "@editor/input/editorCameraPose";
+import { KeptTerrainTilesStore } from "@editor/scene/keptTerrainTiles";
 import { ScenePicker } from "@editor/render-three/scenePicker";
 import { EditorSceneController } from "@editor/scene/EditorSceneController";
 import { floorSnapPosition } from "@editor/render-three/floorSnap";
@@ -819,6 +820,8 @@ export interface WorldPartitionTileView {
   z: number;
   state: "resident" | "loading" | "unloaded";
   unsaved: boolean;
+  /** Kept loaded from the panel, wherever the camera is. */
+  kept: boolean;
 }
 
 /** What the World Partition panel draws (OPEN_WORLD_PLAN Faz 8). */
@@ -834,6 +837,8 @@ export interface WorldPartitionView {
     streams: boolean;
     /** Editor load radius around the camera while streaming, in metres. */
     loadRange: number | null;
+    /** Editor memory of one resident tile (Float32 heights + RGBA8 weights), in bytes. */
+    tileBytes: number;
     tiles: WorldPartitionTileView[];
     /** Heights over `rect` for the minimap; null for a rotated 1x1 Landscape. */
     map: WorldMapHeights | null;
@@ -1569,6 +1574,11 @@ export class SceneApp {
   private readonly cameraController: EditorCameraController;
   /** Remembers the viewport pose across editor reloads. Editor-only. */
   private readonly cameraPoseStore: EditorCameraPoseStore | null;
+  /** Terrain regions kept loaded from the World Partition panel, per terrain (editor only). */
+  private readonly keptTerrainTiles: KeptTerrainTilesStore | null;
+  /** Grows on every scene structure change: the World Partition cell counts cache on it. */
+  private sceneObjectsRevision = 0;
+  private worldPartitionCellCache: { key: string; cells: WorldPartitionView["cells"] } | null = null;
   /** Editor viewport raycasting (selection / gizmo / surface picks). */
   private readonly picker: ScenePicker;
 
@@ -1817,6 +1827,7 @@ export class SceneApp {
       onStatus: (message, tone) => this.onStatus?.(message, tone),
     });
     this.cameraPoseStore = this.editorEnabled ? new EditorCameraPoseStore() : null;
+    this.keptTerrainTiles = this.editorEnabled ? new KeptTerrainTilesStore() : null;
     this.picker = new ScenePicker({
       camera: () => this.editorViewportCamera(),
       canvas: this.canvas,
@@ -2548,13 +2559,19 @@ export class SceneApp {
     const camera = this.editorViewportCamera();
     const forward = camera.getWorldDirection(new Vector3());
     const partition = normalizeWorldPartitionSettings(this.layout?.worldSettings?.partition);
-    const cells = this.layout
-      ? [...worldPartitionCellContents(this.layout, partition)].map(([key, contents]) => {
-        const coord = parseWorldCellKey(key)!;
-        const count = Object.values(contents).reduce((sum, items) => sum + items.length, 0);
-        return { key, x: coord.x, z: coord.z, count };
-      })
-      : [];
+    // Routing walks the whole level; redo it only when the scene or the grid changed.
+    const cacheKey = `${this.sceneObjectsRevision}:${JSON.stringify(partition)}`;
+    if (this.worldPartitionCellCache?.key !== cacheKey) {
+      const cells = this.layout
+        ? [...worldPartitionCellContents(this.layout, partition)].map(([key, contents]) => {
+          const coord = parseWorldCellKey(key)!;
+          const count = Object.values(contents).reduce((sum, items) => sum + items.length, 0);
+          return { key, x: coord.x, z: coord.z, count };
+        })
+        : [];
+      this.worldPartitionCellCache = { key: cacheKey, cells };
+    }
+    const cells = this.worldPartitionCellCache.cells;
     return {
       terrain: this.worldPartitionTerrainView(),
       partition,
@@ -2577,12 +2594,14 @@ export class SceneApp {
       const tiles = def.tiles.map(({ key }): WorldPartitionTileView => {
         const coord = parseTileKey(key)!;
         const state = document.tiles.has(key) ? "resident" : streaming?.isLoading(key) ? "loading" : "unloaded";
-        return { key, x: coord.x, z: coord.z, state, unsaved: unsaved.has(key) };
+        return { key, x: coord.x, z: coord.z, state, unsaved: unsaved.has(key), kept: streaming?.isKept(key) ?? false };
       });
       const map = document.globalAttributes?.map ?? null;
+      const vertices = (def.tileQuads + 1) ** 2;
       return {
         name: actor.name || def.name, rect, tileSize: size, tilesX: def.tilesX, tilesZ: def.tilesZ,
-        streams: Boolean(streaming), loadRange: streaming?.loadRange ?? null, tiles,
+        streams: Boolean(streaming), loadRange: streaming?.loadRange ?? null,
+        tileBytes: vertices * (4 + 4 * terrainWeightBlockCount(def.layers.length)), tiles,
         map, metresPerSample: map ? (def.tilesX * size) / (map.width - 1) : def.spacing,
         mapRevision: `${actor.id}:${session?.editRevision ?? 0}:${document.tiles.size}`,
       };
@@ -2600,11 +2619,39 @@ export class SceneApp {
       name: actor.name || "Landscape",
       rect: { minX: x - width / 2, minZ: z - depth / 2, maxX: x + width / 2, maxZ: z + depth / 2 },
       tileSize: Math.max(width, depth), tilesX: 1, tilesZ: 1, streams: false, loadRange: null,
-      tiles: [{ key: "0_0", x: 0, z: 0, state: "resident", unsaved: Boolean(revision?.dirty) }],
+      tileBytes: verticesX * verticesZ * (4 + 4 * data.layers.length),
+      tiles: [{ key: "0_0", x: 0, z: 0, state: "resident", unsaved: Boolean(revision?.dirty), kept: false }],
       map: rotated ? null : { width: verticesX, height: verticesZ, heights: Float32Array.from(data.heights, (height) => y + height * scale) },
       metresPerSample: spacing,
       mapRevision: `${actor.id}:${revision?.current ?? 0}`,
     };
+  }
+
+  /**
+   * Keeps the terrain tiles a world X/Z rectangle touches loaded wherever the
+   * camera goes (`load`), or stops keeping them (World Partition panel). Kept
+   * regions are remembered per terrain for the next session. A terrain that
+   * holds every tile in memory has nothing to load.
+   */
+  setWorldMapRegionLoaded(rect: WorldMapRect, load: boolean): void {
+    const actor = this.layout?.landscapes?.[0];
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    const streaming = document ? this.worldTerrainStreams.get(document) : undefined;
+    if (!actor || !document || !streaming) {
+      this.onStatus?.("This terrain keeps every tile in memory; there is nothing to load or unload.", "info");
+      return;
+    }
+    const keys = terrainTileKeysInRect(document.def, rect);
+    if (keys.length === 0) {
+      this.onStatus?.("The selected region covers no terrain tile.", "info");
+      return;
+    }
+    if (load) void streaming.keepLoaded(keys).catch(() => {});
+    else streaming.releaseKept(keys);
+    this.keptTerrainTiles?.write(actor.dataRef, streaming.keptKeys());
+    this.onStatus?.(load
+      ? `Keeping ${keys.length} tile${keys.length === 1 ? "" : "s"} loaded (${streaming.keptKeys().length} kept in total).`
+      : `Unloaded ${keys.length} tile${keys.length === 1 ? "" : "s"} from the kept region; tiles near the camera or with unsaved edits stay.`, "info");
   }
 
   /**
@@ -9272,7 +9319,7 @@ export class SceneApp {
     this.worldTerrainSessions.set(document, session);
     // The loader left tiles out: this terrain is too large to hold whole.
     if (loaded.tiles.size < loaded.def.tiles.length) {
-      this.worldTerrainStreams.set(document, new TerrainEditorStreaming(world, {
+      const streaming = new TerrainEditorStreaming(world, {
         fetch: async (key, signal) => {
           const tilePath = terrainTilePath(path, key);
           const response = await fetch(projectFileUrl(tilePath), { signal, cache: "no-cache" });
@@ -9295,7 +9342,11 @@ export class SceneApp {
           console.warn(message);
           this.onStatus?.(message, "warning");
         },
-      }));
+      });
+      this.worldTerrainStreams.set(document, streaming);
+      // Regions kept loaded last session stream in again (read failures warn through the hook).
+      const kept = this.keptTerrainTiles?.read(path) ?? [];
+      if (kept.length > 0) void streaming.keepLoaded(kept).catch(() => {});
     }
     return document;
   }
@@ -15269,6 +15320,7 @@ export class SceneApp {
   }
 
   private emitSceneObjectsChanged(): void {
+    this.sceneObjectsRevision += 1;
     this.onSceneObjectsChanged?.(this.getSceneObjects());
     // Any structural change (add/delete/edit of a collider, placement or nav
     // volume) can alter the baked walkable area, so refresh the AI Navigation

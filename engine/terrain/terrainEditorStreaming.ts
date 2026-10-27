@@ -38,6 +38,29 @@ export function terrainBrushTileKeys(
   return keys;
 }
 
+/**
+ * Declared tiles overlapping a world X/Z rectangle (World Partition panel
+ * region), row by row; a rectangle touching a tile edge includes that tile.
+ */
+export function terrainTileKeysInRect(
+  def: Pick<WorldTerrainDef, "origin" | "spacing" | "tileQuads" | "tilesX" | "tilesZ" | "tiles">,
+  rect: { minX: number; minZ: number; maxX: number; maxZ: number },
+): string[] {
+  const size = terrainTileWorldSize(def);
+  const range = (min: number, max: number, origin: number, count: number) => [
+    Math.max(0, Math.floor((Math.min(min, max) - origin) / size)),
+    Math.min(count - 1, Math.floor((Math.max(min, max) - origin) / size)),
+  ] as const;
+  const [x0, x1] = range(rect.minX, rect.maxX, def.origin[0], def.tilesX);
+  const [z0, z1] = range(rect.minZ, rect.maxZ, def.origin[2], def.tilesZ);
+  const declared = new Set(def.tiles.map(({ key }) => key));
+  const keys: string[] = [];
+  for (let tz = z0; tz <= z1; tz += 1) {
+    for (let tx = x0; tx <= x1; tx += 1) if (declared.has(tileKey(tx, tz))) keys.push(tileKey(tx, tz));
+  }
+  return keys;
+}
+
 export interface TerrainEditorStreamingHooks {
   /** Reads and validates one tile against the edit world's current definition. */
   fetch(key: string, signal: AbortSignal): Promise<TerrainTileData>;
@@ -76,6 +99,11 @@ export class TerrainEditorStreaming {
   private readonly inFlight = new Map<string, { controller: AbortController; done: Promise<void> }>();
   /** Requested by a brush stroke or a whole-terrain operation; kept until released. */
   private readonly held = new Set<string>();
+  /**
+   * Regions the user chose to keep loaded (World Partition panel). Separate
+   * from `held`, which a stroke or import releases wholesale.
+   */
+  private readonly kept = new Set<string>();
   private disposed = false;
 
   constructor(
@@ -117,7 +145,7 @@ export class TerrainEditorStreaming {
       { loaded: new Set([...resident, ...this.inFlight.keys()]), active: resident }, sources, this.settings, this.bounds,
     );
     for (const key of targets.toUnload) {
-      if (this.held.has(key)) continue;
+      if (this.held.has(key) || this.kept.has(key)) continue;
       const flight = this.inFlight.get(key);
       if (flight) {
         flight.controller.abort();
@@ -150,6 +178,35 @@ export class TerrainEditorStreaming {
     return Promise.all(waits).then(() => {});
   }
 
+  /**
+   * Keeps `keys` loaded wherever the camera goes, until {@link releaseKept}.
+   * Resolves once every declared key is resident; rejects if a read fails.
+   */
+  keepLoaded(keys: Iterable<string>): Promise<void> {
+    const waits: Promise<void>[] = [];
+    for (const key of keys) {
+      if (!this.declared.has(key)) continue;
+      this.kept.add(key);
+      if (this.world.tiles.has(key)) continue;
+      waits.push(this.inFlight.get(key)?.done ?? this.start(key));
+    }
+    return Promise.all(waits).then(() => {});
+  }
+
+  /** Stops keeping `keys`; the next update drops those out of range, unheld and unedited. */
+  releaseKept(keys: Iterable<string>): void {
+    for (const key of keys) this.kept.delete(key);
+  }
+
+  isKept(key: string): boolean {
+    return this.kept.has(key);
+  }
+
+  /** Every kept tile key, in insertion order. */
+  keptKeys(): string[] {
+    return [...this.kept];
+  }
+
   /** Every declared tile, held: whole-terrain operations (RAW import/export). */
   demandAll(): Promise<void> {
     return this.demand(this.declared);
@@ -165,6 +222,7 @@ export class TerrainEditorStreaming {
     for (const { controller } of this.inFlight.values()) controller.abort();
     this.inFlight.clear();
     this.held.clear();
+    this.kept.clear();
   }
 
   private start(key: string): Promise<void> {

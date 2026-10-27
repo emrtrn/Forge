@@ -329,7 +329,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
           placeholder="Landscape" />
       </label>
-      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked || Boolean(worldTerrain))}
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked || Boolean(worldTerrain))}
       <div class="detail-section" ${worldTerrain ? "data-world-terrain-splines" : ""}>
         <div class="detail-section-title">Landscape Mode</div>
@@ -408,16 +408,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         </label>` : ""}
       </div>
       ${splinePanels}
-      ${settings.editMode !== "sculpt" || worldTerrain ? "" : heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr, `
-        <div class="detail-subsection-title">Any size (resample)</div>
-        <label class="detail-row">
-          <span>Import Height</span>
-          <input data-landscape-import-range type="number" min="0" step="0.1" value="${importHeight}" ${lockedAttr} />
-        </label>
-        <div class="landscape-heightmap-actions">
-          <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG (resample)<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
-        </div>
-        <div class="detail-hint">Resamples any PNG onto this grid; Import Height scales its brightness (0 m to Import Height). Re-import to change the height scale.</div>`)}
+      ${settings.editMode !== "sculpt" || worldTerrain ? "" : heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr, resampleImportMarkup(importHeight, lockedAttr))}
       ${settings.editMode === "sculpt" && !worldTerrain ? `<div class="detail-section">
         <div class="detail-section-title">Tiles</div>
         <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
@@ -436,23 +427,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         </label>
       </div>
       ` : ""}
-      ${settings.editMode !== "sculpt" || worldTerrain ? "" : `
-      <div class="detail-section">
-        <div class="detail-section-title">Landscape Size</div>
-        <label class="detail-row">
-          <span>Resolution</span>
-          <select data-landscape-resolution ${lockedAttr}>
-            <option value="small" ${resolution?.verticesX === 65 && resolution.verticesZ === 65 ? "selected" : ""}>Small (65 × 65)</option>
-            <option value="medium" ${resolution?.verticesX === 129 && resolution.verticesZ === 129 ? "selected" : ""}>Medium (129 × 129)</option>
-            <option value="large" ${resolution?.verticesX === 257 && resolution.verticesZ === 257 ? "selected" : ""}>High (257 × 257)</option>
-          </select>
-        </label>
-        <label class="detail-row">
-          <span>World Size</span>
-          <input data-landscape-world-size type="number" min="${resolution ? (resolution.verticesX - 1) * 0.01 : 0.01}" max="${resolution ? (resolution.verticesX - 1) * 100 : 10000}" step="0.1" value="${resolution?.worldSize ?? ""}" ${lockedAttr} />
-        </label>
-        <div class="detail-hint">Changes the terrain width and depth while keeping its height and paint data.</div>
-      </div>`}
+      ${settings.editMode !== "sculpt" || worldTerrain ? "" : landscapeSizeSection(resolution, lockedAttr)}
     `;
 
   const selectedPoints = splinePoints.filter((p) => multi.points.ids.has(p.id));
@@ -624,6 +599,50 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     },
   );
 
+  bindSingleTileGridControls(options);
+  bindHeightmapFileControls(options);
+}
+
+/** Resampling PNG import: any image size, fitted onto a single-tile grid. */
+function resampleImportMarkup(importHeight: number, lockedAttr: string): string {
+  return `
+        <div class="detail-subsection-title">Any size (resample)</div>
+        <label class="detail-row">
+          <span>Import Height</span>
+          <input data-landscape-import-range type="number" min="0" step="0.1" value="${importHeight}" ${lockedAttr} />
+        </label>
+        <div class="landscape-heightmap-actions">
+          <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG (resample)<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
+        </div>
+        <div class="detail-hint">Resamples any PNG onto this grid; Import Height scales its brightness (0 m to Import Height). Re-import to change the height scale.</div>`;
+}
+
+/** Resolution and World Size of a single-tile Landscape; both keep it centred in place. */
+function landscapeSizeSection(
+  resolution: { verticesX: number; verticesZ: number; worldSize: number } | null,
+  lockedAttr: string,
+): string {
+  return `
+      <div class="detail-section" data-landscape-size>
+        <div class="detail-section-title">Landscape Size</div>
+        <label class="detail-row">
+          <span>Resolution</span>
+          <select data-landscape-resolution ${lockedAttr}>
+            <option value="small" ${resolution?.verticesX === 65 && resolution.verticesZ === 65 ? "selected" : ""}>Small (65 × 65)</option>
+            <option value="medium" ${resolution?.verticesX === 129 && resolution.verticesZ === 129 ? "selected" : ""}>Medium (129 × 129)</option>
+            <option value="large" ${resolution?.verticesX === 257 && resolution.verticesZ === 257 ? "selected" : ""}>High (257 × 257)</option>
+          </select>
+        </label>
+        <label class="detail-row">
+          <span>World Size</span>
+          <input data-landscape-world-size type="number" min="${resolution ? (resolution.verticesX - 1) * 0.01 : 0.01}" max="${resolution ? (resolution.verticesX - 1) * 100 : 10000}" step="0.1" value="${resolution?.worldSize ?? ""}" ${lockedAttr} />
+        </label>
+        <div class="detail-hint">Changes the terrain width and depth while keeping its height and paint data.</div>
+      </div>`;
+}
+
+function bindSingleTileGridControls(options: SpecialActorDetailsOptions): void {
+  const { body } = options;
   body.querySelector<HTMLInputElement>("[data-landscape-heightmap-import]")?.addEventListener("change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -660,8 +679,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     options.setSelectedLandscapeWorldSize(worldSize);
     options.refreshDetails();
   });
-
-  bindHeightmapFileControls(options);
 }
 
 /**
@@ -898,6 +915,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
   const { body, selection, editableAssets } = options;
   options.setDetailsScale([1, 1, 1]);
   const lockedAttr = selection.locked ? "disabled" : "";
+  const singleTile = terrain.tilesX === 1 && terrain.tilesZ === 1;
   const settings = options.getLandscapeSculptSettings();
   const layers = options.getSelectedLandscapeLayers();
   const materialAssets = editableAssets.filter((asset) => assetType(asset) === "material");
@@ -958,7 +976,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
           placeholder="Landscape" />
       </label>
-      ${vectorRow("Location", "p", selection.position, 0.1, true)}
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, true)}
       <div class="detail-section" data-world-terrain-tools>
         <div class="detail-section-title">Landscape Mode</div>
@@ -981,7 +999,9 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
           </select>
         </label>` : ""}
       </div>
-      ${settings.editMode === "sculpt" ? `${heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr)}
+      ${settings.editMode === "sculpt" ? `${heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr,
+        singleTile ? resampleImportMarkup(options.getSelectedLandscapeImportHeight(), lockedAttr) : "")}
+      ${singleTile ? landscapeSizeSection(options.getSelectedLandscapeResolution(), lockedAttr) : ""}
       <div class="detail-section" data-world-terrain>
         <div class="detail-section-title">Tiles</div>
         <div class="detail-row"><span>Tiles in memory</span><span data-world-terrain-residency></span></div>
@@ -990,7 +1010,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing, terrain effects, mesh output and River Water. Resizing is not available for a multi-tile Landscape yet.</div>
+        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing, terrain effects, mesh output and River Water.${singleTile ? "" : " Resizing is not available for a multi-tile Landscape yet."}</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Others</div>
@@ -1024,6 +1044,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
   }, 500);
 
   bindNameAndLock(options);
+  bindPositionRotation(options);
   bindLandscapeBrushControls(options);
   body
     .querySelector<HTMLSelectElement>("[data-landscape-layer-material]")
@@ -1036,6 +1057,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       options.refreshDetails();
     });
   bindLayerPhysicalMaterial(options);
+  bindSingleTileGridControls(options);
   bindHeightmapFileControls(options);
   body.querySelector<HTMLInputElement>("[data-landscape-collision]")?.addEventListener("change", (event) => {
     options.setSelectedLandscape({ collision: (event.currentTarget as HTMLInputElement).checked });

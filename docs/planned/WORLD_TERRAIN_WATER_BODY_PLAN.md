@@ -84,10 +84,14 @@ değişiklikleri için Codex Security diff scan önerilir, ayrıca onay verilmed
   kanallarında tutar; RG kaynak üçgen bayrakları level-0 `texelFetch` ile okunur.
   Desen mipmap ile filtrelenir; ek sampler/capture/çizim geçişi eklenmez.
   Yalnız etkin caustics gölü sayısına ait shader alanları derlenir.
-- Son `npm.cmd run build:verify` **çıkış 0**: TypeScript, 2.009 engine kontrolü,
+- İlk teslim `npm.cmd run build:verify` **çıkış 0**: TypeScript, 2.009 engine kontrolü,
   smoke/content/UI tipleri, production build, strict dist ve world-data geçti.
   Kanıt: `.dev-server/caustics-final-gate.log`. Ek engine/smoke tip kontrolü de
   geçti: `caustics-final-qa-types.log`; önceki geçici test engeli artık yoktur.
+- Git yayını öncesinde `origin/main` üzerindeki World Terrain taşıma/yeniden
+  örnekleme güncellemeleri çakışmasız birleştirildi. Birleşim sonrası
+  `npx.cmd tsc --noEmit` ve tam `build:verify` **çıkış 0**, **2.016 engine
+  kontrolü** ile tekrar geçti: `.dev-server/caustics-merge-gate.log`.
 - Chrome/D3D11/RTX 3060: Lake caustics normal/animasyon/gece, kuru kıyı/ada/ayrı
   çukur, dört CSM kademesi, UI/undo, gerçek Save/Reload ve runtime kabulü geçti.
   Altı Lake sculpt/uzak tile Retry, River UI/Retry ve wet-mud regresyonu geçti.

@@ -163,7 +163,7 @@ function weightOffset(tile: TerrainTileData, index: number, layer: number): numb
 }
 
 /** Legacy four-decimal normalization, quantized with largest remainders to exactly 255. */
-function quantizeWeights(weights: number[]): Uint8Array {
+export function quantizeTerrainWeights(weights: number[]): Uint8Array {
   const total = weights.reduce((sum, weight) => sum + weight, 0);
   if (total <= 0) {
     const bytes = new Uint8Array(weights.length);
@@ -292,7 +292,7 @@ export function createTerrainRegionPatches(
       if (height !== undefined && !Number.isFinite(height)) throw new Error("Invalid terrain edit height");
       if (next.weights !== undefined && (next.weights.length !== owner.tile.layerCount
         || !next.weights.every((value) => Number.isFinite(value) && value >= 0 && value <= 1))) throw new Error("Invalid terrain edit weights");
-      const weights = next.weights === undefined ? undefined : quantizeWeights([...next.weights]);
+      const weights = next.weights === undefined ? undefined : quantizeTerrainWeights([...next.weights]);
       for (const copy of copies) {
         const changed = (height !== undefined && !Object.is(height, copy.tile.heights[copy.index]))
           || weights?.some((value, layer) => value !== copy.tile.weights[weightOffset(copy.tile, copy.index, layer)]);
@@ -390,7 +390,7 @@ export function applyTerrainBrush(world: TerrainEditWorld, brush: TerrainBrush, 
           }, values[layer] ?? 0));
         // Staged like the bytes: smoothing must read this dab's starting weights.
         if (accumulated) floatWrites.push([vertexId(gx, gz), values]);
-        weights = quantizeWeights(values);
+        weights = quantizeTerrainWeights(values);
       } else {
         const target = Number.isFinite(brush.flattenTargetHeight) ? brush.flattenTargetHeight! : brush.hitHeight ?? 0;
         if (!Number.isFinite(target)) throw new Error("Invalid terrain flatten height");

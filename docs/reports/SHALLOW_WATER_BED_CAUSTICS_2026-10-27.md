@@ -60,9 +60,13 @@ otomatik boyanmadı; mevcut sahne, ışık ve fizik ayarları değiştirilmedi.
 
 ## Doğrulama kaydı
 
-- Tam `npm.cmd run build:verify`: **çıkış 0**, **2.009 engine kontrolü**,
+- İlk teslim `npm.cmd run build:verify`: **çıkış 0**, **2.009 engine kontrolü**,
   TypeScript, fixture/content/UI tipleri, production build, strict dist ve world
   data geçti. [Son gate logu](../../.dev-server/caustics-final-gate.log).
+- Git yayını öncesi `origin/main` terrain taşıma/yeniden örnekleme güncellemeleri
+  çakışmasız birleştirildi. Birleşim sonrası `tsc --noEmit` ve tam `build:verify`
+  **çıkış 0**, **2.016 engine kontrolü** ile geçti:
+  [birleşim gate logu](../../.dev-server/caustics-merge-gate.log).
 - Ek yeni engine/smoke test dosyası tip kontrolü geçti:
   [tip logu](../../.dev-server/caustics-final-qa-types.log).
 - Chrome/D3D11/RTX 3060'da dört CSM kademesiyle caustics açık/kapalı, animasyon,

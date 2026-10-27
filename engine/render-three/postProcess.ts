@@ -29,6 +29,7 @@ import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
 
 import type { ResolvedPostProcess } from "@engine/scene/postProcess";
 import { renderSceneWithTerrainOverride } from "./terrain/terrainRenderer";
+import { WaterSceneSnapshot } from "./waterSceneSnapshot";
 
 export {
   POST_PROCESS_DEFAULTS,
@@ -171,6 +172,10 @@ export function writesSceneDepth(object: Object3D): boolean {
  *  - **`userData.noAmbientOcclusion === true`** — the explicit opt-out, for real
  *    depth-writing geometry that still should not receive AO.
  *
+ * A lake that has composited its sampled bed into a final pixel is an exception:
+ * its flat interface participates in this normal/depth pass without changing
+ * the beauty material's depthWrite or transparent sorting.
+ *
  * Solid geometry — including characters — stays in and gets proper AO (see
  * {@link AO_RADIUS_SCALE} for the tuning that keeps small objects from
  * self-occluding). Visibility is restored by the base pass within the same frame
@@ -194,7 +199,7 @@ class ForgeGtaoPass extends GTAOPass {
         probe.isLine2 ||
         probe.isSprite ||
         object.userData.noAmbientOcclusion === true ||
-        !writesSceneDepth(object)
+        (!writesSceneDepth(object) && object.userData.compositedWaterSurface !== true)
       ) {
         object.visible = false;
         cache.push(object);
@@ -393,6 +398,7 @@ function createFloatDepthTarget(): WebGLRenderTarget {
  * RenderPass/OutputPass and lets callers inject editor-only passes before output.
  */
 export class PostProcessPipeline {
+  private readonly waterScene: WaterSceneSnapshot;
   private readonly composer: EffectComposer;
   private readonly renderPass: RenderPass;
   private readonly outputPass: OutputPass;
@@ -416,6 +422,7 @@ export class PostProcessPipeline {
     floatDepth?: boolean;
   }) {
     this.floatDepth = options.floatDepth === true;
+    this.waterScene = new WaterSceneSnapshot(options.scene);
     this.composer = new EffectComposer(options.renderer, this.floatDepth ? createFloatDepthTarget() : undefined);
     this.renderPass = new RenderPass(options.scene, options.camera);
     this.composer.addPass(this.renderPass);
@@ -458,6 +465,7 @@ export class PostProcessPipeline {
   }
 
   render(deltaSeconds: number): void {
+    this.waterScene.begin(this.renderPass.camera, [this.composer.renderTarget1, this.composer.renderTarget2]);
     this.composer.render(deltaSeconds);
   }
 
@@ -476,6 +484,7 @@ export class PostProcessPipeline {
   }
 
   dispose(): void {
+    this.waterScene.dispose();
     for (const pass of this.effectPasses) pass.dispose();
     for (const pass of this.injectedPasses) pass.dispose();
     this.antialiasPass?.dispose();

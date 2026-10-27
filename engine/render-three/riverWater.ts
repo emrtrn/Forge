@@ -370,7 +370,8 @@ void main() {
   float bedOpacity = 1.0 - bedTransmission;
   float authoredOpacity = opacity * wetness * mix(0.58, 1.0, smoothstep(0.0, 3.0, vWaterDepth));
   gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectionAmount * wetness,
-    foamColor, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28) * wetness * 0.35);
+    foamColor, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28)
+      * wetness * smoothstep(0.03, 0.3, vWaterDepth) * 0.35);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>

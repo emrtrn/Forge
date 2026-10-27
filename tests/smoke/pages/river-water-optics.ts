@@ -11,8 +11,11 @@ import { resolveRiverWater } from "@engine/scene/riverWater";
 import type { ForgeLandscapeSpline } from "@engine/scene/landscape";
 import type { SphereReflectionCaptureBake } from "@engine/render-three/reflectionCapture";
 import { LakeWaterObject } from "@engine/render-three/lakeWater";
+import { PostProcessPipeline } from "@engine/render-three/postProcess";
 
 export interface OpticsOptions {
+  sceneTransmission: boolean;
+  sceneBedDepth: number | null;
   kind: "river" | "lake";
   isolateReflection: boolean;
   angle: "top" | "grazing" | "below";
@@ -46,6 +49,7 @@ const perspectiveCamera = new PerspectiveCamera(48, 800 / 480, 0.01, 100);
 const orthographicCamera = new OrthographicCamera(-9, 9, 5.4, -5.4, 0.01, 100);
 let camera: PerspectiveCamera | OrthographicCamera = perspectiveCamera;
 const composer = new EffectComposer(renderer);
+const scenePipeline = new PostProcessPipeline({ renderer, scene, camera, width: 800, height: 480 });
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
 composer.addPass(new OutputPass());
@@ -95,6 +99,8 @@ const spline: ForgeLandscapeSpline = {
   ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }],
 };
 let options: OpticsOptions = {
+  sceneTransmission: false,
+  sceneBedDepth: null,
   kind: "river",
   isolateReflection: false,
   angle: "top", pipeline: "direct", depth: 1, reflection: "off", visible: true,
@@ -154,7 +160,7 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   for (let i = 0; i < positions.count; i++) positions.setZ(i, positions.getX(i) * options.slope);
   positions.needsUpdate = true;
   bed.geometry.computeBoundingSphere();
-  bed.position.y = -options.depth;
+  bed.position.y = -(options.sceneBedDepth ?? options.depth);
   const bedMap = options.isolateReflection ? null : checker;
   if (bedMaterial.map !== bedMap) { bedMaterial.map = bedMap; bedMaterial.needsUpdate = true; }
   bedMaterial.color.set(options.isolateReflection ? "#000000" : "#ffffff");
@@ -172,7 +178,9 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   camera.lookAt(fixtureGroup.position);
   camera.updateMatrixWorld(true);
   renderer.toneMappingExposure = options.exposure;
-  if (options.pipeline === "composer") composer.render(0);
+  if (options.pipeline === "composer" && options.sceneTransmission) {
+    scenePipeline.setCamera(camera); scenePipeline.render(0);
+  } else if (options.pipeline === "composer") composer.render(0);
   else renderer.render(scene, camera);
   document.querySelector("output")!.textContent =
     `${options.angle} · ${options.pipeline} · depth ${options.depth} m · exposure ${options.exposure}`;
@@ -214,6 +222,8 @@ function snapshot() {
     // Composer owns two fixed targets even in Direct mode. Off/Low must not
     // allocate any additional reflection target; this is not a VRAM estimate.
     textures: renderer.info.memory.textures,
+    sceneTransmission: river.material.uniforms.waterSceneEnabled?.value ?? 0,
+    glError: gl.getError(),
   };
 }
 

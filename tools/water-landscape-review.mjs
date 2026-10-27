@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { resolve, join } from "node:path";
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 
 // Run against the isolated server documented in WATER_LANDSCAPE_REVIEW.md.
@@ -8,6 +9,19 @@ import sharp from "sharp";
 const base = process.env.FORGE_WATER_REVIEW_URL ?? "http://127.0.0.1:5488";
 const output = resolve(process.env.FORGE_WATER_REVIEW_OUTPUT ?? "docs/planned/Forge_Water_System/evidence/landscape-review");
 await mkdir(output, { recursive: true });
+// HMR is disabled, but another editor session may still change files while a
+// page is loading. Keep the complete engine/app source boundary reviewable.
+async function sourceSnapshot() {
+  const files = [];
+  for (const root of ["engine", "src"]) for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+    if (entry.isFile() && /\.(ts|js|glsl)$/.test(entry.name)) files.push(join(entry.parentPath, entry.name));
+  }
+  files.push("tests/smoke/pages/water-landscape-review.ts", "tests/smoke/pages/water-surface-v3-shaders.json");
+  const result = {};
+  for (const file of files.sort()) result[file] = createHash("sha256").update(await readFile(file)).digest("hex");
+  return result;
+}
+const sourceStart = await sourceSnapshot();
 const refine = process.argv.includes("--refine");
 const baseline = process.argv.includes("--baseline");
 const captureOnly = process.argv.includes("--capture-only");
@@ -38,7 +52,7 @@ try {
     || initial.waters.some((w) => !w.vertices || !w.triangles)) throw new Error("Incomplete scene/water geometry");
   await page.waitForTimeout(2000);
   const views = refine ? ["river-flat", "lake-shore"] : process.argv.includes("--pilot") ? ["river-upper", "river-bank", "lake-overview"] :
-    ["river-upper", "river-bank", "river-flat", "river-top", "lake-overview", "lake-shore", "lake-top", "lake-low", "lake-1"];
+    ["river-upper", "river-bank", "river-flat", "river-top", "lake-overview", "lake-shore", "lake-top", "lake-low", "lake-1", "lake-1-low"];
   for (const view of views) {
     await page.selectOption("#review-view", view);
     await page.waitForTimeout(1800);
@@ -61,7 +75,7 @@ try {
     await page.evaluate(() => window.__waterLandscape.setTime(12));
   }
   if (!process.argv.includes("--pilot") && !captureOnly) {
-    for (const view of refine ? ["river-flat"] : ["river-bank", "river-flat", "lake-overview"]) {
+    for (const view of refine ? ["river-flat"] : ["river-bank", "river-flat", "lake-overview", "lake-1"]) {
       await page.selectOption("#review-view", view);
       await page.waitForTimeout(1800);
       const result = await page.evaluate(() => window.__waterLandscape.benchmark(120));
@@ -82,8 +96,10 @@ try {
     await page.selectOption("#review-view", "river-bank");
     await page.selectOption("#review-variant", "after");
   }
-  const report = { date: new Date().toISOString(), pilot: process.argv.includes("--pilot"),
-    baselineCommit: "783895d5", baseline, initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
+  const sourceEnd = await sourceSnapshot();
+  const changedSources = [...new Set([...Object.keys(sourceStart), ...Object.keys(sourceEnd)])].filter(file => sourceStart[file] !== sourceEnd[file]);
+  const report = { date: new Date().toISOString(), pilot: process.argv.includes("--pilot"), sourceStart, sourceEnd, changedSources,
+    baselineCommit: "18f2307c", baseline, initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
   if (refine) {
     report.initial = previousReport.initial;
     report.captures = [...previousReport.captures.filter((c) => !views.includes(c.view)), ...captures];
@@ -95,7 +111,7 @@ try {
   }
   await writeFile(resolve(output, baseline ? "before.json" : process.argv.includes("--pilot") ? "pilot.json" : "review.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ output, renderer: initial.renderer, views: captures.length, benchmarks: benchmarks.length, errors, warningTypes: warnings.size, failedRequests, writes }, null, 2));
-  if (errors.length || writes.length || failedRequests.length) process.exitCode = 1;
+  if (errors.length || writes.length || failedRequests.length || changedSources.length) process.exitCode = 1;
 } catch (error) {
   await writeFile(resolve(output, "failure.json"), JSON.stringify({ error: String(error), errors, warnings: Object.fromEntries(warnings), failedRequests, writes }, null, 2));
   await page.screenshot({ path: resolve(output, "failure.png") }).catch(() => {});

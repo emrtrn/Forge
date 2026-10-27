@@ -5,6 +5,7 @@ import type { LakeGeometry } from "../terrain/terrainLakeWater";
 import type { PlanarReflectionBinding, PlanarReflectionSource } from "./planarReflectionSource";
 import { createWaterEnvironmentUniforms, updateWaterEnvironment, WATER_ENVIRONMENT_GLSL } from "./waterEnvironment";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
+import { createWaterSceneUniforms, readWaterScene, WATER_SCENE_GLSL } from "./waterSceneSnapshot";
 
 /** Flat exact surface; the normal animation never displaces the shoreline. */
 export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
@@ -16,9 +17,10 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.setAttribute("waterDepth", new BufferAttribute(data.depths, 1));
     geometry.setAttribute("uv", new BufferAttribute(data.uvs, 2));
     geometry.setIndex(new BufferAttribute(data.indices, 1));
+    geometry.computeVertexNormals();
     geometry.computeBoundingBox(); geometry.computeBoundingSphere();
     super(geometry, new ShaderMaterial({ transparent: true, depthWrite: false, side: DoubleSide, fog: true,
-      uniforms: { ...UniformsUtils.clone(UniformsLib.fog), ...createWaterEnvironmentUniforms(), time: { value: 0 }, normalMap: { value: normal }, hasNormal: { value: normal ? 1 : 0 },
+      uniforms: { ...UniformsUtils.clone(UniformsLib.fog), ...createWaterEnvironmentUniforms(), ...createWaterSceneUniforms(), time: { value: 0 }, normalMap: { value: normal }, hasNormal: { value: normal ? 1 : 0 },
         rippleSpeed: { value: appearance.rippleSpeed }, normalScale: { value: appearance.normalScale },
         deepColor: { value: new Color(appearance.deepColor) }, shallowColor: { value: new Color(appearance.shallowColor) },
         opacity: { value: appearance.opacity }, bedVisibility: { value: appearance.bedVisibility },
@@ -41,6 +43,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         varying float vDepth;varying vec2 vUv;varying vec4 vReflection;varying vec3 vWorldPosition;
         ${WATER_OPTICS_GLSL}
         ${WATER_ENVIRONMENT_GLSL}
+        ${WATER_SCENE_GLSL}
         void main(){
         float d=max(0.,vDepth);
         vec2 p=vWorldPosition.xz*normalScale*.12;
@@ -69,19 +72,48 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         float authoredOpacity=opacity*wetness*mix(.3,1.,smoothstep(0.,3.,d));
         gl_FragColor=waterComposite(color,max(authoredOpacity,1.-transmission),reflected,reflectionAmount,
           vec3(0.),0.,waterSunGlint(normal,viewDirection,.12)*wetness);
+        if(waterSceneEnabled>.5){
+          vec2 screenUv=gl_FragCoord.xy/waterSceneSize;
+          float bedDepth=texture2D(waterSceneDepth,screenUv).r;
+          vec3 bedPosition=waterScenePosition(screenUv,bedDepth);
+          vec3 surfacePosition=waterScenePosition(screenUv,gl_FragCoord.z);
+          float path=min(length(bedPosition-surfacePosition),100.);
+          // Tint controls spectral loss, rather than adding a dark colour over
+          // an otherwise unfiltered brown bed. Keep the authored opacity floor.
+          vec3 tint=deepColor/max(max(deepColor.r,deepColor.g),max(deepColor.b,.00001));
+          vec3 extinction=(vec3(1.)+(vec3(1.)-tint)*2.)/max(absorptionDistance,.01);
+          vec3 transmitted=min(exp(-extinction*path)*mix(1.,bedVisibility,wetness),vec3(1.-authoredOpacity));
+          vec3 bed=texture2D(waterSceneColor,screenUv).rgb;
+          vec3 body=bed*transmitted+color*(vec3(1.)-transmitted);
+          gl_FragColor=vec4(mix(body,reflected,reflectionAmount)+waterSunGlint(normal,viewDirection,.12)*wetness,1.);
+        }
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
         }` }));
     this.position.set(...data.position); this.name = `Lake:${lake.id}`;
     this.userData.waterBodyId = lake.id; this.source = source; this.strength = appearance.reflectionStrength;
+    this.userData.waterSceneTransmission = true;
     this.layers.enable(31); // Water layer marker; the reflection source hides registered consumers.
     source?.addConsumer(this);
     const started = performance.now();
     this.onBeforeRender = (renderer, scene, camera) => {
+      if (scene.overrideMaterial) return;
       this.material.uniforms.time!.value = (performance.now() - started) / 1000;
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera);
       source?.update(renderer, scene, camera);
+      const snapshot = readWaterScene(renderer, scene, camera);
+      this.material.uniforms.waterSceneEnabled!.value = snapshot ? 1 : 0;
+      // This path already composites the bed into an opaque final pixel. AO
+      // must see that interface, not apply the hidden basin's AO over it.
+      this.userData.compositedWaterSurface = !!snapshot;
+      if (snapshot) {
+        this.material.uniforms.waterSceneColor!.value = snapshot.texture;
+        this.material.uniforms.waterSceneDepth!.value = snapshot.depthTexture;
+        this.material.uniforms.waterSceneSize!.value.set(snapshot.width, snapshot.height);
+        this.material.uniforms.waterSceneInverseProjection!.value.copy(camera.projectionMatrixInverse);
+        this.material.uniforms.waterSceneReversed!.value = camera.reversedDepth ? 1 : 0;
+      }
     };
   }
   setPlanarReflectionBinding(binding: PlanarReflectionBinding | null) {

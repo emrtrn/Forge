@@ -171,3 +171,43 @@ test("river optics: controls round-trip, animation survives, Off / Low stays tar
   await evidence(info, "controls", { first, restored, calm, flowing, last, errors });
   expect(errors).toEqual([]);
 });
+
+test("lake optics: scene depth transmission preserves shallows, filters colour and releases copies", async ({ page }, info) => {
+  const shots = [];
+  for (const orthographic of [false, true]) {
+    const off = await frame(page, { kind: "lake", sceneTransmission: true, pipeline: "composer",
+      orthographic, depth: 0.1, visible: false, reflection: "off", opacity: 0, bedVisibility: 1, absorptionDistance: 3 });
+    const shallow = await frame(page, { visible: true });
+    expect(shallow.sceneTransmission).toBe(1);
+    expect(shallow.glError).toBe(0);
+    expect(contrast(shallow)).toBeGreaterThan(30);
+    const deep = await frame(page, { depth: 5 });
+    expect(deep.glError).toBe(0);
+    expect(contrast(deep)).toBeLessThan(contrast(shallow) - 10);
+    // A neutral bed becomes greener through spectral loss, rather than an
+    // unfiltered checkerboard seen through a scalar alpha overlay.
+    expect(channel(deep, 1) - channel(deep, 0)).toBeGreaterThan(3);
+    // An oblique view can see a deep bed behind a shallow surface vertex.
+    // Independently varying the actual bed catches using baked vertex depth
+    // as if it were the screen ray's optical thickness.
+    const realDeepBed = await frame(page, { depth: 0.1, sceneBedDepth: 5 });
+    const bakedOnly = await frame(page, { sceneTransmission: false });
+    expect(realDeepBed.sceneTransmission).toBe(1);
+    expect(bakedOnly.sceneTransmission).toBe(0);
+    expect(contrast(realDeepBed)).toBeLessThan(contrast(bakedOnly) - 10);
+    // The alternate composer lazily initializes its own colour target. Warm
+    // both pipelines before comparing repeated lake rebuild resource counts.
+    const warmed = await frame(page, { sceneTransmission: true, sceneBedDepth: null, depth: 5 });
+    const stableTextures = warmed.textures;
+    for (let i = 0; i < 6; i++) await frame(page, { depth: i % 2 ? 0.1 : 5 });
+    const rebuilt = await frame(page, { depth: 5 });
+    expect(rebuilt.textures).toBe(stableTextures);
+    const hidden = await frame(page, { visible: false });
+    expect(hidden.textures).toBeLessThan(stableTextures);
+    const restored = await frame(page, { visible: true });
+    expect(restored.centre).toEqual(deep.centre);
+    shots.push({ off, shallow, deep, realDeepBed, bakedOnly, warmed, rebuilt, hidden, restored });
+    await page.screenshot({ path: info.outputPath(`lake-scene-depth-${orthographic ? "ortho" : "perspective"}.png`) });
+  }
+  await evidence(info, "lake-scene-depth", shots);
+});

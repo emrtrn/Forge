@@ -81,6 +81,7 @@ import {
   Object3D,
   OrthographicCamera,
   Plane,
+  PlaneGeometry,
   Raycaster,
   RepeatWrapping,
   RingGeometry,
@@ -1662,7 +1663,7 @@ export class SceneApp {
   /** Live drag-and-drop placement ghost (a translucent clone of the dragged
    *  asset shown in the viewport before the drop commits). */
   private dragPreview: {
-    kind: "asset" | "light";
+    kind: "asset" | "light" | "reflectiveSurface" | "reflectionCapture";
     key: string;
     group: Object3D;
     dispose: () => void;
@@ -3215,6 +3216,39 @@ export class SceneApp {
     this.scene.add(record.root);
   }
 
+  /** Lightweight placement helpers; reflection rendering/baking starts only on drop. */
+  beginReflectionDragPreview(kind: "reflectiveSurface" | "reflectionCapture"): void {
+    this.endAssetDragPreview();
+    this.dragPreviewAssetId = kind;
+    const group = new Group();
+    let dispose: () => void;
+    if (kind === "reflectionCapture") {
+      const helper = createSphereReflectionCaptureObject(this.reflectionCaptureItem({
+        id: "drag-preview",
+        position: [0, 0, 0],
+      }));
+      group.add(helper, createSphereReflectionCaptureIcon());
+      // The icon uses a shared cached material; only the helper owns resources.
+      dispose = () => disposeSphereReflectionCaptureObject(helper);
+    } else {
+      const geometry = new PlaneGeometry(4, 4);
+      const material = new MeshBasicMaterial({
+        color: 0xf59e2c,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+        side: DoubleSide,
+      });
+      const mesh = new Mesh(geometry, material);
+      mesh.rotation.x = -Math.PI / 2;
+      group.add(mesh);
+      dispose = () => { geometry.dispose(); material.dispose(); };
+    }
+    group.visible = false;
+    this.dragPreview = { kind, key: kind, group, dispose };
+    this.scene.add(tagSceneSource(group, EDITOR_OVERLAY_SOURCE));
+  }
+
   private createDragPreview(assetId: string): void {
     const gltf = this.models.get(assetId);
     if (!gltf) return;
@@ -3253,6 +3287,12 @@ export class SceneApp {
     this.dragPreviewClient = { x: clientX, y: clientY };
     const preview = this.dragPreview;
     if (!preview) return;
+    if (preview.kind === "reflectiveSurface" || preview.kind === "reflectionCapture") {
+      const position = this.computeReflectionDropPosition(preview.kind, clientX, clientY);
+      preview.group.visible = position !== null;
+      if (position) preview.group.position.set(...position);
+      return;
+    }
     if (preview.kind === "light") {
       const position = this.computeLightDropPosition(clientX, clientY);
       if (!position) {
@@ -3830,6 +3870,21 @@ export class SceneApp {
     ];
   }
 
+  private computeReflectionDropPosition(
+    kind: "reflectiveSurface" | "reflectionCapture",
+    clientX: number,
+    clientY: number,
+  ): Vec3 | null {
+    const hit = this.picker.clientToSurface(clientX, clientY);
+    if (!hit) return null;
+    return [
+      snapValue(hit.x, this.snapSettings.move, this.snapSettings.moveEnabled),
+      // Keep the plane clear of z-fighting and the probe above the picked surface.
+      round(hit.y + (kind === "reflectiveSurface" ? 0.01 : 2)),
+      snapValue(hit.z, this.snapSettings.move, this.snapSettings.moveEnabled),
+    ];
+  }
+
   addAssetAt(assetId: string, clientX: number, clientY: number): void {
     if (!this.layout) return;
     this.ensureShapeModel(assetId);
@@ -3962,6 +4017,13 @@ export class SceneApp {
    */
   addSpecialActorAt(payload: string, clientX: number, clientY: number): void {
     if (!this.layout) return;
+    if (payload === "reflectiveSurface" || payload === "reflectionCapture") {
+      const position = this.computeReflectionDropPosition(payload, clientX, clientY);
+      if (!position) return;
+      if (payload === "reflectiveSurface") this.addReflectiveSurface(position);
+      else this.addReflectionCapture(position);
+      return;
+    }
     const hit = this.picker.clientToSurface(clientX, clientY);
     if (!hit) return;
     const x = snapValue(hit.x, this.snapSettings.move, this.snapSettings.moveEnabled);
@@ -5325,13 +5387,13 @@ export class SceneApp {
   }
 
   /** Adds a Reflective Surface actor (flat floor by default) and selects it. */
-  addReflectiveSurface(): void {
+  addReflectiveSurface(position: Vec3 = [0, 0.01, 0]): void {
     if (!this.layout) return;
     const surfaces = this.layout.reflectiveSurfaces ?? [];
     const actor: LayoutReflectiveSurface = {
       id: uniqueReflectiveSurfaceId(surfaces),
       name: uniqueReflectiveSurfaceName("Reflective Surface", surfaces),
-      position: [0, 0.01, 0],
+      position: [...position],
       rotation: [-90, 0, 0],
       scale: [4, 4, 1],
     };
@@ -12046,13 +12108,13 @@ export class SceneApp {
   }
 
   /** Adds a Sphere Reflection Capture probe (default radius) and selects it. */
-  addReflectionCapture(): void {
+  addReflectionCapture(position: Vec3 = [0, 2, 0]): void {
     if (!this.layout) return;
     const captures = this.layout.reflectionCaptures ?? [];
     const actor: LayoutSphereReflectionCapture = {
       id: uniqueSphereReflectionCaptureId(captures),
       name: uniqueSphereReflectionCaptureName("Sphere Reflection Capture", captures),
-      position: [0, 2, 0],
+      position: [...position],
     };
     const index = captures.length;
     this.executeCommand({

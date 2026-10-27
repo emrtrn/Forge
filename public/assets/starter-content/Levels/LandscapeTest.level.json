@@ -30,6 +30,10 @@
     {
       "assetId": "shape:sphere",
       "placements": []
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": []
     }
   ],
   "characters": [],
@@ -1882,7 +1886,7 @@
       "name": "River Water 1",
       "coordinateSpace": "world",
       "surfaceLevel": -38.7,
-      "flowSpeed": 0.5,
+      "flowSpeed": 0.1,
       "reflectionMode": "environment",
       "reflectionQuality": "high"
     }

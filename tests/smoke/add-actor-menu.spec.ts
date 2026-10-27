@@ -1,5 +1,75 @@
 import { expect, test } from "./test";
 
+for (const [kind, label] of [
+  ["reflectiveSurface", "Reflective Surface"],
+  ["reflectionCapture", "Sphere Reflection Capture"],
+] as const) {
+  test(`${label} places by dragging from category and search, with undo and cancellation`, async ({ page }, testInfo) => {
+    await page.route("**/__save-layout**", (route) => route.fulfill({ status: 200, json: { ok: true } }));
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1680, height: 900 });
+    await page.goto("/?editor", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 30_000 });
+    const before = await page.getByTestId("outliner-row").count();
+    const popover = page.locator("[data-add-actor-popover]");
+    const canvas = page.locator("#game-canvas");
+    const openCategory = async () => {
+      await page.getByTestId("add-actor-button").hover();
+      await popover.getByRole("button", { name: /^Visual Effects/ }).hover();
+      return popover.locator(`[data-add-categories] [data-add-key="${kind}"]`);
+    };
+    const row = await openCategory();
+    await expect(row).toHaveAttribute("draggable", "true");
+    await row.click();
+    await expect(page.getByTestId("outliner-row")).toHaveCount(before);
+
+    const dragIntoViewport = async (source: typeof row, x: number, y: number) => {
+      await expect(source).toBeVisible();
+      const box = await source.boundingBox();
+      const viewport = await canvas.boundingBox();
+      if (!box || !viewport) throw new Error("Missing drag source or viewport");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(viewport.x + x, viewport.y + y, { steps: 12 });
+      await page.mouse.move(viewport.x + x + 5, viewport.y + y);
+    };
+    await dragIntoViewport(await openCategory(), 520, 450);
+    await page.mouse.up();
+    await expect(page.getByTestId("outliner-row")).toHaveCount(before + 1);
+    const position = async () => Promise.all(["px", "py", "pz"].map(async (axis) =>
+      Number(await page.getByTestId(`detail-${axis}`).filter({ visible: true }).inputValue()),
+    ));
+    const placed = await position();
+    expect(Math.hypot(placed[0]!, placed[2]!)).toBeGreaterThan(0.5);
+    await page.screenshot({ path: testInfo.outputPath(`${kind}-placed.png`) });
+    await page.getByTestId("editor-undo").click();
+    await expect(page.getByTestId("outliner-row")).toHaveCount(before);
+    await page.getByTestId("editor-redo").click();
+    await expect(page.getByTestId("outliner-row")).toHaveCount(before + 1);
+    expect(await position()).toEqual(placed);
+    await page.getByTestId("editor-undo").click();
+
+    // A native drag cancelled with Escape must leave the scene untouched.
+    await dragIntoViewport(await openCategory(), 520, 450);
+    await page.screenshot({ path: testInfo.outputPath(`${kind}-preview.png`) });
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    await expect(page.getByTestId("outliner-row")).toHaveCount(before);
+
+    await page.getByTestId("add-actor-button").hover();
+    await popover.locator("[data-add-search]").fill(label);
+    const searchRow = popover.locator(`[data-add-results] [data-add-key="${kind}"]`);
+    await dragIntoViewport(searchRow, 650, 550);
+    await page.mouse.up();
+    await expect(page.getByTestId("outliner-row")).toHaveCount(before + 1);
+    const searched = await position();
+    expect(Math.hypot(searched[0]!, searched[2]!)).toBeGreaterThan(0.5);
+    expect(searched).not.toEqual(placed);
+    expect(errors).toEqual([]);
+  });
+}
+
 test("Add Actor menu uses a flat hover-only category list", async ({ page }) => {
   await page.setViewportSize({ width: 1680, height: 900 });
   await page.goto("/?editor");

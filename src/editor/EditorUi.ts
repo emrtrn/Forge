@@ -2217,16 +2217,23 @@ export class EditorUi {
     singleton("reflectionPlane", "Mirror Plane", "Visual Effects", "reflection", () =>
       this.app.addReflectionPlane(),
     );
-    singleton("reflectiveSurface", "Reflective Surface", "Visual Effects", "reflection", () =>
-      this.app.addReflectiveSurface(),
-    );
-    singleton(
-      "reflectionCapture",
-      "Sphere Reflection Capture",
-      "Visual Effects",
-      "reflection",
-      () => this.app.addReflectionCapture(),
-    );
+    ([
+      ["reflectiveSurface", "Reflective Surface"],
+      ["reflectionCapture", "Sphere Reflection Capture"],
+    ] as const).forEach(([kind, label]) => {
+      entries.push({
+        key: kind,
+        label,
+        category: "Visual Effects",
+        icon: "reflection",
+        drag: {
+          mime: "application/x-forge-special-actor",
+          payload: () => kind,
+          beginPreview: () => this.app.beginReflectionDragPreview(kind),
+        },
+        onClick: dragHintClick,
+      });
+    });
     singleton("postProcess", "Post Process", "Visual Effects", "postprocess", () =>
       this.app.addPostProcess(),
     );

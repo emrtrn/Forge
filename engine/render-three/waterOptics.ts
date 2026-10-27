@@ -23,4 +23,16 @@ float waterTransmission(float depth, float path, float visibility, float absorpt
   float wetness = smoothstep(0.0, 0.35, depth);
   return mix(1.0, clamp(visibility, 0.0, 1.0), wetness) * exp(-path / max(absorption, 0.01));
 }
+// Straight-alpha output for a layered interface. Reflection must contribute R,
+// not R * alpha: divide the accumulated surface radiance by the final coverage
+// before the renderer performs its one SrcAlpha blend with the visible bed.
+vec4 waterComposite(vec3 body, float bodyOpacity, vec3 reflection, float reflectance,
+    vec3 foamColor, float foamCoverage, vec3 glint) {
+  float r = clamp(reflectance, 0.0, 1.0);
+  float b = (1.0 - r) * clamp(bodyOpacity, 0.0, 1.0);
+  float f = clamp(foamCoverage, 0.0, 1.0);
+  float alpha = f + (1.0 - f) * (r + b);
+  vec3 radiance = f * foamColor + (1.0 - f) * (r * reflection + b * body + glint);
+  return vec4(radiance / max(alpha, 0.00001), alpha);
+}
 `;

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forge · Su yüzeyleri · 27 Ekim 2026</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101a20;color:#e3ecec;font:16px/1.55 system-ui,sans-serif}main{max-width:1328px;margin:auto;padding:32px 24px 80px}h1{font-size:clamp(26px,4vw,44px);line-height:1.15;margin:8px 0 20px}h2{font-size:22px;margin:0}p{max-width:900px;color:#b6caca}a{color:#98d9c6}article{margin:32px 0 48px;border:1px solid #34505b;border-radius:12px;overflow:hidden;background:#162830}header{padding:18px 22px}header p{margin:8px 0 0}.stage{position:relative;aspect-ratio:1280/748;background:#03090c;overflow:hidden}.stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.stage .new{clip-path:inset(0 0 0 var(--split,50%))}.stage .line{position:absolute;top:0;bottom:0;left:var(--split,50%);border-left:2px solid white;pointer-events:none}.tag{position:absolute;top:12px;padding:3px 10px;background:#0c1c25d9;border-radius:4px;font-size:13px}.left{left:12px}.right{right:12px}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px 22px}button{border:1px solid #688c96;border-radius:5px;background:#1e3942;color:#e3ecec;padding:7px 12px;cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #8ed6c2;outline-offset:3px}input{flex:1;min-width:120px;accent-color:#9cdec9}.note{padding:16px 20px;border-left:3px solid #b99a67;background:#253134}.eyebrow{color:#9cdec9;font-size:13px;letter-spacing:.08em}details{margin:22px 0}summary{cursor:pointer}figure{margin:20px 0}figure img{max-width:100%;display:block}figcaption{color:#b6caca;font-size:14px}@media(max-width:650px){main{padding:22px 12px 50px}header,.controls{padding:12px}.controls{gap:6px}button{font-size:12px}.tag{top:5px;font-size:11px;padding:1px 5px}}
+</style>
+<main>
+<span class="eyebrow">FORGE / LANDSCAPETEST / 27 EKİM 2026</span>
+<h1>Akış, sakin yüzey ve görünen dip</h1>
+<p>Solda 26 Ekim yüzey shader'ı, sağda bu çalışmanın sonucu. Aynı güncel sahne kopyası, aynı kamera, ışık, ACES exposure 0.2 ve su saati 12 saniye. Kaydırıcı sınırı değiştirir; düğmeler tam kareyi açar. Görseller gerçek Chrome / NVIDIA RTX 3060 / D3D11 çıktılarıdır.</p>
+<p><a href="WATER_SURFACE_V3_REVIEW.md">Teknik rapor ve açık sınırlar</a> · <a href="evidence/surface-v3/review.json">Kamera / GPU / uyarı kayıtları</a> · <a href="evidence/surface-v3/scene-hashes.json">Sahne hash'leri</a></p>
+<p class="note">Planar yalnız göllerde; nehir mevcut bulanık environment/probe yansımasını kullanır. Terrain ve authored su ayarları değiştirilmedi. Gölün sığ, kahverengi dibi korunur; tüm görsel hedeflerin koşulsuz tamamlandığı iddia edilmez.</p>
+<div id="gallery"></div>
+<details><summary>Reddedilen ilk nehir denemesi</summary><figure><img src="evidence/surface-v3/iteration-1/river-bank-after.png" alt="Reddedilen düzenli enine dalga bantları"><figcaption>İlk denemede enine bantlar fazla düzenliydi. Kabul edilmedi; yerini düzensiz akan normal ve yerel köpük parçaları aldı.</figcaption></figure></details>
+<details><summary>Göl tanı kareleri — nihai görünüm değildir</summary><p>Opacity=1 ve bedVisibility=0 yalnız teşhis içindir; kayıt veya teslim ayarı yapılmadı.</p><figure><img src="evidence/surface-v3/lake-1-diagnostic-opaque.png" alt="Lake-1 opak tanı karesi"><figcaption>Opak teşhis: gövde görünür; bu düz opak görünüm nihai çözüm olarak uygulanmadı.</figcaption></figure></details>
+<script>
+const root='evidence/surface-v3/';
+const views=[
+ ['river-bank','Nehir · kıyı','Düzensiz normal kümeleri ve kopuk köpük parçaları, saydam dipten ayrı bir akan yüzey katmanı oluşturur.','motion'],
+ ['river-upper','Nehir · üst bölüm','Akış yönü korunur. Kıyıdaki parlaklık ve gölgeli vadi bu kadrajda hâlâ güçlüdür.'],
+ ['river-flat','Nehir · alt bölüm','Kaya teması, sığ dip ve yerel yüzey hareketi. Köpük fiziksel engel simülasyonu değildir.'],
+ ['river-top','Nehir · üstten','Yukarıdan bakışta dip okunur; environment yansıması ölçülü kalır.'],
+ ['lake-low','Lake-3 · alçak bakış','Sakin ağaç yansımaları artık alpha ile ikinci kez sönmez; sığ kahverengi dip görünür kalır.','motion'],
+ ['lake-shore','Lake-3 · kıyı','Dip ve kıyı çizgisi korunur. Havzanın maksimum derinliği 0.759 metredir.'],
+ ['lake-top','Lake-3 · üstten','Normal bakışta düşük Fresnel nedeniyle dip baskındır; bu görüntü derin mavi göl kabulü değildir.'],
+ ['lake-overview','Göller · genel','Güncel sahnedeki iki göl ve mevcut çevre. Kamera ve authored ışık değiştirilmedi.'],
+ ['lake-1','Lake-1 · mevcut ikinci göl','Bu authored havza yaklaşık 6.463 m derinliğe ulaşır. Dip biçiminin fazla okunması ayrıca incelenmiştir.'],
+];
+for(const [view,title,note,motion] of views){
+ const article=document.createElement('article');article.dataset.view=view;
+ article.innerHTML=`<header><h2>${title}</h2><p>${note}</p></header><div class="stage"><img class="old" src="${root+view}-before.png" alt="${title}, önce"><img class="new" src="${root+view}-after.png" alt="${title}, sonra"><div class="line"></div><span class="tag left">Önce</span><span class="tag right">Sonra</span></div><div class="controls"><button data-split="100">Önce</button><button data-split="0">Sonra</button><button data-split="50">Karşılaştır</button><button data-off>Su kapalı</button>${motion?'<button data-time>t=14 s</button>':''}<input type="range" min="0" max="100" value="50" aria-label="${title} karşılaştırma sınırı"></div>`;
+ const stage=article.querySelector('.stage'),old=article.querySelector('.old'),fresh=article.querySelector('.new'),range=article.querySelector('input');
+ const restore=()=>{old.src=root+view+'-before.png';fresh.src=root+view+'-after.png';article.querySelector('.right').textContent='Sonra';article.querySelector('.left').textContent='Önce';};
+ const split=n=>{stage.style.setProperty('--split',n+'%');range.value=n;};
+ range.oninput=()=>{restore();split(range.value)};
+ for(const b of article.querySelectorAll('[data-split]'))b.onclick=()=>{restore();split(b.dataset.split)};
+ article.querySelector('[data-off]').onclick=()=>{old.src=root+view+'-off.png';split(100);article.querySelector('.left').textContent='Su kapalı';};
+ if(motion)article.querySelector('[data-time]').onclick=()=>{restore();fresh.src=root+view+'-time14.png';split(0);article.querySelector('.right').textContent='Sonra · t=14 s';};
+ document.querySelector('#gallery').append(article);
+}
+</script>
+</main></html>

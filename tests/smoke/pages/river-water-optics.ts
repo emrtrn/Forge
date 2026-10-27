@@ -1,5 +1,5 @@
 import {
-  ACESFilmicToneMapping, Color, DataTexture, Group, Mesh, MeshBasicMaterial, PMREMGenerator,
+  ACESFilmicToneMapping, Color, DataTexture, Group, Matrix4, Mesh, MeshBasicMaterial, PMREMGenerator,
   NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry, RepeatWrapping, RGBAFormat,
   Scene, SRGBColorSpace, Vector3, WebGLRenderer,
 } from "three";
@@ -10,8 +10,11 @@ import { createRiverWaterObject, type RiverWaterObject } from "@engine/render-th
 import { resolveRiverWater } from "@engine/scene/riverWater";
 import type { ForgeLandscapeSpline } from "@engine/scene/landscape";
 import type { SphereReflectionCaptureBake } from "@engine/render-three/reflectionCapture";
+import { LakeWaterObject } from "@engine/render-three/lakeWater";
 
 export interface OpticsOptions {
+  kind: "river" | "lake";
+  isolateReflection: boolean;
   angle: "top" | "grazing" | "below";
   pipeline: "direct" | "composer";
   depth: number;
@@ -72,6 +75,11 @@ captureScene.background.setRGB(0, 0, 1);
 const blueEnvironment = generator.fromScene(captureScene, 0, 0.1, 100, { size: 64 });
 generator.dispose();
 const reflectionTextures = { red: redEnvironment.texture, blue: blueEnvironment.texture };
+const planarTextures = {
+  red: new DataTexture(new Uint8Array([255, 0, 0, 255]), 1, 1, RGBAFormat),
+  blue: new DataTexture(new Uint8Array([0, 0, 255, 255]), 1, 1, RGBAFormat),
+};
+for (const texture of Object.values(planarTextures)) texture.needsUpdate = true;
 const localBake: SphereReflectionCaptureBake = { target: blueEnvironment, position: [0, 0, 0], radius: 30,
   intensity: 1, priority: 1, resolution: 64, parallax: false, near: 0.1, far: 100 };
 const normals = new DataTexture(new Uint8Array([
@@ -87,12 +95,14 @@ const spline: ForgeLandscapeSpline = {
   ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }],
 };
 let options: OpticsOptions = {
+  kind: "river",
+  isolateReflection: false,
   angle: "top", pipeline: "direct", depth: 1, reflection: "off", visible: true,
   bedVisibility: 1, absorptionDistance: 2, opacity: 0, foamOpacity: 0,
   time: 0, normalMap: false, calibration: false, exposure: 0.2,
   transformed: false, slope: 0, orthographic: false, localProbe: false,
 };
-let river: RiverWaterObject;
+let river: RiverWaterObject | LakeWaterObject;
 
 function frame(patch: Partial<OpticsOptions> = {}) {
   options = { ...options, ...patch };
@@ -107,11 +117,31 @@ function frame(patch: Partial<OpticsOptions> = {}) {
       reflectionStrength: 1,
       reflectionMode: options.reflection === "off" ? "off" : "environment",
       ...(options.calibration ? { deepColor: "#808080", shallowColor: "#808080" } : {}),
+      ...(options.isolateReflection ? { deepColor: "#000000", shallowColor: "#000000" } : {}),
     }),
     spline: slopedSpline, heightAt: (x) => x * options.slope - options.depth, sampleSpacing: 0.5,
     position: [0, 0, 0], rotation: [0, 0, 0], foamNoiseMap: null,
     environmentProbes: () => options.localProbe ? [localBake] : [],
   }, options.normalMap ? normals : null);
+  if (options.kind === "lake") {
+    const geometry = river.geometry;
+    const lake = new LakeWaterObject({ schema: 1, id: "optics", kind: "lake", mode: "fillExisting", coordinateSpace: "world",
+      terrainRef: "fixture", bounds: { min: [-8, -4], max: [8, 4] }, seed: [0, 0], surfaceLevel: 0,
+      appearance: { opacity: options.opacity, bedVisibility: options.bedVisibility, absorptionDistance: options.absorptionDistance,
+        reflectionStrength: 1, rippleSpeed: 0.15,
+        ...(options.isolateReflection ? { deepColor: "#000000", shallowColor: "#000000" } : {}) } }, {
+      status: "ready", message: "fixture", position: [0, 0, 0], escapeLevel: null,
+      positions: new Float32Array(geometry.getAttribute("position").array),
+      depths: new Float32Array(geometry.getAttribute("waterDepth").array),
+      uvs: new Float32Array(geometry.getAttribute("uv").array), indices: new Uint32Array(geometry.index!.array),
+      shore: new Float32Array(), cuts: new Float32Array(), cells: 1, bytes: 0, buildMs: 0,
+    }, options.normalMap ? normals : null);
+    if (options.reflection !== "off") lake.setPlanarReflectionBinding({
+      texture: planarTextures[options.reflection],
+      textureMatrix: new Matrix4().set(.03, 0, 0, .5, 0, 0, .03, .5, 0, 0, 0, 0, 0, 0, 0, 1),
+    });
+    river.dispose(); river = lake;
+  }
   // Test-only deterministic clock; production's onBeforeRender uses wall time.
   const beforeRender = river.onBeforeRender;
   river.onBeforeRender = function (...args) { beforeRender.apply(this, args); river.material.uniforms.time!.value = options.time; };
@@ -125,6 +155,9 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   positions.needsUpdate = true;
   bed.geometry.computeBoundingSphere();
   bed.position.y = -options.depth;
+  const bedMap = options.isolateReflection ? null : checker;
+  if (bedMaterial.map !== bedMap) { bedMaterial.map = bedMap; bedMaterial.needsUpdate = true; }
+  bedMaterial.color.set(options.isolateReflection ? "#000000" : "#ffffff");
   bed.visible = options.angle !== "below";
   if (options.transformed) fixtureGroup.position.set(100, 17, -80);
   else fixtureGroup.position.set(0, 0, 0);

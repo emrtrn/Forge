@@ -309,11 +309,16 @@ void main() {
   vec2 normalB = texture2D(normalMap, baseUv * 1.73 + vec2(0.37, 0.61) - vec2(time * flowSpeed * 0.13, 0.0)).xy * 2.0 - 1.0;
   float phase = 0.5 + 0.5 * sin(time * 0.43 + waterNoise(advected * 0.3) * 3.0);
   vec2 flowingNormal = mix(normalA, normalB, phase * waterDetail);
+  // Metre-scale, broken current patches travel downstream. The normal-map
+  // micro detail rides these rather than tinting the whole bed uniformly.
+  vec2 currentSlope = (vec2(waterNoise(advected * vec2(0.65, 1.2) + warp * 2.0),
+    waterNoise(advected * vec2(0.85, 2.1) + vec2(4.7, 8.1))) * 2.0 - 1.0) * vec2(0.24, 0.14);
   vec3 tangent = vFlowTangent - surfaceNormal * dot(vFlowTangent, surfaceNormal);
   tangent /= max(length(tangent), 0.000001);
   vec3 bitangent = cross(surfaceNormal, tangent);
-  vec3 opticalNormal = normalize(surfaceNormal + hasNormalMap * (0.22 + vRapidness * 0.12)
-    * (tangent * flowingNormal.x + bitangent * flowingNormal.y));
+  vec2 slope = flowingNormal * (0.22 + vRapidness * 0.12) + currentSlope;
+  vec3 opticalNormal = normalize(surfaceNormal + hasNormalMap
+    * (tangent * slope.x + bitangent * slope.y));
   float viewCosine = clamp(abs(dot(opticalNormal, viewDirection)), 0.0, 1.0);
   // Air/water F0 is approximately 0.02. Strength remains an authored multiplier.
   float fresnel = waterFresnel(viewCosine);
@@ -324,7 +329,6 @@ void main() {
     + waterNoise(advected * vec2(0.67, 3.4) + vec2(7.3, 1.2)) * 0.45;
   vec3 color = mix(deepColor, shallowColor, shallow) * (0.84 + turbulence * 0.32);
   color *= waterSurfaceLight(opticalNormal, viewDirection, 0.38);
-  color += waterSunGlint(opticalNormal, viewDirection, 0.28);
   vec2 foamUv = vec2(
     vRiverUv.x * 0.78 - time * flowSpeed * vFlowSpeedMultiplier * 0.34,
     vRiverUv.y * 4.5
@@ -351,22 +355,22 @@ void main() {
   float shallowContact = smoothstep(0.0, 0.08, vWaterDepth)
     * (1.0 - smoothstep(0.08, 0.8, vWaterDepth));
   float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup) * shallowContact;
-  float rapidFoam = smoothstep(0.035, 0.3, vRapidness) * smoothstep(0.58, 0.85, turbulence) * foamBreakup * 0.65;
+  float brokenCrest = smoothstep(0.67, 0.88, waterNoise(advected * vec2(0.4, 3.8) + warp * 2.0))
+    * smoothstep(0.42, 0.72, turbulence);
+  float rapidFoam = smoothstep(0.035, 0.3, vRapidness) * brokenCrest * foamBreakup * 0.75;
   float foam = clamp(shoreFoam + rapidFoam, 0.0, 1.0);
-  color = mix(color, foamColor, foam * foamOpacity);
   vec3 reflected = min(waterReflectedEnvironment(vWorldPosition, reflect(-viewDirection, opticalNormal), 0.38 + (1.0 - waterDetail) * 0.2), vec3(2.0));
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
   float hasEnvironment = step(0.0001, waterEnvironmentIntensity + waterProbeIntensity);
   float reflectionAmount = clamp(reflectionStrength * (0.025 + fresnel * 0.425) * aboveSurface * hasEnvironment
     * (1.0 - foam * foamOpacity * 0.65), 0.0, 1.0);
-  color = mix(color, reflected, reflectionAmount);
   float wetness = smoothstep(0.0, 0.12, vWaterDepth);
   float pathDepth = waterPath(vWaterDepth, abs(dot(surfaceNormal, viewDirection)));
   float bedTransmission = waterTransmission(vWaterDepth, pathDepth, bedVisibility, absorptionDistance);
   float bedOpacity = 1.0 - bedTransmission;
   float authoredOpacity = opacity * wetness * mix(0.58, 1.0, smoothstep(0.0, 3.0, vWaterDepth));
-  float alpha = clamp(max(max(authoredOpacity, bedOpacity), reflectionAmount), 0.0, 1.0);
-  gl_FragColor = vec4(color, alpha);
+  gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectionAmount * wetness,
+    foamColor, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28) * wetness * 0.35);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>

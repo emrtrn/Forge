@@ -40,6 +40,9 @@ export function installLakeProbe(app: unknown) {
       const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const render = (wet: boolean) => {
         for (let i = 0; i < surfaces.length; i++) surfaces[i]!.visible = wet && visible[i]!;
+        // Forge keeps autoReset=false so nested captures count in the parent.
+        // Each A/B sample still needs its own frame boundary.
+        renderer.info.reset();
         renderer.render(a.scene, a.camera);
       };
       try {

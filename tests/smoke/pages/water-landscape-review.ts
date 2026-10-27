@@ -1,7 +1,6 @@
 import { Box3, Mesh, ShaderMaterial, Vector3, type Group, type PerspectiveCamera, type Scene, type WebGLRenderer } from "three";
 import { SceneApp } from "@/scene/SceneApp";
 import type { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
-import { updateLandscapeLod } from "@engine/render-three/landscape";
 import type { RiverWaterObject } from "@engine/render-three/riverWater";
 import type { LakeWaterController } from "@/scene/lakeWaterController";
 import { GpuFrameTimer, type GpuTimerContext } from "@engine/perf/gpuTimer";
@@ -9,13 +8,18 @@ import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { tileKey } from "@engine/terrain/terrainTypes";
 import type { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
+import type { RoomLayout } from "@engine/scene/layout";
+import { WATER_OPTICS_GLSL } from "@engine/render-three/waterOptics";
+import { WATER_ENVIRONMENT_GLSL } from "@engine/render-three/waterEnvironment";
+import baselineShaders from "./water-surface-v2-shaders.json";
 
-type Variant = "off" | "after" | "low" | "high";
+type Variant = "off" | "before" | "after" | "low" | "high";
 interface ReviewApp {
   projectReady: Promise<void>; scene: Scene; camera: PerspectiveCamera; renderer: WebGLRenderer;
   frameHandle: number; riverWaterObjects: RiverWaterObject[]; lakes: LakeWaterController | null;
   landscapeObjects: Group[]; worldTerrains: Map<string, WorldTerrainDocument>;
   environment: AuthoredEnvironment; riverReflectionSources: PlanarReflectionSource[];
+  layout: RoomLayout;
   postProcessPipeline: { render(dt: number): void } | null;
   foliageBinding: { updateCulling(camera: Vector3): void } | null;
   updateSunCascades(): void; updateWorldTerrainStreaming(): void;
@@ -25,7 +29,8 @@ const internal = app as unknown as ReviewApp;
 app.start();
 await internal.projectReady;
 const waterDeadline = performance.now() + 60_000;
-while (internal.riverWaterObjects.length !== 1 || internal.lakes?.objects.size !== 1) {
+while (internal.riverWaterObjects.length !== internal.layout.riverWaters?.filter((w) => !w.hidden).length
+  || internal.lakes?.objects.size !== internal.layout.waterBodies?.filter((w) => !w.hidden).length) {
   if (performance.now() > waterDeadline) throw new Error("LandscapeTest river/lake did not finish publishing");
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
@@ -35,7 +40,11 @@ const sources = [...new Set([...internal.riverReflectionSources,
 let reflectionDraws = 0, reflectionCaptures = 0, motion = false;
 const captureWitness = new Map<PlanarReflectionSource, { total: number; camera: number[] }>();
 let variant: Variant = "after", view = "river-upper";
-const fixedTime = 12;
+let fixedTime = 12;
+const currentShaders = new Map([...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]
+  .map((water) => [water, { vertex: water.material.vertexShader, fragment: water.material.fragmentShader }]));
+const expand = (shader: string) => shader.replaceAll("${WATER_OPTICS_GLSL}", WATER_OPTICS_GLSL)
+  .replaceAll("${WATER_ENVIRONMENT_GLSL}", WATER_ENVIRONMENT_GLSL);
 let currentDraw: { object: string; material: string; type: string } | null = null;
 const samplerWarnings = new Map<string, { count: number; object: string; material: string; type: string; variant: Variant }>();
 const originalDraw = renderer.renderBufferDirect.bind(renderer);
@@ -87,6 +96,13 @@ function setVariant(next: Variant) {
   variant = next;
   for (const source of sources) source.setQuality(next === "low" ? null : next === "high" ? "high" : "medium");
   for (const water of [...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]) water.visible = next !== "off";
+  for (const [water, current] of currentShaders) {
+    const shaders = next === "before" ? ("isRiverWaterObject" in water ? baselineShaders.river : baselineShaders.lake) : current;
+    const vertex = expand(shaders.vertex), fragment = expand(shaders.fragment);
+    if (water.material.fragmentShader !== fragment || water.material.vertexShader !== vertex) {
+      water.material.vertexShader = vertex; water.material.fragmentShader = fragment; water.material.needsUpdate = true;
+    }
+  }
   for (const water of internal.riverWaterObjects) water.material.uniforms.waterDetail!.value = next === "low" ? 0 : 1;
   document.querySelector<HTMLSelectElement>("#review-variant")!.value = next;
   status();
@@ -100,6 +116,7 @@ const cameras: Record<string, { target: number[]; offset: number[]; fov: number 
   "lake-shore": { target: [40, -5, -42], offset: [-1, 8, 20], fov: 48 },
   "lake-top": { target: [44, -5, -44], offset: [0, 85, 0.01], fov: 48 },
   "lake-low": { target: [40, -5, -42], offset: [-1, 2.5, 20], fov: 48 },
+  "lake-1": { target: [-52, -7, -57], offset: [10, 12, 28], fov: 48 },
 };
 function setView(name: string) {
   const pose = cameras[name]; if (!pose) throw new Error(`Unknown view ${name}`);
@@ -120,6 +137,10 @@ function setView(name: string) {
 }
 function status() {
   document.querySelector("#review-status")!.textContent = `${view} · ${variant} · ${motion ? "canlı" : `t=${fixedTime}s`}`;
+}
+function setTime(time: number) {
+  if (!Number.isFinite(time) || time < 0 || time > 3600) throw new Error("Invalid review time");
+  fixedTime = time; status();
 }
 function metadata() {
   const gl = renderer.getContext(), debug = gl.getExtension("WEBGL_debug_renderer_info");
@@ -149,13 +170,27 @@ function metadata() {
     resources: { ...renderer.info.memory, programs: renderer.info.programs?.length ?? 0, reflectionSources: sources.length },
   };
 }
-function renderOnce() {
-  renderer.info.reset(); reflectionDraws = 0; reflectionCaptures = 0;
-  internal.environment.update(0); internal.updateWorldTerrainStreaming();
-  internal.foliageBinding?.updateCulling(camera.position);
-  for (const object of internal.landscapeObjects) updateLandscapeLod(object, camera);
-  internal.updateSunCascades();
-  if (internal.postProcessPipeline) internal.postProcessPipeline.render(0); else renderer.render(scene, camera);
+// Read-only review sandbox: diagnostic controls never reach an authored file.
+function diagnoseLake(mode: "opaque" | "no-effects" | "no-reflection" | "ao-surface" | "depth") {
+  if (mode === "depth") for (const water of internal.lakes?.objects.values() ?? []) {
+    water.material.fragmentShader = water.material.fragmentShader.replace("#include <fog_fragment>",
+      "gl_FragColor=vec4(vec3(clamp(vDepth/6.,0.,1.)),1.);");
+    water.material.needsUpdate = true;
+  }
+  if (mode === "ao-surface") for (const water of internal.lakes?.objects.values() ?? []) {
+    water.geometry.computeVertexNormals(); water.material.depthWrite = true;
+  }
+  if (mode === "opaque") for (const water of internal.lakes?.objects.values() ?? []) {
+    water.material.uniforms.opacity!.value = 1;
+    water.material.uniforms.bedVisibility!.value = 0;
+    water.material.uniforms.reflectionStrength!.value = 0;
+  }
+  if (mode === "no-reflection") for (const water of internal.lakes?.objects.values() ?? []) water.material.uniforms.reflectionStrength!.value = 0;
+  if (mode === "no-effects") {
+    const pipeline = internal.postProcessPipeline as unknown as { effectPasses: { enabled: boolean }[] } | null;
+    for (const pass of pipeline?.effectPasses ?? []) pass.enabled = false;
+  }
+  return metadata();
 }
 const nextFrame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
 function percentiles(values: number[]) {
@@ -164,44 +199,48 @@ function percentiles(values: number[]) {
   return { samples: values.length, p50: p(0.5), p95: p(0.95), p99: p(0.99), mean: values.length ? values.reduce((a,b)=>a+b,0) / values.length : null };
 }
 async function benchmark(samples = 120) {
-  cancelAnimationFrame(internal.frameHandle);
   const gl = renderer.getContext();
   const timer = GpuFrameTimer.create(typeof (gl as WebGL2RenderingContext).createQuery === "function" ? gl as GpuTimerContext : null);
-  if (!timer) { app.start(); throw new Error("Hardware GPU timer unavailable"); }
+  if (!timer || !internal.postProcessPipeline) throw new Error("Hardware GPU timer/composer unavailable");
+  const pipeline = internal.postProcessPipeline, originalRender = pipeline.render;
   const results = [];
   try {
     // Reverse the order in the second round to expose drift/capture cadence.
-    for (const [round, order] of [[0, ["off", "low", "after", "high"]], [1, ["high", "after", "low", "off"]]] as const) {
+    for (const [round, order] of [[0, ["off", "before", "low", "after", "high"]], [1, ["high", "after", "low", "before", "off"]]] as const) {
       for (const next of order) {
         setVariant(next);
-        for (let i = 0; i < 30; i++) { await nextFrame(); renderOnce(); }
+        for (let i = 0; i < 30; i++) await nextFrame();
         const gpu: number[] = [], cpu: number[] = [], raf: number[] = [], draws: number[] = [], reflection: number[] = [];
-        let issued = 0, previous = await nextFrame(), captures = 0;
-        for (let i = 0; i < samples + 30; i++) {
-          const now = await nextFrame();
-          const measuring = i < samples;
+        let issued = 0, previous = performance.now(), captures = 0;
+        // Observe the actual SceneApp render boundary. Reimplementing its frame
+        // loop can miss material/subsystem updates and measure a different image.
+        pipeline.render = (dt) => {
+          const measuring = cpu.length < samples, now = performance.now();
           if (measuring) raf.push(now - previous);
-          previous = now;
-          const began = measuring && timer.begin(1);
-          const start = performance.now(); renderOnce();
+          previous = now; reflectionDraws = 0; reflectionCaptures = 0;
+          const began = measuring && timer.begin(1), start = performance.now();
+          try { originalRender.call(pipeline, dt); } finally { if (began) { timer.end(); issued++; } }
           if (measuring) { cpu.push(performance.now()-start); draws.push(renderer.info.render.calls); reflection.push(reflectionDraws); captures += reflectionCaptures; }
-          if (began) { timer.end(); issued++; }
           for (const result of timer.poll()) gpu.push(result.ms);
-          if (!measuring && gpu.length === issued) break;
+        };
+        for (let i = 0; i < samples + 60; i++) {
+          await nextFrame();
+          if (cpu.length === samples && gpu.length === issued) break;
         }
-        if (timer.disjointCount > 0 || gpu.length !== issued) throw new Error("GPU timing disjoint or incomplete");
+        pipeline.render = originalRender;
+        if (timer.disjointCount > 0 || issued !== samples || gpu.length !== issued) throw new Error("GPU timing disjoint or incomplete");
         results.push({ round, variant: next, gpuMs: percentiles(gpu), cpuSubmitMs: percentiles(cpu), rafMs: percentiles(raf),
           draws: percentiles(draws), reflectionDraws: percentiles(reflection), reflectionCaptures: captures, metadata: metadata() });
       }
     }
     return results;
-  } finally { timer.dispose(); setVariant("after"); app.start(); }
+  } finally { pipeline.render = originalRender; timer.dispose(); setVariant("after"); }
 }
 document.querySelector("#review-variant")!.addEventListener("change", (e) => setVariant((e.target as HTMLSelectElement).value as Variant));
 document.querySelector("#review-view")!.addEventListener("change", (e) => setView((e.target as HTMLSelectElement).value));
 document.querySelector("#review-motion")!.addEventListener("change", (e) => { motion = (e.target as HTMLInputElement).checked; status(); });
 declare global { interface Window { __waterLandscape: {
-  ready: boolean; metadata: typeof metadata; setView: typeof setView; setVariant: typeof setVariant; benchmark: typeof benchmark;
+  ready: boolean; metadata: typeof metadata; setView: typeof setView; setVariant: typeof setVariant; benchmark: typeof benchmark; setTime: typeof setTime; diagnoseLake: typeof diagnoseLake;
 }; } }
-window.__waterLandscape = { ready: true, metadata, setView, setVariant, benchmark };
+window.__waterLandscape = { ready: true, metadata, setView, setVariant, benchmark, setTime, diagnoseLake };
 setView("river-upper");

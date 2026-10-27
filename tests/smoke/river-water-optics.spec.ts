@@ -28,6 +28,25 @@ test.beforeEach(async ({ page }) => {
 });
 test.afterEach(async ({ page }) => { expect(browserErrors.get(page)).toEqual([]); });
 
+test("water interface: clear river and lake preserve reflection energy through alpha blending", async ({ page }, info) => {
+  const measurements = [];
+  for (const kind of ["river", "lake"] as const) {
+    const signals = [];
+    for (const opacity of [1, 0]) {
+      const red = await frame(page, { kind, isolateReflection: true, angle: "grazing", depth: 0.1,
+        opacity, bedVisibility: 1, absorptionDistance: 100, reflection: "red", pipeline: "composer" });
+      const blue = await frame(page, { reflection: "blue" });
+      const signal = channel(red, 0) - channel(blue, 0);
+      signals.push(signal); measurements.push({ kind, opacity, red, blue, signal });
+    }
+    // Black bed/body isolate interface energy from tint and output nonlinearity.
+    // Clear water must retain the same reflected radiance as opaque water.
+    expect(signals[0]!).toBeGreaterThan(15);
+    expect(Math.abs(signals[1]! - signals[0]!)).toBeLessThan(3);
+  }
+  await evidence(info, "reflection-energy", measurements);
+});
+
 test("river optics: grazing reflection exceeds top-down, underside stays bounded", async ({ page }, info) => {
   const measurements: Record<string, unknown> = {};
   const signals: number[] = [];

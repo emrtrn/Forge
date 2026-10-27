@@ -388,6 +388,17 @@
   transition-delay: 0s;
 }
 
+/* Keep the trigger and popover in one continuous hover area, even when the
+   pointer pauses in their visual gap longer than the close grace period. */
+.add-actor-popover::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: -1px;
+  right: -1px;
+  height: 7px;
+}
+
 .editor-shell .add-actor-popover button {
   width: 100%;
   justify-content: flex-start;
@@ -443,6 +454,17 @@
   border-radius: 6px;
   background: rgba(19, 22, 25, 0.98);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* The 4px visual gap must still hover this submenu's category. Otherwise its
+   display:none rule removes the destination before the pointer can reach it. */
+.add-actor-submenu::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  width: 5px;
 }
 
 /* Only the hovered category shows its flyout: moving to another category closes

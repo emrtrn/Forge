@@ -2319,24 +2319,44 @@ export class EditorUi {
     const next = this.buildAddActorEntries();
     const keys = (entries: readonly AddActorEntry[]) => entries.map((entry) => `${entry.key}|${entry.label}`).join("\n");
     if (keys(next) === keys(this.addActorEntries)) return;
+    const previous = this.addActorEntries;
     this.addActorEntries = next;
     const popover = this.root.querySelector<HTMLElement>("[data-add-actor-popover]");
     if (!popover) return;
-    popover.innerHTML = this.buildAddActorMenuMarkup();
-    this.bindAddActorMenu();
+    // Class discovery updates Vehicles asynchronously. Keep the other category
+    // nodes (and their current :hover state) alive while the user browses them.
+    const submenus = popover.querySelectorAll<HTMLElement>(".add-actor-submenu");
+    ADD_ACTOR_CATEGORIES.forEach((category, index) => {
+      const entries = next.filter((entry) => entry.category === category.label);
+      if (keys(entries) === keys(previous.filter((entry) => entry.category === category.label))) return;
+      const submenu = submenus[index];
+      if (!submenu) return;
+      submenu.innerHTML = this.addActorCategoryRows(category.label);
+      const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+      submenu.querySelectorAll<HTMLButtonElement>(".add-actor-item").forEach((button) => {
+        const entry = byKey.get(button.dataset.addKey ?? "");
+        if (entry) this.bindAddActorEntry(button, entry);
+      });
+    });
+    const search = popover.querySelector<HTMLInputElement>("[data-add-search]");
+    if (search?.value) this.renderAddActorSearchResults(search.value);
+  }
+
+  private addActorCategoryRows(category: string): string {
+    return this.addActorEntries
+      .filter((entry) => entry.category === category)
+      .map((entry) => this.addActorItemMarkup(entry, { includeAttr: true }))
+      .join("")
+      || (ADD_ACTOR_EMPTY_HINTS[category]
+        ? `<div class="add-actor-empty">${escapeHtml(ADD_ACTOR_EMPTY_HINTS[category]!)}</div>`
+        : "");
   }
 
   /** Markup for the Add Actor popover body: search row, category submenus, and
    *  the flat search-results slot. */
   private buildAddActorMenuMarkup(): string {
     const categories = ADD_ACTOR_CATEGORIES.map((cat) => {
-      const rows = this.addActorEntries
-        .filter((entry) => entry.category === cat.label)
-        .map((entry) => this.addActorItemMarkup(entry, { includeAttr: true }))
-        .join("")
-        || (ADD_ACTOR_EMPTY_HINTS[cat.label]
-          ? `<div class="add-actor-empty">${escapeHtml(ADD_ACTOR_EMPTY_HINTS[cat.label]!)}</div>`
-          : "");
+      const rows = this.addActorCategoryRows(cat.label);
       return (
         `<div class="add-actor-category">` +
         `<button type="button" class="add-actor-category-label">${ACTOR_TYPE_ICONS[cat.icon]}<span>${cat.label}</span></button>` +

@@ -1,4 +1,85 @@
-import { expect, test } from "./test";
+import { expect, test, type Page } from "./test";
+
+/** Exercise real class loading without scanning the entire local asset library. */
+async function useReferenceCarTree(page: Page): Promise<void> {
+  await page.route("**/__project-dir/assets", (route) => route.fulfill({
+    json: {
+      root: "assets",
+      children: [{
+        name: "Script_ReferenceCar.actor.json",
+        path: "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
+        type: "file",
+      }],
+    },
+  }));
+}
+
+for (const width of [1680, 1366]) {
+  test(`Add Actor stays open across hover gaps at ${width}px`, async ({ page }, testInfo) => {
+    test.setTimeout(300_000);
+    // This tests a menu refresh, independent of the size of the local asset tree.
+    await useReferenceCarTree(page);
+    // Complete class discovery while a different category is being browsed.
+    let releaseClasses = (): void => {};
+    const classesReady = new Promise<void>((resolve) => { releaseClasses = resolve; });
+    page.on("close", releaseClasses);
+    await page.route("**/Script_ReferenceCar.actor.json", async (route) => {
+      await classesReady;
+      await route.continue();
+    });
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/?editor", { waitUntil: "domcontentloaded" });
+    const trigger = page.getByTestId("add-actor-button");
+    const popover = page.locator("[data-add-actor-popover]");
+    await expect(trigger).toBeVisible({ timeout: 30_000 });
+    await trigger.hover();
+    const buttonBox = await trigger.boundingBox();
+    const menuBox = await popover.boundingBox();
+    if (!buttonBox || !menuBox) throw new Error("Missing Add Actor menu bounds");
+
+    // Pause longer than the close delay between the trigger and the menu.
+    await page.mouse.move(buttonBox.x + buttonBox.width / 2, (buttonBox.y + buttonBox.height + menuBox.y) / 2);
+    await page.waitForTimeout(450);
+    await expect(popover).toBeVisible();
+
+    // Exercise category switches and both directions across each flyout gap.
+    for (const name of ["Shapes", "Visual Effects", "Volumes", "Visual Effects"]) {
+      const category = popover.getByRole("button", { name: new RegExp(`^${name}`) });
+      await category.hover();
+      const submenu = category.locator("..").locator(".add-actor-submenu");
+      await expect(submenu).toBeVisible();
+      if (name === "Shapes") {
+        releaseClasses();
+        await expect(popover.locator('[data-add-key="vehicle:assets/starter-content/Gameplay/Script_ReferenceCar.actor.json"]')).toHaveCount(1, { timeout: 30_000 });
+        await expect(submenu).toBeVisible();
+      }
+      const categoryBox = await category.boundingBox();
+      const submenuBox = await submenu.boundingBox();
+      if (!categoryBox || !submenuBox) throw new Error("Missing category bounds");
+      const gapX = (categoryBox.x + categoryBox.width + submenuBox.x) / 2;
+      const y = categoryBox.y + categoryBox.height / 2;
+      for (const x of [gapX, submenuBox.x + 20, gapX, categoryBox.x + categoryBox.width - 10]) {
+        await page.mouse.move(x, y, { steps: 5 });
+        await page.waitForTimeout(450);
+        await expect(popover).toBeVisible();
+        await expect(submenu).toBeVisible();
+      }
+    }
+    await popover.getByRole("button", { name: "Sphere Reflection Capture", exact: true }).hover();
+    await page.waitForTimeout(450);
+    await expect(popover).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("hover-reflection-submenu.png") });
+
+    // Leaving the menu closes it; visiting another toolbar menu must not block re-entry.
+    await page.mouse.move(width - 50, 700);
+    await expect(popover).toBeHidden();
+    await page.locator("[data-camera-button]").hover();
+    await expect(page.locator("[data-camera-popover]")).toBeVisible();
+    await trigger.hover();
+    await expect(popover).toBeVisible();
+    await expect(page.locator("[data-camera-popover]")).toBeHidden();
+  });
+}
 
 for (const [kind, label] of [
   ["reflectiveSurface", "Reflective Surface"],
@@ -145,6 +226,7 @@ test("Camera, view mode, and Show menus use flat rows", async ({ page }) => {
 test("Add Actor Vehicles lists the project's vehicle classes and places one on click", async ({ page }) => {
   // Placing marks the layout dirty; never let the autosave write the smoke layout.
   await page.route("**/__save-layout**", (route) => route.fulfill({ status: 200, json: { ok: true } }));
+  await useReferenceCarTree(page);
   await page.goto("/?editor");
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   const actorCount = async (): Promise<number> => {

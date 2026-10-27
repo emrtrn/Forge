@@ -719,9 +719,9 @@
         },
         {
           "position": [
-            10.49,
-            -0.953,
-            -29.995
+            10.89,
+            -0.95,
+            -25.02
           ],
           "name": "LT Rock 64",
           "rotation": [
@@ -1292,9 +1292,9 @@
         },
         {
           "position": [
-            29.67,
-            -0.897,
-            -29.245
+            44.48,
+            -6.04,
+            -46.03
           ],
           "name": "LT Rock 149",
           "rotation": [
@@ -1311,9 +1311,9 @@
     {
       "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
-        20.96,
-        0.12,
-        -44.42
+        48.49,
+        -4.66,
+        -74.65
       ],
       "rotationYDeg": 0,
       "scale": 1

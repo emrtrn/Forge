@@ -130,6 +130,11 @@
       "intensity": 1,
       "radius": 1
     },
+    "dof": {
+      "focusDistance": 10,
+      "aperture": 1,
+      "maxBlur": 1
+    },
     "ao": {
       "enabled": true,
       "radius": 1,
@@ -1917,14 +1922,19 @@
       "name": "Lake 3",
       "hidden": false,
       "appearance": {
+        "causticsEnabled": true,
         "opacity": 0.35,
         "bedVisibility": 0.9,
         "absorptionDistance": 3,
         "normalScale": 2,
         "rippleSpeed": 0.15,
         "reflectionStrength": 0.45,
+        "causticsStrength": 1,
+        "causticsScale": 1,
+        "causticsSpeed": 0.25,
+        "causticsDepthFade": 4,
         "reflectionMode": "sharedPlanar",
-        "reflectionQuality": "medium"
+        "reflectionQuality": "high"
       }
     },
     {
@@ -1951,6 +1961,7 @@
       "surfaceLevel": -7,
       "name": "Lake 1",
       "appearance": {
+        "causticsEnabled": false,
         "opacity": 0.8,
         "absorptionDistance": 3,
         "reflectionStrength": 0.2,

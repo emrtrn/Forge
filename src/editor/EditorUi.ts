@@ -3806,11 +3806,11 @@ export class EditorUi {
     });
   }
 
-  /** Add Actor → Landscape: tile grid options first (1x1 by default), then an undoable add. */
+  /** Add Actor → Landscape: tile grid (1x1 by default) and, for more tiles, open world settings; then one undoable add. */
   private async addLandscape(): Promise<void> {
     const { pickWorldTerrainOptions } = await import("@/editor/worldTerrainDialog");
-    const options = await pickWorldTerrainOptions();
-    if (options) this.app.addLandscape(options);
+    const choice = await pickWorldTerrainOptions(this.app.getWorldSettings());
+    if (choice) this.app.addLandscape(choice.terrain, choice.world);
   }
 
   private async expandLandscapeToWorldTerrain(): Promise<void> {

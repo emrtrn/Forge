@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { openWorldFogPatch } from "../../engine/world/openWorldSetup";
 import { expect, test, type Page } from "./test";
 import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
@@ -16,23 +17,30 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
  */
 
 const LEVEL = "layouts/__playwright-terrain-create.level.json";
+const OPEN_WORLD_LEVEL = "layouts/__playwright-open-world-create.level.json";
 const BASE_HEIGHT = 2;
 
 async function exists(path: string): Promise<boolean> {
   return access(smokePublicPath(path)).then(() => true, () => false);
 }
 
-async function writeLevel(): Promise<void> {
+async function writeLevel(path = LEVEL): Promise<void> {
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
-  level.name = "__playwright-terrain-create";
+  level.name = path === LEVEL ? "__playwright-terrain-create" : "__playwright-open-world-create";
   level.instances = level.instances.filter((group: { assetId: string }) => group.assetId === "marker:playerStart");
   const start = level.instances[0];
   if (!start) throw new Error("smoke spline level has no Player Start");
   start.placements = [{ ...start.placements[0], position: [6, BASE_HEIGHT + 3, -4] }];
   level.landscapes = [];
   level.riverWaters = [];
-  await mkdir(dirname(smokePublicPath(LEVEL)), { recursive: true });
-  await writeFile(smokePublicPath(LEVEL), JSON.stringify(level, null, 2));
+  // The open world flow starts from a level with no partition, view distance or fog.
+  delete level.heightFog;
+  if (level.worldSettings) {
+    delete level.worldSettings.partition;
+    delete level.worldSettings.viewDistance;
+  }
+  await mkdir(dirname(smokePublicPath(path)), { recursive: true });
+  await writeFile(smokePublicPath(path), JSON.stringify(level, null, 2));
 }
 
 function saved(page: Page, path: "/__save-terrain" | "/__save-layout") {
@@ -132,5 +140,99 @@ test("Add Actor → Landscape creates a flat multi-tile terrain that saves, undo
   const y = Number(text.match(/pos: (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/)?.[2]);
   console.log(`[terrain-create] pawn y ${y}`);
   expect(Math.abs(y - BASE_HEIGHT)).toBeLessThan(0.2);
+  expect(errors).toEqual([]);
+});
+
+/**
+ * New Open World (OPEN_WORLD_PLAN Faz 8): a multi-tile grid opens the dialog's
+ * Open World section. Height range, World Partition, view distance and a
+ * fitted Height Fog are created with the terrain as one undo step.
+ */
+test("New Landscape's Open World section sets partition, view distance, fog and height range in one undo step", async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  await writeLevel(OPEN_WORLD_LEVEL);
+  expect((await request.post("/__open-level", { data: { path: OPEN_WORLD_LEVEL } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/?editor&openWorld=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 60_000 });
+
+  await page.getByTestId("add-actor-button").hover();
+  await page.getByRole("button", { name: /^Terrain/ }).hover();
+  await page.locator("[data-add-categories]").getByRole("button", { name: "Landscape", exact: true }).click();
+  const dialog = page.locator("[data-world-terrain-dialog]");
+  const section = dialog.locator("[data-open-world]");
+  const notes = dialog.locator("[data-open-world-notes]");
+  const create = dialog.locator("[data-world-terrain-create]");
+  await expect(section).toBeHidden();
+  await dialog.locator('[data-field="tilesX"]').fill("4");
+  await dialog.locator('[data-field="tilesZ"]').fill("2");
+  await dialog.locator('[data-field="tileQuads"]').selectOption("64");
+  await dialog.locator('[data-field="spacing"]').fill("2");
+  await expect(section).toBeVisible();
+  // Seeded from the level: nothing switched on.
+  await expect(section.locator('[data-world="partition"]')).not.toBeChecked();
+  await expect(section.locator('[data-world="cellSize"]')).toBeDisabled();
+  await expect(section.locator('[data-world="viewDistance"]')).toHaveValue("");
+  await section.locator('[data-field="heightMin"]').fill("-20");
+  await section.locator('[data-field="heightMax"]').fill("300");
+  await expect(notes).toContainText("0.5 cm steps");
+
+  // 512 m × 256 m world: the suggestion sees across it and stays under far view mode.
+  await section.locator("[data-open-world-suggest]").click();
+  await expect(section.locator('[data-world="viewDistance"]')).toHaveValue("600");
+  await expect(section.locator('[data-world="partition"]')).toBeChecked();
+  await expect(section.locator('[data-world="fitFog"]')).not.toBeChecked();
+  await section.locator('[data-world="cellSize"]').fill("64");
+  await expect(notes).toContainText("About 32 actor cells");
+  await section.locator('[data-world="viewDistance"]').fill("10");
+  await expect(create).toBeDisabled();
+  await section.locator('[data-world="viewDistance"]').fill("1500");
+  await expect(notes).toContainText("hard edge");
+  await section.locator('[data-world="fitFog"]').check();
+  await expect(notes).not.toContainText("hard edge");
+  await expect(create).toBeEnabled();
+  await dialog.screenshot({ path: testInfo.outputPath("open-world-dialog.png") });
+
+  const layoutSave = saved(page, "/__save-layout");
+  await create.click();
+  await expect(dialog).toHaveCount(0);
+  expect((await layoutSave).ok()).toBeTruthy();
+  const row = page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first();
+  await expect(row).toBeVisible();
+
+  const level = async () => JSON.parse(await readFile(smokePublicPath(OPEN_WORLD_LEVEL), "utf8"));
+  // Autosave may be mid-write while polling: a partial file reads as "not yet".
+  const settled = async <T>(read: (current: any) => T): Promise<T | "writing"> => {
+    try {
+      return read(await level());
+    } catch {
+      return "writing";
+    }
+  };
+  const created = await level();
+  expect(created.worldSettings.partition.enabled).toBe(true);
+  expect(created.worldSettings.partition.grids.main).toEqual({ cellSize: 64, loadRange: 384 });
+  expect(created.worldSettings.viewDistance).toBe(1500);
+  expect(created.heightFog).toMatchObject(openWorldFogPatch(1500));
+  const definition = normalizeWorldTerrain(JSON.parse(await readFile(smokePublicPath(levelTerrainPath(OPEN_WORLD_LEVEL, created.landscapes[0].id)), "utf8")));
+  expect([definition.tilesX, definition.tilesZ, definition.heightMin, definition.heightMax]).toEqual([4, 2, -20, 300]);
+
+  // One undo takes the terrain, the world settings and the fog back together.
+  await page.getByTestId("editor-undo").click();
+  await expect(row).toHaveCount(0);
+  await expect.poll(() => settled((current) => [
+    current.landscapes?.length ?? 0, current.worldSettings?.partition ?? null, current.worldSettings?.viewDistance ?? null, current.heightFog ?? null,
+  ]), { timeout: 30_000 }).toEqual([0, null, null, null]);
+  await page.getByTestId("editor-redo").click();
+  await expect(row).toBeVisible();
+  await expect.poll(() => settled((current) => [
+    current.landscapes?.length ?? 0, current.worldSettings?.viewDistance ?? null, current.heightFog?.mode ?? null,
+  ]), { timeout: 30_000 }).toEqual([1, 1500, "exp"]);
   expect(errors).toEqual([]);
 });

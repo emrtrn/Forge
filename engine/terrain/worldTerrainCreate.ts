@@ -26,6 +26,8 @@ export const WORLD_TERRAIN_CREATE_MAX_VERTICES = 64 * 257 * 257;
 export const WORLD_TERRAIN_CREATE_MIN_SPACING = 0.25;
 export const WORLD_TERRAIN_CREATE_MAX_SPACING = 8;
 export const WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT = 1000;
+/** Largest height range offset either side of the datum the dialog accepts. */
+export const WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE = 10000;
 
 export interface WorldTerrainCreateOptions {
   name: string;
@@ -36,6 +38,12 @@ export interface WorldTerrainCreateOptions {
   spacing: number;
   /** World Y of the height datum; the new terrain is flat at this height. */
   baseHeight: number;
+  /**
+   * u16 encoding range relative to the datum (default ±256 m); it must hold
+   * the flat start (0). Sculpting past it widens the range on Save.
+   */
+  heightMin?: number;
+  heightMax?: number;
 }
 
 /** One 128-quad tile at 1 m: the 129 × 129 grid Add Landscape has always made. */
@@ -84,10 +92,21 @@ export function worldTerrainCreateProblems(options: WorldTerrainCreateOptions): 
   if (!(Math.abs(options.baseHeight) <= WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT)) {
     problems.push(`Base height must be within ±${WORLD_TERRAIN_CREATE_MAX_BASE_HEIGHT} m.`);
   }
+  const heightMin = options.heightMin ?? TERRAIN_DEFAULT_HEIGHT_MIN;
+  const heightMax = options.heightMax ?? TERRAIN_DEFAULT_HEIGHT_MAX;
+  if (!(heightMin <= 0 && heightMin >= -WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE)
+    || !(heightMax >= 0 && heightMax <= WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE) || !(heightMax > heightMin)) {
+    problems.push(`Height range must hold the flat start: min from -${WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE} to 0 m, max from 0 to ${WORLD_TERRAIN_CREATE_MAX_HEIGHT_RANGE} m, max above min.`);
+  }
   if (problems.length === 0 && estimateWorldTerrain(options).vertices > WORLD_TERRAIN_CREATE_MAX_VERTICES) {
     problems.push("Too large for this build: at most 64 tiles of 256 quads (or the same vertex count) until tile streaming lands.");
   }
   return problems;
+}
+
+/** Metres per u16 height step for a range (the precision Save stores). */
+export function worldTerrainHeightStep(options: Pick<WorldTerrainCreateOptions, "heightMin" | "heightMax">): number {
+  return ((options.heightMax ?? TERRAIN_DEFAULT_HEIGHT_MAX) - (options.heightMin ?? TERRAIN_DEFAULT_HEIGHT_MIN)) / 65535;
 }
 
 /**
@@ -105,7 +124,7 @@ export function createFlatWorldTerrain(options: WorldTerrainCreateOptions): Worl
     schema: 1, type: "worldTerrain", name: options.name.trim(),
     tileQuads: options.tileQuads, spacing: options.spacing, tilesX: options.tilesX, tilesZ: options.tilesZ,
     origin: [-extent[0] / 2, options.baseHeight, -extent[1] / 2],
-    heightMin: TERRAIN_DEFAULT_HEIGHT_MIN, heightMax: TERRAIN_DEFAULT_HEIGHT_MAX,
+    heightMin: options.heightMin ?? TERRAIN_DEFAULT_HEIGHT_MIN, heightMax: options.heightMax ?? TERRAIN_DEFAULT_HEIGHT_MAX,
     layers: LANDSCAPE_DEFAULT_LAYERS.map(({ id, name, color }) => ({ id, name, color })),
     tiles: [], collision: true,
   };

@@ -28,8 +28,7 @@ import {
   WORLD_TERRAIN_CREATE_DEFAULTS,
   createFlatWorldTerrain,
   estimateWorldTerrain,
-  worldTerrainCreateProblems,
-} from "../../engine/terrain/worldTerrainCreate";
+  worldTerrainCreateProblems, worldTerrainHeightStep } from "../../engine/terrain/worldTerrainCreate";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { terrainTileTrimesh } from "./terrainTrimeshReference";
 import { fetchLandscapeDocument, fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
@@ -348,6 +347,22 @@ export function registerWorldTerrainCreateTests(check: Check): void {
     assert.match(worldTerrainCreateProblems({ ...base, tilesX: 13, tilesZ: 5 }).join(" "), /Too large/);
     assert.deepEqual(worldTerrainCreateProblems({ ...base, tilesX: 16, tilesZ: 16, tileQuads: 64 }), []);
     assert.throws(() => createFlatWorldTerrain({ ...base, spacing: 0.1 }), /spacing/);
+  });
+
+  check("world terrain create: a chosen height range is written to the definition and must hold the flat start", () => {
+    const base = { ...WORLD_TERRAIN_CREATE_DEFAULTS, tilesX: 2, tilesZ: 1, tileQuads: 64 as const };
+    assert.deepEqual([createFlatWorldTerrain(base).def.heightMin, createFlatWorldTerrain(base).def.heightMax], [-256, 256], "default ±256 m");
+    const { def, tiles } = createFlatWorldTerrain({ ...base, heightMin: -40, heightMax: 1200 });
+    assert.deepEqual([def.heightMin, def.heightMax], [-40, 1200]);
+    assert.deepEqual(normalizeWorldTerrain(structuredClone(def)), def);
+    for (const [key, tile] of tiles) validateTerrainTile(def, key, encodeTerrainTile(tile, { heightMin: def.heightMin, heightMax: def.heightMax }));
+    assert.equal(worldTerrainHeightStep({ heightMin: -40, heightMax: 1200 }), 1240 / 65535);
+    assert.equal(worldTerrainHeightStep({}), 512 / 65535);
+    for (const range of [{ heightMin: 5, heightMax: 100 }, { heightMin: -100, heightMax: -5 }, { heightMin: 0, heightMax: 0 },
+      { heightMin: -20000, heightMax: 10 }, { heightMin: Number.NaN, heightMax: 10 }]) {
+      assert.match(worldTerrainCreateProblems({ ...base, ...range }).join(" "), /Height range/, JSON.stringify(range));
+    }
+    assert.deepEqual(worldTerrainCreateProblems({ ...base, heightMin: 0, heightMax: 10 }), [], "a range may start at the datum");
   });
 }
 

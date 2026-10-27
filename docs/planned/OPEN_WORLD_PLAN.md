@@ -1912,7 +1912,8 @@ yoğunluğu yardımcısı.
   modda far'daki opaklık %90 altındaysa konsola uyarı yazar; World Settings
   ipucu sisi önerir. `heightFogOpacityAt` saf yardımcı. Smoke
   `fog-fit-view-distance.spec.ts`. Ertelendi: World Terrain diyaloğunun
-  `viewDistance` + sis önermesi (Faz 8 New Open World sihirbazıyla birlikte).
+  `viewDistance` + sis önermesi (Faz 8 New Open World sihirbazıyla birlikte;
+  2026-10-27'de New Landscape diyaloğunun Open World bölümüyle tamam).
 - *7e tamam (2026-10-24):* küçük nesne culling, yalnız runtime ve yalnız
   açık dünya level'larında (World Partition açık ya da `viewDistance`
   tanımlı). Saf kural `engine/world/detailCulling.ts`: cull mesafesi =
@@ -2242,8 +2243,26 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
 
 ## Faz 8 — Editör dünya araçları
 
-- [ ] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,
+- [x] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,
       yükseklik aralığı, hücre boyları; boş ya da heightmap'ten.
+      *Tamam (2026-10-27, boş dünya):* ayrı bir menü girdisi yok (tek
+      Landscape girişi kararı); Add Actor → Landscape diyaloğunda çok-tile
+      seçilince **Open World** bölümü açılır: yükseklik aralığı (u16 adımı
+      gösterilir; düz başlangıcı, yani 0'ı içermeli, ±10 km), World Partition
+      açık/kapalı + `main` hücre boyu ve yükleme menzili, görüş mesafesi ve
+      "Fit Height Fog to the view distance". Level'ın mevcut değerleriyle açılır;
+      **Suggest for this world** görüş mesafesini en uzun kenara (100 m'ye
+      yukarı yuvarlı) ayarlar, partition'ı açar, 1000 m üstünde sisi işaretler.
+      Notlar hücre sayısını, uzak görüş modunu ve sissiz sert kenarı söyler.
+      Terrain, World Settings ve sis (yoksa eklenir, varsa 7d'deki gibi exp +
+      %98 opaklığa uydurulur) **tek undo adımı** ("Create Open World"); foliage
+      grid'i korunur. Saf çekirdek `engine/world/openWorldSetup.ts`,
+      `WorldTerrainCreateOptions.heightMin/heightMax`. Doğrulama: engine
+      `open world setup` + `world terrain create` yükseklik aralığı testleri;
+      smoke `terrain-create.spec.ts` ikinci senaryo (diyalog, öneri, notlar,
+      geçersiz görüş mesafesi, Create sonrası level/tanım alanları, tek undo
+      hepsini geri alır, redo geri getirir). **Açık:** heightmap'ten başlatma
+      (bugün oluşturduktan sonra Details → Heightmap import).
 - [ ] Büyük heightmap import (ör. 4097² 16-bit PNG/RAW) worker'da *(ertelendi, Faz 2 maddesindeki ölçüm)*, ilerleme
       çubuğuyla; export aynı.
 - [ ] **World Partition paneli:** heightmap'ten üretilmiş minimap, hücre

@@ -37,6 +37,7 @@ import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWate
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
 import { terrainHeightAt, raycastTerrain } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, type WorldTerrainCreateOptions } from "@engine/terrain/worldTerrainCreate";
+import { openWorldFogPatch, openWorldPartitionSettings, type OpenWorldSetup } from "@engine/world/openWorldSetup";
 import { expandLandscapeToWorldTerrain, type WorldTerrainExpandOptions } from "@engine/terrain/worldTerrainExpand";
 import {
   landscapeEditIssues,
@@ -10120,8 +10121,10 @@ export class SceneApp {
    * One tile is the classic single-grid Landscape, edited through the 1x1
    * adapter; more tiles make a multi-tile World Terrain. Either way the next
    * Save writes the level's terrain folder before the level that references it.
+   * `world` (New Open World, Faz 8) sets the level's partition and view
+   * distance and fits the Height Fog in the same undo step.
    */
-  addLandscape(options: WorldTerrainCreateOptions): void {
+  addLandscape(options: WorldTerrainCreateOptions, world: OpenWorldSetup | null = null): void {
     if (!this.layout || !this.activeProject) return;
     const landscapes = this.layout.landscapes ?? [];
     if (landscapes.length > 0) {
@@ -10152,15 +10155,36 @@ export class SceneApp {
       terrain = { kind: "landscape", data };
     }
     const index = landscapes.length;
+    const previousSettings = this.getWorldSettings();
+    let nextSettings = previousSettings;
+    if (world) {
+      const { viewDistance: _viewDistance, partition: _partition, ...kept } = previousSettings;
+      const partition = openWorldPartitionSettings(world, this.layout.worldSettings?.partition);
+      nextSettings = {
+        ...kept,
+        ...(world.viewDistance !== null ? { viewDistance: world.viewDistance } : {}),
+        ...(partition ? { partition } : {}),
+      };
+    }
+    const settingsChange = !worldSettingsEqual(previousSettings, nextSettings);
+    const previousFog = this.layout.heightFog ? { ...this.layout.heightFog } : undefined;
+    const nextFog = world?.fitFog && world.viewDistance !== null
+      ? { ...(previousFog ?? {}), ...openWorldFogPatch(world.viewDistance) }
+      : previousFog;
+    const fogChange = nextFog !== previousFog;
     this.executeCommand({
-      label: "Add Landscape",
+      label: settingsChange || fogChange ? "Create Open World" : "Add Landscape",
       redo: () => {
         this.insertLandscape(index, actor, terrain);
+        if (settingsChange) this.applyWorldSettings(nextSettings);
+        if (fogChange) this.applyFogState(nextFog);
         this.select({ kind: "landscape", index });
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
       },
       undo: () => {
+        if (fogChange) this.applyFogState(previousFog);
+        if (settingsChange) this.applyWorldSettings(previousSettings);
         this.removeLandscapeAt(index);
         this.select(null);
         this.emitSceneObjectsChanged();
@@ -10168,7 +10192,12 @@ export class SceneApp {
       },
     });
     const [width, depth] = worldTerrainExtent(loaded.def);
-    this.onStatus?.(`Added Landscape: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m.`, "info");
+    const extras = [
+      settingsChange ? "world settings" : "",
+      fogChange ? (previousFog ? "fitted Height Fog" : "added Height Fog") : "",
+    ].filter(Boolean);
+    this.onStatus?.(`Added Landscape: ${loaded.def.tilesX} × ${loaded.def.tilesZ} tiles, ${width} m × ${depth} m${
+      extras.length > 0 ? `; updated ${extras.join(" and ")}` : ""}.`, "info");
   }
 
   /** The selected 1x1 source, for the editor-only expansion dialog. */
@@ -12664,22 +12693,22 @@ export class SceneApp {
   private commitFog(nextFog: LayoutHeightFog | undefined, label: string): void {
     if (!this.layout) return;
     const previousFog = this.layout.heightFog ? { ...this.layout.heightFog } : undefined;
-
-    const apply = (fog: LayoutHeightFog | undefined): void => {
-      if (!this.layout) return;
-      if (fog) this.layout.heightFog = { ...fog };
-      else delete this.layout.heightFog;
-      this.applyHeightFog();
-      if (!this.layout.heightFog && this.selection?.kind === "fog") this.select(null);
-      else this.emitSelectionChanged();
-      this.scheduleAutoSave();
-    };
-
     this.executeCommand({
       label,
-      redo: () => apply(nextFog),
-      undo: () => apply(previousFog),
+      redo: () => this.applyFogState(nextFog),
+      undo: () => this.applyFogState(previousFog),
     });
+  }
+
+  /** Swaps `layout.heightFog` and refreshes the scene, panels and autosave (the body of every fog command). */
+  private applyFogState(fog: LayoutHeightFog | undefined): void {
+    if (!this.layout) return;
+    if (fog) this.layout.heightFog = { ...fog };
+    else delete this.layout.heightFog;
+    this.applyHeightFog();
+    if (!this.layout.heightFog && this.selection?.kind === "fog") this.select(null);
+    else this.emitSelectionChanged();
+    this.scheduleAutoSave();
   }
 
   /**

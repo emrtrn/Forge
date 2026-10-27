@@ -109,12 +109,12 @@ export async function registerContentLoadingTests(check: Check, checkAsync: Chec
     assert.deepEqual(unregistered, [orphan]);
   });
 
-  check("content: asset health treats painted foliage and cell files as companions of their registered level", () => {
+  check("content: asset health treats painted foliage, mesh paint and cell files as companions of their registered level", () => {
     const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
     const levelAsset = manifest.assets.find((asset: { path: string }) => /\.level\.json$/i.test(asset.path));
     const stem = levelAsset.path.replace(/\.level\.json$/i, "");
-    const owned = [`${stem}.foliage.json`, `${stem}.cells/foliage/0_0.foliage.json`, `${stem}.cells/main/0_0.cell.json`];
-    const orphans = ["assets/unregistered.foliage.json", "assets/unregistered.cells/main/0_0.cell.json"];
+    const owned = [`${stem}.foliage.json`, `${stem}.meshpaint.json`, `${stem}.cells/foliage/0_0.foliage.json`, `${stem}.cells/main/0_0.cell.json`];
+    const orphans = ["assets/unregistered.foliage.json", "assets/unregistered.meshpaint.json", "assets/unregistered.cells/main/0_0.cell.json"];
     const report = validateAssetManifest({ ...manifest, assets: [levelAsset] }, {
       publicFiles: [levelAsset.path, ...owned, ...orphans],
     });

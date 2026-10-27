@@ -3570,9 +3570,7 @@ export class EditorUi {
     this.outlinerScrollTargetId = null;
     if (!targetId) return;
 
-    const row = Array.from(this.outlinerList.querySelectorAll<HTMLElement>("[data-object-id]")).find(
-      (element) => element.dataset.objectId === targetId,
-    );
+    const row = this.outlinerList.querySelector<HTMLElement>(`[data-object-id="${CSS.escape(targetId)}"]`);
     row?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 

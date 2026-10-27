@@ -1584,6 +1584,8 @@ export class SceneApp {
   private readonly keptTerrainTiles: KeptTerrainTilesStore | null;
   /** Grows on every scene structure change: the World Partition cell counts cache on it. */
   private sceneObjectsRevision = 0;
+  /** A gizmo drag held back the Outliner refresh; the drag end emits it. */
+  private sceneObjectsDeferredByDrag = false;
   private worldPartitionCellCache: {
     key: string;
     objectCells: Map<string, string>;
@@ -1593,6 +1595,11 @@ export class SceneApp {
   private readonly picker: ScenePicker;
 
   private manifest: AssetManifest | null = null;
+  private assetCategoryIndex: {
+    assets: AssetManifest["assets"];
+    length: number;
+    categories: Map<string, string>;
+  } | null = null;
   private metadataSchema: MetadataSchema | null = null;
   private layout: RoomLayout | null = null;
   private models = new Map<string, GLTF>();
@@ -1832,6 +1839,7 @@ export class SceneApp {
       getOrbitTarget: () => this.getCameraOrbitTarget(),
       onInteractionStart: () => {
         this.pointerDrag = null;
+        this.flushDragDeferredSceneObjects();
         this.endAssetDragPreview();
       },
       onStatus: (message, tone) => this.onStatus?.(message, tone),
@@ -3421,7 +3429,18 @@ export class SceneApp {
 
   /** Resolves an asset's manifest category for Details display. */
   private assetCategory(assetId: string): string {
-    return this.manifest?.assets.find((entry) => entry.id === assetId)?.category ?? "";
+    const assets = this.manifest?.assets;
+    if (!assets) return "";
+    // The Outliner asks once per scene object; a linear manifest scan each made
+    // every refresh of a large level quadratic.
+    if (this.assetCategoryIndex?.assets !== assets || this.assetCategoryIndex.length !== assets.length) {
+      const categories = new Map<string, string>();
+      for (const entry of assets) {
+        if (!categories.has(entry.id)) categories.set(entry.id, entry.category ?? "");
+      }
+      this.assetCategoryIndex = { assets, length: assets.length, categories };
+    }
+    return this.assetCategoryIndex.categories.get(assetId) ?? "";
   }
 
   private isMaterialAsset(assetId: string): boolean {
@@ -4587,6 +4606,9 @@ export class SceneApp {
     const previous = this.instanceGroups.get(assetId);
     if (previous) {
       previous.traverse((child) => {
+        // Geometry and materials are the shared GLTF ones, but each group owns
+        // its instance buffers; without this every rebuild leaked them on the GPU.
+        if ((child as InstancedMesh).isInstancedMesh) (child as InstancedMesh).dispose();
         if (!isRenderableMesh(child) || child.geometry.userData.forgeMeshPaintClone !== true) return;
         child.geometry.dispose();
       });
@@ -4629,8 +4651,44 @@ export class SceneApp {
     return removed ? clonePlacement(removed) : null;
   }
 
+  /**
+   * Re-places one placement inside its live instance group without rebuilding
+   * it, so a gizmo drag step costs one matrix instead of the whole asset group.
+   * Clone routing and probe coverage stay as built; the drag commit rebuilds the
+   * group and settles them. False when the group can't be patched.
+   */
+  private moveInstancePlacementInPlace(assetId: string, placementIndex: number): boolean {
+    const placement = this.layout?.instances.find((entry) => entry.assetId === assetId)?.placements[placementIndex];
+    if (!placement) return false;
+    const matrix = composePlacementMatrix(placement);
+    const separate = this.markerObjects.get(assetId)?.[placementIndex]
+      ?? this.instanceOverrideObjects.get(assetId)?.find((object) => object.userData.placementIndex === placementIndex);
+    if (separate) {
+      separate.matrix.copy(matrix);
+      separate.matrixWorldNeedsUpdate = true;
+      return true;
+    }
+    const meshes = this.instanceMeshes.get(assetId);
+    if (!meshes || meshes.length === 0 || meshes.some((mesh) => placementIndex >= mesh.count)) return false;
+    // A hidden placement keeps its collapsed matrix; there is nothing to move.
+    if (placement.hidden) return true;
+    const instanceMatrix = new Matrix4();
+    for (const mesh of meshes) {
+      const source = mesh.userData.sourceMatrix;
+      instanceMatrix.copy(matrix);
+      if (source instanceof Matrix4) instanceMatrix.multiply(source);
+      mesh.setMatrixAt(placementIndex, instanceMatrix);
+      mesh.instanceMatrix.needsUpdate = true;
+      // Picking recomputes these lazily from the moved instance.
+      mesh.boundingBox = null;
+      mesh.boundingSphere = null;
+    }
+    return true;
+  }
+
   private refreshSelectionObject(selection: Selection): void {
     if (selection.kind === "instance") {
+      if (this.pointerDrag && this.moveInstancePlacementInPlace(selection.assetId, selection.placementIndex)) return;
       this.rebuildInstanceGroup(selection.assetId);
       return;
     }
@@ -13393,7 +13451,10 @@ export class SceneApp {
       updateMoveDrag: (event, selected) => this.updateMoveDrag(event, selected),
       updateRotateDrag: (event) => this.updateRotateDrag(event),
       updateScaleDrag: (event) => this.updateScaleDrag(event),
-      commitPointerDrag: (drag) => this.commitPointerDrag(drag),
+      commitPointerDrag: (drag) => {
+        this.commitPointerDrag(drag);
+        this.flushDragDeferredSceneObjects();
+      },
       updateGizmo: () => this.updateGizmo(),
       onAssetDragOver: (clientX, clientY) => this.updateAssetDragPreview(clientX, clientY),
       onAssetDragLeave: () => this.hideAssetDragPreview(),
@@ -15415,10 +15476,22 @@ export class SceneApp {
   private emitSelectionChanged(): void {
     this.applyMeshPaintColorView();
     this.onSelectionChanged?.(this.getSelected());
+    // A gizmo drag emits on every pointer move; listing every scene object per
+    // step stalled large levels, so the Outliner catches up once the drag ends.
+    if (this.pointerDrag) {
+      this.sceneObjectsDeferredByDrag = true;
+      return;
+    }
     this.emitSceneObjectsChanged();
   }
 
+  /** Emits the scene-object refresh a gizmo drag held back, unless one already ran. */
+  private flushDragDeferredSceneObjects(): void {
+    if (this.sceneObjectsDeferredByDrag) this.emitSceneObjectsChanged();
+  }
+
   private emitSceneObjectsChanged(): void {
+    this.sceneObjectsDeferredByDrag = false;
     this.sceneObjectsRevision += 1;
     this.onSceneObjectsChanged?.(this.getSceneObjects());
     // Any structural change (add/delete/edit of a collider, placement or nav

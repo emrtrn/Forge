@@ -144,6 +144,13 @@ export function affordableSunCascades(requested: number, maxTextureUnits: number
   return Math.min(requested, sunCascadeBudget(maxTextureUnits, reserved));
 }
 
+const sceneCascades = new WeakMap<Object3D, SunCascadeShadow>();
+/** Existing cascade state for custom receivers; does not allocate or render. */
+export function sunCascadesFor(scene: Object3D): SunCascadeShadow | undefined {
+  const state = sceneCascades.get(scene);
+  return state?.isActive ? state : undefined;
+}
+
 export interface SunCascadeUpdate {
   /** The level's sun; its direction, colour and intensity are read every frame. */
   readonly sun: DirectionalLight;
@@ -177,6 +184,7 @@ export class SunCascadeShadow {
 
   constructor(scene: Object3D) {
     this.scene = scene;
+    sceneCascades.set(scene, this);
     this.chunk = createSunCascadeLightsChunk();
     this.group.name = "forge-sun-cascades";
   }

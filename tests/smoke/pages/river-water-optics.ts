@@ -1,5 +1,5 @@
 import {
-  ACESFilmicToneMapping, Color, DataTexture, Group, Matrix4, Mesh, MeshBasicMaterial, PMREMGenerator,
+  ACESFilmicToneMapping, DirectionalLight, DoubleSide, Color, DataTexture, Group, Matrix4, Mesh, MeshBasicMaterial, PMREMGenerator,
   NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry, RepeatWrapping, RGBAFormat,
   Scene, SRGBColorSpace, Vector3, WebGLRenderer,
 } from "three";
@@ -11,9 +11,17 @@ import { resolveRiverWater } from "@engine/scene/riverWater";
 import type { ForgeLandscapeSpline } from "@engine/scene/landscape";
 import type { SphereReflectionCaptureBake } from "@engine/render-three/reflectionCapture";
 import { LakeWaterObject } from "@engine/render-three/lakeWater";
+import baselineShaders from "./river-shadow-baseline-shaders.json";
+import { SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
 import { PostProcessPipeline } from "@engine/render-three/postProcess";
 
 export interface OpticsOptions {
+  pointFoam: boolean;
+  baselineFoam: boolean;
+  sunTest: boolean;
+  shadowCaster: boolean;
+  shadowSystem: "single" | "cascade" | "disabled";
+  sunTerm: "all" | "body" | "glint" | "ibl";
   sceneTransmission: boolean;
   sceneBedDepth: number | null;
   kind: "river" | "lake";
@@ -53,6 +61,19 @@ const scenePipeline = new PostProcessPipeline({ renderer, scene, camera, width: 
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
 composer.addPass(new OutputPass());
+const sun = new DirectionalLight(0xffffff, 5);
+sun.position.set(0, 4, -24);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+Object.assign(sun.shadow.camera, {left:-20,right:20,top:20,bottom:-20,near:0.1,far:100});
+sun.shadow.camera.updateProjectionMatrix();
+scene.add(sun, sun.target);
+const cascades = new SunCascadeShadow(scene);
+const occluder = new Mesh(new PlaneGeometry(8, 10), new MeshBasicMaterial({side:DoubleSide}));
+occluder.rotation.x = -Math.PI/2;
+occluder.position.set(-4,2,-12);
+occluder.castShadow = true;
+scene.add(occluder);
 const fixtureGroup = new Group();
 scene.add(fixtureGroup);
 
@@ -99,6 +120,7 @@ const spline: ForgeLandscapeSpline = {
   ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }],
 };
 let options: OpticsOptions = {
+  pointFoam: false, baselineFoam: false, sunTest: false, shadowCaster: false, shadowSystem: "single", sunTerm: "all",
   sceneTransmission: false,
   sceneBedDepth: null,
   kind: "river",
@@ -120,6 +142,7 @@ function frame(patch: Partial<OpticsOptions> = {}) {
     ...resolveRiverWater({ id: "optics", landscapeRef: "fixture", splineRef: "optics",
       surfaceLevel: -8 * options.slope, bedVisibility: options.calibration ? 0 : options.bedVisibility, absorptionDistance: options.absorptionDistance,
       opacity: options.opacity, foamOpacity: options.foamOpacity, waveAmplitude: 0,
+      foamStamps: options.pointFoam ? [{id:"test",kind:"point",position:[0,0,0],radius:3,intensity:1}] : [],
       reflectionStrength: 1,
       reflectionMode: options.reflection === "off" ? "off" : "environment",
       ...(options.calibration ? { deepColor: "#808080", shallowColor: "#808080" } : {}),
@@ -151,8 +174,27 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   // Test-only deterministic clock; production's onBeforeRender uses wall time.
   const beforeRender = river.onBeforeRender;
   river.onBeforeRender = function (...args) { beforeRender.apply(this, args); river.material.uniforms.time!.value = options.time; };
+  for (const child of river.children) {
+    const stamp = child as Mesh<PlaneGeometry, import("three").ShaderMaterial>;
+    const stampBefore = stamp.onBeforeRender;
+    stamp.onBeforeRender = function (...args) { stampBefore.apply(this,args); stamp.material.uniforms.time!.value = options.time; };
+    if (options.baselineFoam) {
+      stamp.material.vertexShader = baselineShaders.radial.vertex;
+      stamp.material.fragmentShader = baselineShaders.radial.fragment;
+    }
+  }
   // Hold illumination neutral while reflection input changes red <-> blue.
-  river.material.uniforms.waterLightingEnabled!.value = 0;
+  river.material.uniforms.waterLightingEnabled!.value = options.sunTest ? 1 : 0;
+  if (options.sunTest) {
+    if (options.sunTerm === "body" || options.sunTerm === "ibl") river.material.fragmentShader = river.material.fragmentShader.replace(
+      "waterSunGlint(opticalNormal, viewDirection, 0.28, sunVisibility)", "vec3(0.0)");
+    if (options.sunTerm === "glint" || options.sunTerm === "ibl") river.material.fragmentShader = river.material.fragmentShader.replace(
+      "waterSurfaceLight(opticalNormal, viewDirection, 0.38, sunVisibility)", "waterSurfaceLight(opticalNormal, viewDirection, 0.38, 0.0)");
+  }
+  sun.visible = options.sunTest;
+  occluder.visible = options.sunTest && options.shadowCaster;
+  renderer.shadowMap.enabled = options.sunTest && options.shadowSystem !== "disabled";
+  cascades.deactivate();
   river.visible = options.visible;
   scene.environment = options.reflection === "off" ? null : reflectionTextures[options.reflection];
   fixtureGroup.add(river);
@@ -177,6 +219,8 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   camera.up.set(0, 1, 0).transformDirection(fixtureGroup.matrixWorld);
   camera.lookAt(fixtureGroup.position);
   camera.updateMatrixWorld(true);
+  if (options.sunTest && options.shadowSystem === "cascade") cascades.update({sun, camera: perspectiveCamera,
+    count: 3, mapSize: 1024, distance: 60, stagger: false});
   renderer.toneMappingExposure = options.exposure;
   if (options.pipeline === "composer" && options.sceneTransmission) {
     scenePipeline.setCamera(camera); scenePipeline.render(0);
@@ -195,8 +239,8 @@ function snapshot() {
   const gl = renderer.getContext();
   const pixels = new Uint8Array(800 * 480 * 4);
   gl.readPixels(0, 0, 800, 480, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-  function probe(x: number, z: number) {
-    const screen = new Vector3(x, x * options.slope, z).applyMatrix4(fixtureGroup.matrixWorld).project(camera);
+  function probe(x: number, z: number, surfaceOffset = 0) {
+    const screen = new Vector3(x, x * options.slope + surfaceOffset, z).applyMatrix4(fixtureGroup.matrixWorld).project(camera);
     const px = Math.round((screen.x * 0.5 + 0.5) * 800);
     const py = Math.round((screen.y * 0.5 + 0.5) * 480);
     if (px < 2 || py < 2 || px > 797 || py > 477) throw new Error("Probe outside viewport");
@@ -212,6 +256,7 @@ function snapshot() {
   return {
     options: { ...options },
     centre: [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5].map((x) => probe(x, 0.25)),
+    stamp: [-0.8,-0.6,-0.4,-0.2,0,0.2,0.4,0.6,0.8].flatMap(x => [-0.4,0,0.4].map(z=>probe(x,z,0.025))),
     edge: [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5].map((x) => probe(x, 3.65)),
     camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(),
       kind: options.orthographic ? "orthographic" : "perspective",

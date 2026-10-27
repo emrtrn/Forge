@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { CubeUVReflectionMapping, Mesh, PerspectiveCamera, Scene, Vector3, WebGLRenderTarget } from "three";
+import { CubeUVReflectionMapping, DirectionalLight, Mesh, PerspectiveCamera, Scene, Vector3, WebGLRenderTarget } from "three";
 import { createWaterEnvironmentUniforms, updateWaterEnvironment } from "../../engine/render-three/waterEnvironment";
+import { createRiverSunShadowUniforms, updateRiverSunShadow } from "../../engine/render-three/riverSunShadow";
+import { SunCascadeShadow } from "../../engine/render-three/sunCascadeShadow";
 import { buildRiverWaterRibbon, createRiverWaterObject } from "../../engine/render-three/riverWater";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
 import { splineToPolyline } from "../../engine/scene/landscape";
@@ -32,6 +34,26 @@ function fixture() {
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain river: sun receiver matches camera light layers and releases cascade state", async () => {
+    const scene = new Scene(), camera = new PerspectiveCamera(), uniforms = createRiverSunShadowUniforms();
+    const hidden = new DirectionalLight(0xffffff, 20), fill = new DirectionalLight(0xffffff, 1), sun = new DirectionalLight(0xffffff, 5);
+    hidden.castShadow = fill.castShadow = sun.castShadow = true;
+    hidden.layers.set(2); sun.position.set(10, 30, 10);
+    scene.add(hidden, fill, sun, sun.target);
+    updateRiverSunShadow(uniforms, scene, camera);
+    assert.equal(uniforms.riverSunShadowIndex.value, 1);
+    sun.castShadow = false; updateRiverSunShadow(uniforms, scene, camera);
+    assert.equal(uniforms.riverSunShadowIndex.value, -1, "Unshadowed sun does not borrow a fill light shadow");
+    sun.castShadow = true;
+    const cascades = new SunCascadeShadow(scene);
+    cascades.update({sun, camera, count:3, mapSize:512, distance:100, stagger:false});
+    updateRiverSunShadow(uniforms, scene, camera);
+    assert.equal(uniforms.riverSunCascadeCount.value, 3);
+    assert.deepEqual(uniforms.riverSunShadowFade.value.toArray(), cascades.fadeUniform.value.toArray());
+    cascades.dispose(); updateRiverSunShadow(uniforms, scene, camera);
+    assert.equal(uniforms.riverSunCascadeCount.value, 0);
+    assert.deepEqual(uniforms.riverSunShadowFade.value.toArray(), [1e9,1e9]);
+  });
   await checkAsync("terrain river: environment and legacy reflection modes save without planar leases", async () => {
     const base = { id: "river", landscapeRef: "land", splineRef: "spline" };
     assert.equal(resolveRiverWater({ ...base, reflectionMode: "sharedPlanar" }).reflectionMode, "environment");

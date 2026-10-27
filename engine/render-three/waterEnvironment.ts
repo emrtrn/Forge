@@ -94,16 +94,22 @@ vec3 waterReflectedEnvironment(vec3 worldPosition, vec3 direction, float roughne
   vec3 local = textureCubeUV(waterProbe, direction, roughness, waterProbeSize).rgb * waterProbeIntensity;
   return mix(global, local, weight);
 }
-vec3 waterSurfaceLight(vec3 normal, vec3 viewDirection, float roughness) {
+vec3 waterSurfaceLight(vec3 normal, vec3 viewDirection, float roughness, float sunVisibility) {
   vec3 ambient = waterEnvironmentIntensity > 0.0 ? waterSky(vec3(0.0, 1.0, 0.0), 1.0) : vec3(0.6);
   vec3 halfDirection = normalize(viewDirection + waterSunDirection + vec3(0.00001));
   float highlight = pow(max(0.0, dot(normal, halfDirection)), mix(180.0, 35.0, roughness));
   vec3 illumination = clamp(vec3(0.5) + ambient * 0.5, vec3(0.4), vec3(1.8));
-  return mix(vec3(1.0), illumination, waterLightingEnabled) + waterSunColor * highlight * 0.08 * waterLightingEnabled;
+  return mix(vec3(1.0), illumination, waterLightingEnabled) + waterSunColor * highlight * 0.08 * waterLightingEnabled * sunVisibility;
 }
-vec3 waterSunGlint(vec3 normal, vec3 viewDirection, float roughness) {
+vec3 waterSurfaceLight(vec3 normal, vec3 viewDirection, float roughness) {
+  return waterSurfaceLight(normal, viewDirection, roughness, 1.0);
+}
+vec3 waterSunGlint(vec3 normal, vec3 viewDirection, float roughness, float sunVisibility) {
   vec3 halfDirection = normalize(viewDirection + waterSunDirection + vec3(0.00001));
   float highlight = pow(max(0.0, dot(normal, halfDirection)), mix(220.0, 55.0, roughness));
-  return waterSunColor * highlight * 0.3 * waterLightingEnabled;
+  return waterSunColor * highlight * 0.3 * waterLightingEnabled * sunVisibility;
+}
+vec3 waterSunGlint(vec3 normal, vec3 viewDirection, float roughness) {
+  return waterSunGlint(normal, viewDirection, roughness, 1.0);
 }
 `;

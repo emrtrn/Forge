@@ -12,7 +12,10 @@ import type { RoomLayout } from "@engine/scene/layout";
 import { WATER_OPTICS_GLSL } from "@engine/render-three/waterOptics";
 import { WATER_ENVIRONMENT_GLSL } from "@engine/render-three/waterEnvironment";
 import { WATER_SCENE_GLSL } from "@engine/render-three/waterSceneSnapshot";
-import baselineShaders from "./water-surface-v4-shaders.json";
+import lakeBaseline from "./water-surface-v4-shaders.json";
+import riverBaseline from "./river-shadow-baseline-shaders.json";
+const riverReview = new URLSearchParams(location.search).has("riverReview");
+const baselineShaders = riverReview ? riverBaseline : lakeBaseline;
 
 type Variant = "off" | "before" | "after" | "low" | "high";
 interface ReviewApp {
@@ -35,6 +38,13 @@ while (internal.riverWaterObjects.length !== internal.layout.riverWaters?.filter
   if (performance.now() > waterDeadline) throw new Error("LandscapeTest river/lake did not finish publishing");
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
+// Publication count can match before the streamed bed finishes rebuilding
+// ribbons/stamps. Hold the review until the authored snapshot is resident.
+while ([...internal.worldTerrains.values()].some(d => d.tiles.size !== d.def.tiles.length)) {
+  if (performance.now() > waterDeadline) throw new Error("Incomplete review terrain");
+  await new Promise(resolve => setTimeout(resolve, 50));
+}
+await new Promise(resolve => setTimeout(resolve, 2000));
 const { renderer, scene, camera } = internal;
 const sources = [...new Set([...internal.riverReflectionSources,
   ...((internal.lakes as unknown as { reflection: Map<string, PlanarReflectionSource> } | null)?.reflection.values() ?? [])])];
@@ -42,7 +52,8 @@ let reflectionDraws = 0, reflectionCaptures = 0, motion = false;
 const captureWitness = new Map<PlanarReflectionSource, { total: number; camera: number[] }>();
 let variant: Variant = "after", view = "river-upper";
 let fixedTime = 12;
-const currentShaders = new Map([...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]
+const radialObjects = internal.riverWaterObjects.flatMap(w => w.children.filter((c): c is Mesh<import("three").BufferGeometry, ShaderMaterial> => c instanceof Mesh && c.material instanceof ShaderMaterial));
+const currentShaders = new Map([...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? []), ...(riverReview ? radialObjects : [])]
   .map((water) => [water, { vertex: water.material.vertexShader, fragment: water.material.fragmentShader }]));
 const expand = (shader: string) => shader.replaceAll("${WATER_OPTICS_GLSL}", WATER_OPTICS_GLSL)
   .replaceAll("${WATER_ENVIRONMENT_GLSL}", WATER_ENVIRONMENT_GLSL)
@@ -100,7 +111,7 @@ function setVariant(next: Variant) {
   for (const water of [...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]) water.visible = next !== "off";
   for (const water of internal.lakes?.objects.values() ?? []) water.userData.waterSceneTransmission = next !== "off";
   for (const [water, current] of currentShaders) {
-    const shaders = next === "before" ? ("isRiverWaterObject" in water ? baselineShaders.river : baselineShaders.lake) : current;
+    const shaders = next === "before" ? ("isRiverWaterObject" in water ? baselineShaders.river : radialObjects.includes(water) ? riverBaseline.radial : riverReview ? current : baselineShaders.lake) : current;
     const vertex = expand(shaders.vertex), fragment = expand(shaders.fragment);
     if (water.material.fragmentShader !== fragment || water.material.vertexShader !== vertex) {
       water.material.vertexShader = vertex; water.material.fragmentShader = fragment; water.material.needsUpdate = true;
@@ -114,6 +125,7 @@ const cameras: Record<string, { target: number[]; offset: number[]; fov: number 
   "river-upper": { target: [279.23, -45.7, 57.8], offset: [-28, 24, -22], fov: 48 },
   "river-bank": { target: [279.23, -45.7, 57.8], offset: [-10, 5, 13], fov: 48 },
   "river-flat": { target: [148.4, -71.7, 281.85], offset: [-8, 22, -6], fov: 48 },
+  "river-rock-low": { target: [155.341, -71.7, 269.99], offset: [-6, 3, 6], fov: 48 },
   "river-top": { target: [233.59, -59.7, 151.82], offset: [0, 55, 0.01], fov: 48 },
   "lake-overview": { target: [44, -5, -44], offset: [43, 32, 48], fov: 48 },
   "lake-shore": { target: [40, -5, -42], offset: [-1, 8, 20], fov: 48 },
@@ -170,7 +182,7 @@ function metadata() {
       const box = new Box3().setFromObject(water), position = water.geometry.getAttribute("position"), depth = water.geometry.getAttribute("waterDepth");
       let minDepth = Infinity, maxDepth = 0, wet = 0, shallow = 0;
       for (let i = 0; i < depth.count; i++) { const d = depth.getX(i); minDepth = Math.min(minDepth, d); maxDepth = Math.max(maxDepth, d); if (d > 0.001) wet++; if (d > 0.001 && d < 0.35) shallow++; }
-      return { name: water.name, visible: water.visible, vertices: position.count, triangles: (water.geometry.index?.count ?? 0) / 3,
+      return { name: water.name, reviewedObject: currentShaders.has(water), stampCount: water.children.length, visible: water.visible, vertices: position.count, triangles: (water.geometry.index?.count ?? 0) / 3,
         bounds: { min: box.min.toArray(), max: box.max.toArray() }, minDepth, maxDepth, wet, shallow,
         uniforms: Object.fromEntries(Object.entries(water.material.uniforms).filter(([,u]) => typeof u.value === "number").map(([k,u]) => [k,u.value])),
         sun: water.material.uniforms.waterSunColor?.value.toArray(), sunDirection: water.material.uniforms.waterSunDirection?.value.toArray() };

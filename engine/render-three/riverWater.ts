@@ -21,6 +21,7 @@ import type {
 } from "@engine/scene/layout";
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
 import { createWaterEnvironmentUniforms, updateWaterEnvironment, WATER_ENVIRONMENT_GLSL, type WaterEnvironmentProbes } from "./waterEnvironment";
+import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
@@ -217,6 +218,7 @@ export function buildRiverWaterRibbon(
 
 const VERTEX_SHADER = `
 #include <fog_pars_vertex>
+#include <shadowmap_pars_vertex>
 attribute vec2 flowDirection;
 attribute float shoreDistance;
 attribute float waterDepth;
@@ -252,6 +254,7 @@ void main() {
   vFlowTangent = mat3(modelMatrix) * vec3(flowDirection.x, 0.0, flowDirection.y);
   vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
   gl_Position = projectionMatrix * mvPosition;
+  #include <shadowmap_vertex>
   #include <fog_vertex>
 }`;
 
@@ -289,6 +292,7 @@ varying vec3 vFlowTangent;
 
 ${WATER_OPTICS_GLSL}
 ${WATER_ENVIRONMENT_GLSL}
+${RIVER_SUN_SHADOW_GLSL}
 void main() {
   // Derivatives include spline slope, vertex waves and the object's transform.
   // Evaluate them before discard so shoreline quads retain valid derivatives.
@@ -328,7 +332,8 @@ void main() {
   float turbulence = waterNoise(advected * vec2(0.35, 1.7)) * 0.55
     + waterNoise(advected * vec2(0.67, 3.4) + vec2(7.3, 1.2)) * 0.45;
   vec3 color = mix(deepColor, shallowColor, shallow) * (0.84 + turbulence * 0.32);
-  color *= waterSurfaceLight(opticalNormal, viewDirection, 0.38);
+  float sunVisibility = riverSunVisibility();
+  color *= waterSurfaceLight(opticalNormal, viewDirection, 0.38, sunVisibility);
   vec2 foamUv = vec2(
     vRiverUv.x * 0.78 - time * flowSpeed * vFlowSpeedMultiplier * 0.34,
     vRiverUv.y * 4.5
@@ -354,7 +359,7 @@ void main() {
   float shoreBands = smoothstep(0.68, 0.88, shorePhase);
   float shallowContact = smoothstep(0.0, 0.08, vWaterDepth)
     * (1.0 - smoothstep(0.08, 0.8, vWaterDepth));
-  float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup) * shallowContact;
+  float shoreFoam = shoreZone * shoreBands * smoothstep(0.46, 0.78, shoreBreakup) * shallowContact * 0.55;
   float brokenCrest = smoothstep(0.67, 0.88, waterNoise(advected * vec2(0.4, 3.8) + warp * 2.0))
     * smoothstep(0.42, 0.72, turbulence);
   float rapidFoam = smoothstep(0.035, 0.3, vRapidness) * brokenCrest * foamBreakup * 0.75;
@@ -370,7 +375,7 @@ void main() {
   float bedOpacity = 1.0 - bedTransmission;
   float authoredOpacity = opacity * wetness * mix(0.58, 1.0, smoothstep(0.0, 3.0, vWaterDepth));
   gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectionAmount * wetness,
-    foamColor, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28)
+    foamColor * mix(vec3(0.34), vec3(0.72), sunVisibility), foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28, sunVisibility)
       * wetness * smoothstep(0.03, 0.3, vWaterDepth) * 0.35);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -419,6 +424,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       fragmentShader: FRAGMENT_SHADER,
       uniforms: {
         ...UniformsUtils.clone(UniformsLib.fog),
+        ...UniformsUtils.clone(UniformsLib.lights),
+        ...createRiverSunShadowUniforms(),
         ...createWaterEnvironmentUniforms(),
         normalMap: { value: normalMap },
         time: { value: 0 },
@@ -446,6 +453,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       },
       transparent: true,
       fog: true,
+      lights: true,
       depthWrite: false,
       side: DoubleSide,
     });
@@ -460,10 +468,10 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     );
     this.visible = !item.hidden;
     // Water is a visual transparent overlay: it neither writes opaque depth nor
-    // participates in shadow maps/collision, leaving terrain and authored blockers as
+    // casts into shadow maps/collision, leaving terrain and authored blockers as
     // their respective render/gameplay authorities.
     this.castShadow = false;
-    this.receiveShadow = false;
+    this.receiveShadow = true;
     this.renderOrder = 1;
     for (const stamp of item.foamStamps) {
       if (stamp.kind !== "point") continue;
@@ -471,6 +479,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     }
     this.onBeforeRender = (_renderer, scene, camera) => {
       this.material.uniforms["time"]!.value = performance.now() / 1000;
+      updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera, item.environmentProbes?.());
     };
   }
@@ -491,8 +500,13 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
 
 const RING_FOAM_VERTEX_SHADER = `
 varying vec2 vUv;
+varying vec3 vWorldPosition;
+#include <shadowmap_pars_vertex>
 void main() {
   vUv = uv;
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldPosition = worldPosition.xyz;
+  #include <shadowmap_vertex>
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
@@ -508,6 +522,10 @@ uniform float shoreWaveSpeed;
 uniform float shoreWaveReach;
 uniform float shoreWaveBreakupScale;
 varying vec2 vUv;
+varying vec3 vWorldPosition;
+${WATER_OPTICS_GLSL}
+${WATER_ENVIRONMENT_GLSL}
+${RIVER_SUN_SHADOW_GLSL}
 
 void main() {
   vec2 centred = vUv - 0.5;
@@ -518,11 +536,14 @@ void main() {
   float breakup = mix(0.72, textureBreakup, hasFoamNoiseMap);
   float fadeStart = max(0.01, shoreWaveReach * 0.62);
   float radialZone = 1.0 - smoothstep(fadeStart, max(fadeStart + 0.01, shoreWaveReach), radialDistance);
-  float radialPhase = fract(radialDistance * shoreWaveSpacing - time * shoreWaveSpeed + breakup * 0.24);
-  float radialBands = smoothstep(0.78, 0.96, radialPhase);
-  float alpha = radialZone * radialBands * smoothstep(0.34, 0.66, breakup) * intensity * foamOpacity;
+  // Irregular moving patches, not complete concentric white rings. This is
+  // an authored presentation stamp, not obstacle hydrodynamics.
+  float foamPatch = waterNoise(centred * vec2(9.0, 13.0) * max(shoreWaveSpacing, 0.1)
+    + vec2(time * shoreWaveSpeed * 0.7, -time * shoreWaveSpeed * 0.4));
+  float radialBands = smoothstep(0.53, 0.82, foamPatch + (breakup - 0.5) * 0.3);
+  float alpha = radialZone * radialBands * smoothstep(0.40, 0.76, breakup) * intensity * foamOpacity * 0.48;
   if (alpha <= 0.002) discard;
-  gl_FragColor = vec4(foamColor, alpha);
+  gl_FragColor = vec4(foamColor * mix(vec3(0.34), vec3(0.72), riverSunVisibility()), alpha);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -541,7 +562,11 @@ function createRiverWaterRadialFoamObject(
   const material = new ShaderMaterial({
     vertexShader: RING_FOAM_VERTEX_SHADER,
     fragmentShader: RADIAL_FOAM_FRAGMENT_SHADER,
+    lights: true,
     uniforms: {
+      ...UniformsUtils.clone(UniformsLib.lights),
+      ...createWaterEnvironmentUniforms(),
+      ...createRiverSunShadowUniforms(),
       foamNoiseMap: { value: item.foamNoiseMap },
       hasFoamNoiseMap: { value: item.foamNoiseMap ? 1 : 0 },
       time: { value: 0 },
@@ -562,9 +587,11 @@ function createRiverWaterRadialFoamObject(
   overlay.position.set(stamp.position[0], stamp.position[1] + 0.025, stamp.position[2]);
   overlay.rotation.x = -Math.PI / 2;
   overlay.renderOrder = 2;
+  overlay.receiveShadow = true;
   overlay.layers.enable(PLANAR_REFLECTION_EXCLUDED_LAYER);
   overlay.raycast = () => {};
-  overlay.onBeforeRender = () => {
+  overlay.onBeforeRender = (_renderer, scene, camera) => {
+    updateRiverSunShadow(material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
     material.uniforms["time"]!.value = performance.now() / 1000;
   };
   return overlay;

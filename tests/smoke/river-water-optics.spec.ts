@@ -236,3 +236,48 @@ test("lake optics: the visible shoreline fades to the real bed despite deeper ba
   }
   await evidence(info, "lake-shore-thickness", measurements);
 });
+
+
+test("river sunlight: existing single/cascade shadows attenuate both sun terms, preserve IBL and fallback", async ({page}, info) => {
+  const measurements = [];
+  for (const shadowSystem of ["single", "cascade", "disabled"] as const) {
+    for (const sunTerm of ["body", "glint", "ibl"] as const) {
+      const clear = await frame(page, {sunTest:true, shadowSystem, sunTerm, shadowCaster:false,
+        angle:"grazing", pipeline:"composer", depth:5, opacity:1, bedVisibility:0,
+        normalMap:false, calibration:true, reflection:"red", exposure:1});
+      const shadow = await frame(page, {shadowCaster:true});
+      const differences = clear.centre.map((p,i) => mean(p)-mean(shadow.centre[i]!));
+      measurements.push({shadowSystem,sunTerm,clear,shadow,differences});
+      await evidence(info,"sun-shadow-progress",measurements);
+      await page.screenshot({path:info.outputPath(`sun-${shadowSystem}-${sunTerm}.png`)});
+      expect(shadow.glError).toBe(0);
+      if (shadowSystem !== "disabled" && sunTerm !== "ibl") {
+        expect(mean(differences.slice(0,3))).toBeGreaterThan(2);
+        expect(Math.abs(mean(differences.slice(3)))).toBeLessThan(2);
+      } else expect(Math.max(...differences.map(Math.abs))).toBeLessThan(2);
+      await page.screenshot({path:info.outputPath(`sun-${shadowSystem}-${sunTerm}.png`)});
+    }
+  }
+  await evidence(info,"sun-shadow",measurements);
+});
+
+
+test("river point foam: local patch coverage, opacity and motion survive without white rings", async ({page},info) => {
+  const shots = [];
+  for (const angle of ["top","grazing"] as const) {
+    const off = await frame(page,{pointFoam:true, foamOpacity:0, angle, depth:5, opacity:1, bedVisibility:0,
+      pipeline:"composer", time:12, reflection:"off", sunTest:false, baselineFoam:false});
+    const before = await frame(page,{foamOpacity:0.92,baselineFoam:true});
+    await page.screenshot({path:info.outputPath(`stamp-${angle}-before.png`)});
+    const after = await frame(page,{baselineFoam:false});
+    await page.screenshot({path:info.outputPath(`stamp-${angle}-after.png`)});
+    const moving = await frame(page,{time:14});
+    await page.screenshot({path:info.outputPath(`stamp-${angle}-time14.png`)});
+    shots.push({angle,off,before,after,moving});
+    expect(after.glError).toBe(0);
+    expect(Math.max(...after.stamp.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-off.stamp[i]![c]!))))).toBeGreaterThan(1);
+    expect(Math.max(...moving.stamp.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-after.stamp[i]![c]!))))).toBeGreaterThan(1);
+    expect(after.edge).toEqual(off.edge);
+  }
+  await evidence(info,"point-foam",shots);
+});

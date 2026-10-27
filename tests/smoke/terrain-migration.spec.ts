@@ -68,8 +68,9 @@ test("legacy terrain Save migrates files, preserves road/water IDs, reloads and 
   expect(await (await request.get(`/${SMOKE_ROAD_SIDECAR}`)).body()).toEqual(oldBytes);
   const data = await readSavedTerrain(page, level.landscapes[0].dataRef);
   const legacy = JSON.parse(oldBytes.toString());
-  expect(data.splines).toEqual(legacy.splines);
   const definition = await (await request.get(`/${level.landscapes[0].dataRef}`)).json();
+  // The saved World Terrain carries the legacy splines in world space.
+  expect(data.splines).toEqual(definition.splines);
   expect(definition.splines).toEqual(legacy.splines.map((spline: { points: Array<{ position: number[] }> }) => ({
     ...spline, coordinateSpace: "world", points: spline.points.map((point) => ({
       ...point, position: point.position.map((value, axis) => Number((value + before.landscapes[0].position[axis]).toFixed(3))),
@@ -82,7 +83,7 @@ test("legacy terrain Save migrates files, preserves road/water IDs, reloads and 
   await expect(page.locator("[data-project-name]")).toHaveText("__playwright-smoke-spline", { timeout: 60_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
   await page.keyboard.press("f");
-  expect((await readSavedTerrain(page, level.landscapes[0].dataRef)).splines).toEqual(legacy.splines);
+  expect((await readSavedTerrain(page, level.landscapes[0].dataRef)).splines).toEqual(definition.splines);
   const repeatSave = page.waitForResponse((response) => response.url().endsWith("/__save-layout") && response.request().method() === "POST");
   await page.getByTestId("editor-save").click();
   expect((await repeatSave).ok()).toBeTruthy();

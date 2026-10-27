@@ -2418,6 +2418,24 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       (aşağıdaki madde). Eşzamanlı oturum `SceneApp`/`EditorUi` üzerinde
       çalıştığı için dilimler ayrı worktree dalında yapılır, her yeşil dilim
       `main`'e birleştirilir.
+      *K1 (2026-10-27):* `engine/terrain/worldTerrainMove.ts`; taşıma commit'te
+      (gizmo bırakma, Details, undo/redo) tanımın `origin`'ini ve dünya
+      çerçeveli spline'ları, nehir yüzeyi/köpüğünü, gölleri aynı farkla kaydırır,
+      tile'lara dokunmaz; sürüklerken yalnız görsel actor'ü izler. Taşıma diğer
+      transform'lar gibi Save ile yazılır. Editör akışı çerçeveyi yeniden okur
+      (`TerrainEditorStreaming.syncFrame`). Smoke `terrain-multitile` taşıma
+      senaryosu. *K2:* `engine/terrain/terrainResample.ts`; Resolution / World
+      Size tek undo adımlı belge değişimi, PNG resample ortak heightmap yama
+      hattı. *K3:* `expandSingleTileWorldTerrain`; orijinal tile dünyada yerinde
+      ve birebir (yükseklik biçimi dahil), dünya koordinatlı spline/nehir/göl
+      artık Expand'i engellemez; diyalog kaynağı `WorldTerrainExpansionSource`.
+      *K4:* `fetchTerrainActorDocument` her zaman `{ kind: "world" }` döner; eski
+      dosya actor'le kayıpsız dönüşür (`legacySource`), editör onu level'a ait
+      yola (`levelTerrainPath`) kaydeder, eski dosya kalır; kayıplı eski dosya
+      `terrain:migrate`'i gösteren açık hata. Yeni 1×1 Landscape de World Terrain
+      (Float32 tile). Davranış farkı: paylaşılan bir 1×1 `.terrain.json` artık
+      çok-tile gibi yerinde kaydedilir (köprü onu ilk Save'de level'a
+      kopyalıyordu).
 - [ ] Eski `.landscape.json` okuyucusu emekliye ayrılır: fork'lar için toplu
       migrasyon komutu (`terrain:repair` gibi, `--check` ile CI'da), upstream
       notu, bir geçiş süresi; sonra okuma dönüşümü (`terrainLegacy.ts`),

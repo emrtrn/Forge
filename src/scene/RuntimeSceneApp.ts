@@ -5864,8 +5864,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
-  private fetchLandscapeDocument(dataRef: string): Promise<TerrainActorDocument> {
-    return fetchTerrainActorDocument(dataRef, this.runtimeServices.resolve(worldStreamingService) !== undefined);
+  private fetchLandscapeDocument(actor: LayoutLandscape): Promise<TerrainActorDocument> {
+    return fetchTerrainActorDocument(actor.dataRef, this.runtimeServices.resolve(worldStreamingService) !== undefined, actor);
   }
 
   /**
@@ -5882,7 +5882,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
-      const loaded = await this.fetchLandscapeDocument(actor.dataRef);
+      const loaded = await this.fetchLandscapeDocument(actor);
       if (loaded.kind === "world") {
         await this.buildRuntimeWorldTerrain(actor, loaded.document);
         continue;

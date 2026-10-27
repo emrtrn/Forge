@@ -31,7 +31,7 @@ import {
 import { decodeTerrainTile, encodeTerrainTile, type DecodedTerrainTile, type TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
 import { exportRawHeightmap, heightmapSamplesToRaw, importRawHeightmap, rawHeightmapToSamples } from "@engine/terrain/terrainImport";
 import { decodeHeightmapPng, encodeHeightmapPng16 } from "@engine/terrain/heightmapPng";
-import { legacyTerrainHeightRange } from "@engine/terrain/terrainLegacy";
+import { legacyTerrainHeightRange, migratedTerrainPath } from "@engine/terrain/terrainLegacy";
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
 import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineData";
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
@@ -49,7 +49,6 @@ import {
   landscapeEditWorld,
   landscapeLayersWithoutLayer,
   landscapeGridPatchValues,
-  terrainDocumentToLandscape,
   writeTerrainPatchToLandscape,
 } from "@engine/terrain/terrainLandscapeBridge";
 import {
@@ -7417,9 +7416,16 @@ export class SceneApp {
     this.editorSaves.landscapeSaveRevisions.clear();
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
-      const loaded = await this.fetchLandscapeDocument(actor.dataRef);
+      const loaded = await this.fetchLandscapeDocument(actor);
       if (loaded.kind === "world") {
-        this.adoptWorldTerrain(actor, loaded.document);
+        // A legacy sidecar is saved as this level's own World Terrain (never over a
+        // shared or copied file); the old file stays.
+        if (loaded.legacySource) {
+          actor.dataRef = this.activeProject
+            ? levelTerrainPath(this.activeProject.manifest.editor.defaultScene, actor.id)
+            : migratedTerrainPath(actor.dataRef);
+        }
+        this.adoptWorldTerrain(actor, loaded.document, loaded.legacySource !== undefined);
         continue;
       }
       const data = loaded.data;
@@ -9452,18 +9458,24 @@ export class SceneApp {
   }
 
   /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
-  private fetchLandscapeDocument(dataRef: string): Promise<TerrainActorDocument> {
-    return fetchTerrainActorDocument(dataRef, editorStreamsTerrain);
+  private fetchLandscapeDocument(actor: LayoutLandscape): Promise<TerrainActorDocument> {
+    return fetchTerrainActorDocument(actor.dataRef, editorStreamsTerrain, actor);
   }
 
   /**
-   * Registers a multi-tile World Terrain actor. The definition is the source of
-   * truth for placement, so a stale actor transform is snapped onto it (and
-   * reported) instead of drawing the terrain away from where it collides.
+   * Registers a World Terrain actor. The definition is the source of truth for
+   * placement, so a stale actor transform is snapped onto it (and reported)
+   * instead of drawing the terrain away from where it collides. A terrain read
+   * from a legacy sidecar has no files yet: the next Save writes all of it.
    */
-  private adoptWorldTerrain(actor: LayoutLandscape, loaded: WorldTerrainDocument): void {
-    const document = this.editableWorldTerrain(actor.dataRef, loaded);
+  private adoptWorldTerrain(actor: LayoutLandscape, loaded: WorldTerrainDocument, unwritten = false): void {
+    const document = this.editableWorldTerrain(actor.dataRef, loaded, unwritten ? "f32" : undefined);
     this.worldTerrains.set(actor.id, document);
+    if (unwritten) {
+      const session = this.worldTerrainSessions.get(document);
+      session?.markTiles(document.tiles.keys());
+      session?.markDefinitionDirty();
+    }
     const issues = worldTerrainPlacementIssues(actor, document.def);
     if (issues.length > 0) {
       console.warn(`[terrain] ${actor.id}: ${issues.join("; ")}`);
@@ -10535,15 +10547,11 @@ export class SceneApp {
       position: worldTerrainActorPosition(loaded.def),
       dataRef: levelTerrainPath(this.activeProject.manifest.editor.defaultScene, id),
     };
-    let terrain: TerrainActorDocument;
-    if (isMultiTileTerrain(loaded.def)) {
-      // New tiles use compact u16 heights (OPEN_WORLD_PLAN K1).
-      terrain = { kind: "world", document: this.editableWorldTerrain(actor.dataRef, loaded, "u16") };
-    } else {
-      const data = terrainDocumentToLandscape(loaded);
-      data.splines = [];
-      terrain = { kind: "landscape", data };
-    }
+    // New multi-tile terrains use compact u16 heights (OPEN_WORLD_PLAN K1); a
+    // single tile keeps the Float32 heights the 1x1 Landscape always saved.
+    const terrain: TerrainActorDocument = {
+      kind: "world", document: this.editableWorldTerrain(actor.dataRef, loaded, isMultiTileTerrain(loaded.def) ? "u16" : "f32"),
+    };
     const index = landscapes.length;
     const previousSettings = this.getWorldSettings();
     let nextSettings = previousSettings;

@@ -1,6 +1,6 @@
 import { LANDSCAPE_QUADS_PER_CHUNK, type ForgeLandscapeData, type LandscapeLayerWeights } from "../scene/landscape";
 import type { LayoutLandscape } from "../scene/layout";
-import { legacyLandscapeToWorldTerrain } from "./terrainLegacy";
+import { legacyLandscapeToWorldTerrain, migratedTerrainPath } from "./terrainLegacy";
 import { migrateTerrainSplineCoordinates, terrainSplineInLocalFrame } from "./terrainSplineData";
 import { encodeTerrainGlobalMap } from "./terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "./terrainRenderSource";
@@ -11,7 +11,6 @@ import { createTerrainEditWorld, type TerrainDirtyRect, type TerrainEditWorld, t
 import {
   TERRAIN_MAX_LAYERS,
   isValidTileQuads,
-  isWorldTerrainPath,
   terrainTileLayerWeight,
   terrainWeightBlockCount,
   type WorldTerrainDef,
@@ -33,11 +32,7 @@ export function terrainTransformNeedsSave(actor: LayoutLandscape, data: ForgeLan
     def.origin[2] !== actor.position[2] - half || def.collision !== (actor.collision ?? true);
 }
 
-export function migratedTerrainPath(path: string): string {
-  if (isWorldTerrainPath(path)) return path;
-  if (!path.endsWith(".landscape.json")) throw new Error("legacy terrain path must end with .landscape.json");
-  return path.slice(0, -".landscape.json".length) + ".terrain.json";
-}
+export { migratedTerrainPath } from "./terrainLegacy";
 
 /**
  * The 1×1 editing adapter. A multi-tile World Terrain never comes through here:

@@ -1,17 +1,46 @@
-import type { ForgeLandscapeData } from "../../engine/scene/landscape";
 import { expect, type Page } from "./test";
 import { SMOKE_SCENE } from "./smokeProject.mjs";
 
+/**
+ * A saved single-tile Landscape as plain arrays: heights relative to the
+ * terrain origin Y and each paint layer's 0..1 weight per vertex, row-major
+ * along +Z (the shape the 1×1 smoke specs compare).
+ */
+export interface SavedTerrain {
+  size: { verticesX: number; verticesZ: number; spacing: number };
+  origin: [number, number, number];
+  heights: number[];
+  layers: { id: string; name: string; material?: string; physicalMaterial?: string | null; weights: number[] }[];
+  splines: unknown[];
+}
+
 /** Read the saved definition + binary through the real browser loader, including deployment base. */
-export async function readSavedTerrain(page: Page, path?: string): Promise<ForgeLandscapeData> {
+export async function readSavedTerrain(page: Page, path?: string): Promise<SavedTerrain> {
   path ??= await page.evaluate(async (scenePath) => {
     const level = await (await fetch(`/${scenePath}`)).json();
     return level.landscapes[0].dataRef as string;
   }, SMOKE_SCENE);
   return page.evaluate(async (dataRef) => {
-    const modulePath = "/src/scene/terrainDocument.ts";
-    const { fetchLandscapeDocument } = await import(modulePath);
-    return fetchLandscapeDocument(dataRef);
+    const documentModule = "/src/scene/terrainDocument.ts";
+    const typesModule = "/engine/terrain/terrainTypes.ts";
+    const { fetchTerrainActorDocument } = await import(documentModule);
+    const { terrainTileLayerWeight } = await import(typesModule);
+    const loaded = await fetchTerrainActorDocument(dataRef);
+    if (loaded.kind !== "world") throw new Error(`${dataRef} did not load as a World Terrain`);
+    const { def, tiles } = loaded.document;
+    if (def.tilesX !== 1 || def.tilesZ !== 1) throw new Error(`${dataRef} is not a single-tile Landscape`);
+    const tile = tiles.get("0_0");
+    if (!tile) throw new Error(`${dataRef} has no tile 0_0`);
+    return {
+      size: { verticesX: tile.size, verticesZ: tile.size, spacing: def.spacing },
+      origin: def.origin,
+      heights: Array.from(tile.heights as Float32Array),
+      layers: def.layers.map((layer: { id: string; name: string; material?: string; physicalMaterial?: string | null }, index: number) => ({
+        ...layer,
+        weights: Array.from({ length: tile.size * tile.size }, (_unused, vertex) => terrainTileLayerWeight(tile, index, vertex)),
+      })),
+      splines: def.splines ?? [],
+    };
   }, path);
 }
 

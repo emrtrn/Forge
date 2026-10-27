@@ -8,8 +8,10 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
  * The GPU CDLOD terrain renderer draws a Landscape in the real browser: shaders
  * compile (lit, and the GTAO normal / DOF depth materials used when those
  * passes override the scene), and the terrain covers the frame from several
- * viewpoints. The fixture is deliberately neither square nor power-of-two, so
- * the padded-grid path runs on the GPU too.
+ * viewpoints. The fixture is a legacy `.landscape.json` sidecar, so the
+ * in-memory legacy → World Terrain read path draws it too. (A non-square or
+ * non-power-of-two legacy grid is an explicit migration error now, OPEN_WORLD_PLAN
+ * Faz 8 K4, so the padded-grid path it used to exercise is gone.)
  *
  * Its acceptance run against the old chunk mesh (Faz 2 slice 1) measured at
  * most 0.11/255 mean difference; that renderer is gone, so this guards the
@@ -19,8 +21,8 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 const LEVEL = "layouts/__playwright-terrain-render.level.json";
 const POST_LEVEL = "layouts/__playwright-terrain-render-post.level.json";
 const SIDECAR = "landscapes/terrain-render.landscape.json";
-const VERTICES_X = 201;
-const VERTICES_Z = 137;
+const VERTICES_X = 129;
+const VERTICES_Z = 129;
 
 /**
  * A hilly Landscape with slope/height-painted layers and a textured base layer,

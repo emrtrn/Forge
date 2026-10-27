@@ -31,7 +31,7 @@ import {
   worldTerrainCreateProblems, worldTerrainHeightStep, createWorldTerrainFromHeightmap, worldTerrainGridForHeightmap, worldTerrainHeightmapProblems } from "../../engine/terrain/worldTerrainCreate";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { terrainTileTrimesh } from "./terrainTrimeshReference";
-import { fetchLandscapeDocument, fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
+import { fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
 
 type Check = (label: string, fn: () => void) => void;
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
@@ -438,7 +438,6 @@ export async function registerWorldTerrainActorAsyncTests(checkAsync: CheckAsync
       assert.deepEqual([...loaded.document.tiles.keys()].sort(), [...tiles.keys()].sort());
       assert.deepEqual(loaded.document.def.origin, def.origin);
       assert.deepEqual(Array.from(loaded.document.tiles.get("1_1")!.heights), Array.from(tiles.get("1_1")!.heights));
-      await assert.rejects(fetchLandscapeDocument(path), /multi-tile World Terrain/);
     } finally { globalThis.fetch = original; }
   });
 }

@@ -409,11 +409,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       </div>
       ${splinePanels}
       ${settings.editMode !== "sculpt" || worldTerrain ? "" : heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr, resampleImportMarkup(importHeight, lockedAttr))}
-      ${settings.editMode === "sculpt" && !worldTerrain ? `<div class="detail-section">
-        <div class="detail-section-title">Tiles</div>
-        <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
-        <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
-      </div>` : ""}
+      ${settings.editMode === "sculpt" && !worldTerrain ? expandSection(lockedAttr) : ""}
       ${settings.editMode === "sculpt" ? `
       <div class="detail-section">
         <div class="detail-section-title">Others</div>
@@ -446,7 +442,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   bindNameAndLock(options);
   bindLandscapeBrushControls(options);
 
-  body.querySelector<HTMLButtonElement>("[data-landscape-expand-world]")?.addEventListener("click", options.expandLandscapeToWorldTerrain);
 
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-tool]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -617,6 +612,15 @@ function resampleImportMarkup(importHeight: number, lockedAttr: string): string 
         <div class="detail-hint">Resamples any PNG onto this grid; Import Height scales its brightness (0 m to Import Height). Re-import to change the height scale.</div>`;
 }
 
+/** Expand: extend a single-tile Landscape with neighbouring tiles. */
+function expandSection(lockedAttr: string): string {
+  return `<div class="detail-section">
+        <div class="detail-section-title">Expand</div>
+        <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
+        <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
+      </div>`;
+}
+
 /** Resolution and World Size of a single-tile Landscape; both keep it centred in place. */
 function landscapeSizeSection(
   resolution: { verticesX: number; verticesZ: number; worldSize: number } | null,
@@ -643,6 +647,7 @@ function landscapeSizeSection(
 
 function bindSingleTileGridControls(options: SpecialActorDetailsOptions): void {
   const { body } = options;
+  body.querySelector<HTMLButtonElement>("[data-landscape-expand-world]")?.addEventListener("click", options.expandLandscapeToWorldTerrain);
   body.querySelector<HTMLInputElement>("[data-landscape-heightmap-import]")?.addEventListener("change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -969,7 +974,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
   body.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
-        <span>terrain / landscape (multi-tile)</span>
+        <span>terrain / landscape${singleTile ? "" : " (multi-tile)"}</span>
       </div>
       <label class="detail-row">
         <span>Name</span>
@@ -1002,6 +1007,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       ${settings.editMode === "sculpt" ? `${heightmapFileSection(options.getSelectedLandscapeHeightmapShape(), lockedAttr,
         singleTile ? resampleImportMarkup(options.getSelectedLandscapeImportHeight(), lockedAttr) : "")}
       ${singleTile ? landscapeSizeSection(options.getSelectedLandscapeResolution(), lockedAttr) : ""}
+      ${singleTile ? expandSection(lockedAttr) : ""}
       <div class="detail-section" data-world-terrain>
         <div class="detail-section-title">Tiles</div>
         <div class="detail-row"><span>Tiles in memory</span><span data-world-terrain-residency></span></div>

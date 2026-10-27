@@ -188,8 +188,9 @@ export async function registerTerrainSplineDataAsyncTests(checkAsync: CheckAsync
           return String(input).endsWith(".tile.bin") ? new Response(snapshot.bytes.slice().buffer) : new Response(JSON.stringify(def));
         };
         const loaded = await fetchTerrainActorDocument(path);
-        assert.equal(loaded.kind, "landscape");
-        if (loaded.kind === "landscape") assert.deepEqual(loaded.data.splines, data.splines);
+        assert.equal(loaded.kind, "world");
+        // The reader passes the definition through; the editor migrates unmarked splines when it adopts it.
+        if (loaded.kind === "world") assert.deepEqual(loaded.document.def.splines, def.splines);
       }
       let binaryRead = false;
       const invalid = { ...snapshot.def, splines: [{ ...snapshot.def.splines![0], coordinateSpace: "invalid" }] };

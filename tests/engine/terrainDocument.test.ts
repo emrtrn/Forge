@@ -11,7 +11,7 @@ import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terr
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { collectDroppedFields } from "../../tools/droppedFields";
 import { validateSaveTerrainPayload, validateSaveTerrainTile } from "../../tools/saveValidator";
-import { fetchLandscapeDocument } from "../../src/scene/terrainDocument";
+import { fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
 
 type Check = (label: string, fn: () => void) => void;
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
@@ -183,7 +183,7 @@ export async function registerTerrainDocumentAsyncTests(checkAsync: CheckAsync):
     await assert.rejects(loadWorldTerrain(path, def, async () => bytes.subarray(0, 33)));
   });
 
-  await checkAsync("terrain read path: legacy and migrated sidecars load, new format errors propagate", async () => {
+  await checkAsync("terrain read path: legacy and migrated sidecars load as the same World Terrain, new format errors propagate", async () => {
     const { def, bytes, path, data } = fixture();
     const original = globalThis.fetch;
     const requests: string[] = [];
@@ -193,9 +193,18 @@ export async function registerTerrainDocumentAsyncTests(checkAsync: CheckAsync):
         if (url.endsWith(".tile.bin")) return new Response(bytes.slice().buffer);
         return new Response(JSON.stringify(url.endsWith(".terrain.json") ? def : data));
       };
-      const legacy = await fetchLandscapeDocument(actor.dataRef);
-      const migrated = await fetchLandscapeDocument(path);
-      assert.deepEqual(legacy, migrated);
+      const legacy = await fetchTerrainActorDocument(actor.dataRef, false, actor);
+      const loaded = await fetchTerrainActorDocument(path);
+      assert.equal(legacy.kind, "world");
+      assert.equal(loaded.kind, "world");
+      if (legacy.kind !== "world" || loaded.kind !== "world") return;
+      // The legacy sidecar is read in memory and names where the editor saves it.
+      assert.deepEqual(legacy.legacySource, { path: actor.dataRef });
+      assert.equal(loaded.legacySource, undefined);
+      assert.deepEqual(legacy.document.def.origin, loaded.document.def.origin);
+      assert.deepEqual(legacy.document.def.splines, loaded.document.def.splines, "legacy splines arrive in world space");
+      assert.deepEqual(Array.from(legacy.document.tiles.get("0_0")!.heights), Array.from(loaded.document.tiles.get("0_0")!.heights));
+      const migrated = terrainDocumentToLandscape(loaded.document);
       assert.equal(terrainTransformNeedsSave(actor, migrated), false);
       assert.equal(terrainTransformNeedsSave({ ...actor, position: [20, 2, -3] }, migrated), true);
       assert.equal(terrainTransformNeedsSave({ ...actor, collision: false }, migrated), true);
@@ -207,9 +216,19 @@ export async function registerTerrainDocumentAsyncTests(checkAsync: CheckAsync):
       const snapshot = captureTerrainSnapshot({ ...actor, dataRef: path }, document);
       assert.equal(snapshot.def.heightMin, -100);
       assert.equal(snapshot.def.layers[0]!.color, "#123456");
+      // A legacy grid a tile cannot hold exactly is an explicit error, never a silent adaptation.
+      await assert.rejects(fetchTerrainActorDocument(actor.dataRef, false, { ...actor, rotation: [0, 15, 0] }), /terrain:migrate/);
+      globalThis.fetch = async () => new Response(JSON.stringify({ ...data, size: { ...data.size, verticesZ: 33 } }));
+      await assert.rejects(fetchTerrainActorDocument(actor.dataRef, false, actor), /non-square .*terrain:migrate/);
       globalThis.fetch = async () => new Response("missing", { status: 404 });
-      await assert.rejects(fetchLandscapeDocument(path), /HTTP 404/);
-      assert.equal((await fetchLandscapeDocument(actor.dataRef)).size.verticesX, 129);
+      await assert.rejects(fetchTerrainActorDocument(path), /HTTP 404/);
+      // A missing legacy sidecar stays a flat 128-quad Landscape, centred on its actor.
+      const missing = await fetchTerrainActorDocument(actor.dataRef, false, actor);
+      assert.equal(missing.kind, "world");
+      if (missing.kind !== "world") return;
+      assert.equal(missing.document.def.tileQuads, 128);
+      assert.deepEqual(missing.document.def.origin, [-54, 2, -67]);
+      assert.deepEqual(missing.legacySource, { path: actor.dataRef });
     } finally { globalThis.fetch = original; }
   });
 }

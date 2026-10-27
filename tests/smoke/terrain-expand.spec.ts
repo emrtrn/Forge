@@ -103,12 +103,11 @@ test("Landscape expansion validates the dialog, keeps the 1x1 Float32/RGBA8 samp
   expect(errors).toEqual([]);
 });
 
-test("rotated Landscape opens an explanatory dialog and cannot expand", async ({ page, request }) => {
+test("rotated single-tile Landscape is an explicit migration error, never silently unrotated", async ({ page, request }) => {
   await fixture(15);
   expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
-  const dialog = await openDialog(page);
-  await expect(dialog.locator("[data-world-terrain-problems]")).toContainText("unrotated");
-  await expect(dialog.locator("[data-world-terrain-expand]")).toBeDisabled();
-  await dialog.locator("[data-world-terrain-cancel]").click();
-  await expect(page.locator("[data-landscape-expand-world]")).toBeVisible();
+  await page.goto("/?editor&terrainExpandRotated");
+  await expect(page.locator("[data-project-name]")).toHaveText("level failed to load", { timeout: 60_000 });
+  await expect(page.locator("[data-status-toast]")).toContainText("terrain:migrate");
+  await expect(page.locator("[data-status-toast]")).toContainText("rotated");
 });

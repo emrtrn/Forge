@@ -14,6 +14,7 @@ import {
   TERRAIN_MIN_TILE_QUADS,
   TERRAIN_SCHEMA,
   isValidTileQuads,
+  isWorldTerrainPath,
   terrainTileHeightRange,
   terrainWeightBlockCount,
   tileKey,
@@ -40,6 +41,13 @@ export interface LegacyLandscapeConversion {
   /** Landscape-local compatibility view; save snapshots migrate the definition. */
   splines: ForgeLandscapeSpline[];
   warnings: string[];
+}
+
+/** Where a legacy `.landscape.json` is written once migrated: the same name as a `.terrain.json`. */
+export function migratedTerrainPath(path: string): string {
+  if (isWorldTerrainPath(path)) return path;
+  if (!path.endsWith(".landscape.json")) throw new Error("legacy terrain path must end with .landscape.json");
+  return path.slice(0, -".landscape.json".length) + ".terrain.json";
 }
 
 /** Headroom kept around legacy relief so a first sculpt stroke does not clip. */

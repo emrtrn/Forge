@@ -149,7 +149,7 @@ Reddedilenler:
 |---|---|
 | CPU'da LOD'lu chunk mesh + skirt (geomipmapping) | Daha az risk ama her LOD için CPU geometri kurulumu ve bellek gerekir, akışta kurulum ana thread'i yer, sculpt yine geometri yeniden kurar. Faz 0 spike'ı GPU yolunu doğrulayamazsa **yedek plan** budur. |
 | Geometry clipmap (kameraya bağlı halkalar) | Çok büyük tek heightmap için ideal ama tile tabanlı akış ve tile başına slot havuzuyla CDLOD kadar doğal eşleşmiyor; düzensiz yüklenmiş tile'larda karmaşık. |
-| Voxel / marching cubes arazi | Mağara/overhang verir ama render, fizik, editör maliyeti çok yüksek. Mağara gerekirse "Açık sorular"daki delik maskesi + mesh yolu. |
+| Voxel / marching cubes arazi | Mağara/overhang verir ama render, fizik, editör maliyeti çok yüksek. Mağara gerekirse Faz 10'daki delik maskesi + mesh yolu. |
 | WebGPU'ya geçmek | Forge WebGL2 `WebGLRenderer` üzerinde; bu plan renderer değiştirmez. |
 
 **S1 sonucu — masaüstü (2026-10-22).** GPU CDLOD yolu masaüstünde
@@ -1267,7 +1267,7 @@ editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i aç
       - **Save-game:** `applyPersistentStateSnapshot` canlı olmayan actor'lerin
         kayıtlarını da saklar (bugün atlıyor); aktivasyon onları uygular.
         Boşaltılmış hücredeki taşınmış dinamik cisim/araç pozu v1'de
-        saklanmaz (açık soru olarak kalır).
+        saklanmaz (sonra çözüldü: aşağıdaki Save-game maddesi, açık soru 1).
       - **Akış:** `worldPartitionModule` (`worldStreamingModule` gibi), main
         grid `cellSize/loadRange`, histerezis 1,25, kaynak = pawn'ın canlı
         pozu (yoksa kamera), kare başına aktivasyon bütçesi.
@@ -2452,6 +2452,8 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       görev durumu).
 - [ ] Delik maskesi (mağara girişleri) + ayrı mesh'lerle mağara.
 - [ ] Runtime virtual texture benzeri uzak arazi albedo bake'i.
+- [ ] Detay normal haritası: daha kaba tile aralığında (ör. 2 m) yakın
+      yüzey ayrıntısını korumak için (açık soru 2'nin rafa kalan kısmı).
 
 ---
 
@@ -2503,15 +2505,40 @@ TERRAIN_DEFORMATION Faz 0 (araç/render spike'ları) + Faz 1a: bağımsız, şim
 
 ## Açık sorular
 
+Hepsi kapandı (2026-10-27, kullanıcı onayladı). Soru metni tarihçe için
+duruyor; her birinin altında karar ve dayanağı var.
+
 1. **Hücreden çıkan dinamik durum:** oyuncu arabayı bırakıp 1 km uzaklaşırsa
    araç ne olur? Öneri: taşınmış dinamik actor'lerin durumu bellek içi hücre
    önbelleğinde ve save-game'de tutulur; araçlar her zaman "persistent
    runtime" kümesine terfi eder. Faz 5 başında karar.
+   **Karar (Faz 5'te uygulandı):** terfi yok, hücre önbelleği var.
+   `StreamedActorStateCache` (`engine/world/streamedActorState.ts`) hücre
+   boşalırken yetkili pozdan ayrılmış simüle cisim/aracın son pozunu saklar,
+   hücre dönünce o pozda kurar. Araçlar save-game'in `vehicles` listesine park
+   halinde girer, sürülen araç hücresinden önce canlandırılır; diğer dinamik
+   cisimler yalnız bellekte tutulur (bkz. Faz 5 Save-game maddesi).
 2. **Tile çözünürlüğü:** varsayılan 1 m mi, yoksa 4 km dünyada 2 m + detay
    normal map mi? Faz 0 S1 bütçesine göre.
+   **Karar:** varsayılan 1 m kalır (`TERRAIN_DEFAULT_TILE_QUADS = 256` × 1 m).
+   S1 4 km'de arazi GPU bütçesini (< 3 ms) yaklaşık 3 kat payla geçti; aralık
+   zaten dünya başına seçilir (Open World diyaloğu). Detay normal haritası
+   Faz 10'a isteğe bağlı genişletme olarak alındı; ilk laptop/mobil ölçümü
+   gerekirse onu ya da daha kaba aralığı düşük profile önerir.
 3. **Katman sayısı:** 8 yeterli mi, yoksa katman başına ayrı ağırlık dokusu
    (Unreal gibi sınırsız) mı?
+   **Karar:** 8 kalır (`TERRAIN_MAX_LAYERS`, iki RGBA8 ağırlık bloğu). Katman
+   dokuları tek `sampler2DArray`'e geçtiği için (7c2) doku birimi artık katman
+   sayısıyla büyümüyor; 8'in üstü tile ikili formatını ve global haritayı
+   değiştirir, buna şu an ihtiyaç yok.
 4. **Editör büyük dünyayı ne kadar yükler?** Varsayılan menzil ve "tüm dünyayı
    yükle" seçeneğinin bellek sınırı.
+   **Karar:** bugünkü davranış kalıcıdır. En çok 36 tile'lık (6×6) arazi
+   tümüyle bellekte; daha büyüğü editör kamerası çevresinde 3 tile yarıçapında
+   akar (`EDITOR_TERRAIN_STREAMING_MAX_EAGER_TILES`, `TerrainEditorStreaming`).
+   Ayrı bir "tüm dünyayı yükle" komutu yok: World Partition panelinde bütün
+   haritayı seçip **Load Region** aynı işi görür. Bellek sınırı konmaz; panel
+   tutulan tile'ların tahmini editör belleğini gösterir.
 5. **HLOD üretimi** dev sunucusunda mı (Save sonrası arka plan), yoksa yalnız
    `world:build` ile mi?
+   **Karar (7f):** yalnız `npm run world:build`.

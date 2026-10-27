@@ -9,9 +9,8 @@ import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { tileKey } from "@engine/terrain/terrainTypes";
 import type { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
-import legacy from "./river-water-legacy-shaders.json";
 
-type Variant = "off" | "before" | "after" | "low" | "high";
+type Variant = "off" | "after" | "low" | "high";
 interface ReviewApp {
   projectReady: Promise<void>; scene: Scene; camera: PerspectiveCamera; renderer: WebGLRenderer;
   frameHandle: number; riverWaterObjects: RiverWaterObject[]; lakes: LakeWaterController | null;
@@ -31,7 +30,6 @@ while (internal.riverWaterObjects.length !== 1 || internal.lakes?.objects.size !
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
 const { renderer, scene, camera } = internal;
-const originalShaders = new Map<ShaderMaterial, { vertex: string; fragment: string }>();
 const sources = [...new Set([...internal.riverReflectionSources,
   ...((internal.lakes as unknown as { reflection: Map<string, PlanarReflectionSource> } | null)?.reflection.values() ?? [])])];
 let reflectionDraws = 0, reflectionCaptures = 0, motion = false;
@@ -85,24 +83,11 @@ for (const source of sources) {
     }
   };
 }
-for (const water of internal.riverWaterObjects) {
-  originalShaders.set(water.material, { vertex: water.material.vertexShader, fragment: water.material.fragmentShader });
-  for (const child of water.children) if (child instanceof Mesh && child.material instanceof ShaderMaterial) {
-    originalShaders.set(child.material, { vertex: child.material.vertexShader, fragment: child.material.fragmentShader });
-  }
-}
 function setVariant(next: Variant) {
   variant = next;
   for (const source of sources) source.setQuality(next === "low" ? null : next === "high" ? "high" : "medium");
   for (const water of [...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]) water.visible = next !== "off";
-  for (const [material, after] of originalShaders) {
-    const radial = material.uniforms.intensity !== undefined;
-    const vertex = next === "before" ? radial ? legacy.foamVertex : legacy.vertex : after.vertex;
-    const fragment = next === "before" ? radial ? legacy.foamFragment : legacy.fragment : after.fragment;
-    if (vertex !== material.vertexShader || fragment !== material.fragmentShader) {
-      material.vertexShader = vertex; material.fragmentShader = fragment; material.needsUpdate = true;
-    }
-  }
+  for (const water of internal.riverWaterObjects) water.material.uniforms.waterDetail!.value = next === "low" ? 0 : 1;
   document.querySelector<HTMLSelectElement>("#review-variant")!.value = next;
   status();
 }
@@ -114,6 +99,7 @@ const cameras: Record<string, { target: number[]; offset: number[]; fov: number 
   "lake-overview": { target: [44, -5, -44], offset: [43, 32, 48], fov: 48 },
   "lake-shore": { target: [40, -5, -42], offset: [-1, 8, 20], fov: 48 },
   "lake-top": { target: [44, -5, -44], offset: [0, 85, 0.01], fov: 48 },
+  "lake-low": { target: [40, -5, -42], offset: [-1, 2.5, 20], fov: 48 },
 };
 function setView(name: string) {
   const pose = cameras[name]; if (!pose) throw new Error(`Unknown view ${name}`);
@@ -185,7 +171,7 @@ async function benchmark(samples = 120) {
   const results = [];
   try {
     // Reverse the order in the second round to expose drift/capture cadence.
-    for (const [round, order] of [[0, ["off", "before", "low", "after", "high"]], [1, ["high", "after", "low", "before", "off"]]] as const) {
+    for (const [round, order] of [[0, ["off", "low", "after", "high"]], [1, ["high", "after", "low", "off"]]] as const) {
       for (const next of order) {
         setVariant(next);
         for (let i = 0; i < 30; i++) { await nextFrame(); renderOnce(); }

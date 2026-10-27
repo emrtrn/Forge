@@ -32,7 +32,7 @@ test("river optics: grazing reflection exceeds top-down, underside stays bounded
   const measurements: Record<string, unknown> = {};
   const signals: number[] = [];
   for (const angle of ["top", "grazing", "below"] as const) {
-    const red = await frame(page, { angle, pipeline: "composer", depth: 2.2, opacity: 1, reflection: "red" });
+    const red = await frame(page, { angle, pipeline: "composer", depth: 2.2, opacity: 1, bedVisibility: 0, reflection: "red" });
     const blue = await frame(page, { reflection: "blue" });
     const signal = channel(red, 0) - channel(blue, 0);
     measurements[angle] = { red, blue, signal };
@@ -43,6 +43,19 @@ test("river optics: grazing reflection exceeds top-down, underside stays bounded
   expect(signals[0]!).toBeGreaterThanOrEqual(0);
   expect(signals[1]! - signals[0]!).toBeGreaterThan(15);
   expect(signals[2]!).toBeLessThan(3);
+});
+
+test("river optics: a 64px sphere capture blends with a 256px sky without new reflection targets", async ({ page }, info) => {
+  const sky = await frame(page, { angle: "grazing", reflection: "red", bedVisibility: 0, opacity: 1, pipeline: "composer" });
+  const probe = await frame(page, { localProbe: true });
+  expect(channel(probe, 2) - channel(sky, 2)).toBeGreaterThan(10);
+  expect(channel(sky, 0) - channel(probe, 0)).toBeGreaterThan(10);
+  // First use can initialise a borrowed map. Rebinding must then stay stable.
+  for (let i = 0; i < 4; i++) await frame(page, { localProbe: i % 2 === 0 });
+  const rebound = await frame(page, { localProbe: true });
+  expect(rebound.textures).toBe(probe.textures);
+  await page.screenshot({ path: info.outputPath("sphere-capture.png") });
+  await evidence(info, "sphere-capture", { sky, probe });
 });
 
 test("river optics: neutral direct and composer output agree at fixed exposure", async ({ page }, info) => {
@@ -125,7 +138,8 @@ test("river optics: controls round-trip, animation survives, Off / Low stays tar
   await page.selectOption("#reflection", "off");
   const restored = await page.evaluate(() => window.__riverOptics.snapshot());
   expect(restored.centre).toEqual(first.centre);
-  const calm = await frame(page, { normalMap: true, time: 0, opacity: 1, pipeline: "composer" });
+  const calm = await frame(page, { normalMap: true, time: 0, opacity: 1, bedVisibility: 0,
+    reflection: "red", angle: "grazing", exposure: 1, pipeline: "composer" });
   const flowing = await frame(page, { time: 2 });
   expect(Math.max(...flowing.centre.flatMap((p, i) => p.map((v, c) => Math.abs(v - calm.centre[i]![c]!))))).toBeGreaterThan(1);
   const stableTextures = flowing.textures;

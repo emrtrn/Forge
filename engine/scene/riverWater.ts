@@ -32,7 +32,7 @@ export interface ResolvedRiverWater {
   shoreWaveBreakupScale: number;
   foamStamps: readonly LayoutRiverWaterFoamStamp[];
   segmentProfiles: readonly LayoutRiverWaterSegmentProfile[];
-  reflectionMode: "off" | "sharedPlanar";
+  reflectionMode: "off" | "environment";
   reflectionGroup: string | null;
   reflectionQuality: "low" | "medium" | "high";
   reflectionStrength: number;
@@ -49,13 +49,11 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   flowSpeed: 0.35,
   normalScale: 1,
   normalTexture: "t-water-n",
-  deepColor: "#063447",
-  shallowColor: "#2f8b91",
-  opacity: 0.82,
-  // A nearly opaque default keeps the terrain bed from showing through the
-  // authoring preview while retaining an explicit clear-water control.
-  bedVisibility: 0.05,
-  absorptionDistance: 0.5,
+  deepColor: "#164c50",
+  shallowColor: "#76b6a6",
+  opacity: 0.65,
+  bedVisibility: 0.88,
+  absorptionDistance: 3,
   waveAmplitude: 0.04,
   waveLength: 3.5,
   foamColor: "#e8fff5",
@@ -66,7 +64,7 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   shoreWaveBreakupScale: 1.25,
   foamStamps: [],
   segmentProfiles: [],
-  reflectionMode: "off",
+  reflectionMode: "environment",
   reflectionGroup: null,
   reflectionQuality: "medium",
   // Scales the angle-dependent Fresnel reflection and fades it under visible
@@ -108,7 +106,7 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
       ...(stamp.endPosition ? { endPosition: [...stamp.endPosition] } : {}),
     })) ?? defaults.foamStamps,
     segmentProfiles: actor?.segmentProfiles?.map((profile) => ({ ...profile })) ?? defaults.segmentProfiles,
-    reflectionMode: actor?.reflectionMode === "sharedPlanar" ? "sharedPlanar" : "off",
+    reflectionMode: actor?.reflectionMode === "off" ? "off" : defaults.reflectionMode,
     reflectionGroup: actor?.reflectionGroup?.trim() || null,
     reflectionQuality: actor?.reflectionQuality === "low" || actor?.reflectionQuality === "high"
       ? actor.reflectionQuality
@@ -125,14 +123,11 @@ export function uniqueRiverWaterId(waters: readonly LayoutRiverWater[]): string 
 }
 
 /**
- * Returns the sharing key only for enabled, non-Low planar reflection. The world
- * plane is deliberately part of the key so a mistaken author group cannot make
- * two different heights sample the same reflection camera.
+ * Legacy API: rivers never lease planar targets. Keep old callers source-compatible.
  */
 export function riverWaterReflectionGroupKey(
-  water: Pick<ResolvedRiverWater, "reflectionMode" | "reflectionGroup" | "reflectionQuality">,
-  worldPlaneY: number,
+  _water: Pick<ResolvedRiverWater, "reflectionMode" | "reflectionGroup" | "reflectionQuality">,
+  _worldPlaneY: number,
 ): string | null {
-  if (water.reflectionMode !== "sharedPlanar" || water.reflectionQuality === "low") return null;
-  return `${water.reflectionGroup ?? "river"}:${worldPlaneY.toFixed(3)}:${water.reflectionQuality}`;
+  return null;
 }

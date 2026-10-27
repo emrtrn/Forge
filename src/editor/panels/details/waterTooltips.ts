@@ -44,6 +44,8 @@ export function applyWaterTooltips(body: HTMLElement): void {
       if (key === "group") key = "reflectionGroup";
     }
     let description = descriptions[key ?? ""];
+    if (control.dataset.riverWaterReflection === "reflectionMode") description = "Nehirde mevcut sky light ve sphere capture haritalarından soluk çevre yansıması kullanır. Ek planar çizimi oluşturmaz.";
+    if (control.dataset.riverWaterReflection === "reflectionQuality") description = "Çevre yansımasının yumuşaklığını ve normal katmanı ayrıntısını belirler. Nehir için yeni yansıma hedefi oluşturulmaz.";
     if (control.hasAttribute("data-river-water-delete")) description = descriptions.delete;
     if (control.hasAttribute("data-river-water-foam-number")) description = control.dataset.riverWaterFoamNumber?.endsWith(":radius") ? "Dairesel köpüğün yarıçapı (metre)." : "Dairesel köpüğün yoğunluğu. 0 görünmez, 1 tam yoğunluktur.";
     if (control.hasAttribute("data-river-water-foam-add")) description = "Suya veya araziye tıklayarak kaya ve iskele çevresi için dairesel köpük ekler.";

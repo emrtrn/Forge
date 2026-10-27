@@ -1285,9 +1285,9 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
       return saved;
     });
   }
-  if (input.reflectionMode === "sharedPlanar") water.reflectionMode = "sharedPlanar";
+  if (input.reflectionMode === "sharedPlanar" || input.reflectionMode === "environment") water.reflectionMode = input.reflectionMode;
   else if (input.reflectionMode !== undefined && input.reflectionMode !== "off") {
-    throw new Error("river water reflectionMode must be off or sharedPlanar");
+    throw new Error("river water reflectionMode must be off, environment or legacy sharedPlanar");
   }
   if (typeof input.reflectionGroup === "string" && input.reflectionGroup.length > 0) {
     water.reflectionGroup = input.reflectionGroup;

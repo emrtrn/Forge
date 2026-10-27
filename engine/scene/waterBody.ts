@@ -85,8 +85,8 @@ export function validateWaterBodies(value: unknown): LayoutLakeWaterBody[] {
 
 export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
   const d = RIVER_WATER_DEFAULTS;
-  return { deepColor: d.deepColor, shallowColor: d.shallowColor, opacity: d.opacity,
-    bedVisibility: d.bedVisibility, absorptionDistance: d.absorptionDistance, normalTexture: d.normalTexture,
+  return { deepColor: "#234f4b", shallowColor: "#779a82", opacity: 0.35,
+    bedVisibility: 0.9, absorptionDistance: 4, normalTexture: d.normalTexture,
     normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
     reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high",
     reflectionStrength: d.reflectionStrength, ...lake.appearance };

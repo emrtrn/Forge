@@ -39,7 +39,7 @@ test("physics wheelspin excites water without wheel rotation, stays inside its p
   expect(errors).toEqual([]);
 });
 
-test("terrain water ripples respond to wheels, settle, and reflect scene objects across three quality tiers", async ({ page }, info) => {
+test("terrain water ripples respond to wheels and retain sky IBL without planar captures across quality tiers", async ({ page }, info) => {
   test.setTimeout(300_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -50,7 +50,7 @@ test("terrain water ripples respond to wheels, settle, and reflect scene objects
   const environment = await page.evaluate(() => (window as any).__wetMudQa.skyLight());
   const medium = await page.evaluate(() => (window as any).__wetMudQa.enableDynamics("medium"));
   expect(medium.resolution).toBe(256);
-  expect(medium.captures).toBeGreaterThan(0);
+  expect(medium.captures).toBe(0); expect(medium.groups).toBe(0);
   const ground = await page.evaluate(() => (window as any).__wetMudQa.groundColor() as number[]);
   expect(ground[0]! - ground[2]!).toBeGreaterThan(5);
   const calm = await page.evaluate(() => (window as any).__wetMudQa.waveEnergy());
@@ -69,12 +69,8 @@ test("terrain water ripples respond to wheels, settle, and reflect scene objects
   const red = await page.evaluate(() => (window as any).__wetMudQa.reflectionColor(true) as number[]);
   await page.waitForTimeout(70);
   const blue = await page.evaluate(() => (window as any).__wetMudQa.reflectionColor(false) as number[]);
-  expect(Math.max(...red.map((v, i) => Math.abs(v - blue[i]!)))).toBeGreaterThan(15);
-  await page.screenshot({ path: info.outputPath("terrain-water-planar-medium.png") });
-  const capture = await page.evaluate(() => (window as any).__wetMudQa.showCapture() as number[][]);
-  expect(capture.filter((pixel) => pixel[2]! - pixel[0]! > 80).length).toBeGreaterThan(capture.length * 0.9);
-  await page.screenshot({ path: info.outputPath("terrain-water-capture-medium.png") });
-  await page.evaluate(() => (window as any).__wetMudQa.restoreView());
+  expect(Math.max(...red.map((v, i) => Math.abs(v - blue[i]!)))).toBeLessThan(3);
+  await page.screenshot({ path: info.outputPath("terrain-water-environment-medium.png") });
   const mediumTiming = await page.evaluate(() => (window as any).__wetMudQa.benchmarkFrames(4));
   const low = await page.evaluate(() => (window as any).__wetMudQa.enableDynamics("low"));
   expect(low.groups).toBe(0); expect(low.captures).toBe(0);
@@ -86,24 +82,24 @@ test("terrain water ripples respond to wheels, settle, and reflect scene objects
   await page.screenshot({ path: info.outputPath("terrain-water-sky-low.png") });
   const lowTiming = await page.evaluate(() => (window as any).__wetMudQa.benchmarkFrames(4));
   const high = await page.evaluate(() => (window as any).__wetMudQa.enableDynamics("high"));
-  expect(high.resolution).toBe(512); expect(high.captures).toBeGreaterThan(0);
-  await page.screenshot({ path: info.outputPath("terrain-water-planar-high.png") });
+  expect(high.resolution).toBe(512); expect(high.captures).toBe(0); expect(high.groups).toBe(0);
+  await page.screenshot({ path: info.outputPath("terrain-water-environment-high.png") });
   const highTiming = await page.evaluate(() => (window as any).__wetMudQa.benchmarkFrames(4));
   const depthMode = await page.evaluate(() => (window as any).__wetMudQa.reverseDepth());
   await page.waitForTimeout(70);
   const reverseRed = await page.evaluate(() => (window as any).__wetMudQa.reflectionColor(true) as number[]);
   await page.waitForTimeout(70);
   const reverseBlue = await page.evaluate(() => (window as any).__wetMudQa.reflectionColor(false) as number[]);
-  expect(Math.max(...reverseRed.map((v, i) => Math.abs(v - reverseBlue[i]!)))).toBeGreaterThan(15);
+  expect(Math.max(...reverseRed.map((v, i) => Math.abs(v - reverseBlue[i]!)))).toBeLessThan(3);
   await page.screenshot({ path: info.outputPath("terrain-water-reversed-depth.png") });
   await page.evaluate(() => (window as any).__wetMudQa.tracks(0, 0.25, 1));
   const narrow = await page.evaluate(() => (window as any).__wetMudQa.enableDynamics("high"));
-  expect(narrow.captures).toBeGreaterThan(0);
+  expect(narrow.captures).toBe(0);
   await page.waitForTimeout(70);
   const narrowRed = await page.evaluate(() => (window as any).__wetMudQa.reflectionColor(true) as number[]);
   await page.waitForTimeout(70);
   const narrowBlue = await page.evaluate(() => (window as any).__wetMudQa.reflectionColor(false) as number[]);
-  expect(Math.max(...narrowRed.map((v, i) => Math.abs(v - narrowBlue[i]!)))).toBeGreaterThan(10);
+  expect(Math.max(...narrowRed.map((v, i) => Math.abs(v - narrowBlue[i]!)))).toBeLessThan(3);
   await page.screenshot({ path: info.outputPath("terrain-water-narrow-25cm.png") });
   const released = await page.evaluate(() => (window as any).__wetMudQa.releaseDynamics());
   expect(released.resolution).toBe(0); expect(released.captures).toBe(0);

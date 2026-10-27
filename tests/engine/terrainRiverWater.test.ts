@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { Mesh, Vector3 } from "three";
+import { CubeUVReflectionMapping, Mesh, PerspectiveCamera, Scene, Vector3, WebGLRenderTarget } from "three";
+import { createWaterEnvironmentUniforms, updateWaterEnvironment } from "../../engine/render-three/waterEnvironment";
 import { buildRiverWaterRibbon, createRiverWaterObject } from "../../engine/render-three/riverWater";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
 import { splineToPolyline } from "../../engine/scene/landscape";
@@ -31,6 +32,37 @@ function fixture() {
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain river: environment and legacy reflection modes save without planar leases", async () => {
+    const base = { id: "river", landscapeRef: "land", splineRef: "spline" };
+    assert.equal(resolveRiverWater({ ...base, reflectionMode: "sharedPlanar" }).reflectionMode, "environment");
+    assert.equal(resolveRiverWater({ ...base, reflectionMode: "off" }).reflectionMode, "off");
+    assert.equal(validateRiverWater({ ...base, reflectionMode: "environment" }).reflectionMode, "environment");
+    assert.equal(validateRiverWater({ ...base, reflectionMode: "sharedPlanar" }).reflectionMode, "sharedPlanar");
+  });
+  await checkAsync("terrain river: environment rebind, probe removal and borrowed texture lifetime", async () => {
+    const global = new WebGLRenderTarget(768, 1024), local = new WebGLRenderTarget(336, 256);
+    global.texture.mapping = local.texture.mapping = CubeUVReflectionMapping;
+    let disposed = 0;
+    global.texture.addEventListener("dispose", () => { disposed++; });
+    local.texture.addEventListener("dispose", () => { disposed++; });
+    const scene = new Scene(), camera = new PerspectiveCamera(), uniforms = createWaterEnvironmentUniforms();
+    camera.position.set(1, 2, 3); camera.updateMatrixWorld(true);
+    const probe = { target: local, position: [0, 0, 0] as [number, number, number], radius: 10, priority: 1,
+      intensity: 0.6, resolution: 64, parallax: false, near: 0.1, far: 100 };
+    scene.environment = global.texture; scene.environmentIntensity = 0.8;
+    updateWaterEnvironment(uniforms, scene, camera, [probe]);
+    assert.equal(uniforms.waterEnvironment.value, global.texture);
+    assert.equal(uniforms.waterEnvironmentIntensity.value, 0.8);
+    assert.equal(uniforms.waterEnvironmentSize.value.z, 8);
+    assert.equal(uniforms.waterProbeSize.value.z, 6);
+    assert.equal(uniforms.waterProbe.value, local.texture);
+    updateWaterEnvironment(uniforms, scene, camera);
+    assert.equal(uniforms.waterProbe.value, null); assert.equal(uniforms.waterProbeRadius.value, 0);
+    scene.environment = null; updateWaterEnvironment(uniforms, scene, camera);
+    assert.equal(uniforms.waterEnvironment.value, null); assert.equal(uniforms.waterEnvironmentIntensity.value, 0);
+    assert.equal(disposed, 0, "Water does not dispose scene-owned textures");
+    global.dispose(); local.dispose();
+  });
   await checkAsync("terrain river: optical rendering preserves transformed slope, point stamps and resource disposal", async () => {
     const spline = { id: "sloped", points: [
       { id: "a", position: [-2, 3, 0] as [number, number, number], width: 1, falloff: 0 },
@@ -58,7 +90,8 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.equal(stamp.name, "radial-foam:point");
     assert.deepEqual(stamp.position.toArray(), [-1, 3.525, 0]);
     assert.equal(object.material.depthWrite, false);
-    assert.equal(object.material.uniforms.reflectionStrength!.value, 0, "Off / Low uses no reflection source");
+    assert.equal(object.material.uniforms.reflectionStrength!.value, water.reflectionStrength);
+    assert.equal(object.material.uniforms.waterEnvironmentIntensity!.value, 0, "No map is fabricated before a scene supplies one");
     let geometryDisposals = 0, materialDisposals = 0;
     object.geometry.addEventListener("dispose", () => { geometryDisposals++; });
     stamp.geometry.addEventListener("dispose", () => { geometryDisposals++; });

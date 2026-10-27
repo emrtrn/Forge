@@ -278,7 +278,7 @@ import {
   type RiverWaterObjectLike,
   type RiverWaterRenderItem,
 } from "@engine/render-three/riverWater";
-import { riverWaterReflectionGroupKey, uniqueRiverWaterId } from "@engine/scene/riverWater";
+import { uniqueRiverWaterId } from "@engine/scene/riverWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import {
   FoliageRenderBinding,
@@ -881,7 +881,7 @@ export interface RiverWaterDetailsView {
   shoreWaveSpeed: number;
   shoreWaveReach: number;
   shoreWaveBreakupScale: number;
-  reflectionMode: "off" | "sharedPlanar";
+  reflectionMode: "off" | "environment";
   reflectionGroup: string;
   reflectionQuality: "low" | "medium" | "high";
   reflectionStrength: number;
@@ -7432,7 +7432,6 @@ export class SceneApp {
     for (const source of this.riverReflectionSources) this.waterReflections.release(source);
     this.riverReflectionSources = [];
     const waters = this.layout?.riverWaters ?? [];
-    const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
     for (const actor of waters) {
       try {
         const resolved = resolveRiverWater(actor);
@@ -7455,23 +7454,11 @@ export class SceneApp {
         const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
         const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
-        let reflectionSource: PlanarReflectionSource | null = null;
-        const planeY = source.position[1] + source.surfaceLevel;
-        const groupKey = riverWaterReflectionGroupKey(resolved, planeY);
-        const reflectionKey = groupKey ? `${groupKey}:${planeY}` : null;
-        if (reflectionKey && resolved.reflectionQuality !== "low") {
-          reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
-          if (!reflectionSource) {
-            reflectionSource = this.waterReflections.acquire(resolved.reflectionGroup ?? "water", planeY, resolved.reflectionQuality);
-            reflectionSourceByKey.set(reflectionKey, reflectionSource);
-            this.riverReflectionSources.push(reflectionSource);
-          }
-        }
         const item: RiverWaterRenderItem = {
           ...resolved,
           ...source,
           foamNoiseMap,
-          reflectionSource,
+          environmentProbes: () => this.eligibleProbeBakes(),
         };
         const object = createRiverWaterObject(item, normalMap);
         object.raycast = () => {};
@@ -10380,7 +10367,7 @@ export class SceneApp {
     if (patch.shoreWaveSpeed !== undefined) next.shoreWaveSpeed = Number(clamp(patch.shoreWaveSpeed, 0, 10).toFixed(3));
     if (patch.shoreWaveReach !== undefined) next.shoreWaveReach = Number(clamp(patch.shoreWaveReach, 0.05, 1).toFixed(3));
     if (patch.shoreWaveBreakupScale !== undefined) next.shoreWaveBreakupScale = Number(clamp(patch.shoreWaveBreakupScale, 0.1, 10).toFixed(3));
-    if (patch.reflectionMode !== undefined) next.reflectionMode = patch.reflectionMode === "sharedPlanar" ? "sharedPlanar" : "off";
+    if (patch.reflectionMode !== undefined) next.reflectionMode = patch.reflectionMode === "environment" ? "environment" : "off";
     if (patch.reflectionGroup !== undefined) {
       const group = patch.reflectionGroup.trim();
       if (group) next.reflectionGroup = group;

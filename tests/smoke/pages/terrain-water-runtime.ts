@@ -1,7 +1,7 @@
 import { createForgeRuntime } from "@/scene/ForgeRuntime";
 import { createDefaultRuntimeModules } from "@/scene/capabilities/defaultRuntimeModules";
 import { createGameModule } from "@/game/gameModule";
-import { QUALITY_PROFILES } from "@engine/perf/qualityProfiles";
+import type { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
 import { updateLandscapeLod, type LandscapeObject } from "@engine/render-three/landscape";
 import { sharedTerrainDeformation } from "@engine/render-three/terrain/terrainDeformation";
 import type { DeformationField } from "@engine/scene/deformationField";
@@ -19,10 +19,19 @@ let reflectedPixels: Uint8Array | null = null;
 let captureSerial = 0;
 let realWaterContacts: TerrainWaterContact[] = [];
 let calmRipplePixels: Uint8Array | null = null;
+function drawRuntimeReview() {
+  const state = forge.app as unknown as { renderer: WebGLRenderer; scene: Scene; camera: PerspectiveCamera;
+    environment: AuthoredEnvironment; updateFollowShadow(): void;
+    postProcessPipeline: { render(dt: number): void } | null };
+  state.environment.update(0); state.updateFollowShadow();
+  state.renderer.info.reset();
+  if (state.postProcessPipeline) state.postProcessPipeline.render(0);
+  else state.renderer.render(state.scene, state.camera);
+}
 (window as any).__terrainWaterRuntime = {
   ready: true,
   snapshot: () => forge.app.getTerrainDeformationSnapshot(),
-  captureUltra() {
+  captureWater() {
     const internal = forge.app as unknown as { frameHandle: number; renderer: WebGLRenderer; scene: Scene;
       camera: PerspectiveCamera; landscapeObjects: LandscapeObject[]; postProcessPipeline: { render(dt: number): void } | null };
     cancelAnimationFrame(internal.frameHandle);
@@ -42,15 +51,18 @@ let calmRipplePixels: Uint8Array | null = null;
     }
     deformation.update(field.takeDirty());
     if (physicalSnapshot) deformation.water.advance(1 / 60, seeded, physicalSnapshot.centre, field);
-    forge.app.applyQualitySettings(QUALITY_PROFILES.ultra);
+    // Keep the test's authored/custom pipeline. Switching to Ultra after
+    // stopping its rAF rebuilds post-processing mid-capture.
     internal.camera.fov = 45; internal.camera.updateProjectionMatrix();
     internal.camera.position.set(22, 1.8, -38.5);
     internal.camera.lookAt(20.96, 0.8, -44.42); internal.camera.updateMatrixWorld(true);
     for (const object of internal.landscapeObjects) updateLandscapeLod(object, internal.camera);
-    if (internal.postProcessPipeline) internal.postProcessPipeline.render(0);
-    else internal.renderer.render(internal.scene, internal.camera);
+    drawRuntimeReview();
     return { physicalSnapshot, snapshot: forge.app.getTerrainDeformationSnapshot(), reversed: internal.camera.reversedDepth,
-      textures: internal.renderer.info.memory.textures };
+      textures: internal.renderer.info.memory.textures, draws: internal.renderer.info.render.calls,
+      exposure: internal.renderer.toneMappingExposure, toneMapping: internal.renderer.toneMapping,
+      camera: { position: internal.camera.position.toArray(), far: internal.camera.far },
+      depthState: internal.renderer.state.buffers.depth.getReversed() };
   },
   wheelRippleAppearance(on: boolean) {
     const internal = forge.app as unknown as { renderer: WebGLRenderer; scene: Scene; camera: PerspectiveCamera;
@@ -74,12 +86,11 @@ let calmRipplePixels: Uint8Array | null = null;
     }
     (water as unknown as { copy: ShaderMaterial }).copy.uniforms.rippleStrength!.value = on ? 1 : 0;
     // Compare only wavefronts: both images keep the same reflection capture.
-    const groups = (water as unknown as { groups: { source: PlanarReflectionSource }[] }).groups;
+    const groups = (water as unknown as { groups?: { source: PlanarReflectionSource }[] }).groups ?? [];
     const updates = groups.map((group) => group.source.update);
     groups.forEach((group) => { group.source.update = () => {}; });
     try {
-      if (internal.postProcessPipeline) internal.postProcessPipeline.render(0);
-      else internal.renderer.render(internal.scene, internal.camera);
+      drawRuntimeReview();
     } finally { groups.forEach((group, i) => { group.source.update = updates[i]!; }); }
     const gl = internal.renderer.getContext();
     const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
@@ -102,7 +113,7 @@ let calmRipplePixels: Uint8Array | null = null;
     for (const object of internal.landscapeObjects) updateLandscapeLod(object, internal.camera);
     const deformation = sharedTerrainDeformation();
     const water = deformation.water;
-    const groups = (water as unknown as { groups: { source: PlanarReflectionSource; level: number }[] }).groups;
+    const groups = (water as unknown as { groups?: { source: PlanarReflectionSource; level: number }[] }).groups ?? [];
     const actor = internal.actorObjects.get("actor:0")!;
     actor.visible = withVehicle;
     captureSerial++;
@@ -116,8 +127,7 @@ let calmRipplePixels: Uint8Array | null = null;
     const updates = groups.map((group) => group.source.update);
     groups.forEach((group) => { group.source.update = () => {}; });
     try {
-      if (internal.postProcessPipeline) internal.postProcessPipeline.render(0);
-      else internal.renderer.render(internal.scene, internal.camera);
+      drawRuntimeReview();
     } finally { groups.forEach((group, i) => { group.source.update = updates[i]!; }); }
     const gl = internal.renderer.getContext();
     const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);

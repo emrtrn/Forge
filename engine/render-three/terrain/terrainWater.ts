@@ -1,14 +1,14 @@
 import {
-  BoxGeometry, Camera, Color, DataTexture, FloatType, HalfFloatType, LinearFilter,
-  Matrix4, Mesh, MeshBasicMaterial, NearestFilter, NoBlending, NoToneMapping,
+  Camera, Color, DataTexture, FloatType, HalfFloatType, LinearFilter,
+  Matrix4, Mesh, NearestFilter, NoBlending, NoToneMapping,
   OrthographicCamera, PlaneGeometry, RepeatWrapping, RGBAFormat, Scene, ShaderMaterial,
   Vector2, Vector4, WebGLArrayRenderTarget, WebGLRenderTarget,
   type Texture, type WebGLRenderer,
 } from "three";
 import type { DeformationField } from "@engine/scene/deformationField";
-import { PlanarReflectionSource, isPlanarReflectionCamera } from "../planarReflectionSource";
-import { TerrainWaterState, terrainWaterRenderDepth, TERRAIN_WATER_MASK_SIZE, TERRAIN_WATER_SIZE, TERRAIN_WATER_STEP, TERRAIN_WATER_MAX_IMPULSES, TERRAIN_WATER_MAX_RIPPLES } from "./terrainWaterState";
-import type { TerrainWaterContact, TerrainWaterGroup } from "./terrainWaterState";
+import { isPlanarReflectionCamera } from "../planarReflectionSource";
+import { TerrainWaterState, TERRAIN_WATER_MASK_SIZE, TERRAIN_WATER_SIZE, TERRAIN_WATER_STEP, TERRAIN_WATER_MAX_IMPULSES, TERRAIN_WATER_MAX_RIPPLES } from "./terrainWaterState";
+import type { TerrainWaterContact } from "./terrainWaterState";
 
 export type TerrainWaterQuality = "low" | "medium" | "high";
 const live = new Set<TerrainWater>();
@@ -108,10 +108,8 @@ void main(){
  } else gl_FragColor=texture2D(source,vUv);
 }`;
 
-interface ReflectionGroup { source: PlanarReflectionSource; proxy: Mesh; level: number }
-
-/** Shared by terrain materials: two ripple buffers, one array sampler for
- * normals + up to two planar captures. Lazily allocated after wet contact. */
+/** Ripple simulation only. Mud/puddles use the terrain's environment IBL;
+ * planar capture is reserved for lakes. Lazily allocated after wet contact. */
 export class TerrainWater {
   readonly state = new TerrainWaterState();
   readonly uniforms = {
@@ -142,9 +140,6 @@ export class TerrainWater {
       origin: { value: new Vector2() }, rippleCount: { value: 0 }, rippleStrength: { value: 1 },
       ripples: { value: Array.from({ length: TERRAIN_WATER_MAX_RIPPLES }, () => new Vector4()) } } });
   private readonly quad = new Mesh(new PlaneGeometry(2, 2), this.simulation);
-  private groups: ReflectionGroup[] = [];
-  private readonly proxyGeometry = new BoxGeometry(1, 0.02, 1);
-  private readonly proxyMaterial = new MeshBasicMaterial();
   private readonly previousOrigin = new Vector2(-16, -16);
   private rendering = false;
   private simulationSteps = 0;
@@ -166,7 +161,7 @@ export class TerrainWater {
 
   stats(): { quality: TerrainWaterQuality; resolution: number; steps: number; groups: number; captures: number; sites: number; contacts: number; renderCalls: number; reversed: boolean } {
     return { quality: this.quality, resolution: this.atlas?.width ?? 0, steps: this.simulationSteps,
-      groups: this.groups.length, captures: this.groups.filter((group) => group.source.hasCapture).length,
+      groups: 0, captures: 0,
       sites: this.state.sites.size, contacts: this.state.previous.size, renderCalls: this.renderCalls, reversed: this.reversed };
   }
 
@@ -176,10 +171,10 @@ export class TerrainWater {
 
   dispose(): void {
     live.delete(this); this.reset(); this.simulation.dispose(); this.copy.dispose();
-    this.quad.geometry.dispose(); this.proxyGeometry.dispose(); this.proxyMaterial.dispose();
+    this.quad.geometry.dispose();
   }
 
-  render(renderer: WebGLRenderer, scene: Scene, camera: Camera, deformation: Texture | null, window: Vector4, depthRange: number): void {
+  render(renderer: WebGLRenderer, _scene: Scene, camera: Camera, deformation: Texture | null, window: Vector4, depthRange: number): void {
     this.renderCalls++;
     this.uniforms.uTerrainWaterReflectionPass.value = isPlanarReflectionCamera(camera) || this.rendering ? 1 : 0;
     if (this.rendering || isPlanarReflectionCamera(camera) || !this.field || this.state.sites.size === 0 || !deformation) return;
@@ -223,23 +218,9 @@ export class TerrainWater {
         .set(ripple.x, ripple.z, ripple.age, ripple.strength));
       this.copyLayer(renderer, targets[0].texture, 0, true);
       this.uniforms.uTerrainWaterWindow.value.set(this.previousOrigin.x, this.previousOrigin.y, 32, 1);
-      this.syncGroups(camera, deformation, window, depthRange);
-      this.uniforms.uTerrainWaterReflectionPass.value = 1;
-      // Restore authored clear/background state for the real scene captures.
-      renderer.setClearColor(clear, alpha); renderer.autoClear = autoClear;
-      for (let i = 0; i < this.groups.length; i++) {
-        const group = this.groups[i]!;
-        group.source.update(renderer, scene, camera);
-        if (group.source.hasCapture) {
-          renderer.autoClear = true;
-          this.copyLayer(renderer, group.source.binding.texture, i + 1, false);
-          renderer.autoClear = autoClear;
-          this.uniforms.uTerrainWaterMatrices.value[i]!.copy(group.source.binding.textureMatrix);
-          this.uniforms.uTerrainWaterPlanes.value[i]!.set(group.level, 1, 0, 0);
-        }
-      }
     } finally {
       renderer.setRenderTarget(target, face, mip); renderer.setClearColor(clear, alpha);
+      renderer.state.buffers.depth.setReversed(this.reversed);
       renderer.toneMapping = toneMapping; renderer.autoClear = autoClear; renderer.xr.enabled = xr;
       this.rendering = false; this.uniforms.uTerrainWaterReflectionPass.value = 0;
     }
@@ -250,14 +231,14 @@ export class TerrainWater {
     const size = this.quality === "high" ? 512 : 256;
     const options = { type: HalfFloatType, format: RGBAFormat, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: false };
     this.targets = [new WebGLRenderTarget(size, size, options), new WebGLRenderTarget(size, size, options)];
-    this.atlas = new WebGLArrayRenderTarget(size, size, 3, options);
+    this.atlas = new WebGLArrayRenderTarget(size, size, 1, options);
     this.maskTexture = new DataTexture(this.maskBytes, TERRAIN_WATER_MASK_SIZE, TERRAIN_WATER_MASK_SIZE, RGBAFormat, FloatType);
     this.maskTexture.wrapS = this.maskTexture.wrapT = RepeatWrapping;
     this.maskTexture.minFilter = this.maskTexture.magFilter = NearestFilter;
     this.maskTexture.needsUpdate = true; this.maskRevision = -1;
     this.simulation.uniforms.cellSize!.value = TERRAIN_WATER_SIZE / size;
     for (const target of this.targets) { renderer.setRenderTarget(target); renderer.clear(); }
-    for (let layer = 0; layer < 3; layer++) { renderer.setRenderTarget(this.atlas, layer); renderer.clear(); }
+    renderer.setRenderTarget(this.atlas, 0); renderer.clear();
     this.previousOrigin.set(this.state.minX, this.state.minZ);
     this.uniforms.uTerrainWaterTex.value = this.atlas.texture;
   }
@@ -268,42 +249,10 @@ export class TerrainWater {
     renderer.setRenderTarget(this.atlas, layer); renderer.render(this.passScene, this.passCamera);
   }
 
-  private syncGroups(camera: Camera, deformation: Texture, window: Vector4, depthRange: number): void {
-    const image = deformation.image as { data: ArrayLike<number>; width: number };
-    const depthAt = (x: number, z: number): number => {
-      if (this.field!.sample(x, z).depth <= 0) return 0;
-      return terrainWaterRenderDepth(image.data, image.width, window.w, depthRange, x, z);
-    };
-    const selected: TerrainWaterGroup[] = this.quality === "low" ? [] : this.state.groups(depthAt,
-      camera.matrixWorld.elements[12]!, camera.matrixWorld.elements[14]!);
-    const remaining = [...this.groups];
-    this.groups = selected.map((bounds) => {
-      let group = remaining.find((item) => Math.abs(item.level - bounds.level) < 0.001);
-      if (group) remaining.splice(remaining.indexOf(group), 1);
-      else if (remaining.length > 0) {
-        group = remaining.pop()!;
-        group.level = bounds.level;
-        group.source.setPlaneHeight(bounds.level);
-      }
-      else {
-        const source = new PlanarReflectionSource(bounds.level, this.quality === "high" ? "high" : "medium");
-        const proxy = new Mesh(this.proxyGeometry, this.proxyMaterial);
-        source.addConsumer(proxy); group = { source, proxy, level: bounds.level };
-      }
-      group.proxy.position.set((bounds.minX + bounds.maxX) / 2, bounds.level, (bounds.minZ + bounds.maxZ) / 2);
-      group.proxy.scale.set(bounds.maxX - bounds.minX, 1, bounds.maxZ - bounds.minZ);
-      group.proxy.updateMatrixWorld(true);
-      return group;
-    });
-    for (const group of remaining) group.source.dispose();
-    for (const plane of this.uniforms.uTerrainWaterPlanes.value) plane.set(0, 0, 0, 0);
-  }
-
   private releaseTargets(): void {
     for (const target of this.targets ?? []) target.dispose();
     this.targets = null; this.atlas?.dispose(); this.atlas = null;
     this.maskTexture?.dispose(); this.maskTexture = null;
-    for (const group of this.groups) group.source.dispose(); this.groups = [];
     this.uniforms.uTerrainWaterTex.value = null; this.uniforms.uTerrainWaterWindow.value.w = 0;
     for (const plane of this.uniforms.uTerrainWaterPlanes.value) plane.set(0, 0, 0, 0);
   }
@@ -336,32 +285,6 @@ void forgeSampleWater() {}
 `;
 
 export const TERRAIN_WATER_REFLECTION = /* glsl */ `
-#ifdef FORGE_TERRAIN_WATER
-if(forgePuddle>0.0 && uTerrainWaterWindow.w>0.5 && uTerrainWaterReflectionPass<0.5){
- vec2 local=forgeWaterUv();
- float nearFade=smoothstep(0.0,0.08,min(min(local.x,local.y),min(1.0-local.x,1.0-local.y)));
- int selected=-1;
- float closest=0.065;
- // A film follows the pixel-filtered rut. The coarser vertex grid must not
- // decide which water plane is selected (otherwise LOD changes cut stripes).
- float filmY=vForgeDeformBaseY-forgeDeform.x;
- for(int i=0;i<2;i++) {
-   float distanceToPlane=abs(filmY-uTerrainWaterPlanes[i].x);
-   if(uTerrainWaterPlanes[i].y>0.5 && distanceToPlane<closest) { closest=distanceToPlane; selected=i; }
- }
- for(int i=0;i<2;i++){
-  if(i!=selected) continue;
-  vec4 plane=uTerrainWaterPlanes[i];
-  if(plane.y<0.5 || abs(filmY-plane.x)>0.065) continue;
-  vec4 projected=uTerrainWaterMatrices[i]*vec4(vForgeDeformWorld.x,plane.x,vForgeDeformWorld.y,1.0);
-  vec2 uv=projected.xy/max(projected.w,0.0001);
-  uv+=forgeWaterGradient*0.055;
-  if(projected.w<=0.0||any(lessThan(uv,vec2(0.0)))||any(greaterThan(uv,vec2(1.0)))) continue;
-  vec3 reflected=texture(uTerrainWaterTex,vec3(uv,float(i+1))).rgb;
-  float fresnel=0.02+0.98*pow(1.0-clamp(dot(normalize(vViewPosition),normal),0.0,1.0),5.0);
-  outgoingLight=mix(outgoingLight,reflected,forgePuddle*nearFade*(0.12+0.6*fresnel));
-  break;
- }
-}
-#endif
+// Puddles retain MeshStandardMaterial environment IBL and wet-ground shading.
+// Dynamic planar capture is reserved for lakes.
 `;

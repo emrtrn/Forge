@@ -387,7 +387,6 @@ import {
   resolveRiverWater,
   type RiverWaterObjectLike,
 } from "@engine/render-three/riverWater";
-import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
@@ -6001,7 +6000,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     const waters = this.layout?.riverWaters ?? [];
     if (waters.length === 0) return;
-    const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
     for (const actor of waters) {
       try {
         const resolved = resolveRiverWater(actor);
@@ -6026,24 +6024,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
         const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
-        let reflectionSource: PlanarReflectionSource | null = null;
-        const planeY = source.position[1] + source.surfaceLevel;
-        const groupKey = riverWaterReflectionGroupKey(resolved, planeY);
-        const reflectionKey = groupKey ? `${groupKey}:${planeY}` : null;
-        if (reflectionKey && resolved.reflectionQuality !== "low") {
-          reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
-          if (!reflectionSource) {
-            reflectionSource = this.waterReflections.acquire(resolved.reflectionGroup ?? "water", planeY, resolved.reflectionQuality);
-            reflectionSourceByKey.set(reflectionKey, reflectionSource);
-            this.riverReflectionSources.push(reflectionSource);
-          }
-        }
         const object = createRiverWaterObject(
           {
             ...resolved,
             ...source,
             foamNoiseMap,
-            reflectionSource,
+            environmentProbes: () => this.eligibleProbeBakes(),
           },
           normalMap,
         );

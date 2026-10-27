@@ -84,8 +84,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
           return `<div class="detail-subsection-title"><span>${id} (Radial Foam)</span><span><button type="button" class="detail-action-button" data-river-water-foam-select="${id}:start" ${lockedAttr}>Move Gizmo</button><button type="button" class="detail-action-button" data-river-water-foam-delete="${id}" ${lockedAttr}>Delete</button></span></div><div class="detail-hint">Select the marker or Move Gizmo to position this Radial Foam.</div><label class="detail-row"><span>Radius</span><input data-river-water-foam-number="${id}:radius" type="number" min="0.1" step="0.1" value="${stamp.radius}" ${lockedAttr} /></label><label class="detail-row"><span>Intensity</span><input data-river-water-foam-number="${id}:intensity" type="number" min="0" max="1" step="0.05" value="${stamp.intensity}" ${lockedAttr} /></label>`;
         }).join("") || "<div class=\"detail-hint\">Add Radial Foam for rocks and piers.</div>"}</div>
       </div><div class="detail-section" data-detail-section="river-reflection"><div class="detail-section-title">Reflection</div>
-        <label class="detail-row"><span>Mode</span><select data-river-water-reflection="reflectionMode" ${lockedAttr}><option value="off" ${activeRiverWater.reflectionMode === "off" ? "selected" : ""}>Off</option><option value="sharedPlanar" ${activeRiverWater.reflectionMode === "sharedPlanar" ? "selected" : ""}>Shared Planar</option></select></label>
-        <label class="detail-row"><span>Group</span><input data-river-water-reflection="reflectionGroup" type="text" value="${escapeHtml(activeRiverWater.reflectionGroup)}" placeholder="river" ${lockedAttr} /></label>
+        <label class="detail-row"><span>Mode</span><select data-river-water-reflection="reflectionMode" ${lockedAttr}><option value="off" ${activeRiverWater.reflectionMode === "off" ? "selected" : ""}>Off</option><option value="environment" ${activeRiverWater.reflectionMode === "environment" ? "selected" : ""}>Environment / Captures</option></select></label>
         <label class="detail-row"><span>Quality</span><select data-river-water-reflection="reflectionQuality" ${lockedAttr}>${["low", "medium", "high"].map((quality) => `<option value="${quality}" ${activeRiverWater.reflectionQuality === quality ? "selected" : ""}>${quality}</option>`).join("")}</select></label>
         <label class="detail-row"><span>Strength</span><input data-river-water-number="reflectionStrength" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.reflectionStrength}" ${lockedAttr} /></label>
       </div>`
@@ -195,7 +194,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
       const key = input.dataset.riverWaterReflection as "reflectionMode" | "reflectionGroup" | "reflectionQuality" | undefined;
       if (!water || !key) return;
       const value = input.value;
-      if (key === "reflectionMode" && value !== "off" && value !== "sharedPlanar") return;
+      if (key === "reflectionMode" && value !== "off" && value !== "environment") return;
       if (key === "reflectionQuality" && value !== "low" && value !== "medium" && value !== "high") return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: value } as RiverWaterDetailsPatch);
       options.refreshDetails();

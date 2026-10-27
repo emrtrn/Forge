@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 // Run against the isolated server documented in WATER_LANDSCAPE_REVIEW.md.
 // This driver never calls a save endpoint or touches authored scene data.
 const base = process.env.FORGE_WATER_REVIEW_URL ?? "http://127.0.0.1:5488";
-const output = resolve("docs/planned/Forge_Water_System/evidence/landscape-review");
+const output = resolve(process.env.FORGE_WATER_REVIEW_OUTPUT ?? "docs/planned/Forge_Water_System/evidence/landscape-review");
 await mkdir(output, { recursive: true });
 const refine = process.argv.includes("--refine");
 const previousReport = refine ? JSON.parse(await readFile(resolve(output, "review.json"), "utf8")) : null;
@@ -33,11 +33,11 @@ try {
   if (!initial.renderer.includes("NVIDIA") || !initial.gpuTimer) throw new Error(`Expected hardware GPU: ${JSON.stringify(initial)}`);
   await page.waitForTimeout(2000);
   const views = refine ? ["river-flat", "lake-shore"] : process.argv.includes("--pilot") ? ["river-upper", "river-bank", "lake-overview"] :
-    ["river-upper", "river-bank", "river-flat", "river-top", "lake-overview", "lake-shore", "lake-top"];
+    ["river-upper", "river-bank", "river-flat", "river-top", "lake-overview", "lake-shore", "lake-top", "lake-low"];
   for (const view of views) {
     await page.selectOption("#review-view", view);
     await page.waitForTimeout(1800);
-    for (const variant of view.startsWith("river") ? ["off", "before", "after"] : ["off", "after"]) {
+    for (const variant of ["off", "after"]) {
       await page.selectOption("#review-variant", variant);
       await page.waitForTimeout(250);
       await page.locator("canvas").screenshot({ path: resolve(output, `${view}-${variant}.png`) });
@@ -59,7 +59,7 @@ try {
     let step = 0;
     while (Date.now() - explorationStart < (refine ? 0 : 30_000)) {
       await page.selectOption("#review-view", views[step % views.length]);
-      await page.selectOption("#review-variant", step % 2 ? "before" : "after");
+      await page.selectOption("#review-variant", step % 2 ? "low" : "after");
       await page.waitForTimeout(1000); step++;
     }
     await page.uncheck("#review-motion");
@@ -67,7 +67,7 @@ try {
     await page.selectOption("#review-variant", "after");
   }
   const report = { date: new Date().toISOString(), pilot: process.argv.includes("--pilot"),
-    baselineCommit: "6486120bb178e3bf98871c8aa8912c2826354ca2", initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
+    baselineCommit: "ac727f5a", initial, captures, benchmarks, errors, warnings: Object.fromEntries(warnings), failedRequests, writes };
   if (refine) {
     report.initial = previousReport.initial;
     report.captures = [...previousReport.captures.filter((c) => !views.includes(c.view)), ...captures];

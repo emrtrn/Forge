@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { expect, test } from "./test";
 
-test("terrain water runtime: LandscapeTest GAZ-52 contacts reach the planar renderer", async ({ page }, info) => {
+test("terrain water runtime: LandscapeTest GAZ-52 contacts drive environment-lit ripples without planar captures", async ({ page }, info) => {
   test.setTimeout(300_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -38,7 +38,9 @@ test("terrain water runtime: LandscapeTest GAZ-52 contacts reach the planar rend
   await page.keyboard.down("KeyW");
   await expect.poll(() => page.evaluate(() => (window as any).__terrainWaterRuntime.snapshot()?.water?.sites ?? 0), { timeout: 30_000 }).toBeGreaterThan(3);
   await page.keyboard.up("KeyW");
-  const snapshot = await page.evaluate(() => (window as any).__terrainWaterRuntime.captureUltra());
+  const snapshot = await page.evaluate(() => (window as any).__terrainWaterRuntime.captureWater());
+  expect(snapshot.draws).toBeGreaterThan(5);
+  expect(snapshot.depthState).toBe(snapshot.reversed);
   await writeFile(info.outputPath("terrain-water-runtime.json"), JSON.stringify(snapshot, null, 2));
   await page.screenshot({ path: info.outputPath("terrain-water-runtime.png") });
   await page.evaluate(() => (window as any).__terrainWaterRuntime.vehicleReflection(true));
@@ -46,10 +48,10 @@ test("terrain water runtime: LandscapeTest GAZ-52 contacts reach the planar rend
   const difference = await page.evaluate(() => (window as any).__terrainWaterRuntime.vehicleReflection(false));
   await page.screenshot({ path: info.outputPath("terrain-water-runtime-no-car-reflection.png") });
   await writeFile(info.outputPath("terrain-water-runtime-reflection-diff.json"), JSON.stringify(difference, null, 2));
-  expect(difference.maxDifference).toBeGreaterThan(25);
-  expect(difference.changed).toBeGreaterThan(25);
+  expect(difference.maxDifference).toBeLessThan(3);
+  expect(difference.changed).toBe(0);
   expect(snapshot.snapshot.water.resolution).toBe(512);
-  expect(snapshot.snapshot.water.captures).toBeGreaterThan(0);
+  expect(snapshot.snapshot.water.captures).toBe(0);
   await page.evaluate(() => (window as any).__terrainWaterRuntime.wheelRippleAppearance(false));
   await page.screenshot({ path: info.outputPath("terrain-water-wheel-calm.png") });
   const ripples = await page.evaluate(() => (window as any).__terrainWaterRuntime.wheelRippleAppearance(true));

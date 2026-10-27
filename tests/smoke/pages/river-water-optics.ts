@@ -1,5 +1,5 @@
 import {
-  ACESFilmicToneMapping, Color, DataTexture, Group, Matrix4, Mesh, MeshBasicMaterial,
+  ACESFilmicToneMapping, Color, DataTexture, Group, Mesh, MeshBasicMaterial, PMREMGenerator,
   NearestFilter, OrthographicCamera, PerspectiveCamera, PlaneGeometry, RepeatWrapping, RGBAFormat,
   Scene, SRGBColorSpace, Vector3, WebGLRenderer,
 } from "three";
@@ -9,6 +9,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { createRiverWaterObject, type RiverWaterObject } from "@engine/render-three/riverWater";
 import { resolveRiverWater } from "@engine/scene/riverWater";
 import type { ForgeLandscapeSpline } from "@engine/scene/landscape";
+import type { SphereReflectionCaptureBake } from "@engine/render-three/reflectionCapture";
 
 export interface OpticsOptions {
   angle: "top" | "grazing" | "below";
@@ -27,6 +28,7 @@ export interface OpticsOptions {
   transformed: boolean;
   slope: number;
   orthographic: boolean;
+  localProbe: boolean;
 }
 
 const canvas = document.querySelector("canvas")!;
@@ -62,11 +64,16 @@ const bedMaterial = new MeshBasicMaterial({ map: checker });
 const bed = new Mesh(new PlaneGeometry(16, 8), bedMaterial);
 bed.rotation.x = -Math.PI / 2;
 fixtureGroup.add(bed);
-const reflectionTextures = {
-  red: new DataTexture(new Uint8Array([255, 0, 0, 255]), 1, 1, RGBAFormat),
-  blue: new DataTexture(new Uint8Array([0, 0, 255, 255]), 1, 1, RGBAFormat),
-};
-Object.values(reflectionTextures).forEach((texture) => { texture.needsUpdate = true; });
+const generator = new PMREMGenerator(renderer);
+const captureScene = new Scene();
+captureScene.background = new Color(1, 0, 0);
+const redEnvironment = generator.fromScene(captureScene, 0, 0.1, 100, { size: 256 });
+captureScene.background.setRGB(0, 0, 1);
+const blueEnvironment = generator.fromScene(captureScene, 0, 0.1, 100, { size: 64 });
+generator.dispose();
+const reflectionTextures = { red: redEnvironment.texture, blue: blueEnvironment.texture };
+const localBake: SphereReflectionCaptureBake = { target: blueEnvironment, position: [0, 0, 0], radius: 30,
+  intensity: 1, priority: 1, resolution: 64, parallax: false, near: 0.1, far: 100 };
 const normals = new DataTexture(new Uint8Array([
   180, 128, 240, 255, 76, 150, 240, 255,
   128, 180, 240, 255, 150, 76, 240, 255,
@@ -83,7 +90,7 @@ let options: OpticsOptions = {
   angle: "top", pipeline: "direct", depth: 1, reflection: "off", visible: true,
   bedVisibility: 1, absorptionDistance: 2, opacity: 0, foamOpacity: 0,
   time: 0, normalMap: false, calibration: false, exposure: 0.2,
-  transformed: false, slope: 0, orthographic: false,
+  transformed: false, slope: 0, orthographic: false, localProbe: false,
 };
 let river: RiverWaterObject;
 
@@ -95,20 +102,23 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   })) };
   river = createRiverWaterObject({
     ...resolveRiverWater({ id: "optics", landscapeRef: "fixture", splineRef: "optics",
-      surfaceLevel: -8 * options.slope, bedVisibility: options.bedVisibility, absorptionDistance: options.absorptionDistance,
+      surfaceLevel: -8 * options.slope, bedVisibility: options.calibration ? 0 : options.bedVisibility, absorptionDistance: options.absorptionDistance,
       opacity: options.opacity, foamOpacity: options.foamOpacity, waveAmplitude: 0,
       reflectionStrength: 1,
+      reflectionMode: options.reflection === "off" ? "off" : "environment",
       ...(options.calibration ? { deepColor: "#808080", shallowColor: "#808080" } : {}),
     }),
     spline: slopedSpline, heightAt: (x) => x * options.slope - options.depth, sampleSpacing: 0.5,
     position: [0, 0, 0], rotation: [0, 0, 0], foamNoiseMap: null,
+    environmentProbes: () => options.localProbe ? [localBake] : [],
   }, options.normalMap ? normals : null);
   // Test-only deterministic clock; production's onBeforeRender uses wall time.
-  river.onBeforeRender = () => { river.material.uniforms.time!.value = options.time; };
+  const beforeRender = river.onBeforeRender;
+  river.onBeforeRender = function (...args) { beforeRender.apply(this, args); river.material.uniforms.time!.value = options.time; };
+  // Hold illumination neutral while reflection input changes red <-> blue.
+  river.material.uniforms.waterLightingEnabled!.value = 0;
   river.visible = options.visible;
-  if (options.reflection !== "off") river.setPlanarReflectionBinding({
-    texture: reflectionTextures[options.reflection], textureMatrix: new Matrix4(),
-  });
+  scene.environment = options.reflection === "off" ? null : reflectionTextures[options.reflection];
   fixtureGroup.add(river);
   const positions = bed.geometry.getAttribute("position");
   for (let i = 0; i < positions.count; i++) positions.setZ(i, positions.getX(i) * options.slope);

@@ -24772,11 +24772,11 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     flowSpeed: 0.35,
     normalScale: 1,
     normalTexture: "t-water-n",
-    deepColor: "#063447",
-    shallowColor: "#2f8b91",
-    opacity: 0.82,
-    bedVisibility: 0.05,
-    absorptionDistance: 0.5,
+    deepColor: "#164c50",
+    shallowColor: "#76b6a6",
+    opacity: 0.65,
+    bedVisibility: 0.88,
+    absorptionDistance: 3,
     waveAmplitude: 0.04,
     waveLength: 3.5,
     foamColor: "#e8fff5",
@@ -24787,7 +24787,7 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     shoreWaveBreakupScale: 1.25,
     foamStamps: [],
     segmentProfiles: [],
-    reflectionMode: "off",
+    reflectionMode: "environment",
     reflectionGroup: null,
     reflectionQuality: "medium",
     reflectionStrength: 0.34,
@@ -24892,9 +24892,9 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     reflectionGroup: "river-a",
     reflectionQuality: "high",
   });
-  assert.equal(riverWaterReflectionGroupKey(shared, -1.4), "river-a:-1.400:high");
+  assert.equal(riverWaterReflectionGroupKey(shared, -1.4), null);
   assert.equal(riverWaterReflectionGroupKey({ ...shared, reflectionQuality: "low" }, -1.4), null);
-  assert.notEqual(riverWaterReflectionGroupKey(shared, -1.5), riverWaterReflectionGroupKey(shared, -1.4));
+  assert.equal(riverWaterReflectionGroupKey(shared, -1.5), null);
   assert.equal(PLANAR_REFLECTION_EXCLUDED_LAYER, 31);
   assert.equal(planarReflectionLayerMask(0xffffffff) >>> 0, 0x7fffffff);
 });

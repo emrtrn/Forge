@@ -1881,7 +1881,7 @@
       "name": "River Water 1",
       "coordinateSpace": "world",
       "surfaceLevel": -38.7,
-      "reflectionMode": "sharedPlanar"
+      "reflectionMode": "environment"
     }
   ],
   "waterBodies": [
@@ -1910,11 +1910,43 @@
       "name": "Lake 3",
       "hidden": false,
       "appearance": {
-        "opacity": 0.5,
-        "absorptionDistance": 1,
+        "opacity": 0.35,
+        "bedVisibility": 0.9,
+        "absorptionDistance": 3,
         "normalScale": 2,
-        "rippleSpeed": 0.5,
-        "reflectionStrength": 0.1,
+        "rippleSpeed": 0.15,
+        "reflectionStrength": 0.45,
+        "reflectionMode": "sharedPlanar",
+        "reflectionQuality": "medium"
+      }
+    },
+    {
+      "schema": 1,
+      "kind": "lake",
+      "mode": "fillExisting",
+      "coordinateSpace": "world",
+      "id": "lake-1",
+      "terrainRef": "landscape-1",
+      "bounds": {
+        "min": [
+          -85,
+          -90
+        ],
+        "max": [
+          -20,
+          -25
+        ]
+      },
+      "seed": [
+        -52.76229407679271,
+        -57.73656214563056
+      ],
+      "surfaceLevel": -7,
+      "name": "Lake 1",
+      "appearance": {
+        "opacity": 0.8,
+        "absorptionDistance": 3,
+        "reflectionStrength": 0.2,
         "reflectionMode": "sharedPlanar"
       }
     }

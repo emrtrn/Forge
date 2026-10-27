@@ -3,11 +3,12 @@ import {
   Color,
   DoubleSide,
   Float32BufferAttribute,
-  Matrix4,
   Mesh,
   PlaneGeometry,
   ShaderMaterial,
   Texture,
+  UniformsLib,
+  UniformsUtils,
 } from "three";
 import { PLANAR_REFLECTION_EXCLUDED_LAYER } from "./planarReflectionSource";
 
@@ -19,7 +20,8 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
-import type { PlanarReflectionBinding, PlanarReflectionSource } from "./planarReflectionSource";
+import { createWaterEnvironmentUniforms, updateWaterEnvironment, WATER_ENVIRONMENT_GLSL, type WaterEnvironmentProbes } from "./waterEnvironment";
+import { WATER_OPTICS_GLSL } from "./waterOptics";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
 
@@ -214,6 +216,7 @@ export function buildRiverWaterRibbon(
 }
 
 const VERTEX_SHADER = `
+#include <fog_pars_vertex>
 attribute vec2 flowDirection;
 attribute float shoreDistance;
 attribute float waterDepth;
@@ -226,14 +229,12 @@ varying float vWaterDepth;
 varying float vRapidness;
 varying float vFoamMask;
 varying float vFlowSpeedMultiplier;
-varying vec4 vReflectionUv;
 varying vec3 vWorldPosition;
 varying vec3 vFlowTangent;
 uniform float time;
 uniform float flowSpeed;
 uniform float waveAmplitude;
 uniform float waveLength;
-uniform mat4 reflectionTextureMatrix;
 void main() {
   vRiverUv = uv;
   vShoreDistance = shoreDistance;
@@ -249,11 +250,13 @@ void main() {
   vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
   vWorldPosition = worldPosition.xyz;
   vFlowTangent = mat3(modelMatrix) * vec3(flowDirection.x, 0.0, flowDirection.y);
-  vReflectionUv = reflectionTextureMatrix * worldPosition;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+  vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
 }`;
 
 const FRAGMENT_SHADER = `
+#include <fog_pars_fragment>
 uniform sampler2D normalMap;
 uniform float time;
 uniform float flowSpeed;
@@ -273,36 +276,19 @@ uniform float shoreWaveReach;
 uniform float shoreWaveBreakupScale;
 uniform sampler2D foamNoiseMap;
 uniform float hasFoamNoiseMap;
-uniform sampler2D reflectionTexture;
 uniform float reflectionStrength;
+uniform float waterDetail;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
 varying float vRapidness;
 varying float vFoamMask;
 varying float vFlowSpeedMultiplier;
-varying vec4 vReflectionUv;
 varying vec3 vWorldPosition;
 varying vec3 vFlowTangent;
 
-// Two inexpensive value-noise layers prevent foam from reading as even,
-// repeating stripes. vRiverUv.x advances along the authored spline, so the
-// pattern naturally drifts with the river rather than across it.
-float foamHash(vec2 point) {
-  point = fract(point * vec2(123.34, 456.21));
-  point += dot(point, point + 45.32);
-  return fract(point.x * point.y);
-}
-float foamNoise(vec2 point) {
-  vec2 cell = floor(point);
-  vec2 local = fract(point);
-  local = local * local * (3.0 - 2.0 * local);
-  float a = foamHash(cell);
-  float b = foamHash(cell + vec2(1.0, 0.0));
-  float c = foamHash(cell + vec2(0.0, 1.0));
-  float d = foamHash(cell + vec2(1.0, 1.0));
-  return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
-}
+${WATER_OPTICS_GLSL}
+${WATER_ENVIRONMENT_GLSL}
 void main() {
   // Derivatives include spline slope, vertex waves and the object's transform.
   // Evaluate them before discard so shoreline quads retain valid derivatives.
@@ -315,32 +301,36 @@ void main() {
     : cameraPosition - vWorldPosition;
   viewDirection /= max(length(viewDirection), 0.000001);
   if (clipDryBed > 0.5 && vWaterDepth <= 0.001) discard;
-  vec2 baseUv = vec2(vRiverUv.x * normalScale, vRiverUv.y * normalScale);
-  vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed * vFlowSpeedMultiplier, 0.0)).xy * 2.0 - 1.0;
-  vec2 normalB = texture2D(normalMap, baseUv * 1.37 + vec2(0.37, 0.61) - vec2(time * flowSpeed * vFlowSpeedMultiplier * 0.73, 0.0)).xy * 2.0 - 1.0;
-  float phase = 0.5 + 0.5 * sin(time * flowSpeed * vFlowSpeedMultiplier * 1.4);
-  vec2 flowingNormal = mix(normalA, normalB, phase);
-  float ripple = hasNormalMap * dot(flowingNormal, vec2(0.07));
+  float bankSpeed = mix(1.0, 0.38, pow(vShoreDistance, 2.0));
+  vec2 advected = vec2(vRiverUv.x * 3.0 - time * flowSpeed * vFlowSpeedMultiplier * bankSpeed, vRiverUv.y * 8.0);
+  vec2 warp = vec2(waterNoise(advected * 0.21), waterNoise(advected * 0.19 + vec2(9.3, 2.7))) - 0.5;
+  vec2 baseUv = (advected + warp * 1.6) * normalScale * vec2(0.42, 0.7);
+  vec2 normalA = texture2D(normalMap, baseUv).xy * 2.0 - 1.0;
+  vec2 normalB = texture2D(normalMap, baseUv * 1.73 + vec2(0.37, 0.61) - vec2(time * flowSpeed * 0.13, 0.0)).xy * 2.0 - 1.0;
+  float phase = 0.5 + 0.5 * sin(time * 0.43 + waterNoise(advected * 0.3) * 3.0);
+  vec2 flowingNormal = mix(normalA, normalB, phase * waterDetail);
   vec3 tangent = vFlowTangent - surfaceNormal * dot(vFlowTangent, surfaceNormal);
   tangent /= max(length(tangent), 0.000001);
   vec3 bitangent = cross(surfaceNormal, tangent);
-  vec3 opticalNormal = normalize(surfaceNormal + hasNormalMap * 0.18
+  vec3 opticalNormal = normalize(surfaceNormal + hasNormalMap * (0.22 + vRapidness * 0.12)
     * (tangent * flowingNormal.x + bitangent * flowingNormal.y));
   float viewCosine = clamp(abs(dot(opticalNormal, viewDirection)), 0.0, 1.0);
   // Air/water F0 is approximately 0.02. Strength remains an authored multiplier.
-  float fresnel = 0.02 + 0.98 * pow(1.0 - viewCosine, 5.0);
+  float fresnel = waterFresnel(viewCosine);
   float depth = clamp(vWaterDepth / 2.2, 0.0, 1.0);
   // Ribbon width is not a measurement of bed depth or distance to a rock.
   float shallow = 1.0 - depth;
-  vec3 color = mix(deepColor, shallowColor, shallow) + ripple;
-  float flowStreak = 0.5 + 0.5 * sin(vRiverUv.x * 13.0 - time * flowSpeed * vFlowSpeedMultiplier * 5.0 + normalA.x * 4.0);
-  color += (flowStreak - 0.5) * (0.012 + depth * 0.008);
+  float turbulence = waterNoise(advected * vec2(0.35, 1.7)) * 0.55
+    + waterNoise(advected * vec2(0.67, 3.4) + vec2(7.3, 1.2)) * 0.45;
+  vec3 color = mix(deepColor, shallowColor, shallow) * (0.84 + turbulence * 0.32);
+  color *= waterSurfaceLight(opticalNormal, viewDirection, 0.38);
+  color += waterSunGlint(opticalNormal, viewDirection, 0.28);
   vec2 foamUv = vec2(
     vRiverUv.x * 0.78 - time * flowSpeed * vFlowSpeedMultiplier * 0.34,
     vRiverUv.y * 4.5
   ) * 1.35;
-  float broadFoamNoise = foamNoise(foamUv);
-  float detailFoamNoise = foamNoise(foamUv * 2.13 + vec2(7.1, 3.7));
+  float broadFoamNoise = waterNoise(foamUv);
+  float detailFoamNoise = waterNoise(foamUv * 2.13 + vec2(7.1, 3.7));
   float foamBreakup = smoothstep(0.38, 0.70, mix(broadFoamNoise, detailFoamNoise, 0.52));
   // vShoreDistance is 1 on either bank and 0 at the centre. Move several
   // narrow wave fronts along its inverse so they visibly travel bank -> centre
@@ -356,36 +346,30 @@ void main() {
   // Opacity remains the single visible foam-strength control in Details.
   float shoreFadeStart = max(0.01, shoreWaveReach * 0.62);
   float shoreZone = 1.0 - smoothstep(shoreFadeStart, max(shoreFadeStart + 0.01, shoreWaveReach), inwardDistance);
-  float shorePhase = fract(inwardDistance * shoreWaveSpacing - time * shoreWaveSpeed + shoreBreakup * 0.24);
-  float shoreBands = smoothstep(0.78, 0.96, shorePhase);
+  float shorePhase = waterNoise(vec2(advected.x * 0.8, inwardDistance * shoreWaveSpacing * 4.0 - time * shoreWaveSpeed) + warp);
+  float shoreBands = smoothstep(0.68, 0.88, shorePhase);
   float shallowContact = smoothstep(0.0, 0.08, vWaterDepth)
     * (1.0 - smoothstep(0.08, 0.8, vWaterDepth));
   float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup) * shallowContact;
-  float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.28 + 0.72 * foamBreakup);
+  float rapidFoam = smoothstep(0.035, 0.3, vRapidness) * smoothstep(0.58, 0.85, turbulence) * foamBreakup * 0.65;
   float foam = clamp(shoreFoam + rapidFoam, 0.0, 1.0);
   color = mix(color, foamColor, foam * foamOpacity);
-  vec2 reflectionUv = vReflectionUv.xy / max(vReflectionUv.w, 0.0001);
-  reflectionUv += flowingNormal * hasNormalMap * 0.025;
-  vec3 reflected = texture2D(reflectionTexture, reflectionUv).rgb;
-  // Underwater capture is unsupported. Do not reuse a stale above-water mirror
-  // on the underside; retain bounded tint/transmission as the fallback.
+  vec3 reflected = min(waterReflectedEnvironment(vWorldPosition, reflect(-viewDirection, opticalNormal), 0.38 + (1.0 - waterDetail) * 0.2), vec3(2.0));
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
-  float reflectionAmount = clamp(reflectionStrength * fresnel * aboveSurface
+  float hasEnvironment = step(0.0001, waterEnvironmentIntensity + waterProbeIntensity);
+  float reflectionAmount = clamp(reflectionStrength * (0.025 + fresnel * 0.425) * aboveSurface * hasEnvironment
     * (1.0 - foam * foamOpacity * 0.65), 0.0, 1.0);
   color = mix(color, reflected, reflectionAmount);
-  // Vertical terrain depth only approximates the optical path. The bounded
-  // oblique factor avoids infinite absorption at the horizon. Blend the
-  // authored visibility in over the first 35 cm so even opaque presets meet
-  // the real bed softly, without inventing a shallow ribbon border.
-  float wetness = smoothstep(0.0, 0.35, vWaterDepth);
-  float pathDepth = max(vWaterDepth, 0.0) / max(abs(dot(surfaceNormal, viewDirection)), 0.12);
-  float bedTransmission = mix(1.0, clamp(bedVisibility, 0.0, 1.0), wetness)
-    * exp(-pathDepth / max(absorptionDistance, 0.01));
+  float wetness = smoothstep(0.0, 0.12, vWaterDepth);
+  float pathDepth = waterPath(vWaterDepth, abs(dot(surfaceNormal, viewDirection)));
+  float bedTransmission = waterTransmission(vWaterDepth, pathDepth, bedVisibility, absorptionDistance);
   float bedOpacity = 1.0 - bedTransmission;
-  float alpha = clamp(max(max(opacity * wetness, bedOpacity), reflectionAmount), 0.0, 1.0);
+  float authoredOpacity = opacity * wetness * mix(0.58, 1.0, smoothstep(0.0, 3.0, vWaterDepth));
+  float alpha = clamp(max(max(authoredOpacity, bedOpacity), reflectionAmount), 0.0, 1.0);
   gl_FragColor = vec4(color, alpha);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  #include <fog_fragment>
 }`;
 
 export interface RiverWaterRenderItem extends ResolvedRiverWater {
@@ -397,13 +381,12 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   rotation: Vec3;
   /** Repeating grayscale noise used to break up inward shore-wave fronts. */
   foamNoiseMap: Texture | null;
-  /** Optional shared source; absent covers off/low reflection profiles. */
-  reflectionSource?: PlanarReflectionSource | null;
+  /** Existing sky/probe maps, borrowed from the owning scene. No new render pass. */
+  environmentProbes?: WaterEnvironmentProbes;
 }
 
 export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   readonly isRiverWaterObject = true;
-  private readonly authoredReflectionStrength: number;
 
   constructor(item: RiverWaterRenderItem, normalMap: Texture | null) {
     const ribbon = buildRiverWaterRibbon(item.spline, {
@@ -430,6 +413,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       uniforms: {
+        ...UniformsUtils.clone(UniformsLib.fog),
+        ...createWaterEnvironmentUniforms(),
         normalMap: { value: normalMap },
         time: { value: 0 },
         flowSpeed: { value: item.flowSpeed },
@@ -451,18 +436,15 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         shoreWaveBreakupScale: { value: item.shoreWaveBreakupScale },
         foamNoiseMap: { value: item.foamNoiseMap },
         hasFoamNoiseMap: { value: item.foamNoiseMap ? 1 : 0 },
-        reflectionTexture: { value: item.reflectionSource?.binding.texture ?? null },
-        reflectionTextureMatrix: { value: item.reflectionSource?.binding.textureMatrix ?? new Matrix4() },
-        // Per-body, not per-source: bodies may share one reflection capture and
-        // still want different amounts of it, so strength stays on the consumer.
-        reflectionStrength: { value: item.reflectionSource ? item.reflectionStrength : 0 },
+        reflectionStrength: { value: item.reflectionMode === "off" ? 0 : item.reflectionStrength },
+        waterDetail: { value: item.reflectionQuality === "low" ? 0 : 1 },
       },
       transparent: true,
+      fog: true,
       depthWrite: false,
       side: DoubleSide,
     });
     super(geometry, material);
-    this.authoredReflectionStrength = item.reflectionStrength;
     this.name = item.name;
     this.position.set(...item.position);
     this.rotation.set(
@@ -482,18 +464,10 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       if (stamp.kind !== "point") continue;
       this.add(createRiverWaterRadialFoamObject(stamp, item));
     }
-    item.reflectionSource?.addConsumer(this);
-    const reflectionSource = item.reflectionSource;
-    this.onBeforeRender = (renderer, scene, camera) => {
+    this.onBeforeRender = (_renderer, scene, camera) => {
       this.material.uniforms["time"]!.value = performance.now() / 1000;
-      reflectionSource?.update(renderer, scene, camera);
+      updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera, item.environmentProbes?.());
     };
-  }
-
-  setPlanarReflectionBinding(binding: PlanarReflectionBinding | null): void {
-    this.material.uniforms["reflectionTexture"]!.value = binding?.texture ?? null;
-    this.material.uniforms["reflectionTextureMatrix"]!.value = binding?.textureMatrix ?? new Matrix4();
-    this.material.uniforms["reflectionStrength"]!.value = binding ? this.authoredReflectionStrength : 0;
   }
 
   dispose(): void {

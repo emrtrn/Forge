@@ -229,7 +229,7 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await height.fill("7"); await height.press("Enter");
   const flow = page.locator('[data-river-water-number="flowSpeed"]');
   await flow.fill("1.2"); await flow.press("Enter");
-  await page.locator('[data-river-water-reflection="reflectionMode"]').selectOption("sharedPlanar");
+  await page.locator('[data-river-water-reflection="reflectionMode"]').selectOption("environment");
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.samples[0]?.y).toBe(7);
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.reflection).toBeGreaterThan(0);
   const initial = (await riverSnapshot(page)).waters[0];

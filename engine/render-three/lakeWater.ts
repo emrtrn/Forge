@@ -1,8 +1,10 @@
-import { BufferGeometry, BufferAttribute, Color, DoubleSide, Matrix4, Mesh, ShaderMaterial, type Texture } from "three";
+import { BufferGeometry, BufferAttribute, Color, DoubleSide, Matrix4, Mesh, ShaderMaterial, UniformsLib, UniformsUtils, type Texture } from "three";
 import type { LayoutLakeWaterBody } from "../scene/layout";
 import { resolveLakeAppearance } from "../scene/waterBody";
 import type { LakeGeometry } from "../terrain/terrainLakeWater";
 import type { PlanarReflectionBinding, PlanarReflectionSource } from "./planarReflectionSource";
+import { createWaterEnvironmentUniforms, updateWaterEnvironment, WATER_ENVIRONMENT_GLSL } from "./waterEnvironment";
+import { WATER_OPTICS_GLSL } from "./waterOptics";
 
 /** Flat exact surface; the normal animation never displaces the shoreline. */
 export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
@@ -15,34 +17,61 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.setAttribute("uv", new BufferAttribute(data.uvs, 2));
     geometry.setIndex(new BufferAttribute(data.indices, 1));
     geometry.computeBoundingBox(); geometry.computeBoundingSphere();
-    super(geometry, new ShaderMaterial({ transparent: true, depthWrite: false, side: DoubleSide,
-      uniforms: { time: { value: 0 }, normalMap: { value: normal }, hasNormal: { value: normal ? 1 : 0 },
+    super(geometry, new ShaderMaterial({ transparent: true, depthWrite: false, side: DoubleSide, fog: true,
+      uniforms: { ...UniformsUtils.clone(UniformsLib.fog), ...createWaterEnvironmentUniforms(), time: { value: 0 }, normalMap: { value: normal }, hasNormal: { value: normal ? 1 : 0 },
         rippleSpeed: { value: appearance.rippleSpeed }, normalScale: { value: appearance.normalScale },
         deepColor: { value: new Color(appearance.deepColor) }, shallowColor: { value: new Color(appearance.shallowColor) },
         opacity: { value: appearance.opacity }, bedVisibility: { value: appearance.bedVisibility },
         absorptionDistance: { value: appearance.absorptionDistance }, reflectionTexture: { value: null },
         reflectionMatrix: { value: new Matrix4() }, reflectionStrength: { value: 0 } },
-      vertexShader: `attribute float waterDepth;
-        varying float vDepth; varying vec2 vUv; varying vec4 vReflection;
+      vertexShader: `#include <fog_pars_vertex>
+        attribute float waterDepth;
+        varying float vDepth; varying vec2 vUv; varying vec4 vReflection; varying vec3 vWorldPosition;
         uniform mat4 reflectionMatrix;
-        void main(){vDepth=waterDepth;vUv=uv;vec4 world=modelMatrix*vec4(position,1.);
-        vReflection=reflectionMatrix*world;gl_Position=projectionMatrix*viewMatrix*world;}`,
-      fragmentShader: `uniform sampler2D normalMap; uniform float hasNormal;
+        void main(){vDepth=waterDepth;vUv=uv;vec4 world=modelMatrix*vec4(position,1.);vWorldPosition=world.xyz;
+        vReflection=reflectionMatrix*world;vec4 mvPosition=viewMatrix*world;gl_Position=projectionMatrix*mvPosition;
+        #include <fog_vertex>
+        }`,
+      fragmentShader: `#include <fog_pars_fragment>
+        uniform sampler2D normalMap; uniform float hasNormal;
         uniform float time;uniform float rippleSpeed;uniform float normalScale;
         uniform vec3 deepColor;uniform vec3 shallowColor;uniform float opacity;
         uniform float bedVisibility;uniform float absorptionDistance;
         uniform sampler2D reflectionTexture;uniform float reflectionStrength;
-        varying float vDepth;varying vec2 vUv;varying vec4 vReflection;
-        void main(){float d=max(0.,vDepth);vec2 p=vUv*normalScale*.12;
-        vec2 n=(texture2D(normalMap,p+vec2(time*rippleSpeed*.1,0.)).xy*2.-1.)*hasNormal;
-        float ripple=sin(p.x*3.+time*rippleSpeed)*sin(p.y*4.-time*rippleSpeed)*.012;
-        vec3 color=mix(shallowColor,deepColor,clamp(d/2.2,0.,1.))+ripple+n.x*.03;
-        if(reflectionStrength>0.){vec2 r=vReflection.xy/max(vReflection.w,.0001)+n*.015;
-        color=mix(color,texture2D(reflectionTexture,r).rgb,reflectionStrength*.3);}
-        float transmission=bedVisibility*exp(-d/max(absorptionDistance,.01));
-        gl_FragColor=vec4(color,max(opacity,1.-transmission));
+        varying float vDepth;varying vec2 vUv;varying vec4 vReflection;varying vec3 vWorldPosition;
+        ${WATER_OPTICS_GLSL}
+        ${WATER_ENVIRONMENT_GLSL}
+        void main(){
+        float d=max(0.,vDepth);
+        vec2 p=vWorldPosition.xz*normalScale*.12;
+        vec2 a=texture2D(normalMap,p+time*rippleSpeed*vec2(.035,.022)).xy*2.-1.;
+        vec2 b=texture2D(normalMap,p*1.61-time*rippleSpeed*vec2(.021,.029)).xy*2.-1.;
+        vec2 n=mix(a,b,.5)*hasNormal;
+        n+=vec2(sin(p.x*.7+time*rippleSpeed*.21),sin(p.y*.53-time*rippleSpeed*.17))*.12;
+        vec3 normal=normalize(vec3(n.x*.10,1.,n.y*.10));
+        vec3 viewDirection=isOrthographic?vec3(viewMatrix[0][2],viewMatrix[1][2],viewMatrix[2][2]):cameraPosition-vWorldPosition;
+        viewDirection/=max(length(viewDirection),.000001);
+        float viewCosine=clamp(abs(dot(normal,viewDirection)),0.,1.);
+        float fresnel=waterFresnel(viewCosine);
+        vec3 color=mix(deepColor,shallowColor,exp(-d/2.2));
+        color*=waterSurfaceLight(normal,viewDirection,.18);
+        color+=waterSunGlint(normal,viewDirection,.12);
+        float reflectionAmount=0.;
+        if(reflectionStrength>0. && viewDirection.y>=0. && vReflection.w>0.){
+          vec2 r=vReflection.xy/vReflection.w+n*.006;
+          if(all(greaterThanEqual(r,vec2(0.)))&&all(lessThanEqual(r,vec2(1.)))){
+            reflectionAmount=clamp(reflectionStrength*fresnel,0.,1.);
+            color=mix(color,texture2D(reflectionTexture,r).rgb,reflectionAmount);
+          }
+        }
+        float transmission=waterTransmission(d,waterPath(d,abs(viewDirection.y)),bedVisibility,absorptionDistance);
+        float wetness=smoothstep(0.,.35,d);
+        float authoredOpacity=opacity*wetness*mix(.3,1.,smoothstep(0.,3.,d));
+        float alpha=clamp(max(max(authoredOpacity,1.-transmission),reflectionAmount),0.,1.);
+        gl_FragColor=vec4(color,alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
+        #include <fog_fragment>
         }` }));
     this.position.set(...data.position); this.name = `Lake:${lake.id}`;
     this.userData.waterBodyId = lake.id; this.source = source; this.strength = appearance.reflectionStrength;
@@ -51,6 +80,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const started = performance.now();
     this.onBeforeRender = (renderer, scene, camera) => {
       this.material.uniforms.time!.value = (performance.now() - started) / 1000;
+      updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera);
       source?.update(renderer, scene, camera);
     };
   }

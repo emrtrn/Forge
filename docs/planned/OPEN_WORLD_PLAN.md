@@ -867,10 +867,16 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       autosave yalnız (0,0) ve (1,0)'ı yazar, dikiş satırları eşit; undo iki
       tile'ın baytlarını birebir geri getirir; redo sonrası Play'de pawn
       arazide).
-- [ ] Dab başına GPU yüklemesi (perf): GPU'ya dab başına tile katmanının
+- [x] Dab başına GPU yüklemesi (perf): GPU'ya dab başına tile katmanının
       tamamı ve global haritanın tamamı yükleniyor (CPU normalleri
       dikdörtgenle sınırlı); dikişe değen dab komşu tile'ın normallerini
       baştan hesaplıyor. Yüklemeler kirli dikdörtgene daraltılır.
+      *Tamam (kaynaktan doğrulandı 2026-10-27):* `TerrainTextureUpdates`
+      slot katmanlarını ve global haritaları yalnız kirli dikdörtgenle
+      `copyTextureToTexture` ile yükler; `TerrainRenderer.updateTile` komşu
+      tile'da yalnız örtüşen şeridin (1 vertex normal payı) normallerini
+      yeniden hesaplar. Kalan küçük maliyet: delikli dünyada her dab
+      `fillHoles` ile bütün global yükseklik haritasını tarar.
 - [x] Editörde çok-tile World Terrain oluşturma (2026-10-23): Add Actor →
       Terrain → **World Terrain** bir diyalog açar (ad, Tiles X/Z, tile
       çözünürlüğü 64/128/256 quad, vertex aralığı 0,25–8 m, taban yüksekliği);
@@ -933,9 +939,15 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       `engine/terrain/heightmapPng.ts`. 1×1'de eski "Import PNG (resample)" kalır.
       Ayrıntı `OPEN_WORLD_FAZ2_EDITOR_PLAN.md` (arşivde, `docs/COMPLETED_WORK_INDEX.md`).
       Büyük import'un worker'a taşınması aşağıdaki açık maddede.
-- [ ] Büyük heightmap import'u worker'da (Faz 4'ten sonra): tile başına
+- [ ] Büyük heightmap import'u worker'da (Faz 4'ten sonra; **ertelendi**): tile başına
       generator (`iterateRawHeightmapTiles`) ilerleme sayacıyla worker'a taşınır;
       bugün import ana thread'de çalışıyor.
+      *Ölçüm (2026-10-27, Node, editörün en büyük dünyası 8×8 × 256 quad =
+      2049²):* RAW bölme 67 ms + tile çözme 19 ms + undo yamaları 57 ms +
+      uygulama 80 ms = 223 ms (4×4: 76 ms). Worker'a yalnız ilk ikisi (~85 ms)
+      taşınabilir; yamalar edit dünyasına ana thread'de yazılır. Madde 4097²
+      (256 tile) varsayımıyla yazıldı, editör bugün en fazla 64 tile tutuyor:
+      editör sınırı büyüyene (Faz 8 sihirbazı / tam akışlı import) kadar ertelendi.
 - [x] Mevcut smoke'lar: `landscape-sculpt`, `landscape-paint`,
       `landscape-spline-chain`, `runtime-parity`, `game-starter` yeşil.
       *Tamam (2026-10-23):* yeni renderer varsayılanken bunlar ve
@@ -2232,7 +2244,7 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
 
 - [ ] **New Open World** sihirbazı: tile sayısı, tile boyu, spacing,
       yükseklik aralığı, hücre boyları; boş ya da heightmap'ten.
-- [ ] Büyük heightmap import (ör. 4097² 16-bit PNG/RAW) worker'da, ilerleme
+- [ ] Büyük heightmap import (ör. 4097² 16-bit PNG/RAW) worker'da *(ertelendi, Faz 2 maddesindeki ölçüm)*, ilerleme
       çubuğuyla; export aynı.
 - [ ] **World Partition paneli:** heightmap'ten üretilmiş minimap, hücre
       grid'i, bölge seçip yükle/boşalt, kalıcı "pinned" bölgeler; editör
@@ -2325,13 +2337,17 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       global haritayı yazar; kaydedilen global harita diskteki tüm
       tile'lardan yeniden kurulana u16 nicelemesi dışında (9/37249 örnek,
       ≤ yarım adım) eşittir; uzak kamera kendi bölgesini okur.
-      Açık: kamera menzili dışındaki tile'a tıklama isabet etmez (ışın yalnız
-      yüklü tile'ları görür; global haritaya düşmüyor), brush'ın tile
+      Açık: ~~kamera menzili dışındaki tile'a tıklama isabet etmez~~ (tamam,
+      `1b9faa0c`: yüklü olmayan tile global harita üzerinde aynı köşegenle
+      yürünür, isabet "yaklaşık" işaretli), brush'ın tile
       yüklediği yol tarayıcıda denenmedi (engine testli), panel/minimap yok,
       Show > Collision tel kafesi yalnız açıldığı andaki yüklü tile'ları
       çizer.
-- [ ] Brush'lar tile sınırında kesintisiz; brush birden çok yüklü olmayan
+- [x] Brush'lar tile sınırında kesintisiz; brush birden çok yüklü olmayan
       tile'a uzanıyorsa onları yükler.
+      *Tamam (editör tile akışı ilk dilimi, yukarıda):* dikiş kenarları iki
+      tile'a yazılır; iz + yumuşatma payı yüklü değilse dab atlanır, tile'lar
+      istenir ve vuruş bitene kadar tutulur. Tarayıcıda denenmedi (engine testli).
 - [ ] Kirli tile/hücre göstergesi, Save yalnız kirlileri yazar.
 - [ ] Editör smoke'u: yeni dünya oluştur → iki tile arasında sculpt → kaydet
       → yeniden aç → aynı yükseklik.

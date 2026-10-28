@@ -3,7 +3,9 @@
 let shared: Uint8Array | null = null;
 export function terrainCausticPattern(): Uint8Array {
   if (shared) return shared;
-  const side = 256, cells = 6, data = new Uint8Array(side * side * 2);
+  // Keep a readable light network at the authored metre scale. Six cells per
+  // repeat reduced a 1 m pattern to ~17 cm details that vanished in mipmaps.
+  const side = 256, cells = 2, data = new Uint8Array(side * side * 2);
   const sites = Array.from({ length: cells * cells }, (_, i) => {
     const hash = (salt: number) => {
       let h = Math.imul(i + salt, 0x9e3779b1); h ^= h >>> 16;

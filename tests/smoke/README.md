@@ -53,3 +53,11 @@ files. See [content read contracts](../../docs/architecture/CONTENT_LOADING_CONT
 The debug readout is passive by default. **Inspect text** enables scrolling and
 selection; Escape from the readout turns that mode off. Buttons remain usable
 in either mode. Menu tests use normal clicks, with no forced click workaround.
+
+The Lake caustics case in `terrain-lake-editor.spec.ts` checks spatial luminance
+contrast at overview and shoreline distances, in addition to animation, dry-area
+masking, shadows, toggle/undo, Save/Reload and runtime loading. Its 300-pair GPU
+timing pilot is opt-in: set `FORGE_CAUSTICS_GPU_PILOT=1` on a hardware-rendered
+browser when running this case. Without that flag the JSON report explicitly
+marks timing as not requested; the visual and persistence assertions still run.
+Software browser timing is not representative of the target desktop GPU.

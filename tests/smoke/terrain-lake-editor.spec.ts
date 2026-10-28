@@ -100,6 +100,18 @@ test("Lake caustics and sandy pebble normals animate, persist through UI Save/Re
   const differences = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]!) > 3).length;
   const changes = { caustics: differences(off.samples, on.samples), animation: differences(on.samples, moved.samples), normals: differences(on.samples, flat.samples) };
   expect(changes.caustics).toBeGreaterThan(30); expect(changes.animation).toBeGreaterThan(30); expect(changes.normals).toBeGreaterThan(30);
+  // Measure spatial contrast, not just changed pixels: a nearly uniform lift
+  // passes the old existence check even when the light network has disappeared.
+  const contrast = (baseline: number[], lit: number[]) => {
+    const deltas = Array.from({ length: baseline.length / 3 }, (_, i) =>
+      [0.2126, 0.7152, 0.0722].reduce((sum, weight, c) => sum + weight * (lit[i * 3 + c]! - baseline[i * 3 + c]!), 0));
+    const mean = deltas.reduce((sum, value) => sum + value, 0) / deltas.length;
+    return Math.sqrt(deltas.reduce((sum, value) => sum + (value - mean) ** 2, 0) / deltas.length);
+  };
+  const closeOff = await capture(false, 0, true, false, true), closeOn = await capture(true, 0, true, false, true);
+  const visibility = { overview: contrast(off.samples, on.samples), close: contrast(closeOff.samples, closeOn.samples) };
+  expect(visibility.overview, "caustic network must remain readable from the overview camera").toBeGreaterThan(2.7);
+  expect(visibility.close, "caustic network must remain readable at the shoreline").toBeGreaterThan(3);
   const nightOff = await capture(false, 0, true, true), nightOn = await capture(true, 0, true, true);
   expect(differences(nightOff.samples, nightOn.samples)).toBe(0);
   expect(on.calls).toBe(off.calls); expect(on.glError).toBe(0);
@@ -114,8 +126,12 @@ test("Lake caustics and sandy pebble normals animate, persist through UI Save/Re
   }
   await page.screenshot({ path: info.outputPath("lake-caustics-island-dry-shore.png") });
   await capture();
-  const gpu = await page.evaluate(() => (window as any).__lakeQA.causticsGpuPilot());
-  await writeFile(info.outputPath("caustics-render.json"), JSON.stringify({ changes, gpu, calls: { off: off.calls, on: on.calls }, textures: on.textures, shadows: on.shadows, dryProbes: wideOn.probes, errors }, null, 2));
+  // Timing is a separate opt-in hardware pilot, not a prerequisite for visual
+  // and persistence coverage on software-rendered CI/cloud browsers.
+  const gpu = process.env.FORGE_CAUSTICS_GPU_PILOT === "1"
+    ? await page.evaluate(() => (window as any).__lakeQA.causticsGpuPilot())
+    : { available: false, reason: "Not requested; set FORGE_CAUSTICS_GPU_PILOT=1 on a hardware GPU" };
+  await writeFile(info.outputPath("caustics-render.json"), JSON.stringify({ changes, visibility, gpu, calls: { off: off.calls, on: on.calls }, textures: on.textures, shadows: on.shadows, dryProbes: wideOn.probes, errors }, null, 2));
   await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "caustics");
   const toggle = page.locator("[data-lake-caustics]"); await expect(toggle).toBeChecked();
   await toggle.uncheck(); await expect.poll(async () => (await capture()).count).toBe(0);
@@ -131,7 +147,7 @@ test("Lake caustics and sandy pebble normals animate, persist through UI Save/Re
   await expect.poll(async () => (await capture()).normalLayers, { timeout: 90_000 }).toBe(1);
   const runtime = await capture(); expect(runtime.count).toBe(1); expect(runtime.glError).toBe(0);
   await page.screenshot({ path: info.outputPath("lake-caustics-runtime.png") });
-  await writeFile(info.outputPath("caustics.json"), JSON.stringify({ changes, calls: { off: off.calls, on: on.calls }, textures: on.textures, gpu, runtime: { count: runtime.count, normalLayers: runtime.normalLayers }, errors }, null, 2));
+  await writeFile(info.outputPath("caustics.json"), JSON.stringify({ changes, visibility, calls: { off: off.calls, on: on.calls }, textures: on.textures, gpu, runtime: { count: runtime.count, normalLayers: runtime.normalLayers }, errors }, null, 2));
   expect(errors).toEqual([]);
 });
 

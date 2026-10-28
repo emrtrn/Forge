@@ -172,10 +172,15 @@ engine/editor.
   `tests/engine/worldRecipe.test.ts`'s maximal recipe. Objects not listed in
   `ownership` are manual; stages never move or delete them. The editor's
   World Builder tab (`src/editor/worldBuilderSession.ts`) applies a stage as one
-  undo step over level + recipe, and Save Layout writes the recipe before the
-  level. Generated placements must be save-canonical (`planStage` rounds the
-  transform like the save; stages omit default-valued flags) or the ownership
-  `outputHash` stops matching after a reload and every object looks hand-edited.
+  undo step over level + World Terrain splines + recipe, and Save Layout writes
+  the recipe first, then terrain definitions, then the level. Stages may own
+  placements (`ownership.placements`) and World Terrain splines
+  (`ownership.splines`, e.g. the `roads` stage's `wb-road-<edge>`); stages only
+  write spline data, never terrain heights or paint. Generated placements must
+  be save-canonical (`planStage` rounds the transform like the save; stages
+  omit default-valued flags) and generated splines go through
+  `normalizeTerrainSplines`, or the ownership `outputHash` stops matching after
+  a reload and every object looks hand-edited.
   Region profiles
   (`*.regionprofile.json`, `normalizeRegionProfile` in
   `engine/worldbuilder/regionProfile.ts`) are fork data with no save surface

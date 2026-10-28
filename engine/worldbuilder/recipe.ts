@@ -183,6 +183,11 @@ export interface OwnershipEntry {
   stage: string;
   /** Hash of the stage inputs that produced the object; absent until computed. */
   inputHash?: string;
+  /**
+   * Hash of the object exactly as the stage wrote it. A level object whose
+   * current hash differs was edited by hand, and a re-run leaves it alone.
+   */
+  outputHash?: string;
 }
 
 export interface SplineOwnershipEntry extends OwnershipEntry {
@@ -599,12 +604,11 @@ function ownershipMap<T extends OwnershipEntry>(
       continue;
     }
     const owned = { stage: entry.stage } as T;
-    if (entry.inputHash !== undefined) {
-      if (typeof entry.inputHash === "string" && /^[0-9a-f]{1,64}$/.test(entry.inputHash)) {
-        owned.inputHash = entry.inputHash;
-      } else {
-        issue(ctx, `${entryPath}.inputHash`, "must be a lowercase hex string");
-      }
+    for (const field of ["inputHash", "outputHash"] as const) {
+      const hash = entry[field];
+      if (hash === undefined) continue;
+      if (typeof hash === "string" && /^[0-9a-f]{1,64}$/.test(hash)) owned[field] = hash;
+      else issue(ctx, `${entryPath}.${field}`, "must be a lowercase hex string");
     }
     Object.assign(owned, extra(ctx, entryPath, entry));
     result[key] = owned;

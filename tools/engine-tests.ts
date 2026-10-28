@@ -1030,6 +1030,7 @@ import { registerSerializationDriftTests } from "../tests/engine/serializationDr
 import { registerPlacementIdentityTests } from "../tests/engine/placementIdentity.test";
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerRegionProfileTests } from "../tests/engine/regionProfile.test";
+import { registerWorldStageTests } from "../tests/engine/worldStage.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
@@ -1202,6 +1203,7 @@ registerSerializationDriftTests(check);
 registerPlacementIdentityTests(check);
 registerWorldRecipeTests(check);
 registerRegionProfileTests(check);
+registerWorldStageTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);
 await registerFoliageCellStreamingTests(checkAsync);

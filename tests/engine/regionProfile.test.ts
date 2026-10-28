@@ -4,7 +4,8 @@
  * fixture is the profile Forge's own tests build with.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { posix } from "node:path";
 
 import {
   landUseCompatibility,
@@ -108,12 +109,20 @@ export function registerRegionProfileTests(check: Check): void {
   });
 
   check("world builder: engine/worldbuilder modules stay dependency-free (no three.js)", () => {
-    for (const file of ["normalize.ts", "recipe.ts", "regionProfile.ts", "vocabulary.ts"]) {
-      const source = readFileSync(`engine/worldbuilder/${file}`, "utf8");
+    // Only World Builder's own modules and the three-free scene data modules.
+    const allowedScene = new Set(["layout", "placementIdentity", "shapes"]);
+    const files = readdirSync("engine/worldbuilder", { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".ts"));
+    assert.ok(files.length >= 6);
+    for (const file of files) {
+      const path = posix.join("engine/worldbuilder", file.replace(/\\/g, "/"));
+      const source = readFileSync(path, "utf8");
       for (const [, specifier] of source.matchAll(/from\s+"([^"]+)"/g)) {
+        const target = posix.normalize(posix.join(posix.dirname(path), specifier!));
+        const scene = /^engine\/scene\/([A-Za-z]+)$/.exec(target)?.[1];
         assert.ok(
-          specifier!.startsWith("./") || specifier === "../scene/placementIdentity",
-          `${file} imports ${specifier}`,
+          specifier!.startsWith(".") && (target.startsWith("engine/worldbuilder/") || (scene !== undefined && allowedScene.has(scene))),
+          `${path} imports ${specifier}`,
         );
       }
     }

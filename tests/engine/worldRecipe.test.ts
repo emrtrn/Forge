@@ -55,7 +55,7 @@ function maximalRecipe(): Record<string, unknown> {
     },
     generation: { preserveManualOverrides: false, stages: ["roads", "settlement"] },
     ownership: {
-      placements: { "plc-house-1": { stage: "settlement", inputHash: "9f3a" } },
+      placements: { "plc-house-1": { stage: "settlement", inputHash: "9f3a", outputHash: "0b7e" } },
       splines: { "road-e1": { stage: "roads", inputHash: "0c", edge: "e1" } },
       foliageRules: { "rule-meadow": { stage: "scatter" } },
       protectedRegions: [{ id: "manual_corner", kind: "manual", min: [0, 0], max: [64, 64] }],

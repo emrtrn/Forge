@@ -1,3 +1,4 @@
+import { registerLakeShoreWetness } from "@engine/render-three/terrain/terrainShoreWetness";
 import { Group, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, Mesh, MeshBasicMaterial, SphereGeometry, type Texture, type Scene } from "three";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { LAKE_LIMITS, resolveLakeAppearance } from "@engine/scene/waterBody";
@@ -70,7 +71,20 @@ export class LakeWaterController {
             reflection = this.reflection.get(key) ?? this.context.reflections?.acquire(a.reflectionGroup, lake.surfaceLevel, a.reflectionQuality) ?? new PlanarReflectionSource(lake.surfaceLevel, a.reflectionQuality);
             this.reflection.set(key, reflection);
           }
-          const object = new LakeWaterObject(lake, result, normal, reflection);
+          let object: LakeWaterObject | undefined;
+          try {
+            object = new LakeWaterObject(lake, result, normal, reflection);
+            object.addEventListener("removed", registerLakeShoreWetness(this.context.scene, lake, result, object));
+          }
+          catch (error) {
+            object?.dispose();
+            const message = error instanceof Error ? error.message : String(error);
+            result = emptyLake(lake, message.includes("over-budget") ? "over-budget" : "invalid", message);
+            this.results.set(lake.id, result);
+            if (this.context.editor) this.addHelper(lake, result);
+            this.context.changed?.();
+            continue;
+          }
           object.visible = !lake.hidden;
           if (!this.context.editor) object.raycast = () => {};
           this.objects.set(lake.id, object); this.context.scene.add(object);

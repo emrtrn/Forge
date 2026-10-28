@@ -48,8 +48,21 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${field("Opacity", "opacity", a.opacity, "0.05", 'min="0" max="1"')}
       ${field("Bed Visibility", "bedVisibility", a.bedVisibility, "0.05", 'min="0" max="1"')}
       ${field("Absorption Distance (m)", "absorptionDistance", a.absorptionDistance, "0.25", 'min="0.01" max="100"')}
+      ${field("Shore Blend Depth (m)", "shoreBlendDepth", a.shoreBlendDepth, "0.05", 'min="0" max="2"')}
       ${field("Normal Scale", "normalScale", a.normalScale)}
       ${field("Ripple Speed", "rippleSpeed", a.rippleSpeed)}
+    `, true));
+    section.insertAdjacentHTML("beforeend", group("wet-shore", "Wet Shore", `
+      <label class="detail-toggle"><input type="checkbox" data-lake-wet-shore aria-label="Wet Shore Enabled" ${a.shoreWetnessEnabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${field("Wet Band Width (m)", "shoreWetnessWidth", a.shoreWetnessWidth, "0.1", 'min="0.2" max="4"')}
+      ${field("Wet Band Strength", "shoreWetnessStrength", a.shoreWetnessStrength, "0.05", 'min="0" max="1"')}
+    `, true));
+    section.insertAdjacentHTML("beforeend", group("foam", "Shore Foam", `
+      <label class="detail-toggle"><input type="checkbox" data-lake-foam aria-label="Shore Foam Enabled" ${a.foamEnabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${field("Foam Opacity", "foamOpacity", a.foamOpacity, "0.05", 'min="0" max="1"')}
+      ${field("Foam Width (m)", "foamWidth", a.foamWidth, "0.1", 'min="0.2" max="4"')}
+      ${field("Foam Pattern Size (m)", "foamScale", a.foamScale, "0.1", 'min="0.1" max="10"')}
+      ${field("Foam Speed", "foamSpeed", a.foamSpeed, "0.05", 'min="0" max="3"')}
     `, true));
     section.insertAdjacentHTML("beforeend", group("caustics", "Caustics", `
       <label class="detail-toggle"><input type="checkbox" data-lake-caustics aria-label="Caustics Enabled" ${a.causticsEnabled ? "checked" : ""} ${disabled}> Enabled</label>
@@ -101,6 +114,8 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   });
   for (const input of section.querySelectorAll<HTMLInputElement>("[data-lake-color]")) input.addEventListener("change", () => app.editLake({ appearance: { ...lake.appearance, [input.dataset.lakeColor!]: input.value } }));
   for (const key of ["hidden", "locked"] as const) section.querySelector<HTMLInputElement>(`[data-lake-${key}]`)?.addEventListener("change", (e) => app.editLake({ [key]: (e.target as HTMLInputElement).checked }));
+  section.querySelector<HTMLInputElement>("[data-lake-wet-shore]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, shoreWetnessEnabled: (e.target as HTMLInputElement).checked } }));
+  section.querySelector<HTMLInputElement>("[data-lake-foam]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, foamEnabled: (e.target as HTMLInputElement).checked } }));
   section.querySelector<HTMLInputElement>("[data-lake-caustics]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, causticsEnabled: (e.target as HTMLInputElement).checked } }));
   const reflection = section.querySelector<HTMLSelectElement>("[data-lake-reflection]")!;
   reflection.value = resolveLakeAppearance(lake).reflectionMode;

@@ -1,5 +1,57 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel uygulama — Islak kıyı zemini — 2026-10-28
+
+Kullanıcı ıslak zemin bandının uygulanmasını istedi. İlk kapsam Lake'e bağlı
+terrain sunumudur: gerçek kıyı ve ada segmentlerinden kara tarafına mesafe
+maskesi; renk koyulaştırma ve roughness azaltma. Paint ağırlıkları, yükseklik,
+physical material, araç tutunması veya batması değiştirilmez. Efekt geçicidir;
+Lake gizlenir/silinir veya ayar kapanırsa kalkar. Islanma/kuruma simülasyonu yok.
+
+Lake Details → **Wet Shore**: Enabled, Width (m), Strength. Eski kayıtlarda
+kapalı; varsayılan genişlik 1 m ve şiddet 0,65. Bandın 0,35 m'den yüksek
+zemine taşması engellenir; su çizgisinde keskin ton farkı bırakmamak için suyun
+8 cm altından başlayarak karaya yumuşak geçer. Genişlik azami yatay mesafedir;
+dik yamaçta yükseklik sınırı gerçek bandı daraltır. River ve mesh taşlar bu
+ilk dilime dahil değildir.
+
+Yeni terrain fragment sampler'ı gerçek sampler/CSM/water bütçesine eklendi;
+sınır gevşetilmedi. Maske en çok 1024² R8/göl, en çok 8 gövde; shader'a ortak
+R8 array olarak yüklenir. Ayrı draw/capture yok. Üretim yeniden build sırasında
+senkrondur; büyük dünya CPU/GPU performans kabulü açık. Genişlik/alan çözünürlük
+sınırını aşarsa açık over-budget tanısı mevcut kaynak ayarını korur.
+
+Kaynak ömrü, terrain referansı/görünürlük, eski varsayılanlar, kaynak shader
+sampler sayımı, UI/undo/kayıt ve terrain hash korunumu test edilir.
+[Uygulama kaydı](../reports/LAKE_WET_SHORE_2026-10-28.md).
+
+## Güncel uygulama — Yumuşak Lake kıyı geçişi — 2026-10-28
+
+Kullanıcı, keskin su/zemin çizgisi için önerilen geçişin plana eklenmesini ve
+uygulanmasını istedi. İlk adım gerçek su geometrisini koruyarak su rengi,
+örtücülük, yansıma, küçük normal dalgaları ve köpüğü kıyıda birlikte söndürür.
+Köpük tek başına kenarı örtmek için kullanılmaz; sürekli beyaz çizgiye dönüşmez.
+
+Geçiş, kaynak terrain derinliği ile varsa görünür dip derinliğinin küçük olanına
+bağlıdır. Böylece kamera snapshot'ının kıyıdan farklı derinlik vermesi kuru kenarı
+opaklaştırmaz. Dünya sabit, düşük genlikli ve yavaş noise geçiş kalınlığını
+çeşitlendirir; vertex/kıyı konumu değiştirilmez ve karaya su taşınmaz.
+`Shore Blend Depth (m)` geçişin düşey derinliğidir; sığ eğimde yatay bant geniş,
+dik kıyıda dardır. Her eğimde aynı metre yatay bandı veya dik duvarın arkasına
+su uzatılması vaat edilmez. 0 değeri karşılaştırma/eski görünüm için kapatır.
+
+Snapshot yolunda son su/köpük ışığı gerçek dip rengine karışır; yalnız alpha'yı
+azaltmak yeterli değildir. Direct/MSAA fallback'te aynı etki straight-alpha
+örtücülüğüne uygulanır. Kıyıda normal/parlaklık sönmesi aynı katsayıyı kullanır.
+Yeni capture, mesafe dokusu veya draw eklenmez. Terrain boyası değiştirilmez;
+ıslak zemin bandı sonraki ayrı dilimdir.
+
+Kabul: köpük açık/kapalı, snapshot/direct, yakın/genel kamera; sığ ve dik kıyı,
+ada/kuru/ayrı çukur ve derin bölgenin korunması; hareketli görüntüde titreme,
+Save/Reload/Play, shader/GL hataları, TypeScript ve tam build:verify. Donanım
+GPU kabulü açık kalır. İlk köpük ve bu geçiş kodu henüz main'e gönderilmedi.
+[Uygulama kaydı](../reports/LAKE_SHORE_TRANSITION_2026-10-28.md).
+
 ## Güncel kullanıcı isteği — Göl yüzeyi ve tekerlek dalgaları — 2026-10-28
 
 Köpük çalışmasına ek kapsam: son TV fotoğrafındaki gibi, küçük ve birbirine
@@ -32,7 +84,8 @@ sorgusu ve teker–su kesişimi gerekir.
 temasları ve sınırlı ripple sunumu → L3 köpük/caustics/yansıma ile ortak kabul.
 Detaylar ve test matrisi
 [köpük ve yüzey araştırmasının ilave bölümünde](../reports/WATER_CONTACT_FOAM_RESEARCH_2026-10-28.md#göl-yüzeyi-ve-tekerlek-etkileşimi--ilave-kapsam).
-Bu kullanıcı isteği dokümana kaydedildi; kod uygulaması henüz başlamadı.
+Bu kullanıcı isteği dokümana kaydedildi; L1–L3 kod uygulaması henüz başlamadı.
+Köpük F1 ilk uygulaması aşağıdaki güncel kayıttadır.
 
 ## Güncel ek — Caustics görünürlüğü ve köpük araştırması — 2026-10-28
 
@@ -56,6 +109,26 @@ GPU zamanı ölçülmedi. **Önceki 3,72 ms bulgusu ve 1 ms hedefinin açık dur
 korunur; görünürlük düzeltmesi performans kabulünü kapatmaz.** Ayrıntılar:
 [Lake caustics görünürlük raporu](../reports/LAKE_CAUSTICS_VISIBILITY_2026-10-28.md).
 
+### F1 ilk uygulaması — Lake kıyı köpüğü — 2026-10-28
+
+Kullanıcı planın main'e push edilmesini ve çalışmanın başlamasını istedi;
+belgeler `01b3f559` ile yayımlandı. İlk kod dilimi Lake kıyı/ada köpüğüdür:
+opt-in ortak görünüm alanları, Shore Foam Details, metre ölçekli gerçek kıyı
+mesafe dokusu ve parçalı hareketli shader. Eski Lake kayıtlarında kapalıdır.
+River görünümü/verisi değiştirilmedi. Mevcut güneş/CSM gölge alıcısı köpüğe
+bağlandı; kompozisyon dip/yansıma üzerinde yüzey katmanı olarak yapılır.
+
+Maske eksen başına en çok 1024 texel ve bandın genişliğinde dört texel;
+1 MiB/göl üst sınırı. Dar bant/büyük alan birlikte sınırı aşarsa `over-budget`
+tanısı ve yüzey reddi; hesap alanını küçültmek veya bandı genişletmek gerekir.
+Ek capture/draw yok; maske yeniden üretimde oluşturulup dispose edilir.
+Bu synchronous CPU üretiminin büyük dünya/ana thread ve donanım GPU kabulü açık.
+
+F1 ilk kodu yerel çalışma ağacındadır; taş proxy'leri, River gerçek temas
+ortaklaşması, akış izleri ve L1–L3 araç/yüzey çalışmaları henüz uygulanmadı.
+Doğrulama/teslim kaydı:
+[Lake kıyı köpüğü ilk dilim](../reports/LAKE_SHORE_FOAM_2026-10-28.md).
+
 ### Göl/nehir kıyısı ve taş çevresi köpüğü (araştırma/öneri)
 
 Kullanıcı, göl ve nehirde kıyıya değen yüzeylerde ve taşların etrafında kırık,
@@ -72,7 +145,7 @@ izler; mevcut depth snapshot yalnız destekleyici temas bilgisi olur.
 
 Kaynak incelemesi, seçenekler, sınırlamalar, aşamalar ve kabul matrisi:
 [Kıyı ve taş çevresi köpük araştırması](../reports/WATER_CONTACT_FOAM_RESEARCH_2026-10-28.md).
-**Bu ek uygulama teslimi değildir.** F1–F4 aşağıdaki raporda önerilmiştir;
+**Bu araştırma kaydı tam uygulama teslimi değildir.** F1 ilk dilimi yukarıdadır; F2–F4 raporda önerilmiştir;
 uygulama, sahne/taş yerleştirme, yeni fizik veya donanım performans kabulü yoktur.
 
 ## Güncel ek — Küçük taşlı kum ve caustics — 2026-10-27

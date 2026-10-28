@@ -1,4 +1,4 @@
-import { Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
+import { Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
 import type { LakeWaterController } from "@/scene/lakeWaterController";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { updateLandscapeLod } from "@engine/render-three/landscape";
@@ -17,7 +17,7 @@ export function installLakeProbe(app: unknown) {
     worldTerrainSessions?: WeakMap<WorldTerrainDocument, WorldTerrainEditSession>;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
-    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false) {
+    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false, foam?: boolean, foamTime = 0, softEdge = true, direct = false, wetShore = true) {
       cancelAnimationFrame(a.frameHandle);
       a.camera.near = 0.1; a.camera.far = 2000;
       a.camera.position.set(close ? -20 : -12, close ? 13.3 : 35, close ? -25.5 : 32);
@@ -25,7 +25,8 @@ export function installLakeProbe(app: unknown) {
       if (wide) { a.camera.position.set(0, 200, 1); a.camera.lookAt(0, 11, 0); }
       a.camera.updateProjectionMatrix(); a.camera.updateMatrixWorld(true);
       const restore: Array<() => void> = [];
-      let count = 0, normalLayers = 0;
+      let count = 0, normalLayers = 0, foamActive = false, wetShoreActive = false, lakeDraws = 0, snapshotUsed = false;
+      let drawnMaterial = "";
       a.scene.traverse((node: any) => {
         if (night && node.isDirectionalLight) { const intensity = node.intensity; node.intensity = 0; restore.push(() => { node.intensity = intensity; }); }
         const terrain = node.userData.forgeTerrain;
@@ -36,6 +37,10 @@ export function installLakeProbe(app: unknown) {
             count = u.uCausticCount.value;
             u.uCausticTime.value = time;
             if (!enabled) u.uCausticCount.value = 0;
+            if (u.uShoreWetParams) {
+              wetShoreActive ||= u.uShoreWetCount.value > 0 && u.uShoreWetParams.value.slice(0, u.uShoreWetCount.value).some((p: any) => p.w > 0);
+              if (!wetShore) u.uShoreWetCount.value = 0;
+            }
             if (u.uLayerNormalIndex) {
               normalLayers = u.uLayerNormalIndex.value.filter((n: number) => n >= 0).length;
               if (!detail) u.uLayerNormalIndex.value = u.uLayerNormalIndex.value.map(() => -1);
@@ -46,18 +51,28 @@ export function installLakeProbe(app: unknown) {
         }
         if (node.userData.waterBodyId && node.material?.uniforms?.time) {
           const before = node.onBeforeRender;
-          node.onBeforeRender = (...args: any[]) => { before(...args); node.material.uniforms.time.value = 0; };
-          restore.push(() => { node.onBeforeRender = before; });
+          const opacity = node.material.uniforms.foamOpacity?.value;
+          const edgeDepth = node.material.uniforms.shoreBlendDepth?.value;
+          node.onBeforeRender = (...args: any[]) => {
+            before(...args); node.material.uniforms.time.value = foamTime;
+            lakeDraws++; snapshotUsed = node.material.uniforms.waterSceneEnabled?.value > 0; drawnMaterial = args[4]?.type;
+            if (!softEdge && edgeDepth !== undefined) node.material.uniforms.shoreBlendDepth.value = 0;
+            foamActive ||= (node.material.uniforms.foamOpacity?.value ?? 0) > 0;
+            if (foam === false && opacity !== undefined) node.material.uniforms.foamOpacity.value = 0;
+          };
+          restore.push(() => { node.onBeforeRender = before; if (edgeDepth !== undefined) node.material.uniforms.shoreBlendDepth.value = edgeDepth; if (opacity !== undefined) node.material.uniforms.foamOpacity.value = opacity; });
         }
       });
+      const directTarget = direct ? new WebGLRenderTarget(a.renderer.domElement.width, a.renderer.domElement.height) : null;
       try {
         for (const object of a.landscapeObjects) updateLandscapeLod(object, a.camera);
         a.renderer.info.reset();
-        if (a.postProcessPipeline) a.postProcessPipeline.render(0); else a.renderer.render(a.scene, a.camera);
+        if (a.postProcessPipeline && !direct) a.postProcessPipeline.render(0); else { a.renderer.setRenderTarget(directTarget); a.renderer.clear(); a.renderer.render(a.scene, a.camera); }
         const canvas = a.renderer.domElement;
         const gl = a.renderer.getContext(), width = canvas.width, height = canvas.height;
         const pixels = new Uint8Array(width * height * 4);
-        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        if (directTarget) a.renderer.readRenderTargetPixels(directTarget, 0, 0, width, height, pixels);
+        else gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         const samples: number[] = [];
         for (let y = 0; y < height; y += 8) for (let x = 0; x < width; x += 8) {
           const i = (y * width + x) * 4; samples.push(pixels[i]!, pixels[i + 1]!, pixels[i + 2]!);
@@ -74,10 +89,11 @@ export function installLakeProbe(app: unknown) {
         };
         let cascades = 0;
         a.scene.traverse(node => { if (node.name.startsWith("forge-sun-cascade-")) cascades++; });
-        return { count, normalLayers, samples, calls: a.renderer.info.render.calls, textures: a.renderer.info.memory.textures, glError: gl.getError(),
+        return { count, normalLayers, foamActive, wetShoreActive, lakeDraws, snapshotUsed, drawnMaterial, override: a.scene.overrideMaterial?.type, samples, calls: a.renderer.info.render.calls, textures: a.renderer.info.memory.textures, glError: gl.getError(),
           shadows: { enabled: a.renderer.shadowMap.enabled, cascades },
+          shoreProbes: { near: probe(-20,12,-23.9), deep: probe(-20,12,-22) },
           probes: { dry: probe(-20, 16, -40), island: probe(0, 15, 0), separate: probe(30, 10, 0) } };
-      } finally { restore.reverse().forEach(fn => fn()); }
+      } finally { a.renderer.setRenderTarget(null); directTarget?.dispose(); restore.reverse().forEach(fn => fn()); }
     },
     async causticsGpuPilot() {
       cancelAnimationFrame(a.frameHandle);

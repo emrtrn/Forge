@@ -29,8 +29,12 @@ async function number(page: Page, key: string, value: number) {
   if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
   const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
 }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false) {
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false) {
   const doc = createLakeFixture();
+  if (steep) for (const entry of doc.def.tiles) entry.maxHeight = 18;
+  if (steep) for (const tile of doc.tiles.values()) {
+    for (let i = 0; i < tile.heights.length; i++) tile.heights[i] = Math.max(0, 2 + (tile.heights[i]! - 2) * 4);
+  }
   if (caustics) {
     doc.def.layers[0]!.material = "m-shallow-water-bed";
     doc.lake.appearance = { causticsEnabled: true, causticsStrength: 1.5, causticsScale: 1.5, causticsDepthFade: 6 };
@@ -149,6 +153,130 @@ test("Lake caustics and sandy pebble normals animate, persist through UI Save/Re
   await page.screenshot({ path: info.outputPath("lake-caustics-runtime.png") });
   await writeFile(info.outputPath("caustics.json"), JSON.stringify({ changes, visibility, calls: { off: off.calls, on: on.calls }, textures: on.textures, gpu, runtime: { count: runtime.count, normalLayers: runtime.normalLayers }, errors }, null, 2));
   expect(errors).toEqual([]);
+});
+
+test("Lake shore foam follows real coast and islands, animates and survives Save/Reload/Play", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true);
+  await ready(page, 180_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "foam");
+  await expect(page.locator("[data-lake-foam]")).not.toBeChecked();
+  await page.locator("[data-lake-foam]").check(); await ready(page);
+  const capture = (enabled = true, time = 0, night = false, close = false, wide = false) => page.evaluate(
+    args => (window as any).__lakeQA.causticsFrame(false, 0, true, args[2], args[3], args[4], args[0], args[1]), [enabled, time, night, close, wide]);
+  const diff = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]!) > 3).length;
+  await expect.poll(async () => (await capture()).foamActive, { timeout: 90_000 }).toBe(true);
+  expect(errors).toEqual([]);
+  const off = await capture(false), on = await capture(), moved = await capture(true, 5);
+  expect(diff(off.samples, on.samples), "foam must be visible").toBeGreaterThan(30);
+  expect(diff(on.samples, moved.samples), "foam patches must move").toBeGreaterThan(30);
+  expect(on.calls).toBe(off.calls); expect(on.glError).toBe(0);
+  expect(on.shadows.cascades).toBeGreaterThan(0);
+  await capture(false); await page.screenshot({ path: info.outputPath("shore-foam-off.png") });
+  await capture(); await page.screenshot({ path: info.outputPath("shore-foam-on.png") });
+  await capture(true, 0, false, true); await page.screenshot({ path: info.outputPath("shore-foam-close.png") });
+  // Compare the full water+foam composite, not just transparency: the snapshot
+  // path already includes the opaque bed and needs radiance blending instead.
+  const edgeFrame = (soft: boolean, foam: boolean, direct: boolean) => page.evaluate(
+    ([soft, foam, direct]) => (window as any).__lakeQA.causticsFrame(false, 0, true, false, true, false, foam, 0, soft, direct), [soft, foam, direct]);
+  for (const direct of [false, true]) for (const foam of [false, true]) {
+    const hard = await edgeFrame(false, foam, direct), soft = await edgeFrame(true, foam, direct);
+    await writeFile(info.outputPath(`edge-${direct}-${foam}.json`), JSON.stringify({ hard: { lakeDraws: hard.lakeDraws, snapshotUsed: hard.snapshotUsed, drawnMaterial: hard.drawnMaterial, override: hard.override, mean: hard.samples.reduce((a: number,b: number)=>a+b,0)/hard.samples.length, calls: hard.calls, error: hard.glError, probes: hard.shoreProbes }, soft: { lakeDraws: soft.lakeDraws, snapshotUsed: soft.snapshotUsed, drawnMaterial: soft.drawnMaterial, override: soft.override, mean: soft.samples.reduce((a: number,b: number)=>a+b,0)/soft.samples.length, calls: soft.calls, error: soft.glError, probes: soft.shoreProbes }, errors }, null, 2));
+    // Offscreen fallback readback is linear RGB8, so its shallow-water
+    // differences are smaller than the tone-mapped display path (often 1 LSB).
+    const changed = direct ? hard.samples.filter((v: number, i: number) => v !== soft.samples[i]).length : diff(hard.samples, soft.samples);
+    expect(changed, `shore blend must work: direct=${direct}, foam=${foam}`).toBeGreaterThan(20);
+    expect(soft.glError).toBe(0); expect(soft.calls).toBe(hard.calls);
+    if (direct) {
+      expect(soft.shoreProbes.near).not.toBeNull(); expect(soft.shoreProbes.deep).not.toBeNull();
+      expect(soft.shoreProbes.near).not.toEqual(hard.shoreProbes.near);
+      expect(soft.shoreProbes.deep).toEqual(hard.shoreProbes.deep);
+    }
+  }
+  await edgeFrame(false, true, false); await page.screenshot({ path: info.outputPath("shore-edge-hard.png") });
+  await edgeFrame(true, true, false); await page.screenshot({ path: info.outputPath("shore-edge-soft.png") });
+  const dryOff = await capture(false, 0, false, false, true), dryOn = await capture(true, 0, false, false, true);
+  for (const key of ["dry", "island", "separate"]) expect(dryOn.probes[key], key).toEqual(dryOff.probes[key]);
+  const nightOff = await capture(false, 0, true), nightOn = await capture(true, 0, true);
+  const meanDelta = (a: number[], b: number[]) => a.reduce((sum, v, i) => sum + Math.max(0, b[i]! - v), 0) / a.length;
+  expect(meanDelta(nightOff.samples, nightOn.samples), "foam must not glow at night").toBeLessThan(meanDelta(off.samples, on.samples));
+  await page.locator("[data-lake-foam]").uncheck(); await ready(page);
+  await expect.poll(async () => (await capture()).foamActive).toBe(false);
+  await page.getByTestId("editor-undo").click(); await ready(page);
+  await expect.poll(async () => (await capture()).foamActive).toBe(true);
+  await number(page, "foamWidth", 0.2);
+  await expect.poll(async () => (await snapshot(page)).results[0]?.status).toBe("over-budget");
+  await number(page, "foamWidth", 1.2); await ready(page);
+  await expandLake(page, "appearance"); await number(page, "shoreBlendDepth", 0.35); await ready(page); await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance.foamEnabled).toBe(true);
+  expect(saved.waterBodies[0].appearance.foamWidth).toBe(1.2);
+  expect(saved.waterBodies[0].appearance.shoreBlendDepth).toBe(0.35);
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 180_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "foam");
+  await expect(page.locator("[data-lake-foam]")).toBeChecked();
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 180_000);
+  const runtimeOff = await capture(false), runtimeOn = await capture();
+  expect(diff(runtimeOff.samples, runtimeOn.samples)).toBeGreaterThan(30); expect(runtimeOn.glError).toBe(0);
+  await page.screenshot({ path: info.outputPath("shore-foam-runtime.png") });
+  expect(errors).toEqual([]);
+});
+
+test("Lake shore blend also softens a steep bank without expanding onto land", async ({ page, request }, info) => {
+  test.setTimeout(180_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, false, true);
+  await expect.poll(async () => { const r = (await snapshot(page)).results[0]; return r?.status === "ready" ? "ready" : JSON.stringify(r); }, { timeout: 20_000 }).toBe("ready");
+  const frame = (soft: boolean, direct: boolean, wide = false) => page.evaluate(
+    ([soft, direct, wide]) => (window as any).__lakeQA.causticsFrame(false, 0, true, false, !wide, wide, false, 0, soft, direct), [soft, direct, wide]);
+  const difference = (a: number[], b: number[], threshold: number) => a.filter((v, i) => Math.abs(v - b[i]!) > threshold).length;
+  for (const direct of [false, true]) {
+    const hard = await frame(false, direct), soft = await frame(true, direct);
+    expect(difference(hard.samples, soft.samples, direct ? 0 : 2)).toBeGreaterThan(10);
+    expect(soft.calls).toBe(hard.calls); expect(soft.glError).toBe(0);
+  }
+  const hardWide = await frame(false, false, true), softWide = await frame(true, false, true);
+  for (const key of ["dry", "island", "separate"]) expect(softWide.probes[key]).toEqual(hardWide.probes[key]);
+  await frame(false, false); await page.screenshot({ path: info.outputPath("steep-edge-hard.png") });
+  await frame(true, false); await page.screenshot({ path: info.outputPath("steep-edge-soft.png") });
+  expect(errors).toEqual([]);
+});
+
+test("Lake wet shore darkens only its contact band and survives toggle undo Save/Reload/Play", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true);
+  await ready(page, 120_000); const terrainBefore = await terrainHash();
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "wet-shore");
+  await expect(page.locator("[data-lake-wet-shore]")).not.toBeChecked();
+  await page.locator("[data-lake-wet-shore]").check(); await ready(page);
+  const capture = (wet = true, close = false, wide = false) => page.evaluate(
+    ([wet, close, wide]) => (window as any).__lakeQA.causticsFrame(false, 0, true, false, close, wide, false, 0, true, false, wet), [wet, close, wide]);
+  await expect.poll(async () => (await capture()).wetShoreActive).toBe(true);
+  const off = await capture(false, true), on = await capture(true, true);
+  const changed = off.samples.filter((v: number, i: number) => Math.abs(v - on.samples[i]!) > 2).length;
+  expect(changed, "wet shore must alter terrain shading").toBeGreaterThan(20);
+  expect(on.calls).toBe(off.calls); expect(on.glError).toBe(0);
+  await capture(false, true); await page.screenshot({ path: info.outputPath("wet-shore-off.png") });
+  await capture(true, true); await page.screenshot({ path: info.outputPath("wet-shore-on.png") });
+  const wideOff = await capture(false, false, true), wideOn = await capture(true, false, true);
+  for (const key of ["dry", "separate"]) expect(wideOn.probes[key]).toEqual(wideOff.probes[key]);
+  await page.locator("[data-lake-wet-shore]").uncheck(); await ready(page);
+  await expect.poll(async () => (await capture()).wetShoreActive).toBe(false);
+  await page.getByTestId("editor-undo").click(); await ready(page);
+  await expect.poll(async () => (await capture()).wetShoreActive).toBe(true);
+  await number(page, "shoreWetnessStrength", 0.8); await ready(page); await save(page);
+  expect(await terrainHash()).toBe(terrainBefore);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance.shoreWetnessEnabled).toBe(true);
+  expect(saved.waterBodies[0].appearance.shoreWetnessStrength).toBe(0.8);
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 120_000);
+  await expect.poll(async () => (await capture()).wetShoreActive).toBe(true);
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 120_000);
+  await expect.poll(async () => (await capture()).wetShoreActive).toBe(true);
+  const runtimeOff = await capture(false, true), runtimeOn = await capture(true, true);
+  expect(runtimeOff.samples.filter((v: number, i: number) => Math.abs(v - runtimeOn.samples[i]!) > 2).length).toBeGreaterThan(20);
+  expect(runtimeOn.glError).toBe(0); expect(errors).toEqual([]);
 });
 
 // QA inventory: click/create/cancel; world level, four bounds and drag handles;

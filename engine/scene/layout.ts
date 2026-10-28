@@ -1024,6 +1024,10 @@ export interface LayoutLakeWaterBody {
   appearance?: {
     deepColor?: string; shallowColor?: string; opacity?: number; bedVisibility?: number;
     absorptionDistance?: number; normalTexture?: string; normalScale?: number; rippleSpeed?: number;
+    /** Vertical depth of the visual shore transition in metres; 0 disables it. */
+    shoreBlendDepth?: number;
+    shoreWetnessEnabled?: boolean; shoreWetnessWidth?: number; shoreWetnessStrength?: number;
+    foamEnabled?: boolean; foamOpacity?: number; foamWidth?: number; foamScale?: number; foamSpeed?: number;
     causticsEnabled?: boolean; causticsStrength?: number; causticsScale?: number;
     causticsSpeed?: number; causticsDepthFade?: number;
     reflectionMode?: "off" | "sharedPlanar"; reflectionGroup?: string;

@@ -1,3 +1,4 @@
+import { updateTerrainShoreWetness } from "./terrainShoreWetness";
 import {
   Box3,
   BufferAttribute,
@@ -417,6 +418,7 @@ export class TerrainRenderer {
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
     this.mesh.onBeforeRender = (renderer, scene, camera) => {
       updateTerrainCaustics(this.materials.uniforms, scene, options.terrainRef);
+      updateTerrainShoreWetness(this.materials.uniforms, scene, options.terrainRef);
       const bodies = this.materials.uniforms.uCausticCount!.value as number;
       const defines = this.materials.material.defines ??= {};
       if (defines.FORGE_TERRAIN_CAUSTIC_BODIES !== bodies) {

@@ -1,3 +1,4 @@
+import { createTerrainShoreWetnessUniforms, TERRAIN_SHORE_WETNESS_PARS } from "./terrainShoreWetness";
 import {
   Color,
   MeshDepthMaterial,
@@ -380,7 +381,7 @@ const SAMPLER_DECLARATION = /^uniform\s+(?:\w+\s+)?sampler\w*\s/gm;
  * Texture units the lit terrain's fragment shader takes for itself regardless
  * of its layers: normals, weights (tile + global each) and the track field.
  */
-export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(false), TERRAIN_DEFORMATION_FRAGMENT_PARS, TERRAIN_CAUSTICS_PARS]
+export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(false), TERRAIN_DEFORMATION_FRAGMENT_PARS, TERRAIN_CAUSTICS_PARS, TERRAIN_SHORE_WETNESS_PARS]
   .join("\n")
   .match(SAMPLER_DECLARATION)!.length;
 
@@ -475,7 +476,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uniforms.uLayerNormalArray = { value: normals.texture };
     uniforms.uLayerNormalIndex = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => normals.index[i] ?? -1) };
   }
-  Object.assign(uniforms, createTerrainCausticsUniforms());
+  Object.assign(uniforms, createTerrainCausticsUniforms(), createTerrainShoreWetnessUniforms());
   const textured = layerArray !== null;
   const litFragmentSamplers = terrainLitFragmentSamplers(textured, normalMapped);
   // Runtime tracks (TERRAIN_DEFORMATION Faz 2/3): always compiled in; the
@@ -494,11 +495,11 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   (material.defines ??= {}).FORGE_TERRAIN_CAUSTIC_BODIES = 0;
   patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}${normalMapped ? "-n1" : ""}`, (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
-      FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${FRAGMENT_MAIN}`);
+      FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(textured, normalMapped)}`)
-      .replace("#include <roughnessmap_fragment>", TERRAIN_DEFORMATION_ROUGHNESS)
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(textured, normalMapped)}\nforgeShoreWet = forgeShoreWetness();\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
+      .replace("#include <roughnessmap_fragment>", `${TERRAIN_DEFORMATION_ROUGHNESS}\nroughnessFactor=mix(roughnessFactor,min(roughnessFactor,.32),forgeShoreWet);`)
       .replace("#include <lights_fragment_begin>", "forgePrepareCaustics();\n#include <lights_fragment_begin>")
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)
       .replace("  nonPerturbedNormal = normal;\n}", `${normalMapped ? `

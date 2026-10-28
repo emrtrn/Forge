@@ -33,6 +33,7 @@ export class WorldBuilderPanel {
     else if (action === "reload") await session.reload();
     else if (action === "dry-run") session.dryRun(stageId);
     else if (action === "apply") session.apply(stageId);
+    else if (action === "apply-pads") await session.applyPads();
     this.update();
   }
 }
@@ -85,7 +86,16 @@ function renderStages(view: WorldBuilderView): string {
       </div>
     </div>`;
   }).join("");
-  return `<div class="detail-section"><div class="detail-section-title">Stages</div>${rows}</div>`;
+  const pads = view.planCounts?.pads ?? 0;
+  // Pads are a terrain bake on request (decision 19), not a stage: the Buildings stage writes them as data.
+  const terrain = `<div class="world-builder-stage">
+      <div><strong>Building pads</strong> <span class="world-builder-path">${pads} in the recipe · bakes into the terrain, one undo step</span></div>
+      <div class="world-builder-actions">
+        <button type="button" data-wb-action="apply-pads" data-testid="world-builder-apply-pads" ${pads === 0 ? "disabled title=\"Run Buildings first\"" : ""}>Apply Pads</button>
+      </div>
+    </div>`;
+  return `<div class="detail-section"><div class="detail-section-title">Stages</div>${rows}</div>
+    <div class="detail-section"><div class="detail-section-title">Terrain</div>${terrain}</div>`;
 }
 
 function renderPlan(plan: StagePlan): string {

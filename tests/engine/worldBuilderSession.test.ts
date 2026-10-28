@@ -9,7 +9,9 @@ import { readFileSync } from "node:fs";
 
 import { EditorHistory } from "../../editor/core/history";
 import type { LayoutLandscape, RoomLayout } from "../../engine/scene/layout";
+import type { TerrainPad } from "../../engine/terrain/terrainPads";
 import type { TerrainSpline } from "../../engine/terrain/terrainTypes";
+import { PAD_FALLOFF } from "../../engine/worldbuilder/buildings";
 import { createEmptyMeshPaintData } from "../../engine/scene/meshPaint";
 import { createWorldRecipe } from "../../engine/worldbuilder/recipe";
 import { applyPlacementGroupChanges } from "../../engine/worldbuilder/stage";
@@ -58,6 +60,7 @@ function harness(files: Record<string, unknown> = {}) {
     layers: [], splines: [] as TerrainSpline[], locked: false };
   const statuses: string[] = [];
   const posts: Array<{ url: string; body: unknown }> = [];
+  const baked: TerrainPad[][] = [];
   let postStatus = 200;
   const host: WorldBuilderHost = {
     scenePath: () => LEVEL,
@@ -69,6 +72,7 @@ function harness(files: Record<string, unknown> = {}) {
     applySplineChanges: (changes, side) => {
       for (const change of changes) if (change.landscapeId === terrain.id) terrain.splines = structuredClone(change[side]);
     },
+    applyPads: async (pads) => void baked.push([...pads]),
     onStatus: (message) => statuses.push(message),
   };
   const session = new WorldBuilderSession(
@@ -79,7 +83,7 @@ function harness(files: Record<string, unknown> = {}) {
       return postStatus === 200 ? respond(200, { ok: true }) : respond(postStatus, { ok: false, error: "nope" });
     },
   );
-  return { session, history, layout, terrain, rebuilt, statuses, posts, setPostStatus: (status: number) => { postStatus = status; } };
+  return { session, history, layout, terrain, rebuilt, statuses, posts, baked, setPostStatus: (status: number) => { postStatus = status; } };
 }
 
 export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): Promise<void> {
@@ -107,7 +111,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.equal(view.state, "loaded");
     assert.equal(view.dirty, false);
     assert.deepEqual(view.profile, { path: PROFILE, state: "loaded", label: "Neutral test profile", issues: [] });
-    assert.deepEqual(view.planCounts, { settlements: 1, landmarks: 1, roadNodes: 0, roadEdges: 0, owned: 0 });
+    assert.deepEqual(view.planCounts, { settlements: 1, landmarks: 1, roadNodes: 0, roadEdges: 0, owned: 0, pads: 0 });
     assert.deepEqual(view.stages, [
       { id: "planBlockout", label: "Plan blockout", version: 1, recordedVersion: null },
       { id: "roads", label: "Roads", version: 3, recordedVersion: null },
@@ -231,5 +235,25 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.equal(await session.reload(), false);
     assert.match(statuses.at(-1)!, /unsaved changes/);
     assert.equal(session.getView().planCounts!.owned, 2);
+  });
+
+  await checkAsync("world builder session: Apply Pads bakes only pads whose building stands in the level", async () => {
+    const recipe = planRecipe();
+    const square: [number, number][] = [[0, 0], [10, 0], [10, 10], [0, 10]];
+    recipe.generated.pads.push(
+      { id: "wb-building-village.p1", settlement: "village", polygon: square, height: 4.5 },
+      { id: "wb-building-village.p2", settlement: "village", polygon: square, height: 2 },
+    );
+    const { session, layout, baked, statuses } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    assert.equal(session.getView().planCounts!.pads, 0);
+    await session.applyPads();
+    assert.deepEqual(baked, []);
+    assert.match(statuses.at(-1)!, /No building pads to apply/);
+
+    layout.instances.push({ assetId: "shape:cube", placements: [{ id: "wb-building-village.p1", role: "building.civic.hall", position: [5, 1, 5] }] });
+    assert.equal(session.getView().planCounts!.pads, 1);
+    await session.applyPads();
+    assert.deepEqual(baked, [[{ polygon: square, height: 4.5, falloff: PAD_FALLOFF }]]);
   });
 }

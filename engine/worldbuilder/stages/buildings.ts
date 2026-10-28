@@ -8,8 +8,10 @@
  * plus the host parcel's `placement` and a pad per building in
  * `recipe.generated.pads`. Pads are data: the editor's Apply Pads bakes them
  * into the terrain as one undo step (decision 19); this stage never edits the
- * terrain. A placeholder keeps its `id` and `role` when a model replaces it
- * later (WB-17).
+ * terrain, and it stays up to date with its own baked pads. Stages that read
+ * the ground near them (sites, parcels, roads, streets) see the levelled ground
+ * on a re-run, so Apply Pads is the finishing step. A placeholder keeps its
+ * `id` and `role` when a model replaces it later (WB-17).
  *
  * The report gives the buildings per land use, lots too small for their role
  * and pads that need much cut or fill. A protected settlement keeps its
@@ -17,9 +19,9 @@
  */
 import type { LayoutPlacement } from "../../scene/layout";
 import { SHAPE_PRIMITIVE_SIZE, shapeAssetId } from "../../scene/shapes";
-import { planBuilding } from "../buildings";
+import { FOUNDATION, planBuilding, type PlannedBuilding } from "../buildings";
 import { roleLandUse } from "../landUse";
-import { mulberry32 } from "../parcels";
+import { mulberry32, polygonsOverlap } from "../parcels";
 import type { GeneratedPad, GeneratedParcel } from "../recipe";
 import type { GeneratedPlacement, StageInput, StageOutput, WorldStage } from "../stage";
 import { LAND_USES, type LandUse } from "../vocabulary";
@@ -72,6 +74,7 @@ export const buildingsStage: WorldStage = {
       const counts = new Map<LandUse, number>();
       const squeezed: string[] = [];
       const graded: string[] = [];
+      const planned: Array<{ id: string; role: string; host: GeneratedParcel; building: PlannedBuilding }> = [];
       for (const host of hosts) {
         const role = host.role!;
         const spec = profile?.roles[role];
@@ -84,7 +87,13 @@ export const buildingsStage: WorldStage = {
           warnings.push(`${name}: parcel ${host.id} (${role}) has no room for a building or is off the terrain; skipped`);
           continue;
         }
-        const id = buildingPlacementId(host.id);
+        planned.push({ id: buildingPlacementId(host.id), role, host, building });
+        counts.set(landUse, (counts.get(landUse) ?? 0) + 1);
+        if (building.squeezed) squeezed.push(host.id);
+        if (building.grading > GRADING_REPORT) graded.push(`${host.id} ${building.grading} m`);
+      }
+      const shared = levelOverlappingPads(planned.map((entry) => entry.building));
+      for (const { id, role, host, building } of planned) {
         const top = building.pad.height + building.height;
         const placement: LayoutPlacement & { id: string } = {
           id,
@@ -98,14 +107,12 @@ export const buildingsStage: WorldStage = {
         placements.push({ assetId: shapeAssetId("cube"), placement });
         pads.push({ id, settlement: settlement.id, polygon: building.pad.polygon, height: building.pad.height });
         placementOf.set(host.id, id);
-        counts.set(landUse, (counts.get(landUse) ?? 0) + 1);
-        if (building.squeezed) squeezed.push(host.id);
-        if (building.grading > GRADING_REPORT) graded.push(`${host.id} ${building.grading} m`);
       }
       const split = LAND_USES.filter((landUse) => counts.has(landUse)).map((landUse) => `${counts.get(landUse)} ${landUse}`);
       warnings.push(`${name}: ${[...counts.values()].reduce((sum, count) => sum + count, 0)} buildings (${split.join(", ")})`);
       if (squeezed.length > 0) warnings.push(`${name}: ${squeezed.length} lots are smaller than their role's footprint; squeezed: ${squeezed.join(", ")}`);
       if (graded.length > 0) warnings.push(`${name}: ${graded.length} pads cut or fill more than ${GRADING_REPORT} m: ${graded.join(", ")}`);
+      if (shared > 0) warnings.push(`${name}: ${shared} pads overlap a neighbour's and share its level`);
     }
 
     const parcels = recipe.generated.parcels.map((parcel): GeneratedParcel => {
@@ -118,6 +125,38 @@ export const buildingsStage: WorldStage = {
     return { placements, generated: { parcels, pads }, warnings };
   },
 };
+
+/**
+ * Pads that overlap (corner lots on two streets) would ask for two levels on
+ * the same ground, and the bake would give the shared part to one of them.
+ * Each overlapping group takes the mean of its pads' levels instead, so every
+ * footprint corner ends up at its own pad's level and a re-run after the bake
+ * computes the same levels. Rewrites the buildings in place; returns how many
+ * pads share a level.
+ */
+function levelOverlappingPads(buildings: PlannedBuilding[]): number {
+  const group = buildings.map((_, index) => index);
+  const find = (index: number): number => (group[index] === index ? index : (group[index] = find(group[index]!)));
+  for (let i = 0; i < buildings.length; i += 1) {
+    for (let j = i + 1; j < buildings.length; j += 1) {
+      if (polygonsOverlap(buildings[i]!.pad.polygon, buildings[j]!.pad.polygon)) group[find(j)] = find(i);
+    }
+  }
+  const members = new Map<number, number[]>();
+  buildings.forEach((_, index) => members.set(find(index), [...(members.get(find(index)) ?? []), index]));
+  let shared = 0;
+  for (const indices of members.values()) {
+    if (indices.length < 2) continue;
+    shared += indices.length;
+    const level = Number((indices.reduce((sum, index) => sum + buildings[index]!.pad.height, 0) / indices.length).toFixed(2));
+    for (const index of indices) {
+      const building = buildings[index]!;
+      building.pad.height = level;
+      building.base = Number((level - FOUNDATION).toFixed(2));
+    }
+  }
+  return shared;
+}
 
 function findPlacement(input: StageInput, id: string): GeneratedPlacement | null {
   for (const group of input.layout.instances) {

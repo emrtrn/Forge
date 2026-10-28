@@ -2,7 +2,7 @@
  * World Builder F1, step 12b: building placeholders and pad data (plan v0.4
  * §13.4, §13.5 L6; T40, T21). One coloured `shape:cube` per role-holding lot,
  * fitted into the role's footprint behind the setback, entrance facing the
- * street; a pad per building levelled at its corners' mean height; the host
+ * street; a pad per building levelled at the mean ground under it; the host
  * parcel names its placement; a re-run after save + reload is empty.
  */
 import assert from "node:assert/strict";
@@ -10,8 +10,8 @@ import { readFileSync } from "node:fs";
 
 import type { RoomLayout } from "../../engine/scene/layout";
 import { SHAPE_PRIMITIVE_SIZE } from "../../engine/scene/shapes";
-import { LAND_USE_COLORS, PAD_MARGIN, planBuilding, SLAB_HEIGHT } from "../../engine/worldbuilder/buildings";
-import { sourceDistance } from "../../engine/worldbuilder/field";
+import { FOUNDATION, LAND_USE_COLORS, PAD_MARGIN, planBuilding, SLAB_HEIGHT } from "../../engine/worldbuilder/buildings";
+import { insidePolygon, sourceDistance } from "../../engine/worldbuilder/field";
 import { streetLines } from "../../engine/worldbuilder/masks";
 import type { WorldPoint } from "../../engine/worldbuilder/normalize";
 import { mulberry32 } from "../../engine/worldbuilder/parcels";
@@ -87,9 +87,17 @@ export function registerWorldBuildingTests(check: Check): void {
     assert.ok([1, 2].includes(building.storeys));
     assert.equal(building.height, building.storeys * 3);
     assert.equal(building.color, "#f2a65a", "the role's placeholder colour");
-    assert.deepEqual({ height: building.pad.height, grading: building.grading, base: building.base }, { height: 2, grading: 0, base: 2 });
+    assert.deepEqual({ height: building.pad.height, grading: building.grading, base: building.base }, { height: 2, grading: 0, base: 2 - FOUNDATION });
     const xs = building.pad.polygon.map(([x]) => x);
+    const zs = building.pad.polygon.map(([, z]) => z);
     assert.ok(Math.abs(Math.max(...xs) - Math.min(...xs) - (building.width + 2 * PAD_MARGIN)) < 1e-3);
+    assert.ok(Math.abs(Math.min(...zs) - (5 + 3 - PAD_MARGIN)) < 1e-3, "the pad keeps behind the parcel front");
+
+    const shop = planBuilding({
+      lot: [strip(0, 20)], landUse: "commercial", spec: profile().roles["building.commercial.shop"], parcel: profile().parcels.commercial,
+      random: mulberry32(3), sampleHeight: () => 0,
+    })!;
+    assert.ok(Math.min(...shop.pad.polygon.map(([, z]) => z)) >= 5 - 1e-6, "no setback: the pad stops at the parcel front, off the road");
     assert.equal(building.squeezed, false);
   });
 
@@ -116,14 +124,14 @@ export function registerWorldBuildingTests(check: Check): void {
     })!;
     assert.deepEqual({ storeys: square.storeys, height: square.height }, { storeys: 0, height: SLAB_HEIGHT });
 
-    // Ground rising 0.2 m per metre north: the pad is the corners' mean, the box reaches the lowest corner.
+    // Ground rising 0.2 m per metre north: the pad is the mean under the footprint, the box stands a foundation below it.
     const slope = (_x: number, z: number) => z * 0.2;
     const sloped = planBuilding({
       lot: [strip(0, 20)], landUse: "residential", spec: base.roles["building.residential.detached"],
       parcel: base.parcels.residential, random: mulberry32(3), sampleHeight: slope,
     })!;
     assert.ok(Math.abs(sloped.pad.height - slope(0, sloped.center[1])) < 0.01, `pad at ${sloped.pad.height}`);
-    assert.ok(Math.abs(sloped.base - slope(0, sloped.center[1] - sloped.depth / 2)) < 1e-6);
+    assert.equal(sloped.base, Number((sloped.pad.height - FOUNDATION).toFixed(2)));
     assert.ok(Math.abs(sloped.grading - 0.2 * sloped.depth / 2) < 0.01);
     assert.equal(planBuilding({ lot: [strip(0, 20)], landUse: "residential", spec: undefined, parcel: undefined, random: mulberry32(1), sampleHeight: () => null }), null);
   });
@@ -166,6 +174,16 @@ export function registerWorldBuildingTests(check: Check): void {
     const again = planStage(buildingsStage, input(savedRecipe!, savedLayout));
     assert.deepEqual({ added: again.added, updated: again.updated, removed: again.removed, kept: again.kept }, { added: [], updated: [], removed: [], kept: [] });
     assert.equal(again.empty, true);
+
+    // After Apply Pads the ground under each pad is at its level: the stage still has nothing to do.
+    const slope = (_x: number, z: number) => z * 0.1;
+    const onSlope = planStage(buildingsStage, input(savedRecipe!, savedLayout, slope));
+    applyPlacementGroupChanges(savedLayout, onSlope.groupChanges, "after");
+    const pads = onSlope.recipeAfter.generated.pads;
+    const baked = (x: number, z: number) => pads.find((pad) => insidePolygon(x, z, pad.polygon))?.height ?? slope(x, z);
+    const rerun = planStage(buildingsStage, input(onSlope.recipeAfter, savedLayout, baked));
+    assert.deepEqual({ updated: rerun.updated, pads: JSON.stringify(rerun.recipeAfter.generated.pads) === JSON.stringify(pads) }, { updated: [], pads: true });
+    assert.equal(rerun.empty, true);
 
     const guarded = structuredClone(savedRecipe!);
     guarded.plan.settlements[0]!.protected = true;

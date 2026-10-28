@@ -4,6 +4,7 @@ import { validateLandscapeSplines } from "../engine/scene/landscapeSplineValidat
 import type { TerrainSplineMeshSource } from "../engine/terrain/terrainSplineMeshes";
 import { registerTerrainErosionTests } from "../tests/engine/terrainErosion.test";
 import { registerTerrainSplineTests } from "../tests/engine/terrainSplines.test";
+import { registerTerrainPadTests } from "../tests/engine/terrainPads.test";
 import { registerTerrainSplineDataTests, registerTerrainSplineDataAsyncTests } from "../tests/engine/terrainSplineData.test";
 import { registerTerrainSplineEditingTests } from "../tests/engine/terrainSplineEditing.test";
 import { registerTerrainSplineMeshTests } from "../tests/engine/terrainSplineMeshes.test";
@@ -1279,6 +1280,7 @@ registerTerrainEditTests(check);
 await registerHeightmapPngTests(checkAsync);
 registerTerrainErosionTests(check);
 registerTerrainSplineTests(check);
+registerTerrainPadTests(check);
 registerTerrainSplineDataTests(check);
 await registerTerrainSplineDataAsyncTests(checkAsync);
 await registerTerrainSplineEditingTests(check, checkAsync);

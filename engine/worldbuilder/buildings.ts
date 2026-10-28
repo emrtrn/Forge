@@ -13,11 +13,15 @@
  *   (`storeys [0, 0]`, a square) is a thin slab;
  * - colour: the role's `placeholderColor`, else its land use's colour.
  *
- * Each building gets a pad: the footprint plus a margin, levelled at the mean
- * ground height of the footprint's corners (cut and fill balance). The pad is
- * data; the editor's Apply Pads bakes it (decision 19). The box reaches down
- * to the lower of the pad and the lowest corner, so it neither floats before
- * the pad is applied nor shows a gap after.
+ * Each building gets a pad: the footprint plus a margin (towards the street no
+ * more than the setback, so a pad never reaches the road), levelled at the
+ * mean ground height under the footprint (its quarter points; cut and fill
+ * balance on a plane). The
+ * pad is data; the editor's Apply Pads bakes it (decision 19). The box stands
+ * `FOUNDATION` below the pad level, not on the ground: after the bake its
+ * corners are at the pad level, and a box measured from the ground would move,
+ * so the stage would no longer be up to date with its own pads. Before the
+ * bake a box on a slope shows a gap of up to its grading on the low side.
  *
  * Pure and deterministic. Dependency-free.
  */
@@ -45,6 +49,8 @@ export const REAR_CLEARANCE = 2;
 export const PAD_MARGIN = 1.5;
 /** Pad blends into the terrain over this distance beyond its margin, metres. */
 export const PAD_FALLOFF = 4;
+/** The box reaches this far below its pad level, metres. */
+export const FOUNDATION = 0.5;
 /** Thickness of an open role's slab, metres. */
 export const SLAB_HEIGHT = 0.2;
 /** Footprint when the profile does not describe the role, metres. */
@@ -69,7 +75,7 @@ export interface PlannedBuilding {
   /** Height above the pad, metres (slab thickness for open roles). */
   height: number;
   storeys: number;
-  /** Bottom of the box: the lower of the pad and the lowest corner. */
+  /** Bottom of the box: `FOUNDATION` below the pad. */
   base: number;
   color: string;
   pad: { polygon: WorldPoint[]; height: number };
@@ -110,15 +116,17 @@ export function planBuilding(request: BuildingRequest): PlannedBuilding | null {
     mid.point[0] + inward[0] * (setback + depth / 2),
     mid.point[1] + inward[1] * (setback + depth / 2),
   ];
-  const corners = rectangle(center, mid.tangent, inward, width / 2, depth / 2);
-  const grounds = corners.map(([x, z]) => request.sampleHeight(x, z));
-  if (grounds.some((ground) => ground === null)) return null;
-  const heights = grounds as number[];
-  const padHeight = round(heights.reduce((sum, value) => sum + value, 0) / heights.length, 2);
-  const grading = Math.max(...heights.map((value) => Math.abs(value - padHeight)));
+  // The level comes from the footprint's quarter points, well inside the pad: after the bake they sit
+  // exactly at its level (the corners may be on its edge, where the terrain grid blends into the falloff).
+  const probes = rectangle(center, mid.tangent, inward, width / 4, depth / 4, depth / 4).map(([x, z]) => request.sampleHeight(x, z));
+  const corners = rectangle(center, mid.tangent, inward, width / 2, depth / 2, depth / 2).map(([x, z]) => request.sampleHeight(x, z));
+  if (probes.some((ground) => ground === null) || corners.some((ground) => ground === null)) return null;
+  const padHeight = round((probes as number[]).reduce((sum, value) => sum + value, 0) / probes.length, 2);
+  const grading = Math.max(...(corners as number[]).map((value) => Math.abs(value - padHeight)));
 
   // Entrance (+Z) faces the street, i.e. against `inward`.
   const yawDeg = (Math.atan2(-inward[0], -inward[1]) * 180) / Math.PI;
+  const frontMargin = Math.min(PAD_MARGIN, setback);
   return {
     center,
     yawDeg,
@@ -126,10 +134,11 @@ export function planBuilding(request: BuildingRequest): PlannedBuilding | null {
     depth,
     height,
     storeys,
-    base: Math.min(padHeight, ...heights),
+    base: round(padHeight - FOUNDATION, 2),
     color: request.spec?.placeholderColor ?? LAND_USE_COLORS[request.landUse],
     pad: {
-      polygon: rectangle(center, mid.tangent, inward, width / 2 + PAD_MARGIN, depth / 2 + PAD_MARGIN).map(([x, z]) => [round(x, 3), round(z, 3)]),
+      polygon: rectangle(center, mid.tangent, inward, width / 2 + PAD_MARGIN, depth / 2 + frontMargin, depth / 2 + PAD_MARGIN)
+        .map(([x, z]) => [round(x, 3), round(z, 3)]),
       height: padHeight,
     },
     grading: round(grading, 2),
@@ -143,13 +152,13 @@ function fit(range: [number, number], room: number, random: () => number): numbe
   return round(Math.min(draw, room), 2);
 }
 
-/** Corners counter-clockwise from front-left, around `center`. */
-function rectangle(center: WorldPoint, along: WorldPoint, inward: WorldPoint, halfAlong: number, halfIn: number): WorldPoint[] {
+/** Corners from front-left around `center`: `front` towards the street, `back` away from it. */
+function rectangle(center: WorldPoint, along: WorldPoint, inward: WorldPoint, halfAlong: number, front: number, back: number): WorldPoint[] {
   const at = (a: number, b: number): WorldPoint => [
     center[0] + along[0] * a + inward[0] * b,
     center[1] + along[1] * a + inward[1] * b,
   ];
-  return [at(-halfAlong, -halfIn), at(halfAlong, -halfIn), at(halfAlong, halfIn), at(-halfAlong, halfIn)];
+  return [at(-halfAlong, -front), at(halfAlong, -front), at(halfAlong, back), at(-halfAlong, back)];
 }
 
 function alongAt(points: readonly WorldPoint[], s: number): { point: WorldPoint; tangent: WorldPoint } {

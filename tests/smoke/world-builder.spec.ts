@@ -213,3 +213,111 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~0 updated · −0 removed · 2 unchanged");
   expect(errors).toEqual([]);
 });
+
+const VILLAGE_LEVEL = "layouts/__playwright-world-builder-village.level.json";
+const VILLAGE_TERRAIN_REF = levelTerrainPath(VILLAGE_LEVEL, TERRAIN_ID);
+const VILLAGE_PROFILE = "layouts/__playwright-world-builder.regionprofile.json";
+const VILLAGE_STAGES = ["roads", "settlementSites", "streets", "parcels", "landUse", "buildings"];
+
+/**
+ * World Builder F1 steps 9–12: the settlement chain on a slope — roads, site,
+ * inner streets, parcels, land use, coloured building placeholders — then
+ * Apply Pads bakes the pads into the terrain; everything saves, and after a
+ * reload the buildings are up to date with their baked pads.
+ */
+test("World Builder village: the settlement chain places coloured buildings, Apply Pads bakes their pads", async ({ page, request }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+
+  // 2 × 2 tiles of 128 m at 2 m spacing (x, z in -128..128), rising 6 cm per metre north.
+  const world = createFlatWorldTerrain({ name: "WB Village", tilesX: 2, tilesZ: 2, tileQuads: 64, spacing: 2, baseHeight: 3 });
+  for (const [key, tile] of world.tiles) {
+    for (let iz = 0; iz < tile.size; iz += 1) {
+      for (let ix = 0; ix < tile.size; ix += 1) {
+        const worldZ = world.def.origin[2] + (tile.z * world.def.tileQuads + iz) * world.def.spacing;
+        tile.heights[iz * tile.size + ix] = 0.06 * worldZ;
+      }
+    }
+    const summary = world.def.tiles.find((entry) => entry.key === key)!;
+    summary.minHeight = Math.min(...tile.heights);
+    summary.maxHeight = Math.max(...tile.heights);
+  }
+  const tileBytes = new Map<string, Uint8Array>();
+  for (const [key, tile] of world.tiles) {
+    const bytes = encodeTerrainTile(tile, { ...world.def, heightFormat: "f32" });
+    tileBytes.set(key, bytes);
+    await writeFileIn(terrainTilePath(VILLAGE_TERRAIN_REF, key), bytes);
+  }
+  await writeFileIn(VILLAGE_TERRAIN_REF, JSON.stringify(world.def));
+  await writeFileIn(terrainGlobalMapPath(VILLAGE_TERRAIN_REF), encodeTerrainGlobalMap(world.def,
+    buildTerrainGlobalAttributes(worldTerrainRenderSource(world.def, world.tiles))));
+  await writeFileIn(VILLAGE_PROFILE, await readFile(resolve(REPO_ROOT, "tests/engine/fixtures/neutral.regionprofile.json"), "utf8"));
+  const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
+  await writeJson(VILLAGE_LEVEL, {
+    ...base, name: "__playwright-world-builder-village",
+    landscapes: [{ id: TERRAIN_ID, name: "WB Village", position: worldTerrainActorPosition(world.def), dataRef: VILLAGE_TERRAIN_REF }],
+  });
+  const recipe = createWorldRecipe("playwright_world_builder_village", 4);
+  recipe.regionProfile = VILLAGE_PROFILE;
+  recipe.plan.settlements.push({ id: "village", source: "manual", center: [0, 0], radius: 40, type: "village", population: 45 });
+  recipe.plan.roadGraph.nodes.push(
+    { id: "west", source: "manual", position: [-120, 0], kind: "end" },
+    { id: "east", source: "manual", position: [120, 0], kind: "end" },
+  );
+  recipe.plan.roadGraph.edges.push({ id: "main", source: "manual", from: "west", to: "east", roadClass: "local" });
+  await writeJson(worldRecipePath(VILLAGE_LEVEL), recipe);
+  expect((await request.post("/__open-level", { data: { path: VILLAGE_LEVEL } })).ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.clear());
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  const bootEditor = async () => {
+    await page.goto(`/?editor&worldBuilderVillage=${Date.now()}`);
+    await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("world-builder-tab").click();
+    await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_village", { timeout: 30_000 });
+  };
+  const save = async () => {
+    const layoutSaved = page.waitForResponse((res) => res.url().endsWith("/__save-layout") && res.request().method() === "POST");
+    await page.getByTestId("editor-save").click();
+    expect((await layoutSaved).ok()).toBeTruthy();
+    await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+  };
+
+  await bootEditor();
+  await expect(page.getByTestId("world-builder-panel")).toContainText("Neutral test profile (loaded)");
+  await expect(page.getByTestId("world-builder-apply-pads")).toBeDisabled();
+  for (const stage of VILLAGE_STAGES) {
+    await page.getByTestId(`world-builder-apply-${stage}`).click();
+    await expect(page.getByTestId("world-builder-report")).toContainText("Changes pending");
+    await expect(page.getByTestId("world-builder-report")).not.toContainText("Errors");
+  }
+  await expect(page.getByTestId("world-builder-apply-pads")).toBeEnabled();
+  await page.getByTestId("world-builder-apply-pads").click();
+  await save();
+
+  const savedRecipe = await readJson<WorldRecipe>(worldRecipePath(VILLAGE_LEVEL));
+  expect(Object.keys(savedRecipe.generators).sort()).toEqual([...VILLAGE_STAGES].sort());
+  const buildings = ((await readJson<RoomLayout>(VILLAGE_LEVEL)).instances.find((group) => group.assetId === "shape:cube")?.placements ?? [])
+    .filter((placement) => placement.id?.startsWith("wb-building-"));
+  expect(buildings.length).toBeGreaterThan(5);
+  expect(buildings.every((placement) => /^#[0-9a-f]{6}$/i.test(placement.color ?? "") && placement.role)).toBe(true);
+  expect(savedRecipe.generated.pads.map((pad) => pad.id).sort()).toEqual(buildings.map((placement) => placement.id).sort());
+  // The pads changed the ground under the village.
+  let changed = 0;
+  for (const [key, bytes] of tileBytes) {
+    const saved = new Uint8Array(await readFile(smokePublicPath(terrainTilePath(VILLAGE_TERRAIN_REF, key))));
+    if (Buffer.compare(Buffer.from(saved), Buffer.from(bytes)) !== 0) changed += 1;
+  }
+  expect(changed).toBeGreaterThan(0);
+
+  // Apply Pads levelled the ground: stages reading it near the pads (sites, streets, parcels) would
+  // re-sample, but land use does not read the ground and buildings stand on their own pads.
+  await bootEditor();
+  for (const stage of ["landUse", "buildings"]) {
+    await page.getByTestId(`world-builder-dry-run-${stage}`).click();
+    await expect(page.getByTestId("world-builder-report")).toContainText("Up to date");
+  }
+  expect(errors).toEqual([]);
+});

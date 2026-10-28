@@ -12,7 +12,9 @@
  */
 import type { EditorCommand } from "@editor/core/history";
 import type { RoomLayout } from "@engine/scene/layout";
-import { createWorldRecipe, normalizeWorldRecipe, worldRecipePath, type WorldRecipe } from "@engine/worldbuilder/recipe";
+import type { TerrainPad } from "@engine/terrain/terrainPads";
+import { PAD_FALLOFF } from "@engine/worldbuilder/buildings";
+import { createWorldRecipe, normalizeWorldRecipe, worldRecipePath, type GeneratedPad, type WorldRecipe } from "@engine/worldbuilder/recipe";
 import { normalizeRegionProfile, type RegionProfile } from "@engine/worldbuilder/regionProfile";
 import {
   planStage,
@@ -39,6 +41,8 @@ export interface WorldBuilderHost {
   terrains(): StageTerrain[];
   /** Writes one side of the spline changes into the terrain definitions and rebuilds their splines. */
   applySplineChanges(changes: readonly TerrainSplineChange[], side: "before" | "after"): void;
+  /** Bakes pads into the terrains under them as undoable terrain commands, and reports. */
+  applyPads(pads: readonly TerrainPad[]): Promise<void>;
   onStatus(message: string, tone: "success" | "warning" | "error"): void;
 }
 
@@ -59,8 +63,8 @@ export interface WorldBuilderView {
   issues: readonly string[];
   profile: { path: string; state: "loaded" | "missing" | "invalid"; label: string | null; issues: readonly string[] } | null;
   dirty: boolean;
-  /** `owned`: generated placements and splines. */
-  planCounts: { settlements: number; landmarks: number; roadNodes: number; roadEdges: number; owned: number } | null;
+  /** `owned`: generated placements and splines; `pads`: building pads Apply Pads would bake. */
+  planCounts: { settlements: number; landmarks: number; roadNodes: number; roadEdges: number; owned: number; pads: number } | null;
   stages: readonly WorldBuilderStageView[];
   /** The last dry run or apply, for the report. */
   lastPlan: StagePlan | null;
@@ -181,6 +185,24 @@ export class WorldBuilderSession {
     return true;
   }
 
+  /**
+   * Bakes the recipe's building pads into the terrain (decision 19: on request,
+   * like a road's Deform). Only pads whose building still stands in the level:
+   * a building removed by hand or never placed leaves its ground alone.
+   */
+  async applyPads(): Promise<void> {
+    if (!this.recipe) {
+      this.host.onStatus("Create or load a world recipe first.", "warning");
+      return;
+    }
+    const pads = this.standingPads();
+    if (pads.length === 0) {
+      this.host.onStatus("No building pads to apply; run Buildings first.", "warning");
+      return;
+    }
+    await this.host.applyPads(pads.map((pad) => ({ polygon: pad.polygon, height: pad.height, falloff: PAD_FALLOFF })));
+  }
+
   getView(): WorldBuilderView {
     const recipe = this.recipe;
     return {
@@ -197,6 +219,7 @@ export class WorldBuilderSession {
             roadNodes: recipe.plan.roadGraph.nodes.length,
             roadEdges: recipe.plan.roadGraph.edges.length,
             owned: Object.keys(recipe.ownership.placements).length + Object.keys(recipe.ownership.splines).length,
+            pads: this.standingPads().length,
           }
         : null,
       stages: this.stages.map((stage) => ({
@@ -240,6 +263,14 @@ export class WorldBuilderSession {
       terrains: this.host.terrains(),
       programExtensions: gameProgramExtensions(),
     });
+  }
+
+  /** Recipe pads whose building placement is in the level. */
+  private standingPads(): GeneratedPad[] {
+    const layout = this.host.layout();
+    if (!this.recipe || !layout) return [];
+    const ids = new Set(layout.instances.flatMap((group) => group.placements.flatMap((placement) => (placement.id ? [placement.id] : []))));
+    return this.recipe.generated.pads.filter((pad) => ids.has(pad.id));
   }
 
   private setRecipe(recipe: WorldRecipe | null): void {

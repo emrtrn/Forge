@@ -35,6 +35,7 @@ import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineDa
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
 import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
+import { createTerrainPadPatches, terrainPadTileKeys, type TerrainPad } from "@engine/terrain/terrainPads";
 import { terrainHeightAt, raycastTerrain } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, createWorldTerrainFromHeightmap, type WorldTerrainCreateOptions, type WorldTerrainHeightmapSource } from "@engine/terrain/worldTerrainCreate";
 import { openWorldFogPatch, openWorldPartitionSettings, type OpenWorldSetup } from "@engine/world/openWorldSetup";
@@ -1401,6 +1402,7 @@ export class SceneApp {
     applyGroupChanges: (changes, side) => this.applyWorldBuilderGroupChanges(changes, side),
     terrains: () => this.worldBuilderTerrains(),
     applySplineChanges: (changes, side) => this.applyWorldBuilderSplineChanges(changes, side),
+    applyPads: (pads) => this.applyWorldBuilderPads(pads),
     onStatus: (message, tone) => this.onStatus?.(message, tone),
   });
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
@@ -4621,6 +4623,63 @@ export class SceneApp {
     this.clearSelection();
     for (const assetId of applyPlacementGroupChanges(this.layout, changes, side)) this.rebuildInstanceGroup(assetId);
     this.emitSceneObjectsChanged();
+  }
+
+  /**
+   * Bakes World Builder pads into the World Terrains under them, one terrain
+   * undo command per terrain (decision 19: an explicit button, like a spline
+   * deform). Pads off every terrain or on a locked one are skipped and counted.
+   */
+  private async applyWorldBuilderPads(pads: readonly TerrainPad[]): Promise<void> {
+    if (this.worldTerrainSplineBusy) {
+      this.onStatus?.("Loading terrain for the previous terrain operation…", "info");
+      return;
+    }
+    const terrains = this.worldBuilderTerrains();
+    const byTerrain = new Map<string, TerrainPad[]>();
+    let skipped = 0;
+    for (const pad of pads) {
+      const [x, z] = pad.polygon[0]!;
+      const terrain = terrains.find((entry) => x >= entry.min[0] && x <= entry.max[0] && z >= entry.min[1] && z <= entry.max[1]);
+      if (!terrain || terrain.locked) {
+        skipped += 1;
+        continue;
+      }
+      byTerrain.set(terrain.id, [...(byTerrain.get(terrain.id) ?? []), pad]);
+    }
+    this.worldTerrainSplineBusy = true;
+    let applied = 0;
+    let tiles = 0;
+    try {
+      for (const [landscapeId, own] of byTerrain) {
+        const document = this.worldTerrains.get(landscapeId);
+        const session = document ? this.worldTerrainSessions.get(document) : undefined;
+        if (!document || !session) {
+          skipped += own.length;
+          continue;
+        }
+        const streaming = this.worldTerrainStreams.get(document);
+        const keys = terrainPadTileKeys(document.def, own);
+        if (streaming) this.onStatus?.("Loading terrain for pads…", "info");
+        await streaming?.demand(keys);
+        try {
+          if (this.worldTerrains.get(landscapeId) !== document) continue;
+          const patches = createTerrainPadPatches(session.world, own);
+          if (patches.length === 0) continue;
+          this.executeTerrainPatchCommand("World Builder: Apply Pads", landscapeId, document, patches);
+          applied += own.length;
+          tiles += patches.length;
+        } finally {
+          streaming?.release(keys);
+        }
+      }
+      const rest = skipped > 0 ? `; ${skipped} off the terrain or on a locked one were skipped` : "";
+      this.onStatus?.(applied > 0 ? `Pads applied: ${applied} pads on ${tiles} tiles${rest}.` : `No pad changed the terrain${rest}.`, applied > 0 ? "success" : "warning");
+    } catch (error) {
+      this.onStatus?.(`Pads failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      this.worldTerrainSplineBusy = false;
+    }
   }
 
   /** The level's loaded World Terrains as World Builder stages read them. */

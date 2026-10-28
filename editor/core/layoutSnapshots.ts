@@ -19,6 +19,7 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import type { WorldUiWidget } from "@engine/ui/uiWorldWidget";
+import { uniqueEditorId } from "./ids";
 
 export interface EditableTransformLike {
   position: Vec3;
@@ -81,6 +82,8 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   const clone: LayoutPlacement = {
     position: [...placement.position],
   };
+  if (placement.id !== undefined) clone.id = placement.id;
+  if (placement.role !== undefined) clone.role = placement.role;
   if (placement.name !== undefined) clone.name = placement.name;
   if (placement.spatiallyLoaded !== undefined) clone.spatiallyLoaded = placement.spatiallyLoaded;
   if (placement.hidden !== undefined) clone.hidden = placement.hidden;
@@ -129,6 +132,17 @@ export function cloneUngroupedPlacement(placement: LayoutPlacement): LayoutPlace
   const clone = clonePlacement(placement);
   delete clone.groupId;
   return clone;
+}
+
+/**
+ * A duplicate is a new object: it keeps its role (still a house) but takes a
+ * fresh id, because World Builder ownership records point at the source's.
+ * `takenIds` is updated so several duplicates in one command stay unique.
+ */
+export function reidentifyDuplicatePlacement(clone: LayoutPlacement, takenIds: Set<string>): void {
+  if (clone.id === undefined) return;
+  clone.id = uniqueEditorId("plc", takenIds);
+  takenIds.add(clone.id);
 }
 
 export function cloneCharacter(character: LayoutCharacter): LayoutCharacter {

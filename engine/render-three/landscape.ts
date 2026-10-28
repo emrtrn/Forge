@@ -1,4 +1,4 @@
-import { Group, Mesh, Vector3, type Camera, type Material, type Texture } from "three";
+import { Group, Mesh, Vector3, type Camera, type DirectionalLight, type Material, type Texture } from "three";
 
 import type { Vec3 } from "@engine/scene/layout";
 import { LANDSCAPE_DEFAULT_LAYERS, type ResolvedLandscape } from "@engine/scene/landscape";
@@ -204,9 +204,13 @@ function landscapeTerrain(object: LandscapeObject): TerrainRenderer | null {
   return null;
 }
 
-/** Re-selects the terrain's LOD for `camera`. Call once per frame before rendering. */
-export function updateLandscapeLod(object: LandscapeObject, camera: Camera): void {
-  landscapeTerrain(object)?.updateLod(camera);
+/**
+ * Re-selects the terrain's LOD for `camera`. Call once per frame before
+ * rendering, after the frame's shadow fit; `shadowLights` are the lights whose
+ * shadow maps the terrain may cast into (their frusta join the node cull).
+ */
+export function updateLandscapeLod(object: LandscapeObject, camera: Camera, shadowLights: readonly DirectionalLight[] = []): void {
+  landscapeTerrain(object)?.updateLod(camera, shadowLights);
 }
 
 /** Frees the terrain and every other mesh (spline meshes) under a landscape group. */

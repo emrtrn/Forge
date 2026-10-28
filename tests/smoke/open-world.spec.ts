@@ -12,7 +12,7 @@ const TERRAIN = "landscapes/__playwright-open-world.terrain.json";
 const world = generateTestWorld({ tileQuads: 128, spacing: 2 });
 const TOTAL_TILES = world.def.tilesX * world.def.tilesZ;
 
-async function writeWorld() {
+async function writeWorld(levelFile: string = LEVEL, configure?: (level: Record<string, unknown>) => void) {
   const write = async (path: string, data: string | Uint8Array) => {
     await mkdir(dirname(smokePublicPath(path)), { recursive: true });
     await writeFile(smokePublicPath(path), data);
@@ -29,9 +29,10 @@ async function writeWorld() {
   const mode = JSON.parse(await readFile(smokePublicPath("assets/starter-content/Gameplay/Script_GameMode.actor.json"), "utf8"));
   mode.variables.find((v: { key: string }) => v.key === "defaultPawnClassRef").default = playerPath;
   await write(modePath, JSON.stringify(mode));
-  const level = testWorldLevel(world, TERRAIN, "__playwright-open-world") as { worldSettings: Record<string, unknown> };
+  const level = testWorldLevel(world, TERRAIN, "__playwright-open-world") as Record<string, unknown> & { worldSettings: Record<string, unknown> };
   level.worldSettings.gameMode = modePath;
-  await write(LEVEL, JSON.stringify(level));
+  configure?.(level);
+  await write(levelFile, JSON.stringify(level));
 }
 
 function readStats(text: string) {
@@ -90,5 +91,79 @@ test("open world: a 4x4 km generated world streams a bounded set of tiles while 
   expect(peak.physics).toBeLessThanOrEqual(9);
   // Active data plus the four-tile passive LRU budget (the readout rounds to 0.1 MB).
   expect(peak.residentBytes).toBeLessThanOrEqual((peak.active + 4) * tileBytes + 50_000);
+  expect(errors).toEqual([]);
+});
+
+// OPEN_WORLD_PLAN Faz 8 roads: a segmented, collidable road's collision streams
+// with World Partition cells. The road starts ~650 m north of the spawn (out of
+// the 384 m load range at boot), rises 2.5 m over a ramp and stays raised, so
+// standing above the terrain there proves its cell's trimesh arrived in time.
+const ROAD_LEVEL = "layouts/__playwright-open-world-road.level.json";
+const ROAD_START_Z = -150;
+const ROAD_END_Z = -900;
+const ROAD_LIFT = 2.5;
+
+function roadLift(z: number): number {
+  return Math.min(1, Math.max(0, (-250 - z) / 100)) * ROAD_LIFT;
+}
+
+function roadActor() {
+  const x = world.spawn[0];
+  const points = [];
+  for (let z = ROAD_START_Z, index = 0; z >= ROAD_END_Z; z -= 25, index += 1) {
+    points.push({ id: `road-${index}`, position: [x, world.heightAt(x, z)! + 0.05 + roadLift(z), z], pointType: "linear" });
+  }
+  return {
+    id: "streamed-road", name: "Streamed Road", position: [0, 0, 0],
+    spline: { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 32, points },
+    generators: [{ id: "surface", type: "deformMesh", meshAsset: "sm-road-asphalt", forwardAxis: "z", upAxis: "y",
+      sampleSteps: 8, geometryMode: "segments", collisionEnabled: true, uvMode: "stretch", verticalOffset: 0.025 }],
+  };
+}
+
+test("open world: a segmented road's collision streams in with its partition cells", async ({ page, request }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  const activated: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+    const cell = message.text().match(/\[world-partition\] activated (\S+)/);
+    if (cell) activated.push(cell[1]!);
+  });
+  await writeWorld(ROAD_LEVEL, (level) => {
+    (level.worldSettings as Record<string, unknown>).partition = { enabled: true };
+    level.splines = [roadActor()];
+  });
+  expect((await request.post("/__open-level", { data: { path: ROAD_LEVEL } })).ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto(`/?debug&openworldroad=${Date.now()}`);
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 90_000 });
+  const overlay = page.locator("#debug-stats");
+  await expect(overlay).toContainText("movement: walking (grounded)", { timeout: 30_000 });
+  // 128 m cells: the road's cells start at z = -256 (cell row -2), 750+ m away.
+  const roadRow = (key: string) => Number(key.split("_")[1]) <= -2;
+  // The road is the world's only partition content: nothing near the spawn loads.
+  const bootCells = [...activated];
+  expect(bootCells.filter(roadRow)).toEqual([]);
+
+  await page.keyboard.down("w");
+  let lifted = 0;
+  try {
+    await expect.poll(async () => {
+      const current = readStats((await overlay.textContent())!);
+      const ground = world.heightAt(current.x, current.z)!;
+      // On the raised stretch the pawn stands on the road deck, not the terrain.
+      if (current.z < -400 && current.z > -850) {
+        expect(current.y).toBeGreaterThan(ground + ROAD_LIFT - 0.6);
+        lifted += 1;
+      }
+      return current.z < -700 && lifted >= 3;
+    }, { timeout: 150_000, intervals: [250] }).toBeTruthy();
+  } finally {
+    await page.keyboard.up("w");
+  }
+  expect(activated.filter(roadRow).length).toBeGreaterThan(0);
+  console.log(`[open-world-road] boot cells ${bootCells.length}; road cells activated ${activated.filter(roadRow).length}; samples on the deck ${lifted}`);
   expect(errors).toEqual([]);
 });

@@ -29,7 +29,13 @@ import { hlodCellPlacements, hlodCellSourceHash, type HlodIndex } from "@engine/
 import { fetchHlodIndex, HlodProxies, loadHlodGeometry } from "./hlodProxies";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
-import { setTerrainTrackDetailLevels, terrainRendererOf, terrainTrackDetailStats } from "@engine/render-three/terrain/terrainRenderer";
+import {
+  setTerrainFarTiling,
+  setTerrainSelfShadow,
+  setTerrainTrackDetailLevels,
+  terrainRendererOf,
+  terrainTrackDetailStats,
+} from "@engine/render-three/terrain/terrainRenderer";
 import { setTerrainWaterQuality } from "@engine/render-three/terrain/terrainWater";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, Sphere, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import {
@@ -273,6 +279,7 @@ import { FoliageRenderBinding } from "@engine/render-three/foliage";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { validateTerrainTile } from "@engine/terrain/terrainLoader";
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
+import { splineCollisionCells, streamedSplineCollisionGeneratorIds } from "@engine/scene/splineCollisionCells";
 import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { terrainTilePath } from "@engine/terrain/terrainTypes";
 import {
@@ -564,6 +571,42 @@ interface StaticCellState {
 function staticEntityWeight(entity: Entity): number {
   const primitives = readColliderComponent(entity)?.primitives;
   return primitives?.some((primitive) => primitive.shape === "trimesh") ? STATIC_TRIMESH_WEIGHT : 1;
+}
+
+/** One static trimesh body from deformed spline chunks (world-space vertices), or null without triangles. */
+function splineTrimeshEntity(id: string, name: string, chunks: readonly Group[]): Entity | null {
+  const vertices: Vec3[] = [];
+  const indices: number[] = [];
+  for (const chunk of chunks) {
+    const primitive = splineDeformMeshColliderPrimitive(chunk);
+    if (!primitive) continue;
+    const offset = vertices.length;
+    vertices.push(...primitive.vertices);
+    indices.push(...primitive.indices.map((entry) => entry + offset));
+  }
+  if (indices.length < 3) return null;
+  const min: Vec3 = [Infinity, Infinity, Infinity];
+  const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const vertex of vertices) {
+    min[0] = Math.min(min[0], vertex[0]); min[1] = Math.min(min[1], vertex[1]); min[2] = Math.min(min[2], vertex[2]);
+    max[0] = Math.max(max[0], vertex[0]); max[1] = Math.max(max[1], vertex[1]); max[2] = Math.max(max[2], vertex[2]);
+  }
+  const size: Vec3 = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+  const collider: ColliderComponent = {
+    shape: "box",
+    size,
+    isStatic: true,
+    isSensor: false,
+    primitives: [{ shape: "trimesh", size, vertices, indices }],
+  };
+  return {
+    id,
+    name,
+    components: {
+      [TRANSFORM_COMPONENT]: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
+    },
+  };
 }
 
 function partitionCellOwner(key: string): string {
@@ -985,6 +1028,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private modelEvictionPaused = true;
   /** Cell-streamed static placements (`group`/`placement` into layout.instances) per cell. */
   private partitionStaticCells = new Map<string, { group: number; placement: number }[]>();
+  /**
+   * Spline id → segment index → cell, for splines whose segmented road
+   * collision streams with World Partition cells (`splineCollisionCells`).
+   */
+  private partitionSplineSegmentCells = new Map<string, Map<number, string>>();
+  /** Cells holding streamed spline collision. */
+  private partitionSplineCells = new Set<string>();
+  /** Per cell, the spline collision trimeshes it adds while loaded (filled when splines build). */
+  private partitionSplineEntities = new Map<string, Entity[]>();
   /** `overrideObjectKey` of every cell-streamed placement: never part of the eager build. */
   private streamedPlacementKeys = new Set<string>();
   /** Assets with at least one cell-streamed placement. */
@@ -1807,8 +1859,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.qualitySettings.foliageCullDistanceScale,
       );
       this.perfRegion(FRAME_REGION_FOLIAGE, mark);
+      // Shadow frusta first: the terrain keeps the nodes its own shadow casts from.
+      this.updateFollowShadow();
       mark = this.perfMark();
-      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera);
+      const shadowLights = this.terrainShadowLights();
+      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera, shadowLights);
       this.perfRegion(FRAME_REGION_TERRAIN, mark);
       mark = this.perfMark();
       // An absolute clock rather than a delta, so it gets a clock that has been
@@ -1824,7 +1879,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // step it belongs to. Tag 0 stays reserved for ordinary frames, so the
       // rolling `gpu` readout is never fed a deliberately crippled frame.
       this.gpuSweepSession.beginFrame();
-      this.updateFollowShadow();
       this.staticDetailCulling?.update(this.camera.position, this.qualitySettings.foliageCullDistanceScale);
       this.hlodProxies?.update(this.camera.position.x, this.camera.position.z, this.camera.far, (key) => this.liveStaticCells.has(key));
       // Simulation time, not real time: the frame is still drawn while the world
@@ -2236,6 +2290,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyRuntimeShadowQuality();
     this.vfxCommands()?.setGlobalDensity(settings.particleDensity);
     setTerrainTrackDetailLevels(settings.terrainTrackDetailLevels);
+    setTerrainSelfShadow(settings.terrainSelfShadow);
+    setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     this.applyRuntimePostProcess();
   }
@@ -3399,6 +3455,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.liveStaticCells.clear();
     this.bootStaticCells = [];
     this.partitionStaticCells = new Map();
+    this.partitionSplineSegmentCells = new Map();
+    this.partitionSplineCells = new Set();
+    this.partitionSplineEntities = new Map();
     this.streamedPlacementKeys = new Set();
     this.streamedStaticAssetIds = new Set();
     this.partitionVolumeCells = new Map();
@@ -4371,6 +4430,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.partitionActorIndexById = new Map();
     this.streamedActorStates.clear();
     this.partitionStaticCells = new Map();
+    this.partitionSplineSegmentCells = new Map();
+    this.partitionSplineCells = new Set();
+    this.partitionSplineEntities = new Map();
     this.streamedPlacementKeys = new Set();
     this.streamedStaticAssetIds = new Set();
     this.partitionVolumeCells = new Map();
@@ -4387,6 +4449,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.placedActorModelEntities = entities;
     const contents = worldPartitionCellContents(this.layout, settings);
+    this.partitionSplineSegmentCells = splineCollisionCells(this.layout.splines ?? [], settings.grids.main);
+    for (const segments of this.partitionSplineSegmentCells.values()) {
+      for (const key of segments.values()) this.partitionSplineCells.add(key);
+    }
     const loadable = await this.loadableModelIds();
     const actorCells = new Map<number, string>();
     const cells = new Map<string, number[]>();
@@ -4446,7 +4512,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       },
       isReady: (key) => this.modelResidency.isOwnerReady(partitionCellOwner(key)),
     }, this.debug, {
-      occupiedCells: [...this.partitionStaticCells.keys(), ...this.partitionVolumeCells.keys(), ...this.partitionLightCells.keys()],
+      occupiedCells: [
+        ...this.partitionStaticCells.keys(), ...this.partitionVolumeCells.keys(), ...this.partitionLightCells.keys(),
+        ...this.partitionSplineCells,
+      ],
     });
   }
 
@@ -4510,7 +4579,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private activateStaticCell(key: string): void {
     if (this.liveStaticCells.has(key)) return;
-    if (!this.partitionStaticCells.has(key) && !this.partitionVolumeCells.has(key) && !this.partitionLightCells.has(key)) return;
+    if (!this.partitionStaticCells.has(key) && !this.partitionVolumeCells.has(key) && !this.partitionLightCells.has(key)
+      && !this.partitionSplineCells.has(key)) return;
     if (!this.worldPartitionLive) {
       if (!this.bootStaticCells.includes(key)) this.bootStaticCells.push(key);
       return;
@@ -4539,6 +4609,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       byGroup.set(group, indices);
     }
     const state: StaticCellState = { batches: [], volumes: [], lights: [], pending: [], added: [], authored: new Map() };
+    state.pending.push(...this.partitionSplineEntities.get(key) ?? []);
     const adapter = {
       colliderBox: (assetId: string, source: ColliderTransformSource) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
@@ -5707,46 +5778,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
   }
 
-  /** Emits one static trimesh body per opted-in deform generator, combining its segment chunks. */
+  /**
+   * Emits one static trimesh body per opted-in deform generator, combining its
+   * segment chunks. A segmented generator of a World Partition level gets one
+   * body per cell instead, filed in {@link partitionSplineEntities}: its cell
+   * adds and removes it with the cell's statics, so it is not returned here.
+   */
   private splineDeformColliderEntities(actor: LayoutSplineActor, generated: Group): Entity[] {
     const result: Entity[] = [];
+    const segmentCells = this.partitionSplineSegmentCells.get(actor.id);
+    const streamed = new Set(segmentCells ? streamedSplineCollisionGeneratorIds(actor) : []);
     for (const definition of normalizeSplineGenerators(actor.generators)) {
       if (definition.type !== "deformMesh") continue;
       const generator = resolveSplineDeformMeshGenerator(definition);
       if (!generator.enabled || !generator.runtimeEnabled || !generator.collisionEnabled) continue;
       const chunks = generated.children.filter((child) => child instanceof Group && child.userData.splineGeneratorId === generator.id) as Group[];
-      const vertices: Vec3[] = [];
-      const indices: number[] = [];
+      if (!segmentCells || !streamed.has(generator.id)) {
+        const entity = splineTrimeshEntity(`spline:${actor.id}:${generator.id}`, `${actor.name} ${generator.id} Collider`, chunks);
+        if (entity) result.push(entity);
+        continue;
+      }
+      const byCell = new Map<string, Group[]>();
       for (const chunk of chunks) {
-        const primitive = splineDeformMeshColliderPrimitive(chunk);
-        if (!primitive) continue;
-        const offset = vertices.length;
-        vertices.push(...primitive.vertices);
-        indices.push(...primitive.indices.map((entry) => entry + offset));
+        const cell = segmentCells.get(chunk.userData.splineSegmentIndex as number);
+        if (cell !== undefined) byCell.set(cell, [...byCell.get(cell) ?? [], chunk]);
       }
-      if (indices.length < 3) continue;
-      const min: Vec3 = [Infinity, Infinity, Infinity];
-      const max: Vec3 = [-Infinity, -Infinity, -Infinity];
-      for (const vertex of vertices) {
-        min[0] = Math.min(min[0], vertex[0]); min[1] = Math.min(min[1], vertex[1]); min[2] = Math.min(min[2], vertex[2]);
-        max[0] = Math.max(max[0], vertex[0]); max[1] = Math.max(max[1], vertex[1]); max[2] = Math.max(max[2], vertex[2]);
+      for (const [cell, cellChunks] of byCell) {
+        const entity = splineTrimeshEntity(`spline:${actor.id}:${generator.id}:${cell}`, `${actor.name} ${generator.id} Collider ${cell}`, cellChunks);
+        if (!entity) continue;
+        this.partitionSplineEntities.set(cell, [...this.partitionSplineEntities.get(cell) ?? [], entity]);
+        // A cell already built takes it with its next queued statics.
+        this.liveStaticCells.get(cell)?.pending.push(entity);
       }
-      const size: Vec3 = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
-      const collider: ColliderComponent = {
-        shape: "box",
-        size,
-        isStatic: true,
-        isSensor: false,
-        primitives: [{ shape: "trimesh", size, vertices, indices }],
-      };
-      result.push({
-        id: `spline:${actor.id}:${generator.id}`,
-        name: `${actor.name} ${generator.id} Collider`,
-        components: {
-          [TRANSFORM_COMPONENT]: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-          [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
-        },
-      });
     }
     return result;
   }
@@ -6373,6 +6436,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * camera (`FOLLOW_SHADOW_HALF_EXTENT × shadowDistanceScale`, texel-snapped),
    * and every other level keeps the bounds fit ({@link fitSunShadowToScene}).
    */
+  /** The lights whose shadow maps are drawn this frame: the cascades, else the sun. */
+  private terrainShadowLights(): readonly DirectionalLight[] {
+    if (!this.renderer.shadowMap.enabled) return [];
+    if (this.sunCascades?.isActive) return this.sunCascades.cascadeLights;
+    return this.sun?.castShadow ? [this.sun] : [];
+  }
+
   private updateFollowShadow(): void {
     const sun = this.sun;
     if (!sun?.castShadow || !this.renderer.shadowMap.enabled) {

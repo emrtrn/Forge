@@ -177,10 +177,13 @@ test("Cascaded Shadows: on a 16-texture-unit GPU a textured 5-layer terrain leve
   expect(result.maxTextures).toBe(16);
   // 6 fixed (normals and weights ×2, track field, water array) + the paint layer
   // array + environment map + BRDF table + 4 cascades = 13 in the fragment
-  // stage: the five layer textures take one unit, not five. The program's
-  // active samplers are counted over both stages, and the tile and global
-  // height lookups are vertex-only.
-  expect(result.terrainSamplers - 2).toBe(13);
+  // stage: the five layer textures take one unit, not five; a layer with a
+  // normal map (LandscapeTest's shallow water bed) adds the normal array as one
+  // more. The program's active samplers are counted over both stages, and the
+  // tile and global height lookups are vertex-only.
+  const normalArray = result.samplerNames.includes("uLayerNormalArray") ? 1 : 0;
+  expect(result.terrainSamplers - 2).toBe(13 + normalArray);
+  expect(result.terrainSamplers - 2).toBeLessThanOrEqual(result.maxTextures);
   expect(result.samplerNames).toContain("uLayerTexArray");
   expect(result.samplerNames.filter((name) => /^uLayerTex\d/.test(name))).toEqual([]);
   expect(messages.some((message) => message.includes("[shadows] Cascaded Shadows"))).toBe(false);

@@ -15,7 +15,9 @@ import {
   cloneUngroupedCharacter,
   cloneUngroupedLightActor,
   cloneUngroupedPlacement,
+  reidentifyDuplicatePlacement,
 } from "@editor/core/layoutSnapshots";
+import { collectPlacementIds } from "@engine/scene/placementIdentity";
 import {
   flagCommandLabel,
   type EditorDefaultTrueFlagCommand,
@@ -1351,6 +1353,7 @@ export class EditorSceneController {
       const snapshot = clonePlacement(transform);
       delete snapshot.groupId;
       delete snapshot.nodeId;
+      reidentifyDuplicatePlacement(snapshot, collectPlacementIds(layout));
       const duplicateIndex = selection.placementIndex + 1;
       const duplicateSelection: Selection = {
         kind: "instance",
@@ -1454,6 +1457,7 @@ export class EditorSceneController {
       snapshot: LayoutPlacement | LayoutCharacter | LayoutLightActor | LayoutActorInstance;
     }> = [];
 
+    const takenPlacementIds = collectPlacementIds(layout);
     const instancesByAsset = new Map<string, Selection[]>();
     for (const selection of selections) {
       if (selection.kind !== "instance") continue;
@@ -1477,10 +1481,12 @@ export class EditorSceneController {
           assetId,
           placementIndex: selection.placementIndex + offset + 1,
         };
+        const snapshot = cloneUngroupedPlacement(transform);
+        reidentifyDuplicatePlacement(snapshot, takenPlacementIds);
         inserts.push({
           source: cloneSelection(selection),
           selection: duplicateSelection,
-          snapshot: cloneUngroupedPlacement(transform),
+          snapshot,
         });
       });
     }

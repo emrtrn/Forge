@@ -86,6 +86,16 @@ export interface QualitySettings {
    * tracks drawn by shading only, the Faz 2 look).
    */
   terrainTrackDetailLevels: number;
+  /**
+   * The terrain casts shadows onto itself (ridges onto valleys) as well as
+   * receiving them; costs one terrain draw per shadow map / cascade.
+   */
+  terrainSelfShadow: boolean;
+  /**
+   * Past 25 m each textured terrain layer blends in a second, rotated sample to
+   * break up the repeat grid; costs up to one extra texture read per layer.
+   */
+  terrainFarTiling: boolean;
   /** Local puddle ripple resolution and planar reflection tier (low = sky only). */
   terrainWaterQuality: "low" | "medium" | "high";
 }
@@ -130,6 +140,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 1.0,
     grassDensity: 1.0,
     terrainTrackDetailLevels: 2,
+    terrainSelfShadow: true,
+    terrainFarTiling: true,
     terrainWaterQuality: "high",
   },
   high: {
@@ -149,6 +161,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 0.85,
     grassDensity: 0.8,
     terrainTrackDetailLevels: 2,
+    terrainSelfShadow: true,
+    terrainFarTiling: true,
     terrainWaterQuality: "high",
   },
   medium: {
@@ -168,6 +182,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 0.65,
     grassDensity: 0.55,
     terrainTrackDetailLevels: 1,
+    terrainSelfShadow: false,
+    terrainFarTiling: false,
     terrainWaterQuality: "medium",
   },
   low: {
@@ -187,6 +203,8 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 0.45,
     grassDensity: 0.3,
     terrainTrackDetailLevels: 0,
+    terrainSelfShadow: false,
+    terrainFarTiling: false,
     terrainWaterQuality: "low",
   },
 };
@@ -329,6 +347,8 @@ function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | nul
   num("foliageCullDistanceScale");
   num("grassDensity");
   num("terrainTrackDetailLevels");
+  bool("terrainSelfShadow");
+  bool("terrainFarTiling");
   if (raw.terrainWaterQuality === "low" || raw.terrainWaterQuality === "medium" || raw.terrainWaterQuality === "high") {
     out.terrainWaterQuality = raw.terrainWaterQuality;
   }

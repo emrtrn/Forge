@@ -140,6 +140,7 @@ import {
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 import { NAV_REACHABLE_BLOCKER_MARGIN, runAiQuery } from "../engine/ai/queryRunner";
+import { splineCollisionCells, splineSegmentCells, streamedSplineCollisionGeneratorIds } from "../engine/scene/splineCollisionCells";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import { SmartObjectReservationStore } from "../engine/ai/smartObjects";
@@ -1026,6 +1027,7 @@ import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegis
 import { registerDroppedFieldTests } from "../tests/engine/droppedFields.test";
 import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCoverage.test";
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
+import { registerPlacementIdentityTests } from "../tests/engine/placementIdentity.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
@@ -1195,6 +1197,7 @@ await registerHlodTests(check, checkAsync);
 registerDroppedFieldTests(check);
 registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
+registerPlacementIdentityTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);
 await registerFoliageCellStreamingTests(checkAsync);
@@ -24106,6 +24109,44 @@ check("deformed spline mesh disposes generated geometry and materials without to
 
   for (let cycle = 0; cycle < 5; cycle += 1) disposeSplineDeformMeshGroup(build());
   assert.equal(sourceGeometry.getAttribute("position").count, sourcePositionCount, "the shared source geometry survives repeated edit/rebuild cycles");
+});
+
+check("segmented spline deform chunks share one material clone the generated group owns", () => {
+  const actor = createDefaultSplineActor();
+  actor.spline.points = [0, 10, 20, 30].map((z, index) => ({ id: `p${index}`, position: [0, 0, z] as Vec3, pointType: "linear" as const }));
+  actor.generators = [{ id: "road", type: "deformMesh", meshAsset: "road", forwardAxis: "z", upAxis: "y", geometryMode: "segments" }];
+  const sourceMaterial = new MeshBasicMaterial();
+  const gltf = { scene: (() => { const group = new Group(); group.add(new Mesh(new BoxGeometry(2, 0.2, 10, 2, 1, 8), sourceMaterial)); return group; })() } as unknown as GLTF;
+  const built = buildSplineInstanceGeneratorGroup({ actor, mode: "runtime", models: new Map([["road", gltf]]), castShadow: false, receiveShadow: false });
+  const meshes: Mesh[] = [];
+  built!.group!.traverse((child) => { if (child instanceof Mesh) meshes.push(child); });
+  assert.equal(meshes.length, 3, "one chunk per segment");
+  const materials = new Set(meshes.map((mesh) => mesh.material));
+  assert.equal(materials.size, 1, "every chunk draws with the same clone");
+  assert.ok(!materials.has(sourceMaterial), "the source material stays cache-owned");
+  let disposed = 0;
+  [...materials][0]!.addEventListener("dispose", () => { disposed += 1; });
+  // An editor dirty-segment rebuild frees one chunk; the shared clone stays.
+  disposeSplineGeneratedGroup(meshes[0]!.parent as Group);
+  assert.equal(disposed, 0);
+  disposeSplineGeneratedGroup(built!.group!);
+  assert.equal(disposed, 1, "the group frees its clone once");
+});
+
+check("spline collision cells: a segmented collidable road files each segment under its midpoint's cell", () => {
+  const road = createDefaultSplineActor();
+  road.id = "road";
+  road.position = [10, 0, 0];
+  road.spline.points = [0, 100, 200, 300].map((z, index) => ({ id: `p${index}`, position: [0, 0, z] as Vec3, pointType: "linear" as const }));
+  road.generators = [{ id: "surface", type: "deformMesh", meshAsset: "asphalt", collisionEnabled: true, geometryMode: "segments" }];
+  const grid = { cellSize: 128 };
+  // Midpoints at z = 50, 150, 250 (world x = 10): cells 0_0, 0_1, 0_1.
+  assert.deepEqual([...splineSegmentCells(road, grid)], [[0, "0_0"], [1, "0_1"], [2, "0_1"]]);
+  assert.deepEqual(streamedSplineCollisionGeneratorIds(road), ["surface"]);
+  const whole = { ...road, id: "whole", generators: [{ ...road.generators[0]!, geometryMode: "whole" as const }] };
+  const visual = { ...road, id: "visual", generators: [{ ...road.generators[0]!, collisionEnabled: false }] };
+  const cells = splineCollisionCells([road, whole, visual], grid);
+  assert.deepEqual([...cells.keys()], ["road"], "whole-geometry and render-only roads keep the eager path");
 });
 
 check("spline performance warnings fire only at the §19.4 thresholds (Faz 12)", () => {

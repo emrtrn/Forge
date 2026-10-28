@@ -101,7 +101,11 @@ engine/editor.
   `vite.config.ts`) or it is silently dropped on save. Current placement collision overrides
   (`collisionPreset`, `collisionEnabled`, `objectType`, `responses`,
   `physicalMaterialId`, `generateOverlapEvents`, `simulationGeneratesHitEvents`)
-  live in `applyTransformFields`. World Partition's `spatiallyLoaded` (only `false`
+  live in `applyTransformFields`. Placement-only identity — `id` (unique per
+  layout) and semantic `role` (`engine/scene/placementIdentity.ts`) — lives in
+  `validatePlacement`, not the shared `applyTransformFields`; undo snapshots
+  keep the id and duplicates mint a fresh one (`reidentifyDuplicatePlacement`).
+  World Partition's `spatiallyLoaded` (only `false`
   is persisted) is copied by `applyTransformFields` and the actor, light,
   reflection-capture, blocking-volume, target-point and world-widget validators;
   `worldSettings.partition` goes through `normalizeWorldPartitionSettings`.

@@ -12,6 +12,8 @@ interface WorldPartitionCommands {
     debug: boolean,
     options?: { occupiedCells?: Iterable<string> },
   ): void;
+  /** Cells of host content registered after `configure` (World Terrain road collision). */
+  addOccupiedCells(keys: Iterable<string>): void;
   prepare(position: readonly [number, number]): void;
   /** Prefetches the ring around a position; returns the cells `prepare` there would activate. */
   prefetchAround(position: readonly [number, number]): string[];
@@ -44,6 +46,7 @@ export function createWorldPartitionModule(): CapabilityModule {
             },
           }, options);
         },
+        addOccupiedCells: (keys) => stream?.addOccupiedCells(keys),
         prepare: (position) => stream?.prepare(position),
         prefetchAround: (position) => stream?.prefetchAround(position) ?? [],
         startSimulation: () => { live = true; },

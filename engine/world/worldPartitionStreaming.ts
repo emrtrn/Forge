@@ -54,6 +54,25 @@ export class WorldPartitionStreaming {
     }
   }
 
+  /**
+   * Host content that registers after configuration (World Terrain road
+   * collision builds with the landscapes): its cells join the residency
+   * set, and the next prepare/update activates the ones in range.
+   */
+  addOccupiedCells(keys: Iterable<string>): void {
+    for (const key of keys) {
+      if (this.cells.has(key)) continue;
+      const coord = parseWorldCellKey(key);
+      if (!coord) continue;
+      this.cells.set(key, []);
+      const box = worldCellBounds(this.settings, coord.x, coord.z);
+      this.bounds = this.bounds ? {
+        minX: Math.min(this.bounds.minX, box.minX), minZ: Math.min(this.bounds.minZ, box.minZ),
+        maxX: Math.max(this.bounds.maxX, box.maxX), maxZ: Math.max(this.bounds.maxZ, box.maxZ),
+      } : box;
+    }
+  }
+
   /** Boot/travel/restore preparation ignores the per-frame activation budget. */
   prepare(position: readonly [number, number]): void {
     this.advance([{ position }], Infinity);

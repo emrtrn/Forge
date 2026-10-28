@@ -20,6 +20,8 @@ export interface LakeGeometry {
   cells: number;
   bytes: number;
   buildMs: number;
+  /** Exact connected source faces (b–c diagonal), retained for terrain lighting. */
+  coverage?: { min: [number, number]; nx: number; nz: number; spacing: number; triangles: Uint8Array };
 }
 export interface LakeSnapshot {
   def: WorldTerrainDef;
@@ -222,7 +224,8 @@ export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSi
   }
   out.positions = pos.slice(0, vc * 3); out.depths = depths.slice(0, vc); out.uvs = uv.slice(0, vc * 2);
   out.indices = indices.slice(0, ic); out.shore = shore.slice(0, sc); out.cuts = cuts.slice(0, bc);
-  out.bytes = out.positions.byteLength + out.depths.byteLength + out.uvs.byteLength + out.indices.byteLength + out.shore.byteLength + out.cuts.byteLength;
+  out.coverage = { min: [...lake.bounds.min], nx, nz, spacing: def.spacing, triangles: wet };
+  out.bytes = out.positions.byteLength + out.depths.byteLength + out.uvs.byteLength + out.indices.byteLength + out.shore.byteLength + out.cuts.byteLength + wet.byteLength;
   if (out.bytes > LAKE_LIMITS.geometryBytes) return { ...emptyLake(lake, "over-budget", "Lake geometry exceeds 16 MiB"), cells: out.cells };
   if (level >= escape - EPS) { out.status = "open-boundary"; out.message = `Area opens at world Y ${out.escapeLevel.toFixed(3)}; enlarge area or lower level`; }
   out.buildMs = performance.now() - started;

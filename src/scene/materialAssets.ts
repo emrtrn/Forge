@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, SRGBColorSpace, TextureLoader, type Texture } from "three";
+import { DataTexture, LinearFilter, LinearMipmapLinearFilter, NoColorSpace, RepeatWrapping, SRGBColorSpace, TextureLoader, type Texture } from "three";
 
 import { assetPath, assetRecordById, assetType, type AssetManifest } from "@engine/assets/manifest";
 import { normalizeForgeMaterialDef } from "@engine/assets/material";
@@ -83,6 +83,9 @@ export async function loadForgeMaterial(
 }
 
 export interface ForgeMaterialLayer {
+  normalTexture?: Texture | null;
+  /** Texture repeats per metre, when authored by the material. */
+  textureScale?: number;
   roughness?: number;
   /** Terrain packs linear roughness into albedo alpha to avoid extra samplers. */
   roughnessInAlpha?: boolean;
@@ -95,8 +98,8 @@ export interface ForgeMaterialLayer {
 /**
  * Loads albedo and optional roughness for Landscape layer splatting. Roughness
  * is packed into albedo alpha (RGB stays sRGB, alpha stays linear), keeping the
- * eight-layer terrain within the existing texture-unit budget. Skips normal /
- * layer-blend loading that the full material loader does. Returns
+ * eight-layer terrain within the existing texture-unit budget. Normals use a
+ * separate linear array in the terrain renderer. Skips material layer blends. Returns
  * `null` if the id isn't a material asset or can't be read.
  */
 export async function loadForgeMaterialLayer(
@@ -108,13 +111,25 @@ export async function loadForgeMaterialLayer(
   const materialRecord = assetRecordById(manifest, materialId);
   if (!materialRecord || assetType(materialRecord) !== "material") return null;
   let texture: Texture | null = null;
+  let normalTexture: Texture | null = null;
   try {
     const response = await fetch(projectFileUrl(assetPath(materialRecord)), { cache: "no-cache" });
     if (!response.ok) return null;
     const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
+    if (def.normalTexture) {
+      try {
+        normalTexture = await loadTextureByAssetId(manifest, def.normalTexture, textureLoader);
+        normalTexture.colorSpace = NoColorSpace;
+        normalTexture.flipY = def.flipY;
+        normalTexture.wrapS = normalTexture.wrapT = RepeatWrapping;
+        if (options.maxAnisotropy) normalTexture.anisotropy = options.maxAnisotropy;
+        normalTexture.needsUpdate = true;
+      } catch { normalTexture = null; } // A missing detail map must not erase the painted layer.
+    }
     if (def.baseColorTexture) {
       texture = await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader);
       texture.colorSpace = SRGBColorSpace;
+      texture.flipY = def.flipY;
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
       if (options.maxAnisotropy) texture.anisotropy = options.maxAnisotropy;
@@ -132,9 +147,11 @@ export async function loadForgeMaterialLayer(
         roughness.dispose();
       }
     }
-    return { baseColor: def.baseColor ?? "#ffffff", texture, roughness: def.roughness, roughnessInAlpha: Boolean(def.roughnessTexture) };
+    return { baseColor: def.baseColor ?? "#ffffff", texture, normalTexture, roughness: def.roughness, roughnessInAlpha: Boolean(def.roughnessTexture),
+      ...(def.terrainMetersPerRepeat ? { textureScale: 1 / def.terrainMetersPerRepeat } : {}) };
   } catch {
     texture?.dispose();
+    normalTexture?.dispose();
     return null;
   }
 }

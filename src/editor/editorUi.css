@@ -1150,10 +1150,6 @@
   box-shadow: inset 2px 0 0 var(--forge-accent);
 }
 
-.outliner-row.active.is-grouped {
-  box-shadow: inset 2px 0 0 var(--forge-accent);
-}
-
 .outliner-row.is-dragging {
   opacity: 0.5;
 }

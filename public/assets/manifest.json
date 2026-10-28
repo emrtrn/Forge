@@ -21679,6 +21679,138 @@
         "bytes": 433
       },
       "license": "Unknown"
+    },
+    {
+      "id": "t-shallow-water-bed-bc",
+      "name": "T_Shallow_Water_Bed_BC",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Shallow_Water_Bed_BC.jpg",
+      "tags": [
+        "water",
+        "sand",
+        "pebbles",
+        "terrain"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-content",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1062525
+      },
+      "source": {
+        "origin": "https://polyhaven.com/a/gravelly_sand",
+        "pack": "Shallow Water Bed",
+        "packVersion": "2026-10-27"
+      },
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "t-shallow-water-bed-n",
+      "name": "T_Shallow_Water_Bed_N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Shallow_Water_Bed_N.png",
+      "tags": [
+        "water",
+        "sand",
+        "pebbles",
+        "terrain"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-content",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6086837
+      },
+      "source": {
+        "origin": "https://polyhaven.com/a/gravelly_sand",
+        "pack": "Shallow Water Bed",
+        "packVersion": "2026-10-27"
+      },
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "t-shallow-water-bed-r",
+      "name": "T_Shallow_Water_Bed_R",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Shallow_Water_Bed_R.jpg",
+      "tags": [
+        "water",
+        "sand",
+        "pebbles",
+        "terrain"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-content",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 419895
+      },
+      "source": {
+        "origin": "https://polyhaven.com/a/gravelly_sand",
+        "pack": "Shallow Water Bed",
+        "packVersion": "2026-10-27"
+      },
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "m-shallow-water-bed",
+      "name": "M_Shallow_Water_Bed",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Shallow_Water_Bed.material.json",
+      "tags": [
+        "water",
+        "sand",
+        "pebbles",
+        "terrain"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-content",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 433
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Shallow Water Bed",
+        "packVersion": "2026-10-27"
+      },
+      "license": "Project-local material; Poly Haven CC0 textures"
     }
   ]
 }

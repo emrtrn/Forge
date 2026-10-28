@@ -5806,9 +5806,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
               })
             : null;
         if (resolved?.texture) this.landscapeLayerTextures.push(resolved.texture);
+        if (resolved?.normalTexture) this.landscapeLayerTextures.push(resolved.normalTexture);
         return {
           id: layer.id,
           texture: resolved?.texture ?? null,
+          normalTexture: resolved?.normalTexture ?? null,
+          ...(resolved?.textureScale ? { textureScale: resolved.textureScale } : {}),
           color: resolved?.baseColor ?? presetColor,
           roughness: resolved?.roughness ?? 1,
           roughnessInAlpha: resolved?.roughnessInAlpha ?? false,
@@ -5918,6 +5921,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(def.layers, worldTerrainExtent(def)[0]);
     const object = createWorldTerrainObject({
       ...resolved,
+      terrainRef: actor.id,
       document,
       layerTextures,
       layerColors: Object.fromEntries(layerTextures.map((layer) => [layer.id, layer.color])),

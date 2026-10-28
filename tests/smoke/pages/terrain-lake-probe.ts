@@ -17,6 +17,109 @@ export function installLakeProbe(app: unknown) {
     worldTerrainSessions?: WeakMap<WorldTerrainDocument, WorldTerrainEditSession>;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false) {
+      cancelAnimationFrame(a.frameHandle);
+      a.camera.near = 0.1; a.camera.far = 2000;
+      a.camera.position.set(close ? -20 : -12, close ? 13.3 : 35, close ? -25.5 : 32);
+      a.camera.lookAt(close ? -20 : -10, close ? 11.6 : 10, close ? -23.2 : -5);
+      if (wide) { a.camera.position.set(0, 200, 1); a.camera.lookAt(0, 11, 0); }
+      a.camera.updateProjectionMatrix(); a.camera.updateMatrixWorld(true);
+      const restore: Array<() => void> = [];
+      let count = 0, normalLayers = 0;
+      a.scene.traverse((node: any) => {
+        if (night && node.isDirectionalLight) { const intensity = node.intensity; node.intensity = 0; restore.push(() => { node.intensity = intensity; }); }
+        const terrain = node.userData.forgeTerrain;
+        if (terrain) {
+          const before = node.onBeforeRender;
+          node.onBeforeRender = (...args: any[]) => {
+            before(...args); const u = terrain.materials.uniforms;
+            count = u.uCausticCount.value;
+            u.uCausticTime.value = time;
+            if (!enabled) u.uCausticCount.value = 0;
+            if (u.uLayerNormalIndex) {
+              normalLayers = u.uLayerNormalIndex.value.filter((n: number) => n >= 0).length;
+              if (!detail) u.uLayerNormalIndex.value = u.uLayerNormalIndex.value.map(() => -1);
+            }
+          };
+          const indices = terrain.materials.uniforms.uLayerNormalIndex?.value;
+          restore.push(() => { node.onBeforeRender = before; if (indices) terrain.materials.uniforms.uLayerNormalIndex.value = indices; });
+        }
+        if (node.userData.waterBodyId && node.material?.uniforms?.time) {
+          const before = node.onBeforeRender;
+          node.onBeforeRender = (...args: any[]) => { before(...args); node.material.uniforms.time.value = 0; };
+          restore.push(() => { node.onBeforeRender = before; });
+        }
+      });
+      try {
+        for (const object of a.landscapeObjects) updateLandscapeLod(object, a.camera);
+        a.renderer.info.reset();
+        if (a.postProcessPipeline) a.postProcessPipeline.render(0); else a.renderer.render(a.scene, a.camera);
+        const canvas = a.renderer.domElement;
+        const gl = a.renderer.getContext(), width = canvas.width, height = canvas.height;
+        const pixels = new Uint8Array(width * height * 4);
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const samples: number[] = [];
+        for (let y = 0; y < height; y += 8) for (let x = 0; x < width; x += 8) {
+          const i = (y * width + x) * 4; samples.push(pixels[i]!, pixels[i + 1]!, pixels[i + 2]!);
+        }
+        const probe = (x: number, y: number, z: number) => {
+          const p = new Vector3(x, y, z).project(a.camera);
+          const px = Math.round((p.x + 1) * width / 2), py = Math.round((p.y + 1) * height / 2);
+          if (px < 2 || px >= width - 2 || py < 2 || py >= height - 2) return null;
+          const result: number[] = [];
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const i = ((py + dy) * width + px + dx) * 4; result.push(pixels[i]!, pixels[i + 1]!, pixels[i + 2]!);
+          }
+          return result;
+        };
+        let cascades = 0;
+        a.scene.traverse(node => { if (node.name.startsWith("forge-sun-cascade-")) cascades++; });
+        return { count, normalLayers, samples, calls: a.renderer.info.render.calls, textures: a.renderer.info.memory.textures, glError: gl.getError(),
+          shadows: { enabled: a.renderer.shadowMap.enabled, cascades },
+          probes: { dry: probe(-20, 16, -40), island: probe(0, 15, 0), separate: probe(30, 10, 0) } };
+      } finally { restore.reverse().forEach(fn => fn()); }
+    },
+    async causticsGpuPilot() {
+      cancelAnimationFrame(a.frameHandle);
+      const renderer = a.renderer, gl = renderer.getContext() as WebGL2RenderingContext;
+      const debug = gl.getExtension("WEBGL_debug_renderer_info");
+      const device = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      const ext = gl.getExtension("EXT_disjoint_timer_query_webgl2");
+      if (!ext) return { available: false, device, reason: "GPU timer unavailable" };
+      if (gl.getQuery(ext.TIME_ELAPSED_EXT, gl.CURRENT_QUERY)) return { available: false, device, reason: "GPU timer already owned" };
+      let enabled = false;
+      const restore: Array<() => void> = [];
+      a.scene.traverse((node: any) => {
+        if (!node.userData.forgeTerrain) return;
+        const before = node.onBeforeRender;
+        node.onBeforeRender = (...args: any[]) => {
+          before(...args); const u = node.userData.forgeTerrain.materials.uniforms;
+          if (!enabled) u.uCausticCount.value = 0;
+          u.uCausticTime.value = 0;
+        };
+        restore.push(() => { node.onBeforeRender = before; });
+      });
+      const queries: Array<{ query: WebGLQuery; on: boolean }> = [], calls: number[] = [];
+      const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const render = (on: boolean) => { enabled = on; renderer.info.reset(); renderer.render(a.scene, a.camera); };
+      try {
+        for (let i = 0; i < 5; i++) { render(false); render(true); await frame(); }
+        for (let i = 0; i < 300; i++) {
+          for (const on of [false, true]) {
+            const query = gl.createQuery()!; gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
+            render(on); gl.endQuery(ext.TIME_ELAPSED_EXT); queries.push({ query, on });
+            if (i === 299) calls.push(renderer.info.render.calls);
+          }
+          await frame();
+        }
+        for (let i = 0; i < 120 && queries.some(q => !gl.getQueryParameter(q.query, gl.QUERY_RESULT_AVAILABLE)); i++) await frame();
+        if (gl.getParameter(ext.GPU_DISJOINT_EXT) || queries.some(q => !gl.getQueryParameter(q.query, gl.QUERY_RESULT_AVAILABLE))) return { available: false, device, reason: "GPU timing disjoint or incomplete" };
+        const off = queries.filter(q => !q.on).map(q => gl.getQueryParameter(q.query, gl.QUERY_RESULT) / 1e6);
+        const on = queries.filter(q => q.on).map(q => gl.getQueryParameter(q.query, gl.QUERY_RESULT) / 1e6);
+        const p95 = (v: number[]) => [...v].sort((a, b) => a - b)[Math.ceil(v.length * 0.95) - 1]!;
+        return { available: true, device, frames: 300, viewport: renderer.getSize(new Vector2()).toArray(), baselineP95Ms: p95(off), causticsP95Ms: p95(on), pairedDeltaP95Ms: p95(on.map((v, i) => v - off[i]!)), additionalCalls: calls[1]! - calls[0]! };
+      } finally { queries.forEach(q => gl.deleteQuery(q.query)); restore.forEach(fn => fn()); }
+    },
     editor() {
       return { state: a.getLakeEditorState?.(), selection: a.selection,
         terrain: [...(a.worldTerrains ?? a.worldTerrainDocuments ?? [])].map(([id, doc]) => {

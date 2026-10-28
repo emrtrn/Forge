@@ -5,6 +5,7 @@ import {
   RepeatWrapping,
   RGBAFormat,
   SRGBColorSpace,
+  NoColorSpace,
   UnsignedByteType,
   type Texture,
 } from "three";
@@ -146,7 +147,7 @@ export interface TerrainLayerArray {
 }
 
 /** Packs the layers' readable textures into one sRGB, mipmapped, repeating array. */
-export function createTerrainLayerArray(textures: readonly (Texture | null | undefined)[]): TerrainLayerArray {
+export function createTerrainLayerArray(textures: readonly (Texture | null | undefined)[], linear = false): TerrainLayerArray {
   const index = textures.map(() => -1);
   const sources: TerrainLayerPixels[] = [];
   let anisotropy = 1;
@@ -165,7 +166,7 @@ export function createTerrainLayerArray(textures: readonly (Texture | null | und
   const texture = new DataArrayTexture(data, size, size, sources.length);
   texture.format = RGBAFormat;
   texture.type = UnsignedByteType;
-  texture.colorSpace = SRGBColorSpace;
+  texture.colorSpace = linear ? NoColorSpace : SRGBColorSpace;
   texture.wrapS = texture.wrapT = RepeatWrapping;
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearMipmapLinearFilter;

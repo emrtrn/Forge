@@ -64,6 +64,7 @@ import {
 } from "./terrainDeformation";
 import { TerrainTextureUpdates } from "./terrainTextureUpdates";
 import { isPlanarReflectionCamera } from "../planarReflectionSource";
+import { updateTerrainCaustics } from "./terrainCaustics";
 
 /**
  * GPU CDLOD renderer for one terrain grid of tiles (OPEN_WORLD_PLAN Faz 2). One
@@ -83,6 +84,7 @@ import { isPlanarReflectionCamera } from "../planarReflectionSource";
  */
 
 export interface TerrainRendererOptions {
+  terrainRef?: string;
   globalAttributes?: TerrainGlobalAttributes;
   viewMode: TerrainViewMode;
   activeLayer: number;
@@ -376,6 +378,13 @@ export class TerrainRenderer {
     this.mesh.userData.forgeTerrain = this;
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
     this.mesh.onBeforeRender = (renderer, scene, camera) => {
+      updateTerrainCaustics(this.materials.uniforms, scene, options.terrainRef);
+      const bodies = this.materials.uniforms.uCausticCount!.value as number;
+      const defines = this.materials.material.defines ??= {};
+      if (defines.FORGE_TERRAIN_CAUSTIC_BODIES !== bodies) {
+        defines.FORGE_TERRAIN_CAUSTIC_BODIES = bodies;
+        this.materials.material.needsUpdate = true;
+      }
       this.textureUpdates.flush(renderer);
       const planar = isPlanarReflectionCamera(camera) ? 1 : 0;
       this.materials.uniforms.uTerrainPlanarPass!.value = planar;
@@ -549,6 +558,7 @@ export class TerrainRenderer {
     this.materials.normalMaterial.dispose();
     this.materials.depthMaterial.dispose();
     this.materials.layerArray?.dispose();
+    this.materials.normalArray?.dispose();
     for (const texture of [
       this.heightTexture, this.normalTexture, this.weightTexture,
       this.globalHeightTexture, this.globalNormalTexture, this.globalWeightTexture,

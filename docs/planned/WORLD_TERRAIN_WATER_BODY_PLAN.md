@@ -1,5 +1,80 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel kullanıcı isteği — Göl yüzeyi ve tekerlek dalgaları — 2026-10-28
+
+Köpük çalışmasına ek kapsam: son TV fotoğrafındaki gibi, küçük ve birbirine
+karışan dalgacıkları olan doğal göl yüzeyi; sığ kıyıda dip görünürlüğü, açıya
+bağlı yansıma ve parçalı ışık parlamaları. Fotoğraftaki büyük düzenli/renkli
+çizgiler TV-kamera moiré'si olabilir; birebir dalga deseni veya renk hedefi
+sayılmaz. Tek fotoğraf dalganın hareketini/yönünü kanıtlamaz. Göl yüzeyi,
+nehir akışını zorunlu kılmadan bu görsel karakteri sağlayabilmelidir.
+
+**Araç etkileşimi:** Tekerlek geçerli göl yüzeyine girdiğinde suya temas yerinden
+başlayan, teker hareketiyle güçlenen ve dışarı yayılarak sönen dalgalar oluşmalı.
+İlerleme, dönüş ve patinaj etkisi ayırt edilmeli; duran teker sürekli enerji
+üretmemeli. Dalga yalnız tekerin terrain'e/mud'a bastığı anda değil, teker hacmi
+su yüzeyini kestiğinde de üretilebilmeli. Kuru zemin, taş üstü, havadaki ve su
+yüzeyinin tamamen altındaki teker için sahte yüzey teması oluşturulmamalı.
+
+Mud'daki mevcut teker batması, terrain deformasyonu ve su dalgası birlikte
+referanstır; **gölün kendisi terrain'i batırmaz veya oymaz**. Zemin mud ise
+mevcut batma sürer; sert zeminde yeni çamur deformasyonu eklenmez. Dalga
+sunumu yüzdürme, su direnci, yüzme veya hacim/akış fiziği teslimi değildir.
+
+Kaynak incelemesi: `terrainWaterState.ts` ve `terrainWater.ts` dünya sabit,
+sınırlı impulse/ripple, hareket/patinaj enerjisi, cooldown ve sönme içeriyor.
+`terrainDeformationModule.ts` temasları mud/deformation yolundan topluyor.
+Bu olay/enerji ilkeleri yeniden kullanılmalı; mud maskesi veya deform alanı
+Lake'e doğrudan bağlanmamalı. Lake için bağımsız su seviyesi/bağlı yüzey
+sorgusu ve teker–su kesişimi gerekir.
+
+**Önerilen ilave sıra:** L1 doğal yüzey görsel ayarı → L2 bağımsız teker–Lake
+temasları ve sınırlı ripple sunumu → L3 köpük/caustics/yansıma ile ortak kabul.
+Detaylar ve test matrisi
+[köpük ve yüzey araştırmasının ilave bölümünde](../reports/WATER_CONTACT_FOAM_RESEARCH_2026-10-28.md#göl-yüzeyi-ve-tekerlek-etkileşimi--ilave-kapsam).
+Bu kullanıcı isteği dokümana kaydedildi; kod uygulaması henüz başlamadı.
+
+## Güncel ek — Caustics görünürlüğü ve köpük araştırması — 2026-10-28
+
+### Caustics görünürlük düzeltmesi (teslim edildi)
+
+`f5a6c77d` ile `main`e gönderildi. Prosedürel desenin bir tekrarındaki hücre
+sayısı eksen başına 6'dan 2'ye indirildi; mevcut metre ayarında ışık ağı yaklaşık
+üç kat genişledi. Mipmap filtresi, şiddet, derinlik sönmesi ve su geçirgenliği
+korundu; yeni capture/sampler/draw eklenmedi. Mevcut caustics açık göllerin
+görünümü değişir; sahne verisi migrasyonu gerekmez.
+
+SwiftShader fixture'ında genel görünümün açık/kapalı luminans farkı standart
+sapması **2,081 → 3,190** (yaklaşık %53 artış), yakın kıyı **5,370** ölçüldü.
+Yeni kontrast testi eski deseni reddediyor; yeni desenle animasyon, gece,
+ada/kuru kıyı/ayrı çukur, CSM, UI toggle/undo, Save/Reload ve runtime geçti.
+`build:verify` 1.960 engine kontrolüyle geçti. Bu sayılar farklı kaynak
+sürümlerindeki tarihsel test adetleriyle doğrudan karşılaştırılmaz.
+
+GPU pilotu `FORGE_CAUSTICS_GPU_PILOT=1` ile isteğe bağlıdır; bu teslimde donanım
+GPU zamanı ölçülmedi. **Önceki 3,72 ms bulgusu ve 1 ms hedefinin açık durumu
+korunur; görünürlük düzeltmesi performans kabulünü kapatmaz.** Ayrıntılar:
+[Lake caustics görünürlük raporu](../reports/LAKE_CAUSTICS_VISIBILITY_2026-10-28.md).
+
+### Göl/nehir kıyısı ve taş çevresi köpüğü (araştırma/öneri)
+
+Kullanıcı, göl ve nehirde kıyıya değen yüzeylerde ve taşların etrafında kırık,
+hareketli köpük istiyor. Dört TV fotoğrafı yerleşim/yoğunluk referansıdır;
+parlama, moiré, çizgiler ve mutlak beyazlık hedef kabul edilmez. Burada “göl ve
+nehir” kapsamı esas alınır; ışık gölgesi köpük kaynağı değildir, köpüğün
+aydınlatmasını etkiler.
+
+Mevcut River kıyı/rapid/point-stamp köpüğü yeniden kullanılabilir; Lake'te köpük
+yoktur. Nehir şeridinin kenarı gerçek kıyı veya taş mesafesi değildir. Tek başına
+kamera depth farkı da kalıcı taş çevresi halkası sağlamaz. Öneri: ortak köpük
+shader'ı + dünya koordinatında kıyı/engel temas maskesi + nehirde akış yönlü
+izler; mevcut depth snapshot yalnız destekleyici temas bilgisi olur.
+
+Kaynak incelemesi, seçenekler, sınırlamalar, aşamalar ve kabul matrisi:
+[Kıyı ve taş çevresi köpük araştırması](../reports/WATER_CONTACT_FOAM_RESEARCH_2026-10-28.md).
+**Bu ek uygulama teslimi değildir.** F1–F4 aşağıdaki raporda önerilmiştir;
+uygulama, sahne/taş yerleştirme, yeni fizik veya donanım performans kabulü yoktur.
+
 ## Güncel ek — Küçük taşlı kum ve caustics — 2026-10-27
 
 Kullanıcı araştırma önerisini onayladı ve dokümana eklenmesinin ardından

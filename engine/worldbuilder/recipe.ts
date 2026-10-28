@@ -7,7 +7,8 @@
  *   write it; every element records where it came from (`source`, `observed`,
  *   `confidence`) so a re-analysis never overwrites a manual edit.
  * - `generated` is stage output that must persist to be regenerated locally
- *   (parcels). Geometry itself stays in the standard level formats.
+ *   (settlement sites with their programs, parcels). Geometry itself stays in
+ *   the standard level formats.
  * - `ownership` maps level objects (placement ids, spline ids, foliage rules)
  *   to the stage that produced them. Anything not listed is manual and is never
  *   moved or deleted by a stage.
@@ -37,6 +38,7 @@ import {
   pointList,
   reject,
   requireId,
+  requireNumber,
   requirePoint,
   requirePolygon,
   requireToken,
@@ -190,6 +192,18 @@ export interface GeneratedParcel {
   placement?: string;
 }
 
+/** A settlement's chosen site and resolved program (L1 + L2), written by the `settlementSites` stage. */
+export interface GeneratedSite {
+  settlement: string;
+  center: WorldPoint;
+  /** Built-up core radius the program needs, metres. */
+  coreRadius: number;
+  /** Site score 0..1; absent when the site was not scored (a protected settlement keeps its planned centre). */
+  score?: number;
+  dwellings: number;
+  program: ProgramLine[];
+}
+
 export interface OwnershipEntry {
   /** Token naming the stage, e.g. `roads`, `settlement`. */
   stage: string;
@@ -226,7 +240,7 @@ export interface WorldRecipe {
   /** Public-root-relative default `*.regionprofile.json`. */
   regionProfile?: string;
   plan: WorldPlan;
-  generated: { parcels: GeneratedParcel[] };
+  generated: { sites: GeneratedSite[]; parcels: GeneratedParcel[] };
   generation: {
     /** Stages leave objects outside `ownership` alone. Default true. */
     preserveManualOverrides: boolean;
@@ -264,7 +278,7 @@ export function createWorldRecipe(recipeId: string, seed = 0): WorldRecipe {
     seed: normalizeSeed(seed) ?? 0,
     generators: {},
     plan: { regions: [], water: [], landmarks: [], settlements: [], roadGraph: { nodes: [], edges: [] } },
-    generated: { parcels: [] },
+    generated: { sites: [], parcels: [] },
     generation: { preserveManualOverrides: true, stages: [] },
     ownership: { placements: {}, splines: {}, foliageRules: {}, protectedRegions: [] },
   };
@@ -296,7 +310,10 @@ export function normalizeWorldRecipe(value: unknown): WorldRecipeNormalization {
     else issue(ctx, "regionProfile", "must be a public-root-relative .regionprofile.json path");
   }
   recipe.plan = normalizePlan(ctx, value.plan);
-  recipe.generated = { parcels: normalizeParcels(ctx, value.generated, recipe.plan) };
+  recipe.generated = {
+    sites: normalizeSites(ctx, value.generated, recipe.plan),
+    parcels: normalizeParcels(ctx, value.generated, recipe.plan),
+  };
   recipe.generation = normalizeGeneration(ctx, value.generation);
   recipe.ownership = normalizeOwnership(ctx, value.ownership, recipe.plan);
   return { recipe, issues };
@@ -504,6 +521,40 @@ function provenance(ctx: Ctx, path: string, value: Record<string, unknown>): Pla
 }
 
 // ─── Generated, generation, ownership ───────────────────────────────────────
+
+function normalizeSites(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedSite[] {
+  if (!isRecord(value) || value.sites === undefined) return [];
+  const settlements = idSet(plan.settlements);
+  const seen = new Set<string>();
+  return arrayOf(ctx, "generated.sites", value.sites, (c, p, site) => {
+    if (!isRecord(site)) return reject(c, p, "must be an object");
+    if (typeof site.settlement !== "string" || !settlements.has(site.settlement)) {
+      return reject(c, `${p}.settlement`, "must name a plan settlement");
+    }
+    const center = requirePoint(c, `${p}.center`, site.center);
+    const coreRadius = optionalPositive(c, `${p}.coreRadius`, site.coreRadius);
+    if (center === null) return null;
+    if (coreRadius === undefined) return reject(c, `${p}.coreRadius`, "must be a positive number");
+    if (!isNonNegativeInteger(site.dwellings)) return reject(c, `${p}.dwellings`, "must be a non-negative integer");
+    if (seen.has(site.settlement)) return reject(c, `${p}.settlement`, `repeats settlement "${site.settlement}"`);
+    const score = site.score === undefined ? null : requireNumber(c, `${p}.score`, site.score, 0, 1);
+    // Field order matches what the stage writes, so a reloaded recipe compares equal to a re-run's.
+    const result: GeneratedSite = {
+      settlement: site.settlement, center, coreRadius, ...(score === null ? {} : { score }), dwellings: site.dwellings, program: [],
+    };
+    result.program = arrayOf(c, `${p}.program`, site.program ?? [], (c2, p2, line) => {
+      if (!isRecord(line)) return reject(c2, p2, "must be an object");
+      if (!isSemanticRole(line.role)) return reject(c2, `${p2}.role`, "must be a semantic role");
+      if (!isPositiveInteger(line.count)) return reject(c2, `${p2}.count`, "must be a positive integer");
+      if (!isOneOf(PROGRAM_SITINGS, line.siting)) return reject(c2, `${p2}.siting`, `must be one of ${PROGRAM_SITINGS.join(", ")}`);
+      if (!isOneOf(PROGRAM_SOURCES, line.source)) return reject(c2, `${p2}.source`, `must be one of ${PROGRAM_SOURCES.join(", ")}`);
+      const entry: ProgramLine = { role: line.role, count: line.count, siting: line.siting, source: line.source };
+      return entry;
+    });
+    seen.add(site.settlement);
+    return result;
+  });
+}
 
 function normalizeParcels(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedParcel[] {
   if (value === undefined) return [];

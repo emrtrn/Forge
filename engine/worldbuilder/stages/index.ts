@@ -2,7 +2,8 @@
 import type { WorldStage } from "../stage";
 import { planBlockoutStage } from "./planBlockout";
 import { roadsStage } from "./roads";
+import { settlementSitesStage } from "./settlementSites";
 
 export function createDefaultWorldStages(): WorldStage[] {
-  return [planBlockoutStage, roadsStage];
+  return [planBlockoutStage, roadsStage, settlementSitesStage];
 }

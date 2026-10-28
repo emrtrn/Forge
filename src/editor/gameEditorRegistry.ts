@@ -17,6 +17,7 @@
  */
 import type { Object3D } from "three";
 import type { Vec3 } from "@engine/scene/layout";
+import type { ProgramExtension } from "@engine/worldbuilder/program";
 import type { RagdollGroupDesc, RagdollPose } from "@engine/physics/ragdoll";
 import type {
   AssetSkeletonMontageDef,
@@ -273,6 +274,12 @@ export interface GameEditorCatalog {
    * data-table opener, so the feature is naturally opt-in.
    */
   readonly dataTables?: readonly EditorDataTableDef[];
+  /**
+   * The game's own settlement program rows for World Builder (a depot, a fuel
+   * station…), merged after the region profile's rows. Omitted for a game with
+   * no such needs.
+   */
+  readonly settlementProgram?: ProgramExtension;
 }
 
 let catalog: GameEditorCatalog | null = null;
@@ -280,6 +287,11 @@ let catalog: GameEditorCatalog | null = null;
 /** Injected once by the composition root before the editor renders. */
 export function setGameEditorCatalog(next: GameEditorCatalog): void {
   catalog = next;
+}
+
+/** The game's settlement program extensions; none when no catalog is registered (tests) or it has none. */
+export function gameProgramExtensions(): ProgramExtension[] {
+  return catalog?.settlementProgram ? [catalog.settlementProgram] : [];
 }
 
 /** The injected game catalog. Throws if the composition root never registered it. */

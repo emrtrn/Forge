@@ -25,6 +25,7 @@ import {
 import { createDefaultWorldStages } from "@engine/worldbuilder/stages";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { SaveRevision, type EditorSaveStep } from "./editorSaveCoordinator";
+import { gameProgramExtensions } from "./gameEditorRegistry";
 
 export interface WorldBuilderHost {
   scenePath(): string;
@@ -237,6 +238,7 @@ export class WorldBuilderSession {
       profile: this.profile,
       sampleHeight: (x, z) => this.host.sampleHeight(x, z),
       terrains: this.host.terrains(),
+      programExtensions: gameProgramExtensions(),
     });
   }
 

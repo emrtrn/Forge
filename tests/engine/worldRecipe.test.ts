@@ -48,6 +48,13 @@ function maximalRecipe(): Record<string, unknown> {
       },
     },
     generated: {
+      sites: [{
+        settlement: "village_01", center: [318, 152.5], coreRadius: 146, score: 0.812, dwellings: 74,
+        program: [
+          { role: "open.square", count: 1, siting: "center", source: "profile" },
+          { role: "building.transport.depot", count: 1, siting: "entrance", source: "recipe" },
+        ],
+      }],
       parcels: [{
         id: "village_01.p1", settlement: "village_01", polygon: [[300, 120], [320, 120], [320, 140], [300, 140]],
         frontage: "e1", landUse: "residential", role: "building.residential.detached", placement: "plc-house-1",
@@ -121,6 +128,11 @@ export function registerWorldRecipeTests(check: Check): void {
     plan.regions.push({ id: "far", kind: "plain", polygon: [[0, 0], [2_000_000, 0], [0, 1]] });
     plan.regions.push({ id: "low", kind: "plain", polygon: [[0, 0], [1, 0], [0, 1]], confidence: 2 });
     (input.generated as Record<string, any>).parcels.push({ id: "orphan", settlement: "gone", polygon: [[0, 0], [1, 0], [0, 1]] });
+    const sites = (input.generated as Record<string, any>).sites;
+    sites[0].program.push({ role: "building.x", count: 1, siting: "nowhere", source: "profile" });
+    sites.push({ settlement: "village_01", center: [0, 0], coreRadius: 20, dwellings: 1.5 });
+    sites.push({ settlement: "gone", center: [0, 0], coreRadius: 20, dwellings: 0 });
+    sites.push({ settlement: "village_01", center: [0, 0], coreRadius: 20, dwellings: 0, program: [] });
     const ownership = input.ownership as Record<string, any>;
     ownership.placements["has space"] = { stage: "props" };
     ownership.placements["plc-x"] = { stage: "Props" };
@@ -137,6 +149,10 @@ export function registerWorldRecipeTests(check: Check): void {
       "plan.roadGraph.edges[1].to: must name a road node",
       "plan.roadGraph.edges[2]: from and to must differ",
       "plan.roadGraph.edges[3].roadClass: must be one of highway, arterial, collector, local, track, path",
+      "generated.sites[0].program[2].siting: must be one of center, mainRoad, edge, downstream, entrance, any",
+      "generated.sites[1].dwellings: must be a non-negative integer",
+      "generated.sites[2].settlement: must name a plan settlement",
+      'generated.sites[3].settlement: repeats settlement "village_01"',
       "generated.parcels[1].settlement: must name a plan settlement",
       "ownership.placements.has space: key must be an id",
       "ownership.placements.plc-x: needs a stage token",
@@ -149,6 +165,8 @@ export function registerWorldRecipeTests(check: Check): void {
     assert.equal(recipe!.plan.regions[1]!.confidence, undefined);
     assert.deepEqual(recipe!.ownership.splines["road-e9"], { stage: "roads" });
     assert.deepEqual(Object.keys(recipe!.ownership.placements), ["plc-house-1"]);
+    assert.equal(recipe!.generated.sites.length, 1);
+    assert.equal(recipe!.generated.sites[0]!.program.length, 2);
   });
 
   check("world recipe: save rejects a recipe the normalizer had to correct, and bad level paths", () => {

@@ -9,10 +9,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { deriveSettlementProgram, type ProgramExtension } from "../../engine/worldbuilder/program";
-import { createWorldRecipe, type PlanSettlement, type WorldRecipe } from "../../engine/worldbuilder/recipe";
+import { createWorldRecipe, normalizeWorldRecipe, type PlanSettlement, type WorldRecipe } from "../../engine/worldbuilder/recipe";
 import { normalizeRegionProfile, type RegionProfile } from "../../engine/worldbuilder/regionProfile";
 import type { RouteContext } from "../../engine/worldbuilder/route";
 import { estimateCoreRadius, selectSite } from "../../engine/worldbuilder/siteSelection";
+import { applyPlacementGroupChanges, planStage, type StageInput } from "../../engine/worldbuilder/stage";
+import { settlementSitesStage, siteMarkerId } from "../../engine/worldbuilder/stages/settlementSites";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -157,4 +159,68 @@ export function registerWorldSettlementTests(check: Check): void {
     const again = selectSite(context(ridge), village(), 20, profile(), { preferredAspect: [1, 0] });
     assert.deepEqual(again, east, "deterministic");
   });
+
+  check("world settlement: the stage writes sites, programs and core markers; a re-run is empty after save + reload (WB-02)", () => {
+    const recipe = createWorldRecipe("sites_test", 2);
+    recipe.plan.settlements.push(village());
+    const first = planStage(settlementSitesStage, stageInput(recipe, () => 5));
+    assert.deepEqual(first.errors, []);
+    assert.deepEqual(first.added, [siteMarkerId("v1")]);
+    const site = first.recipeAfter.generated.sites[0]!;
+    assert.deepEqual({ ...site, program: site.program.length }, {
+      settlement: "v1", center: [0, 0], coreRadius: 146, score: site.score, dwellings: 74, program: 4,
+    });
+    const marker = first.groupChanges[0]!;
+    assert.equal(marker.assetId, "shape:cylinder");
+    assert.deepEqual(marker.after![0], {
+      id: "wb-site-v1", role: "marker.settlement.site", name: "v1 site", position: [0, 5.25, 0], scale: [584, 1, 584],
+    });
+
+    const layout = emptyLayout();
+    applyPlacementGroupChanges(layout, first.groupChanges, "after");
+    const saved = normalizeWorldRecipe(JSON.parse(JSON.stringify(first.recipeAfter)));
+    assert.deepEqual(saved.issues, []);
+    const again = planStage(settlementSitesStage, { ...stageInput(saved.recipe!, () => 5), layout: JSON.parse(JSON.stringify(layout)) });
+    assert.deepEqual({ added: again.added, updated: again.updated, removed: again.removed, kept: again.kept, groups: again.groupChanges.length }, { added: [], updated: [], removed: [], kept: [], groups: 0 });
+    assert.deepEqual(again.recipeAfter, again.recipeBefore);
+    assert.equal(again.empty, true);
+  });
+
+  check("world settlement: no valid site removes the site and its marker; a protected settlement keeps its site", () => {
+    const recipe = createWorldRecipe("sites_test", 2);
+    recipe.plan.settlements.push(village(), village({ id: "v2", center: [400, 0], protected: true }));
+    const first = planStage(settlementSitesStage, stageInput(recipe, () => 5));
+    const layout = emptyLayout();
+    applyPlacementGroupChanges(layout, first.groupChanges, "after");
+
+    // The ground turns into a wall: v1 has nowhere to go, protected v2 stays.
+    const wall = planStage(settlementSitesStage, { ...stageInput(first.recipeAfter, (x, z) => x + z), layout });
+    assert.deepEqual(wall.removed, [siteMarkerId("v1")]);
+    assert.deepEqual(wall.recipeAfter.generated.sites.map((entry) => [entry.settlement, entry.center]), [["v2", [400, 0]]]);
+    assert.ok(wall.warnings.includes(
+      "settlement v1: no buildable site within 150 m (100% steeper than the limit); it gets no site — move its centre or widen its radius",
+    ), wall.warnings.join(" | "));
+  });
+
+  check("world settlement: game program rows reach the stage and a slide is reported", () => {
+    const recipe = createWorldRecipe("sites_test", 2);
+    recipe.plan.settlements.push(village());
+    recipe.ownership.protectedRegions.push({ id: "shrine", kind: "manual", min: [-30, -30], max: [30, 30] });
+    const plan = planStage(settlementSitesStage, {
+      ...stageInput(recipe, () => 0),
+      programExtensions: [() => [{ role: "building.transport.depot", count: 1, siting: "entrance" }]],
+    });
+    const site = plan.recipeAfter.generated.sites[0]!;
+    assert.deepEqual(site.program.at(-1), { role: "building.transport.depot", count: 1, siting: "entrance", source: "game" });
+    assert.ok(plan.warnings.some((warning) => /^settlement v1: moved \d+ m from the planned centre \(the planned centre is protected\)$/.test(warning)),
+      plan.warnings.join(" | "));
+  });
+}
+
+function emptyLayout(): StageInput["layout"] {
+  return { schema: 1, name: "Sites", loadGroups: [], characters: [], instances: [] };
+}
+
+function stageInput(recipe: WorldRecipe, sampleHeight: StageInput["sampleHeight"]): StageInput {
+  return { recipe, layout: emptyLayout(), profile: profile(), sampleHeight, terrains: [] };
 }

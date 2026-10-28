@@ -27,6 +27,7 @@ import { findDuplicatePlacementId, isPlacementId, isSemanticRole } from "../scen
 import { normalizeTerrainSplines } from "../terrain/terrainSplineData";
 import type { TerrainSpline, WorldTerrainSpline } from "../terrain/terrainTypes";
 import type { WorldPoint } from "./normalize";
+import type { ProgramExtension } from "./program";
 import { normalizeWorldRecipe, type OwnershipEntry, type SplineOwnershipEntry, type WorldRecipe } from "./recipe";
 import type { RegionProfile } from "./regionProfile";
 
@@ -53,6 +54,8 @@ export interface StageInput {
   readonly sampleHeight: (x: number, z: number) => number | null;
   /** The level's loaded World Terrains, in level order. */
   readonly terrains: readonly StageTerrain[];
+  /** The game module's settlement program rows (L1 "game rows"), if it supplies any. */
+  readonly programExtensions?: readonly ProgramExtension[];
 }
 
 /** One placement a stage wants; `placement.id` is its stable identity. */
@@ -597,8 +600,8 @@ function nextRecipe(
   );
   if (!next.generation.stages.includes(stage.id)) next.generation.stages.push(stage.id);
   if (generated) {
-    for (const key of Object.keys(generated) as Array<keyof WorldRecipe["generated"]>) {
-      if (generated[key]) next.generated[key] = structuredClone(generated[key]!);
+    for (const [key, entries] of Object.entries(generated)) {
+      if (entries) (next.generated as Record<string, unknown>)[key] = structuredClone(entries);
     }
   }
   return next;

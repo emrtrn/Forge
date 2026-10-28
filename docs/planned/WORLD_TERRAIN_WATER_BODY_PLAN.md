@@ -30,8 +30,10 @@ shader ALU maliyeti var. Donanım p95 kabulü henüz yok.
 Son kaynakla `build:verify` 1.979 engine kontrolüyle geçti; doğal yüzey,
 köpük, kıyı, ıslak dip ve caustics tarayıcı regresyonları 5/5 geçti.
 [Uygulama ve kabul kaydı](../reports/LAKE_NATURAL_SURFACE_2026-10-28.md).
-Kod henüz commit/push edilmedi; referans fotoğrafla nihai masaüstü görsel/GPU
-kabulü yerel bilgisayarda ayrıca yapılmalı.
+Kod `5d8c8d49` ile commit edildi, main `e68c01b8` ile çakışmasız birleştirildi
+(`5d32fee8`). Birleşim sonrası `build:verify` 1.986 engine kontrolüyle ve beş
+su browser senaryosu 5/5 geçti. Main push sonucu görev çıktısında belirtilir.
+Referans fotoğrafla nihai masaüstü görsel/GPU kabulü yerelde ayrıca yapılmalı.
 
 ## Güncel iyileştirme — Su altı dip ıslaklığı — 2026-10-28
 

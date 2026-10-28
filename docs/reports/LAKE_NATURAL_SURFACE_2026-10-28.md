@@ -67,3 +67,11 @@ GL/konsol hatası yoktu, yüzey açık/düz karşılaştırmasında draw sayıs�
 Yakın/uzak görüntüler incelendi; önceki aşırı parlama ve düzenli kesişim deseni
 azaltıldı. Bu, fotoğrafla nihai masaüstü sanat kabulü veya donanım GPU zamanı
 değildir. Kaynak sahneler değiştirilmedi; kod henüz commit/push edilmedi.
+
+
+Birleşim kabulü: doğal yüzey kodu `5d8c8d49` ile commit edildi; main'in
+`e68c01b8` sürümüyle çakışmasız birleştirildi (`5d32fee8`). Birleşmiş kaynakta
+`build:verify` çıkış 0 ve **1.986 engine kontrolü**, beş su browser senaryosu
+**5/5 geçti (3,2 dakika)**. Önceki “henüz commit/push edilmedi” satırları ilk
+uygulama adımının tarihsel durumudur. Main push sonucu görev çıktısında
+doğrulanır; donanım GPU kabulü ve tekerlek etkileşimi bu teslimin dışındadır.

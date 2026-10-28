@@ -44,7 +44,7 @@ function layout(): RoomLayout {
 }
 
 function input(recipeValue: WorldRecipe, layoutValue: RoomLayout): StageInput {
-  return { recipe: recipeValue, layout: layoutValue, profile: null, sampleHeight: () => 2 };
+  return { recipe: recipeValue, layout: layoutValue, profile: null, sampleHeight: () => 2, terrains: [] };
 }
 
 /** Plan, apply "after" to a copy, and return the new level + recipe. */

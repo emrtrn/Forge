@@ -60,6 +60,8 @@ export interface RoadSpec {
   minTurnRadius: number;
   /** Terrain paint layer name hint; its physical material drives wheels (T27). */
   surfaceLayer?: string;
+  /** Asset id of the road surface mesh a road spline sweeps (with collision). */
+  meshAsset?: string;
 }
 
 /** Relative weights of the street patterns a generator mixes, plus block size. */
@@ -211,6 +213,10 @@ function normalizeRoads(ctx: Ctx, value: unknown): Partial<Record<RoadClass, Roa
     if (spec.surfaceLayer !== undefined) {
       if (typeof spec.surfaceLayer === "string" && spec.surfaceLayer.trim()) road.surfaceLayer = spec.surfaceLayer;
       else issue(c, `${p}.surfaceLayer`, "must be a non-empty layer name");
+    }
+    if (spec.meshAsset !== undefined) {
+      if (typeof spec.meshAsset === "string" && spec.meshAsset.trim()) road.meshAsset = spec.meshAsset;
+      else issue(c, `${p}.meshAsset`, "must be a non-empty asset id");
     }
     return road;
   });

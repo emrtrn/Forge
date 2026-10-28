@@ -109,8 +109,9 @@ export function registerRegionProfileTests(check: Check): void {
   });
 
   check("world builder: engine/worldbuilder modules stay dependency-free (no three.js)", () => {
-    // Only World Builder's own modules and the three-free scene data modules.
-    const allowedScene = new Set(["layout", "placementIdentity", "shapes"]);
+    // Only World Builder's own modules and the three-free scene / terrain spline data modules.
+    const allowedScene = new Set(["layout", "placementIdentity", "shapes", "landscape"]);
+    const allowedTerrain = new Set(["terrainSplineData", "terrainTypes"]);
     const files = readdirSync("engine/worldbuilder", { recursive: true, encoding: "utf8" })
       .filter((file) => file.endsWith(".ts"));
     assert.ok(files.length >= 6);
@@ -120,8 +121,11 @@ export function registerRegionProfileTests(check: Check): void {
       for (const [, specifier] of source.matchAll(/from\s+"([^"]+)"/g)) {
         const target = posix.normalize(posix.join(posix.dirname(path), specifier!));
         const scene = /^engine\/scene\/([A-Za-z]+)$/.exec(target)?.[1];
+        const terrain = /^engine\/terrain\/([A-Za-z]+)$/.exec(target)?.[1];
         assert.ok(
-          specifier!.startsWith(".") && (target.startsWith("engine/worldbuilder/") || (scene !== undefined && allowedScene.has(scene))),
+          specifier!.startsWith(".") && (target.startsWith("engine/worldbuilder/")
+            || (scene !== undefined && allowedScene.has(scene))
+            || (terrain !== undefined && allowedTerrain.has(terrain))),
           `${path} imports ${specifier}`,
         );
       }

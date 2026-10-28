@@ -225,6 +225,7 @@ export class WorldBuilderSession {
       layout,
       profile: this.profile,
       sampleHeight: (x, z) => this.host.sampleHeight(x, z),
+      terrains: [],
     });
   }
 

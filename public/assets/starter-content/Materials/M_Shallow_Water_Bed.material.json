@@ -6,12 +6,29 @@
   "baseColor": "#ffffff",
   "baseColorTexture": "t-shallow-water-bed-bc",
   "normalTexture": "t-shallow-water-bed-n",
+  "maskTexture": null,
   "roughnessTexture": "t-shallow-water-bed-r",
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
   "terrainMetersPerRepeat": 2.4,
-  "uvTiling": { "x": 1, "y": 1 },
-  "roughness": 0.9,
+  "flipY": true,
+  "roughness": 0.7,
   "metalness": 0,
+  "aoIntensity": 1,
   "opacity": 1,
   "alphaMode": "opaque",
-  "side": "front"
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "normalMotion": null,
+  "layerBlend": null
 }

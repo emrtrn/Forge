@@ -121,7 +121,7 @@ function nearby(lines: readonly StreetLine[], center: WorldPoint, reach: number)
 }
 
 /** Protected regions and other protected settlements, as shapes. */
-function protectedAreas(recipe: WorldRecipe, self: PlanSettlement): Array<(point: WorldPoint) => boolean> {
+export function protectedAreas(recipe: WorldRecipe, self: PlanSettlement): Array<(point: WorldPoint) => boolean> {
   const tests: Array<(point: WorldPoint) => boolean> = recipe.ownership.protectedRegions.map(({ min, max }) =>
     ([x, z]: WorldPoint) => x >= min[0] && x <= max[0] && z >= min[1] && z <= max[1]);
   for (const settlement of recipe.plan.settlements) {

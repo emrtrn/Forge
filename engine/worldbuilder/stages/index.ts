@@ -5,7 +5,8 @@ import { roadsStage } from "./roads";
 import { landUseStage } from "./landUse";
 import { parcelsStage } from "./parcels";
 import { settlementSitesStage } from "./settlementSites";
+import { streetsStage } from "./streets";
 
 export function createDefaultWorldStages(): WorldStage[] {
-  return [planBlockoutStage, roadsStage, settlementSitesStage, parcelsStage, landUseStage];
+  return [planBlockoutStage, roadsStage, settlementSitesStage, streetsStage, parcelsStage, landUseStage];
 }

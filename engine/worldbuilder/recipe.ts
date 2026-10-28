@@ -116,6 +116,18 @@ export interface ProgramEntry {
   siting?: ProgramSiting;
 }
 
+/** Where a settlement program line came from; later sources replace earlier ones for the same role. */
+export const PROGRAM_SOURCES = ["profile", "game", "recipe"] as const;
+export type ProgramSource = (typeof PROGRAM_SOURCES)[number];
+
+/** One resolved line of a settlement's program (L1). */
+export interface ProgramLine {
+  role: string;
+  count: number;
+  siting: ProgramSiting;
+  source: ProgramSource;
+}
+
 /** Changes to the program a settlement derives from population and its region profile. */
 export interface SettlementProgram {
   add?: ProgramEntry[];

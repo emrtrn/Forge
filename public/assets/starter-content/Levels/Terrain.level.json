@@ -197,6 +197,7 @@
         "wheelRippleWavelength": 0.6,
         "wheelRippleLifetime": 4,
         "wheelRippleInterval": 0.12,
+        "shoreWetnessWidth": 1,
         "foamScale": 2,
         "foamSpeed": 2,
         "causticsStrength": 1,

@@ -50,7 +50,7 @@
       "name": "Layer 6",
       "color": "#55493b",
       "material": "m-shallow-water-bed",
-      "physicalMaterial": "default"
+      "physicalMaterial": "mud"
     }
   ],
   "tiles": [

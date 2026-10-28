@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   BufferAttribute,
   BufferGeometry,
+  DirectionalLight,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -17,7 +18,7 @@ import {
   updateWorldTerrainObjectTiles,
   type LandscapeObject,
 } from "../../engine/render-three/landscape";
-import { terrainRendererOf, withTerrainCullingSuspended } from "../../engine/render-three/terrain/terrainRenderer";
+import { setTerrainSelfShadow, terrainRendererOf, withTerrainCullingSuspended } from "../../engine/render-three/terrain/terrainRenderer";
 import type { WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
 import { TerrainNodeHeightBounds, computeTerrainNormals } from "../../engine/terrain/terrainRenderData";
 import { createFlatTerrainTile, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
@@ -262,6 +263,46 @@ export function registerTerrainRendererTests(check: Check): void {
     // Pitched down, the nodes past the screen's top edge stay for a lake to reflect.
     const down = place(cx, 60, extentZ, cx, 0, extentZ - 40);
     assert.ok(down.some(([, z0]) => z0! < extentZ / 4), "far slopes above the view are kept");
+    disposeLandscapeObject(object);
+  });
+
+  check("terrain renderer: self-shadow keeps the nodes inside a shadow frustum the view does not see", () => {
+    const document = hillyTerrain(3, 2, 64);
+    const object = build(document);
+    const terrain = terrainOf(object);
+    const extentX = 3 * 64 * document.def.spacing;
+    const extentZ = 2 * 64 * document.def.spacing;
+    const [ox, oy, oz] = document.def.origin;
+    const [cx, cz] = [extentX / 2, extentZ / 2];
+    assert.equal(terrain.mesh.castShadow, true, "the page default casts");
+    assert.ok(terrain.mesh.customDepthMaterial, "the shadow pass draws the displaced surface");
+    const camera = new PerspectiveCamera(60, 16 / 9, 0.1, 20000);
+    camera.position.set(ox + cx, oy + 20, oz + cz);
+    camera.lookAt(ox + cx, oy + 20, oz + cz - 1);
+    camera.updateMatrixWorld(true);
+    // A sun straight overhead whose 40 m box sits behind the camera.
+    const sun = new DirectionalLight();
+    sun.castShadow = true;
+    sun.position.set(ox + cx, oy + 200, oz + cz + 60);
+    sun.target.position.set(ox + cx, oy, oz + cz + 60);
+    Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 400 });
+    sun.shadow.camera.updateProjectionMatrix();
+    const behindInBox = (rects: number[][]) => rects.some(([x0, z0, x1, z1]) =>
+      z0! >= cz && x0! < cx + 20 && x1! > cx - 20 && z0! < cz + 80 && z1! > cz + 40);
+    updateLandscapeLod(object, camera, [sun]);
+    assert.ok(behindInBox(nodeRects(object, extentX, extentZ)), "the shadow box's nodes stay");
+    updateLandscapeLod(object, camera);
+    assert.ok(!behindInBox(nodeRects(object, extentX, extentZ)), "without the light only the view's do");
+
+    setTerrainSelfShadow(false);
+    try {
+      assert.equal(terrain.mesh.castShadow, false);
+      updateLandscapeLod(object, camera, [sun]);
+      assert.ok(!behindInBox(nodeRects(object, extentX, extentZ)), "a terrain that casts nothing ignores shadow frusta");
+    } finally {
+      setTerrainSelfShadow(true);
+    }
+    assert.equal(terrain.mesh.castShadow, true);
     disposeLandscapeObject(object);
   });
 

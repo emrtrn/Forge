@@ -730,7 +730,7 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       (tam çözünürlüklü vertex değerleri nokta örnekleniyor, slot↔harita
       geçişinde ışık/boya kaymıyor). Delik yükseklikleri GPU'da komşudan
       dolduruluyor, delik üç materyalde de `discard` ediliyor.
-- [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
+- [x] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
       splat, `sampler2DArray` katmanlar *(tamam 2026-10-27, 7c2 notu)*, uzak tekrar kırma, view mode'lar,
       gölge alma, kalite profiline bağlı kendine gölge.
       *Node frustum culling tamam (2026-10-28):* `updateLod` kameranın dört
@@ -744,9 +744,23 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       Sphere Reflection Capture bake'i `withTerrainCullingSuspended`
       içinde kırpmasız çizer. Residency kırpmadan bağımsız (dönünce tile
       hazır). Kendine gölge açıldığında gölge kameralarının gördüğü
-      düğümler de korunmalı (aşağıdaki gölge işi). Test: `terrain renderer:
+      düğümler de korunur (aşağıda). Test: `terrain renderer:
       the view frustum culls…` (mirror uzatması kapatılınca düşüyor); kapsama
       değişmezleri kırpmasız seçimde denetlenir.
+      *Kendine gölge + uzak tekrar kırma tamam (2026-10-28):* yeni kalite
+      anahtarı `terrainSelfShadow` (ultra/high açık, medium/low kapalı;
+      runtime `applyQualitySettings`, editör `applyEditorQuality` →
+      `setTerrainSelfShadow`). Arazi `customDepthMaterial` olarak displaced
+      bir `MeshDepthMaterial` taşır; gölge pass'i `uTerrainLodCamera` ile
+      görünümün LOD'unu çizer. Gölge atarken kırpma, gölge haritası çizilen
+      ışıkların (kaskadlar, yoksa güneş) dört yan düzlemini görünümle
+      birleşim olarak kullanır; bu yüzden gölge fit'i artık terrain LOD'dan
+      önce koşar (runtime + editör). Uzak tekrar kırma: dokulu her katman 25 m'den
+      sonra 0,23 ölçekli, 0,6 rad döndürülmüş ikinci bir örneği (dallanma
+      içinde `textureGrad`, yalnız ağırlığı olan katmanda) 100 m'de yarı
+      yarıya karıştırır; normal haritası tek ölçekte kalır. Görsel
+      karşılaştırma kullanıcıya gösterildi. Testler: `terrain renderer:
+      self-shadow keeps…`, `terrain render:` shader metni.
       *İlk dilim tamam (2026-10-23, `engine/render-three/terrain/`):* tek slot
       (1×1 Landscape) için instanced patch + morph, R32F yükseklik (`texelFetch`,
       morph ara noktalarında elle bilineer — float filtre eklentisi gerekmiyor),
@@ -803,7 +817,7 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       `tests/smoke/terrain-multitile.spec.ts` (3×2 + delik, gökyüzüsüz fikstür;
       editör görüntü + boş kare kontrolü, seçim/F/uyarı/Save, Play'de pawn
       arazi yüksekliğinde duruyor: 5,70 m'ye karşı 5,698 m).
-      **Açık:** uzak tekrar kırma ve kendine gölge *(frustum culling 2026-10-28'de tamam)*
+      *(Frustum culling, uzak tekrar kırma ve kendine gölge 2026-10-28'de tamam.)*
       (legacy de gölge düşürmüyor; parite için kapalı), tile akışının Faz 4
       alt sistemine bağlanması (şimdilik bütün tile'lar CPU'da yüklü).
       **Dirty-rect tamam (2026-10-23):** slot dokuları ve global haritalar

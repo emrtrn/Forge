@@ -154,6 +154,8 @@ export interface TerrainMaterials {
   material: MeshStandardMaterial;
   normalMaterial: MeshNormalMaterial;
   depthMaterial: MeshDepthMaterial;
+  /** Displaced depth for the terrain's own shadow maps (`customDepthMaterial`, three's default packing). */
+  shadowDepthMaterial: MeshDepthMaterial;
   uniforms: TerrainUniforms;
   /** Texture units the lit material's fragment stage takes for itself ({@link terrainLitFragmentSamplers}). */
   litFragmentSamplers: number;
@@ -320,6 +322,13 @@ uniform float uLayerRoughnessInAlpha[${TERRAIN_RENDER_LAYERS}];
 float forgeLayerRoughness = 1.0;
 `;
 
+/** View distance (m) where the far tiling break starts, and where it is full. */
+export const TERRAIN_FAR_TILING_START = 25;
+export const TERRAIN_FAR_TILING_END = 100;
+/** The far copy's UV scale and rotation (radians) against the layer's own. */
+export const TERRAIN_FAR_TILING_SCALE = 0.23;
+const TERRAIN_FAR_TILING_ANGLE = 0.6;
+
 // The Landscape look: weighted layer colours/textures, or a debug view.
 const fragmentColor = (textured: boolean, normalMapped = false): string => /* glsl */ `
 #include <color_fragment>
@@ -336,9 +345,22 @@ const fragmentColor = (textured: boolean, normalMapped = false): string => /* gl
   vec3 forgeColor;
   if (uTerrainView < 0.5) {
     vec2 forgeP = vTerrainLocal;
+    ${textured ? `// Far tiling break: past ${TERRAIN_FAR_TILING_START} m each painted layer also reads a
+    // rotated ${TERRAIN_FAR_TILING_SCALE}× copy and averages the two, whose periods share no
+    // multiple, so the grid of repeats fades out. Gradients are taken here,
+    // outside the per-layer branch, for textureGrad.
+    float forgeFarT = smoothstep(${TERRAIN_FAR_TILING_START.toFixed(1)}, ${TERRAIN_FAR_TILING_END.toFixed(1)}, length(vViewPosition));
+    vec2 forgeFarP = mat2(${Math.cos(TERRAIN_FAR_TILING_ANGLE).toFixed(6)}, ${Math.sin(TERRAIN_FAR_TILING_ANGLE).toFixed(6)}, ${(-Math.sin(TERRAIN_FAR_TILING_ANGLE)).toFixed(6)}, ${Math.cos(TERRAIN_FAR_TILING_ANGLE).toFixed(6)}) * forgeP * ${TERRAIN_FAR_TILING_SCALE.toFixed(2)};
+    vec2 forgeFarDx = dFdx(forgeFarP);
+    vec2 forgeFarDy = dFdy(forgeFarP);` : ""}
     ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec4 forgeS${i} = ${textured
       ? `uLayerTexIndex[${i}] >= 0.0 ? texture(uLayerTexArray, vec3(forgeP * uLayerScale[${i}], uLayerTexIndex[${i}])) : vec4(uLayerColors[${i}], 1.0)`
-      : `vec4(uLayerColors[${i}], 1.0)`};
+      : `vec4(uLayerColors[${i}], 1.0)`};${textured ? `
+    if (forgeFarT > 0.0 && uLayerTexIndex[${i}] >= 0.0 && ${i < 4 ? `forgeW0[${i}]` : `forgeW1[${i - 4}]`} > 0.001) {
+      vec4 forgeFar${i} = textureGrad(uLayerTexArray, vec3(forgeFarP * uLayerScale[${i}], uLayerTexIndex[${i}]),
+        forgeFarDx * uLayerScale[${i}], forgeFarDy * uLayerScale[${i}]);
+      forgeS${i} = mix(forgeS${i}, 0.5 * (forgeS${i} + forgeFar${i}), forgeFarT);
+    }` : ""}
     vec3 forgeC${i} = forgeS${i}.rgb;
     float forgeR${i} = uLayerRoughness[${i}] * mix(1.0, forgeS${i}.a, uLayerRoughnessInAlpha[${i}]);
     // Packed wet soil has no layer micro-normal: very smooth texels otherwise
@@ -530,5 +552,10 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   depthMaterial.blending = NoBlending;
   patch(depthMaterial, uniforms, "forge-terrain-cdlod-depth", injectFragmentBase);
 
-  return { material, normalMaterial, depthMaterial, uniforms, litFragmentSamplers, layerArray, normalArray: normals.texture };
+  // The shadow pass morphs to the view camera's LOD (`uTerrainLodCamera`), so
+  // the caster is the surface the view draws.
+  const shadowDepthMaterial = new MeshDepthMaterial();
+  patch(shadowDepthMaterial, uniforms, "forge-terrain-cdlod-shadow", injectFragmentBase);
+
+  return { material, normalMaterial, depthMaterial, shadowDepthMaterial, uniforms, litFragmentSamplers, layerArray, normalArray: normals.texture };
 }

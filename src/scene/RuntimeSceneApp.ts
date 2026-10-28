@@ -29,7 +29,12 @@ import { hlodCellPlacements, hlodCellSourceHash, type HlodIndex } from "@engine/
 import { fetchHlodIndex, HlodProxies, loadHlodGeometry } from "./hlodProxies";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
-import { setTerrainTrackDetailLevels, terrainRendererOf, terrainTrackDetailStats } from "@engine/render-three/terrain/terrainRenderer";
+import {
+  setTerrainSelfShadow,
+  setTerrainTrackDetailLevels,
+  terrainRendererOf,
+  terrainTrackDetailStats,
+} from "@engine/render-three/terrain/terrainRenderer";
 import { setTerrainWaterQuality } from "@engine/render-three/terrain/terrainWater";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, Sphere, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import {
@@ -1807,8 +1812,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.qualitySettings.foliageCullDistanceScale,
       );
       this.perfRegion(FRAME_REGION_FOLIAGE, mark);
+      // Shadow frusta first: the terrain keeps the nodes its own shadow casts from.
+      this.updateFollowShadow();
       mark = this.perfMark();
-      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera);
+      const shadowLights = this.terrainShadowLights();
+      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera, shadowLights);
       this.perfRegion(FRAME_REGION_TERRAIN, mark);
       mark = this.perfMark();
       // An absolute clock rather than a delta, so it gets a clock that has been
@@ -1824,7 +1832,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // step it belongs to. Tag 0 stays reserved for ordinary frames, so the
       // rolling `gpu` readout is never fed a deliberately crippled frame.
       this.gpuSweepSession.beginFrame();
-      this.updateFollowShadow();
       this.staticDetailCulling?.update(this.camera.position, this.qualitySettings.foliageCullDistanceScale);
       this.hlodProxies?.update(this.camera.position.x, this.camera.position.z, this.camera.far, (key) => this.liveStaticCells.has(key));
       // Simulation time, not real time: the frame is still drawn while the world
@@ -2236,6 +2243,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyRuntimeShadowQuality();
     this.vfxCommands()?.setGlobalDensity(settings.particleDensity);
     setTerrainTrackDetailLevels(settings.terrainTrackDetailLevels);
+    setTerrainSelfShadow(settings.terrainSelfShadow);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     this.applyRuntimePostProcess();
   }
@@ -6373,6 +6381,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * camera (`FOLLOW_SHADOW_HALF_EXTENT × shadowDistanceScale`, texel-snapped),
    * and every other level keeps the bounds fit ({@link fitSunShadowToScene}).
    */
+  /** The lights whose shadow maps are drawn this frame: the cascades, else the sun. */
+  private terrainShadowLights(): readonly DirectionalLight[] {
+    if (!this.renderer.shadowMap.enabled) return [];
+    if (this.sunCascades?.isActive) return this.sunCascades.cascadeLights;
+    return this.sun?.castShadow ? [this.sun] : [];
+  }
+
   private updateFollowShadow(): void {
     const sun = this.sun;
     if (!sun?.castShadow || !this.renderer.shadowMap.enabled) {

@@ -25,6 +25,7 @@ import {
   Vector2,
   Vector3,
   type Camera,
+  type DirectionalLight,
   type Intersection,
   type Material,
   type MagnificationTextureFilter,
@@ -119,6 +120,16 @@ export const DEFAULT_TRACK_DETAIL_LEVELS = 2;
 /** Renderers alive on this page, for the page-wide quality hook. */
 const liveRenderers = new Set<TerrainRenderer>();
 let pageTrackDetailLevels = DEFAULT_TRACK_DETAIL_LEVELS;
+let pageSelfShadow = true;
+
+/**
+ * Quality hook (`QualitySettings.terrainSelfShadow`): whether every live terrain
+ * renderer, and every one created later on this page, casts shadows onto itself.
+ */
+export function setTerrainSelfShadow(enabled: boolean): void {
+  pageSelfShadow = enabled;
+  for (const renderer of liveRenderers) renderer.setSelfShadow(enabled);
+}
 
 /**
  * Quality hook (`QualitySettings.terrainTrackDetailLevels`): detail levels for
@@ -326,8 +337,11 @@ export class TerrainRenderer {
   /** Tiles whose slot holds their current data. */
   private readonly uploaded = new Set<string>();
   private readonly lastCamera = new Vector3(Number.NaN, Number.NaN, Number.NaN);
-  /** The view camera's four side planes in selector space; null until the first `updateLod`. */
-  private cullPlanes: Plane[] | null = null;
+  /**
+   * Side planes in selector space: the view camera's, then each shadow-casting
+   * light's (while the terrain casts shadows); null until the first `updateLod`.
+   */
+  private cullPlanes: Plane[][] | null = null;
   private readonly cullFrustum = new Frustum();
   private readonly cullMatrix = new Matrix4();
   private readonly cameraScratch = new Vector3();
@@ -412,7 +426,8 @@ export class TerrainRenderer {
     this.mesh = new Mesh(createPatchGeometry(TERRAIN_PATCH_QUADS, Math.min(leaves, 1024)), this.materials.material);
     this.mesh.name = MESH_NAME;
     this.mesh.receiveShadow = true;
-    this.mesh.castShadow = false;
+    this.mesh.castShadow = pageSelfShadow;
+    this.mesh.customDepthMaterial = this.materials.shadowDepthMaterial;
     this.mesh.userData.forgeTerrain = this;
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
     this.mesh.onBeforeRender = (renderer, scene, camera) => {
@@ -461,6 +476,13 @@ export class TerrainRenderer {
     return this.detailNodes;
   }
 
+  /** Quality hook: cast shadows onto itself; re-selects on the next update (shadow frusta join the cull). */
+  setSelfShadow(enabled: boolean): void {
+    if (this.mesh.castShadow === enabled) return;
+    this.mesh.castShadow = enabled;
+    this.selectionDirty = true;
+  }
+
   /** Re-selects now at the last camera with no frustum cull ({@link withTerrainCullingSuspended}). */
   selectUnculled(): void {
     if (Number.isFinite(this.lastCamera.x)) this.select(this.lastCamera.clone());
@@ -499,60 +521,80 @@ export class TerrainRenderer {
     this.selectionDirty = true;
   }
 
-  /** Re-selects the quadtree and streams tile slots for `camera`; call once per frame before rendering. */
-  updateLod(camera: Camera): void {
+  /**
+   * Re-selects the quadtree and streams tile slots for `camera`; call once per
+   * frame before rendering, after `shadowLights`' shadow frusta are fitted for
+   * the frame. While the terrain casts shadows, nodes inside those frusta stay
+   * selected too, so a ridge off screen still shades the valley in view.
+   */
+  updateLod(camera: Camera, shadowLights: readonly DirectionalLight[] = []): void {
     this.mesh.updateWorldMatrix(true, false);
     const local = this.mesh.worldToLocal(camera.getWorldPosition(this.cameraScratch)).sub(this.origin);
     const residencyChanged = this.allResident ? false : this.updateResidency(local);
     const threshold = this.selector.settings.leafSize * 0.01;
-    const viewChanged = this.updateCullPlanes(camera, threshold);
+    const viewChanged = this.updateCullPlanes(camera, this.mesh.castShadow ? shadowLights : [], threshold);
     if (!residencyChanged && !viewChanged && !this.selectionDirty && this.deformationRevision === this.deformation.revision
       && local.distanceToSquared(this.lastCamera) < threshold * threshold) return;
     this.select(local);
   }
 
   /**
-   * Refreshes {@link cullPlanes} from `camera`; true when a side plane turned
-   * past {@link CULL_RESELECT_COS} or moved past `threshold`. Only the four side
+   * Refreshes {@link cullPlanes}: the view camera's set, then one per shadow
+   * casting light. True when the set count changed or a side plane turned past
+   * {@link CULL_RESELECT_COS} or moved past `threshold`. Only the four side
    * planes cull: for a perspective camera together they already reject what is
-   * behind it, and the far plane is the scene's (selection ranges stop sooner).
+   * behind it, the far plane is the scene's (selection ranges stop sooner), and
+   * for a light's orthographic frustum they keep every caster along its rays.
    */
-  private updateCullPlanes(camera: Camera, threshold: number): boolean {
+  private updateCullPlanes(camera: Camera, shadowLights: readonly DirectionalLight[], threshold: number): boolean {
+    const sets: Plane[][] = [this.sidePlanes(camera)];
+    for (const light of shadowLights) {
+      if (!light.castShadow) continue;
+      light.updateWorldMatrix(true, false);
+      light.target.updateWorldMatrix(true, false);
+      light.shadow.updateMatrices(light);
+      sets.push(this.sidePlanes(light.shadow.camera));
+    }
+    const last = this.cullPlanes;
+    let changed = !last || last.length !== sets.length;
+    for (let set = 0; set < sets.length && !changed; set += 1) {
+      for (let i = 0; i < 4 && !changed; i += 1) {
+        const plane = sets[set]![i]!, previous = last![set]![i]!;
+        changed = plane.normal.dot(previous.normal) < CULL_RESELECT_COS
+          || Math.abs(plane.constant - previous.constant) > threshold;
+      }
+    }
+    if (changed) this.cullPlanes = sets;
+    return changed;
+  }
+
+  /** `camera`'s four side planes in selector space. */
+  private sidePlanes(camera: Camera): Plane[] {
     // Selector space → clip: projection · view · terrain world · origin offset.
     this.cullMatrix.makeTranslation(this.origin.x, this.origin.y, this.origin.z)
       .premultiply(this.mesh.matrixWorld)
       .premultiply(camera.matrixWorldInverse)
       .premultiply(camera.projectionMatrix);
     const planes = this.cullFrustum.setFromProjectionMatrix(this.cullMatrix, camera.coordinateSystem, camera.reversedDepth).planes;
-    const last = this.cullPlanes;
-    let changed = !last;
-    for (let i = 0; i < 4 && !changed; i += 1) {
-      changed = planes[i]!.normal.dot(last![i]!.normal) < CULL_RESELECT_COS
-        || Math.abs(planes[i]!.constant - last![i]!.constant) > threshold;
-    }
-    if (changed) this.cullPlanes = planes.slice(0, 4).map((plane) => plane.clone());
-    return changed;
+    return planes.slice(0, 4).map((plane) => plane.clone());
   }
 
   /**
-   * Frustum test for one quadtree box, or null to keep every node. The box's
-   * height span is widened to the mirror of the terrain's whole height range so
-   * a planar reflection about any level inside it (a lake) keeps the slopes it
-   * reflects from above the screen; a box drops only past a padded side plane.
+   * Frustum test for one quadtree box, or undefined to keep every node. A box
+   * stays when it is inside the view set or any shadow set, dropping only past
+   * a padded side plane. In the view test the box's height span is widened to
+   * the mirror of the terrain's whole height range, so a planar reflection about
+   * any level inside it (a lake) keeps the slopes it reflects from above the
+   * screen.
    */
   private cullVisibility(cameraLocal: Vector3): ((box: TerrainLodBox) => boolean) | undefined {
-    const planes = cullingSuspended > 0 ? null : this.cullPlanes;
-    if (!planes) return undefined;
+    const sets = cullingSuspended > 0 ? null : this.cullPlanes;
+    if (!sets) return undefined;
     const range = this.bounds.range();
     const mirrorMin = 2 * range.min - range.max;
     const mirrorMax = 2 * range.max - range.min;
     const pad = this.selector.settings.leafSize * 0.01;
-    return (box) => {
-      const minY = Math.min(box.minY, mirrorMin);
-      const maxY = Math.max(box.maxY, mirrorMax);
-      const dx = Math.max(box.minX - cameraLocal.x, 0, cameraLocal.x - box.maxX);
-      const dz = Math.max(box.minZ - cameraLocal.z, 0, cameraLocal.z - box.maxZ);
-      const slack = pad + CULL_ANGULAR_PAD * Math.hypot(dx, dz);
+    const inside = (planes: readonly Plane[], box: TerrainLodBox, minY: number, maxY: number, slack: number): boolean => {
       for (const plane of planes) {
         const { x, y, z } = plane.normal;
         // The box corner furthest along the plane normal.
@@ -561,6 +603,16 @@ export class TerrainRenderer {
         if (distance < -slack) return false;
       }
       return true;
+    };
+    return (box) => {
+      const dx = Math.max(box.minX - cameraLocal.x, 0, cameraLocal.x - box.maxX);
+      const dz = Math.max(box.minZ - cameraLocal.z, 0, cameraLocal.z - box.maxZ);
+      const slack = pad + CULL_ANGULAR_PAD * Math.hypot(dx, dz);
+      if (inside(sets[0]!, box, Math.min(box.minY, mirrorMin), Math.max(box.maxY, mirrorMax), slack)) return true;
+      for (let set = 1; set < sets.length; set += 1) {
+        if (inside(sets[set]!, box, box.minY, box.maxY, slack)) return true;
+      }
+      return false;
     };
   }
 
@@ -659,6 +711,7 @@ export class TerrainRenderer {
     this.materials.material.dispose();
     this.materials.normalMaterial.dispose();
     this.materials.depthMaterial.dispose();
+    this.materials.shadowDepthMaterial.dispose();
     this.materials.layerArray?.dispose();
     this.materials.normalArray?.dispose();
     for (const texture of [

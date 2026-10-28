@@ -90,6 +90,7 @@ import {
   Vector3,
 } from "three";
 import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
+import { setTerrainSelfShadow } from "@engine/render-three/terrain/terrainRenderer";
 import { sunCascadeDistance } from "@engine/world/sunCascades";
 import {
   applyQualityToPostProcess,
@@ -1972,9 +1973,13 @@ export class SceneApp {
         this.worldTerrainCollisionWiresDirty = false;
         this.updateCollisionBoxes();
       }
-      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera());
-      advanceForgeMaterialAnimations(now / 1000);
+      // Shadow frusta first: the terrain keeps the nodes its own shadow casts from.
       this.updateSunCascades();
+      const shadowLights = !this.renderer.shadowMap.enabled ? []
+        : this.sunCascades?.isActive ? this.sunCascades.cascadeLights
+          : this.sun?.castShadow ? [this.sun] : [];
+      for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera(), shadowLights);
+      advanceForgeMaterialAnimations(now / 1000);
 
       // The sweep decides what this frame draws and tags the GPU query with the
       // step it belongs to; with the panel closed both calls are a null check.
@@ -3116,6 +3121,7 @@ export class SceneApp {
       invalidateMaterialsForShadowToggle(this.scene);
     }
     for (const record of this.lightObjects) this.applyShadowMapSize(record.light);
+    setTerrainSelfShadow(quality.terrainSelfShadow);
     this.fitSunShadowToScene();
     this.applyPostProcess();
   }

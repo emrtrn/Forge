@@ -315,8 +315,13 @@ export function registerTerrainRenderTests(check: Check): void {
         if (textured) {
           assert.ok(shader.fragmentShader.includes(`texture(uLayerTexArray, vec3(forgeP * uLayerScale[${layerCount - 1}], uLayerTexIndex[${layerCount - 1}]))`));
           assert.equal((shader.uniforms.uLayerTexArray!.value as { image: { depth: number } }).image.depth, layerCount);
+          // Far tiling break: a gradient-sampled rotated copy, only for a weighted layer past the start distance.
+          assert.match(shader.fragmentShader, /float forgeFarT = smoothstep\(25\.0, 100\.0, length\(vViewPosition\)\);/);
+          assert.ok(shader.fragmentShader.includes(`forgeFarT > 0.0 && uLayerTexIndex[${layerCount - 1}] >= 0.0`));
+          assert.ok(shader.fragmentShader.includes(`textureGrad(uLayerTexArray, vec3(forgeFarP * uLayerScale[${layerCount - 1}]`));
         } else {
           assert.ok(!shader.fragmentShader.includes("uLayerTexArray"));
+          assert.ok(!shader.fragmentShader.includes("forgeFar"), "untextured layers have nothing to break up");
           assert.ok(shader.fragmentShader.includes("vec4 forgeS0 = vec4(uLayerColors[0], 1.0);"));
         }
         terrain.dispose();

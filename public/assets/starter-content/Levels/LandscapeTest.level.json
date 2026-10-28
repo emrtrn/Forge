@@ -1894,6 +1894,33 @@
       "coordinateSpace": "world",
       "surfaceLevel": -38.7,
       "flowSpeed": 0.1,
+      "contactFoam": {
+        "enabled": false,
+        "shoreWidth": 0.6,
+        "scale": 0.8,
+        "speed": 0.3,
+        "obstacles": [
+          {
+            "id": "obstacle-1",
+            "kind": "ellipse",
+            "position": [
+              300.22,
+              -38.7,
+              -8.44
+            ],
+            "radii": [
+              1,
+              1
+            ],
+            "rotation": 0,
+            "halfHeight": 1,
+            "width": 0.3,
+            "strength": 0.8,
+            "wakeLength": 4
+          }
+        ]
+      },
+      "foamStamps": [],
       "reflectionMode": "environment",
       "reflectionQuality": "high"
     }
@@ -1921,9 +1948,22 @@
         -43.94528225259613
       ],
       "surfaceLevel": -5,
+      "geometryFoam": {
+        "enabled": true,
+        "width": 0.4,
+        "strength": 0.8,
+        "scale": 0.8,
+        "speed": 0.3,
+        "bake": {
+          "manifest": "assets/starter-content/Levels/LandscapeTest.foam/4d1726263d2633b0433a8de4cfb036d4702533f9674dc274ddef919c527067e5.foam.json",
+          "fingerprint": "aa3a11bbf6022f6cb0a6a755ea2e9396edff3f6f1c425420e1a0f4c90dcdbf8a"
+        }
+      },
       "name": "Lake 3",
       "hidden": false,
       "appearance": {
+        "shoreWetnessEnabled": true,
+        "foamEnabled": true,
         "causticsEnabled": true,
         "opacity": 0.35,
         "bedVisibility": 0.9,
@@ -1931,6 +1971,7 @@
         "normalScale": 2,
         "rippleSpeed": 0.15,
         "reflectionStrength": 0.45,
+        "foamWidth": 2,
         "causticsStrength": 1,
         "causticsScale": 0.7,
         "causticsSpeed": 1,

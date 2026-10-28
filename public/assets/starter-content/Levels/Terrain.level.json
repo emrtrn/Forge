@@ -128,6 +128,24 @@
         102.17214733788103
       ],
       "surfaceLevel": -1,
+      "geometryFoam": {
+        "enabled": true,
+        "width": 1.5,
+        "strength": 0.4,
+        "scale": 0.6,
+        "speed": 1,
+        "bake": {
+          "manifest": "assets/starter-content/Levels/Terrain.foam/62b56e85937632c5686e27e1ca6308801c62cc0f9db7df3f136a0551146faf16.foam.json",
+          "fingerprint": "721cd56f48bed0846f5c2831b1af284e2ffdca9b3c4148d0b03e196d87f2469a"
+        }
+      },
+      "contactFoam": {
+        "enabled": true,
+        "shoreWidth": 0.6,
+        "scale": 1,
+        "speed": 1,
+        "obstacles": []
+      },
       "name": "Lake 1",
       "appearance": {
         "surfaceWavesEnabled": true,

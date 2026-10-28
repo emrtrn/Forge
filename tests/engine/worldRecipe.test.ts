@@ -58,6 +58,9 @@ function maximalRecipe(): Record<string, unknown> {
       parcels: [{
         id: "village_01.p1", settlement: "village_01", polygon: [[300, 120], [320, 120], [320, 140], [300, 140]],
         frontage: "e1", landUse: "residential", role: "building.residential.detached", placement: "plc-house-1",
+      }, {
+        id: "village_01.p2", settlement: "village_01", polygon: [[320, 120], [340, 120], [340, 140], [320, 140]],
+        frontage: "e1", landUse: "residential", partOf: "village_01.p1",
       }],
     },
     generation: { preserveManualOverrides: false, stages: ["roads", "settlement"] },
@@ -153,7 +156,7 @@ export function registerWorldRecipeTests(check: Check): void {
       "generated.sites[1].dwellings: must be a non-negative integer",
       "generated.sites[2].settlement: must name a plan settlement",
       'generated.sites[3].settlement: repeats settlement "village_01"',
-      "generated.parcels[1].settlement: must name a plan settlement",
+      "generated.parcels[2].settlement: must name a plan settlement",
       "ownership.placements.has space: key must be an id",
       "ownership.placements.plc-x: needs a stage token",
       "ownership.splines.road-e9.edge: must name an existing element",

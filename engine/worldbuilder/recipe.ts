@@ -188,6 +188,8 @@ export interface GeneratedParcel {
   frontage?: string;
   landUse?: LandUse;
   role?: string;
+  /** The host parcel whose role this one is merged into (a lot of several parcels, L5). */
+  partOf?: string;
   /** The placement standing on it. */
   placement?: string;
 }
@@ -564,7 +566,8 @@ function normalizeParcels(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedP
   }
   const settlements = idSet(plan.settlements);
   const edges = idSet(plan.roadGraph.edges);
-  return uniqueEntries(ctx, "generated.parcels", value.parcels, (c, p, parcel) => {
+  const paths = new Map<GeneratedParcel, string>();
+  const parcels = uniqueEntries(ctx, "generated.parcels", value.parcels, (c, p, parcel) => {
     const id = requireId(c, p, parcel.id);
     const polygon = requirePolygon(c, `${p}.polygon`, parcel.polygon);
     if (id === null || polygon === null) return null;
@@ -582,12 +585,27 @@ function normalizeParcels(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedP
       if (isSemanticRole(parcel.role)) result.role = parcel.role;
       else issue(c, `${p}.role`, "must be a semantic role");
     }
+    if (parcel.partOf !== undefined) {
+      if (isPlacementId(parcel.partOf)) result.partOf = parcel.partOf;
+      else issue(c, `${p}.partOf`, "must be a parcel id");
+    }
     if (parcel.placement !== undefined) {
       if (isPlacementId(parcel.placement)) result.placement = parcel.placement;
       else issue(c, `${p}.placement`, "must be a placement id");
     }
+    paths.set(result, p);
     return result;
   });
+  const byId = new Map(parcels.map((parcel) => [parcel.id, parcel]));
+  for (const parcel of parcels) {
+    if (parcel.partOf === undefined) continue;
+    const host = byId.get(parcel.partOf);
+    if (!host || host === parcel || host.settlement !== parcel.settlement || host.partOf !== undefined) {
+      issue(ctx, `${paths.get(parcel)}.partOf`, "must name another, unmerged parcel of the same settlement");
+      delete parcel.partOf;
+    }
+  }
+  return parcels;
 }
 
 function normalizeGeneration(ctx: Ctx, value: unknown): WorldRecipe["generation"] {

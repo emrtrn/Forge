@@ -163,7 +163,7 @@ function plate(parcel: GeneratedParcel, input: StageInput): GeneratedPlacement {
 }
 
 /** A settlement's default seed: FNV-1a of its id mixed with the recipe seed. */
-function hashSeed(seed: number, id: string): number {
+export function hashSeed(seed: number, id: string): number {
   let hash = (2166136261 ^ seed) >>> 0;
   for (let index = 0; index < id.length; index += 1) {
     hash ^= id.charCodeAt(index);

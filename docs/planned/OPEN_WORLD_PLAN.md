@@ -2415,6 +2415,25 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       Nehir aktarımı kapatıldı; su/yol geometri streaming'i ve büyük dünya
       performans kabulü açık. Sonraki su dilimi W0-Lake tasarımıdır; ayrıntı
       ve kanıtlar Water Body alt planı §11.9'da.
+      **Yol streaming ölçümü + ilk iki dilim (2026-10-28, su dışı):**
+      4×4 km test dünyasında 8 × 4 km çarpışmalı `sm-road-asphalt` (genel
+      spline actor'ı, `segments`) yolsuza göre: açılış +0,6 s, JS heap
+      +110–125 MB (GC sonrası), kare başına render CPU +~2 ms; 1296 segment
+      mesh'i, 155 bin üçgen, 4,9 MB GPU geometrisi. Örneklemeli heap profili
+      kalıcı belleğin ~70 MB'ını fiziğin statik kayıtlarında (yüzey/engel
+      üçgen kayıtları, uzamsal indeks, primitive kopyaları) gösterdi.
+      *2a:* bir build'in segment parçaları materyal kopyasını paylaşır (grup
+      sahiplenir, `disposeSplineSharedMaterials`; 1296 → 8) ve eğri önbelleği
+      actor başına bir kez kurulur (açılış 2,1–2,3 s → 1,2–1,3 s).
+      *2b:* World Partition açık level'da `segments` + çarpışmalı deformMesh
+      üreteçlerinin çarpışması hücre başına trimesh olur
+      (`engine/scene/splineCollisionCells.ts`: segment orta noktasının
+      hücresi); hücre statikleriyle aynı kuyrukta eklenir/kaldırılır. `whole`
+      mod ve partition'sız level eskisi gibi tek gövde. Kabul:
+      `open-world.spec.ts` ikinci testi (açılışta yol hücresi yok, 2,5 m
+      yükseltilmiş yolda pawn güvertede; ekleme kapatılınca düşüyor).
+      Açık: render tarafı (segment mesh'lerinin hücre başına birleşmesi),
+      Landscape spline'ları (`def.splines`) ve su.
       **W1 Lake işlevleri tamam (2026-10-26):** Kullanıcı onaylı W0-Lake
       tasarımının ardından seed + sınırlı çalışma alanıyla mevcut çukuru
       doldurma; terrain üçgeninden gerçek kıyı/derinlik, adalar/bağlılık,

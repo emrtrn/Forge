@@ -139,6 +139,7 @@ import {
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 import { NAV_REACHABLE_BLOCKER_MARGIN, runAiQuery } from "../engine/ai/queryRunner";
+import { splineCollisionCells, splineSegmentCells, streamedSplineCollisionGeneratorIds } from "../engine/scene/splineCollisionCells";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import { SmartObjectReservationStore } from "../engine/ai/smartObjects";
@@ -24128,6 +24129,22 @@ check("segmented spline deform chunks share one material clone the generated gro
   assert.equal(disposed, 0);
   disposeSplineGeneratedGroup(built!.group!);
   assert.equal(disposed, 1, "the group frees its clone once");
+});
+
+check("spline collision cells: a segmented collidable road files each segment under its midpoint's cell", () => {
+  const road = createDefaultSplineActor();
+  road.id = "road";
+  road.position = [10, 0, 0];
+  road.spline.points = [0, 100, 200, 300].map((z, index) => ({ id: `p${index}`, position: [0, 0, z] as Vec3, pointType: "linear" as const }));
+  road.generators = [{ id: "surface", type: "deformMesh", meshAsset: "asphalt", collisionEnabled: true, geometryMode: "segments" }];
+  const grid = { cellSize: 128 };
+  // Midpoints at z = 50, 150, 250 (world x = 10): cells 0_0, 0_1, 0_1.
+  assert.deepEqual([...splineSegmentCells(road, grid)], [[0, "0_0"], [1, "0_1"], [2, "0_1"]]);
+  assert.deepEqual(streamedSplineCollisionGeneratorIds(road), ["surface"]);
+  const whole = { ...road, id: "whole", generators: [{ ...road.generators[0]!, geometryMode: "whole" as const }] };
+  const visual = { ...road, id: "visual", generators: [{ ...road.generators[0]!, collisionEnabled: false }] };
+  const cells = splineCollisionCells([road, whole, visual], grid);
+  assert.deepEqual([...cells.keys()], ["road"], "whole-geometry and render-only roads keep the eager path");
 });
 
 check("spline performance warnings fire only at the §19.4 thresholds (Faz 12)", () => {

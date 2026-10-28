@@ -303,6 +303,7 @@ export function registerTerrainRenderTests(check: Check): void {
         }));
         const terrain = new TerrainRenderer(source, { origin: new Vector3(), viewMode: "lit", activeLayer: 0, layers });
         const material = (terrain as unknown as { materials: { material: MeshBasicMaterial } }).materials.material;
+        assert.equal(material.defines?.FORGE_TERRAIN_WET_SHORES, 0, "inactive wet shore must compile out its sampler");
         const shader = compile(material, {} as WebGLRenderer);
         // 16 units (three's default when the renderer is unknown) keep the water path at any layer count.
         assert.equal(shader.defines?.FORGE_TERRAIN_WATER, 1, `${layerCount} layers, textured ${textured}`);

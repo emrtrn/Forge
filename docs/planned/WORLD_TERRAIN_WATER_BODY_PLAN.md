@@ -1,5 +1,32 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel birleştirme ve yayın kaydı — 2026-10-28
+
+Su çalışmaları `f48ff14d` commit'inde toplandı ve `origin/main`in `2a447d15`
+sürümüyle çakışmasız birleştirildi (`bed6ea15`). Yeni terrain self-shadow/far
+tiling, placement identity ve yol çarpışması streaming değişiklikleri korundu.
+Aşağıdaki ilk teslim bölümlerinin “yerel/henüz commit-push edilmedi” ifadeleri
+o adımların tarihsel durumudur; güncel yayın hazırlığı bu bölümde izlenir.
+
+Birleşim kabulü 16-unit GPU testinde kapalı ıslak kıyı sampler'ının aktif kaldığını
+buldu: toplam 17 sampler. `FORGE_TERRAIN_WET_SHORES` variant'ı artık bu yolun
+kodunu yalnız sahnede etkin wet-shore kaynağı varken derler. Varsayılan kapalı
+yolda 16 sampler ve dört Ultra CSM kademesi yeniden doğrulandı; wet-shore
+kaynaksız sahnelerde gereksiz sampler tutulmaz. Açık özellik için mevcut
+konservatif sampler bütçesi korunur; limit veya test beklentisi gevşetilmedi.
+
+Son birleşmiş kaynakla `build:verify` çıkış 0: TypeScript, **1.970 engine
+kontrolü**, production build, strict dist ve world-data geçti. Köpük/kıyı,
+dik kıyı, ıslak zemin ve caustics browser kabulü **4/4 geçti (2,1 dakika)**;
+16-unit/dört Ultra cascade regresyonu ayrıca **1/1 geçti**. İzole smoke
+projeleri kullanıldı; kaynak sahneler değiştirilmedi. Donanım GPU p95 ve gerçek
+D3D11 cihaz testi değildir. Gerçek bilgisayarda pull sonrası görsel/performance
+kontrolü yapılmalı. River/taş proxy'leri ve araç dalgaları hâlâ sonraki dilimlerdir.
+
+Yayın hedefi `main`; yayın işleminin sonucu görev çıktısında belirtilir. Bu kayıt
+remote CI sonucu değildir. Security scan çalıştırılmadı.
+
+
 ## Güncel uygulama — Islak kıyı zemini — 2026-10-28
 
 Kullanıcı ıslak zemin bandının uygulanmasını istedi. İlk kapsam Lake'e bağlı

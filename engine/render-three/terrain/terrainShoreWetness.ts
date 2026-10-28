@@ -76,6 +76,7 @@ uniform vec4 uShoreWetParams[8];
 float forgeShoreWetness() {
   if(uTerrainView>.5) return 0.;
   float wet=0.;
+  #if FORGE_TERRAIN_WET_SHORES > 0
   for(int i=0;i<8;i++) {
     if(i>=uShoreWetCount) break;
     vec4 bounds=uShoreWetBounds[i], p=uShoreWetParams[i];
@@ -89,6 +90,7 @@ float forgeShoreWetness() {
       wet=max(wet,edge*height*smoothstep(-.08,0.,above)*p.w);
     }
   }
+  #endif
   return wet;
 }
 float forgeShoreWet = 0.;

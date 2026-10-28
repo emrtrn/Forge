@@ -519,6 +519,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
   (material.defines ??= {}).FORGE_TERRAIN_CAUSTIC_BODIES = 0;
+  material.defines.FORGE_TERRAIN_WET_SHORES = 0;
   patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}${normalMapped ? "-n1" : ""}`, (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
       FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${FRAGMENT_MAIN}`);

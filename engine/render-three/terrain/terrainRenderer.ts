@@ -452,6 +452,13 @@ export class TerrainRenderer {
         defines.FORGE_TERRAIN_CAUSTIC_BODIES = bodies;
         this.materials.material.needsUpdate = true;
       }
+      // No wet shore in this scene: compile the texture lookup out entirely,
+      // so inactive effects do not consume a GPU texture unit.
+      const wetShore = (this.materials.uniforms.uShoreWetCount!.value as number) > 0 ? 1 : 0;
+      if (defines.FORGE_TERRAIN_WET_SHORES !== wetShore) {
+        defines.FORGE_TERRAIN_WET_SHORES = wetShore;
+        this.materials.material.needsUpdate = true;
+      }
       this.textureUpdates.flush(renderer);
       const planar = isPlanarReflectionCamera(camera) ? 1 : 0;
       this.materials.uniforms.uTerrainPlanarPass!.value = planar;

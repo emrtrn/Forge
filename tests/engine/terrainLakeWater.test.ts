@@ -19,6 +19,7 @@ export async function registerTerrainLakeWaterTests(check: (label: string, fn: (
     const initial = createLakeAppearance();
     assert.equal(initial.wheelRippleStrength, 3); assert.equal(initial.wheelRippleLifetime, 4);
     assert.equal(initial.reflectionMode, "sharedPlanar"); assert.equal(initial.foamEnabled, true);
+    assert.equal(initial.wheelWetTrailLength, 5); assert.equal(resolveLakeAppearance(lake).wheelWetTrailDrySeconds, 40, "older records get the wet trail defaults");
     const newLake = validateWaterBody({ ...lake, appearance: initial });
     assert.deepEqual(newLake.appearance, initial);
     initial.wheelRippleStrength = 6;

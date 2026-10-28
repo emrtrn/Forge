@@ -1043,6 +1043,8 @@ export interface LayoutLakeWaterBody {
     /** Vehicle-generated surface waves, independent of the natural surface normals. */
     wheelRipplesEnabled?: boolean; wheelRippleStrength?: number; wheelRippleSpeed?: number;
     wheelRippleWidth?: number; wheelRippleWavelength?: number; wheelRippleLifetime?: number; wheelRippleInterval?: number;
+    /** Wet tyre prints after leaving the water: length (m), first-print wetness (0..1), drying time (s). */
+    wheelWetTrailEnabled?: boolean; wheelWetTrailLength?: number; wheelWetTrailStrength?: number; wheelWetTrailDrySeconds?: number;
     shoreWetnessEnabled?: boolean; shoreWetnessWidth?: number; shoreWetnessStrength?: number;
     foamEnabled?: boolean; foamOpacity?: number; foamWidth?: number; foamScale?: number; foamSpeed?: number;
     causticsEnabled?: boolean; causticsStrength?: number; causticsScale?: number;

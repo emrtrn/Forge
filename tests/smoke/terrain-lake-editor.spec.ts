@@ -474,6 +474,32 @@ test("Lake Wheel Ripples controls tune visible waves and persist through undo Sa
   expect(await terrainHash()).toBe(before); expect(errors).toEqual([]);
 });
 
+test("Lake Wheel Wet Trail controls persist through undo, Save and Reload", async ({ page, request }) => {
+  test.setTimeout(240_000);
+  const { errors } = await setup(page, request, true);
+  await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "wheel-wet-trail");
+  const enabled = page.getByRole("checkbox", { name: "Wheel Wet Trail Enabled", exact: true });
+  await expect(enabled).toBeChecked();
+  await expect(page.locator('[data-lake-number="wheelWetTrailLength"]')).toHaveValue("5");
+  await expect(page.locator('[data-lake-number="wheelWetTrailDrySeconds"]')).toHaveAttribute("title", /saniye/);
+  const values = { wheelWetTrailLength: 2.5, wheelWetTrailStrength: .6, wheelWetTrailDrySeconds: 90 };
+  for (const [key, value] of Object.entries(values)) { await number(page, key, value); await ready(page); }
+  await page.locator("[data-lake-reset-wet-trail]").click(); await ready(page);
+  await expect(page.locator('[data-lake-number="wheelWetTrailLength"]')).toHaveValue("5");
+  await page.getByTestId("editor-undo").click(); await ready(page);
+  await expect(page.locator('[data-lake-number="wheelWetTrailLength"]')).toHaveValue("2.5");
+  await enabled.uncheck(); await ready(page);
+  await save(page);
+  expect(JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")).waterBodies[0].appearance)
+    .toMatchObject({ ...values, wheelWetTrailEnabled: false });
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "wheel-wet-trail");
+  for (const [key, value] of Object.entries(values)) await expect(page.locator(`[data-lake-number="${key}"]`)).toHaveValue(String(value));
+  await expect(page.getByRole("checkbox", { name: "Wheel Wet Trail Enabled", exact: true })).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
 // QA inventory: click/create/cancel; world level, four bounds and drag handles;
 // island/isolated basin + escape rejection; selection/flags/delete/undo;
 // real Save/Reload/Play and unchanged terrain; sculpt and retry in separate cases.

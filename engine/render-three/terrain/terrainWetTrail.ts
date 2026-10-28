@@ -1,11 +1,22 @@
 import type { DeformationDirtyRect } from "@engine/scene/deformationField";
+import { LAKE_WHEEL_WET_TRAIL_DEFAULTS } from "@engine/scene/waterBody";
 
-/** Ground (m) a tyre still wets after it leaves water; its print fades out along it. */
-export const TERRAIN_WET_TRAIL_LENGTH = 5;
-/** Seconds a freshly printed, fully wet cell takes to dry. */
-export const TERRAIN_WET_TRAIL_DRY_SECONDS = 40;
-/** Wetness of the first print (0..1). */
-export const TERRAIN_WET_TRAIL_STRENGTH = 1;
+/** How a water source wets the tyres that leave it. */
+export interface TerrainWetTrailSettings {
+  /** Ground (m) a tyre still wets after it leaves the water; its print fades out along it. */
+  readonly length: number;
+  /** Wetness of the first print (0..1); 0 prints nothing. */
+  readonly strength: number;
+  /** Seconds a freshly printed, fully wet cell takes to dry. */
+  readonly drySeconds: number;
+}
+
+/** A Lake's defaults; also what rut puddles, which have no settings of their own, use. */
+export const TERRAIN_WET_TRAIL_DEFAULTS: TerrainWetTrailSettings = {
+  length: LAKE_WHEEL_WET_TRAIL_DEFAULTS.wheelWetTrailLength,
+  strength: LAKE_WHEEL_WET_TRAIL_DEFAULTS.wheelWetTrailStrength,
+  drySeconds: LAKE_WHEEL_WET_TRAIL_DEFAULTS.wheelWetTrailDrySeconds,
+};
 /**
  * Prints dry in steps this long (s): every step re-uploads the prints' bounds,
  * so drying costs one bounded upload a second rather than one per level.
@@ -24,16 +35,20 @@ export interface TerrainWetTrailContact {
   width: number;
   /** The contact stands in water (a Lake, a rut puddle): the tyre is soaked again. */
   inWater: boolean;
+  /** That water's trail; the tyre keeps it until it is soaked again (default {@link TERRAIN_WET_TRAIL_DEFAULTS}). */
+  settings?: TerrainWetTrailSettings | undefined;
 }
 
-interface Tyre { x: number; z: number; water: number; unseen: number }
+interface Tyre { x: number; z: number; water: number; unseen: number; settings: TerrainWetTrailSettings }
+/** A printed cell: its world cell, wetness (0..255, fractional while drying) and drying rate (per second). */
+interface Print { cx: number; cz: number; level: number; rate: number }
 
 const mod = (value: number, size: number): number => ((value % size) + size) % size;
 
 /**
- * Wet tyre prints, presentation only: a tyre leaving water carries it for
- * {@link TERRAIN_WET_TRAIL_LENGTH} m and prints a band that fades along that
- * distance, then dries over {@link TERRAIN_WET_TRAIL_DRY_SECONDS}. Storage
+ * Wet tyre prints, presentation only: a tyre leaving water carries it for its
+ * source's trail length and prints a band that fades along that distance, each
+ * cell then drying over the source's drying time. Storage
  * matches the deformation field's toroidal window — world cell (x, z) at
  * mod(z, N) * N + mod(x, N) — so the track texture carries it in a spare
  * channel. Never touches soil, physics or save state.
@@ -41,12 +56,11 @@ const mod = (value: number, size: number): number => ((value % size) + size) % s
 export class TerrainWetTrail {
   /** Wetness per cell, 0..255; an upload view, callers must not mutate it. */
   readonly wet: Uint8Array;
-  private readonly active = new Map<number, { cx: number; cz: number }>();
+  private readonly active = new Map<number, Print>();
   private readonly tyres = new Map<string, Tyre>();
   private minX = 0;
   private minZ = 0;
   private drySeconds = 0;
-  private dryRemainder = 0;
   private dirtyMinX = Infinity;
   private dirtyMinZ = Infinity;
   private dirtyMaxX = -Infinity;
@@ -78,18 +92,13 @@ export class TerrainWetTrail {
     if (!Number.isFinite(dt) || dt <= 0) return;
     this.drySeconds += dt;
     if (this.drySeconds >= TERRAIN_WET_TRAIL_DRY_STEP_SECONDS) {
-      this.dryRemainder += this.drySeconds * 255 / TERRAIN_WET_TRAIL_DRY_SECONDS;
-      this.drySeconds = 0;
-    }
-    const dry = Math.floor(this.dryRemainder);
-    if (dry > 0) {
-      this.dryRemainder -= dry;
-      for (const [index, cell] of this.active) {
-        const value = this.wet[index]! - dry;
-        this.wet[index] = Math.max(0, value);
-        if (value <= 0) this.active.delete(index);
-        this.markDirty(cell.cx, cell.cz);
+      for (const [index, print] of this.active) {
+        print.level -= print.rate * this.drySeconds;
+        this.wet[index] = Math.max(0, Math.round(print.level));
+        if (this.wet[index] === 0) this.active.delete(index);
+        this.markDirty(print.cx, print.cz);
       }
+      this.drySeconds = 0;
     }
     const seen = new Set<string>();
     for (const contact of contacts) {
@@ -97,12 +106,13 @@ export class TerrainWetTrail {
       seen.add(contact.id);
       const tyre = this.tyres.get(contact.id);
       if (contact.inWater) {
-        this.tyres.set(contact.id, { x: contact.x, z: contact.z, water: 1, unseen: 0 });
+        this.tyres.set(contact.id, { x: contact.x, z: contact.z, water: 1, unseen: 0, settings: contact.settings ?? TERRAIN_WET_TRAIL_DEFAULTS });
         continue;
       }
       if (!tyre) continue;
       const distance = Math.hypot(contact.x - tyre.x, contact.z - tyre.z);
-      const water = distance > TELEPORT_DISTANCE ? tyre.water : Math.max(0, tyre.water - distance / TERRAIN_WET_TRAIL_LENGTH);
+      const length = Math.max(1e-3, tyre.settings.length);
+      const water = distance > TELEPORT_DISTANCE ? tyre.water : Math.max(0, tyre.water - distance / length);
       if (distance <= TELEPORT_DISTANCE && distance > 0) this.print(tyre, contact, tyre.water, water);
       if (water <= 0) {
         this.tyres.delete(contact.id);
@@ -146,7 +156,10 @@ export class TerrainWetTrail {
    * tyre-wide band at full strength; the square root keeps the print strong
    * until its last stretch rather than fading evenly.
    */
-  private print(start: { x: number; z: number }, end: TerrainWetTrailContact, from: number, to: number): void {
+  private print(start: Tyre, end: TerrainWetTrailContact, from: number, to: number): void {
+    const { strength, drySeconds } = start.settings;
+    if (!(strength > 0)) return;
+    const rate = 255 / Math.max(1e-3, drySeconds);
     const size = this.cellSize;
     const radius = end.width / 2 + size;
     const length = Math.hypot(end.x - start.x, end.z - start.z);
@@ -155,7 +168,7 @@ export class TerrainWetTrail {
       const t = step / steps;
       const x = start.x + (end.x - start.x) * t;
       const z = start.z + (end.z - start.z) * t;
-      const value = Math.round(255 * TERRAIN_WET_TRAIL_STRENGTH * Math.sqrt(from + (to - from) * t));
+      const value = Math.round(255 * Math.min(1, strength) * Math.sqrt(from + (to - from) * t));
       if (value <= 0) continue;
       const x0 = Math.floor((x - radius) / size), x1 = Math.floor((x + radius) / size);
       const z0 = Math.floor((z - radius) / size), z1 = Math.floor((z + radius) / size);
@@ -164,7 +177,7 @@ export class TerrainWetTrail {
         const index = mod(cz, this.cellsPerSide) * this.cellsPerSide + mod(cx, this.cellsPerSide);
         if (this.wet[index]! >= value) continue;
         this.wet[index] = value;
-        this.active.set(index, { cx, cz });
+        this.active.set(index, { cx, cz, level: value, rate });
         this.markDirty(cx, cz);
       }
     }

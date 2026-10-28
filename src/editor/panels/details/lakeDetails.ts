@@ -1,5 +1,5 @@
 import type { SceneApp } from "@/scene/SceneApp";
-import { LAKE_SURFACE_WAVE_DEFAULTS, LAKE_WHEEL_RIPPLE_DEFAULTS, resolveLakeAppearance } from "@engine/scene/waterBody";
+import { LAKE_SURFACE_WAVE_DEFAULTS, LAKE_WHEEL_RIPPLE_DEFAULTS, LAKE_WHEEL_WET_TRAIL_DEFAULTS, resolveLakeAppearance } from "@engine/scene/waterBody";
 import { applyWaterTooltips } from "./waterTooltips";
 import { UI_ICONS } from "../../editorIcons";
 
@@ -75,6 +75,14 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${field("Emission Interval (s)", "wheelRippleInterval", a.wheelRippleInterval, "0.02", 'min="0.04" max="1"')}
       ${button("reset-wheel-ripples", "Reset Wave Settings", locked)}
     `));
+    section.insertAdjacentHTML("beforeend", group("wheel-wet-trail", "Wheel Wet Trail", `
+      <div class="detail-hint">Play modunda gölden ya da ıslak kıyıdan çıkan tekerleklerin kuru zeminde bıraktığı ıslak iz.</div>
+      <label class="detail-toggle"><input type="checkbox" data-lake-wet-trail aria-label="Wheel Wet Trail Enabled" ${a.wheelWetTrailEnabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${field("Trail Length (m)", "wheelWetTrailLength", a.wheelWetTrailLength, "0.5", 'min="0.5" max="10"')}
+      ${field("Trail Strength", "wheelWetTrailStrength", a.wheelWetTrailStrength, "0.05", 'min="0" max="1"')}
+      ${field("Dry Time (s)", "wheelWetTrailDrySeconds", a.wheelWetTrailDrySeconds, "5", 'min="5" max="180"')}
+      ${button("reset-wet-trail", "Reset Wet Trail", locked)}
+    `, true));
     section.insertAdjacentHTML("beforeend", group("wet-shore", "Wet Shore", `
       <label class="detail-toggle"><input type="checkbox" data-lake-wet-shore aria-label="Wet Shore Enabled" ${a.shoreWetnessEnabled ? "checked" : ""} ${disabled}> Enabled</label>
       ${field("Wet Band Width (m)", "shoreWetnessWidth", a.shoreWetnessWidth, "0.1", 'min="0.2" max="4"')}
@@ -126,6 +134,8 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   section.querySelector<HTMLInputElement>("[data-lake-surface-waves]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, surfaceWavesEnabled: (e.target as HTMLInputElement).checked } }));
   click("reset-wheel-ripples", () => app.editLake({ appearance: { ...lake.appearance, ...LAKE_WHEEL_RIPPLE_DEFAULTS } }));
   section.querySelector<HTMLInputElement>("[data-lake-wheel-ripples]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, wheelRipplesEnabled: (e.target as HTMLInputElement).checked } }));
+  click("reset-wet-trail", () => app.editLake({ appearance: { ...lake.appearance, ...LAKE_WHEEL_WET_TRAIL_DEFAULTS } }));
+  section.querySelector<HTMLInputElement>("[data-lake-wet-trail]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, wheelWetTrailEnabled: (e.target as HTMLInputElement).checked } }));
   section.querySelector<HTMLInputElement>("[data-lake-name]")?.addEventListener("change", (event) => app.editLake({ name: (event.target as HTMLInputElement).value }));
   for (const input of section.querySelectorAll<HTMLInputElement>("[data-lake-number]")) input.addEventListener("change", () => {
     const key = input.dataset.lakeNumber!; let value = Number(input.value); if (!Number.isFinite(value)) return;

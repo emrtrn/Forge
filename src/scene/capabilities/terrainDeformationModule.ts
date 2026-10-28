@@ -17,9 +17,9 @@
  * the level; the field is runtime state only.
  *
  * Beside the field it keeps the wet tyre prints ({@link TerrainWetTrail}): a
- * tyre that stood in a Lake (the surface host's `waterDepthAt`), on its wet
- * shore (`groundWetnessAt`) or in a rut puddle wets the next few metres of
- * ground it rolls over. Presentation only.
+ * tyre that stood in a Lake or on its wet shore (the surface host's
+ * `wetTrailSourceAt`, with that Lake's trail settings) or in a rut puddle
+ * wets the next few metres of ground it rolls over. Presentation only.
  */
 import type { Subsystem } from "@engine/core/Subsystem";
 import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
@@ -43,13 +43,6 @@ import {
 
 export const TERRAIN_DEFORMATION_MODULE_ID = "terrain-deformation";
 
-/** Lake water (m) over a contact that soaks a tyre; thinner films at the very shore do not. */
-const SOAKING_LAKE_DEPTH = 0.02;
-/**
- * Ground at least this wet (a Lake's wet shore band) keeps a tyre soaked, so
- * its print starts where that ground stops looking wet, not inside the band.
- */
-const SOAKING_GROUND_WETNESS = 0.25;
 /** Profile wetness and rut depth (m) of a rut puddle that soaks a tyre (the puddle shading's thresholds). */
 const PUDDLE_WETNESS = 0.4;
 const PUDDLE_DEPTH = 0.03;
@@ -171,10 +164,10 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
         waterContacts.push({ id: `${id}:${index}`, x, y, z, radius: wheel.radius,
           rotation: wheel.rotation, tractionSlip: wheel.tractionSlip,
           width, wetness: profile?.wetness ?? 0 });
-        const inLake = (surface.waterDepthAt?.(x, y, z) ?? 0) > SOAKING_LAKE_DEPTH;
+        const source = surface.wetTrailSourceAt?.(x, y, z) ?? null;
         const inPuddle = (profile?.wetness ?? 0) > PUDDLE_WETNESS && active.sample(x, z).depth > PUDDLE_DEPTH;
-        const onWetGround = (surface.groundWetnessAt?.(x, y, z) ?? 0) >= SOAKING_GROUND_WETNESS;
-        trailContacts.push({ id: `${id}:${index}`, x, z, width, inWater: inLake || inPuddle || onWetGround });
+        trailContacts.push({ id: `${id}:${index}`, x, z, width, inWater: source !== null || inPuddle,
+          settings: source ?? undefined });
       });
     }
     trail!.advance(deltaSeconds, trailContacts);

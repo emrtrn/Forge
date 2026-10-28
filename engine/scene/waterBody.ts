@@ -9,6 +9,14 @@ export const LAKE_WHEEL_RIPPLE_DEFAULTS = {
   wheelRipplesEnabled: true, wheelRippleStrength: 2, wheelRippleSpeed: 1.8,
   wheelRippleWidth: .45, wheelRippleWavelength: .35, wheelRippleLifetime: 1.6, wheelRippleInterval: .12,
 };
+/**
+ * Wet tyre prints a vehicle leaves after driving out of the Lake (or off its
+ * wet shore): the trail's length, its first print's wetness and the seconds a
+ * print takes to dry. Rut puddles use the same values.
+ */
+export const LAKE_WHEEL_WET_TRAIL_DEFAULTS = {
+  wheelWetTrailEnabled: true, wheelWetTrailLength: 5, wheelWetTrailStrength: 1, wheelWetTrailDrySeconds: 40,
+};
 export const LAKE_SURFACE_WAVE_DEFAULTS = { surfaceWavesEnabled: true, surfaceWaveHeight: .02,
   surfaceWaveLength: 12, surfaceWavePeriod: 5, surfaceWaveDirection: 30, surfaceWaveShoreDepth: .5 };
 
@@ -21,6 +29,7 @@ export function createLakeAppearance(): NonNullable<LayoutLakeWaterBody["appeara
     absorptionDistance: 2, surfaceStrength: 2, surfaceRoughness: .2, normalScale: 1, rippleSpeed: 2,
     wheelRipplesEnabled: true, wheelRippleStrength: 3, wheelRippleSpeed: 1.8,
     wheelRippleWidth: 1, wheelRippleWavelength: .6, wheelRippleLifetime: 4, wheelRippleInterval: .12,
+    ...LAKE_WHEEL_WET_TRAIL_DEFAULTS,
     foamScale: 2, foamSpeed: 2, causticsStrength: 1, causticsScale: 1,
     causticsSpeed: 2, causticsDepthFade: 1, reflectionMode: "sharedPlanar", reflectionQuality: "medium",
   };
@@ -76,6 +85,7 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
       surfaceWaveDirection: [0, 360], surfaceWaveShoreDepth: [.1, 2],
       wheelRippleStrength: [0, 6], wheelRippleSpeed: [0.2, 5], wheelRippleWidth: [0.1, 2],
       wheelRippleWavelength: [0.1, 2], wheelRippleLifetime: [0.2, 4], wheelRippleInterval: [0.04, 1],
+      wheelWetTrailLength: [0.5, 10], wheelWetTrailStrength: [0, 1], wheelWetTrailDrySeconds: [5, 180],
       shoreWetnessWidth: [0.2, 4], shoreWetnessStrength: [0, 1], shoreBlendDepth: [0, 2], foamOpacity: [0, 1], foamWidth: [0.2, 4], foamScale: [0.1, 10], foamSpeed: [0, 3],
       causticsStrength: [0, 3], causticsScale: [0.1, 10], causticsSpeed: [0, 3], causticsDepthFade: [0.1, 30] } as const;
     if (source.surfaceWavesEnabled !== undefined) {
@@ -85,6 +95,10 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
     if (source.wheelRipplesEnabled !== undefined) {
       if (typeof source.wheelRipplesEnabled !== "boolean") throw new Error("Invalid Lake wheelRipplesEnabled");
       appearance.wheelRipplesEnabled = source.wheelRipplesEnabled;
+    }
+    if (source.wheelWetTrailEnabled !== undefined) {
+      if (typeof source.wheelWetTrailEnabled !== "boolean") throw new Error("Invalid Lake wheelWetTrailEnabled");
+      appearance.wheelWetTrailEnabled = source.wheelWetTrailEnabled;
     }
     if (source.shoreWetnessEnabled !== undefined) {
       if (typeof source.shoreWetnessEnabled !== "boolean") throw new Error("Invalid Lake shoreWetnessEnabled");
@@ -136,7 +150,7 @@ export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
     bedVisibility: 0.9, absorptionDistance: 4, normalTexture: d.normalTexture,
     surfaceStrength: 1, surfaceRoughness: 0.22, normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
     reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high", ...LAKE_WHEEL_RIPPLE_DEFAULTS, ...LAKE_SURFACE_WAVE_DEFAULTS,
-    shoreWetnessEnabled: false, shoreWetnessWidth: 1, shoreWetnessStrength: 0.65,
+    ...LAKE_WHEEL_WET_TRAIL_DEFAULTS, shoreWetnessEnabled: false, shoreWetnessWidth: 1, shoreWetnessStrength: 0.65,
     shoreBlendDepth: 0.25, foamEnabled: false, foamOpacity: 0.7, foamWidth: 1, foamScale: 0.8, foamSpeed: 0.3,
     reflectionStrength: d.reflectionStrength, causticsEnabled: false, causticsStrength: 1,
     causticsScale: 1.5, causticsSpeed: 0.25, causticsDepthFade: 4, ...lake.appearance };

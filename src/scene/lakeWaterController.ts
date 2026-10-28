@@ -1,7 +1,7 @@
-import { registerLakeShoreWetness } from "@engine/render-three/terrain/terrainShoreWetness";
+import { registerLakeShoreWetness, terrainShoreWetnessAt } from "@engine/render-three/terrain/terrainShoreWetness";
 import { LakeSurfaceQuery, LakeRippleState, lakeWheelContact, type LakeWheelContact } from "@engine/terrain/lakeInteraction";
 import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
-import type { VehicleHost } from "./capabilities/runtimeServiceKeys";
+import type { VehicleHost, WetTrailSource } from "./capabilities/runtimeServiceKeys";
 import { Group, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, Mesh, MeshBasicMaterial, SphereGeometry, type Texture, type Scene } from "three";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { LAKE_LIMITS, resolveLakeAppearance } from "@engine/scene/waterBody";
@@ -12,6 +12,11 @@ import { LakeWaterObject } from "@engine/render-three/lakeWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import type { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import { registerLakeCaustics } from "@engine/render-three/terrain/terrainCaustics";
+
+/** Lake water (m) over a contact that soaks a tyre; thinner films at the very shore do not. */
+const SOAKING_DEPTH = 0.02;
+/** Wet-shore wetness that keeps a tyre soaked, so its print starts where the shore stops looking wet. */
+const SOAKING_SHORE_WETNESS = 0.25;
 
 export interface LakeWaterContext {
   scene: Scene;
@@ -34,7 +39,7 @@ export class LakeWaterController {
   private chain: Promise<void> = Promise.resolve();
   private reflection = new Map<string, PlanarReflectionSource>();
   private selected: string | null = null;
-  private interactions = new Map<string, { query: LakeSurfaceQuery; state: LakeRippleState }>();
+  private interactions = new Map<string, { lake: LayoutLakeWaterBody; query: LakeSurfaceQuery; state: LakeRippleState }>();
   private unsubscribePhysics: (() => void) | null = null;
   private waveTime = 0;
   constructor(private readonly context: LakeWaterContext) { context.scene.add(this.helpers); this.helpers.layers.set(31); }
@@ -44,18 +49,25 @@ export class LakeWaterController {
     this.interactions.clear();
     for (const object of this.objects.values()) object.setWheelRipples([]);
   }
-  /** Depth (m) of a world point below a visible Lake's connected water surface, or null (wet tyre prints). */
-  waterDepthAt(x: number, y: number, z: number): number | null {
-    let deepest: number | null = null;
+  /**
+   * The visible Lake whose connected water or visibly wet shore soaks a tyre
+   * at a world point, with its wet trail settings (the deepest one), or null.
+   */
+  wetTrailSourceAt(x: number, y: number, z: number): WetTrailSource | null {
+    let best: WetTrailSource | null = null;
     for (const [id, interaction] of this.interactions) {
       const object = this.objects.get(id);
       let visible = !!object?.visible;
       for (let p = object?.parent; p; p = p.parent) visible &&= p.visible;
-      if (!object || !visible || interaction.query.depthAt(x, z) === null) continue;
-      const depth = object.position.y - y;
-      if (depth > 0 && (deepest === null || depth > deepest)) deepest = depth;
+      if (!object || !visible) continue;
+      const depth = interaction.query.depthAt(x, z) === null ? 0 : Math.max(0, object.position.y - y);
+      if (depth <= SOAKING_DEPTH && terrainShoreWetnessAt(this.context.scene, x, y, z, undefined, id) < SOAKING_SHORE_WETNESS) continue;
+      const a = resolveLakeAppearance(interaction.lake);
+      if (best && best.depth >= depth) continue;
+      best = { depth, length: a.wheelWetTrailLength, strength: a.wheelWetTrailEnabled ? a.wheelWetTrailStrength : 0,
+        drySeconds: a.wheelWetTrailDrySeconds };
     }
-    return deepest;
+    return best;
   }
   /** Called once per fixed physics slice; also usable by isolated QA fixtures. */
   advanceWheelInteractions(dt: number): void {
@@ -140,7 +152,7 @@ export class LakeWaterController {
           if (!this.context.editor && this.unsubscribePhysics) object.setSurfaceWaveTime(this.waveTime);
           if (!this.context.editor) object.raycast = () => {};
           this.objects.set(lake.id, object); this.context.scene.add(object);
-          this.interactions.set(lake.id, { query: new LakeSurfaceQuery(result), state: new LakeRippleState(a) });
+          this.interactions.set(lake.id, { lake, query: new LakeSurfaceQuery(result), state: new LakeRippleState(a) });
           object.addEventListener("removed", registerLakeCaustics(this.context.scene, lake, result, object));
         }
         if (this.context.editor) this.addHelper(lake, result);

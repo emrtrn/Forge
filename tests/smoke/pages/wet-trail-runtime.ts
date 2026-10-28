@@ -19,7 +19,7 @@ async function boot() {
   const id = physics.vehicleEntityIds()[0]!;
   const host = () => (services as RuntimeServices | null)?.resolve(terrainSurfaceHostService);
   /** Inside a Lake's connected water at X/Z (any depth). */
-  const wetAt = (x: number, z: number) => host()?.waterDepthAt?.(x, -1000, z) != null;
+  const wetAt = (x: number, z: number) => (host()?.wetTrailSourceAt?.(x, -1000, z)?.depth ?? 0) > 0;
   /** March from `from` toward `to`; the last wet point and the unit direction. */
   const findShore = (from: [number, number], to: [number, number]) => {
     const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
@@ -48,11 +48,10 @@ async function boot() {
       speed: state.forwardSpeed,
       wheels: state.wheels.map((wheel) => ({
         contact: wheel.inContact, ground: wheel.groundEntityId, point: wheel.contactPoint,
-        water: wheel.contactPoint ? host()?.waterDepthAt?.(...wheel.contactPoint) ?? null : null,
-        shore: wheel.contactPoint ? host()?.groundWetnessAt?.(...wheel.contactPoint) ?? 0 : 0,
+        source: wheel.contactPoint ? host()?.wetTrailSourceAt?.(...wheel.contactPoint) ?? null : null,
       })),
       wetTrailCells: snapshot?.wetTrailCells ?? null, activeCells: snapshot?.activeCells ?? null,
-      hasWaterQuery: typeof host()?.waterDepthAt === "function",
+      hasWaterQuery: typeof host()?.wetTrailSourceAt === "function",
     };
   };
   /** Wet print (0..255) in the track texture's B channel at world X/Z, or null off the window. */

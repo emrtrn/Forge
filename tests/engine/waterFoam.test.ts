@@ -76,9 +76,11 @@ export async function registerWaterFoamTests(check: Check): Promise<void> {
   await check("Lake foam: old defaults, strict shared appearance allowlist and sampling budget", async () => {
     const doc = createLakeFixture();
     assert.equal(resolveLakeAppearance(doc.lake).foamEnabled, false);
-    const appearance = { foamEnabled: true, foamOpacity: 0.6, foamWidth: 1.2, foamScale: 0.5, foamSpeed: 0.3, shoreBlendDepth: 0.4, shoreWetnessEnabled: true, shoreWetnessWidth: 1.2, shoreWetnessStrength: 0.7, surfaceStrength: 1.1, surfaceRoughness: 0.2 };
+    const appearance = { foamEnabled: true, foamOpacity: 0.6, foamWidth: 1.2, foamScale: 0.5, foamSpeed: 0.3, shoreBlendDepth: 0.4, shoreWetnessEnabled: true, shoreWetnessWidth: 1.2, shoreWetnessStrength: 0.7, surfaceStrength: 1.1, surfaceRoughness: 0.2,
+      wheelWetTrailEnabled: false, wheelWetTrailLength: 2.5, wheelWetTrailStrength: 0.6, wheelWetTrailDrySeconds: 90 };
     assert.deepEqual(validateWaterBody({ ...doc.lake, appearance }).appearance, appearance);
-    for (const appearance of [{ surfaceStrength: 3 }, { surfaceRoughness: 0 }, { surfaceRoughness: NaN }, { shoreWetnessEnabled: 1 }, { shoreWetnessWidth: 0 }, { shoreWetnessStrength: 2 }, { shoreBlendDepth: -1 }, { shoreBlendDepth: 3 }, { shoreBlendDepth: NaN }, { foamEnabled: "yes" }, { foamWidth: 0 }, { foamWidth: 5 }, { foamOpacity: 1.1 }, { foamScale: Infinity }, { foamSpeed: -1 }]) {
+    for (const appearance of [{ surfaceStrength: 3 }, { surfaceRoughness: 0 }, { surfaceRoughness: NaN }, { shoreWetnessEnabled: 1 }, { shoreWetnessWidth: 0 },
+      { wheelWetTrailEnabled: "no" }, { wheelWetTrailLength: 0.2 }, { wheelWetTrailLength: 11 }, { wheelWetTrailStrength: 1.2 }, { wheelWetTrailDrySeconds: 2 }, { wheelWetTrailDrySeconds: NaN }, { shoreWetnessStrength: 2 }, { shoreBlendDepth: -1 }, { shoreBlendDepth: 3 }, { shoreBlendDepth: NaN }, { foamEnabled: "yes" }, { foamWidth: 0 }, { foamWidth: 5 }, { foamOpacity: 1.1 }, { foamScale: Infinity }, { foamSpeed: -1 }]) {
       assert.throws(() => validateWaterBody({ ...doc.lake, appearance }), /Invalid Lake|finite/);
     }
     const geometry = await buildLakeGeometry(await prepareLakeSnapshot(doc, doc.lake));

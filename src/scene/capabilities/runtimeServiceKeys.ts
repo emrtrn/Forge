@@ -213,17 +213,23 @@ export interface TerrainSurfaceHost {
   /** Whether a loaded terrain has a deformable paint layer; false keeps track work off entirely. */
   hasDeformableTerrain(): boolean;
   /**
-   * How far (m) a world point lies below a visible water body's surface, or
-   * null outside its connected water (dry ground, a bridge above it);
-   * presentation only (wet tyre prints). Optional: hosts without water
-   * bodies omit it.
+   * The water that soaks a tyre at a world point — a visible water body's
+   * connected water or its visibly wet shore — with that body's wet tyre
+   * trail, or null on dry ground (and on a bridge above the water).
+   * Presentation only. Optional: hosts without water bodies omit it.
    */
-  waterDepthAt?(worldX: number, worldY: number, worldZ: number): number | null;
-  /**
-   * How wet the ground at a world point looks (0..1) beside water, such as a
-   * Lake's wet shore; presentation only (wet tyre prints). Optional.
-   */
-  groundWetnessAt?(worldX: number, worldY: number, worldZ: number): number;
+  wetTrailSourceAt?(worldX: number, worldY: number, worldZ: number): WetTrailSource | null;
+}
+
+export interface WetTrailSource {
+  /** Water above the point (m); 0 on the wet shore above the level. */
+  readonly depth: number;
+  /** Ground (m) a tyre leaving it keeps wetting. */
+  readonly length: number;
+  /** First print's wetness (0..1); 0 when the body's trail is off. */
+  readonly strength: number;
+  /** Seconds a print takes to dry. */
+  readonly drySeconds: number;
 }
 
 export const terrainSurfaceHostService = runtimeServiceKey<TerrainSurfaceHost>("terrain-surface-host");

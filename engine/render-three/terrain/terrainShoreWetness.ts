@@ -39,7 +39,7 @@ export function registerLakeShoreWetness(scene: Scene, lake: LayoutLakeWaterBody
  * the Lake's own query (`LakeSurfaceQuery`), so points below a level read 0.
  * Presentation only (wet tyre prints).
  */
-export function terrainShoreWetnessAt(scene: Scene, x: number, y: number, z: number, terrainRef?: string): number {
+export function terrainShoreWetnessAt(scene: Scene, x: number, y: number, z: number, terrainRef?: string, lakeId?: string): number {
   const registry = registries.get(scene);
   if (!registry || ![x, y, z].every(Number.isFinite)) return 0;
   const smooth = (edge0: number, edge1: number, value: number) => {
@@ -50,7 +50,7 @@ export function terrainShoreWetnessAt(scene: Scene, x: number, y: number, z: num
   for (const { lake, object, mask } of registry.sources) {
     const a = resolveLakeAppearance(lake), w = a.shoreWetnessWidth;
     let visible = true; for (let p: Object3D | null = object; p; p = p.parent) visible &&= p.visible;
-    if (!visible || (terrainRef && terrainRef !== lake.terrainRef)) continue;
+    if (!visible || (terrainRef && terrainRef !== lake.terrainRef) || (lakeId && lakeId !== lake.id)) continue;
     const above = y - lake.surfaceLevel;
     if (above < 0 || above >= 0.35) continue;
     const u = (x - (lake.bounds.min[0] - w)) / (lake.bounds.max[0] - lake.bounds.min[0] + 2 * w);

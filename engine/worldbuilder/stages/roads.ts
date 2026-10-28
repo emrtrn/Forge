@@ -18,7 +18,7 @@ import type { ForgeLandscapeSplinePoint, ForgeLandscapeSplineSegment } from "../
 import type { WorldTerrainSpline } from "../../terrain/terrainTypes";
 import type { WorldPoint } from "../normalize";
 import type { RoadEdge } from "../recipe";
-import type { RoadSpec } from "../regionProfile";
+import type { RegionProfile, RoadSpec } from "../regionProfile";
 import type { GeneratedSpline, StageInput, StageOutput, StageTerrain, WorldStage } from "../stage";
 import type { RoadClass } from "../vocabulary";
 
@@ -98,6 +98,12 @@ interface ResolvedRoad {
   meshAsset?: string;
 }
 
+/** Full road width of a class: carriageway + both shoulders, or the default without a spec. */
+export function roadClassWidth(profile: RegionProfile | null, roadClass: RoadClass): number {
+  const spec = profile?.roads[roadClass];
+  return spec ? spec.width + 2 * spec.shoulder : DEFAULT_WIDTH[roadClass];
+}
+
 function roadSpec(
   input: StageInput,
   roadClass: RoadClass,
@@ -110,7 +116,7 @@ function roadSpec(
   }
   if (!spec.meshAsset) warnOnce(`mesh:${roadClass}`, `${roadClass} roads have no meshAsset in the region profile; their splines carry no mesh`);
   return {
-    width: spec.width + 2 * spec.shoulder,
+    width: roadClassWidth(input.profile, roadClass),
     ...(spec.surfaceLayer ? { surfaceLayer: spec.surfaceLayer } : {}),
     ...(spec.meshAsset ? { meshAsset: spec.meshAsset } : {}),
   };

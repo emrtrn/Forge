@@ -6330,6 +6330,8 @@ export class SceneApp {
           segmentIndex,
           castShadow: this.staticObjectsCastShadow(),
           receiveShadow: this.staticObjectsReceiveShadow(),
+          cache,
+          ...(outer.userData.splineSharedMaterials ? { sharedMaterials: outer.userData.splineSharedMaterials as Map<Material, Material> } : {}),
         });
         warnings.push(...built.warnings);
         if (!built.group) continue;

@@ -40,9 +40,17 @@ export function buildSplineDeformMeshGroup(options: {
   segmentIndex?: number;
   castShadow: boolean;
   receiveShadow: boolean;
+  /** The actor's curve, when the caller builds several chunks from it (saves a rebuild per chunk). */
+  cache?: SplineCurveCache;
+  /**
+   * Source material → the clone every chunk of one build shares. Its owner
+   * disposes the clones ({@link disposeSplineSharedMaterials}); chunk disposal
+   * leaves them alone. Without it each mesh gets, and disposes, its own clone.
+   */
+  sharedMaterials?: Map<Material, Material>;
 }): { group: Group | null; triangleCount: number; warnings: string[] } {
   const generator = resolveSplineDeformMeshGenerator(options.definition);
-  const cache = buildSplineCurveCache(options.actor.spline);
+  const cache = options.cache ?? buildSplineCurveCache(options.actor.spline);
   if (cache.totalLength <= 1e-8 || cache.segments.length === 0) {
     return { group: null, triangleCount: 0, warnings: ["Spline needs at least one non-zero segment before a mesh can be deformed."] };
   }
@@ -77,8 +85,10 @@ export function buildSplineDeformMeshGroup(options: {
     const geometry = deformGeometry(template.geometry, bounds, samples, generator);
     missingUvs ||= !template.geometry.getAttribute("uv");
     triangleCount += geometry.index ? geometry.index.count / 3 : geometry.getAttribute("position").count / 3;
-    const mesh = new Mesh(geometry, cloneMaterial(template.material));
+    const shared = options.sharedMaterials;
+    const mesh = new Mesh(geometry, shared ? sharedClone(template.material, shared) : cloneMaterial(template.material));
     mesh.userData.splineGeneratedGeometry = true;
+    if (shared) mesh.userData.splineSharedMaterial = true;
     mesh.castShadow = options.castShadow;
     mesh.receiveShadow = options.receiveShadow;
     mesh.raycast = () => {};
@@ -96,10 +106,17 @@ export function disposeSplineDeformMeshGroup(group: Group): void {
   group.traverse((child) => {
     if (!(child instanceof Mesh) || !child.userData.splineGeneratedGeometry && !group.userData.splineGeneratedGeometry) return;
     child.geometry.dispose();
+    if (child.userData.splineSharedMaterial) return;
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     materials.forEach((material) => material.dispose());
   });
   group.removeFromParent();
+}
+
+/** Disposes the clones a build's chunks shared ({@link buildSplineDeformMeshGroup} `sharedMaterials`). */
+export function disposeSplineSharedMaterials(shared: Map<Material, Material> | undefined): void {
+  for (const material of shared?.values() ?? []) material.dispose();
+  shared?.clear();
 }
 
 /**
@@ -265,6 +282,15 @@ function axisVector(axis: SplineMeshAxis): Vec3 {
     case "y": return [0, 1, 0]; case "-y": return [0, -1, 0];
     case "z": return [0, 0, 1]; case "-z": return [0, 0, -1];
   }
+}
+
+function sharedClone(value: Material | Material[], shared: Map<Material, Material>): Material | Material[] {
+  const one = (material: Material): Material => {
+    let clone = shared.get(material);
+    if (!clone) shared.set(material, clone = material.clone());
+    return clone;
+  };
+  return Array.isArray(value) ? value.map(one) : one(value);
 }
 
 function cloneMaterial(value: Material | Material[]): Material | Material[] {

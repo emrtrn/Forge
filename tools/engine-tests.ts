@@ -24108,6 +24108,28 @@ check("deformed spline mesh disposes generated geometry and materials without to
   assert.equal(sourceGeometry.getAttribute("position").count, sourcePositionCount, "the shared source geometry survives repeated edit/rebuild cycles");
 });
 
+check("segmented spline deform chunks share one material clone the generated group owns", () => {
+  const actor = createDefaultSplineActor();
+  actor.spline.points = [0, 10, 20, 30].map((z, index) => ({ id: `p${index}`, position: [0, 0, z] as Vec3, pointType: "linear" as const }));
+  actor.generators = [{ id: "road", type: "deformMesh", meshAsset: "road", forwardAxis: "z", upAxis: "y", geometryMode: "segments" }];
+  const sourceMaterial = new MeshBasicMaterial();
+  const gltf = { scene: (() => { const group = new Group(); group.add(new Mesh(new BoxGeometry(2, 0.2, 10, 2, 1, 8), sourceMaterial)); return group; })() } as unknown as GLTF;
+  const built = buildSplineInstanceGeneratorGroup({ actor, mode: "runtime", models: new Map([["road", gltf]]), castShadow: false, receiveShadow: false });
+  const meshes: Mesh[] = [];
+  built!.group!.traverse((child) => { if (child instanceof Mesh) meshes.push(child); });
+  assert.equal(meshes.length, 3, "one chunk per segment");
+  const materials = new Set(meshes.map((mesh) => mesh.material));
+  assert.equal(materials.size, 1, "every chunk draws with the same clone");
+  assert.ok(!materials.has(sourceMaterial), "the source material stays cache-owned");
+  let disposed = 0;
+  [...materials][0]!.addEventListener("dispose", () => { disposed += 1; });
+  // An editor dirty-segment rebuild frees one chunk; the shared clone stays.
+  disposeSplineGeneratedGroup(meshes[0]!.parent as Group);
+  assert.equal(disposed, 0);
+  disposeSplineGeneratedGroup(built!.group!);
+  assert.equal(disposed, 1, "the group frees its clone once");
+});
+
 check("spline performance warnings fire only at the §19.4 thresholds (Faz 12)", () => {
   assert.deepEqual(splinePerformanceWarnings({ pointCount: 3 }), []);
   assert.deepEqual(splinePerformanceWarnings({ pointCount: SPLINE_WARN_POINT_COUNT - 1 }), []);

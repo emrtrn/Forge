@@ -15,6 +15,7 @@ import type {
   BufferGeometry,
   DirectionalLight,
   InstancedMesh,
+  Material,
   Object3D,
   PerspectiveCamera,
   WebGLRenderer,
@@ -76,8 +77,8 @@ import {
 } from "@engine/scene/splineGenerator";
 import { cloneSplineActor } from "@engine/scene/splineActor";
 import type { TerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
-import { buildSplineDeformMeshGroup } from "@engine/render-three/splineDeformMesh";
-import { buildSplineCurveCache } from "@engine/scene/splineCurve";
+import { buildSplineDeformMeshGroup, disposeSplineSharedMaterials } from "@engine/render-three/splineDeformMesh";
+import { buildSplineCurveCache, type SplineCurveCache } from "@engine/scene/splineCurve";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 
@@ -469,6 +470,11 @@ export function buildSplineInstanceGeneratorGroup(options: {
     group.add(built.group);
     meshes.push(...built.meshes);
   }
+  // One clone per source material for every chunk of this actor (owned by the
+  // group, freed by disposeSplineGeneratedGroup), and the curve built once.
+  const sharedMaterials = new Map<Material, Material>();
+  group.userData.splineSharedMaterials = sharedMaterials;
+  let curve: SplineCurveCache | undefined;
   for (const definition of options.actor.generators ?? []) {
     if (definition.type !== "deformMesh") continue;
     const generator = resolveSplineDeformMeshGenerator(definition);
@@ -482,8 +488,9 @@ export function buildSplineInstanceGeneratorGroup(options: {
     const deformDefinition = options.deformQuality === "preview"
       ? { ...generator, sampleSteps: Math.min(generator.sampleSteps, 4) }
       : generator;
+    curve ??= buildSplineCurveCache(options.actor.spline);
     const segmentIndices = generator.geometryMode === "segments"
-      ? buildSplineCurveCache(options.actor.spline).segments.map((segment) => segment.index)
+      ? curve.segments.map((segment) => segment.index)
       : [undefined];
     for (const segmentIndex of segmentIndices) {
       const built = buildSplineDeformMeshGroup({
@@ -493,6 +500,8 @@ export function buildSplineInstanceGeneratorGroup(options: {
         ...(segmentIndex === undefined ? {} : { segmentIndex }),
         castShadow: options.castShadow,
         receiveShadow: options.receiveShadow,
+        cache: curve,
+        sharedMaterials,
       });
       triangleCount += built.triangleCount;
       warnings.push(...built.warnings);
@@ -514,9 +523,11 @@ export function disposeSplineGeneratedGroup(group: Group): void {
   group.traverse((child) => {
     if (!(child instanceof Mesh) || !child.userData.splineGeneratedGeometry) return;
     child.geometry.dispose();
+    if (child.userData.splineSharedMaterial) return;
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     materials.forEach((material) => material.dispose());
   });
+  disposeSplineSharedMaterials(group.userData.splineSharedMaterials as Map<Material, Material> | undefined);
   group.removeFromParent();
 }
 

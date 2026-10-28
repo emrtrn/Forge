@@ -115,12 +115,26 @@ function renderList(title: string, items: readonly string[], className = ""): st
   return `<div class="${className}">${escapeHtml(title)} (${items.length})<ul class="world-builder-list">${shown}${more}</ul></div>`;
 }
 
+const KEPT_LABELS: Record<StagePlan["kept"][number]["reason"], string> = {
+  editedByHand: "edited by hand",
+  deletedByHand: "deleted by hand",
+  protected: "protected region",
+  locked: "locked terrain",
+};
+
+const BLOCKED_LABELS: Record<StagePlan["blocked"][number]["reason"], string> = {
+  manual: "id used by a manual object",
+  otherStage: "owned by another stage",
+  protected: "protected region",
+  locked: "locked terrain",
+};
+
 function keptLabel(reason: StagePlan["kept"][number]["reason"]): string {
-  return reason === "editedByHand" ? "edited by hand" : reason === "deletedByHand" ? "deleted by hand" : "protected region";
+  return KEPT_LABELS[reason];
 }
 
 function blockedLabel(reason: StagePlan["blocked"][number]["reason"]): string {
-  return reason === "manual" ? "id used by a manual object" : reason === "otherStage" ? "owned by another stage" : "protected region";
+  return BLOCKED_LABELS[reason];
 }
 
 function escapeHtml(value: string): string {

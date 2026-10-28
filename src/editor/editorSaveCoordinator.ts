@@ -115,7 +115,7 @@ export interface EditorSaveSource {
   readonly worldTerrainSessions?: ReadonlyMap<string, WorldTerrainEditSession>;
   readonly foliageData: LayoutFoliageData;
   readonly meshPaintData: LayoutMeshPaintData;
-  /** The level's World Builder recipe; written before the level (see `WorldBuilderSession`). */
+  /** The level's World Builder recipe; written first, before terrains and the level (see `WorldBuilderSession`). */
   readonly worldRecipe?: { captureSave(): EditorSaveStep | null; readonly saveRevision: SaveRevision };
 }
 
@@ -166,6 +166,9 @@ export class EditorSaveSession {
       // Capture the whole batch before awaiting the first response. Later edits
       // belong to a later save, even for sidecars not written yet.
       const payload = structuredClone({ layout: source.layout, editor: source.editor, scenePath: source.scenePath });
+      // The World Builder recipe first: it may own splines in the terrain
+      // definitions as well as placements in the level (see WorldBuilderSession).
+      const recipe = source.worldRecipe?.captureSave();
       const terrains: EditorSaveStep[] = [];
       for (const actor of source.layout.landscapes ?? []) {
         // Tiles and definition before the level, so the level never names a
@@ -173,8 +176,7 @@ export class EditorSaveSession {
         const step = this.captureLandscapeSave(source, actor.id);
         if (step) terrains.push(step);
       }
-      const recipe = source.worldRecipe?.captureSave();
-      const steps: EditorSaveStep[] = [...terrains, ...(recipe ? [recipe] : []), {
+      const steps: EditorSaveStep[] = [...(recipe ? [recipe] : []), ...terrains, {
         path: source.scenePath,
         write: async () => {
           result = await source.layoutSaver(payload);

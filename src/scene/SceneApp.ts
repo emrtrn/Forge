@@ -325,7 +325,12 @@ import {
 import { EditorSaveSession, type EditorSaveSource } from "@/editor/editorSaveCoordinator";
 import { WorldTerrainEditSession } from "@/editor/terrainStore";
 import { WorldBuilderSession } from "@/editor/worldBuilderSession";
-import { applyPlacementGroupChanges, type PlacementGroupChange } from "@engine/worldbuilder/stage";
+import {
+  applyPlacementGroupChanges,
+  type PlacementGroupChange,
+  type StageTerrain,
+  type TerrainSplineChange,
+} from "@engine/worldbuilder/stage";
 import {
   loadAssetVertexColors,
   saveAssetVertexColors,
@@ -1394,6 +1399,8 @@ export class SceneApp {
     sampleHeight: (x, z) => this.worldTerrainHeightAt(x, z),
     executeCommand: (command) => this.executeCommand(command),
     applyGroupChanges: (changes, side) => this.applyWorldBuilderGroupChanges(changes, side),
+    terrains: () => this.worldBuilderTerrains(),
+    applySplineChanges: (changes, side) => this.applyWorldBuilderSplineChanges(changes, side),
     onStatus: (message, tone) => this.onStatus?.(message, tone),
   });
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
@@ -4610,6 +4617,47 @@ export class SceneApp {
     if (!this.layout) return;
     this.clearSelection();
     for (const assetId of applyPlacementGroupChanges(this.layout, changes, side)) this.rebuildInstanceGroup(assetId);
+    this.emitSceneObjectsChanged();
+  }
+
+  /** The level's loaded World Terrains as World Builder stages read them. */
+  private worldBuilderTerrains(): StageTerrain[] {
+    return (this.layout?.landscapes ?? []).flatMap((actor) => {
+      const def = this.worldTerrains.get(actor.id)?.def;
+      if (!def) return [];
+      const [width, depth] = worldTerrainExtent(def);
+      return [{
+        id: actor.id,
+        min: [def.origin[0], def.origin[2]],
+        max: [def.origin[0] + width, def.origin[2] + depth],
+        layers: def.layers.map((layer) => ({ id: layer.id, name: layer.name })),
+        splines: def.splines ?? [],
+        locked: actor.locked === true,
+      }];
+    });
+  }
+
+  /**
+   * Writes one side of a World Builder stage's spline changes: each touched
+   * terrain's whole spline list, then its spline meshes, overlay and rivers —
+   * the `applySelectedLandscapeSplines` path without touching the selection or
+   * the active tool. The definition is marked dirty, so Save writes it.
+   */
+  private applyWorldBuilderSplineChanges(changes: readonly TerrainSplineChange[], side: "before" | "after"): void {
+    let changed = false;
+    for (const change of changes) {
+      const index = this.layout?.landscapes?.findIndex((actor) => actor.id === change.landscapeId) ?? -1;
+      const data = this.landscapeSplineSource(change.landscapeId);
+      if (index < 0 || !data) continue;
+      // Both sides are copies of the definition's own list, frames included.
+      data.splines = structuredClone(change[side]);
+      this.markLandscapeSplineDirty(change.landscapeId);
+      void this.rebuildLandscapeSplineMeshes(index);
+      this.refreshLandscapeSplineOverlay(index);
+      changed = true;
+    }
+    if (!changed) return;
+    void this.buildRiverWaters();
     this.emitSceneObjectsChanged();
   }
 

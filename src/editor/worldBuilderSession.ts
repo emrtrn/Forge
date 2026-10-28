@@ -2,11 +2,13 @@
  * The editor's World Builder state for the open level (plan v0.4 §6.2, §12):
  * its `<Level>.worldrecipe.json`, the region profile the recipe names, and
  * stage dry runs / applies. A stage apply is one history step that swaps the
- * touched placement groups and the recipe together, so undo keeps the level
- * and its ownership record in step. The recipe saves with Save Layout, before
- * the level (a recipe that names a placement the level lacks is recoverable —
- * the stage re-creates it — while the reverse would leave generated objects
- * looking manual).
+ * touched placement groups, the touched terrains' spline lists and the recipe
+ * together, so undo keeps the level, its terrains and their ownership record
+ * in step. The recipe saves with Save Layout, first — before the World Terrain
+ * definitions and the level. A failed later step then leaves a recipe naming
+ * an object that is not on disk, reported as deleted by hand; the reverse
+ * order would leave generated objects looking manual, blocking the stage and
+ * outliving their plan element.
  */
 import type { EditorCommand } from "@editor/core/history";
 import type { RoomLayout } from "@engine/scene/layout";
@@ -16,6 +18,8 @@ import {
   planStage,
   type PlacementGroupChange,
   type StagePlan,
+  type StageTerrain,
+  type TerrainSplineChange,
   type WorldStage,
 } from "@engine/worldbuilder/stage";
 import { createDefaultWorldStages } from "@engine/worldbuilder/stages";
@@ -30,6 +34,10 @@ export interface WorldBuilderHost {
   executeCommand(command: EditorCommand): void;
   /** Writes one side of the group changes into the layout and rebuilds those groups. */
   applyGroupChanges(changes: readonly PlacementGroupChange[], side: "before" | "after"): void;
+  /** The level's loaded World Terrains (id, XZ box, paint layers, splines, locked). */
+  terrains(): StageTerrain[];
+  /** Writes one side of the spline changes into the terrain definitions and rebuilds their splines. */
+  applySplineChanges(changes: readonly TerrainSplineChange[], side: "before" | "after"): void;
   onStatus(message: string, tone: "success" | "warning" | "error"): void;
 }
 
@@ -50,6 +58,7 @@ export interface WorldBuilderView {
   issues: readonly string[];
   profile: { path: string; state: "loaded" | "missing" | "invalid"; label: string | null; issues: readonly string[] } | null;
   dirty: boolean;
+  /** `owned`: generated placements and splines. */
   planCounts: { settlements: number; landmarks: number; roadNodes: number; roadEdges: number; owned: number } | null;
   stages: readonly WorldBuilderStageView[];
   /** The last dry run or apply, for the report. */
@@ -159,9 +168,11 @@ export class WorldBuilderSession {
       label: `World Builder: ${plan.stageLabel}`,
       redo: () => {
         this.host.applyGroupChanges(plan.groupChanges, "after");
+        this.host.applySplineChanges(plan.splineChanges, "after");
         this.setRecipe(structuredClone(after));
       },
       undo: () => {
+        this.host.applySplineChanges(plan.splineChanges, "before");
         this.host.applyGroupChanges(plan.groupChanges, "before");
         this.setRecipe(structuredClone(before));
       },
@@ -184,7 +195,7 @@ export class WorldBuilderSession {
             landmarks: recipe.plan.landmarks.length,
             roadNodes: recipe.plan.roadGraph.nodes.length,
             roadEdges: recipe.plan.roadGraph.edges.length,
-            owned: Object.keys(recipe.ownership.placements).length,
+            owned: Object.keys(recipe.ownership.placements).length + Object.keys(recipe.ownership.splines).length,
           }
         : null,
       stages: this.stages.map((stage) => ({
@@ -225,7 +236,7 @@ export class WorldBuilderSession {
       layout,
       profile: this.profile,
       sampleHeight: (x, z) => this.host.sampleHeight(x, z),
-      terrains: [],
+      terrains: this.host.terrains(),
     });
   }
 

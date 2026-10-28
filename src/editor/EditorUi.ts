@@ -820,7 +820,11 @@ export class EditorUi {
       if (this.inspectorTab === "meshPaint") this.renderMeshPaint();
     };
     this.app.onPivotEditModeChanged = () => this.renderDetails(this.selected);
-    this.app.onStatus = (message, tone) => this.setStatus(message, tone);
+    this.app.onStatus = (message, tone) => {
+      this.setStatus(message, tone);
+      // A finished save is reported here; the recipe's "unsaved" mark clears with it.
+      this.refreshWorldBuilderPanel();
+    };
 
     this.renderOutliner(this.app.getSceneObjects());
     this.renderHistory(this.app.getHistoryState());
@@ -4236,9 +4240,13 @@ export class EditorUi {
     this.worldSettingsPopoverCleanup = null;
   };
 
+  private refreshWorldBuilderPanel(): void {
+    if (this.worldBuilderPanel && !requireElement(this.root, "#world-builder-pane").hidden) this.worldBuilderPanel.update();
+  }
+
   private renderHistory(state: EditorHistoryState): void {
     // Undo/redo can swap the World Builder recipe; redraw it if it is showing.
-    if (this.worldBuilderPanel && !requireElement(this.root, "#world-builder-pane").hidden) this.worldBuilderPanel.update();
+    this.refreshWorldBuilderPanel();
     this.undoButton.disabled = !state.canUndo;
     this.redoButton.disabled = !state.canRedo;
     const undoTip = state.undoLabel ? `Undo ${state.undoLabel}` : "Undo";

@@ -30,6 +30,7 @@ import { fetchHlodIndex, HlodProxies, loadHlodGeometry } from "./hlodProxies";
 import { setCameraFarOverride } from "@engine/render-three/camera";
 import { disposeGltfResources } from "@engine/render-three/gltfModelLoader";
 import {
+  setTerrainFarTiling,
   setTerrainSelfShadow,
   setTerrainTrackDetailLevels,
   terrainRendererOf,
@@ -2244,6 +2245,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.vfxCommands()?.setGlobalDensity(settings.particleDensity);
     setTerrainTrackDetailLevels(settings.terrainTrackDetailLevels);
     setTerrainSelfShadow(settings.terrainSelfShadow);
+    setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     this.applyRuntimePostProcess();
   }

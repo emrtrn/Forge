@@ -345,22 +345,26 @@ const fragmentColor = (textured: boolean, normalMapped = false): string => /* gl
   vec3 forgeColor;
   if (uTerrainView < 0.5) {
     vec2 forgeP = vTerrainLocal;
-    ${textured ? `// Far tiling break: past ${TERRAIN_FAR_TILING_START} m each painted layer also reads a
+    ${textured ? `#ifdef FORGE_TERRAIN_FAR_TILING
+    // Far tiling break (quality-gated): past ${TERRAIN_FAR_TILING_START} m each painted layer also reads a
     // rotated ${TERRAIN_FAR_TILING_SCALE}× copy and averages the two, whose periods share no
     // multiple, so the grid of repeats fades out. Gradients are taken here,
     // outside the per-layer branch, for textureGrad.
     float forgeFarT = smoothstep(${TERRAIN_FAR_TILING_START.toFixed(1)}, ${TERRAIN_FAR_TILING_END.toFixed(1)}, length(vViewPosition));
     vec2 forgeFarP = mat2(${Math.cos(TERRAIN_FAR_TILING_ANGLE).toFixed(6)}, ${Math.sin(TERRAIN_FAR_TILING_ANGLE).toFixed(6)}, ${(-Math.sin(TERRAIN_FAR_TILING_ANGLE)).toFixed(6)}, ${Math.cos(TERRAIN_FAR_TILING_ANGLE).toFixed(6)}) * forgeP * ${TERRAIN_FAR_TILING_SCALE.toFixed(2)};
     vec2 forgeFarDx = dFdx(forgeFarP);
-    vec2 forgeFarDy = dFdy(forgeFarP);` : ""}
+    vec2 forgeFarDy = dFdy(forgeFarP);
+    #endif` : ""}
     ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `vec4 forgeS${i} = ${textured
       ? `uLayerTexIndex[${i}] >= 0.0 ? texture(uLayerTexArray, vec3(forgeP * uLayerScale[${i}], uLayerTexIndex[${i}])) : vec4(uLayerColors[${i}], 1.0)`
       : `vec4(uLayerColors[${i}], 1.0)`};${textured ? `
+    #ifdef FORGE_TERRAIN_FAR_TILING
     if (forgeFarT > 0.0 && uLayerTexIndex[${i}] >= 0.0 && ${i < 4 ? `forgeW0[${i}]` : `forgeW1[${i - 4}]`} > 0.001) {
       vec4 forgeFar${i} = textureGrad(uLayerTexArray, vec3(forgeFarP * uLayerScale[${i}], uLayerTexIndex[${i}]),
         forgeFarDx * uLayerScale[${i}], forgeFarDy * uLayerScale[${i}]);
       forgeS${i} = mix(forgeS${i}, 0.5 * (forgeS${i} + forgeFar${i}), forgeFarT);
-    }` : ""}
+    }
+    #endif` : ""}
     vec3 forgeC${i} = forgeS${i}.rgb;
     float forgeR${i} = uLayerRoughness[${i}] * mix(1.0, forgeS${i}.a, uLayerRoughnessInAlpha[${i}]);
     // Packed wet soil has no layer micro-normal: very smooth texels otherwise

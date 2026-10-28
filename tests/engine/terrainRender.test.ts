@@ -315,7 +315,10 @@ export function registerTerrainRenderTests(check: Check): void {
         if (textured) {
           assert.ok(shader.fragmentShader.includes(`texture(uLayerTexArray, vec3(forgeP * uLayerScale[${layerCount - 1}], uLayerTexIndex[${layerCount - 1}]))`));
           assert.equal((shader.uniforms.uLayerTexArray!.value as { image: { depth: number } }).image.depth, layerCount);
-          // Far tiling break: a gradient-sampled rotated copy, only for a weighted layer past the start distance.
+          // Far tiling break: a gradient-sampled rotated copy, only for a weighted layer past the start
+          // distance, compiled in only while the quality allows it (page default on).
+          assert.equal(material.defines?.FORGE_TERRAIN_FAR_TILING, 1);
+          assert.ok(shader.fragmentShader.includes("#ifdef FORGE_TERRAIN_FAR_TILING"));
           assert.match(shader.fragmentShader, /float forgeFarT = smoothstep\(25\.0, 100\.0, length\(vViewPosition\)\);/);
           assert.ok(shader.fragmentShader.includes(`forgeFarT > 0.0 && uLayerTexIndex[${layerCount - 1}] >= 0.0`));
           assert.ok(shader.fragmentShader.includes(`textureGrad(uLayerTexArray, vec3(forgeFarP * uLayerScale[${layerCount - 1}]`));

@@ -18,7 +18,7 @@ import {
   updateWorldTerrainObjectTiles,
   type LandscapeObject,
 } from "../../engine/render-three/landscape";
-import { setTerrainSelfShadow, terrainRendererOf, withTerrainCullingSuspended } from "../../engine/render-three/terrain/terrainRenderer";
+import { setTerrainFarTiling, setTerrainSelfShadow, terrainRendererOf, withTerrainCullingSuspended } from "../../engine/render-three/terrain/terrainRenderer";
 import type { WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
 import { TerrainNodeHeightBounds, computeTerrainNormals } from "../../engine/terrain/terrainRenderData";
 import { createFlatTerrainTile, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
@@ -266,7 +266,7 @@ export function registerTerrainRendererTests(check: Check): void {
     disposeLandscapeObject(object);
   });
 
-  check("terrain renderer: self-shadow keeps the nodes inside a shadow frustum the view does not see", () => {
+  check("terrain renderer: self-shadow keeps the nodes inside a shadow frustum the view does not see; quality hooks toggle", () => {
     const document = hillyTerrain(3, 2, 64);
     const object = build(document);
     const terrain = terrainOf(object);
@@ -303,6 +303,19 @@ export function registerTerrainRendererTests(check: Check): void {
       setTerrainSelfShadow(true);
     }
     assert.equal(terrain.mesh.castShadow, true);
+
+    // The far tiling break is a program switch: a define, toggled page-wide.
+    const lit = terrain.mesh.material as { defines?: Record<string, unknown>; version: number };
+    assert.equal(lit.defines?.FORGE_TERRAIN_FAR_TILING, 1);
+    const version = lit.version;
+    setTerrainFarTiling(false);
+    try {
+      assert.equal(lit.defines?.FORGE_TERRAIN_FAR_TILING, undefined);
+      assert.ok(lit.version > version, "the lit program recompiles");
+    } finally {
+      setTerrainFarTiling(true);
+    }
+    assert.equal(lit.defines?.FORGE_TERRAIN_FAR_TILING, 1);
     disposeLandscapeObject(object);
   });
 

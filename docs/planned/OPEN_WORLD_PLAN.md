@@ -758,7 +758,11 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       önce koşar (runtime + editör). Uzak tekrar kırma: dokulu her katman 25 m'den
       sonra 0,23 ölçekli, 0,6 rad döndürülmüş ikinci bir örneği (dallanma
       içinde `textureGrad`, yalnız ağırlığı olan katmanda) 100 m'de yarı
-      yarıya karıştırır; normal haritası tek ölçekte kalır. Görsel
+      yarıya karıştırır; normal haritası tek ölçekte kalır. Kalite anahtarı
+      `terrainFarTiling` (ultra/high açık, medium/low kapalı) bunu
+      `FORGE_TERRAIN_FAR_TILING` define'ı olarak programa derler; SwiftShader'da
+      ek okumalar `vehicle-soft-ground` smoke'unu (medium tabanlı) süre sınırının
+      dışına itiyordu. Görsel
       karşılaştırma kullanıcıya gösterildi. Testler: `terrain renderer:
       self-shadow keeps…`, `terrain render:` shader metni.
       *İlk dilim tamam (2026-10-23, `engine/render-three/terrain/`):* tek slot

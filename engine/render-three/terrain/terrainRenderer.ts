@@ -121,6 +121,7 @@ export const DEFAULT_TRACK_DETAIL_LEVELS = 2;
 const liveRenderers = new Set<TerrainRenderer>();
 let pageTrackDetailLevels = DEFAULT_TRACK_DETAIL_LEVELS;
 let pageSelfShadow = true;
+let pageFarTiling = true;
 
 /**
  * Quality hook (`QualitySettings.terrainSelfShadow`): whether every live terrain
@@ -129,6 +130,16 @@ let pageSelfShadow = true;
 export function setTerrainSelfShadow(enabled: boolean): void {
   pageSelfShadow = enabled;
   for (const renderer of liveRenderers) renderer.setSelfShadow(enabled);
+}
+
+/**
+ * Quality hook (`QualitySettings.terrainFarTiling`): whether every live terrain
+ * renderer, and every one created later on this page, compiles the far tiling
+ * break into its lit program.
+ */
+export function setTerrainFarTiling(enabled: boolean): void {
+  pageFarTiling = enabled;
+  for (const renderer of liveRenderers) renderer.setFarTiling(enabled);
 }
 
 /**
@@ -428,6 +439,7 @@ export class TerrainRenderer {
     this.mesh.receiveShadow = true;
     this.mesh.castShadow = pageSelfShadow;
     this.mesh.customDepthMaterial = this.materials.shadowDepthMaterial;
+    this.setFarTiling(pageFarTiling);
     this.mesh.userData.forgeTerrain = this;
     this.mesh.raycast = (raycaster, intersects) => this.raycast(raycaster, intersects);
     this.mesh.onBeforeRender = (renderer, scene, camera) => {
@@ -481,6 +493,16 @@ export class TerrainRenderer {
     if (this.mesh.castShadow === enabled) return;
     this.mesh.castShadow = enabled;
     this.selectionDirty = true;
+  }
+
+  /** Quality hook: compile the far tiling break into the lit program (a program switch, not a per-frame cost). */
+  setFarTiling(enabled: boolean): void {
+    const material = this.materials.material;
+    const defines = material.defines ??= {};
+    if (Boolean(defines.FORGE_TERRAIN_FAR_TILING) === enabled) return;
+    if (enabled) defines.FORGE_TERRAIN_FAR_TILING = 1;
+    else delete defines.FORGE_TERRAIN_FAR_TILING;
+    material.needsUpdate = true;
   }
 
   /** Re-selects now at the last camera with no frustum cull ({@link withTerrainCullingSuspended}). */

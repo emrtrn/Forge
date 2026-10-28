@@ -90,7 +90,7 @@ import {
   Vector3,
 } from "three";
 import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
-import { setTerrainSelfShadow } from "@engine/render-three/terrain/terrainRenderer";
+import { setTerrainFarTiling, setTerrainSelfShadow } from "@engine/render-three/terrain/terrainRenderer";
 import { sunCascadeDistance } from "@engine/world/sunCascades";
 import {
   applyQualityToPostProcess,
@@ -3122,6 +3122,7 @@ export class SceneApp {
     }
     for (const record of this.lightObjects) this.applyShadowMapSize(record.light);
     setTerrainSelfShadow(quality.terrainSelfShadow);
+    setTerrainFarTiling(quality.terrainFarTiling);
     this.fitSunShadowToScene();
     this.applyPostProcess();
   }

@@ -108,6 +108,7 @@
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 2,
+    "mie": 0.004,
     "exposure": 1,
     "skyLightCapture": {
       "intensity": 1
@@ -118,7 +119,8 @@
     "density": 0.000989
   },
   "cloudLayer": {
-    "density": 0.5,
+    "coverage": 0.3,
+    "density": 0.3,
     "speed": 0.1
   },
   "postProcess": {
@@ -1930,9 +1932,9 @@
         "rippleSpeed": 0.15,
         "reflectionStrength": 0.45,
         "causticsStrength": 1,
-        "causticsScale": 1,
-        "causticsSpeed": 0.25,
-        "causticsDepthFade": 4,
+        "causticsScale": 0.7,
+        "causticsSpeed": 1,
+        "causticsDepthFade": 1,
         "reflectionMode": "sharedPlanar",
         "reflectionQuality": "high"
       }

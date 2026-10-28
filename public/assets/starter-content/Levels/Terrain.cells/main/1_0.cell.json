@@ -2,16 +2,22 @@
   "schema": 1,
   "type": "worldCell",
   "grid": "main",
-  "key": "0_0",
+  "key": "1_0",
   "actors": [
     {
       "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
-        93.62,
+        169.14,
         0,
-        127
+        125.86
       ],
-      "rotationYDeg": 0
+      "rotationYDeg": 0,
+      "rotation": [
+        0,
+        -120,
+        0
+      ],
+      "scale": 1
     }
   ]
 }

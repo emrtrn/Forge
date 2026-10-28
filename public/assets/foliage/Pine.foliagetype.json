@@ -3,8 +3,8 @@
   "type": "foliageType",
   "name": "Pine",
   "meshAssetId": "lt-alpine-pine",
-  "radius": 0.5,
-  "density": 0.1,
+  "radius": 2,
+  "density": 0.01,
   "scaleMin": [
     20,
     20,

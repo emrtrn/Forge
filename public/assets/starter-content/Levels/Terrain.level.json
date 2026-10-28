@@ -46,7 +46,7 @@
     "gameMode": "forge.vehicle"
   },
   "worldCells": [
-    "0_0"
+    "1_0"
   ],
   "skyAtmosphere": {
     "rayleigh": 1.4,
@@ -95,13 +95,39 @@
       "name": "Landscape"
     }
   ],
-  "riverWaters": [
+  "waterBodies": [
     {
-      "id": "river-water-1",
-      "landscapeRef": "landscape-1",
-      "splineRef": "spline-2",
-      "name": "River Water 1",
-      "surfaceLevel": 0
+      "schema": 1,
+      "kind": "lake",
+      "mode": "fillExisting",
+      "coordinateSpace": "world",
+      "id": "lake-1",
+      "terrainRef": "landscape-1",
+      "bounds": {
+        "min": [
+          98,
+          70
+        ],
+        "max": [
+          163,
+          135
+        ]
+      },
+      "seed": [
+        130.09964287736702,
+        102.17214733788103
+      ],
+      "surfaceLevel": -1,
+      "name": "Lake 1",
+      "appearance": {
+        "causticsEnabled": true,
+        "causticsStrength": 1,
+        "causticsScale": 1,
+        "causticsSpeed": 1,
+        "causticsDepthFade": 1,
+        "reflectionMode": "sharedPlanar",
+        "reflectionQuality": "medium"
+      }
     }
   ],
   "actors": []

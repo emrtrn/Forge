@@ -578,7 +578,7 @@ import { VEHICLE_COMPONENT } from "@engine/scene/components";
 import type { SceneJsonValue } from "@engine/scene/entity";
 import type { VehicleOverrides } from "@engine/physics/vehicle/vehicleTypes";
 import type { Entity } from "@engine/scene/entity";
-import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
+import { createCharacterSceneObject, entityCharacterItem, tintedMaterial } from "@engine/render-three/models";
 import { actorInstanceToEntity, resolveActorInstanceVariables } from "@engine/scene/actorInstance";
 import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import type { MetadataFieldDef, MetadataSchema } from "@engine/scene/metadataSchema";
@@ -4469,7 +4469,8 @@ export class SceneApp {
         child.geometry = geometry;
       }
       const applyBake = (source: Material): Material => {
-        const base = overrideMaterial ?? source;
+        const chosen = overrideMaterial ?? source;
+        const base = placement.color === undefined ? chosen : tintedMaterial(chosen, placement.color, clonedMaterials);
         return bake
           ? assignProbeEnvMapMaterial(
               base,
@@ -4491,8 +4492,9 @@ export class SceneApp {
         object,
         materialSlots,
         (materialId) => this.materialCache.get(materialId),
-        (material) =>
-          bake
+        (slotMaterial) => {
+          const material = placement.color === undefined ? slotMaterial : tintedMaterial(slotMaterial, placement.color, clonedMaterials);
+          return bake
             ? assignProbeEnvMapMaterial(
                 material,
                 bake,
@@ -4500,7 +4502,8 @@ export class SceneApp {
                 this.scene.environment,
                 this.scene.environmentIntensity,
               )
-            : material,
+            : material;
+        },
       );
     }
     return object;

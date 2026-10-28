@@ -361,7 +361,7 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import { actorInstanceEntityId, actorInstanceToEntity, actorInstanceTransform } from "@engine/scene/actorInstance";
 import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
-import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
+import { createCharacterSceneObject, entityCharacterItem, tintedMaterial } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import { createVehicleAssetLoader, resolveActorVehicleAssets, withVehicleOverrides } from "@/scene/vehicleAssetLoader";
@@ -5515,7 +5515,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         child.geometry = geometry;
       }
       const applyBake = (source: Material): Material => {
-        const base = overrideMaterial ?? source;
+        const chosen = overrideMaterial ?? source;
+        const base = placement.color === undefined ? chosen : tintedMaterial(chosen, placement.color, clonedMaterials);
         return bake
           ? assignProbeEnvMapMaterial(
               base,
@@ -5537,8 +5538,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         object,
         materialSlots,
         (materialId) => this.materialCache.get(materialId),
-        (material) =>
-          bake
+        (slotMaterial) => {
+          const material = placement.color === undefined ? slotMaterial : tintedMaterial(slotMaterial, placement.color, clonedMaterials);
+          return bake
             ? assignProbeEnvMapMaterial(
                 material,
                 bake,
@@ -5546,7 +5548,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
                 this.scene.environment,
                 this.scene.environmentIntensity,
               )
-            : material,
+            : material;
+        },
       );
     }
     return object;

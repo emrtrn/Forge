@@ -103,7 +103,8 @@ engine/editor.
   `physicalMaterialId`, `generateOverlapEvents`, `simulationGeneratesHitEvents`)
   live in `applyTransformFields`. Placement-only identity — `id` (unique per
   layout) and semantic `role` (`engine/scene/placementIdentity.ts`) — lives in
-  `validatePlacement`, not the shared `applyTransformFields`; undo snapshots
+  `validatePlacement`, not the shared `applyTransformFields`, and so does the
+  placement `color` (`#rrggbb` base colour, e.g. World Builder placeholders); undo snapshots
   keep the id and duplicates mint a fresh one (`reidentifyDuplicatePlacement`).
   World Partition's `spatiallyLoaded` (only `false`
   is persisted) is copied by `applyTransformFields` and the actor, light,

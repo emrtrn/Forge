@@ -522,6 +522,7 @@ export function validatePlacement(value: unknown): Record<string, unknown> {
   }
   placement.position = entry.position.map((item) => Number(item.toFixed(3)));
   applyTransformFields(entry, placement, "placement");
+  if (entry.color !== undefined) placement.color = validateColorHex(entry.color, "placement color");
   return placement;
 }
 

@@ -189,6 +189,12 @@ export interface LayoutPlacement {
   simulationGeneratesHitEvents?: boolean;
   /** Per-placement material override. References a manifest material asset id. */
   materialSlot?: string;
+  /**
+   * `#rrggbb` base colour replacing the material's own (textures still apply),
+   * e.g. a World Builder placeholder's role or land-use colour. Absent keeps the
+   * material colour.
+   */
+  color?: string;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
   sensor?: boolean;
   /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */

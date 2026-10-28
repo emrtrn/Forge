@@ -1,4 +1,4 @@
-import { Group, InstancedMesh, Matrix4, Object3D } from "three";
+import { Color, Group, InstancedMesh, type Material, Matrix4, Object3D } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 
@@ -11,6 +11,7 @@ import { applyEulerDegrees, composePlacementMatrix, composeTransformMatrix } fro
 
 const HIDDEN_INSTANCE_MATRIX = new Matrix4().makeScale(0, 0, 0);
 const IDENTITY_MATRIX = new Matrix4();
+const WHITE = new Color(1, 1, 1);
 
 /**
  * glTF primitives may ship without a NORMAL attribute. Per the spec GLTFLoader
@@ -43,6 +44,8 @@ export interface InstancedModelGroup {
 export interface InstanceRenderItem {
   matrix: Matrix4;
   hidden: boolean;
+  /** `#rrggbb` base colour replacing the material colour (`LayoutPlacement.color`). */
+  color?: string;
 }
 
 /** Legacy builder: derives render items straight from layout placements. */
@@ -109,11 +112,53 @@ export function createInstancedModelGroup(
       instanced.setMatrixAt(index, matrix);
     }
     instanced.instanceMatrix.needsUpdate = true;
+    applyInstanceColors(instanced, items);
     group.add(instanced);
     meshes.push(instanced);
   });
 
   return { group, meshes };
+}
+
+/**
+ * Per-instance base colours. three multiplies the instance colour into the
+ * material colour, so each one is divided by it: the instance shows `color`
+ * itself. Instances without one keep white (the material colour). Nothing is
+ * allocated when no item has a colour.
+ */
+function applyInstanceColors(instanced: InstancedMesh, items: readonly InstanceRenderItem[]): void {
+  if (!items.some((item) => item.color !== undefined)) return;
+  const materials = Array.isArray(instanced.material) ? instanced.material : [instanced.material];
+  const base = (materials[0] as { color?: unknown } | undefined)?.color;
+  const divisor = base instanceof Color ? base : WHITE;
+  const color = new Color();
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item?.color === undefined) {
+      instanced.setColorAt(index, WHITE);
+      continue;
+    }
+    color.set(item.color);
+    color.setRGB(
+      divisor.r > 0 ? color.r / divisor.r : color.r,
+      divisor.g > 0 ? color.g / divisor.g : color.g,
+      divisor.b > 0 ? color.b / divisor.b : color.b,
+    );
+    instanced.setColorAt(index, color);
+  }
+  if (instanced.instanceColor) instanced.instanceColor.needsUpdate = true;
+}
+
+/**
+ * A copy of `material` whose base colour is `color` (textures still apply), for
+ * a placement rendered as its own clone; pushed onto `owned` for disposal.
+ */
+export function tintedMaterial<T extends Material>(material: T, color: string, owned: Material[]): T {
+  const tinted = material.clone() as T;
+  const target = (tinted as { color?: unknown }).color;
+  if (target instanceof Color) target.set(color);
+  owned.push(tinted);
+  return tinted;
 }
 
 export interface CreatePackedInstancedModelGroupOptions {

@@ -109,6 +109,7 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
     clone.simulationGeneratesHitEvents = placement.simulationGeneratesHitEvents;
   }
   if (placement.materialSlot !== undefined) clone.materialSlot = placement.materialSlot;
+  if (placement.color !== undefined) clone.color = placement.color;
   if (placement.sensor !== undefined) clone.sensor = placement.sensor;
   if (placement.simulatePhysics !== undefined) clone.simulatePhysics = placement.simulatePhysics;
   if (placement.physics !== undefined) {

@@ -378,7 +378,10 @@ export function buildSceneInstancedModel(options: {
 }): { group: Group; meshes: InstancedMesh[] } {
   const items = entityInstanceItems(
     instanceEntitiesForAsset(options.assetId, options.placements),
-  );
+  ).map((item, index) => {
+    const color = options.placements[index]?.color;
+    return color === undefined ? item : { ...item, color };
+  });
   return createInstancedModelGroup({
     assetId: options.assetId,
     gltf: options.gltf,

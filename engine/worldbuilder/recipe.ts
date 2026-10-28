@@ -18,32 +18,51 @@
  * rejects the save). Dependency-free; no three.js.
  */
 import { isPlacementId, isSemanticRole } from "../scene/placementIdentity";
+import {
+  arrayOf,
+  type Ctx,
+  idSet,
+  isFiniteNumber,
+  isNonNegativeInteger,
+  isOneOf,
+  isPositiveInteger,
+  isRecord,
+  issue,
+  normalizeAssetPath,
+  normalizeSeed,
+  optionalPolygon,
+  optionalPositive,
+  optionalReference,
+  optionalTokens,
+  pointList,
+  reject,
+  requireId,
+  requirePoint,
+  requirePolygon,
+  requireToken,
+  round,
+  uniqueEntries,
+  type WorldPoint,
+} from "./normalize";
+import {
+  LAND_USES,
+  type LandUse,
+  PROGRAM_SITINGS,
+  type ProgramSiting,
+  ROAD_CLASSES,
+  type RoadClass,
+} from "./vocabulary";
+
+export type { WorldPoint } from "./normalize";
 
 export const WORLD_RECIPE_SCHEMA_VERSION = 1;
 export const WORLD_RECIPE_SUFFIX = ".worldrecipe.json";
 
-/** Plan coordinates beyond this are rejected: far outside any streamed world. */
-export const WORLD_RECIPE_MAX_COORDINATE = 1_000_000;
-
-/** `[x, z]` in world metres. */
-export type WorldPoint = [number, number];
-
 export const PLAN_SOURCES = ["reference", "osm", "manual", "generated"] as const;
 export type PlanSource = (typeof PLAN_SOURCES)[number];
 
-export const ROAD_CLASSES = ["highway", "arterial", "collector", "local", "track", "path"] as const;
-export type RoadClass = (typeof ROAD_CLASSES)[number];
-
 export const ROAD_NODE_KINDS = ["end", "junction", "gate"] as const;
 export type RoadNodeKind = (typeof ROAD_NODE_KINDS)[number];
-
-export const LAND_USES = [
-  "residential", "commercial", "civic", "industrial", "agricultural", "open", "transport",
-] as const;
-export type LandUse = (typeof LAND_USES)[number];
-
-export const PROGRAM_SITINGS = ["center", "mainRoad", "edge", "downstream", "entrance", "any"] as const;
-export type ProgramSiting = (typeof PROGRAM_SITINGS)[number];
 
 export const REFERENCE_VIEWS = ["topDown", "perspective"] as const;
 export type ReferenceView = (typeof REFERENCE_VIEWS)[number];
@@ -628,168 +647,4 @@ function normalizeReference(ctx: Ctx, value: unknown): WorldReference | null {
     else issue(ctx, "reference.view", `must be one of ${REFERENCE_VIEWS.join(", ")}`);
   }
   return reference;
-}
-
-// ─── Primitives ─────────────────────────────────────────────────────────────
-
-interface Ctx {
-  issues: string[];
-}
-
-function issue(ctx: Ctx, path: string, message: string): void {
-  ctx.issues.push(`${path}: ${message}`);
-}
-
-function reject(ctx: Ctx, path: string, message: string): null {
-  issue(ctx, path, message);
-  return null;
-}
-
-/** Normalizes an array, dropping bad entries and later repeats of an id. */
-function uniqueEntries<T extends { id: string }>(
-  ctx: Ctx,
-  path: string,
-  value: unknown,
-  normalize: (ctx: Ctx, path: string, entry: Record<string, unknown>) => T | null,
-): T[] {
-  const seen = new Set<string>();
-  return arrayOf(ctx, path, value, (c, p, entry) => {
-    if (!isRecord(entry)) return reject(c, p, "must be an object");
-    const result = normalize(c, p, entry);
-    if (!result) return null;
-    if (seen.has(result.id)) return reject(c, p, `repeats id "${result.id}"`);
-    seen.add(result.id);
-    return result;
-  });
-}
-
-function arrayOf<T>(
-  ctx: Ctx,
-  path: string,
-  value: unknown,
-  normalize: (ctx: Ctx, path: string, entry: unknown) => T | null,
-): T[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) {
-    issue(ctx, path, "must be an array");
-    return [];
-  }
-  const result: T[] = [];
-  value.forEach((entry, index) => {
-    const normalized = normalize(ctx, `${path}[${index}]`, entry);
-    if (normalized !== null) result.push(normalized);
-  });
-  return result;
-}
-
-function idSet(entries: ReadonlyArray<{ id: string }>): Set<string> {
-  return new Set(entries.map((entry) => entry.id));
-}
-
-function requireId(ctx: Ctx, path: string, value: unknown): string | null {
-  return isPlacementId(value) ? value : reject(ctx, `${path}.id`, "must be an id");
-}
-
-function requireToken(ctx: Ctx, path: string, value: unknown): string | null {
-  return isSemanticRole(value) ? value : reject(ctx, path, "must be a lowercase dotted token");
-}
-
-function optionalTokens(ctx: Ctx, path: string, value: unknown): string[] | undefined {
-  if (value === undefined) return undefined;
-  const tokens = arrayOf(ctx, path, value, (c, p, token) =>
-    isSemanticRole(token) ? token : reject(c, p, "must be a lowercase dotted token"));
-  return tokens.length > 0 ? [...new Set(tokens)] : undefined;
-}
-
-function optionalReference(
-  ctx: Ctx, path: string, value: unknown, ids: ReadonlySet<string>,
-): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value === "string" && ids.has(value)) return value;
-  issue(ctx, path, "must name an existing element");
-  return undefined;
-}
-
-function optionalPositive(ctx: Ctx, path: string, value: unknown): number | undefined {
-  if (value === undefined) return undefined;
-  if (isFiniteNumber(value) && value > 0) return round(value);
-  issue(ctx, path, "must be a positive number");
-  return undefined;
-}
-
-function requirePoint(ctx: Ctx, path: string, value: unknown): WorldPoint | null {
-  const point = toPoint(value);
-  return point ?? reject(ctx, path, `must be [x, z] within ±${WORLD_RECIPE_MAX_COORDINATE}`);
-}
-
-function pointList(ctx: Ctx, path: string, value: unknown, minimum: number): WorldPoint[] | null {
-  if (!Array.isArray(value) || value.length < minimum) {
-    return reject(ctx, path, `must list at least ${minimum} points`);
-  }
-  const points: WorldPoint[] = [];
-  for (let index = 0; index < value.length; index += 1) {
-    const point = toPoint(value[index]);
-    if (!point) return reject(ctx, `${path}[${index}]`, `must be [x, z] within ±${WORLD_RECIPE_MAX_COORDINATE}`);
-    points.push(point);
-  }
-  return points;
-}
-
-function requirePolygon(ctx: Ctx, path: string, value: unknown): WorldPoint[] | null {
-  return pointList(ctx, path, value, 3);
-}
-
-function optionalPolygon(ctx: Ctx, path: string, value: unknown): WorldPoint[] | undefined {
-  if (value === undefined) return undefined;
-  return requirePolygon(ctx, path, value) ?? undefined;
-}
-
-function toPoint(value: unknown): WorldPoint | null {
-  if (!Array.isArray(value) || value.length !== 2) return null;
-  const [x, z] = value;
-  if (!isCoordinate(x) || !isCoordinate(z)) return null;
-  return [round(x), round(z)];
-}
-
-function isCoordinate(value: unknown): value is number {
-  return isFiniteNumber(value) && Math.abs(value) <= WORLD_RECIPE_MAX_COORDINATE;
-}
-
-/** Public-root-relative, forward slashes, no `..`, optionally with a required suffix. */
-function normalizeAssetPath(value: unknown, suffix: string | null): string | null {
-  if (typeof value !== "string") return null;
-  const path = value.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!path || path.split("/").some((part) => part === ".." || part === "")) return null;
-  if (suffix && !path.endsWith(suffix)) return null;
-  return path;
-}
-
-function normalizeSeed(value: unknown): number | null {
-  return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 0xffff_ffff
-    ? (value as number)
-    : null;
-}
-
-function round(value: number): number {
-  return Number(value.toFixed(3));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) > 0;
-}
-
-function isNonNegativeInteger(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 0;
-}
-
-function isOneOf<T extends string>(options: readonly T[], value: unknown): value is T {
-  return typeof value === "string" && (options as readonly string[]).includes(value);
 }

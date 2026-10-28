@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "neutral-test",
+  "label": "Neutral test profile",
+  "traffic": { "side": "right" },
+  "roads": {
+    "collector": { "width": 7, "shoulder": 1, "sidewalk": 1.5, "maxSlopeDeg": 10, "minTurnRadius": 30, "surfaceLayer": "Asphalt" },
+    "local": { "width": 5, "shoulder": 0.5, "maxSlopeDeg": 14, "minTurnRadius": 12 },
+    "track": { "width": 3.5, "shoulder": 0, "maxSlopeDeg": 20, "minTurnRadius": 8, "surfaceLayer": "Dirt" }
+  },
+  "streetPattern": { "linear": 2, "grid": 0, "organic": 1, "radial": 0, "contourFollow": 1, "blockSize": [40, 110] },
+  "parcels": {
+    "agricultural": { "frontage": [40, 120], "depth": [60, 200], "setback": 10, "coverage": 0.05 },
+    "civic": { "frontage": [24, 50], "depth": [30, 60], "setback": 5, "coverage": 0.35 },
+    "commercial": { "frontage": [10, 20], "depth": [18, 30], "setback": 0, "coverage": 0.6 },
+    "industrial": { "frontage": [24, 60], "depth": [30, 80], "setback": 6, "coverage": 0.45 },
+    "open": { "frontage": [20, 50], "depth": [20, 50], "setback": 0, "coverage": 1 },
+    "residential": { "frontage": [14, 24], "depth": [22, 36], "setback": 3, "coverage": 0.3 }
+  },
+  "zoning": {
+    "mode": "separated",
+    "compatibility": {
+      "civic": { "commercial": 0.6, "industrial": -0.6 },
+      "industrial": { "residential": -0.8 },
+      "residential": { "commercial": 0.4, "open": 0.5 }
+    }
+  },
+  "household": { "personsPerDwelling": 3 },
+  "program": [
+    { "role": "open.square", "count": 1, "minPopulation": 50, "siting": "center" },
+    { "role": "building.civic.hall", "count": 1, "minPopulation": 50, "siting": "center" },
+    { "role": "building.civic.school", "perResidents": 600, "minPopulation": 300, "siting": "center" },
+    { "role": "building.commercial.shop", "perResidents": 150, "siting": "mainRoad" },
+    { "role": "building.industrial.workshop", "perResidents": 400, "siting": "downstream" }
+  ],
+  "roles": {
+    "building.civic.hall": { "landUse": "civic", "footprint": { "width": [12, 18], "depth": [10, 16] }, "storeys": [1, 2], "storeyHeight": 4, "entrance": "street" },
+    "building.civic.school": { "landUse": "civic", "footprint": { "width": [18, 30], "depth": [12, 20] }, "storeys": [1, 2], "storeyHeight": 3.6, "entrance": "street" },
+    "building.commercial.shop": { "landUse": "commercial", "footprint": { "width": [8, 14], "depth": [10, 16] }, "storeys": [1, 2], "storeyHeight": 3.4, "entrance": "street" },
+    "building.industrial.workshop": { "landUse": "industrial", "footprint": { "width": [14, 24], "depth": [12, 22] }, "storeys": [1, 1], "storeyHeight": 5, "entrance": "any" },
+    "building.residential.detached": { "landUse": "residential", "footprint": { "width": [8, 12], "depth": [8, 11] }, "storeys": [1, 2], "storeyHeight": 3, "entrance": "street", "placeholderColor": "#f2a65a" },
+    "open.square": { "landUse": "open", "footprint": { "width": [20, 36], "depth": [20, 36] }, "storeys": [0, 0], "storeyHeight": 1, "entrance": "any" }
+  },
+  "streetFurniture": [
+    { "role": "prop.sign.settlementName", "roadClasses": ["collector", "local"], "placement": "gate", "size": [1.2, 2.4, 0.1] },
+    { "role": "prop.light.street", "roadClasses": ["collector"], "placement": "interval", "spacing": 30, "size": [0.3, 6, 0.3] }
+  ]
+}

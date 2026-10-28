@@ -1029,6 +1029,7 @@ import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCover
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
 import { registerPlacementIdentityTests } from "../tests/engine/placementIdentity.test";
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
+import { registerRegionProfileTests } from "../tests/engine/regionProfile.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
@@ -1200,6 +1201,7 @@ registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
 registerPlacementIdentityTests(check);
 registerWorldRecipeTests(check);
+registerRegionProfileTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);
 await registerFoliageCellStreamingTests(checkAsync);

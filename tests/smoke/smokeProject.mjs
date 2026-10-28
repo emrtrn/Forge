@@ -14,7 +14,9 @@ export const SMOKE_SCENE = "layouts/__playwright-smoke.level.json";
 export const SMOKE_TARGET_SCENE = "layouts/__playwright-smoke-target.level.json";
 export const SMOKE_PATROL_SCENE = "layouts/__playwright-smoke-patrol.level.json";
 export const SMOKE_SPLINE_SCENE = "layouts/__playwright-smoke-spline.level.json";
-export const SMOKE_ROAD_SIDECAR = "landscapes/smoke-road.landscape.json";
+/** The spline scene's one-tile World Terrain; its tile binary sits beside it (`smoke-road.tiles/0_0.tile.bin`). */
+export const SMOKE_ROAD_TERRAIN = "landscapes/smoke-road.terrain.json";
+const SMOKE_ROAD_TILE = "landscapes/smoke-road.tiles/0_0.tile.bin";
 const RUNTIME_PARITY_SCENE = "layouts/RuntimeParity.level.json";
 const SMOKE_MENU = "assets/__playwright-smoke-menu.ui.json";
 
@@ -269,30 +271,57 @@ function prepareSmokeMenu(menu) {
 }
 
 
-function roadData(fixture) {
-  const vertexCount = fixture.vertices ** 2;
+/** Where the road terrain's grid centre (its Landscape actor) sits. */
+const ROAD_CENTRE = [0, -0.1, 0];
+
+/**
+ * A flat one-tile World Terrain under the road, painted fully with its first
+ * layer, and the road spline in world space. Points are authored around the
+ * grid centre.
+ */
+function roadTerrain(fixture) {
+  const quads = fixture.vertices - 1;
   const points = fixture.points.map((position, index) => ({
-    id: "point-" + (index + 1), position, width: 2, falloff: 1,
+    id: "point-" + (index + 1), width: 2, falloff: 1,
+    position: position.map((value, axis) => Number((value + ROAD_CENTRE[axis]).toFixed(4))),
   }));
-  return {
-    schema: 1, type: "landscape",
-    size: { verticesX: fixture.vertices, verticesZ: fixture.vertices, spacing: 1, heightScale: 1 },
-    chunks: { quadsPerChunk: 32 },
-    heights: new Array(vertexCount).fill(0),
+  const def = {
+    schema: 1, type: "worldTerrain", name: "Landscape", tileQuads: quads, spacing: 1, tilesX: 1, tilesZ: 1,
+    origin: [ROAD_CENTRE[0] - quads / 2, ROAD_CENTRE[1], ROAD_CENTRE[2] - quads / 2], heightMin: -256, heightMax: 256,
     layers: [
-      { id: "grass", name: "Grass", material: "starter-mat-grass", weights: new Array(vertexCount).fill(1) },
-      { id: "dirt", name: "Dirt", weights: new Array(vertexCount).fill(0) },
-      { id: "rock", name: "Rock", weights: new Array(vertexCount).fill(0) },
-      { id: "snow", name: "Snow", weights: new Array(vertexCount).fill(0) },
+      { id: "grass", name: "Grass", color: "#5f9449", material: "starter-mat-grass" },
+      { id: "dirt", name: "Dirt", color: "#8a6441" },
+      { id: "rock", name: "Rock", color: "#7d7d7d" },
+      { id: "snow", name: "Snow", color: "#dce7ec" },
     ],
+    tiles: [{ key: "0_0", minHeight: 0, maxHeight: 0 }],
+    collision: true,
     splines: [{
-      id: "smoke-road", points,
+      id: "smoke-road", coordinateSpace: "world", points,
       segments: points.slice(1).map((point, index) => ({
         id: "segment-" + (index + 1), startPointId: points[index].id, endPointId: point.id,
         mesh: structuredClone(fixture.mesh),
       })),
     }],
   };
+  return { def, tile: flatTerrainTile(fixture.vertices, def.layers.length) };
+}
+
+/** A flat tile in the engine's FTIL layout: Float32 heights, layer 0 fully weighted. */
+function flatTerrainTile(size, layerCount) {
+  const count = size * size;
+  const blocks = Math.ceil(layerCount / 4);
+  const bytes = Buffer.alloc(32 + count * 4 + blocks * count * 4);
+  bytes.write("FTIL", 0, "latin1");
+  bytes.writeUInt16LE(1, 4); // version
+  bytes.writeUInt16LE(1, 6); // f32 heights
+  bytes.writeUInt16LE(size, 8);
+  bytes.writeUInt8(layerCount, 10);
+  bytes.writeFloatLE(-256, 12);
+  bytes.writeFloatLE(256, 16);
+  const weights = 32 + count * 4;
+  for (let index = 0; index < count; index++) bytes[weights + index * 4] = 255;
+  return bytes;
 }
 
 /** Copy assets once; every test resets only the mutable fixture documents. */
@@ -315,11 +344,11 @@ export async function prepareSmokeProject(root = smokeRunRoot(), sourceRoot = RE
     lights: base.lights,
     instances: source.instances.filter((group) => group.assetId !== "shape:cube"),
   });
-  const road = roadData(await readJson(resolve(FIXTURES, "road.json")));
+  const road = roadTerrain(await readJson(resolve(FIXTURES, "road.json")));
   const spline = structuredClone(source);
   spline.name = "__playwright-smoke-spline";
   spline.instances = spline.instances.filter((group) => group.assetId !== "shape:cube");
-  spline.landscapes = [{ id: "smoke-road", name: "Landscape", position: [0, -0.1, 0], dataRef: SMOKE_ROAD_SIDECAR }];
+  spline.landscapes = [{ id: "smoke-road", name: "Landscape", position: [...ROAD_CENTRE], dataRef: SMOKE_ROAD_TERRAIN }];
   const menu = prepareSmokeMenu(await readJson(resolve(FIXTURES, "menu.ui.json")));
   const patrolBehavior = await readJson(resolve(FIXTURES, "patrol.behavior.json"));
   // AI libraries load manifest entries, rather than arbitrary class references.
@@ -343,8 +372,7 @@ export async function prepareSmokeProject(root = smokeRunRoot(), sourceRoot = RE
     [SMOKE_TARGET_SCENE]: prepareSmokeTargetScene(base),
     [SMOKE_PATROL_SCENE]: patrol,
     [SMOKE_SPLINE_SCENE]: spline,
-    [SMOKE_ROAD_SIDECAR]: road,
-    "landscapes/landscape-1.landscape.json": { ...road, splines: [] },
+    [SMOKE_ROAD_TERRAIN]: road.def,
     [SMOKE_MENU]: menu,
     "assets/__playwright-ai-character.actor.json": await readJson(resolve(FIXTURES, "ai-character.actor.json")),
     "assets/__playwright-patrol.behavior.json": patrolBehavior,
@@ -353,6 +381,8 @@ export async function prepareSmokeProject(root = smokeRunRoot(), sourceRoot = RE
   };
   const baseline = Object.fromEntries(Object.entries(documents).map(([path, data]) => [path, JSON.stringify(data, null, 2) + "\n"]));
   await writeFile(resolve(root, "baseline.json"), JSON.stringify(baseline), "utf8");
+  const binaries = { [SMOKE_ROAD_TILE]: road.tile.toString("base64") };
+  await writeFile(resolve(root, "baseline-binary.json"), JSON.stringify(binaries), "utf8");
   await resetSmokeDocuments(root);
 }
 
@@ -363,6 +393,11 @@ export async function resetSmokeDocuments(root = smokeRunRoot()) {
     const target = smokePublicPath(path, root);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, raw, "utf8");
+  }
+  for (const [path, base64] of Object.entries(await readJson(resolve(root, "baseline-binary.json")))) {
+    const target = smokePublicPath(path, root);
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, Buffer.from(base64, "base64"));
   }
 }
 

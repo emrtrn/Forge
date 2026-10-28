@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
-import { rotatePointAboutOrigin } from "../../engine/physics/rotatedBox";
 import { nominalWheelLoad, sinkage, vehicleWheelWidth } from "../../engine/physics/surface/sinkage";
 import {
   createPhysicalMaterialSurfaceProvider, NEUTRAL_SURFACE_SAMPLE, resolveSurfaceSample,
@@ -8,10 +7,8 @@ import {
 } from "../../engine/physics/surface/surfaceResponse";
 import { createReferenceCarDefinition, NEUTRAL_VEHICLE_INPUT } from "../../engine/physics/vehicle/vehicleTypes";
 import { PHYSICAL_MATERIALS } from "../../engine/scene/collision";
-import { createFlatLandscapeData } from "../../engine/scene/landscape";
-import type { Vec3 } from "../../engine/scene/layout";
 import {
-  createTerrainSurfaceProvider, landscapeSurfaceSource, terrainLayerPhysicalMaterials,
+  createTerrainSurfaceProvider, terrainLayerPhysicalMaterials,
   TerrainSurfaceSampler, worldTerrainSurfaceSource,
 } from "../../engine/terrain/terrainSurface";
 import {
@@ -72,7 +69,6 @@ export function registerTerrainSurfaceTests(check: Check): void {
     assert.equal(terrainLayerPhysicalMaterials([{}, { physicalMaterial: null }]), null);
     assert.deepEqual(terrainLayerPhysicalMaterials([{}, { physicalMaterial: "mud" }]), [null, "mud"]);
     assert.equal(worldTerrainSurfaceSource(flatTerrain(LAYERS(null, null), BORDER)), null);
-    assert.equal(landscapeSurfaceSource(createFlatLandscapeData("small"), [0, 0, 0], [0, 0, 0]), null);
   });
 
   check("terrain surface: layer weights blend like resolveSurfaceSample across a mud border", () => {
@@ -135,30 +131,6 @@ export function registerTerrainSurfaceTests(check: Check): void {
     } };
     const blended = new TerrainSurfaceSampler(source).sampleAt([0, 0, 0])!;
     close(blended.frictionSlipScale, (1 + PHYSICAL_MATERIALS.mud!.vehicle!.frictionSlipScale) / 2);
-  });
-
-  check("terrain surface: a rotated, offset 1x1 Landscape samples in its own actor frame", () => {
-    const data = createFlatLandscapeData("small");
-    const half = ((data.size.verticesX - 1) * data.size.spacing) / 2;
-    // Mud on the local +X half only.
-    data.layers[1]!.physicalMaterial = "mud";
-    data.layers.forEach((layer, index) => {
-      layer.weights = layer.weights.map((_weight, vertex) => {
-        const localX = (vertex % data.size.verticesX) * data.size.spacing - half;
-        const mud = localX > 0 ? 1 : 0;
-        return index === 1 ? mud : index === 0 ? 1 - mud : 0;
-      });
-    });
-    const position: Vec3 = [100, 5, -40];
-    const rotation: Vec3 = [0, 90, 0];
-    const sampler = new TerrainSurfaceSampler(landscapeSurfaceSource(data, position, rotation)!);
-    const world = (local: Vec3): Vec3 => rotatePointAboutOrigin(position, local, rotation);
-    assert.deepEqual(sampler.sampleAt(world([half / 2, 0, -3])), resolveSurfaceSample("mud"));
-    assert.deepEqual(sampler.sampleAt(world([-half / 2, 0, -3])), NEUTRAL_SURFACE_SAMPLE);
-    // Unrotated, the same world point is at local X = -3: the grass half.
-    assert.deepEqual(new TerrainSurfaceSampler(landscapeSurfaceSource(data, position, [0, 0, 0])!)
-      .sampleAt(world([half / 2, 0, -3])), NEUTRAL_SURFACE_SAMPLE);
-    assert.equal(sampler.sampleAt(world([half + 1, 0, 0])), null);
   });
 
   check("terrain surface: collider ids map to the Landscape actor; other ground uses the fallback", () => {

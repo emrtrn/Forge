@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { createFlatLandscapeData, type ForgeLandscapeSpline } from "../../engine/scene/landscape";
-import { buildRiverWaterRibbon } from "../../engine/render-three/riverWater";
+import type { ForgeLandscapeSpline } from "../../engine/scene/landscape";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
-import { captureTerrainSnapshot, terrainDocumentToLandscape } from "../../engine/terrain/terrainLandscapeBridge";
 import { loadWorldTerrain } from "../../engine/terrain/terrainLoader";
 import { migrateTerrainSplineCoordinates, terrainSplineInLocalFrame, terrainSplineToWorld } from "../../engine/terrain/terrainSplineData";
-import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import { createFlatWorldTerrain, WORLD_TERRAIN_CREATE_DEFAULTS } from "../../engine/terrain/worldTerrainCreate";
 import { captureWorldTerrainSave } from "../../engine/terrain/worldTerrainSave";
@@ -33,10 +30,13 @@ function spline(): ForgeLandscapeSpline {
   };
 }
 
+/** A one-tile World Terrain centred on `actor`, its spline saved in world space. */
 function single() {
-  const data = createFlatLandscapeData("small");
-  data.splines = [spline()];
-  return { data, snapshot: captureTerrainSnapshot(actor, data) };
+  const created = createFlatWorldTerrain({ ...WORLD_TERRAIN_CREATE_DEFAULTS, tilesX: 1, tilesZ: 1, tileQuads: 64, spacing: 1 });
+  created.def.origin = [actor.position[0] - 32, actor.position[1], actor.position[2] - 32];
+  created.def.splines = [spline()];
+  const saved = captureWorldTerrainSave(createTerrainEditWorld(created.def, created.tiles.values()), ["0_0"], new Map());
+  return { data: { splines: [spline()] }, snapshot: { def: saved.def, bytes: saved.tiles[0]!.bytes } };
 }
 
 function multi() {
@@ -78,53 +78,6 @@ export function registerTerrainSplineDataTests(check: Check): void {
     assert.equal(Object.hasOwn(migrateTerrainSplineCoordinates(world.def), "splines"), false);
   });
 
-  check("terrain spline data: 1x1 reload, repeat save and actor movement preserve local road and river geometry", () => {
-    const { data, snapshot } = single();
-    const bytes = snapshot.bytes.slice();
-    let def = snapshot.def;
-    for (let i = 0; i < 3; i++) {
-      const loaded = terrainDocumentToLandscape({ def: normalizeWorldTerrain(def), tiles: new Map([["0_0", decodeTerrainTile(bytes)]]) });
-      assert.deepEqual(loaded.splines, data.splines);
-      assert.deepEqual(buildRiverWaterRibbon(loaded.splines![0]!, { surfaceLevel: 0, widthScale: 1, landscapeData: loaded }),
-        buildRiverWaterRibbon(data.splines![0]!, { surfaceLevel: 0, widthScale: 1, landscapeData: data }));
-      def = captureTerrainSnapshot(actor, loaded).def;
-      assert.deepEqual(def, snapshot.def, "repeat save cannot apply the terrain offset twice");
-    }
-    const loaded = terrainDocumentToLandscape({ def, tiles: new Map([["0_0", decodeTerrainTile(bytes)]]) });
-    const moved = { ...actor, position: [41, 10, -20] as [number, number, number] };
-    const saved = captureTerrainSnapshot(moved, loaded);
-    assert.deepEqual(saved.def.splines![0]!.points[0]!.position, [33, 8.75, -24]);
-    assert.deepEqual(terrainDocumentToLandscape({ def: saved.def, tiles: new Map([["0_0", decodeTerrainTile(saved.bytes)]]) }).splines, data.splines);
-  });
-
-  check("terrain spline data: fractional origins reach a stable save representation within one millimetre", () => {
-    const { data } = single();
-    const fractional = { ...actor, position: [31.123456, 7.234567, -13.345678] as [number, number, number] };
-    let snapshot = captureTerrainSnapshot(fractional, data);
-    let saved = normalizeWorldTerrain(snapshot.def);
-    for (let i = 0; i < 3; i++) {
-      const loaded = terrainDocumentToLandscape({ def: saved, tiles: new Map([["0_0", decodeTerrainTile(snapshot.bytes)]]) });
-      loaded.splines![0]!.points.forEach((point, index) => point.position.forEach((value, axis) =>
-        assert.ok(Math.abs(value - data.splines![0]!.points[index]!.position[axis]!) < 0.001)));
-      snapshot = captureTerrainSnapshot(fractional, loaded);
-      const next = normalizeWorldTerrain(snapshot.def);
-      assert.deepEqual(next, saved);
-      saved = next;
-    }
-  });
-
-  check("terrain spline data: decimal datum roundoff does not change unchanged legacy points on reload", () => {
-    for (const datum of [-0.1, 19]) {
-      const { data } = single();
-      data.splines![0]!.points[0]!.position[1] = 0.15;
-      const placed = { ...actor, position: [31, datum, -13] as [number, number, number] };
-      const snapshot = captureTerrainSnapshot(placed, data);
-      const def = normalizeWorldTerrain(snapshot.def);
-      const loaded = terrainDocumentToLandscape({ def, tiles: new Map([["0_0", decodeTerrainTile(snapshot.bytes)]]) });
-      assert.deepEqual(loaded.splines, data.splines);
-      assert.deepEqual(normalizeWorldTerrain(captureTerrainSnapshot(placed, loaded).def), def);
-    }
-  });
 }
 
 export async function registerTerrainSplineDataAsyncTests(checkAsync: CheckAsync): Promise<void> {

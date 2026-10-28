@@ -1,6 +1,3 @@
-import type { LayoutLandscape } from "@engine/scene/layout";
-import type { ForgeLandscapeData } from "@engine/scene/landscape";
-import { acknowledgeTerrainSnapshot, captureTerrainSnapshot } from "@engine/terrain/terrainLandscapeBridge";
 import type { TerrainEditWorld } from "@engine/terrain/terrainEdit";
 import type { TerrainGlobalAttributes } from "@engine/terrain/terrainRenderSource";
 import type { TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
@@ -116,26 +113,4 @@ export class WorldTerrainEditSession {
       },
     };
   }
-}
-
-/** Definition follows tile and global map; a failed migration leaves the legacy reference usable. */
-export function captureTerrainWrite(actor: LayoutLandscape, data: ForgeLandscapeData) {
-  const snapshot = captureTerrainSnapshot(actor, data);
-  const body = JSON.stringify({ path: snapshot.path, terrain: snapshot.def });
-  return {
-    path: snapshot.path,
-    write: async (): Promise<void> => {
-      // Binary size/header are validated here; definition commit cross-checks the tile on disk.
-      await checkSave(await fetch(`/__save-terrain-tile?path=${encodeURIComponent(snapshot.path)}&key=0_0`, {
-        method: "POST", headers: { "Content-Type": "application/octet-stream" },
-        body: snapshot.bytes.slice().buffer,
-      }));
-      await checkSave(await fetch(`/__save-terrain-global?path=${encodeURIComponent(snapshot.path)}`, {
-        method: "POST", headers: { "Content-Type": "application/octet-stream" },
-        body: snapshot.global.slice().buffer,
-      }));
-      await checkSave(await fetch("/__save-terrain", { method: "POST", headers: { "Content-Type": "application/json" }, body }));
-      acknowledgeTerrainSnapshot(data, snapshot.def);
-    },
-  };
 }

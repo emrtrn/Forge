@@ -885,7 +885,7 @@ export interface LayoutLandscape {
   position: Vec3;
   /** Full Euler rotation (XYZ order) in degrees. */
   rotation?: Vec3;
-  /** Public-root-relative `*.terrain.json`, or a legacy `*.landscape.json` sidecar. */
+  /** Public-root-relative `*.terrain.json` World Terrain definition. */
   dataRef: string;
   /** Landscape material asset id, unused until Faz 3 (layer paint + landscape material). */
   material?: string;
@@ -937,7 +937,7 @@ export interface LayoutRiverWater {
   parentId?: string;
   /** Id of the placed Landscape actor that owns the referenced spline. */
   landscapeRef: string;
-  /** Id of a spline in that Landscape's `*.landscape.json` sidecar. */
+  /** Id of a spline in that Landscape's World Terrain definition. */
   splineRef: string;
   /** Explicit world coordinates for surface/foam; absent preserves Landscape-local data. */
   coordinateSpace?: "world";

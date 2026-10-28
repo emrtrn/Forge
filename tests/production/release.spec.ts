@@ -27,7 +27,7 @@ test(`packaged runtime${debug ? " with debug" : ""}: model, texture, terrain, sa
   await expect(page.locator(".forge-loading")).toBeHidden();
   await expect.poll(() => messages.some((text) => text.includes("ReleaseStarter"))).toBe(true);
   if (debug) await expect(page.locator("#debug-stats")).toContainText(/\d+ fps/);
-  for (const file of ["project.3dgame.json", "assets/manifest.json", "layouts/starter.level.json", "assets/release/cube.gltf", "assets/release/cube.bin", "assets/release/checker.png", "assets/release/checker.material.json", "landscapes/starter.landscape.json"]) {
+  for (const file of ["project.3dgame.json", "assets/manifest.json", "layouts/starter.level.json", "assets/release/cube.gltf", "assets/release/cube.bin", "assets/release/checker.png", "assets/release/checker.material.json", "landscapes/starter.terrain.json", "landscapes/starter.tiles/0_0.tile.bin"]) {
     expect(loaded.has(file), `loaded ${file}`).toBe(true);
   }
   await page.screenshot({ path: testInfo.outputPath("starter.png") });

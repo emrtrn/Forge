@@ -12,8 +12,8 @@ import {
 } from "three";
 import { PLANAR_REFLECTION_EXCLUDED_LAYER } from "./planarReflectionSource";
 
-import type { ForgeLandscapeData, ForgeLandscapeSpline, LandscapeSplinePolylineSample } from "@engine/scene/landscape";
-import { landscapeHeightAtLocal, splineToPolyline } from "@engine/scene/landscape";
+import type { ForgeLandscapeSpline, LandscapeSplinePolylineSample } from "@engine/scene/landscape";
+import { splineToPolyline } from "@engine/scene/landscape";
 import type {
   LayoutRiverWaterFoamStamp,
   LayoutRiverWaterSegmentProfile,
@@ -48,7 +48,6 @@ export interface BuildRiverWaterRibbonOptions {
   /** World units represented by one U repeat of the normal texture. */
   normalTileLength?: number;
   /** Optional Landscape data used to bake shallow/deep water into the ribbon. */
-  landscapeData?: ForgeLandscapeData;
   /** Exact bed height in ribbon-local coordinates; null clips real terrain holes. */
   heightAt?: (x: number, z: number) => number | null;
   /** Legacy strip data is accepted for saved-layout compatibility, but ignored. */
@@ -193,9 +192,7 @@ export function buildRiverWaterRibbon(
         uvs.push(sample.distance / tileLength, v);
         flowDirections.push(flowX, flowZ);
         shoreDistances.push(Math.abs(v - 0.5) * 2);
-        const terrainHeight = options.heightAt ? options.heightAt(x, z) : options.landscapeData
-          ? landscapeHeightAtLocal(options.landscapeData, x, z)
-          : surfaceHeight - 1;
+        const terrainHeight = options.heightAt ? options.heightAt(x, z) : surfaceHeight - 1;
         valid.push(terrainHeight !== null);
         waterDepths.push(terrainHeight === null ? 0 : Math.max(0, surfaceHeight - terrainHeight));
         rapidness.push(segmentRapidness);
@@ -384,7 +381,6 @@ void main() {
 
 export interface RiverWaterRenderItem extends ResolvedRiverWater {
   spline: ForgeLandscapeSpline;
-  landscapeData?: ForgeLandscapeData;
   heightAt?: (x: number, z: number) => number | null;
   sampleSpacing?: number;
   position: Vec3;
@@ -402,7 +398,6 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const ribbon = buildRiverWaterRibbon(item.spline, {
       surfaceLevel: item.surfaceLevel,
       widthScale: item.widthScale,
-      ...(item.landscapeData ? { landscapeData: item.landscapeData } : {}),
       ...(item.heightAt ? { heightAt: item.heightAt } : {}),
       ...(item.sampleSpacing !== undefined ? { sampleSpacing: item.sampleSpacing } : {}),
       foamStamps: item.foamStamps,

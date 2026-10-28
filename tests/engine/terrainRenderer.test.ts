@@ -11,23 +11,16 @@ import {
   type InstancedBufferGeometry,
 } from "three";
 import {
-  createLandscapeObject,
+  createWorldTerrainObject,
   disposeLandscapeObject,
   updateLandscapeLod,
-  updateLandscapeObjectGeometry,
+  updateWorldTerrainObjectTiles,
   type LandscapeObject,
-  type LandscapeRenderItem,
 } from "../../engine/render-three/landscape";
 import { terrainRendererOf } from "../../engine/render-three/terrain/terrainRenderer";
-import { createFlatLandscapeData, type ForgeLandscapeData } from "../../engine/scene/landscape";
-import {
-  TerrainNodeHeightBounds,
-  computeTerrainNormals,
-  copyLandscapeHeights,
-  fullTerrainRect,
-  packTerrainWeights,
-  terrainRenderGrid,
-} from "../../engine/terrain/terrainRenderData";
+import type { WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
+import { TerrainNodeHeightBounds, computeTerrainNormals } from "../../engine/terrain/terrainRenderData";
+import { createFlatTerrainTile, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -39,63 +32,80 @@ function random(seed: number): () => number {
   };
 }
 
-/** Rolling hills plus noise over any grid size, so normals and LOD bounds are not trivial. */
-function hillyData(verticesX: number, verticesZ: number, spacing = 1.5, seed = 7): ForgeLandscapeData {
-  const data = createFlatLandscapeData("small");
-  data.size = { verticesX, verticesZ, spacing, heightScale: 1 };
+/** World-space hills plus per-vertex noise, so normals and LOD bounds are not trivial. */
+function hillHeight(x: number, z: number, next: () => number): number {
+  return 6 * Math.sin(x * 0.11) * Math.cos(z * 0.07) + next() * 0.4;
+}
+
+/**
+ * A World Terrain of hills centred on (3, -2, 5). Shared seam vertices get the
+ * same height in both tiles, as a saved terrain has.
+ */
+function hillyTerrain(tilesX: number, tilesZ: number, tileQuads: number, spacing = 1.5, seed = 7): WorldTerrainDocument {
+  const extentX = tilesX * tileQuads * spacing;
+  const extentZ = tilesZ * tileQuads * spacing;
+  const def: WorldTerrainDef = {
+    schema: 1, type: "worldTerrain", name: "Hills", tileQuads, spacing, tilesX, tilesZ,
+    origin: [3 - extentX / 2, -2, 5 - extentZ / 2], heightMin: -64, heightMax: 64,
+    layers: [{ id: "grass", name: "Grass", color: "#5f9449" }], tiles: [], collision: true,
+  };
   const next = random(seed);
-  data.heights = [];
-  for (let z = 0; z < verticesZ; z += 1) {
-    for (let x = 0; x < verticesX; x += 1) data.heights.push(6 * Math.sin(x * 0.11) * Math.cos(z * 0.07) + next() * 0.4);
+  const columns = tilesX * tileQuads + 1;
+  const global = new Float32Array(columns * (tilesZ * tileQuads + 1));
+  for (let index = 0; index < global.length; index += 1) global[index] = hillHeight(index % columns, Math.floor(index / columns), next);
+  const tiles = new Map<string, TerrainTileData>();
+  for (let tz = 0; tz < tilesZ; tz += 1) {
+    for (let tx = 0; tx < tilesX; tx += 1) {
+      const tile = createFlatTerrainTile(def, tx, tz);
+      for (let z = 0; z <= tileQuads; z += 1) {
+        for (let x = 0; x <= tileQuads; x += 1) {
+          tile.heights[z * (tileQuads + 1) + x] = global[(tz * tileQuads + z) * columns + tx * tileQuads + x]!;
+        }
+      }
+      tiles.set(tileKey(tx, tz), tile);
+      def.tiles.push({ key: tileKey(tx, tz), minHeight: -64, maxHeight: 64 });
+    }
   }
-  data.layers = [];
-  return data;
+  return { def, tiles };
 }
 
-function item(data: ForgeLandscapeData, rotationY = 0): LandscapeRenderItem {
-  return {
-    id: "land", name: "Landscape", collision: true, hidden: false,
-    position: [3, -2, 5], rotation: [0, rotationY, 0], data,
-  } as LandscapeRenderItem;
-}
-
-function build(source: LandscapeRenderItem): LandscapeObject {
-  const object = createLandscapeObject(source);
+function build(document: WorldTerrainDocument): LandscapeObject {
+  const object = createWorldTerrainObject({ name: "Landscape", collision: true, hidden: false, document });
   object.updateMatrixWorld(true);
   return object;
 }
 
 /**
- * Independent reference surface: the authored grid as an ordinary mesh, centred
- * on the actor and split along the same b–c diagonal as the collider.
+ * Independent reference surface: every tile as an ordinary world-space mesh,
+ * split along the same b–c diagonal as the collider.
  */
-function referenceMesh(source: LandscapeRenderItem): Group {
-  const { verticesX, verticesZ, spacing, heightScale } = source.data.size;
-  const positions = new Float32Array(verticesX * verticesZ * 3);
-  for (let z = 0; z < verticesZ; z += 1) {
-    for (let x = 0; x < verticesX; x += 1) {
-      const index = z * verticesX + x;
-      positions.set([
-        x * spacing - ((verticesX - 1) * spacing) / 2,
-        source.data.heights[index]! * heightScale,
-        z * spacing - ((verticesZ - 1) * spacing) / 2,
-      ], index * 3);
-    }
-  }
-  const indices: number[] = [];
-  for (let z = 0; z < verticesZ - 1; z += 1) {
-    for (let x = 0; x < verticesX - 1; x += 1) {
-      const a = z * verticesX + x;
-      indices.push(a, a + verticesX, a + 1, a + 1, a + verticesX, a + verticesX + 1);
-    }
-  }
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(positions, 3));
-  geometry.setIndex(indices);
+function referenceMesh({ def, tiles }: WorldTerrainDocument): Group {
   const group = new Group();
-  group.add(new Mesh(geometry, new MeshBasicMaterial()));
-  group.position.set(...source.position);
-  group.rotation.set(0, (source.rotation[1] * Math.PI) / 180, 0);
+  const size = def.tileQuads + 1;
+  for (const tile of tiles.values()) {
+    const positions = new Float32Array(size * size * 3);
+    for (let z = 0; z < size; z += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const index = z * size + x;
+        positions.set([
+          def.origin[0] + (tile.x * def.tileQuads + x) * def.spacing,
+          def.origin[1] + tile.heights[index]!,
+          def.origin[2] + (tile.z * def.tileQuads + z) * def.spacing,
+        ], index * 3);
+      }
+    }
+    const indices: number[] = [];
+    for (let z = 0; z < size - 1; z += 1) {
+      for (let x = 0; x < size - 1; x += 1) {
+        const a = z * size + x;
+        indices.push(a, a + size, a + 1, a + 1, a + size, a + size + 1);
+      }
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    group.add(new Mesh(geometry, new MeshBasicMaterial()));
+  }
   group.updateMatrixWorld(true);
   return group;
 }
@@ -135,54 +145,23 @@ function assertNodesTileGrid(object: LandscapeObject, extentX: number, extentZ: 
 }
 
 export function registerTerrainRendererTests(check: Check): void {
-  check("terrain renderer: any grid is drawn in the next power-of-two square of at least one patch", () => {
-    const grid = (x: number, z: number) => terrainRenderGrid({ verticesX: x, verticesZ: z }).stride;
-    assert.equal(grid(65, 65), 65);
-    assert.equal(grid(257, 257), 257);
-    assert.equal(grid(100, 100), 129);
-    assert.equal(grid(129, 65), 129);
-    assert.equal(grid(70, 200), 257);
-    assert.equal(grid(17, 17), 33);
-    assert.throws(() => terrainRenderGrid({ verticesX: 1, verticesZ: 9 }), /at least 2/);
-  });
-
-  check("terrain renderer: padding repeats the authored edge; normals match the clamped edge formula", () => {
-    const data = hillyData(100, 73, 1.25);
-    const grid = terrainRenderGrid(data.size);
-    const heights = new Float32Array(grid.stride * grid.stride);
-    copyLandscapeHeights(data, grid, heights, fullTerrainRect(grid));
-    const authored = (x: number, z: number) =>
-      data.heights[Math.min(Math.max(z, 0), 72) * 100 + Math.min(Math.max(x, 0), 99)]!;
-    for (const [x, z] of [[0, 0], [99, 0], [99, 72], [128, 72], [50, 128], [128, 128], [110, 10]] as const) {
-      assert.equal(heights[z * grid.stride + x], Math.fround(authored(x, z)), `texel ${x},${z}`);
-    }
-    const normals = new Float32Array(grid.stride * grid.stride * 2);
-    computeTerrainNormals(heights, grid.stride, data.size.spacing, normals, fullTerrainRect(grid));
-    for (let z = 0; z < 73; z += 6) {
-      for (let x = 0; x < 100; x += 7) {
-        const dx = authored(x - 1, z) - authored(x + 1, z);
-        const dz = authored(x, z - 1) - authored(x, z + 1);
-        const length = Math.sqrt(dx * dx + 4 * 1.25 * 1.25 + dz * dz);
-        const index = (z * grid.stride + x) * 2;
+  check("terrain renderer: normals match the clamped central-difference formula, edges included", () => {
+    const size = 65, spacing = 1.25;
+    const next = random(7);
+    const heights = Float32Array.from({ length: size * size }, (_, index) => hillHeight(index % size, Math.floor(index / size), next));
+    const normals = new Float32Array(size * size * 2);
+    computeTerrainNormals(heights, size, spacing, normals, { x0: 0, x1: size - 1, z0: 0, z1: size - 1 });
+    const at = (x: number, z: number) => heights[Math.min(Math.max(z, 0), size - 1) * size + Math.min(Math.max(x, 0), size - 1)]!;
+    for (let z = 0; z < size; z += 6) {
+      for (let x = 0; x < size; x += 7) {
+        const dx = at(x - 1, z) - at(x + 1, z);
+        const dz = at(x, z - 1) - at(x, z + 1);
+        const length = Math.sqrt(dx * dx + 4 * spacing * spacing + dz * dz);
+        const index = (z * size + x) * 2;
         assert.ok(Math.abs(normals[index]! - dx / length) < 1e-5);
         assert.ok(Math.abs(normals[index + 1]! - dz / length) < 1e-5);
       }
     }
-  });
-
-  check("terrain renderer: weights pack block-major RGBA8 at the padded stride, clamped, layers past eight dropped", () => {
-    const data = createFlatLandscapeData("small");
-    const grid = terrainRenderGrid(data.size);
-    const size = data.size.verticesX;
-    data.layers = Array.from({ length: 9 }, (_, layer) => ({
-      id: `l${layer}`, name: `L${layer}`, weights: new Array(size * size).fill(layer === 0 ? 1.5 : layer / 10),
-    }));
-    const out = new Uint8Array(grid.stride * grid.stride * 4 * 2);
-    packTerrainWeights(data, grid, out, fullTerrainRect(grid));
-    const texel = 3 * grid.stride + 5;
-    assert.deepEqual([...out.subarray(texel * 4, texel * 4 + 4)], [255, 26, 51, 77]);
-    const second = (grid.stride * grid.stride + texel) * 4;
-    assert.deepEqual([...out.subarray(second, second + 4)], [102, 128, 153, 179]);
   });
 
   check("terrain renderer: node height bounds equal brute force after partial updates", () => {
@@ -227,11 +206,11 @@ export function registerTerrainRendererTests(check: Check): void {
   });
 
   check("terrain renderer: selected nodes tile the authored grid once from any camera", () => {
-    for (const [verticesX, verticesZ] of [[257, 257], [100, 73]] as const) {
-      const data = hillyData(verticesX, verticesZ);
-      const object = build(item(data, 30));
-      const extentX = (verticesX - 1) * data.size.spacing;
-      const extentZ = (verticesZ - 1) * data.size.spacing;
+    for (const [tilesX, tilesZ, tileQuads] of [[1, 1, 256], [3, 2, 64]] as const) {
+      const document = hillyTerrain(tilesX, tilesZ, tileQuads);
+      const object = build(document);
+      const extentX = tilesX * tileQuads * document.def.spacing;
+      const extentZ = tilesZ * tileQuads * document.def.spacing;
       const camera = new PerspectiveCamera();
       const next = random(5);
       for (let round = 0; round < 25; round += 1) {
@@ -245,19 +224,19 @@ export function registerTerrainRendererTests(check: Check): void {
       camera.updateMatrixWorld(true);
       updateLandscapeLod(object, camera);
       const sizes = nodeRects(object, Infinity, Infinity).map(([x0, , x1]) => x1! - x0!);
-      assert.equal(Math.min(...sizes), 32 * data.size.spacing);
+      assert.equal(Math.min(...sizes), 32 * document.def.spacing);
       disposeLandscapeObject(object);
     }
   });
 
   check("terrain renderer: raycasts hit the authored surface, and nothing past its edge", () => {
-    for (const [verticesX, verticesZ, rotationY] of [[129, 129, 0], [129, 129, 37], [100, 73, 21]] as const) {
-      const source = item(hillyData(verticesX, verticesZ, 1.25), rotationY);
-      const reach = Math.max(verticesX, verticesZ) * 1.25 * 1.5;
-      const reference = referenceMesh(source);
-      const terrain = build(source);
+    for (const [tilesX, tilesZ, tileQuads] of [[1, 1, 128], [3, 2, 64]] as const) {
+      const document = hillyTerrain(tilesX, tilesZ, tileQuads, 1.25, tilesX * 31 + tileQuads);
+      const reach = Math.max(tilesX, tilesZ) * tileQuads * 1.25 * 1.5;
+      const reference = referenceMesh(document);
+      const terrain = build(document);
       const raycaster = new Raycaster();
-      const next = random(verticesX + rotationY);
+      const next = random(tilesX + tileQuads);
       let hits = 0;
       let misses = 0;
       for (let ray = 0; ray < 200; ray += 1) {
@@ -267,7 +246,7 @@ export function registerTerrainRendererTests(check: Check): void {
         raycaster.set(origin, target.clone().sub(origin).normalize());
         const expected = raycaster.intersectObject(reference, true)[0];
         const actual = raycaster.intersectObject(terrain, true)[0];
-        assert.equal(Boolean(actual), Boolean(expected), `ray ${ray} hit mismatch (${verticesX}x${verticesZ})`);
+        assert.equal(Boolean(actual), Boolean(expected), `ray ${ray} hit mismatch (${tilesX}x${tilesZ})`);
         if (!expected || !actual) {
           misses += 1;
           continue;
@@ -284,20 +263,22 @@ export function registerTerrainRendererTests(check: Check): void {
   });
 
   check("terrain renderer: an edit updates the raycast surface and the bounding box", () => {
-    const data = createFlatLandscapeData("small");
-    const object = build(item(data));
+    const document = hillyTerrain(1, 1, 64);
+    const tile = document.tiles.get("0_0")!;
+    tile.heights.fill(0);
+    const object = build(document);
     const mesh = terrainOf(object).mesh;
     assert.equal(mesh.geometry.boundingBox!.max.y, 0);
-    const size = data.size.verticesX;
-    data.heights[32 * size + 32] = 12;
-    updateLandscapeObjectGeometry(object, data, { x0: 32, x1: 32, z0: 32, z1: 32 });
+    const size = tile.size;
+    tile.heights[32 * size + 32] = 12;
+    updateWorldTerrainObjectTiles(object, new Map([["0_0", { x0: 32, x1: 32, z0: 32, z1: 32 }]]));
     assert.equal(mesh.geometry.boundingBox!.max.y, 12);
     const raycaster = new Raycaster(new Vector3(3, 50, 5), new Vector3(0, -1, 0));
     const hit = raycaster.intersectObject(object, true)[0];
     assert.ok(hit && Math.abs(hit.point.y - (12 - 2)) < 1e-4, `peak hit at ${hit?.point.y}`);
-    // An edge edit refreshes the padding too, so the height bounds stay exact.
-    data.heights[size * size - 1] = -9;
-    updateLandscapeObjectGeometry(object, data, { x0: size - 1, x1: size - 1, z0: size - 1, z1: size - 1 });
+    // An edge edit keeps the height bounds exact.
+    tile.heights[size * size - 1] = -9;
+    updateWorldTerrainObjectTiles(object, new Map([["0_0", { x0: size - 1, x1: size - 1, z0: size - 1, z1: size - 1 }]]));
     assert.equal(mesh.geometry.boundingBox!.min.y, -9);
     disposeLandscapeObject(object);
   });

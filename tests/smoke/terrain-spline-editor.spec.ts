@@ -7,7 +7,7 @@ import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFil
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { worldTerrainActorPosition } from "../../engine/terrain/worldTerrainActor";
 import { expect, test, type Page, type APIRequestContext } from "./test";
-import { SMOKE_ROAD_SIDECAR, SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
+import { SMOKE_ROAD_TERRAIN, SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
 // QA: real Draw/Edit/gizmo input; seam bake and exact undo/redo; metadata-only
 // saves; reload; locked controls; a remote tile failure and successful retry.
@@ -56,9 +56,19 @@ async function setup(page: Page, request: APIRequestContext, streamed = false, s
   level.riverWaters = [];
   if (road) {
     level.instances[0].placements[0].position = [-8, 9, -16];
-    // A legacy actor after World Terrain catches compressed-data-array indexing
-    // that used to attach the second actor's meshes to the first terrain.
-    level.landscapes.push({ id: "legacy-road", name: "Legacy Road", position: [120, 5, 0], dataRef: SMOKE_ROAD_SIDECAR });
+    // A second Landscape catches compressed-data-array indexing that used to
+    // attach the second actor's meshes to the first terrain: the smoke road
+    // terrain, moved (with its road) so its centre is at (120, 5, 0).
+    const second = "landscapes/__playwright-second-road.terrain.json";
+    const roadDef = JSON.parse(await readFile(smokePublicPath(SMOKE_ROAD_TERRAIN), "utf8")) as WorldTerrainDef;
+    const shift = [120 - worldTerrainActorPosition(roadDef)[0], 5 - roadDef.origin[1], -worldTerrainActorPosition(roadDef)[2]];
+    roadDef.origin = roadDef.origin.map((value, axis) => value + shift[axis]!) as [number, number, number];
+    for (const spline of roadDef.splines ?? []) for (const point of spline.points) {
+      point.position = point.position.map((value, axis) => value + shift[axis]!) as [number, number, number];
+    }
+    await write(second, JSON.stringify(roadDef));
+    await write(terrainTilePath(second, "0_0"), await readFile(smokePublicPath(terrainTilePath(SMOKE_ROAD_TERRAIN, "0_0"))));
+    level.landscapes.push({ id: "second-road", name: "Second Road", position: worldTerrainActorPosition(roadDef), dataRef: second });
   }
   await write(LEVEL, JSON.stringify(level));
   expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
@@ -511,7 +521,7 @@ test("multi-tile road mesh controls persist and Play collides with the rendered 
   expect(snapshot.meshCount).toBeGreaterThan(0);
   expect(snapshot.bounds.min[0]).toBeLessThan(-10); expect(snapshot.bounds.max[0]).toBeGreaterThan(10);
   expect(snapshot.colliders).toContain("landscape-splines:world");
-  expect(snapshot.colliders).toContain("landscape-splines:legacy-road");
+  expect(snapshot.colliders).toContain("landscape-splines:second-road");
   expect(snapshot.parents).toEqual([{ position: [0, 5, 0], road: true }, { position: [120, 5, 0], road: true }]);
   for (const sample of snapshot.samples) {
     expect(sample.renderY).toBeGreaterThan(7.5);

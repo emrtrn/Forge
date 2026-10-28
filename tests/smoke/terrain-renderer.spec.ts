@@ -1,6 +1,9 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { APIRequestContext } from "@playwright/test";
 import { PerspectiveCamera } from "three";
+import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
+import { createFlatTerrainTile, terrainTilePath, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { expect, test, type Page } from "./test";
 import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
@@ -8,10 +11,7 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
  * The GPU CDLOD terrain renderer draws a Landscape in the real browser: shaders
  * compile (lit, and the GTAO normal / DOF depth materials used when those
  * passes override the scene), and the terrain covers the frame from several
- * viewpoints. The fixture is a legacy `.landscape.json` sidecar, so the
- * in-memory legacy → World Terrain read path draws it too. (A non-square or
- * non-power-of-two legacy grid is an explicit migration error now, OPEN_WORLD_PLAN
- * Faz 8 K4, so the padded-grid path it used to exercise is gone.)
+ * viewpoints. The fixture is a one-tile World Terrain written straight to disk.
  *
  * Its acceptance run against the old chunk mesh (Faz 2 slice 1) measured at
  * most 0.11/255 mean difference; that renderer is gone, so this guards the
@@ -20,7 +20,7 @@ import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 
 const LEVEL = "layouts/__playwright-terrain-render.level.json";
 const POST_LEVEL = "layouts/__playwright-terrain-render-post.level.json";
-const SIDECAR = "landscapes/terrain-render.landscape.json";
+const TERRAIN = "landscapes/terrain-render.terrain.json";
 const VERTICES_X = 129;
 const VERTICES_Z = 129;
 
@@ -58,19 +58,24 @@ async function writeFixture(): Promise<void> {
       raw.forEach((value, index) => layers[index]!.weights.push(value / total));
     }
   }
-  const data = {
-    schema: 1, type: "landscape",
-    size: { verticesX: VERTICES_X, verticesZ: VERTICES_Z, spacing: 1, heightScale: 1 },
-    chunks: { quadsPerChunk: 32 },
-    heights,
-    layers: layers.map(({ weight: _weight, ...entry }) => entry),
-    splines: [],
+  const def: WorldTerrainDef = {
+    schema: 1, type: "worldTerrain", name: "Landscape", tileQuads: VERTICES_X - 1, spacing: 1, tilesX: 1, tilesZ: 1,
+    origin: [-(VERTICES_X - 1) / 2, 0, -(VERTICES_Z - 1) / 2], heightMin: -64, heightMax: 64,
+    layers: layers.map(({ id, name, material }) => ({ id, name, color: "#808080", ...(material ? { material } : {}) })),
+    tiles: [{ key: "0_0", minHeight: min, maxHeight: max }], collision: true,
   };
+  const tile = createFlatTerrainTile(def, 0, 0);
+  tile.heights.set(heights);
+  layers.forEach((entry, layer) => entry.weights.forEach((weight, index) => {
+    tile.weights[index * 4 + layer] = Math.round(weight * 255);
+  }));
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
   level.name = "__playwright-terrain-render";
   level.instances = [];
-  level.landscapes = [{ id: "render", name: "Landscape", position: [0, 0, 0], dataRef: SIDECAR }];
-  await writeFile(smokePublicPath(SIDECAR), JSON.stringify(data));
+  level.landscapes = [{ id: "render", name: "Landscape", position: [0, 0, 0], dataRef: TERRAIN }];
+  await mkdir(dirname(smokePublicPath(terrainTilePath(TERRAIN, "0_0"))), { recursive: true });
+  await writeFile(smokePublicPath(TERRAIN), JSON.stringify(def));
+  await writeFile(smokePublicPath(terrainTilePath(TERRAIN, "0_0")), encodeTerrainTile(tile, { heightMin: -64, heightMax: 64, heightFormat: "f32" }));
   await writeFile(smokePublicPath(LEVEL), JSON.stringify(level));
   // AO and DOF render the scene with an override material; the terrain must
   // take part in both (postProcess.ts) or its shaders never compile here.

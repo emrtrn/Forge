@@ -3,10 +3,9 @@ import {
   terrainHeightAt, terrainSmoothNormalAt, terrainLayerWeightsAt, TerrainTileMap,
   type TerrainQueryDef, type TerrainTileLookup,
 } from "../terrain/terrainHeightQuery";
-import { TERRAIN_MAX_LAYERS, terrainWeightBlockCount, type TerrainTileData } from "../terrain/terrainTypes";
+import type { TerrainTileData } from "../terrain/terrainTypes";
 import type { ForgeFoliageTypeDef, LandscapeFoliageRule } from "./foliage";
 import { makeFoliageRng, passesFoliageFilters } from "./foliagePaint";
-import type { LandscapeFoliageGenerationInput } from "./landscapeFoliage";
 import type { Vec3 } from "./layout";
 
 export interface FoliageSurface {
@@ -39,48 +38,6 @@ export function worldTerrainFoliageSurface(
       minZ: def.origin[2], maxZ: def.origin[2] + def.tilesZ * def.tileQuads * def.spacing,
     },
   };
-}
-
-/** A 1×1 legacy Landscape as one World Terrain tile (exact triangle heights); null when it cannot be (rotated, non-square, invalid). */
-export function landscapeTerrainView(input: LandscapeFoliageGenerationInput): {
-  def: TerrainQueryDef & { layers: readonly { id: string }[] };
-  tile: TerrainTileData;
-} | null {
-  const { data, position } = input;
-  const { verticesX, verticesZ, spacing, heightScale } = data.size;
-  if (input.rotation?.some((value) => Math.abs(value) > 1e-9)
-    || verticesX !== verticesZ || verticesX < 2 || spacing <= 0) return null;
-  const count = verticesX * verticesX;
-  const layerCount = Math.min(data.layers.length, TERRAIN_MAX_LAYERS);
-  const weights = new Uint8Array(terrainWeightBlockCount(layerCount) * count * 4);
-  for (let layer = 0; layer < layerCount; layer += 1) {
-    const block = Math.floor(layer / 4);
-    const channel = layer % 4;
-    for (let index = 0; index < count; index += 1) {
-      weights[block * count * 4 + index * 4 + channel] = Math.max(0, Math.min(255,
-        Math.round((data.layers[layer]!.weights[index] ?? 0) * 255)));
-    }
-  }
-  const tile: TerrainTileData = {
-    x: 0, z: 0, size: verticesX,
-    heights: Float32Array.from(data.heights, (height) => height * heightScale),
-    layerCount, weights,
-  };
-  const width = (verticesX - 1) * spacing;
-  return { def: {
-    tileQuads: verticesX - 1, spacing, tilesX: 1, tilesZ: 1,
-    origin: [position[0] - width / 2, position[1], position[2] - width / 2],
-    layers: data.layers,
-  }, tile };
-}
-
-/** Exact triangle surface for an unrotated, square legacy Landscape. */
-export function landscapeFoliageSurface(input: LandscapeFoliageGenerationInput): FoliageSurface | null {
-  const view = landscapeTerrainView(input);
-  if (!view) return null;
-  const tiles = new TerrainTileMap();
-  tiles.set(view.tile);
-  return worldTerrainFoliageSurface(view.def, tiles);
 }
 
 export const MAX_FOLIAGE_CELL_INSTANCES = 4096;

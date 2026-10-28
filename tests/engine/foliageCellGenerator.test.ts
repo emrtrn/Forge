@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { normalizeFoliageType, type LandscapeFoliageRule } from "../../engine/scene/foliage";
-import type { LandscapeFoliageGenerationInput } from "../../engine/scene/landscapeFoliage";
 import {
-  FoliageTerrainStore, generateFoliageCell, landscapeFoliageSurface, landscapeTerrainView,
+  FoliageTerrainStore, generateFoliageCell,
   worldTerrainFoliageSurface, type GeneratedFoliageCell,
 } from "../../engine/scene/proceduralFoliage";
 import { TerrainTileMap } from "../../engine/terrain/terrainHeightQuery";
@@ -55,14 +54,6 @@ function equalCells(actual: GeneratedFoliageCell, expected: GeneratedFoliageCell
   assert.equal(actual.matrices.length, actual.count * 16);
   assert.deepEqual(new Uint8Array(actual.matrices.buffer, actual.matrices.byteOffset, actual.matrices.byteLength),
     new Uint8Array(expected.matrices.buffer, expected.matrices.byteOffset, expected.matrices.byteLength));
-}
-
-function landscape(): LandscapeFoliageGenerationInput {
-  return { id: "legacy", position: [10, 7, -20], data: {
-    schema: 1, type: "landscape", size: { verticesX: 3, verticesZ: 3, spacing: 2, heightScale: 2 },
-    chunks: { quadsPerChunk: 2 }, heights: [0, 1, 2, 3, 5, 4, -1, -2, 0],
-    layers: [{ id: "grass", name: "Grass", weights: [1, 0.8, 0.6, 0.4, 0.2, 0, 0.3, 0.5, 0.7] }],
-  } };
 }
 
 class FakeWorker {
@@ -186,32 +177,6 @@ export async function registerFoliageCellGeneratorTests(checkAsync: CheckAsync):
     generator.dispose();
     generator.dispose();
     await assert.rejects(generator.generate(JOB), { message: "Foliage cell generator disposed" });
-  });
-
-  await checkAsync("foliage cell generator: landscape view preserves scaled heights and surface queries", async () => {
-    const input = landscape();
-    const before = structuredClone(input);
-    const view = landscapeTerrainView(input);
-    assert.ok(view);
-    assert.deepEqual(view.tile.heights, Float32Array.from(input.data.heights, (height) => height * input.data.size.heightScale));
-    const map = new TerrainTileMap();
-    map.set(view.tile);
-    const fromView = worldTerrainFoliageSurface(view.def, map);
-    const legacy = landscapeFoliageSurface(input)!;
-    assert.deepEqual(legacy.bounds, fromView.bounds);
-    for (const [x, z] of [[8, -22], [9, -21], [10.5, -19.25], [12, -18], [7, -20]] as const) {
-      assert.equal(legacy.heightAt(x, z), fromView.heightAt(x, z));
-      assert.deepEqual(legacy.normalAt(x, z), fromView.normalAt(x, z));
-      assert.equal(legacy.layerWeightAt("grass", x, z), fromView.layerWeightAt("grass", x, z));
-    }
-    assert.deepEqual(input, before);
-    for (const rotation of [[1, 0, 0], [0, 1, 0], [0, 0, 1]] as [number, number, number][]) {
-      assert.equal(landscapeTerrainView({ ...input, rotation }), null);
-    }
-    for (const size of [{ ...input.data.size, verticesZ: 2 }, { ...input.data.size, verticesX: 1, verticesZ: 1 },
-      { ...input.data.size, spacing: 0 }, { ...input.data.size, spacing: -1 }]) {
-      assert.equal(landscapeTerrainView({ ...input, data: { ...input.data, size } }), null);
-    }
   });
 
   await checkAsync("foliage cell generator: worker construction failure resolves jobs locally and warns once", async () => {

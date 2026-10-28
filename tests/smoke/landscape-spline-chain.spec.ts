@@ -1,5 +1,5 @@
 import { expect, test } from "./test";
-import { SMOKE_SPLINE_SCENE, SMOKE_ROAD_SIDECAR } from "./smokeProject.mjs";
+import { SMOKE_SPLINE_SCENE, SMOKE_ROAD_TERRAIN } from "./smokeProject.mjs";
 
 test("editor and Play render the authored asphalt spline chain without browser errors", async ({ page }, testInfo) => {
   await page.route("**/project.3dgame.json", async (route) => {
@@ -44,7 +44,7 @@ test("editor and Play render the authored asphalt spline chain without browser e
     return (await response.json()) as {
       splines?: Array<{ segments: Array<{ mesh?: { enabled?: boolean; assetId?: string; deform?: boolean } }> }>;
     };
-  }, SMOKE_ROAD_SIDECAR);
+  }, SMOKE_ROAD_TERRAIN);
   // The test-owned road fixture has exactly three deforming asphalt segments.
   const segments = spline.splines?.[0]?.segments ?? [];
   expect(segments).toHaveLength(3);

@@ -5,13 +5,11 @@ import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import { forEachHeightfieldTriangle } from "../../engine/physics/heightfieldStatic";
 import { createWorldTerrainObject } from "../../engine/render-three/landscape";
 import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type TransformComponent } from "../../engine/scene/components";
-import { createFlatLandscapeData } from "../../engine/scene/landscape";
 import { normalizeFoliageData, normalizeFoliageType, resolveFoliageTarget } from "../../engine/scene/foliage";
 import { makeFoliageRng, rollFoliageInstance } from "../../engine/scene/foliagePaint";
 import { FoliageRenderBinding, foliageInstanceFromRoll } from "../../engine/render-three/foliage";
-import type { LayoutLandscape, Vec3 } from "../../engine/scene/layout";
+import type { Vec3 } from "../../engine/scene/layout";
 import { terrainFaceNormalAt, terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
-import { captureTerrainSnapshot, terrainDocumentToLandscape } from "../../engine/terrain/terrainLandscapeBridge";
 import { applyTerrainBrush, createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
 import { validateTerrainTile, type WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
 import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
@@ -155,19 +153,16 @@ export function registerWorldTerrainActorTests(check: Check): void {
     assert.equal(raycaster.intersectObject(object, true).length, 0);
   });
 
-  check("world terrain frame: def.origin is the min corner, the actor is the grid centre, same relation as the 1x1 bridge", () => {
+  check("world terrain frame: def.origin is the min corner, the actor is the grid centre", () => {
     const { def } = worldDocument();
     assert.deepEqual(worldTerrainExtent(def), [3 * Q * SPACING, 2 * Q * SPACING]);
     assert.deepEqual(worldTerrainActorPosition(def), [10 + 1.5 * Q * SPACING, 2, -30 + Q * SPACING]);
-    // The 1×1 save bridge writes origin = position − half extent; reading it back must give the actor position.
-    const actor: LayoutLandscape = { id: "l", position: [7, -1, 3], dataRef: "landscapes/l.landscape.json" };
-    assert.deepEqual(worldTerrainActorPosition(captureTerrainSnapshot(actor, createFlatLandscapeData("small")).def), actor.position);
     assert.deepEqual(worldTerrainPlacementIssues({ position: worldTerrainActorPosition(def) }, def), []);
     assert.equal(worldTerrainPlacementIssues({ position: [0, 0, 0] }, def).length, 1);
     assert.match(worldTerrainPlacementIssues({ position: worldTerrainActorPosition(def), rotation: [0, 30, 0] }, def)[0]!, /rotated/);
   });
 
-  check("world terrain shape: only a single (0, 0) tile goes through the 1x1 adapter", () => {
+  check("world terrain shape: only a single (0, 0) tile is not multi-tile", () => {
     const one = { tilesX: 1, tilesZ: 1, tiles: [{ key: "0_0", minHeight: 0, maxHeight: 0 }] };
     assert.equal(isMultiTileTerrain(one), false);
     assert.equal(isMultiTileTerrain({ ...one, tilesX: 2 }), true);
@@ -325,15 +320,16 @@ export function registerWorldTerrainCreateTests(check: Check): void {
     assert.equal(estimate.diskBytes, 6 * (32 + 65 * 65 * 2 + 65 * 65 * 4));
   });
 
-  check("world terrain create: the Add Landscape default is one flat 129 x 129 tile edited through the 1x1 adapter", () => {
+  check("world terrain create: the Add Landscape default is one flat 129 x 129 tile", () => {
     const { def, tiles } = createFlatWorldTerrain(WORLD_TERRAIN_CREATE_DEFAULTS);
     assert.equal(isMultiTileTerrain(def), false);
     assert.deepEqual(worldTerrainExtent(def), [128, 128]);
     assert.deepEqual(worldTerrainActorPosition(def), [0, 0, 0]);
-    const data = terrainDocumentToLandscape({ def, tiles });
-    assert.deepEqual(data.size, { verticesX: 129, verticesZ: 129, spacing: 1, heightScale: 1 });
-    assert.ok(data.heights.every((height) => height === 0));
-    assert.deepEqual(data.layers.map((layer) => layer.weights[0]), [1, 0, 0, 0]);
+    const tile = tiles.get("0_0")!;
+    assert.equal(tile.size, 129);
+    assert.equal(def.spacing, 1);
+    assert.ok(tile.heights.every((height) => height === 0));
+    assert.deepEqual(def.layers.map((_, layer) => terrainTileLayerWeight(tile, layer, 0)), [1, 0, 0, 0]);
   });
 
   check("world terrain create: out-of-range spacing and oversized grids are refused with a reason", () => {
@@ -407,18 +403,17 @@ export function registerWorldTerrainCreateTests(check: Check): void {
     for (let vz = 0; vz < 65; vz += 1) assert.equal(left.heights[vz * 65 + 64], right.heights[vz * 65], `seam row ${vz}`);
     const fromBig = createWorldTerrainFromHeightmap(options, { ...source, bytes: big, endianness: "big" });
     assert.deepEqual(fromBig.tiles.get("1_0")!.heights, right.heights, "big-endian RAW");
-    // The size must match the grid; a 1x1 grid feeds the classic Landscape adapter.
+    // The size must match the grid; a 1x1 grid is one tile.
     assert.match(worldTerrainHeightmapProblems({ ...options, tilesX: 3 }, source).join(" "), /needs exactly 193 × 65/);
     assert.match(worldTerrainHeightmapProblems(options, { ...source, heightMax: -30 }).join(" "), /max above min/);
     assert.throws(() => createWorldTerrainFromHeightmap({ ...options, tilesX: 3 }, source), /needs exactly/);
     const single = createWorldTerrainFromHeightmap({ ...options, tilesX: 1 }, { ...source, width: 65, bytes: little.slice(0, 65 * 65 * 2), height: 65 });
-    const data = terrainDocumentToLandscape(single);
-    assert.equal(data.heights[64], Math.fround(-20 + ((64 * 509) % 65536) / 65535 * 320));
+    assert.equal(single.tiles.get("0_0")!.heights[64], Math.fround(-20 + ((64 * 509) % 65536) / 65535 * 320));
   });
 }
 
 export async function registerWorldTerrainActorAsyncTests(checkAsync: CheckAsync): Promise<void> {
-  await checkAsync("terrain read path: a multi-tile World Terrain loads as tiles and never through the 1x1 adapter", async () => {
+  await checkAsync("terrain read path: a multi-tile World Terrain loads as tiles", async () => {
     const { def, tiles } = worldDocument();
     const path = "worlds/big.terrain.json";
     const original = globalThis.fetch;

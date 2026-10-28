@@ -192,8 +192,11 @@ export function checkWorldData(levelPaths: readonly string[], source: WorldDataS
     for (const entry of Array.isArray(layout.landscapes) ? layout.landscapes : []) {
       const dataRef = record(entry)?.dataRef;
       if (typeof dataRef !== "string") continue;
+      if (!isWorldTerrainPath(dataRef)) {
+        issue(dataRef, "unsupported legacy .landscape.json terrain; a Landscape needs a World Terrain (.terrain.json)");
+        continue;
+      }
       const exists = size(dataRef, "missing terrain data") !== null;
-      if (!isWorldTerrainPath(dataRef)) continue;
       let tiles = emptyStats();
       let globalBytes: number | null = null;
       if (exists) {

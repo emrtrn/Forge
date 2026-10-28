@@ -4,7 +4,7 @@ export const SMOKE_SCENE: string;
 export const SMOKE_TARGET_SCENE: string;
 export const SMOKE_PATROL_SCENE: string;
 export const SMOKE_SPLINE_SCENE: string;
-export const SMOKE_ROAD_SIDECAR: string;
+export const SMOKE_ROAD_TERRAIN: string;
 export function assertSmokeRoot(root: string): string;
 export function smokeRunRoot(): string;
 export function smokePublicPath(path: string, root?: string): string;

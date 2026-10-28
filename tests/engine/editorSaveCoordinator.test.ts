@@ -2,7 +2,6 @@ import { decodeTerrainGlobalMap, validateTerrainGlobalMap } from "../../engine/t
 import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 /** Production editor save session, without a renderer, timers or disk writes. */
 import assert from "node:assert/strict";
-import { createFlatLandscapeData, type ForgeLandscapeData } from "../../engine/scene/landscape";
 import { EditorSaveCoordinator, EditorSaveError, EditorSaveSession, SaveRevision, type EditorSaveSource } from "../../src/editor/editorSaveCoordinator";
 import type { LayoutSaver } from "../../src/scene/SceneApp";
 import { levelTerrainPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
@@ -16,7 +15,9 @@ type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 type Sidecar = "landscape" | "foliage" | "meshPaint";
 
 const LEVEL = "layouts/save-test.level.json";
-const PATHS = [LEVEL, "layouts/save-test.landscapes/terrain.terrain.json", "layouts/save-test.foliage.json", "layouts/save-test.meshpaint.json"];
+/** Save order: a World Terrain is written before the level that names it, sidecars after. */
+const PATHS = ["layouts/save-test.landscapes/terrain.terrain.json", LEVEL, "layouts/save-test.foliage.json", "layouts/save-test.meshpaint.json"];
+const KIND_PATH = { landscape: 0, foliage: 2, meshPaint: 3 } as const;
 
 function deferred() {
   let resolve!: () => void;
@@ -27,11 +28,7 @@ function deferred() {
 interface SaveHost extends EditorSaveSource {
   saveLayout(): Promise<void>;
   saveLandscapeData(id: string): Promise<void>;
-  markLandscapeDirty(id: string): void;
-  markLandscapeUnwritten(id: string, data: ForgeLandscapeData): void;
   layoutSaver: LayoutSaver;
-  landscapeData: Map<string, ForgeLandscapeData>;
-  landscapeSaveRevisions: Map<string, SaveRevision>;
   foliageSaveRevision: SaveRevision;
   meshPaintSaveRevision: SaveRevision;
 }
@@ -39,6 +36,10 @@ interface SaveHost extends EditorSaveSource {
 function fixture(scenePath = LEVEL) {
   const writes: { path: string; value: unknown }[] = [];
   const statuses: { message: string; tone: string }[] = [];
+  // A level-owned one-tile World Terrain, saved with Float32 heights so written values read back exactly.
+  const created = createFlatWorldTerrain({ ...WORLD_TERRAIN_CREATE_DEFAULTS, tilesX: 1, tilesZ: 1, tileQuads: 64 });
+  const terrain = new WorldTerrainEditSession(levelTerrainPath(scenePath, "terrain"),
+    createTerrainEditWorld(created.def, created.tiles.values()), new Map([["0_0", "f32"]]));
   const documents: EditorSaveSource = {
     scenePath,
     editor: { gridSize: 1, gridEnabled: true, snapRotationDeg: 15, snapRotationEnabled: true, snapScale: 0.1, snapScaleEnabled: true },
@@ -46,8 +47,8 @@ function fixture(scenePath = LEVEL) {
       schema: 1, name: "before", loadGroups: [], instances: [], characters: [],
       landscapes: [{ id: "terrain", name: "Terrain", position: [0, 0, 0], dataRef: levelTerrainPath(scenePath, "terrain") }],
     },
-    landscapeData: new Map([["terrain", createFlatLandscapeData("small")]]),
-    worldTerrainIds: new Set<string>(),
+    worldTerrainIds: new Set(["terrain"]),
+    worldTerrainSessions: new Map([["terrain", terrain]]),
     foliageData: {
       schema: 1, type: "foliage",
       groups: [{
@@ -68,20 +69,17 @@ function fixture(scenePath = LEVEL) {
   const host = Object.assign(documents, {
     saveLayout: () => session.saveLayout(),
     saveLandscapeData: (id: string) => session.saveLandscapeData(id),
-    markLandscapeDirty: (id: string) => session.markLandscapeDirty(id),
-    markLandscapeUnwritten: (id: string, data: ForgeLandscapeData) => session.markLandscapeUnwritten(id, data),
-    landscapeSaveRevisions: session.landscapeSaveRevisions,
     foliageSaveRevision: session.foliageSaveRevision,
     meshPaintSaveRevision: session.meshPaintSaveRevision,
   }) as SaveHost;
 
-  const revision = (kind: Sidecar) => kind === "landscape"
-    ? host.landscapeSaveRevisions.get("terrain")!
+  const revision = (kind: Sidecar): { readonly dirty: boolean } => kind === "landscape"
+    ? terrain
     : kind === "foliage" ? host.foliageSaveRevision : host.meshPaintSaveRevision;
   const edit = (kind: Sidecar, value: number) => {
     if (kind === "landscape") {
-      host.landscapeData.get("terrain")!.heights[0] = value;
-      host.markLandscapeDirty("terrain");
+      terrain.world.tiles.get("0_0")!.heights[0] = value;
+      terrain.markTiles(["0_0"]);
     } else if (kind === "foliage") {
       host.foliageData.groups[0]!.instances[0]!.position[0] = value;
       host.foliageSaveRevision.markDirty();
@@ -101,7 +99,7 @@ function fixture(scenePath = LEVEL) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
     const body = JSON.parse(String(init?.body));
-    const value = (body.terrain ? terrainValue : undefined) ?? body.landscape?.heights[0] ?? body.foliage?.groups[0].instances[0].position[0] ?? body.meshPaint?.placements[0].colors[0];
+    const value = (body.terrain ? terrainValue : undefined) ?? body.foliage?.groups[0].instances[0].position[0] ?? body.meshPaint?.placements[0].colors[0];
     writes.push({ path: body.path, value });
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   };
@@ -217,108 +215,6 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     assert.equal(levelTerrainPath("/levels/A/Terrain.level.json", "landscape-1"), paths[0]);
   });
 
-  for (const shared of ["landscapes/landscape-1.landscape.json", "landscapes/landscape-1.terrain.json",
-    levelTerrainPath("levels/A/Terrain.level.json", "terrain")]) {
-    await checkAsync(`terrain ownership: two levels sharing ${shared} save independently without overwriting the source`, async () => {
-      const first = fixture("levels/A/Terrain.level.json");
-      const second = fixture("levels/B/Terrain.level.json");
-      first.host.layout.landscapes![0]!.dataRef = shared;
-      second.host.layout.landscapes![0]!.dataRef = shared;
-      const tiles = new Map<string, number>();
-      // A copied level must leave its original owner's terrain untouched, even
-      // on a clean manual Save (without a sculpt revision).
-      if (shared.endsWith(".terrain.json")) tiles.set(shared, 11);
-      await withFetch(async (input, init) => {
-        if (String(input).startsWith("/__save-terrain-tile")) {
-          const path = new URL(String(input), "http://localhost").searchParams.get("path")!;
-          tiles.set(path, decodeTerrainTile(new Uint8Array(init!.body as ArrayBuffer)).heights[0]!);
-        }
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }, async () => {
-        await second.host.saveLayout();
-        const secondPath = levelTerrainPath(second.host.scenePath, "terrain");
-        assert.equal(second.host.layout.landscapes![0]!.dataRef, secondPath);
-        assert.equal(tiles.get(secondPath), 0);
-        if (shared.endsWith(".terrain.json")) assert.equal(tiles.get(shared), 11);
-        first.edit("landscape", 7);
-        await first.host.saveLandscapeData("terrain");
-        const firstPath = levelTerrainPath(first.host.scenePath, "terrain");
-        assert.equal(first.host.layout.landscapes![0]!.dataRef, firstPath);
-        second.edit("landscape", 3);
-        await second.host.saveLandscapeData("terrain");
-        assert.equal(tiles.get(firstPath), 7);
-        assert.equal(tiles.get(secondPath), 3);
-        if (shared.startsWith("landscapes/") && shared.endsWith(".terrain.json")) assert.equal(tiles.get(shared), 11);
-        assert.ok(!tiles.has("landscapes/landscape-1.landscape.json"));
-      });
-    });
-  }
-
-  for (const failure of ["tile", "global", "definition", "layout", "none"]) {
-    await checkAsync(`terrain migration: ${failure} failure preserves legacy reference until the complete snapshot is saved`, async () => {
-      const f = fixture();
-      const actor = f.host.layout.landscapes![0]!;
-      const legacy = "landscapes/save-test.landscape.json";
-      actor.dataRef = legacy;
-      f.edit("landscape", 4);
-      const order: string[] = [];
-      let fail = failure !== "none";
-      const saver = f.host.layoutSaver;
-      f.host.layoutSaver = async (payload) => {
-        order.push("layout");
-        assert.equal(payload.layout.landscapes![0]!.dataRef, PATHS[1]);
-        assert.equal(actor.dataRef, legacy);
-        if (fail && failure === "layout") throw new Error("layout failed");
-        return saver(payload);
-      };
-      await withFetch(async (input, init) => {
-        const kind = String(input).startsWith("/__save-terrain-tile") ? "tile" : String(input).startsWith("/__save-terrain-global") ? "global" : "definition";
-        order.push(kind);
-        assert.equal(actor.dataRef, legacy);
-        if (fail && failure === kind) return new Response("failed", { status: 400 });
-        return f.fetch(input, init);
-      }, async () => {
-        if (fail) {
-          await assert.rejects(f.host.saveLandscapeData("terrain"), /Save failed/);
-          assert.equal(actor.dataRef, legacy);
-          assert.equal(f.statuses.length, 0);
-          fail = false;
-        }
-        await f.host.saveLayout();
-        assert.equal(actor.dataRef, PATHS[1]);
-        assert.deepEqual(order.slice(-4), ["tile", "global", "definition", "layout"]);
-      });
-    });
-  }
-
-  await checkAsync("editor save: a new 1x1 Landscape writes its terrain before the level, later edits after it", async () => {
-    const f = fixture();
-    const order: string[] = [];
-    const saver = f.host.layoutSaver;
-    f.host.layoutSaver = async (payload) => { order.push("layout"); return saver(payload); };
-    let failTile = true;
-    await withFetch(async (input, init) => {
-      const kind = String(input).startsWith("/__save-terrain-tile") ? "tile" : String(input).startsWith("/__save-terrain-global") ? "global" : "definition";
-      order.push(kind);
-      if (failTile && kind === "tile") return new Response("failed", { status: 400 });
-      return f.fetch(input, init);
-    }, async () => {
-      f.host.markLandscapeUnwritten("terrain", f.host.landscapeData.get("terrain")!);
-      // A failed terrain write keeps the level unsaved, so it never names a missing terrain.
-      await assert.rejects(f.host.saveLandscapeData("terrain"), /Save failed/);
-      assert.deepEqual(order, ["tile"]);
-      failTile = false;
-      order.length = 0;
-      await f.host.saveLandscapeData("terrain");
-      assert.deepEqual(order, ["tile", "global", "definition", "layout"]);
-      // Once on disk, edits keep the historic level-first order.
-      order.length = 0;
-      f.edit("landscape", 3);
-      await f.host.saveLayout();
-      assert.deepEqual(order, ["layout", "tile", "global", "definition"]);
-    });
-  });
-
   for (const kind of ["landscape", "foliage", "meshPaint"] as const) {
     await checkAsync(`editor save: delayed ${kind} response preserves newer edits and next save writes them`, async () => {
       const f = fixture();
@@ -369,9 +265,9 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
       for (const kind of ["landscape", "foliage", "meshPaint"] as const) f.edit(kind, 2);
       release.resolve();
       await first;
-      assert.deepEqual(f.writes.map((write) => write.value), ["before", 1, 1, 1]);
+      assert.deepEqual(f.writes.map((write) => write.value), [1, "before", 1, 1]);
       await f.host.saveLayout();
-      assert.deepEqual(f.writes.slice(4).map((write) => write.value), ["after", 2, 2, 2]);
+      assert.deepEqual(f.writes.slice(4).map((write) => write.value), [2, "after", 2, 2]);
     });
   });
 
@@ -405,11 +301,11 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
       const direct = f.host.saveLandscapeData("terrain");
       const autosave = f.host.saveLayout();
       await Promise.resolve();
-      assert.equal(f.writes.length, 0, "later requests must wait for the blocked layout write");
+      assert.equal(f.writes.length, 1, "only the blocked snapshot's terrain is written; later requests wait");
       release.resolve();
       await Promise.all([manual, direct, autosave]);
       assert.equal(peak, 1);
-      assert.deepEqual(f.writes.map((write) => write.value), ["before", 1, 2, "before"]);
+      assert.deepEqual(f.writes.map((write) => write.value), [1, "before", 2, "before"]);
       assert.equal(f.revision("landscape").dirty, false);
     });
   });
@@ -421,7 +317,7 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
       let fail = true;
       const saver = f.host.layoutSaver;
       f.host.layoutSaver = async (payload) => {
-        if (fail && failedIndex === 0) throw new Error("disk unavailable");
+        if (fail && PATHS[failedIndex] === LEVEL) throw new Error("disk unavailable");
         return saver(payload);
       };
       await withFetch(async (input, init) => {
@@ -438,13 +334,13 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
           return true;
         });
         assert.equal(f.statuses.length, 0, "a partial batch must not report success");
-        for (const [index, kind] of (["landscape", "foliage", "meshPaint"] as const).entries()) {
-          assert.equal(f.revision(kind).dirty, index + 1 >= failedIndex);
+        for (const kind of ["landscape", "foliage", "meshPaint"] as const) {
+          assert.equal(f.revision(kind).dirty, KIND_PATH[kind] >= failedIndex);
         }
         fail = false;
         await f.host.saveLayout();
         for (const kind of ["landscape", "foliage", "meshPaint"] as const) assert.equal(f.revision(kind).dirty, false);
-        assert.deepEqual(f.writes.filter((write) => write.path !== LEVEL).map((write) => write.path), PATHS.slice(1));
+        assert.deepEqual(f.writes.filter((write) => write.path !== LEVEL).map((write) => write.path), PATHS.filter((path) => path !== LEVEL));
         assert.equal(f.statuses.at(-1)!.tone, "success");
       });
     });
@@ -462,32 +358,6 @@ export async function registerEditorSaveCoordinatorTests(checkAsync: CheckAsync)
     assert.equal(state.dirty, true);
     await state.capture("paint.json", async () => {}).write();
     assert.equal(state.dirty, false);
-  });
-
-  await checkAsync("editor save: recreating the same landscape id cannot be cleaned by an old response", async () => {
-    const f = fixture();
-    f.edit("landscape", 1);
-    const started = deferred();
-    const release = deferred();
-    await withFetch(async (input, init) => {
-      const response = await f.fetch(input, init);
-      started.resolve();
-      await release.promise;
-      return response;
-    }, async () => {
-      const pending = f.host.saveLandscapeData("terrain");
-      await started.promise;
-      f.host.landscapeSaveRevisions.delete("terrain");
-      const replacement = createFlatLandscapeData("small");
-      replacement.heights[0] = 2;
-      f.host.landscapeData.set("terrain", replacement);
-      f.host.markLandscapeDirty("terrain");
-      release.resolve();
-      await pending;
-      assert.equal(f.revision("landscape").dirty, true);
-      await f.host.saveLayout();
-      assert.deepEqual(f.writes.filter((write) => write.path !== LEVEL).map((write) => write.value), [1, 2]);
-    });
   });
 
   await checkAsync("editor save: snapshot preparation failure leaves the queue available for retry", async () => {

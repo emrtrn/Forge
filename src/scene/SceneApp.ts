@@ -2,7 +2,6 @@ import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainD
 import { LakeWaterController } from "./lakeWaterController";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import { validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
-import { legacyLandscapeToWorldTerrain } from "@engine/terrain/terrainLegacy";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { compareWorldCellKeys, normalizeWorldPartitionSettings, type WorldPartitionSettings } from "@engine/world/worldPartition";
 import { parseWorldCellKey } from "@engine/world/worldGrid";
@@ -28,10 +27,9 @@ import {
   type TerrainPaintAccumulator,
   type TerrainUndoPatch,
 } from "@engine/terrain/terrainEdit";
-import { decodeTerrainTile, encodeTerrainTile, type DecodedTerrainTile, type TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
+import { decodeTerrainTile, type DecodedTerrainTile, type TerrainHeightFormat } from "@engine/terrain/terrainTileCodec";
 import { exportRawHeightmap, heightmapSamplesToRaw, importRawHeightmap, rawHeightmapToSamples } from "@engine/terrain/terrainImport";
 import { decodeHeightmapPng, encodeHeightmapPng16 } from "@engine/terrain/heightmapPng";
-import { legacyTerrainHeightRange, migratedTerrainPath } from "@engine/terrain/terrainLegacy";
 import { captureWorldTerrainSave } from "@engine/terrain/worldTerrainSave";
 import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineData";
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
@@ -41,16 +39,9 @@ import { terrainHeightAt, raycastTerrain } from "@engine/terrain/terrainHeightQu
 import { createFlatWorldTerrain, createWorldTerrainFromHeightmap, type WorldTerrainCreateOptions, type WorldTerrainHeightmapSource } from "@engine/terrain/worldTerrainCreate";
 import { openWorldFogPatch, openWorldPartitionSettings, type OpenWorldSetup } from "@engine/world/openWorldSetup";
 import {
-  expandLandscapeToWorldTerrain, expandSingleTileWorldTerrain, singleTileExpandProblems, worldTerrainExpandProblems,
+  expandSingleTileWorldTerrain, singleTileExpandProblems,
   type WorldTerrainExpandOptions, type WorldTerrainExpansionSource,
 } from "@engine/terrain/worldTerrainExpand";
-import {
-  landscapeEditIssues,
-  landscapeEditWorld,
-  landscapeLayersWithoutLayer,
-  landscapeGridPatchValues,
-  writeTerrainPatchToLandscape,
-} from "@engine/terrain/terrainLandscapeBridge";
 import {
   isMultiTileTerrain,
   terrainTileHeightfield,
@@ -249,36 +240,24 @@ import {
 import {
   landscapeLitFragmentSamplers,
   applyLandscapeTransform,
-  createFlatLandscapeData,
-  createLandscapeHeightfieldPrimitive,
-  createLandscapeObject,
   createWorldTerrainObject,
   disposeLandscapeObject,
-  ensureLandscapeLayers,
   LANDSCAPE_DEFAULT_LAYERS,
   resampleLandscapeHeightmap,
   landscapeSizeForPreset,
-  resampleLandscapeData,
-  applyLandscapeSplineDeform,
-  applyLandscapeSplinePaint,
   landscapeSplineMeshAssetIds,
   splineToPolyline,
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
   updateLandscapeLod,
-  updateLandscapeObjectGeometry,
   updateWorldTerrainAppearance,
   refreshWorldTerrainObjectTile,
   updateWorldTerrainObjectTiles,
-  type ForgeLandscapeData,
   type ForgeLandscapeSpline,
-  type LandscapeDirtyBounds,
   type LandscapeLayerColors,
   type LandscapeLayerTexture,
-  type LandscapeLayerWeights,
   type LandscapeObject,
-  type LandscapeRenderItem,
   type LandscapeViewMode,
   type WorldTerrainRenderItem,
 } from "@engine/render-three/landscape";
@@ -311,7 +290,6 @@ import {
   type LayoutFoliageData,
   type LayoutFoliageGroup,
 } from "@engine/scene/foliage";
-import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
 import {
   FoliageSelection,
   foliageIndicesInRadius,
@@ -332,8 +310,6 @@ import {
 import { loadFoliageDocument, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
 import { ProceduralFoliageRing, type ProceduralFoliageRuleSource, type ProceduralFoliageTerrain } from "./proceduralFoliageRing";
 import { createFoliageCellGenerator, type FoliageCellGenerator } from "./foliageCellGenerator";
-import { landscapeTerrainView } from "@engine/scene/proceduralFoliage";
-import { TerrainTileMap } from "@engine/terrain/terrainHeightQuery";
 import {
   createEmptyMeshPaintData,
   fillMeshVertexColors,
@@ -1075,12 +1051,9 @@ interface TerrainStroke {
   pointerId: number;
   landscapeIndex: number;
   landscapeId: string;
-  /** Multi-tile World Terrain; null for a 1×1 Landscape. */
-  document: WorldTerrainDocument | null;
-  /** The tiles the dabs edit: the World Terrain session's, or a Landscape-local copy of a 1×1 grid. */
+  document: WorldTerrainDocument;
+  /** The tiles the dabs edit: the World Terrain session's. */
   world: TerrainEditWorld;
-  /** 1×1 Landscape: the grid each dab is written back to. */
-  landscape: ForgeLandscapeData | null;
   mode: "sculpt" | "paint";
   flattenSampleHeight: number;
   /** Ramp previews during the drag and applies on release. */
@@ -1096,23 +1069,6 @@ interface TerrainStroke {
   demanded: Set<string>;
   /** Unquantized paint weights, so low-strength dabs add up across the stroke. */
   paint: TerrainPaintAccumulator;
-}
-
-function cloneLandscapeLayers(layers: readonly LandscapeLayerWeights[]): LandscapeLayerWeights[] {
-  return layers.map((layer) => {
-    const clone: LandscapeLayerWeights = {
-      id: layer.id,
-      name: layer.name,
-      weights: [...layer.weights],
-    };
-    if (typeof layer.material === "string" && layer.material.length > 0) {
-      clone.material = layer.material;
-    }
-    if (typeof layer.physicalMaterial === "string" && layer.physicalMaterial.length > 0) {
-      clone.physicalMaterial = layer.physicalMaterial;
-    }
-    return clone;
-  });
 }
 
 function cloneLandscapeSplines(splines: readonly ForgeLandscapeSpline[]): ForgeLandscapeSpline[] {
@@ -1167,18 +1123,6 @@ function uniqueSplineSegmentId(spline: ForgeLandscapeSpline): string {
   let number = spline.segments.length + 1;
   while (used.has(`segment-${number}`)) number += 1;
   return `segment-${number}`;
-}
-
-function mergeLandscapeDirtyBounds(
-  left: LandscapeDirtyBounds,
-  right: LandscapeDirtyBounds,
-): LandscapeDirtyBounds {
-  return {
-    x0: Math.min(left.x0, right.x0),
-    x1: Math.max(left.x1, right.x1),
-    z0: Math.min(left.z0, right.z0),
-    z1: Math.max(left.z1, right.z1),
-  };
 }
 
 /**
@@ -1415,12 +1359,10 @@ export class SceneApp {
   private readonly landscapeSplineMeshBuilds = new WeakMap<Group, number>();
   /** Editor-only spline control-point/segment overlay, parented under each landscape, by index. */
   private landscapeSplineOverlays: (Group | null)[] = [];
-  /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
-  private landscapeData = new Map<string, ForgeLandscapeData>();
   /**
-   * Multi-tile World Terrains by landscape id (OPEN_WORLD_PLAN Faz 2). These
-   * actors have no `landscapeData` entry: they are drawn from and sculpted on
-   * their tiles, and Save writes edited tiles in place at their reference.
+   * World Terrains by landscape id (OPEN_WORLD_PLAN Faz 2): every Landscape
+   * actor is drawn from and sculpted on its tiles, and Save writes edited tiles
+   * in place at their reference.
    */
   private worldTerrains = new Map<string, WorldTerrainDocument>();
   /**
@@ -2663,25 +2605,7 @@ export class SceneApp {
         mapRevision: `${actor.id}:${session?.editRevision ?? 0}:${document.tiles.size}`,
       };
     }
-    const data = this.landscapeData.get(actor.id);
-    if (!data) return null;
-    const { verticesX, verticesZ, spacing } = data.size;
-    const scale = data.size.heightScale === 0 ? 1 : data.size.heightScale;
-    const [x, y, z] = actor.position;
-    const width = (verticesX - 1) * spacing;
-    const depth = (verticesZ - 1) * spacing;
-    const rotated = (actor.rotation ?? [0, 0, 0]).some((angle) => angle !== 0);
-    const revision = this.editorSaves.landscapeSaveRevisions.get(actor.id);
-    return {
-      name: actor.name || "Landscape",
-      rect: { minX: x - width / 2, minZ: z - depth / 2, maxX: x + width / 2, maxZ: z + depth / 2 },
-      tileSize: Math.max(width, depth), tilesX: 1, tilesZ: 1, streams: false, loadRange: null,
-      tileBytes: verticesX * verticesZ * (4 + 4 * data.layers.length),
-      tiles: [{ key: "0_0", x: 0, z: 0, state: "resident", unsaved: Boolean(revision?.dirty), kept: false }],
-      map: rotated ? null : { width: verticesX, height: verticesZ, heights: Float32Array.from(data.heights, (height) => y + height * scale) },
-      metresPerSample: spacing,
-      mapRevision: `${actor.id}:${revision?.current ?? 0}`,
-    };
+    return null;
   }
 
   /**
@@ -4142,7 +4066,6 @@ export class SceneApp {
         snapScale: this.snapSettings.scale,
         snapScaleEnabled: this.snapSettings.scaleEnabled,
       },
-      landscapeData: this.landscapeData,
       worldTerrainIds: new Set(this.worldTerrains.keys()),
       worldTerrainSessions: new Map([...this.worldTerrains].flatMap(([id, document]) => {
         const session = this.worldTerrainSessions.get(document);
@@ -7015,27 +6938,7 @@ export class SceneApp {
 
   // --- Landscape (heightfield terrain) actors --------------------------------
 
-  /** Resolved settings + world transform + sidecar data for a landscape layout actor. */
-  private landscapeItem(actor: LayoutLandscape): LandscapeRenderItem {
-    const data = this.landscapeData.get(actor.id);
-    // Never fall back to a flat grid: a missing grid is either a World Terrain
-    // (drawn by `worldTerrainItem`) or a bug that must not paint fake terrain.
-    if (!data) throw new Error(`Landscape ${actor.id} has no editable grid loaded`);
-    ensureLandscapeLayers(data);
-    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
-    return {
-      ...resolveLandscape(actor),
-      position: [...actor.position],
-      rotation: readRotation(actor),
-      data,
-      viewMode: this.landscapeSculptSettings.viewMode,
-      activeLayerId: this.landscapeSculptSettings.activeLayerId,
-      layerColors: this.resolveLandscapeLayerColors(data.layers),
-      layerTextures: this.resolveLandscapeLayerTextures(data.layers, worldSize),
-    };
-  }
-
-  /** Render inputs of a multi-tile World Terrain actor; placement comes from its definition. */
+  /** Render inputs of a World Terrain actor; placement comes from its definition. */
   private worldTerrainItem(actor: LayoutLandscape, document: WorldTerrainDocument): WorldTerrainRenderItem {
     const layers = document.def.layers;
     return {
@@ -7049,18 +6952,17 @@ export class SceneApp {
     };
   }
 
-  /** The scene object for a landscape actor: its editable grid, or its World Terrain tiles. */
+  /** The scene object for a landscape actor, drawn from its World Terrain tiles. */
   private createLandscapeObjectFor(actor: LayoutLandscape): LandscapeObject {
     const world = this.worldTerrains.get(actor.id);
-    return world ? createWorldTerrainObject(this.worldTerrainItem(actor, world)) : createLandscapeObject(this.landscapeItem(actor));
+    if (!world) throw new Error(`Landscape ${actor.id} has no World Terrain loaded`);
+    return createWorldTerrainObject(this.worldTerrainItem(actor, world));
   }
 
   /** Whatever backs a landscape actor in memory, for delete/undo round trips. */
   private terrainActorDocument(id: string): TerrainActorDocument | null {
     const world = this.worldTerrains.get(id);
-    if (world) return { kind: "world", document: world };
-    const data = this.landscapeData.get(id);
-    return data ? { kind: "landscape", data } : null;
+    return world ? { kind: "world", document: world } : null;
   }
 
   /** The multi-tile World Terrain behind a landscape index, if that is what it references. */
@@ -7151,7 +7053,7 @@ export class SceneApp {
    */
   private async warmLandscapeLayerMaterials(index: number): Promise<void> {
     const actor = this.layout?.landscapes?.[index];
-    const layers = actor ? this.landscapeData.get(actor.id)?.layers ?? this.worldTerrains.get(actor.id)?.def.layers : null;
+    const layers = actor ? this.worldTerrains.get(actor.id)?.def.layers : null;
     if (!actor || !layers) return;
     const manifest = this.manifest;
     if (!manifest) return;
@@ -7216,13 +7118,13 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[index];
     const object = this.landscapeObjects[index];
     const document = actor ? this.worldTerrains.get(actor.id) : undefined;
-    const source = actor ? this.landscapeData.get(actor.id) ?? document?.def : undefined;
+    const source = document?.def;
     const previous = this.landscapeSplineMeshGroups[index];
     if (previous) {
       disposeLandscapeSplineMeshGroup(previous);
       this.landscapeSplineMeshGroups[index] = null;
     }
-    if (!actor || !object || !source) return;
+    if (!actor || !object || !document || !source) return;
     const build = (this.landscapeSplineMeshBuilds.get(object) ?? 0) + 1;
     this.landscapeSplineMeshBuilds.set(object, build);
     const current = () => this.landscapeObjects[index] === object && Boolean(object.parent)
@@ -7233,12 +7135,12 @@ export class SceneApp {
       await Promise.all(assetIds.map((assetId) => this.ensureAssetLoaded(assetId)));
       // The landscape object may have been rebuilt/removed while assets loaded.
       if (!current()) return;
-      const data = document ? await prepareTerrainSplineMeshSource(document, async (key) => {
+      const data = await prepareTerrainSplineMeshSource(document, async (key) => {
         const path = terrainTilePath(actor.dataRef, key);
         const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
         if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
         return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
-      }) : this.landscapeData.get(actor.id)!;
+      });
       if (!current()) return;
       const built = buildLandscapeSplineMeshGroup({
         data,
@@ -7412,28 +7314,13 @@ export class SceneApp {
     this.landscapeObjects = [];
     this.landscapeSplineMeshGroups = [];
     this.landscapeSplineOverlays = [];
-    this.landscapeData.clear();
     this.worldTerrains.clear();
     for (const streaming of this.worldTerrainStreams.values()) streaming.dispose();
     this.worldTerrainStreams.clear();
-    this.editorSaves.landscapeSaveRevisions.clear();
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
       const loaded = await this.fetchLandscapeDocument(actor);
-      if (loaded.kind === "world") {
-        // A legacy sidecar is saved as this level's own World Terrain (never over a
-        // shared or copied file); the old file stays.
-        if (loaded.legacySource) {
-          actor.dataRef = this.activeProject
-            ? levelTerrainPath(this.activeProject.manifest.editor.defaultScene, actor.id)
-            : migratedTerrainPath(actor.dataRef);
-        }
-        this.adoptWorldTerrain(actor, loaded.document, loaded.legacySource !== undefined);
-        continue;
-      }
-      const data = loaded.data;
-      if (ensureLandscapeLayers(data)) this.markLandscapeDirty(actor.id);
-      this.landscapeData.set(actor.id, data);
+      this.adoptWorldTerrain(actor, loaded.document);
     }
     landscapes.forEach((actor, index) => {
       const object = this.createLandscapeObjectFor(actor);
@@ -7459,11 +7346,7 @@ export class SceneApp {
    * creates a collider or navigation rule.
    */
   private lakeDocument(id: string): WorldTerrainDocument | undefined {
-    const world = this.worldTerrains.get(id); if (world) return world;
-    const actor = this.layout?.landscapes?.find((a) => a.id === id), data = this.landscapeData.get(id);
-    if (!actor || !data || !actor.dataRef.endsWith(".terrain.json")) return undefined;
-    const converted = legacyLandscapeToWorldTerrain(actor, data);
-    return converted.warnings.length ? undefined : { def: converted.def, tiles: new Map([["0_0", converted.tile]]) };
+    return this.worldTerrains.get(id);
   }
 
   private lakeController(): LakeWaterController {
@@ -7795,20 +7678,17 @@ export class SceneApp {
         const resolved = resolveRiverWater(actor);
         const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
         const document = landscape ? this.worldTerrains.get(landscape.id) : undefined;
-        const data = landscape ? this.landscapeData.get(landscape.id) : null;
-        const spline = (document?.def ?? data)?.splines?.find((candidate) => candidate.id === resolved.splineRef);
-        if (!landscape || !spline || (!document && !data)) {
+        const spline = document?.def.splines?.find((candidate) => candidate.id === resolved.splineRef);
+        if (!landscape || !document || !spline) {
           console.warn(`[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`);
           continue;
         }
-        const source = document ? await prepareTerrainRiverWaterSource(document, resolved, async (key) => {
+        const source = await prepareTerrainRiverWaterSource(document, resolved, async (key) => {
           const path = terrainTilePath(landscape.dataRef, key);
           const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
           if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
           return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
-        }) : { spline, landscapeData: data!, surfaceLevel: resolved.surfaceLevel,
-          foamStamps: resolved.foamStamps, position: [...landscape.position] as Vec3,
-          rotation: landscape.rotation ? [...landscape.rotation] as Vec3 : [0, 0, 0] as Vec3 };
+        });
         const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
         const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
@@ -7957,12 +7837,7 @@ export class SceneApp {
         existingTiles: new Set(def.tiles.map((tile) => tile.key)),
       };
     }
-    const data = this.landscapeData.get(actor.id);
-    const view = data ? landscapeTerrainView({ id: actor.id, position: [...actor.position], rotation: readRotation(actor), data }) : null;
-    if (!view) return null;
-    const tiles = new TerrainTileMap();
-    tiles.set(view.tile);
-    return { id: actor.id, def: { ...view.def, layers: view.def.layers.map((layer) => ({ id: layer.id })) }, tiles, existingTiles: null };
+    return null;
   }
 
   /** Recreates the editor ring from the current rules, types and terrains (the generator is kept). */
@@ -7982,48 +7857,14 @@ export class SceneApp {
     this.foliageRing = new ProceduralFoliageRing({ rules, binding, resolver: this.foliageResolver(), generator: this.foliageCellGenerator });
   }
 
-  /**
-   * Generated foliage is transient render data; only its rules live in the sidecar.
-   * Only for a Landscape the ring cannot express; every other rule grows in the ring.
-   */
-  private generatedFoliageGroup(rule: LandscapeFoliageRule): LayoutFoliageGroup | null {
-    const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    const type = this.foliageTypes.get(rule.foliageTypeId);
-    if (!actor || !data || !type || this.proceduralFoliageTerrain(actor.id)) return null;
-    const instances = generateLandscapeFoliageSamples(rule, {
-      id: actor.id,
-      position: [...actor.position],
-      rotation: readRotation(actor),
-      data,
-    }).map((sample) =>
-      foliageInstanceFromRoll(type, rollFoliageInstance(type, sample, makeFoliageRng(sample.seed))),
-    );
-    return {
-      id: `generated-${rule.id}`,
-      foliageTypeId: rule.foliageTypeId,
-      target: { kind: "landscape", id: rule.landscapeId },
-      instances,
-    };
-  }
-
   private foliageRenderData(): LayoutFoliageData {
-    const generated = (this.foliageData.landscapeRules ?? [])
-      .map((rule) => this.generatedFoliageGroup(rule))
-      .filter((group): group is LayoutFoliageGroup => group !== null);
-    return { schema: 1, type: "foliage", groups: [...this.foliageData.groups, ...generated] };
+    return { schema: 1, type: "foliage", groups: [...this.foliageData.groups] };
   }
 
   /** Rebuilds only the generated rule groups affected by a terrain change. */
   private rebuildGeneratedFoliageForLandscape(landscapeId: string): void {
     const terrain = this.proceduralFoliageTerrain(landscapeId);
     if (terrain) this.foliageRing?.replaceTerrain(terrain);
-    for (const rule of this.foliageData.landscapeRules ?? []) {
-      if (rule.landscapeId !== landscapeId) continue;
-      const group = this.generatedFoliageGroup(rule);
-      if (group && group.instances.length > 0) this.foliageBinding?.rebuildGroup(group, this.foliageResolver());
-      else this.foliageBinding?.removeGroup(`generated-${rule.id}`);
-    }
     this.disableFoliagePicking();
   }
 
@@ -8108,14 +7949,7 @@ export class SceneApp {
       if (world) {
         return { id: actor.id, name: actor.name ?? actor.id, layers: world.def.layers.map((layer) => ({ id: layer.id, name: layer.name })) };
       }
-      const data = this.landscapeData.get(actor.id);
-      if (data) ensureLandscapeLayers(data);
-      const layers = data?.layers ?? LANDSCAPE_DEFAULT_LAYERS.map((layer) => ({ id: layer.id, name: layer.name }));
-      return {
-        id: actor.id,
-        name: actor.name ?? actor.id,
-        layers: layers.map((layer) => ({ id: layer.id, name: layer.name })),
-      };
+      return { id: actor.id, name: actor.name ?? actor.id, layers: [] };
     });
   }
 
@@ -9565,12 +9399,9 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[index];
     const object = this.landscapeObjects[index];
     if (!actor || !object) return;
-    const world = this.worldTerrains.get(actor.id);
     // A World Terrain follows its actor while dragged; `syncWorldTerrainPlacement`
     // moves the definition (and what is authored on it) when the move commits.
-    applyLandscapeTransform(object, world
-      ? { position: actor.position, rotation: [0, 0, 0], hidden: resolveLandscape(actor).hidden }
-      : this.landscapeItem(actor));
+    applyLandscapeTransform(object, { position: actor.position, rotation: [0, 0, 0], hidden: resolveLandscape(actor).hidden });
     this.syncRiverWaterTransformsForLandscape(actor);
   }
 
@@ -9645,15 +9476,14 @@ export class SceneApp {
     return this.selection.index;
   }
 
-  /** Live editor source: 1x1 points are local, multi-tile points are world-space. */
-  private landscapeSplineSource(id: string): Pick<ForgeLandscapeData, "splines"> | null {
-    return this.worldTerrains.get(id)?.def ?? this.landscapeData.get(id) ?? null;
+  /** Live editor source: world-space spline points on the World Terrain definition. */
+  private landscapeSplineSource(id: string): Pick<WorldTerrainDef, "splines"> | null {
+    return this.worldTerrains.get(id)?.def ?? null;
   }
 
   private markLandscapeSplineDirty(id: string): void {
     const document = this.worldTerrains.get(id);
     if (document) this.worldTerrainSessions.get(document)?.markDefinitionDirty();
-    else this.markLandscapeDirty(id);
   }
 
   private defaultLandscapeSplinePaintLayer(): string {
@@ -9993,8 +9823,7 @@ export class SceneApp {
       spline.points.at(-1);
     // Weld radius scales with the terrain footprint so it feels the same at any size.
     const document = this.worldTerrains.get(actor.id);
-    const grid = this.landscapeData.get(actor.id);
-    const worldSize = document ? terrainTileWorldSize(document.def) : grid ? (grid.size.verticesX - 1) * grid.size.spacing : 0;
+    const worldSize = document ? terrainTileWorldSize(document.def) : 0;
     const weldDist = Math.max(1.5, worldSize * 0.02);
     // Search every spline, not just the active one, so a click can weld onto a
     // point of another spline to fork/join two roads. The nearest point wins
@@ -10124,32 +9953,18 @@ export class SceneApp {
     const mode = this.landscapeSculptSettings.editMode;
     const actor = this.layout?.landscapes?.[index];
     if (!actor) return false;
-    const document = this.worldTerrains.get(actor.id) ?? null;
-    let world: TerrainEditWorld;
-    let landscape: ForgeLandscapeData | null = null;
-    if (document) {
-      if (mode === "splines") {
-        // Say why nothing happens instead of silently selecting the terrain again.
-        this.onStatus?.("Splines are not supported on a multi-tile Landscape yet.", "warning");
-        return false;
-      }
-      const session = this.worldTerrainSessions.get(document);
-      if (!session) return false;
-      world = session.world;
-    } else {
-      const data = this.landscapeData.get(actor.id);
-      if (!data || mode === "splines") return false;
-      ensureLandscapeLayers(data);
-      const issues = landscapeEditIssues(data);
-      if (issues.length > 0) {
-        this.onStatus?.(`${actor.name ?? actor.id} cannot be sculpted or painted (${issues.join("; ")}). Resample it to a preset resolution first.`, "warning");
-        return false;
-      }
-      world = landscapeEditWorld(data);
-      landscape = data;
+    const document = this.worldTerrains.get(actor.id);
+    if (!document) return false;
+    if (mode === "splines") {
+      // Say why nothing happens instead of silently selecting the terrain again.
+      this.onStatus?.("Splines are not supported on a multi-tile Landscape yet.", "warning");
+      return false;
     }
+    const session = this.worldTerrainSessions.get(document);
+    if (!session) return false;
+    const world = session.world;
     const stroke: TerrainStroke = {
-      pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, world, landscape, mode,
+      pointerId: event.pointerId, landscapeIndex: index, landscapeId: actor.id, document, world, mode,
       flattenSampleHeight: 0, patches: [], demanded: new Set(), tool: this.landscapeSculptTool(event),
       rampStart: null, rampEnd: null, pendingBrush: null, paint: createTerrainPaintAccumulator(),
     };
@@ -10157,7 +9972,7 @@ export class SceneApp {
       this.onStatus?.("The active paint layer is not one of this Landscape's layers.", "warning");
       return false;
     }
-    const point = this.terrainStrokePoint(stroke, hit.point);
+    const point = hit.point.clone();
     stroke.flattenSampleHeight = point.y - world.def.origin[1];
     if (mode === "sculpt" && stroke.tool === "ramp") stroke.rampStart = point;
     this.terrainStroke = stroke;
@@ -10167,21 +9982,8 @@ export class SceneApp {
     return true;
   }
 
-  /** A 1×1 Landscape keeps its legacy fallback to the first layer. */
   private terrainStrokeLayer(stroke: TerrainStroke): number {
-    const index = stroke.world.def.layers.findIndex((layer) => layer.id === this.landscapeSculptSettings.activeLayerId);
-    return stroke.landscape ? Math.max(0, index) : index;
-  }
-
-  /** A world-space hit in the stroke's edit frame: world space, or the 1×1 Landscape's local space. */
-  private terrainStrokePoint(stroke: TerrainStroke, point: Vector3): Vector3 {
-    const object = stroke.landscape ? this.landscapeObjects[stroke.landscapeIndex] : undefined;
-    return object ? object.worldToLocal(point.clone()) : point.clone();
-  }
-
-  private terrainStrokeWorldPoint(stroke: TerrainStroke, point: Vector3): Vector3 {
-    const object = stroke.landscape ? this.landscapeObjects[stroke.landscapeIndex] : undefined;
-    return object ? object.localToWorld(point.clone()) : point.clone();
+    return stroke.world.def.layers.findIndex((layer) => layer.id === this.landscapeSculptSettings.activeLayerId);
   }
 
   private landscapeSculptTool(event: Pick<PointerEvent, "shiftKey" | "ctrlKey" | "altKey">): LandscapeSculptTool {
@@ -10272,11 +10074,8 @@ export class SceneApp {
   private applyTerrainStrokeBrush(stroke: TerrainStroke, brush: TerrainBrush): void {
     const index = this.layout?.landscapes?.findIndex((actor) => actor.id === stroke.landscapeId) ?? -1;
     const object = this.landscapeObjects[index];
-    const session = stroke.document ? this.worldTerrainSessions.get(stroke.document) : undefined;
-    const current = stroke.document
-      ? session !== undefined && this.worldTerrains.get(stroke.landscapeId) === stroke.document
-      : this.landscapeData.get(stroke.landscapeId) === stroke.landscape;
-    if (!object || !current) return;
+    const session = this.worldTerrainSessions.get(stroke.document);
+    if (!object || !session || this.worldTerrains.get(stroke.landscapeId) !== stroke.document) return;
     let result: TerrainBrushResult;
     try {
       result = applyTerrainBrush(stroke.world, brush, { paint: stroke.paint });
@@ -10286,31 +10085,9 @@ export class SceneApp {
       return;
     }
     if (result.dirty.size === 0) return;
-    if (stroke.landscape) {
-      this.writeLandscapePatches(stroke.landscapeId, index, stroke.landscape, result.patches, "after");
-      return;
-    }
-    session!.markTiles(result.dirty.keys());
+    session.markTiles(result.dirty.keys());
     updateWorldTerrainObjectTiles(object, result.dirty);
     this.scheduleLandscapeFoliageRebuild(stroke.landscapeId);
-  }
-
-  /**
-   * A 1×1 Landscape's half of a terrain edit: one side of the tile patches goes
-   * into its grid (undo in reverse order), then only that rectangle is redrawn.
-   */
-  private writeLandscapePatches(
-    landscapeId: string, index: number, data: ForgeLandscapeData,
-    patches: readonly TerrainUndoPatch[], side: "before" | "after",
-  ): void {
-    if (patches.length === 0) return;
-    let dirty: LandscapeDirtyBounds | null = null;
-    for (const patch of side === "before" ? [...patches].reverse() : patches) {
-      writeTerrainPatchToLandscape(data, patch.rect, patch[side]);
-      dirty = dirty ? mergeLandscapeDirtyBounds(dirty, patch.rect) : patch.rect;
-    }
-    this.markLandscapeDirty(landscapeId);
-    this.refreshLandscapeGeometry(index, dirty!);
   }
 
   private updateTerrainStroke(event: PointerEvent): boolean {
@@ -10318,10 +10095,10 @@ export class SceneApp {
     if (!stroke || stroke.pointerId !== event.pointerId) return false;
     const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY);
     if (hit && hit.index === stroke.landscapeIndex) {
-      const point = this.terrainStrokePoint(stroke, hit.point);
+      const point = hit.point.clone();
       if (stroke.rampStart) {
         stroke.rampEnd = point;
-        this.updateTerrainRampPreview(this.terrainStrokeWorldPoint(stroke, stroke.rampStart), hit.point);
+        this.updateTerrainRampPreview(stroke.rampStart.clone(), hit.point);
       } else this.applyTerrainStrokeDab(stroke, point, event);
     }
     this.updateLandscapeBrushHover(event.clientX, event.clientY);
@@ -10341,7 +10118,7 @@ export class SceneApp {
     if (stroke.rampStart) {
       const hit = event.type === "pointercancel" ? null : this.picker.pickLandscapeSurface(event.clientX, event.clientY);
       if (hit && hit.index === stroke.landscapeIndex) {
-        const point = this.terrainStrokePoint(stroke, hit.point);
+        const point = hit.point.clone();
         stroke.rampEnd = point;
         this.applyTerrainStrokeDab(stroke, point, event);
       } else this.onStatus?.("Ramp cancelled: release over the selected Landscape.", "info");
@@ -10353,7 +10130,7 @@ export class SceneApp {
   }
 
   private async completeTerrainStroke(stroke: TerrainStroke): Promise<void> {
-    const streaming = stroke.document ? this.worldTerrainStreams.get(stroke.document) : undefined;
+    const streaming = this.worldTerrainStreams.get(stroke.document);
     const pendingBrush = stroke.pendingBrush;
     if (pendingBrush && streaming) {
       this.terrainStrokePending = true;
@@ -10373,44 +10150,32 @@ export class SceneApp {
     streaming?.release(stroke.demanded);
     if (stroke.patches.length === 0) return;
     const tool = stroke.mode === "paint" ? this.landscapeSculptSettings.paintTool : this.landscapeSculptSettings.tool;
-    const size = stroke.world.def.tileQuads + 1;
-    this.executeTerrainPatchCommand(`Landscape ${tool}`, stroke.landscapeId, stroke.document, stroke.patches,
-      { verticesX: size, verticesZ: size, layerCount: stroke.world.def.layers.length });
+    this.executeTerrainPatchCommand(`Landscape ${tool}`, stroke.landscapeId, stroke.document, stroke.patches);
   }
 
   /**
    * One undoable terrain edit made of tile patches (a stroke, Fill Layer, a
-   * spline bake); executing it applies the after side. A World Terrain replays
-   * them on its session tiles. A 1×1 Landscape writes them into its grid and
-   * skips them when the grid no longer has the `grid` shape (the resample or
-   * layer change that altered it is undone first, in order).
+   * spline bake); executing it applies the after side by replaying them on the
+   * World Terrain's session tiles.
    */
   private executeTerrainPatchCommand(
-    label: string, landscapeId: string, document: WorldTerrainDocument | null, patches: readonly TerrainUndoPatch[],
-    grid?: { verticesX: number; verticesZ: number; layerCount: number },
+    label: string, landscapeId: string, document: WorldTerrainDocument, patches: readonly TerrainUndoPatch[],
     companion?: { redo: () => void; undo: () => void; selectedId: string },
   ): void {
     const restore = (side: "before" | "after"): void => {
       const index = this.layout?.landscapes?.findIndex((actor) => actor.id === landscapeId) ?? -1;
       const object = this.landscapeObjects[index];
       if (!object) return;
-      if (document) {
-        const session = this.worldTerrainSessions.get(document);
-        // A reload replaced the document: its edits went with it.
-        if (!session || this.worldTerrains.get(landscapeId) !== document) return;
-        const dirty = (side === "after" ? applyTerrainUndoPatches : revertTerrainUndoPatches)(session.world, patches);
-        session.markTiles(dirty.keys());
-        updateWorldTerrainObjectTiles(object, dirty);
-        void this.rebuildLandscapeSplineMeshes(index);
-        void this.buildRiverWaters(false);
-        if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
-        this.scheduleLandscapeFoliageRebuild(landscapeId);
-      } else {
-        const data = this.landscapeData.get(landscapeId);
-        if (!data || !grid || data.size.verticesX !== grid.verticesX || data.size.verticesZ !== grid.verticesZ
-          || data.layers.length !== grid.layerCount) return;
-        this.writeLandscapePatches(landscapeId, index, data, patches, side);
-      }
+      const session = this.worldTerrainSessions.get(document);
+      // A reload replaced the document: its edits went with it.
+      if (!session || this.worldTerrains.get(landscapeId) !== document) return;
+      const dirty = (side === "after" ? applyTerrainUndoPatches : revertTerrainUndoPatches)(session.world, patches);
+      session.markTiles(dirty.keys());
+      updateWorldTerrainObjectTiles(object, dirty);
+      void this.rebuildLandscapeSplineMeshes(index);
+      void this.buildRiverWaters(false);
+      if (this.showCollision) this.worldTerrainCollisionWiresDirty = true;
+      this.scheduleLandscapeFoliageRebuild(landscapeId);
       companion?.[side === "after" ? "redo" : "undo"]();
       this.updateLakesForTerrainPatches(landscapeId, patches);
       if (companion) {
@@ -10432,31 +10197,6 @@ export class SceneApp {
     return this.endTerrainStroke(event);
   }
 
-  private refreshLandscapeGeometry(index: number, dirty: LandscapeDirtyBounds): void {
-    const actor = this.layout?.landscapes?.[index];
-    const object = this.landscapeObjects[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!actor || !object || !data) return;
-    updateLandscapeObjectGeometry(
-      object,
-      data,
-      dirty,
-      this.landscapeSculptSettings.viewMode,
-      this.landscapeSculptSettings.activeLayerId,
-      this.resolveLandscapeLayerColors(data.layers),
-    );
-    this.scheduleLandscapeFoliageRebuild(actor.id);
-  }
-
-  private landscapeFullDirtyBounds(data: ForgeLandscapeData): LandscapeDirtyBounds {
-    return {
-      x0: 0,
-      x1: data.size.verticesX - 1,
-      z0: 0,
-      z1: data.size.verticesZ - 1,
-    };
-  }
-
   private refreshAllLandscapeGeometry(): void {
     const landscapes = this.layout?.landscapes ?? [];
     landscapes.forEach((actor, index) => {
@@ -10466,11 +10206,7 @@ export class SceneApp {
         const { layers } = world.def;
         updateWorldTerrainAppearance(object, layers, this.landscapeSculptSettings.viewMode,
           this.landscapeSculptSettings.activeLayerId, this.resolveLandscapeLayerColors(layers));
-        return;
       }
-      const data = this.landscapeData.get(actor.id);
-      if (!data) return;
-      this.refreshLandscapeGeometry(index, this.landscapeFullDirtyBounds(data));
     });
   }
 
@@ -10479,17 +10215,11 @@ export class SceneApp {
     this.layout.landscapes ??= [];
     const insertionIndex = clampIndex(index, this.layout.landscapes.length);
     this.layout.landscapes.splice(insertionIndex, 0, cloneLandscape(actor));
-    if (document.kind === "world") {
-      this.worldTerrains.set(actor.id, document.document);
-      // New, or back after a delete whose Save pruned its level-owned files:
-      // either way the next Save writes every tile, as a Landscape does.
-      const session = this.worldTerrainSessions.get(document.document);
-      session?.markTiles(document.document.tiles.keys());
-    } else {
-      this.landscapeData.set(actor.id, document.data);
-      // New, or back after a Save pruned it: the next Save writes it first.
-      this.editorSaves.markLandscapeUnwritten(actor.id, document.data);
-    }
+    this.worldTerrains.set(actor.id, document.document);
+    // New, or back after a delete whose Save pruned its level-owned files:
+    // either way the next Save writes every tile.
+    const session = this.worldTerrainSessions.get(document.document);
+    session?.markTiles(document.document.tiles.keys());
     const object = this.createLandscapeObjectFor(actor);
     this.applyWireframeToLevelObject(object);
     this.landscapeObjects.splice(insertionIndex, 0, object);
@@ -10507,9 +10237,7 @@ export class SceneApp {
       disposeLandscapeObject(object);
     }
     if (removed) {
-      this.landscapeData.delete(removed.id);
       this.worldTerrains.delete(removed.id);
-      this.editorSaves.landscapeSaveRevisions.delete(removed.id);
     }
     this.refreshLandscapeIndices();
     this.rebuildFoliageRing();
@@ -10647,17 +10375,10 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[this.selection.index];
     if (!actor) return null;
     const single = this.singleTileWorldTerrain(actor.id);
-    if (single) {
-      const { def } = single.document;
-      return { actorId: actor.id, tileQuads: def.tileQuads, tileEdge: def.tileQuads * def.spacing,
-        problems: (options) => singleTileExpandProblems(def, options) };
-    }
-    const data = this.landscapeData.get(actor.id);
-    if (!data || this.worldTerrains.has(actor.id)) return null;
-    const source = cloneLandscape(actor);
-    const rivers = this.layout?.riverWaters ?? [];
-    return { actorId: actor.id, tileQuads: data.size.verticesX - 1, tileEdge: (data.size.verticesX - 1) * data.size.spacing,
-      problems: (options) => worldTerrainExpandProblems(source, data, options, rivers) };
+    if (!single) return null;
+    const { def } = single.document;
+    return { actorId: actor.id, tileQuads: def.tileQuads, tileEdge: def.tileQuads * def.spacing,
+      problems: (options) => singleTileExpandProblems(def, options) };
   }
 
   /** Replaces one authored grid in a single undo step; foliage is already world-space. */
@@ -10670,45 +10391,16 @@ export class SceneApp {
       return;
     }
     const single = this.singleTileWorldTerrain(id);
-    if (single) {
-      const expanded = expandSingleTileWorldTerrain(single.document, options);
-      if (!expanded.ok) {
-        this.onStatus?.(expanded.reasons.join(" "), "error");
-        return;
-      }
-      // The original tile keeps its own height format; new tiles match it.
-      const format = (single.tile as Partial<DecodedTerrainTile>).heightFormat ?? "f32";
-      this.replaceWorldTerrainDocument(index, "Expand Landscape", expanded.document,
-        `Expanded Landscape to ${options.tilesX} × ${options.tilesZ} tiles.`, format);
+    if (!single) return;
+    const expanded = expandSingleTileWorldTerrain(single.document, options);
+    if (!expanded.ok) {
+      this.onStatus?.(expanded.reasons.join(" "), "error");
       return;
     }
-    const data = this.landscapeData.get(id);
-    if (!data) return;
-    const source = { actor: cloneLandscape(current), data, rivers: this.layout?.riverWaters ?? [] };
-    const result = expandLandscapeToWorldTerrain(source.actor, source.data, options, source.rivers);
-    if (!result.ok) {
-      this.onStatus?.(result.reasons.join(" "), "error");
-      return;
-    }
-    const actor = cloneLandscape(source.actor);
-    actor.dataRef = levelTerrainPath(this.activeProject.manifest.editor.defaultScene, id);
-    actor.position = worldTerrainActorPosition(result.document.def);
-    delete actor.rotation;
-    // Match the 1x1 save and preserve identical shared heights after reload.
-    const document = this.editableWorldTerrain(actor.dataRef, result.document, "f32");
-    const replace = (next: LayoutLandscape, terrain: TerrainActorDocument): void => {
-      this.removeLandscapeAt(index);
-      this.insertLandscape(index, next, terrain);
-      this.select({ kind: "landscape", index });
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({
-      label: "Expand Landscape",
-      redo: () => replace(actor, { kind: "world", document }),
-      undo: () => replace(source.actor, { kind: "landscape", data: source.data }),
-    });
-    this.onStatus?.(`Expanded Landscape to ${options.tilesX} × ${options.tilesZ} tiles.`, "info");
+    // The original tile keeps its own height format; new tiles match it.
+    const format = (single.tile as Partial<DecodedTerrainTile>).heightFormat ?? "f32";
+    this.replaceWorldTerrainDocument(index, "Expand Landscape", expanded.document,
+      `Expanded Landscape to ${options.tilesX} × ${options.tilesZ} tiles.`, format);
   }
 
   /** Removes a Landscape actor (undoable). */
@@ -10744,7 +10436,7 @@ export class SceneApp {
         this.scheduleAutoSave();
       },
       undo: () => {
-        this.insertLandscape(index, snapshot, document ?? { kind: "landscape", data: createFlatLandscapeData("medium") });
+        if (document) this.insertLandscape(index, snapshot, document);
         this.select({ kind: "landscape", index });
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
@@ -11024,7 +10716,7 @@ export class SceneApp {
     const presets = LANDSCAPE_DEFAULT_LAYERS;
     const presetById = new Map(presets.map((preset) => [preset.id as string, preset] as const));
     const selectedId = this.selection?.kind === "landscape" ? this.layout?.landscapes?.[this.selection.index]?.id ?? "" : "";
-    const layers = this.landscapeData.get(selectedId)?.layers ?? this.worldTerrains.get(selectedId)?.def.layers;
+    const layers = this.worldTerrains.get(selectedId)?.def.layers;
     const source = layers ?? presets.map((preset) => ({ id: preset.id, name: preset.name, weights: [] }));
     return source.map((layer) => {
       const preset = presetById.get(layer.id);
@@ -11165,74 +10857,14 @@ export class SceneApp {
   applySelectedLandscapeSplineDeform(): void {
     if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)) {
       void this.applyWorldTerrainSpline("deform");
-      return;
     }
-    this.applyActiveLandscapeSplineHeights(
-      (data, spline) => applyLandscapeSplineDeform(data, spline),
-      "Apply Spline Terrain Deform",
-      "No terrain change: enable Deform on a segment, then set a Target Offset or raise/lower control-point heights (flatten does nothing on already-flat terrain).",
-    );
-  }
-
-  private applyActiveLandscapeSplineHeights(
-    run: (data: ForgeLandscapeData, spline: ForgeLandscapeSpline) => { changed: boolean; bounds: LandscapeDirtyBounds | null },
-    label: string,
-    emptyMessage: string,
-  ): void {
-    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
-    const index = this.selection.index;
-    const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    const spline = data?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
-    if (!actor || !data || !spline) return;
-    if (!this.applyLandscapeGridOperation(actor.id, data, label, (scratch) => run(scratch, spline))) {
-      this.onStatus?.(emptyMessage, "info");
-      return;
-    }
-    this.onStatus?.("Spline terrain deform applied.", "info");
   }
 
   /** Destructively bakes the active spline's paint config into the paint layers (undoable). */
   applySelectedLandscapeSplinePaint(): void {
     if (this.selection?.kind === "landscape" && this.isWorldTerrainSelection(this.selection)) {
       void this.applyWorldTerrainSpline("paint");
-      return;
     }
-    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
-    const index = this.selection.index;
-    const actor = this.layout?.landscapes?.[index];
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    const spline = data?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
-    if (!actor || !data || !spline) return;
-    ensureLandscapeLayers(data);
-    if (!this.applyLandscapeGridOperation(actor.id, data, "Apply Spline Layer Paint", (scratch) => applyLandscapeSplinePaint(scratch, spline))) {
-      this.onStatus?.("No paint applied: enable Paint on a segment and pick a target Layer with Strength > 0.", "info");
-      return;
-    }
-    this.onStatus?.("Spline layer paint applied.", "info");
-  }
-
-  /**
-   * Runs a grid operation that still works on `ForgeLandscapeData` (spline
-   * deform/paint) on a scratch copy and commits only its changed rectangle as a
-   * tile patch, so undo stays proportional to the edit. False when nothing changed.
-   */
-  private applyLandscapeGridOperation(
-    landscapeId: string, data: ForgeLandscapeData, label: string,
-    run: (scratch: ForgeLandscapeData) => { changed: boolean; bounds: LandscapeDirtyBounds | null },
-  ): boolean {
-    const scratch: ForgeLandscapeData = { ...data, heights: data.heights.slice(), layers: cloneLandscapeLayers(data.layers) };
-    const result = run(scratch);
-    if (!result.changed || !result.bounds) return false;
-    const rect = result.bounds;
-    const patch: TerrainUndoPatch = {
-      key: tileKey(0, 0), rect,
-      before: landscapeGridPatchValues(data, rect),
-      after: landscapeGridPatchValues(scratch, rect),
-    };
-    this.executeTerrainPatchCommand(label, landscapeId, null, [patch],
-      { verticesX: data.size.verticesX, verticesZ: data.size.verticesZ, layerCount: data.layers.length });
-    return true;
   }
 
   createSelectedLandscapeSpline(): void {
@@ -11463,15 +11095,14 @@ export class SceneApp {
     if (!actor) return;
     const document = this.worldTerrains.get(actor.id);
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
-    const data = this.landscapeData.get(actor.id);
-    const layers = document?.def.layers ?? data?.layers;
-    if (!layers || layers.length >= 8) return;
+    const layers = document?.def.layers;
+    if (!document || !session || !layers || layers.length >= 8) return;
     const id = Array.from({ length: 9 }, (_, i) => `layer-${i + 1}`).find((id) => !layers.some((layer) => layer.id === id))!;
     const layer = { id, name: `Layer ${layers.length + 1}`, color: "#55493b" };
     try {
-      if (document) await this.loadWholeWorldTerrain(document, "add a paint layer");
+      await this.loadWholeWorldTerrain(document, "add a paint layer");
       if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
-        || this.isSelectionLocked(this.selection) || (document && this.worldTerrains.get(actor.id) !== document)) return;
+        || this.isSelectionLocked(this.selection) || this.worldTerrains.get(actor.id) !== document) return;
       const refresh = (): void => {
         const index = this.layout?.landscapes?.findIndex((entry) => entry.id === actor.id) ?? -1;
         if (index < 0) return;
@@ -11480,33 +11111,21 @@ export class SceneApp {
         this.emitSceneObjectsChanged();
         this.scheduleAutoSave();
       };
-      if (document && session) {
-        const addition = createTerrainLayerAddition(session.world, layer);
-        const apply = (state: typeof addition.before): void => {
-          if (this.worldTerrains.get(actor.id) !== document) return;
-          applyTerrainLayerState(session.world, state);
-          document.globalAttributes = buildTerrainGlobalAttributes(worldTerrainRenderSource(document.def, document.tiles));
-          session.markTiles(document.tiles.keys());
-          session.markDefinitionDirty();
-          this.landscapeSculptSettings.activeLayerId = state.layers.some((entry) => entry.id === id) ? id : state.layers[0]!.id;
-          refresh();
-        };
-        this.executeCommand({ label: "Add Landscape Paint Layer", redo: () => apply(addition.after), undo: () => apply(addition.before) });
-      } else if (data) {
-        const before = cloneLandscapeLayers(data.layers);
-        const after = [...cloneLandscapeLayers(data.layers), { id, name: layer.name, weights: new Array(data.heights.length).fill(0) }];
-        const apply = (layers: LandscapeLayerWeights[]): void => {
-          data.layers = cloneLandscapeLayers(layers);
-          this.landscapeSculptSettings.activeLayerId = layers.some((entry) => entry.id === id) ? id : layers[0]!.id;
-          this.markLandscapeDirty(actor.id);
-          refresh();
-        };
-        this.executeCommand({ label: "Add Landscape Paint Layer", redo: () => apply(after), undo: () => apply(before) });
-      }
+      const addition = createTerrainLayerAddition(session.world, layer);
+      const apply = (state: typeof addition.before): void => {
+        if (this.worldTerrains.get(actor.id) !== document) return;
+        applyTerrainLayerState(session.world, state);
+        document.globalAttributes = buildTerrainGlobalAttributes(worldTerrainRenderSource(document.def, document.tiles));
+        session.markTiles(document.tiles.keys());
+        session.markDefinitionDirty();
+        this.landscapeSculptSettings.activeLayerId = state.layers.some((entry) => entry.id === id) ? id : state.layers[0]!.id;
+        refresh();
+      };
+      this.executeCommand({ label: "Add Landscape Paint Layer", redo: () => apply(addition.after), undo: () => apply(addition.before) });
     } catch (error) {
       this.onStatus?.(`Add layer failed: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
-      if (document) this.worldTerrainStreams.get(document)?.release();
+      this.worldTerrainStreams.get(document)?.release();
     }
   }
 
@@ -11523,13 +11142,12 @@ export class SceneApp {
     if (!actor) return;
     const document = this.worldTerrains.get(actor.id);
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
-    const data = this.landscapeData.get(actor.id);
-    const layers = document?.def.layers ?? data?.layers;
-    if (!layers || layers.length <= 1 || !layers.some((layer) => layer.id === layerId)) return;
+    const layers = document?.def.layers;
+    if (!document || !session || !layers || layers.length <= 1 || !layers.some((layer) => layer.id === layerId)) return;
     try {
-      if (document) await this.loadWholeWorldTerrain(document, "remove a paint layer");
+      await this.loadWholeWorldTerrain(document, "remove a paint layer");
       if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
-        || this.isSelectionLocked(this.selection) || (document && this.worldTerrains.get(actor.id) !== document)) return;
+        || this.isSelectionLocked(this.selection) || this.worldTerrains.get(actor.id) !== document) return;
       const refresh = (activeLayerId: string): void => {
         this.landscapeSculptSettings.activeLayerId = activeLayerId;
         const index = this.layout?.landscapes?.findIndex((entry) => entry.id === actor.id) ?? -1;
@@ -11542,49 +11160,25 @@ export class SceneApp {
       const previousActive = this.landscapeSculptSettings.activeLayerId;
       const activeAfter = (remaining: readonly { id: string }[]): string =>
         remaining.some((entry) => entry.id === previousActive) ? previousActive : remaining[0]!.id;
-      if (document && session) {
-        const removal = createTerrainLayerRemoval(session.world, layerId);
-        const nextActive = activeAfter(removal.after.layers);
-        const apply = (state: typeof removal.before, activeLayerId: string): void => {
-          if (this.worldTerrains.get(actor.id) !== document) return;
-          applyTerrainLayerState(session.world, state);
-          document.globalAttributes = buildTerrainGlobalAttributes(worldTerrainRenderSource(document.def, document.tiles));
-          session.markTiles(document.tiles.keys());
-          session.markDefinitionDirty();
-          refresh(activeLayerId);
-        };
-        this.executeCommand({
-          label: "Remove Landscape Paint Layer",
-          redo: () => apply(removal.after, nextActive),
-          undo: () => apply(removal.before, previousActive),
-        });
-      } else if (data) {
-        ensureLandscapeLayers(data);
-        const issues = landscapeEditIssues(data);
-        if (issues.length > 0) {
-          this.onStatus?.(`${actor.name ?? actor.id} cannot remove a layer (${issues.join("; ")}). Resample it to a preset resolution first.`, "warning");
-          return;
-        }
-        const before = cloneLandscapeLayers(data.layers);
-        const after = landscapeLayersWithoutLayer(data, layerId);
-        const nextActive = activeAfter(after);
-        const apply = (next: LandscapeLayerWeights[], activeLayerId: string): void => {
-          const current = this.landscapeData.get(actor.id);
-          if (!current) return;
-          current.layers = cloneLandscapeLayers(next);
-          this.markLandscapeDirty(actor.id);
-          refresh(activeLayerId);
-        };
-        this.executeCommand({
-          label: "Remove Landscape Paint Layer",
-          redo: () => apply(after, nextActive),
-          undo: () => apply(before, previousActive),
-        });
-      }
+      const removal = createTerrainLayerRemoval(session.world, layerId);
+      const nextActive = activeAfter(removal.after.layers);
+      const apply = (state: typeof removal.before, activeLayerId: string): void => {
+        if (this.worldTerrains.get(actor.id) !== document) return;
+        applyTerrainLayerState(session.world, state);
+        document.globalAttributes = buildTerrainGlobalAttributes(worldTerrainRenderSource(document.def, document.tiles));
+        session.markTiles(document.tiles.keys());
+        session.markDefinitionDirty();
+        refresh(activeLayerId);
+      };
+      this.executeCommand({
+        label: "Remove Landscape Paint Layer",
+        redo: () => apply(removal.after, nextActive),
+        undo: () => apply(removal.before, previousActive),
+      });
     } catch (error) {
       this.onStatus?.(`Remove layer failed: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
-      if (document) this.worldTerrainStreams.get(document)?.release();
+      this.worldTerrainStreams.get(document)?.release();
     }
   }
 
@@ -11617,43 +11211,7 @@ export class SceneApp {
         redo: () => applyMaterial(nextMaterial),
         undo: () => applyMaterial(before),
       });
-      return;
     }
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!actor || !data) return;
-    ensureLandscapeLayers(data);
-    const layer = data.layers.find((entry) => entry.id === layerId);
-    if (!layer) return;
-    const nextMaterial = materialId && materialId.length > 0 ? materialId : null;
-    if ((layer.material ?? null) === nextMaterial) return;
-    const before = cloneLandscapeLayers(data.layers);
-    const after = cloneLandscapeLayers(data.layers).map((entry) =>
-      entry.id === layerId
-        ? nextMaterial
-          ? { ...entry, material: nextMaterial }
-          : { id: entry.id, name: entry.name, weights: entry.weights }
-        : entry,
-    );
-    const selection: Selection = { kind: "landscape", index };
-    const applyLayers = (layers: LandscapeLayerWeights[]): void => {
-      const current = this.landscapeData.get(actor.id);
-      if (!current) return;
-      current.layers = cloneLandscapeLayers(layers);
-      ensureLandscapeLayers(current);
-      this.markLandscapeDirty(actor.id);
-      // A material change swaps the layer's texture, so the splat material itself
-      // must be rebuilt (not just geometry); warming then reloads any new texture.
-      this.rebuildLandscapeObject(index);
-      void this.warmLandscapeLayerMaterials(index);
-      this.select(selection);
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({
-      label: nextMaterial ? "Assign Landscape Layer Material" : "Clear Landscape Layer Material",
-      redo: () => applyLayers(after),
-      undo: () => applyLayers(before),
-    });
   }
 
   /**
@@ -11669,11 +11227,9 @@ export class SceneApp {
     const next = physicalMaterialId && PHYSICAL_MATERIAL_IDS.includes(physicalMaterialId) ? physicalMaterialId : null;
     const document = this.worldTerrains.get(actor.id);
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
-    if (document && !session) return;
-    // Looked up on every apply: paint/fill undo swaps a 1×1 Landscape's layer objects.
-    const findLayer = (): { physicalMaterial?: string | null } | undefined => session
-      ? session.world.def.layers.find((entry) => entry.id === layerId)
-      : this.landscapeData.get(actor.id)?.layers.find((entry) => entry.id === layerId);
+    if (!session) return;
+    const findLayer = (): { physicalMaterial?: string | null } | undefined =>
+      session.world.def.layers.find((entry) => entry.id === layerId);
     const layer = findLayer();
     if (!layer || (layer.physicalMaterial ?? null) === next) return;
     const before = layer.physicalMaterial;
@@ -11682,8 +11238,7 @@ export class SceneApp {
       if (!layer || !this.layout?.landscapes?.some((entry) => entry.id === actor.id)) return;
       if (value) layer.physicalMaterial = value;
       else delete layer.physicalMaterial;
-      if (session) session.markDefinitionDirty();
-      else this.markLandscapeDirty(actor.id);
+      session.markDefinitionDirty();
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
     };
@@ -11699,28 +11254,14 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
     const actor = this.layout?.landscapes?.[this.selection.index];
     if (!actor) return;
-    const document = this.worldTerrains.get(actor.id) ?? null;
+    const document = this.worldTerrains.get(actor.id);
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    if (!document || !session) return;
     try {
-      let world: TerrainEditWorld;
-      let data: ForgeLandscapeData | undefined;
-      if (document) {
-        const session = this.worldTerrainSessions.get(document);
-        if (!session) return;
-        await this.loadWholeWorldTerrain(document, "fill a paint layer");
-        if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
-          || this.isSelectionLocked(this.selection) || this.worldTerrains.get(actor.id) !== document) return;
-        world = session.world;
-      } else {
-        data = this.landscapeData.get(actor.id);
-        if (!data) return;
-        ensureLandscapeLayers(data);
-        const issues = landscapeEditIssues(data);
-        if (issues.length > 0) {
-          this.onStatus?.(`${actor.name ?? actor.id} cannot be filled (${issues.join("; ")}). Resample it to a preset resolution first.`, "warning");
-          return;
-        }
-        world = landscapeEditWorld(data);
-      }
+      await this.loadWholeWorldTerrain(document, "fill a paint layer");
+      if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
+        || this.isSelectionLocked(this.selection) || this.worldTerrains.get(actor.id) !== document) return;
+      const world = session.world;
       const layer = world.def.layers.findIndex((entry) => entry.id === layerId);
       if (layer < 0) return;
       const patches = createTerrainLayerFillPatches(world, layer);
@@ -11728,9 +11269,7 @@ export class SceneApp {
         this.onStatus?.(`Landscape layer ${layerId} already covers the whole terrain.`, "info");
         return;
       }
-      this.executeTerrainPatchCommand("Landscape Fill Layer", actor.id, document, patches, data
-        ? { verticesX: data.size.verticesX, verticesZ: data.size.verticesZ, layerCount: data.layers.length }
-        : undefined);
+      this.executeTerrainPatchCommand("Landscape Fill Layer", actor.id, document, patches);
       this.onStatus?.(`Filled Landscape layer: ${layerId}`, "info");
     } catch (error) {
       this.onStatus?.(`Fill layer failed: ${error instanceof Error ? error.message : String(error)}`, "error");
@@ -11769,30 +11308,7 @@ export class SceneApp {
       } catch (error) {
         this.onStatus?.(error instanceof Error ? error.message : "Heightmap import failed.", "error");
       }
-      return;
     }
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!actor || !data) return;
-    let samples: number[];
-    try {
-      samples = resampleLandscapeHeightmap(rgba, width, height, data.size, 1);
-    } catch (error) {
-      this.onStatus?.(error instanceof Error ? error.message : "Heightmap import failed.", "error");
-      return;
-    }
-    this.lastLandscapeImportHeight = heightRange;
-    const heights = samples.map((sample) => Math.round(sample * heightRange * 1_000_000) / 1_000_000);
-    this.applyLandscapeGridOperation(actor.id, data, "Import Landscape Heightmap", (scratch) => {
-      scratch.heights = heights;
-      return { changed: true, bounds: this.landscapeFullDirtyBounds(scratch) };
-    });
-    try {
-      await this.saveLandscapeData(actor.id);
-    } catch (error) {
-      this.onStatus?.(`Heightmap save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
-      return;
-    }
-    this.onStatus?.(`Imported ${width} x ${height} heightmap.`, "info");
   }
 
   getSelectedLandscapeImportHeight(): number {
@@ -11801,8 +11317,7 @@ export class SceneApp {
 
   /**
    * Grid of the selected Landscape's exact 16-bit RAW/PNG heightmap, with the
-   * heights 0 and 65535 map to by default: a World Terrain's definition range,
-   * or the range a 1×1 grid's terrain save would use.
+   * heights 0 and 65535 map to by default: the World Terrain's definition range.
    */
   getSelectedLandscapeHeightmapShape(): LandscapeHeightmapShape | null {
     if (this.selection?.kind !== "landscape") return null;
@@ -11813,16 +11328,7 @@ export class SceneApp {
       return { width: def.tilesX * def.tileQuads + 1, height: def.tilesZ * def.tileQuads + 1,
         heightMin: def.heightMin, heightMax: def.heightMax, multiTile: true, issues: [] };
     }
-    const data = actor ? this.landscapeData.get(actor.id) : undefined;
-    if (!data) return null;
-    let min = Infinity, max = -Infinity;
-    for (const height of data.heights) {
-      const value = Math.fround(height * data.size.heightScale);
-      if (value < min) min = value;
-      if (value > max) max = value;
-    }
-    return { width: data.size.verticesX, height: data.size.verticesZ, ...legacyTerrainHeightRange(min, max),
-      multiTile: false, issues: landscapeEditIssues(data) };
+    return null;
   }
 
   /**
@@ -11837,10 +11343,9 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[this.selection.index];
     const shape = this.getSelectedLandscapeHeightmapShape();
     if (!actor || !shape) return;
-    const document = this.worldTerrains.get(actor.id) ?? null;
+    const document = this.worldTerrains.get(actor.id);
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
-    const data = document ? undefined : this.landscapeData.get(actor.id);
-    if ((document && !session) || (!document && !data)) return;
+    if (!document || !session) return;
     const { width, height } = shape;
     const label = format === "png" ? "PNG" : "RAW";
     try {
@@ -11851,37 +11356,34 @@ export class SceneApp {
         throw new Error(`RAW expected ${width * height * 2} bytes for ${width} x ${height} samples (16-bit), got ${file.size}.`);
       }
       // Replacing every tile pins every tile (undo needs them all).
-      if (document) await this.loadWholeWorldTerrain(document, "import the heightmap");
+      await this.loadWholeWorldTerrain(document, "import the heightmap");
       let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
       let order = endianness;
       if (format === "png") {
         const png = await decodeHeightmapPng(bytes);
         if (png.width !== width || png.height !== height) {
-          throw new Error(`PNG is ${png.width} x ${png.height}; this Landscape needs exactly ${width} x ${height} pixels (rows along +Z)${
-            document ? "" : ". Import PNG (resample) fits any size"}.`);
+          throw new Error(`PNG is ${png.width} x ${png.height}; this Landscape needs exactly ${width} x ${height} pixels (rows along +Z).`);
         }
         bytes = heightmapSamplesToRaw(png.samples);
         order = "little";
       }
       if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
         || this.isSelectionLocked(this.selection)
-        || (document ? this.worldTerrains.get(actor.id) !== document : this.landscapeData.get(actor.id) !== data)) {
+        || this.worldTerrains.get(actor.id) !== document) {
         throw new Error(`Terrain selection changed while reading the ${label} file; import cancelled.`);
       }
-      const world = session?.world ?? landscapeEditWorld(data!);
+      const world = session.world;
       const { def } = world;
       const imported = importRawHeightmap({ bytes, width, height, endianness: order, heightMin, heightMax,
         tileQuads: def.tileQuads, spacing: def.spacing, origin: def.origin });
       const heights = new Map([...imported.tiles].map(([key, tile]) => [key, decodeTerrainTile(tile).heights]));
       const patches = createTerrainHeightmapPatches(world, heights);
-      this.executeTerrainPatchCommand("Import Landscape Heightmap", actor.id, document, patches, data
-        ? { verticesX: width, verticesZ: height, layerCount: data.layers.length }
-        : undefined);
-      this.onStatus?.(`Imported ${width} x ${height} ${label} heightmap${document ? ` (${patches.length} tiles)` : ""}.`, "info");
+      this.executeTerrainPatchCommand("Import Landscape Heightmap", actor.id, document, patches);
+      this.onStatus?.(`Imported ${width} x ${height} ${label} heightmap (${patches.length} tiles).`, "info");
     } catch (error) {
       this.onStatus?.(`Heightmap import failed: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
-      if (document) this.worldTerrainStreams.get(document)?.release();
+      this.worldTerrainStreams.get(document)?.release();
     }
   }
 
@@ -11889,27 +11391,15 @@ export class SceneApp {
   async exportSelectedLandscapeHeightmapFile(format: HeightmapFileFormat): Promise<{ bytes: Uint8Array; name: string } | null> {
     if (this.selection?.kind !== "landscape") return null;
     const actor = this.layout?.landscapes?.[this.selection.index];
-    const document = actor ? this.worldTerrains.get(actor.id) ?? null : null;
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
-    const data = actor && !document ? this.landscapeData.get(actor.id) : undefined;
-    if (!actor || (document ? !session : !data)) return null;
+    if (!actor || !document || !session) return null;
     try {
-      let def: WorldTerrainDef;
-      let tiles: Map<string, Uint8Array>;
-      if (document && session) {
-        await this.loadWholeWorldTerrain(document, "export the heightmap");
-        // The save snapshot includes unsaved relief outside the old encoding range.
-        const snapshot = captureWorldTerrainSave(session.world, document.tiles.keys(), new Map());
-        def = snapshot.def;
-        tiles = new Map(snapshot.tiles.map((tile) => [tile.key, tile.bytes]));
-      } else {
-        const issues = landscapeEditIssues(data!);
-        if (issues.length > 0) throw new Error(`this grid cannot be written as a 16-bit heightmap (${issues.join("; ")}); resample it first.`);
-        const world = landscapeEditWorld(data!);
-        def = world.def;
-        tiles = new Map([...world.tiles].map(([key, tile]) => [key,
-          encodeTerrainTile(tile, { heightMin: def.heightMin, heightMax: def.heightMax, heightFormat: "f32" })]));
-      }
+      await this.loadWholeWorldTerrain(document, "export the heightmap");
+      // The save snapshot includes unsaved relief outside the old encoding range.
+      const snapshot = captureWorldTerrainSave(session.world, document.tiles.keys(), new Map());
+      const def = snapshot.def;
+      const tiles = new Map(snapshot.tiles.map((tile) => [tile.key, tile.bytes]));
       const raw = exportRawHeightmap(def, tiles);
       const bytes = format === "png"
         ? await encodeHeightmapPng16(def.tilesX * def.tileQuads + 1, def.tilesZ * def.tileQuads + 1, rawHeightmapToSamples(raw))
@@ -11922,7 +11412,7 @@ export class SceneApp {
       this.onStatus?.(`Heightmap export failed: ${error instanceof Error ? error.message : String(error)}`, "error");
       return null;
     } finally {
-      if (document) this.worldTerrainStreams.get(document)?.release();
+      this.worldTerrainStreams.get(document)?.release();
     }
   }
 
@@ -11971,14 +11461,7 @@ export class SceneApp {
       const { tileQuads, spacing } = single.document.def;
       return { verticesX: tileQuads + 1, verticesZ: tileQuads + 1, worldSize: tileQuads * spacing };
     }
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    return data
-      ? {
-          verticesX: data.size.verticesX,
-          verticesZ: data.size.verticesZ,
-          worldSize: (data.size.verticesX - 1) * data.size.spacing,
-        }
-      : null;
+    return null;
   }
 
   /** Resamples the selected terrain and paint layers to a supported editor preset. */
@@ -11999,36 +11482,7 @@ export class SceneApp {
       } catch (error) {
         this.onStatus?.(`Resample failed: ${error instanceof Error ? error.message : String(error)}`, "error");
       }
-      return;
     }
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!actor || !data) return;
-    if (data.size.verticesX === target.verticesX && data.size.verticesZ === target.verticesZ) return;
-    const before: ForgeLandscapeData = {
-      schema: 1,
-      type: "landscape",
-      size: { ...data.size },
-      chunks: { ...data.chunks },
-      heights: [...data.heights],
-      layers: cloneLandscapeLayers(data.layers),
-    };
-    const after = resampleLandscapeData(before, target);
-    const selection: Selection = { kind: "landscape", index };
-    const apply = (snapshot: ForgeLandscapeData): void => {
-      const current = this.landscapeData.get(actor.id);
-      if (!current) return;
-      current.size = { ...snapshot.size };
-      current.chunks = { ...snapshot.chunks };
-      current.heights = [...snapshot.heights];
-      current.layers = cloneLandscapeLayers(snapshot.layers);
-      this.markLandscapeDirty(actor.id);
-      this.rebuildLandscapeObject(index);
-      this.select(selection);
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({ label: "Resample Landscape Resolution", redo: () => apply(after), undo: () => apply(before) });
-    this.onStatus?.(`Landscape resampled to ${target.verticesX} x ${target.verticesZ}.`, "info");
   }
 
   /** Changes the selected terrain's X/Z footprint while retaining its grid and authored data. */
@@ -12049,39 +11503,7 @@ export class SceneApp {
       } catch (error) {
         this.onStatus?.(error instanceof Error ? error.message : String(error), "error");
       }
-      return;
     }
-    const data = actor ? this.landscapeData.get(actor.id) : null;
-    if (!actor || !data) return;
-    const spacing = worldSize / Math.max(1, data.size.verticesX - 1);
-    if (spacing < 0.01 || spacing > 100) {
-      this.onStatus?.("Landscape world size is outside the supported range.", "error");
-      return;
-    }
-    if (Math.abs(spacing - data.size.spacing) < 0.000001) return;
-    const before = { ...data.size };
-    const after = { ...data.size, spacing };
-    const selection: Selection = { kind: "landscape", index };
-    const apply = (size: typeof data.size): void => {
-      const current = this.landscapeData.get(actor.id);
-      if (!current) return;
-      current.size = { ...size };
-      this.markLandscapeDirty(actor.id);
-      this.rebuildLandscapeObject(index);
-      this.select(selection);
-      this.emitSceneObjectsChanged();
-      this.scheduleAutoSave();
-    };
-    this.executeCommand({ label: "Resize Landscape", redo: () => apply(after), undo: () => apply(before) });
-    this.onStatus?.(`Landscape world size set to ${worldSize.toFixed(2)}.`, "info");
-  }
-
-  private markLandscapeDirty(landscapeId: string): void {
-    this.editorSaves.markLandscapeDirty(landscapeId);
-  }
-
-  private saveLandscapeData(landscapeId: string): Promise<void> {
-    return this.editorSaves.saveLandscapeData(landscapeId);
   }
 
   // --- Sphere Reflection Capture (probe) actors ----------------------------
@@ -15063,23 +14485,14 @@ export class SceneApp {
     for (const actor of this.layout?.landscapes ?? []) {
       if (!resolveLandscape(actor).collision) continue;
       const world = this.worldTerrains.get(actor.id);
-      if (world) {
-        const { tileQuads, spacing, origin } = world.def;
-        for (const [key, tile] of world.tiles) {
-          use(`${actor.id}:${key}`, `${tileQuads}:${spacing}:${origin.join(",")}:${heightsSignature(tile.heights)}`, () => {
-            const { translation, primitive } = terrainTileHeightfield(world.def, tile);
-            return { field: primitive.heightfield!, position: translation, rotation: [0, 0, 0] };
-          });
-        }
-        continue;
+      if (!world) continue;
+      const { tileQuads, spacing, origin } = world.def;
+      for (const [key, tile] of world.tiles) {
+        use(`${actor.id}:${key}`, `${tileQuads}:${spacing}:${origin.join(",")}:${heightsSignature(tile.heights)}`, () => {
+          const { translation, primitive } = terrainTileHeightfield(world.def, tile);
+          return { field: primitive.heightfield!, position: translation, rotation: [0, 0, 0] };
+        });
       }
-      const item = this.landscapeItem(actor);
-      const field = createLandscapeHeightfieldPrimitive(item.data).heightfield!;
-      use(
-        actor.id,
-        `${field.quadsX}x${field.quadsZ}:${field.spacing}:${actor.position.join(",")}:${item.rotation.join(",")}:${heightsSignature(field.heights)}`,
-        () => ({ field, position: actor.position, rotation: item.rotation }),
-      );
     }
     for (const [key, { helper }] of this.landscapeCollisionWires) {
       if (keep.has(key)) continue;

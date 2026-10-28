@@ -1,16 +1,7 @@
-import type { ForgeLandscapeData, LandscapeSize } from "../scene/landscape";
-
 /**
  * CPU side of the CDLOD terrain renderer (OPEN_WORLD_PLAN Faz 2): the per-vertex
  * arrays the GPU textures are filled from and the per-node height bounds the LOD
  * selector needs. Pure and renderer-free so it is tested without a GL context.
- *
- * The renderer's quadtree needs a square power-of-two grid, but a legacy
- * Landscape may be any `verticesX × verticesZ`. Arrays are therefore laid out
- * over a padded square grid of `stride × stride` vertices (row-major, stride
- * `stride`) whose top-left block is the authored grid at its own indices; the
- * padding repeats the last authored row/column so samples and height bounds past
- * the edge add nothing new. Authored data is never resampled.
  */
 
 /** Quads per side of one instanced patch; one patch spans a level-0 node. */
@@ -27,31 +18,10 @@ export interface TerrainVertexRect {
   z1: number;
 }
 
-/** Authored grid size and the padded square it is drawn in. */
-export interface TerrainRenderGrid {
-  verticesX: number;
-  verticesZ: number;
-  /** Vertices per side of the padded square: a power of two plus one. */
-  stride: number;
-}
-
-export function terrainRenderGrid(size: Pick<LandscapeSize, "verticesX" | "verticesZ">): TerrainRenderGrid {
-  if (![size.verticesX, size.verticesZ].every((count) => Number.isInteger(count) && count >= 2)) {
-    throw new Error(`Terrain grid needs at least 2×2 vertices, got ${size.verticesX}×${size.verticesZ}`);
-  }
-  const quads = Math.max(size.verticesX, size.verticesZ) - 1;
-  const padded = Math.max(TERRAIN_PATCH_QUADS, 2 ** Math.ceil(Math.log2(quads)));
-  return { verticesX: size.verticesX, verticesZ: size.verticesZ, stride: padded + 1 };
-}
-
-export function fullTerrainRect(grid: Pick<TerrainRenderGrid, "verticesX" | "verticesZ">): TerrainVertexRect {
-  return { x0: 0, x1: grid.verticesX - 1, z0: 0, z1: grid.verticesZ - 1 };
-}
-
 /** Clamps to the authored grid and grows by `pad` vertices (normals read one neighbour). */
 export function clampTerrainRect(
   rect: TerrainVertexRect,
-  grid: Pick<TerrainRenderGrid, "verticesX" | "verticesZ">,
+  grid: { verticesX: number; verticesZ: number },
   pad = 0,
 ): TerrainVertexRect {
   const clamp = (value: number, size: number) => Math.min(size - 1, Math.max(0, Math.floor(value)));
@@ -61,37 +31,6 @@ export function clampTerrainRect(
     z0: clamp(rect.z0 - pad, grid.verticesZ),
     z1: clamp(rect.z1 + pad, grid.verticesZ),
   };
-}
-
-/** Repeats the last authored column/row into the padding a rect on that edge touches. */
-function padEdges(out: Float32Array, grid: TerrainRenderGrid, rect: TerrainVertexRect): void {
-  const { verticesX, verticesZ, stride } = grid;
-  if (rect.x1 === verticesX - 1) {
-    for (let z = rect.z0; z <= rect.z1; z += 1) {
-      out.fill(out[z * stride + verticesX - 1]!, z * stride + verticesX, (z + 1) * stride);
-    }
-  }
-  if (rect.z1 === verticesZ - 1) {
-    const x1 = rect.x1 === verticesX - 1 ? stride - 1 : rect.x1;
-    const last = (verticesZ - 1) * stride;
-    for (let z = verticesZ; z < stride; z += 1) out.copyWithin(z * stride + rect.x0, last + rect.x0, last + x1 + 1);
-  }
-}
-
-/** World-scaled heights, the values the Landscape collider places its vertices at. */
-export function copyLandscapeHeights(
-  data: ForgeLandscapeData,
-  grid: TerrainRenderGrid,
-  out: Float32Array,
-  rect: TerrainVertexRect,
-): void {
-  const scale = data.size.heightScale;
-  for (let z = rect.z0; z <= rect.z1; z += 1) {
-    for (let x = rect.x0; x <= rect.x1; x += 1) {
-      out[z * grid.stride + x] = (data.heights[z * grid.verticesX + x] ?? 0) * scale;
-    }
-  }
-  padEdges(out, grid, rect);
 }
 
 /**
@@ -117,34 +56,6 @@ export function computeTerrainNormals(
       const index = (z * stride + x) * 2;
       out[index] = dx / length;
       out[index + 1] = dz / length;
-    }
-  }
-}
-
-/**
- * Paint weights as RGBA8, block-major: block `b` holds layers `4b..4b+3`, texel
- * `i` of block `b` starts at `(b · stride² + i) · 4`. Layers beyond
- * {@link TERRAIN_RENDER_LAYERS} are not drawn (the editor caps layers lower).
- */
-export function packTerrainWeights(
-  data: ForgeLandscapeData,
-  grid: TerrainRenderGrid,
-  out: Uint8Array,
-  rect: TerrainVertexRect,
-): void {
-  const texels = grid.stride * grid.stride;
-  // Coarse/morphing vertices can read the padding beside an authored edge.
-  // Match height padding, including after a partial edge paint operation.
-  const x1 = rect.x1 === grid.verticesX - 1 ? grid.stride - 1 : rect.x1;
-  const z1 = rect.z1 === grid.verticesZ - 1 ? grid.stride - 1 : rect.z1;
-  for (let layer = 0; layer < TERRAIN_RENDER_LAYERS; layer += 1) {
-    const weights = data.layers[layer]?.weights;
-    const base = Math.floor(layer / 4) * texels * 4 + (layer % 4);
-    for (let z = rect.z0; z <= z1; z += 1) {
-      for (let x = rect.x0; x <= x1; x += 1) {
-        const weight = weights?.[Math.min(z, grid.verticesZ - 1) * grid.verticesX + Math.min(x, grid.verticesX - 1)] ?? 0;
-        out[base + (z * grid.stride + x) * 4] = Math.round(Math.min(1, Math.max(0, weight)) * 255);
-      }
     }
   }
 }

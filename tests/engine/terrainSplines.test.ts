@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { applyLandscapeSplineDeform, applyLandscapeSplinePaint, type ForgeLandscapeSpline } from "../../engine/scene/landscape";
+import type { ForgeLandscapeSpline } from "../../engine/scene/landscape";
 import {
   applyTerrainUndoPatches, createTerrainEditWorld, createTerrainRegionPatches,
   revertTerrainUndoPatches, type TerrainEditWorld,
 } from "../../engine/terrain/terrainEdit";
-import { terrainDocumentToLandscape } from "../../engine/terrain/terrainLandscapeBridge";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { decodeTerrainTile, encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
@@ -166,32 +165,6 @@ export function registerTerrainSplineTests(check: Check): void {
       applyTerrainUndoPatches(world, patches);
       assert.equal(world.tiles.get("1_1")!.heights[0], allowed ? height : 0);
       assert.ok(world.tiles.get("1_1")!.weights.every((value, i) => value === (i < 33 * 33 * 4 && i % 4 === 0 ? 255 : 0)));
-    }
-  });
-
-  check("terrain spline world bake matches the existing smooth 1x1 deform and paint semantics", () => {
-    const world = fixture(1, 1);
-    const grid = terrainDocumentToLandscape({ def: world.def, tiles: world.tiles });
-    const legacy: ForgeLandscapeSpline = {
-      id: "curve", smooth: true, smoothness: 0.6,
-      points: [
-        { id: "a", position: [-12, -1, -10], width: 3, falloff: 2 },
-        { id: "b", position: [0, -4, 5], width: 5, falloff: 4 },
-        { id: "c", position: [12, 2, -5], width: 4, falloff: 3 },
-      ],
-      segments: ["a", "b"].map((id, i) => ({ id, startPointId: id, endPointId: ["b", "c"][i]!,
-        deform: { enabled: true, flatten: true, raiseTerrain: false, lowerTerrain: false, targetOffset: -0.2 },
-        paint: { enabled: true, layerId: "layer-6", strength: 0.35 } })),
-    };
-    applyLandscapeSplineDeform(grid, legacy);
-    applyLandscapeSplinePaint(grid, legacy);
-    applyTerrainUndoPatches(world, createTerrainSplinePatches(world, terrainSplineToWorld(world.def, legacy)));
-    const tile = world.tiles.get("0_0")!;
-    for (let i = 0; i < tile.heights.length; i++) {
-      assert.ok(Math.abs(tile.heights[i]! - grid.heights[i]!) < 1e-5, `height ${i}`);
-      for (let layer = 0; layer < 8; layer++) {
-        assert.ok(Math.abs(terrainTileLayerWeight(tile, layer, i) - grid.layers[layer]!.weights[i]!) <= 1 / 255 + 1e-6, `weight ${i}:${layer}`);
-      }
     }
   });
 

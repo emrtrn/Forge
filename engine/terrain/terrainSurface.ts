@@ -7,7 +7,6 @@
  * A terrain where no layer names a physical material builds no source at all:
  * the host's collider-material provider then answers exactly as before (I3).
  */
-import { rotationMatrixFromEulerDegrees } from "../physics/rotatedBox";
 import {
   NEUTRAL_SURFACE_SAMPLE, resolveSurfaceSample, softGroundParameter,
   type SurfaceSample, type VehicleSurfaceProvider,
@@ -15,8 +14,6 @@ import {
 import type { VehicleVec3 } from "../physics/vehicle/vehicleTypes";
 import { resolvePhysicalMaterial, type PhysicalMaterialDef } from "../scene/collision";
 import type { EntityId } from "../scene/entity";
-import type { ForgeLandscapeData } from "../scene/landscape";
-import type { Vec3 } from "../scene/layout";
 import { terrainLayerWeightsAt } from "./terrainHeightQuery";
 import type { WorldTerrainDocument } from "./terrainLoader";
 import { tileKey } from "./terrainTypes";
@@ -64,47 +61,6 @@ export function worldTerrainSurfaceSource({ def, tiles }: WorldTerrainDocument):
   return {
     physicalMaterials,
     weightsAt: (point, out) => terrainLayerWeightsAt(def, lookup, point[0], point[2], out) !== null,
-  };
-}
-
-/**
- * A 1×1 Landscape placed at `position` / `rotation` (XYZ Euler degrees, the
- * collider's transform). The grid is actor-centred like its heightfield.
- */
-export function landscapeSurfaceSource(
-  data: ForgeLandscapeData, position: Vec3, rotation: Vec3,
-): TerrainSurfaceSource | null {
-  const physicalMaterials = terrainLayerPhysicalMaterials(data.layers);
-  if (!physicalMaterials) return null;
-  const { verticesX, verticesZ, spacing } = data.size;
-  const halfX = ((verticesX - 1) * spacing) / 2;
-  const halfZ = ((verticesZ - 1) * spacing) / 2;
-  const m = rotationMatrixFromEulerDegrees(rotation);
-  return {
-    physicalMaterials,
-    weightsAt: (point, out) => {
-      // World → local is the transposed rotation (row-major matrix).
-      const dx = point[0] - position[0];
-      const dy = point[1] - position[1];
-      const dz = point[2] - position[2];
-      const gx = (m[0] * dx + m[3] * dy + m[6] * dz + halfX) / spacing;
-      const gz = (m[2] * dx + m[5] * dy + m[8] * dz + halfZ) / spacing;
-      if (!(gx >= 0 && gz >= 0 && gx <= verticesX - 1 && gz <= verticesZ - 1)) return false;
-      const x0 = Math.min(Math.floor(gx), verticesX - 2);
-      const z0 = Math.min(Math.floor(gz), verticesZ - 2);
-      const fx = gx - x0;
-      const fz = gz - z0;
-      const a = z0 * verticesX + x0;
-      const c = a + verticesX;
-      out.length = data.layers.length;
-      data.layers.forEach((layer, index) => {
-        const w = layer.weights;
-        const top = (w[a] ?? 0) * (1 - fx) + (w[a + 1] ?? 0) * fx;
-        const bottom = (w[c] ?? 0) * (1 - fx) + (w[c + 1] ?? 0) * fx;
-        out[index] = top * (1 - fz) + bottom * fz;
-      });
-      return true;
-    },
   };
 }
 

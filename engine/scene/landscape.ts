@@ -1,5 +1,3 @@
-import { normalizeLandscapeBrushWeights } from "./landscapeBrush";
-import type { ColliderPrimitive } from "./components";
 import type { LayoutLandscape, Vec3 } from "./layout";
 import { buildLandscapeSplineAdjacency, landscapeSplineSegmentSampler } from "./landscapeSplineAdapter";
 
@@ -56,7 +54,7 @@ export function uniqueLandscapeName(baseName: string, landscapes: LayoutLandscap
   return `${baseName} ${index}`;
 }
 
-// --- Sidecar data (`*.landscape.json`) --------------------------------------
+// --- Grid size presets and paint layers --------------------------------------
 
 /**
  * Preset sizes: `small`/`medium` are the safe range, `large` (exposed in the
@@ -73,10 +71,6 @@ export interface LandscapeSize {
   heightScale: number;
 }
 
-/** Minimum/maximum vertex grid dimension accepted by the Faz 1 save validator. */
-export const LANDSCAPE_MIN_VERTICES = 65;
-export const LANDSCAPE_MAX_VERTICES = 257;
-
 const LANDSCAPE_SIZE_PRESETS: Record<LandscapeSizePreset, LandscapeSize> = {
   small: { verticesX: 65, verticesZ: 65, spacing: 1, heightScale: 1 },
   medium: { verticesX: 129, verticesZ: 129, spacing: 1, heightScale: 1 },
@@ -86,9 +80,6 @@ const LANDSCAPE_SIZE_PRESETS: Record<LandscapeSizePreset, LandscapeSize> = {
 export function landscapeSizeForPreset(preset: LandscapeSizePreset): LandscapeSize {
   return { ...LANDSCAPE_SIZE_PRESETS[preset] };
 }
-
-/** Vertex-grid subdivision used to split a landscape's mesh into render chunks. */
-export const LANDSCAPE_QUADS_PER_CHUNK = 32;
 
 export type LandscapeLayerId = "grass" | "dirt" | "rock" | "snow";
 
@@ -104,23 +95,6 @@ export const LANDSCAPE_DEFAULT_LAYERS: readonly LandscapeDefaultLayer[] = [
   { id: "rock", name: "Rock", color: "#7f8485" },
   { id: "snow", name: "Snow", color: "#dce7ec" },
 ];
-
-export interface LandscapeLayerWeights {
-  id: string;
-  /** Base/placeholder layer name (Grass/Dirt/Rock/Snow). The display name follows
-   * the assigned material when `material` is set. */
-  name: string;
-  /**
-   * Assigned material asset id, or `null`/absent for the built-in preset look.
-   * When set, the paint layer displays that material's name and its base color
-   * tints the terrain in place of the default swatch.
-   */
-  material?: string | null;
-  /** Built-in physical material id for vehicle surface response; absent is neutral. */
-  physicalMaterial?: string | null;
-  /** `verticesX * verticesZ` weights, `0..1`. Empty in Faz 1 (paint is Faz 3). */
-  weights: number[];
-}
 
 export interface ForgeLandscapeMaterialDef {
   schema: 1;
@@ -235,21 +209,6 @@ export const DEFAULT_LANDSCAPE_MATERIAL: ForgeLandscapeMaterialDef = {
   layers: LANDSCAPE_DEFAULT_LAYERS.map((layer) => ({ ...layer })),
 };
 
-export interface ForgeLandscapeData {
-  schema: 1;
-  type: "landscape";
-  size: LandscapeSize;
-  chunks: {
-    quadsPerChunk: number;
-  };
-  /** `verticesX * verticesZ` world-space heights (Y). Flat (all zero) in Faz 1. */
-  heights: number[];
-  /** Paint layers (Grass/Dirt/Rock/Snow). Empty in Faz 1 — populated starting Faz 3. */
-  layers: LandscapeLayerWeights[];
-  /** Faz 6 road/spline authoring data. Its terrain effects are destructive applies. */
-  splines?: ForgeLandscapeSpline[];
-}
-
 /** One resolved static-mesh instance placed along a spline (landscape-local). */
 export interface LandscapeSplineMeshInstance {
   assetId: string;
@@ -295,8 +254,6 @@ export interface LandscapeSplineMeshChain {
 }
 
 export interface ComputeLandscapeSplineMeshInstancesOptions {
-  /** Landscape data used only when a mesh opts into terrain-normal alignment. */
-  landscape?: ForgeLandscapeData;
   /** Exact normal in the same frame as the spline, for tiled terrain hosts. */
   normalAt?: (x: number, z: number) => Vec3;
   /** Base-model local +Z lengths, supplied by the render host from loaded bounds. */
@@ -548,9 +505,8 @@ export function computeLandscapeSplineMeshInstances(
           [dx / length, dy / length, dz / length],
           yawOffset,
           bank,
-          mesh.alignToTerrain === true && (options.normalAt || options.landscape)
-            ? options.normalAt?.((start[0] + end[0]) / 2, (start[2] + end[2]) / 2)
-              ?? landscapeNormalAtLocal(options.landscape!, (start[0] + end[0]) / 2, (start[2] + end[2]) / 2)
+          mesh.alignToTerrain === true && options.normalAt
+            ? options.normalAt((start[0] + end[0]) / 2, (start[2] + end[2]) / 2)
             : [0, 1, 0],
         );
         const fitScaleZ = fitToLength ? pieceLength / forwardLength! : 1;
@@ -636,7 +592,7 @@ function splineMeshOrientation(forward: Vec3, yawOffset: number, bank: number, u
 }
 
 /** All static-mesh asset ids referenced by a landscape's spline mesh segments. */
-export function landscapeSplineMeshAssetIds(data: Pick<ForgeLandscapeData, "splines">): string[] {
+export function landscapeSplineMeshAssetIds(data: { splines?: readonly ForgeLandscapeSpline[] | undefined }): string[] {
   const ids = new Set<string>();
   for (const spline of data.splines ?? []) {
     for (const segment of spline.segments) {
@@ -644,96 +600,6 @@ export function landscapeSplineMeshAssetIds(data: Pick<ForgeLandscapeData, "spli
     }
   }
   return [...ids];
-}
-
-export function landscapeVertexCount(data: Pick<ForgeLandscapeData, "size">): number {
-  return data.size.verticesX * data.size.verticesZ;
-}
-
-export function createDefaultLandscapeLayers(vertexCount: number): LandscapeLayerWeights[] {
-  return LANDSCAPE_DEFAULT_LAYERS.map((layer, index) => ({
-    id: layer.id,
-    name: layer.name,
-    weights: new Array(vertexCount).fill(index === 0 ? 1 : 0),
-  }));
-}
-
-export function normalizeLandscapeLayerWeights(
-  data: ForgeLandscapeData,
-  vertexIndex?: number,
-): void {
-  const vertexCount = landscapeVertexCount(data);
-  const start = vertexIndex ?? 0;
-  const end = vertexIndex === undefined ? vertexCount : Math.min(vertexIndex + 1, vertexCount);
-  const base = data.layers[0];
-  if (!base) return;
-
-  for (let index = start; index < end; index += 1) {
-    const weights = data.layers.map((layer) => layer.weights[index] ?? 0);
-    normalizeLandscapeBrushWeights(weights);
-    data.layers.forEach((layer, i) => { layer.weights[index] = weights[i]!; });
-  }
-}
-
-/**
- * Normalizes paint layers in-place. Old Faz 1/2 sidecars with `layers: []`
- * get the default four and become paint-ready on first use; an authored list
- * keeps its order and ids (a removed preset layer stays removed), with preset
- * ids taking their preset name, at most 8 layers and weights clamped/padded.
- */
-export function ensureLandscapeLayers(data: ForgeLandscapeData): boolean {
-  const vertexCount = landscapeVertexCount(data);
-  if (data.layers.length === 0) {
-    data.layers = createDefaultLandscapeLayers(vertexCount);
-    return true;
-  }
-  let changed = false;
-  const nextLayers: LandscapeLayerWeights[] = [];
-  for (const existing of data.layers) {
-    if (nextLayers.length >= 8 || nextLayers.some((layer) => layer.id === existing.id)) continue;
-    const padding = nextLayers.length === 0 ? 1 : 0;
-    const weights = existing.weights.slice(0, vertexCount).map((weight) =>
-      Number.isFinite(weight) ? Math.min(1, Math.max(0, weight)) : 0,
-    );
-    while (weights.length < vertexCount) weights.push(padding);
-    const preset = LANDSCAPE_DEFAULT_LAYERS.find((defaults) => defaults.id === existing.id);
-    if (
-      (preset && existing.name !== preset.name) ||
-      existing.weights.length !== vertexCount ||
-      existing.weights.some((weight, index) => weights[index] !== weight)
-    ) {
-      changed = true;
-    }
-    if (!preset) {
-      nextLayers.push({ ...existing, weights });
-      continue;
-    }
-    const layer: LandscapeLayerWeights = { id: preset.id, name: preset.name, weights };
-    if (typeof existing.material === "string" && existing.material.length > 0) layer.material = existing.material;
-    if (typeof existing.physicalMaterial === "string" && existing.physicalMaterial.length > 0) {
-      layer.physicalMaterial = existing.physicalMaterial;
-    }
-    nextLayers.push(layer);
-  }
-  if (data.layers.length !== nextLayers.length) changed = true;
-  data.layers = nextLayers;
-  normalizeLandscapeLayerWeights(data);
-  return changed;
-}
-
-/** Builds a flat (all-zero-height, default paint layers) landscape sidecar for a preset. */
-export function createFlatLandscapeData(preset: LandscapeSizePreset): ForgeLandscapeData {
-  const size = landscapeSizeForPreset(preset);
-  const vertexCount = size.verticesX * size.verticesZ;
-  return {
-    schema: 1,
-    type: "landscape",
-    size,
-    chunks: { quadsPerChunk: LANDSCAPE_QUADS_PER_CHUNK },
-    heights: new Array(vertexCount).fill(0),
-    layers: createDefaultLandscapeLayers(vertexCount),
-    splines: [],
-  };
 }
 
 /**
@@ -779,136 +645,6 @@ export function resampleLandscapeHeightmap(
   return samples;
 }
 
-/** Builds an 8-bit grayscale preview/export buffer from the current heights. */
-export function landscapeHeightsToGrayscale(data: Pick<ForgeLandscapeData, "size" | "heights">): Uint8ClampedArray {
-  const count = landscapeVertexCount(data);
-  const values = data.heights.slice(0, count);
-  while (values.length < count) values.push(0);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min;
-  const pixels = new Uint8ClampedArray(count * 4);
-  for (let index = 0; index < count; index += 1) {
-    const value = range > 0.000001 ? Math.round(((values[index]! - min) / range) * 255) : 0;
-    const offset = index * 4;
-    pixels[offset] = value;
-    pixels[offset + 1] = value;
-    pixels[offset + 2] = value;
-    pixels[offset + 3] = 255;
-  }
-  return pixels;
-}
-
-function resampleLandscapeGrid(
-  values: readonly number[],
-  source: Pick<LandscapeSize, "verticesX" | "verticesZ">,
-  target: Pick<LandscapeSize, "verticesX" | "verticesZ">,
-): number[] {
-  const at = (x: number, z: number): number => values[z * source.verticesX + x] ?? 0;
-  const output: number[] = [];
-  for (let z = 0; z < target.verticesZ; z += 1) {
-    const sourceZ = target.verticesZ <= 1 ? 0 : (z * (source.verticesZ - 1)) / (target.verticesZ - 1);
-    const z0 = Math.floor(sourceZ);
-    const z1 = Math.min(source.verticesZ - 1, z0 + 1);
-    const tz = sourceZ - z0;
-    for (let x = 0; x < target.verticesX; x += 1) {
-      const sourceX = target.verticesX <= 1 ? 0 : (x * (source.verticesX - 1)) / (target.verticesX - 1);
-      const x0 = Math.floor(sourceX);
-      const x1 = Math.min(source.verticesX - 1, x0 + 1);
-      const tx = sourceX - x0;
-      const top = at(x0, z0) + (at(x1, z0) - at(x0, z0)) * tx;
-      const bottom = at(x0, z1) + (at(x1, z1) - at(x0, z1)) * tx;
-      output.push(Math.round((top + (bottom - top) * tz) * 1_000_000) / 1_000_000);
-    }
-  }
-  return output;
-}
-
-/**
- * Changes a landscape's vertex density while preserving its world-space X/Z
- * footprint. Heights and paint weights are bilinearly resampled together.
- */
-export function resampleLandscapeData(
-  data: ForgeLandscapeData,
-  target: Pick<LandscapeSize, "verticesX" | "verticesZ">,
-): ForgeLandscapeData {
-  if (!Number.isInteger(target.verticesX) || !Number.isInteger(target.verticesZ) || target.verticesX < 2 || target.verticesZ < 2) {
-    throw new Error("Landscape resolution must contain at least 2 vertices per axis.");
-  }
-  const source = data.size;
-  const vertexCount = target.verticesX * target.verticesZ;
-  const result: ForgeLandscapeData = {
-    schema: 1,
-    type: "landscape",
-    size: {
-      verticesX: target.verticesX,
-      verticesZ: target.verticesZ,
-      // Preserve the terrain's width/depth rather than growing it with the grid.
-      spacing: ((source.verticesX - 1) * source.spacing) / (target.verticesX - 1),
-      heightScale: source.heightScale,
-    },
-    chunks: { ...data.chunks },
-    heights: resampleLandscapeGrid(data.heights, source, target),
-    layers: data.layers.map((layer) => ({
-      id: layer.id,
-      name: layer.name,
-      ...(layer.material ? { material: layer.material } : {}),
-      ...(layer.physicalMaterial ? { physicalMaterial: layer.physicalMaterial } : {}),
-      weights: resampleLandscapeGrid(layer.weights, source, target),
-    })),
-    ...(data.splines
-      ? {
-          splines: data.splines.map((spline) => ({
-            ...spline,
-            points: spline.points.map((point) => ({
-              ...point,
-              position: [...point.position] as Vec3,
-              ...(point.arriveTangent ? { arriveTangent: [...point.arriveTangent] as Vec3 } : {}),
-              ...(point.leaveTangent ? { leaveTangent: [...point.leaveTangent] as Vec3 } : {}),
-            })),
-            segments: spline.segments.map((segment) => ({
-              ...segment,
-              ...(segment.deform ? { deform: { ...segment.deform } } : {}),
-              ...(segment.paint ? { paint: { ...segment.paint } } : {}),
-              ...(segment.mesh
-                ? {
-                    mesh: {
-                      ...segment.mesh,
-                      ...(segment.mesh.scale ? { scale: [...segment.mesh.scale] as Vec3 } : {}),
-                      ...(segment.mesh.offset ? { offset: [...segment.mesh.offset] as Vec3 } : {}),
-                    },
-                  }
-                : {}),
-            })),
-          })),
-        }
-      : {}),
-  };
-  ensureLandscapeLayers(result);
-  if (result.heights.length !== vertexCount) result.heights = new Array(vertexCount).fill(0);
-  return result;
-}
-
-/** Default public-root-relative sidecar path for a landscape id. */
-export function landscapeDataPath(landscapeId: string): string {
-  return `landscapes/${landscapeId}.landscape.json`;
-}
-
-// --- Spline apply (Faz 6 Road Tool destructive operations) ------------------
-
-/** Grid-space bounds (inclusive) of the vertices an apply pass touched. */
-export interface LandscapeSplineApplyBounds {
-  x0: number;
-  z0: number;
-  x1: number;
-  z1: number;
-}
-
-export interface LandscapeSplineApplyResult {
-  changed: boolean;
-  bounds: LandscapeSplineApplyBounds | null;
-}
-
 export interface SplineCorridorSample {
   influence: number;
   /** Interpolation parameter along the winning sub-segment (0 at start, 1 at end). */
@@ -916,13 +652,6 @@ export interface SplineCorridorSample {
   segment: ForgeLandscapeSplineSegment;
   start: LandscapeSplinePolylineSample;
   end: LandscapeSplinePolylineSample;
-}
-
-function landscapeGridOrigin(size: LandscapeSize): { originX: number; originZ: number } {
-  return {
-    originX: ((size.verticesX - 1) * size.spacing) / 2,
-    originZ: ((size.verticesZ - 1) * size.spacing) / 2,
-  };
 }
 
 /** Smoothstep corridor influence: 1 inside `halfWidth`, fading to 0 across `falloff`. */
@@ -1075,435 +804,4 @@ export class SplineCorridorIndex {
     }
     return best;
   }
-}
-
-function expandBounds(bounds: LandscapeSplineApplyBounds | null, x: number, z: number): LandscapeSplineApplyBounds {
-  if (!bounds) return { x0: x, z0: z, x1: x, z1: z };
-  bounds.x0 = Math.min(bounds.x0, x);
-  bounds.z0 = Math.min(bounds.z0, z);
-  bounds.x1 = Math.max(bounds.x1, x);
-  bounds.z1 = Math.max(bounds.z1, z);
-  return bounds;
-}
-
-/**
- * Grid rectangle that can possibly receive influence from an indexed corridor.
- * The actual blend still asks {@link SplineCorridorIndex.sample}, so this is
- * deliberately a conservative over-approximation. It avoids walking an entire
- * heightfield when a short road or editor spline only occupies a small part of it.
- */
-function corridorApplyBounds(
-  data: ForgeLandscapeData,
-  index: SplineCorridorIndex,
-): LandscapeSplineApplyBounds | null {
-  const { verticesX, verticesZ, spacing } = data.size;
-  const { originX, originZ } = landscapeGridOrigin(data.size);
-  const reach = index.reach;
-  if (!reach) return null;
-  return {
-    x0: Math.max(0, Math.floor((reach.minX + originX) / spacing)),
-    z0: Math.max(0, Math.floor((reach.minZ + originZ) / spacing)),
-    x1: Math.min(verticesX - 1, Math.ceil((reach.maxX + originX) / spacing)),
-    z1: Math.min(verticesZ - 1, Math.ceil((reach.maxZ + originZ) / spacing)),
-  };
-}
-
-/**
- * Drops corridor pieces that cannot reach any vertex of a clipped apply pass. A
- * piece outside the clip's own world box contributes zero influence everywhere the
- * pass will sample, so this only removes work — it never changes a sample.
- */
-function subSegmentsWithinClip(
-  data: ForgeLandscapeData,
-  subSegments: readonly LandscapeSplineSubSegment[],
-  clip: LandscapeSplineApplyBounds | null | undefined,
-): readonly LandscapeSplineSubSegment[] {
-  if (!clip) return subSegments;
-  const { spacing } = data.size;
-  const { originX, originZ } = landscapeGridOrigin(data.size);
-  const minX = clip.x0 * spacing - originX;
-  const maxX = clip.x1 * spacing - originX;
-  const minZ = clip.z0 * spacing - originZ;
-  const maxZ = clip.z1 * spacing - originZ;
-  return subSegments.filter((sub) => {
-    const box = subSegmentReachBox(sub);
-    return box.maxX >= minX && box.minX <= maxX && box.maxZ >= minZ && box.minZ <= maxZ;
-  });
-}
-
-/**
- * Grid rectangle covering a landscape-local XZ box, clamped to the heightfield;
- * null when the box falls entirely outside it. Callers that track their own edited
- * region (a runtime path painter does) turn it into an apply `clip` with this, so
- * the grid math stays in one place.
- */
-export function landscapeGridBoundsForLocalBox(
-  size: LandscapeSize,
-  box: { minX: number; minZ: number; maxX: number; maxZ: number },
-): LandscapeSplineApplyBounds | null {
-  const { verticesX, verticesZ, spacing } = size;
-  const { originX, originZ } = landscapeGridOrigin(size);
-  const x0 = Math.max(0, Math.floor((box.minX + originX) / spacing));
-  const z0 = Math.max(0, Math.floor((box.minZ + originZ) / spacing));
-  const x1 = Math.min(verticesX - 1, Math.ceil((box.maxX + originX) / spacing));
-  const z1 = Math.min(verticesZ - 1, Math.ceil((box.maxZ + originZ) / spacing));
-  if (x0 > x1 || z0 > z1) return null;
-  return { x0, z0, x1, z1 };
-}
-
-/**
- * Narrows an apply pass to a caller-supplied grid rectangle, or returns null when
- * the two do not overlap at all. This is what lets a runtime repaint touch only
- * the region its edit could have changed: paint and deform are per-vertex
- * independent, so applying the same ordered operations over a sub-rectangle
- * reproduces exactly the values a full pass would have written there.
- */
-function clipApplyBounds(
-  bounds: LandscapeSplineApplyBounds | null,
-  clip: LandscapeSplineApplyBounds | null | undefined,
-): LandscapeSplineApplyBounds | null {
-  if (!bounds) return null;
-  if (!clip) return bounds;
-  const x0 = Math.max(bounds.x0, clip.x0);
-  const z0 = Math.max(bounds.z0, clip.z0);
-  const x1 = Math.min(bounds.x1, clip.x1);
-  const z1 = Math.min(bounds.z1, clip.z1);
-  if (x0 > x1 || z0 > z1) return null;
-  return { x0, z0, x1, z1 };
-}
-
-/**
- * Destructively deforms the heightfield toward a spline's corridor (Faz 6 Road
- * Tool). Each deform-enabled segment pulls terrain toward the interpolated
- * control-point height (plus `targetOffset`); `flatten` moves both ways while
- * `raiseTerrain`/`lowerTerrain` gate the allowed direction. Mutates `data.heights`.
- */
-export function applyLandscapeSplineDeform(
-  data: ForgeLandscapeData,
-  spline: ForgeLandscapeSpline,
-  clip?: LandscapeSplineApplyBounds | null,
-): LandscapeSplineApplyResult {
-  const { verticesX, spacing, heightScale } = data.size;
-  const { originX, originZ } = landscapeGridOrigin(data.size);
-  const scale = heightScale === 0 ? 1 : heightScale;
-  const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
-    !!segment.deform && segment.deform.enabled && (segment.deform.flatten || segment.deform.raiseTerrain || segment.deform.lowerTerrain);
-  if (!spline.segments.some(accept)) return { changed: false, bounds: null };
-  const corridor = new SplineCorridorIndex(
-    subSegmentsWithinClip(data, splineToPolyline(spline).filter((sub) => accept(sub.segment)), clip),
-    spacing * 4,
-  );
-  const applyBounds = clipApplyBounds(corridorApplyBounds(data, corridor), clip);
-  if (!applyBounds) return { changed: false, bounds: null };
-
-  let changed = false;
-  let bounds: LandscapeSplineApplyBounds | null = null;
-  for (let z = applyBounds.z0; z <= applyBounds.z1; z += 1) {
-    const localZ = z * spacing - originZ;
-    for (let x = applyBounds.x0; x <= applyBounds.x1; x += 1) {
-      const localX = x * spacing - originX;
-      const sample = corridor.sample(localX, localZ);
-      if (!sample) continue;
-      const deform = sample.segment.deform!;
-      const targetLocalY =
-        sample.start.position[1] + (sample.end.position[1] - sample.start.position[1]) * sample.t + (deform.targetOffset ?? 0);
-      const targetRaw = targetLocalY / scale;
-      const index = z * verticesX + x;
-      const current = data.heights[index] ?? 0;
-      const delta = targetRaw - current;
-      const allowUp = deform.flatten || deform.raiseTerrain;
-      const allowDown = deform.flatten || deform.lowerTerrain;
-      if ((delta > 0 && !allowUp) || (delta < 0 && !allowDown)) continue;
-      const next = Number((current + delta * sample.influence).toFixed(4));
-      if (next === current) continue;
-      data.heights[index] = next;
-      changed = true;
-      bounds = expandBounds(bounds, x, z);
-    }
-  }
-  return { changed, bounds };
-}
-
-/**
- * Destructively paints a spline's corridor into landscape paint layers (Faz 6).
- * Each paint-enabled segment raises its target layer's weight by
- * `influence * strength`, then the per-vertex weights are renormalized so the
- * layer set still sums to ~1. Mutates `data.layers`.
- */
-export function applyLandscapeSplinePaint(
-  data: ForgeLandscapeData,
-  spline: ForgeLandscapeSpline,
-  clip?: LandscapeSplineApplyBounds | null,
-): LandscapeSplineApplyResult {
-  const { verticesX, spacing } = data.size;
-  const { originX, originZ } = landscapeGridOrigin(data.size);
-  const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
-    !!segment.paint &&
-    segment.paint.enabled &&
-    segment.paint.strength > 0 &&
-    data.layers.some((layer) => layer.id === segment.paint!.layerId);
-  if (!spline.segments.some(accept)) return { changed: false, bounds: null };
-  const corridor = new SplineCorridorIndex(
-    subSegmentsWithinClip(data, splineToPolyline(spline).filter((sub) => accept(sub.segment)), clip),
-    spacing * 4,
-  );
-  const applyBounds = clipApplyBounds(corridorApplyBounds(data, corridor), clip);
-  if (!applyBounds) return { changed: false, bounds: null };
-  const layerIndexById = new Map(data.layers.map((layer, index) => [layer.id, index]));
-
-  let changed = false;
-  let bounds: LandscapeSplineApplyBounds | null = null;
-  for (let z = applyBounds.z0; z <= applyBounds.z1; z += 1) {
-    const localZ = z * spacing - originZ;
-    for (let x = applyBounds.x0; x <= applyBounds.x1; x += 1) {
-      const localX = x * spacing - originX;
-      const sample = corridor.sample(localX, localZ);
-      if (!sample) continue;
-      const paint = sample.segment.paint!;
-      const activeIndex = layerIndexById.get(paint.layerId) ?? -1;
-      if (activeIndex < 0) continue;
-      const index = z * verticesX + x;
-      const amount = Math.min(1, sample.influence * paint.strength);
-      if (!blendLandscapeLayerWeight(data, index, activeIndex, amount)) continue;
-      changed = true;
-      bounds = expandBounds(bounds, x, z);
-    }
-  }
-  return { changed, bounds };
-}
-
-/**
- * Raises one vertex's `activeIndex` layer weight by `amount` and renormalizes the
- * rest of the set around it. The single place a paint effect mutates weights, so a
- * spline corridor and a rect pad ({@link applyLandscapeRectPaint}) blend by exactly
- * the same rule. Returns whether the vertex actually moved.
- */
-export function blendLandscapeLayerWeight(
-  data: ForgeLandscapeData,
-  vertexIndex: number,
-  activeIndex: number,
-  amount: number,
-): boolean {
-  const active = data.layers[activeIndex];
-  if (!active) return false;
-  const current = active.weights[vertexIndex] ?? 0;
-  const target = Math.min(1, current + amount);
-  if (target <= current + 1e-6) return false;
-  const remaining = 1 - target;
-  const otherTotal = data.layers.reduce(
-    (total, layer, layerIndex) => total + (layerIndex === activeIndex ? 0 : layer.weights[vertexIndex] ?? 0),
-    0,
-  );
-  active.weights[vertexIndex] = target;
-  for (const [layerIndex, layer] of data.layers.entries()) {
-    if (layerIndex === activeIndex) continue;
-    const value = layer.weights[vertexIndex] ?? 0;
-    layer.weights[vertexIndex] = otherTotal > 0 ? (value / otherTotal) * remaining : 0;
-  }
-  normalizeLandscapeLayerWeights(data, vertexIndex);
-  return true;
-}
-
-/**
- * One axis-aligned, soft-edged paint pad in landscape-local X/Z. The counterpart
- * of a spline corridor for things that are areas rather than lines — a building
- * footprint, a clearing — so callers do not have to fake a rectangle out of
- * segments. Corners round off over `falloff`, which is what makes a pad read as
- * worn ground instead of a stamped box.
- */
-export interface LandscapeRectPaint {
-  /** Paint layer the pad blends toward (must exist in `data.layers`). */
-  readonly layerId: string;
-  /** Pad centre in landscape-local coordinates (world − landscape position). */
-  readonly centerX: number;
-  readonly centerZ: number;
-  /** Half extents of the fully painted core, before `falloff`. */
-  readonly halfWidth: number;
-  readonly halfDepth: number;
-  /** Soft edge distance blended out past the core, in world units. */
-  readonly falloff: number;
-  /** Peak paint weight applied over the core (0..1). */
-  readonly strength: number;
-}
-
-/**
- * A rounded rectangular terrain foundation.  Like {@link LandscapeRectPaint},
- * coordinates are landscape-local; unlike paint it pulls the heightfield toward
- * one local-space Y level.  Runtime users can rebuild these from a pristine
- * snapshot when a temporary foundation is removed.
- */
-export interface LandscapeRectDeform {
-  readonly centerX: number;
-  readonly centerZ: number;
-  readonly halfWidth: number;
-  readonly halfDepth: number;
-  readonly falloff: number;
-  /** Target local-space height after `heightScale` has been applied. */
-  readonly targetHeight: number;
-}
-
-/**
- * Destructively paints rounded-rect pads into landscape paint layers. Unlike the
- * spline pass this only walks each pad's own vertex box, so painting many small
- * pads stays proportional to their area rather than to the whole heightfield.
- * Overlapping pads simply blend twice — they are additive like any other paint.
- * Mutates `data.layers`.
- */
-export function applyLandscapeRectPaint(
-  data: ForgeLandscapeData,
-  rects: readonly LandscapeRectPaint[],
-  clip?: LandscapeSplineApplyBounds | null,
-): LandscapeSplineApplyResult {
-  const { verticesX, verticesZ, spacing } = data.size;
-  const { originX, originZ } = landscapeGridOrigin(data.size);
-  let changed = false;
-  let bounds: LandscapeSplineApplyBounds | null = null;
-  for (const rect of rects) {
-    if (rect.strength <= 0) continue;
-    const activeIndex = data.layers.findIndex((layer) => layer.id === rect.layerId);
-    if (activeIndex < 0) continue;
-    const reach = Math.max(0, rect.falloff);
-    const gridX = (local: number): number => (local + originX) / spacing;
-    const gridZ = (local: number): number => (local + originZ) / spacing;
-    const rectBounds = clipApplyBounds(
-      {
-        x0: Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach))),
-        x1: Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach))),
-        z0: Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach))),
-        z1: Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach))),
-      },
-      clip,
-    );
-    if (!rectBounds) continue;
-    const { x0, x1, z0, z1 } = rectBounds;
-    for (let z = z0; z <= z1; z += 1) {
-      const localZ = z * spacing - originZ;
-      const dz = Math.max(Math.abs(localZ - rect.centerZ) - rect.halfDepth, 0);
-      for (let x = x0; x <= x1; x += 1) {
-        const localX = x * spacing - originX;
-        const dx = Math.max(Math.abs(localX - rect.centerX) - rect.halfWidth, 0);
-        const influence = corridorInfluence(Math.hypot(dx, dz), 0, reach);
-        if (influence <= 0) continue;
-        const index = z * verticesX + x;
-        if (!blendLandscapeLayerWeight(data, index, activeIndex, Math.min(1, influence * rect.strength))) continue;
-        changed = true;
-        bounds = expandBounds(bounds, x, z);
-      }
-    }
-  }
-  return { changed, bounds };
-}
-
-/**
- * Destructively flattens rounded rectangular pads into a heightfield. The core
- * reaches the requested height exactly and the edge blends across `falloff`, so
- * a building foundation meets surrounding terrain without a vertical seam.
- */
-export function applyLandscapeRectDeform(
-  data: ForgeLandscapeData,
-  rects: readonly LandscapeRectDeform[],
-  clip?: LandscapeSplineApplyBounds | null,
-): LandscapeSplineApplyResult {
-  const { verticesX, verticesZ, spacing, heightScale } = data.size;
-  const { originX, originZ } = landscapeGridOrigin(data.size);
-  const scale = heightScale === 0 ? 1 : heightScale;
-  let changed = false;
-  let bounds: LandscapeSplineApplyBounds | null = null;
-  for (const rect of rects) {
-    const reach = Math.max(0, rect.falloff);
-    const gridX = (local: number): number => (local + originX) / spacing;
-    const gridZ = (local: number): number => (local + originZ) / spacing;
-    const rectBounds = clipApplyBounds(
-      {
-        x0: Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach))),
-        x1: Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach))),
-        z0: Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach))),
-        z1: Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach))),
-      },
-      clip,
-    );
-    if (!rectBounds) continue;
-    const { x0, x1, z0, z1 } = rectBounds;
-    const targetRaw = rect.targetHeight / scale;
-    for (let z = z0; z <= z1; z += 1) {
-      const localZ = z * spacing - originZ;
-      const dz = Math.max(Math.abs(localZ - rect.centerZ) - rect.halfDepth, 0);
-      for (let x = x0; x <= x1; x += 1) {
-        const localX = x * spacing - originX;
-        const dx = Math.max(Math.abs(localX - rect.centerX) - rect.halfWidth, 0);
-        const influence = corridorInfluence(Math.hypot(dx, dz), 0, reach);
-        if (influence <= 0) continue;
-        const index = z * verticesX + x;
-        const current = data.heights[index] ?? 0;
-        const next = Number((current + (targetRaw - current) * influence).toFixed(4));
-        if (next === current) continue;
-        data.heights[index] = next;
-        changed = true;
-        bounds = expandBounds(bounds, x, z);
-      }
-    }
-  }
-  return { changed, bounds };
-}
-
-function landscapeHeightAt(data: ForgeLandscapeData, x: number, z: number): number {
-  const { verticesX, verticesZ } = data.size;
-  const cx = Math.min(Math.max(x, 0), verticesX - 1);
-  const cz = Math.min(Math.max(z, 0), verticesZ - 1);
-  return data.heights[cz * verticesX + cx] ?? 0;
-}
-
-/** Bilinearly samples terrain height in landscape-local X/Z coordinates. */
-export function landscapeHeightAtLocal(data: ForgeLandscapeData, localX: number, localZ: number): number {
-  const { verticesX, verticesZ, spacing, heightScale } = data.size;
-  const { originX, originZ } = landscapeGridOrigin(data.size);
-  const gridX = Math.min(verticesX - 1, Math.max(0, (localX + originX) / spacing));
-  const gridZ = Math.min(verticesZ - 1, Math.max(0, (localZ + originZ) / spacing));
-  const x0 = Math.floor(gridX);
-  const z0 = Math.floor(gridZ);
-  const x1 = Math.min(verticesX - 1, x0 + 1);
-  const z1 = Math.min(verticesZ - 1, z0 + 1);
-  const tx = gridX - x0;
-  const tz = gridZ - z0;
-  const top = landscapeHeightAt(data, x0, z0) * (1 - tx) + landscapeHeightAt(data, x1, z0) * tx;
-  const bottom = landscapeHeightAt(data, x0, z1) * (1 - tx) + landscapeHeightAt(data, x1, z1) * tx;
-  return (top * (1 - tz) + bottom * tz) * heightScale;
-}
-
-/** Up-facing terrain normal in landscape-local coordinates. */
-function landscapeNormalAtLocal(data: ForgeLandscapeData, localX: number, localZ: number): Vec3 {
-  const step = Math.max(data.size.spacing, 0.001);
-  const left = landscapeHeightAtLocal(data, localX - step, localZ);
-  const right = landscapeHeightAtLocal(data, localX + step, localZ);
-  const down = landscapeHeightAtLocal(data, localX, localZ - step);
-  const up = landscapeHeightAtLocal(data, localX, localZ + step);
-  return normalize([left - right, 2 * step, down - up]);
-}
-
-/**
- * The Landscape collider: an actor-centred heightfield whose quads split along
- * the render mesh's b-c diagonal, at Rapier's Float32 precision. Vertices are
- * body-local; the actor's Transform supplies world position/rotation.
- */
-export function createLandscapeHeightfieldPrimitive(data: ForgeLandscapeData): ColliderPrimitive & { center: Vec3 } {
-  const { spacing, heightScale, verticesX, verticesZ } = data.size;
-  const quadsX = verticesX - 1;
-  const quadsZ = verticesZ - 1;
-  const heights = new Float32Array(verticesX * verticesZ);
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (let z = 0; z < verticesZ; z += 1) {
-    for (let x = 0; x < verticesX; x += 1) {
-      const height = landscapeHeightAt(data, x, z) * heightScale;
-      heights[z * verticesX + x] = height;
-      minY = Math.min(minY, height);
-      maxY = Math.max(maxY, height);
-    }
-  }
-  return {
-    shape: "heightfield",
-    size: [quadsX * spacing, maxY - minY, quadsZ * spacing],
-    center: [0, (minY + maxY) / 2, 0],
-    heightfield: { quadsX, quadsZ, spacing, heights },
-  };
 }

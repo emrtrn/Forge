@@ -1,10 +1,7 @@
-import { LANDSCAPE_DEFAULT_LAYERS, type ForgeLandscapeData } from "../scene/landscape";
-import type { LayoutLandscape, LayoutRiverWater } from "../scene/layout";
 import type { WorldTerrainDocument } from "./terrainLoader";
-import { legacyLandscapeToWorldTerrain } from "./terrainLegacy";
 import {
   createFlatTerrainTile, terrainTileHeightRange, tileKey,
-  TERRAIN_DEFAULT_HEIGHT_MIN, TERRAIN_DEFAULT_HEIGHT_MAX, TERRAIN_MAX_LAYERS, TERRAIN_MAX_TILES_PER_AXIS,
+  TERRAIN_MAX_TILES_PER_AXIS,
   type TerrainTileData, type WorldTerrainDef,
 } from "./terrainTypes";
 import { WORLD_TERRAIN_CREATE_MAX_VERTICES } from "./worldTerrainCreate";
@@ -117,64 +114,4 @@ export function expandSingleTileWorldTerrain(document: WorldTerrainDocument, opt
   return { ok: true, document: { def, tiles: expandTiles(def, originalTile!, options) } };
 }
 
-/** No adaptation: these problems block expansion before any input is changed. */
-export function worldTerrainExpandProblems(
-  actor: LayoutLandscape, data: ForgeLandscapeData, options: WorldTerrainExpandOptions,
-  rivers: readonly Pick<LayoutRiverWater, "landscapeRef">[] = [],
-): string[] {
-  const problems: string[] = [];
-  const { verticesX, verticesZ, spacing, heightScale } = data.size;
-  if (actor.rotation?.some((value) => value !== 0)) problems.push("Landscape must be unrotated; expansion never rotates or resamples authored terrain.");
-  if (verticesX !== verticesZ) problems.push("Landscape must be square; expansion never resamples a non-square grid.");
-  if (![65, 129, 257].includes(verticesX) || ![65, 129, 257].includes(verticesZ)) {
-    problems.push("Landscape must have 64, 128 or 256 quads per side (65, 129 or 257 vertices).");
-  }
-  if (data.splines?.length) problems.push("Remove Landscape splines first: expansion does not migrate existing splines yet.");
-  if (rivers.some((water) => water.landscapeRef === actor.id)) problems.push("Remove River Water bodies first: expansion does not migrate attached water coordinates.");
-  if (!(spacing >= 0.01 && spacing <= 100) || !Number.isFinite(heightScale) || !actor.position.every(Number.isFinite)) {
-    problems.push("Landscape spacing, height scale and actor position must be valid finite terrain values.");
-  }
-  const count = verticesX * verticesZ;
-  if (data.heights.length !== count || !data.heights.every((height) => Number.isFinite(height * heightScale))) {
-    problems.push("Landscape must contain a finite height for every vertex.");
-  }
-  if (data.layers.length > TERRAIN_MAX_LAYERS) problems.push("Landscape supports at most 8 paint layers; layers are never discarded.");
-  if (data.layers.some((layer) => layer.weights.length !== count || !layer.weights.every((weight) => Number.isFinite(weight) && weight >= 0 && weight <= 1))) {
-    problems.push("Landscape must contain a finite paint weight in 0..1 for every vertex and layer.");
-  }
-  return [...problems, ...expandGridProblems(options, count)];
-}
-
 export type WorldTerrainExpansion = { ok: true; document: WorldTerrainDocument } | { ok: false; reasons: string[] };
-
-/**
- * Extend edge/corner heights in metres without resampling. Shared vertices
- * retain the original paint too; all other new vertices start on layer 0.
- * Original samples match the existing 1x1 save conversion (Float32/RGBA8).
- * Neither actor, source arrays nor river bodies are mutated.
- */
-export function expandLandscapeToWorldTerrain(
-  actor: LayoutLandscape, data: ForgeLandscapeData, options: WorldTerrainExpandOptions,
-  rivers: readonly Pick<LayoutRiverWater, "landscapeRef">[] = [],
-): WorldTerrainExpansion {
-  const reasons = worldTerrainExpandProblems(actor, data, options, rivers);
-  if (reasons.length) return { ok: false, reasons };
-  const size = data.size.verticesX;
-  const q = size - 1;
-  const edge = q * data.size.spacing;
-  const originalTile = legacyLandscapeToWorldTerrain(actor, data).tile;
-  const def: WorldTerrainDef = {
-    schema: 1, type: "worldTerrain", name: actor.name ?? actor.id,
-    tileQuads: q, spacing: data.size.spacing, tilesX: options.tilesX, tilesZ: options.tilesZ,
-    origin: [actor.position[0] - edge / 2 - options.originalX * edge, actor.position[1], actor.position[2] - edge / 2 - options.originalZ * edge],
-    heightMin: TERRAIN_DEFAULT_HEIGHT_MIN, heightMax: TERRAIN_DEFAULT_HEIGHT_MAX,
-    layers: data.layers.map((layer) => ({
-      id: layer.id, name: layer.name,
-      color: LANDSCAPE_DEFAULT_LAYERS.find((preset) => preset.id === layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color,
-      ...(layer.material === undefined ? {} : { material: layer.material }),
-      ...(layer.physicalMaterial ? { physicalMaterial: layer.physicalMaterial } : {}),
-    })),
-    tiles: [], collision: actor.collision ?? true,
-  };
-  return { ok: true, document: { def, tiles: expandTiles(def, originalTile, options) } };
-}

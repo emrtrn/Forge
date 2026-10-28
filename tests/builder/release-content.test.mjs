@@ -24,7 +24,7 @@ async function fixture(run) {
 test("closure includes level travel, model resources, material texture, landscape and sidecars", () => fixture(async ({ publicDir, root, collect }) => {
   const selection = await collect();
   const paths = new Set(selection.files.map((file) => file.path));
-  for (const path of ["layouts/destination.level.json", "assets/release/cube.bin", "assets/release/checker.png", "assets/release/cube.materials.json", "assets/release/checker.material.json", "landscapes/starter.landscape.json", "layouts/starter.foliage.json", "layouts/starter.meshpaint.json"]) assert.ok(paths.has(path), path);
+  for (const path of ["layouts/destination.level.json", "assets/release/cube.bin", "assets/release/checker.png", "assets/release/cube.materials.json", "assets/release/checker.material.json", "landscapes/starter.terrain.json", "landscapes/starter.tiles/0_0.tile.bin", "layouts/starter.foliage.json", "layouts/starter.meshpaint.json"]) assert.ok(paths.has(path), path);
   assert.equal(selection.manifest.assets.length, 5);
   const output = resolve(root, "staged");
   const before = await readFile(resolve(publicDir, "project.3dgame.json"));
@@ -53,16 +53,11 @@ test("unused Unknown assets are excluded; explicit dynamic includes are checked"
 test("terrain definitions close over implicit tile files and enforce their provenance", () => fixture(async ({ publicDir, collect, provenance }) => {
   const path = "landscapes/starter.terrain.json";
   const binary = "landscapes/starter.tiles/0_0.tile.bin";
-  const level = await readJson(resolve(publicDir, profile.defaultScene));
-  level.landscapes[0].dataRef = path;
-  await writeFile(resolve(publicDir, profile.defaultScene), JSON.stringify(level));
-  await writeFile(resolve(publicDir, path), JSON.stringify({ schema: 1, type: "worldTerrain", tiles: [{ key: "0_0" }] }));
-  provenance[path] = provenance["landscapes/starter.landscape.json"];
-  await mkdir(resolve(publicDir, "landscapes/starter.tiles"));
-  await writeFile(resolve(publicDir, binary), new Uint8Array([1, 2, 3]));
-  await assert.rejects(collect(), /Missing or unresolved provenance/);
-  provenance[binary] = provenance[path];
   assert.ok((await collect()).files.some((entry) => entry.path === binary));
+  const tileProvenance = provenance[binary];
+  delete provenance[binary];
+  await assert.rejects(collect(), /Missing or unresolved provenance/);
+  provenance[binary] = tileProvenance;
   const global = "landscapes/starter.global.bin";
   await writeFile(resolve(publicDir, global), new Uint8Array([4, 5, 6]));
   await assert.rejects(collect(), /Missing or unresolved provenance/);

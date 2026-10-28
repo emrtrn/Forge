@@ -182,8 +182,8 @@ engine/editor.
 - **Fifth allowlist surface — World Terrain:** `*.terrain.json` definitions
   use `normalizeWorldTerrain` (`engine/terrain/terrainDefinition.ts`) on read
   and through `validateSaveTerrainPayload` re-exported by `tools/saveValidator.ts`.
-  Spline fields share `engine/scene/landscapeSplineValidation.ts` with legacy
-  Landscape. `/__save-terrain-tile?path=<definition>&key=<x_z>` accepts a raw
+  Spline fields are validated by `engine/scene/landscapeSplineValidation.ts`.
+  `/__save-terrain-tile?path=<definition>&key=<x_z>` accepts a raw
   binary body, validates its size/header/coordinates/finite heights, and derives
   `<name>.tiles/<x_z>.tile.bin`; `/__save-terrain` cross-checks every listed
   binary before writing the definition and returns `dropped[]` for unknown keys.
@@ -192,14 +192,17 @@ engine/editor.
   fields to the shared normalizer and terrain serialization-drift tests.
   A paint layer's `physicalMaterial` (a `PHYSICAL_MATERIAL_IDS` preset or
   `null`; an unknown id rejects the terrain) drives vehicle surface response
-  (`engine/terrain/terrainSurface.ts`); the 1×1 path carries it on
-  `LandscapeLayerWeights` through the bridge, legacy conversion and clones.
-  Editor saves migrate legacy sidecars tile → global map → definition → level reference,
-  preserving the old file. Landscapes render through the GPU CDLOD renderer
-  (`engine/render-three/terrain/`, wrapped by `engine/render-three/landscape.ts`);
-  picking raycasts the CPU heightfield. Multi-tile World Terrain supports
-  sculpt/paint, heightfield collision, and editor/runtime streaming. The 1×1
-  legacy adapter remains available for existing Landscape authoring data.
+  (`engine/terrain/terrainSurface.ts`).
+  Every Landscape actor is a World Terrain (one tile or many; OPEN_WORLD_PLAN
+  Faz 8 removed the 1×1 `ForgeLandscapeData` bridge). The old `*.landscape.json`
+  sidecar is not read: a level that still references one fails to load with an
+  explicit "not supported" error (`src/scene/terrainDocument.ts`), and
+  `verify:world-data` reports it. There is no migration path. Landscapes render
+  through the GPU CDLOD renderer (`engine/render-three/terrain/`, wrapped by
+  `engine/render-three/landscape.ts`); picking raycasts the CPU heightfield.
+  World Terrain supports sculpt/paint, heightfield collision, and editor/runtime
+  streaming; single-tile terrains also take Resolution / World Size resampling,
+  PNG resample import and Expand.
   A tile rewritten after its definition was committed (overlapping saves) leaves
   the `minHeight..maxHeight` summary stale and the editor refuses to load the level
   (`terrain tile K samples … exceed declared bounds`, shown as an editor toast).

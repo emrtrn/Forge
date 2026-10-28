@@ -8,14 +8,15 @@ import { buildTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMap";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { TerrainLodSelector } from "../../engine/terrain/terrainLod";
 import {
-  landscapeRenderSource, terrainSourceQueryDef, TerrainWorldHeightBounds, worldTerrainRenderSource,
+  terrainSourceQueryDef, TerrainWorldHeightBounds, worldTerrainRenderSource, type TerrainRenderSource,
 } from "../../engine/terrain/terrainRenderSource";
-import { createFlatTerrainTile, terrainTileLayerWeight, tileKey, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
-import type { ForgeLandscapeData } from "../../engine/scene/landscape";
+import { createFlatTerrainTile, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { TerrainTexturePool } from "../../engine/render-three/terrain/terrainTexturePool";
 import { TerrainRenderer, terrainRendererOf } from "../../engine/render-three/terrain/terrainRenderer";
 import { TERRAIN_LIT_FIXED_SAMPLERS, terrainLitFragmentSamplers, type TerrainUniforms } from "../../engine/render-three/terrain/terrainMaterial";
-import { createLandscapeObject, disposeLandscapeObject, resolveLandscape, updateLandscapeObjectGeometry } from "../../engine/render-three/landscape";
+import {
+  createWorldTerrainObject, disposeLandscapeObject, resolveLandscape, updateWorldTerrainAppearance, updateWorldTerrainObjectTiles,
+} from "../../engine/render-three/landscape";
 import type { LayoutLandscape } from "../../engine/scene/layout";
 import { EditorSelectionOutline } from "../../src/scene/editorSelectionOutline";
 import { SunCascadeShadow } from "../../engine/render-three/sunCascadeShadow";
@@ -31,27 +32,21 @@ function rgbaTexture(width: number, height: number, rgba: readonly number[]): Da
   return texture;
 }
 
-/** A non-square, non-power-of-two legacy grid with six paint layers and relief. */
-function legacyData(verticesX = 65, verticesZ = 97, spacing = 0.5, heightScale = 2): ForgeLandscapeData {
-  const count = verticesX * verticesZ;
-  const heights = Array.from({ length: count }, (_, index) => {
-    const x = index % verticesX;
-    const z = Math.floor(index / verticesX);
-    return Math.sin(x / 7) * 3 + Math.cos(z / 5) * 2 + x * 0.01;
-  });
-  const layers = Array.from({ length: 6 }, (_, layer) => ({
-    id: `layer${layer}`,
-    name: `Layer ${layer}`,
-    weights: Array.from({ length: count }, (_, index) => ((index + layer) % 6) / 5),
-  }));
-  return {
-    schema: 1,
-    type: "landscape",
-    size: { verticesX, verticesZ, spacing, heightScale },
-    chunks: { quadsPerChunk: 32 },
-    heights,
-    layers,
+/** A one-tile World Terrain with six paint layers and relief, its origin at (0, 0, 0). */
+function reliefTerrain(size = 65, spacing = 0.5, heightScale = 2): { def: WorldTerrainDef; tile: TerrainTileData; source: TerrainRenderSource } {
+  const def: WorldTerrainDef = {
+    schema: 1, type: "worldTerrain", name: "Relief", tileQuads: size - 1, spacing, tilesX: 1, tilesZ: 1,
+    origin: [0, 0, 0], heightMin: -64, heightMax: 64,
+    layers: Array.from({ length: 6 }, (_, layer) => ({ id: `layer${layer}`, name: `Layer ${layer}`, color: "#808080" })),
+    tiles: [{ key: "0_0", minHeight: -64, maxHeight: 64 }], collision: true,
   };
+  const tile = createFlatTerrainTile(def, 0, 0);
+  for (let index = 0; index < size * size; index += 1) {
+    const x = index % size;
+    const z = Math.floor(index / size);
+    tile.heights[index] = (Math.sin(x / 7) * 3 + Math.cos(z / 5) * 2 + x * 0.01) * heightScale;
+  }
+  return { def, tile, source: worldTerrainRenderSource(def, new Map([["0_0", tile]])) };
 }
 
 function worldDef(tilesX: number, tilesZ: number, layers = 2): WorldTerrainDef {
@@ -74,15 +69,15 @@ function worldDef(tilesX: number, tilesZ: number, layers = 2): WorldTerrainDef {
 
 /**
  * The pre-Faz-2 chunk renderer's surface, rebuilt as one mesh: vertices
- * centred on the actor, heightScale applied, cells split a,c,b / b,c,d.
+ * centred on the actor, cells split a,c,b / b,c,d.
  */
-function legacyChunkMesh(data: ForgeLandscapeData, rotation: [number, number, number]): Mesh {
-  const { verticesX, verticesZ, spacing, heightScale } = data.size;
+function legacyChunkMesh({ def, tile }: ReturnType<typeof reliefTerrain>, rotation: [number, number, number]): Mesh {
+  const verticesX = tile.size, verticesZ = tile.size, spacing = def.spacing;
   const positions = new Float32Array(verticesX * verticesZ * 3);
   for (let z = 0; z < verticesZ; z += 1) {
     for (let x = 0; x < verticesX; x += 1) {
       const index = z * verticesX + x;
-      positions.set([x * spacing - ((verticesX - 1) * spacing) / 2, data.heights[index]! * heightScale, z * spacing - ((verticesZ - 1) * spacing) / 2], index * 3);
+      positions.set([x * spacing - ((verticesX - 1) * spacing) / 2, tile.heights[index]!, z * spacing - ((verticesZ - 1) * spacing) / 2], index * 3);
     }
   }
   const indices: number[] = [];
@@ -102,15 +97,14 @@ function legacyChunkMesh(data: ForgeLandscapeData, rotation: [number, number, nu
   return mesh;
 }
 
-function makeTerrain(data: ForgeLandscapeData): TerrainRenderer {
-  const source = landscapeRenderSource(data);
+function makeTerrain({ source }: ReturnType<typeof reliefTerrain>): TerrainRenderer {
   return new TerrainRenderer(source, {
     origin: new Vector3(-source.extent[0] / 2, 0, -source.extent[1] / 2),
     viewMode: "lit", activeLayer: 0, layers: [{ color: "#5d7f3a", texture: null, scale: 1 }],
   });
 }
 
-function placedTerrain(data: ForgeLandscapeData, rotation: [number, number, number]): { group: Group; terrain: TerrainRenderer } {
+function placedTerrain(data: ReturnType<typeof reliefTerrain>, rotation: [number, number, number]): { group: Group; terrain: TerrainRenderer } {
   const terrain = makeTerrain(data);
   const group = new Group();
   group.add(terrain.mesh);
@@ -126,54 +120,6 @@ function uniformsOf(terrain: TerrainRenderer): TerrainUniforms {
 
 /** Cloud renderer cases ported to the streaming/deformation renderer retained at integration. */
 export function registerTerrainRenderTests(check: Check): void {
-  check("terrain render source: legacy footprint, scaled vertices and padded edges survive integration", () => {
-    const data = legacyData();
-    const source = landscapeRenderSource(data);
-    const tile = source.tile(0, 0)!;
-    assert.equal(source.tileQuads, 128);
-    assert.deepEqual(source.extent, [32, 48]);
-    assert.equal(tile.size, 129);
-    for (const [x, z] of [[0, 0], [64, 0], [0, 96], [64, 96], [31, 47], [7, 90]] as const) {
-      const height = terrainHeightAt(terrainSourceQueryDef(source), source, x * 0.5, z * 0.5)!;
-      assert.ok(Math.abs(height - data.heights[z * 65 + x]! * 2) < 1e-5);
-    }
-    assert.equal(tile.heights[50 * 129 + 100], tile.heights[50 * 129 + 64]);
-    assert.equal(tile.heights[120 * 129 + 10], tile.heights[96 * 129 + 10]);
-    assert.equal(tile.heights[128 * 129 + 128], tile.heights[96 * 129 + 64]);
-  });
-
-  check("terrain render source: six painted layers quantize and ninth layers stay outside the GPU format", () => {
-    const data = legacyData();
-    const tile = landscapeRenderSource(data).tile(0, 0)!;
-    assert.equal(tile.weights.length, 2 * 129 * 129 * 4);
-    for (const [x, z] of [[0, 0], [13, 22], [64, 96]] as const) {
-      for (let layer = 0; layer < 6; layer += 1) {
-        assert.equal(terrainTileLayerWeight(tile, layer, z * 129 + x), Math.round(data.layers[layer]!.weights[z * 65 + x]! * 255) / 255);
-      }
-    }
-    data.layers.push(...[6, 7, 8].map((index) => ({ id: `layer${index}`, name: `L${index}`, weights: new Array(65 * 97).fill(0.5) })));
-    assert.equal(landscapeRenderSource(data).tile(0, 0)!.layerCount, 8);
-  });
-
-  check("terrain render source: an edited corner refreshes padding and conservative height bounds", () => {
-    const data = legacyData();
-    const source = landscapeRenderSource(data);
-    const bounds = new TerrainWorldHeightBounds(source);
-    data.heights[20 * 65 + 11] = 40;
-    const interior = { x0: 10, x1: 12, z0: 20, z1: 21 };
-    assert.deepEqual(source.refresh(interior), interior);
-    bounds.updateTile("0_0", interior);
-    data.heights[96 * 65 + 64] = -9;
-    data.layers[0]!.weights[96 * 65 + 64] = 1;
-    const rect = source.refresh({ x0: 60, x1: 64, z0: 94, z1: 96 });
-    assert.deepEqual(rect, { x0: 60, x1: 128, z0: 94, z1: 128 });
-    const tile = source.tile(0, 0)!;
-    assert.equal(tile.heights[128 * 129 + 128], -18);
-    assert.equal(terrainTileLayerWeight(tile, 0, 128 * 129 + 128), 1);
-    bounds.updateTile("0_0", rect);
-    assert.equal(bounds.range().max, 80);
-  });
-
   check("terrain render source: a sparse World Terrain retains world queries, holes and invalidated bounds", () => {
     const def = worldDef(3, 2, 6);
     const tiles = new Map([["0_0", createFlatTerrainTile(def, 0, 0, 4)], ["2_1", createFlatTerrainTile(def, 2, 1, -3)]]);
@@ -191,8 +137,14 @@ export function registerTerrainRenderTests(check: Check): void {
     assert.deepEqual(bounds.node(0, 0, 0), { min: 4, max: 30 });
   });
 
-  check("terrain LOD: clipped legacy extent still tiles the footprint with track-detail refinement", () => {
-    const source = landscapeRenderSource(legacyData(65, 97, 1, 1));
+  check("terrain LOD: a 2×3 tile extent tiles the footprint with track-detail refinement and frustum culling", () => {
+    const def: WorldTerrainDef = { ...worldDef(2, 3), tileQuads: 32, spacing: 1, origin: [0, 0, 0] };
+    const tiles = new Map<string, TerrainTileData>();
+    for (let z = 0; z < 3; z += 1) for (let x = 0; x < 2; x += 1) {
+      tiles.set(tileKey(x, z), createFlatTerrainTile(def, x, z));
+      def.tiles.push({ key: tileKey(x, z), minHeight: 0, maxHeight: 0 });
+    }
+    const source = worldTerrainRenderSource(def, tiles);
     const bounds = new TerrainWorldHeightBounds(source);
     const selector = new TerrainLodSelector(terrainSourceQueryDef(source), (l, x, z) => bounds.node(l, x, z), { extent: source.extent });
     assert.deepEqual([selector.extentX, selector.extentZ], [64, 96]);
@@ -271,7 +223,7 @@ export function registerTerrainRenderTests(check: Check): void {
     pool.dispose();
   });
   check("terrain renderer: raycasts hit the same points as the legacy chunk mesh under a rotated actor", () => {
-    const data = legacyData(65, 97, 0.5, 2);
+    const data = reliefTerrain(65, 0.5, 2);
     const rotation: [number, number, number] = [0, 37, 0];
     const { group, terrain } = placedTerrain(data, rotation);
     const legacy = legacyChunkMesh(data, rotation);
@@ -299,7 +251,7 @@ export function registerTerrainRenderTests(check: Check): void {
   });
 
   check("terrain renderer: padded margins and raycaster far do not produce false picks", () => {
-    const { group, terrain } = placedTerrain(legacyData(65, 97, 1, 1), [0, 0, 0]);
+    const { group, terrain } = placedTerrain(reliefTerrain(65, 1, 1), [0, 0, 0]);
     const ray = new Raycaster(new Vector3(43, 50, -2), new Vector3(0, -1, 0));
     assert.equal(ray.intersectObject(group, true).length, 0);
     ray.set(new Vector3(3, 50, -2), new Vector3(0, -1, 0));
@@ -310,11 +262,10 @@ export function registerTerrainRenderTests(check: Check): void {
   });
 
   check("terrain renderer: cloud edit cases retain sculpt bounds, shader views and displaced pass materials", () => {
-    const data = legacyData(65, 65, 1, 1);
-    const source = landscapeRenderSource(data);
+    const { tile, source } = reliefTerrain(65, 1, 1);
     const terrain = new TerrainRenderer(source, { origin: new Vector3(-32, 0, -32), viewMode: "lit", activeLayer: 0, layers: [] });
-    data.heights[10 * 65 + 10] = 99;
-    terrain.updateTile("0_0", source.refresh({ x0: 10, x1: 10, z0: 10, z1: 10 }));
+    tile.heights[10 * 65 + 10] = 99;
+    terrain.updateTile("0_0", { x0: 10, x1: 10, z0: 10, z1: 10 });
     assert.equal(terrain.mesh.geometry.boundingBox!.max.y, 99);
     const uniforms = uniformsOf(terrain);
     assert.equal((uniforms.uTerrainHeightRange!.value as Vector2).y, 99);
@@ -337,7 +288,7 @@ export function registerTerrainRenderTests(check: Check): void {
   check("terrain renderer: the paint layers share one array sampler, as the cascade budget counts", () => {
     // Normals ×2, weights ×2, track field, shared water array and connected Lake faces.
     assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 7);
-    const data = legacyData(65, 65, 1, 1);
+    const { source } = reliefTerrain(65, 1, 1);
     const compile = (material: MeshBasicMaterial, renderer: WebGLRenderer) => {
       const shader = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
       material.onBeforeCompile(shader, renderer);
@@ -350,7 +301,7 @@ export function registerTerrainRenderTests(check: Check): void {
           color: `#${(index + 1).toString(16).repeat(6)}`,
           scale: 1,
         }));
-        const terrain = new TerrainRenderer(landscapeRenderSource(data), { origin: new Vector3(), viewMode: "lit", activeLayer: 0, layers });
+        const terrain = new TerrainRenderer(source, { origin: new Vector3(), viewMode: "lit", activeLayer: 0, layers });
         const material = (terrain as unknown as { materials: { material: MeshBasicMaterial } }).materials.material;
         const shader = compile(material, {} as WebGLRenderer);
         // 16 units (three's default when the renderer is unknown) keep the water path at any layer count.
@@ -375,7 +326,7 @@ export function registerTerrainRenderTests(check: Check): void {
 
   check("terrain caustics: micro-normal array and cascaded shadow patches compose and release together", () => {
     const texture = rgbaTexture(2, 2, [128, 180, 240, 255]);
-    const terrain = new TerrainRenderer(landscapeRenderSource(legacyData(65, 65)), {
+    const terrain = new TerrainRenderer(reliefTerrain(65).source, {
       origin: new Vector3(), viewMode: "lit", activeLayer: 0, layers: [{ texture: null, normalTexture: texture, color: "#aaaaaa", scale: 1 }],
     });
     const materials = (terrain as any).materials;
@@ -397,10 +348,12 @@ export function registerTerrainRenderTests(check: Check): void {
   });
 
   check("landscape binding: cloud sculpt and tint cases retain the actor and dispose spline geometry", () => {
-    const data = legacyData(65, 65, 1, 1);
-    data.layers = data.layers.slice(0, 4).map((layer, index) => ({ ...layer, id: ["grass", "dirt", "rock", "snow"][index]! }));
-    const actor = { id: "land", name: "Hills", position: [10, 2, 0], rotation: [0, 90, 0], dataRef: "x.landscape.json" } as unknown as LayoutLandscape;
-    const group = createLandscapeObject({ ...resolveLandscape(actor), position: [10, 2, 0], rotation: [0, 90, 0], data, viewMode: "lit", activeLayerId: "rock", layerColors: { dirt: "#123456" } });
+    const { def, tile } = reliefTerrain(65, 1, 1);
+    def.origin = [-22, 2, -32];
+    def.layers = def.layers.slice(0, 4).map((layer, index) => ({ ...layer, id: ["grass", "dirt", "rock", "snow"][index]! }));
+    const document = { def, tiles: new Map([["0_0", tile]]) };
+    const actor = { id: "land", name: "Hills", position: [10, 2, 0], dataRef: "x.terrain.json" } as unknown as LayoutLandscape;
+    const group = createWorldTerrainObject({ ...resolveLandscape(actor), document, viewMode: "lit", activeLayerId: "rock", layerColors: { dirt: "#123456" } });
     group.updateMatrixWorld(true);
     const terrain = terrainRendererOf(group.children[0]!)!;
     assert.equal(group.children.length, 1);
@@ -409,8 +362,9 @@ export function registerTerrainRenderTests(check: Check): void {
     assert.equal((uniforms.uLayerColors!.value as Color[])[1]!.getHexString(), "123456");
     const ray = new Raycaster(new Vector3(10, 50, 0), new Vector3(0, -1, 0));
     const before = ray.intersectObject(group, true)[0]!;
-    data.heights[32 * 65 + 32] = 20;
-    updateLandscapeObjectGeometry(group, data, { x0: 31, x1: 33, z0: 31, z1: 33 }, "layer", "snow");
+    tile.heights[32 * 65 + 32] = 20;
+    updateWorldTerrainObjectTiles(group, new Map([["0_0", { x0: 31, x1: 33, z0: 31, z1: 33 }]]));
+    updateWorldTerrainAppearance(group, def.layers, "layer", "snow");
     const after = ray.intersectObject(group, true)[0]!;
     assert.ok(Math.abs(after.point.y - 22) < 1e-4);
     assert.notEqual(before.point.y, after.point.y);
@@ -425,7 +379,7 @@ export function registerTerrainRenderTests(check: Check): void {
   });
 
   check("selection outline: GPU terrain patches are excluded while spline meshes keep their proxies", () => {
-    const terrain = makeTerrain(legacyData(65, 65));
+    const terrain = makeTerrain(reliefTerrain(65));
     const invisible = new MeshBasicMaterial({ colorWrite: false });
     // Exercise the real clone method without constructing a WebGL post-process pipeline.
     const outline = Object.create(EditorSelectionOutline.prototype) as EditorSelectionOutline;

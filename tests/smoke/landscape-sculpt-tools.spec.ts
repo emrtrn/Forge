@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { PerspectiveCamera } from "three";
-import type { ForgeLandscapeData } from "../../engine/scene/landscape";
 import type { TerrainTileData, WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { SMOKE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 import { expect, test, type Page } from "./test";
@@ -20,15 +19,13 @@ async function attachHarness(page: Page): Promise<void> {
     const { terrainHeightAt } = await import(heightModulePath);
     const original = SceneApp.prototype.getLandscapeSculptSettings;
     SceneApp.prototype.getLandscapeSculptSettings = function (this: {
-      landscapeData: Map<string, ForgeLandscapeData>;
       worldTerrains: Map<string, { def: WorldTerrainDef; tiles: Map<string, TerrainTileData> }>;
       editorViewportCamera(): PerspectiveCamera;
       landscapeRampPreview: { visible: boolean } | null;
     }) {
       const app = this;
       (window as unknown as { sculptTools: SculptHarness }).sculptTools = {
-        heights: () => [...app.landscapeData.values()].flatMap((data) => data.heights).concat(
-          [...app.worldTerrains.values()].flatMap((world) => [...world.tiles.values()].flatMap((tile) => Array.from(tile.heights)))),
+        heights: () => [...app.worldTerrains.values()].flatMap((world) => [...world.tiles.values()].flatMap((tile) => Array.from(tile.heights))),
         project: (x, z) => {
           const camera = app.editorViewportCamera();
           const point = camera.position.clone().set(x, 0, z).project(camera);
@@ -37,12 +34,8 @@ async function attachHarness(page: Page): Promise<void> {
         },
         previewVisible: () => app.landscapeRampPreview?.visible ?? false,
         sample: (x, z) => {
-          const world = app.worldTerrains.values().next().value;
-          if (world) return terrainHeightAt(world.def, { tile: (tx: number, tz: number) => world.tiles.get(`${tx}_${tz}`) }, x, z)!;
-          const data = app.landscapeData.values().next().value!;
-          const vx = Math.round(x / data.size.spacing + (data.size.verticesX - 1) / 2);
-          const vz = Math.round(z / data.size.spacing + (data.size.verticesZ - 1) / 2);
-          return data.heights[vz * data.size.verticesX + vx]! * data.size.heightScale;
+          const world = app.worldTerrains.values().next().value!;
+          return terrainHeightAt(world.def, { tile: (tx: number, tz: number) => world.tiles.get(`${tx}_${tz}`) }, x, z)!;
         },
       };
       return original.call(this);

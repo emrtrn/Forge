@@ -1,10 +1,7 @@
 /** World Terrain data model, tile codec, CPU queries, legacy conversion and World Partition grid math. */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { terrainTileHeightfieldShape } from "../../engine/physics/terrainCollider";
-import { createFlatLandscapeData, type ForgeLandscapeData } from "../../engine/scene/landscape";
-import { landscapeTrimesh } from "./terrainTrimeshReference";
-import type { LayoutLandscape, Vec3 } from "../../engine/scene/layout";
+import type { Vec3 } from "../../engine/scene/layout";
 import { buildTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMap";
 import {
   TerrainTileMap,
@@ -16,7 +13,6 @@ import {
   terrainSmoothNormalAt,
   type TerrainQueryDef,
 } from "../../engine/terrain/terrainHeightQuery";
-import { legacyLandscapeToWorldTerrain } from "../../engine/terrain/terrainLegacy";
 import {
   TerrainTileCodecError,
   decodeTerrainTile,
@@ -343,54 +339,6 @@ export function registerTerrainTests(check: Check): void {
     assert.equal(hit.approximate, undefined);
     close(hit.point[0], 60);
     assert.deepEqual(hit, exact);
-  });
-
-  check("terrain legacy: the runtime-parity Landscape converts to a matching 1×1 terrain", () => {
-    const data = JSON.parse(readFileSync("public/landscapes/runtime-parity.landscape.json", "utf8")) as ForgeLandscapeData;
-    const actor: LayoutLandscape = { id: "parity-landscape", position: [-32, -0.6, -32], dataRef: "landscapes/runtime-parity.landscape.json" };
-    const { def, tile, warnings } = legacyLandscapeToWorldTerrain(actor, data);
-    assert.deepEqual(warnings, []);
-    assert.equal(def.tileQuads, 64);
-    assert.deepEqual(def.origin, [-64, -0.6, -64]);
-    assert.equal(def.tiles.length, 1);
-    assert.equal(def.layers.length, data.layers.length);
-    assert.ok(def.heightMin <= def.tiles[0]!.minHeight && def.heightMax >= def.tiles[0]!.maxHeight);
-    const tiles = new TerrainTileMap();
-    tiles.set(tile);
-    // Every legacy collider vertex lies on the converted surface.
-    const primitive = landscapeTrimesh(data);
-    for (const vertex of primitive.vertices) {
-      const worldX = actor.position[0] + vertex[0];
-      const worldZ = actor.position[2] + vertex[2];
-      close(terrainHeightAt(def, tiles, worldX, worldZ), actor.position[1] + vertex[1]);
-    }
-    // And survives a u16 save/load within one quantization step.
-    const decoded = decodeTerrainTile(encodeTerrainTile(tile, def));
-    const step = (def.heightMax - def.heightMin) / 65535;
-    tile.heights.forEach((height, index) => assert.ok(Math.abs(decoded.heights[index]! - height) <= step));
-  });
-
-  check("terrain legacy: folds heightScale, quantizes weights and reports adaptations", () => {
-    const data = createFlatLandscapeData("small");
-    data.size.heightScale = 2;
-    data.heights[0] = 3;
-    data.layers[1]!.weights[0] = 0.5;
-    const actor: LayoutLandscape = { id: "l", position: [0, 1, 0], rotation: [0, 45, 0], dataRef: "x" };
-    const { def, tile, warnings } = legacyLandscapeToWorldTerrain(actor, data);
-    assert.equal(tile.heights[0], 6);
-    assert.equal(terrainTileLayerWeight(tile, 1, 0), 128 / 255);
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /rotation/);
-    assert.equal(def.collision, true);
-
-    const odd = createFlatLandscapeData("small");
-    odd.size = { verticesX: 101, verticesZ: 101, spacing: 2, heightScale: 1 };
-    odd.heights = new Array(101 * 101).fill(1);
-    odd.layers = odd.layers.map((layer) => ({ ...layer, weights: new Array(101 * 101).fill(0) }));
-    const resampled = legacyLandscapeToWorldTerrain({ id: "o", position: [0, 0, 0], dataRef: "x" }, odd);
-    assert.equal(resampled.def.tileQuads, 128);
-    close(resampled.def.tileQuads * resampled.def.spacing, 200, 1e-9);
-    assert.match(resampled.warnings[0]!, /resampled to 128/);
   });
 
   check("world grid: cell lookup owns boundaries by their min edge, negatives included", () => {

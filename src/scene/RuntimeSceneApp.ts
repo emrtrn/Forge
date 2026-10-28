@@ -3,7 +3,6 @@ import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabili
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
 import { LakeWaterController } from "./lakeWaterController";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
-import { legacyLandscapeToWorldTerrain } from "@engine/terrain/terrainLegacy";
 import {
   normalizeWorldPartitionSettings,
   streamedLightPeaks,
@@ -259,22 +258,18 @@ import {
   type ReflectionPlaneObject,
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
-import { createLandscapeHeightfieldPrimitive } from "@engine/scene/landscape";
 import {
   landscapeLitFragmentSamplers,
-  createLandscapeObject,
   createWorldTerrainObject,
   disposeLandscapeObject,
   landscapeSplineMeshAssetIds,
   LANDSCAPE_DEFAULT_LAYERS,
   resolveLandscape,
   updateLandscapeLod,
-  type ForgeLandscapeData,
   type LandscapeLayerTexture,
   type LandscapeObject,
-  type LandscapeRenderItem,
 } from "@engine/render-three/landscape";
-import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
+import { FoliageRenderBinding } from "@engine/render-three/foliage";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { validateTerrainTile } from "@engine/terrain/terrainLoader";
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
@@ -284,18 +279,14 @@ import {
   landscapeColliderActorId, worldTerrainActorPosition, worldTerrainColliderEntities, worldTerrainExtent, worldTerrainPlacementIssues,
 } from "@engine/terrain/worldTerrainActor";
 import {
-  createTerrainSurfaceProvider, landscapeSurfaceSource, TerrainSurfaceSampler, worldTerrainSurfaceSource,
+  createTerrainSurfaceProvider, TerrainSurfaceSampler, worldTerrainSurfaceSource,
 } from "@engine/terrain/terrainSurface";
 import { forEachHeightfieldTriangle } from "@engine/physics/heightfieldStatic";
-import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
-import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
-import type { LayoutFoliageData, LayoutFoliageGroup } from "@engine/scene/foliage";
+import type { LayoutFoliageData } from "@engine/scene/foliage";
 import { fetchFoliageCell, loadFoliageData, loadFoliageSidecar, loadFoliageTypesForData } from "./foliageLoader";
 import { FoliageCellStreaming } from "./foliageCellStreaming";
 import { ProceduralFoliageRing, type ProceduralFoliageRuleSource, type ProceduralFoliageTerrain } from "./proceduralFoliageRing";
 import { createFoliageCellGenerator, type FoliageCellGenerator } from "./foliageCellGenerator";
-import { landscapeTerrainView } from "@engine/scene/proceduralFoliage";
-import { TerrainTileMap } from "@engine/terrain/terrainHeightQuery";
 import { tileKey } from "@engine/terrain/terrainTypes";
 import {
   createEmptyMeshPaintData,
@@ -947,7 +938,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
   /** Landscape sidecar data by actor id, kept for the River Water pass. */
-  private readonly landscapeDataById = new Map<string, ForgeLandscapeData>();
   /** Paint-layer surface response per Landscape actor id; only terrains with a physical material layer. */
   private readonly terrainSurfaceSamplers = new Map<string, TerrainSurfaceSampler>();
   /** Live river-water ribbons, and the planar reflections they share. */
@@ -1938,7 +1928,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.landscapeObjects = [];
     this.riverWaterBuild += 1;
     this.lakes?.dispose();
-    this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
@@ -3463,7 +3452,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.landscapeObjects = [];
     this.riverWaterBuild += 1;
     this.lakes?.dispose();
-    this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
@@ -5763,25 +5751,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return result;
   }
 
-  /** Resolved settings + world transform + sidecar data for a landscape layout actor. */
-  private landscapeItem(
-    actor: LayoutLandscape,
-    data: ForgeLandscapeData,
-    layerTextures?: LandscapeLayerTexture[],
-  ): LandscapeRenderItem {
-    const item: LandscapeRenderItem = {
-      ...resolveLandscape(actor),
-      position: [...actor.position],
-      rotation: readRotation(actor),
-      data,
-    };
-    if (layerTextures) {
-      item.layerTextures = layerTextures;
-      item.layerColors = Object.fromEntries(layerTextures.map((layer) => [layer.id, layer.color]));
-    }
-    return item;
-  }
-
   /**
    * Resolves the per-layer splat inputs (base color + tiling texture) for a
    * landscape's material-assigned paint layers, aligned to `data.layers` order
@@ -5837,35 +5806,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return resolvePhysicalMaterial(this.physicsSubsystem.colliderPhysicalMaterialId(wheel.groundEntityId));
   }
 
-  private landscapeColliderEntity(actor: LayoutLandscape, data: ForgeLandscapeData): Entity | null {
-    const item = this.landscapeItem(actor, data);
-    if (!item.collision) return null;
-    const primitive = createLandscapeHeightfieldPrimitive(data);
-    const collider: ColliderComponent = {
-      shape: "box",
-      size: [...primitive.size] as [number, number, number],
-      isStatic: true,
-      isSensor: false,
-      navigationRole: "walkable",
-      primitives: [primitive],
-    };
-    if (primitive.center && !isZeroVec3(primitive.center)) {
-      collider.center = [...primitive.center] as [number, number, number];
-    }
-    return {
-      id: `landscape:${actor.id}`,
-      name: `${item.name} Collider`,
-      components: {
-        [TRANSFORM_COMPONENT]: {
-          position: [...actor.position] as [number, number, number],
-          rotation: [...item.rotation] as [number, number, number],
-          scale: [1, 1, 1],
-        },
-        [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
-      },
-    };
-  }
-
   /** Shared legacy/World Terrain document loader; renderer adapter lives outside SceneApp. */
   private fetchLandscapeDocument(actor: LayoutLandscape): Promise<TerrainActorDocument> {
     return fetchTerrainActorDocument(actor.dataRef, this.runtimeServices.resolve(worldStreamingService) !== undefined, actor);
@@ -5882,30 +5822,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const landscapes = this.layout?.landscapes ?? [];
     this.riverWaterBuild += 1;
     this.lakes?.dispose();
-    this.landscapeDataById.clear();
     this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
       const loaded = await this.fetchLandscapeDocument(actor);
-      if (loaded.kind === "world") {
-        await this.buildRuntimeWorldTerrain(actor, loaded.document);
-        continue;
-      }
-      const data = loaded.data;
-      // River Water resolves its shape from a Landscape spline, so the data has
-      // to outlive this pass rather than being re-fetched per water body.
-      this.landscapeDataById.set(actor.id, data);
-      const surface = landscapeSurfaceSource(data, actor.position, readRotation(actor));
-      if (surface) this.terrainSurfaceSamplers.set(actor.id, new TerrainSurfaceSampler(surface));
-      const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data.layers, (data.size.verticesX - 1) * data.size.spacing);
-      const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
-      this.landscapeObjects.push(object);
-      this.scene.add(tagSceneSource(object, "landscape"));
-      const colliderEntity = this.landscapeColliderEntity(actor, data);
-      if (colliderEntity) {
-        this.landscapeColliderEntities.push(colliderEntity);
-        this.landscapeColliderObjects.set(colliderEntity.id, object);
-        this.addColliderDebugWire(colliderEntity);
-      }
+      await this.buildRuntimeWorldTerrain(actor, loaded.document);
     }
     await this.buildRuntimeLandscapeSplineMeshes();
   }
@@ -5971,13 +5891,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * reflection group also share one planar-reflection render.
    */
   private async buildRuntimeLakes(): Promise<void> {
-    const terrain = (id: string): WorldTerrainDocument | undefined => {
-      const document = this.worldTerrainDocuments.get(id); if (document) return document;
-      const actor = this.layout?.landscapes?.find((a) => a.id === id), data = this.landscapeDataById.get(id);
-      if (!actor || !data || !actor.dataRef.endsWith(".terrain.json")) return undefined;
-      const converted = legacyLandscapeToWorldTerrain(actor, data);
-      return converted.warnings.length ? undefined : { def: converted.def, tiles: new Map([["0_0", converted.tile]]) };
-    };
+    const terrain = (id: string): WorldTerrainDocument | undefined => this.worldTerrainDocuments.get(id);
     this.lakes ??= new LakeWaterController({ scene: this.scene, editor: false, document: terrain, reflections: this.waterReflections,
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find((a) => a.id === id), document = terrain(id);
@@ -6009,22 +5923,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const resolved = resolveRiverWater(actor);
         const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
         const document = landscape ? this.worldTerrainDocuments.get(landscape.id) : undefined;
-        const data = landscape ? this.landscapeDataById.get(landscape.id) : undefined;
-        const spline = (document?.def ?? data)?.splines?.find((candidate) => candidate.id === resolved.splineRef);
-        if (!landscape || !spline || (!document && !data)) {
+        const spline = document?.def.splines?.find((candidate) => candidate.id === resolved.splineRef);
+        if (!landscape || !document || !spline) {
           console.warn(
             `[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`,
           );
           continue;
         }
-        const source = document ? await prepareTerrainRiverWaterSource(document, resolved, async (key) => {
+        const source = await prepareTerrainRiverWaterSource(document, resolved, async (key) => {
           const path = terrainTilePath(landscape.dataRef, key);
           const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
           if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
           return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
-        }) : { spline, landscapeData: data!, surfaceLevel: resolved.surfaceLevel,
-          foamStamps: resolved.foamStamps, position: [...landscape.position] as Vec3,
-          rotation: landscape.rotation ? [...landscape.rotation] as Vec3 : [0, 0, 0] as Vec3 };
+        });
         const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
         const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
@@ -6098,38 +6009,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     const binding = new FoliageRenderBinding();
     this.scene.add(tagSceneSource(binding.root, "foliage"));
-    const generated: LayoutFoliageGroup[] = [];
     const ringRules: ProceduralFoliageRuleSource[] = [];
     for (const rule of data.landscapeRules ?? []) {
       const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
       const type = types.get(rule.foliageTypeId);
       if (!actor || !type) continue;
       const terrain = this.proceduralFoliageTerrain(actor);
-      if (terrain) {
-        ringRules.push({ rule, type, terrain });
-        continue;
-      }
-      // A rotated or non-square legacy Landscape keeps the one-shot whole-surface generation.
-      const landscape = this.landscapeDataById.get(actor.id);
-      if (!landscape) continue;
-      const instances = generateLandscapeFoliageSamples(rule, {
-        id: actor.id,
-        position: [...actor.position],
-        rotation: readRotation(actor),
-        data: landscape,
-      }).map((sample) =>
-        foliageInstanceFromRoll(type, rollFoliageInstance(type, sample, makeFoliageRng(sample.seed))),
-      );
-      if (instances.length > 0) {
-        generated.push({
-          id: `generated-${rule.id}`,
-          foliageTypeId: rule.foliageTypeId,
-          target: { kind: "landscape", id: rule.landscapeId },
-          instances,
-        });
-      }
+      if (terrain) ringRules.push({ rule, type, terrain });
     }
-    const renderData: LayoutFoliageData = { schema: 1, type: "foliage", groups: [...data.groups, ...generated] };
+    const renderData: LayoutFoliageData = { schema: 1, type: "foliage", groups: [...data.groups] };
     const resolver = {
       getType: (id: string) => types.get(id) ?? null,
       getModel: (assetId: string) => this.models.get(assetId) ?? null,
@@ -6160,11 +6048,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
   }
 
-  /**
-   * The terrain a Landscape foliage rule grows on: the World Terrain document the
-   * renderer draws (its live tiles), or a 1×1 Landscape as one tile; null for a
-   * Landscape the ring cannot express exactly (rotated, non-square).
-   */
+  /** The terrain a Landscape foliage rule grows on: the World Terrain document the renderer draws (its live tiles). */
   private proceduralFoliageTerrain(actor: LayoutLandscape): ProceduralFoliageTerrain | null {
     const document = this.worldTerrainDocuments.get(actor.id);
     if (document) {
@@ -6177,12 +6061,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         existingTiles: new Set(def.tiles.map((tile) => tile.key)),
       };
     }
-    const data = this.landscapeDataById.get(actor.id);
-    const view = data ? landscapeTerrainView({ id: actor.id, position: [...actor.position], rotation: readRotation(actor), data }) : null;
-    if (!view) return null;
-    const tiles = new TerrainTileMap();
-    tiles.set(view.tile);
-    return { id: actor.id, def: { ...view.def, layers: view.def.layers.map((layer) => ({ id: layer.id })) }, tiles, existingTiles: null };
+    return null;
   }
 
   /** Loads spline mesh assets (Faz 6) and parents their instanced groups under each landscape. */
@@ -6194,7 +6073,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const response = await fetch(projectFileUrl(path));
         if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
         return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
-      }) : this.landscapeDataById.get(actor.id);
+      }) : undefined;
       return { actor, object: this.landscapeObjects[index], data };
     }));
     const splineAssetIds = new Set<string>();
@@ -6636,10 +6515,6 @@ function disposeSceneMeshResources(root: Object3D): void {
       material?.dispose();
     }
   });
-}
-
-function isZeroVec3(vec: readonly [number, number, number]): boolean {
-  return Math.abs(vec[0]) <= 1e-9 && Math.abs(vec[1]) <= 1e-9 && Math.abs(vec[2]) <= 1e-9;
 }
 
 function colliderTrimeshWireGeometry(primitives: readonly ColliderPrimitive[] | undefined): BufferGeometry {

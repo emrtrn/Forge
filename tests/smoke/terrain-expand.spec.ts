@@ -1,7 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { createFlatLandscapeData } from "../../engine/scene/landscape";
-import { legacyLandscapeToWorldTerrain } from "../../engine/terrain/terrainLegacy";
+import { createFlatWorldTerrain } from "../../engine/terrain/worldTerrainCreate";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { encodeTerrainTile, decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
@@ -16,11 +15,17 @@ async function fixture(rotation = 0) {
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
   const actor = { id: "expand-source", name: NAME, position: [12, 3, -9] as [number, number, number],
     rotation: [0, rotation, 0], dataRef: levelTerrainPath(LEVEL, "expand-source") };
-  const data = createFlatLandscapeData("small");
-  data.heights = data.heights.map((_, i) => Math.sin(i * 0.05) / 3);
-  data.layers[0]!.weights.fill(0.1234);
-  data.layers[1]!.weights.fill(0.8766);
-  const { def, tile } = legacyLandscapeToWorldTerrain({ ...actor, rotation: [0, 0, 0] }, data);
+  // One 64-quad tile centred on the actor, with Float32 relief and two partly weighted layers.
+  const { def, tiles } = createFlatWorldTerrain({ name: NAME, tilesX: 1, tilesZ: 1, tileQuads: 64, spacing: 1, baseHeight: actor.position[1] });
+  def.origin = [actor.position[0] - 32, actor.position[1], actor.position[2] - 32];
+  const tile = tiles.get("0_0")!;
+  tile.heights.forEach((_, i) => { tile.heights[i] = Math.sin(i * 0.05) / 3; });
+  for (let i = 0; i < tile.size * tile.size; i += 1) {
+    tile.weights[i * 4] = 31;
+    tile.weights[i * 4 + 1] = 224;
+  }
+  const range = tile.heights.reduce((r, h) => ({ min: Math.min(r.min, h), max: Math.max(r.max, h) }), { min: Infinity, max: -Infinity });
+  def.tiles = [{ key: "0_0", minHeight: range.min, maxHeight: range.max }];
   level.name = NAME;
   level.landscapes = [actor];
   level.riverWaters = [];
@@ -33,7 +38,7 @@ async function fixture(rotation = 0) {
   await writeFile(smokePublicPath(terrainGlobalMapPath(actor.dataRef)), encodeTerrainGlobalMap(def,
     buildTerrainGlobalAttributes(worldTerrainRenderSource(def, new Map([["0_0", tile]])))));
   await writeFile(smokePublicPath(LEVEL), JSON.stringify(level));
-  return { actor, tile, data };
+  return { actor, tile };
 }
 
 async function openDialog(page: Page) {
@@ -103,11 +108,10 @@ test("Landscape expansion validates the dialog, keeps the 1x1 Float32/RGBA8 samp
   expect(errors).toEqual([]);
 });
 
-test("rotated single-tile Landscape is an explicit migration error, never silently unrotated", async ({ page, request }) => {
+test("a rotated single-tile Landscape is an explicit load error, never silently unrotated", async ({ page, request }) => {
   await fixture(15);
   expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
   await page.goto("/?editor&terrainExpandRotated");
   await expect(page.locator("[data-project-name]")).toHaveText("level failed to load", { timeout: 60_000 });
-  await expect(page.locator("[data-status-toast]")).toContainText("terrain:migrate");
   await expect(page.locator("[data-status-toast]")).toContainText("rotated");
 });

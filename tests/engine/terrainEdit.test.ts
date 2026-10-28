@@ -1,17 +1,7 @@
 import assert from "node:assert/strict";
-import { createFlatLandscapeData, ensureLandscapeLayers } from "../../engine/scene/landscape";
-import {
-  landscapeEditIssues,
-  landscapeEditWorld,
-  landscapeGridPatchValues,
-  landscapeLayersWithoutLayer,
-  terrainDocumentToLandscape,
-  writeTerrainPatchToLandscape,
-} from "../../engine/terrain/terrainLandscapeBridge";
 import { applyTerrainLayerState, createTerrainLayerAddition, createTerrainLayerRemoval } from "../../engine/terrain/terrainLayers";
 import {
   editLandscapeBrushWeights,
-  landscapeBrushFalloff,
   normalizeLandscapeBrushWeights,
   type LandscapeHeightBrushMode,
 } from "../../engine/scene/landscapeBrush";
@@ -235,47 +225,6 @@ export function registerTerrainEditTests(check: Check): void {
     const partial = fixture(2, 1, 32, 4);
     partial.tiles.delete("1_0");
     assert.throws(() => createTerrainLayerRemoval(partial, "layer1"), /Load all/);
-  });
-  check("terrain paint layers: a 1x1 Landscape grid removes a layer through the tile removal; the save writes its bytes", () => {
-    const data = createFlatLandscapeData("small");
-    data.layers[1]!.material = "mat-desert-sand";
-    data.layers[3]!.physicalMaterial = "snow";
-    const count = data.heights.length;
-    for (let i = 0; i < count; i++) {
-      // RGBA8-exact weights summing to 255, as painting leaves a 1x1 grid.
-      const raw = [i % 5, (i * 3) % 7, (i * 11) % 4, i % 2];
-      const total = raw.reduce((sum, value) => sum + value, 0) || 1;
-      const bytes = raw.map((value) => Math.floor(value * 255 / total));
-      bytes[0]! += 255 - bytes.reduce((sum, value) => sum + value, 0);
-      data.layers.forEach((layer, index) => { layer.weights[i] = bytes[index]! / 255; });
-    }
-    ensureLandscapeLayers(data);
-    const world = landscapeEditWorld(data);
-    const expected = createTerrainLayerRemoval(world, "rock").after.weights.get("0_0")!;
-    const layers = landscapeLayersWithoutLayer(data, "rock");
-    assert.deepEqual(layers.map((layer) => layer.id), ["grass", "dirt", "snow"]);
-    assert.equal(layers[1]!.material, "mat-desert-sand");
-    assert.equal(layers[2]!.physicalMaterial, "snow");
-    assert.equal(data.layers.length, 4, "the grid itself is unchanged until the command applies");
-    const after = { ...data, layers };
-    ensureLandscapeLayers(after);
-    assert.deepEqual(after.layers.map((layer) => layer.id), ["grass", "dirt", "snow"], "a removed preset is not backfilled");
-    assert.deepEqual(landscapeEditWorld(after).tiles.get("0_0")!.weights, expected);
-    assert.throws(() => landscapeLayersWithoutLayer({ ...data, layers: [data.layers[0]!] }, "grass"), /at least one/);
-  });
-  check("terrain paint layers: a fifth layer survives the one-tile adapter and legacy normalization", () => {
-    const world = fixture(1, 1, 32, 4);
-    // The one-tile editing adapter backfills the four legacy preset ids.
-    world.def.layers.forEach((layer, i) => { layer.id = ["grass", "dirt", "rock", "snow"][i]!; });
-    const addition = createTerrainLayerAddition(world, { id: "wet-mud", name: "Wet Mud", color: "#493226", material: "lt-wet-mud", physicalMaterial: "mud" });
-    applyTerrainLayerState(world, addition.after);
-    const data = terrainDocumentToLandscape({ def: world.def, tiles: world.tiles });
-    data.layers.forEach((layer, i) => { layer.weights[0] = i === 4 ? 1 : 0; });
-    ensureLandscapeLayers(data);
-    assert.equal(data.layers.length, 5);
-    assert.equal(data.layers[4]!.material, "lt-wet-mud");
-    assert.equal(data.layers[4]!.physicalMaterial, "mud");
-    assert.equal(data.layers[4]!.weights[0], 1);
   });
   check("terrain paint layers: fifth channel preserves all tiles, relief and old weights; undo and binary round-trip", () => {
     const world = fixture(2, 2, 32, 4);
@@ -609,51 +558,6 @@ export function registerTerrainEditTests(check: Check): void {
     assert.deepEqual(run(createTerrainPaintAccumulator()), run());
   });
 
-  check("terrain 1x1 Landscape edit: only power-of-two square grids with at most eight layers use the tile editor", () => {
-    const data = createFlatLandscapeData("small");
-    assert.deepEqual(landscapeEditIssues(data), []);
-    assert.match(landscapeEditIssues({ ...data, size: { ...data.size, verticesZ: 129 } }).join(), /non-square/);
-    assert.match(landscapeEditIssues({ ...data, size: { ...data.size, verticesX: 101, verticesZ: 101 } }).join(), /power-of-two/);
-    assert.match(landscapeEditIssues({ ...data, size: { ...data.size, heightScale: 0 } }).join(), /height scale/);
-    const layers = Array.from({ length: 9 }, (_, i) => ({ id: `l${i}`, name: `L${i}`, weights: [] as number[] }));
-    assert.match(landscapeEditIssues({ ...data, layers }).join(), /9 paint layers/);
-    assert.throws(() => landscapeEditWorld({ ...data, size: { ...data.size, verticesZ: 129 } }), /not editable/);
-  });
-
-  check("terrain 1x1 Landscape edit: dabs land in actor-local metres and write back only their rectangle", () => {
-    for (const heightScale of [1, 2.5]) {
-      const data = createFlatLandscapeData("small");
-      data.size.heightScale = heightScale;
-      data.heights = data.heights.map((_, i) => Math.fround((i % 7) * 0.25 / heightScale));
-      const original = structuredClone(data);
-      const world = landscapeEditWorld(data);
-      // Grid centred on the actor: vertex (32, 32) is local (0, 0).
-      assert.deepEqual(world.def.origin, [-32, 0, -32]);
-      const dab = { mode: "raise" as const, x: 3.2, z: -5.7, radius: 4.5, strength: 0.6, falloff: 1.5, hitHeight: 0 };
-      const result = applyTerrainBrush(world, dab);
-      for (const patch of result.patches) writeTerrainPatchToLandscape(data, patch.rect, patch.after);
-      const rect = result.dirty.get("0_0")!;
-      for (let z = 0; z < 65; z += 1) {
-        for (let x = 0; x < 65; x += 1) {
-          const i = z * 65 + x;
-          const inside = x >= rect.x0 && x <= rect.x1 && z >= rect.z0 && z <= rect.z1;
-          const amount = dab.strength * landscapeBrushFalloff(Math.hypot(x - 32 - dab.x, z - 32 - dab.z), dab.radius, dab.falloff);
-          if (!inside) assert.equal(data.heights[i], original.heights[i]);
-          else assert.ok(Math.abs(data.heights[i]! * heightScale - (original.heights[i]! * heightScale + amount)) < 2e-4, `vertex ${x},${z}`);
-        }
-      }
-      const painted = applyTerrainBrush(world, { ...dab, mode: "paint", layer: 2, strength: 1 });
-      for (const patch of painted.patches) writeTerrainPatchToLandscape(data, patch.rect, patch.after);
-      const centre = 26 * 65 + 35;
-      assert.ok(data.layers[2]!.weights[centre]! > 0.5);
-      assert.ok(Math.abs(data.layers.reduce((sum, layer) => sum + layer.weights[centre]!, 0) - 1) < 1e-9);
-      // Undo: before sides in reverse order restore the grid exactly.
-      for (const patch of [...result.patches, ...painted.patches].reverse()) writeTerrainPatchToLandscape(data, patch.rect, patch.before);
-      assert.deepEqual(data.layers.map((layer) => layer.weights), original.layers.map((layer) => layer.weights));
-      data.heights.forEach((height, i) => assert.ok(Math.abs(height - original.heights[i]!) < 1e-6));
-    }
-  });
-
   check("terrain edit Fill Layer patches cover every tile, keep heights and undo exactly", () => {
     const world = fixture(2, 2, 32, 5);
     applyTerrainBrush(world, { ...brush(world), mode: "paint", layer: 2 });
@@ -675,23 +579,6 @@ export function registerTerrainEditTests(check: Check): void {
     assert.throws(() => createTerrainLayerFillPatches(world, 5), /Invalid terrain fill layer/);
     world.tiles.delete("1_1");
     assert.throws(() => createTerrainLayerFillPatches(world, 0), /not resident/);
-  });
-
-  check("terrain 1x1 Landscape grid rectangles round-trip through tile patch values", () => {
-    const data = createFlatLandscapeData("small");
-    data.size.heightScale = 2;
-    data.heights = data.heights.map((_, i) => Math.fround(i % 11) / 2);
-    data.layers[1]!.weights[70] = 0.4;
-    data.layers[0]!.weights[70] = 0.6;
-    const rect = { x0: 3, x1: 9, z0: 0, z1: 2 };
-    const values = landscapeGridPatchValues(data, rect);
-    assert.equal(values.heights[(1 - 0) * 7 + 5 - 3], (70 % 11));
-    const copy = structuredClone(data);
-    writeTerrainPatchToLandscape(copy, rect, values);
-    assert.deepEqual(copy.heights, data.heights);
-    assert.equal(copy.layers[1]!.weights[70], 102 / 255);
-    assert.equal(copy.layers[0]!.weights[70], 153 / 255);
-    assert.deepEqual(landscapeGridPatchValues(copy, rect), values);
   });
 
   check("terrain edit dirty rectangles bound every changed vertex tightly and merge", () => {

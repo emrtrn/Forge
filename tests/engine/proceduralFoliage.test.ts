@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { Matrix4, Quaternion, Vector3 } from "three";
 import { normalizeFoliageType, type LandscapeFoliageRule } from "../../engine/scene/foliage";
 import { makeFoliageRng } from "../../engine/scene/foliagePaint";
-import type { LandscapeFoliageGenerationInput } from "../../engine/scene/landscapeFoliage";
 import {
-  foliageCellSeed, generateFoliageCell, landscapeFoliageSurface, MAX_FOLIAGE_CELL_INSTANCES,
+  foliageCellSeed, generateFoliageCell, MAX_FOLIAGE_CELL_INSTANCES,
   worldTerrainFoliageSurface, type FoliageCellRequest, type FoliageSurface, type GeneratedFoliageCell,
 } from "../../engine/scene/proceduralFoliage";
 import { TerrainTileMap, terrainHeightAt, terrainSmoothNormalAt } from "../../engine/terrain/terrainHeightQuery";
-import { TERRAIN_MAX_LAYERS, type TerrainTileData } from "../../engine/terrain/terrainTypes";
+import type { TerrainTileData } from "../../engine/terrain/terrainTypes";
 
 type Check = (label: string, fn: () => void) => void;
 const RULE: LandscapeFoliageRule = {
@@ -28,19 +27,6 @@ function translations(cell: GeneratedFoliageCell): string[] {
 
 function near(actual: number | null, expected: number, epsilon = 1e-5): void {
   assert.ok(actual !== null && Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);
-}
-
-function landscape(): LandscapeFoliageGenerationInput {
-  return {
-    id: "ground", position: [10, 7, -20],
-    data: {
-      schema: 1, type: "landscape", size: { verticesX: 3, verticesZ: 3, spacing: 2, heightScale: 2 },
-      chunks: { quadsPerChunk: 2 },
-      heights: [0, 1, 2, 3, 5, 4, -1, -2, 0],
-      layers: Array.from({ length: 6 }, (_, layer) => ({ id: `layer-${layer}`, name: `Layer ${layer}`,
-        weights: Array.from({ length: 9 }, (_, index) => (index + layer) / 15) })),
-    },
-  };
 }
 
 export function registerProceduralFoliageTests(check: Check): void {
@@ -186,45 +172,5 @@ export function registerProceduralFoliageTests(check: Check): void {
     assert.equal(surface.normalAt(15, -2), null);
     assert.equal(surface.layerWeightAt("b", 15, -2), null);
     assert.equal(surface.heightAt(14, -2), terrainHeightAt(def, tiles, 14, -2));
-  });
-
-  check("procedural foliage: legacy landscape preserves vertex heights, packed weights and triangle interpolation", () => {
-    const input = landscape();
-    const before = structuredClone(input);
-    const surface = landscapeFoliageSurface(input)!;
-    assert.ok(surface);
-    assert.deepEqual(surface.bounds, { minX: 8, maxX: 12, minZ: -22, maxZ: -18 });
-    for (let z = 0; z < 3; z += 1) {
-      for (let x = 0; x < 3; x += 1) {
-        const index = z * 3 + x;
-        near(surface.heightAt(8 + x * 2, -22 + z * 2), input.data.heights[index]! * 2 + 7);
-        for (const layer of input.data.layers) {
-          near(surface.layerWeightAt(layer.id, 8 + x * 2, -22 + z * 2), layer.weights[index]!, 1 / 255 + 1e-6);
-        }
-      }
-    }
-    near(surface.heightAt(9, -21), 11);
-    assert.deepEqual(input, before);
-    const clamped = landscape();
-    clamped.data.layers[0]!.weights[0] = -1;
-    clamped.data.layers[1]!.weights[0] = 2;
-    const clampedSurface = landscapeFoliageSurface(clamped)!;
-    assert.equal(clampedSurface.layerWeightAt("layer-0", 8, -22), 0);
-    assert.equal(clampedSurface.layerWeightAt("layer-1", 8, -22), 1);
-    const limited = landscape();
-    limited.data.layers = Array.from({ length: TERRAIN_MAX_LAYERS + 1 }, (_, i) => ({ id: `l${i}`, name: `L${i}`, weights: Array(9).fill(1) }));
-    assert.equal(landscapeFoliageSurface(limited)!.layerWeightAt(`l${TERRAIN_MAX_LAYERS}`, 8, -22), 0);
-  });
-
-  check("procedural foliage: legacy landscape rejects rotation, non-square grids and invalid dimensions", () => {
-    const input = landscape();
-    for (const rotation of [[1, 0, 0], [0, -1, 0], [0, 0, 1]] as [number, number, number][]) {
-      assert.equal(landscapeFoliageSurface({ ...input, rotation }), null);
-    }
-    assert.ok(landscapeFoliageSurface({ ...input, rotation: [1e-10, 0, 0] }));
-    for (const size of [{ ...input.data.size, verticesZ: 2 }, { ...input.data.size, verticesX: 1, verticesZ: 1 },
-      { ...input.data.size, spacing: 0 }, { ...input.data.size, spacing: -1 }]) {
-      assert.equal(landscapeFoliageSurface({ ...input, data: { ...input.data, size } }), null);
-    }
   });
 }

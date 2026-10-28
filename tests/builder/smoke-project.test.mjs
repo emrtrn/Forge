@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import {
   assertSmokeRoot, cleanupSmokeProject, prepareSmokeProject, resetSmokeDocuments,
-  smokePublicPath, REPO_ROOT, SMOKE_SCENE, SMOKE_PATROL_SCENE, SMOKE_ROAD_SIDECAR,
+  smokePublicPath, REPO_ROOT, SMOKE_SCENE, SMOKE_PATROL_SCENE, SMOKE_ROAD_TERRAIN,
 } from "../smoke/smokeProject.mjs";
 
 async function sourceFixture(t, defaultScene = "Terrain.level.json") {
@@ -16,7 +16,7 @@ async function sourceFixture(t, defaultScene = "Terrain.level.json") {
   await writeFile(smokePublicPath("project.3dgame.json", root), JSON.stringify({ name: "original", editor: { defaultScene, assetManifest: "assets/manifest.json" } }));
   await writeFile(smokePublicPath("assets/manifest.json", root), JSON.stringify({ assets: [{ id: "menu", path: "original-menu.json" }] }));
   await writeFile(smokePublicPath("assets/model.glb", root), "original asset bytes");
-  await writeFile(smokePublicPath("landscapes/landscape-1.landscape.json", root), "user-authored road with 28 segments");
+  await writeFile(smokePublicPath("landscapes/landscape-1.terrain.json", root), "user-authored road with 28 segments");
   return root;
 }
 
@@ -29,12 +29,12 @@ function runFixture(t) {
 test("smoke scenes do not depend on defaultScene or the editable demo landscape", async (t) => {
   const terrainSource = await sourceFixture(t);
   const playgroundSource = await sourceFixture(t, "Playground.level.json");
-  await writeFile(smokePublicPath("landscapes/landscape-1.landscape.json", playgroundSource), "different user landscape");
+  await writeFile(smokePublicPath("landscapes/landscape-1.terrain.json", playgroundSource), "different user landscape");
   const a = runFixture(t);
   const b = runFixture(t);
   await prepareSmokeProject(a, terrainSource);
   await prepareSmokeProject(b, playgroundSource);
-  for (const path of [SMOKE_SCENE, SMOKE_PATROL_SCENE, SMOKE_ROAD_SIDECAR, "project.3dgame.json"]) {
+  for (const path of [SMOKE_SCENE, SMOKE_PATROL_SCENE, SMOKE_ROAD_TERRAIN, "project.3dgame.json"]) {
     assert.equal(await readFile(smokePublicPath(path, a), "utf8"), await readFile(smokePublicPath(path, b), "utf8"));
   }
   const patrol = JSON.parse(await readFile(smokePublicPath(SMOKE_PATROL_SCENE, a), "utf8"));
@@ -47,9 +47,12 @@ test("smoke scenes do not depend on defaultScene or the editable demo landscape"
   assert.equal(behavior.root.task, "forge.moveAlongPatrolRoute");
   const manifest = JSON.parse(await readFile(smokePublicPath("assets/manifest.json", a), "utf8"));
   assert.equal(manifest.assets.find((asset) => asset.path === ai.props.behaviorTree)?.assetType, "behaviorTree");
-  const road = JSON.parse(await readFile(smokePublicPath(SMOKE_ROAD_SIDECAR, a), "utf8"));
+  const road = JSON.parse(await readFile(smokePublicPath(SMOKE_ROAD_TERRAIN, a), "utf8"));
   assert.equal(road.splines[0].segments.length, 3);
-  assert.equal(road.heights.length, road.size.verticesX * road.size.verticesZ);
+  assert.equal(road.type, "worldTerrain");
+  const tile = await readFile(smokePublicPath("landscapes/smoke-road.tiles/0_0.tile.bin", a));
+  assert.equal(tile.subarray(0, 4).toString("latin1"), "FTIL");
+  assert.equal(tile.readUInt16LE(8), road.tileQuads + 1);
 });
 
 test("isolated save, delete and cleanup cannot change authoring files", async (t) => {
@@ -62,7 +65,7 @@ test("isolated save, delete and cleanup cannot change authoring files", async (t
   await cleanupSmokeProject(root);
   assert.equal(await readFile(smokePublicPath("project.3dgame.json", source), "utf8"), originalManifest);
   assert.equal(await readFile(smokePublicPath("assets/model.glb", source), "utf8"), "original asset bytes");
-  assert.equal(await readFile(smokePublicPath("landscapes/landscape-1.landscape.json", source), "utf8"), "user-authored road with 28 segments");
+  assert.equal(await readFile(smokePublicPath("landscapes/landscape-1.terrain.json", source), "utf8"), "user-authored road with 28 segments");
 });
 
 test("each test resets saved scenes and manifests after a previous failed case", async (t) => {

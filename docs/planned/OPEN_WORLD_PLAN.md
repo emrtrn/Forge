@@ -2391,31 +2391,30 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       tarif runtime'da otomatik uygulanmaz. Tasarım, bütçe ve bağımsız kabul
       alanı Water Body alt planı §14'te. W1 donanım GPU/browser bellek/ana
       thread ve büyük dünya performans kabulü bu onayla kapanmaz.
-- [ ] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
+- [x] 1×1 `ForgeLandscapeData` köprüsü kaldırılır: bu madde ve Faz 6'nın
       prosedürel çim maddesi bittikten sonra 1×1 de çok-tile ile aynı yoldan
       (`terrainEdit.ts`, `worldTerrainActor.ts`) düzenlenir;
       `terrainLandscapeBridge.ts` ve `engine/scene/landscape.ts`'in köprüye ait
       kısmı (veri tipi, fırça, spline adaptörü, foliage kuralları) silinir. Expand
       ve tek-tile/çok-tile ayrımı (Details, spline uyarıları) bununla kalkar.
-      **Kararlar (kullanıcı onaylı, 2026-10-27):** (1) Dönüşü kayıplı eski veri
-      (döndürülmüş, kare olmayan, 2'nin kuvveti olmayan grid) editör ve runtime'da
-      açık hata verir, sessizce uyarlanmaz; kayıpsız eski dosya (kare, döndürülmemiş,
-      geçerli tile boyu; `heightScale` yüksekliklere katlanır) okumada 1×1 World
-      Terrain'e dönüşür. Kayıplı olanları `npm run terrain:migrate`
-      (`--check` / `--write`) uyarlamaları raporlayarak dönüştürür. (2) Her World
+      **Kararlar (kullanıcı onaylı, 2026-10-27; 1 ve 4 2026-10-28'de
+      değişti):** (1) Eski `.landscape.json` hiç okunmaz: ona referans veren
+      level editörde ve runtime'da "desteklenmiyor" açık hatasıyla yüklenmez,
+      `verify:world-data` da raporlar. Dönüştürme yolu yok (`terrain:migrate`
+      yazılmadı); kullanıcı eski dosyaları önemsemiyor, geriye uyumluluk
+      istenmiyor. Döndürülmüş bir Landscape actor'ü de açık hatadır. (2) Her World
       Terrain (1×1 ve çok-tile) gizmo ile **taşınabilir**: taşıma tanımın `origin`'ini
       değiştirir (undo'lu); döndürme/ölçek kapalı kalır. (3) Yalnız 1×1'de olan
       Resample preset'leri ve "Import PNG (resample)" tek tile'lı World Terrain'e
-      taşınır, çok-tile'da kapalı kalır. (4) Eski okuyucu için geçiş süresi yok:
-      tek aktif fork (minigolf) arazi kullanmıyor, ThreeAges kapandı; migrate
-      komutu + upstream notundan sonra okuyucu aynı seride kalkar.
+      taşınır, çok-tile'da kapalı kalır. (4) Geçiş süresi ve migrate komutu
+      yok: okuyucu köprüyle aynı dilimde (K5) kalktı. Tek aktif fork (minigolf)
+      arazi kullanmıyor, ThreeAges kapandı.
       **Dilimler:** K1 World Terrain taşıma → K2 1×1 World Terrain'de resample ve
       PNG resample → K3 1×1 World Terrain'de eksik kalan 1×1 özelliklerinin
       tamamlanması (spline/nehir/foliage kuralları/overlay/Expand) → K4 okuma yolu:
       1×1 `.terrain.json` ve kayıpsız eski dosya `{ kind: "world" }`, kayıplı eski
-      dosya açık hata; smoke fikstürleri yeni biçime → K5 köprü ve 1×1 dallarının
-      silinmesi → K6 `terrain:migrate` + upstream notu → eski okuyucunun emekliliği
-      (aşağıdaki madde). Eşzamanlı oturum `SceneApp`/`EditorUi` üzerinde
+      dosya açık hata; smoke fikstürleri yeni biçime → K5 köprü, 1×1 dalları ve
+      eski okuyucunun silinmesi (K6 bununla birleşti, migrate yok). Eşzamanlı oturum `SceneApp`/`EditorUi` üzerinde
       çalıştığı için dilimler ayrı worktree dalında yapılır, her yeşil dilim
       `main`'e birleştirilir.
       *K1 (2026-10-27):* `engine/terrain/worldTerrainMove.ts`; taşıma commit'te
@@ -2435,13 +2434,29 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       `terrain:migrate`'i gösteren açık hata. Yeni 1×1 Landscape de World Terrain
       (Float32 tile). Davranış farkı: paylaşılan bir 1×1 `.terrain.json` artık
       çok-tile gibi yerinde kaydedilir (köprü onu ilk Save'de level'a
-      kopyalıyordu).
-- [ ] Eski `.landscape.json` okuyucusu emekliye ayrılır: fork'lar için toplu
-      migrasyon komutu (`terrain:repair` gibi, `--check` ile CI'da), upstream
-      notu, bir geçiş süresi; sonra okuma dönüşümü (`terrainLegacy.ts`),
-      `validateLandscapeData` ve `public/landscapes/*.landscape.json` kaldırılır
-      (`runtime-parity.landscape.json` parity referansı mı, önce bakılır).
-      İlke 3 gereği o zamana kadar okuyucu kalır.
+      kopyalıyordu). K3+K4 main'de (`755600d0`); aynı seride CI'ın 25 Ekim'den
+      beri kırmızı olan production smoke'u da düzeldi: `ActionMap` iki tick
+      arasında basılıp bırakılan tuşu kaçırıyordu (yavaş SwiftShader karesinde
+      Escape menüsü), artık bir tick basılı sayılıyor (`2958356e`).
+      *K5 (2026-10-28):* `terrainLandscapeBridge.ts`, `terrainLegacy.ts`,
+      `landscapeFoliage.ts`, `tools/world/migrate-landscape.mjs`,
+      `validateLandscapeData` ve `public/landscapes/*.landscape.json` silindi;
+      `engine/scene/landscape.ts`'ten `ForgeLandscapeData`, 1×1 ızgara/fırça/spline
+      uygulama/heightfield yardımcıları, render'dan `createLandscapeObject` ve
+      1×1 render kaynağı, yüzey örnekleyiciden ve nehir/spline-mesh yolundan
+      `landscapeData` dalları çıktı. `TerrainActorDocument` yalnız `{ kind:
+      "world" }`; `.landscape.json` yolu açık "not supported" hatası.
+      `SceneApp`/`RuntimeSceneApp` yalnız World Terrain taşır; kayıt
+      koordinatörü her araziyi World Terrain oturumuyla, level'dan önce yazar.
+      Release starter ve smoke fikstürleri `.terrain.json` + tile binary
+      üretir; `terrain-migration.spec` yalnız endpoint doğrulamasıyla
+      `terrain-endpoints.spec` oldu. 62 eski motor kontrolü silindi, World
+      Terrain'i test edip 1×1 fikstür kullananlar tek-tile fikstüre çevrildi.
+- [x] Eski `.landscape.json` okuyucusu emekliye ayrılır. *2026-10-28, K5 ile:*
+      kullanıcı kararıyla migrasyon komutu ve geçiş süresi olmadan kaldırıldı
+      (yukarıdaki madde, karar 1/4). `runtime-parity.landscape.json` parity
+      referansı değildi: RuntimeParity level'ı zaten `runtime-parity.terrain.json`
+      kullanıyordu.
 - [x] **Editör tile akışı (2026-10-23, ilk dilim):** 6×6'dan büyük
       (`editorStreamsTerrain`, >36 tile) ve geçerli global haritası olan
       World Terrain editörde yalnız tanım + global harita ile açılır;

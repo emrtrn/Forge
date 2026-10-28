@@ -153,14 +153,16 @@ export function registerWorldDataCheckTests(check: Check): void {
     assert.equal(report.levels[0]!.terrains[0]!.globalBytes, null);
   });
 
-  check("world data: legacy landscape data is existence-checked without parsing", () => {
+  check("world data: a legacy .landscape.json reference fails as unsupported, existing or not, without parsing", () => {
     const path = "layouts/ground.landscape.json";
     const tree = fixture({ landscapes: [{ dataRef: path }] });
-    assert.deepEqual(tree.report().issues, [{
-      severity: "fail", level: LEVEL, path, reason: "missing terrain data",
-    }]);
+    const unsupported = [{
+      severity: "fail", level: LEVEL, path,
+      reason: "unsupported legacy .landscape.json terrain; a Landscape needs a World Terrain (.terrain.json)",
+    }];
+    assert.deepEqual(tree.report().issues, unsupported);
     tree.addJson(path, new Error("legacy data must not be parsed"));
-    assert.deepEqual(tree.report(), { levels: [], issues: [] });
+    assert.deepEqual(tree.report().issues, unsupported);
   });
 
   check("world data: missing World Terrain definition fails but retains its level report", () => {

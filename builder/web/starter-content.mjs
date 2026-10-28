@@ -36,6 +36,21 @@ function checkerPng() {
   ]);
 }
 
+function flatTerrainTile(size) {
+  const count = size * size;
+  const bytes = Buffer.alloc(32 + count * 4 + count * 4);
+  bytes.write("FTIL", 0, "latin1");
+  bytes.writeUInt16LE(1, 4); // version
+  bytes.writeUInt16LE(1, 6); // f32 heights
+  bytes.writeUInt16LE(size, 8);
+  bytes.writeUInt8(1, 10); // one layer
+  bytes.writeFloatLE(-256, 12);
+  bytes.writeFloatLE(256, 16);
+  const weights = 32 + count * 4;
+  for (let index = 0; index < count; index++) bytes[weights + index * 4] = 255;
+  return bytes;
+}
+
 function cubeGeometry() {
   const faces = [
     [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]]],
@@ -107,18 +122,22 @@ export async function createStarterContent(root) {
   json("assets/release/hud.ui.json", { schema: 1, type: "ui", name: "Starter HUD", root: {
     id: "root", widget: "Canvas", props: { padding: 24 }, children: [text("instructions", "Forge Starter | WASD: move | Q/E: height | Escape: menu")],
   } });
-  json("landscapes/starter.landscape.json", {
-    schema: 1, type: "landscape", size: { verticesX: 65, verticesZ: 65, spacing: 0.5, heightScale: 1 },
-    chunks: { quadsPerChunk: 32 }, heights: Array(65 * 65).fill(0),
-    layers: [{ id: "base", name: "Checker", material: "release-material", weights: Array(65 * 65).fill(1) }], splines: [],
+  // One flat 32 m World Terrain tile, centred on the actor: 65×65 f32 heights
+  // and one paint layer fully weighted (the engine's FTIL tile layout).
+  json("landscapes/starter.terrain.json", {
+    schema: 1, type: "worldTerrain", name: "Starter Ground", tileQuads: 64, spacing: 0.5, tilesX: 1, tilesZ: 1,
+    origin: [-16, -0.1, -16], heightMin: -256, heightMax: 256,
+    layers: [{ id: "base", name: "Checker", color: "#5f9449", material: "release-material" }],
+    tiles: [{ key: "0_0", minHeight: 0, maxHeight: 0 }], collision: true,
   });
+  documents.set("landscapes/starter.tiles/0_0.tile.bin", flatTerrainTile(65));
   for (const [file, name, x] of [["starter", "ReleaseStarter", -2], ["destination", "ReleaseDestination", 2]]) {
     json(`layouts/${file}.level.json`, {
       schema: 1, name, loadGroups: [],
       instances: [{ assetId: "release-cube", placements: [{ position: [x, 1, 0], scale: 1, rotationYDeg: 20 }] }], characters: [],
       worldSettings: { gameMode: "forge.defaultCamera", hudWidget: "release-hud", pauseMenuWidget: "release-menu", backgroundColor: "#182331", locale: "en" },
       lights: [{ id: "sun", type: "directional", position: [6, 9, 6], rotation: [-40, 25, 0], color: "#ffffff", intensity: 3, castShadow: true }],
-      landscapes: [{ id: "starter-landscape", name: "Starter Ground", position: [0, -0.1, 0], dataRef: "landscapes/starter.landscape.json", collision: true }],
+      landscapes: [{ id: "starter-landscape", name: "Starter Ground", position: [0, -0.1, 0], dataRef: "landscapes/starter.terrain.json", collision: true }],
     });
     json(`layouts/${file}.foliage.json`, { schema: 1, type: "foliage", instances: [] });
     json(`layouts/${file}.meshpaint.json`, { schema: 1, type: "meshPaint", placements: [] });

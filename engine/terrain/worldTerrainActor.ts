@@ -5,20 +5,18 @@ import type { WorldTerrainDocument } from "./terrainLoader";
 import { parseTileKey, terrainTileWorldBounds, terrainTileWorldSize, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
 
 /**
- * A Landscape actor that references a multi-tile World Terrain
- * (OPEN_WORLD_PLAN Faz 2). Such a terrain skips the legacy
- * `ForgeLandscapeData` adapter: it is drawn straight from its tiles, collides
- * per tile and is sculpted/painted in the editor through `terrainEdit.ts`.
+ * A Landscape actor references a World Terrain (OPEN_WORLD_PLAN Faz 2, one
+ * tile or many): it is drawn straight from its tiles, collides per tile and is
+ * sculpted/painted in the editor through `terrainEdit.ts`.
  *
  * Frame: `def.origin` is the world position of tile (0, 0)'s min corner at the
- * height datum, and the actor sits at the centre of the whole tile grid — the
- * same relation the 1×1 bridge keeps (`origin = position − half extent`). A
- * World Terrain has no rotation.
+ * height datum, and the actor sits at the centre of the whole tile grid
+ * (`origin = position − half extent`). A World Terrain has no rotation.
  */
 
 type TerrainFrameDef = Pick<WorldTerrainDef, "tileQuads" | "spacing" | "tilesX" | "tilesZ" | "origin">;
 
-/** True unless the document is exactly one (0, 0) tile, the only shape the legacy adapter accepts. */
+/** True unless the document is exactly one (0, 0) tile (the single-tile tools: resample, resize, Expand). */
 export function isMultiTileTerrain(def: Pick<WorldTerrainDef, "tilesX" | "tilesZ" | "tiles">): boolean {
   return def.tilesX !== 1 || def.tilesZ !== 1 || def.tiles.length !== 1 || def.tiles[0]!.key !== "0_0";
 }

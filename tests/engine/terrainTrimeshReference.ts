@@ -5,7 +5,6 @@
  * queries are checked against, and as a ready-made static trimesh fixture.
  */
 import type { ColliderPrimitive } from "../../engine/scene/components";
-import type { ForgeLandscapeData } from "../../engine/scene/landscape";
 import type { Vec3 } from "../../engine/scene/layout";
 import type { TerrainTileData, WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { terrainTileWorldBounds } from "../../engine/terrain/terrainTypes";
@@ -29,35 +28,6 @@ function gridIndices(verticesX: number, verticesZ: number): number[] {
     }
   }
   return indices;
-}
-
-function pointAabb(points: readonly Vec3[]): { size: Vec3; center: Vec3 } {
-  const min: Vec3 = [Infinity, Infinity, Infinity];
-  const max: Vec3 = [-Infinity, -Infinity, -Infinity];
-  for (const point of points) {
-    for (let axis = 0; axis < 3; axis += 1) {
-      min[axis] = Math.min(min[axis]!, point[axis]!);
-      max[axis] = Math.max(max[axis]!, point[axis]!);
-    }
-  }
-  return {
-    size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
-    center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
-  };
-}
-
-/** A 1x1 Landscape in its actor-centred body frame, with `heightScale` folded in. */
-export function landscapeTrimesh(data: ForgeLandscapeData): TerrainTrimeshPrimitive {
-  const { spacing, heightScale, verticesX, verticesZ } = data.size;
-  const originX = ((verticesX - 1) * spacing) / 2;
-  const originZ = ((verticesZ - 1) * spacing) / 2;
-  const vertices: Vec3[] = [];
-  for (let z = 0; z < verticesZ; z += 1) {
-    for (let x = 0; x < verticesX; x += 1) {
-      vertices.push([x * spacing - originX, (data.heights[z * verticesX + x] ?? 0) * heightScale, z * spacing - originZ]);
-    }
-  }
-  return { shape: "trimesh", ...pointAabb(vertices), vertices, indices: gridIndices(verticesX, verticesZ) };
 }
 
 /** One World Terrain tile, centred on the tile at the height datum: the frame of `terrainTileHeightfield`. */

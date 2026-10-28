@@ -10,8 +10,7 @@ import type { Vec3 } from "../scene/layout";
  * keep the copies equal.
  *
  * The terrain is axis-aligned and unrotated — the World Partition grid is
- * world-aligned, and a rotated heightfield would break every cell lookup. A
- * legacy single Landscape becomes a 1×1 terrain (`terrainLegacy.ts`).
+ * world-aligned, and a rotated heightfield would break every cell lookup.
  *
  * Kept free of three.js and Rapier so the save validator, the editor core and
  * the engine tests can read it.
@@ -90,7 +89,7 @@ export interface WorldTerrainDef {
   /**
    * Road/spline data. New saves mark each spline coordinateSpace:"world".
    * Unmarked schema-1 data remains relative to the terrain centre when read;
-   * terrainSplineData provides explicit copy migration and the 1x1 adapter.
+   * terrainSplineData provides the explicit copy migration to world space.
    */
   splines?: TerrainSpline[];
 }

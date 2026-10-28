@@ -1,19 +1,17 @@
 import assert from "node:assert/strict";
-import { forEachHeightfieldTriangle, HeightfieldStaticSource } from "../../engine/physics/heightfieldStatic";
+import { HeightfieldStaticSource } from "../../engine/physics/heightfieldStatic";
 import { buildNavGrid, searchNavGrid, type NavAgent } from "../../engine/navigation/gridNavigation";
 import { navFloorSampler } from "../../engine/navigation/navFloorSampler";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
-import { rotatePointAboutOrigin } from "../../engine/physics/rotatedBox";
 import { createReferenceCarDefinition, NEUTRAL_VEHICLE_INPUT } from "../../engine/physics/vehicle/vehicleTypes";
-import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type ColliderPrimitive, type TransformComponent } from "../../engine/scene/components";
+import { COLLIDER_COMPONENT, TRANSFORM_COMPONENT, type ColliderComponent, type TransformComponent } from "../../engine/scene/components";
 import type { Entity, EntityComponentData } from "../../engine/scene/entity";
-import { createLandscapeHeightfieldPrimitive, type ForgeLandscapeData } from "../../engine/scene/landscape";
 import type { Vec3 } from "../../engine/scene/layout";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { createFlatTerrainTile, terrainTileHeightRange, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { terrainTileHeightfield, worldTerrainColliderEntities } from "../../engine/terrain/worldTerrainActor";
 import { heightfieldWireGeometry, heightfieldWireSegments } from "../../engine/render-three/collisionView";
-import { landscapeTrimesh, terrainTileTrimesh } from "./terrainTrimeshReference";
+import { terrainTileTrimesh } from "./terrainTrimeshReference";
 
 type Check = (label: string, fn: () => void) => void;
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
@@ -122,36 +120,6 @@ function assertSameStaticQueries(trimesh: PhysicsSubsystem, heightfield: Physics
   assert.deepEqual(heightfield.staticSurfaceTriangles(), trimesh.staticSurfaceTriangles(), `${label}: all surfaces`);
   assert.deepEqual(heightfield.staticNavigationBlockerAabbs(), trimesh.staticNavigationBlockerAabbs(), `${label}: nav blockers`);
   assert.deepEqual(heightfield.staticNavigationSurfaceTriangles(), trimesh.staticNavigationSurfaceTriangles(), `${label}: nav surfaces`);
-}
-
-function landscape(verticesX: number, verticesZ: number, heightScale: number): ForgeLandscapeData {
-  const heights: number[] = [];
-  for (let z = 0; z < verticesZ; z += 1) {
-    for (let x = 0; x < verticesX; x += 1) {
-      // Dyadic samples/scales keep static-query deepEqual exact across Float32 storage.
-      const relief = Math.round(48 * Math.sin(x * 0.21) * Math.cos(z * 0.13) + z) / 16;
-      heights.push(relief + (x === 40 && z === 9 ? 50_000 : 0));
-    }
-  }
-  return {
-    schema: 1, type: "landscape", size: { verticesX, verticesZ, spacing: 1.5, heightScale },
-    chunks: { quadsPerChunk: 32 }, heights, layers: [],
-  };
-}
-
-function landscapeEntity(primitive: ColliderPrimitive, rotation: Vec3): Entity {
-  const collider: ColliderComponent = {
-    shape: "box", size: primitive.size, isStatic: true, isSensor: false,
-    navigationRole: "walkable", primitives: [primitive],
-  };
-  if (primitive.center) collider.center = primitive.center;
-  return {
-    id: "landscape:legacy", name: "Legacy Collider",
-    components: {
-      [TRANSFORM_COMPONENT]: { position: [-7, 2, -5], rotation, scale: [1, 1, 1] },
-      [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
-    },
-  };
 }
 
 /** Same 64 m square and 1 m samples: four 32-quad tiles or one 64-quad control. */
@@ -378,58 +346,6 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
     }
   });
 
-  for (const { label, verticesX, verticesZ, heightScale, rotation } of [
-    { label: "square", verticesX: 65, verticesZ: 65, heightScale: 1, rotation: [0, 0, 0] as Vec3 },
-    { label: "rotated", verticesX: 65, verticesZ: 65, heightScale: 1, rotation: [0, 30, 0] as Vec3 },
-    { label: "non-square 129x65", verticesX: 129, verticesZ: 65, heightScale: 1, rotation: [0, 0, 0] as Vec3 },
-    { label: "heightScale 2.5", verticesX: 65, verticesZ: 65, heightScale: 2.5, rotation: [0, 0, 0] as Vec3 },
-  ]) {
-    check(`landscape heightfield physics: ${label} matches every legacy trimesh static query in order`, () => {
-      const data = landscape(verticesX, verticesZ, heightScale);
-      const originalHeights = [...data.heights];
-      const mesh = landscapeTrimesh(data);
-      const field = createLandscapeHeightfieldPrimitive(data);
-      assert.equal(field.shape, "heightfield");
-      assert.deepEqual(field.size, mesh.size);
-      assert.deepEqual(field.center, mesh.center);
-      assert.deepEqual(data.heights, originalHeights, "building the collider does not mutate authored heights");
-      // Verify the diagonal, winding and complete triangle sequence before querying physics.
-      forEachHeightfieldTriangle(field.heightfield!, 0, verticesX - 2, 0, verticesZ - 2, (a, b, c, index) => {
-        assert.deepEqual([a, b, c], mesh.indices.slice(index * 3, index * 3 + 3).map((i) => mesh.vertices[i]!));
-      });
-      const trimesh = new PhysicsSubsystem();
-      const heightfield = new PhysicsSubsystem();
-      try {
-        trimesh.setEntities(scene([landscapeEntity(mesh, rotation)]));
-        heightfield.setEntities(scene([landscapeEntity(field, rotation)]));
-        assert.ok(trimesh.staticBlockerAabbs().length > 3, "the landscape cliff produces wall blockers");
-        const points: [number, number, number][] = [];
-        const random = seeded(37);
-        const extentX = (verticesX - 1) * data.size.spacing;
-        const extentZ = (verticesZ - 1) * data.size.spacing;
-        for (let index = 0; index < 200; index += 1) {
-          const [x, , z] = rotatePointAboutOrigin([-7, 2, -5], [
-            (random() - 0.5) * (extentX + 12), 0, (random() - 0.5) * (extentZ + 12),
-          ], rotation);
-          points.push([x, z, random() * 6]);
-        }
-        for (const local of [
-          [-extentX / 2, 0, -extentZ / 2], [extentX / 2, 0, extentZ / 2],
-          [40 * data.size.spacing - extentX / 2, 0, 9 * data.size.spacing - extentZ / 2],
-        ] as Vec3[]) {
-          const [x, , z] = rotatePointAboutOrigin([-7, 2, -5], local, rotation);
-          points.push([x, z, 0], [x, z, 4]);
-        }
-        points.push([16, 16, 0], [16, 16, 4], [1000, 1000, 1]);
-        assertSameStaticQueries(trimesh, heightfield, points, label);
-        assertSameStaticQueries(trimesh, heightfield, points, `${label} cached`);
-      } finally {
-        trimesh.dispose();
-        heightfield.dispose();
-      }
-    });
-  }
-
   check("terrain heightfield physics: on-demand triangles answer every static query exactly like the per-tile trimesh", () => {
     const document = terrain(1.5, [-7, 2, -5]);
     const heightfields = worldTerrainColliderEntities({ id: "world", name: "World", collision: true }, document);
@@ -483,12 +399,10 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
     assert.equal(physics.hasStaticGround(), false);
   });
 
-  check("terrain heightfield collision overlay: the editor wire traces exactly the legacy trimesh edges, 1x1 and per tile", () => {
+  check("terrain heightfield collision overlay: the editor wire traces exactly the legacy trimesh edges per tile", () => {
     const edges = ({ vertices, indices }: { vertices: Vec3[]; indices: number[] }): Vec3[] =>
       Array.from({ length: indices.length / 3 }, (_, t) => indices.slice(t * 3, t * 3 + 3).map((i) => vertices[i]!))
         .flatMap(([a, b, c]) => [a!, b!, b!, c!, c!, a!]);
-    const data = landscape(65, 33, 2);
-    assert.deepEqual(heightfieldWireSegments(createLandscapeHeightfieldPrimitive(data).heightfield!), edges(landscapeTrimesh(data)));
     const document = terrain(1.5, [3, -2, 7]);
     for (const tile of document.tiles.values()) {
       const field = terrainTileHeightfield(document.def, tile);
@@ -502,7 +416,6 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
     const key = (p: ArrayLike<number>): string => Array.from(p, (value) => Math.fround(value)).join(",");
     const edgeKey = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
     const fields = [
-      createLandscapeHeightfieldPrimitive(landscape(65, 33, 2)).heightfield!,
       ...[...terrain(1.5, [3, -2, 7]).tiles.values()].map((tile) => terrainTileHeightfield(terrain(1.5, [3, -2, 7]).def, tile).primitive.heightfield!),
     ];
     for (const field of fields) {
@@ -537,57 +450,6 @@ export async function registerTerrainHeightfieldRapierTests(checkAsync: CheckAsy
       assert.ok(control.maxVy < 0.07 && control.maxDy < 0.001, `${route.label}: smooth control`);
       assert.ok(seam.maxVy < Math.min(0.07, control.maxVy + 0.005), `${route.label}: seam vertical velocity ${seam.maxVy} vs ${control.maxVy}`);
       assert.ok(seam.maxDy < Math.min(0.001, control.maxDy + 0.0001), `${route.label}: seam step delta Y ${seam.maxDy} vs ${control.maxDy}`);
-    }
-  });
-
-  await checkAsync("landscape heightfield physics: rotated non-square Rapier rays match the legacy trimesh surface", async () => {
-    const data = landscape(129, 65, 1.7);
-    // Non-dyadic heights also exercise Float32 conversion at the Rapier boundary.
-    data.heights = data.heights.map((_, index) => 3 * Math.sin(index * 0.21) + 0.01 * index);
-    const mesh = landscapeTrimesh(data);
-    const rotation: Vec3 = [0, 30, 0];
-    const trimesh = new PhysicsSubsystem({ backend: "rapier" });
-    const heightfield = new PhysicsSubsystem({ backend: "rapier" });
-    try {
-      trimesh.setEntities([landscapeEntity(mesh, rotation)]);
-      heightfield.setEntities([landscapeEntity(createLandscapeHeightfieldPrimitive(data), rotation)]);
-      for (const physics of [trimesh, heightfield]) {
-        await physics.init();
-        assert.equal(physics.usesRapier(), true);
-        physics.update({ deltaSeconds: 1 / 30, elapsedSeconds: 1 / 30, frame: 1 });
-      }
-      const random = seeded(19);
-      for (let index = 0; index < 100; index += 1) {
-        const gx = 1 + random() * 125;
-        const gz = 1 + random() * 61;
-        const x0 = Math.floor(gx);
-        const z0 = Math.floor(gz);
-        const tx = gx - x0;
-        const tz = gz - z0;
-        const a = z0 * data.size.verticesX + x0;
-        const b = a + 1;
-        const c = a + data.size.verticesX;
-        const d = c + 1;
-        const y = (i: number) => mesh.vertices[i]![1];
-        const expected = 2 + (tx + tz <= 1
-          ? y(a) * (1 - tx - tz) + y(b) * tx + y(c) * tz
-          : y(b) * (1 - tz) + y(c) * (1 - tx) + y(d) * (tx + tz - 1));
-        const [x, , z] = rotatePointAboutOrigin([-7, 2, -5], [
-          (gx - 64) * data.size.spacing, 0, (gz - 32) * data.size.spacing,
-        ], rotation);
-        const from: Vec3 = [x, 500, z];
-        const to: Vec3 = [x, -100, z];
-        const oldFraction = trimesh.traceCamera(from, to);
-        const fraction = heightfield.traceCamera(from, to);
-        assert.ok(oldFraction !== null && fraction !== null, `both rays at ${x},${z} hit the landscape`);
-        const oldHeight = 500 - oldFraction! * 600;
-        const height = 500 - fraction! * 600;
-        assert.ok(Math.abs(height - expected) < 2e-3, `${x},${z}: heightfield ${height} vs trimesh surface ${expected}`);
-        assert.ok(Math.abs(height - oldHeight) < 2e-3, `${x},${z}: heightfield ${height} vs trimesh ray ${oldHeight}`);
-      }
-    } finally {
-      trimesh.dispose();
-      heightfield.dispose();
     }
   });
 

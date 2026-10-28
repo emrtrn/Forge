@@ -1,17 +1,10 @@
-import type { ForgeLandscapeData } from "../scene/landscape";
 import { buildTerrainGlobalMap, updateTerrainGlobalMap, type TerrainGlobalMap } from "./terrainGlobalMap";
 import type { TerrainQueryDef, TerrainTileLookup } from "./terrainHeightQuery";
 import {
   TERRAIN_PATCH_QUADS,
-  TERRAIN_RENDER_LAYERS,
   TERRAIN_WEIGHT_BLOCKS,
   TerrainNodeHeightBounds,
   clampTerrainRect,
-  copyLandscapeHeights,
-  fullTerrainRect,
-  packTerrainWeights,
-  terrainRenderGrid,
-  type TerrainRenderGrid,
   type TerrainVertexRect,
 } from "./terrainRenderData";
 import { parseTileKey, tileKey, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
@@ -20,7 +13,7 @@ import { parseTileKey, tileKey, type TerrainTileData, type WorldTerrainDef } fro
  * What the CDLOD renderer draws (OPEN_WORLD_PLAN Faz 2): a grid of square
  * tiles in a "terrain-local" frame whose (0, 0) is tile (0, 0)'s min corner and
  * whose heights are relative to the datum. A multi-tile World Terrain is one
- * directly; a legacy 1×1 Landscape is one padded tile ({@link landscapeRenderSource}).
+ * directly, one tile or many.
  *
  * Also the CPU half of the far-terrain path: per-node height bounds across all
  * tiles and the global map's normals, hole flags and weights. Pure, so the
@@ -60,45 +53,6 @@ export function worldTerrainRenderSource(def: TerrainWorldShape, tiles: Readonly
   };
 }
 
-/** A legacy Landscape drawn as one padded tile; `refresh` re-reads an edited rectangle. */
-export interface LandscapeRenderSource extends TerrainRenderSource {
-  readonly grid: TerrainRenderGrid;
-  /** Re-reads authored heights/weights inside `rect`; returns the tile texels it changed (padding included). */
-  refresh(rect: TerrainVertexRect): TerrainVertexRect;
-}
-
-export function landscapeRenderSource(data: ForgeLandscapeData): LandscapeRenderSource {
-  const grid = terrainRenderGrid(data.size);
-  const texels = grid.stride * grid.stride;
-  const tile: TerrainTileData = {
-    x: 0, z: 0, size: grid.stride,
-    heights: new Float32Array(texels),
-    layerCount: TERRAIN_RENDER_LAYERS,
-    weights: new Uint8Array(texels * 4 * TERRAIN_WEIGHT_BLOCKS),
-  };
-  const refresh = (rect: TerrainVertexRect): TerrainVertexRect => {
-    const area = clampTerrainRect(rect, grid);
-    copyLandscapeHeights(data, grid, tile.heights, area);
-    packTerrainWeights(data, grid, tile.weights, area);
-    const last = grid.stride - 1;
-    return {
-      x0: area.x0, z0: area.z0,
-      x1: area.x1 === grid.verticesX - 1 ? last : area.x1,
-      z1: area.z1 === grid.verticesZ - 1 ? last : area.z1,
-    };
-  };
-  refresh(fullTerrainRect(grid));
-  return {
-    grid, refresh,
-    tileQuads: grid.stride - 1,
-    spacing: data.size.spacing,
-    tilesX: 1,
-    tilesZ: 1,
-    extent: [(grid.verticesX - 1) * data.size.spacing, (grid.verticesZ - 1) * data.size.spacing],
-    keys: () => [tileKey(0, 0)],
-    tile: (x, z) => (x === 0 && z === 0 ? tile : undefined),
-  };
-}
 
 /** The query shape of a source: terrain-local frame, heights relative to the datum. */
 export function terrainSourceQueryDef(source: TerrainRenderSource): TerrainQueryDef {

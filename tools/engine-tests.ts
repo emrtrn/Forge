@@ -1,4 +1,6 @@
-import { landscapeTrimesh } from "../tests/engine/terrainTrimeshReference";
+import { terrainTileTrimesh } from "../tests/engine/terrainTrimeshReference";
+import { validateLandscapeSplines } from "../engine/scene/landscapeSplineValidation";
+import type { TerrainSplineMeshSource } from "../engine/terrain/terrainSplineMeshes";
 import { registerTerrainErosionTests } from "../tests/engine/terrainErosion.test";
 import { registerTerrainSplineTests } from "../tests/engine/terrainSplines.test";
 import { registerTerrainSplineDataTests, registerTerrainSplineDataAsyncTests } from "../tests/engine/terrainSplineData.test";
@@ -9,7 +11,6 @@ import { registerTerrainLakeWaterTests } from "../tests/engine/terrainLakeWater.
 import { registerTerrainCausticsTests } from "../tests/engine/terrainCaustics.test";
 import { registerTerrainLakeBedTests } from "../tests/engine/terrainLakeBed.test";
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
-import { registerWorldTerrainExpandTests } from "../tests/engine/worldTerrainExpand.test";
 import { registerWorldPartitionTests } from "../tests/engine/worldPartition.test";
 import { registerFoliageFadeTests } from "../tests/engine/foliageFade.test";
 import { registerFoliageCellsTests } from "../tests/engine/foliageCells.test";
@@ -231,22 +232,13 @@ import {
   upVectorFromRotation,
 } from "../engine/scene/transform";
 import {
-  applyLandscapeSplineDeform,
-  applyLandscapeSplinePaint,
   computeLandscapeSplineMeshInstances,
   resolveLandscapeSplineMeshChains,
   splineToPolyline,
   landscapeSplineMeshAssetIds,
-  createFlatLandscapeData,
-  ensureLandscapeLayers,
-  landscapeHeightsToGrayscale,
   resampleLandscapeHeightmap,
-  resampleLandscapeData,
-  applyLandscapeRectDeform,
-  applyLandscapeRectPaint,
-  landscapeGridBoundsForLocalBox,
 } from "../engine/scene/landscape";
-import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
+import type { ForgeLandscapeSpline } from "../engine/scene/landscape";
 import {
   evaluateLandscapeSplineSegment,
   landscapeSplineSegmentComponent,
@@ -708,7 +700,6 @@ import {
   validateTargetPoint,
   validateSplineActor,
   validateLandscape,
-  validateLandscapeData,
   validatePostProcess,
   validateSaveActorPayload,
   validateNewBehaviorPayload,
@@ -766,7 +757,6 @@ import {
   normalizeAssetVertexColors,
   upsertAssetVertexColorMesh,
 } from "../engine/scene/assetVertexColors";
-import { generateLandscapeFoliageSamples } from "../engine/scene/landscapeFoliage";
 import {
   makeFoliageRng,
   surfaceSlopeDegrees,
@@ -1277,7 +1267,6 @@ await registerTerrainDocumentAsyncTests(checkAsync);
 registerWorldTerrainActorTests(check);
 registerWorldTerrainSaveTests(check);
 registerWorldTerrainCreateTests(check);
-registerWorldTerrainExpandTests(check);
 registerWorldPartitionTests(check);
 registerFoliageFadeTests(check);
 registerFoliageCellsTests(check);
@@ -1874,9 +1863,14 @@ check("scene runtime computes local model bounds keyed by asset id", () => {
   assert.deepEqual(bounds.get("box")?.max.toArray(), [1, 1, 1]);
 });
 
+/** Flat ground as a spline-mesh terrain source: what a World Terrain hands the spline mesh builder. */
+function flatSplineMeshSource(): TerrainSplineMeshSource {
+  return { splines: [], normalAt: () => [0, 1, 0] };
+}
+
 check("deformSplineMeshGeometry bends local +Z geometry along the sampled spline path", () => {
   const geometry = new BoxGeometry(2, 0.2, 10, 2, 1, 8);
-  const landscape = createFlatLandscapeData("small");
+  const landscape = flatSplineMeshSource();
   const deformed = deformSplineMeshGeometry(geometry, {
     assetId: "road",
     points: [[0, 0, 0], [0, 0, 10], [10, 0, 10]],
@@ -1916,7 +1910,7 @@ check("deformSplineMeshGeometry continues the UV component that follows the sour
     bank: 0,
     alignToTerrain: false,
     distanceStart: 10,
-  }, createFlatLandscapeData("small"));
+  }, flatSplineMeshSource());
   assert.ok(deformed);
   const uv = deformed.getAttribute("uv");
   assert.deepEqual(Array.from({ length: uv.count }, (_, index) => uv.getX(index)), [1, 1, 2, 2]);
@@ -1945,7 +1939,7 @@ check("deformSplineMeshGeometry shares one chain frame at authored segment joins
     alignToTerrain: false,
     recomputeNormals: false,
   };
-  const landscape = createFlatLandscapeData("small");
+  const landscape = flatSplineMeshSource();
   const first = deformSplineMeshGeometry(strip(), { ...basePath, pathDistanceStart: 0, pathDistanceEnd: 10 }, landscape)!;
   const second = deformSplineMeshGeometry(strip(), { ...basePath, distanceStart: 10, pathDistanceStart: 10, pathDistanceEnd: 20 }, landscape)!;
   const point = (geometry: BufferGeometry, index: number): number[] => {
@@ -1960,7 +1954,7 @@ check("deformSplineMeshGeometry shares one chain frame at authored segment joins
 });
 
 check("buildLandscapeSplineMeshGroup uses unique geometry for an opt-in deformed spline", () => {
-  const data = createFlatLandscapeData("small");
+  const data = flatSplineMeshSource();
   data.splines = [{
     id: "curve",
     smooth: true,
@@ -1987,7 +1981,7 @@ check("buildLandscapeSplineMeshGroup uses unique geometry for an opt-in deformed
 });
 
 check("deformed spline chains weld compatible pieces and keep UV phase continuous", () => {
-  const data = createFlatLandscapeData("small");
+  const data = flatSplineMeshSource();
   data.splines = [{
     id: "road-chain",
     points: [
@@ -2044,7 +2038,7 @@ check("SM_Asphalt chain welds every shared end-ring vertex", () => {
   root.add(sourceMesh);
   root.updateMatrixWorld(true);
 
-  const data = createFlatLandscapeData("small");
+  const data = flatSplineMeshSource();
   data.splines = [{
     id: "asphalt-chain",
     points: [
@@ -19337,36 +19331,6 @@ check("normalizeFoliageData keeps canonical Landscape foliage rules without gene
   assert.equal(uniqueLandscapeFoliageRuleId(data.landscapeRules ?? []), "landscape-foliage-rule-1");
 });
 
-check("Landscape foliage samples are deterministic and respect the painted layer mask", () => {
-  const landscape = createFlatLandscapeData("small");
-  const grass = landscape.layers.find((layer) => layer.id === "grass")!;
-  // Keep the left half painted and the right half clear.
-  for (let z = 0; z < landscape.size.verticesZ; z += 1) {
-    for (let x = 0; x < landscape.size.verticesX; x += 1) {
-      grass.weights[z * landscape.size.verticesX + x] = x < landscape.size.verticesX / 2 ? 1 : 0;
-    }
-  }
-  const rule = {
-    id: "rule-1",
-    landscapeId: "landscape-1",
-    layerId: "grass",
-    foliageTypeId: "grass-type",
-    density: 0.1,
-    minWeight: 0.5,
-    seed: 42,
-  };
-  const input = { id: "landscape-1", position: [10, 2, 0] as Vec3, data: landscape };
-  const first = generateLandscapeFoliageSamples(rule, input);
-  const second = generateLandscapeFoliageSamples(rule, input);
-  assert.ok(first.length > 0);
-  assert.deepEqual(first, second);
-  // World X is actor position + local X; samples must stay in the painted left half.
-  // Bilinear mask sampling permits the half-weight boundary cell, but never the
-  // unpainted right-hand terrain beyond that one-unit blend edge.
-  assert.ok(first.every((sample) => sample.position[0] < 10.5));
-  assert.ok(first.every((sample) => Math.abs(sample.position[1] - 2) < 1e-6));
-});
-
 check("validateSaveFoliagePayload requires a .foliage.json path", () => {
   const ok = validateSaveFoliagePayload({
     path: "layouts/playground.foliage.json",
@@ -23202,100 +23166,6 @@ check("validateReflectionPlane allowlists fields and round-trips through validat
   assert.deepEqual(validateLayout(layout), layout);
 });
 
-check("landscape heightmaps bilinearly resample and export normalized grayscale", () => {
-  const rgba = new Uint8ClampedArray([
-    0, 0, 0, 255,
-    255, 255, 255, 255,
-    255, 255, 255, 255,
-    0, 0, 0, 255,
-  ]);
-  assert.deepEqual(
-    resampleLandscapeHeightmap(rgba, 2, 2, { verticesX: 3, verticesZ: 3 }, 10),
-    [0, 5, 10, 5, 5, 5, 10, 5, 0],
-  );
-  const data = createFlatLandscapeData("small");
-  data.size.verticesX = 2;
-  data.size.verticesZ = 2;
-  data.heights = [5, 10, 15, 20];
-  assert.deepEqual([...landscapeHeightsToGrayscale(data)], [
-    0, 0, 0, 255, 85, 85, 85, 255, 170, 170, 170, 255, 255, 255, 255, 255,
-  ]);
-  assert.throws(() => resampleLandscapeHeightmap(rgba, 0, 2, { verticesX: 2, verticesZ: 2 }, 1));
-});
-
-check("landscape resolution resample preserves world footprint, height shape, and normalized paint", () => {
-  const data = createFlatLandscapeData("small");
-  data.size = { verticesX: 2, verticesZ: 2, spacing: 4, heightScale: 2 };
-  data.heights = [0, 10, 20, 30];
-  data.layers = [
-    { id: "grass", name: "Grass", weights: [1, 0, 0, 1] },
-    { id: "dirt", name: "Dirt", weights: [0, 1, 1, 0] },
-    { id: "rock", name: "Rock", weights: [0, 0, 0, 0] },
-    { id: "snow", name: "Snow", weights: [0, 0, 0, 0] },
-  ];
-  const result = resampleLandscapeData(data, { verticesX: 3, verticesZ: 3 });
-  assert.deepEqual(result.size, { verticesX: 3, verticesZ: 3, spacing: 2, heightScale: 2 });
-  assert.deepEqual(result.heights, [0, 5, 10, 10, 15, 20, 20, 25, 30]);
-  assert.equal(result.layers[0]!.weights[4], 0.5);
-  assert.equal(result.layers[1]!.weights[4], 0.5);
-  for (let index = 0; index < result.heights.length; index += 1) {
-    assert.equal(result.layers.reduce((sum, layer) => sum + layer.weights[index]!, 0), 1);
-  }
-});
-
-check("landscape sidecar drops any legacy heightmap import reference on save", () => {
-  const data = createFlatLandscapeData("small");
-  // Older sidecars carried a `heightmapImport` PNG reference; the validator now
-  // strips it so baked heights are the single source of truth.
-  const legacy = {
-    ...data,
-    heightmapImport: {
-      source: "assets/starter-content/Landscapes/Heightmaps/landscape-1-heightmap.png",
-      height: 50,
-    },
-  };
-  const validated = validateLandscapeData(legacy) as Record<string, unknown>;
-  assert.equal("heightmapImport" in validated, false);
-});
-
-check("landscape spline data is allowlisted and rejects broken point links", () => {
-  const data = createFlatLandscapeData("small");
-  data.splines = [
-    {
-      id: "road-main",
-      name: "Main Road",
-      points: [
-        { id: "p0", position: [-10, 2, 0], width: 6, falloff: 3 },
-        { id: "p1", position: [10, 2, 0], width: 8, falloff: 4, leaveTangent: [4, 0, 0] },
-      ],
-      segments: [
-        {
-          id: "s0",
-          startPointId: "p0",
-          endPointId: "p1",
-          deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true, targetOffset: 0.2 },
-          paint: { enabled: true, layerId: "road", strength: 0.8 },
-          mesh: { enabled: true, assetId: "road-tile", spacing: 2, scale: [1, 1, 1], alignToTerrain: true },
-        },
-      ],
-    },
-  ];
-  const validated = validateLandscapeData(data) as typeof data;
-  assert.deepEqual(validated.splines, data.splines);
-  assert.throws(() =>
-    validateLandscapeData({
-      ...data,
-      splines: [{ ...data.splines![0]!, segments: [{ id: "bad", startPointId: "p0", endPointId: "missing" }] }],
-    }),
-  );
-  assert.throws(() =>
-    validateLandscapeData({
-      ...data,
-      splines: [{ ...data.splines![0]!, points: [{ id: "p0", position: [0, 0], width: 1, falloff: 0 }], segments: [] }],
-    }),
-  );
-});
-
 function straightSpline(overrides: {
   deform?: ForgeLandscapeSpline["segments"][number]["deform"];
   paint?: ForgeLandscapeSpline["segments"][number]["paint"];
@@ -23310,51 +23180,6 @@ function straightSpline(overrides: {
     segments: [{ id: "s0", startPointId: "p0", endPointId: "p1", ...overrides }],
   };
 }
-
-check("applyLandscapeSplineDeform flattens terrain toward the spline corridor", () => {
-  const data = createFlatLandscapeData("small"); // 65x65, spacing 1, origin 32
-  const spline = straightSpline({ deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } });
-  const centerIndex = 32 * 65 + 32; // localX 0, localZ 0 — on the centerline
-  const farIndex = 42 * 65 + 32; // localZ +10, outside the 3u corridor
-  const result = applyLandscapeSplineDeform(data, spline);
-  assert.equal(result.changed, true);
-  assert.equal(data.heights[centerIndex], 2);
-  assert.equal(data.heights[farIndex], 0);
-  assert.ok(result.bounds && result.bounds.x0 <= 22 && result.bounds.x1 >= 42);
-});
-
-check("applyLandscapeSplineDeform respects raise/lower direction gating", () => {
-  const data = createFlatLandscapeData("small");
-  const lowIndex = 32 * 65 + 30; // corridor vertex starting below target
-  const highIndex = 32 * 65 + 34; // corridor vertex starting above target
-  data.heights[lowIndex] = 0;
-  data.heights[highIndex] = 5;
-  const spline = straightSpline({ deform: { enabled: true, raiseTerrain: true, lowerTerrain: false, flatten: false } });
-  applyLandscapeSplineDeform(data, spline);
-  assert.equal(data.heights[lowIndex], 2); // raised up to the road height
-  assert.equal(data.heights[highIndex], 5); // lowering is gated off, so kept
-});
-
-check("applyLandscapeSplinePaint blends the target layer along the corridor", () => {
-  const data = createFlatLandscapeData("small");
-  const spline = straightSpline({ paint: { enabled: true, layerId: "dirt", strength: 1 } });
-  const centerIndex = 32 * 65 + 32;
-  const farIndex = 42 * 65 + 32;
-  const dirt = data.layers.find((layer) => layer.id === "dirt")!;
-  const grass = data.layers.find((layer) => layer.id === "grass")!;
-  const result = applyLandscapeSplinePaint(data, spline);
-  assert.equal(result.changed, true);
-  assert.ok(dirt.weights[centerIndex]! > 0.99);
-  assert.ok(grass.weights[centerIndex]! < 0.01);
-  assert.equal(dirt.weights[farIndex], 0); // untouched outside the corridor
-});
-
-check("landscape spline apply is a no-op when no segment enables the effect", () => {
-  const data = createFlatLandscapeData("small");
-  const spline = straightSpline({ deform: { enabled: false, raiseTerrain: true, lowerTerrain: true, flatten: true } });
-  assert.deepEqual(applyLandscapeSplineDeform(data, spline), { changed: false, bounds: null });
-  assert.deepEqual(applyLandscapeSplinePaint(data, straightSpline({})), { changed: false, bounds: null });
-});
 
 check("resolveLandscapeSplineMeshChains joins reversed compatible segments and stops at branches", () => {
   const mesh = { enabled: true, assetId: "road", deform: true } as const;
@@ -23445,6 +23270,20 @@ check("computeLandscapeSplineMeshInstances fits each spline piece along its full
   assert.equal(computeLandscapeSplineMeshInstances(offsetSpline)[0]!.rotation[1], 0);
 });
 
+check("landscape PNG heightmaps bilinearly resample to the terrain grid", () => {
+  const rgba = new Uint8ClampedArray([
+    0, 0, 0, 255,
+    255, 255, 255, 255,
+    255, 255, 255, 255,
+    0, 0, 0, 255,
+  ]);
+  assert.deepEqual(
+    resampleLandscapeHeightmap(rgba, 2, 2, { verticesX: 3, verticesZ: 3 }, 10),
+    [0, 5, 10, 5, 5, 5, 10, 5, 0],
+  );
+  assert.throws(() => resampleLandscapeHeightmap(rgba, 0, 2, { verticesX: 2, verticesZ: 2 }, 1));
+});
+
 check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alignment in its quaternion", () => {
   const slope: ForgeLandscapeSpline = {
     id: "slope",
@@ -23454,11 +23293,9 @@ check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alig
     ],
     segments: [{ id: "s0", startPointId: "p0", endPointId: "p1", mesh: { enabled: true, assetId: "road", alignToTerrain: true, bank: 10 } }],
   };
-  const terrain = createFlatLandscapeData("small");
-  // Rise one unit per +X grid step so a terrain-aligned up vector tilts toward -X.
-  terrain.heights = terrain.heights.map((_, index) => index % terrain.size.verticesX);
+  // Ground rising one unit per metre along +X, so a terrain-aligned up vector tilts toward -X.
   const instance = computeLandscapeSplineMeshInstances(slope, {
-    landscape: terrain,
+    normalAt: () => [-Math.SQRT1_2, Math.SQRT1_2, 0],
     meshForwardLengths: new Map([["road", 10]]),
   })[0]!;
   assert.equal(instance.rotation[0], -26.565);
@@ -23472,8 +23309,8 @@ check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alig
     ...slope,
     segments: [{ ...slope.segments[0]!, mesh: { ...slope.segments[0]!.mesh!, fitToLength: false, deform: true } }],
   };
-  const saved = validateLandscapeData({ ...terrain, splines: [savedSpline] }) as ForgeLandscapeData;
-  assert.deepEqual(saved.splines?.[0]?.segments[0]?.mesh, {
+  const saved = validateLandscapeSplines([savedSpline]) as unknown as ForgeLandscapeSpline[];
+  assert.deepEqual(saved[0]?.segments[0]?.mesh, {
     enabled: true,
     assetId: "road",
     fitToLength: false,
@@ -23481,58 +23318,6 @@ check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alig
     bank: 10,
     deform: true,
   });
-});
-
-check("landscape spline smoothness round-trips through the save allowlist", () => {
-  // The allowlist half of the tangent knob: a field the validator does not copy
-  // is silently dropped, so an authored corner softness would reset on save.
-  const terrain = createFlatLandscapeData("small");
-  const spline: ForgeLandscapeSpline = { ...smoothBend(true), smoothness: 0 };
-  const saved = validateLandscapeData({ ...terrain, splines: [spline] }) as ForgeLandscapeData;
-  assert.equal(saved.splines?.[0]?.smoothness, 0);
-  assert.equal(saved.splines?.[0]?.smooth, true);
-  // Absent stays absent, so an untouched spline keeps the historic 0.5 default.
-  const plain = validateLandscapeData({ ...terrain, splines: [smoothBend(true)] }) as ForgeLandscapeData;
-  assert.equal(plain.splines?.[0]?.smoothness, undefined);
-});
-
-check("landscape splines support shared-point branches and closed loops", () => {
-  const branch: ForgeLandscapeSpline = {
-    id: "hub",
-    points: [
-      { id: "c", position: [0, 1, 0], width: 4, falloff: 2 },
-      { id: "n", position: [0, 1, 10], width: 4, falloff: 2 },
-      { id: "e", position: [10, 1, 0], width: 4, falloff: 2 },
-      { id: "s", position: [0, 1, -10], width: 4, falloff: 2 },
-    ],
-    // Three segments fan out of the shared hub point "c" (a branch/junction).
-    segments: [
-      { id: "s0", startPointId: "c", endPointId: "n", deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } },
-      { id: "s1", startPointId: "c", endPointId: "e", deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } },
-      { id: "s2", startPointId: "c", endPointId: "s", mesh: { enabled: true, assetId: "post", spacing: 5 } },
-    ],
-  };
-  const loop: ForgeLandscapeSpline = {
-    id: "ring",
-    points: [
-      { id: "p0", position: [-8, 1, -8], width: 4, falloff: 2 },
-      { id: "p1", position: [8, 1, -8], width: 4, falloff: 2 },
-      { id: "p2", position: [8, 1, 8], width: 4, falloff: 2 },
-      { id: "p3", position: [-8, 1, 8], width: 4, falloff: 2 },
-    ],
-    segments: [
-      { id: "s0", startPointId: "p0", endPointId: "p1" },
-      { id: "s1", startPointId: "p1", endPointId: "p2" },
-      { id: "s2", startPointId: "p2", endPointId: "p3" },
-      { id: "s3", startPointId: "p3", endPointId: "p0" }, // loop-closing segment
-    ],
-  };
-  const data = createFlatLandscapeData("small");
-  data.splines = [branch, loop];
-  const validated = validateLandscapeData(data) as typeof data;
-  assert.deepEqual(validated.splines, data.splines); // shared points + loop allowlisted
-  assert.equal(applyLandscapeSplineDeform(data, branch).changed, true);
-  assert.ok(computeLandscapeSplineMeshInstances(branch).length > 0);
 });
 
 check("computeLandscapeSplineMeshInstances skips disabled or asset-less mesh segments", () => {
@@ -23609,74 +23394,6 @@ check("Landscape spline adapter delegates linear and smooth centerline math to G
   assert.deepEqual(component?.points.map((point) => point.position), [smooth.points[0]!.position, smooth.points[1]!.position]);
 });
 
-check("applyLandscapeRectDeform levels a footprint and blends its edge", () => {
-  const data = createFlatLandscapeData("small");
-  const center = 32 * 65 + 32;
-  const edge = 32 * 65 + 35; // local X +3: inside the falloff band
-  const outside = 32 * 65 + 37; // local X +5: clear of the pad
-  data.heights[center] = 1;
-  data.heights[edge] = 1;
-  data.heights[outside] = 1;
-  const result = applyLandscapeRectDeform(data, [{
-    centerX: 0,
-    centerZ: 0,
-    halfWidth: 2,
-    halfDepth: 2,
-    falloff: 2,
-    targetHeight: 5,
-  }]);
-  assert.equal(result.changed, true);
-  assert.equal(data.heights[center], 5, "the pad core reaches its target elevation");
-  assert.ok(data.heights[edge]! > 1 && data.heights[edge]! < 5, "the edge blends toward surrounding ground");
-  assert.equal(data.heights[outside], 1, "terrain outside the footprint and falloff is unchanged");
-});
-
-check("applyLandscapeRectPaint blends a soft-edged pad and renormalizes the layer set", () => {
-  const data = createFlatLandscapeData("small");
-  const center = 32 * 65 + 32;
-  const outside = 32 * 65 + 40;
-  const dirt = data.layers.find((layer) => layer.id === "dirt")!;
-  const grass = data.layers.find((layer) => layer.id === "grass")!;
-  const result = applyLandscapeRectPaint(data, [{
-    layerId: "dirt",
-    centerX: 0,
-    centerZ: 0,
-    halfWidth: 2,
-    halfDepth: 2,
-    falloff: 2,
-    strength: 1,
-  }]);
-  assert.equal(result.changed, true);
-  assert.ok(dirt.weights[center]! > 0.99, "the pad core reaches full weight");
-  assert.ok(grass.weights[center]! < 0.01, "the rest of the set renormalizes around it");
-  assert.equal(dirt.weights[outside], 0, "outside the pad and its falloff nothing is painted");
-  const total = data.layers.reduce((sum, layer) => sum + layer.weights[center]!, 0);
-  assert.ok(Math.abs(total - 1) < 1e-6, "weights still sum to 1 at a painted vertex");
-});
-
-check("a clipped spline apply reproduces the full pass inside its own rectangle", () => {
-  // The whole point of `clip`: paint and deform are per-vertex independent, so
-  // replaying the same ordered operations over a sub-rectangle must write exactly
-  // the values a full pass would have written there — otherwise a partial repaint
-  // silently diverges from a full one.
-  const spline = straightSpline({ deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } });
-  const full = createFlatLandscapeData("small");
-  applyLandscapeSplineDeform(full, spline);
-
-  const clipped = createFlatLandscapeData("small");
-  const clip = landscapeGridBoundsForLocalBox(clipped.size, { minX: -4, minZ: -4, maxX: 4, maxZ: 4 });
-  assert.ok(clip, "the box overlaps the heightfield");
-  applyLandscapeSplineDeform(clipped, spline, clip);
-  for (let z = clip!.z0; z <= clip!.z1; z += 1) {
-    for (let x = clip!.x0; x <= clip!.x1; x += 1) {
-      const index = z * 65 + x;
-      assert.equal(clipped.heights[index], full.heights[index], `vertex ${x},${z} must match the full pass`);
-    }
-  }
-  // And a box entirely off the heightfield yields no rectangle at all.
-  assert.equal(landscapeGridBoundsForLocalBox(clipped.size, { minX: 500, minZ: 500, maxX: 600, maxZ: 600 }), null);
-});
-
 check("landscape spline smoothness scales the corner tangent, absent keeping the historic 0.5", () => {
   const historic = landscapeSplineSegmentComponent(smoothBend(true), smoothBend(true).segments[0]!);
   const leave = historic?.points[0]?.leaveTangent;
@@ -23698,49 +23415,6 @@ check("landscape spline smoothness scales the corner tangent, absent keeping the
   const flat = landscapeSplineSegmentComponent(straightened, straightened.segments[0]!);
   assert.deepEqual(flat?.points[0]?.leaveTangent, [0, 0, 0]);
 });
-
-check("smooth spline deform bows outside the straight corridor", () => {
-  const straightData = createFlatLandscapeData("small");
-  applyLandscapeSplineDeform(straightData, smoothBend(false, true));
-  const smoothData = createFlatLandscapeData("small");
-  const result = applyLandscapeSplineDeform(smoothData, smoothBend(true, true));
-  assert.equal(result.changed, true);
-  // The curved corridor reaches at least one vertex the straight corridor misses.
-  const spilled = smoothData.heights.some((height, index) => height !== 0 && straightData.heights[index] === 0);
-  assert.ok(spilled, "smooth deform should touch vertices outside the straight corridor");
-});
-
-check("smooth spline follows a closed loop with wrapped tangents", () => {
-  const loop: ForgeLandscapeSpline = {
-    id: "ring",
-    smooth: true,
-    points: [
-      { id: "p0", position: [-8, 1, -8], width: 4, falloff: 2 },
-      { id: "p1", position: [8, 1, -8], width: 4, falloff: 2 },
-      { id: "p2", position: [8, 1, 8], width: 4, falloff: 2 },
-      { id: "p3", position: [-8, 1, 8], width: 4, falloff: 2 },
-    ],
-    segments: [
-      { id: "s0", startPointId: "p0", endPointId: "p1" },
-      { id: "s1", startPointId: "p1", endPointId: "p2" },
-      { id: "s2", startPointId: "p2", endPointId: "p3" },
-      { id: "s3", startPointId: "p3", endPointId: "p0" },
-    ],
-  };
-  const poly = splineToPolyline(loop, 8);
-  assert.equal(poly.length, 32);
-  assert.ok(poly.every((sub) => sub.end.position.every((value) => Number.isFinite(value))));
-  // Loop neighbours wrap around, so the top edge (p0→p1) bows outward past its
-  // straight chord (z = -8). A reflected open-end tangent would not bulge this way.
-  const topEdge = poly.filter((sub) => sub.segment.id === "s0");
-  const midZ = topEdge[Math.floor(topEdge.length / 2)]!.end.position[2];
-  assert.ok(midZ < -8, `expected outward bulge past z=-8, got z=${midZ}`);
-
-  const validated = validateLandscapeData({ ...createFlatLandscapeData("small"), splines: [loop] }) as ForgeLandscapeData;
-  assert.equal(validated.splines?.[0]?.smooth, true); // `smooth` survives the save validator
-});
-
-// --- Generic Spline component data (engine/scene/spline.ts, Faz 1) -----------
 
 check("normalizeSplineComponentData survives garbage input without throwing", () => {
   for (const garbage of [undefined, null, 42, "spline", [], { points: "nope" }]) {
@@ -24610,118 +24284,15 @@ check("validateLandscape allowlists fields and round-trips through validateLayou
   assert.deepEqual(validateLayout(layout), layout);
 });
 
-check("validateLandscapeData accepts a valid flat heightfield and rejects malformed sidecars", () => {
-  const size = { verticesX: 65, verticesZ: 65, spacing: 1, heightScale: 1 };
-  const heights = new Array(65 * 65).fill(0);
-  const data = validateLandscapeData({
-    schema: 1,
-    type: "landscape",
-    size,
-    chunks: { quadsPerChunk: 32 },
-    heights,
-    layers: [],
-  });
-  assert.equal(data.schema, 1);
-  assert.equal(data.type, "landscape");
-  assert.deepEqual(data.size, size);
-  assert.equal((data.heights as number[]).length, 65 * 65);
-
-  // Wrong schema/type rejects.
-  assert.throws(() =>
-    validateLandscapeData({ schema: 2, type: "landscape", size, heights, layers: [] }),
-  );
-  assert.throws(() =>
-    validateLandscapeData({ schema: 1, type: "not-landscape", size, heights, layers: [] }),
-  );
-  // Grid size outside 65..257 rejects.
-  assert.throws(() =>
-    validateLandscapeData({
-      schema: 1,
-      type: "landscape",
-      size: { ...size, verticesX: 32 },
-      heights: new Array(32 * 65).fill(0),
-      layers: [],
-    }),
-  );
-  // Mismatched heights length rejects.
-  assert.throws(() =>
-    validateLandscapeData({
-      schema: 1,
-      type: "landscape",
-      size,
-      heights: heights.slice(0, 10),
-      layers: [],
-    }),
-  );
-  // A layer weights array of the wrong length rejects.
-  assert.throws(() =>
-    validateLandscapeData({
-      schema: 1,
-      type: "landscape",
-      size,
-      heights,
-      layers: [{ id: "grass", name: "Grass", weights: [0, 1] }],
-    }),
-  );
-
-});
-
-check("landscape layer material is allowlisted, round-trips, and survives normalization", () => {
-  const size = { verticesX: 65, verticesZ: 65, spacing: 1, heightScale: 1 };
-  const heights = new Array(65 * 65).fill(0);
-  const weights = new Array(65 * 65).fill(0);
-  const validated = validateLandscapeData({
-    schema: 1,
-    type: "landscape",
-    size,
-    heights,
-    layers: [
-      { id: "grass", name: "Grass", material: "mat-rocky-soil", weights: weights.map(() => 1) },
-      { id: "dirt", name: "Dirt", weights },
-    ],
-  });
-  const layers = validated.layers as Array<Record<string, unknown>>;
-  assert.equal(layers[0]!.material, "mat-rocky-soil");
-  assert.equal("material" in layers[1]!, false);
-
-  // A non-string, non-null material rejects.
-  assert.throws(() =>
-    validateLandscapeData({
-      schema: 1,
-      type: "landscape",
-      size,
-      heights,
-      layers: [{ id: "grass", name: "Grass", material: 5, weights }],
-    }),
-  );
-
-  // ensureLandscapeLayers keeps an authored list (order, removed presets) and its assignments.
-  const data = createFlatLandscapeData("small");
-  data.layers[1]!.material = "mat-desert-sand";
-  data.layers[0]!.name = "Renamed";
-  data.layers = [data.layers[1]!, data.layers[0]!];
-  ensureLandscapeLayers(data);
-  assert.deepEqual(data.layers.map((layer) => layer.id), ["dirt", "grass"]);
-  assert.equal(data.layers[0]!.material, "mat-desert-sand");
-  assert.equal(data.layers[1]!.material, undefined);
-  assert.equal(data.layers[1]!.name, "Grass", "preset ids keep their preset name");
-  assert.equal(data.layers[1]!.weights[0], 1);
-  // Only an empty list (old Faz 1/2 sidecars) gets the four presets.
-  data.layers = [];
-  assert.equal(ensureLandscapeLayers(data), true);
-  assert.deepEqual(data.layers.map((layer) => layer.id), ["grass", "dirt", "rock", "snow"]);
-});
-
 check("landscape trimesh reference is centred and up-facing, and physics files its triangles as walkable surfaces", () => {
-  const data = createFlatLandscapeData("small");
-  data.size = { verticesX: 3, verticesZ: 3, spacing: 2, heightScale: 1 };
-  data.heights = [
-    0, 0, 0,
-    0, 1, 0,
-    0, 0, 0,
-  ];
-  data.layers = [];
-  const primitive = landscapeTrimesh(data);
+  const { primitive } = terrainTileTrimesh({ tileQuads: 2, spacing: 2, origin: [0, 0, 0] }, {
+    x: 0, z: 0, size: 3, layerCount: 0, weights: new Uint8Array(0),
+    heights: Float32Array.from([
+      0, 0, 0,
+      0, 1, 0,
+      0, 0, 0,
+    ]),
+  });
   assert.equal(primitive.shape, "trimesh");
   assert.equal(primitive.vertices.length, 9);
   assert.equal(primitive.indices.length, 24);
@@ -24757,11 +24328,8 @@ check("landscape trimesh reference is centred and up-facing, and physics files i
 });
 
 check("physics subsystem spatially narrows static landscape surface candidates for ground probes", () => {
-  const data = createFlatLandscapeData("small");
-  data.size = { verticesX: 9, verticesZ: 9, spacing: 1, heightScale: 1 };
-  data.heights = new Array(81).fill(0);
-  data.layers = [];
-  const primitive = landscapeTrimesh(data);
+  const { primitive } = terrainTileTrimesh({ tileQuads: 8, spacing: 1, origin: [0, 0, 0] },
+    { x: 0, z: 0, size: 9, layerCount: 0, weights: new Uint8Array(0), heights: new Float32Array(81) });
   const physics = new PhysicsSubsystem();
   physics.setEntities([
     {

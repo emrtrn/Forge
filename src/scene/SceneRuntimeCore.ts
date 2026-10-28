@@ -52,9 +52,7 @@ import {
 import { isProceduralAssetId } from "@engine/scene/shapes";
 import {
   computeLandscapeSplineMeshInstances,
-  landscapeHeightAtLocal,
   resolveLandscapeSplineMeshChains,
-  type ForgeLandscapeData,
   type LandscapeSplineMeshChain,
 } from "@engine/scene/landscape";
 import { createProceduralAssetGltf } from "./shapePrimitives";
@@ -530,7 +528,7 @@ export function disposeSplineGeneratedGroup(group: Group): void {
  * referenced assets are loaded). Assets absent from `models` are skipped.
  */
 export function buildLandscapeSplineMeshGroup(options: {
-  data: ForgeLandscapeData | TerrainSplineMeshSource;
+  data: TerrainSplineMeshSource;
   models: ReadonlyMap<string, GLTF>;
   castShadow: boolean;
   receiveShadow: boolean;
@@ -778,7 +776,7 @@ interface DeformPathSample {
 export function deformSplineMeshGeometry(
   geometry: BufferGeometry,
   path: LandscapeSplineMeshDeformPath,
-  landscape: ForgeLandscapeData | TerrainSplineMeshSource,
+  landscape: TerrainSplineMeshSource,
 ): BufferGeometry | null {
   const positions = geometry.getAttribute("position");
   if (!positions) return null;
@@ -946,14 +944,8 @@ function sampleDeformPathAtDistance(
   return null;
 }
 
-function terrainNormalAt(landscape: ForgeLandscapeData | TerrainSplineMeshSource, x: number, z: number): Vector3 {
-  if ("normalAt" in landscape) return new Vector3(...landscape.normalAt(x, z));
-  const step = Math.max(landscape.size.spacing, 0.001);
-  return new Vector3(
-    landscapeHeightAtLocal(landscape, x - step, z) - landscapeHeightAtLocal(landscape, x + step, z),
-    2 * step,
-    landscapeHeightAtLocal(landscape, x, z - step) - landscapeHeightAtLocal(landscape, x, z + step),
-  ).normalize();
+function terrainNormalAt(landscape: TerrainSplineMeshSource, x: number, z: number): Vector3 {
+  return new Vector3(...landscape.normalAt(x, z));
 }
 
 /**

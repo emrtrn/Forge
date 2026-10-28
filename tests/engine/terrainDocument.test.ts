@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { createFlatLandscapeData } from "../../engine/scene/landscape";
 import type { LayoutLandscape } from "../../engine/scene/layout";
+import { createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
-import { captureTerrainSnapshot, landscapeLayersWithoutLayer, terrainDocumentToLandscape, terrainTransformNeedsSave } from "../../engine/terrain/terrainLandscapeBridge";
+import { applyTerrainLayerState, createTerrainLayerRemoval } from "../../engine/terrain/terrainLayers";
 import { loadWorldTerrain, validateTerrainTile } from "../../engine/terrain/terrainLoader";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
-import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
-import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
+import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
+import { terrainGlobalMapPath, terrainTileHeightRange, terrainTileLayerWeight, terrainTilePath, type TerrainSpline } from "../../engine/terrain/terrainTypes";
+import { createFlatWorldTerrain } from "../../engine/terrain/worldTerrainCreate";
+import { captureWorldTerrainSave } from "../../engine/terrain/worldTerrainSave";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { collectDroppedFields } from "../../tools/droppedFields";
 import { validateSaveTerrainPayload, validateSaveTerrainTile } from "../../tools/saveValidator";
@@ -15,22 +16,29 @@ import { fetchTerrainActorDocument } from "../../src/scene/terrainDocument";
 
 type Check = (label: string, fn: () => void) => void;
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
-const actor: LayoutLandscape = { id: "l", name: "Terrain", position: [10, 2, -3], dataRef: "landscapes/test.landscape.json" };
+const path = "landscapes/test.terrain.json";
+const actor: LayoutLandscape = { id: "l", name: "Terrain", position: [10, 2, -3], dataRef: path };
 
+/** A one-tile World Terrain centred on `actor`, with a world-space road on it. */
 function fixture() {
-  const data = createFlatLandscapeData("small");
-  data.heights[0] = 3.25;
-  data.layers[1]!.physicalMaterial = "mud";
-  data.splines = [{ id: "road", name: "Road", hidden: false, locked: false, smooth: true, smoothness: 0.25,
-    points: [{ id: "a", position: [0, 0, 0], width: 2, falloff: 1, arriveTangent: [1, 0, 0] },
-      { id: "b", position: [4, 0, 4], width: 2, falloff: 1, leaveTangent: [1, 0, 0] }],
+  const { def, tiles } = createFlatWorldTerrain({ name: "Terrain", tilesX: 1, tilesZ: 1, tileQuads: 64, spacing: 1, baseHeight: 2 });
+  def.origin = [-22, 2, -35];
+  const tile = tiles.get("0_0")!;
+  tile.heights[0] = 3.25;
+  const range = terrainTileHeightRange(tile);
+  def.tiles = [{ key: "0_0", minHeight: range.min, maxHeight: range.max }];
+  def.layers[1]!.physicalMaterial = "mud";
+  def.splines = [{ id: "road", name: "Road", hidden: false, locked: false, smooth: true, smoothness: 0.25, coordinateSpace: "world",
+    points: [{ id: "a", position: [10, 2, -3], width: 2, falloff: 1, arriveTangent: [1, 0, 0] },
+      { id: "b", position: [14, 2, 1], width: 2, falloff: 1, leaveTangent: [1, 0, 0] }],
     segments: [{ id: "ab", startPointId: "a", endPointId: "b",
       deform: { enabled: true, raiseTerrain: true, lowerTerrain: false, flatten: false, targetOffset: 1 },
       paint: { enabled: true, layerId: "grass", strength: 0.8 },
       mesh: { enabled: true, assetId: "road", collision: true, spacing: 2, scale: [1, 1, 1], offset: [0, 0, 0],
         yawOffset: 0, fitToLength: true, alignToTerrain: true, bank: 2, deform: true } }],
-  }];
-  return { data, ...captureTerrainSnapshot(actor, data) };
+  } as unknown as TerrainSpline];
+  const bytes = encodeTerrainTile(tile, { heightMin: def.heightMin, heightMax: def.heightMax, heightFormat: "f32" });
+  return { def, tile, bytes, path };
 }
 
 export function registerTerrainDocumentTests(check: Check): void {
@@ -39,11 +47,10 @@ export function registerTerrainDocumentTests(check: Check): void {
     const saved = validateSaveTerrainPayload({ path, terrain: def }).terrain;
     assert.deepEqual(saved, normalizeWorldTerrain(def));
     assert.deepEqual(collectDroppedFields(def, saved, "terrain").paths, []);
-    assert.equal(saved.layers[1]?.physicalMaterial, "mud", "the 1x1 adapter carries the layer's physical material");
+    assert.equal(saved.layers[1]?.physicalMaterial, "mud", "the definition carries the layer's physical material");
     const nulled = { ...def, layers: def.layers.map((layer, index) => index === 0 ? { ...layer, physicalMaterial: null } : layer) };
     assert.equal(normalizeWorldTerrain(nulled).layers[0]?.physicalMaterial, null);
-    const edited = terrainDocumentToLandscape({ def: saved, tiles: new Map([["0_0", decodeTerrainTile(fixture().bytes)]]) });
-    assert.deepEqual(edited.layers.map((layer) => layer.physicalMaterial ?? null), [null, "mud", null, null]);
+    assert.deepEqual(saved.layers.map((layer) => layer.physicalMaterial ?? null), [null, "mud", null, null]);
     const extra = { ...def, secret: true, layers: def.layers.map((l) => ({ ...l, future: 1 })) };
     const report = collectDroppedFields(extra, normalizeWorldTerrain(extra), "terrain");
     assert.ok(report.paths.includes("terrain.secret"));
@@ -51,22 +58,26 @@ export function registerTerrainDocumentTests(check: Check): void {
   });
 
   check("terrain definition: removing paint layers down to one has no serialization drift; tiles validate", () => {
-    const { data } = fixture();
+    const { def, tile } = fixture();
+    const world = createTerrainEditWorld(def, [tile]);
     for (const [id, count, blocks] of [["grass", 3, 1], ["snow", 2, 1], ["rock", 1, 1]] as const) {
-      data.layers = landscapeLayersWithoutLayer(data, id);
-      const snapshot = captureTerrainSnapshot(actor, data);
-      const saved = validateSaveTerrainPayload({ path: snapshot.path, terrain: snapshot.def }).terrain;
+      applyTerrainLayerState(world, createTerrainLayerRemoval(world, id).after);
+      const snapshot = captureWorldTerrainSave(world, ["0_0"], new Map());
+      const saved = validateSaveTerrainPayload({ path, terrain: snapshot.def }).terrain;
       assert.equal(saved.layers.length, count);
       assert.deepEqual(saved, normalizeWorldTerrain(snapshot.def));
       assert.deepEqual(collectDroppedFields(snapshot.def, saved, "terrain").paths, []);
-      const tile = validateTerrainTile(saved, "0_0", snapshot.bytes);
-      assert.equal(tile.layerCount, count);
-      assert.equal(tile.weights.length, blocks * tile.size * tile.size * 4);
-      assert.deepEqual(saved.layers.map((layer) => layer.physicalMaterial ?? null), data.layers.map((layer) => layer.physicalMaterial ?? null));
+      const saved0 = validateTerrainTile(saved, "0_0", snapshot.tiles[0]!.bytes);
+      assert.equal(saved0.layerCount, count);
+      assert.equal(saved0.weights.length, blocks * saved0.size * saved0.size * 4);
+      assert.deepEqual(saved.layers.map((layer) => layer.physicalMaterial ?? null), world.def.layers.map((layer) => layer.physicalMaterial ?? null));
     }
-    assert.deepEqual(data.layers.map((layer) => layer.id), ["dirt"]);
-    assert.equal(data.layers[0]!.physicalMaterial, "mud");
-    assert.ok(data.layers[0]!.weights.every((weight) => weight === 1), "the last layer holds every vertex");
+    assert.deepEqual(world.def.layers.map((layer) => layer.id), ["dirt"]);
+    assert.equal(world.def.layers[0]!.physicalMaterial, "mud");
+    const last = world.tiles.get("0_0")!;
+    for (let index = 0; index < last.size * last.size; index += 1) {
+      assert.equal(terrainTileLayerWeight(last, 0, index), 1, "the last layer holds every vertex");
+    }
   });
 
   check("terrain definition: malformed shape, bounds, layer IDs, keys and spline links are rejected", () => {
@@ -106,27 +117,6 @@ export function registerTerrainDocumentTests(check: Check): void {
     assert.throws(() => validateTerrainTile({ ...def, tiles: [{ key: "0_0", minHeight: 0, maxHeight: 0 }] }, "0_0", bytes));
   });
 
-  check("terrain migration: refuses silent rotation loss and snapshot survives later edits", () => {
-    const { data, def, bytes } = fixture();
-    assert.throws(() => captureTerrainSnapshot({ ...actor, rotation: [0, 10, 0] }, data), /explicit adaptation/);
-    data.heights[0] = 100;
-    data.splines![0]!.name = "changed";
-    assert.equal(def.splines![0]!.name, "Road");
-    assert.equal(validateTerrainTile(def, "0_0", bytes).heights[0], 3.25);
-  });
-
-  check("terrain fixture: migrated RuntimeParity has the same heights, materials and spline references as legacy", () => {
-    const level = JSON.parse(readFileSync("public/layouts/RuntimeParity.level.json", "utf8"));
-    const entry = level.landscapes[0] as LayoutLandscape;
-    const definition = JSON.parse(readFileSync(`public/${entry.dataRef}`, "utf8"));
-    const legacy = JSON.parse(readFileSync("public/landscapes/runtime-parity.landscape.json", "utf8"));
-    const def = normalizeWorldTerrain(definition);
-    const tile = validateTerrainTile(def, "0_0", readFileSync(`public/${terrainTilePath(entry.dataRef, "0_0")}`));
-    const data = terrainDocumentToLandscape({ def, tiles: new Map([["0_0", tile]]) });
-    assert.deepEqual(data.heights, legacy.heights.map((h: number) => Math.fround(h * legacy.size.heightScale)));
-    assert.deepEqual(data.layers.map((l) => l.material), legacy.layers.map((l: { material?: string }) => l.material));
-    assert.deepEqual(data.splines ?? [], legacy.splines ?? []);
-  });
 }
 
 export async function registerTerrainDocumentAsyncTests(checkAsync: CheckAsync): Promise<void> {
@@ -162,7 +152,7 @@ export async function registerTerrainDocumentAsyncTests(checkAsync: CheckAsync):
         assert.deepEqual(document.globalAttributes, expectedAttributes);
         assert.equal(document.tiles.size, 1, "tiles still load eagerly");
       }
-      // A single (0, 0) tile goes through the 1x1 adapter: no sidecar request, no warning.
+      // A single (0, 0) tile needs no global map: no sidecar request, no warning.
       warnings.length = 0;
       const read: string[] = [];
       const document = await loadWorldTerrain(path, single, async (p) => { read.push(p); return bytes; });
@@ -178,57 +168,33 @@ export async function registerTerrainDocumentAsyncTests(checkAsync: CheckAsync):
     const document = await loadWorldTerrain(path, { ...def, tilesX: 2 }, async (p) => { read.push(p); return bytes; });
     assert.deepEqual(read, [terrainGlobalMapPath(path), terrainTilePath(path, "0_0")]);
     assert.equal(document.tiles.size, 1);
-    assert.throws(() => terrainDocumentToLandscape(document), /Phase 2/);
     await assert.rejects(loadWorldTerrain(path, def, async () => { throw new Error("missing tile"); }), /missing tile/);
     await assert.rejects(loadWorldTerrain(path, def, async () => bytes.subarray(0, 33)));
   });
 
-  await checkAsync("terrain read path: legacy and migrated sidecars load as the same World Terrain, new format errors propagate", async () => {
-    const { def, bytes, path, data } = fixture();
+  await checkAsync("terrain read path: a .terrain.json loads as a World Terrain; legacy sidecars and rotation are explicit errors", async () => {
+    const { def, bytes } = fixture();
     const original = globalThis.fetch;
     const requests: string[] = [];
     try {
       globalThis.fetch = async (input) => {
         const url = String(input); requests.push(url);
         if (url.endsWith(".tile.bin")) return new Response(bytes.slice().buffer);
-        return new Response(JSON.stringify(url.endsWith(".terrain.json") ? def : data));
+        return new Response(JSON.stringify(def));
       };
-      const legacy = await fetchTerrainActorDocument(actor.dataRef, false, actor);
-      const loaded = await fetchTerrainActorDocument(path);
-      assert.equal(legacy.kind, "world");
+      const loaded = await fetchTerrainActorDocument(path, false, actor);
       assert.equal(loaded.kind, "world");
-      if (legacy.kind !== "world" || loaded.kind !== "world") return;
-      // The legacy sidecar is read in memory and names where the editor saves it.
-      assert.deepEqual(legacy.legacySource, { path: actor.dataRef });
-      assert.equal(loaded.legacySource, undefined);
-      assert.deepEqual(legacy.document.def.origin, loaded.document.def.origin);
-      assert.deepEqual(legacy.document.def.splines, loaded.document.def.splines, "legacy splines arrive in world space");
-      assert.deepEqual(Array.from(legacy.document.tiles.get("0_0")!.heights), Array.from(loaded.document.tiles.get("0_0")!.heights));
-      const migrated = terrainDocumentToLandscape(loaded.document);
-      assert.equal(terrainTransformNeedsSave(actor, migrated), false);
-      assert.equal(terrainTransformNeedsSave({ ...actor, position: [20, 2, -3] }, migrated), true);
-      assert.equal(terrainTransformNeedsSave({ ...actor, collision: false }, migrated), true);
-      assert.deepEqual(captureTerrainSnapshot({ ...actor, position: [20, 2, -3] }, migrated).def.origin, [-12, 2, -35]);
+      assert.deepEqual(loaded.document.def.origin, [-22, 2, -35]);
+      assert.equal(loaded.document.tiles.get("0_0")!.heights[0], 3.25);
       assert.ok(requests.some((p) => p.endsWith("test.tiles/0_0.tile.bin")));
-      // Retain authored encoding range and layer colors through the old editing adapter.
-      def.heightMin = -100; def.heightMax = 100; def.layers[0]!.color = "#123456";
-      const document = terrainDocumentToLandscape({ def, tiles: new Map([["0_0", validateTerrainTile(fixture().def, "0_0", bytes)]]) });
-      const snapshot = captureTerrainSnapshot({ ...actor, dataRef: path }, document);
-      assert.equal(snapshot.def.heightMin, -100);
-      assert.equal(snapshot.def.layers[0]!.color, "#123456");
-      // A legacy grid a tile cannot hold exactly is an explicit error, never a silent adaptation.
-      await assert.rejects(fetchTerrainActorDocument(actor.dataRef, false, { ...actor, rotation: [0, 15, 0] }), /terrain:migrate/);
-      globalThis.fetch = async () => new Response(JSON.stringify({ ...data, size: { ...data.size, verticesZ: 33 } }));
-      await assert.rejects(fetchTerrainActorDocument(actor.dataRef, false, actor), /non-square .*terrain:migrate/);
+      // The 1x1 .landscape.json sidecar is no longer read: no request, an explicit error.
+      requests.length = 0;
+      await assert.rejects(fetchTerrainActorDocument("landscapes/test.landscape.json", false, actor), /not supported/);
+      assert.deepEqual(requests, []);
+      // A World Terrain is world-aligned: a rotated actor is refused, never silently dropped.
+      await assert.rejects(fetchTerrainActorDocument(path, false, { ...actor, rotation: [0, 15, 0] }), /rotated/);
       globalThis.fetch = async () => new Response("missing", { status: 404 });
       await assert.rejects(fetchTerrainActorDocument(path), /HTTP 404/);
-      // A missing legacy sidecar stays a flat 128-quad Landscape, centred on its actor.
-      const missing = await fetchTerrainActorDocument(actor.dataRef, false, actor);
-      assert.equal(missing.kind, "world");
-      if (missing.kind !== "world") return;
-      assert.equal(missing.document.def.tileQuads, 128);
-      assert.deepEqual(missing.document.def.origin, [-54, 2, -67]);
-      assert.deepEqual(missing.legacySource, { path: actor.dataRef });
     } finally { globalThis.fetch = original; }
   });
 }

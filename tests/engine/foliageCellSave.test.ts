@@ -42,7 +42,6 @@ function fixture(partition?: { enabled: boolean; grids?: Record<string, unknown>
       ...(partition ? { worldSettings: { partition: normalizeWorldPartitionSettings(partition) } } : {}),
     },
     layoutSaver: (async () => ({ path: LEVEL })) as LayoutSaver,
-    landscapeData: new Map(),
     worldTerrainIds: new Set(),
     foliageData: foliage(),
     meshPaintData: { schema: 1, type: "meshPaint", placements: [] },

@@ -94,6 +94,6 @@ export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
     bedVisibility: 0.9, absorptionDistance: 4, normalTexture: d.normalTexture,
     normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
     reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high",
-    reflectionStrength: d.reflectionStrength, causticsEnabled: false, causticsStrength: 0.85,
+    reflectionStrength: d.reflectionStrength, causticsEnabled: false, causticsStrength: 1,
     causticsScale: 1.5, causticsSpeed: 0.25, causticsDepthFade: 4, ...lake.appearance };
 }

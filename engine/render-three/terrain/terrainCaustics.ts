@@ -6,6 +6,10 @@ import type { TerrainUniforms } from "./terrainMaterial";
 import { terrainCausticPattern } from "./terrainCausticPattern";
 
 const SIDE = 256, MAX_BODIES = 8;
+/** Authored Strength 1 renders what the first release needed Strength 2 for: its
+ * light network was too faint to read at normal editor distances. Saved values
+ * stay as authored; only the uniform is scaled, so 0 still disables the lake. */
+const CAUSTICS_STRENGTH_GAIN = 2;
 interface Source { lake: LayoutLakeWaterBody; coverage: NonNullable<LakeGeometry["coverage"]>; object: Object3D }
 interface Registry { sources: Map<Object3D, Source>; texture: DataArrayTexture | null; dirty: boolean }
 const registries = new WeakMap<Scene, Registry>();
@@ -75,7 +79,7 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
     let visible = true;
     for (let parent: Object3D | null = object; parent; parent = parent.parent) visible &&= parent.visible;
     (uniforms.uCausticGrid!.value as Vector4[])[i]!.set(...coverage.min, 1 / coverage.spacing, coverage.nx);
-    (uniforms.uCausticArea!.value as Vector4[])[i]!.set(coverage.nz, lake.surfaceLevel, visible && (!terrainRef || lake.terrainRef === terrainRef) ? a.causticsStrength : 0, a.causticsScale);
+    (uniforms.uCausticArea!.value as Vector4[])[i]!.set(coverage.nz, lake.surfaceLevel, visible && (!terrainRef || lake.terrainRef === terrainRef) ? a.causticsStrength * CAUSTICS_STRENGTH_GAIN : 0, a.causticsScale);
     (uniforms.uCausticMotion!.value as Vector2[])[i]!.set(a.causticsSpeed, a.causticsDepthFade);
     i++;
   }

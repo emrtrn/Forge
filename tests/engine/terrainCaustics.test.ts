@@ -48,6 +48,8 @@ export async function registerTerrainCausticsTests(check: Check): Promise<void> 
     }
     assert.ok(packed.some((v, i) => i % 4 === 2 && v > 0), "original light pattern occupies B without changing RG flags");
     assert.ok((uniforms.uCausticArea.value as Vector4[])[0]!.z > 0);
+    assert.equal((uniforms.uCausticArea.value as Vector4[])[0]!.z, resolveLakeAppearance(doc.lake).causticsStrength * 2, "Strength 1 renders the doubled light the first release needed Strength 2 for");
+    assert.equal(resolveLakeAppearance({ ...doc.lake, appearance: {} }).causticsStrength, 1, "default Strength");
     object.visible = false; updateTerrainCaustics(uniforms, scene, "terrain");
     assert.equal(uniforms.uCausticArea.value[0]!.z, 0);
     object.visible = true; updateTerrainCaustics(uniforms, scene, "other-terrain");

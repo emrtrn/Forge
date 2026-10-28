@@ -7,7 +7,7 @@
 **Doğrulanan kod:** `main` @ `f9aa05f` (three `0.184.0`, `WebGLRenderer`)
 **Durum:** K0 (repo incelemesi) bu belgeyle **kapandı**. K1 uygulamaya hazır.
 **Henüz WES kodu yazılmadı.**
-**İlgili:** [World Builder v0.3](FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.3.md) · [K1 görev talimatı](FORGE_WES_K1_GOREV_TALIMATI_v0.2.md) · [OPEN_WORLD_PLAN](../OPEN_WORLD_PLAN.md) · [TERRAIN_DEFORMATION_PLAN](../TERRAIN_DEFORMATION_PLAN.md)
+**İlgili:** [World Builder v0.4](FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.4.md) · [K1 görev talimatı](FORGE_WES_K1_GOREV_TALIMATI_v0.2.md) · [OPEN_WORLD_PLAN](../OPEN_WORLD_PLAN.md) · [TERRAIN_DEFORMATION_PLAN](../TERRAIN_DEFORMATION_PLAN.md)
 
 > **Etiketler**
 > - `[ONAYLANDI]`: kullanıcı kararı. Yeniden açılmaz.

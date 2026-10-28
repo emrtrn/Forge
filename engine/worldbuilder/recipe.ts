@@ -194,6 +194,20 @@ export interface GeneratedParcel {
   placement?: string;
 }
 
+/**
+ * Ground levelled under a building (L6, T21), written by the `buildings` stage.
+ * Data only: the editor's Apply Pads bakes it into the terrain (decision 19).
+ */
+export interface GeneratedPad {
+  /** The building placement standing on it. */
+  id: string;
+  settlement: string;
+  /** Footprint plus margin, on the XZ plane. */
+  polygon: WorldPoint[];
+  /** Level of the pad, world metres. */
+  height: number;
+}
+
 /** A settlement's chosen site and resolved program (L1 + L2), written by the `settlementSites` stage. */
 export interface GeneratedSite {
   settlement: string;
@@ -242,7 +256,7 @@ export interface WorldRecipe {
   /** Public-root-relative default `*.regionprofile.json`. */
   regionProfile?: string;
   plan: WorldPlan;
-  generated: { sites: GeneratedSite[]; parcels: GeneratedParcel[] };
+  generated: { sites: GeneratedSite[]; parcels: GeneratedParcel[]; pads: GeneratedPad[] };
   generation: {
     /** Stages leave objects outside `ownership` alone. Default true. */
     preserveManualOverrides: boolean;
@@ -280,7 +294,7 @@ export function createWorldRecipe(recipeId: string, seed = 0): WorldRecipe {
     seed: normalizeSeed(seed) ?? 0,
     generators: {},
     plan: { regions: [], water: [], landmarks: [], settlements: [], roadGraph: { nodes: [], edges: [] } },
-    generated: { sites: [], parcels: [] },
+    generated: { sites: [], parcels: [], pads: [] },
     generation: { preserveManualOverrides: true, stages: [] },
     ownership: { placements: {}, splines: {}, foliageRules: {}, protectedRegions: [] },
   };
@@ -315,6 +329,7 @@ export function normalizeWorldRecipe(value: unknown): WorldRecipeNormalization {
   recipe.generated = {
     sites: normalizeSites(ctx, value.generated, recipe.plan),
     parcels: normalizeParcels(ctx, value.generated, recipe.plan),
+    pads: normalizePads(ctx, value.generated, recipe.plan),
   };
   recipe.generation = normalizeGeneration(ctx, value.generation);
   recipe.ownership = normalizeOwnership(ctx, value.ownership, recipe.plan);
@@ -606,6 +621,23 @@ function normalizeParcels(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedP
     }
   }
   return parcels;
+}
+
+function normalizePads(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedPad[] {
+  if (!isRecord(value) || value.pads === undefined) return [];
+  const settlements = idSet(plan.settlements);
+  return uniqueEntries(ctx, "generated.pads", value.pads, (c, p, pad) => {
+    const id = requireId(c, p, pad.id);
+    const polygon = requirePolygon(c, `${p}.polygon`, pad.polygon);
+    const height = requireNumber(c, `${p}.height`, pad.height, -100_000, 100_000);
+    if (id === null || polygon === null || height === null) return null;
+    if (typeof pad.settlement !== "string" || !settlements.has(pad.settlement)) {
+      return reject(c, `${p}.settlement`, "must name a plan settlement");
+    }
+    // Field order matches what the stage writes.
+    const result: GeneratedPad = { id, settlement: pad.settlement, polygon, height };
+    return result;
+  });
 }
 
 function normalizeGeneration(ctx: Ctx, value: unknown): WorldRecipe["generation"] {

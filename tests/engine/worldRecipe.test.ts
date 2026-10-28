@@ -62,6 +62,7 @@ function maximalRecipe(): Record<string, unknown> {
         id: "village_01.p2", settlement: "village_01", polygon: [[320, 120], [340, 120], [340, 140], [320, 140]],
         frontage: "e1", landUse: "residential", partOf: "village_01.p1",
       }],
+      pads: [{ id: "plc-house-1", settlement: "village_01", polygon: [[302, 124], [318, 124], [318, 138], [302, 138]], height: 41.25 }],
     },
     generation: { preserveManualOverrides: false, stages: ["roads", "settlement"] },
     ownership: {

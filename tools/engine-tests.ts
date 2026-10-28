@@ -1041,6 +1041,7 @@ import { registerWorldSettlementTests } from "../tests/engine/worldSettlement.te
 import { registerWorldParcelTests } from "../tests/engine/worldParcels.test";
 import { registerWorldStreetTests } from "../tests/engine/worldStreets.test";
 import { registerWorldLandUseTests } from "../tests/engine/worldLandUse.test";
+import { registerWorldBuildingTests } from "../tests/engine/worldBuildings.test";
 import { registerWorldBuilderSessionTests } from "../tests/engine/worldBuilderSession.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
@@ -1224,6 +1225,7 @@ registerWorldSettlementTests(check);
 registerWorldParcelTests(check);
 registerWorldStreetTests(check);
 registerWorldLandUseTests(check);
+registerWorldBuildingTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
 await registerWorldBuilderSessionTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);

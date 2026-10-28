@@ -588,12 +588,14 @@ test("World Terrain moves by its definition origin: tiles stay untouched, undo/r
 
   const DELTA: [number, number, number] = [20, 1.5, 10];
   const moved = CENTRE.map((value, axis) => value + DELTA[axis]!) as [number, number, number];
-  const definition = async () => JSON.parse((await fileBytes(TERRAIN)).toString("utf8")) as WorldTerrainDef;
-  const savedLevel = async () => (await (await request.get(`/${LEVEL}?t=${Date.now()}`)).json()) as { landscapes: { position: number[] }[] };
+  // Save rewrites these files in place: a read can land mid-write, so a partial file polls again.
+  const parsed = <T>(text: string): T | null => { try { return JSON.parse(text) as T; } catch { return null; } };
+  const definition = async () => parsed<WorldTerrainDef>((await fileBytes(TERRAIN)).toString("utf8"));
+  const savedLevel = async () => parsed<{ landscapes: { position: number[] }[] }>(await (await request.get(`/${LEVEL}?t=${Date.now()}`)).text());
   const terrainSaved = () => page.waitForResponse((response) => response.url().endsWith("/__save-terrain") && response.request().method() === "POST", { timeout: 20_000 });
   const expectSavedAt = async (origin: readonly number[], centre: readonly number[]) => {
-    await expect.poll(async () => (await definition()).origin, { timeout: 20_000 }).toEqual(origin);
-    await expect.poll(async () => (await savedLevel()).landscapes[0]!.position, { timeout: 20_000 }).toEqual(centre);
+    await expect.poll(async () => (await definition())?.origin, { timeout: 20_000 }).toEqual(origin);
+    await expect.poll(async () => (await savedLevel())?.landscapes[0]?.position, { timeout: 20_000 }).toEqual(centre);
     for (const [path, bytes] of tileBytes) expect((await fileBytes(path)).equals(bytes), `${path} untouched`).toBe(true);
   };
 

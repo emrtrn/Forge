@@ -1202,14 +1202,15 @@ global haritanın korunmasını, collider ekle/sil ve pawn tutmayı denetler.
 `terrain-streaming.spec.ts` kopya smoke projesinde 6×6 × 64 quad + encoder'la
 global harita üretir; köşede spawn, alt küme yükleme, normal input'la uzak
 köşeye koşma, eski tile/collider bırakma ve `terrainHeightAt` ile zemini ölçer.
-5274 koşumu sandbox esbuild dizin erişim engelinde sunucu başlamadan durdu;
-smoke TypeScript kapısı geçti, tarayıcı kabulü açık. Aynı engel standart
-engine runner'ını da durdurdu; geçici TypeScript loader'ıyla yeni ve mevcut
-renderer/streaming kontrolleri 36/36 geçti. Bu, tam build kapısı değildir;
-`build:verify` import/smoke fixture/content/UI tür kapılarını geçti, release
-araçlarındaki iki esbuild tabanlı URL kontrolünde aynı erişim engeline takıldı.
 Geçerli global haritası olmayan eski çok-tile arazi Play'de açık hata verir;
-editörde Save haritayı üretir. 4×4 km/1 km uzun koşum ve grid overlay'i açık.
+editörde Save haritayı üretir.
+
+**Tarayıcı kabulü (2026-10-28, kapandı):** `terrain-streaming.spec.ts` geçti
+(spawn 8 yüklü / 4 fizik tile → hedef 17 yüklü / 4 fizik, spawn köşesi
+bırakıldı, düşme yok). `open-world.spec.ts` 4×4 km `OpenWorldTest`
+dünyasında (256 tile) pawn'ı normal input'la 1 km koşturur; tepe 29 yüklü /
+25 aktif / 6 fizik tile, 3,9 MB resident, düşme yok (1,4 dk). Grid overlay'i
+1b11faca'da (`?debug` paneli). Araçla uzun sürüş versiyonu yok.
 
 ## Faz 5 — Actor bölümleme (hücre dosyaları)
 

@@ -7,6 +7,7 @@ import {
   DataUtils,
   DynamicDrawUsage,
   FloatType,
+  Frustum,
   HalfFloatType,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
@@ -14,6 +15,7 @@ import {
   Matrix4,
   Mesh,
   NearestFilter,
+  Plane,
   Ray,
   RedFormat,
   RGBAFormat,
@@ -35,7 +37,13 @@ import {
   type WebGLRenderTarget,
 } from "three";
 
-import { TerrainLodSelector, terrainResidentTileKeys, type TerrainLodDetail, type TerrainLodWorld } from "@engine/terrain/terrainLod";
+import {
+  TerrainLodSelector,
+  terrainResidentTileKeys,
+  type TerrainLodBox,
+  type TerrainLodDetail,
+  type TerrainLodWorld,
+} from "@engine/terrain/terrainLod";
 import { invalidateTerrainTileRange, raycastTerrain, type TerrainQueryDef } from "@engine/terrain/terrainHeightQuery";
 import { TERRAIN_PATCH_QUADS, TERRAIN_WEIGHT_BLOCKS, type TerrainVertexRect } from "@engine/terrain/terrainRenderData";
 import {
@@ -128,9 +136,35 @@ export function terrainTrackDetailStats(): { nodes: number; levels: number } {
   return { nodes, levels: pageTrackDetailLevels };
 }
 
+let cullingSuspended = 0;
+
+/**
+ * Runs `render` with every live terrain drawing its whole quadtree instead of
+ * the last view camera's frustum, for a pass that looks elsewhere (a reflection
+ * capture's six cube faces). Each terrain re-culls on its next `updateLod`.
+ */
+export function withTerrainCullingSuspended<T>(render: () => T): T {
+  cullingSuspended += 1;
+  try {
+    for (const renderer of liveRenderers) renderer.selectUnculled();
+    return render();
+  } finally {
+    cullingSuspended -= 1;
+    for (const renderer of liveRenderers) renderer.invalidateSelection();
+  }
+}
+
 export type TerrainOverrideKind = "normal" | "depth";
 
 const MESH_NAME = "landscape-terrain";
+/**
+ * Angular slack of the frustum cull, in radians of view distance: a node is
+ * dropped only when it lies this far past a side plane (plus 1% of a leaf), so
+ * a re-select every 0.1° of turn never shows a gap at the screen edge.
+ */
+const CULL_ANGULAR_PAD = 0.005;
+/** cos(0.1°): a side plane turning further than this re-selects. */
+const CULL_RESELECT_COS = Math.cos((0.1 * Math.PI) / 180);
 const DEFAULT_SLOT_CAPACITY = 64;
 const DEFAULT_UPLOADS_PER_FRAME = 4;
 
@@ -292,6 +326,10 @@ export class TerrainRenderer {
   /** Tiles whose slot holds their current data. */
   private readonly uploaded = new Set<string>();
   private readonly lastCamera = new Vector3(Number.NaN, Number.NaN, Number.NaN);
+  /** The view camera's four side planes in selector space; null until the first `updateLod`. */
+  private cullPlanes: Plane[] | null = null;
+  private readonly cullFrustum = new Frustum();
+  private readonly cullMatrix = new Matrix4();
   private readonly cameraScratch = new Vector3();
   private readonly cornerScratch = new Vector3();
   private selectionDirty = true;
@@ -423,6 +461,16 @@ export class TerrainRenderer {
     return this.detailNodes;
   }
 
+  /** Re-selects now at the last camera with no frustum cull ({@link withTerrainCullingSuspended}). */
+  selectUnculled(): void {
+    if (Number.isFinite(this.lastCamera.x)) this.select(this.lastCamera.clone());
+  }
+
+  /** Re-selects on the next {@link updateLod}. */
+  invalidateSelection(): void {
+    this.selectionDirty = true;
+  }
+
   /** Quality hook: detail levels inside the track window (0 = Faz 2 look); re-selects on the next update. */
   setTrackDetailLevels(levels: number): void {
     const next = Number.isFinite(levels) ? Math.max(0, Math.floor(levels)) : 0;
@@ -457,9 +505,63 @@ export class TerrainRenderer {
     const local = this.mesh.worldToLocal(camera.getWorldPosition(this.cameraScratch)).sub(this.origin);
     const residencyChanged = this.allResident ? false : this.updateResidency(local);
     const threshold = this.selector.settings.leafSize * 0.01;
-    if (!residencyChanged && !this.selectionDirty && this.deformationRevision === this.deformation.revision
+    const viewChanged = this.updateCullPlanes(camera, threshold);
+    if (!residencyChanged && !viewChanged && !this.selectionDirty && this.deformationRevision === this.deformation.revision
       && local.distanceToSquared(this.lastCamera) < threshold * threshold) return;
     this.select(local);
+  }
+
+  /**
+   * Refreshes {@link cullPlanes} from `camera`; true when a side plane turned
+   * past {@link CULL_RESELECT_COS} or moved past `threshold`. Only the four side
+   * planes cull: for a perspective camera together they already reject what is
+   * behind it, and the far plane is the scene's (selection ranges stop sooner).
+   */
+  private updateCullPlanes(camera: Camera, threshold: number): boolean {
+    // Selector space → clip: projection · view · terrain world · origin offset.
+    this.cullMatrix.makeTranslation(this.origin.x, this.origin.y, this.origin.z)
+      .premultiply(this.mesh.matrixWorld)
+      .premultiply(camera.matrixWorldInverse)
+      .premultiply(camera.projectionMatrix);
+    const planes = this.cullFrustum.setFromProjectionMatrix(this.cullMatrix, camera.coordinateSystem, camera.reversedDepth).planes;
+    const last = this.cullPlanes;
+    let changed = !last;
+    for (let i = 0; i < 4 && !changed; i += 1) {
+      changed = planes[i]!.normal.dot(last![i]!.normal) < CULL_RESELECT_COS
+        || Math.abs(planes[i]!.constant - last![i]!.constant) > threshold;
+    }
+    if (changed) this.cullPlanes = planes.slice(0, 4).map((plane) => plane.clone());
+    return changed;
+  }
+
+  /**
+   * Frustum test for one quadtree box, or null to keep every node. The box's
+   * height span is widened to the mirror of the terrain's whole height range so
+   * a planar reflection about any level inside it (a lake) keeps the slopes it
+   * reflects from above the screen; a box drops only past a padded side plane.
+   */
+  private cullVisibility(cameraLocal: Vector3): ((box: TerrainLodBox) => boolean) | undefined {
+    const planes = cullingSuspended > 0 ? null : this.cullPlanes;
+    if (!planes) return undefined;
+    const range = this.bounds.range();
+    const mirrorMin = 2 * range.min - range.max;
+    const mirrorMax = 2 * range.max - range.min;
+    const pad = this.selector.settings.leafSize * 0.01;
+    return (box) => {
+      const minY = Math.min(box.minY, mirrorMin);
+      const maxY = Math.max(box.maxY, mirrorMax);
+      const dx = Math.max(box.minX - cameraLocal.x, 0, cameraLocal.x - box.maxX);
+      const dz = Math.max(box.minZ - cameraLocal.z, 0, cameraLocal.z - box.maxZ);
+      const slack = pad + CULL_ANGULAR_PAD * Math.hypot(dx, dz);
+      for (const plane of planes) {
+        const { x, y, z } = plane.normal;
+        // The box corner furthest along the plane normal.
+        const distance = x * (x > 0 ? box.maxX : box.minX) + y * (y > 0 ? maxY : minY)
+          + z * (z > 0 ? box.maxZ : box.minZ) + plane.constant;
+        if (distance < -slack) return false;
+      }
+      return true;
+    };
   }
 
   /** The track window in terrain-local X/Z, or null without tracks or detail levels. */
@@ -718,7 +820,7 @@ export class TerrainRenderer {
     const tileSize = this.source.tileQuads * this.source.spacing;
     this.deformationRevision = this.deformation.revision;
     this.mesh.updateWorldMatrix(true, false);
-    const nodes = this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z], undefined, this.trackDetail()).filter((node) =>
+    const nodes = this.selector.select([cameraLocal.x, cameraLocal.y, cameraLocal.z], this.cullVisibility(cameraLocal), this.trackDetail()).filter((node) =>
       // Nodes wholly past the drawn extent (legacy padding) or on a missing tile draw nothing.
       node.offsetX < this.extent.x && node.offsetZ < this.extent.y && (!node.tileKey || this.allKeys.has(node.tileKey)));
     if (nodes.length > (geometry.getAttribute("terrainNodeA") as InstancedBufferAttribute).count) {

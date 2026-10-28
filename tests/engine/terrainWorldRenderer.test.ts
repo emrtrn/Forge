@@ -14,7 +14,7 @@ import {
   type WebGLProgramParametersWithUniforms,
   type WebGLRenderer,
 } from "three";
-import { TerrainRenderer } from "../../engine/render-three/terrain/terrainRenderer";
+import { TerrainRenderer, withTerrainCullingSuspended } from "../../engine/render-three/terrain/terrainRenderer";
 import { encodeTerrainGlobalMap, validateTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import {
   TerrainWorldHeightBounds,
@@ -83,9 +83,10 @@ function nodes(terrain: TerrainRenderer): { x0: number; z0: number; size: number
   }));
 }
 
-function cameraAt(x: number, y: number, z: number): PerspectiveCamera {
+function cameraAt(x: number, y: number, z: number, look?: readonly [number, number, number]): PerspectiveCamera {
   const camera = new PerspectiveCamera();
   camera.position.set(x, y, z);
+  if (look) camera.lookAt(...look);
   camera.updateMatrixWorld(true);
   return camera;
 }
@@ -518,7 +519,8 @@ export function registerTerrainWorldRendererTests(check: Check): void {
     })();
     for (let round = 0; round < 30; round += 1) {
       terrain.updateLod(cameraAt(-10 + (next() - 0.25) * width * 1.5, 2 + next() * 200, 5 + (next() - 0.25) * depth * 1.5));
-      const list = nodes(terrain);
+      // Coverage of the camera's LOD before the view cull drops what it cannot see.
+      const list = withTerrainCullingSuspended(() => nodes(terrain));
       for (let probe = 0; probe < 150; probe += 1) {
         const px = next() * width;
         const pz = next() * depth;
@@ -538,7 +540,8 @@ export function registerTerrainWorldRendererTests(check: Check): void {
     const terrain = renderer(source, { slotCapacity: 2, uploadsPerFrame: 1 });
     assert.equal(terrain.residentTileCount, 0);
     // On tile 0_0 in terrain-local space: (0, 0) of the mesh is at origin (-10, 2, 5).
-    const near = cameraAt(-10 + 20, 2 + 8, 5 + 20);
+    // Looking into the grid, so the view cull keeps the neighbouring tiles' edges.
+    const near = cameraAt(-10 + 20, 2 + 8, 5 + 20, [-10 + Q * SPACING, 2, 5 + Q * SPACING]);
     terrain.updateLod(near);
     assert.equal(terrain.residentTileCount, 1);
     terrain.updateLod(near);

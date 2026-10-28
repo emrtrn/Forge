@@ -23,6 +23,7 @@ import {
 } from "three";
 
 import type { Vec3 } from "@engine/scene/layout";
+import { withTerrainCullingSuspended } from "./terrain/terrainRenderer";
 import type { ResolvedSphereReflectionCapture } from "@engine/scene/reflectionCapture";
 import { createActorBillboardIcon } from "./actorIcon";
 
@@ -243,7 +244,8 @@ export function bakeSphereReflectionCapture(
 
   const previousToneMapping = renderer.toneMapping;
   renderer.toneMapping = NoToneMapping;
-  cubeCamera.update(renderer, scene);
+  // The six faces look every way; the terrain's view-frustum cull would hollow them out.
+  withTerrainCullingSuspended(() => cubeCamera.update(renderer, scene));
   renderer.toneMapping = previousToneMapping;
 
   const pmrem = new PMREMGenerator(renderer);

@@ -17,7 +17,7 @@ import {
   updateWorldTerrainObjectTiles,
   type LandscapeObject,
 } from "../../engine/render-three/landscape";
-import { terrainRendererOf } from "../../engine/render-three/terrain/terrainRenderer";
+import { terrainRendererOf, withTerrainCullingSuspended } from "../../engine/render-three/terrain/terrainRenderer";
 import type { WorldTerrainDocument } from "../../engine/terrain/terrainLoader";
 import { TerrainNodeHeightBounds, computeTerrainNormals } from "../../engine/terrain/terrainRenderData";
 import { createFlatTerrainTile, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
@@ -217,16 +217,52 @@ export function registerTerrainRendererTests(check: Check): void {
         camera.position.set((next() - 0.5) * extentX * 3, next() * 300, (next() - 0.5) * extentZ * 3);
         camera.updateMatrixWorld(true);
         updateLandscapeLod(object, camera);
-        assertNodesTileGrid(object, extentX, extentZ);
+        // The view cull keeps a subset; unculled, the same camera's LOD covers it all.
+        withTerrainCullingSuspended(() => assertNodesTileGrid(object, extentX, extentZ));
       }
       // A camera on the surface sees full resolution: level-0 nodes are one patch.
       camera.position.set(3, 10, 5);
+      camera.lookAt(extentX / 2, 0, extentZ / 2);
       camera.updateMatrixWorld(true);
       updateLandscapeLod(object, camera);
       const sizes = nodeRects(object, Infinity, Infinity).map(([x0, , x1]) => x1! - x0!);
       assert.equal(Math.min(...sizes), 32 * document.def.spacing);
       disposeLandscapeObject(object);
     }
+  });
+
+  check("terrain renderer: the view frustum culls nodes behind the camera and re-selects on a turn", () => {
+    const document = hillyTerrain(3, 2, 64);
+    const object = build(document);
+    const extentX = 3 * 64 * document.def.spacing;
+    const extentZ = 2 * 64 * document.def.spacing;
+    const [ox, oy, oz] = document.def.origin;
+    // Camera placement in terrain-local X/Z (node rects are local).
+    const place = (x: number, y: number, z: number, lookX: number, lookY: number, lookZ: number) => {
+      camera.position.set(ox + x, oy + y, oz + z);
+      camera.lookAt(ox + lookX, oy + lookY, oz + lookZ);
+      camera.updateMatrixWorld(true);
+      updateLandscapeLod(object, camera);
+      return nodeRects(object, extentX, extentZ);
+    };
+    const camera = new PerspectiveCamera(60, 16 / 9, 0.1, 20000);
+    const [cx, cz] = [extentX / 2, extentZ / 2];
+    const ahead = place(cx, 20, cz, cx, 20, cz - 1);
+    const all = withTerrainCullingSuspended(() => nodeRects(object, extentX, extentZ));
+    assert.ok(ahead.length > 0 && ahead.length < all.length, `${ahead.length} culled of ${all.length}`);
+    assert.ok(ahead.every(([, z0]) => z0! < cz), "nothing wholly behind the camera");
+    // The capture pass's unculled selection is only borrowed.
+    updateLandscapeLod(object, camera);
+    assert.equal(nodeRects(object, extentX, extentZ).length, ahead.length);
+
+    // A turn alone (no move) re-selects.
+    const behind = place(cx, 20, cz, cx, 20, cz + 1);
+    assert.ok(behind.length > 0 && behind.every(([, , , z1]) => z1! > cz), "the turn shows the other half");
+
+    // Pitched down, the nodes past the screen's top edge stay for a lake to reflect.
+    const down = place(cx, 60, extentZ, cx, 0, extentZ - 40);
+    assert.ok(down.some(([, z0]) => z0! < extentZ / 4), "far slopes above the view are kept");
+    disposeLandscapeObject(object);
   });
 
   check("terrain renderer: raycasts hit the authored surface, and nothing past its edge", () => {

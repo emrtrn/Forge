@@ -696,7 +696,7 @@ texture ve dirty-rect yönetimini kullanmaya devam eder.
 Bulut renderer'ının node-texture + `onBeforeRender` kamera seçimi ve fragment
 normal hesabı mevcut renderer'ın yerine geçirilmedi. Bu dala ait eski
 SwiftShader parite ölçümleri birleşmiş renderer için yeni doğrulama sayılmaz.
-Aktif renderer'ın node frustum culling'i aşağıdaki açık iş olarak kalır;
+Aktif renderer'ın node frustum culling'i 2026-10-28'de bağlandı (aşağıda);
 GTAO'yu dışlamak yerine yerel displaced normal/depth geçişleri korunur.
 `tests/engine/terrainRender.test.ts` uyarlaması; kaynak/padding, slot cache ve
 eviction, döndürülmüş arazide 60 ışın, sculpt/picking, shader geçişleri ve
@@ -733,6 +733,20 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
 - [ ] `terrainRenderer.ts` + `terrainMaterial.ts`: instanced draw, dünya UV'li
       splat, `sampler2DArray` katmanlar *(tamam 2026-10-27, 7c2 notu)*, uzak tekrar kırma, view mode'lar,
       gölge alma, kalite profiline bağlı kendine gölge.
+      *Node frustum culling tamam (2026-10-28):* `updateLod` kameranın dört
+      yan düzlemini terrain-local seçici uzayına çevirip
+      `TerrainLodSelector.select`'e görünürlük olarak verir (perspektifte
+      arkayı da eler; near/far kullanılmaz). Kutunun Y aralığı arazinin
+      tüm yükseklik aralığının aynasına uzatılır, böylece yatay su/planar
+      yansıması ekranın üstündeki yamaçları kaybetmez; düşey ayna bu
+      kapsamda değil. Pay %1 yaprak + 0,005 × düzlemsel mesafe; kamera
+      0,1°'den fazla dönünce ya da projeksiyon değişince yeniden seçer.
+      Sphere Reflection Capture bake'i `withTerrainCullingSuspended`
+      içinde kırpmasız çizer. Residency kırpmadan bağımsız (dönünce tile
+      hazır). Kendine gölge açıldığında gölge kameralarının gördüğü
+      düğümler de korunmalı (aşağıdaki gölge işi). Test: `terrain renderer:
+      the view frustum culls…` (mirror uzatması kapatılınca düşüyor); kapsama
+      değişmezleri kırpmasız seçimde denetlenir.
       *İlk dilim tamam (2026-10-23, `engine/render-three/terrain/`):* tek slot
       (1×1 Landscape) için instanced patch + morph, R32F yükseklik (`texelFetch`,
       morph ara noktalarında elle bilineer — float filtre eklentisi gerekmiyor),
@@ -789,7 +803,7 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       `tests/smoke/terrain-multitile.spec.ts` (3×2 + delik, gökyüzüsüz fikstür;
       editör görüntü + boş kare kontrolü, seçim/F/uyarı/Save, Play'de pawn
       arazi yüksekliğinde duruyor: 5,70 m'ye karşı 5,698 m).
-      **Açık:** node frustum culling, uzak tekrar kırma ve kendine gölge
+      **Açık:** uzak tekrar kırma ve kendine gölge *(frustum culling 2026-10-28'de tamam)*
       (legacy de gölge düşürmüyor; parite için kapalı), tile akışının Faz 4
       alt sistemine bağlanması (şimdilik bütün tile'lar CPU'da yüklü).
       **Dirty-rect tamam (2026-10-23):** slot dokuları ve global haritalar

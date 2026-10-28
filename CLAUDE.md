@@ -162,6 +162,16 @@ engine/editor.
   restores it on unload, and leaves model geometry/material ownership with the
   asset loader. Omitted/unusable nodes use the procedural wheel fallback.
 
+- **Sixth allowlist surface — `<Level>.worldrecipe.json` World Builder
+  recipe (schema 1):** `/__save-worldrecipe` takes `{ level, recipe }`, derives
+  the sidecar path from the level (`worldRecipePath`) and only writes for the
+  open level. `validateSaveWorldRecipePayload` reuses `normalizeWorldRecipe`
+  (`engine/worldbuilder/recipe.ts`) as the single source of field shape, but is
+  stricter: any normalization issue (bad entry, dangling id reference) rejects
+  the save. New recipe fields go in the normalizer and
+  `tests/engine/worldRecipe.test.ts`'s maximal recipe. Objects not listed in
+  `ownership` are manual; stages never move or delete them.
+
 - **World Partition cell files:** with `worldSettings.partition.enabled`, the
   editor saves a level as a persistent level (`worldCells` index) plus
   `<Level>.cells/main/<x_z>.cell.json` (`engine/world/worldPartition.ts`).
@@ -244,6 +254,7 @@ engine/editor.
   `/__save-terrain`, `/__save-terrain-tile`, `/__save-terrain-global`,
   `/__save-world-cells`, `/__save-foliage-cells`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
+  `/__save-worldrecipe`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,
   `/__import-asset`, and `/__open-level`.

@@ -77,6 +77,7 @@ import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 import { normalizeSplineComponentData } from "../engine/scene/spline";
 import { normalizeSplineGenerators } from "../engine/scene/splineGenerator";
+import { normalizeWorldRecipe, worldRecipePath } from "../engine/worldbuilder/recipe";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -3517,6 +3518,42 @@ export function validateSaveEffectPayload(value: unknown): {
     path: input.path,
     effect: validateEffectAsset(input.effect),
   };
+}
+
+// ─── World Recipe (World Builder plan v0.4 §6.3) ────────────────────────────
+//
+// SIXTH allowlist surface: `<Level>.worldrecipe.json`. `normalizeWorldRecipe`
+// (engine/worldbuilder/recipe.ts) is the single source of field shape, so a new
+// recipe field goes there. The save is stricter than the editor's read: any
+// normalization issue (bad entry, dangling reference) rejects the write instead
+// of saving a silently trimmed recipe. The path is derived from the level, never
+// taken from the client.
+
+/** At most this many issues are quoted in a rejected save's message. */
+const WORLD_RECIPE_ISSUES_QUOTED = 5;
+
+export function validateSaveWorldRecipePayload(value: unknown): {
+  level: string;
+  path: string;
+  recipe: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("world recipe payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.level !== "string" || !input.level.endsWith(".json") || input.level.includes("..")) {
+    throw new Error("world recipe level must be a public-root-relative .json level path");
+  }
+  const level = input.level.replace(/\\/g, "/").replace(/^\/+/, "");
+  const { recipe, issues } = normalizeWorldRecipe(input.recipe);
+  if (!recipe || issues.length > 0) {
+    const quoted = issues.slice(0, WORLD_RECIPE_ISSUES_QUOTED).join("; ");
+    const more = issues.length > WORLD_RECIPE_ISSUES_QUOTED
+      ? ` (+${issues.length - WORLD_RECIPE_ISSUES_QUOTED} more)`
+      : "";
+    throw new Error(`invalid world recipe: ${quoted}${more}`);
+  }
+  return { level, path: worldRecipePath(level), recipe: recipe as unknown as Record<string, unknown> };
 }
 
 // ─── Foliage (Foliage Mode Faz 1 saves) ──────────────────────────────────────

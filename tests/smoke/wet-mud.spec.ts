@@ -6,6 +6,33 @@ import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { expect, test } from "./test";
 import { smokePublicPath } from "./smokeProject.mjs";
 
+test("mud puddles fade into the Lake shore without changing the soil or separate basins", async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", e => errors.push(e.message));
+  page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+  await page.goto("/tests/smoke/pages/wet-mud.html");
+  await page.waitForFunction(() => (window as any).__wetMudQa?.ready);
+  type Point = { puddle: number; roughness: number; normalY: number };
+  const result = await page.evaluate(() => (window as any).__wetMudQa.shoreFadeProbe() as {
+    height: (Point & { above: number })[]; distance: (Point & { distance: number })[];
+    disconnected: Point; narrowShore: Point; disabled: Point; soilUnchanged: boolean;
+  });
+  await writeFile(info.outputPath("shore-fade.json"), JSON.stringify(result, null, 2));
+  for (const row of [result.height, result.distance]) {
+    expect(row[0]!.puddle).toBeGreaterThan(.95);
+    expect(row[2]!.puddle).toBeGreaterThan(.35);
+    expect(row[2]!.puddle).toBeLessThan(.65);
+    for (let i = 1; i < row.length; i++) expect(row[i]!.puddle).toBeLessThanOrEqual(row[i - 1]!.puddle);
+  }
+  for (const p of result.height.filter(p => p.above <= 0)) expect(p.puddle).toBe(0);
+  expect(result.disconnected.puddle).toBeGreaterThan(.95);
+  expect(result.narrowShore.puddle).toBeGreaterThan(.95);
+  expect(result.disabled.puddle).toBeGreaterThan(.95);
+  expect(result.height.every(p => p.normalY === result.height[0]!.normalY)).toBe(true);
+  expect(result.soilUnchanged).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test("a tyre leaving water prints a short wet trail that fades along its length and dries", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

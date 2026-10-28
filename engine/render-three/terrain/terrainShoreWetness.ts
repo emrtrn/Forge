@@ -73,6 +73,7 @@ export function createTerrainShoreWetnessUniforms() {
     uShoreWetBounds: { value: Array.from({ length: MAX }, () => new Vector4()) },
     uShoreWetGrid: { value: Array.from({ length: MAX }, () => new Vector4()) },
     uShoreWetRows: { value: Array.from({ length: MAX }, () => 0) },
+    uShoreWetWidths: { value: Array.from({ length: MAX }, () => 1) },
     uShoreWetParams: { value: Array.from({ length: MAX }, () => new Vector4()) } };
 }
 
@@ -108,6 +109,7 @@ export function updateTerrainShoreWetness(uniforms: TerrainUniforms, scene: Scen
     const sizeX = lake.bounds.max[0] - lake.bounds.min[0] + 2 * w, sizeZ = lake.bounds.max[1] - lake.bounds.min[1] + 2 * w;
     (uniforms.uShoreWetGrid!.value as Vector4[])[i]!.set(...coverage.min, 1 / coverage.spacing, coverage.nx);
     (uniforms.uShoreWetRows!.value as number[])[i] = coverage.nz;
+    (uniforms.uShoreWetWidths!.value as number[])[i] = w;
     (uniforms.uShoreWetBounds!.value as Vector4[])[i]!.set(lake.bounds.min[0] - w, lake.bounds.min[1] - w, sizeX, sizeZ);
     (uniforms.uShoreWetParams!.value as Vector4[])[i]!.set(mask.image.width, mask.image.height, lake.surfaceLevel,
       visible && (!terrainRef || terrainRef === lake.terrainRef) ? a.shoreWetnessStrength : 0);
@@ -122,7 +124,11 @@ uniform vec4 uShoreWetBounds[8];
 uniform vec4 uShoreWetParams[8];
 uniform vec4 uShoreWetGrid[8];
 uniform float uShoreWetRows[8];
+uniform float uShoreWetWidths[8];
 float forgeShoreWet = 0.;
+// The pooled film fades before the exact underwater cutoff. The soil and
+// deformation remain wet/visible; only puddle shading uses this factor.
+float forgeShorePuddleFade = 1.;
 // 1 on a connected underwater face (set by forgeShoreWetness).
 float forgeShoreSubmerged = 0.;
 float forgeShoreWetness() {
@@ -158,6 +164,15 @@ float forgeShoreWetness() {
       float coverage=submerged?1.:(above>=0.?edge*height:0.);
       wet=max(wet,coverage*p.w);
       if(submerged && p.w>0.) forgeShoreSubmerged=1.;
+      if(submerged) forgeShorePuddleFade=0.;
+      else if(above>=0.) {
+        // Distance is normalized by the authored wet-shore width. Fade over
+        // 50 cm on shallow banks or 8 cm of elevation on steeper banks.
+        // The undeformed height keeps the boundary stable as ruts deepen.
+        float width=min(.5,uShoreWetWidths[i]);
+        float fade=max(smoothstep(0.,width,distance*uShoreWetWidths[i]),smoothstep(0.,.08,above));
+        forgeShorePuddleFade=min(forgeShorePuddleFade,fade);
+      }
     }
   }
   #endif

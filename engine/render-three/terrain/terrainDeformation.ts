@@ -433,7 +433,7 @@ export const TERRAIN_DEFORMATION_COLOR = /* glsl */ `
       * smoothstep(0.4, 0.8, forgeProfileWet) * (1.0 - forgeShoreSubmerged)
       * smoothstep(0.94, 0.995, forgeDeformedWorldNormal(forgeBaseWorld).y)
       * (1.0 - smoothstep(0.002, 0.012, vForgeDeformBerm));
-    forgePuddle *= forgePuddlePatch(vForgeDeformWorld, forgeDeform.x);
+    forgePuddle *= forgePuddlePatch(vForgeDeformWorld, forgeDeform.x) * forgeShorePuddleFade;
     forgeColor = mix(forgeColor, vec3(0.025, 0.029, 0.027), forgePuddle * 0.6);
   }
 `;

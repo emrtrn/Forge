@@ -4,6 +4,8 @@ import { TerrainRenderer } from "@engine/render-three/terrain/terrainRenderer";
 import { TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
 import { DeformationField } from "@engine/scene/deformationField";
 import { TerrainWetTrail } from "@engine/render-three/terrain/terrainWetTrail";
+import { createTerrainShoreWetnessUniforms } from "@engine/render-three/terrain/terrainShoreWetness";
+import { DataArrayTexture, LinearFilter, RGFormat } from "three";
 import { worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { type TerrainTileData } from "@engine/terrain/terrainTypes";
 import type { TerrainWaterQuality } from "@engine/render-three/terrain/terrainWater";
@@ -51,10 +53,15 @@ let roughnessInAlpha: number[] | undefined;
 const compile = terrain.mesh.material.onBeforeCompile;
 const debug = { value: 0 };
 const bedBaseline = { value: 0 };
+const shoreProbe = createTerrainShoreWetnessUniforms();
 terrain.mesh.material.onBeforeCompile = (shader, renderer) => {
   compile(shader, renderer);
   shader.uniforms.uWetMudDebug = debug;
   shader.uniforms.uBedBaseline = bedBaseline;
+  Object.assign(shader.uniforms, shoreProbe);
+  // Exercise the actual shore shader with a controlled distance/coverage
+  // texture. Default count zero leaves all other QA scenarios unchanged.
+  shader.fragmentShader = shader.fragmentShader.replace("#if FORGE_TERRAIN_WET_SHORES > 0", "#if 1");
   shader.fragmentShader = `uniform float uBedBaseline;\nuniform float uWetMudDebug;\n${shader.fragmentShader}`
     .replace(/(forgeR\d = max\(forgeR\d, 0\.45 \* step\(0\.5, uDeformLayerWet\[\d\]\) \* uLayerRoughnessInAlpha\[\d\]\);)/g, "if (uBedBaseline < 0.5) $1")
     .replace("#include <opaque_fragment>", `
@@ -148,6 +155,44 @@ function puddleScan(seconds: number) {
   const motion = points.map(p => read(p.x, p.z).slice(0, 2));
   debug.value = 0; draw();
   return { points, motion };
+}
+
+function shoreFadeProbe() {
+  const z = puddleScan(0).points.find(p => p.x === -1.1 && p.puddle > .98)!.z;
+  const before = field.depth.slice();
+  const bytes = new Uint8Array(1024 * 1024 * 2);
+  // Every face in the synthetic grid is connected water below level zero.
+  for (let i = 0; i < 64 * 64; i++) bytes[i * 2 + 1] = 3;
+  const mask = new DataArrayTexture(bytes, 1024, 1024, 1);
+  mask.format = RGFormat; mask.minFilter = mask.magFilter = LinearFilter;
+  mask.generateMipmaps = false; mask.needsUpdate = true;
+  (shoreProbe.uShoreWetMask as { value: unknown }).value = mask;
+  shoreProbe.uShoreWetBounds.value[0]!.set(-32, -32, 64, 64);
+  shoreProbe.uShoreWetGrid.value[0]!.set(-32, -32, 1, 64);
+  shoreProbe.uShoreWetRows.value[0] = 64;
+  shoreProbe.uShoreWetWidths.value[0] = 1;
+  const sample = (above: number, distance = 0, connected = true, width = 1) => {
+    shoreProbe.uShoreWetWidths.value[0] = width;
+    for (let i = 0; i < bytes.length; i += 2) bytes[i] = Math.round(distance * 255);
+    for (let i = 0; i < 64 * 64; i++) bytes[i * 2 + 1] = connected ? 3 : 0;
+    mask.needsUpdate = true;
+    shoreProbe.uShoreWetParams.value[0]!.set(1024, 1024, -above, 1);
+    return profile(z).find(p => p.offset === 0)!;
+  };
+  shoreProbe.uShoreWetCount.value = 1;
+  try {
+    const height = [.12, .06, .04, .02, .005, 0, -.02].map(above => ({ above, ...sample(above) }));
+    const distance = [.75, .375, .25, .125, 0].map(d => ({ distance: d, ...sample(.001, d) }));
+    const disconnected = sample(-.02, 0, false);
+    const narrowShore = sample(.001, 1, true, .2);
+    shoreProbe.uShoreWetCount.value = 0;
+    const disabled = profile(z).find(p => p.offset === 0)!;
+    return { height, distance, disconnected, narrowShore, disabled, soilUnchanged: before.every((v, i) => v === field.depth[i]) };
+  } finally {
+    shoreProbe.uShoreWetCount.value = 0;
+    (shoreProbe.uShoreWetMask as { value: unknown }).value = null;
+    mask.dispose(); draw();
+  }
 }
 // Wet tyre print: a tyre soaked at z = -4.5 rolls 7 m along +Z between the two
 // ruts (its trail ends 5 m on, at z = 0.5). Top view, untoned: debug roughness and colour
@@ -362,7 +407,7 @@ function showCapture() {
 }
 let frame = 0;
 function loop() { draw(); if (++frame < 20) requestAnimationFrame(loop); else {
-  (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks, wetPrint, puddleScan,
+  (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks, wetPrint, puddleScan, shoreFadeProbe,
     bedGlare(original: boolean, wetProfile = 0.9, packed = true) {
       bedBaseline.value = original ? 1 : 0; wet![4] = wetProfile; roughnessInAlpha![4] = packed ? 1 : 0;
       draw(); return { color: surfaceProbes(), profile: profile() };

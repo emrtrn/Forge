@@ -114,6 +114,7 @@ export function registerTerrainTrackDetailTests(check: Check): void {
       const tintAt = shader.fragmentShader.indexOf("forgeTint.a *= 1.0 - forgeShoreWet;");
       assert.ok(wetAt >= 0 && tintAt > wetAt, "shore wetness is sampled before the track tint");
       assert.match(shader.fragmentShader, /smoothstep\(0\.4, 0\.8, forgeProfileWet\) \* \(1\.0 - forgeShoreSubmerged\)/);
+      assert.match(shader.fragmentShader, /forgePuddlePatch\(vForgeDeformWorld, forgeDeform.x\) \* forgeShorePuddleFade/);
     } finally { terrain.dispose(); textures.forEach((texture) => texture.dispose()); }
   });
   check("terrain deformation texture: filtering softens edges without changing physics and partial halos match full copies", () => {

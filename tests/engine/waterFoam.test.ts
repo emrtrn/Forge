@@ -18,6 +18,7 @@ export async function registerWaterFoamTests(check: Check): Promise<void> {
     const uniforms = createTerrainShoreWetnessUniforms();
     updateTerrainShoreWetness(uniforms, scene, "terrain");
     assert.equal(uniforms.uShoreWetCount.value, 1);
+    assert.equal(uniforms.uShoreWetWidths.value[0], resolveLakeAppearance(doc.lake).shoreWetnessWidth, "puddle fade distance uses metres, independent of authored wet-shore width");
     const texture = uniforms.uShoreWetMask.value as unknown as import("three").DataArrayTexture;
     assert.equal(texture.image.data!.length, 1024 * 1024 * 2);
     assert.ok(texture.image.data!.some((v, i) => i % 2 === 0 && v < 255));

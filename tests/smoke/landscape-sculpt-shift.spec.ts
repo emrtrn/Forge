@@ -41,11 +41,10 @@ for (const tiles of [1, 2]) {
       const { SceneApp } = await import(modulePath);
       const original = SceneApp.prototype.getLandscapeSculptSettings;
       SceneApp.prototype.getLandscapeSculptSettings = function (this: {
-        landscapeData: Map<string, { heights: number[] }>;
         worldTerrains: Map<string, { tiles: Map<string, { heights: Float32Array }> }>;
       }) {
         (window as unknown as { sculptRange: () => { min: number; max: number } }).sculptRange = () => {
-          const heights = [...this.landscapeData.values()].flatMap((data) => data.heights);
+          const heights: number[] = [];
           for (const world of this.worldTerrains.values()) {
             for (const tile of world.tiles.values()) heights.push(...tile.heights);
           }

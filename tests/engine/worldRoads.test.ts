@@ -156,7 +156,7 @@ export function registerWorldRoadsTests(check: Check): void {
       stage: "roads", edge: "main", outputHash: splineHash({ landscapeId: WEST, spline: main }),
     });
     assert.deepEqual(next.ownership.placements, {});
-    assert.deepEqual(next.generators, { roads: 2 });
+    assert.deepEqual(next.generators, { roads: 3 });
     assert.deepEqual(plan.bounds, { min: [-80, 0], max: [-50, 30] });
     assert.deepEqual(normalizeTerrainSplines([main]), [main], "stage output is save-canonical");
   });

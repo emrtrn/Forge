@@ -13,11 +13,15 @@
  * are at most `ROUTE_SPACING` apart and set on the terrain height. What the
  * route still breaks — steep legs, tight bends, water crossings — is reported.
  *
+ * Junctions (`junctions.ts`): where three or more roads meet, the two of the
+ * highest class run through the node and the others end at their edge.
+ *
  * The spline lives on the World Terrain under the edge's start node (else its
  * end node). Ids derive from edge ids, so a re-run updates the same spline.
  */
 import type { ForgeLandscapeSplinePoint, ForgeLandscapeSplineSegment } from "../../scene/landscape";
 import type { WorldTerrainSpline } from "../../terrain/terrainTypes";
+import { resolveJunctions, type JunctionRoad } from "../junctions";
 import type { WorldPoint } from "../normalize";
 import type { RoadEdge } from "../recipe";
 import { resolveRoadClass, type ResolvedRoadClass } from "../roadClass";
@@ -40,11 +44,11 @@ const ROAD_FALLOFF = 3;
 export const roadsStage: WorldStage = {
   id: ROADS_STAGE_ID,
   label: "Roads",
-  version: 2,
+  version: 3,
   run(input: StageInput): StageOutput {
     const { nodes, edges } = input.recipe.plan.roadGraph;
     const positions = new Map(nodes.map((node) => [node.id, node.position]));
-    const splines: GeneratedSpline[] = [];
+    const routed: Array<{ edge: RoadEdge; terrain: StageTerrain; spec: ResolvedRoadClass; road: JunctionRoad }> = [];
     const warnings: string[] = [];
     const warned = new Set<string>();
     const warnOnce = (key: string, message: string): void => {
@@ -81,11 +85,21 @@ export const roadsStage: WorldStage = {
       }
       warnings.push(...routeWarnings(edge, route, spec));
       if (heights.filled) warnings.push(`road ${edge.id} leaves the terrain; off-terrain points take the nearest height`);
-      splines.push({
-        landscapeId: terrain.id,
-        edge: edge.id,
-        spline: roadSpline(edge, route.points, heights.values, spec, terrain, warnOnce),
+      routed.push({
+        edge, terrain, spec,
+        road: { edge: edge.id, from: edge.from, to: edge.to, roadClass: edge.roadClass, width: spec.width, points: route.points },
       });
+    }
+
+    warnings.push(...resolveJunctions(routed.map((entry) => entry.road)).warnings);
+    const splines: GeneratedSpline[] = [];
+    for (const { edge, terrain, spec, road } of routed) {
+      const heights = routeHeights(road.points, input.sampleHeight);
+      if (!heights) {
+        warnings.push(`road ${edge.id} has no terrain height left after its junction trim; skipped`);
+        continue;
+      }
+      splines.push({ landscapeId: terrain.id, edge: edge.id, spline: roadSpline(edge, road.points, heights.values, spec, terrain, warnOnce) });
     }
     return { placements: [], splines, warnings };
   },

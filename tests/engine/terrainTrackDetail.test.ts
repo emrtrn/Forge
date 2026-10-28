@@ -18,6 +18,7 @@ import { worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSour
 import { tileKey, type TerrainTileData } from "../../engine/terrain/terrainTypes";
 import { formatTerrainTrackDetailDebug } from "../../src/scene/debugStats";
 import { registerTerrainWaterTests } from "./terrainWater.test";
+import { registerTerrainWetTrailTests } from "./terrainWetTrail.test";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -84,6 +85,7 @@ function compiled(material: Material, base: { vertexShader: string; fragmentShad
 
 export function registerTerrainTrackDetailTests(check: Check): void {
   registerTerrainWaterTests(check);
+  registerTerrainWetTrailTests(check);
   check("terrain wet layers: all eight albedos and material roughness reach the lit shader with puddle shading", () => {
     const textures = Array.from({ length: 8 }, (_, i) => {
       const texture = new DataTexture(new Uint8Array([i * 20, 40, 60, 200]), 1, 1);
@@ -103,8 +105,15 @@ export function registerTerrainTrackDetailTests(check: Check): void {
       assert.deepEqual(shader.uniforms.uLayerRoughnessInAlpha!.value, [0, 0, 0, 0, 1, 0, 0, 0]);
       assert.match(shader.fragmentShader, /texture\(uLayerTexArray, vec3\(forgeP \* uLayerScale\[4\], uLayerTexIndex\[4\]\)\)/);
       assert.match(shader.fragmentShader, /texture\(uLayerTexArray, vec3\(forgeP \* uLayerScale\[7\], uLayerTexIndex\[7\]\)\)/);
-      assert.match(shader.fragmentShader, /roughnessFactor = mix\(roughnessFactor, 0.16, forgePuddle\)/);
+      assert.match(shader.fragmentShader, /roughnessFactor = mix\(roughnessFactor, forgePuddleRoughness, forgePuddle\)/);
       assert.match(shader.fragmentShader, /outgoingLight = mix\(outgoingLight, forgeSky/);
+      // A wet Lake shore/bed (or a wet tyre print) overrides the profile's dry
+      // track tint, so its wetness must be known before the colour block;
+      // underwater ruts never pool.
+      const wetAt = shader.fragmentShader.indexOf("forgeShoreWet = max(forgeShoreWetness(), uTerrainView < 0.5 ? forgeTrailWet : 0.0);");
+      const tintAt = shader.fragmentShader.indexOf("forgeTint.a *= 1.0 - forgeShoreWet;");
+      assert.ok(wetAt >= 0 && tintAt > wetAt, "shore wetness is sampled before the track tint");
+      assert.match(shader.fragmentShader, /smoothstep\(0\.4, 0\.8, forgeProfileWet\) \* \(1\.0 - forgeShoreSubmerged\)/);
     } finally { terrain.dispose(); textures.forEach((texture) => texture.dispose()); }
   });
   check("terrain deformation texture: filtering softens edges without changing physics and partial halos match full copies", () => {
@@ -129,7 +138,7 @@ export function registerTerrainTrackDetailTests(check: Check): void {
       // The single cell crosses both toroidal texture seams: the filter must
       // also update its eight neighbours, including the diagonally wrapped one.
       assert.equal(image()[1], 60, "one-cell impulse: tent centre has one quarter of the disturbance");
-      assert.equal(image()[(63 * 64 + 63) * 2 + 1], 15, "wrapped diagonal has one sixteenth");
+      assert.equal(image()[(63 * 64 + 63) * 4 + 1], 15, "wrapped diagonal has one sixteenth");
       assert.equal(field.sample(0.0625, 0.0625).depth, 0.2);
       field.stampWheel({ from: [-3.8, -3], to: [3.8, 3], width: 0.4, contactLength: 0.5, targetDepth: 0.18, compaction: 1, disturbance: 255 });
       compareFullCopy();

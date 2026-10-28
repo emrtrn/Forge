@@ -3,6 +3,7 @@ import { loadForgeMaterialLayer } from "@/scene/materialAssets";
 import { TerrainRenderer } from "@engine/render-three/terrain/terrainRenderer";
 import { TerrainDeformationTexture } from "@engine/render-three/terrain/terrainDeformation";
 import { DeformationField } from "@engine/scene/deformationField";
+import { TerrainWetTrail } from "@engine/render-three/terrain/terrainWetTrail";
 import { worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { type TerrainTileData } from "@engine/terrain/terrainTypes";
 import type { TerrainWaterQuality } from "@engine/render-three/terrain/terrainWater";
@@ -37,7 +38,9 @@ if (!mudLayer?.texture || !mudLayer.roughnessInAlpha) throw new Error("Wet mud r
 const field = new DeformationField();
 for (const x of [-1.1, 1.1]) field.stampWheel({ from: [x, -14], to: [x, 14], width: 0.55, contactLength: 0.6, targetDepth: 0.18, compaction: 1, disturbance: 255 });
 const deformation = new TerrainDeformationTexture();
-deformation.attach(field);
+const trail = new TerrainWetTrail(field.cellsPerSide, field.cellSize);
+trail.setOrigin(...field.originCell);
+deformation.attach(field, trail);
 const terrain = new TerrainRenderer(worldTerrainRenderSource({ tileQuads: q, spacing: 0.5, tilesX: 2, tilesZ: 2 }, tiles), {
   viewMode: "lit", activeLayer: 4, origin: new Vector3(-32, 0, -32), slotCapacity: 4, uploadsPerFrame: 4, deformation,
   layers: Array.from({ length: 5 }, (_, i) => ({ texture: i === 4 ? mudLayer.texture : null, color: "#493226", scale: 0.25, roughness: mudLayer.roughness ?? 1, roughnessInAlpha: i === 4, physicalMaterial: i === 4 ? "mud" : null })),
@@ -55,6 +58,10 @@ terrain.mesh.material.onBeforeCompile = (shader, renderer) => {
   shader.fragmentShader = `uniform float uBedBaseline;\nuniform float uWetMudDebug;\n${shader.fragmentShader}`
     .replace(/(forgeR\d = max\(forgeR\d, 0\.45 \* step\(0\.5, uDeformLayerWet\[\d\]\) \* uLayerRoughnessInAlpha\[\d\]\);)/g, "if (uBedBaseline < 0.5) $1")
     .replace("#include <opaque_fragment>", `
+    if (uWetMudDebug > 3.5) {
+      vec2 micro = forgePuddle > 0.0 ? forgePuddleMicroGradient(vForgeDeformWorld, uTerrainWaterTime) : vec2(0.0);
+      gl_FragColor = vec4(abs(forgeWaterGradient - micro)*10.0, 1.0, 1.0); return;
+    }
     if (uWetMudDebug > 2.5) {
       gl_FragColor = vec4(abs(forgeWaterGradient)*10.0, 1.0, 1.0); return;
     }
@@ -99,7 +106,7 @@ function surfaceProbes() {
 }
 // Orthographic top view isolates shader masks from perspective/occlusion. Raw
 // output bypasses tone mapping so R=puddle, G=roughness, B=surface normal Y.
-function profile() {
+function profile(z = 0) {
   const top = new OrthographicCamera(-2, 2, 2, -2, 0.05, 40);
   top.position.set(0, 12, 0);
   top.up.set(0, 0, -1);
@@ -110,7 +117,7 @@ function profile() {
   renderer.render(scene, top);
   const gl = renderer.getContext();
   const result = [-0.5, -0.38, -0.22, -0.1, 0, 0.1, 0.22, 0.38, 0.5].map((offset) => {
-    const p = new Vector3(-1.1 + offset, 0, 0).project(top);
+    const p = new Vector3(-1.1 + offset, 0, z).project(top);
     const pixel = new Uint8Array(4);
     gl.readPixels(Math.round((p.x + 1) * 0.5 * canvas.width), Math.round((p.y + 1) * 0.5 * canvas.height), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
     return { offset, puddle: pixel[0]! / 255, roughness: pixel[1]! / 255, normalY: pixel[2]! / 255 };
@@ -118,6 +125,60 @@ function profile() {
   debug.value = 0;
   draw();
   return result;
+}
+
+/** Actual shader output along both rut floors, with fixed time for repeatability. */
+function puddleScan(seconds: number) {
+  deformation.water.uniforms.uTerrainWaterTime.value = seconds;
+  const top = new OrthographicCamera(-2, 2, 2, -2, 0.05, 40);
+  top.position.set(0, 12, 0); top.up.set(0, 0, -1); top.lookAt(0, 0, 0); top.updateMatrixWorld(true);
+  terrain.updateLod(top);
+  const gl = renderer.getContext();
+  const read = (x: number, z: number) => {
+    const p = new Vector3(x, 0, z).project(top), pixel = new Uint8Array(4);
+    gl.readPixels(Math.round((p.x + 1) * .5 * canvas.width), Math.round((p.y + 1) * .5 * canvas.height), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    return [...pixel];
+  };
+  debug.value = 1; renderer.render(scene, top);
+  const points = [-1.1, 1.1].flatMap(x => Array.from({ length: 90 }, (_, i) => {
+    const z = -1.8 + i * .04, pixel = read(x, z);
+    return { x, z, puddle: pixel[0]! / 255, roughness: pixel[1]! / 255 };
+  }));
+  debug.value = 3; renderer.render(scene, top);
+  const motion = points.map(p => read(p.x, p.z).slice(0, 2));
+  debug.value = 0; draw();
+  return { points, motion };
+}
+// Wet tyre print: a tyre soaked at z = -4.5 rolls 7 m along +Z between the two
+// ruts (its trail ends 5 m on, at z = 0.5). Top view, untoned: debug roughness and colour
+// on the print versus the same row 0.6 m beside it.
+function wetPrint(on: boolean) {
+  if (on) {
+    trail.advance(1 / 60, [{ id: "qa", x: 0, z: -4.5, width: 0.4, inWater: true }]);
+    for (let z = -4.4; z <= 2.5 + 1e-9; z += 0.1) trail.advance(1 / 60, [{ id: "qa", x: 0, z, width: 0.4, inWater: false }]);
+  } else for (let t = 0; t < 45; t++) trail.advance(1, []);
+  deformation.update(trail.takeDirty());
+  const top = new OrthographicCamera(-5, 5, 5, -5, 0.05, 40);
+  top.position.set(0, 12, 0);
+  top.up.set(0, 0, -1);
+  top.lookAt(0, 0, 0);
+  top.updateMatrixWorld(true);
+  const gl = renderer.getContext();
+  const read = (x: number, z: number) => {
+    const p = new Vector3(x, 0, z).project(top);
+    const pixel = new Uint8Array(4);
+    gl.readPixels(Math.round((p.x + 1) * 0.5 * canvas.width), Math.round((p.y + 1) * 0.5 * canvas.height), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    return [...pixel];
+  };
+  const rows = [-4.3, -3, -1.5, 1.2, 1.8];
+  terrain.updateLod(top);
+  debug.value = 1;
+  renderer.render(scene, top);
+  const roughness = rows.map((z) => ({ z, on: read(0, z)[1]! / 255, off: read(0.6, z)[1]! / 255 }));
+  debug.value = 0;
+  renderer.render(scene, top);
+  const colour = rows.map((z) => ({ z, on: read(0, z).slice(0, 3), off: read(0.6, z).slice(0, 3) }));
+  return { roughness, colour, cells: trail.activeCellCount };
 }
 function tracks(angle: number, width: number, detail: number) {
   field.decay(10, 1);
@@ -135,8 +196,12 @@ const marker = new Mesh(new BoxGeometry(0.8, 1.2, 0.8), new MeshBasicMaterial({ 
 marker.position.set(-1.1, 0.6, -2);
 const emptyScene = new Scene();
 let spin = 0;
+let dynamicZ = 0;
 let calmAppearance: Uint8Array | null = null;
 function enableDynamics(quality: TerrainWaterQuality) {
+  // Excite an actual water patch; a wheel over a mud gap must not make waves.
+  dynamicZ = puddleScan(0).points.filter(p => p.x === -1.1 && p.puddle > .1)
+    .sort((a, b) => Math.abs(a.z) - Math.abs(b.z))[0]?.z ?? 0;
   deformation.water.setQuality(quality);
   scene.add(marker);
   const contacts = [];
@@ -144,7 +209,7 @@ function enableDynamics(quality: TerrainWaterQuality) {
     rotation: 0, width: 0.55, radius: 0.5, wetness: 0.9 });
   deformation.water.advance(1 / 60, contacts, [0, 0], field);
   camera.position.set(-1.1, 1.6, 5);
-  camera.lookAt(-1.1, -0.15, 0); camera.updateMatrixWorld(true);
+  camera.lookAt(-1.1, -0.15, dynamicZ); camera.updateMatrixWorld(true);
   draw();
   return deformation.water.stats();
 }
@@ -152,7 +217,7 @@ function pumpWater(frames: number, spinning: boolean | "traction") {
   const before = performance.now();
   for (let i = 0; i < frames; i++) {
     if (spinning === true) spin += 0.3;
-    deformation.water.advance(1 / 60, [{ id: "wheel", x: -1.1, y: 0, z: 0, rotation: spin,
+    deformation.water.advance(1 / 60, [{ id: "wheel", x: -1.1, y: 0, z: dynamicZ, rotation: spin,
       width: 0.55, radius: 0.5, wetness: 0.9, tractionSlip: spinning === "traction" ? 0.8 : undefined }], [0, 0], field);
     deformation.water.render(renderer, emptyScene, camera,
       deformation.uniforms.uDeformTex!.value as import("three").Texture,
@@ -172,20 +237,25 @@ function waveSamples() {
   const pixels = new Uint16Array(n * n * 4);
   renderer.readRenderTargetPixels(target, 0, 0, n, n, pixels);
   const window = deformation.water.uniforms.uTerrainWaterWindow.value;
-  let left = 0, right = 0, dry = 0, weightedX = 0, weightedZ = 0, peak = 0;
+  let left = 0, right = 0, dry = 0, weightedX = 0, weightedZ = 0, peak = 0, gapEnergy = 0, floorGaps = 0;
   for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) {
     const wx = window.x + (x + 0.5) * 32 / n, wz = window.y + (z + 0.5) * 32 / n;
     const height = Math.abs(DataUtils.fromHalfFloat(pixels[(z * n + x) * 4]!));
+    const film = DataUtils.fromHalfFloat(pixels[(z * n + x) * 4 + 3]!);
+    if (film === 0) {
+      gapEnergy += height;
+      if (Math.abs(wx + 1.1) < .12 && Math.abs(wz) < 5) floorGaps++;
+    }
     peak = Math.max(peak, height);
     if (wx < 0) left += height; else right += height;
     if (Math.abs(wx) < 0.5 || Math.abs(wx) > 1.7) dry += height;
     weightedX += wx * height; weightedZ += wz * height;
   }
   const total = left + right;
-  return { left, right, dry, peak, centreX: total ? weightedX / total : null, centreZ: total ? weightedZ / total : null };
+  return { left, right, dry, peak, gapEnergy, floorGaps, centreX: total ? weightedX / total : null, centreZ: total ? weightedZ / total : null };
 }
 function waveEnergy() {
-  debug.value = 3; draw();
+  debug.value = 4; draw();
   const gl = renderer.getContext();
   const pixels = new Uint8Array(canvas.width * canvas.height * 4);
   gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -242,7 +312,7 @@ function skyLight() {
   return scene.environment.uuid;
 }
 function shiftDynamics() {
-  deformation.water.advance(1 / 60, [{ id: "wheel", x: -1.1, y: 0, z: 0, rotation: spin, width: 0.55, radius: 0.5, wetness: 0.9 }], [0.5, 0], field);
+  deformation.water.advance(1 / 60, [{ id: "wheel", x: -1.1, y: 0, z: dynamicZ, rotation: spin, width: 0.55, radius: 0.5, wetness: 0.9 }], [0.5, 0], field);
   draw();
   return waveEnergy();
 }
@@ -292,7 +362,7 @@ function showCapture() {
 }
 let frame = 0;
 function loop() { draw(); if (++frame < 20) requestAnimationFrame(loop); else {
-  (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks,
+  (window as any).__wetMudQa = { ready: true, water(on: boolean) { wet![4] = on ? 0.9 : 0; draw(); return probes(); }, sample, profile, tracks, wetPrint, puddleScan,
     bedGlare(original: boolean, wetProfile = 0.9, packed = true) {
       bedBaseline.value = original ? 1 : 0; wet![4] = wetProfile; roughnessInAlpha![4] = packed ? 1 : 0;
       draw(); return { color: surfaceProbes(), profile: profile() };

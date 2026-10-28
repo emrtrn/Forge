@@ -25,6 +25,8 @@ test("physics wheelspin excites water without wheel rotation, stays inside its p
   expect(waves.left).toBeGreaterThan(0.001);
   expect(waves.right).toBe(0);
   expect(waves.dry).toBe(0);
+  expect(waves.floorGaps).toBeGreaterThan(10);
+  expect(waves.gapEnergy).toBe(0);
   expect(movingProfile.map((probe: { puddle: number }) => probe.puddle)).toEqual(calmProfile.map((probe: { puddle: number }) => probe.puddle));
   await page.screenshot({ path: info.outputPath("terrain-water-physics-slip.png") });
   await page.evaluate(() => (window as any).__wetMudQa.shiftDynamics());

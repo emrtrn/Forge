@@ -37,6 +37,7 @@ import {
   terrainTrackDetailStats,
 } from "@engine/render-three/terrain/terrainRenderer";
 import { setTerrainWaterQuality } from "@engine/render-three/terrain/terrainWater";
+import { terrainShoreWetnessAt } from "@engine/render-three/terrain/terrainShoreWetness";
 import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, Sphere, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RepeatWrapping, type Texture, TextureLoader, Vector2, Vector3 } from "three";
 import {
   InstancedMesh,
@@ -1513,6 +1514,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         for (const sampler of this.terrainSurfaceSamplers.values()) if (sampler.deformable) return true;
         return false;
       },
+      waterDepthAt: (x, y, z) => this.lakes?.waterDepthAt(x, y, z) ?? null,
+      groundWetnessAt: (x, y, z) => terrainShoreWetnessAt(this.scene, x, y, z),
     });
     this.runtimeServices.provide(aiHostService, {
       debug: this.debug,

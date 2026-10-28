@@ -2,7 +2,7 @@ import {
   DataTexture,
   LinearFilter,
   RepeatWrapping,
-  RGFormat,
+  RGBAFormat,
   UnsignedByteType,
   Vector4,
   type WebGLRenderer,
@@ -14,15 +14,18 @@ import { TERRAIN_RENDER_LAYERS } from "@engine/terrain/terrainRenderData";
 
 import { TerrainTextureUpdates } from "./terrainTextureUpdates";
 import { TerrainWater, TERRAIN_WATER_PARS, TERRAIN_WATER_REFLECTION } from "./terrainWater";
+import type { TerrainWetTrail } from "./terrainWetTrail";
 
 type TerrainUniforms = Record<string, { value: unknown }>;
 
 /**
  * The GPU copy of the runtime track field (TERRAIN_DEFORMATION Faz 2). The CPU
  * {@link DeformationField} stays authoritative — physics and gameplay read it —
- * and this only mirrors it into an RG8 texture the CDLOD terrain material
+ * and this only mirrors it into an RGBA8 texture the CDLOD terrain material
  * samples: R = depth over {@link TERRAIN_DEFORMATION_DEPTH_RANGE}, G =
- * disturbance, both softened by a one-cell tent filter (rendering only).
+ * disturbance, B = wet tyre prints ({@link TerrainWetTrail}, presentation
+ * state beside the field), all softened by a one-cell tent filter (rendering
+ * only). A is unused.
  * The texture repeats like the field's toroidal storage, so a
  * world position maps to `world / windowSize` with no shift on recentre.
  *
@@ -48,6 +51,8 @@ export const TERRAIN_DEFORMATION_BERM_RADIUS = 0.3;
 export const TERRAIN_DEFORMATION_BERM_MAX = 0.06;
 /** Share of the window, on each side, over which tracks fade out (the window's moving edge never shows a seam). */
 export const TERRAIN_DEFORMATION_EDGE_FADE = 0.06;
+/** Track wetness (roughness drop) a fully wet Lake shore lends a disturbed track; it never adds puddles. */
+export const TERRAIN_DEFORMATION_SHORE_WETNESS = 0.7;
 
 /** World X/Z rectangle the track texture covers while a field is attached. */
 export interface TerrainDeformationWindow {
@@ -76,6 +81,7 @@ export class TerrainDeformationTexture {
   private texture: DataTexture | null = null;
   private updates: TerrainTextureUpdates | null = null;
   private field: DeformationField | null = null;
+  private trail: TerrainWetTrail | null = null;
   private lastStats: TerrainDeformationStats = { uploadedTexels: 0, packMs: 0 };
   private windowRevision = 0;
 
@@ -94,30 +100,37 @@ export class TerrainDeformationTexture {
     return { minX: window.x, minZ: window.y, size: window.z };
   }
 
-  /** Mirrors `field` from now on: a full copy now, then its dirty rectangles via {@link update}. */
-  attach(field: DeformationField): void {
+  /**
+   * Mirrors `field` (and the wet prints of `trail`, which must share its
+   * window) from now on: a full copy now, then dirty rectangles via {@link update}.
+   */
+  attach(field: DeformationField, trail: TerrainWetTrail | null = null): void {
+    if (trail && (trail.cellsPerSide !== field.cellsPerSide || trail.cellSize !== field.cellSize)) {
+      throw new RangeError("Wet trail must share the deformation field's cells");
+    }
     const size = field.cellsPerSide;
     if (!this.texture || this.texture.image.width !== size) {
       this.disposeTexture();
-      const texture = new DataTexture(new Uint8Array(size * size * 2), size, size, RGFormat, UnsignedByteType);
+      const texture = new DataTexture(new Uint8Array(size * size * 4), size, size, RGBAFormat, UnsignedByteType);
       texture.wrapS = texture.wrapT = RepeatWrapping;
       texture.minFilter = texture.magFilter = LinearFilter;
       texture.generateMipmaps = false;
       texture.flipY = false;
-      texture.unpackAlignment = 1;
+      texture.unpackAlignment = 4;
       texture.name = "terrain-deformation";
       this.texture = texture;
       this.updates = new TerrainTextureUpdates([texture]);
       this.uniforms.uDeformTex!.value = texture;
     }
     this.field = field;
+    this.trail = trail;
     this.pack({ x: 0, y: 0, width: size, height: size });
     this.texture.needsUpdate = true;
     this.syncWindow();
     this.uniforms.uDeformActive!.value = 1;
   }
 
-  /** Copies the field's changed cells (its `takeDirty()` rectangles) and its window position. */
+  /** Copies changed cells (the field's and the trail's `takeDirty()` rectangles) and the window position. */
   update(rects: readonly DeformationDirtyRect[]): void {
     if (!this.field || !this.texture || !this.updates) return;
     const started = performance.now();
@@ -151,6 +164,7 @@ export class TerrainDeformationTexture {
   detach(): void {
     if (this.field) this.windowRevision += 1;
     this.field = null;
+    this.trail = null;
     this.uniforms.uDeformActive!.value = 0;
     this.water.reset();
   }
@@ -169,20 +183,24 @@ export class TerrainDeformationTexture {
     const field = this.field!;
     const data = this.texture!.image.data as Uint8Array;
     const size = field.cellsPerSide;
+    const wet = this.trail?.wet;
     const scale = 255 / (TERRAIN_DEFORMATION_DEPTH_RANGE * DEFORMATION_DEPTH_SCALE);
     for (let y = rect.y; y < rect.y + rect.height; y += 1) {
       for (let x = rect.x; x < rect.x + rect.width; x += 1) {
         const index = y * size + x;
         let depth = 0;
         let disturbance = 0;
+        let wetness = 0;
         for (let dz = -1; dz <= 1; dz += 1) for (let dx = -1; dx <= 1; dx += 1) {
           const neighbour = ((y + dz + size) % size) * size + (x + dx + size) % size;
           const weight = (dx === 0 ? 2 : 1) * (dz === 0 ? 2 : 1);
           depth += field.depth[neighbour]! * weight;
           disturbance += field.disturbance[neighbour]! * weight;
+          if (wet) wetness += wet[neighbour]! * weight;
         }
-        data[index * 2] = Math.min(255, Math.round(depth * scale / 16));
-        data[index * 2 + 1] = Math.round(disturbance / 16);
+        data[index * 4] = Math.min(255, Math.round(depth * scale / 16));
+        data[index * 4 + 1] = Math.round(disturbance / 16);
+        data[index * 4 + 2] = Math.round(wetness / 16);
       }
     }
   }
@@ -339,10 +357,15 @@ uniform vec4 uDeformLayerTint[${TERRAIN_RENDER_LAYERS}];
 uniform float uDeformLayerWet[${TERRAIN_RENDER_LAYERS}];
 varying vec2 vForgeDeformWorld;
 varying float vForgeDeformBerm;
+// Undented world Y: classifications against a fixed level (Lake shores) must
+// not change where a track dips below it.
+varying float vForgeDeformBaseY;
 // x: depth (m), y: disturbance (0..1), z/w: full displacement gradient along world X/Z.
 vec4 forgeDeform = vec4(0.0);
 float forgeDeformWetness = 0.0;
 float forgePuddle = 0.0;
+// Wet tyre prints (B channel, TerrainWetTrail): 0 dry .. 1 soaked.
+float forgeTrailWet = 0.0;
 
 void forgeSampleDeformation() {
   if (uDeformActive < 0.5) return;
@@ -350,8 +373,9 @@ void forgeSampleDeformation() {
   if (any(lessThan(t, vec2(0.0))) || any(greaterThan(t, vec2(1.0)))) return;
   float fade = forgeDeformFade(vForgeDeformWorld);
   vec2 uv = vForgeDeformWorld / uDeformWindow.z;
-  vec2 c = texture(uDeformTex, uv).rg;
+  vec3 c = texture(uDeformTex, uv).rgb;
   forgeDeform.xy = vec2(c.r * uDeformDepthRange, c.g) * fade;
+  forgeTrailWet = c.b * fade;
   if (c.r > 0.0 || c.g > 0.0 || vForgeDeformBerm > 0.0) {
     // The same height function as every vertex pass, including the berm and
     // window fade. No triangle-constant derivatives of interpolated rim heights.
@@ -390,18 +414,26 @@ export const TERRAIN_DEFORMATION_COLOR = /* glsl */ `
       + uDeformLayerWet[6] * forgeW1.z + uDeformLayerWet[7] * forgeW1.w;
     float forgeWeightSum = max(0.0001, dot(forgeW0, vec4(1.0)) + dot(forgeW1, vec4(1.0)));
     forgeTint /= forgeWeightSum;
+    // A profile's tint is its dry disturbed look. On a wet Lake shore or bed
+    // (forgeShoreWet, set before this block) the track keeps the painted
+    // layer's own albedo and turns wet instead, whatever the profile.
+    forgeTint.a *= 1.0 - forgeShoreWet;
     forgeColor = mix(forgeColor, forgeTint.rgb, clamp(forgeTint.a * forgeDeform.y, 0.0, 1.0));
     forgeColor *= 1.0 - 0.3 * clamp(forgeDeform.x / max(0.0001, uDeformDepthRange), 0.0, 1.0);
-    forgeDeformWetness = clamp(forgeWet / forgeWeightSum * forgeDeform.y, 0.0, 1.0);
+    float forgeProfileWet = clamp(forgeWet / forgeWeightSum * forgeDeform.y, 0.0, 1.0);
+    forgeDeformWetness = max(forgeProfileWet, ${glslFloat(TERRAIN_DEFORMATION_SHORE_WETNESS)} * forgeShoreWet * forgeDeform.y);
     vec3 forgeBase = forgeTerrainLocalNormal();
     vec3 forgeBaseWorld = inverseTransformDirection(normalize(vTerrainAxisX * forgeBase.x
       + vTerrainAxisY * forgeBase.y + vTerrainAxisZ * forgeBase.z), viewMatrix);
     // Evaluate the dented surface: steep rut walls must remain muddy even on
     // flat authored terrain. The raised rim stays rough, with a soft shoreline.
+    // Puddles follow the profile only (shore wetness darkens, it does not
+    // flood ruts) and never form under a Lake's surface.
     forgePuddle = smoothstep(0.02, 0.08, forgeDeform.x)
-      * smoothstep(0.4, 0.8, forgeDeformWetness)
+      * smoothstep(0.4, 0.8, forgeProfileWet) * (1.0 - forgeShoreSubmerged)
       * smoothstep(0.94, 0.995, forgeDeformedWorldNormal(forgeBaseWorld).y)
       * (1.0 - smoothstep(0.002, 0.012, vForgeDeformBerm));
+    forgePuddle *= forgePuddlePatch(vForgeDeformWorld, forgeDeform.x);
     forgeColor = mix(forgeColor, vec3(0.025, 0.029, 0.027), forgePuddle * 0.6);
   }
 `;
@@ -411,7 +443,8 @@ export const TERRAIN_DEFORMATION_ROUGHNESS = /* glsl */ `
 roughnessFactor *= 1.0 - 0.45 * forgeDeformWetness;
 roughnessFactor *= forgeLayerRoughness;
 roughnessFactor = max(roughnessFactor, 0.32 * smoothstep(0.0, 0.5, forgeDeformWetness));
-roughnessFactor = mix(roughnessFactor, 0.16, forgePuddle);
+float forgePuddleRoughness = .24 + .04 * forgePuddleNoise(vForgeDeformWorld * 5.0);
+roughnessFactor = mix(roughnessFactor, forgePuddleRoughness, forgePuddle);
 `;
 
 /** Environment-lit water; an analytic sky is the fallback without an env map. */
@@ -438,7 +471,10 @@ outgoingLight += vec3(0.50, 0.44, 0.32) * forgeWaterCrest * forgePuddle;
 export const TERRAIN_DEFORMATION_NORMAL = /* glsl */ `
   if (forgeDeform.y > 0.0 || forgeDeform.x > 0.0 || vForgeDeformBerm > 0.0) {
     normal = mat3(viewMatrix) * forgeDeformedWorldNormal(inverseTransformDirection(normal, viewMatrix));
-    if (forgePuddle > 0.0) forgeSampleWater();
+    if (forgePuddle > 0.0) {
+      forgeSampleWater();
+      forgeWaterGradient += forgePuddleMicroGradient(vForgeDeformWorld, uTerrainWaterTime);
+    }
     normal = normalize(mix(normal, mat3(viewMatrix) * normalize(vec3(-forgeWaterGradient.x, 1.0, -forgeWaterGradient.y)), forgePuddle));
     nonPerturbedNormal = normal;
   }

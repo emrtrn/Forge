@@ -21811,6 +21811,62 @@
         "packVersion": "2026-10-27"
       },
       "license": "Project-local material; Poly Haven CC0 textures"
+    },
+    {
+      "id": "t-sand-dry-bc",
+      "name": "T_Sand_Dry_BC",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Sand_Dry_BC.png",
+      "tags": ["sand", "dry", "pebbles", "terrain"],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-content",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1711908
+      },
+      "source": {
+        "origin": "https://polyhaven.com/a/gravelly_sand",
+        "pack": "Dry Sand - Forge sand track tint derivative",
+        "packVersion": "2026-10-28"
+      },
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "m-sand-dry",
+      "name": "M_Sand_Dry",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Sand_Dry.material.json",
+      "tags": ["sand", "dry", "pebbles", "terrain"],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-content",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 433
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Shallow Water Bed",
+        "packVersion": "2026-10-28"
+      },
+      "license": "Project-local material; Poly Haven CC0 textures"
     }
   ]
 }

@@ -32,6 +32,42 @@ export function registerLakeShoreWetness(scene: Scene, lake: LayoutLakeWaterBody
   };
 }
 
+/**
+ * The dry-side shore wetness the terrain shader shows at a world point (0..1),
+ * mirroring `forgeShoreWetness` for ground at or above a Lake's level: shore
+ * distance × height above the level × strength. Connected underwater faces are
+ * the Lake's own query (`LakeSurfaceQuery`), so points below a level read 0.
+ * Presentation only (wet tyre prints).
+ */
+export function terrainShoreWetnessAt(scene: Scene, x: number, y: number, z: number, terrainRef?: string): number {
+  const registry = registries.get(scene);
+  if (!registry || ![x, y, z].every(Number.isFinite)) return 0;
+  const smooth = (edge0: number, edge1: number, value: number) => {
+    const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+  };
+  let wet = 0;
+  for (const { lake, object, mask } of registry.sources) {
+    const a = resolveLakeAppearance(lake), w = a.shoreWetnessWidth;
+    let visible = true; for (let p: Object3D | null = object; p; p = p.parent) visible &&= p.visible;
+    if (!visible || (terrainRef && terrainRef !== lake.terrainRef)) continue;
+    const above = y - lake.surfaceLevel;
+    if (above < 0 || above >= 0.35) continue;
+    const u = (x - (lake.bounds.min[0] - w)) / (lake.bounds.max[0] - lake.bounds.min[0] + 2 * w);
+    const v = (z - (lake.bounds.min[1] - w)) / (lake.bounds.max[1] - lake.bounds.min[1] + 2 * w);
+    if (!(u >= 0 && u <= 1 && v >= 0 && v <= 1)) continue;
+    // Linear filtering between texel centres, clamped like the shader's lookup.
+    const { data, width, height } = mask.image;
+    const px = Math.max(0.5, Math.min(width - 0.5, u * width)) - 0.5, pz = Math.max(0.5, Math.min(height - 0.5, v * height)) - 0.5;
+    const x0 = Math.floor(px), z0 = Math.floor(pz), x1 = Math.min(width - 1, x0 + 1), z1 = Math.min(height - 1, z0 + 1);
+    const fx = px - x0, fz = pz - z0;
+    const at = (cx: number, cz: number) => data![cz * width + cx]! / 255;
+    const distance = (at(x0, z0) * (1 - fx) + at(x1, z0) * fx) * (1 - fz) + (at(x0, z1) * (1 - fx) + at(x1, z1) * fx) * fz;
+    wet = Math.max(wet, (1 - smooth(0, 1, distance)) * (1 - smooth(0.08, 0.35, above)) * a.shoreWetnessStrength);
+  }
+  return wet;
+}
+
 export function createTerrainShoreWetnessUniforms() {
   return { uShoreWetMask: { value: null }, uShoreWetCount: { value: 0 },
     uShoreWetBounds: { value: Array.from({ length: MAX }, () => new Vector4()) },
@@ -86,6 +122,9 @@ uniform vec4 uShoreWetBounds[8];
 uniform vec4 uShoreWetParams[8];
 uniform vec4 uShoreWetGrid[8];
 uniform float uShoreWetRows[8];
+float forgeShoreWet = 0.;
+// 1 on a connected underwater face (set by forgeShoreWetness).
+float forgeShoreSubmerged = 0.;
 float forgeShoreWetness() {
   if(uTerrainView>.5) return 0.;
   float wet=0.;
@@ -94,7 +133,10 @@ float forgeShoreWetness() {
     if(i>=uShoreWetCount) break;
     vec4 bounds=uShoreWetBounds[i], p=uShoreWetParams[i];
     vec2 uv=(vCausticWorld.xz-bounds.xy)/bounds.zw;
-    float above=vCausticWorld.y-p.z;
+    // The undented ground (vForgeDeformBaseY, terrainDeformation's pars): a
+    // rut dipping below the level on a dry face would otherwise read as an
+    // unconnected basin and drop to dry along that face's triangle edges.
+    float above=vForgeDeformBaseY-p.z;
     if(p.w>0. && above<.35 && all(greaterThanEqual(uv,vec2(0.))) && all(lessThanEqual(uv,vec2(1.)))) {
       vec2 texel=clamp(uv*p.xy,vec2(.5),p.xy-.5)/1024.;
       float distance=texture(uShoreWetMask,vec3(texel,float(i))).r;
@@ -115,10 +157,10 @@ float forgeShoreWetness() {
       // distance/depth. Unconnected basins below the water level stay unchanged.
       float coverage=submerged?1.:(above>=0.?edge*height:0.);
       wet=max(wet,coverage*p.w);
+      if(submerged && p.w>0.) forgeShoreSubmerged=1.;
     }
   }
   #endif
   return wet;
 }
-float forgeShoreWet = 0.;
 `;

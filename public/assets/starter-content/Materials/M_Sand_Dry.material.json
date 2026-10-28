@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_Sand_Dry",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "t-sand-dry-bc",
+  "normalTexture": "t-shallow-water-bed-n",
+  "roughnessTexture": "t-shallow-water-bed-r",
+  "terrainMetersPerRepeat": 2.4,
+  "uvTiling": { "x": 1, "y": 1 },
+  "flipY": true,
+  "roughness": 0.95,
+  "metalness": 0,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "side": "front"
+}

@@ -44,6 +44,19 @@ export class LakeWaterController {
     this.interactions.clear();
     for (const object of this.objects.values()) object.setWheelRipples([]);
   }
+  /** Depth (m) of a world point below a visible Lake's connected water surface, or null (wet tyre prints). */
+  waterDepthAt(x: number, y: number, z: number): number | null {
+    let deepest: number | null = null;
+    for (const [id, interaction] of this.interactions) {
+      const object = this.objects.get(id);
+      let visible = !!object?.visible;
+      for (let p = object?.parent; p; p = p.parent) visible &&= p.visible;
+      if (!object || !visible || interaction.query.depthAt(x, z) === null) continue;
+      const depth = object.position.y - y;
+      if (depth > 0 && (deepest === null || depth > deepest)) deepest = depth;
+    }
+    return deepest;
+  }
   /** Called once per fixed physics slice; also usable by isolated QA fixtures. */
   advanceWheelInteractions(dt: number): void {
     if (!Number.isFinite(dt) || dt <= 0) return;

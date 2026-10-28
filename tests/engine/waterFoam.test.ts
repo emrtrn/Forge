@@ -1,5 +1,5 @@
 import { Group, Scene, Vector4 } from "three";
-import { registerLakeShoreWetness, createTerrainShoreWetnessUniforms, updateTerrainShoreWetness } from "../../engine/render-three/terrain/terrainShoreWetness";
+import { registerLakeShoreWetness, createTerrainShoreWetnessUniforms, terrainShoreWetnessAt, updateTerrainShoreWetness } from "../../engine/render-three/terrain/terrainShoreWetness";
 import assert from "node:assert/strict";
 import { createLakeFoamMask } from "../../engine/render-three/waterFoam";
 import { LakeWaterObject } from "../../engine/render-three/lakeWater";
@@ -35,8 +35,20 @@ export async function registerWaterFoamTests(check: Check): Promise<void> {
     assert.equal(connected(-60, 0), false, "outside grid must not wrap");
     assert.equal((uniforms.uShoreWetBounds.value as Vector4[])[0]!.x, -49, "mask extends onto dry side of bounds");
     assert.ok(uniforms.uShoreWetParams.value[0]!.w > 0);
+    // CPU mirror (wet tyre prints): on a shore point just above the level it
+    // reads the full strength; farther, higher or below the level it is dry.
+    const level = doc.lake.surfaceLevel, strength = resolveLakeAppearance(doc.lake).shoreWetnessStrength;
+    const shoreX = geometry.shore[0]! + geometry.position[0], shoreZ = geometry.shore[1]! + geometry.position[2];
+    assert.ok(Math.abs(terrainShoreWetnessAt(scene, shoreX, level + 0.02, shoreZ) - strength) < 0.05, "shore line reads full strength");
+    const raised = terrainShoreWetnessAt(scene, shoreX, level + 0.2, shoreZ);
+    assert.ok(raised > 0 && Math.abs(raised - strength * 0.584) < 0.03, "the shader's height falloff (1 - smoothstep(0.08, 0.35, 0.2))");
+    assert.equal(terrainShoreWetnessAt(scene, shoreX, level + 0.4, shoreZ), 0, "dry past the height band");
+    assert.equal(terrainShoreWetnessAt(scene, shoreX, level - 0.1, shoreZ), 0, "below the level is the Lake's own query");
+    assert.equal(terrainShoreWetnessAt(scene, 500, level, 500), 0, "outside the padded bounds");
+    assert.equal(terrainShoreWetnessAt(scene, shoreX, level + 0.02, shoreZ, "another-terrain"), 0, "bound to its terrain");
     object.visible = false; updateTerrainShoreWetness(uniforms, scene, "terrain");
     assert.equal(uniforms.uShoreWetParams.value[0]!.w, 0);
+    assert.equal(terrainShoreWetnessAt(scene, shoreX, level + 0.02, shoreZ), 0, "hidden Lake shows no wet shore");
     object.visible = true; updateTerrainShoreWetness(uniforms, scene, "another-terrain");
     assert.equal(uniforms.uShoreWetParams.value[0]!.w, 0);
     let disposed = false; texture.addEventListener("dispose", () => { disposed = true; });

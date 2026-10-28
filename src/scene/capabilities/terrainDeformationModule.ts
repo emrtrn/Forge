@@ -15,6 +15,11 @@
  * from the paint layers' physical materials through the shell's surface
  * provider, which runs with or without this module. Nothing here is written to
  * the level; the field is runtime state only.
+ *
+ * Beside the field it keeps the wet tyre prints ({@link TerrainWetTrail}): a
+ * tyre that stood in a Lake (the surface host's `waterDepthAt`), on its wet
+ * shore (`groundWetnessAt`) or in a rut puddle wets the next few metres of
+ * ground it rolls over. Presentation only.
  */
 import type { Subsystem } from "@engine/core/Subsystem";
 import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
@@ -25,6 +30,7 @@ import { sharedTerrainDeformation, type TerrainDeformationTexture } from "@engin
 import { DeformationField } from "@engine/scene/deformationField";
 import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
 import type { TerrainWaterContact } from "@engine/render-three/terrain/terrainWaterState";
+import { TerrainWetTrail, type TerrainWetTrailContact } from "@engine/render-three/terrain/terrainWetTrail";
 
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeServices } from "./RuntimeServices";
@@ -36,6 +42,17 @@ import {
 } from "./runtimeServiceKeys";
 
 export const TERRAIN_DEFORMATION_MODULE_ID = "terrain-deformation";
+
+/** Lake water (m) over a contact that soaks a tyre; thinner films at the very shore do not. */
+const SOAKING_LAKE_DEPTH = 0.02;
+/**
+ * Ground at least this wet (a Lake's wet shore band) keeps a tyre soaked, so
+ * its print starts where that ground stops looking wet, not inside the band.
+ */
+const SOAKING_GROUND_WETNESS = 0.25;
+/** Profile wetness and rut depth (m) of a rut puddle that soaks a tyre (the puddle shading's thresholds). */
+const PUDDLE_WETNESS = 0.4;
+const PUDDLE_DEPTH = 0.03;
 
 export interface TerrainDeformationModuleOptions {
   /** GPU mirror to drive (default: the page's shared texture every terrain material samples). */
@@ -62,6 +79,7 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
   let services: RuntimeServices | null = null;
   let field: DeformationField | null = null;
   let stamper: WheelTrackStamper | null = null;
+  let trail: TerrainWetTrail | null = null;
   let stampedWheels = 0;
   let centre: [number, number] = [0, 0];
   let sinkInstalled = false;
@@ -91,7 +109,9 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
       });
       stamper = new WheelTrackStamper(field);
       field.recenter(centre[0], centre[1]);
-      texture.attach(field);
+      trail = new TerrainWetTrail(field.cellsPerSide, field.cellSize);
+      trail.setOrigin(...field.originCell);
+      texture.attach(field, trail);
     }
     return field;
   };
@@ -101,6 +121,7 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
     sinkInstalled = false;
     field = null;
     stamper = null;
+    trail = null;
     stampedWheels = 0;
     texture.detach();
   };
@@ -127,8 +148,10 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
       centre = focus;
       active.recenter(focus[0], focus[1]);
     }
+    trail!.setOrigin(...active.originCell);
     stampedWheels = 0;
     const waterContacts: TerrainWaterContact[] = [];
+    const trailContacts: TerrainWetTrailContact[] = [];
     for (const id of ids) {
       const state = vehicles.vehicleState(id);
       if (!state) {
@@ -144,11 +167,17 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
         if (!wheel.inContact || !wheel.contactPoint || wheel.groundEntityId === null) return;
         const profile = surface.deformationAt(wheel.groundEntityId, wheel.contactPoint);
         const [x, y, z] = wheel.contactPoint;
+        const width = vehicleWheelWidth(definition?.wheels[index] ?? wheel);
         waterContacts.push({ id: `${id}:${index}`, x, y, z, radius: wheel.radius,
           rotation: wheel.rotation, tractionSlip: wheel.tractionSlip,
-          width: vehicleWheelWidth(definition?.wheels[index] ?? wheel), wetness: profile?.wetness ?? 0 });
+          width, wetness: profile?.wetness ?? 0 });
+        const inLake = (surface.waterDepthAt?.(x, y, z) ?? 0) > SOAKING_LAKE_DEPTH;
+        const inPuddle = (profile?.wetness ?? 0) > PUDDLE_WETNESS && active.sample(x, z).depth > PUDDLE_DEPTH;
+        const onWetGround = (surface.groundWetnessAt?.(x, y, z) ?? 0) >= SOAKING_GROUND_WETNESS;
+        trailContacts.push({ id: `${id}:${index}`, x, z, width, inWater: inLake || inPuddle || onWetGround });
       });
     }
+    trail!.advance(deltaSeconds, trailContacts);
     texture.water.advance(deltaSeconds, waterContacts, centre, active);
     active.recover(deltaSeconds);
   };
@@ -157,7 +186,7 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
     id: "terrainDeformation",
     update: () => {
       // Rendering uploads only. No stamps, digging or recovery on render time.
-      if (field) texture.update(field.takeDirty());
+      if (field) texture.update([...field.takeDirty(), ...(trail?.takeDirty() ?? [])]);
     },
   };
 
@@ -180,7 +209,8 @@ export function createTerrainDeformationModule(options: TerrainDeformationModule
           if (!field) return null;
           const { activeCellCount, maxDepth } = field.stats();
           const { uploadedTexels, packMs } = texture.stats();
-          return { activeCells: activeCellCount, maxDepth, stampedWheels, uploadedTexels, packMs, centre: [...centre], water: texture.water.stats() };
+          return { activeCells: activeCellCount, maxDepth, stampedWheels, uploadedTexels, packMs, centre: [...centre],
+            water: texture.water.stats(), wetTrailCells: trail?.activeCellCount ?? 0 };
         },
       });
     },

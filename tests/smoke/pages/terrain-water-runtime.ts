@@ -7,6 +7,7 @@ import { sharedTerrainDeformation } from "@engine/render-three/terrain/terrainDe
 import type { DeformationField } from "@engine/scene/deformationField";
 import type { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import type { TerrainWaterContact } from "@engine/render-three/terrain/terrainWaterState";
+import { DataUtils, type WebGLRenderTarget } from "three";
 import type { Object3D, PerspectiveCamera, Scene, ShaderMaterial, Texture, Vector4, WebGLRenderer } from "three";
 
 // Real shell/modules/physics/vehicle/lighting, with test-only readback. No debug
@@ -70,6 +71,25 @@ function drawRuntimeReview() {
     const deformation = sharedTerrainDeformation();
     const water = deformation.water;
     if (!on) {
+      // Choose a wet part of the extended real tyre footprint. The original
+      // contact can now legitimately sit on a dry gap between puddles.
+      const target = (water as unknown as { targets: [WebGLRenderTarget, WebGLRenderTarget] }).targets[0];
+      const pixels = new Uint16Array(target.width * target.height * 4);
+      internal.renderer.readRenderTargetPixels(target, 0, 0, target.width, target.height, pixels);
+      const origin = water.uniforms.uTerrainWaterWindow.value;
+      realWaterContacts = realWaterContacts.map(contact => {
+        let best = contact, distance = Infinity;
+        for (let z = 0; z < target.height; z++) for (let x = 0; x < target.width; x++) {
+          const wx = origin.x + (x + .5) * 32 / target.width, wz = origin.y + (z + .5) * 32 / target.height;
+          const d = Math.abs(wz - contact.z);
+          if (Math.abs(wx - contact.x) < contact.width * .2 && d < 1.5 && d < distance
+            && DataUtils.fromHalfFloat(pixels[(z * target.width + x) * 4 + 3]!) > .95) {
+            best = { ...contact, x: wx, z: wz }; distance = d;
+          }
+        }
+        if (!Number.isFinite(distance)) throw new Error("No water patch on the seeded wheel footprint");
+        return best;
+      });
       const wheel = realWaterContacts.reduce((closest, item) => item.x > closest.x ? item : closest);
       internal.camera.fov = 50; internal.camera.updateProjectionMatrix();
       internal.camera.position.set(wheel.x + 2, wheel.y + 0.85, wheel.z + 1.2);

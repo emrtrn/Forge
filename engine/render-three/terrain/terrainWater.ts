@@ -9,6 +9,7 @@ import type { DeformationField } from "@engine/scene/deformationField";
 import { isPlanarReflectionCamera } from "../planarReflectionSource";
 import { TerrainWaterState, TERRAIN_WATER_MASK_SIZE, TERRAIN_WATER_SIZE, TERRAIN_WATER_STEP, TERRAIN_WATER_MAX_IMPULSES, TERRAIN_WATER_MAX_RIPPLES } from "./terrainWaterState";
 import type { TerrainWaterContact } from "./terrainWaterState";
+import { TERRAIN_PUDDLE_PATTERN, TERRAIN_PUDDLE_MOTION } from "./terrainPuddleAppearance";
 
 export type TerrainWaterQuality = "low" | "medium" | "high";
 const live = new Set<TerrainWater>();
@@ -31,6 +32,7 @@ uniform vec2 previousOrigin;
 uniform float cellSize;
 uniform vec4 impulses[${TERRAIN_WATER_MAX_IMPULSES}];
 uniform int impulseCount;
+${TERRAIN_PUDDLE_PATTERN}
 vec2 filmAt(vec2 world) {
   vec2 local=(world-origin)/32.0;
   vec2 terrain=(world-deformWindow.xy)/deformWindow.z;
@@ -38,7 +40,9 @@ vec2 filmAt(vec2 world) {
     ||any(lessThan(terrain,vec2(0.06)))||any(greaterThan(terrain,vec2(0.94)))) return vec2(0.0);
   vec2 wet=texture2D(wetMask,world/32.0).rg;
   vec2 field=texture2D(deformation,world/deformWindow.z).rg;
-  return vec2(smoothstep(0.4,0.7,wet.r)*smoothstep(0.015,0.045,field.r*depthRange)*smoothstep(0.35,0.7,field.g),wet.g-field.r*depthRange);
+  float depth=field.r*depthRange;
+  return vec2(smoothstep(0.4,0.7,wet.r)*smoothstep(0.015,0.045,depth)*smoothstep(0.35,0.7,field.g)
+    *forgePuddlePatch(world,depth),wet.g-depth);
 }
 vec2 oldAt(vec2 world) {
   vec2 uv=(world-previousOrigin)/32.0;
@@ -118,6 +122,7 @@ export class TerrainWater {
     uTerrainWaterPlanes: { value: [new Vector4(), new Vector4()] },
     uTerrainWaterMatrices: { value: [new Matrix4(), new Matrix4()] },
     uTerrainWaterReflectionPass: { value: 0 },
+    uTerrainWaterTime: { value: 0 },
   };
   private field: DeformationField | null = null;
   private quality = pageQuality;
@@ -150,6 +155,7 @@ export class TerrainWater {
 
   advance(dt: number, contacts: readonly TerrainWaterContact[], centre: readonly [number, number], field: DeformationField): void {
     this.field = field;
+    if (Number.isFinite(dt) && dt > 0) this.uniforms.uTerrainWaterTime.value += Math.min(dt, 0.1);
     this.state.advance(dt, contacts, centre);
   }
 
@@ -167,6 +173,7 @@ export class TerrainWater {
 
   reset(): void {
     this.field = null; this.state.clear(); this.releaseTargets(); this.simulationSteps = 0;
+    this.uniforms.uTerrainWaterTime.value = 0;
   }
 
   dispose(): void {
@@ -259,13 +266,15 @@ export class TerrainWater {
 }
 
 export const TERRAIN_WATER_PARS = /* glsl */ `
+uniform float uTerrainWaterTime;
+${TERRAIN_PUDDLE_PATTERN}
+${TERRAIN_PUDDLE_MOTION}
 #ifdef FORGE_TERRAIN_WATER
 uniform highp sampler2DArray uTerrainWaterTex;
 uniform vec4 uTerrainWaterWindow;
 uniform vec4 uTerrainWaterPlanes[2];
 uniform mat4 uTerrainWaterMatrices[2];
 uniform float uTerrainWaterReflectionPass;
-varying float vForgeDeformBaseY;
 vec2 forgeWaterGradient=vec2(0.0);
 float forgeWaterCrest=0.0;
 vec2 forgeWaterUv(){ return (vForgeDeformWorld-uTerrainWaterWindow.xy)/uTerrainWaterWindow.z; }

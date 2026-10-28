@@ -268,13 +268,13 @@ export function registerWheelTrackTests(check: Check): void {
     // Toroidal storage: world cell (x, z) lives at mod(z, N) * N + mod(x, N).
     const mod = (v: number) => ((v % 16) + 16) % 16;
     const index = (x: number, z: number) => mod(z) * 16 + mod(x);
-    assert.ok(Math.abs(tex.image.data[index(0, 0) * 2]! - 128) <= 1, "half the range encodes as ~128");
-    assert.equal(tex.image.data[index(0, 0) * 2 + 1], 100);
+    assert.ok(Math.abs(tex.image.data[index(0, 0) * 4]! - 128) <= 1, "half the range encodes as ~128");
+    assert.equal(tex.image.data[index(0, 0) * 4 + 1], 100);
     field.takeDirty();
     field.recenter(3, -2);
     field.stampDisc([2.25, 0.25], 1, TERRAIN_DEFORMATION_DEPTH_RANGE * 2, 1, 255);
     texture.update(field.takeDirty());
-    assert.equal(tex.image.data[index(4, 0) * 2], 255, "deeper than the range saturates");
+    assert.equal(tex.image.data[index(4, 0) * 4], 255, "deeper than the range saturates");
     assert.ok(texture.stats().uploadedTexels > 0 && texture.stats().uploadedTexels < 2 * 16 * 16, "bounded dirty regions with filter halos");
     const window = texture.uniforms.uDeformWindow!.value as { x: number; y: number; z: number; w: number };
     assert.deepEqual([window.x, window.y, window.z, window.w], [field.originCell[0] * 0.5, field.originCell[1] * 0.5, 8, 0.5]);

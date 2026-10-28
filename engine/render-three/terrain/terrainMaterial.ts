@@ -525,7 +525,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
       FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <color_fragment>", `forgeSampleDeformation();\n${fragmentColor(textured, normalMapped)}\nforgeShoreWet = forgeShoreWetness();\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n// Before the colour block: the track look reads it. Wet tyre prints wet the\n// ground the same way a Lake shore does (debug views show neither).\nforgeShoreWet = max(forgeShoreWetness(), uTerrainView < 0.5 ? forgeTrailWet : 0.0);\n${fragmentColor(textured, normalMapped)}\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
       .replace("#include <roughnessmap_fragment>", `${TERRAIN_DEFORMATION_ROUGHNESS}\nroughnessFactor=mix(roughnessFactor,min(roughnessFactor,.32),forgeShoreWet);`)
       .replace("#include <lights_fragment_begin>", "forgePrepareCaustics();\n#include <lights_fragment_begin>")
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)

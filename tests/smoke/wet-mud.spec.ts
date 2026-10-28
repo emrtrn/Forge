@@ -6,7 +6,37 @@ import { decodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { expect, test } from "./test";
 import { smokePublicPath } from "./smokeProject.mjs";
 
-test("wet mud fifth layer renders reflective water on track floors", async ({ page }, info) => {
+test("a tyre leaving water prints a short wet trail that fades along its length and dries", async ({ page }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/tests/smoke/pages/wet-mud.html");
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).__wetMudQa?.ready)), { timeout: 60_000 }).toBe(true);
+  type Print = { roughness: { z: number; on: number; off: number }[]; colour: { z: number; on: number[]; off: number[] }[]; cells: number };
+  const wet = await page.evaluate(() => (window as any).__wetMudQa.wetPrint(true) as Print);
+  await page.screenshot({ path: info.outputPath("wet-tyre-print.png") });
+  await writeFile(info.outputPath("wet-tyre-print.json"), JSON.stringify(wet, null, 2));
+  expect(wet.cells).toBeGreaterThan(0);
+  const dried = await page.evaluate(() => (window as any).__wetMudQa.wetPrint(false) as Print);
+  await page.screenshot({ path: info.outputPath("wet-tyre-print-dried.png") });
+  expect(dried.cells).toBe(0);
+  // The same pixels wet and dried (the mud's own roughness varies across it).
+  const luma = (rgb: number[]) => rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722;
+  const smoother = (z: number) => dried.roughness.find((row) => row.z === z)!.on - wet.roughness.find((row) => row.z === z)!.on;
+  const darker = (z: number) => luma(dried.colour.find((row) => row.z === z)!.on) - luma(wet.colour.find((row) => row.z === z)!.on);
+  expect(smoother(-4.3), "fresh print is smoother").toBeGreaterThan(0.05);
+  expect(darker(-4.3), "fresh print is darker").toBeGreaterThan(6);
+  expect(smoother(-1.5), "it fades along the path").toBeLessThan(smoother(-4.3));
+  for (const z of [1.2, 1.8]) {
+    expect(Math.abs(smoother(z)), `dry past the trail at z=${z}`).toBeLessThan(0.01);
+    expect(Math.abs(darker(z)), `dry past the trail at z=${z}`).toBeLessThan(1);
+  }
+  for (const row of wet.roughness) expect(Math.abs(row.off - dried.roughness.find((r) => r.z === row.z)!.off), `beside the print at z=${row.z}`).toBeLessThan(0.01);
+  expect(errors).toEqual([]);
+});
+
+test("wet mud fifth layer renders broken water patches with subtle moving normals", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
@@ -18,14 +48,26 @@ test("wet mud fifth layer renders reflective water on track floors", async ({ pa
   expect(texturedSurface.filter((value, i) => Math.abs(value - uniformSurface[i]!) > 3).length).toBeGreaterThan(30);
   await page.screenshot({ path: info.outputPath("wet-mud-roughness.png") });
   const dry = await page.evaluate(() => (window as any).__wetMudQa.water(false) as number[]);
-  const dryCentre = await page.evaluate(() => (window as any).__wetMudQa.sample() as number[]);
   await page.screenshot({ path: info.outputPath("mud-track-without-water.png") });
   const wet = await page.evaluate(() => (window as any).__wetMudQa.water(true) as number[]);
-  const wetCentre = await page.evaluate(() => (window as any).__wetMudQa.sample() as number[]);
   await page.screenshot({ path: info.outputPath("wet-mud-puddles.png") });
   expect(Math.max(...wet.map((value, i) => value - dry[i]!))).toBeGreaterThan(10); // blue sky on visible flat parts of the floor
-  expect(wetCentre[2]! - dryCentre[2]!).toBeGreaterThan(10); // the rut centre must fill, not only one narrow edge
-  const profile = await page.evaluate(() => (window as any).__wetMudQa.profile() as { offset: number; puddle: number; roughness: number; normalY: number }[]);
+  type Scan = { points: { x: number; z: number; puddle: number; roughness: number }[]; motion: number[][] };
+  const scan = await page.evaluate(() => (window as any).__wetMudQa.puddleScan(0) as Scan);
+  const moved = await page.evaluate(() => (window as any).__wetMudQa.puddleScan(2) as Scan);
+  expect(moved.points, "normal animation never moves puddle boundaries").toEqual(scan.points);
+  for (const x of [-1.1, 1.1]) {
+    const row = scan.points.filter(p => p.x === x);
+    expect(row.filter(p => p.puddle > .8).length, "wet floor patches remain").toBeGreaterThan(5);
+    expect(row.filter(p => p.puddle < .05).length, "mud gaps break the ribbon").toBeGreaterThan(5);
+  }
+  expect(moved.motion.filter((v, i) => Math.max(...v.map((n, c) => Math.abs(n - scan.motion[i]![c]!))) > 2).length).toBeGreaterThan(10);
+  for (const point of scan.points.filter(p => p.puddle > .98)) {
+    expect(point.roughness).toBeGreaterThan(.22);
+    expect(point.roughness).toBeLessThan(.31);
+  }
+  const wetZ = scan.points.find(p => p.x === -1.1 && p.puddle > .98)!.z;
+  const profile = await page.evaluate(z => (window as any).__wetMudQa.profile(z) as { offset: number; puddle: number; roughness: number; normalY: number }[], wetZ);
   await writeFile(info.outputPath("wet-mud-profile.json"), JSON.stringify(profile, null, 2));
   const floor = profile.find((point) => point.offset === 0)!;
   expect(floor.puddle).toBeGreaterThan(0.8);
@@ -69,10 +111,7 @@ test("wet soil bed glare is bounded without changing dry profiles, unpacked laye
   const after = await shot(false, 0.9);
   await page.screenshot({ path: info.outputPath("wet-bed-after.png") });
   expect(after.color.filter((v, i) => Math.abs(v - before.color[i]!) > 2).length).toBeGreaterThan(10);
-  const beforeFloor = before.profile.find(p => p.offset === 0)!;
-  const afterFloor = after.profile.find(p => p.offset === 0)!;
-  expect(afterFloor.puddle).toBeGreaterThan(0.8);
-  expect(afterFloor).toEqual(beforeFloor);
+  expect(after.profile.find(p => p.offset === 0)).toEqual(before.profile.find(p => p.offset === 0));
   expect(after.profile.map(p => [p.puddle, p.normalY])).toEqual(before.profile.map(p => [p.puddle, p.normalY]));
   for (const wet of [0, 0.1]) expect(await shot(false, wet)).toEqual(await shot(true, wet));
   expect(await shot(false, 0.9, false)).toEqual(await shot(true, 0.9, false));

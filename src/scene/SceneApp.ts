@@ -14435,6 +14435,16 @@ export class SceneApp {
     if (!this.layout) return;
     this.materialCache.delete(materialId);
     this.materialLoads.delete(materialId);
+    // Terrain owns packed layer textures separately from mesh materials. Play
+    // loads them afresh; the editor must discard its old layer on save too.
+    const cachedLayer = this.landscapeLayerMaterialCache.get(materialId);
+    this.landscapeLayerMaterialCache.delete(materialId);
+    const affectedLandscapes = this.layout.landscapes
+      ?.flatMap((actor, index) => this.worldTerrains.get(actor.id)?.def.layers
+        .some((layer) => layer.material === materialId) ? [index] : []) ?? [];
+    await Promise.all(affectedLandscapes.map((index) => this.warmLandscapeLayerMaterials(index)));
+    cachedLayer?.texture?.dispose();
+    cachedLayer?.normalTexture?.dispose();
     const affectedAssetIds = new Set<string>();
     for (const instance of this.layout.instances) {
       const defaultSlots = this.assetMaterialSlots.get(instance.assetId)?.slots ?? [];

@@ -212,6 +212,18 @@ export interface TerrainSurfaceHost {
   deformationAt(groundEntityId: string, contactPoint: VehicleVec3): SurfaceDeformationSample | null;
   /** Whether a loaded terrain has a deformable paint layer; false keeps track work off entirely. */
   hasDeformableTerrain(): boolean;
+  /**
+   * How far (m) a world point lies below a visible water body's surface, or
+   * null outside its connected water (dry ground, a bridge above it);
+   * presentation only (wet tyre prints). Optional: hosts without water
+   * bodies omit it.
+   */
+  waterDepthAt?(worldX: number, worldY: number, worldZ: number): number | null;
+  /**
+   * How wet the ground at a world point looks (0..1) beside water, such as a
+   * Lake's wet shore; presentation only (wet tyre prints). Optional.
+   */
+  groundWetnessAt?(worldX: number, worldY: number, worldZ: number): number;
 }
 
 export const terrainSurfaceHostService = runtimeServiceKey<TerrainSurfaceHost>("terrain-surface-host");
@@ -228,6 +240,8 @@ export interface TerrainDeformationSnapshot {
   readonly maxDepth: number;
   /** Wheels that stamped this frame. */
   readonly stampedWheels: number;
+  /** Cells holding a wet tyre print. */
+  readonly wetTrailCells?: number;
   /** Texels copied to the GPU this frame, and the CPU time packing them took. */
   readonly uploadedTexels: number;
   readonly packMs: number;

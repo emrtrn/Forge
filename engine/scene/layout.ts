@@ -1037,6 +1037,7 @@ export interface LayoutLakeWaterBody {
     absorptionDistance?: number; normalTexture?: string; normalScale?: number; rippleSpeed?: number;
     /** Vertical depth of the visual shore transition in metres; 0 disables it. */
     shoreBlendDepth?: number;
+    surfaceStrength?: number; surfaceRoughness?: number;
     shoreWetnessEnabled?: boolean; shoreWetnessWidth?: number; shoreWetnessStrength?: number;
     foamEnabled?: boolean; foamOpacity?: number; foamWidth?: number; foamScale?: number; foamSpeed?: number;
     causticsEnabled?: boolean; causticsStrength?: number; causticsScale?: number;

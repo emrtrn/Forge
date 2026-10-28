@@ -17,12 +17,22 @@ export function installLakeProbe(app: unknown) {
     worldTerrainSessions?: WeakMap<WorldTerrainDocument, WorldTerrainEditSession>;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
-    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false, foam?: boolean, foamTime = 0, softEdge = true, direct = false, wetShore = true) {
+    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false, foam?: boolean, foamTime = 0, softEdge = true, direct = false, wetShore = true, surfaceStrength?: number, surfaceView = 0, mappedSurface = true) {
       cancelAnimationFrame(a.frameHandle);
       a.camera.near = 0.1; a.camera.far = 2000;
       a.camera.position.set(close ? -20 : -12, close ? 13.3 : 35, close ? -25.5 : 32);
       a.camera.lookAt(close ? -20 : -10, close ? 11.6 : 10, close ? -23.2 : -5);
       if (wide) { a.camera.position.set(0, 200, 1); a.camera.lookAt(0, 11, 0); }
+      if (surfaceView) {
+        let sun: any;
+        a.scene.traverseVisible((node: any) => { if (node.isDirectionalLight && (!sun || node.intensity > sun.intensity)) sun = node; });
+        if (sun) {
+          const direction = sun.getWorldPosition(new Vector3()).sub(sun.target.getWorldPosition(new Vector3())).normalize();
+          const target = new Vector3(-12, 12, 4);
+          a.camera.position.copy(target).addScaledVector(new Vector3(-direction.x, direction.y, -direction.z), surfaceView === 2 ? 100 : 30);
+          a.camera.lookAt(target);
+        }
+      }
       a.camera.updateProjectionMatrix(); a.camera.updateMatrixWorld(true);
       const restore: Array<() => void> = [];
       let count = 0, normalLayers = 0, foamActive = false, wetShoreActive = false, lakeDraws = 0, snapshotUsed = false;
@@ -53,14 +63,19 @@ export function installLakeProbe(app: unknown) {
           const before = node.onBeforeRender;
           const opacity = node.material.uniforms.foamOpacity?.value;
           const edgeDepth = node.material.uniforms.shoreBlendDepth?.value;
+          const strength = node.material.uniforms.surfaceStrength?.value;
+          const hasNormal = node.material.uniforms.hasNormal?.value;
+          const normalMap = node.material.uniforms.normalMap?.value;
           node.onBeforeRender = (...args: any[]) => {
             before(...args); node.material.uniforms.time.value = foamTime;
             lakeDraws++; snapshotUsed = node.material.uniforms.waterSceneEnabled?.value > 0; drawnMaterial = args[4]?.type;
+            if (!mappedSurface) { node.material.uniforms.hasNormal.value = 0; node.material.uniforms.normalMap.value = null; }
+            if (surfaceStrength !== undefined && strength !== undefined) node.material.uniforms.surfaceStrength.value = surfaceStrength;
             if (!softEdge && edgeDepth !== undefined) node.material.uniforms.shoreBlendDepth.value = 0;
             foamActive ||= (node.material.uniforms.foamOpacity?.value ?? 0) > 0;
             if (foam === false && opacity !== undefined) node.material.uniforms.foamOpacity.value = 0;
           };
-          restore.push(() => { node.onBeforeRender = before; if (edgeDepth !== undefined) node.material.uniforms.shoreBlendDepth.value = edgeDepth; if (opacity !== undefined) node.material.uniforms.foamOpacity.value = opacity; });
+          restore.push(() => { node.onBeforeRender = before; if (hasNormal !== undefined) { node.material.uniforms.hasNormal.value = hasNormal; node.material.uniforms.normalMap.value = normalMap; } if (strength !== undefined) node.material.uniforms.surfaceStrength.value = strength; if (edgeDepth !== undefined) node.material.uniforms.shoreBlendDepth.value = edgeDepth; if (opacity !== undefined) node.material.uniforms.foamOpacity.value = opacity; });
         }
       });
       const directTarget = direct ? new WebGLRenderTarget(a.renderer.domElement.width, a.renderer.domElement.height) : null;

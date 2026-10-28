@@ -1,5 +1,38 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel uygulama — L1 doğal göl yüzeyi — 2026-10-28
+
+Kullanıcı fotoğrafındaki küçük dalgacıklar/farklı ölçeklerde hareket/kırık güneş
+parlaması için uygulama başladı. İlk dilim su geometrisini değiştirmeyen yüzey
+normalleri ve yüzey ışığıdır; kıyı, bağlılık ve derinlik geometrisi korunur.
+Tekerlek dalgaları L2/L3 ayrı iş olarak açık kalır.
+
+`lakeSurface.ts`: aynı normal asset'inden üç farklı ölçek/yön/hız; döndürülmüş
+UV'nin eğimi dünya çerçevesine geri çevrilir. Farklı yönlerdeki geniş ve küçük
+prosedürel dalgacıklar yavaş noise paketleriyle karışır. Normal asset'i yokken
+prosedürel hareket kalır. İnce dalgalar ekran footprint'i arttıkça söner;
+çözülemeyen speküler lobe normal varyansına göre genişler. Tek yönde sürekli
+sinüs çizgisi veya fotoğrafın TV moiré deseni hedef değildir.
+
+Lake Appearance: **Surface Strength** 0–2 (varsayılan 1), **Surface Roughness**
+0,04–1 (varsayılan 0,22); mevcut Normal Scale ve Ripple Speed korunur. Strength
+0 yüzeyi düzleştirir; Roughness güneş parlaması ve mevcut planar yansımanın
+blur genişliğini etkiler. Alanlar ortak runtime/save validator ve mevcut
+undo/Save/Reload yolundadır. Mevcut Lake'ler varsayılan yeni yüzeyi kullanır;
+authored renk, opaklık, yansıma seçimi veya terrain dosyaları değiştirilmez.
+
+Güneş parlaması dar, düşük enerjili bir lobe kullanır; renk/emissive beyaz bant
+eklenmez. Lake gölge alıcısı köpük kapalıyken de bağlanır; güneş/CSM gölgesi
+parlamayı etkiler. Kıyı sönmesi normal ayrıntısını sakinleştirir. Yeni sampler,
+asset, capture veya draw yok; aynı normal sampler'ından üçüncü örnek ve ilave
+shader ALU maliyeti var. Donanım p95 kabulü henüz yok.
+
+Son kaynakla `build:verify` 1.979 engine kontrolüyle geçti; doğal yüzey,
+köpük, kıyı, ıslak dip ve caustics tarayıcı regresyonları 5/5 geçti.
+[Uygulama ve kabul kaydı](../reports/LAKE_NATURAL_SURFACE_2026-10-28.md).
+Kod henüz commit/push edilmedi; referans fotoğrafla nihai masaüstü görsel/GPU
+kabulü yerel bilgisayarda ayrıca yapılmalı.
+
 ## Güncel iyileştirme — Su altı dip ıslaklığı — 2026-10-28
 
 Kullanıcı, kıyı bandına ek olarak suyun kapladığı zeminin de ıslak görünmesini
@@ -135,8 +168,9 @@ sorgusu ve teker–su kesişimi gerekir.
 temasları ve sınırlı ripple sunumu → L3 köpük/caustics/yansıma ile ortak kabul.
 Detaylar ve test matrisi
 [köpük ve yüzey araştırmasının ilave bölümünde](../reports/WATER_CONTACT_FOAM_RESEARCH_2026-10-28.md#göl-yüzeyi-ve-tekerlek-etkileşimi--ilave-kapsam).
-Bu kullanıcı isteği dokümana kaydedildi; L1–L3 kod uygulaması henüz başlamadı.
-Köpük F1 ilk uygulaması aşağıdaki güncel kayıttadır.
+Bu kullanıcı isteği dokümana kaydedildi. L1 ilk uygulaması üstteki güncel
+kayıttadır; L2/L3 henüz başlamadı.
+Köpük F1 ilk uygulaması aşağıdaki kayıttadır.
 
 ## Güncel ek — Caustics görünürlüğü ve köpük araştırması — 2026-10-28
 

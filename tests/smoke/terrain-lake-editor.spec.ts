@@ -285,6 +285,49 @@ test("Lake wet shore includes the connected submerged bed and survives toggle un
   expect(runtimeOn.glError).toBe(0); expect(errors).toEqual([]);
 });
 
+test("Lake multiscale surface animates reflected light, preserves shore and persists surface controls", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true);
+  await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "appearance");
+  await expandLake(page, "advanced");
+  await page.locator("[data-lake-reflection]").selectOption("sharedPlanar"); await ready(page);
+  const capture = (strength = 1, time = 0, night = false, view = 1, wide = false) => page.evaluate(
+    ([strength, time, night, view, wide]) => (window as any).__lakeQA.causticsFrame(false, 0, true, night, false, wide, false, time, true, false, true, strength, wide ? 0 : view), [strength, time, night, view, wide]);
+  const differences = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]!) > 3).length;
+  const flat = await capture(0), on = await capture(), moved = await capture(1, 6);
+  expect(differences(flat.samples, on.samples), "ripples must break up reflected light").toBeGreaterThan(30);
+  expect(differences(on.samples, moved.samples), "surface must evolve over time").toBeGreaterThan(30);
+  expect(on.glError).toBe(0); expect(on.calls).toBe(flat.calls);
+  await capture(0); await page.screenshot({ path: info.outputPath("lake-surface-flat.png") });
+  await capture(); await page.screenshot({ path: info.outputPath("lake-surface-ripples.png") });
+  await capture(1, 6); await page.screenshot({ path: info.outputPath("lake-surface-moving.png") });
+  const far = await capture(1, 0, false, 2); expect(far.glError).toBe(0);
+  await page.screenshot({ path: info.outputPath("lake-surface-far.png") });
+  const dryFlat = await capture(0, 0, false, 1, true), dryOn = await capture(1, 0, false, 1, true);
+  for (const key of ["dry", "island", "separate"]) expect(dryOn.probes[key]).toEqual(dryFlat.probes[key]);
+  const noMap = await page.evaluate(() => (window as any).__lakeQA.causticsFrame(false, 0, true, false, false, false, false, 0, true, false, true, 1, 1, false));
+  const noMapMoved = await page.evaluate(() => (window as any).__lakeQA.causticsFrame(false, 0, true, false, false, false, false, 6, true, false, true, 1, 1, false));
+  expect(differences(noMap.samples, noMapMoved.samples), "procedural ripples must survive a missing normal map").toBeGreaterThan(30);
+  expect(noMap.glError).toBe(0);
+  const night = await capture(1, 0, true);
+  const mean = (a: number[]) => a.reduce((sum, v) => sum + v, 0) / a.length;
+  expect(mean(night.samples)).toBeLessThan(mean(on.samples)); expect(night.glError).toBe(0);
+  await number(page, "surfaceStrength", 0.8); await ready(page);
+  await number(page, "surfaceRoughness", 0.28); await ready(page); await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance.surfaceStrength).toBe(0.8);
+  expect(saved.waterBodies[0].appearance.surfaceRoughness).toBe(0.28);
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "appearance");
+  await expect(page.locator('[data-lake-number="surfaceStrength"]')).toHaveValue("0.8");
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 120_000);
+  const runtimeFlat = await capture(0), runtimeOn = await capture(0.8);
+  expect(differences(runtimeFlat.samples, runtimeOn.samples)).toBeGreaterThan(30);
+  expect(runtimeOn.glError).toBe(0); expect(errors).toEqual([]);
+});
+
 // QA inventory: click/create/cancel; world level, four bounds and drag handles;
 // island/isolated basin + escape rejection; selection/flags/delete/undo;
 // real Save/Reload/Play and unchanged terrain; sculpt and retry in separate cases.

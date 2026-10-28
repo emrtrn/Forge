@@ -49,6 +49,8 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${field("Bed Visibility", "bedVisibility", a.bedVisibility, "0.05", 'min="0" max="1"')}
       ${field("Absorption Distance (m)", "absorptionDistance", a.absorptionDistance, "0.25", 'min="0.01" max="100"')}
       ${field("Shore Blend Depth (m)", "shoreBlendDepth", a.shoreBlendDepth, "0.05", 'min="0" max="2"')}
+      ${field("Surface Strength", "surfaceStrength", a.surfaceStrength, "0.05", 'min="0" max="2"')}
+      ${field("Surface Roughness", "surfaceRoughness", a.surfaceRoughness, "0.02", 'min="0.04" max="1"')}
       ${field("Normal Scale", "normalScale", a.normalScale)}
       ${field("Ripple Speed", "rippleSpeed", a.rippleSpeed)}
     `, true));

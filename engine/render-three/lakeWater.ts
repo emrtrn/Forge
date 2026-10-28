@@ -1,3 +1,4 @@
+import { LAKE_SURFACE_GLSL } from "./lakeSurface";
 import { BufferGeometry, BufferAttribute, Color, DoubleSide, Matrix4, Mesh, ShaderMaterial, UniformsLib, UniformsUtils, Vector2, type DataTexture, type Texture } from "three";
 import type { LayoutLakeWaterBody } from "../scene/layout";
 import { resolveLakeAppearance } from "../scene/waterBody";
@@ -32,6 +33,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         foamScale: { value: appearance.foamScale }, foamSpeed: { value: appearance.foamSpeed },
         foamOrigin: { value: new Vector2(lake.bounds.min[0] - data.position[0], lake.bounds.min[1] - data.position[2]) },
         foamSize: { value: new Vector2(lake.bounds.max[0] - lake.bounds.min[0], lake.bounds.max[1] - lake.bounds.min[1]) }, ...createWaterEnvironmentUniforms(), ...createWaterSceneUniforms(), time: { value: 0 }, normalMap: { value: normal }, hasNormal: { value: normal ? 1 : 0 },
+        surfaceStrength: { value: appearance.surfaceStrength }, surfaceRoughness: { value: appearance.surfaceRoughness },
         rippleSpeed: { value: appearance.rippleSpeed }, normalScale: { value: appearance.normalScale },
         deepColor: { value: new Color(appearance.deepColor) }, shallowColor: { value: new Color(appearance.shallowColor) },
         opacity: { value: appearance.opacity }, bedVisibility: { value: appearance.bedVisibility },
@@ -66,10 +68,11 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ${RIVER_SUN_SHADOW_GLSL}
         ${WATER_ENVIRONMENT_GLSL}
         ${WATER_SCENE_GLSL}
+        ${LAKE_SURFACE_GLSL}
         // Small, resolution-aware Gaussian footprint. Reuse the existing planar
         // target; a calm lake keeps a reflection without a razor-sharp bank.
-        vec3 lakeReflection(vec2 uv){
-          vec2 t=reflectionTexelSize*1.5;
+        vec3 lakeReflection(vec2 uv,float roughness){
+          vec2 t=reflectionTexelSize*mix(.75,4.,roughness);
           vec2 lo=reflectionTexelSize*.5,hi=vec2(1.)-lo;
           vec3 c=texture2D(reflectionTexture,clamp(uv,lo,hi)).rgb*4.;
           c+=texture2D(reflectionTexture,clamp(uv+vec2(t.x,0.),lo,hi)).rgb*2.;
@@ -85,10 +88,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         void main(){
         float d=max(0.,vDepth);
         vec2 p=vWorldPosition.xz*normalScale*.12;
-        vec2 a=texture2D(normalMap,p+time*rippleSpeed*vec2(.035,.022)).xy*2.-1.;
-        vec2 b=texture2D(normalMap,p*1.61-time*rippleSpeed*vec2(.021,.029)).xy*2.-1.;
-        vec2 n=mix(a,b,.5)*hasNormal;
-        n+=vec2(sin(p.x*.7+time*rippleSpeed*.21),sin(p.y*.53-time*rippleSpeed*.17))*.12;
+        vec2 n=lakeSurfaceSlopes(p,time*rippleSpeed);
         vec3 normal=normalize(vec3(n.x*.10,1.,n.y*.10));
         vec3 viewDirection=isOrthographic?vec3(viewMatrix[0][2],viewMatrix[1][2],viewMatrix[2][2]):cameraPosition-vWorldPosition;
         viewDirection/=max(length(viewDirection),.000001);
@@ -110,10 +110,13 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         float edgeWidth=shoreBlendDepth*mix(.85,1.15,edgeNoise);
         float shoreBlend=shoreBlendDepth>0.?smoothstep(0.,max(edgeWidth,.0001),edgeDepth):1.;
         normal=normalize(vec3(n.x*.10*shoreBlend,1.,n.y*.10*shoreBlend));
+        float roughness=lakeFilteredRoughness(normal);
+        float sunVisibility=riverSunVisibility();
+        vec3 glint=lakeSunGlint(normal,viewDirection,roughness,sunVisibility);
         float viewCosine=clamp(abs(dot(normal,viewDirection)),0.,1.);
         float fresnel=waterFresnel(viewCosine);
         vec3 color=mix(deepColor,shallowColor,exp(-d/2.2));
-        vec3 surfaceLight=waterSurfaceLight(normal,viewDirection,.18);
+        vec3 surfaceLight=waterSurfaceLight(normal,viewDirection,roughness,sunVisibility);
         color*=surfaceLight;
         float reflectionAmount=0.;
         vec3 reflected=vec3(0.);
@@ -121,14 +124,14 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           vec2 r=vReflection.xy/vReflection.w+n*.006;
           if(all(greaterThanEqual(r,vec2(0.)))&&all(lessThanEqual(r,vec2(1.)))){
             reflectionAmount=clamp(reflectionStrength*fresnel,0.,1.)*smoothstep(0.,.08,d);
-            reflected=lakeReflection(r);
+            reflected=lakeReflection(r,roughness);
           }
         }
         float transmission=waterTransmission(d,path,bedVisibility,absorptionDistance);
         float wetness=smoothstep(0.,.35,d);
         float authoredOpacity=opacity*wetness*mix(.3,1.,smoothstep(0.,3.,d));
         gl_FragColor=waterComposite(color,max(authoredOpacity,1.-transmission),reflected,reflectionAmount,
-          vec3(0.),0.,waterSunGlint(normal,viewDirection,.12)*wetness);
+          vec3(0.),0.,glint*wetness);
         vec3 visibleBed=vec3(0.);
         if(waterSceneEnabled>.5){
           // Tint controls spectral loss, rather than adding a dark colour over
@@ -152,7 +155,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           scatterColor*=scatterLight;
           visibleBed=texture2D(waterSceneColor,screenUv).rgb;
           vec3 body=visibleBed*transmitted+scatterColor*(vec3(1.)-transmitted);
-          gl_FragColor=vec4(mix(body,reflected,reflectionAmount)+waterSunGlint(normal,viewDirection,.12)*wetness,1.);
+          gl_FragColor=vec4(mix(body,reflected,reflectionAmount)+glint*wetness,1.);
         }
         if(foamOpacity>0.) {
           float shore=texture2D(foamMask,vFoamUv).r;
@@ -178,7 +181,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         #include <colorspace_fragment>
         #include <fog_fragment>
         }` }));
-    this.foamTexture = foam; this.receiveShadow = appearance.foamEnabled;
+    this.foamTexture = foam; this.receiveShadow = true;
     this.position.set(...data.position); this.name = `Lake:${lake.id}`;
     this.userData.waterBodyId = lake.id; this.source = source; this.strength = appearance.reflectionStrength;
     this.userData.waterSceneTransmission = true;
@@ -188,7 +191,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
       this.material.uniforms.time!.value = (performance.now() - started) / 1000;
-      if (appearance.foamEnabled) updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
+      updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera);
       source?.update(renderer, scene, camera);
       const snapshot = readWaterScene(renderer, scene, camera);

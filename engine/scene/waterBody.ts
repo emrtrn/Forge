@@ -50,7 +50,7 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
       }
     }
     const ranges = { opacity: [0, 1], bedVisibility: [0, 1], absorptionDistance: [0.01, 100],
-      normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1],
+      surfaceStrength: [0, 2], surfaceRoughness: [0.04, 1], normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1],
       shoreWetnessWidth: [0.2, 4], shoreWetnessStrength: [0, 1], shoreBlendDepth: [0, 2], foamOpacity: [0, 1], foamWidth: [0.2, 4], foamScale: [0.1, 10], foamSpeed: [0, 3],
       causticsStrength: [0, 3], causticsScale: [0.1, 10], causticsSpeed: [0, 3], causticsDepthFade: [0.1, 30] } as const;
     if (source.shoreWetnessEnabled !== undefined) {
@@ -101,7 +101,7 @@ export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
   const d = RIVER_WATER_DEFAULTS;
   return { deepColor: "#234f4b", shallowColor: "#779a82", opacity: 0.35,
     bedVisibility: 0.9, absorptionDistance: 4, normalTexture: d.normalTexture,
-    normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
+    surfaceStrength: 1, surfaceRoughness: 0.22, normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
     reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high",
     shoreWetnessEnabled: false, shoreWetnessWidth: 1, shoreWetnessStrength: 0.65,
     shoreBlendDepth: 0.25, foamEnabled: false, foamOpacity: 0.7, foamWidth: 1, foamScale: 0.8, foamSpeed: 0.3,

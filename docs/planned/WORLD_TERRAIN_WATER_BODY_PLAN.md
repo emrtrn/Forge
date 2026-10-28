@@ -18,8 +18,11 @@ GPU array üst payı 16→32 MiB olur. Önceki R8 bellek kayıtları tarihsel ka
 Terrain boyası, yüksekliği, fizik ve su geometrisi değiştirilmez. Caustics ve suyun
 renk/soğurulması ayrı kalır; ıslak albedo bunların altında birlikte çizilir.
 
-Bu iyileştirme henüz commit/push edilmedi; yerel kabul aşağıdaki uygulama
-raporuna eklenir: [Lake ıslak zemin](../reports/LAKE_WET_SHORE_2026-10-28.md).
+Bu iyileştirme `62ca7eaa` ile commit edildi; `origin/main`in `52bb582e`
+sürümüyle çakışmasız birleştirildi (`eb91a431`). Birleşim sonrası `build:verify`
+1.979 engine kontrolüyle geçti; su altı ıslaklığı ve caustics browser kabulü
+2/2 geçti. Main yayın sonucu görev çıktısında belirtilir. Uygulama
+raporu: [Lake ıslak zemin](../reports/LAKE_WET_SHORE_2026-10-28.md).
 
 ## Güncel birleştirme ve yayın kaydı — 2026-10-28
 

@@ -87,3 +87,10 @@ ayrı çukur korunumu, ıslak dip üzerinde caustics, toggle/undo ve gerçek
 Save/Reload/runtime senaryosu **1/1 geçti**. Terrain hash'leri aynı kaldı.
 Smoke TypeScript ve whitespace kontrolü geçti. Bu sonuçlar yeni bir donanım GPU
 performans ölçümü değildir. İyileştirme henüz commit/push edilmedi.
+
+
+Birleşim/yayın hazırlığı: su altı iyileştirmesi `62ca7eaa`, main `52bb582e`
+ile birleşim `eb91a431`. Birleşmiş kaynakta `build:verify` çıkış 0, **1.979
+engine kontrolü**; su altı ıslaklığı ve caustics browser testleri **2/2 geçti**.
+Önceki “henüz commit/push edilmedi” satırları o doğrulama adımının tarihsel
+durumudur; main push sonucu görev çıktısında doğrulanır.

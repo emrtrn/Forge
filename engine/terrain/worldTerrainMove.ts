@@ -63,6 +63,7 @@ export function moveWorldTerrain(
       copy.seed = shiftXZ(copy.seed);
       copy.bounds = { min: shiftXZ(copy.bounds.min), max: shiftXZ(copy.bounds.max) };
       copy.surfaceLevel = moved(copy.surfaceLevel, delta[1]);
+      if (copy.contactFoam) copy.contactFoam.obstacles.forEach(o => { o.position = shift(o.position); });
       if (copy.bed) copy.bed.points = copy.bed.points.map(shiftXZ);
       return copy;
     }),
@@ -70,6 +71,7 @@ export function moveWorldTerrain(
       if (river.landscapeRef !== terrainRef || river.coordinateSpace !== "world") return river;
       const copy = structuredClone(river);
       if (copy.surfaceLevel !== undefined) copy.surfaceLevel = moved(copy.surfaceLevel, delta[1]);
+      if (copy.contactFoam) copy.contactFoam.obstacles.forEach(o => { o.position = shift(o.position); });
       if (copy.foamStamps) copy.foamStamps = copy.foamStamps.map((stamp) => ({
         ...stamp, position: shift(stamp.position), ...(stamp.endPosition ? { endPosition: shift(stamp.endPosition) } : {}),
       }));

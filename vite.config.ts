@@ -1,3 +1,6 @@
+import { createHash, randomUUID } from "node:crypto";
+import { validateLakeFoamSave } from "./tools/lakeFoamSaveValidator";
+import { LAKE_FOAM_MAX_BYTES } from "./engine/scene/lakeFoamBake";
 import { validateTerrainTile } from "./engine/terrain/terrainLoader";
 import { worldCellPath } from "./engine/world/worldPartition";
 import { foliageCellPath } from "./engine/world/foliageCells";
@@ -925,6 +928,7 @@ async function ensureDefaultSceneSurvivesFolderDelete(folder: string): Promise<v
 // stays open so real-device (LAN) testing can still render scenes.
 const PRIVILEGED_URLS = new Set([
   "/__save-layout",
+  "/__save-lake-foam",
   "/__save-world-cells",
   "/__save-foliage-cells",
   "/__save-collision",
@@ -1024,6 +1028,29 @@ function layoutEditorPlugin(): Plugin {
         // through Vite's static serving of public/, so only writes need an
         // endpoint. The path is validated to stay a collision sidecar; the
         // resolvePublicPath guard keeps it inside public/.
+        if (req.url?.split("?")[0] === "/__save-lake-foam") {
+          if(req.method!=="POST"){res.statusCode=405;res.end("Method not allowed");return;}
+          try {
+            const query=new URL(req.url,"http://localhost").searchParams;
+            const level=query.get("level"), hash=query.get("hash");
+            const manifest=await readProjectManifest();
+            if(level!==manifest.editor.defaultScene)throw new Error("Lake foam can only be saved for the open level");
+            const bytes=await readRawBody(req,LAKE_FOAM_MAX_BYTES+32768);
+            const payload=validateLakeFoamSave(level,hash,bytes);
+            if(createHash("sha256").update(bytes).digest("hex")!==hash)throw new Error("Lake foam checksum mismatch");
+            const atomic=async(path:string,content:Uint8Array|string)=>{
+              const target=resolvePublicPath(path),temporary=`${target}.${randomUUID()}.tmp`;
+              await mkdir(resolve(target,".."),{recursive:true});
+              try {await writeFile(temporary,content);await rename(temporary,target);}
+              finally {await unlink(temporary).catch((error:NodeJS.ErrnoException)=>{if(error.code!=="ENOENT")throw error;});}
+            };
+            await atomic(payload.dataPath,bytes);
+            await atomic(payload.path,JSON.stringify({schema:1,dataPath:payload.dataPath,sha256:hash,metadata:payload.metadata}));
+            res.setHeader("Content-Type","application/json");res.end(JSON.stringify({ok:true,path:payload.path}));
+          } catch(error){res.statusCode=400;res.setHeader("Content-Type","application/json");res.end(JSON.stringify({ok:false,error:String(error)}));}
+          return;
+        }
+
         if (req.url === "/__save-collision") {
           if (req.method !== "POST") {
             res.statusCode = 405;

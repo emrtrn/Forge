@@ -1,3 +1,4 @@
+import { LakeFoamStore } from "./lakeFoamStore";
 import { registerLakeShoreWetness, terrainShoreWetnessAt } from "@engine/render-three/terrain/terrainShoreWetness";
 import { LakeSurfaceQuery, LakeRippleState, lakeWheelContact, type LakeWheelContact } from "@engine/terrain/lakeInteraction";
 import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
@@ -31,6 +32,8 @@ export interface LakeWaterContext {
 
 /** One serialized CPU job and at most four temporary reads, with per-body publication. */
 export class LakeWaterController {
+  readonly foam = new LakeFoamStore();
+  readonly foamErrors = new Map<string,string>();
   readonly results = new Map<string, LakeGeometry>();
   readonly objects = new Map<string, LakeWaterObject>();
   readonly helpers = new Group();
@@ -104,7 +107,7 @@ export class LakeWaterController {
       const ids = new Set(sources.map((w) => w.id));
       for (const id of this.objects.keys()) if (!ids.has(id)) this.remove(id);
       for (const id of this.results.keys()) if (!ids.has(id)) { this.remove(id); this.results.delete(id); }
-      let total = 0, bytes = 0;
+      let total = 0, bytes = 0, foamBytes = 0;
       for (const lake of sources.sort((a, b) => a.id.localeCompare(b.id))) {
         if (signal.aborted) return;
         let result: LakeGeometry;
@@ -125,6 +128,19 @@ export class LakeWaterController {
         let normal: Texture | null = null;
         if (result.status === "ready") normal = await this.context.normal(resolveLakeAppearance(lake).normalTexture);
         if (signal.aborted || generation !== this.generation) return;
+        let bakedFoam;
+        this.foamErrors.delete(lake.id);
+        if(result.status==="ready" && lake.geometryFoam?.bake) {
+          try {
+            bakedFoam=await this.foam.read(lake.geometryFoam.bake.manifest,signal);
+            if(bakedFoam.metadata.fingerprint!==lake.geometryFoam.bake.fingerprint)throw new Error("Lake foam reference fingerprint mismatch");
+            const {nx,nz}=bakedFoam.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
+            const allocation=tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th);
+            if(foamBytes+allocation>32*1024**2)throw new Error("over-budget: total Lake foam textures exceed 32 MiB");
+            foamBytes+=allocation;
+          } catch(error) {bakedFoam=undefined;if(signal.aborted)return;this.foamErrors.set(lake.id,String(error));console.warn("[lake-foam]",lake.id,error);}
+        }
+        if(signal.aborted || generation!==this.generation)return;
         this.remove(lake.id); this.results.set(lake.id, result);
         if (result.status === "ready") {
           const a = resolveLakeAppearance(lake);
@@ -136,7 +152,7 @@ export class LakeWaterController {
           }
           let object: LakeWaterObject | undefined;
           try {
-            object = new LakeWaterObject(lake, result, normal, reflection);
+            object = new LakeWaterObject(lake, result, normal, reflection, bakedFoam);
             object.addEventListener("removed", registerLakeShoreWetness(this.context.scene, lake, result, object));
           }
           catch (error) {
@@ -194,7 +210,7 @@ export class LakeWaterController {
     }
   }
   private release(source: PlanarReflectionSource) { if (this.context.reflections) this.context.reflections.release(source); else source.dispose(); }
-  dispose() { this.unsubscribePhysics?.(); this.unsubscribePhysics = null; this.waveTime = 0; this.clearInteractions(); this.aborter.abort(); ++this.generation; for (const id of this.objects.keys()) this.remove(id);
+  dispose() { this.foam.clear(); this.foamErrors.clear(); this.unsubscribePhysics?.(); this.unsubscribePhysics = null; this.waveTime = 0; this.clearInteractions(); this.aborter.abort(); ++this.generation; for (const id of this.objects.keys()) this.remove(id);
     for (const child of [...this.helpers.children]) this.remove(child.userData.waterBodyId as string);
     this.results.clear(); for (const source of this.reflection.values()) this.release(source); this.reflection.clear(); }
 }

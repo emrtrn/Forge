@@ -1,3 +1,4 @@
+import { renderLakeGeometryFoamDetails } from "./lakeGeometryFoamDetails";
 import type { SceneApp } from "@/scene/SceneApp";
 import { LAKE_SURFACE_WAVE_DEFAULTS, LAKE_WHEEL_RIPPLE_DEFAULTS, LAKE_WHEEL_WET_TRAIL_DEFAULTS, resolveLakeAppearance } from "@engine/scene/waterBody";
 import { applyWaterTooltips } from "./waterTooltips";
@@ -36,6 +37,7 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   </div>`;
   if (lake) {
     const a = resolveLakeAppearance(lake);
+    renderLakeGeometryFoamDetails(section, app, lake, !!state.draft);
     section.insertAdjacentHTML("beforeend", group("basic", "Surface", `
       <label class="detail-row"><span>Name</span><input data-lake-name aria-label="Lake Name" value="${escape(lake.name ?? lake.id)}" ${disabled}></label>
       ${field("Water Height (m)", "surfaceLevel", lake.surfaceLevel)}

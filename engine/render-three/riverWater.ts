@@ -9,6 +9,8 @@ import {
   Texture,
   UniformsLib,
   UniformsUtils,
+  Vector2,
+  type DataTexture,
 } from "three";
 import { PLANAR_REFLECTION_EXCLUDED_LAYER } from "./planarReflectionSource";
 
@@ -22,12 +24,14 @@ import type {
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
 import { createWaterEnvironmentUniforms, updateWaterEnvironment, WATER_ENVIRONMENT_GLSL, type WaterEnvironmentProbes } from "./waterEnvironment";
 import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
+import { createWaterShoreMask, riverContactSegments, riverContactSettings, WATER_FOAM_GLSL, WATER_CONTACT_GLSL, createWaterContactUniforms } from "./waterFoam";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
 
 /** Pure ribbon arrays, kept inspectable for engine tests without a WebGL context. */
 export interface RiverWaterRibbonData {
+  bedDepths: number[];
   positions: number[];
   uvs: number[];
   flowDirections: number[];
@@ -136,6 +140,7 @@ export function buildRiverWaterRibbon(
   spline: ForgeLandscapeSpline,
   options: BuildRiverWaterRibbonOptions,
 ): RiverWaterRibbonData {
+  const bedDepths: number[] = [];
   const positions: number[] = [];
   const uvs: number[] = [];
   const flowDirections: number[] = [];
@@ -194,6 +199,7 @@ export function buildRiverWaterRibbon(
         shoreDistances.push(Math.abs(v - 0.5) * 2);
         const terrainHeight = options.heightAt ? options.heightAt(x, z) : surfaceHeight - 1;
         valid.push(terrainHeight !== null);
+        bedDepths.push(terrainHeight === null ? 0 : surfaceHeight - terrainHeight);
         waterDepths.push(terrainHeight === null ? 0 : Math.max(0, surfaceHeight - terrainHeight));
         rapidness.push(segmentRapidness);
         foamMasks.push(0);
@@ -210,7 +216,7 @@ export function buildRiverWaterRibbon(
     }
     vertexBase += chain.length * width;
   }
-  return { positions, uvs, flowDirections, shoreDistances, waterDepths, rapidness, foamMasks, flowSpeedMultipliers, indices };
+  return { bedDepths, positions, uvs, flowDirections, shoreDistances, waterDepths, rapidness, foamMasks, flowSpeedMultipliers, indices };
 }
 
 const VERTEX_SHADER = `
@@ -222,6 +228,8 @@ attribute float waterDepth;
 attribute float rapidness;
 attribute float foamMask;
 attribute float flowSpeedMultiplier;
+varying vec3 vContactPosition;
+varying vec2 vContactFlow;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
@@ -235,6 +243,8 @@ uniform float flowSpeed;
 uniform float waveAmplitude;
 uniform float waveLength;
 void main() {
+  vContactPosition = position;
+  vContactFlow=flowDirection;
   vRiverUv = uv;
   vShoreDistance = shoreDistance;
   vWaterDepth = waterDepth;
@@ -278,6 +288,8 @@ uniform sampler2D foamNoiseMap;
 uniform float hasFoamNoiseMap;
 uniform float reflectionStrength;
 uniform float waterDetail;
+varying vec3 vContactPosition;
+varying vec2 vContactFlow;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
@@ -290,6 +302,13 @@ varying vec3 vFlowTangent;
 ${WATER_OPTICS_GLSL}
 ${WATER_ENVIRONMENT_GLSL}
 ${RIVER_SUN_SHADOW_GLSL}
+${WATER_FOAM_GLSL}
+${WATER_CONTACT_GLSL}
+uniform float realContactEnabled;
+uniform sampler2D realShoreMask;
+uniform vec2 realShoreOrigin;
+uniform vec2 realShoreSize;
+uniform float hasRealShore;
 void main() {
   // Derivatives include spline slope, vertex waves and the object's transform.
   // Evaluate them before discard so shoreline quads retain valid derivatives.
@@ -360,7 +379,14 @@ void main() {
   float brokenCrest = smoothstep(0.67, 0.88, waterNoise(advected * vec2(0.4, 3.8) + warp * 2.0))
     * smoothstep(0.42, 0.72, turbulence);
   float rapidFoam = smoothstep(0.035, 0.3, vRapidness) * brokenCrest * foamBreakup * 0.75;
-  float foam = clamp(shoreFoam + rapidFoam, 0.0, 1.0);
+  if(realContactEnabled>.5) {
+    vec2 shoreUv=(vContactPosition.xz-realShoreOrigin)/realShoreSize;
+    float distanceToContact=hasRealShore>.5 ? texture2D(realShoreMask,shoreUv).r : 1.;
+    shoreFoam=waterFoamPatches((vContactPosition.xz-vContactFlow/max(length(vContactFlow),.0001)*time*flowSpeed*vFlowSpeedMultiplier),
+      distanceToContact,time,contactScale,contactSpeed)*hasRealShore;
+  }
+  float obstacleFoam=waterObstacleFoam(vContactPosition,vContactFlow,flowSpeed*vFlowSpeedMultiplier,time);
+  float foam = realContactEnabled>.5 ? clamp(max(shoreFoam,obstacleFoam) + rapidFoam*(1.-max(shoreFoam,obstacleFoam)), 0., 1.) : clamp(shoreFoam+rapidFoam,0.,1.);
   vec3 reflected = min(waterReflectedEnvironment(vWorldPosition, reflect(-viewDirection, opticalNormal), 0.38 + (1.0 - waterDetail) * 0.2), vec3(2.0));
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
   float hasEnvironment = step(0.0001, waterEnvironmentIntensity + waterProbeIntensity);
@@ -393,6 +419,7 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
 
 export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   readonly isRiverWaterObject = true;
+  private readonly contactTexture: DataTexture | null;
 
   constructor(item: RiverWaterRenderItem, normalMap: Texture | null) {
     const ribbon = buildRiverWaterRibbon(item.spline, {
@@ -403,12 +430,20 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       foamStamps: item.foamStamps,
       segmentProfiles: item.segmentProfiles,
     });
+    const contact = item.contactFoam?.enabled === true;
+    const min = [Infinity,Infinity], max = [-Infinity,-Infinity];
+    for(let i=0;i<ribbon.positions.length;i+=3) {
+      min[0]=Math.min(min[0]!,ribbon.positions[i]!); min[1]=Math.min(min[1]!,ribbon.positions[i+2]!);
+      max[0]=Math.max(max[0]!,ribbon.positions[i]!); max[1]=Math.max(max[1]!,ribbon.positions[i+2]!);
+    }
+    const segments=contact ? riverContactSegments(ribbon.positions,ribbon.bedDepths,ribbon.indices) : [];
+    const contactTexture=segments.length ? createWaterShoreMask(min,max,segments,item.contactFoam!.shoreWidth) : null;
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(ribbon.positions, 3));
     geometry.setAttribute("uv", new Float32BufferAttribute(ribbon.uvs, 2));
     geometry.setAttribute("flowDirection", new Float32BufferAttribute(ribbon.flowDirections, 2));
     geometry.setAttribute("shoreDistance", new Float32BufferAttribute(ribbon.shoreDistances, 1));
-    geometry.setAttribute("waterDepth", new Float32BufferAttribute(ribbon.waterDepths, 1));
+    geometry.setAttribute("waterDepth", new Float32BufferAttribute(contact ? ribbon.bedDepths : ribbon.waterDepths, 1));
     geometry.setAttribute("rapidness", new Float32BufferAttribute(ribbon.rapidness, 1));
     geometry.setAttribute("foamMask", new Float32BufferAttribute(ribbon.foamMasks, 1));
     geometry.setAttribute("flowSpeedMultiplier", new Float32BufferAttribute(ribbon.flowSpeedMultipliers, 1));
@@ -422,6 +457,11 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ...UniformsUtils.clone(UniformsLib.lights),
         ...createRiverSunShadowUniforms(),
         ...createWaterEnvironmentUniforms(),
+        ...createWaterContactUniforms(riverContactSettings(item.contactFoam,ribbon.positions,ribbon.bedDepths,ribbon.indices)),
+        realContactEnabled: { value: contact ? 1 : 0 }, realShoreMask: { value: contactTexture },
+        hasRealShore: { value: contactTexture ? 1 : 0 },
+        realShoreOrigin: { value: new Vector2(...min as [number,number]) },
+        realShoreSize: { value: new Vector2(Math.max(.001,max[0]!-min[0]!),Math.max(.001,max[1]!-min[1]!)) },
         normalMap: { value: normalMap },
         time: { value: 0 },
         flowSpeed: { value: item.flowSpeed },
@@ -453,6 +493,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       side: DoubleSide,
     });
     super(geometry, material);
+    this.contactTexture = contactTexture;
     this.name = item.name;
     this.position.set(...item.position);
     this.rotation.set(
@@ -480,6 +521,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   }
 
   dispose(): void {
+    this.contactTexture?.dispose();
     for (const child of this.children) {
       if (child instanceof Mesh) {
         child.geometry.dispose();

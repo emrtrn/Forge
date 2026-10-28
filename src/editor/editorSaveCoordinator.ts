@@ -116,6 +116,7 @@ export interface EditorSaveSource {
   readonly foliageData: LayoutFoliageData;
   readonly meshPaintData: LayoutMeshPaintData;
   /** The level's World Builder recipe; written first, before terrains and the level (see `WorldBuilderSession`). */
+  readonly lakeFoamSteps?: () => EditorSaveStep[];
   readonly worldRecipe?: { captureSave(): EditorSaveStep | null; readonly saveRevision: SaveRevision };
 }
 
@@ -176,7 +177,7 @@ export class EditorSaveSession {
         const step = this.captureLandscapeSave(source, actor.id);
         if (step) terrains.push(step);
       }
-      const steps: EditorSaveStep[] = [...(recipe ? [recipe] : []), ...terrains, {
+      const steps: EditorSaveStep[] = [...(recipe ? [recipe] : []), ...terrains, ...(source.lakeFoamSteps?.() ?? []), {
         path: source.scenePath,
         write: async () => {
           result = await source.layoutSaver(payload);

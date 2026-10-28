@@ -1,5 +1,39 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel karar — Göl aracından isteğe bağlı geometri köpüğü hesabı — 2026-10-28
+
+Kullanıcı her taş için elle temas alanı yerleştirmeyi uygun bulmadı. Yeni ana
+akış: taşları normal yerleştir → Göl aracından **Hesapla** → gerçek mesh/su
+kesişiminden köpük üret. Taş taşındığında otomatik hesap yapılmaz; kullanıcı
+**Yeniden Hesapla** der. Başarılı sonuç kaydedilir; Reload/Play mesh taraması veya
+yeniden hesaplama yapmaz. İlk kapsam statik geometri ve Lake'tir; River'ın
+eğimli yüzeyine uyarlama sonraki dilimdir. Önceki manuel F2–F3 uygulaması bu
+kullanımın tamamlanmış çözümü sayılmaz.
+
+Akış, geometri, bütçe, kayıt, undo ve kabul planı:
+[Göl geometri köpüğü hesaplama planı](LAKE_GEOMETRY_FOAM_BAKE_PLAN.md).
+Lake uygulandı; kullanıcı masaüstü görsel denemeyi başarılı buldu. UI İngilizce,
+tooltip açıklamaları Türkçedir. Kaynak, kayıt, test sonuçları ve açık performans/
+tam gate sınırları [uygulama raporundadır](../reports/LAKE_GEOMETRY_FOAM_BAKE_2026-10-28.md).
+
+## Güncel kapsam — Taş/engel temas köpüğü ve River izleri — 2026-10-28
+
+Kullanıcı F2–F3 çalışmasını uygulamaya açtı. Lake/River için ortak, gövdeye bağlı
+elips/kapsül temas alanları, River'ın terrain wet/dry kesişiminden kıyı maskesi
+ve yerel akış yönünde analitik köpük izleri eklendi. Contact Foam Details,
+undo/redo ve ortak runtime/save sözleşmesi bağlıdır; eski Radial Foam verisi ve
+kapalı görünüm korunur. Kaynak merkezleri geçerli ıslak yüzeyde olmalıdır;
+otomatik taş mesh-kesişimi veya akış simülasyonu değildir. Kapsam, kaynak
+bütçesi ve kabul sonuçları [uygulama raporunda](../reports/WATER_CONTACT_FOAM_2026-10-28.md).
+Donanım performansı ve bu yeni köpük diliminin masaüstü görsel kabulü ayrıdır.
+
+**Durum düzeltmeleri:** Kullanıcı L2 ve L3 **görsel kabulünü tamamladı**.
+Önceki bölümlerdeki bu iki görsel kabulün açık olduğu ifadeleri tarihsel kalır;
+donanım GPU/büyük dünya kabulü kapanmaz. Eski terrain sistemi de 2026-10-28
+K5'te emekliye ayrılmıştır; ana planın K5 kaydı (`OPEN_WORLD_PLAN.md`) güncel
+kaynaktır. Aşağıdaki §4 ve eski devam kayıtları aktif kalan iş değildir.
+W2 yatak oyma akışı da önceki kullanıcı kararıyla kaldırılmıştır.
+
 ## Güncel uygulama — Hafif geometrik yüzey dalgaları — 2026-10-28
 
 Kullanıcı WPO benzeri hafif yükselme/alçalma önerisini uygulamaya açtı.

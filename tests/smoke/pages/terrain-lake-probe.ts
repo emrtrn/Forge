@@ -1,3 +1,4 @@
+import type { RiverWaterObject } from "@engine/render-three/riverWater";
 import { Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
 import type { LakeWaterController } from "@/scene/lakeWaterController";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
@@ -13,6 +14,7 @@ import type { WorldTerrainEditSession } from "@/editor/terrainStore";
 
 export function installLakeProbe(app: unknown) {
   const a = app as { camera: PerspectiveCamera; canvas: HTMLCanvasElement; lakes: LakeWaterController | null;
+    riverWaterObjects?: RiverWaterObject[];
     selection: { kind: string; index?: number } | null;
     renderer: WebGLRenderer; scene: Scene; frameHandle: number; landscapeObjects: Group[];
     postProcessPipeline: { render(dt: number): void } | null;
@@ -262,7 +264,7 @@ export function installLakeProbe(app: unknown) {
       if (a.postProcessPipeline) a.postProcessPipeline.render(0); else a.renderer.render(a.scene, a.camera);
     },
     snapshot() {
-      return { source: a.getLakeEditorState?.().source ?? a.layout?.waterBodies?.[0] ?? null,
+      return { baked:[...(a.lakes?.objects.values()??[])].map(o=>({active:!!o.material.defines.FORGE_LAKE_GEOMETRY_FOAM,bytes:o.material.uniforms.geometryFoamMask?.value?.image?.data?.length??0})), riverContacts: a.riverWaterObjects?.map(o => o.material.uniforms.contactCount?.value ?? 0) ?? [], contacts: [...(a.lakes?.objects.values() ?? [])].map(o => o.material.uniforms.contactCount?.value ?? 0), source: a.getLakeEditorState?.().source ?? a.layout?.waterBodies?.[0] ?? null,
         results: [...(a.lakes?.results ?? [])].map(([id, r]) => {
         let hash = 2166136261;
         for (const buffer of [r.positions, r.depths, r.indices]) for (const v of new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)) hash = Math.imul(hash ^ v, 16777619);

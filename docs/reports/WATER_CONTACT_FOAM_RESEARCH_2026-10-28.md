@@ -1,5 +1,14 @@
 # Göl/nehir kıyısı ve taş çevresi köpüğü — araştırma, 2026-10-28
 
+## Güncel uygulama notu — 2026-10-28
+
+F1 önceki Lake çalışmasında uygulandı. F2–F3 ortak engel temasları, River gerçek
+kıyı maskesi ve akış izleri [uygulama kaydında](WATER_CONTACT_FOAM_2026-10-28.md)
+izlenir. Aşağıdaki inceleme tabloları araştırmanın başlangıç durumudur.
+F4 donanım GPU/büyük dünya kabulü açık kalır. L2/L3 önceki yüzey/tekerlek
+çalışmasının görsel kabulü kullanıcı tarafından tamamlanmıştır; bu yeni köpük
+uygulamasının masaüstü kabulüyle aynı kayıt değildir.
+
 ## Hedef ve referans görseller
 
 Dört kullanıcı fotoğrafında üç davranış ayırt ediliyor: kıyıdaki parçalı köpük,

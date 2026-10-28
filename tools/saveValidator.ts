@@ -1,3 +1,4 @@
+import { validateWaterContactFoam } from "../engine/scene/waterContactFoam";
 import { validateWaterBodies } from "../engine/scene/waterBody";
 export { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal } from "./terrainSaveValidator";
 ﻿/**
@@ -1216,6 +1217,7 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (shoreWaveReach !== undefined) water.shoreWaveReach = Number(shoreWaveReach.toFixed(3));
   const shoreWaveBreakupScale = validateOptionalNumber(input.shoreWaveBreakupScale, "river water shoreWaveBreakupScale", 0.1, 10);
   if (shoreWaveBreakupScale !== undefined) water.shoreWaveBreakupScale = Number(shoreWaveBreakupScale.toFixed(3));
+  if (input.contactFoam !== undefined) water.contactFoam = validateWaterContactFoam(input.contactFoam);
   if (input.foamStamps !== undefined) {
     if (!Array.isArray(input.foamStamps) || input.foamStamps.length > 64) {
       throw new Error("river water foamStamps must be an array of at most 64 entries");

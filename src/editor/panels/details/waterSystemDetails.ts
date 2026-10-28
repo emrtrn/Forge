@@ -1,3 +1,4 @@
+import { renderWaterContactFoamDetails } from "./waterContactFoamDetails";
 import type { SceneApp } from "@/scene/SceneApp";
 import type { SpecialActorDetailsOptions } from "./specialActorDetails";
 import { LANDSCAPE_EDIT_MODES, landscapeModeSelect } from "./specialActorDetails";
@@ -97,6 +98,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
       ${availableRiverSplines.length ? "" : `<button type="button" class="detail-action-button" data-water-create-spline ${lockedAttr}>Create Spline</button>`}
     </div>`;
   body.insertAdjacentHTML("beforeend", riverWaterCreateMarkup + '<div data-water-bodies-slot></div>' + riverWaterMarkup);
+  if (activeRiverWater) renderWaterContactFoamDetails(body, activeRiverWater.contactFoam, activeRiverWater.contactOrigin ?? [0, activeRiverWater.surfaceLevel, 0], selection.locked, contactFoam => { options.setSelectedLandscapeRiverWater(activeRiverWater.id, { contactFoam }); options.refreshDetails(); }, true);
   applyWaterTooltips(body);
   body.querySelector("[data-water-create-spline]")?.addEventListener("click", () => {
     options.setLandscapeSculptSettings({ editMode: "splines", splineTool: "draw" });

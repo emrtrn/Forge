@@ -1,3 +1,5 @@
+import type { LakeGeometryFoam } from "./lakeFoamBake";
+import type { WaterContactFoam } from "./waterContactFoam";
 import type {
   CollisionEnabled,
   CollisionObjectChannel,
@@ -996,6 +998,7 @@ export interface LayoutRiverWater {
   shoreWaveBreakupScale?: number;
   /** Static foam masks for bridge piers, rocks, rapids, and other authored obstacles. */
   foamStamps?: LayoutRiverWaterFoamStamp[];
+  contactFoam?: WaterContactFoam;
   /** Static flow/rapid overrides keyed by Landscape spline segment id. */
   segmentProfiles?: LayoutRiverWaterSegmentProfile[];
   /** `sharedPlanar` lets same-plane bodies share one reflection render; default is off. */
@@ -1037,7 +1040,9 @@ export interface LayoutLakeWaterBody {
   seed: [number, number];
   bounds: { min: [number, number]; max: [number, number] };
   surfaceLevel: number;
+  geometryFoam?: LakeGeometryFoam;
   bed?: LakeBedRecipe;
+  contactFoam?: WaterContactFoam;
   appearance?: {
     deepColor?: string; shallowColor?: string; opacity?: number; bedVisibility?: number;
     absorptionDistance?: number; normalTexture?: string; normalScale?: number; rippleSpeed?: number;

@@ -1,3 +1,4 @@
+import { validateWaterContactFoam, type WaterContactFoam } from "./waterContactFoam";
 import type {
   LayoutRiverWater,
   LayoutRiverWaterFoamStamp,
@@ -30,6 +31,7 @@ export interface ResolvedRiverWater {
   shoreWaveSpeed: number;
   shoreWaveReach: number;
   shoreWaveBreakupScale: number;
+  contactFoam?: WaterContactFoam;
   foamStamps: readonly LayoutRiverWaterFoamStamp[];
   segmentProfiles: readonly LayoutRiverWaterSegmentProfile[];
   reflectionMode: "off" | "environment";
@@ -100,6 +102,7 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     shoreWaveSpeed: actor?.shoreWaveSpeed ?? defaults.shoreWaveSpeed,
     shoreWaveReach: actor?.shoreWaveReach ?? defaults.shoreWaveReach,
     shoreWaveBreakupScale: actor?.shoreWaveBreakupScale ?? defaults.shoreWaveBreakupScale,
+    ...(actor?.contactFoam ? { contactFoam: validateWaterContactFoam(actor.contactFoam) } : {}),
     foamStamps: actor?.foamStamps?.map((stamp) => ({
       ...stamp,
       position: [...stamp.position],

@@ -29,7 +29,7 @@ async function number(page: Page, key: string, value: number) {
   if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
   const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
 }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false, wavePasses = false) {
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false, wavePasses = false, foamRocks = false) {
   const doc = createLakeFixture();
   if (steep) for (const entry of doc.def.tiles) entry.maxHeight = 18;
   if (steep) for (const tile of doc.tiles.values()) {
@@ -65,6 +65,10 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   if (foreground || caustics) level.instances.push({ assetId: "shape:cube", placements: [{ name: "Lake foreground cube", position: [-12, 17, -12], scale: [4, 4, 4] }] });
   if (caustics) { level.lights[0].castShadow = true; level.lights[0].cascadedShadows = true; }
   level.landscapes = [{ id: "terrain", name: "Lake QA Terrain", position: worldTerrainActorPosition(doc.def), dataRef: TERRAIN }];
+  if(foamRocks) level.instances.push({assetId:"shape:cube",placements:[
+    {name:"Foam Rock A",position:[-20,12,-12],scale:[4,4,4]},
+    {name:"Foam Rock B",position:[-12,12,-18],scale:[6,3,2],rotation:[0,30,0]},
+  ]});
   level.riverWaters = []; level.waterBodies = seeded ? [doc.lake] : [];
   level.actors = []; level.characters = [];
   await write(LEVEL, JSON.stringify(level)); expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
@@ -93,6 +97,87 @@ async function save(page: Page) {
   const response = page.waitForResponse((r) => r.url().endsWith("/__save-layout") && r.request().method() === "POST", { timeout: 120_000 });
   await button.click(); expect((await response).ok()).toBeTruthy(); await expect(button).toBeEnabled({ timeout: 120_000 });
 }
+
+test("Lake geometry foam Calculate Recalculate undo and binary Save Reload Play",async({page,request},info)=>{
+  test.setTimeout(300_000);
+  const {errors}=await setup(page,request,true,false,false,false,false,false,false,false,true);
+  const before=await terrainHash();await ready(page);await page.locator('[data-object-id="lake:0"]').click();
+  const section=page.locator('[data-detail-section="lake-geometry-foam"]');
+  if(await section.evaluate(e=>e.classList.contains("collapsed")))await section.locator('.detail-section-toggle').click();
+  const calculate=page.locator('[data-geometry-foam-calculate]');
+  await expect(calculate).toHaveText("Calculate");
+  await expect(calculate).toHaveAttribute("title",/hesaplar/);
+  let reject=true;
+  await page.route("**/__save-lake-foam?*",route=>reject?route.fulfill({status:503,body:"test save retry"}):route.continue());
+  await calculate.click();
+  await expect.poll(async()=>(await snapshot(page)).baked[0]?.active,{timeout:90_000}).toBe(true);
+  const original=(await snapshot(page)).source.geometryFoam.bake.manifest;
+  await expect(calculate).toHaveText("Recalculate");
+  const failed=page.waitForResponse(r=>r.url().includes("/__save-lake-foam?")&&r.status()===503);
+  await page.getByTestId("editor-save").click();await failed;
+  const failedLevel=JSON.parse(await readFile(smokePublicPath(LEVEL),"utf8"));
+  expect(failedLevel.waterBodies[0].geometryFoam?.bake).toBeUndefined();
+  reject=false;await save(page);
+  const settings=JSON.parse(await readFile(smokePublicPath(LEVEL),"utf8")).waterBodies[0].geometryFoam;
+  const manifest=JSON.parse(await readFile(smokePublicPath(settings.bake.manifest),"utf8"));
+  const bytes=await readFile(smokePublicPath(manifest.dataPath));
+  expect(manifest.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));expect(manifest.metadata.sources).toBe(2);
+  const invalid=await request.post(`/__save-lake-foam?level=${encodeURIComponent(LEVEL)}&hash=${"a".repeat(64)}`,{data:bytes,headers:{"Content-Type":"application/octet-stream"}});expect(invalid.status()).toBe(400);
+  await page.getByTestId("outliner-row").filter({hasText:"Foam Rock A"}).first().click();
+  await page.getByTestId("detail-px").fill("-16");await page.getByTestId("detail-px").press("Tab");
+  await page.locator('[data-object-id="lake:0"]').click();
+  await expect(page.locator('[data-geometry-foam-status]')).toContainText("Recalculation required");
+  expect((await snapshot(page)).source.geometryFoam.bake.manifest).toBe(original);
+  await calculate.click();
+  await expect.poll(async()=>(await snapshot(page)).source.geometryFoam.bake.manifest,{timeout:90_000}).not.toBe(original);
+  const updated=(await snapshot(page)).source.geometryFoam.bake.manifest;
+  await page.getByTestId("editor-undo").click();await ready(page);
+  expect((await snapshot(page)).source.geometryFoam.bake.manifest).toBe(original);
+  await page.getByTestId("editor-redo").click();await ready(page);
+  expect((await snapshot(page)).source.geometryFoam.bake.manifest).toBe(updated);
+  await page.locator('[data-geometry-foam-clear]').click();await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).baked[0]?.active).toBe(false);
+  await page.getByTestId("editor-undo").click();await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).baked[0]?.active).toBe(true);
+  await save(page);await page.screenshot({path:info.outputPath("geometry-foam-editor.png")});
+  await page.reload({waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).baked[0]?.active).toBe(true);
+  expect(await terrainHash()).toBe(before);
+  let writes=0;page.on("request",r=>{if(r.url().includes("/__save-lake-foam"))writes++;});
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html",{waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).baked[0]?.active).toBe(true);expect(writes).toBe(0);
+  await page.evaluate(()=>(window as any).__lakeQA.frame());await page.screenshot({path:info.outputPath("geometry-foam-runtime.png")});
+  expect(errors.filter(error=>!error.includes("status of 503"))).toEqual([]);
+});
+
+test("River contact foam UI shares obstacle controls and Save Reload runtime state", async ({page,request},info) => {
+  test.setTimeout(240_000);
+  const {errors}=await setup(page,request,true,false,false,false,true);await ready(page);
+  const before=await terrainHash();
+  await page.locator('[data-river-water-create]').click();
+  const waterHeight=Number(await page.locator('[data-river-water-number="surfaceLevel"]').inputValue());
+  await expect(page.locator('[data-contact-add]')).toHaveCount(1);
+  const section=page.locator('[data-detail-section="water-contact-foam"]');
+  if(await section.evaluate(e=>e.classList.contains("collapsed"))) await section.locator('.detail-section-toggle').click();
+  await page.locator('[data-contact-add]').click();
+  await expect.poll(async()=>(await snapshot(page)).riverContacts,{timeout:60_000}).toEqual([1]);
+  const input=page.locator('[data-contact-obstacle="0"] [data-contact-number="wakeLength"]');
+  await input.fill("7");await input.press("Tab");
+  await page.locator('[data-contact-visible]').uncheck();
+  await expect.poll(async()=>(await snapshot(page)).riverContacts,{timeout:60_000}).toEqual([0]);
+  await page.getByTestId("editor-undo").click();
+  await expect.poll(async()=>(await snapshot(page)).riverContacts,{timeout:60_000}).toEqual([1]);
+  await save(page);
+  const level=JSON.parse(await readFile(smokePublicPath(LEVEL),"utf8"));
+  expect(level.riverWaters[0].contactFoam).toMatchObject({enabled:true,obstacles:[{position:[-20,waterHeight,-12],wakeLength:7}]});
+  await page.reload({waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).riverContacts,{timeout:60_000}).toEqual([1]);
+  await page.screenshot({path:info.outputPath("river-contact-editor.png")});
+  expect(await terrainHash()).toBe(before);
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html",{waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).riverContacts,{timeout:60_000}).toEqual([1]);
+  expect(errors).toEqual([]);
+});
 
 test("Lake caustics and sandy pebble normals animate, persist through UI Save/Reload and render in runtime", async ({ page, request }, info) => {
   test.setTimeout(600_000);

@@ -10,6 +10,7 @@ import { worldTerrainActorPosition } from "./worldTerrainActor";
 export interface TerrainRiverWaterSource {
   spline: ForgeLandscapeSpline;
   surfaceLevel: number;
+  contactFoam?: NonNullable<ResolvedRiverWater["contactFoam"]>;
   foamStamps: ResolvedRiverWater["foamStamps"];
   position: Vec3;
   rotation: Vec3;
@@ -62,6 +63,7 @@ export async function prepareTerrainRiverWaterSource(
     spline, position, rotation: [0, 0, 0],
     sampleSpacing: Math.min(1.25, def.spacing),
     surfaceLevel: water.surfaceLevel - (water.coordinateSpace === "world" ? position[1] : 0),
+    ...(water.contactFoam ? { contactFoam: { ...structuredClone(water.contactFoam), obstacles: water.contactFoam.obstacles.map(o => ({ ...structuredClone(o), position: water.coordinateSpace === "world" ? local(o.position) : [...o.position] as Vec3 })) } } : {}),
     foamStamps: water.foamStamps.map((stamp) => water.coordinateSpace === "world" ? {
       ...stamp, position: local(stamp.position), ...(stamp.endPosition ? { endPosition: local(stamp.endPosition) } : {}),
     } : structuredClone(stamp)),

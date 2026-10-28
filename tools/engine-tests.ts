@@ -1031,6 +1031,7 @@ import { registerPlacementIdentityTests } from "../tests/engine/placementIdentit
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerRegionProfileTests } from "../tests/engine/regionProfile.test";
 import { registerWorldStageTests } from "../tests/engine/worldStage.test";
+import { registerWorldBuilderSessionTests } from "../tests/engine/worldBuilderSession.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
@@ -1205,6 +1206,7 @@ registerWorldRecipeTests(check);
 registerRegionProfileTests(check);
 registerWorldStageTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
+await registerWorldBuilderSessionTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);
 await registerFoliageCellStreamingTests(checkAsync);
 await registerProceduralFoliageRingTests(checkAsync);

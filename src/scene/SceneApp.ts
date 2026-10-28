@@ -324,6 +324,8 @@ import {
 } from "@engine/scene/meshPaint";
 import { EditorSaveSession, type EditorSaveSource } from "@/editor/editorSaveCoordinator";
 import { WorldTerrainEditSession } from "@/editor/terrainStore";
+import { WorldBuilderSession } from "@/editor/worldBuilderSession";
+import { applyPlacementGroupChanges, type PlacementGroupChange } from "@engine/worldbuilder/stage";
 import {
   loadAssetVertexColors,
   saveAssetVertexColors,
@@ -1385,6 +1387,15 @@ export class SceneApp {
     () => this.editorSaveSource(),
     (message, tone) => this.onStatus?.(message, tone),
   );
+  /** World Builder recipe and stage runner of the open level (World Builder plan v0.4 §6). */
+  readonly worldBuilder = new WorldBuilderSession({
+    scenePath: () => this.activeProject?.manifest.editor.defaultScene ?? "",
+    layout: () => this.layout,
+    sampleHeight: (x, z) => this.worldTerrainHeightAt(x, z),
+    executeCommand: (command) => this.executeCommand(command),
+    applyGroupChanges: (changes, side) => this.applyWorldBuilderGroupChanges(changes, side),
+    onStatus: (message, tone) => this.onStatus?.(message, tone),
+  });
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
   private landscapeLayerMaterialCache = new Map<string, ForgeMaterialLayer>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
@@ -4081,6 +4092,7 @@ export class SceneApp {
       })),
       foliageData: this.foliageData,
       meshPaintData: this.meshPaintData,
+      worldRecipe: this.worldBuilder,
     };
   }
 
@@ -4110,6 +4122,7 @@ export class SceneApp {
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.meshPaintData = await loadMeshPaintData(this.activeProject.manifest.editor.defaultScene);
     this.editorSaves.meshPaintSaveRevision.reset();
+    await this.worldBuilder.load(this.activeProject.manifest.editor.defaultScene);
     // Normalize world widgets so the editor never reads a malformed anchor (the
     // runtime normalizes on its own load path); keeps the saved JSON clean too.
     if (this.layout.worldWidgets) {
@@ -4587,6 +4600,26 @@ export class SceneApp {
     const index = clampIndex(placementIndex, instance.placements.length);
     instance.placements.splice(index, 0, clonePlacement(placement));
     this.rebuildInstanceGroup(assetId);
+  }
+
+  /**
+   * Writes one side of a World Builder stage's group changes and rebuilds
+   * those groups once each. Placement indices shift, so the selection clears.
+   */
+  private applyWorldBuilderGroupChanges(changes: readonly PlacementGroupChange[], side: "before" | "after"): void {
+    if (!this.layout) return;
+    this.clearSelection();
+    for (const assetId of applyPlacementGroupChanges(this.layout, changes, side)) this.rebuildInstanceGroup(assetId);
+    this.emitSceneObjectsChanged();
+  }
+
+  /** World-space height of any World Terrain at X/Z, or null off-terrain / over a tile not loaded. */
+  private worldTerrainHeightAt(x: number, z: number): number | null {
+    for (const document of this.worldTerrains.values()) {
+      const height = terrainHeightAt(document.def, { tile: (tileX, tileZ) => document.tiles.get(tileKey(tileX, tileZ)) }, x, z);
+      if (height !== null) return height;
+    }
+    return null;
   }
 
   private removeInstancePlacement(assetId: string, placementIndex: number): LayoutPlacement | null {

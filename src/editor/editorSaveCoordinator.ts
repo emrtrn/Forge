@@ -115,6 +115,8 @@ export interface EditorSaveSource {
   readonly worldTerrainSessions?: ReadonlyMap<string, WorldTerrainEditSession>;
   readonly foliageData: LayoutFoliageData;
   readonly meshPaintData: LayoutMeshPaintData;
+  /** The level's World Builder recipe; written before the level (see `WorldBuilderSession`). */
+  readonly worldRecipe?: { captureSave(): EditorSaveStep | null; readonly saveRevision: SaveRevision };
 }
 
 /** Owns save state and payload capture independently of the viewport/render loop. */
@@ -171,7 +173,8 @@ export class EditorSaveSession {
         const step = this.captureLandscapeSave(source, actor.id);
         if (step) terrains.push(step);
       }
-      const steps: EditorSaveStep[] = [...terrains, {
+      const recipe = source.worldRecipe?.captureSave();
+      const steps: EditorSaveStep[] = [...terrains, ...(recipe ? [recipe] : []), {
         path: source.scenePath,
         write: async () => {
           result = await source.layoutSaver(payload);
@@ -198,6 +201,7 @@ export class EditorSaveSession {
       return;
     }
     const pending = this.foliageSaveRevision.dirty || this.meshPaintSaveRevision.dirty ||
+      this.source().worldRecipe?.saveRevision.dirty === true ||
       [...this.source().worldTerrainSessions?.values() ?? []].some((session) => session.dirty);
     this.onStatus(
       pending

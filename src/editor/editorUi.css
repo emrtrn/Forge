@@ -844,6 +844,20 @@
 .outliner-pane[data-outliner-pane="worldPartition"] { display: block; overflow-y: auto; }
 .outliner-pane[data-outliner-pane="worldPartition"][hidden] { display: none; }
 .world-partition-panel { display: grid; gap: 8px; }
+
+/* World Builder tab (World Builder plan v0.4 §6.2): recipe, stages, last plan. */
+.outliner-pane[data-outliner-pane="worldBuilder"] { display: block; overflow-y: auto; }
+.outliner-pane[data-outliner-pane="worldBuilder"][hidden] { display: none; }
+.world-builder-panel { display: grid; gap: 8px; }
+.world-builder-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
+.world-builder-summary strong { color: var(--forge-text); font-weight: 600; }
+.world-builder-path { color: var(--forge-text-secondary); font-size: 11px; word-break: break-all; }
+.world-builder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.world-builder-stage { display: grid; gap: 2px; padding: 6px 0; border-top: 1px solid var(--forge-border-mid); }
+.world-builder-stage:first-of-type { border-top: 0; }
+.world-builder-list { margin: 2px 0 0; padding-left: 16px; }
+.world-builder-dirty { color: #ff9b52; font-size: 11px; }
+.world-builder-error { color: #ff7a7a; }
 .world-partition-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
 .world-partition-summary strong { color: var(--forge-text); font-weight: 600; }
 .world-partition-map {

@@ -148,6 +148,7 @@ import {
 } from "./panels/details/environmentDetails";
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
 import { WorldPartitionPanel } from "./panels/world/worldPartitionPanel";
+import { WorldBuilderPanel } from "./panels/world/worldBuilderPanel";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
 import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
 import { createFoliageType } from "@engine/scene/foliage";
@@ -395,6 +396,7 @@ export class EditorUi {
   private worldPartitionPanel: WorldPartitionPanel | null = null;
   /** Polls the World Partition view while its tab is open. */
   private worldPartitionTimer: number | null = null;
+  private worldBuilderPanel: WorldBuilderPanel | null = null;
   private statusText: HTMLElement;
   private statusToast: HTMLElement;
   private statusToastText: HTMLElement;
@@ -611,6 +613,15 @@ export class EditorUi {
             aria-selected="false"
             aria-controls="world-partition-pane"
           >World Partition</button>
+          <button
+            type="button"
+            class="inspector-tab outliner-tab"
+            data-outliner-tab="worldBuilder"
+            data-testid="world-builder-tab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="world-builder-pane"
+          >World Builder</button>
         </div>
         <div class="outliner-pane" id="scene-outliner-pane" data-outliner-pane="scene" role="tabpanel">
           <div class="outliner-search-row">
@@ -642,6 +653,9 @@ export class EditorUi {
         </div>
         <div class="outliner-pane" id="world-partition-pane" data-outliner-pane="worldPartition" role="tabpanel" hidden>
           <div class="world-partition-body" data-world-partition-body></div>
+        </div>
+        <div class="outliner-pane" id="world-builder-pane" data-outliner-pane="worldBuilder" role="tabpanel" hidden>
+          <div class="world-builder-body" data-world-builder-body></div>
         </div>
       </aside>
       <aside class="editor-panel editor-details">
@@ -1210,7 +1224,7 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLButtonElement>("[data-outliner-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         const tab = button.dataset.outlinerTab;
-        if (tab === "scene" || tab === "worldPartition") this.setOutlinerTab(tab);
+        if (tab === "scene" || tab === "worldPartition" || tab === "worldBuilder") this.setOutlinerTab(tab);
       });
     });
 
@@ -4223,6 +4237,8 @@ export class EditorUi {
   };
 
   private renderHistory(state: EditorHistoryState): void {
+    // Undo/redo can swap the World Builder recipe; redraw it if it is showing.
+    if (this.worldBuilderPanel && !requireElement(this.root, "#world-builder-pane").hidden) this.worldBuilderPanel.update();
     this.undoButton.disabled = !state.canUndo;
     this.redoButton.disabled = !state.canRedo;
     const undoTip = state.undoLabel ? `Undo ${state.undoLabel}` : "Undo";
@@ -4232,10 +4248,11 @@ export class EditorUi {
   }
 
   /**
-   * Scene Outliner or World Partition. The World Partition map polls the scene
-   * only while its tab is open (residency and the camera change every frame).
+   * Scene Outliner, World Partition or World Builder. The World Partition map
+   * polls the scene only while its tab is open (residency and the camera change
+   * every frame); World Builder redraws on its own actions and on undo/redo.
    */
-  private setOutlinerTab(tab: "scene" | "worldPartition"): void {
+  private setOutlinerTab(tab: "scene" | "worldPartition" | "worldBuilder"): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-outliner-tab]").forEach((button) => {
       const active = button.dataset.outlinerTab === tab;
       button.classList.toggle("active", active);
@@ -4244,6 +4261,13 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLElement>("[data-outliner-pane]").forEach((pane) => {
       pane.hidden = pane.dataset.outlinerPane !== tab;
     });
+    if (tab === "worldBuilder") {
+      this.worldBuilderPanel ??= new WorldBuilderPanel({
+        body: requireElement(this.root, "[data-world-builder-body]"),
+        session: this.app.worldBuilder,
+      });
+      this.worldBuilderPanel.update();
+    }
     if (tab !== "worldPartition") {
       if (this.worldPartitionTimer !== null) window.clearInterval(this.worldPartitionTimer);
       this.worldPartitionTimer = null;

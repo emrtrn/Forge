@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "0_0",
+  "instances": [
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            127.37,
+            -1.7,
+            111.84
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            122.97,
+            -1.6,
+            107.47
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            125.86,
+            -1.6,
+            109.62
+          ],
+          "rotationYDeg": 0,
+          "scale": 1.6
+        },
+        {
+          "position": [
+            119.59,
+            -1.6,
+            106.69
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            105,
+            0
+          ],
+          "scale": 1.6
+        }
+      ]
+    },
+    {
+      "assetId": "lt-boulder-b",
+      "placements": [
+        {
+          "position": [
+            117.92,
+            -1.72,
+            103.93
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    }
+  ]
+}

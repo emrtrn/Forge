@@ -18,14 +18,15 @@
       "id": "grass",
       "name": "Grass",
       "color": "#5f9449",
-      "material": "starter-mat-grass"
+      "material": "starter-mat-grass",
+      "physicalMaterial": "default"
     },
     {
       "id": "dirt",
       "name": "Dirt",
       "color": "#8a6441",
       "material": "lt-earth",
-      "physicalMaterial": "default"
+      "physicalMaterial": "mud"
     },
     {
       "id": "rock",
@@ -70,8 +71,8 @@
     },
     {
       "key": "1_1",
-      "minHeight": -4.261783599853516,
-      "maxHeight": 0.4804760813713074
+      "minHeight": -3.3008315563201904,
+      "maxHeight": 0.7461051344871521
     }
   ],
   "collision": true

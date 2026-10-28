@@ -22,6 +22,14 @@
     {
       "assetId": "gaz-52-base",
       "placements": []
+    },
+    {
+      "assetId": "lt-boulder-a",
+      "placements": []
+    },
+    {
+      "assetId": "lt-boulder-b",
+      "placements": []
     }
   ],
   "characters": [],
@@ -46,6 +54,7 @@
     "gameMode": "forge.vehicle"
   },
   "worldCells": [
+    "0_0",
     "1_0"
   ],
   "skyAtmosphere": {
@@ -120,6 +129,7 @@
       "surfaceLevel": -1,
       "name": "Lake 1",
       "appearance": {
+        "surfaceWavesEnabled": true,
         "shoreWetnessEnabled": true,
         "foamEnabled": true,
         "causticsEnabled": true,
@@ -128,6 +138,64 @@
         "surfaceRoughness": 0.2,
         "normalScale": 1,
         "rippleSpeed": 2,
+        "surfaceWaveHeight": 0.04,
+        "surfaceWaveLength": 6,
+        "surfaceWavePeriod": 2,
+        "surfaceWaveDirection": 30,
+        "surfaceWaveShoreDepth": 0.25,
+        "wheelRippleStrength": 3,
+        "wheelRippleWidth": 1,
+        "wheelRippleWavelength": 0.6,
+        "wheelRippleLifetime": 4,
+        "foamScale": 2,
+        "foamSpeed": 2,
+        "causticsStrength": 1,
+        "causticsScale": 1,
+        "causticsSpeed": 2,
+        "causticsDepthFade": 1,
+        "reflectionMode": "sharedPlanar",
+        "reflectionQuality": "medium"
+      }
+    },
+    {
+      "schema": 1,
+      "kind": "lake",
+      "mode": "fillExisting",
+      "coordinateSpace": "world",
+      "id": "lake-2",
+      "terrainRef": "landscape-1",
+      "bounds": {
+        "min": [
+          98,
+          124
+        ],
+        "max": [
+          163,
+          189
+        ]
+      },
+      "seed": [
+        130.1348363408665,
+        156.64497959127345
+      ],
+      "surfaceLevel": -0.15591979677032342,
+      "name": "Lake 2",
+      "appearance": {
+        "wheelRipplesEnabled": true,
+        "shoreWetnessEnabled": true,
+        "foamEnabled": true,
+        "causticsEnabled": true,
+        "absorptionDistance": 2,
+        "surfaceStrength": 2,
+        "surfaceRoughness": 0.2,
+        "normalScale": 1,
+        "rippleSpeed": 2,
+        "wheelRippleStrength": 3,
+        "wheelRippleSpeed": 1.8,
+        "wheelRippleWidth": 1,
+        "wheelRippleWavelength": 0.6,
+        "wheelRippleLifetime": 4,
+        "wheelRippleInterval": 0.12,
         "foamScale": 2,
         "foamSpeed": 2,
         "causticsStrength": 1,

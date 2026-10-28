@@ -266,7 +266,7 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
   snow: {
     friction: 0.3, restitution: 0,
     wheelEffect: "starter-fx-snow-dust",
-    vehicle: { frictionSlipScale: 0.6, tractionCoefficient: 0.22, sideFrictionScale: 0.5, rollingResistance: 0.06 },
+    vehicle: { frictionSlipScale: 0.6, tractionCoefficient: 0.3, sideFrictionScale: 0.5, rollingResistance: 0.06 },
     deformation: {
       maxDepth: 0.3, compaction: 0.25, digRate: 0.05, recoveryRate: 0.01,
       sinkResistance: 0.4, ploughResistance: 0.045, highSpeedResistance: 0.55, resistanceSpeedMps: 20 / 3.6,
@@ -276,7 +276,7 @@ export const PHYSICAL_MATERIALS: Record<string, PhysicalMaterialDef> = {
   mud: {
     friction: 0.6, restitution: 0,
     wheelEffect: "starter-fx-mud-splash",
-    vehicle: { frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12 },
+    vehicle: { frictionSlipScale: 0.55, tractionCoefficient: 0.4, sideFrictionScale: 0.7, rollingResistance: 0.12 },
     deformation: {
       maxDepth: 0.22, compaction: 0.5, digRate: 0.08, recoveryRate: 0,
       sinkResistance: 0.6, ploughResistance: 0.3, ploughExponent: 2, rollingResistanceAtRest: 0,

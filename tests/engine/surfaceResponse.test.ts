@@ -117,7 +117,7 @@ export function registerSurfaceResponseTests(check: Check): void {
       assert.deepEqual(resolveSurfaceSample(id), NEUTRAL_SURFACE_SAMPLE, String(id));
     }
     assert.deepEqual(resolveSurfaceSample("mud"), {
-      frictionSlipScale: 0.55, tractionCoefficient: 0.35, sideFrictionScale: 0.7, rollingResistance: 0.12, deformability: 1,
+      frictionSlipScale: 0.55, tractionCoefficient: 0.4, sideFrictionScale: 0.7, rollingResistance: 0.12, deformability: 1,
       softGround: { maxDepth: 0.22, compaction: 0.5, digRate: 0.08, sinkResistance: 0.6, ploughResistance: 0.3,
         ploughExponent: 2, rollingResistanceAtRest: 0, highSpeedResistance: 0.65, resistanceSpeedMps: 20 / 3.6 },
     });
@@ -135,7 +135,7 @@ export function registerSurfaceResponseTests(check: Check): void {
     close(sample.frictionSlipScale, 0.55 * 0.25 + 0.75);
     close(sample.sideFrictionScale, 0.7 * 0.25 + 0.75);
     close(sample.rollingResistance, 0.12 * 0.25);
-    close(sample.tractionCoefficient!, 0.35 * 0.25 + 0.75);
+    close(sample.tractionCoefficient!, 0.4 * 0.25 + 0.75);
     close(sample.deformability, 0.25);
     assert.deepEqual(sample, resolveSurfaceSample([
       { physicalMaterialId: "mud", weight: 20 },
@@ -176,7 +176,7 @@ export function registerSurfaceResponseTests(check: Check): void {
     close(response.frictionSlip, 1.375);
     close(response.sideFrictionStiffness, 0.14);
     close(response.rollingResistanceForce, 360);
-    close(response.tractionCoefficient!, 0.35);
+    close(response.tractionCoefficient!, 0.4);
     assert.deepEqual(computeWheelSurfaceResponse(wheel, mud, 10, 3000), response);
     for (const sample of [null, NEUTRAL_SURFACE_SAMPLE]) {
       assert.deepEqual(computeWheelSurfaceResponse(wheel, sample, 10, 3000), { ...wheel, rollingResistanceForce: 0 });

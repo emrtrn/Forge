@@ -1,5 +1,26 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel iyileştirme — Su altı dip ıslaklığı — 2026-10-28
+
+Kullanıcı, kıyı bandına ek olarak suyun kapladığı zeminin de ıslak görünmesini
+istedi. Wet Shore artık yalnız dış bandı değil, **geçerli Lake'in bütün bağlı
+su altı yüzlerini** kapsar. Su kotunun altında olmak tek başına yeterli değildir:
+ada, ayrı çukur ve hesap alanı dışı yüzler bağlılık bayraklarıyla elenir. Kara
+kıyısında önceki mesafe/yükseklik sönmesi sürer; su altında derinlik nedeniyle
+ıslaklık kapatılmaz. Mevcut Enabled/Width/Strength kontrolleri korunur; Width
+kara tarafındaki bandı, Strength bandın ve ıslak dibin sunumunu etkiler.
+
+Aynı texture array R8'den RG8'e geçti: R filtrelenen kıyı mesafesi, G her kaynak
+hücresinin iki bağlı üçgen bayrağıdır. G level-0 texelFetch ile okunur; bayraklar
+filtrelenmez ve maske texel boyutuna bağlı kıyı taşması oluşturulmaz. Yeni sampler,
+capture veya draw yok. Array GPU/CPU upload üst sınırı 8→16 MiB; rebuild eski+yeni
+GPU array üst payı 16→32 MiB olur. Önceki R8 bellek kayıtları tarihsel kalır.
+Terrain boyası, yüksekliği, fizik ve su geometrisi değiştirilmez. Caustics ve suyun
+renk/soğurulması ayrı kalır; ıslak albedo bunların altında birlikte çizilir.
+
+Bu iyileştirme henüz commit/push edilmedi; yerel kabul aşağıdaki uygulama
+raporuna eklenir: [Lake ıslak zemin](../reports/LAKE_WET_SHORE_2026-10-28.md).
+
 ## Güncel birleştirme ve yayın kaydı — 2026-10-28
 
 Su çalışmaları `f48ff14d` commit'inde toplandı ve `origin/main`in `2a447d15`

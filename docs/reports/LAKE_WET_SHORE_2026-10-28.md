@@ -5,6 +5,25 @@ Lake → **Wet Shore → Enabled**, Width (m), Strength. İlk dilim yalnız terr
 Eski Lake kayıtlarında kapalıdır. Yeni kaynak alanları ortak runtime/save
 validator'da sınırlandırılır ve mevcut edit/undo/Save/Reload yolunu kullanır.
 
+## Su altı kapsamının genişletilmesi — 2026-10-28
+
+Kullanıcının yeni talebiyle Wet Shore, bağlı göl yüzeyinin altındaki zeminin
+tamamına uygulanır. Önceki 8 cm su altı sınırı kaldırıldı. Gerçek kaynak
+hücrelerinin iki bağlı üçgen bayrağı aynı array'in G kanalında packed bitler
+olarak tutulur; R kıyı mesafesi olarak kalır. Shader kaynak grid koordinatından
+hücreyi ve b–c diyagonalinin doğru yüzünü seçer, G'yi filtrelenmemiş level-0
+texelFetch ile çözer. Böylece başka çukur yalnız kotu düşük olduğu için ıslanmaz.
+Su altı yüzünde tam authored Strength, kara tarafında önceki bandın mesafe ve
+yükseklik sönmesi kullanılır. Kuru ada merkezi/uzak zemin korunur; adanın gerçek
+kıyısındaki nemli bant mevcut davranıştır. Terrain verisi veya fizik yazılmaz.
+
+Bellek düzeltmesi: birleşik array artık RG8, **2 MiB/göl, sekiz gölde 16 MiB**;
+birleşik CPU upload da 16 MiB'ye, eski+yeni GPU array payı 32 MiB'ye çıkar.
+Kaynak mesafe maskeleri R8 kalır (toplam en çok 8 MiB CPU); bağlılık verisi
+zaten LakeGeometry coverage'ında bulunur. Yeni sampler/capture/draw yoktur ve
+kapalı wet-shore varyantı hâlâ bu sampler'ı shader'dan çıkarır. Aşağıdaki ilk
+R8 ve 8 cm kapsam notları tarihsel ilk teslimi anlatır.
+
 ## Görünüm ve sınır
 
 Kıyı/ada segmentlerine dünya metre mesafesiyle yakın terrain rengi kademeli
@@ -59,3 +78,12 @@ strict dist/world-data geçti. Köpük, caustics ve ıslak kıyı senaryoları b
 Ana/smoke TypeScript ve whitespace kontrolü geçti. Terrain byte hash'leri
 korundu; yakın bant açık/kapalı görüntüleri incelendi. SwiftShader sonuçları
 hedef ekran kartının performans kabulü değildir.
+
+Su altı iyileştirmesinin yerel kabulü: `build:verify` çıkış 0, **1.970 engine
+kontrolü**, TypeScript/build/strict dist/world-data geçti. Köpük ve caustics
+regresyonları geçti. Yeni dip probe'u ilk koşuda oyuncu başlangıç işaretçisinin
+altına denk geldi; engellenmeyen noktaya taşınınca su altı ıslaklığı, kuru ada/
+ayrı çukur korunumu, ıslak dip üzerinde caustics, toggle/undo ve gerçek
+Save/Reload/runtime senaryosu **1/1 geçti**. Terrain hash'leri aynı kaldı.
+Smoke TypeScript ve whitespace kontrolü geçti. Bu sonuçlar yeni bir donanım GPU
+performans ölçümü değildir. İyileştirme henüz commit/push edilmedi.

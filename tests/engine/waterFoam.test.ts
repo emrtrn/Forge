@@ -19,8 +19,20 @@ export async function registerWaterFoamTests(check: Check): Promise<void> {
     updateTerrainShoreWetness(uniforms, scene, "terrain");
     assert.equal(uniforms.uShoreWetCount.value, 1);
     const texture = uniforms.uShoreWetMask.value as unknown as import("three").DataArrayTexture;
-    assert.equal(texture.image.data!.length, 1024 * 1024);
-    assert.ok(texture.image.data!.some(v => v < 255));
+    assert.equal(texture.image.data!.length, 1024 * 1024 * 2);
+    assert.ok(texture.image.data!.some((v, i) => i % 2 === 0 && v < 255));
+    const grid = uniforms.uShoreWetGrid.value[0]!;
+    const connected = (x: number, z: number) => {
+      const gx = (x - grid.x) * grid.z, gz = (z - grid.y) * grid.z;
+      const ix = Math.floor(gx), iz = Math.floor(gz);
+      if (ix < 0 || iz < 0 || ix >= grid.w || iz >= uniforms.uShoreWetRows.value[0]!) return false;
+      const flags = texture.image.data![(iz * grid.w + ix) * 2 + 1]!;
+      return (flags & (gx - ix + gz - iz <= 1 ? 1 : 2)) !== 0;
+    };
+    assert.equal(connected(-20, -12), true, "deep connected bed is wet");
+    assert.equal(connected(0, 0), false, "dry island is outside the connected water");
+    assert.equal(connected(30, 0), false, "separate basin below water level stays dry");
+    assert.equal(connected(-60, 0), false, "outside grid must not wrap");
     assert.equal((uniforms.uShoreWetBounds.value as Vector4[])[0]!.x, -49, "mask extends onto dry side of bounds");
     assert.ok(uniforms.uShoreWetParams.value[0]!.w > 0);
     object.visible = false; updateTerrainShoreWetness(uniforms, scene, "terrain");

@@ -242,7 +242,7 @@ test("Lake shore blend also softens a steep bank without expanding onto land", a
   expect(errors).toEqual([]);
 });
 
-test("Lake wet shore darkens only its contact band and survives toggle undo Save/Reload/Play", async ({ page, request }, info) => {
+test("Lake wet shore includes the connected submerged bed and survives toggle undo Save/Reload/Play", async ({ page, request }, info) => {
   test.setTimeout(240_000);
   const { errors } = await setup(page, request, true, false, false, false, false, true);
   await ready(page, 120_000); const terrainBefore = await terrainHash();
@@ -259,7 +259,13 @@ test("Lake wet shore darkens only its contact band and survives toggle undo Save
   await capture(false, true); await page.screenshot({ path: info.outputPath("wet-shore-off.png") });
   await capture(true, true); await page.screenshot({ path: info.outputPath("wet-shore-on.png") });
   const wideOff = await capture(false, false, true), wideOn = await capture(true, false, true);
-  for (const key of ["dry", "separate"]) expect(wideOn.probes[key]).toEqual(wideOff.probes[key]);
+  expect(wideOn.probes.wetBed).not.toBeNull();
+  expect(wideOn.probes.wetBed, "the connected bed away from the shoreline must also become wet").not.toEqual(wideOff.probes.wetBed);
+  for (const key of ["dry", "island", "separate"]) expect(wideOn.probes[key]).toEqual(wideOff.probes[key]);
+  const wetOverview = await capture(true);
+  const causticOverview = await page.evaluate(() => (window as any).__lakeQA.causticsFrame(true, 0, true, false, false, false, false, 0, true, false, true));
+  expect(wetOverview.samples.filter((v: number, i: number) => Math.abs(v - causticOverview.samples[i]!) > 3).length,
+    "caustics must remain visible on the wet submerged bed").toBeGreaterThan(30);
   await page.locator("[data-lake-wet-shore]").uncheck(); await ready(page);
   await expect.poll(async () => (await capture()).wetShoreActive).toBe(false);
   await page.getByTestId("editor-undo").click(); await ready(page);

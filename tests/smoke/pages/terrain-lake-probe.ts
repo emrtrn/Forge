@@ -92,7 +92,7 @@ export function installLakeProbe(app: unknown) {
         return { count, normalLayers, foamActive, wetShoreActive, lakeDraws, snapshotUsed, drawnMaterial, override: a.scene.overrideMaterial?.type, samples, calls: a.renderer.info.render.calls, textures: a.renderer.info.memory.textures, glError: gl.getError(),
           shadows: { enabled: a.renderer.shadowMap.enabled, cascades },
           shoreProbes: { near: probe(-20,12,-23.9), deep: probe(-20,12,-22) },
-          probes: { dry: probe(-20, 16, -40), island: probe(0, 15, 0), separate: probe(30, 10, 0) } };
+          probes: { wetBed: probe(-20, 12, -8), dry: probe(-20, 16, -40), island: probe(0, 15, 0), separate: probe(30, 10, 0) } };
       } finally { a.renderer.setRenderTarget(null); directTarget?.dispose(); restore.reverse().forEach(fn => fn()); }
     },
     async causticsGpuPilot() {

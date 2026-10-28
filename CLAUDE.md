@@ -170,7 +170,10 @@ engine/editor.
   stricter: any normalization issue (bad entry, dangling id reference) rejects
   the save. New recipe fields go in the normalizer and
   `tests/engine/worldRecipe.test.ts`'s maximal recipe. Objects not listed in
-  `ownership` are manual; stages never move or delete them.
+  `ownership` are manual; stages never move or delete them. Region profiles
+  (`*.regionprofile.json`, `normalizeRegionProfile` in
+  `engine/worldbuilder/regionProfile.ts`) are fork data with no save surface
+  yet; one added later must reuse that normalizer.
 
 - **World Partition cell files:** with `worldSettings.partition.enabled`, the
   editor saves a level as a persistent level (`worldCells` index) plus

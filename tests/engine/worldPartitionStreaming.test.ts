@@ -29,6 +29,22 @@ function fixture(settings: WorldPartitionGridSettings, entries: [string, number[
 }
 
 export function registerWorldPartitionStreamingTests(check: Check): void {
+  check("world partition streaming: cells added after configure join residency and activate in range", () => {
+    const changes: string[] = [];
+    const stream = new WorldPartitionStreaming({ cellSize: 16, loadRange: 24 }, new Map([["0_0", [0]]]), {
+      activate() {}, deactivate() {}, isLive: () => false,
+      cellChanged: (key, active) => changes.push(`${active ? "+" : "-"}${key}`),
+    });
+    // Road collision registers once the landscapes build: one cell near, one far.
+    stream.addOccupiedCells(["1_0", "9_0", "not-a-cell", "0_0"]);
+    assert.equal(stream.snapshot().totalCells, 3, "invalid keys are skipped, known ones kept");
+    stream.prepare([8, 8]);
+    assert.deepEqual(changes.sort(), ["+0_0", "+1_0"]);
+    stream.prepare([9 * 16 + 8, 8]);
+    assert.ok(changes.includes("+9_0"), "the far cell extends the streamed bounds");
+    assert.ok(changes.includes("-0_0"));
+  });
+
   check("world partition streaming: prepare activates exactly in-range occupied cells without a budget", () => {
     const { stream, activated, activationCalls } = fixture({ cellSize: 16, loadRange: 24 }, [
       ["0_0", [0, 1]], ["1_0", [2]], ["2_0", [3]], ["0_2", [4]],

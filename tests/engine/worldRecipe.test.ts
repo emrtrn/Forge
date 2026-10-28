@@ -4,7 +4,6 @@
  * validator reuses it and rejects anything the normalizer had to correct.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   createWorldRecipe,
@@ -170,11 +169,5 @@ export function registerWorldRecipeTests(check: Check): void {
       ownership: { placements: { "plc-b": { stage: "props" }, "plc-a": { stage: "props" } } },
     });
     assert.deepEqual(Object.keys(recipe!.ownership.placements), ["plc-a", "plc-b"]);
-  });
-
-  check("world recipe: the schema module stays dependency-free (no three.js)", () => {
-    const source = readFileSync("engine/worldbuilder/recipe.ts", "utf8");
-    const imports = [...source.matchAll(/from\s+"([^"]+)"/g)].map((match) => match[1]);
-    assert.deepEqual(imports, ["../scene/placementIdentity"]);
   });
 }

@@ -140,7 +140,7 @@ import {
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 import { NAV_REACHABLE_BLOCKER_MARGIN, runAiQuery } from "../engine/ai/queryRunner";
-import { splineCollisionCells, splineSegmentCells, streamedSplineCollisionGeneratorIds } from "../engine/scene/splineCollisionCells";
+import { splineCollisionCells, splineSegmentCells, streamedSplineCollisionGeneratorIds, trimeshCellParts } from "../engine/scene/splineCollisionCells";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import { SmartObjectReservationStore } from "../engine/ai/smartObjects";
@@ -1029,6 +1029,7 @@ import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCover
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
 import { registerPlacementIdentityTests } from "../tests/engine/placementIdentity.test";
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
+import { registerRegionProfileTests } from "../tests/engine/regionProfile.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
@@ -1200,6 +1201,7 @@ registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
 registerPlacementIdentityTests(check);
 registerWorldRecipeTests(check);
+registerRegionProfileTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);
 await registerFoliageCellStreamingTests(checkAsync);
@@ -24149,6 +24151,20 @@ check("spline collision cells: a segmented collidable road files each segment un
   const visual = { ...road, id: "visual", generators: [{ ...road.generators[0]!, collisionEnabled: false }] };
   const cells = splineCollisionCells([road, whole, visual], grid);
   assert.deepEqual([...cells.keys()], ["road"], "whole-geometry and render-only roads keep the eager path");
+});
+
+check("spline collision cells: a road trimesh splits per cell by triangle centroid, offset to world", () => {
+  // Two quads 0..10 and 130..140 along X in a frame offset by -20: world 0..-10 and 110..120.
+  const vertices: Vec3[] = [[0, 0, 0], [10, 0, 0], [10, 0, 5], [0, 0, 5], [130, 1, 0], [140, 1, 0], [140, 1, 5], [130, 1, 5]];
+  const indices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+  const parts = trimeshCellParts({ vertices, indices }, [-20, 0, 0], { cellSize: 128 });
+  assert.deepEqual([...parts.keys()].sort(), ["-1_0", "0_0"]);
+  const near = parts.get("-1_0")!, far = parts.get("0_0")!;
+  assert.deepEqual(near.vertices, vertices.slice(0, 4), "each part keeps only its own vertices");
+  assert.deepEqual(near.indices, [0, 1, 2, 0, 2, 3]);
+  assert.deepEqual(far.indices, [0, 1, 2, 0, 2, 3], "indices are remapped into the part");
+  assert.deepEqual(far.size, [10, 0, 5]);
+  assert.deepEqual(far.center, [135, 1, 2.5], "bounds stay in the trimesh's own frame");
 });
 
 check("spline performance warnings fire only at the §19.4 thresholds (Faz 12)", () => {

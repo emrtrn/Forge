@@ -2432,8 +2432,16 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       mod ve partition'sız level eskisi gibi tek gövde. Kabul:
       `open-world.spec.ts` ikinci testi (açılışta yol hücresi yok, 2,5 m
       yükseltilmiş yolda pawn güvertede; ekleme kapatılınca düşüyor).
-      Açık: render tarafı (segment mesh'lerinin hücre başına birleşmesi),
-      Landscape spline'ları (`def.splines`) ve su.
+      *2b-B:* World Terrain yol spline'larının (`def.splines`, World Builder'ın
+      yol ağı da bu yoldan üretilecek) landscape başına tek trimesh'i,
+      partition açıkken üçgen ağırlık merkezinin hücresine göre parçalanır
+      (`trimeshCellParts`) ve aynı hücre kuyruğuna girer; landscape'ler
+      partition yapılandırmasından sonra kurulduğu için hücreler
+      `addOccupiedCells` ile eklenir, boot `prepare`'i bunları da hazırlar.
+      Kabul testi iki türü de koşar. Not: bu yolların nav'a giden `walkable`
+      yüzeyi de artık yalnız yüklü hücrelerde (tile'lı nav Faz 9).
+      Açık: render tarafı (genel spline segment mesh'lerinin hücre başına
+      birleşmesi; World Terrain zincirleri zaten zincir başına tek mesh) ve su.
       **W1 Lake işlevleri tamam (2026-10-26):** Kullanıcı onaylı W0-Lake
       tasarımının ardından seed + sınırlı çalışma alanıyla mevcut çukuru
       doldurma; terrain üçgeninden gerçek kıyı/derinlik, adalar/bağlılık,

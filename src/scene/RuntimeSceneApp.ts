@@ -279,7 +279,8 @@ import { FoliageRenderBinding } from "@engine/render-three/foliage";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { validateTerrainTile } from "@engine/terrain/terrainLoader";
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
-import { splineCollisionCells, streamedSplineCollisionGeneratorIds } from "@engine/scene/splineCollisionCells";
+import { splineCollisionCells, streamedSplineCollisionGeneratorIds, trimeshCellParts } from "@engine/scene/splineCollisionCells";
+import type { WorldGridDef } from "@engine/world/worldGrid";
 import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { terrainTilePath } from "@engine/terrain/terrainTypes";
 import {
@@ -1035,6 +1036,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private partitionSplineSegmentCells = new Map<string, Map<number, string>>();
   /** Cells holding streamed spline collision. */
   private partitionSplineCells = new Set<string>();
+  /** The partition's main grid while this level streams by cell; null without a partition. */
+  private partitionGrid: WorldGridDef | null = null;
   /** Per cell, the spline collision trimeshes it adds while loaded (filled when splines build). */
   private partitionSplineEntities = new Map<string, Entity[]>();
   /** `overrideObjectKey` of every cell-streamed placement: never part of the eager build. */
@@ -3457,6 +3460,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.partitionStaticCells = new Map();
     this.partitionSplineSegmentCells = new Map();
     this.partitionSplineCells = new Set();
+    this.partitionGrid = null;
     this.partitionSplineEntities = new Map();
     this.streamedPlacementKeys = new Set();
     this.streamedStaticAssetIds = new Set();
@@ -4432,6 +4436,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.partitionStaticCells = new Map();
     this.partitionSplineSegmentCells = new Map();
     this.partitionSplineCells = new Set();
+    this.partitionGrid = null;
     this.partitionSplineEntities = new Map();
     this.streamedPlacementKeys = new Set();
     this.streamedStaticAssetIds = new Set();
@@ -4449,6 +4454,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.placedActorModelEntities = entities;
     const contents = worldPartitionCellContents(this.layout, settings);
+    this.partitionGrid = settings.grids.main;
     this.partitionSplineSegmentCells = splineCollisionCells(this.layout.splines ?? [], settings.grids.main);
     for (const segments of this.partitionSplineSegmentCells.values()) {
       for (const key of segments.values()) this.partitionSplineCells.add(key);
@@ -6187,11 +6193,46 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (!built) continue;
       object.add(built.group);
       const colliderEntity = this.landscapeSplineColliderEntity(actor, built.group, manifest);
-      if (colliderEntity) {
-        this.landscapeColliderEntities.push(colliderEntity);
-        this.addColliderDebugWire(colliderEntity);
-      }
+      if (!colliderEntity || this.streamLandscapeSplineCollider(colliderEntity)) continue;
+      this.landscapeColliderEntities.push(colliderEntity);
+      this.addColliderDebugWire(colliderEntity);
     }
+  }
+
+  /**
+   * On a partitioned level, splits a World Terrain's road collision into one
+   * trimesh per cell (each triangle under its centroid's cell) that the cell
+   * adds and removes with its statics. False leaves `entity` to the eager path:
+   * no partition, or a rotated frame the world grid cannot index.
+   */
+  private streamLandscapeSplineCollider(entity: Entity): boolean {
+    const grid = this.partitionGrid;
+    const partition = this.runtimeServices.resolve(worldPartitionService);
+    const transform = readTransformComponent(entity);
+    const collider = readColliderComponent(entity);
+    const trimesh = collider?.primitives?.[0];
+    if (!grid || !partition || !transform || !collider || trimesh?.shape !== "trimesh" || !trimesh.vertices || !trimesh.indices) return false;
+    if (transform.rotation.some((angle) => angle !== 0)) return false;
+    const parts = trimeshCellParts({ vertices: trimesh.vertices, indices: trimesh.indices }, transform.position, grid);
+    for (const [cell, part] of parts) {
+      const cellCollider: ColliderComponent = {
+        ...collider,
+        size: part.size,
+        center: part.center,
+        primitives: [{ shape: "trimesh", ...part }],
+      };
+      const cellEntity: Entity = {
+        id: `${entity.id}:${cell}`,
+        name: `${entity.name ?? entity.id} ${cell}`,
+        components: { ...entity.components, [COLLIDER_COMPONENT]: cellCollider as unknown as EntityComponentData },
+      };
+      this.partitionSplineCells.add(cell);
+      this.partitionSplineEntities.set(cell, [...this.partitionSplineEntities.get(cell) ?? [], cellEntity]);
+      // A cell already built takes it with its next queued statics.
+      this.liveStaticCells.get(cell)?.pending.push(cellEntity);
+    }
+    partition.addOccupiedCells(parts.keys());
+    return true;
   }
 
   /**

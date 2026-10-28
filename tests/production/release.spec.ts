@@ -4,6 +4,9 @@ for (const debug of [false, true]) {
 test(`packaged runtime${debug ? " with debug" : ""}: model, texture, terrain, save/load and level travel`, async ({ page, baseURL }, testInfo) => {
   const errors: string[] = [], messages: string[] = [], loaded = new Set<string>();
   const outsideBase: string[] = [];
+  // A duplicate request the browser cancels mid-flight on a slow machine (CI's
+  // software-rendered Chromium) is not a failure, as long as that file loaded.
+  const aborted = new Set<string>();
   const base = new URL(baseURL!);
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -21,7 +24,12 @@ test(`packaged runtime${debug ? " with debug" : ""}: model, texture, terrain, sa
     if (response.status() >= 400) errors.push(`${response.status()} ${url.pathname}`);
     else loaded.add(url.pathname.slice(base.pathname.length));
   });
-  page.on("requestfailed", (request) => errors.push(`${request.failure()?.errorText} ${request.url()}`));
+  page.on("requestfailed", (request) => {
+    const failure = request.failure()?.errorText;
+    const url = new URL(request.url());
+    if (failure === "net::ERR_ABORTED" && url.origin === base.origin) aborted.add(url.pathname.slice(base.pathname.length));
+    else errors.push(`${failure} ${request.url()}`);
+  });
   await page.goto(debug ? "./?debug" : "./");
   await expect(page.locator('[data-ui-id="instructions"]')).toContainText("Forge Starter");
   await expect(page.locator(".forge-loading")).toBeHidden();
@@ -61,6 +69,7 @@ test(`packaged runtime${debug ? " with debug" : ""}: model, texture, terrain, sa
   // Negative check: this server never serves a missing JSON URL as index.html.
   expect((await page.request.get(new URL("missing.level.json", baseURL).href)).status()).toBe(404);
   expect(outsideBase).toEqual([]);
+  expect([...aborted].filter((file) => !loaded.has(file)), "aborted requests never served").toEqual([]);
   expect(errors).toEqual([]);
 });
 }

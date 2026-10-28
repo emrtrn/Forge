@@ -110,7 +110,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.deepEqual(view.planCounts, { settlements: 1, landmarks: 1, roadNodes: 0, roadEdges: 0, owned: 0 });
     assert.deepEqual(view.stages, [
       { id: "planBlockout", label: "Plan blockout", version: 1, recordedVersion: null },
-      { id: "roads", label: "Roads", version: 1, recordedVersion: null },
+      { id: "roads", label: "Roads", version: 2, recordedVersion: null },
     ]);
 
     const broken = harness({ [RECIPE_URL]: { schemaVersion: 7 } });

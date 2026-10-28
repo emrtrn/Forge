@@ -36,7 +36,8 @@ import type { WorldPoint } from "../../engine/worldbuilder/normalize";
 import { createWorldRecipe, type WorldRecipe } from "../../engine/worldbuilder/recipe";
 import { normalizeRegionProfile, type RegionProfile } from "../../engine/worldbuilder/regionProfile";
 import type { StageTerrain } from "../../engine/worldbuilder/stage";
-import { roadClassWidth, roadSplineId, roadsStage } from "../../engine/worldbuilder/stages/roads";
+import { roadClassWidth } from "../../engine/worldbuilder/roadClass";
+import { roadSplineId, roadsStage } from "../../engine/worldbuilder/stages/roads";
 
 type Check = (label: string, fn: () => void) => void;
 

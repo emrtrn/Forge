@@ -17,7 +17,7 @@ import { splineToPolyline } from "../scene/landscape";
 import { boxMask, bandMask, distanceField, maskOr, polygonMask, type DistanceSource, type Field, type GridSpec } from "./field";
 import type { WorldPoint } from "./normalize";
 import type { StageInput } from "./stage";
-import { roadClassWidth } from "./stages/roads";
+import { roadClassWidth } from "./roadClass";
 
 export type MaskInput = Pick<StageInput, "recipe" | "profile" | "terrains">;
 

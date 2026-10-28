@@ -156,7 +156,7 @@ export function registerWorldRoadsTests(check: Check): void {
       stage: "roads", edge: "main", outputHash: splineHash({ landscapeId: WEST, spline: main }),
     });
     assert.deepEqual(next.ownership.placements, {});
-    assert.deepEqual(next.generators, { roads: 1 });
+    assert.deepEqual(next.generators, { roads: 2 });
     assert.deepEqual(plan.bounds, { min: [-80, 0], max: [-50, 30] });
     assert.deepEqual(normalizeTerrainSplines([main]), [main], "stage output is save-canonical");
   });
@@ -217,7 +217,8 @@ export function registerWorldRoadsTests(check: Check): void {
     const value = recipe();
     value.plan.roadGraph.nodes.push({ id: "d", source: "manual", position: [50, 50], kind: "end" });
     value.plan.roadGraph.edges.push({ id: "east", source: "manual", from: "d", to: "c", roadClass: "local" });
-    value.ownership.protectedRegions.push({ id: "keep_out", kind: "manual", min: [-52, 10], max: [-48, 20] });
+    // Over the spur's end node, so no route can avoid it (a box mid-route is routed around).
+    value.ownership.protectedRegions.push({ id: "keep_out", kind: "manual", min: [-62, 28], max: [-58, 32] });
     const blocked = planStage(roadsStage, input(value, {
       ...start, terrains: [start.terrains[0]!, { ...start.terrains[1]!, locked: true }],
     }));
@@ -258,8 +259,8 @@ export function registerWorldRoadsTests(check: Check): void {
       "no region profile road spec for collector; using 7 m and no mesh",
       "no region profile road spec for track; using 3.5 m and no mesh",
       "road lost has neither end on a World Terrain; skipped",
-      "road out leaves the terrain; off-terrain points take the nearest height",
       "no region profile road spec for local; using 5 m and no mesh",
+      "road out leaves the terrain; off-terrain points take the nearest height",
     ]);
     const out = spline(state, EAST, "wb-road-out");
     assert.ok(out.points.slice(1).every((point) => point.position[1] === out.points[1]!.position[1]));

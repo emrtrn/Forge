@@ -194,7 +194,7 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
   const savedRecipe = await readJson<WorldRecipe>(worldRecipePath(ROADS_LEVEL));
   expect(Object.keys(savedRecipe.ownership.splines)).toEqual(ROADS);
   expect(savedRecipe.ownership.splines["wb-road-spur"]!.edge).toBe("spur");
-  expect(savedRecipe.generators).toEqual({ roads: 1 });
+  expect(savedRecipe.generators).toEqual({ roads: 2 });
 
   // Undo and redo swap the terrain's splines and the recipe together.
   await page.getByTestId("editor-undo").click();

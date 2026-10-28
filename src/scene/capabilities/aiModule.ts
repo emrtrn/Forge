@@ -684,6 +684,9 @@ export function createAiModule(): CapabilityModule {
           return taskRegistry ? { taskRegistry } : {};
         })(),
         blockers: () => aiHost.navigation.staticBlockerAabbs(),
+        ...(aiHost.navigation.staticBlockerAabbsNear
+          ? { blockersNear: (x: number, z: number, radius: number) => aiHost.navigation.staticBlockerAabbsNear!(x, z, radius) }
+          : {}),
         perceptionSourceFilter: isPerceptionSource,
         qualityFocusPosition: () => aiHost.qualityFocusPosition(),
         moveTo: (request) => requestMove(request),

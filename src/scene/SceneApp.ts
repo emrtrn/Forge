@@ -1499,6 +1499,7 @@ export class SceneApp {
   private readonly aiSubsystem = new AISubsystem({
     taskRegistry: createGameAiTaskRegistry(),
     blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
+    blockersNear: (x, z, radius) => this.physicsSubsystem.staticBlockerAabbsNear(x, z, radius),
   });
   /** Unsubscribes script-message -> AI perception stimulus bridge handlers. */
   private aiStimulusUnsubs: Array<() => void> = [];

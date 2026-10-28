@@ -61,12 +61,23 @@ export interface AiQueryRunContext {
   readonly controller: AIController;
   readonly entities: readonly Entity[];
   readonly blockers?: readonly NavAabb[];
+  /**
+   * Blockers intersecting the inclusive X/Z square around a point; preferred
+   * over {@link blockers} when given. Line of sight asks for the square its
+   * segment fits in (exact); nav reachability asks for the pair's square plus
+   * {@link NAV_REACHABLE_BLOCKER_MARGIN}, so a detour wider than that margin
+   * ignores walls past it until navigation is tiled.
+   */
+  readonly blockersNear?: (x: number, z: number, radius: number) => readonly NavAabb[];
   readonly navBounds?: readonly NavAabb[];
   readonly navAgent?: NavAgent;
   readonly smartObjects?: SmartObjectReservationQuery;
 }
 
 const DEFAULT_NAV_AGENT: NavAgent = { radius: 0.35, height: 1.8 };
+
+/** Metres around a nav-reachable pair whose blockers a local query includes. */
+export const NAV_REACHABLE_BLOCKER_MARGIN = 16;
 
 export function runAiQuery(asset: AiQueryAsset, context: AiQueryRunContext): AiQueryResult {
   const raw = generateCandidates(asset, context);
@@ -287,7 +298,8 @@ function evaluateTest(
       return { pass: true, score: scoreDistance(distance, test.min ?? 0, test.max, test.score) };
     }
     case "lineOfSight": {
-      const visible = references.some((reference) => !segmentBlocked2d(reference, position, context.blockers ?? []));
+      const visible = references.some((reference) =>
+        !segmentBlocked2d(reference, position, blockersAround(context, reference, position, 0)));
       return {
         pass: test.require === false ? true : visible,
         score: visible ? scoreForPass(test.score) : 0,
@@ -300,7 +312,7 @@ function evaluateTest(
           start: reference,
           goal: position,
           agent: context.navAgent ?? DEFAULT_NAV_AGENT,
-          blockers: context.blockers ?? [],
+          blockers: blockersAround(context, reference, position, NAV_REACHABLE_BLOCKER_MARGIN),
           ...(context.navBounds ? { bounds: context.navBounds } : {}),
         });
         return result.status === "success";
@@ -439,6 +451,13 @@ function scoreDistance(
 
 function scoreForPass(mode: "none" | "linear" | "inverse" | undefined): number {
   return mode && mode !== "none" ? 1 : 0;
+}
+
+/** Blockers touching the X/Z square around `a`–`b` grown by `margin`, or the context's full list. */
+function blockersAround(context: AiQueryRunContext, a: Vec3, b: Vec3, margin: number): readonly NavAabb[] {
+  if (!context.blockersNear) return context.blockers ?? [];
+  const halfSpan = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[2] - a[2])) / 2;
+  return context.blockersNear((a[0] + b[0]) / 2, (a[2] + b[2]) / 2, halfSpan + margin);
 }
 
 function segmentBlocked2d(start: Vec3, end: Vec3, blockers: readonly NavAabb[]): boolean {

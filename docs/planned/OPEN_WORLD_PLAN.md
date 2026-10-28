@@ -1048,7 +1048,7 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       üretir. Ekle/sil/collision toggle nav cache'ini geçersiz kılar. Engine testi
       çok-tile trimesh ile katmanları, pişmiş grid'i ve yolu `deepEqual` kıyaslar;
       `HeightfieldStaticSource.all()` çağrısı yasaklanarak nav kurulur.
-- [ ] `staticBlockerAabbsNear(x, z, radius)`; karakter hareketi, `hasGroundProbe`,
+- [x] `staticBlockerAabbsNear(x, z, radius)`; karakter hareketi, `hasGroundProbe`,
       TPS kamera ve AI çağrıları buna geçer. Test: 5000 statik AABB'li
       sahnede karakter adımı süresi sabit kalıyor.
       *Kısmen tamam (2026-10-23, Faz 3 bölüm 1):* karakter çözümü, zemin/iniş
@@ -1059,11 +1059,17 @@ Editör maddelerinin uygulama planı (tamamlandı 2026-10-25):
       sahnede eski spawn-height tabanını koruyor. 5000 AABB testinde tam liste
       çağrısı yasak; bir karakter adımı en fazla 12 blocker adayı inceliyor
       (duvar saati yerine sayaç). Yeni 8 kontrol: `static queries` filtresi.
-      AI'nin konum/yarıçap almayan toplu perception/query provider'ları
-      (`aiModule`, `SceneApp`) ve nav engel/debug listeleri tam listede
-      (heightfield yüzeyleri üretilmez); yerel AI sorgu sözleşmesi sonraki iş
-      olduğundan bu madde
-      açık. Heightfield bağlantısı/anlık arazi üçgenleri bu bölümün dışında.
+      *AI tamam (2026-10-28):* `AISubsystemOptions.blockersNear` (`aiModule`
+      host'un yakın sorgusundan, `SceneApp` physics'ten bağlar; yoksa tam
+      liste yedeği). Algı her dinleyici için konumunda `sightRadius`
+      karesini ister: kaynaklar o düzlemsel yarıçapta ve iz uçları kaynağın
+      X/Z'sini paylaştığı için sonuç birebir aynı. Sorgu çalıştırıcıda
+      `lineOfSight` segmentin kendi karesini (birebir), `navReachable` çiftin
+      karesi + `NAV_REACHABLE_BLOCKER_MARGIN` (16 m) ister; bundan geniş
+      dolanan yolun dışarıdaki duvarları görülmez, tile'lı nav (Faz 9) bunu
+      kapatır. Testler tam listeyi yasaklayıp çağrılan kareleri denetler.
+      `moveTo`/nav bake ve nav debug listeleri tam listede kalır (Faz 9).
+      Heightfield bağlantısı/anlık arazi üçgenleri bu bölümün dışında.
 - [x] `createLandscapeColliderPrimitive` (trimesh) kaldırılır.
       *Tamam (2026-10-24):* editörün "Show > Collision" overlay'i 1×1'de
       `createLandscapeHeightfieldPrimitive`, çok-tile'da `terrainTileHeightfield`

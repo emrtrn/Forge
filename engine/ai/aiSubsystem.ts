@@ -97,6 +97,12 @@ export interface AISubsystemOptions {
   readonly emitMessage?: (input: AiMessageEmitInput) => void;
   readonly moveTo?: (request: AiMoveRequest) => "success" | "failure" | "running";
   readonly blockers?: () => readonly PerceptionAabb[];
+  /**
+   * Blockers intersecting the inclusive X/Z square around a point. When given,
+   * perception and queries ask for the square their traces fit in and never
+   * call {@link blockers}, so their cost does not grow with the world.
+   */
+  readonly blockersNear?: (x: number, z: number, radius: number) => readonly PerceptionAabb[];
   readonly perceptionSourceFilter?: (entity: Entity) => boolean;
   /** Runtime Generic Spline facade consumed by spline patrol tasks. */
   readonly splineRegistry?: SplineRegistry;
@@ -130,6 +136,7 @@ export class AISubsystem implements Subsystem {
   private emitMessage: ((input: AiMessageEmitInput) => void) | undefined;
   private moveTo: ((request: AiMoveRequest) => "success" | "failure" | "running") | undefined;
   private blockers: (() => readonly PerceptionAabb[]) | undefined;
+  private blockersNear: ((x: number, z: number, radius: number) => readonly PerceptionAabb[]) | undefined;
   private perceptionSourceFilter: ((entity: Entity) => boolean) | undefined;
   private splineRegistry: SplineRegistry | undefined;
   private qualityFocusPosition: (() => readonly [number, number, number] | null) | undefined;
@@ -162,6 +169,7 @@ export class AISubsystem implements Subsystem {
     this.emitMessage = options.emitMessage;
     this.moveTo = options.moveTo;
     this.blockers = options.blockers;
+    this.blockersNear = options.blockersNear;
     this.perceptionSourceFilter = options.perceptionSourceFilter;
     this.splineRegistry = options.splineRegistry;
     this.qualityFocusPosition = options.qualityFocusPosition;
@@ -173,6 +181,7 @@ export class AISubsystem implements Subsystem {
     if (options.emitMessage) this.emitMessage = options.emitMessage;
     if (options.moveTo) this.moveTo = options.moveTo;
     if (options.blockers) this.blockers = options.blockers;
+    if (options.blockersNear) this.blockersNear = options.blockersNear;
     if (options.perceptionSourceFilter) this.perceptionSourceFilter = options.perceptionSourceFilter;
     if (options.splineRegistry) this.splineRegistry = options.splineRegistry;
     if (options.qualityFocusPosition) this.qualityFocusPosition = options.qualityFocusPosition;
@@ -462,7 +471,8 @@ export class AISubsystem implements Subsystem {
 
   private updatePerception(dueDeltas: ReadonlyMap<EntityId, number>): void {
     const sources = perceptionSources(this.entities, this.perceptionSourceFilter);
-    const blockers = this.blockers?.() ?? [];
+    // Without a local query the whole list is read once and shared.
+    const allBlockers = this.blockersNear ? null : this.blockers?.() ?? [];
     for (const [pawnEntityId, controller] of this.controllers) {
       const deltaSeconds = dueDeltas.get(pawnEntityId);
       if (!deltaSeconds) continue;
@@ -475,6 +485,13 @@ export class AISubsystem implements Subsystem {
         continue;
       }
       const sightOrigin = sightTracePoint(entity);
+      // Sight only traces to sources within `sightRadius` (planar) of the
+      // listener, and both trace ends share their source's X/Z, so every
+      // blocker a trace can hit touches that square.
+      const sightRadius = config.sightRadius ?? 0;
+      const blockers = allBlockers ?? (sightRadius > 0
+        ? this.blockersNear!(transform.position[0], transform.position[2], sightRadius)
+        : []);
       const perceived = evaluatePerception({
         listener: {
           entityId: pawnEntityId,
@@ -608,7 +625,9 @@ export class AISubsystem implements Subsystem {
         const result = runAiQuery(asset, {
           controller,
           entities: this.entities,
-          blockers: this.blockers?.() ?? [],
+          ...(this.blockersNear
+            ? { blockersNear: this.blockersNear }
+            : { blockers: this.blockers?.() ?? [] }),
           smartObjects: this.smartObjects,
         });
         controller.setLastQueryResult(query, result);

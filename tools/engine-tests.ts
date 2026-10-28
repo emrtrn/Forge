@@ -138,7 +138,7 @@ import {
 } from "../engine/ai/behaviorAsset";
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
-import { runAiQuery } from "../engine/ai/queryRunner";
+import { NAV_REACHABLE_BLOCKER_MARGIN, runAiQuery } from "../engine/ai/queryRunner";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import { SmartObjectReservationStore } from "../engine/ai/smartObjects";
@@ -27064,6 +27064,52 @@ check("AI query runner supports generated points and nav reachable filtering", (
   assert.ok(result.candidates.find((candidate) => candidate.entityId === "blocked-cover")?.failedTests.includes("navReachable"));
 });
 
+check("AI query runner asks blockersNear for each trace's square instead of a full list", () => {
+  const controller = new AIController("ai:enemy", "enemy", new Blackboard());
+  // A wall across every Z between the querier and "hidden"; another far past both.
+  const walls = [
+    { min: [1.8, -1, -10], max: [2.2, 2, 10] },
+    { min: [50, -1, -10], max: [51, 2, 10] },
+  ] as const;
+  const calls: Array<[number, number, number]> = [];
+  const blockersNear = (x: number, z: number, radius: number) => {
+    calls.push([x, z, radius]);
+    return walls.filter((b) => b.min[0] <= x + radius && b.max[0] >= x - radius &&
+      b.min[2] <= z + radius && b.max[2] >= z - radius);
+  };
+  const entities = [
+    { id: "enemy", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+    { id: "open", tags: ["cover"], components: { Transform: { position: [0, 0, 4], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+    { id: "hidden", tags: ["cover"], components: { Transform: { position: [4, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+  ] as Entity[];
+  const failed = (result: ReturnType<typeof runAiQuery>, id: string) =>
+    result.candidates.find((candidate) => candidate.entityId === id)?.failedTests ?? [];
+
+  const sight = runAiQuery(normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    generators: [{ kind: "actorsByTag", tag: "cover" }],
+    tests: [{ kind: "lineOfSight" }],
+  }), { controller, entities, blockersNear });
+  assert.equal(sight.winner?.entityId, "open");
+  assert.deepEqual(failed(sight, "hidden"), ["lineOfSight"]);
+  assert.deepEqual(calls, [[0, 2, 2], [2, 0, 2]], "line of sight asks for the segment's own square");
+
+  calls.length = 0;
+  const reach = runAiQuery(normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    generators: [{ kind: "actorsByTag", tag: "cover" }],
+    tests: [{ kind: "navReachable" }],
+  }), { controller, entities, blockersNear, navBounds: [{ min: [-1, -1, -1], max: [6, 2, 6] }] });
+  assert.equal(reach.winner?.entityId, "open");
+  assert.deepEqual(failed(reach, "hidden"), ["navReachable"]);
+  assert.deepEqual(calls, [
+    [0, 2, 2 + NAV_REACHABLE_BLOCKER_MARGIN],
+    [2, 0, 2 + NAV_REACHABLE_BLOCKER_MARGIN],
+  ], "nav reachability adds the detour margin");
+});
+
 check("AiBehaviorRunner executes selector/sequence/decorator/wait task and messages", () => {
   const bb = new Blackboard([
     { key: "hasLineOfSight", kind: "boolean", default: false },
@@ -28831,6 +28877,33 @@ check("AISubsystem derives perception listeners from AIController props and cons
   assert.equal(perceived[0]?.sourceEntityId, "target");
   ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
   assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "noise is transient");
+});
+
+check("AISubsystem perception reads blockersNear around each listener and never the full list", () => {
+  const wall = { min: [-1, -1, 2], max: [1, 2, 2.2] };
+  const calls: Array<[number, number, number]> = [];
+  const ai = new AISubsystem({
+    blockers: () => { throw new Error("perception materialized every blocker"); },
+    blockersNear: (x, z, radius) => {
+      calls.push([x, z, radius]);
+      return [wall];
+    },
+  });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, -1], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: { perception: { sightRadius: 7, fieldOfViewDeg: 360 } },
+      },
+    },
+    { id: "hidden", components: { Transform: { position: [0, 0, 4], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+    { id: "seen", components: { Transform: { position: [3, 0, -1], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  const perceived = ai.getDebugSnapshot().controllers[0]?.perception ?? [];
+  assert.deepEqual(perceived.map((stimulus) => stimulus.sourceEntityId), ["seen"], "the near wall still blocks sight");
+  assert.deepEqual(calls, [[0, -1, 7]], "one query per listener, sized by its sight radius");
 });
 
 check("AISubsystem sight traces from character height so floor blockers do not hide targets", () => {

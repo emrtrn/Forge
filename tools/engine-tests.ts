@@ -2848,6 +2848,26 @@ check("input subsystem maps raw codes to named action edges per tick", () => {
   assert.equal(actions.get("move-forward").held, false);
 });
 
+check("action map keeps a tap shorter than one tick as a one-tick press", () => {
+  const actions = new ActionMap({ Escape: "menu" });
+  // Down and up between two advances (a slow frame): pressed + held once,
+  // released on the next tick, then idle.
+  actions.handleDown("Escape");
+  actions.handleUp("Escape");
+  actions.advance();
+  assert.deepEqual(actions.get("menu"), { pressed: true, held: true, released: false });
+  actions.advance();
+  assert.deepEqual(actions.get("menu"), { pressed: false, held: false, released: true });
+  actions.advance();
+  assert.deepEqual(actions.get("menu"), { pressed: false, held: false, released: false });
+
+  // A focus-loss reset drops a pending tap too.
+  actions.handleDown("Escape");
+  actions.reset();
+  actions.advance();
+  assert.equal(actions.pressed("menu"), false);
+});
+
 check("action map resolves analog axes with deadzone scale invert and delta input", () => {
   const actions = new ActionMap(
     {},

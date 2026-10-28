@@ -59,6 +59,12 @@ export class ActionMap {
   private readonly bindings: Map<RawInputCode, ActionName>;
   private readonly axisBindings = new Map<RawInputCode, AxisBinding>();
   private readonly downCodes = new Set<RawInputCode>();
+  /**
+   * Codes that went down since the last `advance()`. A tap shorter than one
+   * tick (down and up between two advances, e.g. on a slow software-rendered
+   * frame) still counts as down for that one advance instead of vanishing.
+   */
+  private readonly tappedCodes = new Set<RawInputCode>();
   private readonly rawAxes = new Map<RawInputCode, number>();
   private readonly rawAxisDeltas = new Map<RawInputCode, number>();
   private heldActions = new Set<ActionName>();
@@ -86,6 +92,7 @@ export class ActionMap {
   /** Records a raw code as physically down. Safe to call repeatedly. */
   handleDown(code: RawInputCode): void {
     this.downCodes.add(code);
+    this.tappedCodes.add(code);
   }
 
   /** Records a raw code as physically up. */
@@ -107,6 +114,7 @@ export class ActionMap {
   /** Clears all physical key state (e.g. on window blur / focus loss). */
   reset(): void {
     this.downCodes.clear();
+    this.tappedCodes.clear();
     this.rawAxes.clear();
     this.rawAxisDeltas.clear();
     this.axes.clear();
@@ -119,10 +127,13 @@ export class ActionMap {
    */
   advance(): void {
     const currentHeld = new Set<ActionName>();
-    for (const code of this.downCodes) {
-      const action = this.bindings.get(code);
-      if (action) currentHeld.add(action);
+    for (const codes of [this.downCodes, this.tappedCodes]) {
+      for (const code of codes) {
+        const action = this.bindings.get(code);
+        if (action) currentHeld.add(action);
+      }
     }
+    this.tappedCodes.clear();
 
     const states = new Map<ActionName, ActionState>();
     for (const action of new Set<ActionName>([...currentHeld, ...this.heldActions])) {

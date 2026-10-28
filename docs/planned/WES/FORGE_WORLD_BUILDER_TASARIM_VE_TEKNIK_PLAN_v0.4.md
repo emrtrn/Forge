@@ -193,7 +193,7 @@ Forge Offroad'ın kesinleşmiş deneyimi **lojistik ve taşımacılık**, dünya
 | Base heightfield | Macro Terrain stage | Tile yükseklikleri (tek veri, undo patch'li) |
 | Terrain detail / erosion | Detail stage | Aynı tile verisine fırçayla yazılır |
 | Hidroloji deform | River/Lake stage | Nehir yatağı spline verisinden türetilir; göl mevcut çukuru doldurur |
-| Yol deform | Road stage | Dünya spline'ı deform/boya patch'i (8A1) |
+| Yol deform | Road stage | Dünya spline'ı deform/boya patch'i (8A1). **2026-10-28 kod düzeltmesi:** deform/boya açık bir komutla tile'a yazılır (`createTerrainSplinePatches` → `executeTerrainPatchCommand`, undo'lu bake); spline'dan kendiliğinden yeniden üretilmez |
 | Yerleşim/temel | Settlement stage | YOK (flatten fırçası var) |
 | Surface/biome paint | Paint stage | 8 katman ağırlığı |
 | Üretilen foliage/props | Scatter stage | `LandscapeFoliageRule` ile türetilen foliage (kayıtlı değil, kuraldan yeniden kurulur) |
@@ -585,7 +585,7 @@ Fazlar bağımlılığa göre paralel ilerleyebilir; takvim taahhüt edilmez. **
 | # | Soru | v0.3 durumu |
 |---|---|---|
 | 1 | Recipe nerede saklanacak? | `[ÖNERİ]` `<Level>.worldrecipe.json` sidecar + sahiplik kaydı (§6.3). F1'de onay |
-| 2 | Katman modeli: tam non-destructive mi, hibrit mi? | `[KARAR v0.3 — öneri olarak]` **Hibrit:** base height ve detay tile'a bake edilir. Yol/nehir kendi verisinden yeniden üretilen patch olarak kalır (MEVCUT). Manuel fırça işleri `protectedRegions` ile korunur. Tam edit-layer yığını, F2 sonunda ihtiyaç kanıtlanırsa ayrı plan olur |
+| 2 | Katman modeli: tam non-destructive mi, hibrit mi? | `[KARAR v0.3 — öneri olarak]` **Hibrit:** base height ve detay tile'a bake edilir. Yol/nehir kendi verisinden yeniden üretilen patch olarak kalır (v0.3 varsayımı; **2026-10-28 kodla düzeltildi:** yol deform/boyası tile'a bake edilir, karar 19'a bakın). Manuel fırça işleri `protectedRegions` ile korunur. Tam edit-layer yığını, F2 sonunda ihtiyaç kanıtlanırsa ayrı plan olur |
 | 3 | Su oyma ile yol deformunun sırası ve çatışması | KISMİ: ikisi de MEVCUT ve ayrı veri. Sıra kuralı (önce su, sonra yol, köprüde yol kazanır) F2'de testle sabitlenir |
 | 4 | Üretim birimi ve undo sınırı | `[KARAR v0.3]` Stage başına tek undo adımı; birim etkilenen tile seti |
 | 5 | AI girdisi: görsel mi, semantik harita mı, metin+şablon mu? | **Kapandı** `[ONAYLANDI 2026-10-28]`: ilk girdi AI ile üretilmiş dünya görseli; OSM ikinci kaynak; metin + bölge profili tamamlayıcı (karar 11) |
@@ -602,7 +602,7 @@ Fazlar bağımlılığa göre paralel ilerleyebilir; takvim taahhüt edilmez. **
 | 16 | Görsel türü | `[AÇIK — kullanıcı]` Öneri: düzen için tepeden (harita gibi) bir görsel, stil için perspektif bir görsel (§13.2) |
 | 17 | OSM lisansı ve verinin saklanması | `[AÇIK — fork başına]` ODbL atfı ve paylaşım şartı (§13.6) |
 | 18 | İlk bölge profili | `[AÇIK — kullanıcı]` Offroad'ın izole dağ köyü için hangi bölge? (ör. Alpler, Japon kırsalı, Anadolu dağ köyü) |
-| 19 | Ped modeli | `[AÇIK — F3b spike]` Bake + undo mu, yeniden üretilebilir deform patch'i mi (§13.10) |
+| 19 | Ped ve yol deform modeli | `[AÇIK — ayrı adım]` Bake + undo mu, yeniden üretilebilir deform patch'i mi (§13.10). Yol deform'u da bugün bake (karar 2 notu); bir yol taşınınca eski kazı arazide kalır. **Kullanıcı kararı 2026-10-28:** adım 6 yol aşaması yalnız spline verisi üretir (mesh + çarpışma spline'dan gelir, araziye dokunulmaz); deform/boya bugünkü elle düğme olarak kalır; otomatik, yeniden üretilebilir deform pedlerle birlikte ayrı adımda çözülür |
 
 ---
 

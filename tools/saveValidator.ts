@@ -33,6 +33,7 @@ import {
   type AssetType,
 } from "../engine/assets/manifest";
 import { isBrushShape } from "../engine/scene/blockingVolume";
+import { findDuplicatePlacementId, isPlacementId, isSemanticRole } from "../engine/scene/placementIdentity";
 import { normalizeFoliageType, normalizeFoliageData } from "../engine/scene/foliage";
 import { foliageCellPath, normalizeFoliageCellDocument, type FoliageCellDocument } from "../engine/world/foliageCells";
 import { normalizeMeshPaintData } from "../engine/scene/meshPaint";
@@ -507,9 +508,18 @@ export function validatePlacement(value: unknown): Record<string, unknown> {
   const entry = value as Record<string, unknown>;
   if (!isNumberTuple(entry.position)) throw new Error("invalid placement position");
 
-  const placement: Record<string, unknown> = {
-    position: entry.position.map((item) => Number(item.toFixed(3))),
-  };
+  // Identity first so a saved placement reads `{ id, role, position, … }`;
+  // placements without them keep their existing byte layout.
+  const placement: Record<string, unknown> = {};
+  if (entry.id !== undefined) {
+    if (!isPlacementId(entry.id)) throw new Error("invalid placement id");
+    placement.id = entry.id;
+  }
+  if (entry.role !== undefined) {
+    if (!isSemanticRole(entry.role)) throw new Error("invalid placement role");
+    placement.role = entry.role;
+  }
+  placement.position = entry.position.map((item) => Number(item.toFixed(3)));
   applyTransformFields(entry, placement, "placement");
   return placement;
 }
@@ -2100,6 +2110,10 @@ export function validateLayout(value: unknown): unknown {
       placements: item.placements.map(validatePlacement),
     };
   });
+  const duplicatePlacementId = findDuplicatePlacementId(instances);
+  if (duplicatePlacementId !== null) {
+    throw new Error(`duplicate placement id "${duplicatePlacementId}"`);
+  }
 
   const characters = layout.characters.map((character) => {
     if (!character || typeof character !== "object") {

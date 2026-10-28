@@ -131,6 +131,17 @@ export interface LayoutPhysics {
 }
 
 export interface LayoutPlacement {
+  /**
+   * Stable identity that survives reindexing and asset swaps (World Builder
+   * ownership, placeholder → model). Unique within a layout; absent on objects
+   * nothing refers to. A duplicate never inherits it (`editor/core/layoutSnapshots.ts`).
+   */
+  id?: string;
+  /**
+   * Semantic role, e.g. `building.residential.detached` (`isSemanticRole`).
+   * Says what the object is; a region profile decides which asset shows it.
+   */
+  role?: string;
   /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
   spatiallyLoaded?: boolean;
   name?: string;

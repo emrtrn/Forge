@@ -1025,6 +1025,7 @@ import { registerCapabilityRegistryTests } from "../tests/engine/capabilityRegis
 import { registerDroppedFieldTests } from "../tests/engine/droppedFields.test";
 import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCoverage.test";
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
+import { registerPlacementIdentityTests } from "../tests/engine/placementIdentity.test";
 import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCoordinator.test";
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
@@ -1194,6 +1195,7 @@ await registerHlodTests(check, checkAsync);
 registerDroppedFieldTests(check);
 registerCapabilityCoverageTests(check);
 registerSerializationDriftTests(check);
+registerPlacementIdentityTests(check);
 await registerEditorSaveCoordinatorTests(checkAsync);
 await registerFoliageCellSaveTests(checkAsync);
 await registerFoliageCellStreamingTests(checkAsync);

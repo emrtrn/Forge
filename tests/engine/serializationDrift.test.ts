@@ -50,7 +50,7 @@ function partitionFixture(spatiallyLoaded?: boolean): RoomLayout {
     schema: 1, name: "Partition persistence", loadGroups: [],
     worldCells: ["-2_-1", "0_0", "2_0", "10_0"],
     worldSettings: { partition: normalizeWorldPartitionSettings({ enabled: true }) },
-    instances: [{ assetId: "mesh:rock", placements: [{ position: [0, 0, 0], ...flags }] }],
+    instances: [{ assetId: "mesh:rock", placements: [{ id: "plc-rock", role: "nature.rock", position: [0, 0, 0], ...flags }] }],
     actors: [{ classRef: "actors/test.actor.json", position: [0, 0, 0], ...flags }],
     characters: [{ assetId: "character:test", position: [0, 0, 0], ...flags }],
     lights: [{ id: "light", type: "point", position: [0, 0, 0], ...flags }],

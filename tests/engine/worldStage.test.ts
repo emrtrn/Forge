@@ -217,7 +217,7 @@ export function registerWorldStageTests(check: Check): void {
 
   check("world stage: default stages are unique tokens with positive versions", () => {
     const stages = createDefaultWorldStages();
-    assert.deepEqual(stages.map((stage) => stage.id), ["planBlockout", "roads", "settlementSites"]);
+    assert.deepEqual(stages.map((stage) => stage.id), ["planBlockout", "roads", "settlementSites", "parcels"]);
     assert.ok(stages.every((stage) => Number.isInteger(stage.version) && stage.version > 0));
   });
 }

@@ -195,6 +195,46 @@ export function distanceField(spec: GridSpec, sources: readonly DistanceSource[]
   return field;
 }
 
+/** Exact distance from one point to a source's surface, as `distanceField` measures it (uncapped). */
+export function sourceDistance([x, z]: WorldPoint, source: DistanceSource): number {
+  if (source.kind === "point") return Math.max(0, Math.hypot(x - source.position[0], z - source.position[1]) - (source.radius ?? 0));
+  if (source.kind === "polygon") {
+    if (insidePolygon(x, z, source.polygon)) return 0;
+    let best = Infinity;
+    const { polygon } = source;
+    for (let index = 0; index < polygon.length; index += 1) {
+      best = Math.min(best, capsuleDistance(x, z, polygon[index]!, polygon[(index + 1) % polygon.length]!, 0, 0));
+    }
+    return best;
+  }
+  const { points, radii } = source;
+  if (points.length === 1) return capsuleDistance(x, z, points[0]!, points[0]!, radii?.[0] ?? 0, radii?.[0] ?? 0);
+  let best = Infinity;
+  for (let index = 1; index < points.length; index += 1) {
+    best = Math.min(best, capsuleDistance(x, z, points[index - 1]!, points[index]!, radii?.[index - 1] ?? 0, radii?.[index] ?? 0));
+  }
+  return best;
+}
+
+/** Even-odd point-in-polygon. */
+export function insidePolygon(x: number, z: number, polygon: readonly WorldPoint[]): boolean {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const [x0, z0] = polygon[index]!;
+    const [x1, z1] = polygon[previous]!;
+    if ((z0 <= z) !== (z1 <= z) && x < x0 + ((z - z0) / (z1 - z0)) * (x1 - x0)) inside = !inside;
+  }
+  return inside;
+}
+
+function capsuleDistance(x: number, z: number, a: WorldPoint, b: WorldPoint, ra: number, rb: number): number {
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const lengthSq = dx * dx + dz * dz;
+  const t = lengthSq === 0 ? 0 : Math.min(1, Math.max(0, ((x - a[0]) * dx + (z - a[1]) * dz) / lengthSq));
+  return Math.max(0, Math.hypot(x - (a[0] + dx * t), z - (a[1] + dz * t)) - (ra + (rb - ra) * t));
+}
+
 /** 1 for cells whose centre lies inside any polygon (even-odd), else 0. */
 export function polygonMask(spec: GridSpec, polygons: ReadonlyArray<readonly WorldPoint[]>): Field {
   const field = createField(spec, 0);
@@ -223,14 +263,10 @@ function stampSegment(field: Field, a: WorldPoint, b: WorldPoint, ra: number, rb
   const reach = Math.max(ra, rb) + maxDistance;
   const [i0, i1] = cellRange(field.origin[0], field.cellSize, field.width, Math.min(a[0], b[0]) - reach, Math.max(a[0], b[0]) + reach);
   const [j0, j1] = cellRange(field.origin[1], field.cellSize, field.depth, Math.min(a[1], b[1]) - reach, Math.max(a[1], b[1]) + reach);
-  const dx = b[0] - a[0];
-  const dz = b[1] - a[1];
-  const lengthSq = dx * dx + dz * dz;
   for (let j = j0; j <= j1; j += 1) {
     for (let i = i0; i <= i1; i += 1) {
       const [x, z] = cellCenter(field, i, j);
-      const t = lengthSq === 0 ? 0 : Math.min(1, Math.max(0, ((x - a[0]) * dx + (z - a[1]) * dz) / lengthSq));
-      const distance = Math.max(0, Math.hypot(x - (a[0] + dx * t), z - (a[1] + dz * t)) - (ra + (rb - ra) * t));
+      const distance = capsuleDistance(x, z, a, b, ra, rb);
       const index = j * field.width + i;
       if (distance < field.values[index]!) field.values[index] = distance;
     }

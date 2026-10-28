@@ -18,6 +18,7 @@ import { boxMask, bandMask, distanceField, maskOr, polygonMask, type DistanceSou
 import type { WorldPoint } from "./normalize";
 import type { StageInput } from "./stage";
 import { roadClassWidth } from "./roadClass";
+import type { RoadClass } from "./vocabulary";
 
 export type MaskInput = Pick<StageInput, "recipe" | "profile" | "terrains">;
 
@@ -53,11 +54,26 @@ export const DEFAULT_RIVER_HALF_WIDTH = 4;
 export const DEFAULT_ROAD_CLEARANCE = 2;
 export const DEFAULT_WATER_CLEARANCE = 5;
 
-/** Road surfaces as capsules of half their width: splines first, then unrealised plan edges. */
-export function roadSources(input: MaskInput): SourceSet {
-  const sources: DistanceSource[] = [];
+/** A street centre line with its half width per point; `edge` names the plan edge it realises. */
+export interface StreetLine {
+  /** Spline id, or the plan edge id for a road no spline realises yet. */
+  id: string;
+  edge?: string;
+  roadClass?: RoadClass;
+  points: WorldPoint[];
+  halfWidths: number[];
+}
+
+/**
+ * Every road as a continuous centre line: world-space splines on the level's
+ * terrains (one line per chain of joined segments), then plan edges no spline
+ * realises yet (guide polyline at the region profile's width).
+ */
+export function streetLines(input: MaskInput): { lines: StreetLine[]; warnings: string[] } {
+  const lines: StreetLine[] = [];
   const warnings: string[] = [];
   const present = new Set<string>();
+  const edgeClass = new Map(input.recipe.plan.roadGraph.edges.map((edge) => [edge.id, edge.roadClass]));
   for (const terrain of input.terrains) {
     let local = 0;
     for (const spline of terrain.splines) {
@@ -66,12 +82,24 @@ export function roadSources(input: MaskInput): SourceSet {
         continue;
       }
       present.add(spline.id);
+      const edge = input.recipe.ownership.splines[spline.id]?.edge;
+      const roadClass = edge === undefined ? undefined : edgeClass.get(edge);
+      let current: StreetLine | null = null;
       for (const piece of splineToPolyline(spline)) {
-        sources.push({
-          kind: "polyline",
-          points: [xz(piece.start.position), xz(piece.end.position)],
-          radii: [piece.start.width / 2, piece.end.width / 2],
-        });
+        const start = xz(piece.start.position);
+        const last = current?.points[current.points.length - 1];
+        if (!current || !last || last[0] !== start[0] || last[1] !== start[1]) {
+          current = {
+            id: spline.id,
+            ...(edge === undefined ? {} : { edge }),
+            ...(roadClass === undefined ? {} : { roadClass }),
+            points: [start],
+            halfWidths: [piece.start.width / 2],
+          };
+          lines.push(current);
+        }
+        current.points.push(xz(piece.end.position));
+        current.halfWidths.push(piece.end.width / 2);
       }
     }
     if (local > 0) warnings.push(`terrain ${terrain.id} has ${local} spline(s) in terrain-local coordinates; they are not in road masks`);
@@ -89,10 +117,19 @@ export function roadSources(input: MaskInput): SourceSet {
     const to = positions.get(edge.to);
     if (!from || !to) continue;
     const points = [from, ...(edge.guide ?? []), to];
-    const radius = roadClassWidth(input.profile, edge.roadClass) / 2;
-    sources.push({ kind: "polyline", points, radii: points.map(() => radius) });
+    const halfWidth = roadClassWidth(input.profile, edge.roadClass) / 2;
+    lines.push({ id: edge.id, edge: edge.id, roadClass: edge.roadClass, points, halfWidths: points.map(() => halfWidth) });
   }
-  return { sources, warnings };
+  return { lines, warnings };
+}
+
+/** Road surfaces as tapered capsules of half their width (`streetLines`). */
+export function roadSources(input: MaskInput): SourceSet {
+  const { lines, warnings } = streetLines(input);
+  return {
+    sources: lines.map((line): DistanceSource => ({ kind: "polyline", points: line.points, radii: line.halfWidths })),
+    warnings,
+  };
 }
 
 /** Plan water: river centre lines widened by `riverHalfWidth`, lake outlines filled. */

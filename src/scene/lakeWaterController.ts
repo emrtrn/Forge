@@ -1,4 +1,7 @@
 import { registerLakeShoreWetness } from "@engine/render-three/terrain/terrainShoreWetness";
+import { LakeSurfaceQuery, LakeRippleState, lakeWheelContact, type LakeWheelContact } from "@engine/terrain/lakeInteraction";
+import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
+import type { VehicleHost } from "./capabilities/runtimeServiceKeys";
 import { Group, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, Mesh, MeshBasicMaterial, SphereGeometry, type Texture, type Scene } from "three";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { LAKE_LIMITS, resolveLakeAppearance } from "@engine/scene/waterBody";
@@ -18,6 +21,7 @@ export interface LakeWaterContext {
   load: (terrainRef: string, key: string, signal?: AbortSignal) => Promise<TerrainTileData>;
   normal: (id: string) => Promise<Texture | null>;
   changed?: () => void;
+  vehicles?: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "onPhysicsStep" | "isSurfaceFxActive"> | undefined;
 }
 
 /** One serialized CPU job and at most four temporary reads, with per-body publication. */
@@ -30,10 +34,44 @@ export class LakeWaterController {
   private chain: Promise<void> = Promise.resolve();
   private reflection = new Map<string, PlanarReflectionSource>();
   private selected: string | null = null;
+  private interactions = new Map<string, { query: LakeSurfaceQuery; state: LakeRippleState }>();
+  private unsubscribePhysics: (() => void) | null = null;
+  private waveTime = 0;
   constructor(private readonly context: LakeWaterContext) { context.scene.add(this.helpers); this.helpers.layers.set(31); }
   select(id: string | null) { this.selected = id; for (const child of this.helpers.children) child.visible = child.userData.waterBodyId === id; }
-  invalidate() { this.aborter.abort(); this.results.clear(); }
+  invalidate() { this.aborter.abort(); this.results.clear(); this.clearInteractions(); }
+  private clearInteractions(): void {
+    this.interactions.clear();
+    for (const object of this.objects.values()) object.setWheelRipples([]);
+  }
+  /** Called once per fixed physics slice; also usable by isolated QA fixtures. */
+  advanceWheelInteractions(dt: number): void {
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    this.waveTime += dt;
+    for (const object of this.objects.values()) object.setSurfaceWaveTime(this.waveTime);
+    const host = this.context.vehicles;
+    if (!host || !this.interactions.size) return;
+    const vehicles = host.vehicleIds().filter(id => host.isSurfaceFxActive?.(id) !== false)
+      .map(id => ({ id, state: host.vehicleState(id), definition: host.vehicleDefinition(id) }));
+    for (const [id, interaction] of this.interactions) {
+      const object = this.objects.get(id);
+      let visible = !!object;
+      for (let p = object?.parent; p; p = p.parent) visible &&= p.visible;
+      if (!object || !object.visible || !visible) { interaction.state.clear(); object?.setWheelRipples([]); continue; }
+      const contacts: LakeWheelContact[] = [];
+      for (const vehicle of vehicles) vehicle.state?.wheels.forEach((wheel, i) => {
+        const contact = lakeWheelContact(`${vehicle.id}:${i}`, wheel,
+          vehicleWheelWidth(vehicle.definition?.wheels[i] ?? wheel), object.position.y, interaction.query,
+          { time: this.waveTime, parameters: object.waveParameters });
+        if (contact) contacts.push(contact);
+      });
+      interaction.state.advance(dt, contacts);
+      object.setWheelRipples(interaction.state.ripples);
+    }
+  }
   rebuild(bodies: readonly LayoutLakeWaterBody[]): Promise<void> {
+    this.clearInteractions();
+    if (!this.context.editor && !this.unsubscribePhysics) this.unsubscribePhysics = this.context.vehicles?.onPhysicsStep?.(dt => this.advanceWheelInteractions(dt)) ?? null;
     this.aborter.abort(); this.aborter = new AbortController(); const signal = this.aborter.signal, generation = ++this.generation;
     const sources = structuredClone([...bodies]);
     const work = async () => {
@@ -86,8 +124,10 @@ export class LakeWaterController {
             continue;
           }
           object.visible = !lake.hidden;
+          if (!this.context.editor && this.unsubscribePhysics) object.setSurfaceWaveTime(this.waveTime);
           if (!this.context.editor) object.raycast = () => {};
           this.objects.set(lake.id, object); this.context.scene.add(object);
+          this.interactions.set(lake.id, { query: new LakeSurfaceQuery(result), state: new LakeRippleState(a) });
           object.addEventListener("removed", registerLakeCaustics(this.context.scene, lake, result, object));
         }
         if (this.context.editor) this.addHelper(lake, result);
@@ -122,13 +162,14 @@ export class LakeWaterController {
     root.visible = lake.id === this.selected; this.helpers.add(root);
   }
   private remove(id: string) {
+    this.interactions.delete(id);
     const object = this.objects.get(id); if (object) { object.removeFromParent(); object.dispose(); this.objects.delete(id); }
     for (const child of [...this.helpers.children]) if (child.userData.waterBodyId === id) {
       child.removeFromParent(); child.traverse((o) => { if (o instanceof Mesh || o instanceof LineSegments) { o.geometry.dispose(); o.material.dispose(); } });
     }
   }
   private release(source: PlanarReflectionSource) { if (this.context.reflections) this.context.reflections.release(source); else source.dispose(); }
-  dispose() { this.aborter.abort(); ++this.generation; for (const id of this.objects.keys()) this.remove(id);
+  dispose() { this.unsubscribePhysics?.(); this.unsubscribePhysics = null; this.waveTime = 0; this.clearInteractions(); this.aborter.abort(); ++this.generation; for (const id of this.objects.keys()) this.remove(id);
     for (const child of [...this.helpers.children]) this.remove(child.userData.waterBodyId as string);
     this.results.clear(); for (const source of this.reflection.values()) this.release(source); this.reflection.clear(); }
 }

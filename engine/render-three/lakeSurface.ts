@@ -1,4 +1,4 @@
-/** Multiscale presentation normals. The mesh and exact shoreline stay flat.
+/** Multiscale micro surface normals, layered over independent geometric waves.
  * Reuses the authored normal map; the third tap adds fine capillary detail. */
 export const LAKE_SURFACE_GLSL = /* glsl */ `
 uniform float surfaceStrength;

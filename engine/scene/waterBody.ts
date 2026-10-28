@@ -5,6 +5,27 @@ import { RIVER_WATER_DEFAULTS } from "./riverWater";
 export const LAKE_LIMITS = { bodies: 8, cells: 65536, totalCells: 262144, tiles: 16,
   decodeBytes: 32 * 1024 ** 2, geometryBytes: 16 * 1024 ** 2 } as const;
 
+export const LAKE_WHEEL_RIPPLE_DEFAULTS = {
+  wheelRipplesEnabled: true, wheelRippleStrength: 2, wheelRippleSpeed: 1.8,
+  wheelRippleWidth: .45, wheelRippleWavelength: .35, wheelRippleLifetime: 1.6, wheelRippleInterval: .12,
+};
+export const LAKE_SURFACE_WAVE_DEFAULTS = { surfaceWavesEnabled: true, surfaceWaveHeight: .02,
+  surfaceWaveLength: 12, surfaceWavePeriod: 5, surfaceWaveDirection: 30, surfaceWaveShoreDepth: .5 };
+
+/** Initial editor appearance, based on the accepted Terrain / Lake 1 settings.
+ * Kept separate from runtime fallbacks so older saved Lakes retain their look. */
+export function createLakeAppearance(): NonNullable<LayoutLakeWaterBody["appearance"]> {
+  return {
+    ...LAKE_SURFACE_WAVE_DEFAULTS,
+    shoreWetnessEnabled: true, foamEnabled: true, causticsEnabled: true,
+    absorptionDistance: 2, surfaceStrength: 2, surfaceRoughness: .2, normalScale: 1, rippleSpeed: 2,
+    wheelRipplesEnabled: true, wheelRippleStrength: 3, wheelRippleSpeed: 1.8,
+    wheelRippleWidth: 1, wheelRippleWavelength: .6, wheelRippleLifetime: 4, wheelRippleInterval: .12,
+    foamScale: 2, foamSpeed: 2, causticsStrength: 1, causticsScale: 1,
+    causticsSpeed: 2, causticsDepthFade: 1, reflectionMode: "sharedPlanar", reflectionQuality: "medium",
+  };
+}
+
 /** Shared runtime/save allowlist. Keep source coordinates at full JSON precision. */
 export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
   const record = (v: unknown): Record<string, unknown> => {
@@ -51,8 +72,20 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
     }
     const ranges = { opacity: [0, 1], bedVisibility: [0, 1], absorptionDistance: [0.01, 100],
       surfaceStrength: [0, 2], surfaceRoughness: [0.04, 1], normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1],
+      surfaceWaveHeight: [0, .1], surfaceWaveLength: [6, 40], surfaceWavePeriod: [2, 12],
+      surfaceWaveDirection: [0, 360], surfaceWaveShoreDepth: [.1, 2],
+      wheelRippleStrength: [0, 6], wheelRippleSpeed: [0.2, 5], wheelRippleWidth: [0.1, 2],
+      wheelRippleWavelength: [0.1, 2], wheelRippleLifetime: [0.2, 4], wheelRippleInterval: [0.04, 1],
       shoreWetnessWidth: [0.2, 4], shoreWetnessStrength: [0, 1], shoreBlendDepth: [0, 2], foamOpacity: [0, 1], foamWidth: [0.2, 4], foamScale: [0.1, 10], foamSpeed: [0, 3],
       causticsStrength: [0, 3], causticsScale: [0.1, 10], causticsSpeed: [0, 3], causticsDepthFade: [0.1, 30] } as const;
+    if (source.surfaceWavesEnabled !== undefined) {
+      if (typeof source.surfaceWavesEnabled !== "boolean") throw new Error("Invalid Lake surfaceWavesEnabled");
+      appearance.surfaceWavesEnabled = source.surfaceWavesEnabled;
+    }
+    if (source.wheelRipplesEnabled !== undefined) {
+      if (typeof source.wheelRipplesEnabled !== "boolean") throw new Error("Invalid Lake wheelRipplesEnabled");
+      appearance.wheelRipplesEnabled = source.wheelRipplesEnabled;
+    }
     if (source.shoreWetnessEnabled !== undefined) {
       if (typeof source.shoreWetnessEnabled !== "boolean") throw new Error("Invalid Lake shoreWetnessEnabled");
       appearance.shoreWetnessEnabled = source.shoreWetnessEnabled;
@@ -102,7 +135,7 @@ export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
   return { deepColor: "#234f4b", shallowColor: "#779a82", opacity: 0.35,
     bedVisibility: 0.9, absorptionDistance: 4, normalTexture: d.normalTexture,
     surfaceStrength: 1, surfaceRoughness: 0.22, normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
-    reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high",
+    reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high", ...LAKE_WHEEL_RIPPLE_DEFAULTS, ...LAKE_SURFACE_WAVE_DEFAULTS,
     shoreWetnessEnabled: false, shoreWetnessWidth: 1, shoreWetnessStrength: 0.65,
     shoreBlendDepth: 0.25, foamEnabled: false, foamOpacity: 0.7, foamWidth: 1, foamScale: 0.8, foamSpeed: 0.3,
     reflectionStrength: d.reflectionStrength, causticsEnabled: false, causticsStrength: 1,

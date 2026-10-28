@@ -1038,6 +1038,11 @@ export interface LayoutLakeWaterBody {
     /** Vertical depth of the visual shore transition in metres; 0 disables it. */
     shoreBlendDepth?: number;
     surfaceStrength?: number; surfaceRoughness?: number;
+    surfaceWavesEnabled?: boolean; surfaceWaveHeight?: number; surfaceWaveLength?: number;
+    surfaceWavePeriod?: number; surfaceWaveDirection?: number; surfaceWaveShoreDepth?: number;
+    /** Vehicle-generated surface waves, independent of the natural surface normals. */
+    wheelRipplesEnabled?: boolean; wheelRippleStrength?: number; wheelRippleSpeed?: number;
+    wheelRippleWidth?: number; wheelRippleWavelength?: number; wheelRippleLifetime?: number; wheelRippleInterval?: number;
     shoreWetnessEnabled?: boolean; shoreWetnessWidth?: number; shoreWetnessStrength?: number;
     foamEnabled?: boolean; foamOpacity?: number; foamWidth?: number; foamScale?: number; foamSpeed?: number;
     causticsEnabled?: boolean; causticsStrength?: number; causticsScale?: number;

@@ -12,6 +12,8 @@ export interface LakeGeometry {
   escapeLevel: number | null;
   positions: Float32Array;
   depths: Float32Array;
+  /** Area-averaged source-depth gradient for smooth geometric-wave shading. */
+  depthSlopes?: Float32Array;
   uvs: Float32Array;
   indices: Uint32Array;
   /** Local XZ pairs, two endpoints per segment; includes island shores. */
@@ -226,7 +228,24 @@ export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSi
   out.indices = indices.slice(0, ic); out.shore = shore.slice(0, sc); out.cuts = cuts.slice(0, bc);
   out.coverage = { min: [...lake.bounds.min], nx, nz, spacing: def.spacing, triangles: wet };
   out.bytes = out.positions.byteLength + out.depths.byteLength + out.uvs.byteLength + out.indices.byteLength + out.shore.byteLength + out.cuts.byteLength + wet.byteLength;
+  out.bytes += vc * 2 * Float32Array.BYTES_PER_ELEMENT;
   if (out.bytes > LAKE_LIMITS.geometryBytes) return { ...emptyLake(lake, "over-budget", "Lake geometry exceeds 16 MiB"), cells: out.cells };
+  const slopes = new Float32Array(vc * 2), weights = new Float32Array(vc);
+  for (let k = 0; k < ic; k += 3) {
+    const a = out.indices[k]!, b = out.indices[k + 1]!, c = out.indices[k + 2]!;
+    const bx = out.positions[b * 3]! - out.positions[a * 3]!, bz = out.positions[b * 3 + 2]! - out.positions[a * 3 + 2]!;
+    const cx = out.positions[c * 3]! - out.positions[a * 3]!, cz = out.positions[c * 3 + 2]! - out.positions[a * 3 + 2]!;
+    const det = bx * cz - bz * cx, area = Math.abs(det);
+    const db = out.depths[b]! - out.depths[a]!, dc = out.depths[c]! - out.depths[a]!;
+    const dx = (db * cz - dc * bz) / det, dz = (bx * dc - cx * db) / det;
+    for (const i of [a, b, c]) { slopes[i * 2] = slopes[i * 2]! + dx * area; slopes[i * 2 + 1] = slopes[i * 2 + 1]! + dz * area; weights[i] = weights[i]! + area; }
+    if (k % 768 === 0) await yieldWork();
+  }
+  for (let i = 0; i < vc; i++) if (weights[i]! > 0) {
+    slopes[i * 2] = slopes[i * 2]! / weights[i]!; slopes[i * 2 + 1] = slopes[i * 2 + 1]! / weights[i]!;
+    if ((i & 255) === 0) await yieldWork();
+  }
+  out.depthSlopes = slopes;
   if (level >= escape - EPS) { out.status = "open-boundary"; out.message = `Area opens at world Y ${out.escapeLevel.toFixed(3)}; enlarge area or lower level`; }
   out.buildMs = performance.now() - started;
   return out;

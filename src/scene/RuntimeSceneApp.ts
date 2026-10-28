@@ -5962,6 +5962,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeLakes(): Promise<void> {
     const terrain = (id: string): WorldTerrainDocument | undefined => this.worldTerrainDocuments.get(id);
     this.lakes ??= new LakeWaterController({ scene: this.scene, editor: false, document: terrain, reflections: this.waterReflections,
+      vehicles: this.runtimeServices.resolve(vehicleHostService),
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find((a) => a.id === id), document = terrain(id);
         if (!actor || !document) throw new Error("Missing Lake terrain");

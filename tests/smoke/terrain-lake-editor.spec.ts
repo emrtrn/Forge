@@ -29,7 +29,7 @@ async function number(page: Page, key: string, value: number) {
   if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
   const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
 }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false) {
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false, wavePasses = false) {
   const doc = createLakeFixture();
   if (steep) for (const entry of doc.def.tiles) entry.maxHeight = 18;
   if (steep) for (const tile of doc.tiles.values()) {
@@ -59,6 +59,7 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   await write(TERRAIN, JSON.stringify(doc.def));
   await write(terrainGlobalMapPath(TERRAIN), encodeTerrainGlobalMap(doc.def, buildTerrainGlobalAttributes(worldTerrainRenderSource(doc.def, doc.tiles))));
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
+  if (wavePasses) level.postProcess = { ...level.postProcess, ao: { enabled: true, radius: 1, intensity: 1 }, dof: { enabled: true, focusDistance: 30, aperture: .01, maxBlur: .01 } };
   level.instances = level.instances.filter((g: { assetId: string }) => g.assetId === "marker:playerStart");
   level.instances[0].placements[0].position = [-20, 15, -12];
   if (foreground || caustics) level.instances.push({ assetId: "shape:cube", placements: [{ name: "Lake foreground cube", position: [-12, 17, -12], scale: [4, 4, 4] }] });
@@ -328,6 +329,151 @@ test("Lake multiscale surface animates reflected light, preserves shore and pers
   expect(runtimeOn.glError).toBe(0); expect(errors).toEqual([]);
 });
 
+// L2 QA: no-contact tyre/plane intersection, stationary/air/submerged/island
+// rejection, motion/slip wavefronts, ageing, snapshot/direct shader and unchanged terrain.
+test("Lake wheel ripples spread and decay independently of mud and reject false surface contacts", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true);
+  await ready(page, 120_000);
+  const before = await terrainHash();
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 120_000);
+  const frame = (mode: string, age = .15, direct = false) => page.evaluate(
+    ([mode, age, direct]) => (window as any).__lakeQA.wheelFrame(mode, age, direct), [mode, age, direct]);
+  const diff = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]!) > 2).length;
+  const off = await frame("stopped"), on = await frame("moving"), aged = await frame("moving", .5);
+  expect(off.ripples).toHaveLength(0); expect(on.ripples.length).toBeGreaterThan(0);
+  expect(diff(off.samples, on.samples), "moving tyre waves must be visible").toBeGreaterThan(10);
+  expect(diff(on.samples, aged.samples), "wavefronts must travel and decay").toBeGreaterThan(10);
+  expect(on.calls).toBe(off.calls); expect(on.glError).toBe(0);
+  await frame("stopped"); await page.screenshot({ path: info.outputPath("lake-wheel-still.png") });
+  await frame("moving"); await page.screenshot({ path: info.outputPath("lake-wheel-waves.png") });
+  await frame("moving", .5); await page.screenshot({ path: info.outputPath("lake-wheel-waves-aged.png") });
+  for (const mode of ["air", "submerged", "dry"]) {
+    const rejected = await frame(mode); expect(rejected.ripples, mode).toHaveLength(0);
+    expect(rejected.samples, mode).toEqual(off.samples);
+  }
+  const slip = await frame("slip"); expect(slip.ripples.length).toBeGreaterThan(0);
+  expect(diff(off.samples, slip.samples)).toBeGreaterThan(10);
+  const expired = await frame("moving", 1.7); expect(expired.ripples).toHaveLength(0); expect(expired.samples).toEqual(off.samples);
+  const directOff = await frame("stopped", .15, true), directOn = await frame("moving", .15, true);
+  expect(diff(directOff.samples, directOn.samples)).toBeGreaterThan(10); expect(directOn.glError).toBe(0);
+  expect(directOn.calls).toBe(directOff.calls);
+  expect(await terrainHash()).toBe(before); expect(errors).toEqual([]);
+});
+
+// WPO QA: GPU height encoding versus triangle-interpolated CPU contact height;
+// pinned shore/dry regions, zero/off, time, bounds, direct/AO and persistence.
+test("Lake Surface Waves displace geometry with matching CPU heights and persist through UI Save Reload Play", async ({ page, request }, info) => {
+  test.setTimeout(300_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true, false, true);
+  await ready(page, 120_000); const hash = await terrainHash();
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "surface-waves");
+  const field = page.locator('[data-lake-number="surfaceWaveHeight"]');
+  await expect(field).toHaveValue("2"); await expect(field).toHaveAttribute("title", /santimetre/);
+  await page.locator('[data-detail-section="lake-surface-waves"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("lake-surface-wave-controls.png") });
+  const frame = (time = 0, encoded = false, direct = false) => page.evaluate(
+    ([time, encoded, direct]) => (window as any).__lakeQA.surfaceFrame(time, encoded, direct), [time, encoded, direct]);
+  const diff = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]!) > 2).length;
+  await expandLake(page, "advanced"); await page.locator("[data-lake-reflection]").selectOption("sharedPlanar"); await ready(page);
+  await number(page, "surfaceWaveHeight", 0); await ready(page); const flat = await frame();
+  await number(page, "surfaceWaveHeight", 6); await ready(page); const on = await frame(), moved = await frame(1.25);
+  expect(diff(flat.samples, on.samples)).toBeGreaterThan(10); expect(diff(on.samples, moved.samples)).toBeGreaterThan(10);
+  expect(on.calls).toBe(flat.calls); expect(on.glError).toBe(0); expect(on.waveHeight).toBe(.06);
+  expect(on.overrideCount, "AO normal and DoF depth must compile the displacing variants").toBe(2);
+  await frame(); await page.screenshot({ path: info.outputPath("lake-surface-wave-raised.png") });
+  await frame(1.25); await page.screenshot({ path: info.outputPath("lake-surface-wave-moved.png") });
+  for (const t of [0, 1.25]) {
+    const gpu = await frame(t, true);
+    for (const [key, pixels] of [["wetBed", gpu.probes.wetBed], ["deep", gpu.shoreProbes.deep]] as const) {
+      expect(pixels).not.toBeNull(); const measuredHeight = (pixels[12] / 255 - .5) / 4;
+      expect(Math.abs(measuredHeight - gpu.cpuHeights[key]), `${key} GPU height must match the CPU query`).toBeLessThan(.004);
+    }
+    expect(gpu.glError).toBe(0);
+  }
+  for (const key of ["dry", "island", "separate"]) expect(on.probes[key]).toEqual(flat.probes[key]);
+  const directOn = await frame(0, false, true); expect(directOn.glError).toBe(0);
+  const enabled = page.getByRole("checkbox", { name: "Surface Waves Enabled", exact: true });
+  await enabled.uncheck(); await ready(page); const off = await frame(), offMoved = await frame(1.25);
+  expect(off.waveHeight).toBe(0); expect(off.samples).toEqual(offMoved.samples);
+  await page.getByTestId("editor-undo").click(); await ready(page); await expect(enabled).toBeChecked();
+  await page.locator('[data-lake-reset-surface-waves]').click(); await ready(page); await expect(field).toHaveValue("2");
+  await page.getByTestId("editor-undo").click(); await ready(page); await expect(field).toHaveValue("6");
+  const settings = { surfaceWaveLength: 16, surfaceWavePeriod: 6, surfaceWaveDirection: 75, surfaceWaveShoreDepth: .8 };
+  for (const [key, value] of Object.entries(settings)) { await number(page, key, value); await ready(page); }
+  await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance).toMatchObject({ ...settings, surfaceWaveHeight: .06 });
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "surface-waves"); await expect(field).toHaveValue("6");
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 120_000);
+  const runtime = await frame(); expect(runtime.waveHeight).toBe(.06); expect(runtime.glError).toBe(0);
+  expect(diff(runtime.samples, (await frame(1.5)).samples)).toBeGreaterThan(10);
+  expect(await terrainHash()).toBe(hash); expect(errors).toEqual([]);
+  await writeFile(info.outputPath("surface-waves.json"), JSON.stringify({ on: { waveHeight: on.waveHeight, overrideCount: on.overrideCount }, errors }, null, 2));
+});
+
+// Controls QA: visible wave-strength/shape changes; toggle, reset, lock,
+// undo/redo and each saved value in editor reload and runtime; no terrain writes.
+test("Lake Wheel Ripples controls tune visible waves and persist through undo Save Reload and Play", async ({ page, request }, info) => {
+  test.setTimeout(300_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true);
+  await ready(page, 120_000); const before = await terrainHash();
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "wheel-ripples");
+  const frame = (age = .15) => page.evaluate(age => (window as any).__lakeQA.wheelFrame("moving", age), age);
+  const difference = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]!) > 2).length;
+  const enabled = page.getByRole("checkbox", { name: "Wheel Ripples Enabled", exact: true });
+  await expect(enabled).toBeChecked();
+  await expect(page.locator('[data-lake-number="wheelRippleStrength"]')).toHaveValue("2");
+  await expect(page.locator('[data-lake-number="wheelRippleSpeed"]')).toHaveAttribute("title", /metre\/saniye/);
+  await page.locator('[data-detail-section="lake-wheel-ripples"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("lake-wheel-controls.png") });
+  const original = await frame();
+  await number(page, "wheelRippleStrength", 0); await ready(page); const flat = await frame();
+  expect(flat.ripples).toHaveLength(0); expect(difference(original.samples, flat.samples)).toBeGreaterThan(10);
+  await number(page, "wheelRippleStrength", 3); await ready(page); const strong = await frame();
+  expect(strong.waveParams[0]).toBe(3); expect(difference(strong.samples, flat.samples)).toBeGreaterThan(10);
+  await page.locator("[data-lake-reset-wheel-ripples]").click(); await ready(page);
+  await expect(page.locator('[data-lake-number="wheelRippleStrength"]')).toHaveValue("2");
+  await page.getByTestId("editor-undo").click(); await ready(page);
+  await expect(page.locator('[data-lake-number="wheelRippleStrength"]')).toHaveValue("3");
+  let last = await frame();
+  const values = { wheelRippleSpeed: 2.4, wheelRippleWidth: .7, wheelRippleWavelength: .5, wheelRippleLifetime: 2.5, wheelRippleInterval: .2 };
+  for (const [key, value] of Object.entries(values)) {
+    await number(page, key, value); await ready(page); const next = await frame();
+    if (["wheelRippleSpeed", "wheelRippleWidth", "wheelRippleWavelength"].includes(key)) {
+      expect(difference(last.samples, next.samples), key).toBeGreaterThan(10);
+    }
+    last = next;
+  }
+  expect((await frame(2)).ripples.length).toBeGreaterThan(0);
+  await enabled.uncheck(); await ready(page); expect((await frame()).ripples).toHaveLength(0);
+  await page.getByTestId("editor-undo").click(); await ready(page); await expect(enabled).toBeChecked();
+  await page.getByTestId("editor-redo").click(); await ready(page); await expect(enabled).not.toBeChecked();
+  await save(page);
+  expect(JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")).waterBodies[0].appearance.wheelRipplesEnabled).toBe(false);
+  await page.getByTestId("editor-undo").click(); await ready(page); await expect(enabled).toBeChecked();
+  // Undo restores the old implicit true default. Author an explicit true as well.
+  await enabled.uncheck(); await ready(page); await enabled.check(); await ready(page);
+  await page.locator("[data-lake-locked]").check(); await ready(page);
+  await expect(page.locator('[data-lake-number="wheelRippleStrength"]')).toBeDisabled(); await expect(enabled).toBeDisabled();
+  await page.locator("[data-lake-locked]").uncheck(); await ready(page); await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance).toMatchObject({ ...values, wheelRippleStrength: 3, wheelRipplesEnabled: true });
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "wheel-ripples");
+  for (const [key, value] of Object.entries({ ...values, wheelRippleStrength: 3 })) await expect(page.locator(`[data-lake-number="${key}"]`)).toHaveValue(String(value));
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 120_000);
+  const runtime = await frame(); expect(runtime.waveParams).toEqual([3, 2.4, .7, 2.5]); expect(runtime.wavelength).toBe(.5);
+  expect(runtime.ripples.length).toBeGreaterThan(0); expect(runtime.glError).toBe(0);
+  expect((await frame(2)).ripples.length).toBeGreaterThan(0);
+  await frame(); await page.screenshot({ path: info.outputPath("lake-wheel-custom-waves.png") });
+  expect(await terrainHash()).toBe(before); expect(errors).toEqual([]);
+});
+
 // QA inventory: click/create/cancel; world level, four bounds and drag handles;
 // island/isolated basin + escape rejection; selection/flags/delete/undo;
 // real Save/Reload/Play and unchanged terrain; sculpt and retry in separate cases.
@@ -338,6 +484,13 @@ test("Lake UI creates a connected two-seam lake, preserves terrain and survives 
   await page.keyboard.press("Escape"); await expect(page.locator("[data-lake-begin]")).toBeEnabled();
   await page.locator("[data-lake-begin]").click(); await clickWorld(page, [-20, 10, -12]);
   await expect(page.locator("[data-lake-number=surfaceLevel]")).toBeVisible();
+  const initialAppearance = await page.evaluate(() => (window as any).__lakeQA.snapshot().source.appearance);
+  expect(initialAppearance).toMatchObject({ shoreWetnessEnabled: true, foamEnabled: true, causticsEnabled: true,
+    absorptionDistance: 2, surfaceStrength: 2, surfaceRoughness: .2, normalScale: 1, rippleSpeed: 2,
+    wheelRipplesEnabled: true, wheelRippleStrength: 3, wheelRippleSpeed: 1.8,
+    wheelRippleWidth: 1, wheelRippleWavelength: .6, wheelRippleLifetime: 4, wheelRippleInterval: .12,
+    foamScale: 2, foamSpeed: 2, causticsStrength: 1, causticsScale: 1, causticsSpeed: 2, causticsDepthFade: 1,
+    reflectionMode: "sharedPlanar", reflectionQuality: "medium" });
   for (const [key, v] of [["minX", -48], ["minZ", -48], ["maxX", 48], ["maxZ", 48], ["surfaceLevel", 12]] as const) await number(page, key, v);
   await ready(page); await expect(page.locator("[data-lake-create]")).toBeEnabled();
   await page.locator("[data-lake-create]").click();
@@ -358,6 +511,7 @@ test("Lake UI creates a connected two-seam lake, preserves terrain and survives 
   await button.click(); expect((await saved).ok()).toBeTruthy(); await expect(button).toBeEnabled({ timeout: 120_000 });
   expect(await terrainHash()).toBe(hash);
   const source = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")); expect(source.waterBodies[0].surfaceLevel).toBe(12);
+  expect(source.waterBodies[0].appearance).toEqual({ ...initialAppearance, reflectionMode: "off" });
   await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 }); await ready(page);
   expect((await snapshot(page)).results[0].hash).toBe(initial.hash);
   await page.getByTestId("outliner-row").filter({ hasText: "Lake 1" }).first().click(); await expandLake(page); await page.locator("[data-lake-delete]").click();

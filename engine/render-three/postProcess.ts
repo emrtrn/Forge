@@ -29,6 +29,7 @@ import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
 
 import type { ResolvedPostProcess } from "@engine/scene/postProcess";
 import { renderSceneWithTerrainOverride } from "./terrain/terrainRenderer";
+import { renderSceneWithLakeOverride } from "./lakeWater";
 import { WaterSceneSnapshot } from "./waterSceneSnapshot";
 
 export {
@@ -173,7 +174,7 @@ export function writesSceneDepth(object: Object3D): boolean {
  *    depth-writing geometry that still should not receive AO.
  *
  * A lake that has composited its sampled bed into a final pixel is an exception:
- * its flat interface participates in this normal/depth pass without changing
+ * its interface participates in this normal/depth pass without changing
  * the beauty material's depthWrite or transparent sorting.
  *
  * Solid geometry — including characters — stays in and gets proper AO (see
@@ -217,14 +218,14 @@ class ForgeGtaoPass extends GTAOPass {
       base.apply(this, args);
       return;
     }
-    renderSceneWithTerrainOverride(this.scene, "normal", () => base.apply(this, args));
+    renderSceneWithLakeOverride(this.scene, "normal", () => renderSceneWithTerrainOverride(this.scene, "normal", () => base.apply(this, args)));
   }
 }
 
 /** BokehPass whose depth pass draws GPU-displaced terrain with its own depth material. */
 class ForgeBokehPass extends BokehPass {
   override render(...args: Parameters<BokehPass["render"]>): void {
-    renderSceneWithTerrainOverride(this.scene, "depth", () => super.render(...args));
+    renderSceneWithLakeOverride(this.scene, "depth", () => renderSceneWithTerrainOverride(this.scene, "depth", () => super.render(...args)));
   }
 }
 

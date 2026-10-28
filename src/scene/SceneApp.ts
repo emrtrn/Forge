@@ -1,7 +1,7 @@
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { LakeWaterController } from "./lakeWaterController";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
-import { validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
+import { createLakeAppearance, validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { compareWorldCellKeys, normalizeWorldPartitionSettings, type WorldPartitionSettings } from "@engine/world/worldPartition";
 import { parseWorldCellKey } from "@engine/world/worldGrid";
@@ -7719,6 +7719,7 @@ export class SceneApp {
         const s = document.def.spacing, o = document.def.origin;
         this.lakeDraft = { schema: 1, kind: "lake", mode: "fillExisting", coordinateSpace: "world", terrainRef: actor.id,
           id: `lake-${i}`, name: `Lake ${i}`, seed: [x, z], surfaceLevel: height + 0.5,
+          appearance: createLakeAppearance(),
           bounds: { min: [o[0] + Math.floor((x - 32 - o[0]) / s) * s, o[2] + Math.floor((z - 32 - o[2]) / s) * s],
             max: [o[0] + Math.ceil((x + 32 - o[0]) / s) * s, o[2] + Math.ceil((z + 32 - o[2]) / s) * s] } };
         this.rebuildLakes();

@@ -1,5 +1,69 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel uygulama — Hafif geometrik yüzey dalgaları — 2026-10-28
+
+Kullanıcı WPO benzeri hafif yükselme/alçalma önerisini uygulamaya açtı.
+Lake Details → **Surface Waves**: Enabled, Height (cm), Wavelength, Period,
+Direction, Shore Fade Depth ve reset. Varsayılan toplam sapma en çok ±2 cm,
+baskın dalga 12 m / 5 s, yön 30°, kıyıda 0,5 m derinlikte sönmedir.
+Üç düşük genlikli dalga geometriyi düşey hareket ettirir; gerçek kıyıda hareket
+sıfırdır, ortalama kot/bağlı havza ve terrain dosyaları korunur. İnce normaller
+ve tekerlek halkaları bunun üzerine eklenir. Kayıt alanları ortak allowlist,
+undo/redo ve Save/Reload/Play yolundadır; eski göller varsayılan hareketi alır.
+
+Yumuşak analitik normal, kaynak derinlik eğimi, genişletilmiş bounds, hareketli
+yüzeyi vertex-interpolated örnekleyen teker sorgusu ve aynı WPO'yu kullanan
+AO/DoF normal/depth geçişleri uygulandı. Planar reflection, caustics ve wet-shore
+maskeleri ortalama seviyeyi kullanır; dinamik kıyı yıkaması veya su fiziği yoktur.
+Yeni sampler/capture/beauty draw yok; vertex ALU ve 8 byte/vertex eğim buffer'ı
+eklenir. Buffer mevcut geometri bütçesine dahildir. Son kabul sonucu ve açık
+donanım sınırları [uygulama raporunda](../reports/LAKE_SURFACE_WAVES_2026-10-28.md).
+Son kaynakta tam gate 2.017 engine kontrolüyle geçti. Son browser koşusu 7 geçti /
+1 başarısız: Wheel Ripples UI editör Reload beklemesinde zaman aşımı; izole
+tekrar kullanıcı talebiyle durduruldu. Oturumun göl kodu/UI/test/dokümanları
+commit/push kapsamındadır; authored Terrain level/cell/tile dosyaları dışarıda
+tutulur. Ayrıntılı doğrulama sınırı rapordadır.
+
+## Güncel uygulama — L2 tekerlek–göl etkileşimi — 2026-10-28
+
+Kullanıcı **L1 masaüstü görsel kontrolünü tamamladı** ve L2 uygulamasını açtı.
+Lake artık mud/deformation modülünden bağımsız, sabit fizik adımında teker–su
+kesişiminden sınırlı, dışarı yayılan ve sönen yüzey dalgaları üretir.
+
+Gerçek bağlı/kırpılmış göl üçgenlerine grid indeksli derinlik sorgusu kullanılır;
+yalnız bounds, su kotu veya kısmen ıslak kaynak yüz bayrağı yeterli sayılmaz.
+Rapier readback'i araç eğimi, direksiyon, süspansiyon ve sink içeren dünya teker
+merkezi/aksını verir. Teker silindiri su düzlemini kesiyorsa zemin teması olmadan
+da dalga oluşabilir; kuru alan, ada/ayrı çukur, suyun üstündeki ve tamamen
+altındaki teker elenir. İlerleme/dönüşün dünya hareketi ve `tractionSlip` enerji
+üretir; durağan teker, ilk örnek, temas kaybı ve büyük teleport enerji üretmez.
+
+Her Lake en çok 24 dalga ve 128 temas geçmişi tutar; dalga ömrü 1,6 s,
+teker başına üretim aralığı varsayılan 0,12 s. Kullanıcının görünürlük geri
+bildirimi üzerine **Lake Details → Wheel Ripples** kontrolleri eklendi:
+Enabled, Wave Strength (varsayılan 2; öncekinin iki katı), Spread Speed,
+Ring Width, Wavelength, Lifetime ve Emission Interval. Türkçe açıklamalar ve
+geri alınabilir Reset Wave Settings vardır. Ayarlar göl bazında ortak
+runtime/save allowlist, undo/redo ve Save/Reload/Play yolundadır.
+Sonraki kullanıcı isteği: yeni göller Terrain / Lake 1'in kayıtlı görünümüyle
+başlar. `createLakeAppearance()` yalnız oluşturma taslağına bağımsız preset
+yazar: teker şiddeti 3, halka genişliği 1 m, dalga boyu 0,6 m, ömür 4 s;
+ıslak kıyı/köpük/caustics açık ve sharedPlanar/medium dahil bütün kayıtlı
+görünüm değerleri uygulama raporunda listelidir. Eski göller migrate edilmez.
+Sunum mevcut su shader'ında normal eğimidir; mesh deplasmanı veya yeni
+sampler/capture/draw eklenmez. Kontroller için kalıcı appearance alanları eklendi.
+Gölün gizlenmesi, yeniden kurulması, invalidation ve level travel geçmişi temizler.
+Mevcut mud batması/deformasyonu, fizik ve terrain dosyaları değiştirilmez.
+
+İlk L2 teslimi tam gate (2.004 kontrol) ve altı su browser senaryosuyla geçti.
+Arayüz kontrol ekinden sonra **yedi odaklı engine regresyonu**, tam
+`build:verify` **2.006 engine kontrolüyle**, doğal yüzey/L2 browser regresyonları
+**2/2** ve yeni kontrollerin UI/undo/kayıt/Reload/Play senaryosu **1/1** geçti.
+Ayrıntılı sonuç
+[L2 uygulama raporunda](../reports/LAKE_WHEEL_INTERACTION_2026-10-28.md) izlenir.
+Gerçek araçla masaüstü L2 görsel ayarı, donanım GPU maliyeti ve L3 ortak kabulü
+ayrı açıktır. Bu kapsam commit/push içermez.
+
 ## Güncel uygulama — L1 doğal göl yüzeyi — 2026-10-28
 
 Kullanıcı fotoğrafındaki küçük dalgacıklar/farklı ölçeklerde hareket/kırık güneş
@@ -33,7 +97,8 @@ köpük, kıyı, ıslak dip ve caustics tarayıcı regresyonları 5/5 geçti.
 Kod `5d8c8d49` ile commit edildi, main `e68c01b8` ile çakışmasız birleştirildi
 (`5d32fee8`). Birleşim sonrası `build:verify` 1.986 engine kontrolüyle ve beş
 su browser senaryosu 5/5 geçti. Main push sonucu görev çıktısında belirtilir.
-Referans fotoğrafla nihai masaüstü görsel/GPU kabulü yerelde ayrıca yapılmalı.
+Referans fotoğrafla L1 masaüstü görsel kabulü kullanıcı tarafından tamamlandı.
+Donanım GPU performans kabulü ayrı açık kalır.
 
 ## Güncel iyileştirme — Su altı dip ıslaklığı — 2026-10-28
 
@@ -171,7 +236,8 @@ temasları ve sınırlı ripple sunumu → L3 köpük/caustics/yansıma ile orta
 Detaylar ve test matrisi
 [köpük ve yüzey araştırmasının ilave bölümünde](../reports/WATER_CONTACT_FOAM_RESEARCH_2026-10-28.md#göl-yüzeyi-ve-tekerlek-etkileşimi--ilave-kapsam).
 Bu kullanıcı isteği dokümana kaydedildi. L1 ilk uygulaması üstteki güncel
-kayıttadır; L2/L3 henüz başlamadı.
+kayıttadır; L1 görsel kabulü tamamlandı, L2 güncel uygulaması en üsttedir;
+L3 ortak kabulü henüz tamamlanmadı.
 Köpük F1 ilk uygulaması aşağıdaki kayıttadır.
 
 ## Güncel ek — Caustics görünürlüğü ve köpük araştırması — 2026-10-28

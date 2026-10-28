@@ -1,5 +1,9 @@
 import { LAKE_SURFACE_GLSL } from "./lakeSurface";
-import { BufferGeometry, BufferAttribute, Color, DoubleSide, Matrix4, Mesh, ShaderMaterial, UniformsLib, UniformsUtils, Vector2, type DataTexture, type Texture } from "three";
+import { createLakeRippleUniforms, LAKE_RIPPLES_GLSL, updateLakeRippleUniforms } from "./lakeRipples";
+import type { LakeRipple } from "../terrain/lakeInteraction";
+import { lakeWaveParameters, lakeWaveTime, type LakeWaveParameters } from "../terrain/lakeWaves";
+import { createLakeWaveUniforms, LAKE_WAVES_GLSL } from "./lakeWaves";
+import { BufferGeometry, BufferAttribute, Color, DoubleSide, Matrix4, Mesh, MeshNormalMaterial, MeshDepthMaterial, RGBADepthPacking, NoBlending, ShaderMaterial, UniformsLib, UniformsUtils, Vector2, type Camera, type Object3D, type WebGLRenderer, type DataTexture, type Texture } from "three";
 import type { LayoutLakeWaterBody } from "../scene/layout";
 import { resolveLakeAppearance } from "../scene/waterBody";
 import type { LakeGeometry } from "../terrain/terrainLakeWater";
@@ -11,23 +15,30 @@ import { createWaterSceneUniforms, readWaterScene, WATER_SCENE_GLSL } from "./wa
 import { createLakeFoamMask, WATER_FOAM_GLSL } from "./waterFoam";
 import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
 
-/** Flat exact surface; the normal animation never displaces the shoreline. */
+/** Bounded vertical waves over the exact wet mesh; the shoreline stays pinned. */
 export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private readonly source: PlanarReflectionSource | null;
   private readonly strength: number;
   private readonly foamTexture: DataTexture | null;
+  readonly waveParameters: LakeWaveParameters;
+  private externalWaveTime = false;
+  private readonly waveOverrides = new Map<"normal" | "depth", Mesh<BufferGeometry, MeshNormalMaterial | MeshDepthMaterial>>();
   constructor(lake: LayoutLakeWaterBody, data: LakeGeometry, normal: Texture | null, source: PlanarReflectionSource | null = null) {
     const appearance = resolveLakeAppearance(lake);
+    const waves = lakeWaveParameters(appearance, data.position[0], data.position[2]);
     const foam = appearance.foamEnabled ? createLakeFoamMask(lake, data, appearance.foamWidth) : null;
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new BufferAttribute(data.positions, 3));
     geometry.setAttribute("waterDepth", new BufferAttribute(data.depths, 1));
+    geometry.setAttribute("waterDepthSlope", new BufferAttribute(data.depthSlopes ?? new Float32Array(data.depths.length * 2), 2));
     geometry.setAttribute("uv", new BufferAttribute(data.uvs, 2));
     geometry.setIndex(new BufferAttribute(data.indices, 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingBox(); geometry.computeBoundingSphere();
     super(geometry, new ShaderMaterial({ transparent: true, depthWrite: false, side: DoubleSide, fog: true, lights: true,
       uniforms: { ...UniformsUtils.clone(UniformsLib.fog), ...UniformsUtils.clone(UniformsLib.lights), ...createRiverSunShadowUniforms(),
+        ...createLakeRippleUniforms(appearance), lakeRippleOrigin: { value: new Vector2(data.position[0], data.position[2]) },
+        ...createLakeWaveUniforms(waves),
         shoreBlendDepth: { value: appearance.shoreBlendDepth },
         foamMask: { value: foam }, foamOpacity: { value: foam ? appearance.foamOpacity : 0 },
         foamScale: { value: appearance.foamScale }, foamSpeed: { value: appearance.foamSpeed },
@@ -45,12 +56,16 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         #include <shadowmap_pars_vertex>
         uniform vec2 foamOrigin; uniform vec2 foamSize; varying vec2 vFoamUv;
         attribute float waterDepth;
-        varying float vDepth; varying vec2 vUv; varying vec4 vReflection; varying vec3 vWorldPosition;
+        attribute vec2 waterDepthSlope;
+        varying float vDepth; varying vec2 vUv; varying vec4 vReflection; varying vec3 vWorldPosition; varying vec2 vWaveSlope;
         uniform mat4 reflectionMatrix;
-        void main(){vFoamUv=(position.xz-foamOrigin)/foamSize;vDepth=waterDepth;vUv=uv;vec4 world=modelMatrix*vec4(position,1.);vWorldPosition=world.xyz;
+        ${LAKE_WAVES_GLSL}
+        void main(){vFoamUv=(position.xz-foamOrigin)/foamSize;vUv=uv;
+        vec3 displaced=position;vec3 wave=lakeWaveSample(position.xz,waterDepth,waterDepthSlope);float height=wave.x;displaced.y+=height;vWaveSlope=wave.yz;
+        vDepth=max(0.,waterDepth+height);vec4 world=modelMatrix*vec4(displaced,1.);vWorldPosition=world.xyz;
         vReflection=reflectionMatrix*world;vec4 mvPosition=viewMatrix*world;gl_Position=projectionMatrix*mvPosition;
         vec4 worldPosition=world;
-        vec3 transformedNormal=normalMatrix*normal;
+        vec3 transformedNormal=normalMatrix*normalize(vec3(-wave.y,1.,-wave.z));
         #include <shadowmap_vertex>
         #include <fog_vertex>
         }`,
@@ -62,13 +77,15 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         uniform vec3 deepColor;uniform vec3 shallowColor;uniform float opacity;
         uniform float bedVisibility;uniform float absorptionDistance;
         uniform sampler2D reflectionTexture;uniform float reflectionStrength;uniform vec2 reflectionTexelSize;
-        varying float vDepth;varying vec2 vUv;varying vec4 vReflection;varying vec3 vWorldPosition;
+        varying float vDepth;varying vec2 vUv;varying vec4 vReflection;varying vec3 vWorldPosition;varying vec2 vWaveSlope;
         ${WATER_OPTICS_GLSL}
         ${WATER_FOAM_GLSL}
         ${RIVER_SUN_SHADOW_GLSL}
         ${WATER_ENVIRONMENT_GLSL}
         ${WATER_SCENE_GLSL}
         ${LAKE_SURFACE_GLSL}
+        uniform vec2 lakeRippleOrigin;
+        ${LAKE_RIPPLES_GLSL}
         // Small, resolution-aware Gaussian footprint. Reuse the existing planar
         // target; a calm lake keeps a reflection without a razor-sharp bank.
         vec3 lakeReflection(vec2 uv,float roughness){
@@ -89,6 +106,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         float d=max(0.,vDepth);
         vec2 p=vWorldPosition.xz*normalScale*.12;
         vec2 n=lakeSurfaceSlopes(p,time*rippleSpeed);
+        n+=lakeWheelSlopes(vWorldPosition.xz-lakeRippleOrigin);
         vec3 normal=normalize(vec3(n.x*.10,1.,n.y*.10));
         vec3 viewDirection=isOrthographic?vec3(viewMatrix[0][2],viewMatrix[1][2],viewMatrix[2][2]):cameraPosition-vWorldPosition;
         viewDirection/=max(length(viewDirection),.000001);
@@ -109,7 +127,8 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         float edgeNoise=waterNoise(vWorldPosition.xz*.9+time*vec2(.013,-.009));
         float edgeWidth=shoreBlendDepth*mix(.85,1.15,edgeNoise);
         float shoreBlend=shoreBlendDepth>0.?smoothstep(0.,max(edgeWidth,.0001),edgeDepth):1.;
-        normal=normalize(vec3(n.x*.10*shoreBlend,1.,n.y*.10*shoreBlend));
+        vec3 geometric=normalize(vec3(-vWaveSlope.x,1.,-vWaveSlope.y));
+        normal=normalize(geometric+vec3(n.x*.10*shoreBlend,0.,n.y*.10*shoreBlend));
         float roughness=lakeFilteredRoughness(normal);
         float sunVisibility=riverSunVisibility();
         vec3 glint=lakeSunGlint(normal,viewDirection,roughness,sunVisibility);
@@ -181,6 +200,10 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         #include <colorspace_fragment>
         #include <fog_fragment>
         }` }));
+    this.waveParameters = waves;
+    // GPU displacement never updates CPU geometry bounds automatically.
+    geometry.boundingBox!.min.y -= waves.height; geometry.boundingBox!.max.y += waves.height;
+    geometry.boundingSphere!.radius += waves.height;
     this.foamTexture = foam; this.receiveShadow = true;
     this.position.set(...data.position); this.name = `Lake:${lake.id}`;
     this.userData.waterBodyId = lake.id; this.source = source; this.strength = appearance.reflectionStrength;
@@ -191,6 +214,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
       this.material.uniforms.time!.value = (performance.now() - started) / 1000;
+      if (!this.externalWaveTime) this.material.uniforms.surfaceWaveTime!.value = lakeWaveTime(performance.now() / 1000, waves);
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera);
       source?.update(renderer, scene, camera);
@@ -208,6 +232,33 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       }
     };
   }
+  setWheelRipples(ripples: readonly LakeRipple[]): void {
+    updateLakeRippleUniforms(this.material.uniforms as ReturnType<typeof createLakeRippleUniforms>, ripples, this.position.x, this.position.z);
+  }
+  setSurfaceWaveTime(seconds: number): void {
+    this.externalWaveTime = true;
+    this.material.uniforms.surfaceWaveTime!.value = lakeWaveTime(seconds, this.waveParameters);
+  }
+  renderWaveOverride(renderer: WebGLRenderer, camera: Camera, kind: "normal" | "depth"): void {
+    let proxy = this.waveOverrides.get(kind);
+    if (!proxy) {
+      const material = kind === "normal" ? new MeshNormalMaterial({ side: DoubleSide })
+        : new MeshDepthMaterial({ depthPacking: RGBADepthPacking, blending: NoBlending, side: DoubleSide });
+      material.onBeforeCompile = shader => {
+        Object.assign(shader.uniforms, Object.fromEntries(["surfaceWaveTime", "surfaceWaveHeight", "surfaceWaveShoreDepth", "surfaceWaveComponents"]
+          .map(key => [key, this.material.uniforms[key]!])));
+        shader.vertexShader = `attribute float waterDepth;attribute vec2 waterDepthSlope;\n${LAKE_WAVES_GLSL}\n` + shader.vertexShader.replace("#include <begin_vertex>",
+          "#include <begin_vertex>\ntransformed.y+=lakeWaveOffset(position.xz,waterDepth);")
+          .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nvec3 waveNormal=lakeWaveSample(position.xz,waterDepth,waterDepthSlope);objectNormal=normalize(vec3(-waveNormal.y,1.,-waveNormal.z));");
+      };
+      proxy = new Mesh(this.geometry, material); proxy.matrixAutoUpdate = false;
+      this.waveOverrides.set(kind, proxy);
+    }
+    proxy.matrix.copy(this.matrixWorld); proxy.layers.mask = this.layers.mask;
+    const autoClear = renderer.autoClear;
+    try { renderer.autoClear = false; renderer.render(proxy, camera); }
+    finally { renderer.autoClear = autoClear; }
+  }
   setPlanarReflectionBinding(binding: PlanarReflectionBinding | null) {
     this.material.uniforms.reflectionTexture!.value = binding?.texture ?? null;
     const image = binding?.texture.image as { width: number; height: number } | undefined;
@@ -215,5 +266,20 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms.reflectionMatrix!.value = binding?.textureMatrix ?? new Matrix4();
     this.material.uniforms.reflectionStrength!.value = binding ? this.strength : 0;
   }
-  dispose() { this.foamTexture?.dispose(); this.source?.removeConsumer(this); this.geometry.dispose(); this.material.dispose(); }
+  dispose() { for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear(); this.foamTexture?.dispose(); this.source?.removeConsumer(this); this.geometry.dispose(); this.material.dispose(); }
+}
+
+/** Replace the existing override-pass water draw with its displacing variant. */
+export function renderSceneWithLakeOverride(scene: Object3D, kind: "normal" | "depth", render: () => void): void {
+  const lakes: LakeWaterObject[] = [];
+  scene.traverseVisible(object => { if (object instanceof LakeWaterObject && object.waveParameters.height > 0) lakes.push(object); });
+  if (!lakes.length) { render(); return; }
+  for (const lake of lakes) lake.visible = false;
+  const previous = scene.onAfterRender;
+  scene.onAfterRender = (renderer, renderedScene, camera, geometry, material, group) => {
+    previous.call(scene, renderer, renderedScene, camera, geometry, material, group);
+    for (const lake of lakes) lake.renderWaveOverride(renderer, camera, kind);
+  };
+  try { render(); }
+  finally { scene.onAfterRender = previous; for (const lake of lakes) lake.visible = true; }
 }

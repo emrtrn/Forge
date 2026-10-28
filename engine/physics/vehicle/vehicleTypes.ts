@@ -239,6 +239,9 @@ export interface VehicleWheelState {
   readonly contactPoint: VehicleVec3 | null;
   /** World-space ray start (the hard point). */
   readonly hardPoint: VehicleVec3 | null;
+  /** Fixed-step world tyre centre/axle, including chassis tilt and soft-ground sink. */
+  readonly worldCenter?: VehicleVec3;
+  readonly worldAxle?: VehicleVec3;
 }
 
 export interface VehicleState {

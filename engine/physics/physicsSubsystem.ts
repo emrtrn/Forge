@@ -444,6 +444,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const rapier = this.rapierBodies.get(entityId);
     if (!record || !controller || !rapier) return null;
     const q = rapier.body.rotation();
+    const chassisPosition = rapier.body.translation();
     const forward = { x: 2 * (q.x * q.z + q.w * q.y), y: 2 * (q.y * q.z - q.w * q.x),
       z: 1 - 2 * (q.x * q.x + q.y * q.y) };
     return {
@@ -459,11 +460,23 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         const inContact = controller.wheelIsInContact(index);
         const contact = inContact ? controller.wheelContactPoint(index) : null;
         const hardPoint = controller.wheelHardPoint(index);
+        const suspensionLength = controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength;
+        const drop = suspensionLength + (record.sink[index] ?? 0);
+        const steering = controller.wheelSteering(index) ?? 0;
+        const ax = Math.cos(steering), az = -Math.sin(steering);
+        const [lx, ly, lz] = [wheel.position[0], wheel.position[1] - drop, wheel.position[2]];
+        const tx = 2 * (q.y * lz - q.z * ly), ty = 2 * (q.z * lx - q.x * lz), tz = 2 * (q.x * ly - q.y * lx);
         return {
           position: wheel.position,
           radius: wheel.radius,
           ...(wheel.visualNode ? { visualNode: wheel.visualNode } : {}),
-          suspensionLength: controller.wheelSuspensionLength(index) ?? wheel.suspensionRestLength,
+          suspensionLength,
+          worldCenter: [chassisPosition.x + lx + q.w * tx + q.y * tz - q.z * ty,
+            chassisPosition.y + ly + q.w * ty + q.z * tx - q.x * tz,
+            chassisPosition.z + lz + q.w * tz + q.x * ty - q.y * tx] as const,
+          worldAxle: [(1 - 2 * (q.y * q.y + q.z * q.z)) * ax + 2 * (q.x * q.z + q.w * q.y) * az,
+            2 * (q.x * q.y + q.w * q.z) * ax + 2 * (q.y * q.z - q.w * q.x) * az,
+            2 * (q.x * q.z - q.w * q.y) * ax + (1 - 2 * (q.x * q.x + q.y * q.y)) * az] as const,
           suspensionForce: inContact ? Math.max(0, controller.wheelSuspensionForce(index) ?? 0) : 0,
           sinkDepth: record.sink[index] ?? 0,
           ...(record.soil?.[index] ? { soilDepth: record.soil[index]!.depth } : {}),

@@ -1,5 +1,5 @@
 import type { SceneApp } from "@/scene/SceneApp";
-import { resolveLakeAppearance } from "@engine/scene/waterBody";
+import { LAKE_SURFACE_WAVE_DEFAULTS, LAKE_WHEEL_RIPPLE_DEFAULTS, resolveLakeAppearance } from "@engine/scene/waterBody";
 import { applyWaterTooltips } from "./waterTooltips";
 import { UI_ICONS } from "../../editorIcons";
 
@@ -54,6 +54,27 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${field("Normal Scale", "normalScale", a.normalScale)}
       ${field("Ripple Speed", "rippleSpeed", a.rippleSpeed)}
     `, true));
+    section.insertAdjacentHTML("beforeend", group("surface-waves", "Surface Waves", `
+      <div class="detail-hint">Yüzeyin hafif yükselip alçalması. Height, ortalama seviyeden en fazla sapmadır; kıyıda hareket söner.</div>
+      <label class="detail-toggle"><input type="checkbox" data-lake-surface-waves aria-label="Surface Waves Enabled" ${a.surfaceWavesEnabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${field("Height (cm)", "surfaceWaveHeight", a.surfaceWaveHeight * 100, "0.5", 'min="0" max="10"')}
+      ${field("Wavelength (m)", "surfaceWaveLength", a.surfaceWaveLength, "1", 'min="6" max="40"')}
+      ${field("Period (s)", "surfaceWavePeriod", a.surfaceWavePeriod, "0.5", 'min="2" max="12"')}
+      ${field("Direction (°)", "surfaceWaveDirection", a.surfaceWaveDirection, "5", 'min="0" max="360"')}
+      ${field("Shore Fade Depth (m)", "surfaceWaveShoreDepth", a.surfaceWaveShoreDepth, "0.05", 'min="0.1" max="2"')}
+      ${button("reset-surface-waves", "Reset Surface Waves", locked)}
+    `));
+    section.insertAdjacentHTML("beforeend", group("wheel-ripples", "Wheel Ripples", `
+      <div class="detail-hint">Play modunda tekerleklerin oluşturduğu dalgalar. Strength görünürlüğü artırır; doğal yüzey ayarlarından bağımsızdır.</div>
+      <label class="detail-toggle"><input type="checkbox" data-lake-wheel-ripples aria-label="Wheel Ripples Enabled" ${a.wheelRipplesEnabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${field("Wave Strength", "wheelRippleStrength", a.wheelRippleStrength, "0.1", 'min="0" max="6"')}
+      ${field("Spread Speed (m/s)", "wheelRippleSpeed", a.wheelRippleSpeed, "0.1", 'min="0.2" max="5"')}
+      ${field("Ring Width (m)", "wheelRippleWidth", a.wheelRippleWidth, "0.05", 'min="0.1" max="2"')}
+      ${field("Wavelength (m)", "wheelRippleWavelength", a.wheelRippleWavelength, "0.05", 'min="0.1" max="2"')}
+      ${field("Lifetime (s)", "wheelRippleLifetime", a.wheelRippleLifetime, "0.1", 'min="0.2" max="4"')}
+      ${field("Emission Interval (s)", "wheelRippleInterval", a.wheelRippleInterval, "0.02", 'min="0.04" max="1"')}
+      ${button("reset-wheel-ripples", "Reset Wave Settings", locked)}
+    `));
     section.insertAdjacentHTML("beforeend", group("wet-shore", "Wet Shore", `
       <label class="detail-toggle"><input type="checkbox" data-lake-wet-shore aria-label="Wet Shore Enabled" ${a.shoreWetnessEnabled ? "checked" : ""} ${disabled}> Enabled</label>
       ${field("Wet Band Width (m)", "shoreWetnessWidth", a.shoreWetnessWidth, "0.1", 'min="0.2" max="4"')}
@@ -101,9 +122,14 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   click("terrain", () => app.selectLakeTerrain()); click("stop-pick", () => app.escapeLake());
   click("finish", () => app.finishLakeEditing()); click("resume", () => app.resumeLakeEditing());
   if (!lake) return;
+  click("reset-surface-waves", () => app.editLake({ appearance: { ...lake.appearance, ...LAKE_SURFACE_WAVE_DEFAULTS } }));
+  section.querySelector<HTMLInputElement>("[data-lake-surface-waves]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, surfaceWavesEnabled: (e.target as HTMLInputElement).checked } }));
+  click("reset-wheel-ripples", () => app.editLake({ appearance: { ...lake.appearance, ...LAKE_WHEEL_RIPPLE_DEFAULTS } }));
+  section.querySelector<HTMLInputElement>("[data-lake-wheel-ripples]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, wheelRipplesEnabled: (e.target as HTMLInputElement).checked } }));
   section.querySelector<HTMLInputElement>("[data-lake-name]")?.addEventListener("change", (event) => app.editLake({ name: (event.target as HTMLInputElement).value }));
   for (const input of section.querySelectorAll<HTMLInputElement>("[data-lake-number]")) input.addEventListener("change", () => {
-    const key = input.dataset.lakeNumber!, value = Number(input.value); if (!Number.isFinite(value)) return;
+    const key = input.dataset.lakeNumber!; let value = Number(input.value); if (!Number.isFinite(value)) return;
+    if (key === "surfaceWaveHeight") value /= 100;
     if (key === "surfaceLevel") app.editLake({ surfaceLevel: value });
     else if (key.startsWith("seed")) { const seed = [...lake.seed] as [number, number]; seed[key === "seedX" ? 0 : 1] = value; app.editLake({ seed }); }
     else if (["minX", "minZ", "maxX", "maxZ", "width", "length"].includes(key)) {

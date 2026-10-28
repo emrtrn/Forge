@@ -4,6 +4,10 @@ import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { updateLandscapeLod } from "@engine/render-three/landscape";
 import type { TerrainEditorStreaming } from "@engine/terrain/terrainEditorStreaming";
 import { pendingTerrainLoads } from "./terrain-probe-state";
+import { LakeSurfaceQuery, LakeRippleState, lakeWheelContact } from "@engine/terrain/lakeInteraction";
+import type { VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
+import { resolveLakeAppearance } from "@engine/scene/waterBody";
+import type { RoomLayout } from "@engine/scene/layout";
 import type { SceneApp } from "@/scene/SceneApp";
 import type { WorldTerrainEditSession } from "@/editor/terrainStore";
 
@@ -15,9 +19,52 @@ export function installLakeProbe(app: unknown) {
     worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
     getLakeEditorState?: SceneApp["getLakeEditorState"];
     worldTerrainSessions?: WeakMap<WorldTerrainDocument, WorldTerrainEditSession>;
+    layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
-    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false, foam?: boolean, foamTime = 0, softEdge = true, direct = false, wetShore = true, surfaceStrength?: number, surfaceView = 0, mappedSurface = true) {
+    surfaceFrame(time = 0, encoded = false, direct = false) {
+      const restore: Array<() => void> = [];
+      for (const object of a.lakes!.objects.values()) if (encoded) {
+        const material = object.material, fragment = material.fragmentShader;
+        material.uniforms.qaWaterLevel = { value: object.position.y };
+        material.fragmentShader = "uniform float qaWaterLevel;\n" + fragment.slice(0, fragment.indexOf("void main(){"))
+          + "void main(){gl_FragColor=vec4(vec3(.5+(vWorldPosition.y-qaWaterLevel)*4.),1.);}";
+        material.needsUpdate = true;
+        restore.push(() => { material.fragmentShader = fragment; delete material.uniforms.qaWaterLevel; material.needsUpdate = true; });
+      }
+      try {
+        const frame = (window as any).__lakeQA.causticsFrame(false, 0, true, false, false, encoded, false, 0, true, direct || encoded, true, 0, encoded ? 0 : 1, true, time);
+        const object = [...a.lakes!.objects.values()][0]!, source = a.layout!.waterBodies![0]!;
+        const query = new LakeSurfaceQuery(a.lakes!.results.get(source.id)!);
+        return { ...frame, cpuHeights: { wetBed: query.offsetAt(-20, -8, time, object.waveParameters), deep: query.offsetAt(-20, -22, time, object.waveParameters) },
+          waveHeight: object.waveParameters.height, waveTime: object.material.uniforms.surfaceWaveTime!.value,
+          overrideCount: (object as any).waveOverrides.size };
+      } finally { restore.forEach(fn => fn()); }
+    },
+    wheelFrame(mode = "moving", age = .15, direct = false) {
+      cancelAnimationFrame(a.frameHandle);
+      const id = a.lakes!.objects.keys().next().value!;
+      const object = a.lakes!.objects.get(id)!, query = new LakeSurfaceQuery(a.lakes!.results.get(id)!);
+      const source = a.layout!.waterBodies!.find(lake => lake.id === id)!;
+      const state = new LakeRippleState(resolveLakeAppearance(source));
+      for (let i = 0; i < 31; i++) {
+        const x = mode === "moving" ? -15 + i * .05 : mode === "dry" ? 0 : -14;
+        const y = mode === "air" ? 14 : mode === "submerged" ? 10 : 12.1;
+        const wheel: VehicleWheelState = { position: [0, 0, 0], suspensionLength: .3, suspensionForce: 0,
+          radius: .5, steering: 0, rotation: i * .1, inContact: false, groundEntityId: null,
+          contactPoint: null, hardPoint: [x, y + .3, mode === "dry" ? 0 : 4], worldCenter: [x, y, mode === "dry" ? 0 : 4],
+          worldAxle: [1, 0, 0], tractionSlip: mode === "slip" ? .8 : 0 };
+        const contact = lakeWheelContact("qa-wheel", wheel, .35, 12, query);
+        state.advance(1 / 60, contact ? [contact] : []);
+      }
+      if (age > 0) state.advance(age, []);
+      object.setWheelRipples(state.ripples);
+      const frame = (window as any).__lakeQA.causticsFrame(false, 0, true, false, false, false, false, 0, true, direct, true, 0, 1);
+      return { ...frame, ripples: state.ripples.map(r => ({ ...r })),
+        waveParams: object.material.uniforms.wheelRippleParams!.value.toArray(),
+        wavelength: object.material.uniforms.wheelRippleWavelength!.value };
+    },
+    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false, foam?: boolean, foamTime = 0, softEdge = true, direct = false, wetShore = true, surfaceStrength?: number, surfaceView = 0, mappedSurface = true, waveTime = 0) {
       cancelAnimationFrame(a.frameHandle);
       a.camera.near = 0.1; a.camera.far = 2000;
       a.camera.position.set(close ? -20 : -12, close ? 13.3 : 35, close ? -25.5 : 32);
@@ -60,6 +107,7 @@ export function installLakeProbe(app: unknown) {
           restore.push(() => { node.onBeforeRender = before; if (indices) terrain.materials.uniforms.uLayerNormalIndex.value = indices; });
         }
         if (node.userData.waterBodyId && node.material?.uniforms?.time) {
+          node.setSurfaceWaveTime?.(waveTime);
           const before = node.onBeforeRender;
           const opacity = node.material.uniforms.foamOpacity?.value;
           const edgeDepth = node.material.uniforms.shoreBlendDepth?.value;
@@ -214,7 +262,8 @@ export function installLakeProbe(app: unknown) {
       if (a.postProcessPipeline) a.postProcessPipeline.render(0); else a.renderer.render(a.scene, a.camera);
     },
     snapshot() {
-      return { results: [...(a.lakes?.results ?? [])].map(([id, r]) => {
+      return { source: a.getLakeEditorState?.().source ?? a.layout?.waterBodies?.[0] ?? null,
+        results: [...(a.lakes?.results ?? [])].map(([id, r]) => {
         let hash = 2166136261;
         for (const buffer of [r.positions, r.depths, r.indices]) for (const v of new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)) hash = Math.imul(hash ^ v, 16777619);
         return { id, status: r.status, message: r.message, escape: r.escapeLevel, triangles: r.indices.length / 3,

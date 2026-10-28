@@ -9,6 +9,7 @@ import { registerTerrainSplineEditingTests } from "../tests/engine/terrainSpline
 import { registerTerrainSplineMeshTests } from "../tests/engine/terrainSplineMeshes.test";
 import { registerTerrainRiverWaterTests } from "../tests/engine/terrainRiverWater.test";
 import { registerTerrainLakeWaterTests } from "../tests/engine/terrainLakeWater.test";
+import { registerLakeInteractionTests } from "../tests/engine/lakeInteraction.test";
 import { registerTerrainCausticsTests } from "../tests/engine/terrainCaustics.test";
 import { registerTerrainLakeBedTests } from "../tests/engine/terrainLakeBed.test";
 import { registerTerrainDocumentTests, registerTerrainDocumentAsyncTests } from "../tests/engine/terrainDocument.test";
@@ -1266,6 +1267,7 @@ await registerTerrainSplineEditingTests(check, checkAsync);
 await registerTerrainSplineMeshTests(checkAsync);
 await registerTerrainRiverWaterTests(checkAsync);
 await registerTerrainLakeWaterTests(checkAsync);
+await registerLakeInteractionTests(checkAsync);
 await registerTerrainCausticsTests(checkAsync);
 await registerWaterFoamTests(checkAsync);
 await registerTerrainLakeBedTests(checkAsync);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { validateWaterBody } from "../../engine/scene/waterBody";
+import { createLakeAppearance, resolveLakeAppearance, validateWaterBody } from "../../engine/scene/waterBody";
 import { buildLakeGeometry, prepareLakeSnapshot } from "../../engine/terrain/terrainLakeWater";
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { createFlatTerrainTile, tileKey, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
@@ -16,6 +16,15 @@ import { readRoomLayout } from "../../engine/scene/layoutValidation";
 export async function registerTerrainLakeWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>) {
   await check("terrain lake: source schema, save and partition preserve full precision without derived buffers", async () => {
     const { lake } = createLakeFixture(); lake.seed[0] = -20.123456789;
+    const initial = createLakeAppearance();
+    assert.equal(initial.wheelRippleStrength, 3); assert.equal(initial.wheelRippleLifetime, 4);
+    assert.equal(initial.reflectionMode, "sharedPlanar"); assert.equal(initial.foamEnabled, true);
+    const newLake = validateWaterBody({ ...lake, appearance: initial });
+    assert.deepEqual(newLake.appearance, initial);
+    initial.wheelRippleStrength = 6;
+    assert.equal(createLakeAppearance().wheelRippleStrength, 3, "each Lake gets independent initial settings");
+    assert.equal(resolveLakeAppearance(lake).wheelRippleStrength, 2, "older records keep their runtime fallback");
+    assert.equal(resolveLakeAppearance(lake).reflectionMode, "off");
     const saved = validateWaterBody({ ...lake, positions: [99], appearance: { opacity: 0.5, extra: 1 } });
     assert.equal(saved.seed[0], lake.seed[0]); assert.equal("positions" in saved, false);
     const layout = { schema: 1, name: "Lake", loadGroups: [], instances: [], characters: [], waterBodies: [saved] } as RoomLayout;

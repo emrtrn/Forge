@@ -249,7 +249,9 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
 const VILLAGE_LEVEL = "layouts/__playwright-world-builder-village.level.json";
 const VILLAGE_TERRAIN_REF = levelTerrainPath(VILLAGE_LEVEL, TERRAIN_ID);
 const VILLAGE_PROFILE = "layouts/__playwright-world-builder.regionprofile.json";
-const VILLAGE_STAGES = ["roads", "settlementSites", "streets", "parcels", "landUse", "buildings", "furniture"];
+/** A starter-content mesh (a GLB, not a procedural `shape:` id) for a profile prop with a model. */
+const MODEL_PROP = "shape-pipe";
+const VILLAGE_STAGES =["roads", "settlementSites", "streets", "parcels", "landUse", "buildings", "furniture"];
 
 /**
  * World Builder F1 steps 9–13: the settlement chain on a slope — roads, site,
@@ -286,7 +288,11 @@ test("World Builder village: the settlement chain places coloured buildings and 
   await writeFileIn(VILLAGE_TERRAIN_REF, JSON.stringify(world.def));
   await writeFileIn(terrainGlobalMapPath(VILLAGE_TERRAIN_REF), encodeTerrainGlobalMap(world.def,
     buildTerrainGlobalAttributes(worldTerrainRenderSource(world.def, world.tiles))));
-  await writeFileIn(VILLAGE_PROFILE, await readFile(resolve(REPO_ROOT, "tests/engine/fixtures/neutral.regionprofile.json"), "utf8"));
+  // The neutral profile plus a prop with a real model, which no level group has loaded yet:
+  // the furniture stage must load it before drawing it.
+  const profile = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/engine/fixtures/neutral.regionprofile.json"), "utf8"));
+  profile.streetFurniture.push({ role: "prop.bollard", roadClasses: ["local"], placement: "interval", spacing: 25, size: [0.4, 1, 0.4], assetIds: [MODEL_PROP] });
+  await writeJson(VILLAGE_PROFILE, profile);
   const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
   await writeJson(VILLAGE_LEVEL, {
     ...base, name: "__playwright-world-builder-village",
@@ -348,6 +354,9 @@ test("World Builder village: the settlement chain places coloured buildings and 
     .filter((placement) => placement.id?.startsWith("wb-furniture-village-"));
   expect(signs.length).toBeGreaterThan(0);
   expect(signs.every((placement) => placement.role === "prop.sign.settlementName" && placement.color === "#f5cf3a")).toBe(true);
+  const bollards = (await readJson<RoomLayout>(VILLAGE_LEVEL)).instances.find((group) => group.assetId === MODEL_PROP)?.placements ?? [];
+  expect(bollards.length).toBeGreaterThan(0);
+  expect(bollards.every((placement) => placement.role === "prop.bollard")).toBe(true);
   const fences = ((await readJson<RoomLayout>(VILLAGE_LEVEL)).instances.find((group) => group.assetId === "shape:cube")?.placements ?? [])
     .filter((placement) => placement.id?.startsWith("wb-fence-"));
   expect(fences.length).toBeGreaterThan(10);
@@ -361,7 +370,8 @@ test("World Builder village: the settlement chain places coloured buildings and 
   expect(changed).toBeGreaterThan(0);
 
   // Apply Pads levelled the ground: stages reading it near the pads (sites, streets, parcels) would
-  // re-sample, but land use does not read the ground, buildings stand on their own pads and
+  // re-sample, but land use reads the ground only to rank the lowest parcels for industry (the
+  // pads move it too little to change that here), buildings stand on their own pads and
   // furniture at its road's spline level; the fences already follow the baked ground.
   await bootEditor();
   for (const stage of ["landUse", "buildings", "furniture", "fences"]) {

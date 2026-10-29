@@ -62,7 +62,7 @@ function renderRecipe(view: WorldBuilderView): string {
     ? `<strong>${escapeHtml(view.recipeId ?? "")}</strong>${view.dirty ? ' <span class="world-builder-dirty">unsaved</span>' : ""}`
     : view.state === "invalid"
       ? '<span class="world-builder-error">The file is not a world recipe.</span>'
-      : "No world recipe for this level yet.";
+      : view.state === "loading" ? "Loading the level…" : "No world recipe for this level yet.";
   const counts = view.planCounts
     ? `<div>Plan: ${view.planCounts.settlements} settlements, ${view.planCounts.landmarks} landmarks, ${view.planCounts.roadNodes} road nodes, ${view.planCounts.roadEdges} road edges · ${view.planCounts.owned} generated objects</div>`
     : "";
@@ -79,8 +79,8 @@ function renderRecipe(view: WorldBuilderView): string {
       ${renderList("Load issues", view.issues, "world-builder-error")}
     </div>
     <div class="world-builder-actions">
-      ${view.state === "loaded" ? "" : '<button type="button" data-wb-action="create" data-testid="world-builder-create">Create Recipe</button>'}
-      <button type="button" data-wb-action="reload" ${view.dirty ? "disabled title=\"Save or undo recipe changes first\"" : ""}>Reload From Disk</button>
+      ${view.state === "missing" || view.state === "invalid" ? '<button type="button" data-wb-action="create" data-testid="world-builder-create">Create Recipe</button>' : ""}
+      <button type="button" data-wb-action="reload" ${view.dirty || view.state === "loading" ? "disabled title=\"Save or undo recipe changes first\"" : ""}>Reload From Disk</button>
     </div>
   </div>`;
 }

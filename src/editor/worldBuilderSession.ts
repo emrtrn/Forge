@@ -66,8 +66,12 @@ export interface WorldBuilderStageView {
 
 export interface WorldBuilderView {
   path: string;
-  /** `missing`: no recipe file yet; `invalid`: the file is not a recipe. */
-  state: "missing" | "invalid" | "loaded";
+  /**
+   * `loading`: the level (and its terrain) or the recipe is still loading, so
+   * nothing may run or be created yet; `missing`: no recipe file yet;
+   * `invalid`: the file is not a recipe.
+   */
+  state: "loading" | "missing" | "invalid" | "loaded";
   recipeId: string | null;
   /** Problems the normalizer corrected while loading the recipe. */
   issues: readonly string[];
@@ -89,7 +93,7 @@ export class WorldBuilderSession {
   readonly saveRevision = new SaveRevision();
   readonly stages: readonly WorldStage[];
   private recipe: WorldRecipe | null = null;
-  private state: WorldBuilderView["state"] = "missing";
+  private state: WorldBuilderView["state"] = "loading";
   private issues: string[] = [];
   private profile: RegionProfile | null = null;
   private profileView: WorldBuilderView["profile"] = null;
@@ -111,7 +115,7 @@ export class WorldBuilderSession {
   async load(scenePath = this.host.scenePath()): Promise<void> {
     this.loadedFor = scenePath;
     this.recipe = null;
-    this.state = "missing";
+    this.state = "loading";
     this.issues = [];
     this.profile = null;
     this.profileView = null;
@@ -120,14 +124,17 @@ export class WorldBuilderSession {
     this.saveRevision.reset();
     const response = await this.fetchJson(projectFileUrl(worldRecipePath(scenePath))).catch(() => null);
     if (this.loadedFor !== scenePath) return;
+    let state: WorldBuilderView["state"] = "missing";
     if (response?.ok) {
       const { recipe, issues } = normalizeWorldRecipe(await response.json().catch(() => null));
       if (this.loadedFor !== scenePath) return;
       this.recipe = recipe;
       this.issues = issues;
-      this.state = recipe ? "loaded" : "invalid";
+      state = recipe ? "loaded" : "invalid";
     }
+    // Stages read the profile, so the recipe counts as loaded only with it.
     await this.loadProfile();
+    if (this.loadedFor === scenePath) this.state = state;
   }
 
   /** Re-reads the recipe from disk, e.g. after an AI rewrote it. Refuses over unsaved edits. */
@@ -143,7 +150,8 @@ export class WorldBuilderSession {
 
   /** Starts an empty recipe for the open level; saved with the next Save Layout. */
   createRecipe(): void {
-    if (this.recipe) return;
+    // While loading, "no recipe" only means "not read yet": creating one would overwrite it on save.
+    if (this.recipe || this.state === "loading") return;
     const name = this.host.scenePath().split("/").pop()?.replace(/(\.level|\.layout)?\.json$/i, "") ?? "level";
     const recipeId = name.replace(/[^A-Za-z0-9_.:-]/g, "_").replace(/^[^A-Za-z0-9]+/, "") || "level";
     const created = createWorldRecipe(recipeId);
@@ -291,6 +299,10 @@ export class WorldBuilderSession {
     const stage = this.stages.find((entry) => entry.id === stageId);
     const layout = this.host.layout();
     if (!stage || !layout) return null;
+    if (this.state === "loading") {
+      this.host.onStatus("The level is still loading.", "warning");
+      return null;
+    }
     if (!this.recipe) {
       this.host.onStatus("Create or load a world recipe first.", "warning");
       return null;

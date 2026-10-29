@@ -96,6 +96,19 @@ function harness(files: Record<string, unknown> = {}) {
 }
 
 export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("world builder session: before its level has loaded nothing runs and no recipe can be created", async () => {
+    const { session, history, statuses } = harness({ [RECIPE_URL]: planRecipe() });
+    assert.equal(session.getView().state, "loading");
+    session.createRecipe();
+    assert.equal(history.state().canUndo, false, "an unread recipe is not missing; creating one would overwrite it");
+    assert.equal(session.dryRun("planBlockout"), null);
+    assert.equal(session.apply("planBlockout"), false);
+    assert.equal(statuses.at(-1), "The level is still loading.");
+    await session.load();
+    assert.equal(session.getView().state, "loaded");
+    assert.equal(session.dryRun("planBlockout")!.added.length, 2);
+  });
+
   await checkAsync("world builder session: a level without a recipe can create one as an undo step", async () => {
     const { session, history } = harness();
     await session.load();

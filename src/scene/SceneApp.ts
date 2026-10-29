@@ -4200,7 +4200,6 @@ export class SceneApp {
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.meshPaintData = await loadMeshPaintData(this.activeProject.manifest.editor.defaultScene);
     this.editorSaves.meshPaintSaveRevision.reset();
-    await this.worldBuilder.load(this.activeProject.manifest.editor.defaultScene);
     // Normalize world widgets so the editor never reads a malformed anchor (the
     // runtime normalizes on its own load path); keeps the saved JSON clean too.
     if (this.layout.worldWidgets) {
@@ -4209,6 +4208,8 @@ export class SceneApp {
     this.ensureDefaultLights();
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
     await this.levelRuntime.build();
+    // After the build: stages sample the World Terrains, which exist only now.
+    await this.worldBuilder.load(this.activeProject.manifest.editor.defaultScene);
 
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();
@@ -4692,7 +4693,17 @@ export class SceneApp {
     this.clearSelection();
     // A stage can add the level's first shape of a kind; load only registered the ones it had.
     for (const change of changes) this.ensureShapeModel(change.assetId);
-    for (const assetId of applyPlacementGroupChanges(this.layout, changes, side)) this.rebuildInstanceGroup(assetId);
+    for (const assetId of applyPlacementGroupChanges(this.layout, changes, side)) {
+      if (this.models.has(assetId)) {
+        this.rebuildInstanceGroup(assetId);
+        continue;
+      }
+      // A profile model outside the level's load groups loads first, as a drag-and-drop does;
+      // the rebuild then reads whatever the layout holds by the time it arrives.
+      void this.ensureAssetLoaded(assetId).then((ok) => {
+        if (ok) this.rebuildInstanceGroup(assetId);
+      });
+    }
     this.emitSceneObjectsChanged();
   }
 

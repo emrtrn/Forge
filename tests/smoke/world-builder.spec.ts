@@ -30,6 +30,15 @@ const writeJson = (path: string, value: unknown) => writeFileIn(path, `${JSON.st
 
 const readJson = async <T>(path: string) => JSON.parse(await readFile(smokePublicPath(path), "utf8")) as T;
 
+/**
+ * Console errors, plus the editor's warning for a placement whose model is not
+ * loaded: the levels start without shapes, so a stage adding the first one must
+ * register its procedural model or the object is in the level but never drawn.
+ */
+function isFailureMessage(type: string, text: string): boolean {
+  return type === "error" || text.includes("skipping placement for unloaded asset");
+}
+
 function cubeIds(level: RoomLayout): string[] {
   return (level.instances.find((group) => group.assetId === "shape:cube")?.placements ?? [])
     .flatMap((placement) => (placement.id ? [placement.id] : []))
@@ -40,7 +49,7 @@ test("World Builder tab: dry run, apply as one undo step, save the recipe, up to
   test.setTimeout(180_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
 
   const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
   await writeJson(LEVEL, { ...base, name: "__playwright-world-builder" });
@@ -133,7 +142,7 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
   test.setTimeout(240_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
 
   // One flat 64 m tile at y = 3 (x, z in -32..32) holding a hand-made spline.
   const world = createFlatWorldTerrain({ name: "WB Terrain", tilesX: 1, tilesZ: 1, tileQuads: 64, spacing: 1, baseHeight: 3 });
@@ -253,7 +262,7 @@ test("World Builder village: the settlement chain places coloured buildings and 
   test.setTimeout(300_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
 
   // 2 × 2 tiles of 128 m at 2 m spacing (x, z in -128..128), rising 6 cm per metre north.
   const world = createFlatWorldTerrain({ name: "WB Village", tilesX: 2, tilesZ: 2, tileQuads: 64, spacing: 2, baseHeight: 3 });

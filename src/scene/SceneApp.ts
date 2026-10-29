@@ -1428,7 +1428,11 @@ export class SceneApp {
     onStatus: (message, tone) => this.onStatus?.(message, tone),
   });
   /** Viewport layer of the last World Builder dry run (T10). */
-  private readonly worldBuilderPreview = new WorldBuilderPreviewOverlay((assetId) => this.localBounds.get(assetId) ?? null);
+  private readonly worldBuilderPreview = new WorldBuilderPreviewOverlay((assetId) => {
+    // Shape bounds come from the procedural model, which a level without that shape has not built yet.
+    this.ensureShapeModel(assetId);
+    return this.localBounds.get(assetId) ?? null;
+  });
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
   private landscapeLayerMaterialCache = new Map<string, ForgeMaterialLayer>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
@@ -4686,6 +4690,8 @@ export class SceneApp {
   private applyWorldBuilderGroupChanges(changes: readonly PlacementGroupChange[], side: "before" | "after"): void {
     if (!this.layout) return;
     this.clearSelection();
+    // A stage can add the level's first shape of a kind; load only registered the ones it had.
+    for (const change of changes) this.ensureShapeModel(change.assetId);
     for (const assetId of applyPlacementGroupChanges(this.layout, changes, side)) this.rebuildInstanceGroup(assetId);
     this.emitSceneObjectsChanged();
   }

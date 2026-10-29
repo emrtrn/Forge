@@ -4,7 +4,9 @@
  * driver, a prop in the widest gap of a junction, lights at intervals along
  * the roads in the core; every prop beside the road, never on a road, pad or
  * in front of an entrance; its level from the road spline; a re-run after
- * save + reload — and after Apply Pads — is empty.
+ * save + reload — and after Apply Pads — is empty. Step 13b: lot fences round
+ * the roles with a fence, open at the entrance and at roads, buildings and
+ * furniture, one fence on a shared boundary, following the ground.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -13,14 +15,16 @@ import type { RoomLayout } from "../../engine/scene/layout";
 import { SHAPE_PRIMITIVE_SIZE } from "../../engine/scene/shapes";
 import type { TerrainSpline } from "../../engine/terrain/terrainTypes";
 import { insidePolygon, sourceDistance } from "../../engine/worldbuilder/field";
-import { FURNITURE_MARGIN, planFurniture, rectangle, type FurnitureLine, type FurnitureRequest } from "../../engine/worldbuilder/furniture";
+import { FENCE_SINK, MAX_PIECE, planFence, type FencePiece, type FenceRequest } from "../../engine/worldbuilder/fences";
+import { FURNITURE_MARGIN, placementFootprint, planFurniture, rectangle, type FurnitureLine, type FurnitureRequest } from "../../engine/worldbuilder/furniture";
 import { streetLines } from "../../engine/worldbuilder/masks";
 import type { WorldPoint } from "../../engine/worldbuilder/normalize";
 import { polygonsOverlap } from "../../engine/worldbuilder/parcels";
 import { createWorldRecipe, normalizeWorldRecipe, type WorldRecipe } from "../../engine/worldbuilder/recipe";
 import { normalizeRegionProfile, type RegionProfile, type StreetFurnitureRule } from "../../engine/worldbuilder/regionProfile";
 import { applyPlacementGroupChanges, planStage, type StageInput, type StageTerrain, type WorldStage } from "../../engine/worldbuilder/stage";
-import { buildingsStage } from "../../engine/worldbuilder/stages/buildings";
+import { BUILDINGS_STAGE_ID, buildingsStage } from "../../engine/worldbuilder/stages/buildings";
+import { fencesStage } from "../../engine/worldbuilder/stages/fences";
 import { FURNITURE_COLORS, FURNITURE_SINK, furnitureStage } from "../../engine/worldbuilder/stages/furniture";
 import { landUseStage } from "../../engine/worldbuilder/stages/landUse";
 import { parcelsStage } from "../../engine/worldbuilder/stages/parcels";
@@ -116,6 +120,26 @@ function apply(stage: WorldStage, state: World, regionProfile: RegionProfile | n
   });
   return { plan, state: { recipe: plan.recipeAfter, layout, terrains } };
 }
+
+/** A strip lot north of a W–E road: front edge at z = 5 from x0 to x1, `depth` deep. */
+function strip(x0: number, x1: number, depth = 30): WorldPoint[] {
+  return [[x0, 5], [(x0 + x1) / 2, 5], [x1, 5], [x1, 5 + depth], [(x0 + x1) / 2, 5 + depth], [x0, 5 + depth]];
+}
+
+function fence(overrides: Partial<FenceRequest> = {}) {
+  return planFence({
+    outline: strip(0, 20), spec: { role: "prop.fence.picket", height: 1.1 }, entrance: [10, 8],
+    roads: [{ kind: "polyline", points: [[-100, 0], [100, 0]], radii: [4.5, 4.5] }],
+    obstacles: [], laid: [], blockedAt: () => false, sampleHeight: () => 2,
+    ...overrides,
+  });
+}
+
+const onOutline = (piece: FencePiece, outline: WorldPoint[]) =>
+  [piece.a, piece.b].every((point) => outline.some((corner, index) => {
+    const next = outline[(index + 1) % outline.length]!;
+    return sourceDistance(point, { kind: "polyline", points: [corner, next] }) < 1e-6;
+  }));
 
 function furnitureOf(layout: RoomLayout) {
   return layout.instances.flatMap((group) =>
@@ -274,6 +298,96 @@ export function registerWorldFurnitureTests(check: Check): void {
     const plan = planStage(furnitureStage, input(unrealised));
     assert.ok(plan.warnings.includes("settlement v1: road west has no spline yet and gets no furniture; run Roads first"), plan.warnings.join("\n"));
     assert.ok(plan.warnings.includes("settlement v1: prop.light.street (interval): none; no collector road in its core"));
+  });
+
+  check("world fences: a lot fence runs round the boundary, open at the entrance, one fence on a shared edge", () => {
+    const lot = strip(0, 20);
+    const first = fence();
+    assert.equal(first.length, 97, "100 m round less a 3 m gate");
+    assert.equal(first.open, 0);
+    for (const piece of first.pieces) {
+      assert.ok(Math.hypot(piece.b[0] - piece.a[0], piece.b[1] - piece.a[1]) <= MAX_PIECE + 1e-9);
+      assert.ok(onOutline(piece, lot), "on the boundary");
+      assert.deepEqual(piece.heights, [2, 2]);
+      const gate = piece.a[1] === 5 && piece.b[1] === 5 && Math.max(piece.a[0], piece.b[0]) > 8.5 + 1e-9 && Math.min(piece.a[0], piece.b[0]) < 11.5 - 1e-9;
+      assert.equal(gate, false, "nothing in the entrance gap");
+    }
+    assert.equal(fence({ spec: { role: "prop.fence.picket", height: 1.1, front: false } }).length, 80);
+
+    // The neighbour shares the x = 20 side and does not fence it again.
+    const laid: FencePiece[] = [];
+    fence({ laid });
+    assert.equal(fence({ outline: strip(20, 40), entrance: [30, 8], laid }).length, 67);
+
+    // A light post on the front keeps its fence open; so does a road.
+    const post = box(3, 5.05, 3.3, 5.35);
+    const posted = fence({ obstacles: [post] });
+    assert.ok(posted.open > 0 && posted.open < 2, `${posted.open} m open`);
+    for (const piece of posted.pieces) {
+      const across = sourceDistance(piece.a, { kind: "polygon", polygon: post }) > 0.2 || sourceDistance(piece.b, { kind: "polygon", polygon: post }) > 0.2;
+      assert.ok(across);
+      assert.ok(!(Math.min(piece.a[0], piece.b[0]) < 3.3 && Math.max(piece.a[0], piece.b[0]) > 3 && piece.a[1] === 5 && piece.b[1] === 5), "no piece past the post");
+    }
+    assert.ok(fence({ roads: [{ kind: "polyline", points: [[-100, 0], [100, 0]], radii: [5, 5] }] }).open >= 17, "a front on the road's edge stays open");
+
+    // On a slope the pieces shorten until each rises at most 0.25 m (4 m pieces halve on a 10 % slope).
+    const sloped = fence({ sampleHeight: (_x, z) => z * 0.1 });
+    for (const piece of sloped.pieces) assert.ok(Math.abs(piece.heights[1] - piece.heights[0]) <= 0.25 + 1e-9);
+    assert.equal(sloped.length, 97);
+  });
+
+  check("world fences: the stage fences the fenced roles' lots off buildings, furniture and roads; it follows the ground", () => {
+    const { state: furnished } = apply(furnitureStage, village());
+    const { plan, state } = apply(fencesStage, furnished);
+    const pieces = state.layout.instances.flatMap((group) => group.placements.filter((placement) => placement.id?.startsWith("wb-fence-")));
+    assert.ok(pieces.length > 20, `${pieces.length} pieces`);
+    const fencedHosts = new Set(state.recipe.generated.parcels.filter((parcel) => parcel.role === "building.residential.detached").map((parcel) => parcel.id));
+    const roads = streetLines(input(state)).lines.map((road) => ({ kind: "polyline" as const, points: road.points, radii: road.halfWidths }));
+    const blockers = state.layout.instances.flatMap((group) => group.placements)
+      .filter((placement) => placement.id && ["buildings", "furniture"].includes(state.recipe.ownership.placements[placement.id]?.stage ?? ""))
+      .map((placement) => placementFootprint(placement).footprint);
+    for (const piece of pieces) {
+      assert.equal(piece.role, "prop.fence.picket");
+      assert.equal(piece.color, FURNITURE_COLORS.prop);
+      const host = piece.id!.replace(/^wb-fence-/, "").replace(/-\d+$/, "");
+      assert.ok(fencedHosts.has(host), `${piece.id} on a lot without a fence`);
+      const { footprint } = placementFootprint(piece);
+      assert.ok(!blockers.some((outline) => polygonsOverlap(footprint, outline)), `${piece.id} through a building or furniture`);
+      for (const road of roads) for (const point of footprint) assert.ok(sourceDistance(point, road) > 0, `${piece.id} on a road`);
+    }
+    // The way from each fenced building's door to its street stays open.
+    for (const placement of state.layout.instances.flatMap((group) => group.placements)) {
+      if (!placement.id || state.recipe.ownership.placements[placement.id]?.stage !== BUILDINGS_STAGE_ID || placement.role !== "building.residential.detached") continue;
+      const { center, face, halfDepth } = placementFootprint(placement);
+      const path = rectangle([center[0] + face[0] * (halfDepth + 2.5), center[1] + face[1] * (halfDepth + 2.5)], face, 0.5, 2.5);
+      assert.ok(!pieces.some((piece) => polygonsOverlap(placementFootprint(piece).footprint, path)), `${placement.id} fenced in`);
+    }
+    assert.ok(plan.warnings.includes("fences follow the ground: run this stage after Apply Pads"));
+    assert.ok(plan.warnings.some((line) => /^settlement v1: prop\.fence\.picket round \d+ lots, \d+ m in \d+ pieces/.test(line)), plan.warnings.join("\n"));
+    const sample = pieces[0]!;
+    assert.ok((sample.scale as number[])[1]! * SHAPE_PRIMITIVE_SIZE >= 1.1 + FENCE_SINK - 1e-3);
+
+    // Save + reload: nothing to do. Apply Pads changes the ground at the lot boundary, so the fences
+    // follow it once; after that the stage is up to date on the baked ground.
+    const savedLayout = validateLayout(JSON.parse(JSON.stringify(state.layout))) as unknown as RoomLayout;
+    const { recipe: savedRecipe } = normalizeWorldRecipe(JSON.parse(JSON.stringify(state.recipe)));
+    const saved: World = { recipe: savedRecipe!, layout: savedLayout, terrains: state.terrains };
+    assert.equal(planStage(fencesStage, input(saved)).empty, true);
+    const pads = savedRecipe!.generated.pads;
+    const baked = (x: number, z: number) => {
+      const pad = pads.find((entry) => insidePolygon(x, z, entry.polygon));
+      if (pad) return pad.height;
+      const near = pads.find((entry) => sourceDistance([x, z], { kind: "polygon", polygon: entry.polygon }) < 4);
+      return near ? (near.height + slope(x, z)!) / 2 : slope(x, z);
+    };
+    const { plan: follow, state: rebaked } = apply(fencesStage, saved, profile(), baked);
+    assert.ok(follow.updated.length > 0, "the fences follow the baked ground");
+    assert.equal(planStage(fencesStage, input(rebaked, profile(), baked)).empty, true);
+
+    const guarded = structuredClone(rebaked);
+    guarded.recipe.plan.settlements[0]!.protected = true;
+    assert.equal(planStage(fencesStage, input(guarded, profile(), slope)).empty, true);
+    assert.deepEqual(planStage(fencesStage, input(rebaked, profile((raw) => { delete raw.roles["building.residential.detached"].fence; }))).warnings, ["no region profile role has a fence"]);
   });
 }
 

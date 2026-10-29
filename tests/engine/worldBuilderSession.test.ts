@@ -121,6 +121,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
       { id: "landUse", label: "Land use", version: 1, recordedVersion: null },
       { id: "buildings", label: "Buildings", version: 1, recordedVersion: null },
       { id: "furniture", label: "Street furniture", version: 1, recordedVersion: null },
+      { id: "fences", label: "Fences", version: 1, recordedVersion: null },
     ]);
 
     const broken = harness({ [RECIPE_URL]: { schemaVersion: 7 } });
@@ -158,7 +159,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     const { session, history, layout, terrain } = harness({ [RECIPE_URL]: roadRecipe() });
     await session.load();
     const level = structuredClone(layout);
-    assert.deepEqual(session.getView().stages.map((stage) => stage.id), ["planBlockout", "roads", "settlementSites", "streets", "parcels", "landUse", "buildings", "furniture"]);
+    assert.deepEqual(session.getView().stages.map((stage) => stage.id), ["planBlockout", "roads", "settlementSites", "streets", "parcels", "landUse", "buildings", "furniture", "fences"]);
 
     assert.deepEqual(session.dryRun("roads")!.added, ["wb-road-main"]);
     assert.deepEqual(terrain.splines, []);

@@ -38,7 +38,7 @@
     "building.civic.school": { "landUse": "civic", "footprint": { "width": [18, 30], "depth": [12, 20] }, "storeys": [1, 2], "storeyHeight": 3.6, "entrance": "street" },
     "building.commercial.shop": { "landUse": "commercial", "footprint": { "width": [8, 14], "depth": [10, 16] }, "storeys": [1, 2], "storeyHeight": 3.4, "entrance": "street" },
     "building.industrial.workshop": { "landUse": "industrial", "footprint": { "width": [14, 24], "depth": [12, 22] }, "storeys": [1, 1], "storeyHeight": 5, "entrance": "any" },
-    "building.residential.detached": { "landUse": "residential", "footprint": { "width": [8, 12], "depth": [8, 11] }, "storeys": [1, 2], "storeyHeight": 3, "entrance": "street", "placeholderColor": "#f2a65a" },
+    "building.residential.detached": { "landUse": "residential", "footprint": { "width": [8, 12], "depth": [8, 11] }, "storeys": [1, 2], "storeyHeight": 3, "entrance": "street", "placeholderColor": "#f2a65a", "fence": { "role": "prop.fence.picket", "height": 1.1 } },
     "open.square": { "landUse": "open", "footprint": { "width": [20, 36], "depth": [20, 36] }, "storeys": [0, 0], "storeyHeight": 1, "entrance": "any" }
   },
   "streetFurniture": [

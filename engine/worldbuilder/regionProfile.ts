@@ -109,7 +109,26 @@ export interface BuildingRoleSpec {
   assetIds?: string[];
   /** `#rrggbb`; absent uses the land-use colour. */
   placeholderColor?: string;
+  /** A fence round the role's lot (the `fences` stage). */
+  fence?: FenceSpec;
 }
+
+/** A placeholder fence along a lot's boundary. */
+export interface FenceSpec {
+  /** Role of the fence pieces, e.g. `prop.fence.picket`. */
+  role: string;
+  height: number;
+  /** Default `DEFAULT_FENCE_THICKNESS`. */
+  thickness?: number;
+  /** Fence the street front too, open at the entrance. Default true. */
+  front?: boolean;
+  /** Opening in the front fence at the entrance, metres. Default `DEFAULT_FENCE_GAP`. */
+  gap?: number;
+  placeholderColor?: string;
+}
+
+export const DEFAULT_FENCE_THICKNESS = 0.1;
+export const DEFAULT_FENCE_GAP = 3;
 
 /** A prop placed along roads of the listed classes. */
 export interface StreetFurnitureRule {
@@ -310,9 +329,44 @@ function normalizeRoles(
       landUse: spec.landUse, footprint: { width, depth }, storeys, storeyHeight, entrance: spec.entrance,
     };
     applyLook(c, p, spec, role);
+    if (spec.fence !== undefined) {
+      const fence = normalizeFence(c, `${p}.fence`, spec.fence);
+      if (fence) role.fence = fence;
+    }
     return role;
   });
   return roles as Record<string, BuildingRoleSpec>;
+}
+
+/** A bad fence is dropped with an issue; its role stays. */
+function normalizeFence(ctx: Ctx, path: string, value: unknown): FenceSpec | null {
+  if (!isRecord(value)) return reject(ctx, path, "must be an object");
+  if (!isSemanticRole(value.role)) return reject(ctx, `${path}.role`, "must be a semantic role");
+  const height = requireNumber(ctx, `${path}.height`, value.height, 0.1, 10);
+  if (height === null) return null;
+  const fence: FenceSpec = { role: value.role, height };
+  if (value.thickness !== undefined) {
+    const thickness = requireNumber(ctx, `${path}.thickness`, value.thickness, 0.01, 2);
+    if (thickness === null) return null;
+    fence.thickness = thickness;
+  }
+  if (value.front !== undefined) {
+    if (typeof value.front !== "boolean") return reject(ctx, `${path}.front`, "must be true or false");
+    fence.front = value.front;
+  }
+  if (value.gap !== undefined) {
+    const gap = requireNumber(ctx, `${path}.gap`, value.gap, 0.5, 50);
+    if (gap === null) return null;
+    fence.gap = gap;
+  }
+  if (value.placeholderColor !== undefined) {
+    if (typeof value.placeholderColor === "string" && HEX_COLOR.test(value.placeholderColor)) {
+      fence.placeholderColor = value.placeholderColor.toLowerCase();
+    } else {
+      return reject(ctx, `${path}.placeholderColor`, "must be #rrggbb");
+    }
+  }
+  return fence;
 }
 
 function normalizeProgram(ctx: Ctx, value: unknown, roles: Record<string, BuildingRoleSpec>): ProgramRule[] {

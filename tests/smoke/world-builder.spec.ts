@@ -222,11 +222,11 @@ const VILLAGE_STAGES = ["roads", "settlementSites", "streets", "parcels", "landU
 /**
  * World Builder F1 steps 9–13: the settlement chain on a slope — roads, site,
  * inner streets, parcels, land use, coloured building placeholders, street
- * furniture — then Apply Pads bakes the pads into the terrain; everything
- * saves, and after a reload the buildings and furniture are up to date with
- * their baked pads.
+ * furniture — then Apply Pads bakes the pads into the terrain and the fences
+ * follow the baked ground; everything saves, and after a reload the
+ * buildings, furniture and fences are up to date.
  */
-test("World Builder village: the settlement chain places coloured buildings and furniture, Apply Pads bakes their pads", async ({ page, request }) => {
+test("World Builder village: the settlement chain places coloured buildings and furniture, Apply Pads bakes their pads, fences follow", async ({ page, request }) => {
   test.setTimeout(300_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -296,10 +296,14 @@ test("World Builder village: the settlement chain places coloured buildings and 
   }
   await expect(page.getByTestId("world-builder-apply-pads")).toBeEnabled();
   await page.getByTestId("world-builder-apply-pads").click();
+  // Fences follow the ground, so they come after the bake.
+  await page.getByTestId("world-builder-apply-fences").click();
+  await expect(page.getByTestId("world-builder-report")).toContainText("Changes pending");
+  await expect(page.getByTestId("world-builder-report")).not.toContainText("Errors");
   await save();
 
   const savedRecipe = await readJson<WorldRecipe>(worldRecipePath(VILLAGE_LEVEL));
-  expect(Object.keys(savedRecipe.generators).sort()).toEqual([...VILLAGE_STAGES].sort());
+  expect(Object.keys(savedRecipe.generators).sort()).toEqual([...VILLAGE_STAGES, "fences"].sort());
   const buildings = ((await readJson<RoomLayout>(VILLAGE_LEVEL)).instances.find((group) => group.assetId === "shape:cube")?.placements ?? [])
     .filter((placement) => placement.id?.startsWith("wb-building-"));
   expect(buildings.length).toBeGreaterThan(5);
@@ -310,6 +314,10 @@ test("World Builder village: the settlement chain places coloured buildings and 
     .filter((placement) => placement.id?.startsWith("wb-furniture-village-"));
   expect(signs.length).toBeGreaterThan(0);
   expect(signs.every((placement) => placement.role === "prop.sign.settlementName" && placement.color === "#f5cf3a")).toBe(true);
+  const fences = ((await readJson<RoomLayout>(VILLAGE_LEVEL)).instances.find((group) => group.assetId === "shape:cube")?.placements ?? [])
+    .filter((placement) => placement.id?.startsWith("wb-fence-"));
+  expect(fences.length).toBeGreaterThan(10);
+  expect(fences.every((placement) => placement.role === "prop.fence.picket")).toBe(true);
   // The pads changed the ground under the village.
   let changed = 0;
   for (const [key, bytes] of tileBytes) {
@@ -320,9 +328,9 @@ test("World Builder village: the settlement chain places coloured buildings and 
 
   // Apply Pads levelled the ground: stages reading it near the pads (sites, streets, parcels) would
   // re-sample, but land use does not read the ground, buildings stand on their own pads and
-  // furniture at its road's spline level.
+  // furniture at its road's spline level; the fences already follow the baked ground.
   await bootEditor();
-  for (const stage of ["landUse", "buildings", "furniture"]) {
+  for (const stage of ["landUse", "buildings", "furniture", "fences"]) {
     await page.getByTestId(`world-builder-dry-run-${stage}`).click();
     await expect(page.getByTestId("world-builder-report")).toContainText("Up to date");
   }

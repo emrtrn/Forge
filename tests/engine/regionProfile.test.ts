@@ -62,6 +62,8 @@ export function registerRegionProfileTests(check: Check): void {
     input.roles["building.transport.station"] = { landUse: "transport", footprint: { width: [10, 20], depth: [10, 20] }, storeys: [1, 1], storeyHeight: 4, entrance: "street" };
     input.roles["building.residential.tower"] = { landUse: "residential", footprint: { width: [10, 20], depth: [10, 20] }, storeys: [3, 1.5], storeyHeight: 3, entrance: "street" };
     input.roles["building.residential.detached"].placeholderColor = "orange";
+    input.roles["building.civic.hall"].fence = { role: "prop.fence.wall", height: 2, thickness: 0.3, front: false, gap: 4, placeholderColor: "#AABBCC" };
+    input.roles["building.commercial.shop"].fence = { role: "Fence", height: 1 };
     input.program.push({ role: "building.civic.clinic", count: 1 });
     input.program.push({ role: "building.civic.hall", count: 1, perResidents: 100 });
     input.program.push({ role: "building.commercial.shop", perResidents: 80, siting: "rooftop" });
@@ -72,6 +74,7 @@ export function registerRegionProfileTests(check: Check): void {
     assert.deepEqual(issues, [
       "roads.motorway: key must be a road class",
       "roads.path.width: must be a number 0.5..100",
+      "roles.building.commercial.shop.fence.role: must be a semantic role",
       "roles.building.residential.detached.placeholderColor: must be #rrggbb",
       "roles.building.residential.tower.storeys: must be [low, high] integers within 0..200, low ≤ high",
       "roles.building.transport.station.landUse: has no parcels.transport spec",
@@ -88,6 +91,8 @@ export function registerRegionProfileTests(check: Check): void {
     assert.equal(profile!.roles["building.transport.station"], undefined);
     assert.equal(profile!.roles["building.residential.tower"], undefined);
     assert.equal(profile!.roles["building.residential.detached"]!.placeholderColor, undefined);
+    assert.deepEqual(profile!.roles["building.civic.hall"]!.fence, { role: "prop.fence.wall", height: 2, thickness: 0.3, front: false, gap: 4, placeholderColor: "#aabbcc" });
+    assert.equal(profile!.roles["building.commercial.shop"]!.fence, undefined, "a bad fence is dropped, its role stays");
     assert.equal(profile!.program.length, 6);
     assert.equal(profile!.program[5]!.siting, "any");
     assert.equal(profile!.streetFurniture.length, 2);

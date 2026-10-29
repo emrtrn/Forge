@@ -22,6 +22,8 @@
  * Only roads a spline realises are anchors; every road line is an obstacle.
  * Pure and deterministic. Dependency-free.
  */
+import type { LayoutPlacement } from "../scene/layout";
+import { SHAPE_PRIMITIVE_SIZE } from "../scene/shapes";
 import { sourceDistance, type DistanceSource } from "./field";
 import type { StreetLine } from "./masks";
 import type { WorldPoint } from "./normalize";
@@ -232,6 +234,22 @@ export function rectangle(center: WorldPoint, face: WorldPoint, halfX: number, h
     center[1] + across[1] * a + face[1] * b,
   ];
   return [at(-halfX, -halfZ), at(halfX, -halfZ), at(halfX, halfZ), at(-halfX, halfZ)];
+}
+
+/**
+ * XZ footprint and facing (+Z) of a box placement: its scaled `shape:cube`
+ * extent, or `size` ([width, height, depth]) for a model without a scale.
+ */
+export function placementFootprint(
+  placement: LayoutPlacement, size?: readonly [number, number, number],
+): { center: WorldPoint; face: WorldPoint; footprint: WorldPoint[]; halfDepth: number } {
+  const yaw = ((placement.rotation?.[1] ?? placement.rotationYDeg ?? 0) * Math.PI) / 180;
+  const face: WorldPoint = [Math.sin(yaw), Math.cos(yaw)];
+  const scale = placement.scale === undefined ? null : typeof placement.scale === "number" ? [placement.scale, placement.scale, placement.scale] : placement.scale;
+  const halfWidth = scale ? (scale[0]! * SHAPE_PRIMITIVE_SIZE) / 2 : (size?.[0] ?? 1) / 2;
+  const halfDepth = scale ? (scale[2]! * SHAPE_PRIMITIVE_SIZE) / 2 : (size?.[2] ?? 1) / 2;
+  const center: WorldPoint = [placement.position[0], placement.position[2]];
+  return { center, face, footprint: rectangle(center, face, halfWidth, halfDepth), halfDepth };
 }
 
 // ---------------------------------------------------------------- obstacles

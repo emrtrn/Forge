@@ -2,7 +2,7 @@
  * `furniture` stage: street furniture for every sited settlement (World
  * Builder plan v0.4 §13.3 L7, §13.5 "L7 Donatı"; F1 step 13a).
  *
- * Runs last, after `buildings`, and reads the region profile's
+ * Runs after `buildings` (only `fences` follows it) and reads the region profile's
  * `streetFurniture` rules: a name or speed sign at each entrance (`gate`),
  * a prop at each junction (`junction`) and lights along the roads
  * (`interval`), all inside the settlement's core (`furniture.ts`). Every prop
@@ -16,13 +16,12 @@
  * of their entrances. Their level comes from the road spline, not the
  * ground, so they stay up to date after Apply Pads. The report gives, per
  * rule, how many spots got a prop and why the others did not. A protected
- * settlement keeps its furniture. Parcel boundary fences are a later slice
- * (13b).
+ * settlement keeps its furniture. Lot fences are the `fences` stage (13b).
  */
 import type { LayoutPlacement } from "../../scene/layout";
 import { SHAPE_PRIMITIVE_SIZE, shapeAssetId } from "../../scene/shapes";
 import { sourceDistance } from "../field";
-import { entranceZone, planFurniture, rectangle, type FurnitureBlock, type FurnitureLine, type RuleOutcome } from "../furniture";
+import { entranceZone, placementFootprint, planFurniture, type FurnitureBlock, type FurnitureLine, type RuleOutcome } from "../furniture";
 import { streetLines, waterSources } from "../masks";
 import type { WorldPoint } from "../normalize";
 import { mulberry32 } from "../parcels";
@@ -182,13 +181,8 @@ function buildingObstacles(input: StageInput, lines: readonly FurnitureLine[]) {
   for (const group of input.layout.instances) {
     for (const placement of group.placements) {
       if (placement.id === undefined || owned[placement.id]?.stage !== BUILDINGS_STAGE_ID) continue;
-      const yaw = ((placement.rotation?.[1] ?? placement.rotationYDeg ?? 0) * Math.PI) / 180;
-      const face: WorldPoint = [Math.sin(yaw), Math.cos(yaw)];
-      const scale = typeof placement.scale === "number" ? [placement.scale, placement.scale, placement.scale] : placement.scale ?? [1, 1, 1];
-      const halfWidth = (scale[0]! * SHAPE_PRIMITIVE_SIZE) / 2;
-      const halfDepth = (scale[2]! * SHAPE_PRIMITIVE_SIZE) / 2;
-      const center: WorldPoint = [placement.position[0], placement.position[2]];
-      buildings.push(rectangle(center, face, halfWidth, halfDepth));
+      const { center, face, footprint, halfDepth } = placementFootprint(placement);
+      buildings.push(footprint);
       entrances.push(entranceZone([center[0] + face[0] * halfDepth, center[1] + face[1] * halfDepth], face, lines));
     }
   }

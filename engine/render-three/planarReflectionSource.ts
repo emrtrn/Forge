@@ -326,7 +326,6 @@ export class PlanarReflectionSource {
     scene.traverseVisible(object => {
       if (object.userData.waterReflectionBackground === true) hidden.push([object, object.visible]);
     });
-    for (const [consumer] of hidden) consumer.visible = false;
     const previousTarget = renderer.getRenderTarget();
     const previousToneMapping = renderer.toneMapping;
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
@@ -335,6 +334,7 @@ export class PlanarReflectionSource {
     const previousClearAlpha = renderer.getClearAlpha();
     renderer.getClearColor(this.clearColor);
     try {
+      for (const [consumer] of hidden) consumer.visible = false;
       renderer.xr.enabled = false;
       renderer.shadowMap.autoUpdate = false;
       renderer.toneMapping = NoToneMapping;

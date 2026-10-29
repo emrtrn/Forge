@@ -116,7 +116,7 @@ export function installLakeProbe(app: unknown) {
         waveParams: object.material.uniforms.wheelRippleParams!.value.toArray(),
         wavelength: object.material.uniforms.wheelRippleWavelength!.value };
     },
-    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false, foam?: boolean, foamTime = 0, softEdge = true, direct = false, wetShore = true, surfaceStrength?: number, surfaceView = 0, mappedSurface = true, waveTime = 0) {
+    causticsFrame(enabled = true, time = 0, detail = true, night = false, close = false, wide = false, foam?: boolean, foamTime = 0, softEdge = true, direct = false, wetShore = true, surfaceStrength?: number, surfaceView = 0, mappedSurface = true, waveTime = 0, refractionStrength?: number) {
       cancelAnimationFrame(a.frameHandle);
       a.camera.near = 0.1; a.camera.far = 2000;
       a.camera.position.set(close ? -20 : -12, close ? 13.3 : 35, close ? -25.5 : 32);
@@ -136,6 +136,7 @@ export function installLakeProbe(app: unknown) {
       const restore: Array<() => void> = [];
       let count = 0, normalLayers = 0, foamActive = false, wetShoreActive = false, lakeDraws = 0, snapshotUsed = false;
       let drawnMaterial = "";
+      let refractionPower = 0, refractionMask = false;
       a.scene.traverse((node: any) => {
         if (night && node.isDirectionalLight) { const intensity = node.intensity; node.intensity = 0; restore.push(() => { node.intensity = intensity; }); }
         const terrain = node.userData.forgeTerrain;
@@ -166,8 +167,12 @@ export function installLakeProbe(app: unknown) {
           const strength = node.material.uniforms.surfaceStrength?.value;
           const hasNormal = node.material.uniforms.hasNormal?.value;
           const normalMap = node.material.uniforms.normalMap?.value;
+          const refraction = node.material.uniforms.lakeRefractionStrength?.value;
           node.onBeforeRender = (...args: any[]) => {
             before(...args); node.material.uniforms.time.value = foamTime;
+            if (refractionStrength !== undefined && refraction !== undefined) node.material.uniforms.lakeRefractionStrength.value = refractionStrength;
+            refractionPower = node.material.uniforms.lakeRefractionStrength?.value ?? 0;
+            refractionMask = !!node.material.uniforms.lakeRefractionMask?.value;
             lakeDraws++; snapshotUsed = node.material.uniforms.waterSceneEnabled?.value > 0; drawnMaterial = args[4]?.type;
             if (!mappedSurface) { node.material.uniforms.hasNormal.value = 0; node.material.uniforms.normalMap.value = null; }
             if (surfaceStrength !== undefined && strength !== undefined) node.material.uniforms.surfaceStrength.value = surfaceStrength;
@@ -175,7 +180,7 @@ export function installLakeProbe(app: unknown) {
             foamActive ||= (node.material.uniforms.foamOpacity?.value ?? 0) > 0;
             if (foam === false && opacity !== undefined) node.material.uniforms.foamOpacity.value = 0;
           };
-          restore.push(() => { node.onBeforeRender = before; if (hasNormal !== undefined) { node.material.uniforms.hasNormal.value = hasNormal; node.material.uniforms.normalMap.value = normalMap; } if (strength !== undefined) node.material.uniforms.surfaceStrength.value = strength; if (edgeDepth !== undefined) node.material.uniforms.shoreBlendDepth.value = edgeDepth; if (opacity !== undefined) node.material.uniforms.foamOpacity.value = opacity; });
+          restore.push(() => { node.onBeforeRender = before; if (refraction !== undefined) node.material.uniforms.lakeRefractionStrength.value = refraction; if (hasNormal !== undefined) { node.material.uniforms.hasNormal.value = hasNormal; node.material.uniforms.normalMap.value = normalMap; } if (strength !== undefined) node.material.uniforms.surfaceStrength.value = strength; if (edgeDepth !== undefined) node.material.uniforms.shoreBlendDepth.value = edgeDepth; if (opacity !== undefined) node.material.uniforms.foamOpacity.value = opacity; });
         }
       });
       const directTarget = direct ? new WebGLRenderTarget(a.renderer.domElement.width, a.renderer.domElement.height) : null;
@@ -204,7 +209,7 @@ export function installLakeProbe(app: unknown) {
         };
         let cascades = 0;
         a.scene.traverse(node => { if (node.name.startsWith("forge-sun-cascade-")) cascades++; });
-        return { count, normalLayers, foamActive, wetShoreActive, lakeDraws, snapshotUsed, drawnMaterial, override: a.scene.overrideMaterial?.type, samples, calls: a.renderer.info.render.calls, textures: a.renderer.info.memory.textures, glError: gl.getError(),
+        return { count, normalLayers, foamActive, wetShoreActive, lakeDraws, snapshotUsed, refractionPower, refractionMask, drawnMaterial, override: a.scene.overrideMaterial?.type, samples, calls: a.renderer.info.render.calls, textures: a.renderer.info.memory.textures, glError: gl.getError(),
           shadows: { enabled: a.renderer.shadowMap.enabled, cascades },
           shoreProbes: { near: probe(-20,12,-23.9), deep: probe(-20,12,-22) },
           probes: { wetBed: probe(-20, 12, -8), dry: probe(-20, 16, -40), island: probe(0, 15, 0), separate: probe(30, 10, 0) } };

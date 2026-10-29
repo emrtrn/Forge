@@ -28,7 +28,7 @@ export function createLakeAppearance(): NonNullable<LayoutLakeWaterBody["appeara
   return {
     ...LAKE_SURFACE_WAVE_DEFAULTS,
     shoreWetnessEnabled: true, foamEnabled: true, causticsEnabled: true,
-    absorptionDistance: 2, surfaceStrength: 2, surfaceRoughness: .2, normalScale: 1, rippleSpeed: 2,
+    absorptionDistance: 2, surfaceStrength: 2, surfaceRoughness: .2, refractionStrength: .65, normalScale: 1, rippleSpeed: 2,
     wheelRipplesEnabled: true, wheelRippleStrength: 3, wheelRippleSpeed: 1.8,
     wheelRippleWidth: 1, wheelRippleWavelength: .6, wheelRippleLifetime: 4, wheelRippleInterval: .12,
     ...LAKE_WHEEL_WET_TRAIL_DEFAULTS,
@@ -85,6 +85,7 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
     }
     const ranges = { opacity: [0, 1], bedVisibility: [0, 1], absorptionDistance: [0.01, 100],
       surfaceStrength: [0, 2], surfaceRoughness: [0.04, 1], normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1],
+      refractionStrength: [0, 2],
       surfaceWaveHeight: [0, .1], surfaceWaveLength: [6, 40], surfaceWavePeriod: [2, 12],
       surfaceWaveDirection: [0, 360], surfaceWaveShoreDepth: [.1, 2],
       wheelRippleStrength: [0, 6], wheelRippleSpeed: [0.2, 5], wheelRippleWidth: [0.1, 2],
@@ -152,7 +153,7 @@ export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
   const d = RIVER_WATER_DEFAULTS;
   return { deepColor: "#234f4b", shallowColor: "#779a82", opacity: 0.35,
     bedVisibility: 0.9, absorptionDistance: 4, normalTexture: d.normalTexture,
-    surfaceStrength: 1, surfaceRoughness: 0.22, normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
+    surfaceStrength: 1, surfaceRoughness: 0.22, refractionStrength: .65, normalScale: d.normalScale, rippleSpeed: 0.15, reflectionMode: "off" as "off" | "sharedPlanar",
     reflectionGroup: "water", reflectionQuality: "medium" as "low" | "medium" | "high", ...LAKE_WHEEL_RIPPLE_DEFAULTS, ...LAKE_SURFACE_WAVE_DEFAULTS,
     ...LAKE_WHEEL_WET_TRAIL_DEFAULTS, shoreWetnessEnabled: false, shoreWetnessWidth: 1, shoreWetnessStrength: 0.65,
     shoreBlendDepth: 0.25, foamEnabled: false, foamOpacity: 0.7, foamWidth: 1, foamScale: 0.8, foamSpeed: 0.3,

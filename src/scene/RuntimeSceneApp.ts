@@ -4030,6 +4030,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const session = mode.createSession(this.createGameModeContext());
       session.spawnDefaultPawn();
       session.possess();
+      if (mode.defaultPawn.kind === "character" && !session.playerState.pawnEntityId) {
+        // Without this the level silently plays as a free camera.
+        console.warn(
+          `[game-mode] ${mode.displayName}: no player character to possess, so the level plays without one. ` +
+            "Place a Player Start (the mode spawns its default pawn there) or a player character, " +
+            "and check that the default pawn's class and mesh exist in the manifest.",
+        );
+      }
       this.gameModeSession = session;
       this.cachePawnRespawnTransform(session.playerState.pawnEntityId);
     }

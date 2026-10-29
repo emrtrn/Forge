@@ -19,6 +19,7 @@ export async function registerTerrainLakeWaterTests(check: (label: string, fn: (
     const initial = createLakeAppearance();
     assert.equal(initial.wheelRippleStrength, 3); assert.equal(initial.wheelRippleLifetime, 4);
     assert.equal(initial.reflectionMode, "sharedPlanar"); assert.equal(initial.foamEnabled, true);
+    assert.equal(initial.refractionStrength, .65);
     assert.equal(initial.wheelWetTrailLength, 5); assert.equal(resolveLakeAppearance(lake).wheelWetTrailDrySeconds, 40, "older records get the wet trail defaults");
     const newLake = validateWaterBody({ ...lake, appearance: initial });
     assert.deepEqual(newLake.appearance, initial);
@@ -26,12 +27,14 @@ export async function registerTerrainLakeWaterTests(check: (label: string, fn: (
     assert.equal(createLakeAppearance().wheelRippleStrength, 3, "each Lake gets independent initial settings");
     assert.equal(resolveLakeAppearance(lake).wheelRippleStrength, 2, "older records keep their runtime fallback");
     assert.equal(resolveLakeAppearance(lake).reflectionMode, "off");
-    const saved = validateWaterBody({ ...lake, positions: [99], appearance: { opacity: 0.5, extra: 1 } });
+    const saved = validateWaterBody({ ...lake, positions: [99], appearance: { opacity: 0.5, refractionStrength: 1.25, extra: 1 } });
+    assert.equal(saved.appearance?.refractionStrength, 1.25);
     assert.equal(saved.seed[0], lake.seed[0]); assert.equal("positions" in saved, false);
     const layout = { schema: 1, name: "Lake", loadGroups: [], instances: [], characters: [], waterBodies: [saved] } as RoomLayout;
     assert.deepEqual((validateLayout(layout) as unknown as RoomLayout).waterBodies, [saved]);
     assert.deepEqual(partitionLayout(layout, DEFAULT_WORLD_PARTITION).persistent.waterBodies, [saved]);
-    for (const patch of [{ surfaceLevel: NaN }, { coordinateSpace: "local" }, { seed: [48, 0] }, { kind: "ocean" }]) {
+    for (const patch of [{ surfaceLevel: NaN }, { coordinateSpace: "local" }, { seed: [48, 0] }, { kind: "ocean" },
+      ...[-.1, 2.1, NaN, "1"].map(refractionStrength => ({ appearance: { refractionStrength } }))]) {
       assert.throws(() => validateWaterBody({ ...lake, ...patch }));
     }
   });

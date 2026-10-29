@@ -31,7 +31,7 @@ async function number(page: Page, key: string, value: number) {
   if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
   const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
 }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false, wavePasses = false, foamRocks = false, qualityCase = false, riverSlope = false) {
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false, wavePasses = false, foamRocks = false, qualityCase = false, riverSlope = false, refractionCase = false) {
   const doc = createLakeFixture();
   if (steep) for (const entry of doc.def.tiles) entry.maxHeight = 18;
   if (steep) for (const tile of doc.tiles.values()) {
@@ -65,6 +65,10 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   await write(terrainGlobalMapPath(TERRAIN), encodeTerrainGlobalMap(doc.def, buildTerrainGlobalAttributes(worldTerrainRenderSource(doc.def, doc.tiles))));
   const level = JSON.parse(await readFile(smokePublicPath(SMOKE_SPLINE_SCENE), "utf8"));
   if (wavePasses) level.postProcess = { ...level.postProcess, ao: { enabled: true, radius: 1, intensity: 1 }, dof: { enabled: true, focusDistance: 30, aperture: .01, maxBlur: .01 } };
+  // Runtime creates its snapshot path only when post-processing is enabled.
+  // Zero bloom strength retains neutral pixels while exercising that path.
+  if (refractionCase) level.postProcess = { ...level.postProcess, hidden: false,
+    bloom: { enabled: true, intensity: 0, threshold: 1, radius: 0 } };
   level.instances = level.instances.filter((g: { assetId: string }) => g.assetId === "marker:playerStart");
   level.instances[0].placements[0].position = [-20, 15, -12];
   if (foreground || caustics) level.instances.push({ assetId: "shape:cube", placements: [{ name: "Lake foreground cube", position: [-12, 17, -12], scale: [4, 4, 4] }] });
@@ -550,6 +554,44 @@ test("Lake wet shore includes the connected submerged bed and survives toggle un
   const runtimeOff = await capture(false, true), runtimeOn = await capture(true, true);
   expect(runtimeOff.samples.filter((v: number, i: number) => Math.abs(v - runtimeOn.samples[i]!) > 2).length).toBeGreaterThan(20);
   expect(runtimeOn.glError).toBe(0); expect(errors).toEqual([]);
+});
+
+test("Lake refraction bends the bed, preserves dry areas and persists through Save Reload Play", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  const { errors } = await setup(page, request, true, false, false, true, false, true, false, false, false, false, false, true);
+  await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "appearance");
+  const power = page.locator('[data-lake-number="refractionStrength"]');
+  await expect(power).toHaveValue("0.65");
+  const capture = (strength?: number, wide = false, direct = false) => page.evaluate(
+    ({ strength, wide, direct }) => (window as any).__lakeQA.causticsFrame(false, 0, true, false, false, wide,
+      false, 0, true, direct, true, 1, 0, true, 0, strength), { strength, wide, direct });
+  const off = await capture(0), on = await capture(1.5), restored = await capture(0);
+  expect(on.snapshotUsed).toBe(true); expect(on.refractionMask).toBe(true); expect(on.refractionPower).toBe(1.5);
+  expect(on.glError).toBe(0); expect(on.calls).toBe(off.calls);
+  const changed = on.samples.filter((v: number, i: number) => Math.abs(v - off.samples[i]!) > 2).length;
+  expect(changed, "depth-validated refraction must change visible bed pixels").toBeGreaterThan(10);
+  expect(restored.samples).toEqual(off.samples);
+  const dryOff = await capture(0, true), dryOn = await capture(1.5, true);
+  for (const key of ["dry", "island", "separate"]) expect(dryOn.probes[key]).toEqual(dryOff.probes[key]);
+  const directOff = await capture(0, false, true), directOn = await capture(1.5, false, true);
+  expect(directOn.snapshotUsed).toBe(false); expect(directOn.samples).toEqual(directOff.samples);
+  await capture(0); await page.screenshot({ path: info.outputPath("lake-refraction-off.png") });
+  await capture(1.5); await page.screenshot({ path: info.outputPath("lake-refraction-on.png") });
+  await number(page, "refractionStrength", 1.2); await ready(page); await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance.refractionStrength).toBe(1.2);
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "appearance");
+  await expect(power).toHaveValue("1.2");
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!(window as any).__lakeQA);
+  await ready(page, 120_000);
+  const runtime = await capture();
+  expect(runtime.refractionPower).toBe(1.2); expect(runtime.refractionMask).toBe(true);
+  expect(runtime.snapshotUsed, "Play must exercise real refraction, not just the no-snapshot fallback").toBe(true);
+  expect(runtime.glError).toBe(0); expect(errors).toEqual([]);
+  await writeFile(info.outputPath("lake-refraction.json"), JSON.stringify({ changed, off, on, runtime }, null, 2));
 });
 
 test("Lake multiscale surface animates reflected light, preserves shore and persists surface controls", async ({ page, request }, info) => {

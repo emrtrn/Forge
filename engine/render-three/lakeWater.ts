@@ -19,6 +19,7 @@ import { createLakeFoamMask, WATER_FOAM_GLSL, createWaterContactUniforms, WATER_
 import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
 import { FULL_LAKE_QUALITY, type LakeQuality } from "../perf/lakeQuality";
 import { WaterFoamMaterial } from "./waterFoamMaterial";
+import { createLakeRefractionMask, LAKE_REFRACTION_GLSL } from "./lakeRefraction";
 
 /** Bounded vertical waves over the exact wet mesh; the shoreline stays pinned. */
 export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
@@ -26,6 +27,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private readonly strength: number;
   private foamTexture: DataTexture | null;
   private geometryFoamTexture: DataArrayTexture | null;
+  private refractionMask: DataTexture | null;
   private readonly foamMaterial = new WaterFoamMaterial();
   private quality: LakeQuality;
   private readonly contactCount: number;
@@ -42,6 +44,8 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     try { bake = quality.foamAllowed && lake.geometryFoam?.enabled && bakedFoam && bakedFoam.metadata.surface!=="river" && Math.abs(lake.surfaceLevel-bakedFoam.metadata.level)<1e-6 ? lakeFoamTexture(bakedFoam) : null; }
     catch (error) { if (!prepared) foam?.dispose(); throw error; }
     const waves = lakeWaveParameters(appearance, data.position[0], data.position[2]);
+    const refractionMask = appearance.refractionStrength > 0 && quality.reflectionQuality !== "off"
+      ? createLakeRefractionMask(data) : null;
     const geometry = prepared?.geometry ?? lakeRenderGeometry(data);
     super(geometry, new ShaderMaterial({ defines: bake ? { FORGE_LAKE_GEOMETRY_FOAM: 1 } : {}, transparent: true, depthWrite: false, side: DoubleSide, fog: true, lights: true,
       uniforms: { geometryFoamMask: { value: bake?.texture ?? null },
@@ -60,6 +64,12 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         foamSize: { value: new Vector2(lake.bounds.max[0] - lake.bounds.min[0], lake.bounds.max[1] - lake.bounds.min[1]) }, ...createWaterEnvironmentUniforms(), ...createWaterSceneUniforms(), time: { value: 0 }, normalMap: { value: normal }, hasNormal: { value: normal ? 1 : 0 },
         surfaceStrength: { value: appearance.surfaceStrength }, surfaceRoughness: { value: appearance.surfaceRoughness },
         rippleSpeed: { value: appearance.rippleSpeed }, normalScale: { value: appearance.normalScale },
+        lakeRefractionMask: { value: refractionMask },
+        lakeRefractionMin: { value: new Vector2(...(data.coverage?.min ?? lake.bounds.min)) },
+        lakeRefractionGrid: { value: new Vector2(data.coverage?.nx ?? 1, data.coverage?.nz ?? 1) },
+        lakeRefractionSpacing: { value: data.coverage?.spacing ?? 1 },
+        lakeRefractionWaveMargin: { value: .02 + waves.height * 2 },
+        lakeRefractionStrength: { value: refractionMask ? appearance.refractionStrength : 0 },
         deepColor: { value: new Color(appearance.deepColor) }, shallowColor: { value: new Color(appearance.shallowColor) },
         opacity: { value: appearance.opacity }, bedVisibility: { value: appearance.bedVisibility },
         absorptionDistance: { value: appearance.absorptionDistance }, reflectionTexture: { value: null },
@@ -102,6 +112,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ${LAKE_GEOMETRY_FOAM_GLSL}
         ${WATER_CONTACT_GLSL}
         ${WATER_SCENE_GLSL}
+        ${LAKE_REFRACTION_GLSL}
         ${LAKE_SURFACE_GLSL}
         uniform vec2 lakeRippleOrigin;
         ${LAKE_RIPPLES_GLSL}
@@ -131,10 +142,11 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         viewDirection/=max(length(viewDirection),.000001);
         float path=waterPath(d,abs(viewDirection.y));
         vec2 screenUv=gl_FragCoord.xy/waterSceneSize;
+        vec3 surfaceViewPosition=vec3(0.);
         if(waterSceneEnabled>.5){
           vec3 bedPosition=waterScenePosition(screenUv,texture2D(waterSceneDepth,screenUv).r);
-          vec3 surfacePosition=waterScenePosition(screenUv,gl_FragCoord.z);
-          vec3 waterColumn=surfacePosition-bedPosition;
+          surfaceViewPosition=waterScenePosition(screenUv,gl_FragCoord.z);
+          vec3 waterColumn=surfaceViewPosition-bedPosition;
           path=min(length(waterColumn),100.);
           // The same visible bed must drive shoreline coverage and tint too.
           // Interpolated authored depth can disagree with the rendered terrain.
@@ -188,17 +200,21 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           vec3(0.),0.,glint*wetness);
         vec3 visibleBed=vec3(0.);
         if(waterSceneEnabled>.5){
+          visibleBed=texture2D(waterSceneColor,screenUv).rgb;
+          vec3 refractedBed=visibleBed;
+          float refractedPath=path;
+          lakeRefract(screenUv,normal,surfaceViewPosition,vWorldPosition.y,edgeDepth,refractedBed,refractedPath);
           // Tint controls spectral loss, rather than adding a dark colour over
           // an otherwise unfiltered brown bed. Keep the authored opacity floor.
           vec3 tint=deepColor/max(max(deepColor.r,deepColor.g),max(deepColor.b,.00001));
           vec3 extinction=(vec3(1.)+(vec3(1.)-tint)*2.)/max(absorptionDistance,.01);
-          vec3 opticalTransmission=exp(-extinction*path);
+          vec3 opticalTransmission=exp(-extinction*refractedPath);
           vec3 transmitted=min(opticalTransmission*mix(1.,bedVisibility,wetness),vec3(1.-authoredOpacity));
           // Integrate the shallow-to-deep tint along the visible water column,
           // weighted by extinction. Using only the colour at its far endpoint
           // paints the basin's depth contours as bright/dark bands on the lake.
           vec3 tintExtinction=extinction+vec3(1./max(absorptionDistance,.01));
-          vec3 shallowWeight=(extinction/tintExtinction)*(vec3(1.)-exp(-tintExtinction*path))
+          vec3 shallowWeight=(extinction/tintExtinction)*(vec3(1.)-exp(-tintExtinction*refractedPath))
             /max(vec3(1.)-opticalTransmission,vec3(.00001));
           vec3 scatterColor=mix(deepColor,shallowColor,clamp(shallowWeight,0.,1.));
           // The lit bed already contains sunlight. Give the water volume its
@@ -207,8 +223,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           vec3 scatterLight=surfaceLight
             +waterSunColor*max(waterSunDirection.y,0.)*.318309886*waterLightingEnabled;
           scatterColor*=scatterLight;
-          visibleBed=texture2D(waterSceneColor,screenUv).rgb;
-          vec3 body=visibleBed*transmitted+scatterColor*(vec3(1.)-transmitted);
+          vec3 body=refractedBed*transmitted+scatterColor*(vec3(1.)-transmitted);
           gl_FragColor=vec4(mix(body,reflected,reflectionAmount)+glint*wetness,1.);
         }
         float bakedCoverage=0.;
@@ -249,6 +264,10 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.boundingBox!.min.y -= waves.height; geometry.boundingBox!.max.y += waves.height;
     geometry.boundingSphere!.radius += waves.height;
     this.geometryFoamTexture = bake?.texture ?? null;
+    this.refractionMask = refractionMask;
+    if (appearance.refractionStrength > 0 && quality.reflectionQuality !== "off" && !refractionMask) {
+      this.userData.lakeRefractionFallback = "Connected-face grid missing or exceeds 2048 texels per mask axis.";
+    }
     Object.assign(this.material.uniforms, this.foamMaterial.uniforms);
     this.quality = { ...quality };
     this.contactCount = this.material.uniforms.contactCount!.value;
@@ -280,6 +299,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         this.material.uniforms.waterSceneDepth!.value = snapshot.depthTexture;
         this.material.uniforms.waterSceneSize!.value.set(snapshot.width, snapshot.height);
         this.material.uniforms.waterSceneInverseProjection!.value.copy(camera.projectionMatrixInverse);
+        this.material.uniforms.waterSceneCameraWorld!.value.copy(camera.matrixWorld);
         this.material.uniforms.waterSceneReversed!.value = camera.reversedDepth ? 1 : 0;
       }
     };
@@ -321,6 +341,14 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       this.source = source; source?.addConsumer(this);
     }
     this.quality = { ...quality };
+    const refractionAllowed = quality.reflectionQuality !== "off" && a.refractionStrength > 0;
+    if (refractionAllowed && !this.refractionMask) this.refractionMask = createLakeRefractionMask(this.data);
+    if (!refractionAllowed) { this.refractionMask?.dispose(); this.refractionMask = null; }
+    uniforms.lakeRefractionMask!.value = this.refractionMask;
+    uniforms.lakeRefractionStrength!.value = this.refractionMask ? a.refractionStrength : 0;
+    if (refractionAllowed && !this.refractionMask) {
+      this.userData.lakeRefractionFallback = "Connected-face grid missing or exceeds 2048 texels per mask axis.";
+    } else delete this.userData.lakeRefractionFallback;
     if (!quality.foamAllowed) this.foamMaterial.dispose();
     uniforms.wheelRippleCount!.value = Math.min(uniforms.wheelRippleCount!.value, quality.maxRipples);
   }
@@ -357,6 +385,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms.reflectionStrength!.value = this.strength;
   }
   dispose() { for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
+    this.refractionMask?.dispose(); this.refractionMask = null; this.material.uniforms.lakeRefractionMask!.value = null;
     this.foamMaterial.dispose();
     this.foamTexture?.dispose(); this.foamTexture = null; this.material.uniforms.foamMask!.value = null;
     this.geometryFoamTexture?.dispose(); this.geometryFoamTexture = null; this.material.uniforms.geometryFoamMask!.value = null;

@@ -71,6 +71,7 @@ export class WaterSceneSnapshot {
 export function createWaterSceneUniforms() {
   return { waterSceneColor: { value: null }, waterSceneDepth: { value: null },
     waterSceneSize: { value: new Vector2(1, 1) }, waterSceneInverseProjection: { value: new Matrix4() },
+    waterSceneCameraWorld: { value: new Matrix4() },
     waterSceneEnabled: { value: 0 }, waterSceneReversed: { value: 0 } };
 }
 
@@ -83,6 +84,7 @@ uniform sampler2D waterSceneColor;
 uniform sampler2D waterSceneDepth;
 uniform vec2 waterSceneSize;
 uniform mat4 waterSceneInverseProjection;
+uniform mat4 waterSceneCameraWorld;
 uniform float waterSceneEnabled;
 uniform float waterSceneReversed;
 vec3 waterScenePosition(vec2 uv, float depth) {

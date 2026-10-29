@@ -1054,6 +1054,8 @@ export interface LayoutLakeWaterBody {
     /** Vertical depth of the visual shore transition in metres; 0 disables it. */
     shoreBlendDepth?: number;
     surfaceStrength?: number; surfaceRoughness?: number;
+    /** Depth-validated screen-space bed distortion; 0 preserves the unshifted image. */
+    refractionStrength?: number;
     surfaceWavesEnabled?: boolean; surfaceWaveHeight?: number; surfaceWaveLength?: number;
     surfaceWavePeriod?: number; surfaceWaveDirection?: number; surfaceWaveShoreDepth?: number;
     /** Vehicle-generated surface waves, independent of the natural surface normals. */

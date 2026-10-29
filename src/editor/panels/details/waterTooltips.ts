@@ -5,6 +5,7 @@ const descriptions: Record<string, string> = {
   opacity: "Suyun opaklığı. 0 saydam, 1 opaktır.",
   bedVisibility: "Su altındaki tabanın görünürlüğü. 0 tabanı gizler, 1 görünür kılar.",
   absorptionDistance: "Işığın suda soğurulma mesafesi (metre). Küçük değerlerde derin su daha çabuk opaklaşır.",
+  refractionStrength: "Gölün altındaki görüntünün küçük dalgalarla bükülmesi. 0 kapalıdır; başlangıç 0,65. Yüksek/Ultra grafik kalitesinde, post-process renk/depth görüntüsü bulunan yolda etkindir. Sığ kıyıda ve nesne kenarlarında azaltılır.",
   normalScale: "Yüzeydeki küçük dalga deseninin ölçeği.",
   "surface-waves": "Göl geometrisinin hafif yükselip alçalmasını açar/kapatır. Ortalama su seviyesi ve gerçek kıyı korunur.",
   surfaceWaveHeight: "Ortalama seviyeden azami düşey sapma (santimetre). 2 değeri en fazla ±2 cm harekettir; 0 düz yüzeydir. Sığ kıyıda daha küçüktür.",

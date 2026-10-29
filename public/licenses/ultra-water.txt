@@ -5,6 +5,9 @@ ce9248fa20afbdf63fd4c11709f68d7368aca0a0:
 src/water/bakeTextures.js (offline procedural texture generation),
 src/water/OceanSurface.js (foam erosion and billow lighting, environment/planar
 coverage composition, roughness-aware Fresnel, GGX sun and facet sparkle).
+The depth-validated refraction offset/fallback also informs lakeRefraction.ts;
+Forge adds connected-face masks, midpoint checks, displaced local surface
+height, bounded pixel offsets and snapshot/direct fallback handling.
 Forge changes: offline CPU bake, shared texture lifetime, existing Lake/River
 contact masks, authored scale/flow, Forge lighting/shadows and alpha composition.
 Reflection changes: reuse Forge PMREM and shared planar targets, transparent

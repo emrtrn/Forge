@@ -13,6 +13,7 @@ import { loadAssetCollision } from "../../src/scene/assetCollisionLoader";
 import { loadAssetUvw } from "../../src/scene/assetUvwLoader";
 import { loadAssetSkeleton } from "../../src/scene/assetSkeletonLoader";
 import { loadAssetMaterialSlots } from "../../src/scene/assetMaterialSlotsLoader";
+import { listGameModes } from "../../src/game/gameModes/registry";
 
 type Check = (label: string, fn: () => void) => void;
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
@@ -66,6 +67,31 @@ export async function registerContentLoadingTests(check: Check, checkAsync: Chec
     for (const malformed of [{ ...water, landscapeRef: "" }, { ...water, splineRef: null }]) {
       assert.throws(() => readRoomLayout({ ...level(), riverWaters: [malformed] }, "river.level.json"), ContentLoadError);
     }
+  });
+
+  check("content: every built-in Game Mode's default pawn class and mesh ship with the template", () => {
+    // A missing pawn is not an error at runtime: the level silently plays as a
+    // free camera (TPS's default pawn pointed at a deleted model for months).
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as { assets: { id: string; path: string }[] };
+    const ids = new Set(manifest.assets.map((asset) => asset.id));
+    const paths = new Set(manifest.assets.map((asset) => asset.path));
+    let checked = 0;
+    for (const mode of listGameModes()) {
+      const pawn = mode.defaultPawn;
+      if (pawn.characterAssetId) assert.ok(ids.has(pawn.characterAssetId), `${mode.id}: ${pawn.characterAssetId} is in the manifest`);
+      if (!pawn.pawnClassRef) continue;
+      assert.ok(paths.has(pawn.pawnClassRef), `${mode.id}: ${pawn.pawnClassRef} is in the manifest`);
+      const actor = JSON.parse(readFileSync(join("public", pawn.pawnClassRef), "utf8")) as {
+        parentClass: string; components: { component: string; props: { assetId?: string } }[];
+      };
+      assert.equal(actor.parentClass, "character", `${mode.id}: the pawn class is a character`);
+      const meshes = actor.components.filter((component) => component.component === "MeshRenderer");
+      assert.ok(meshes.length > 0, `${mode.id}: the pawn has a mesh`);
+      for (const mesh of meshes) assert.ok(ids.has(mesh.props.assetId ?? ""), `${mode.id}: mesh ${mesh.props.assetId} is in the manifest`);
+      assert.ok(actor.components.some((component) => component.component === "CharacterMovement"), `${mode.id}: the pawn can move`);
+      checked += 1;
+    }
+    assert.ok(checked > 0, "the TPS mode spawns a class pawn");
   });
 
   check("content: asset manifest accepts legacy aliases and rejects bad version and duplicate ids", () => {

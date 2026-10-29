@@ -779,6 +779,8 @@ export interface AiNavigationDebugSnapshot {
   readonly navMeshStaleTiles?: number;
   /** Recast tiles still waiting in the streaming queue after the last frame. */
   readonly navMeshQueuedTiles?: number;
+  /** Recast tiles a worker is building; absent without a tile worker. */
+  readonly navMeshInFlightTiles?: number;
 }
 
 /** Read side of the `?debug` AI overlays: controllers and path following. */

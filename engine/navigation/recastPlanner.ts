@@ -22,9 +22,18 @@
  * otherwise the missing ones jump the queue and the request answers
  * `"pending"` until a later frame has built them.
  *
+ * With a {@link RecastTileWorker} the Recast pipeline leaves the main thread
+ * (R3b): the frame budget then only pays for gathering a tile's triangles and
+ * adding finished tiles, the worker builds the same bytes a synchronous build
+ * would. A result whose tile changed meanwhile (its generation moved on) is
+ * thrown away and the tile is queued again. If the worker fails, building
+ * falls back to the main thread. {@link settle} drains the queue with no
+ * budget, for a loading screen.
+ *
  * Pure engine module: no DOM, Three.js or editor imports.
  */
 import type { Vec3 } from "../scene/layout";
+import type { RecastTileConfig, RecastTileInput } from "./recastTileBuild";
 import type { NavAabb, NavAgent, PathResult } from "./gridNavigation";
 import {
   recastTileKey,
@@ -60,7 +69,18 @@ export interface RecastStreamingUpdate {
   readonly now: number;
 }
 
+/** Builds tiles off the main thread; see the module comment. */
+export interface RecastTileWorker {
+  /** Builds that may run at once; the planner keeps about twice this many in flight. */
+  readonly lanes: number;
+  build(config: RecastTileConfig, input: RecastTileInput): Promise<Uint8Array | null>;
+}
+
 export interface RecastPlannerOptions extends Omit<RecastNavMeshOptions, "bounds"> {
+  /** Off-thread tile builder; absent builds on the calling thread. */
+  readonly tileWorker?: RecastTileWorker;
+  /** Called once when the worker fails and building falls back to the main thread. */
+  readonly onWorkerError?: (error: unknown) => void;
   /** Most tiles one request may need. Default 64 (a 256 m square at 32 m tiles). */
   readonly maxTilesPerRequest?: number;
   /**
@@ -87,8 +107,12 @@ export interface RecastPlannerOptions extends Omit<RecastNavMeshOptions, "bounds
 }
 
 export interface RecastStreamingStats {
-  /** Tiles built by the last update. */
+  /** Tiles built (or, with a worker, finished and added) by the last update. */
   readonly built: number;
+  /** Tiles handed to the worker by the last update. */
+  readonly submitted?: number;
+  /** Tiles the worker is building. */
+  readonly inFlight?: number;
   /** Tiles dropped by the last update. */
   readonly dropped: number;
   /** Tiles still waiting after the last update. */
@@ -100,6 +124,14 @@ const DEFAULT_BUILD_RADIUS = 48;
 const DEFAULT_KEEP_RADIUS = 96;
 const DEFAULT_LINGER_SECONDS = 10;
 const DEFAULT_FRAME_BUDGET_MS = 4;
+
+interface CompletedTile {
+  readonly mesh: RecastNavMesh;
+  readonly x: number;
+  readonly z: number;
+  readonly generation: string;
+  readonly bytes: Uint8Array | null;
+}
 
 interface QueuedTile {
   readonly mesh: RecastNavMesh;
@@ -115,12 +147,19 @@ export class RecastPlanner {
   private revision: unknown = undefined;
   private now = 0;
   private lastStats: RecastStreamingStats = { built: 0, dropped: 0, queued: 0 };
+  private worker: RecastTileWorker | null;
+  /** Tiles at the worker, per mesh: key → the generation their input was gathered at. */
+  private readonly inFlight = new Map<RecastNavMesh, Map<string, string>>();
+  private readonly pendingBuilds = new Set<Promise<void>>();
+  private completed: CompletedTile[] = [];
 
   constructor(
     private readonly modules: RecastModules,
     private readonly source: NavTriangleSource,
     private readonly options: RecastPlannerOptions = {},
-  ) {}
+  ) {
+    this.worker = options.tileWorker ?? null;
+  }
 
   /**
    * Declares the host's static-geometry revision. A different value than the
@@ -169,8 +208,9 @@ export class RecastPlanner {
    * One streaming step: keeps the tiles around the invokers fresh, drops the
    * ones nobody wants, and builds queued tiles within the frame budget.
    */
-  update(update: RecastStreamingUpdate): RecastStreamingStats {
+  update(update: RecastStreamingUpdate, overrides: { readonly frameBudgetMs?: number } = {}): RecastStreamingStats {
     this.now = update.now;
+    const applied = this.applyCompleted();
     const buildRadius = this.options.buildRadius ?? DEFAULT_BUILD_RADIUS;
     const keepRadius = Math.max(buildRadius, this.options.keepRadius ?? DEFAULT_KEEP_RADIUS);
     const linger = this.options.lingerSeconds ?? DEFAULT_LINGER_SECONDS;
@@ -195,17 +235,17 @@ export class RecastPlanner {
           const tileKey = recastTileKey(tile.x, tile.z);
           if (wanted.has(tileKey)) continue;
           wanted.add(tileKey);
-          if (!mesh.needsBuild(tile.x, tile.z) || waiting?.has(tileKey)) continue;
+          if (!mesh.needsBuild(tile.x, tile.z) || waiting?.has(tileKey) || this.isInFlight(mesh, tileKey)) continue;
           queue.push({ mesh, x: tile.x, z: tile.z, priority: 1 + nearestDistance(mesh, tile, points) });
         }
       }
       for (const tileKey of waiting ?? []) {
         const [x, z] = parseTileKey(tileKey);
-        if (mesh.needsBuild(x, z)) queue.push({ mesh, x, z, priority: 0 });
-        else waiting!.delete(tileKey);
+        if (!mesh.needsBuild(x, z)) waiting!.delete(tileKey);
+        else if (!this.isInFlight(mesh, tileKey)) queue.push({ mesh, x, z, priority: 0 });
       }
       for (const tileKey of mesh.loadedTileKeys()) {
-        if (wanted.has(tileKey) || waiting?.has(tileKey)) continue;
+        if (wanted.has(tileKey) || waiting?.has(tileKey) || this.isInFlight(mesh, tileKey)) continue;
         const [x, z] = parseTileKey(tileKey);
         // Outside the build radius a stale tile is dropped rather than rebuilt;
         // a request that needs it again queues it.
@@ -218,19 +258,47 @@ export class RecastPlanner {
 
     queue.sort((a, b) => a.priority - b.priority);
     const clock = this.options.clockMs ?? (() => performance.now());
-    const budget = this.options.frameBudgetMs ?? DEFAULT_FRAME_BUDGET_MS;
+    const budget = overrides.frameBudgetMs ?? this.options.frameBudgetMs ?? DEFAULT_FRAME_BUDGET_MS;
     const started = clock();
-    let built = 0;
+    let built = applied;
+    let submitted = 0;
+    let progressed = 0;
     for (const tile of queue) {
-      if (built > 0 && clock() - started >= budget) break;
+      if (progressed > 0 && clock() - started >= budget) break;
       // An earlier entry (a request and an invoker can both want it) may have built it.
       if (!tile.mesh.needsBuild(tile.x, tile.z)) continue;
-      this.buildTile(tile.mesh, tile.x, tile.z);
-      built += 1;
+      const worker = this.worker;
+      if (worker) {
+        if (this.inFlightCount() >= Math.max(1, worker.lanes) * 2) break;
+        if (this.isInFlight(tile.mesh, recastTileKey(tile.x, tile.z))) continue;
+        if (this.submit(worker, tile.mesh, tile.x, tile.z)) submitted += 1;
+        else built += 1;
+      } else {
+        this.buildTile(tile.mesh, tile.x, tile.z);
+        built += 1;
+      }
+      progressed += 1;
     }
-    const queued = queue.filter((tile) => tile.mesh.needsBuild(tile.x, tile.z)).length;
-    this.lastStats = { built, dropped, queued };
+    const queued = queue.filter((tile) =>
+      tile.mesh.needsBuild(tile.x, tile.z) && !this.isInFlight(tile.mesh, recastTileKey(tile.x, tile.z))).length;
+    this.lastStats = { built, dropped, queued, ...(this.worker ? { submitted, inFlight: this.inFlightCount() } : {}) };
     return this.lastStats;
+  }
+
+  /**
+   * Drains the queue with no frame budget, waiting for the worker when there
+   * is one, until nothing is queued or `timeoutMs` has passed. For a loading
+   * screen, where a long frame is not visible.
+   */
+  async settle(update: RecastStreamingUpdate, timeoutMs = 5000): Promise<RecastStreamingStats> {
+    const clock = this.options.clockMs ?? (() => performance.now());
+    const started = clock();
+    for (;;) {
+      const stats = this.update(update, { frameBudgetMs: Infinity });
+      if (stats.queued === 0 && this.inFlightCount() === 0) return stats;
+      if (clock() - started >= timeoutMs) return stats;
+      if (this.pendingBuilds.size > 0) await Promise.race(this.pendingBuilds);
+    }
   }
 
   /** Loaded and stale tile counts per agent profile (debug). */
@@ -256,11 +324,79 @@ export class RecastPlanner {
     for (const mesh of this.meshes.values()) mesh.dispose();
     this.meshes.clear();
     this.requested.clear();
+    // Builds still at the worker belong to disposed meshes; their results are ignored.
+    this.inFlight.clear();
+    this.completed = [];
   }
 
   dispose(): void {
     this.clear();
     this.revision = undefined;
+    // The host shuts the worker down after this; its rejections are not a failure.
+    this.worker = null;
+  }
+
+  private isInFlight(mesh: RecastNavMesh, tileKey: string): boolean {
+    return this.inFlight.get(mesh)?.has(tileKey) === true;
+  }
+
+  private inFlightCount(): number {
+    let count = 0;
+    for (const tiles of this.inFlight.values()) count += tiles.size;
+    return count;
+  }
+
+  /**
+   * Gathers the tile's input and hands it to the worker. Returns false when
+   * there was nothing to build (no geometry): that tile is settled at once.
+   */
+  private submit(worker: RecastTileWorker, mesh: RecastNavMesh, x: number, z: number): boolean {
+    const input = mesh.gatherTileInput(x, z);
+    if (!input) {
+      mesh.addTileBytes(x, z, null);
+      mesh.touchTile(x, z, this.now);
+      this.requested.get(mesh)?.delete(recastTileKey(x, z));
+      return false;
+    }
+    const key = recastTileKey(x, z);
+    const generation = mesh.tileGeneration(x, z);
+    const tiles = this.inFlight.get(mesh) ?? new Map<string, string>();
+    tiles.set(key, generation);
+    this.inFlight.set(mesh, tiles);
+    const build: Promise<void> = worker.build(mesh.tileConfig, input).then(
+      (bytes) => {
+        if (this.inFlight.get(mesh)?.get(key) === generation) this.completed.push({ mesh, x, z, generation, bytes });
+      },
+      (error: unknown) => {
+        this.inFlight.get(mesh)?.delete(key);
+        if (this.worker !== worker) return;
+        // Fall back to main-thread builds; the tile is still missing and requeues.
+        this.worker = null;
+        this.options.onWorkerError?.(error);
+      },
+    ).finally(() => this.pendingBuilds.delete(build));
+    this.pendingBuilds.add(build);
+    return true;
+  }
+
+  /** Adds the worker's finished tiles whose input is still current. Returns how many were added. */
+  private applyCompleted(): number {
+    const completed = this.completed;
+    this.completed = [];
+    let added = 0;
+    for (const tile of completed) {
+      const key = recastTileKey(tile.x, tile.z);
+      const tiles = this.inFlight.get(tile.mesh);
+      if (tiles?.get(key) !== tile.generation) continue;
+      tiles.delete(key);
+      // A changed tile keeps needing a build and is queued again.
+      if (tile.mesh.tileGeneration(tile.x, tile.z) !== tile.generation) continue;
+      tile.mesh.addTileBytes(tile.x, tile.z, tile.bytes);
+      tile.mesh.touchTile(tile.x, tile.z, this.now);
+      this.requested.get(tile.mesh)?.delete(key);
+      added += 1;
+    }
+    return added;
   }
 
   private buildTile(mesh: RecastNavMesh, x: number, z: number): void {
@@ -294,7 +430,8 @@ export class RecastPlanner {
     if (!mesh) {
       const {
         maxTilesPerRequest: _cap, maxSyncBuilds: _sync, buildRadius: _build, keepRadius: _keep,
-        lingerSeconds: _linger, frameBudgetMs: _budget, clockMs: _clock, snapHeight: _snap, ...meshOptions
+        lingerSeconds: _linger, frameBudgetMs: _budget, clockMs: _clock, snapHeight: _snap,
+        tileWorker: _worker, onWorkerError: _onError, ...meshOptions
       } = this.options;
       mesh = new RecastNavMesh(this.modules, agent, this.source, {
         ...meshOptions,

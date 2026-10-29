@@ -456,11 +456,11 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
         }
         registry.update(0.1);
       };
-      // The first decision asks for a corridor whose tiles are not built yet:
-      // the move keeps running while the frame-budgeted streamer builds them.
+      // levelLoaded settled the tiles around the pawn while the loading screen
+      // was up (R3b): the first decision already gets its path.
+      assert.ok((debug.navigation().navMeshTiles ?? 0) > 0, "tiles built before the first frame");
+      assert.equal(debug.navigation().navMeshQueuedTiles, 0, "nothing left in the streaming queue");
       tick();
-      assert.equal(debug.navigation().followers.length, 0, "no path before the corridor is built");
-      for (let attempt = 0; attempt < 20 && debug.navigation().followers.length === 0; attempt += 1) tick();
 
       const navigation = debug.navigation();
       assert.equal(navigation.planner, "recast");

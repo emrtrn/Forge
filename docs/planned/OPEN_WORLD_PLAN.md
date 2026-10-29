@@ -2647,11 +2647,32 @@ Sözleşme (grid'le aynı `NavAgent`): `radius + clearancePadding` duvarı aşı
       `?debug` satırı `recast tiles:T queued:Q stale:S`. Testler: fizik dirty
       log, invoker kur/beklet/düşür, bekleyen istek → kuyruk → başarı, eklenen
       duvar yalnız bayat tile'ları yeniden kurar, aiModule askıya alma.
-- [ ] **R3b — Tile kurmayı Web Worker'a taşıma.** ~9 ms/tile, akış bütçesinin
+- [x] **R3b — Tile kurmayı Web Worker'a taşıma.** ~9 ms/tile, akış bütçesinin
       (kare başına ≤ 4 ms) üstünde; şimdilik en çok 1 tile/kare. Geometri
       toplama ana thread'de ucuz (~0,5 ms); Recast hattı worker'da kendi wasm
       örneğiyle çalışıp navmesh verisini (bayt) döner, ana thread yalnız
       `addTile` yapar. Kuyruk/`pending` tasarımı buna hazır.
+      *Tamam (2026-10-29):* Recast hattı saf fonksiyon oldu
+      (`engine/navigation/recastTileBuild.ts`: düz `RecastTileConfig` +
+      `RecastTileInput` → Detour baytları; aynı girdi iki tarafta aynı baytı
+      verir, test ediliyor). `RecastPlanner` `tileWorker` alırsa kare bütçesi
+      yalnız geometri toplama + `addTile` öder; en çok lanes×2 iş uçuşta,
+      sonuç sonraki `update`'te eklenir. Tile başına geometri nesli
+      (`tileGeneration`; `markStaleInRect` yüklü olmayan tile'ın neslini de
+      artırır, `markAllStale` epoch'u) uçuştayken değişen tile'ın sonucunu
+      attırır, tile yeniden kuyruğa girer. Worker hata verirse bir kez
+      uyarılır, ana thread'e düşülür. `settle(update, timeoutMs)` kuyruğu
+      bütçesiz boşaltır: `aiModule.onLevelLoaded` yükleme ekranı açıkken spawn
+      çevresini kurar (5 s sınır), ilk kararda yol hazır; invoker konumu
+      movement henüz dolmadıysa entity Transform'undan okunur. Havuz
+      `src/scene/capabilities/recastTileWorkerPool.ts` (en çok 2 lane,
+      terrainWorkerPool deseni), worker `engine/navigation/workers/recastTileWorker.ts`;
+      worker wasm'ı lazy yüklediği için Vite `worker.format: "es"`
+      (tüm worker'lar zaten `type: "module"`). `?debug` satırına
+      `worker:N` (uçuştaki tile) eklendi. Detay örneklemesi 16/2 kaldı;
+      sıklaştırma ölçümü (sentetik 1 m tepeli arazi, tile başına): 6/1 ~17 ms
+      maks. dikey sapma 0,83 m · 8/1 ~10 ms 0,75 m · 10/1 ~8 ms 0,68 m ·
+      16/2 ~6–8 ms 1,61 m — karar kullanıcıda.
 - [ ] **R4 — Debug/editör yüzeyi.** "Show > AI Navigation" Recast poligonlarını
       çizer (runtime `?debug` + editör), yüklü tile'lar görünür.
 - [ ] **R5 — Grid emekliliği kararı.** Parity kabulünden sonra (kullanıcı

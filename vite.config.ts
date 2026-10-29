@@ -2495,6 +2495,11 @@ export default defineConfig({
       },
     },
   },
+  worker: {
+    // Every worker is created with `type: "module"`; ES output also lets a
+    // worker code-split (the Recast tile worker lazy-loads its wasm module).
+    format: "es",
+  },
   server: {
     // Expose on LAN for real-device (Android/Chrome) testing.
     host: true,

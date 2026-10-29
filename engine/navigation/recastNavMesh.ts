@@ -27,6 +27,15 @@
 import type * as RecastCore from "@recast-navigation/core";
 import type { Vec3 } from "../scene/layout";
 import type { NavAabb, NavAgent, NavVec2, PathResult } from "./gridNavigation";
+import {
+  buildRecastTileBytes,
+  createTileRcConfig,
+  recastTileConfigFor,
+  type RecastObstacleVolume,
+  type RecastRcConfig,
+  type RecastTileConfig,
+  type RecastTileInput,
+} from "./recastTileBuild";
 
 export interface RecastModules {
   readonly core: typeof RecastCore;
@@ -70,12 +79,6 @@ export interface NavTriangleSource {
   ): void;
 }
 
-interface NavObstacleVolume {
-  readonly footprint: readonly NavVec2[];
-  readonly minY: number;
-  readonly maxY: number;
-}
-
 export interface RecastNavMeshOptions {
   /** Tile edge in world units. Default 32 (four tiles per default 128 m partition cell). */
   readonly tileSize?: number;
@@ -89,6 +92,9 @@ export interface RecastNavMeshOptions {
    * with the grid planner.
    */
   readonly bounds?: readonly NavAabb[];
+  /** Detail-mesh sampling in cells / cell heights (see {@link RecastTileConfigOptions}). */
+  readonly detailSampleCells?: number;
+  readonly detailSampleErrorCells?: number;
 }
 
 export interface RecastTileCoord {
@@ -99,7 +105,6 @@ export interface RecastTileCoord {
 const DEFAULT_TILE_SIZE = 32;
 const DEFAULT_CELL_SIZE = 0.2;
 const DEFAULT_CELL_HEIGHT = 0.1;
-const DEFAULT_SLOPE_DEG = 50;
 /** Detour poly refs are 32-bit: 22 bits shared by tile index and poly index. */
 const TILE_BITS = 10;
 const POLY_BITS = 22 - TILE_BITS;
@@ -121,13 +126,22 @@ export class RecastNavMesh {
   private readonly bounds: readonly NavAabb[] | undefined;
   private readonly navMesh: RecastCore.NavMesh;
   private readonly query: RecastCore.NavMeshQuery;
-  private readonly rcConfig: ReturnType<typeof RecastCore.createRcConfig>;
+  private readonly rcConfig: RecastRcConfig;
+  /** The plain agent/voxel description a worker rebuilds this mesh's config from. */
+  readonly tileConfig: RecastTileConfig;
   /** Tile key → Detour tile ref; `0` marks a built tile that produced no polygons. */
   private readonly tiles = new Map<string, number>();
   /** Loaded tiles whose source geometry changed; still searchable until rebuilt. */
   private readonly stale = new Set<string>();
   /** Last time (host seconds) each loaded tile was wanted, for eviction. */
   private readonly lastUsed = new Map<string, number>();
+  /**
+   * Geometry generation per tile, bumped when its input changes (and for
+   * every tile by {@link markAllStale}): a build started before the change
+   * carries the old generation and its result is discarded.
+   */
+  private readonly generations = new Map<string, number>();
+  private epoch = 0;
   private disposed = false;
 
   constructor(modules: RecastModules, agent: NavAgent, source: NavTriangleSource, options: RecastNavMeshOptions = {}) {
@@ -141,39 +155,14 @@ export class RecastNavMesh {
     this.tileSize = tileCells * this.cellSize;
     this.bounds = options.bounds && options.bounds.length > 0 ? options.bounds : undefined;
 
-    const radius = Math.max(0, finiteOr(agent.radius, 0)) + Math.max(0, finiteOr(agent.clearancePadding, 0));
-    const walkableRadius = Math.ceil(radius / this.cellSize);
-    const config = core.createRcConfig({
-      ...core.recastConfigDefaults,
-      cs: this.cellSize,
-      ch: this.cellHeight,
-      tileSize: tileCells,
-      walkableRadius,
-      walkableHeight: Math.max(1, Math.ceil(Math.max(0, finiteOr(agent.height, 0)) / this.cellHeight)),
-      walkableClimb: Math.max(0, Math.floor(Math.max(0, finiteOr(agent.stepHeight, 0)) / this.cellHeight)),
-      walkableSlopeAngle: finiteOr(agent.maxSlopeAngleDeg, DEFAULT_SLOPE_DEG),
-      // Edge length in cells: about 12 m keeps long walls to a few vertices.
-      maxEdgeLen: Math.round(12 / this.cellSize),
+    this.tileConfig = recastTileConfigFor(agent, {
+      cellSize: this.cellSize,
+      cellHeight: this.cellHeight,
+      tileCells,
+      ...(options.detailSampleCells !== undefined ? { detailSampleCells: options.detailSampleCells } : {}),
+      ...(options.detailSampleErrorCells !== undefined ? { detailSampleErrorCells: options.detailSampleErrorCells } : {}),
     });
-    // The per-tile derivations of Recast's tiled sample: region areas are
-    // authored as edge lengths, detail errors in cells, and the border keeps
-    // the erosion of neighbouring geometry inside each tile.
-    config.minRegionArea = config.minRegionArea * config.minRegionArea;
-    config.mergeRegionArea = config.mergeRegionArea * config.mergeRegionArea;
-    config.borderSize = walkableRadius + 3;
-    config.width = tileCells + config.borderSize * 2;
-    config.height = tileCells + config.borderSize * 2;
-    // No detail-mesh sampling: it was ~85% of a tile build (60 ms → 8 ms on a
-    // 32 m terrain tile). Polygons keep their own heights, which follow the
-    // floor to within the contour error; the host snaps corners to its real
-    // floor anyway (see the module contract).
-    // Sparse detail sampling (3.2 m / 0.2 m): Recast's default (6 cells /
-    // 1 cell) was ~85% of a tile build, 60 ms → 9 ms on a 32 m terrain tile.
-    // Hosts snap corners to their real floor anyway (see the module contract).
-    // A sample distance of 0 crashes this wasm build's detail pass.
-    config.detailSampleDist = this.cellSize * 16;
-    config.detailSampleMaxError = this.cellHeight * 2;
-    this.rcConfig = config;
+    this.rcConfig = createTileRcConfig(core, this.tileConfig);
 
     this.navMesh = new core.NavMesh();
     const params = core.NavMeshParams.create({
@@ -219,6 +208,8 @@ export class RecastNavMesh {
     let marked = 0;
     for (const tile of this.tilesInRect(minX - border, minZ - border, maxX + border, maxZ + border)) {
       const key = recastTileKey(tile.x, tile.z);
+      // Loaded or not: a build of this tile in flight read the old geometry.
+      this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
       if (!this.tiles.has(key) || this.stale.has(key)) continue;
       this.stale.add(key);
       marked += 1;
@@ -227,7 +218,13 @@ export class RecastNavMesh {
   }
 
   markAllStale(): void {
+    this.epoch += 1;
     for (const key of this.tiles.keys()) this.stale.add(key);
+  }
+
+  /** Opaque geometry generation of a tile; compare before adding an asynchronously built result. */
+  tileGeneration(x: number, z: number): string {
+    return `${this.epoch}:${this.generations.get(recastTileKey(x, z)) ?? 0}`;
   }
 
   /** Records that a loaded tile is wanted at `now` (host seconds). */
@@ -290,10 +287,18 @@ export class RecastNavMesh {
   /** (Re)builds one tile from the triangle source. Returns false when it has no walkable polygons. */
   buildTile(x: number, z: number): boolean {
     this.assertLive();
-    const key = recastTileKey(x, z);
-    const used = this.lastUsed.get(key);
-    this.removeTile(x, z);
-    const border = this.rcConfig.borderSize * this.cellSize;
+    const input = this.gatherTileInput(x, z);
+    const bytes = input ? buildRecastTileBytes(this.modules.core, this.rcConfig, this.tileConfig, input) : null;
+    return this.addTileBytes(x, z, bytes);
+  }
+
+  /**
+   * The tile's input from the triangle source: its square plus the border.
+   * Null when nothing there could become floor (no triangles).
+   */
+  gatherTileInput(x: number, z: number): RecastTileInput | null {
+    this.assertLive();
+    const border = this.borderSize;
     const rect = {
       minX: x * this.tileSize - border,
       minZ: z * this.tileSize - border,
@@ -308,14 +313,29 @@ export class RecastNavMesh {
       minY = Math.min(minY, a[1], b[1], c[1]);
       maxY = Math.max(maxY, a[1], b[1], c[1]);
     });
-    const obstacles: NavObstacleVolume[] = [];
+    if (positions.length === 0) return null;
+    const obstacles: RecastObstacleVolume[] = [];
     this.source.forEachObstacleInRect?.(rect.minX, rect.minZ, rect.maxX, rect.maxZ, (footprint, low, high) => {
       if (footprint.length >= 3) obstacles.push({ footprint, minY: low, maxY: high });
     });
-    const data = positions.length === 0 ? null : this.buildTileData(x, z, rect, minY, maxY, positions, obstacles);
+    return { tileX: x, tileZ: z, rect, minY, maxY, positions: new Float32Array(positions), obstacles };
+  }
+
+  /**
+   * Replaces the tile with built Detour bytes (null: a built tile with no
+   * walkable polygons). Keeps its usage stamp. Returns true when polygons were added.
+   */
+  addTileBytes(x: number, z: number, bytes: Uint8Array | null): boolean {
+    this.assertLive();
+    const key = recastTileKey(x, z);
+    const used = this.lastUsed.get(key);
+    this.removeTile(x, z);
     let tileRef = 0;
-    if (data) {
+    if (bytes && bytes.length > 0) {
       const { core } = this.modules;
+      const data = new core.UnsignedCharArray();
+      data.copy(bytes);
+      // DT_TILE_FREE_DATA: Detour owns (and frees) the buffer once added.
       const added = this.navMesh.addTile(data, core.Detour.DT_TILE_FREE_DATA, 0);
       if (core.statusFailed(added.status)) data.destroy();
       else tileRef = added.tileRef;
@@ -323,107 +343,6 @@ export class RecastNavMesh {
     this.tiles.set(key, tileRef);
     if (used !== undefined) this.lastUsed.set(key, used);
     return tileRef !== 0;
-  }
-
-  /**
-   * Recast's per-tile pipeline (rasterize → filter → compact → erode → regions
-   * → contours → poly mesh → detail mesh → Detour data). Obstacle volumes are
-   * marked null before erosion so the agent radius keeps clear of them too.
-   * Returns null when the tile has no walkable polygons.
-   */
-  private buildTileData(
-    tileX: number,
-    tileZ: number,
-    rect: { minX: number; minZ: number; maxX: number; maxZ: number },
-    minY: number,
-    maxY: number,
-    positions: readonly number[],
-    obstacles: readonly NavObstacleVolume[],
-  ): RecastCore.UnsignedCharArray | null {
-    const { core } = this.modules;
-    const config = this.rcConfig;
-    const context = new core.RecastBuildContext(false);
-    const triangleCount = positions.length / 9;
-    const vertexCount = triangleCount * 3;
-    const vertices = new core.VerticesArray();
-    vertices.copy(new Float32Array(positions));
-    const indices = new Int32Array(vertexCount);
-    for (let i = 0; i < indices.length; i += 1) indices[i] = i;
-    const triangles = new core.TrianglesArray();
-    triangles.copy(indices);
-    // markWalkableTriangles only sets walkable entries: start from RC_NULL_AREA.
-    const areas = new core.TriangleAreasArray();
-    areas.copy(new Uint8Array(triangleCount));
-    const heightfield = core.allocHeightfield();
-    const compact = core.allocCompactHeightfield();
-    const contours = core.allocContourSet();
-    const polyMesh = core.allocPolyMesh();
-    const detail = core.allocPolyMeshDetail();
-    try {
-      const bmin: [number, number, number] = [rect.minX, minY - this.cellHeight, rect.minZ];
-      const bmax: [number, number, number] = [rect.maxX, maxY + Math.max(1, finiteOr(this.agent.height, 0)), rect.maxZ];
-      if (!core.createHeightfield(context, heightfield, config.width, config.height, bmin, bmax, config.cs, config.ch)) {
-        return null;
-      }
-      core.markWalkableTriangles(context, config.walkableSlopeAngle, vertices, vertexCount, triangles, triangleCount, areas);
-      if (!core.rasterizeTriangles(context, vertices, vertexCount, triangles, areas, triangleCount, heightfield,
-        config.walkableClimb)) return null;
-      core.filterLowHangingWalkableObstacles(context, config.walkableClimb, heightfield);
-      core.filterLedgeSpans(context, config.walkableHeight, config.walkableClimb, heightfield);
-      core.filterWalkableLowHeightSpans(context, config.walkableHeight, heightfield);
-      if (!core.buildCompactHeightfield(context, config.walkableHeight, config.walkableClimb, heightfield, compact)) {
-        return null;
-      }
-      for (const obstacle of obstacles) {
-        const footprint = new core.VerticesArray();
-        footprint.copy(new Float32Array(obstacle.footprint.flatMap(([px, pz]) => [px, obstacle.minY, pz])));
-        // A floor belongs to the obstacle when it lies within its span, up to a
-        // step above its top (where Recast's kerb filter lifts a low top to).
-        core.markConvexPolyArea(context, footprint, obstacle.footprint.length, obstacle.minY - this.cellHeight,
-          obstacle.maxY + (config.walkableClimb + 1) * this.cellHeight, core.Recast.RC_NULL_AREA, compact);
-        footprint.destroy();
-      }
-      if (!core.erodeWalkableArea(context, config.walkableRadius, compact)) return null;
-      if (!core.buildDistanceField(context, compact)) return null;
-      if (!core.buildRegions(context, compact, config.borderSize, config.minRegionArea, config.mergeRegionArea)) {
-        return null;
-      }
-      if (!core.buildContours(context, compact, config.maxSimplificationError, config.maxEdgeLen, contours,
-        core.Recast.RC_CONTOUR_TESS_WALL_EDGES)) return null;
-      if (!core.buildPolyMesh(context, contours, config.maxVertsPerPoly, polyMesh)) return null;
-      if (polyMesh.npolys() === 0) return null;
-      if (!core.buildPolyMeshDetail(context, polyMesh, compact, config.detailSampleDist, config.detailSampleMaxError,
-        detail)) return null;
-      for (let i = 0; i < polyMesh.npolys(); i += 1) {
-        // One walkable area (0) with one "walk" flag; Detour's default filter takes it.
-        if (polyMesh.areas(i) === core.Recast.RC_WALKABLE_AREA) polyMesh.setAreas(i, 0);
-        if (polyMesh.areas(i) === 0) polyMesh.setFlags(i, 1);
-      }
-      const params = new core.NavMeshCreateParams();
-      params.setPolyMeshCreateParams(polyMesh);
-      params.setPolyMeshDetailCreateParams(detail);
-      params.setWalkableHeight(config.walkableHeight * config.ch);
-      params.setWalkableRadius(config.walkableRadius * config.cs);
-      params.setWalkableClimb(config.walkableClimb * config.ch);
-      params.setCellSize(config.cs);
-      params.setCellHeight(config.ch);
-      params.setBuildBvTree(true);
-      params.setTileX(tileX);
-      params.setTileY(tileZ);
-      const created = core.createNavMeshData(params);
-      core.Raw.Module.destroy(params.raw);
-      return created.success ? created.navMeshData : null;
-    } finally {
-      vertices.destroy();
-      triangles.destroy();
-      areas.destroy();
-      core.freeHeightfield(heightfield);
-      core.freeCompactHeightfield(compact);
-      core.freeContourSet(contours);
-      core.freePolyMesh(polyMesh);
-      core.freePolyMeshDetail(detail);
-      core.Raw.Module.destroy(context.raw);
-    }
   }
 
   removeTile(x: number, z: number): void {

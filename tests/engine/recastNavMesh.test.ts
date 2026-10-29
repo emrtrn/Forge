@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import type { NavAgent, PathResult } from "../../engine/navigation/gridNavigation";
 import { loadRecastModules, RecastNavMesh, type RecastModules, type RecastNavMeshOptions } from "../../engine/navigation/recastNavMesh";
-import { RecastPlanner } from "../../engine/navigation/recastPlanner";
+import { RecastPlanner, type RecastTileWorker } from "../../engine/navigation/recastPlanner";
+import { buildRecastTileBytes, createTileRcConfig, type RecastTileConfig, type RecastTileInput } from "../../engine/navigation/recastTileBuild";
+import { createRecastTileHandler, type RecastTileWorkerRequest } from "../../engine/navigation/workers/recastTileWorker";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import type { NavigationRole } from "../../engine/scene/collision";
 import type { ColliderComponent, ColliderPrimitive } from "../../engine/scene/components";
@@ -107,6 +109,62 @@ function samplesInside(points: readonly Vec3[], min: [number, number], max: [num
 
 function last(result: PathResult): Vec3 {
   return result.points[result.points.length - 1]!;
+}
+
+interface ManualJob {
+  readonly request: RecastTileWorkerRequest;
+  resolve(bytes: Uint8Array | null): void;
+  reject(error: unknown): void;
+}
+
+/**
+ * A tile worker driven by the test: it runs the real worker handler, but only
+ * when told to (or, with `auto`, in a microtask), so results arrive between
+ * planner updates the way a worker's messages do.
+ */
+class ManualTileWorker implements RecastTileWorker {
+  readonly lanes = 1;
+  auto = false;
+  private readonly handle: (request: RecastTileWorkerRequest) => Uint8Array | null;
+  private readonly jobs: ManualJob[] = [];
+
+  constructor(modules: RecastModules) {
+    this.handle = createRecastTileHandler(modules);
+  }
+
+  build(config: RecastTileConfig, input: RecastTileInput): Promise<Uint8Array | null> {
+    return new Promise((resolve, reject) => {
+      const job: ManualJob = { request: { id: 0, config, input }, resolve, reject };
+      if (this.auto) queueMicrotask(() => this.run(job));
+      else this.jobs.push(job);
+    });
+  }
+
+  pending(): number {
+    return this.jobs.length;
+  }
+
+  async finishAll(): Promise<void> {
+    for (const job of this.jobs.splice(0)) this.run(job);
+    await nextMacrotask();
+  }
+
+  async failAll(error: Error): Promise<void> {
+    for (const job of this.jobs.splice(0)) job.reject(error);
+    await nextMacrotask();
+  }
+
+  private run(job: ManualJob): void {
+    try {
+      job.resolve(this.handle(job.request));
+    } catch (error) {
+      job.reject(error);
+    }
+  }
+}
+
+function nextMacrotask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export async function registerRecastNavMeshTests(checkAsync: CheckAsync): Promise<void> {
@@ -349,6 +407,96 @@ export async function registerRecastNavMeshTests(checkAsync: CheckAsync): Promis
     assert.equal(around.status, "success");
     assert.ok(around.points.length > 2, "the new wall is walked around");
     assert.deepEqual(samplesInside(around.points, [-8, -0.5], [12, 0.5]), []);
+    planner.dispose();
+  });
+
+  await checkAsync("recast worker: the worker handler builds the same tile bytes as a main-thread build", async () => {
+    const { mesh } = navMesh(modules, [ground("ground", 60), box("wall", [-8, 0, -0.5], [12, 3, 0.5])]);
+    const input = mesh.gatherTileInput(0, -1);
+    assert.ok(input);
+    const direct = buildRecastTileBytes(modules.core, createTileRcConfig(modules.core, mesh.tileConfig), mesh.tileConfig, input);
+    // The request crosses a structured clone on its way to the worker.
+    const request = structuredClone({ id: 1, config: mesh.tileConfig, input });
+    const viaWorker = createRecastTileHandler(modules)(request);
+    assert.ok(direct && viaWorker);
+    assert.ok(direct.length > 0);
+    assert.deepEqual(viaWorker, direct);
+    mesh.dispose();
+  });
+
+  await checkAsync("recast worker: results join on a later update, stale ones are rebuilt, settle drains, a failure falls back", async () => {
+    const physics = new PhysicsSubsystem();
+    physics.setEntities([ground("ground", 60)]);
+    const worker = new ManualTileWorker(modules);
+    const errors: unknown[] = [];
+    const planner = new RecastPlanner(modules, {
+      forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) => physics.forEachNavigationTriangleInRect(minX, minZ, maxX, maxZ, visit),
+      forEachObstacleInRect: (minX, minZ, maxX, maxZ, visit) => physics.forEachNavigationObstacleInRect(minX, minZ, maxX, maxZ, visit),
+    }, { frameBudgetMs: 1000, maxSyncBuilds: 0, buildRadius: 0, tileWorker: worker, onWorkerError: (error) => errors.push(error) });
+    const request = { agent: AGENT, start: [2, 0, -10] as Vec3, goal: [2, 0, 10] as Vec3, bounds: [] };
+    const loaded = () => planner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0);
+    physics.takeNavigationDirtyRegions();
+
+    assert.equal(planner.findPath(request).status, "pending");
+    const sent = planner.update({ invokers: [], bounds: [], now: 0 });
+    assert.equal(sent.built, 0);
+    assert.ok((sent.submitted ?? 0) > 0 && sent.inFlight === sent.submitted, JSON.stringify(sent));
+    assert.ok(sent.inFlight! <= worker.lanes * 2, "at most twice the lanes in flight");
+    assert.equal(loaded(), 0, "nothing is added while the worker builds");
+    const again = planner.update({ invokers: [], bounds: [], now: 0 });
+    assert.equal(again.submitted, 0, "a tile in flight is not sent twice");
+    await worker.finishAll();
+    // Corridor tiles beyond the in-flight cap go out as earlier ones come back.
+    for (let frame = 1; frame < 20 && planner.findPath(request).status === "pending"; frame += 1) {
+      planner.update({ invokers: [], bounds: [], now: frame });
+      await worker.finishAll();
+    }
+    assert.equal(planner.findPath(request).status, "success", "the worker's tiles answer the request");
+
+    // A wall appears; while its tiles are at the worker, the geometry changes again.
+    physics.addEntity(box("wall", [-8, 0, -0.5], [12, 3, 0.5]));
+    const invalidate = () => {
+      const dirty = physics.takeNavigationDirtyRegions();
+      assert.notEqual(dirty, "all");
+      for (const rect of dirty as { minX: number; minZ: number; maxX: number; maxZ: number }[]) {
+        planner.invalidateRect(rect.minX, rect.minZ, rect.maxX, rect.maxZ);
+      }
+    };
+    invalidate();
+    assert.equal(planner.findPath(request).status, "pending");
+    const rebuilding = planner.update({ invokers: [], bounds: [], now: 30 });
+    assert.ok((rebuilding.submitted ?? 0) > 0);
+    physics.setEntityTransform("wall", { position: [2, 1.5, 0.2], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    invalidate();
+    await worker.finishAll();
+    const discarded = planner.update({ invokers: [], bounds: [], now: 31 });
+    assert.equal(discarded.built, 0, "results gathered before the second change are thrown away");
+    assert.equal(discarded.submitted, rebuilding.submitted, "and their tiles go back to the worker");
+
+    // settle drains everything without a frame budget, the worker answering on its own.
+    // The waiting move asks again, queueing the corridor tiles the second change touched.
+    planner.findPath(request);
+    worker.auto = true;
+    await worker.finishAll();
+    const settled = await planner.settle({ invokers: [], bounds: [], now: 32 }, 5000);
+    worker.auto = false;
+    assert.equal(settled.queued, 0);
+    assert.equal(settled.inFlight, 0);
+    const around = planner.findPath(request);
+    assert.equal(around.status, "success");
+    assert.ok(around.points.length > 2, "the moved wall is walked around");
+
+    // The worker fails: one report, and tiles build on the main thread from then on.
+    physics.setEntityTransform("wall", { position: [2, 1.5, 0.6], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    invalidate();
+    assert.equal(planner.findPath(request).status, "pending");
+    planner.update({ invokers: [], bounds: [], now: 40 });
+    await worker.failAll(new Error("lane lost"));
+    assert.equal(errors.length, 1);
+    const fallback = planner.update({ invokers: [], bounds: [], now: 41 });
+    assert.ok(fallback.built > 0 && fallback.submitted === undefined, JSON.stringify(fallback));
+    assert.equal(worker.pending(), 0, "nothing more is sent to the failed worker");
+    assert.equal(planner.findPath(request).status, "success", "main-thread builds answer it");
     planner.dispose();
   });
 }

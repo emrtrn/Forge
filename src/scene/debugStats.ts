@@ -783,8 +783,9 @@ function vehicleAiDebugText(app: RuntimeStatsApp): string {
  * crowd of moving NPCs can't flood the overlay.
  */
 export function formatAiNavDebug(snapshot: AiNavigationDebugSnapshot, topN = 4): string[] {
-  const backlog = (snapshot.navMeshQueuedTiles ?? 0) > 0 || (snapshot.navMeshStaleTiles ?? 0) > 0
-    ? ` queued:${snapshot.navMeshQueuedTiles ?? 0} stale:${snapshot.navMeshStaleTiles ?? 0}`
+  const inFlight = snapshot.navMeshInFlightTiles ?? 0;
+  const backlog = (snapshot.navMeshQueuedTiles ?? 0) > 0 || (snapshot.navMeshStaleTiles ?? 0) > 0 || inFlight > 0
+    ? ` queued:${snapshot.navMeshQueuedTiles ?? 0} stale:${snapshot.navMeshStaleTiles ?? 0}${inFlight > 0 ? ` worker:${inFlight}` : ""}`
     : "";
   const planner = snapshot.planner === "recast" ? ` recast tiles:${snapshot.navMeshTiles ?? 0}${backlog}` : "";
   const lines = [`ai nav (${snapshot.followers.length})${planner}`];

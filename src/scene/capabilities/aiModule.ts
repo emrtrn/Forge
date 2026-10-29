@@ -66,6 +66,7 @@ import {
 import { resolveNavAgentProfile } from "@engine/navigation/navAgentProfile";
 import { loadRecastModules } from "@engine/navigation/recastNavMesh";
 import { RecastPlanner, type RecastInvoker, type RecastPlanResult } from "@engine/navigation/recastPlanner";
+import { RecastTileWorkerPool } from "./recastTileWorkerPool";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
@@ -81,6 +82,7 @@ import {
   readAIControllerComponent,
   readBehaviorComponent,
   readCharacterMovementComponent,
+  readTransformComponent,
   type TransformComponent,
 } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
@@ -104,6 +106,9 @@ import {
 } from "./runtimeServiceKeys";
 
 export const AI_MODULE_ID = "ai";
+
+/** Longest the loading screen waits for the nav tiles around the spawn. */
+const RECAST_SETTLE_TIMEOUT_MS = 5000;
 
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
@@ -240,6 +245,8 @@ export function createAiModule(): CapabilityModule {
    * and for any other host, paths come from the grid planner.
    */
   let recastPlanner: RecastPlanner | null = null;
+  /** The planner's tile worker lanes; shut down with the planner. */
+  let recastTileWorkers: RecastTileWorkerPool | null = null;
   /** Entities of the built level, for reading authored agent/movement components. */
   let entityById = new Map<string, Entity>();
   let navigationView: Group | null = null;
@@ -318,7 +325,11 @@ export function createAiModule(): CapabilityModule {
     if (recastPlanner || !host()?.navigation.forEachNavigationTriangleInRect) return;
     try {
       const modules = await loadRecastModules();
-      recastPlanner ??= new RecastPlanner(modules, {
+      if (recastPlanner) return;
+      // Tiles build on worker lanes when the platform has workers (R3b); the
+      // planner falls back to the main thread if the pool fails.
+      recastTileWorkers = typeof Worker !== "undefined" ? new RecastTileWorkerPool() : null;
+      recastPlanner = new RecastPlanner(modules, {
         forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) =>
           host()?.navigation.forEachNavigationTriangleInRect?.(minX, minZ, maxX, maxZ, visit),
         forEachObstacleInRect: (minX, minZ, maxX, maxZ, visit) =>
@@ -328,6 +339,13 @@ export function createAiModule(): CapabilityModule {
         // Tiles are built by the per-frame streamer; a request whose corridor
         // is not ready answers "pending" instead of stalling the frame.
         maxSyncBuilds: 0,
+        ...(recastTileWorkers
+          ? {
+            tileWorker: recastTileWorkers,
+            onWorkerError: (error: unknown) =>
+              console.warn(`[ai] Recast tile worker failed, building tiles on the main thread: ${describeLoadError(error)}`),
+          }
+          : {}),
       });
     } catch (error) {
       console.warn(`[ai] Recast navigation unavailable, using the grid planner: ${describeLoadError(error)}`);
@@ -407,7 +425,9 @@ export function createAiModule(): CapabilityModule {
     const invokers: RecastInvoker[] = [];
     for (const [entityId, entity] of entityById) {
       if (!readAIControllerComponent(entity)) continue;
-      const transform = characterMovement()?.transformOf(entityId);
+      // At levelLoaded the movement subsystem may not hold the pawn yet: the
+      // authored transform still marks where it stands.
+      const transform = characterMovement()?.transformOf(entityId) ?? readTransformComponent(entity);
       if (!transform || isAiSuspended(transform.position)) continue;
       invokers.push({ position: transform.position, agent: navAgentForEntity(entityId) });
     }
@@ -753,6 +773,9 @@ export function createAiModule(): CapabilityModule {
           navMeshTiles: recastPlanner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0),
           navMeshStaleTiles: recastPlanner.loadedTiles().reduce((total, entry) => total + entry.stale, 0),
           navMeshQueuedTiles: recastPlanner.streamingStats().queued,
+          ...(recastPlanner.streamingStats().inFlight !== undefined
+            ? { navMeshInFlightTiles: recastPlanner.streamingStats().inFlight }
+            : {}),
         }
         : {}),
     };
@@ -879,10 +902,20 @@ export function createAiModule(): CapabilityModule {
       });
     },
 
-    onLevelLoaded(context: RuntimeContext) {
+    async onLevelLoaded(context: RuntimeContext) {
       if (!ai) return;
       scene = context.scene;
       layout = context.layout;
+
+      // The loading screen is still up: build the nav tiles around the spawn
+      // now, so the first patrol does not wait on the frame-budgeted streamer.
+      if (recastPlanner) {
+        applyRecastNavigationChanges(recastPlanner);
+        await recastPlanner.settle(
+          { invokers: navigationInvokers(), bounds: navigationBounds(), now: elapsedSeconds },
+          RECAST_SETTLE_TIMEOUT_MS,
+        );
+      }
 
       // Stimuli are how authored content reaches a behavior tree. Without a bus
       // nothing can be promoted, which is simply an AI that only sees and hears.
@@ -937,6 +970,8 @@ export function createAiModule(): CapabilityModule {
       navGridCache.clear();
       recastPlanner?.dispose();
       recastPlanner = null;
+      recastTileWorkers?.dispose();
+      recastTileWorkers = null;
       ai?.dispose();
       ai = null;
       services = null;

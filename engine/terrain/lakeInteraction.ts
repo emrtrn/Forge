@@ -2,6 +2,7 @@ import type { VehicleWheelState } from "../physics/vehicle/vehicleTypes";
 import type { LakeGeometry } from "./terrainLakeWater";
 import { LAKE_WHEEL_RIPPLE_DEFAULTS } from "../scene/waterBody";
 import { lakeWaveOffset, type LakeWaveParameters } from "./lakeWaves";
+import { CooperativeWork, finishWork } from "../core/cooperativeWork";
 
 export const LAKE_MAX_RIPPLES = 24;
 export const LAKE_RIPPLE_LIFETIME = LAKE_WHEEL_RIPPLE_DEFAULTS.wheelRippleLifetime;
@@ -12,10 +13,18 @@ const MAX_CONTACTS = 128;
 export class LakeSurfaceQuery {
   private readonly heads: Int32Array;
   private readonly next: Int32Array;
-  constructor(private readonly geometry: LakeGeometry) {
+  constructor(private readonly geometry: LakeGeometry, deferIndex = false) {
     const grid = geometry.coverage;
     this.heads = new Int32Array(grid ? grid.nx * grid.nz : 0).fill(-1);
     this.next = new Int32Array(geometry.indices.length / 3).fill(-1);
+    if (!deferIndex) finishWork(this.indexSteps());
+  }
+  static async create(geometry: LakeGeometry, work: CooperativeWork): Promise<LakeSurfaceQuery> {
+    const query = new LakeSurfaceQuery(geometry, true);
+    await work.run("surface-query", query.indexSteps()); return query;
+  }
+  private *indexSteps(): Generator<void> {
+    const geometry = this.geometry, grid = geometry.coverage;
     if (!grid || geometry.status !== "ready") return;
     const { positions: p, indices, position } = geometry;
     for (let t = 0; t < this.next.length; t++) {
@@ -25,6 +34,7 @@ export class LakeSurfaceQuery {
       if (x < 0 || z < 0 || x >= grid.nx || z >= grid.nz) continue;
       const cell = z * grid.nx + x;
       this.next[t] = this.heads[cell]!; this.heads[cell] = t;
+      if ((t & 255) === 0) yield;
     }
   }
   /** Returns vertical depth only inside the connected, clipped wet surface. */

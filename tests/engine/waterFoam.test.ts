@@ -1,5 +1,8 @@
 import { Group, Scene, Vector4 } from "three";
 import { registerLakeShoreWetness, createTerrainShoreWetnessUniforms, terrainShoreWetnessAt, updateTerrainShoreWetness } from "../../engine/render-three/terrain/terrainShoreWetness";
+import { registerLakeCaustics, createTerrainCausticsUniforms, updateTerrainCaustics } from "../../engine/render-three/terrain/terrainCaustics";
+import type { TerrainUniforms } from "../../engine/render-three/terrain/terrainMaterial";
+import type { DataArrayTexture } from "three";
 import assert from "node:assert/strict";
 import { createLakeFoamMask, createWaterContactUniforms, createWaterShoreMask, riverContactSegments, riverContactSettings } from "../../engine/render-three/waterFoam";
 import { defaultWaterContactFoam, validateWaterContactFoam } from "../../engine/scene/waterContactFoam";
@@ -15,6 +18,40 @@ import { createLakeFixture } from "./fixtures/lakeFixture";
 
 type Check = (label: string, run: () => Promise<void>) => Promise<void>;
 export async function registerWaterFoamTests(check: Check): Promise<void> {
+  await check("Lake mask rebuild: stable layers reuse allocations and upload only the changed body's exact coverage", async () => {
+    const doc = createLakeFixture(), geometry = await buildLakeGeometry(await prepareLakeSnapshot(doc, doc.lake));
+    const scene = new Scene(), a = new Group(), b = new Group(); scene.add(a, b);
+    const lakeA = { ...doc.lake, id: "a", appearance: { shoreWetnessEnabled: true, causticsEnabled: true } };
+    const lakeB = { ...lakeA, id: "b", surfaceLevel: 13 };
+    const wet = createTerrainShoreWetnessUniforms(), light = createTerrainCausticsUniforms();
+    const update = () => { updateTerrainShoreWetness(wet, scene); updateTerrainCaustics(light as unknown as TerrainUniforms, scene); };
+    const textures = () => [wet.uShoreWetMask.value, light.uCausticMask.value] as unknown as DataArrayTexture[];
+    const releaseB = [registerLakeShoreWetness(scene, lakeB, geometry, b), registerLakeCaustics(scene, lakeB, geometry, b)];
+    let releaseA = [registerLakeShoreWetness(scene, lakeA, geometry, a), registerLakeCaustics(scene, lakeA, geometry, a)];
+    update(); const original = textures(), bytes = original.map(t => (t.image.data as Uint8Array).slice());
+    assert.equal(wet.uShoreWetParams.value[0]!.z, lakeA.surfaceLevel, "uniforms follow the same stable order as texture layers");
+    assert.equal(wet.uShoreWetParams.value[1]!.z, lakeB.surfaceLevel);
+    original.forEach(t => t.clearLayerUpdates());
+    releaseA.forEach(release => release());
+    const changed = { ...geometry, coverage: { ...geometry.coverage!, triangles: new Uint8Array(geometry.coverage!.triangles.length) } };
+    releaseA = [registerLakeShoreWetness(scene, lakeA, changed, a), registerLakeCaustics(scene, lakeA, changed, a)];
+    update();
+    textures().forEach((texture, i) => {
+      assert.equal(texture, original[i], "replacement keeps the texture and its CPU backing allocation");
+      assert.deepEqual([...texture.layerUpdates], [0], "an unchanged second body is never uploaded again");
+      const data = texture.image.data as Uint8Array, half = data.length / 2;
+      assert.notDeepEqual(data.subarray(0, half), bytes[i]!.subarray(0, half), "connected-face changes reach the GPU layer");
+      assert.deepEqual(data.subarray(half), bytes[i]!.subarray(half), "the unrelated layer stays byte-for-byte identical");
+      texture.clearLayerUpdates();
+    });
+    update(); textures().forEach(t => assert.equal(t.layerUpdates.size, 0, "ordinary render passes do not repack/upload"));
+    let disposed = 0; original.forEach(t => t.addEventListener("dispose", () => disposed++));
+    releaseA.forEach(release => release()); update();
+    assert.equal(disposed, 2, "a changed layer count releases old GPU storage");
+    assert.equal(wet.uShoreWetParams.value[0]!.z, lakeB.surfaceLevel, "removal compacts uniforms and texture together");
+    releaseB.forEach(release => release()); update();
+    assert.equal(wet.uShoreWetMask.value, null); assert.equal(light.uCausticMask.value, null);
+  });
   await check("Water contact foam: shared strict save/runtime schema, old defaults and independent clones", async () => {
     const contactFoam = { ...defaultWaterContactFoam(), enabled: true, obstacles: [{ id: "rock", kind: "ellipse" as const,
       position: [-20,12,-12] as [number,number,number], radii: [2,1] as [number,number], rotation: 30, halfHeight: 1,

@@ -7619,10 +7619,11 @@ export class SceneApp {
 
   getLakeGeometryFoamState() {
     const lake=this.getLakeEditorState().source,job=this.lakeFoamJob;
-    if(!lake)return {busy:false,message:"",stale:false};
+    if(!lake)return {busy:false,message:"",stale:false,ready:false};
     const settings=lake.geometryFoam,busy=job?.id===lake.id;
     const stale=!!settings?.bake&&settings.bake.fingerprint!==this.lakeFoamFingerprint(lake);
-    return {busy,message:busy?job.progress:this.lakes?.foamErrors.get(lake.id)??this.lakeFoamMessages.get(lake.id)??(stale?"Recalculation required":settings?.bake?"Ready":"Not calculated"),stale};
+    const ready=this.lakes?.results.get(lake.id)?.status==="ready"&&this.lakes.objects.has(lake.id);
+    return {busy,ready,message:busy?job.progress:!ready?"Preparing water surface":this.lakes?.foamErrors.get(lake.id)??this.lakeFoamMessages.get(lake.id)??(stale?"Recalculation required":settings?.bake?"Ready":"Not calculated"),stale};
   }
 
   cancelLakeGeometryFoam(): void {this.lakeFoamJob?.controller.abort();}
@@ -7705,7 +7706,7 @@ export class SceneApp {
     catch(error){message=String(error);}
     if(water?.geometryFoam?.bake)message=stale?"Recalculation required":"Ready";
     const object=this.riverWaterObjects.find(o=>o.userData.riverWaterId===id);
-    return {busy,stale,message:busy?job.progress:this.riverFoamMessages.get(id)??object?.effectErrors[0]??message};
+    return {busy,stale,ready:!!object,message:busy?job.progress:!object?"Preparing water surface":this.riverFoamMessages.get(id)??object.effectErrors[0]??message};
   }
   cancelRiverGeometryFoam():void {this.riverFoamJob?.controller.abort();}
   clearRiverGeometryFoam(id:string):void {
@@ -8083,6 +8084,7 @@ export class SceneApp {
       }
     }
     this.refreshAllRiverWaterFoamOverlays();
+    this.emitSelectionChanged(); // Calculate becomes available only after the async surface is published.
   }
 
   private async loadRiverWaterNormalTexture(id: string): Promise<Texture | null> {

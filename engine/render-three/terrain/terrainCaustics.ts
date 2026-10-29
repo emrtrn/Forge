@@ -14,8 +14,14 @@ const SIDE = 256, MAX_BODIES = 8;
  * stay as authored; only the uniform is scaled, so 0 still disables the lake. */
 const CAUSTICS_STRENGTH_GAIN = 2;
 interface Source { lake?: LayoutLakeWaterBody; water?: ResolvedRiverWater; coverage: NonNullable<LakeGeometry["coverage"]>; object: Object3D; river?: RiverSurfaceQuery; flowSpeed?: number }
-interface Registry { sources: Map<Object3D, Source>; texture: DataArrayTexture | null; dirty: boolean; atlas?: ReturnType<typeof riverCausticAtlas> | undefined }
+interface Registry { sources: Map<Object3D, Source>; texture: DataArrayTexture | null; dirty: boolean; layers: Source[]; atlasSources: RiverSurfaceQuery[]; atlas?: ReturnType<typeof riverCausticAtlas> | undefined }
 const registries = new WeakMap<Scene, Registry>();
+
+export function assertLakeCausticsCapacity(scene: Scene, replacing?: Object3D): void {
+  const registry = registries.get(scene);
+  if (registry && registry.sources.size - Number(!!replacing && registry.sources.has(replacing)) >= MAX_BODIES)
+    throw new Error("over-budget: at most eight caustics bodies (Lake + River)");
+}
 
 /** Counts actual owned scene resources, independent of the last depth/capture pass's uniforms. */
 export function terrainCausticsResources(scene:Scene) {
@@ -40,7 +46,7 @@ export function registerLakeCaustics(scene: Scene, lake: LayoutLakeWaterBody, ge
 
 function registerSource(scene:Scene, source:Source):()=>void {
   let registry=registries.get(scene);
-  if(!registry){registry={sources:new Map(),texture:null,dirty:true};registries.set(scene,registry);}
+  if(!registry){registry={sources:new Map(),texture:null,dirty:true,layers:[],atlasSources:[]};registries.set(scene,registry);}
   if(registry.sources.size>=MAX_BODIES)throw new Error("over-budget: at most eight caustics bodies (Lake + River)");
   registry.sources.set(source.object,source);registry.dirty=true;
   let released=false;
@@ -73,36 +79,46 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
   uniforms.uCausticTime!.value = performance.now() / 1000;
   uniforms.uRiverCausticCount!.value = registry ? [...registry.sources.values()].filter(s=>s.river).length : 0;
   if (!registry) { uniforms.uCausticMask!.value = null; uniforms.uRiverCausticData!.value=null; return; }
+  const sources = registry.dirty ? [...registry.sources.values()].sort((a, b) =>
+    `${a.lake ? "lake" : "river"}:${a.lake?.id ?? a.water!.id}`.localeCompare(`${b.lake ? "lake" : "river"}:${b.lake?.id ?? b.water!.id}`)) : registry.layers;
   if (registry.dirty) {
     // RG: exact face flags; BA: shared original light/warp tile. The masks use
     // texelFetch at level zero, while animated patterns use filtered mip levels.
-    const rivers=[...registry.sources.values()].flatMap(s=>s.river?[s.river]:[]);
-    const atlas=rivers.length?riverCausticAtlas(rivers):undefined;
-    registry.atlas?.texture.dispose(); registry.atlas=atlas;
-    const data = new Uint8Array(SIDE * SIDE * 4 * registry.sources.size), pattern = terrainCausticPattern();
+    const rivers=sources.flatMap(s=>s.river?[s.river]:[]);
+    if (rivers.length !== registry.atlasSources.length || rivers.some((river, i) => river !== registry.atlasSources[i])) {
+      const atlas=rivers.length?riverCausticAtlas(rivers):undefined;
+      registry.atlas?.texture.dispose(); registry.atlas=atlas; registry.atlasSources=rivers;
+    }
+    const resized = !registry.texture || registry.texture.image.depth !== sources.length;
+    if (resized) {
+      registry.texture?.dispose();
+      registry.texture = new DataArrayTexture(new Uint8Array(SIDE * SIDE * 4 * sources.length), SIDE, SIDE, sources.length);
+      registry.texture.format = RGBAFormat; registry.texture.type = UnsignedByteType;
+      registry.texture.wrapS = registry.texture.wrapT = RepeatWrapping;
+      registry.texture.minFilter = LinearMipmapLinearFilter; registry.texture.magFilter = LinearFilter;
+      registry.texture.generateMipmaps = true; registry.texture.name = "LakeCaustics.connectedFaces";
+    }
+    const texture = registry.texture!, data = texture.image.data as Uint8Array, pattern = terrainCausticPattern();
     let layer = 0;
-    for (const { coverage } of registry.sources.values()) {
-      const start = layer++ * SIDE * SIDE * 4;
+    for (const source of sources) {
+      const index = layer++;
+      if (!resized && registry.layers[index] === source) continue;
+      const { coverage } = source, start = index * SIDE * SIDE * 4;
       for (let cell = 0; cell < SIDE * SIDE; cell++) {
         const offset = start + cell * 4;
         data[offset] = coverage.triangles[cell * 2] ?? 0;
         data[offset + 1] = coverage.triangles[cell * 2 + 1] ?? 0;
         data[offset + 2] = pattern[cell * 2]!; data[offset + 3] = pattern[cell * 2 + 1]!;
       }
+      texture.addLayerUpdate(index);
     }
-    registry.texture?.dispose();
-    registry.texture = new DataArrayTexture(data, SIDE, SIDE, registry.sources.size);
-    registry.texture.format = RGBAFormat; registry.texture.type = UnsignedByteType;
-    registry.texture.wrapS = registry.texture.wrapT = RepeatWrapping;
-    registry.texture.minFilter = LinearMipmapLinearFilter; registry.texture.magFilter = LinearFilter;
-    registry.texture.generateMipmaps = true; registry.texture.needsUpdate = true;
-    registry.texture.name = "LakeCaustics.connectedFaces"; registry.dirty = false;
+    texture.needsUpdate = true; registry.layers = sources; registry.dirty = false;
   }
   uniforms.uCausticMask!.value = registry.texture;
   uniforms.uRiverCausticData!.value=registry.atlas?.texture??null;
   uniforms.uRiverCausticWidth!.value=registry.atlas?.width??1;
   let i = 0, riverIndex=0;
-  for (const { lake, water, coverage, object, river, flowSpeed } of registry.sources.values()) {
+  for (const { lake, water, coverage, object, river, flowSpeed } of sources) {
     const caustics=water?.caustics;
     const a=lake?resolveLakeAppearance(lake):{causticsStrength:caustics!.strength,causticsScale:caustics!.scale,causticsSpeed:caustics!.speed,causticsDepthFade:caustics!.depthFade};
     const terrain=lake?.terrainRef??water!.landscapeRef,level=lake?.surfaceLevel??river!.origin[1];

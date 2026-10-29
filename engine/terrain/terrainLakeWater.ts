@@ -3,6 +3,7 @@ import { LAKE_LIMITS, validateWaterBody } from "../scene/waterBody";
 import { readLakeTile } from "./lakeTileReads";
 import type { WorldTerrainDocument } from "./terrainLoader";
 import { tileKey, type TerrainTileData, type WorldTerrainDef } from "./terrainTypes";
+import { CooperativeWork } from "../core/cooperativeWork";
 
 export type LakeStatus = "ready" | "dry-seed" | "open-boundary" | "missing-data" | "over-budget" | "invalid";
 export interface LakeGeometry {
@@ -105,12 +106,12 @@ export function emptyLake(lake: LayoutLakeWaterBody, status: LakeStatus, message
 
 /** Terrain triangle graph, exact clipping and minimax escape; yields between bounded batches. */
 export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSignal,
-  connected?: (triangles: Uint8Array) => void): Promise<LakeGeometry> {
-  const started = performance.now(); let slice = started;
-  const yieldWork = async () => {
-    abort(signal);
-    if (performance.now() - slice >= 3) { await new Promise<void>((resolve) => setTimeout(resolve, 0)); slice = performance.now(); abort(signal); }
-  };
+  connected?: (triangles: Uint8Array) => void, work = new CooperativeWork({ signal })): Promise<LakeGeometry> {
+  return work.run("geometry", lakeGeometrySteps(snapshot, connected));
+}
+
+function* lakeGeometrySteps(snapshot: LakeSnapshot, connected?: (triangles: Uint8Array) => void): Generator<void, LakeGeometry> {
+  const started = performance.now();
   const { lake, def, nx, nz, gx, gz, heights: h, present } = snapshot;
   const out = emptyLake(lake, "ready", "Lake ready"); out.cells = nx * nz;
   const width = nx + 1, count = nx * nz * 2, level = lake.surfaceLevel - def.origin[1];
@@ -157,7 +158,7 @@ export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSi
       if (next < 0) escape = Math.min(escape, candidate);
       else if (slots[next] !== -2 && candidate < costs[next]!) push(next, candidate);
     }
-    if ((++steps & 255) === 0) await yieldWork();
+    if ((++steps & 255) === 0) yield;
   }
   out.escapeLevel = escape + def.origin[1];
   if (seedH >= level - EPS) return { ...out, status: "dry-seed", message: "Seed is dry: raise water level or choose another seed", buildMs: performance.now() - started };
@@ -168,7 +169,7 @@ export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSi
       const next = n[e]!;
       if (next >= 0 && !wet[next] && Math.min(h[v[e]!]!, h[v[(e + 1) % 3]!]!) < level - EPS) { wet[next] = 1; queue[tail++] = next; }
     }
-    if ((head & 255) === 0) await yieldWork();
+    if ((head & 255) === 0) yield;
   }
   connected?.(wet);
   // Bounded typed buffers. Shared source vertices and all three grid edge families are welded.
@@ -222,7 +223,7 @@ export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSi
     for (let e = 0; e < 3; e++) if (n[e]! < 0) {
       const ids = edgeIds[e]!; if (ids.length >= 2 && ids[0] !== ids[ids.length - 1]) { segment(cuts, bc, ids[0]!, ids[ids.length - 1]!); bc += 4; }
     }
-    if ((qi & 255) === 0) await yieldWork();
+    if ((qi & 255) === 0) yield;
   }
   out.positions = pos.slice(0, vc * 3); out.depths = depths.slice(0, vc); out.uvs = uv.slice(0, vc * 2);
   out.indices = indices.slice(0, ic); out.shore = shore.slice(0, sc); out.cuts = cuts.slice(0, bc);
@@ -239,11 +240,11 @@ export async function buildLakeGeometry(snapshot: LakeSnapshot, signal?: AbortSi
     const db = out.depths[b]! - out.depths[a]!, dc = out.depths[c]! - out.depths[a]!;
     const dx = (db * cz - dc * bz) / det, dz = (bx * dc - cx * db) / det;
     for (const i of [a, b, c]) { slopes[i * 2] = slopes[i * 2]! + dx * area; slopes[i * 2 + 1] = slopes[i * 2 + 1]! + dz * area; weights[i] = weights[i]! + area; }
-    if (k % 768 === 0) await yieldWork();
+    if (k % 768 === 0) yield;
   }
   for (let i = 0; i < vc; i++) if (weights[i]! > 0) {
     slopes[i * 2] = slopes[i * 2]! / weights[i]!; slopes[i * 2 + 1] = slopes[i * 2 + 1]! / weights[i]!;
-    if ((i & 255) === 0) await yieldWork();
+    if ((i & 255) === 0) yield;
   }
   out.depthSlopes = slopes;
   if (level >= escape - EPS) { out.status = "open-boundary"; out.message = `Area opens at world Y ${out.escapeLevel.toFixed(3)}; enlarge area or lower level`; }

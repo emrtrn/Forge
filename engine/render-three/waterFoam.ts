@@ -2,6 +2,7 @@ import { ClampToEdgeWrapping, DataTexture, LinearFilter, RedFormat, UnsignedByte
 import { WATER_CONTACT_FOAM_LIMIT, type WaterContactFoam } from "../scene/waterContactFoam";
 import type { LayoutLakeWaterBody } from "../scene/layout";
 import type { LakeGeometry } from "../terrain/terrainLakeWater";
+import { CooperativeWork, finishWork } from "../core/cooperativeWork";
 
 /** Bounded distance-to-real-shore field, including islands. Local coordinates
  * keep large origins out of the distance calculation. No per-frame generation. */
@@ -10,9 +11,18 @@ export function createLakeFoamMask(lake: LayoutLakeWaterBody, data: LakeGeometry
     [lake.bounds.max[0] - data.position[0], lake.bounds.max[1] - data.position[2]], data.shore, width);
 }
 
+export function createLakeFoamMaskAsync(lake: LayoutLakeWaterBody, data: LakeGeometry, width: number, work: CooperativeWork, phase = "shore-foam") {
+  return work.run(phase, waterShoreMaskSteps([lake.bounds.min[0] - data.position[0], lake.bounds.min[1] - data.position[2]],
+    [lake.bounds.max[0] - data.position[0], lake.bounds.max[1] - data.position[2]], data.shore, width));
+}
+
 /** Same metre-scale distance field for Lake contours and River wet/dry contours.
  * Ribbon edges and terrain holes are deliberately not contact segments. */
 export function createWaterShoreMask(min: readonly number[], max: readonly number[], shore: ArrayLike<number>, width: number) {
+  return finishWork(waterShoreMaskSteps(min, max, shore, width));
+}
+
+function* waterShoreMaskSteps(min: readonly number[], max: readonly number[], shore: ArrayLike<number>, width: number): Generator<void, DataTexture> {
   const extent = [max[0]! - min[0]!, max[1]! - min[1]!];
   if (!Number.isFinite(width) || width <= 0 || extent.some(v => !Number.isFinite(v) || v <= 0)) throw new Error("Invalid Lake foam dimensions");
   const nx = Math.ceil(extent[0]! / (width / 4)), nz = Math.ceil(extent[1]! / (width / 4));
@@ -22,7 +32,7 @@ export function createWaterShoreMask(min: readonly number[], max: readonly numbe
   const values = new Uint8Array(nx * nz); values.fill(255);
   const ox = min[0]!, oz = min[1]!;
   const sx = extent[0]! / nx, sz = extent[1]! / nz;
-  let work = 0;
+  let work = 0, samples = 0;
   for (let i = 0; i < shore.length; i += 4) {
     const ax = shore[i]!, az = shore[i + 1]!, bx = shore[i + 2]!, bz = shore[i + 3]!;
     const dx = bx - ax, dz = bz - az, length2 = dx * dx + dz * dz;
@@ -37,7 +47,9 @@ export function createWaterShoreMask(min: readonly number[], max: readonly numbe
       const t = length2 > 0 ? Math.max(0, Math.min(1, (px * dx + pz * dz) / length2)) : 0;
       const value = Math.min(255, Math.round(Math.hypot(px - t * dx, pz - t * dz) / width * 255));
       const index = z * nx + x; values[index] = Math.min(values[index]!, value);
+      if ((++samples & 255) === 0) yield;
     }
+    if ((i & 255) === 0) yield;
   }
   const texture = new DataTexture(values, nx, nz, RedFormat, UnsignedByteType);
   texture.name = "LakeFoam.shoreDistance"; texture.minFilter = texture.magFilter = LinearFilter;

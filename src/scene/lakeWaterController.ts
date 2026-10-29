@@ -1,9 +1,9 @@
 import { LakeFoamStore } from "./lakeFoamStore";
-import { registerLakeShoreWetness, terrainShoreWetnessAt } from "@engine/render-three/terrain/terrainShoreWetness";
+import { registerLakeShoreWetness, terrainShoreWetnessAt, prepareLakeShoreMask, assertLakeShoreCapacity } from "@engine/render-three/terrain/terrainShoreWetness";
 import { LakeSurfaceQuery, LakeRippleState, lakeWheelContact, type LakeWheelContact } from "@engine/terrain/lakeInteraction";
 import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
 import type { VehicleHost, WetTrailSource } from "./capabilities/runtimeServiceKeys";
-import { Group, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, Mesh, MeshBasicMaterial, SphereGeometry, type Texture, type Scene } from "three";
+import { Group, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, Mesh, MeshBasicMaterial, SphereGeometry, type Texture, type Scene, type DataTexture } from "three";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { LAKE_LIMITS, resolveLakeAppearance } from "@engine/scene/waterBody";
 import { buildLakeGeometry, emptyLake, lakeGrid, prepareLakeSnapshot, type LakeGeometry } from "@engine/terrain/terrainLakeWater";
@@ -12,9 +12,12 @@ import type { TerrainTileData } from "@engine/terrain/terrainTypes";
 import { LakeWaterObject } from "@engine/render-three/lakeWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import type { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
-import { registerLakeCaustics } from "@engine/render-three/terrain/terrainCaustics";
+import { registerLakeCaustics, assertLakeCausticsCapacity } from "@engine/render-three/terrain/terrainCaustics";
 import { FULL_LAKE_QUALITY, qualityLake, type LakeQuality } from "@engine/perf/lakeQuality";
 import type { LakeFoamData } from "@engine/scene/lakeFoamBake";
+import { CooperativeWork, type WorkSlice } from "@engine/core/cooperativeWork";
+import { prepareLakePresentation } from "@engine/render-three/lakePreparation";
+import { createLakeFoamMaskAsync } from "@engine/render-three/waterFoam";
 
 /** Lake water (m) over a contact that soaks a tyre; thinner films at the very shore do not. */
 const SOAKING_DEPTH = 0.02;
@@ -30,6 +33,8 @@ export interface LakeWaterContext {
   load: (terrainRef: string, key: string, signal?: AbortSignal) => Promise<TerrainTileData>;
   normal: (id: string) => Promise<Texture | null>;
   changed?: () => void;
+  /** Optional load-time QA instrumentation; no per-frame collection. */
+  onWorkSlice?: ((slice: WorkSlice) => void) | undefined;
   vehicles?: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "onPhysicsStep" | "isSurfaceFxActive"> | undefined;
 }
 
@@ -37,6 +42,7 @@ interface LakePresentation {
   source: LayoutLakeWaterBody;
   effective: LayoutLakeWaterBody;
   object: LakeWaterObject;
+  geometry: LakeGeometry;
   shore: () => void;
   caustics: () => void;
 }
@@ -77,10 +83,11 @@ export class LakeWaterController {
     if (!quality.foamAllowed) { this.foam.clearLoaded(); this.foamErrors.clear(); }
     const work = async () => {
       if (signal.aborted) return;
+      const scheduler = new CooperativeWork({ signal, onSlice: this.context.onWorkSlice });
       for (const [id, p] of this.presentations) {
         if (signal.aborted) return;
-        const geometry = this.results.get(id);
-        if (geometry?.status !== "ready" || !p.object.parent) continue;
+        const geometry = p.geometry;
+        if (!p.object.parent) continue;
         let bakedFoam;
         if (quality.foamAllowed && p.source.geometryFoam?.enabled && p.source.geometryFoam.bake && !p.object.material.uniforms.geometryFoamMask!.value) {
           const used = [...this.objects].reduce((sum, [other, object]) => sum + (other === id ? 0 : object.material.uniforms.geometryFoamMask!.value?.image?.data?.byteLength ?? 0), 0);
@@ -89,11 +96,17 @@ export class LakeWaterController {
         if (signal.aborted || this.presentations.get(id) !== p) return;
         const effective = qualityLake(p.source, quality), old = resolveLakeAppearance(p.effective), next = resolveLakeAppearance(effective);
         let shore: (() => void) | undefined, caustics: (() => void) | undefined;
+        let foamMask: DataTexture | null = null, shoreMask: DataTexture | null = null;
         try {
           // Stage new masks first; a rejected visual budget leaves the current surface intact.
-          if (next.shoreWetnessEnabled && !old.shoreWetnessEnabled) shore = registerLakeShoreWetness(this.context.scene, effective, geometry, p.object);
+          if (next.foamEnabled && !p.object.material.uniforms.foamMask!.value) foamMask = await createLakeFoamMaskAsync(effective, geometry, next.foamWidth, scheduler);
+          if (next.shoreWetnessEnabled && !old.shoreWetnessEnabled) shoreMask = await prepareLakeShoreMask(effective, geometry, scheduler);
+          scheduler.check();
+          if (next.shoreWetnessEnabled && !old.shoreWetnessEnabled) {
+            shore = registerLakeShoreWetness(this.context.scene, effective, geometry, p.object, shoreMask); shoreMask = null;
+          }
           if (next.causticsEnabled && !old.causticsEnabled) caustics = registerLakeCaustics(this.context.scene, effective, geometry, p.object);
-          p.object.applyQuality(quality, this.reflectionFor(effective), bakedFoam);
+          p.object.applyQuality(quality, this.reflectionFor(effective), bakedFoam, foamMask); foamMask = null;
           if (!next.shoreWetnessEnabled) { p.shore(); p.shore = () => {}; }
           else if (shore) p.shore = shore;
           if (!next.causticsEnabled) { p.caustics(); p.caustics = () => {}; }
@@ -105,8 +118,8 @@ export class LakeWaterController {
           this.qualityErrors.delete(id);
         } catch (error) {
           shore?.(); caustics?.();
-          this.qualityErrors.set(id, String(error)); console.warn("[lake-quality]", id, error);
-        }
+          if (!signal.aborted) { this.qualityErrors.set(id, String(error)); console.warn("[lake-quality]", id, error); }
+        } finally { foamMask?.dispose(); shoreMask?.dispose(); }
         // Mask creation/upload is presentation work; do not batch eight bodies into one job.
         await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
@@ -208,6 +221,7 @@ export class LakeWaterController {
     const sources = structuredClone([...bodies]);
     const work = async () => {
       if (signal.aborted) return;
+      const scheduler = new CooperativeWork({ signal, onSlice: this.context.onWorkSlice });
       const ids = new Set(sources.map((w) => w.id));
       for (const id of this.objects.keys()) if (!ids.has(id)) this.remove(id);
       for (const id of this.results.keys()) if (!ids.has(id)) { this.remove(id); this.results.delete(id); }
@@ -221,7 +235,7 @@ export class LakeWaterController {
           const grid = lakeGrid(document.def, lake); total += grid.nx * grid.nz;
           if (sources.length > LAKE_LIMITS.bodies || total > LAKE_LIMITS.totalCells) throw new Error("over-budget: total Lake area exceeds limit");
           const snapshot = await prepareLakeSnapshot(document, lake, (key, s) => this.context.load(lake.terrainRef, key, s), signal);
-          result = await buildLakeGeometry(snapshot, signal);
+          result = await buildLakeGeometry(snapshot, signal, undefined, scheduler);
           bytes += result.bytes;
           if (bytes * 2 > 32 * 1024 ** 2) throw new Error("over-budget: Lake replacement buffers exceed 32 MiB");
         } catch (error) {
@@ -232,41 +246,72 @@ export class LakeWaterController {
         let normal: Texture | null = null;
         if (result.status === "ready") normal = await this.context.normal(resolveLakeAppearance(lake).normalTexture);
         if (signal.aborted || generation !== this.generation) return;
-        let bakedFoam;
+        let bakedFoam: LakeFoamData | undefined;
         this.foamErrors.delete(lake.id);
-        if(result.status==="ready" && this.quality.foamAllowed && lake.geometryFoam?.enabled && lake.geometryFoam.bake) {
-          bakedFoam = await this.readFoam(lake, AbortSignal.any([signal, this.qualityAborter.signal]), 32 * 1024 ** 2 - foamBytes);
-          if (bakedFoam) foamBytes += foamAllocation(bakedFoam);
-        }
         if(signal.aborted || generation!==this.generation)return;
-        this.remove(lake.id); this.results.set(lake.id, result);
         if (result.status === "ready") {
-          const a = resolveLakeAppearance(lake), effective = qualityLake(lake, this.quality);
+          const a = resolveLakeAppearance(lake);
+          let effective = qualityLake(lake, this.quality);
+          let staged: Awaited<ReturnType<typeof prepareLakePresentation>> | undefined;
           let object: LakeWaterObject | undefined;
+          let published = false;
           try {
-            object = new LakeWaterObject(lake, result, normal, this.reflectionFor(effective), bakedFoam, this.quality);
-            const shore = registerLakeShoreWetness(this.context.scene, effective, result, object);
+            // Quality changes invalidate only presentation staging. Geometry is
+            // immutable and can be reused; no obsolete mask can be published.
+            for (;;) {
+              const quality = this.quality;
+              effective = qualityLake(lake, quality);
+              const visualSignal = AbortSignal.any([signal, this.qualityAborter.signal]);
+              try {
+                if (quality.foamAllowed && !bakedFoam && lake.geometryFoam?.enabled && lake.geometryFoam.bake) {
+                  bakedFoam = await this.readFoam(lake, visualSignal, 32 * 1024 ** 2 - foamBytes);
+                  if (bakedFoam) foamBytes += foamAllocation(bakedFoam);
+                }
+                staged = await prepareLakePresentation(effective, result, new CooperativeWork({ signal: visualSignal, onSlice: this.context.onWorkSlice }));
+                break;
+              } catch (error) { if (signal.aborted || !visualSignal.aborted) throw error; }
+            }
+            scheduler.check();
+            const previous = this.objects.get(lake.id), appearance = resolveLakeAppearance(effective);
+            if (appearance.shoreWetnessEnabled) assertLakeShoreCapacity(this.context.scene, previous);
+            if (appearance.causticsEnabled) assertLakeCausticsCapacity(this.context.scene, previous);
+            object = new LakeWaterObject(lake, result, normal, this.reflectionFor(effective), bakedFoam, this.quality, staged);
+            // All fallible CPU preparation/limits precede the synchronous swap.
+            this.remove(lake.id); this.results.set(lake.id, result);
+            const shore = registerLakeShoreWetness(this.context.scene, effective, result, object, staged.shore); staged.shore = null;
             const caustics = registerLakeCaustics(this.context.scene, effective, result, object);
-            this.presentations.set(lake.id, { source: lake, effective, object, shore, caustics });
+            this.presentations.set(lake.id, { source: lake, effective, object, geometry: result, shore, caustics });
             const owner = object;
             object.addEventListener("removed", () => this.releasePresentation(lake.id, owner));
+            object.visible = !lake.hidden;
+            if (!this.context.editor && this.unsubscribePhysics) object.setSurfaceWaveTime(this.waveTime);
+            if (!this.context.editor) object.raycast = () => {};
+            this.objects.set(lake.id, object); this.context.scene.add(object);
+            const state = new LakeRippleState(a); state.setLimit(this.quality.maxRipples);
+            this.interactions.set(lake.id, { lake, query: staged.query, state });
+            this.qualityErrors.delete(lake.id); published = true;
           }
           catch (error) {
-            object?.dispose();
+            if (signal.aborted) return;
             const message = error instanceof Error ? error.message : String(error);
             result = emptyLake(lake, message.includes("over-budget") ? "over-budget" : "invalid", message);
             this.results.set(lake.id, result);
+            // A rejected replacement retains the previous published surface.
+            this.qualityErrors.set(lake.id, message);
+            this.removeHelpers(lake.id);
             if (this.context.editor) this.addHelper(lake, result);
             this.context.changed?.();
             continue;
+          } finally {
+            if (!published) {
+              object?.dispose();
+              if (!object) { staged?.geometry.dispose(); staged?.foam?.dispose(); }
+              staged?.shore?.dispose();
+              this.pruneReflections();
+            }
           }
-          object.visible = !lake.hidden;
-          if (!this.context.editor && this.unsubscribePhysics) object.setSurfaceWaveTime(this.waveTime);
-          if (!this.context.editor) object.raycast = () => {};
-          this.objects.set(lake.id, object); this.context.scene.add(object);
-          const state = new LakeRippleState(a); state.setLimit(this.quality.maxRipples);
-          this.interactions.set(lake.id, { lake, query: new LakeSurfaceQuery(result), state });
-          this.qualityErrors.delete(lake.id);
+        } else {
+          this.remove(lake.id); this.results.set(lake.id, result);
         }
         if (this.context.editor) this.addHelper(lake, result);
         this.context.changed?.();
@@ -299,6 +344,9 @@ export class LakeWaterController {
     this.interactions.delete(id);
     this.qualityErrors.delete(id);
     const object = this.objects.get(id); if (object) { object.removeFromParent(); object.dispose(); this.objects.delete(id); }
+    this.removeHelpers(id);
+  }
+  private removeHelpers(id: string): void {
     for (const child of [...this.helpers.children]) if (child.userData.waterBodyId === id) {
       child.removeFromParent(); child.traverse((o) => { if (o instanceof Mesh || o instanceof LineSegments) { o.geometry.dispose(); o.material.dispose(); } });
     }

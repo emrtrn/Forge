@@ -15,6 +15,7 @@ import type { SceneApp } from "@/scene/SceneApp";
 import type { WorldTerrainEditSession } from "@/editor/terrainStore";
 
 export function installLakeProbe(app: unknown) {
+  let riverGate: { entered: boolean; release: () => void } | undefined;
   const a = app as { camera: PerspectiveCamera; canvas: HTMLCanvasElement; lakes: LakeWaterController | null;
     riverWaterObjects?: RiverWaterObject[];
     selection: { kind: string; index?: number } | null;
@@ -27,6 +28,20 @@ export function installLakeProbe(app: unknown) {
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    holdRiverPreparation() {
+      const target = app as { loadRiverWaterNormalTexture: (id: string) => Promise<unknown> };
+      const original = target.loadRiverWaterNormalTexture;
+      let release = () => {};
+      const pending = new Promise<void>(resolve => { release = resolve; });
+      riverGate = { entered: false, release };
+      target.loadRiverWaterNormalTexture = async function (id) {
+        target.loadRiverWaterNormalTexture = original;
+        riverGate!.entered = true; await pending;
+        return original.call(this, id);
+      };
+    },
+    riverPreparationPending() { return riverGate?.entered ?? false; },
+    releaseRiverPreparation() { riverGate?.release(); },
     quality() {
       let caustics = 0, wetShore = 0;
       a.scene.traverse((node: any) => {

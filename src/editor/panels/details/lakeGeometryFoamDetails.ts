@@ -2,7 +2,7 @@ import type { SceneApp } from "@/scene/SceneApp";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { defaultLakeGeometryFoam, type LakeGeometryFoam } from "@engine/scene/lakeFoamBake";
 
-export function renderGeometryFoamDetails(parent:HTMLElement,settings:LakeGeometryFoam,state:{busy:boolean;message:string;stale?:boolean},locked:boolean,draft:boolean,
+export function renderGeometryFoamDetails(parent:HTMLElement,settings:LakeGeometryFoam,state:{busy:boolean;message:string;stale?:boolean;ready?:boolean},locked:boolean,draft:boolean,
   actions:{calculate:()=>void;cancel:()=>void;clear:()=>void;edit:(settings:LakeGeometryFoam)=>void}):void {
   const disabled=locked||draft?"disabled":"",section=document.createElement("div");
   section.className="detail-section";section.dataset.detailSection="lake-geometry-foam";
@@ -12,7 +12,7 @@ export function renderGeometryFoamDetails(parent:HTMLElement,settings:LakeGeomet
     ${draft?'<div class="detail-hint" title="Önce gölü oluşturun.">Create the Lake first.</div>':""}
     <label class="detail-toggle" title="Hesaplanan taş ve engel köpüğünü gösterir veya gizler."><input data-geometry-foam-enabled type="checkbox" aria-label="Geometry Foam Enabled" ${settings.enabled?"checked":""} ${disabled}> Enabled</label>
     ${field("Contact Width (m)","width",.1,4)}${field("Foam Strength","strength",0,1)}${field("Pattern Size (m)","scale",.1,10)}${field("Animation Speed","speed",0,3)}
-    <button type="button" class="detail-action-button" title="Göl çevresindeki uygun taşların gerçek su kesişimlerini topluca hesaplar. Taşları değiştirdikten sonra tekrar kullanın." data-geometry-foam-calculate ${disabled||state.busy?"disabled":""}>${settings.bake?"Recalculate":"Calculate"}</button>
+    <button type="button" class="detail-action-button" title="Göl çevresindeki uygun taşların gerçek su kesişimlerini topluca hesaplar. Taşları değiştirdikten sonra tekrar kullanın." data-geometry-foam-calculate ${disabled||state.busy||state.ready===false?"disabled":""}>${settings.bake?"Recalculate":"Calculate"}</button>
     ${state.busy?'<button type="button" class="detail-action-button" title="İşlemi iptal eder; önceki başarılı köpük korunur." data-geometry-foam-cancel>Cancel</button>':""}
     <button type="button" class="detail-action-button" title="Hesaplanan köpüğü temizler. Undo ile geri alınabilir." data-geometry-foam-clear ${disabled||!settings.bake||state.busy?"disabled":""}>Clear</button>
     <div role="status" class="detail-hint" title="Taşlar, göl seviyesi veya temas genişliği değiştiyse yeniden hesaplayın. Kaydedilen sonuç Reload ve Play sırasında tekrar hesaplanmaz." data-geometry-foam-status></div>`;

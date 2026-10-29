@@ -1,5 +1,39 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel performans işi — Dilimlenmiş Lake hazırlığı — 2026-10-29
+
+Shore/köpük ve ıslak kıyı maskeleri, render normal/bounds hazırlığı, tekerlek
+sorgu indeksi ve geometri çekirdeği yaklaşık 2 ms hedefli, iptal edilebilir CPU
+dilimlerine ayrıldı. Hazırlık bitene kadar önceki geçerli mesh korunur; kalite
+değişimi eski maskenin yayımlanmasını engeller. Senkron/asenkron sonuç eşitliği
+ve kaynakların tek sahiplikle bırakılması engine regresyonlarıyla doğrulandı.
+
+Sekiz Lake / 4 km / RTX 3060 / 1920×1080 koşusunda warm rebuild p95 **363,6 ms**,
+en uzun görev **19,628 ms**, >50 ms görev **0**. Köpük/ıslak kıyı maskesi,
+normal/bounds ve sorgu hazırlığının ölçülen bütün dilimleri ≤2,8 ms. Geometri
+çekirdeğinde 7 aykırı dilim (maksimum 7,3 ms) bulundu; **genel ≤4 ms ve performans
+kabulü açık**. Son tam gate **2.120 engine kontrolüyle**, headed browser
+**6/6** geçti. Lake/River Calculate gerçek yüzey hazır olana kadar kapalıdır;
+ilk River hazırlık yarışı düzeltildi ve geciktirilmiş hazırlıkla sınandı. Önceki 536 ms
+kaydı önceki kaynak koşusudur. Ayrıntılar ve kalan sınırlar:
+[Dilimlenmiş hazırlık raporu](../reports/LAKE_COOPERATIVE_PREPARATION_2026-10-29.md).
+
+## Güncel performans işi — Lake rebuild katman güncellemesi — 2026-10-29
+
+Uzun görevlerin CPU profili alındı: başlıca render darboğazı ortak ıslak kıyı/
+caustics dokularının her göl değişiminde tamamen paketlenmesi ve yüklenmesiydi.
+Gövde sayısı aynıyken texture/backing buffer korunur, yalnız değişen gövdenin
+kararlı katmanı güncellenir; değişmeyen River geometri atlası da korunur.
+
+Aynı CPU örnekleyicili önce/sonra koşusunda warm rebuild p95 **1.117 → 761 ms**.
+Son kaynakta örnekleyici kapalı, sekiz Lake / 4 km / RTX 3060 / 1920×1080
+koşusunda p95 **536 ms**, en uzun rebuild-penceresi ana thread görevi
+**34,472 ms**, **>50 ms görev 0**. 35 rebuild sonunda kaynaklar aynı seviyede.
+**Her iş dilimi ≤4 ms kabulü açık:** shore maskesi/presentation/geometri hazırlığı
+için ek dilimleme gerekir. Transient bellek ve genel performans kabulü kapanmadı.
+Ölçüm koşulları, regresyonlar, eşzamanlı World Builder tam gate engeli ve kalan
+işler [rebuild raporundadır](../reports/LAKE_REBUILD_TASKS_2026-10-29.md).
+
 ## Güncel uygulama — River caustics, otomatik geometri köpüğü ve F4 — 2026-10-29
 
 C4 River caustics, çizilen nehir üçgenlerinin yerel yüksekliği/wet derinliği ve

@@ -1,6 +1,7 @@
 import { registerRiverEffectsTests } from "../tests/engine/riverEffects.test";
 import { registerLakeGeometryFoamTests } from "../tests/engine/lakeGeometryFoam.test";
 import { registerLakeQualityTests } from "../tests/engine/lakeQuality.test";
+import { registerLakeSchedulingTests } from "../tests/engine/lakeScheduling.test";
 import { registerWaterFoamTests } from "../tests/engine/waterFoam.test";
 import { terrainTileTrimesh } from "../tests/engine/terrainTrimeshReference";
 import { validateLandscapeSplines } from "../engine/scene/landscapeSplineValidation";
@@ -1294,6 +1295,7 @@ await registerTerrainRiverWaterTests(checkAsync);
 await registerTerrainLakeWaterTests(checkAsync);
 await registerLakeInteractionTests(checkAsync);
 await registerLakeQualityTests(checkAsync);
+await registerLakeSchedulingTests(checkAsync);
 await registerTerrainCausticsTests(checkAsync);
 await registerWaterFoamTests(checkAsync);
 await registerLakeGeometryFoamTests(checkAsync);

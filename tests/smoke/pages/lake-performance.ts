@@ -6,6 +6,7 @@ import { isPlanarReflectionCamera } from "@engine/render-three/planarReflectionS
 import type { LakeWaterController } from "@/scene/lakeWaterController";
 import type { RoomLayout } from "@engine/scene/layout";
 import type { PerspectiveCamera, Scene, WebGLRenderer, Group } from "three";
+import type { WorkSlice } from "@engine/core/cooperativeWork";
 
 // All instrumentation lives in this QA entrypoint, never in a shipping frame.
 const params = new URLSearchParams(location.search), kind = params.get("kind") ?? "small";
@@ -156,6 +157,12 @@ function witness() {
   },
   async rebuild(count = 35) {
     const durations: number[] = [], retained: Array<{ textures: number; geometries: number; bytes: number }> = [];
+    const slices: WorkSlice[] = [];
+    const context = (a.lakes as unknown as { context: { onWorkSlice?: ((slice: WorkSlice) => void) | undefined } }).context;
+    const previousObserver = context.onWorkSlice;
+    context.onWorkSlice = slice => { slices.push(slice); previousObserver?.(slice); };
+    performance.mark("lake-perf-rebuild-start");
+    try {
     for (let i = 0; i < count; i++) {
       const id = `lake-warm-${i}`;
       performance.mark(`${id}-start`);
@@ -167,7 +174,13 @@ function witness() {
       retained.push({ textures: a.renderer.info.memory.textures, geometries: a.renderer.info.memory.geometries,
         bytes: [...a.lakes.results.values()].reduce((sum, r) => sum + r.bytes, 0) });
     }
-    return { durations, retained, measured: summary(durations.slice(5)), witness: witness() };
+    } finally { context.onWorkSlice = previousObserver; }
+    performance.mark("lake-perf-rebuild-end");
+    return { durations, retained, measured: summary(durations.slice(5)), witness: witness(),
+      workSlices: Object.fromEntries([...new Set(slices.map(s => s.phase))].map(phase => {
+        const values = slices.filter(s => s.phase === phase).map(s => s.milliseconds);
+        return [phase, { ...summary(values), over4ms: values.filter(ms => ms > 4).length }];
+      })) };
   },
 };
 camera(); forge.start();

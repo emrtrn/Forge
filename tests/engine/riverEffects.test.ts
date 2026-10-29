@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { BoxGeometry, Matrix4, Mesh, MeshBasicMaterial, Scene } from "three";
+import { BoxGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, Scene } from "three";
 import { RiverWaterObject, buildRiverWaterRibbon, type RiverWaterRenderItem } from "../../engine/render-three/riverWater";
 import { RiverSurfaceQuery } from "../../engine/terrain/riverSurface";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
 import { defaultWaterCaustics } from "../../engine/scene/waterCaustics";
 import { defaultLakeGeometryFoam, encodeLakeFoam, decodeLakeFoam } from "../../engine/scene/lakeFoamBake";
 import { bakeRiverGeometryFoam, foamSource } from "../../engine/render-three/lakeFoamBake";
-import { createTerrainCausticsUniforms, updateTerrainCaustics } from "../../engine/render-three/terrain/terrainCaustics";
+import { createTerrainCausticsUniforms, updateTerrainCaustics, registerLakeCaustics } from "../../engine/render-three/terrain/terrainCaustics";
+import { createLakeFixture } from "./fixtures/lakeFixture";
+import { buildLakeGeometry, prepareLakeSnapshot } from "../../engine/terrain/terrainLakeWater";
 import { validateRiverWater } from "../../tools/saveValidator";
 
 export function riverEffectFixture(origin:[number,number,number]=[0,0,0]):RiverWaterRenderItem {
@@ -16,6 +18,29 @@ export function riverEffectFixture(origin:[number,number,number]=[0,0,0]):RiverW
     position:origin,rotation:[0,0,0],sampleSpacing:1,heightAt:(x,z)=>Math.abs(x)>3?4:1-z/8,foamNoiseMap:null};
 }
 export async function registerRiverEffectsTests(check:(label:string,run:()=>Promise<void>)=>Promise<void>):Promise<void> {
+  await check("River caustics: replacing a Lake retains the unchanged River atlas and aligned layer uniforms", async () => {
+    const scene = new Scene(), u = createTerrainCausticsUniforms();
+    const river = new RiverWaterObject(riverEffectFixture(), null); scene.add(river);
+    const doc = createLakeFixture(); doc.lake.appearance = { causticsEnabled: true };
+    const geometry = await buildLakeGeometry(await prepareLakeSnapshot(doc, doc.lake));
+    let release = registerLakeCaustics(scene, doc.lake, geometry, new Group());
+    updateTerrainCaustics(u, scene, "terrain");
+    const atlas = u.uRiverCausticData.value!, mask = u.uCausticMask.value;
+    let disposed = 0; atlas.addEventListener("dispose", () => disposed++);
+    const offset = u.uCausticRiver.value[1]!.x;
+    for (let i = 0; i < 3; i++) {
+      release(); release = registerLakeCaustics(scene, doc.lake, geometry, new Group());
+      updateTerrainCaustics(u, scene, "terrain");
+      assert.equal(u.uRiverCausticData.value, atlas); assert.equal(u.uCausticMask.value, mask);
+      assert.equal(u.uCausticRiver.value[0]!.x, -1, "the first stable layer is the Lake");
+      assert.equal(u.uCausticRiver.value[1]!.x, offset, "River offset still addresses its retained atlas");
+      assert.equal(disposed, 0);
+    }
+    release(); updateTerrainCaustics(u, scene, "terrain");
+    assert.equal(u.uRiverCausticData.value, atlas); assert.equal(u.uCausticRiver.value[0]!.x, offset);
+    river.removeFromParent(); river.dispose(); updateTerrainCaustics(u, scene);
+    assert.equal(disposed, 1); assert.equal(u.uRiverCausticData.value, null);
+  });
   await check("River effects: exact sloped surface, dry banks, real holes, large origins and flow",async()=>{
     for(const origin of [[0,0,0],[1e6,13,-1e6]] as [number,number,number][]) {
       const item=riverEffectFixture(origin),ribbon=buildRiverWaterRibbon(item.spline,item),q=new RiverSurfaceQuery(ribbon,origin);

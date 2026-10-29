@@ -3,26 +3,42 @@ import type { LayoutLakeWaterBody } from "../../scene/layout";
 import { resolveLakeAppearance } from "../../scene/waterBody";
 import type { LakeGeometry } from "../../terrain/terrainLakeWater";
 import type { TerrainUniforms } from "./terrainMaterial";
-import { createLakeFoamMask } from "../waterFoam";
+import { createLakeFoamMask, createLakeFoamMaskAsync } from "../waterFoam";
+import type { CooperativeWork } from "../../core/cooperativeWork";
 
 const SIDE = 1024, MAX = 8;
 interface Source { lake: LayoutLakeWaterBody; object: Object3D; mask: DataTexture; coverage: NonNullable<LakeGeometry["coverage"]> }
-interface Registry { sources: Set<Source>; texture: DataArrayTexture | null; dirty: boolean }
+interface Registry { sources: Set<Source>; texture: DataArrayTexture | null; dirty: boolean; layers: Source[] }
 const registries = new WeakMap<Scene, Registry>();
 
 /** Presentation only. No paint weights, soil physics or save state is written. */
-export function registerLakeShoreWetness(scene: Scene, lake: LayoutLakeWaterBody, geometry: LakeGeometry, object: Object3D): () => void {
+export function assertLakeShoreCapacity(scene: Scene, replacing?: Object3D): void {
+  const registry = registries.get(scene);
+  if (registry && registry.sources.size - Number([...registry.sources].some(s => s.object === replacing)) >= MAX)
+    throw new Error("over-budget: at most eight wet Lake shores");
+}
+
+function shoreBounds(lake: LayoutLakeWaterBody, width: number): LayoutLakeWaterBody {
+  return { ...lake, bounds: { min: [lake.bounds.min[0] - width, lake.bounds.min[1] - width],
+    max: [lake.bounds.max[0] + width, lake.bounds.max[1] + width] } };
+}
+
+export function prepareLakeShoreMask(lake: LayoutLakeWaterBody, geometry: LakeGeometry, work: CooperativeWork): Promise<DataTexture> {
+  const width = resolveLakeAppearance(lake).shoreWetnessWidth;
+  return createLakeFoamMaskAsync(shoreBounds(lake, width), geometry, width, work, "wet-shore");
+}
+
+export function registerLakeShoreWetness(scene: Scene, lake: LayoutLakeWaterBody, geometry: LakeGeometry, object: Object3D, prepared?: DataTexture | null): () => void {
   const a = resolveLakeAppearance(lake);
   if (!a.shoreWetnessEnabled || geometry.status !== "ready" || !geometry.coverage) return () => {};
   let registry = registries.get(scene);
-  if (registry && registry.sources.size >= MAX) throw new Error("over-budget: at most eight wet Lake shores");
+  assertLakeShoreCapacity(scene);
   const width = a.shoreWetnessWidth;
-  const padded = { ...lake, bounds: { min: [lake.bounds.min[0] - width, lake.bounds.min[1] - width] as [number, number],
-    max: [lake.bounds.max[0] + width, lake.bounds.max[1] + width] as [number, number] } };
+  const padded = shoreBounds(lake, width);
   let mask: DataTexture;
-  try { mask = createLakeFoamMask(padded, geometry, width); }
+  try { mask = prepared ?? createLakeFoamMask(padded, geometry, width); }
   catch (error) { throw new Error(`Wet shore: ${error instanceof Error ? error.message : String(error)}`); }
-  if (!registry) { registry = { sources: new Set(), texture: null, dirty: true }; registries.set(scene, registry); }
+  if (!registry) { registry = { sources: new Set(), texture: null, dirty: true, layers: [] }; registries.set(scene, registry); }
   const source = { lake, object, mask, coverage: geometry.coverage }; registry.sources.add(source); registry.dirty = true;
   let released = false;
   return () => {
@@ -81,29 +97,41 @@ export function updateTerrainShoreWetness(uniforms: TerrainUniforms, scene: Scen
   const registry = registries.get(scene);
   uniforms.uShoreWetCount!.value = registry?.sources.size ?? 0;
   if (!registry) { uniforms.uShoreWetMask!.value = null; return; }
+  // Stable ids keep unchanged bodies in the same GPU layer when a replacement
+  // is removed/re-added at the end of the source Set during a rebuild.
+  const sources = registry.dirty ? [...registry.sources].sort((a, b) => a.lake.id.localeCompare(b.lake.id)) : registry.layers;
   if (registry.dirty) {
     // R: filtered shore distance; G: exact packed connected-face flags.
     // texelFetch reads flags independently of the distance field resolution.
-    const values = new Uint8Array(SIDE * SIDE * registry.sources.size * 2);
-    for (let i = 0; i < values.length; i += 2) values[i] = 255;
+    const resized = !registry.texture || registry.texture.image.depth !== sources.length;
+    if (resized) {
+      registry.texture?.dispose();
+      registry.texture = new DataArrayTexture(new Uint8Array(SIDE * SIDE * sources.length * 2), SIDE, SIDE, sources.length);
+      registry.texture.format = RGFormat; registry.texture.minFilter = registry.texture.magFilter = LinearFilter;
+      registry.texture.generateMipmaps = false; registry.texture.unpackAlignment = 1;
+      registry.texture.name = "LakeShoreWetness.distanceAndConnectedFaces";
+    }
+    const texture = registry.texture!, values = texture.image.data as Uint8Array;
     let layer = 0;
-    for (const { mask, coverage } of registry.sources) {
+    for (const source of sources) {
+      const index = layer++;
+      if (!resized && registry.layers[index] === source) continue;
+      const { mask, coverage } = source;
       const { data, width, height } = mask.image;
-      const start = layer * SIDE * SIDE * 2;
+      const start = index * SIDE * SIDE * 2, end = start + SIDE * SIDE * 2;
+      values.fill(0, start, end);
+      for (let i = start; i < end; i += 2) values[i] = 255;
       for (let z = 0; z < height; z++) for (let x = 0; x < width; x++) values[start + (z * SIDE + x) * 2] = data![z * width + x]!;
       for (let cell = 0; cell < coverage.nx * coverage.nz; cell++) {
         values[start + cell * 2 + 1] = coverage.triangles[cell * 2]! | (coverage.triangles[cell * 2 + 1]! << 1);
       }
-      layer++;
+      texture.addLayerUpdate(index);
     }
-    registry.texture?.dispose(); registry.texture = new DataArrayTexture(values, SIDE, SIDE, registry.sources.size);
-    registry.texture.format = RGFormat; registry.texture.minFilter = registry.texture.magFilter = LinearFilter;
-    registry.texture.generateMipmaps = false; registry.texture.unpackAlignment = 1; registry.texture.needsUpdate = true;
-    registry.texture.name = "LakeShoreWetness.distanceAndConnectedFaces"; registry.dirty = false;
+    texture.needsUpdate = true; registry.layers = sources; registry.dirty = false;
   }
   uniforms.uShoreWetMask!.value = registry.texture;
   let i = 0;
-  for (const { lake, object, mask, coverage } of registry.sources) {
+  for (const { lake, object, mask, coverage } of sources) {
     const a = resolveLakeAppearance(lake), w = a.shoreWetnessWidth;
     let visible = true; for (let p: Object3D | null = object; p; p = p.parent) visible &&= p.visible;
     const sizeX = lake.bounds.max[0] - lake.bounds.min[0] + 2 * w, sizeZ = lake.bounds.max[1] - lake.bounds.min[1] + 2 * w;

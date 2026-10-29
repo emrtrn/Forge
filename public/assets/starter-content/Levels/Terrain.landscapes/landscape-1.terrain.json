@@ -83,9 +83,9 @@
         {
           "id": "point-1",
           "position": [
-            167.97,
-            15,
-            193.96
+            166.19,
+            -2,
+            195.99
           ],
           "width": 6,
           "falloff": 3
@@ -93,9 +93,9 @@
         {
           "id": "point-2",
           "position": [
-            163.34,
-            12.44,
-            190.75
+            143.47,
+            -2,
+            167.14
           ],
           "width": 6,
           "falloff": 3
@@ -103,9 +103,9 @@
         {
           "id": "point-3",
           "position": [
-            156.52,
-            6.47,
-            184.24
+            117.55,
+            -2,
+            146.21
           ],
           "width": 6,
           "falloff": 3
@@ -113,9 +113,9 @@
         {
           "id": "point-4",
           "position": [
-            147.9,
-            3.12,
-            178.7
+            84.5,
+            -2,
+            128.52
           ],
           "width": 6,
           "falloff": 3
@@ -123,29 +123,9 @@
         {
           "id": "point-5",
           "position": [
-            140.53,
-            -1,
-            175.11
-          ],
-          "width": 6,
-          "falloff": 3
-        },
-        {
-          "id": "point-6",
-          "position": [
-            113.41,
-            -1,
-            148.45
-          ],
-          "width": 6,
-          "falloff": 3
-        },
-        {
-          "id": "point-7",
-          "position": [
-            89.44,
-            -1,
-            126.76
+            33.32,
+            -2,
+            133.1
           ],
           "width": 6,
           "falloff": 3
@@ -204,38 +184,6 @@
           "id": "segment-4",
           "startPointId": "point-4",
           "endPointId": "point-5",
-          "deform": {
-            "enabled": true,
-            "raiseTerrain": true,
-            "lowerTerrain": true,
-            "flatten": true
-          },
-          "paint": {
-            "enabled": true,
-            "layerId": "layer-2",
-            "strength": 1
-          }
-        },
-        {
-          "id": "segment-5",
-          "startPointId": "point-5",
-          "endPointId": "point-6",
-          "deform": {
-            "enabled": true,
-            "raiseTerrain": true,
-            "lowerTerrain": true,
-            "flatten": true
-          },
-          "paint": {
-            "enabled": true,
-            "layerId": "layer-2",
-            "strength": 1
-          }
-        },
-        {
-          "id": "segment-6",
-          "startPointId": "point-6",
-          "endPointId": "point-7",
           "deform": {
             "enabled": true,
             "raiseTerrain": true,

@@ -55,8 +55,7 @@
   },
   "worldCells": [
     "0_0",
-    "1_0",
-    "1_1"
+    "1_0"
   ],
   "skyAtmosphere": {
     "rayleigh": 1.4,

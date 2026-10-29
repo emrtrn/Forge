@@ -154,6 +154,31 @@ export function registerWorldRouteTests(check: Check): void {
     assert.equal(JSON.stringify(a), JSON.stringify(b));
   });
 
+  check("world route: a slope steeper than the limit is climbed by a serpentine, its hairpins reported", () => {
+    // 24.7° everywhere (the mountain test's hillside path): no straight climb or plain detour stays under 20°.
+    const slope = Math.tan((24.7 * Math.PI) / 180);
+    const request: RouteRequest = { from: [0, 0], to: [0, 150], maxSlopeDeg: 20, minTurnRadius: 8 };
+    const result = planRoute(context((_x, z) => slope * z), request)!;
+    assert.equal(result.method, "solved");
+    assert.match(result.reason!, /^climbs 24\.7° \(limit 20°\)$/);
+    assert.equal(result.steepLegs, 0, `steepest ${result.maxGradeDeg}°`);
+    assertWellFormed(result, request);
+    const rise = slope * 150;
+    assert.ok(length(result.points) >= rise / Math.tan((20 * Math.PI) / 180), "long enough to climb within the limit");
+    // Traverses joined by hairpins: the route turns back across the slope.
+    let reversals = 0;
+    let side = 0;
+    for (let index = 1; index < result.points.length; index += 1) {
+      const dx = result.points[index]![0] - result.points[index - 1]![0];
+      if (Math.abs(dx) < 2) continue;
+      if (side !== 0 && Math.sign(dx) !== side) reversals += 1;
+      side = Math.sign(dx);
+    }
+    assert.ok(reversals >= 2, `${reversals} hairpins`);
+    assert.ok(result.tightBends > 0 && result.tightestRadius! < request.minTurnRadius, "hairpins tighter than the turn radius are reported");
+    assert.equal(JSON.stringify(planRoute(context((_x, z) => slope * z), request)), JSON.stringify(result), "deterministic");
+  });
+
   check("world route: the roads stage writes the solved route and says why", () => {
     const value = context(HILL, (recipe) => {
       recipe.plan.roadGraph.nodes.push(

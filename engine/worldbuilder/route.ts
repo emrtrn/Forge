@@ -14,6 +14,13 @@
  * - with a guide, cost grows with distance from it, so the corridor the plan
  *   drew is kept where the terrain allows.
  *
+ * On a slope steeper than the limit the cheapest cell path zigzags a cell
+ * wide, and simplifying it leaves the straight climb. When the first solve
+ * still climbs too steeply, a second A* that knows its heading (cell × 16
+ * directions) pays for every turn by its angle, so it climbs in long
+ * traverses joined by hairpins: a serpentine. It costs 16× the states, so it
+ * runs only then, on a grid of at most `MAX_HEADING_CELLS`.
+ *
  * The cell path is simplified (Douglas-Peucker), corner-cut (Chaikin) unless
  * that would clip a protected area, and resampled evenly. Every route — direct
  * or solved — is then checked against the limits and reported: steepest leg,
@@ -42,6 +49,16 @@ const CORRIDOR_MARGIN_SHARE = 0.35;
 /** Beyond this distance from the guide the guide penalty is at its full weight, metres. */
 export const GUIDE_CORRIDOR = 40;
 const GUIDE_WEIGHT = 0.5;
+/** The heading-aware solve keeps its grid (cells × 16 headings) within this many cells. */
+const MAX_HEADING_CELLS = 60_000;
+/** A turn costs this many `minTurnRadius` lengths per radian (at least `MIN_TURN_LENGTH` metres per radian). */
+const TURN_WEIGHT = 1;
+const MIN_TURN_LENGTH = 6;
+/**
+ * The heading-aware solve aims its traverses at this share of the slope
+ * limit: a hairpin's chord climbs steeper than the legs it joins.
+ */
+const SERPENTINE_GRADE_SHARE = 0.85;
 /** Cost per metre above the slope limit, per unit of overshoot ratio. */
 const STEEP_COST = 20;
 export const WATER_COST = 8;
@@ -104,16 +121,34 @@ export function planRoute(context: RouteContext, request: RouteRequest, options:
   if (problems.length === 0) return { method: "direct", points: direct, ...directCheck };
   const reason = problems.join(", ");
 
-  const heights = heightField(grid.spec, context.sampleHeight);
-  const guide = request.guide && request.guide.length > 0
-    ? distanceField(grid.spec, [{ kind: "polyline", points: control }], GUIDE_CORRIDOR)
-    : null;
-  const cells = solve(grid, heights, guide, request);
-  if (!cells) {
+  const solveOn = (target: ObstacleGrid, headings: boolean): { points: WorldPoint[]; check: RouteCheck } | null => {
+    const heights = heightField(target.spec, context.sampleHeight);
+    const guide = request.guide && request.guide.length > 0
+      ? distanceField(target.spec, [{ kind: "polyline", points: control }], GUIDE_CORRIDOR)
+      : null;
+    const cells = headings ? solveWithHeading(target, heights, guide, request) : solve(target, heights, guide, request);
+    if (!cells) return null;
+    const points = smoothPath(cells, target, request, context.sampleHeight);
+    return { points, check: checkRoute(points, request, context.sampleHeight, target) };
+  };
+  let best = solveOn(grid, false);
+  if (best && best.check.steepLegs > 0) {
+    const cells = grid.spec.width * grid.spec.depth;
+    const coarse = cells > MAX_HEADING_CELLS
+      ? obstacleGrid(context, control, grid.spec.cellSize * Math.sqrt(cells / MAX_HEADING_CELLS), request.halfWidth ?? 0)
+      : grid;
+    const serpentine = solveOn(coarse, true);
+    if (serpentine && rank(serpentine.check) < rank(best.check)) best = serpentine;
+  }
+  if (!best) {
     return { method: "fallback", points: direct, reason: `${reason}; no route within the corridor`, ...directCheck };
   }
-  const points = smoothPath(cells, grid);
-  return { method: "solved", points, reason, ...checkRoute(points, request, context.sampleHeight, grid) };
+  return { method: "solved", points: best.points, reason, ...best.check };
+}
+
+/** Lower is better: fewer steep legs, then a gentler steepest leg. */
+function rank(check: RouteCheck): number {
+  return check.steepLegs * 1000 + (check.maxGradeDeg ?? 0);
 }
 
 function describe(check: RouteCheck, request: RouteRequest): string[] {
@@ -315,6 +350,93 @@ function solve(grid: ObstacleGrid, heights: Field, guide: Field | null, request:
   return { cells, from: request.from, to: request.to };
 }
 
+/**
+ * A* over (cell, heading): a move costs what it costs in `solve` plus a turn
+ * penalty proportional to the angle between the arriving and the leaving
+ * heading, so long straight legs win over a cell-wide zigzag. The first move
+ * may take any heading; the goal is reached with any.
+ */
+function solveWithHeading(grid: ObstacleGrid, heights: Field, guide: Field | null, request: RouteRequest): Solved | null {
+  const { spec, water, blocked } = grid;
+  const start = cellIndex(spec, ...request.from);
+  const goal = cellIndex(spec, ...request.to);
+  if (start < 0 || goal < 0) return null;
+  const headings = MOVES.length;
+  const count = spec.width * spec.depth;
+  const passable = (index: number): boolean =>
+    index === start || index === goal || (!Number.isNaN(heights.values[index]!) && blocked.values[index]! < 0.5);
+  const angles = MOVES.map(([di, dj]) => Math.atan2(dj, di));
+  const turnLength = Math.max(MIN_TURN_LENGTH, TURN_WEIGHT * request.minTurnRadius);
+  const turn = (from: number, to: number): number => {
+    const delta = Math.abs(angles[to]! - angles[from]!);
+    return turnLength * Math.min(delta, 2 * Math.PI - delta);
+  };
+
+  // State = cell * headings + heading of the move that entered the cell; the start has none.
+  const g = new Float64Array(count * headings).fill(Infinity);
+  const came = new Int32Array(count * headings).fill(-1);
+  const closed = new Uint8Array(count * headings);
+  const heap = new MinHeap();
+  const gi = goal % spec.width;
+  const gj = Math.floor(goal / spec.width);
+  const heuristic = (cell: number): number =>
+    Math.hypot((cell % spec.width) - gi, Math.floor(cell / spec.width) - gj) * spec.cellSize;
+  const START = -2;
+
+  const expand = (cell: number, heading: number, base: number, state: number): void => {
+    const ci = cell % spec.width;
+    const cj = Math.floor(cell / spec.width);
+    const hc = heights.values[cell]!;
+    MOVES.forEach(([di, dj, through], move) => {
+      const ni = ci + di;
+      const nj = cj + dj;
+      if (ni < 0 || nj < 0 || ni >= spec.width || nj >= spec.depth) return;
+      const next = nj * spec.width + ni;
+      const nextState = next * headings + move;
+      if (closed[nextState] || !passable(next)) return;
+      let wet = water.values[next]! >= 0.5;
+      for (const [ti, tj] of through) {
+        const index = (cj + tj) * spec.width + (ci + ti);
+        if (!passable(index)) return;
+        if (water.values[index]! >= 0.5) wet = true;
+      }
+      const length = Math.hypot(di, dj) * spec.cellSize;
+      const hn = heights.values[next]!;
+      const rise = Number.isNaN(hc) || Number.isNaN(hn) ? 0 : Math.abs(hn - hc);
+      const ratio = (Math.atan(rise / length) * (180 / Math.PI)) / (request.maxSlopeDeg * SERPENTINE_GRADE_SHARE);
+      const slope = ratio <= 1 ? 1 + 0.5 * ratio * ratio : 1.5 + STEEP_COST * (ratio - 1);
+      const corridor = guide ? 1 + GUIDE_WEIGHT * Math.min(1, guide.values[next]! / GUIDE_CORRIDOR) : 1;
+      const bend = heading < 0 ? 0 : turn(heading, move);
+      const cost = base + length * slope * corridor * (wet ? WATER_COST : 1) + bend;
+      if (cost < g[nextState]!) {
+        g[nextState] = cost;
+        came[nextState] = state;
+        heap.push(cost + heuristic(next), nextState);
+      }
+    });
+  };
+
+  expand(start, -1, 0, START);
+  let reached = -1;
+  while (heap.size > 0) {
+    const state = heap.pop();
+    if (closed[state]) continue;
+    closed[state] = 1;
+    const cell = Math.floor(state / headings);
+    if (cell === goal) {
+      reached = state;
+      break;
+    }
+    expand(cell, state % headings, g[state]!, state);
+  }
+  if (reached < 0) return null;
+  const cells: number[] = [];
+  for (let state = reached; state !== START; state = came[state]!) cells.push(Math.floor(state / headings));
+  cells.push(start);
+  cells.reverse();
+  return { cells, from: request.from, to: request.to };
+}
+
 /** Binary min-heap of (priority, index); ties pop the lower index, so runs are deterministic. */
 class MinHeap {
   private readonly priorities: number[] = [];
@@ -372,7 +494,17 @@ class MinHeap {
 
 // ---------------------------------------------------------------- smoothing
 
-function smoothPath(solved: Solved, grid: ObstacleGrid): WorldPoint[] {
+/**
+ * Simplified and corner-cut cell path. A candidate is taken only when it is no
+ * worse than the raw path for obstacles and steep legs: cutting a serpentine's
+ * corners shortens it, and a shorter climb is a steeper one.
+ */
+function smoothPath(
+  solved: Solved,
+  grid: ObstacleGrid,
+  limits: Pick<RouteRequest, "maxSlopeDeg" | "minTurnRadius">,
+  sampleHeight: RouteContext["sampleHeight"],
+): WorldPoint[] {
   const { spec } = grid;
   const raw = solved.cells.map((index): WorldPoint => [
     spec.origin[0] + ((index % spec.width) + 0.5) * spec.cellSize,
@@ -382,14 +514,19 @@ function smoothPath(solved: Solved, grid: ObstacleGrid): WorldPoint[] {
   raw[raw.length - 1] = solved.to;
   if (raw.length === 1) raw.push(solved.to);
   const simplified = simplify(raw, spec.cellSize);
-  // Smoothing may cut a corner into a protected area or the water the path went around: then less of it.
-  const rawObstacles = obstacles(raw, grid);
-  const candidates = [chaikin(simplified, 2), simplified].map((points) => resampleEvenly(points));
-  const clear = candidates.find((points) => {
-    const found = obstacles(points, grid);
-    return found.protectedHits <= rawObstacles.protectedHits && found.waterCrossings <= rawObstacles.waterCrossings;
-  });
-  return clear ?? resampleEvenly(raw);
+  // Smoothing may cut a corner into a protected area, the water the path went around, or steepen a climb: then less of it.
+  const fallback = resampleEvenly(raw);
+  const rawCheck = checkRoute(fallback, limits, sampleHeight, grid);
+  // Even spacing first; keeping the corners stops a leg from cutting across a hairpin, whose chord is steeper than the road.
+  const shapes = [chaikin(simplified, 2), simplified];
+  const candidates = [...shapes.map((points) => resampleEvenly(points)), ...shapes.map((points) => resampleKeepingVertices(points))];
+  let best: { points: WorldPoint[]; steepLegs: number } = { points: fallback, steepLegs: rawCheck.steepLegs };
+  for (const points of candidates) {
+    const found = checkRoute(points, limits, sampleHeight, grid);
+    if (found.protectedHits > rawCheck.protectedHits || found.waterCrossings > rawCheck.waterCrossings) continue;
+    if (best.points === fallback ? found.steepLegs <= best.steepLegs : found.steepLegs < best.steepLegs) best = { points, steepLegs: found.steepLegs };
+  }
+  return best.points;
 }
 
 /** Douglas-Peucker; keeps both ends. */

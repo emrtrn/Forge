@@ -38,7 +38,7 @@ export function roadSplineId(edgeId: string): string {
 export const roadsStage: WorldStage = {
   id: ROADS_STAGE_ID,
   label: "Roads",
-  version: 3,
+  version: 4,
   run(input): StageOutput {
     const { nodes, edges } = input.recipe.plan.roadGraph;
     const positions = new Map(nodes.map((node) => [node.id, node.position]));

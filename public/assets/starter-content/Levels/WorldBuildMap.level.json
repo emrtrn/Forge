@@ -2,74 +2,18 @@
   "schema": 1,
   "name": "WorldBuildMap",
   "loadGroups": [],
-  "instances": [
-    {
-      "assetId": "shape:cube",
-      "placements": []
-    },
-    {
-      "assetId": "shape:cylinder",
-      "placements": []
-    }
-  ],
+  "instances": [],
   "characters": [],
-  "worldSettings": {
-    "partition": {
-      "enabled": true,
-      "grids": {
-        "main": {
-          "cellSize": 128,
-          "loadRange": 384
-        },
-        "foliage": {
-          "cellSize": 64,
-          "loadRange": 256
-        }
-      }
-    },
-    "staticObjectsCastShadow": true
-  },
-  "worldCells": [
-    "-1_-1",
-    "0_-1",
-    "-1_0",
-    "0_0"
-  ],
-  "skyAtmosphere": {
-    "rayleigh": 1,
-    "turbidity": 2
-  },
-  "lights": [
-    {
-      "id": "sun",
-      "type": "directional",
-      "position": [
-        3,
-        9,
-        4
-      ],
-      "name": "Sun",
-      "rotation": [
-        -55,
-        35,
-        0
-      ],
-      "color": "#ffffff",
-      "intensity": 2,
-      "castShadow": true,
-      "cascadedShadows": true
-    }
-  ],
   "landscapes": [
     {
       "id": "wb-terrain",
+      "name": "WB Terrain",
       "position": [
         0,
         3,
         0
       ],
-      "dataRef": "assets/starter-content/Levels/WorldBuildMap.landscapes/wb-terrain.terrain.json",
-      "name": "WB Terrain"
+      "dataRef": "assets/starter-content/Levels/WorldBuildMap.landscapes/wb-terrain.terrain.json"
     }
   ]
 }

@@ -1,0 +1,208 @@
+{
+  "source_video": "C:\\Users\\emret\\Videos\\Bandicam\\bandicam 2026-10-29 16-30-32-435.mp4",
+  "sha256": "79b0a13d047838d6f4302a2c4ff68342cd5d8ea4c31433393ec30c8423136c3c",
+  "bytes": 12365474,
+  "duration_seconds": 49.499967,
+  "width": 560,
+  "height": 316,
+  "codec": "h264",
+  "nominal_frame_rate": "30/1",
+  "average_frame_rate": "44520000/1484999",
+  "video_frames": 1484,
+  "audio_streams": 0,
+  "forge_commit": "3fbcff4d",
+  "overview": {
+    "filter": "fps=1",
+    "count": 49,
+    "labels": "Approximate whole-second labels; selection may differ by approximately half a second."
+  },
+  "temporal_samples": {
+    "foam": [
+      2.4,
+      2.8,
+      3.2,
+      3.6,
+      4.0,
+      4.4,
+      4.8,
+      5.2,
+      5.6,
+      6.0,
+      6.4,
+      6.8
+    ],
+    "waterline": [
+      17.0,
+      17.4,
+      17.8,
+      18.2,
+      18.6,
+      19.0,
+      19.4,
+      19.8,
+      20.2,
+      20.6,
+      21.0,
+      21.4
+    ],
+    "wake": [
+      22.0,
+      22.4,
+      22.8,
+      23.2,
+      23.6,
+      24.0,
+      24.4,
+      24.8,
+      25.2,
+      25.6,
+      26.0,
+      26.4
+    ],
+    "quality": [
+      37.0,
+      37.4,
+      37.8,
+      38.2,
+      38.6,
+      39.0,
+      39.4,
+      39.8,
+      40.2,
+      40.6,
+      41.0,
+      41.4
+    ]
+  },
+  "detail_seconds": [
+    1.4,
+    4.4,
+    6.0,
+    9.5,
+    14.5,
+    18.2,
+    19.4,
+    24.4,
+    30.0,
+    34.0,
+    39.4,
+    42.8
+  ],
+  "detail_extraction": "ffmpeg -ss <seconds> -i <video> -frames:v 1; decoded PNG converted losslessly to WebP at source resolution",
+  "inspection": "49 overview + 48 temporal + 12 detail samples visually inspected; timestamps overlap between sets. Not a frame-by-frame inspection of all 1484 source frames.",
+  "limits": [
+    "Screen recording of a promotional montage, not live rendering telemetry.",
+    "Low resolution and compression prevent reliable aliasing, microtexture, or hardware-performance conclusions.",
+    "Latest WaterPro documentation may differ from the V3 launch video."
+  ],
+  "files": [
+    {
+      "name": "detail-01.4.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 74958
+    },
+    {
+      "name": "detail-04.4.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 123406
+    },
+    {
+      "name": "detail-06.0.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 122734
+    },
+    {
+      "name": "detail-09.5.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 99480
+    },
+    {
+      "name": "detail-14.5.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 100614
+    },
+    {
+      "name": "detail-18.2.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 127050
+    },
+    {
+      "name": "detail-19.4.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 100720
+    },
+    {
+      "name": "detail-24.4.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 110076
+    },
+    {
+      "name": "detail-30.0.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 102414
+    },
+    {
+      "name": "detail-34.0.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 75604
+    },
+    {
+      "name": "detail-39.4.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 112324
+    },
+    {
+      "name": "detail-42.8.webp",
+      "width": 560,
+      "height": 316,
+      "bytes": 110048
+    },
+    {
+      "name": "overview-1.jpg",
+      "width": 1400,
+      "height": 900,
+      "bytes": 390939
+    },
+    {
+      "name": "overview-2.jpg",
+      "width": 1400,
+      "height": 900,
+      "bytes": 323363
+    },
+    {
+      "name": "sequence-foam.jpg",
+      "width": 1120,
+      "height": 540,
+      "bytes": 241417
+    },
+    {
+      "name": "sequence-quality.jpg",
+      "width": 1120,
+      "height": 540,
+      "bytes": 249365
+    },
+    {
+      "name": "sequence-wake.jpg",
+      "width": 1120,
+      "height": 540,
+      "bytes": 217734
+    },
+    {
+      "name": "sequence-waterline.jpg",
+      "width": 1120,
+      "height": 540,
+      "bytes": 214064
+    }
+  ]
+}

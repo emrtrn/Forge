@@ -265,4 +265,90 @@ export async function registerRecastNavMeshTests(checkAsync: CheckAsync): Promis
     assert.equal(far.status, "failure", "the corridor between them is not loaded under the cap");
     planner.dispose();
   });
+
+  await checkAsync("recast streaming: physics logs the regions whose static geometry changed", async () => {
+    const physics = new PhysicsSubsystem();
+    physics.setEntities([ground("ground", 50)]);
+    assert.equal(physics.takeNavigationDirtyRegions(), "all", "a full rebuild dirties everything");
+    assert.deepEqual(physics.takeNavigationDirtyRegions(), [], "taking clears the log");
+    physics.addEntity(box("crate", [10, 0, 10], [12, 1, 12]));
+    assert.deepEqual(physics.takeNavigationDirtyRegions(), [{ minX: 10, minZ: 10, maxX: 12, maxZ: 12 }]);
+    physics.setEntityTransform("crate", { position: [21, 0.5, 1], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    assert.deepEqual(physics.takeNavigationDirtyRegions(), [
+      { minX: 10, minZ: 10, maxX: 12, maxZ: 12 },
+      { minX: 20, minZ: 0, maxX: 22, maxZ: 2 },
+    ], "a move dirties where it was and where it is");
+    physics.setEntityCollisionEnabled("crate", false);
+    physics.removeEntity("crate");
+    assert.equal((physics.takeNavigationDirtyRegions() as unknown[]).length, 2, "collision toggle and removal");
+    const dynamic = body("ball", [0, 1, 0], { isStatic: false });
+    physics.addEntity(dynamic);
+    physics.setEntityTransform("ball", { position: [5, 1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    assert.deepEqual(physics.takeNavigationDirtyRegions(), [], "moving bodies never touch the nav mesh");
+    for (let index = 0; index < 300; index += 1) physics.addEntity(box(`pebble-${index}`, [index, 0, 0], [index + 0.5, 0.2, 0.5]));
+    assert.equal(physics.takeNavigationDirtyRegions(), "all", "an overflowing log collapses to everything");
+  });
+
+  await checkAsync("recast streaming: invokers build nearby tiles within the frame budget and drop far ones after lingering", async () => {
+    const physics = new PhysicsSubsystem();
+    physics.setEntities([ground("ground", 300)]);
+    const planner = new RecastPlanner(modules, {
+      forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) => physics.forEachNavigationTriangleInRect(minX, minZ, maxX, maxZ, visit),
+    }, { buildRadius: 40, keepRadius: 80, lingerSeconds: 5, frameBudgetMs: 0, maxSyncBuilds: 0 });
+    const loaded = () => planner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0);
+    const invokers = [{ position: [16, 0, 16] as Vec3, agent: AGENT }];
+    const first = planner.update({ invokers, bounds: [], now: 0 });
+    assert.equal(first.built, 1, "a zero budget still builds one tile per frame");
+    assert.ok(first.queued > 0);
+    let now = 0;
+    while (planner.streamingStats().queued > 0 && now < 100) planner.update({ invokers, bounds: [], now: (now += 0.1) });
+    const settled = loaded();
+    // Tiles whose square is within 40 m of (16, 16): a 3x3 block plus the edge ring.
+    assert.ok(settled >= 9 && settled <= 25, `tiles around the invoker: ${settled}`);
+    const moved = [{ position: [216, 0, 216] as Vec3, agent: AGENT }];
+    planner.update({ invokers: moved, bounds: [], now: (now += 1) });
+    assert.ok(planner.loadedTiles()[0]!.tiles.includes("0_0"), "an unwanted tile lingers");
+    planner.update({ invokers: moved, bounds: [], now: (now += 6) });
+    assert.ok(!planner.loadedTiles()[0]!.tiles.includes("0_0"), "and is dropped once the linger time has passed");
+    planner.dispose();
+  });
+
+  await checkAsync("recast streaming: a request waits for its corridor, then dirty rectangles rebuild only their tiles", async () => {
+    const physics = new PhysicsSubsystem();
+    physics.setEntities([ground("ground", 60)]);
+    let builds = 0;
+    const planner = new RecastPlanner(modules, {
+      forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) => {
+        builds += 1;
+        physics.forEachNavigationTriangleInRect(minX, minZ, maxX, maxZ, visit);
+      },
+      forEachObstacleInRect: (minX, minZ, maxX, maxZ, visit) => physics.forEachNavigationObstacleInRect(minX, minZ, maxX, maxZ, visit),
+    }, { frameBudgetMs: 1000, maxSyncBuilds: 0, buildRadius: 0 });
+    const request = { agent: AGENT, start: [2, 0, -10] as Vec3, goal: [2, 0, 10] as Vec3, bounds: [] };
+    physics.takeNavigationDirtyRegions();
+    assert.equal(planner.findPath(request).status, "pending");
+    planner.update({ invokers: [], bounds: [], now: 0 });
+    const straight = planner.findPath(request);
+    assert.equal(straight.status, "success");
+    assert.equal(straight.points.length, 2, "open ground: a straight line");
+
+    // A wall appears across the path: only the tiles under it turn stale.
+    physics.addEntity(box("wall", [-8, 0, -0.5], [12, 3, 0.5]));
+    const dirty = physics.takeNavigationDirtyRegions();
+    assert.notEqual(dirty, "all");
+    for (const rect of dirty as { minX: number; minZ: number; maxX: number; maxZ: number }[]) {
+      planner.invalidateRect(rect.minX, rect.minZ, rect.maxX, rect.maxZ);
+    }
+    const loaded = planner.loadedTiles()[0]!;
+    assert.ok(loaded.stale > 0 && loaded.stale < loaded.tiles.length, `stale ${loaded.stale} of ${loaded.tiles.length}`);
+    builds = 0;
+    assert.equal(planner.findPath(request).status, "pending", "stale corridor tiles are rebuilt before searching");
+    planner.update({ invokers: [], bounds: [], now: 1 });
+    assert.equal(builds, loaded.stale, "only the stale tiles were rebuilt");
+    const around = planner.findPath(request);
+    assert.equal(around.status, "success");
+    assert.ok(around.points.length > 2, "the new wall is walked around");
+    assert.deepEqual(samplesInside(around.points, [-8, -0.5], [12, 0.5]), []);
+    planner.dispose();
+  });
 }

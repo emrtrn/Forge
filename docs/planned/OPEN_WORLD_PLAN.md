@@ -2624,11 +2624,34 @@ Sözleşme (grid'le aynı `NavAgent`): `radius + clearancePadding` duvarı aşı
       Bilinen sınır: herhangi bir statik geometri değişimi (ör. collision
       aç/kapa) tüm tile'ları düşürür — grid'in tam yeniden bake'iyle aynı;
       kirli-tile yeniden kurma R3 ile gelir.
-- [ ] **R3 — Navigation Invoker akışı.** Tile'lar yalnız AI ajanlarının ve
-      oyuncunun çevresinde kurulur (kare başına bütçe, histerezisli düşürme);
-      yolu yüklü olmayan zemine uzanan istek, başlangıç–hedef dikdörtgenindeki
-      tile'ları sınırlı sayıda eşzamanlı kurar. Yüklü olmayan hücredeki AI'lar
-      askıda (mevcut uzak güncelleme Hz'i ile uyumlu).
+- [x] **R3a — Navigation Invoker akışı (ana thread).** Tile'lar yalnız AI
+      ajanlarının ve oyuncunun çevresinde kurulur (kare başına bütçe,
+      histerezisli düşürme); yolu yüklü olmayan zemine uzanan istek bekler.
+      Yüklü olmayan hücredeki AI'lar askıda.
+      *Tamam (2026-10-29):* `RecastPlanner.update` her karede invoker'ların
+      (AI piyonları kendi profil mesh'ine, odak/oyuncu hepsine) 48 m içindeki
+      tile'ları en yakından başlayarak 4 ms bütçeyle kurar (en az 1 tile/kare);
+      96 m dışında 10 s kalan tile düşer. Yol isteği koridorunu (uç tile'lar +
+      bir tile paylı dikdörtgen, en çok 64) ister; eksik/bayat tile varsa kuyruğun
+      başına alınır ve istek `"pending"` döner (`requestMove` → `running`, stuck
+      replan eski yolda kalır). Fizik `takeNavigationDirtyRegions` ile
+      değişen statik gövdelerin eski+yeni alanını verir (ekleme, silme, taşıma,
+      collision aç/kapa; 256'yı aşınca "all"); yalnız o alanın tile'ları bayat
+      olur, aranabilir kalır ve aynı kuyrukla yeniden kurulur, build yarıçapı
+      dışındaysa düşer. Askıya alma: partition'lı level'da odaktan `main`
+      `loadRange` ötesindeki piyon invoker değildir, plan yapmaz, yürümez;
+      odak yaklaşınca devam eder (partition'sız level'da hepsi aktif).
+      Ölçüm: 32 m arazi tile'ı + 400 kutu, Recast'in varsayılan detay
+      örneklemesiyle 78 ms/tile, sürenin ~%85'i detay mesh → seyrek örnekleme
+      (3,2 m / 0,2 m) ile ~9 ms (`detailSampleDist = 0` bu wasm'da çöküyor).
+      `?debug` satırı `recast tiles:T queued:Q stale:S`. Testler: fizik dirty
+      log, invoker kur/beklet/düşür, bekleyen istek → kuyruk → başarı, eklenen
+      duvar yalnız bayat tile'ları yeniden kurar, aiModule askıya alma.
+- [ ] **R3b — Tile kurmayı Web Worker'a taşıma.** ~9 ms/tile, akış bütçesinin
+      (kare başına ≤ 4 ms) üstünde; şimdilik en çok 1 tile/kare. Geometri
+      toplama ana thread'de ucuz (~0,5 ms); Recast hattı worker'da kendi wasm
+      örneğiyle çalışıp navmesh verisini (bayt) döner, ana thread yalnız
+      `addTile` yapar. Kuyruk/`pending` tasarımı buna hazır.
 - [ ] **R4 — Debug/editör yüzeyi.** "Show > AI Navigation" Recast poligonlarını
       çizer (runtime `?debug` + editör), yüklü tile'lar görünür.
 - [ ] **R5 — Grid emekliliği kararı.** Parity kabulünden sonra (kullanıcı

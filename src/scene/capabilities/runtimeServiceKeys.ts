@@ -668,6 +668,14 @@ export interface AiNavigationQuery {
     maxZ: number,
     visit: (footprint: readonly (readonly [number, number])[], minY: number, maxY: number) => void,
   ): void;
+  /**
+   * X/Z regions whose static geometry changed since the last call, or "all";
+   * taking them clears the log. Without it the Recast mesh is rebuilt whenever
+   * the blocker list's revision changes.
+   */
+  takeNavigationDirtyRegions?():
+    | readonly { readonly minX: number; readonly minZ: number; readonly maxX: number; readonly maxZ: number }[]
+    | "all";
   /** Collider size an agent profile falls back to when nothing is authored. */
   colliderHalfExtents(entityId: string): readonly [number, number, number] | null;
 }
@@ -767,6 +775,10 @@ export interface AiNavigationDebugSnapshot {
   readonly planner?: "recast" | "grid";
   /** Recast tiles currently loaded, summed over agent profiles. */
   readonly navMeshTiles?: number;
+  /** Loaded Recast tiles whose geometry changed and await a rebuild. */
+  readonly navMeshStaleTiles?: number;
+  /** Recast tiles still waiting in the streaming queue after the last frame. */
+  readonly navMeshQueuedTiles?: number;
 }
 
 /** Read side of the `?debug` AI overlays: controllers and path following. */

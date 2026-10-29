@@ -13,11 +13,16 @@ import {
 } from "./heightfieldStatic";
 import { classifyStaticTriangle } from "./staticTriangles";
 import {
+  bodyNavigationBounds,
   forEachBodyNavigationObstacle,
   forEachBodyNavigationTriangle,
   type NavigationObstacleVisitor,
+  type NavigationRect,
   type NavigationTriangleVisitor,
 } from "./navigationGeometry";
+
+/** Past this many pending regions the log collapses to "everything changed". */
+const MAX_NAVIGATION_DIRTY_REGIONS = 256;
 import { sampleTriangleHeight, type GroundSurfaceSample } from "../movement/slopeSurface";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
@@ -198,6 +203,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private bodies: PhysicsBody[] = [];
   private readonly bodiesById = new Map<EntityId, PhysicsBody>();
   private readonly staticRecords = new Map<EntityId, StaticBodyRecord>();
+  /** Static-geometry changes since the nav consumer last took them (see {@link takeNavigationDirtyRegions}). */
+  private navigationDirty: NavigationRect[] | "all" = "all";
   private readonly staticBlockerIndex = new StaticSpatialIndex<Aabb>();
   private readonly staticSurfaceIndex = new StaticSpatialIndex<PhysicsSurfaceTriangle>();
   /** Static records that carry on-demand heightfields, by entity id (a subset of `staticRecords`). */
@@ -573,6 +580,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.nextStaticOrder = 0;
     for (const body of this.bodies) this.recordStaticBody(body);
     this.invalidateStaticCaches();
+    this.navigationDirty = "all";
     // Component vehicles are rebuilt from the new entity set; API ones persist.
     for (const [entityId, vehicle] of this.vehicles) {
       if (vehicle.source === "component") this.removeVehicle(entityId);
@@ -597,6 +605,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       this.bodiesById.set(body.id, body);
       this.recordStaticBody(body);
       addedStatic ||= body.collider.isStatic;
+      this.markNavigationDirty(body);
       if (this.rapierWorld && this.rapierModule) this.addRapierBody(body);
       added += 1;
     }
@@ -609,7 +618,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   setEntityTransform(entityId: EntityId, transform: TransformComponent): void {
     const body = this.bodiesById.get(entityId);
     if (!body) return;
+    this.markNavigationDirty(body);
     body.transform = cloneTransform(transform);
+    this.markNavigationDirty(body);
     if (body.collider.isStatic) {
       const record = this.staticRecords.get(entityId);
       if (record) this.indexStaticRecord(record, false);
@@ -648,7 +659,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const ids = new Set(entityIds);
     let removedStatic = false;
     for (const entityId of ids) {
-      removedStatic ||= this.bodiesById.get(entityId)?.collider.isStatic === true;
+      const removed = this.bodiesById.get(entityId);
+      removedStatic ||= removed?.collider.isStatic === true;
+      if (removed) this.markNavigationDirty(removed);
       this.bodiesById.delete(entityId);
       this.dropStaticRecord(entityId);
       this.collisionDisabled.delete(entityId);
@@ -682,6 +695,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (enabled) this.collisionDisabled.delete(entityId);
     else this.collisionDisabled.add(entityId);
     const body = this.bodiesById.get(entityId);
+    if (body) this.markNavigationDirty(body);
     if (body?.collider.isStatic) {
       const record = this.staticRecords.get(entityId);
       if (record) this.indexStaticRecord(record, enabled);
@@ -1027,6 +1041,27 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
   }
 
+  /**
+   * X/Z regions whose static navigation geometry changed since the last call
+   * (bodies added, removed, moved or collision-toggled — old and new bounds),
+   * or "all" after a full rebuild. Taking them clears the log; there is one
+   * consumer, the AI capability's nav mesh.
+   */
+  takeNavigationDirtyRegions(): readonly NavigationRect[] | "all" {
+    const dirty = this.navigationDirty;
+    this.navigationDirty = [];
+    return dirty;
+  }
+
+  private markNavigationDirty(body: PhysicsBody): void {
+    if (!body.collider.isStatic || body.collider.isSensor || this.navigationDirty === "all") return;
+    if (this.navigationDirty.length >= MAX_NAVIGATION_DIRTY_REGIONS) {
+      this.navigationDirty = "all";
+      return;
+    }
+    this.navigationDirty.push(bodyNavigationBounds(body.transform, body.collider));
+  }
+
   /** Null-area volumes of enabled `obstacleOnly` static bodies overlapping the X/Z rectangle. */
   forEachNavigationObstacleInRect(
     minX: number,
@@ -1332,6 +1367,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.staticSurfaceIndex.clear();
     this.nextStaticOrder = 0;
     this.invalidateStaticCaches();
+    this.navigationDirty = "all";
     this.bodies = [];
     this.contacts = [];
     this.collisionDisabled.clear();

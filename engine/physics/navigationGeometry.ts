@@ -48,6 +48,30 @@ const BOX_FACES: readonly (readonly [number, number, number, number])[] = [
   [1, 5, 7, 3], // +Z
 ];
 
+/** X/Z bounds of everything a body contributes to navigation (the union of its primitives' boxes). */
+export function bodyNavigationBounds(transform: TransformComponent, collider: ColliderComponent): NavigationRect {
+  const origin = transform.position as Vec3;
+  const rotation = transform.rotation as Vec3;
+  const boxes = collider.primitives && collider.primitives.length > 0
+    ? collider.primitives.map((primitive) => ({
+      center: (primitive.center ?? [0, 0, 0]) as Vec3, size: primitive.size as Vec3, rotation: primitive.rotation as Vec3 | undefined,
+    }))
+    : [{ center: (collider.center ?? [0, 0, 0]) as Vec3, size: collider.size as Vec3, rotation: undefined }];
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  for (const box of boxes) {
+    const half: Vec3 = [box.size[0] / 2, box.size[1] / 2, box.size[2] / 2];
+    const aabb = rotatedBoxAabb(origin, box.center, half, rotation, box.rotation);
+    minX = Math.min(minX, aabb.min[0]);
+    minZ = Math.min(minZ, aabb.min[2]);
+    maxX = Math.max(maxX, aabb.max[0]);
+    maxZ = Math.max(maxZ, aabb.max[2]);
+  }
+  return { minX, minZ, maxX, maxZ };
+}
+
 /** Visits the Recast triangles of one static body that may overlap `rect`. */
 export function forEachBodyNavigationTriangle(
   transform: TransformComponent,

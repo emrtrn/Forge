@@ -447,11 +447,24 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
       await host.resolve(aiCommandsService)!.prepareLevel(layout);
       host.entitySinks()[0]!.setEntities([walker]);
       await registry.levelLoaded(levelContext(host, layout, [walker]));
-      for (const subsystem of subsystems) subsystem.update?.({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+      const debug = host.resolve(aiDebugService)!;
+      let frame = 0;
+      const tick = () => {
+        frame += 1;
+        for (const subsystem of subsystems) {
+          subsystem.update?.({ deltaSeconds: 0.1, elapsedSeconds: frame * 0.1, frame });
+        }
+        registry.update(0.1);
+      };
+      // The first decision asks for a corridor whose tiles are not built yet:
+      // the move keeps running while the frame-budgeted streamer builds them.
+      tick();
+      assert.equal(debug.navigation().followers.length, 0, "no path before the corridor is built");
+      for (let attempt = 0; attempt < 20 && debug.navigation().followers.length === 0; attempt += 1) tick();
 
-      const navigation = host.resolve(aiDebugService)!.navigation();
+      const navigation = debug.navigation();
       assert.equal(navigation.planner, "recast");
-      assert.ok((navigation.navMeshTiles ?? 0) > 0, "the request built the tiles it needed");
+      assert.ok((navigation.navMeshTiles ?? 0) > 0, "the streamer built the pawn's tiles");
       const follower = navigation.followers.find((entry) => entry.entityId === "npc:0");
       assert.ok(follower, "the move request is being followed");
       assert.equal(follower.status, "following");
@@ -459,6 +472,82 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
       assert.ok(path.length >= 3, `string-pulled around a wall end: ${JSON.stringify(path)}`);
       assert.ok(path.slice(1, -1).every((point) => Math.abs(point[0]) >= 6), "corners clear the wall's ends");
       assert.ok(path.every((point) => Math.abs(point[1]) < 1e-3), "corners snapped onto the ground's top");
+      registry.dispose();
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  await checkAsync("ai module suspends pawns beyond a partitioned level's load range", async () => {
+    const walkTree = {
+      schema: 1,
+      type: "behaviorTree",
+      id: "BT_Walk",
+      root: { kind: "task", task: "forge.moveToPosition", params: { position: [0, 0, 8] } },
+    };
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      String(input).includes("BT_Walk")
+        ? ({ ok: true, json: async () => walkTree } as unknown as Response)
+        : ({ ok: false, json: async () => ({}) } as unknown as Response)) as typeof globalThis.fetch;
+    try {
+      const physics = new PhysicsSubsystem();
+      physics.setEntities([{
+        id: "ground",
+        components: {
+          [TRANSFORM_COMPONENT]: { position: [0, -0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          Collider: { shape: "box", size: [400, 1, 400], isStatic: true, isSensor: false },
+        },
+      } as unknown as Entity]);
+      let focus: [number, number, number] = [150, 0, 0];
+      const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+      host.provide(aiHostService, testAiHost({ navigation: physics, qualityFocusPosition: () => focus }));
+      host.provide(assetManifestService, async () => ({
+        assets: [{ id: "BT_Walk", type: "behaviorTree", path: "AI/BT_Walk.behaviortree.json" }],
+      }) as never);
+      const pawnTransform = { position: [0, 0, -8] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] };
+      host.provide(characterMovementQueryService, {
+        transformOf: (entityId) => (entityId === "npc:0" ? pawnTransform : null),
+        velocityOf: () => null,
+        forEachCharacter: () => {},
+        launch: () => {},
+      });
+      const registry = createCapabilityRegistry([createAiModule()]);
+      registry.runtimeStart(host);
+      const subsystems: Subsystem[] = [];
+      host.installSubsystems((subsystem) => subsystems.push(subsystem));
+      const layout = {
+        name: "partitioned",
+        worldSettings: {
+          partition: {
+            enabled: true,
+            grids: { main: { cellSize: 64, loadRange: 100 }, foliage: { cellSize: 64, loadRange: 100 } },
+          },
+        },
+      } as unknown as RoomLayout;
+      const walker = {
+        id: "npc:0",
+        name: "npc:0",
+        components: { [TRANSFORM_COMPONENT]: pawnTransform, [AI_CONTROLLER_COMPONENT]: { behaviorTree: "BT_Walk" } },
+      } as unknown as Entity;
+      await host.resolve(aiCommandsService)!.prepareLevel(layout);
+      host.entitySinks()[0]!.setEntities([walker]);
+      await registry.levelLoaded(levelContext(host, layout, [walker]));
+      const debug = host.resolve(aiDebugService)!;
+      let frame = 0;
+      const tick = () => {
+        frame += 1;
+        for (const subsystem of subsystems) subsystem.update?.({ deltaSeconds: 0.1, elapsedSeconds: frame * 0.1, frame });
+        registry.update(0.1);
+      };
+      for (let index = 0; index < 10; index += 1) tick();
+      assert.equal(debug.navigation().followers.length, 0, "150 m from the focus with a 100 m load range: suspended");
+      const tilesNearFocus = debug.navigation().navMeshTiles ?? 0;
+      // The focus alone invokes tiles; the suspended pawn's own area stays unbuilt.
+      focus = [20, 0, 0];
+      for (let attempt = 0; attempt < 30 && debug.navigation().followers.length === 0; attempt += 1) tick();
+      assert.equal(debug.navigation().followers[0]?.status, "following", "the pawn resumes once the focus is near");
+      assert.ok((debug.navigation().navMeshTiles ?? 0) >= tilesNearFocus);
       registry.dispose();
     } finally {
       globalThis.fetch = original;

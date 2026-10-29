@@ -124,6 +124,10 @@ export class RecastNavMesh {
   private readonly rcConfig: ReturnType<typeof RecastCore.createRcConfig>;
   /** Tile key → Detour tile ref; `0` marks a built tile that produced no polygons. */
   private readonly tiles = new Map<string, number>();
+  /** Loaded tiles whose source geometry changed; still searchable until rebuilt. */
+  private readonly stale = new Set<string>();
+  /** Last time (host seconds) each loaded tile was wanted, for eviction. */
+  private readonly lastUsed = new Map<string, number>();
   private disposed = false;
 
   constructor(modules: RecastModules, agent: NavAgent, source: NavTriangleSource, options: RecastNavMeshOptions = {}) {
@@ -159,8 +163,16 @@ export class RecastNavMesh {
     config.borderSize = walkableRadius + 3;
     config.width = tileCells + config.borderSize * 2;
     config.height = tileCells + config.borderSize * 2;
-    config.detailSampleDist = config.detailSampleDist < 0.9 ? 0 : this.cellSize * config.detailSampleDist;
-    config.detailSampleMaxError = this.cellHeight * config.detailSampleMaxError;
+    // No detail-mesh sampling: it was ~85% of a tile build (60 ms → 8 ms on a
+    // 32 m terrain tile). Polygons keep their own heights, which follow the
+    // floor to within the contour error; the host snaps corners to its real
+    // floor anyway (see the module contract).
+    // Sparse detail sampling (3.2 m / 0.2 m): Recast's default (6 cells /
+    // 1 cell) was ~85% of a tile build, 60 ms → 9 ms on a 32 m terrain tile.
+    // Hosts snap corners to their real floor anyway (see the module contract).
+    // A sample distance of 0 crashes this wasm build's detail pass.
+    config.detailSampleDist = this.cellSize * 16;
+    config.detailSampleMaxError = this.cellHeight * 2;
     this.rcConfig = config;
 
     this.navMesh = new core.NavMesh();
@@ -181,6 +193,52 @@ export class RecastNavMesh {
 
   hasTile(x: number, z: number): boolean {
     return this.tiles.has(recastTileKey(x, z));
+  }
+
+  /** Missing, or loaded but stale. */
+  needsBuild(x: number, z: number): boolean {
+    const key = recastTileKey(x, z);
+    return !this.tiles.has(key) || this.stale.has(key);
+  }
+
+  staleTileCount(): number {
+    return this.stale.size;
+  }
+
+  /** Border (world units) a tile reads geometry from beyond its own edges. */
+  get borderSize(): number {
+    return this.rcConfig.borderSize * this.cellSize;
+  }
+
+  /**
+   * Marks the loaded tiles whose input reaches into the rectangle (their own
+   * area plus the border) as stale. Returns how many were marked.
+   */
+  markStaleInRect(minX: number, minZ: number, maxX: number, maxZ: number): number {
+    const border = this.borderSize;
+    let marked = 0;
+    for (const tile of this.tilesInRect(minX - border, minZ - border, maxX + border, maxZ + border)) {
+      const key = recastTileKey(tile.x, tile.z);
+      if (!this.tiles.has(key) || this.stale.has(key)) continue;
+      this.stale.add(key);
+      marked += 1;
+    }
+    return marked;
+  }
+
+  markAllStale(): void {
+    for (const key of this.tiles.keys()) this.stale.add(key);
+  }
+
+  /** Records that a loaded tile is wanted at `now` (host seconds). */
+  touchTile(x: number, z: number, now: number): void {
+    const key = recastTileKey(x, z);
+    if (this.tiles.has(key)) this.lastUsed.set(key, now);
+  }
+
+  /** Host seconds the tile was last wanted; -Infinity when never. */
+  tileLastUsed(key: string): number {
+    return this.lastUsed.get(key) ?? -Infinity;
   }
 
   loadedTileKeys(): string[] {
@@ -211,14 +269,14 @@ export class RecastNavMesh {
   }
 
   /**
-   * Builds the missing tiles overlapping the rectangle, nearest to its centre
+   * Builds the missing or stale tiles overlapping the rectangle, nearest to its centre
    * first, stopping after `maxBuilds`. Returns how many were built.
    */
   ensureTilesInRect(minX: number, minZ: number, maxX: number, maxZ: number, maxBuilds = Infinity): number {
     const cx = (minX + maxX) / 2 / this.tileSize - 0.5;
     const cz = (minZ + maxZ) / 2 / this.tileSize - 0.5;
     const missing = this.tilesInRect(minX, minZ, maxX, maxZ)
-      .filter((tile) => !this.hasTile(tile.x, tile.z))
+      .filter((tile) => this.needsBuild(tile.x, tile.z))
       .sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz));
     let built = 0;
     for (const tile of missing) {
@@ -232,8 +290,9 @@ export class RecastNavMesh {
   /** (Re)builds one tile from the triangle source. Returns false when it has no walkable polygons. */
   buildTile(x: number, z: number): boolean {
     this.assertLive();
-    this.removeTile(x, z);
     const key = recastTileKey(x, z);
+    const used = this.lastUsed.get(key);
+    this.removeTile(x, z);
     const border = this.rcConfig.borderSize * this.cellSize;
     const rect = {
       minX: x * this.tileSize - border,
@@ -262,6 +321,7 @@ export class RecastNavMesh {
       else tileRef = added.tileRef;
     }
     this.tiles.set(key, tileRef);
+    if (used !== undefined) this.lastUsed.set(key, used);
     return tileRef !== 0;
   }
 
@@ -372,6 +432,8 @@ export class RecastNavMesh {
     if (ref === undefined) return;
     if (ref !== 0) this.navMesh.removeTile(ref);
     this.tiles.delete(key);
+    this.stale.delete(key);
+    this.lastUsed.delete(key);
   }
 
   /** Drops every loaded tile whose key is not in `keep`. Returns how many were dropped. */

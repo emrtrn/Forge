@@ -65,7 +65,7 @@ import {
 } from "@engine/navigation/localAvoidance";
 import { resolveNavAgentProfile } from "@engine/navigation/navAgentProfile";
 import { loadRecastModules } from "@engine/navigation/recastNavMesh";
-import { RecastPlanner } from "@engine/navigation/recastPlanner";
+import { RecastPlanner, type RecastInvoker, type RecastPlanResult } from "@engine/navigation/recastPlanner";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
@@ -218,6 +218,8 @@ export function createAiModule(): CapabilityModule {
   let layout: RoomLayout | null = null;
   let scene: Scene | null = null;
   let debug = false;
+  /** Seconds since runtime start; the Recast tile streamer's clock. */
+  let elapsedSeconds = 0;
 
   const pathFollowing = new Map<string, AiPathFollowing>();
   /**
@@ -321,7 +323,12 @@ export function createAiModule(): CapabilityModule {
           host()?.navigation.forEachNavigationTriangleInRect?.(minX, minZ, maxX, maxZ, visit),
         forEachObstacleInRect: (minX, minZ, maxX, maxZ, visit) =>
           host()?.navigation.forEachNavigationObstacleInRect?.(minX, minZ, maxX, maxZ, visit),
-      }, { snapHeight: snapToNavFloor });
+      }, {
+        snapHeight: snapToNavFloor,
+        // Tiles are built by the per-frame streamer; a request whose corridor
+        // is not ready answers "pending" instead of stalling the frame.
+        maxSyncBuilds: 0,
+      });
     } catch (error) {
       console.warn(`[ai] Recast navigation unavailable, using the grid planner: ${describeLoadError(error)}`);
     }
@@ -358,19 +365,67 @@ export function createAiModule(): CapabilityModule {
     return best;
   }
 
-  function buildPath(entityId: string, start: Vec3, goal: Vec3) {
+  /**
+   * Hands the host's static-geometry changes to the Recast planner: dirty
+   * rectangles turn their tiles stale. A host without the dirty log falls back
+   * to the grid cache's revision token, where any change drops every tile.
+   */
+  function applyRecastNavigationChanges(planner: RecastPlanner): void {
+    const navigation = host()?.navigation;
+    if (!navigation) return;
+    if (navigation.takeNavigationDirtyRegions) {
+      const dirty = navigation.takeNavigationDirtyRegions();
+      if (dirty === "all") planner.invalidateAll();
+      else for (const rect of dirty) planner.invalidateRect(rect.minX, rect.minZ, rect.maxX, rect.maxZ);
+      return;
+    }
+    const blockers = navigation.staticNavigationBlockerAabbs();
+    const surfaces = navigation.staticNavigationSurfaceTriangles(!navigation.staticNavigationSurfaceSamplesAt);
+    planner.setRevision(navRevisionToken(blockers, surfaces, navigationBounds()));
+  }
+
+  /**
+   * Distance from the focus beyond which an AI pawn is suspended (OPEN_WORLD_PLAN
+   * Faz 9): it neither invokes nav tiles nor plans nor moves, until the player
+   * comes back within range. Only partitioned levels have one: the main grid's
+   * load range, the ring whose cells (and collision) are streamed in.
+   */
+  function aiActiveRange(): number {
+    const partition = layout?.worldSettings?.partition;
+    return recastPlanner && partition?.enabled ? partition.grids.main.loadRange : Infinity;
+  }
+
+  function isAiSuspended(position: Vec3): boolean {
+    const range = aiActiveRange();
+    if (!Number.isFinite(range)) return false;
+    const focus = host()?.qualityFocusPosition();
+    return focus ? Math.hypot(position[0] - focus[0], position[2] - focus[2]) > range : false;
+  }
+
+  /** AI pawns (within the active range) plus the focus point, for the tile streamer. */
+  function navigationInvokers(): RecastInvoker[] {
+    const invokers: RecastInvoker[] = [];
+    for (const [entityId, entity] of entityById) {
+      if (!readAIControllerComponent(entity)) continue;
+      const transform = characterMovement()?.transformOf(entityId);
+      if (!transform || isAiSuspended(transform.position)) continue;
+      invokers.push({ position: transform.position, agent: navAgentForEntity(entityId) });
+    }
+    const focus = host()?.qualityFocusPosition();
+    if (focus) invokers.push({ position: [focus[0], focus[1], focus[2]] });
+    return invokers;
+  }
+
+  function buildPath(entityId: string, start: Vec3, goal: Vec3): RecastPlanResult {
     const navigation = host()?.navigation;
     if (!navigation) return { status: "failure" as const, points: [], visited: 0 };
     const bounds = navigationBounds();
     const agent = navAgentForEntity(entityId);
-    const blockers = navigation.staticNavigationBlockerAabbs();
     if (recastPlanner) {
-      // The same revision the grid cache keys on: any static-geometry change
-      // drops every Recast tile and the next requests rebuild what they need.
-      const surfaces = navigation.staticNavigationSurfaceTriangles(!navigation.staticNavigationSurfaceSamplesAt);
-      recastPlanner.setRevision(navRevisionToken(blockers, surfaces, bounds));
+      applyRecastNavigationChanges(recastPlanner);
       return recastPlanner.findPath({ agent, start, goal: [...goal], bounds });
     }
+    const blockers = navigation.staticNavigationBlockerAabbs();
     if (bounds.length === 0) {
       // No authored AI Navigation Volume: the grid extent is derived from
       // start/goal, so it is single-query only and can't be baked/reused.
@@ -404,9 +459,14 @@ export function createAiModule(): CapabilityModule {
       if (request.preserveLocomotionOnSuccess !== true) host()?.reportIdleLocomotion(entityId);
       return "success";
     }
+    // A suspended pawn keeps its task running without planning (or building
+    // tiles) far from the player; it resumes when the player comes back.
+    if (isAiSuspended(transform.position)) return "running";
     const existing = pathFollowing.get(entityId);
     if (!existing || !samePoint3d(existing.goal, request.position)) {
       const path = buildPath(entityId, transform.position, request.position);
+      // The corridor's nav tiles are still queued: ask again next tick.
+      if (path.status === "pending") return "running";
       if (path.status === "failure" || path.points.length < 2) {
         pathFollowing.set(entityId, {
           goal: [...request.position],
@@ -475,6 +535,7 @@ export function createAiModule(): CapabilityModule {
   ): CharacterMoveIntent | null {
     const follow = pathFollowing.get(entityId);
     if (!follow || follow.state.status !== "following") return null;
+    if (isAiSuspended(transform.position)) return { direction: [0, 0], speed: 0 };
     let state = follow.state;
     const advance = advanceWaypoint(state.path, state.waypointIndex, transform.position, {
       final: follow.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS,
@@ -504,12 +565,15 @@ export function createAiModule(): CapabilityModule {
         follow.replans > AI_MAX_STUCK_REPLANS
           ? null
           : buildPath(entityId, transform.position, follow.goal);
-      if (!path || path.status === "failure" || path.points.length < 2) {
+      if (path?.status === "pending") {
+        // Keep walking the old path; the replan retries when stuck again.
+      } else if (!path || path.status === "failure" || path.points.length < 2) {
         follow.state = { path: [], waypointIndex: 0, status: "failure" };
         return null;
+      } else {
+        follow.state = { path: path.points, waypointIndex: 1, status: "following" };
+        target = follow.state.path[1]!;
       }
-      follow.state = { path: path.points, waypointIndex: 1, status: "following" };
-      target = follow.state.path[1]!;
     }
     const dx = target[0] - transform.position[0];
     const dz = target[2] - transform.position[2];
@@ -685,7 +749,11 @@ export function createAiModule(): CapabilityModule {
       followers,
       planner: recastPlanner ? "recast" : "grid",
       ...(recastPlanner
-        ? { navMeshTiles: recastPlanner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0) }
+        ? {
+          navMeshTiles: recastPlanner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0),
+          navMeshStaleTiles: recastPlanner.loadedTiles().reduce((total, entry) => total + entry.stale, 0),
+          navMeshQueuedTiles: recastPlanner.streamingStats().queued,
+        }
         : {}),
     };
   }
@@ -833,7 +901,14 @@ export function createAiModule(): CapabilityModule {
       );
     },
 
-    update() {
+    update(deltaSeconds: number) {
+      elapsedSeconds += Math.max(0, Number.isFinite(deltaSeconds) ? deltaSeconds : 0);
+      // Recast tile streaming: fold in geometry changes, then keep the tiles
+      // around the invokers fresh within this frame's build budget.
+      if (recastPlanner && layout) {
+        applyRecastNavigationChanges(recastPlanner);
+        recastPlanner.update({ invokers: navigationInvokers(), bounds: navigationBounds(), now: elapsedSeconds });
+      }
       // World-space overlay only, rebuilt from this frame's resolved state. It is
       // added to the scene rather than projected, so it does not need to wait for
       // the Game Mode's camera the way screen-space UI does.

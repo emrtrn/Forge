@@ -2,9 +2,10 @@
  * World Builder F1 step 19: the settlement chain on the reproducible mountain
  * test valley (`tools/world/wbTestValley.ts`). The stages run on the analytic
  * height, no terrain files. Pinned here: the track up the slope stays within
- * its limit (a serpentine), and the two known gaps of the mountain test — the
- * valley village short of parcels and the hillside hamlet that slides down to
- * the floor — so a fix shows up as a deliberate change to this test.
+ * its limit (a serpentine); the hamlet drawn on the steep slope above the
+ * bench settles on the bench (not down on the floor) and its stranded road
+ * node is reported; and the known gap left — the valley village short of
+ * parcels — so a fix shows up as a deliberate change to this test.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,6 +20,7 @@ import {
   WB_TEST_VALLEY_HALF,
   WB_TEST_VALLEY_TERRAIN_ID,
   wbTestValleyAxisZ,
+  wbTestValleyBenchZ,
   wbTestValleyHeight,
   wbTestValleyRecipe,
 } from "../../tools/world/wbTestValley";
@@ -93,22 +95,27 @@ export function registerWbTestValleyTests(check: Check): void {
     assert.deepEqual(recipe.generated.sites.map((site) => site.settlement), ["village", "hamlet"]);
   });
 
-  check("wb test valley: known gaps — the village is short of parcels, the hillside hamlet slides to the floor", () => {
+  check("wb test valley: the hillside hamlet settles on the bench and its stranded road node is reported", () => {
+    const { recipe, plans } = chain();
+    const hamlet = recipe.generated.sites.find((entry) => entry.settlement === "hamlet")!;
+    const [x, z] = hamlet.center;
+    assert.ok(Math.abs(z - wbTestValleyBenchZ(x)) < 25, `on the bench, not the floor (${hamlet.center})`);
+    assert.ok(z - wbTestValleyAxisZ(x) > 80, "well up from the valley axis");
+    assert.equal(recipe.generated.parcels.filter((parcel) => parcel.settlement === "hamlet").length, 11, "all 11 program needs");
+    const warnings = plans.get("settlementSites")!.warnings;
+    assert.ok(warnings.some((warning) => /^settlement hamlet: moved \d+ m from the planned centre \(the planned centre is steeper than the limit\)$/.test(warning)));
+    assert.ok(warnings.some((warning) => warning.startsWith("settlement hamlet: its road node hamlet-end is outside the chosen core")),
+      "the track was built to the planned spot: the user moves the node");
+  });
+
+  check("wb test valley: known gap — the valley village is short of parcels", () => {
     const { recipe } = chain();
-    const site = (id: string) => recipe.generated.sites.find((entry) => entry.settlement === id)!;
-    const needs = (id: string) => site(id).dwellings + site(id).program.reduce((sum, line) => sum + line.count, 0);
-    const parcels = (id: string) => recipe.generated.parcels.filter((parcel) => parcel.settlement === id).length;
-
-    // Village: the core grown along the floor holds more than the disc did (25 of 44), not yet all.
-    assert.equal(needs("village"), 44);
-    assert.ok(parcels("village") >= 30, `${parcels("village")} parcels`);
-    assert.ok(parcels("village") < needs("village"), "known gap: fixed? then pin the new count");
-
-    // Hamlet: planned on the slope at (90, 150); its site lands on the valley floor, and the track ends where it was planned.
-    const hamlet = site("hamlet");
-    const fromAxis = Math.abs(hamlet.center[1] - wbTestValleyAxisZ(hamlet.center[0]));
-    assert.ok(fromAxis < 60, `known gap: the hamlet sits ${fromAxis.toFixed(0)} m from the valley axis; fixed? then pin it on the slope`);
-    const end = recipe.plan.roadGraph.nodes.find((node) => node.id === "hamlet-end")!;
-    assert.ok(Math.hypot(end.position[0] - hamlet.center[0], end.position[1] - hamlet.center[1]) > 80, "the track still leads to the planned spot");
+    const site = recipe.generated.sites.find((entry) => entry.settlement === "village")!;
+    const needs = site.dwellings + site.program.reduce((sum, line) => sum + line.count, 0);
+    const parcels = recipe.generated.parcels.filter((parcel) => parcel.settlement === "village").length;
+    // The core grown along the floor holds more than the disc did (25 of 44), not yet all.
+    assert.equal(needs, 44);
+    assert.ok(parcels >= 38, `${parcels} parcels`);
+    assert.ok(parcels < needs, "known gap: fixed? then pin the new count");
   });
 }

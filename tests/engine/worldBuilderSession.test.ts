@@ -194,7 +194,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.deepEqual(view.stages, [
       { id: "planBlockout", label: "Plan blockout", version: 1, recordedVersion: null },
       { id: "roads", label: "Roads", version: 4, recordedVersion: null },
-      { id: "settlementSites", label: "Settlement sites", version: 2, recordedVersion: null },
+      { id: "settlementSites", label: "Settlement sites", version: 3, recordedVersion: null },
       { id: "streets", label: "Streets", version: 1, recordedVersion: null },
       { id: "parcels", label: "Parcels", version: 1, recordedVersion: null },
       { id: "landUse", label: "Land use", version: 1, recordedVersion: null },

@@ -135,6 +135,25 @@ export function registerWorldSettlementTests(check: Check): void {
     assert.ok(shore.center![0] < 40 - 30 * 0.886 * 0.9, `the whole core is on terrain (${shore.center})`);
   });
 
+  check("world settlement: a centre drawn on a steep slope keeps to its height — the bench, not the floor with the road", () => {
+    // Floor at 0 m south of z = -30, a concave slope up to a 40 m bench north of z = 30, a road along the floor.
+    const hillside = (_x: number, z: number): number => (z <= -30 ? 0 : z >= 30 ? 40 : 40 * Math.sqrt((z + 30) / 60));
+    const withRoad = (recipe: WorldRecipe) => {
+      recipe.plan.roadGraph.nodes.push(
+        { id: "w", source: "manual", position: [-400, -70], kind: "end" },
+        { id: "e", source: "manual", position: [400, -70], kind: "end" },
+      );
+      recipe.plan.roadGraph.edges.push({ id: "floor", source: "manual", from: "w", to: "e", roadClass: "local" });
+    };
+    // Drawn at 28 m up the slope, as far from the floor's middle as from the bench's.
+    const site = selectSite(context(hillside, withRoad), village({ center: [0, 0] }), 20, profile());
+    assert.equal(site.reason, "the planned centre is steeper than the limit");
+    assert.ok(site.center![1] > 30, `on the bench (${site.center})`);
+    // Drawn on flat floor, the same ground keeps it there: height intent applies only to a too-steep centre.
+    const floor = selectSite(context(hillside, withRoad), village({ center: [0, -70] }), 20, profile());
+    assert.deepEqual(floor.center, [0, -70]);
+  });
+
   check("world settlement: low ground beside water is flood-prone, the bank above it is chosen", () => {
     // A V valley rising 0.05 m per metre from a river along z = 0.
     const valley = (_x: number, z: number): number => 0.05 * Math.abs(z);

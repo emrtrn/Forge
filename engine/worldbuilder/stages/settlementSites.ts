@@ -15,10 +15,15 @@
  * the valley instead of a disc reaching up its sides. Ground that holds less
  * is reported.
  *
+ * A road node linked to the settlement (`settlement`) that ends up outside
+ * the chosen core is reported (v3): the site slid away from the plan, and the
+ * road built to the node would stop short of the settlement. The stage never
+ * moves plan elements; the user does (Plan Corrections).
+ *
  * A protected settlement keeps the site it has (or its planned centre); its
  * program is still refreshed.
  */
-import { growCore, type CoreGrowth } from "../core";
+import { growCore, inCore, type CoreGrowth } from "../core";
 import { deriveSettlementProgram } from "../program";
 import type { GeneratedSite } from "../recipe";
 import { resolveRoadClass } from "../roadClass";
@@ -35,7 +40,7 @@ export function siteMarkerId(settlementId: string): string {
 export const settlementSitesStage: WorldStage = {
   id: SETTLEMENT_SITES_STAGE_ID,
   label: "Settlement sites",
-  version: 2,
+  version: 3,
   run(input: StageInput): StageOutput {
     const { recipe, profile } = input;
     const sites: GeneratedSite[] = [];
@@ -77,6 +82,12 @@ export const settlementSitesStage: WorldStage = {
         });
         const short = coreShortfall(core);
         if (short) warnings.push(`${name}: ${short}`);
+        const shape = { center: chosen.center, radius: core.reach, outline: core.outline };
+        for (const node of recipe.plan.roadGraph.nodes) {
+          if (node.settlement !== settlement.id || inCore(shape, node.position)) continue;
+          const away = Math.round(Math.hypot(node.position[0] - chosen.center[0], node.position[1] - chosen.center[1]));
+          warnings.push(`${name}: its road node ${node.id} is outside the chosen core, ${away} m from its centre; move the node (Plan Corrections) so its road reaches the settlement`);
+        }
         site = {
           settlement: settlement.id,
           center: chosen.center,

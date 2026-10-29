@@ -17,7 +17,11 @@
  *   kind (`FLOOD_BY_KIND`): a stream floods a narrow strip, a river a plain;
  * - roads: near a road (realised spline or planned edge) is good;
  * - optional aspect: facing `preferredAspect` (e.g. a sunny side) is good;
- * - distance from the plan's centre costs a little, so intent wins ties.
+ * - distance from the plan's centre costs a little, so intent wins ties;
+ * - height intent: when the planned centre is too steep, a site near its
+ *   height is preferred. A hamlet drawn on a hillside goes to a bench on that
+ *   hillside, not down to the valley floor that scores best on roads and
+ *   water (plan coordinates read from an image are a few per cent off).
  *
  * Protected areas and off-terrain cores are excluded. With no valid centre the
  * result says so and why — a generator stops there instead of placing a
@@ -50,6 +54,8 @@ const WATER_CLEARANCE = 5;
 /** Water proximity: full score within the first, none beyond the second, metres. */
 const WATER_NEAR: [number, number] = [50, 400];
 const ROAD_NEAR: [number, number] = [30, 300];
+/** Height intent: full score within the first height difference, none beyond the second, metres. */
+const HEIGHT_NEAR: [number, number] = [3, 40];
 /** Share of a core that may be off terrain. */
 const MAX_OFF_TERRAIN = 0.1;
 /** The plan's centre is kept unless another scores this much more. */
@@ -63,7 +69,7 @@ const MIN_CORE_RADIUS = 20;
 export const CENTRE_SCORE_RADIUS = 40;
 const MAX_SITE_CELLS = 256;
 
-const WEIGHTS = { slope: 0.45, water: 0.2, road: 0.25, aspect: 0.1, shift: 0.15 } as const;
+const WEIGHTS = { slope: 0.45, water: 0.2, road: 0.25, aspect: 0.1, height: 0.35, shift: 0.15 } as const;
 
 export interface SiteOptions {
   /** Default: the settlement's `radius`, else `DEFAULT_SEARCH_RADIUS`. */
@@ -150,6 +156,8 @@ export function selectSite(
   const roadDistance = roads.length > 0 ? distanceField(spec, roads, ROAD_NEAR[1]) : null;
   const guarded = protectedMask(spec, context).field;
 
+  // Scores without height intent first: it applies only when the planned centre is too steep.
+  let intendedHeight: number | null = null;
   const evaluate = (index: number): { score: number; detail: SiteScore } | Exclusion => {
     const height = heights.values[index]!;
     if (Number.isNaN(height) || core.offShare[index]! > MAX_OFF_TERRAIN) return "offTerrain";
@@ -174,6 +182,10 @@ export function selectSite(
       total += WEIGHTS.aspect * aspectScore(heights, index, options.preferredAspect);
       weight += WEIGHTS.aspect;
     }
+    if (intendedHeight !== null) {
+      total += WEIGHTS.height * ramp(Math.abs(height - intendedHeight), HEIGHT_NEAR);
+      weight += WEIGHTS.height;
+    }
     const score = Math.min(1, Math.max(0, total / weight - WEIGHTS.shift * shift));
     return {
       score,
@@ -188,6 +200,7 @@ export function selectSite(
 
   const planIndex = cellIndex(spec, cx, cz);
   const planEval = evaluate(planIndex);
+  if (planEval === "steep") intendedHeight = context.sampleHeight(cx, cz);
   const counts: Record<Exclusion, number> = { steep: 0, flood: 0, water: 0, protected: 0, offTerrain: 0 };
   let candidates = 0;
   let best: { index: number; score: number; detail: SiteScore } | null = null;

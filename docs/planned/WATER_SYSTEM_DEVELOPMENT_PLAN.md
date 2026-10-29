@@ -23,6 +23,15 @@ aynı uygulama raporundadır. Sonraki onaylı kapsam V2a Lake kırılmadır.
 
 **Hedef:** Mevcut Lake/River altyapısını koruyarak suyun renk, ışık, köpük ve kırılma kalitesini geliştirmek; daha sonra kalıcı köpük, rüzgârlı yüzey, nesne izi, su altı ve Ocean çalışmalarını ayrı teslimlerle ilerletmek.
 
+**V2a ilk uygulama:** Lake için bağlı kaynak yüzü ve depth denetimli ekran
+kırılması eklendi. Yeni `Refraction Strength` alanı 0–2, başlangıç 0,65; sıfır
+etkiyi kapatır. Yüksek/Ultra profilinde ve geçerli renk/depth snapshot yolunda
+etkindir. [Uygulama ve elle kontrol](../reports/LAKE_REFRACTION_V2A_2026-10-29.md).
+Kullanıcı Lake kırılma görünümünü iyi buldu ve test/commit istedi. Teknik ve
+GPU kabul katmanları ayrı izlenir. Kullanıcı, bundan sonraki commit isteklerinde
+uygun testlerin topluca çalıştırılmasına izin verdi; ara adımlarda tekrar koşu
+yapılmaması tercihi sürüyor.
+
 İlk uygulama paketi **V0–V2** olarak önerilir. Açık Lake performans işleri **P0** hattında ayrıca izlenir. FFT, WebGPU geçişi veya su sisteminin topluca değiştirilmesi ilk paketin ön koşulu değildir.
 
 ## 1. Kaynaklar ve planın konumu
@@ -175,6 +184,14 @@ Güneş parıltısı bu teslimde V4 dalga hareketinden bağımsız malzeme geli�
 
 ### V2a — Lake
 
+İlk uygulama kodlandı, kullanıcı görünümü iyi buldu ve commit öncesi
+`build:verify` (2.131 engine kontrolü dahil) ile yeni kırılma browser testi
+geçti. Geniş kalite/çoklu Play senaryosu ve GPU kabul sınırları V2a raporunda
+ayrıca izlenir; aşağıdaki genel maddeler tüm matrisin kabulü değildir. Varsayılan
+0,65 güçle başlanır; eski kayıtta alan yoksa aynı runtime varsayılanı uygulanır.
+Kaydetme allowlist'i, `tools/saveValidator.ts` tarafından çağrılan ortak
+`validateWaterBodies` / `validateWaterBody` içinde güncellendi.
+
 Başlangıç noktası: [waterSceneSnapshot.ts](../../engine/render-three/waterSceneSnapshot.ts) ve Lake shader'ı. Uygun render yolundaki mevcut renk/depth snapshot paylaşılır; ilk çözüm gövde başına yeni sahne capture'ı açmaz.
 
 - [ ] Mikro/geometrik normal yönünde sınırlı ekran UV kaydırması uygula; ince suda etkinin sıfıra yaklaşmasını sağla.
@@ -186,6 +203,9 @@ Başlangıç noktası: [waterSceneSnapshot.ts](../../engine/render-three/waterSc
 **Çıkış:** Dipte kontrollü bükülme; kıyıda halo, öndeki siluetin suya çekilmesi veya çift nesne görüntüsü yok. Ekran dışı görüntü üretilemediği kayıtlıdır; teknik tam fiziksel ışın izleme olarak sunulmaz.
 
 ### V2b — River
+
+**Ertelendi:** Kullanıcının 29 Ekim 2026 kararıyla nehir ayrı ve daha kapsamlı
+bir çalışmada ele alınacak. Bu Lake test/commit teslimi V2b'yi başlatmaz.
 
 - [ ] Lake sonucu kabul edildikten sonra River render yolunun snapshot erişimini ve yerel yüzey kotunu ayrı incele.
 - [ ] Eğime, yerel derinliğe ve gerçek River üçgenlerine bağlı doğrulamayla adaptör geliştir; sıfır deniz seviyesi varsayımı kullanma.
@@ -326,9 +346,11 @@ Kaynak referansı, entegrasyon raporunda incelenen **`ce9248fa20afbdf63fd4c11709
 GGX güneş parıltısı kodlandı. Kullanıcı, görüntüler üzerinden yapılan son
 düzeltmenin Lake görünümünü kabul etti. Kullanıcının isteğiyle otomatik veya
 tarayıcı doğrulaması yapılmadı; tür/build/engine ve GPU maliyeti açık kalır.
-Sonraki onaylı adım, mevcut değişiklikleri kapsamlı olmayan ayrı bir su commit'i
-olarak kaydetmek ve ardından yalnız V2a Lake kırılmayı uygulamaktır. Yeni
-görünümün kontrolünü kullanıcı yapar. River kırılma bu adımın kapsamında değildir.
+Yansıma/güneş değişiklikleri `c5d1b4a1` ile commit edildi. Ardından V2a Lake
+kırılma kodlandı ve kullanıcı görünümü iyi buldu. Ortak index'teki göl kodu
+eşzamanlı `671f4386` commit'ine dahil oldu; kalan test/rapor kaydı ayrı Lake
+doğrulama commit'iyle tamamlanır. Sonuçlar V2a raporunda izlenir. Kullanıcı
+kararıyla nehir ayrı ve daha kapsamlı bir çalışmaya ertelendi.
 Aşağıdaki sıra, planın ilk oluşturulduğu andaki başlangıç önerisidir.
 
 İlk uygulama adımı **V0 ve P0 baseline**: ayrı Lake/eğimli River fixture'ı, sabit kameralar, üç görünümün başlangıç değerleri ve güncel kaynak ölçümü. Sonraki adım V1a ile optik denge, ardından V1b ortak köpük malzemesidir. Yeni kalıcı alanların gerekip gerekmediği ve efekt bütçeleri fixture sonuçlarıyla netleştirilir.

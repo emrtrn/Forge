@@ -3,6 +3,18 @@
 29 Ekim 2026. [Su gelişim planındaki V1c](../planned/WATER_SYSTEM_DEVELOPMENT_PLAN.md#v1c--ortam--planar-yansıma-sürekliliği)
 ve ortak güneş parıltısının uygulaması. **Son Lake görünümü kullanıcı tarafından kabul edildi; teknik doğrulama açık.**
 
+Değişiklikler sonradan `c5d1b4a1` ile commit edildi. Kullanıcı bildirimine göre
+bu commit başka oturumun push'u ile origin'e de gönderildi. İlk teslimin
+aşağıdaki commit/push yapılmadı kaydı teslim anına aittir.
+
+Başka oturumdan gelen `renderer.getClearAlpha is not a function` bildirimi,
+renderer taklidindeki eksik clear color/alpha metotlarına işaret etti. Ana
+ağaçta mock ve eski kalite beklentileri eşzamanlı olarak düzeltildi; burada bu
+değişiklikler korunuyor. Ayrıca görünürlük gizleme `try` içine taşındı.
+Sonraki Lake commit'i öncesinde yerel `build:verify` ve 2.131 engine kontrolü
+geçti; önceki clear-alpha hatası bu koşuda tekrarlanmadı. Uzak CI durumu
+ayrıca izlenir. Lake browser sonuçları V2a raporundadır.
+
 Kullanıcı, paralel bant/güneş diski düzeltmesinden sonra paylaştığı son Lake
 görüntüsü için “şuan çok daha iyi, görsel kabul tamam” dedi. Bu kabul o göl
 görünümünü kapsar; River veya bütün grafik ayarlarının kabulü olarak kullanılmaz.

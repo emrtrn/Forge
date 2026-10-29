@@ -67,7 +67,7 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   if (wavePasses) level.postProcess = { ...level.postProcess, ao: { enabled: true, radius: 1, intensity: 1 }, dof: { enabled: true, focusDistance: 30, aperture: .01, maxBlur: .01 } };
   // Runtime creates its snapshot path only when post-processing is enabled.
   // Zero bloom strength retains neutral pixels while exercising that path.
-  if (refractionCase) level.postProcess = { ...level.postProcess, hidden: false,
+  if (refractionCase) level.postProcess = { ...level.postProcess,
     bloom: { enabled: true, intensity: 0, threshold: 1, radius: 0 } };
   level.instances = level.instances.filter((g: { assetId: string }) => g.assetId === "marker:playerStart");
   level.instances[0].placements[0].position = [-20, 15, -12];

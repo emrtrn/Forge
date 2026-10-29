@@ -982,14 +982,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   /**
    * AI-navigation blockers: `ignored` bodies are omitted, but still collide in
    * physics. Every other body is emitted with its `navigationRole` carried on each
-   * AABB, because this list feeds two consumers with opposite needs:
-   * - Ground seeding (`findGroundLayersAt` via the host floor sampler) needs
-   *   `walkable` bodies IN the list — a solid floor/platform box has no trimesh
-   *   surface triangles, so its walkable top is only discoverable as a blocker top.
-   * - Grid erosion (`buildNavGrid`) must NOT erode around `walkable` bodies, or a
-   *   `walkable` staircase's vertical riser AABBs wipe out the tread strip between
-   *   steps. That exclusion lives in `buildNavGrid` (role-aware), keyed off the
-   *   `navigationRole` carried here — not by dropping the body from this list.
+   * AABB. Ground seeding (`findGroundLayersAt` via the host floor sampler) needs
+   * `walkable` bodies IN the list — a solid floor/platform box has no trimesh
+   * surface triangles, so its walkable top is only discoverable as a blocker top —
+   * and reads the role to tell a floor from an obstacle.
    */
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[] {
     if (this.staticNavigationBlockerCache) return this.staticNavigationBlockerCache;
@@ -1024,7 +1020,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   /**
    * Recast input for one nav tile: the collider triangles of every enabled
    * static body overlapping the X/Z rectangle (`navigationGeometry.ts`).
-   * `ignored` bodies are left out, as in the grid planner's lists.
+   * `ignored` bodies are left out, as in the other navigation lists.
    */
   forEachNavigationTriangleInRect(
     minX: number,

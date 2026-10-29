@@ -15,6 +15,7 @@
  */
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId } from "../scene/entity";
+import type { Vec3 } from "../scene/layout";
 import {
   readAIControllerComponent,
   readCharacterMovementComponent,
@@ -38,7 +39,7 @@ import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
 import type { AiStateTreeAsset } from "./stateTreeAsset";
 import { AiStateTreeRunner } from "./stateTreeRunner";
 import type { AiQueryAsset } from "./queryAsset";
-import { runAiQuery } from "./queryRunner";
+import { runAiQuery, type AiNavReachability } from "./queryRunner";
 import { SmartObjectReservationStore } from "./smartObjects";
 import { createTargetPointIndex, type TargetPointEntry, type TargetPointIndex } from "./targetPoints";
 import type { SplineRegistry } from "../scene/splineRegistry";
@@ -108,6 +109,15 @@ export interface AISubsystemOptions {
   readonly splineRegistry?: SplineRegistry;
   /** Runtime-owned focus point (normally the possessed pawn); absent = no throttling. */
   readonly qualityFocusPosition?: () => readonly [number, number, number] | null;
+  /**
+   * Nav mesh reachability for a pawn (the host's planner with that pawn's agent
+   * profile); feeds AI queries' `navReachable` test. Absent = that test fails.
+   */
+  readonly navReachable?: (
+    pawnEntityId: EntityId,
+    from: readonly [number, number, number],
+    to: readonly [number, number, number],
+  ) => AiNavReachability;
 }
 
 /** Optional Phase 7 quality extension. Empty settings retain every-frame AI. */
@@ -140,6 +150,7 @@ export class AISubsystem implements Subsystem {
   private perceptionSourceFilter: ((entity: Entity) => boolean) | undefined;
   private splineRegistry: SplineRegistry | undefined;
   private qualityFocusPosition: (() => readonly [number, number, number] | null) | undefined;
+  private navReachable: AISubsystemOptions["navReachable"];
   private distanceUpdateSettings: AiDistanceUpdateSettings = {};
   private runnerAccumulatedSeconds = new Map<EntityId, number>();
   private entities: readonly Entity[] = [];
@@ -173,6 +184,7 @@ export class AISubsystem implements Subsystem {
     this.perceptionSourceFilter = options.perceptionSourceFilter;
     this.splineRegistry = options.splineRegistry;
     this.qualityFocusPosition = options.qualityFocusPosition;
+    this.navReachable = options.navReachable;
   }
 
   configure(options: AISubsystemOptions): void {
@@ -185,6 +197,7 @@ export class AISubsystem implements Subsystem {
     if (options.perceptionSourceFilter) this.perceptionSourceFilter = options.perceptionSourceFilter;
     if (options.splineRegistry) this.splineRegistry = options.splineRegistry;
     if (options.qualityFocusPosition) this.qualityFocusPosition = options.qualityFocusPosition;
+    if (options.navReachable) this.navReachable = options.navReachable;
   }
 
   /**
@@ -628,6 +641,9 @@ export class AISubsystem implements Subsystem {
           ...(this.blockersNear
             ? { blockersNear: this.blockersNear }
             : { blockers: this.blockers?.() ?? [] }),
+          ...(this.navReachable
+            ? { navReachable: (from: Vec3, to: Vec3) => this.navReachable!(controller.pawnEntityId, from, to) }
+            : {}),
           smartObjects: this.smartObjects,
         });
         controller.setLastQueryResult(query, result);

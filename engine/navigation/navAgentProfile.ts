@@ -13,7 +13,7 @@
  * ramps/corridors out of the baked grid — making an elevated Target Point look
  * unreachable even though movement can climb it.
  */
-import type { NavAgent } from "./gridNavigation";
+import type { NavAgent } from "./navigationTypes";
 
 export interface NavAgentSizeConfig {
   readonly radius?: number;

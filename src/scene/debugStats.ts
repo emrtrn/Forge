@@ -787,7 +787,9 @@ export function formatAiNavDebug(snapshot: AiNavigationDebugSnapshot, topN = 4):
   const backlog = (snapshot.navMeshQueuedTiles ?? 0) > 0 || (snapshot.navMeshStaleTiles ?? 0) > 0 || inFlight > 0
     ? ` queued:${snapshot.navMeshQueuedTiles ?? 0} stale:${snapshot.navMeshStaleTiles ?? 0}${inFlight > 0 ? ` worker:${inFlight}` : ""}`
     : "";
-  const planner = snapshot.planner === "recast" ? ` recast tiles:${snapshot.navMeshTiles ?? 0}${backlog}` : "";
+  const planner = snapshot.planner === "recast"
+    ? ` recast tiles:${snapshot.navMeshTiles ?? 0}${backlog}`
+    : snapshot.planner === "none" ? " nav:unavailable" : "";
   const lines = [`ai nav (${snapshot.followers.length})${planner}`];
   for (const follower of snapshot.followers.slice(0, Math.max(0, topN))) {
     const waypoint =

@@ -394,8 +394,8 @@ export interface PhysicsAabb {
    * Oriented convex XZ ground silhouette of a rotated box collider (the exact
    * footprint the `min`/`max` AABB otherwise bloats to enclose). Present only
    * when the collider is rotated off-axis; consumers that only need the AABB
-   * (perception, ground probe) ignore it, while grid navigation erodes/collides
-   * against it so a diagonal wall no longer blocks a fat axis-aligned area.
+   * (perception, ground probe) ignore it, while the AI debug overlay draws it
+   * so a diagonal wall no longer reads as a fat axis-aligned area.
    */
   readonly footprint?: readonly (readonly [number, number])[];
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { HeightfieldStaticSource } from "../../engine/physics/heightfieldStatic";
-import { buildNavGrid, searchNavGrid, type NavAgent } from "../../engine/navigation/gridNavigation";
+import type { NavAgent } from "../../engine/navigation/navigationTypes";
 import { navFloorSampler } from "../../engine/navigation/navFloorSampler";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import { createReferenceCarDefinition, NEUTRAL_VEHICLE_INPUT } from "../../engine/physics/vehicle/vehicleTypes";
@@ -229,7 +229,7 @@ async function driveTerrainSeam(seamed: boolean, route: SeamDrive) {
 }
 
 export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
-  check("terrain heightfield navigation: 257x257 tile bakes without requesting the full triangle list", () => {
+  check("terrain heightfield navigation: 257x257 tile answers floor queries without requesting the full triangle list", () => {
     const def: WorldTerrainDef = { ...vehicleTerrain(false).def, tileQuads: 256, tilesX: 1, tilesZ: 1,
       origin: [0, 0, 0], tiles: [{ key: "0_0", minHeight: 0, maxHeight: 0 }] };
     const document = { def, tiles: new Map([["0_0", createFlatTerrainTile(def, 0, 0)]]) };
@@ -238,7 +238,7 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
     let fullCalls = 0;
     HeightfieldStaticSource.prototype.all = function () {
       fullCalls += 1;
-      throw new Error("nav bake must not allocate the tile's 131072 triangles");
+      throw new Error("navigation queries must not allocate the tile's 131072 triangles");
     };
     try {
       physics.setEntities(worldTerrainColliderEntities({ id: "large", name: "Large", collision: true }, document));
@@ -251,9 +251,9 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
       const agent = { radius: 0.3, height: 1.8, stepHeight: 0.6 };
       const sampleFloorYs = navFloorSampler(blockers, surfaces, bounds, agent, 0,
         physics.staticNavigationSurfaceSamplesAt.bind(physics));
-      const grid = buildNavGrid({ agent, blockers, bounds, footY: 0, sampleFloorYs });
-      assert.ok(grid);
-      assert.equal(searchNavGrid(grid, [2, 0, 2], [12, 0, 12]).status, "success");
+      for (const [x, z] of [[2, 2], [12, 12], [8, 3]] as const) {
+        assert.deepEqual(sampleFloorYs(x, z), [0], `flat floor at ${x},${z}`);
+      }
       assert.equal(fullCalls, 0);
     } finally {
       HeightfieldStaticSource.prototype.all = originalAll;
@@ -261,7 +261,7 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
     }
   });
 
-  check("terrain heightfield navigation: floor layers, baked grids and paths equal trimesh without full surface generation", () => {
+  check("terrain heightfield navigation: floor layers equal trimesh without full surface generation", () => {
     const document = terrain(1, [0, 0, 0]);
     const fields = worldTerrainColliderEntities({ id: "world", name: "World", collision: true }, document);
     const ramp = staticBox("ramp", [6, 5, 6], [4, 2, 4]);
@@ -291,7 +291,7 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
         for (const eps of [-5e-7, 0, 5e-7]) points.push([x + eps, z, 0], [x + 0.5, z + 0.5 + eps, 0]);
       }
     }
-    const compare = (label: string, bake = false): void => {
+    const compare = (label: string): void => {
       const oldSurfaces = trimesh.staticNavigationSurfaceTriangles();
       const surfaces = heightfield.staticNavigationSurfaceTriangles(false);
       assert.equal(surfaces.length, 2, "only the two non-heightfield ramp surfaces remain in the nav list");
@@ -303,26 +303,15 @@ export function registerTerrainHeightfieldPhysicsTests(check: Check): void {
       const sampler = navFloorSampler(blockers, surfaces, bounds, agent, 0,
         heightfield.staticNavigationSurfaceSamplesAt.bind(heightfield));
       for (const [x, z] of points) assert.deepEqual(sampler(x, z), oldSampler(x, z), `${label}: layers at ${x},${z}`);
-      if (!bake) return;
-      const request = { agent, bounds: [{ min: [1, -10, 1] as Vec3, max: [25, 20, 25] as Vec3 }], footY: 0, cellSize: 0.5 };
-      const grid = buildNavGrid({ ...request, blockers, sampleFloorYs: sampler });
-      const oldGrid = buildNavGrid({ ...request, blockers: trimesh.staticNavigationBlockerAabbs(), sampleFloorYs: oldSampler });
-      assert.ok(grid && oldGrid);
-      assert.deepEqual(grid, oldGrid, `${label}: baked multi-layer grid`);
-      const start: Vec3 = [3, sampler(3, 3)![0]!, 3];
-      const goal: Vec3 = [10, sampler(10, 3)![0]!, 3];
-      const path = searchNavGrid(grid, start, goal);
-      assert.equal(path.status, "success", "fixture exercises a reachable route");
-      assert.deepEqual(path, searchNavGrid(oldGrid, start, goal), `${label}: path`);
     };
     try {
-      compare("loaded", true);
+      compare("loaded");
       const before = heightfield.staticNavigationSurfaceTriangles(false);
       for (const physics of [trimesh, heightfield]) physics.setEntityCollisionEnabled(fields[0]!.id, false);
       assert.notEqual(heightfield.staticNavigationSurfaceTriangles(false), before, "terrain-only toggle invalidates nav revision identity");
       compare("disabled");
       for (const physics of [trimesh, heightfield]) physics.setEntityCollisionEnabled(fields[0]!.id, true);
-      compare("re-enabled", true);
+      compare("re-enabled");
       for (const role of ["ignored", "obstacleOnly", "auto", "walkable"] as const) {
         const withRole = fields.map((entity) => ({ ...entity, components: { ...entity.components,
           [COLLIDER_COMPONENT]: { ...entity.components[COLLIDER_COMPONENT], navigationRole: role },

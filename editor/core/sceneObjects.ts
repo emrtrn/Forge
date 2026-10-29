@@ -367,7 +367,7 @@ function buildBlockingVolumeEditableSelection(
 /**
  * Builds the Details/Outliner view-model for a placed AI Navigation Volume. It
  * mirrors Unreal's NavMesh Bounds Volume at the authoring level: transform + size
- * define where AI grid navigation is allowed.
+ * define where AI navigation is allowed.
  */
 function buildAiNavigationVolumeEditableSelection(
   volume: LayoutAiNavigationVolume,

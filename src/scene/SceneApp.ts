@@ -203,7 +203,6 @@ import {
 import {
   createAiNavigationView,
   disposeAiNavigationView,
-  inflateNavBlocker2d,
   type AiNavAgentClearanceView,
   type AiPerceptionView,
   type AiQueryCandidateView,
@@ -215,7 +214,7 @@ import {
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
 } from "@engine/render-three/materials";
-import { type NavAabb, type NavAgent, type NavBlocker } from "@engine/navigation/gridNavigation";
+import { type NavAabb, type NavAgent, type NavBlocker } from "@engine/navigation/navigationTypes";
 import { convexHullXZ } from "@engine/physics/rotatedBox";
 import {
   attachActorLight,
@@ -1179,10 +1178,8 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
 /** Selections whose edits never change terrain heights (see `updateSelectionBox`). */
 const TERRAIN_NEUTRAL_SELECTION_KINDS: ReadonlySet<Selection["kind"]> = new Set(["instance", "character", "actor", "light"]);
 
-const AI_NAV_DEBUG_CELL_SIZE = 0.5;
 const AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS = AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS;
 const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING;
-const AI_NAV_DEBUG_GRID_SAFETY_MARGIN = AI_NAV_DEBUG_CELL_SIZE * 0.5;
 /** Standing height + step height of the default agent the nav mesh preview builds for. */
 const AI_NAV_DEBUG_AGENT_HEIGHT = 1.8;
 const AI_NAV_DEBUG_AGENT_STEP_HEIGHT = 0.45;
@@ -1316,7 +1313,7 @@ export class SceneApp {
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   /** Editor brush objects (translucent + wireframe) for placed Blocking Volume actors, by index. */
   private blockingVolumeObjects: BlockingVolumeObject[] = [];
-  /** Editor box volumes limiting AI grid navigation, by index. */
+  /** Editor box volumes limiting AI navigation, by index. */
   private aiNavigationVolumeObjects: AiNavigationVolumeObject[] = [];
   /** InstancedMesh foliage batches painted onto the level (Foliage Mode). */
   private foliageBinding: FoliageRenderBinding | null = null;
@@ -1689,7 +1686,7 @@ export class SceneApp {
   private showCollision = false;
   /** Coalesces streamed tile arrivals/departures into one overlay rebuild per frame. */
   private worldTerrainCollisionWiresDirty = false;
-  /** "Show > AI Navigation" overlay: nav grid + blocking footprints, off by default. */
+  /** "Show > AI Navigation" overlay: blocking footprints, clearances, routes; off by default. */
   private aiNavigationView: Group | null = null;
   /** Recast polygons of "Show > AI Navigation" (R4); rebuilt after edits go quiet. */
   private readonly recastPreview: EditorRecastPreview;
@@ -15043,7 +15040,6 @@ export class SceneApp {
     }
     const blockers = this.editorNavBlockers();
     const profile = this.aiNavDebugProfile();
-    const inflatedBlockers = blockers.map((blocker) => inflateNavBlocker2d(blocker, profile.clearanceRadius));
     const bounds = this.aiNavigationBounds();
     const perception = this.aiPerceptionView();
     const queries = this.aiQueryView();
@@ -15054,7 +15050,6 @@ export class SceneApp {
     this.recastPreview.request(() => this.editorRecastPreviewInput(bounds));
     if (
       blockers.length === 0 &&
-      inflatedBlockers.length === 0 &&
       bounds.length === 0 &&
       perception.length === 0 &&
       queries.length === 0 &&
@@ -15065,9 +15060,7 @@ export class SceneApp {
     }
     this.aiNavigationView = createAiNavigationView({
       blockers,
-      inflatedBlockers,
       bounds,
-      cellSize: AI_NAV_DEBUG_CELL_SIZE,
       perception,
       queries,
       routes,
@@ -15179,7 +15172,8 @@ export class SceneApp {
     return {
       agentRadius,
       clearancePadding,
-      clearanceRadius: agentRadius + clearancePadding + AI_NAV_DEBUG_GRID_SAFETY_MARGIN,
+      // The nav mesh erosion: radius plus padding.
+      clearanceRadius: agentRadius + clearancePadding,
     };
   }
 

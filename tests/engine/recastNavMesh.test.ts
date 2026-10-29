@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { NavAgent, PathResult } from "../../engine/navigation/gridNavigation";
+import type { NavAgent, PathResult } from "../../engine/navigation/navigationTypes";
 import { loadRecastModules, RecastNavMesh, type RecastModules, type RecastNavMeshOptions } from "../../engine/navigation/recastNavMesh";
 import { RecastPlanner, type RecastTileWorker } from "../../engine/navigation/recastPlanner";
 import { buildRecastTileBytes, createTileRcConfig, type RecastTileConfig, type RecastTileInput } from "../../engine/navigation/recastTileBuild";
@@ -536,6 +536,43 @@ export async function registerRecastNavMeshTests(checkAsync: CheckAsync): Promis
     planner.clear();
     assert.equal(planner.debugMeshes().length, 0);
     assert.notEqual(planner.debugRevision(), built, "a cleared planner never repeats an old revision");
+    planner.dispose();
+  });
+
+  await checkAsync("recast nav: clearance padding erodes walls further, closing a gap the bare radius fits", async () => {
+    // A 1.2 m gap between two walls across the whole floor.
+    const walls = [ground("ground", 20), box("west", [-20, 0, -0.5], [-0.6, 3, 0.5]), box("east", [0.6, 0, -0.5], [20, 3, 0.5])];
+    const bare = navMesh(modules, walls, {}, { ...AGENT, radius: 0.35, clearancePadding: 0 });
+    const padded = navMesh(modules, walls, {}, { ...AGENT, radius: 0.35, clearancePadding: 0.4 });
+    try {
+      const through = path(bare.mesh, [0, 0, -6], [0, 0, 6]);
+      assert.equal(through.status, "success", "0.7 m of agent fits a 1.2 m gap");
+      assert.equal(path(padded.mesh, [0, 0, -6], [0, 0, 6]).status, "failure", "1.5 m of agent plus padding does not");
+    } finally {
+      bare.mesh.dispose();
+      padded.mesh.dispose();
+    }
+  });
+
+  await checkAsync("recast planner: reachability answers reachable, unreachable and pending without building points", async () => {
+    const physics = new PhysicsSubsystem();
+    // A walled pen at x > 10: open ground outside cannot reach in.
+    physics.setEntities([
+      ground("ground", 60),
+      box("pen-w", [10, 0, -6], [10.5, 3, 6]), box("pen-e", [20, 0, -6], [20.5, 3, 6]),
+      box("pen-n", [10, 0, 6], [20.5, 3, 6.5]), box("pen-s", [10, 0, -6.5], [20.5, 3, -6]),
+    ]);
+    let snaps = 0;
+    const planner = new RecastPlanner(modules, {
+      forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) => physics.forEachNavigationTriangleInRect(minX, minZ, maxX, maxZ, visit),
+    }, { maxSyncBuilds: 0, frameBudgetMs: 1000, buildRadius: 0, snapHeight: () => { snaps += 1; return 0; } });
+    const ask = (goal: Vec3) => planner.reachability({ agent: AGENT, start: [0, 0, 0], goal, bounds: [] });
+    assert.equal(ask([4, 0, 4]), "pending", "unbuilt corridor tiles");
+    planner.update({ invokers: [], bounds: [], now: 0 });
+    assert.equal(ask([4, 0, 4]), "reachable");
+    // The pen lies in the same 32 m tile, already built.
+    assert.equal(ask([15, 0, 0]), "unreachable", "inside the closed pen");
+    assert.equal(snaps, 0, "no path points were produced");
     planner.dispose();
   });
 }

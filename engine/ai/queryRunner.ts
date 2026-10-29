@@ -8,8 +8,7 @@ import {
   type SmartObjectComponent,
   type SmartObjectSlot,
 } from "../scene/components";
-import type { NavAabb, NavAgent } from "../navigation/gridNavigation";
-import { findGridPath } from "../navigation/gridNavigation";
+import type { NavAabb } from "../navigation/navigationTypes";
 import type { AIController } from "./aiController";
 import type { AiQueryAsset, AiQueryContextDef, AiQueryTestDef } from "./queryAsset";
 import type { SmartObjectReservationQuery } from "./smartObjects";
@@ -64,20 +63,20 @@ export interface AiQueryRunContext {
   /**
    * Blockers intersecting the inclusive X/Z square around a point; preferred
    * over {@link blockers} when given. Line of sight asks for the square its
-   * segment fits in (exact); nav reachability asks for the pair's square plus
-   * {@link NAV_REACHABLE_BLOCKER_MARGIN}, so a detour wider than that margin
-   * ignores walls past it until navigation is tiled.
+   * segment fits in.
    */
   readonly blockersNear?: (x: number, z: number, radius: number) => readonly NavAabb[];
-  readonly navBounds?: readonly NavAabb[];
-  readonly navAgent?: NavAgent;
+  /**
+   * Whether the querying pawn can walk from `from` to `to` on the nav mesh
+   * (the host's Recast planner, with that pawn's agent profile). `"pending"`
+   * means the tiles between them are not built yet; they are queued, and the
+   * test fails this time. Without it every `navReachable` test fails.
+   */
+  readonly navReachable?: (from: Vec3, to: Vec3) => AiNavReachability;
   readonly smartObjects?: SmartObjectReservationQuery;
 }
 
-const DEFAULT_NAV_AGENT: NavAgent = { radius: 0.35, height: 1.8 };
-
-/** Metres around a nav-reachable pair whose blockers a local query includes. */
-export const NAV_REACHABLE_BLOCKER_MARGIN = 16;
+export type AiNavReachability = "reachable" | "unreachable" | "pending";
 
 export function runAiQuery(asset: AiQueryAsset, context: AiQueryRunContext): AiQueryResult {
   const raw = generateCandidates(asset, context);
@@ -307,20 +306,18 @@ function evaluateTest(
       };
     }
     case "navReachable": {
+      const navReachable = context.navReachable;
+      if (!navReachable) return { pass: false, score: 0, reason: "no-navigation" };
+      let pending = false;
       const reachable = references.some((reference) => {
-        const result = findGridPath({
-          start: reference,
-          goal: position,
-          agent: context.navAgent ?? DEFAULT_NAV_AGENT,
-          blockers: blockersAround(context, reference, position, NAV_REACHABLE_BLOCKER_MARGIN),
-          ...(context.navBounds ? { bounds: context.navBounds } : {}),
-        });
-        return result.status === "success";
+        const answer = navReachable(reference, position);
+        if (answer === "pending") pending = true;
+        return answer === "reachable";
       });
       return {
         pass: reachable,
         score: reachable ? scoreForPass(test.score) : 0,
-        ...(reachable ? {} : { reason: "unreachable" }),
+        ...(reachable ? {} : { reason: pending ? "nav-pending" : "unreachable" }),
       };
     }
     case "dot": {

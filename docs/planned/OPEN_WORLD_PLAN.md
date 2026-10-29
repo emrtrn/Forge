@@ -2695,8 +2695,29 @@ Sözleşme (grid'le aynı `NavAgent`): `radius + clearancePadding` duvarı aşı
       önizlemeyi de zorla yeniden kurar. Testler: revizyon/çizim, editör
       önizlemesi (gecikme, aynı girdi kurmaz, düzenleme kurar, boş girdi gizler),
       aiModule `?debug` görünümü.
-- [ ] **R5 — Grid emekliliği kararı.** Parity kabulünden sonra (kullanıcı
+- [x] **R5 — Grid emekliliği kararı.** Parity kabulünden sonra (kullanıcı
       smoke'u) grid yalnız yedek mi kalır, kaldırılır mı.
+      *Karar ve uygulama (2026-10-29):* grid planner **kaldırıldı**, yedek de
+      tutulmadı (Unreal/Unity'de de Recast'in yanında ikinci planner yok;
+      wasm JS chunk'ına gömülü olduğu için ayrı bir yükleme riski de yok).
+      `gridNavigation.ts` silindi; planner'dan bağımsız tipler ve
+      `advanceWaypoint` `engine/navigation/navigationTypes.ts`'e taşındı.
+      Recast yüklenemezse aiModule bir kez `console.error` yazar, AI yol
+      bulamaz (`?debug`: `nav:unavailable`). EQS `navReachable` testi artık
+      host'un nav mesh'ine sorar: `RecastPlanner.reachability` (yol
+      bulmayla aynı koridor + Detour araması, nokta üretmeden) →
+      `AISubsystemOptions.navReachable(pawn, from, to)` → sorgu bağlamı;
+      her pawn kendi ajan profiliyle sorar. Kurulmamış tile'lar kuyruğa
+      girer ve test o tur `nav-pending` gerekçesiyle düşer; navigasyon yoksa
+      `no-navigation`. Eski 16 m engel penceresi ve grid araması gitti.
+      `?debug`/editör overlay'inden grid çizgileri, genişletilmiş engel
+      çerçeveleri ve "yol genişletilmiş engeli kesiyor" vurgusu kalktı; ajan
+      açıklık çemberi grid'in yarım hücre payı olmadan Recast erozyonunu
+      (yarıçap + padding) gösteriyor. Grid'in ~30 iç testi silindi; karşılığı
+      olan davranışlar Recast testlerinde zaten vardı (duvar, rampa, basamak,
+      obstacleOnly, headroom, heightfield, bounds, döndürülmüş kutu), eksik
+      olanlar eklendi: clearance padding, `reachability`, EQS'in host
+      kancası ve AISubsystem'in pawn'a göre sorması.
 
 ## Faz 10 — İsteğe bağlı genişletmeler
 

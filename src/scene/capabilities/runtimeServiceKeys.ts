@@ -46,9 +46,8 @@ import type {
 } from "@engine/dialogue/dialogueSubsystem";
 import type {
   NavAabb,
-  NavBlocker,
   PathFollowingState,
-} from "@engine/navigation/gridNavigation";
+} from "@engine/navigation/navigationTypes";
 import type { MovingPlatformQuery } from "@engine/physics/movingPlatformSubsystem";
 import type {
   GameSaveRestoreRequest,
@@ -643,15 +642,15 @@ export interface AiNavigationQuery {
   staticBlockerAabbs(): readonly PhysicsAabb[];
   /** Optional indexed X/Z square query; fall back to the full list when absent. */
   staticBlockerAabbsNear?(x: number, z: number, radius: number): readonly PhysicsAabb[];
-  /** Static obstacles the nav grid is eroded from (`ignored` bodies omitted). */
+  /** Static obstacles for the floor snap and debug footprints (`ignored` bodies omitted). */
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[];
-  /** Walkable triangles the nav grid seeds floor layers from. */
+  /** Walkable triangles the floor snap reads floor layers from. */
   staticNavigationSurfaceTriangles(includeHeightfields?: boolean): readonly PhysicsSurfaceTriangle[];
   /** Ordered point samples, including heightfields, for floor seeding and headroom. */
   staticNavigationSurfaceSamplesAt?(x: number, z: number): readonly GroundSurfaceSample[];
   /**
    * Recast nav tile input: static collider triangles overlapping the X/Z
-   * rectangle. Without it the capability keeps the grid planner.
+   * rectangle. Without it no nav mesh is built and AI pawns cannot plan.
    */
   forEachNavigationTriangleInRect?(
     minX: number,
@@ -766,13 +765,11 @@ export interface AiNavFollowerDebug {
 
 export interface AiNavigationDebugSnapshot {
   readonly blockers: readonly NavAabb[];
-  readonly inflatedBlockers: readonly NavBlocker[];
   readonly agentClearances: readonly AiNavAgentClearanceView[];
   readonly bounds: readonly NavAabb[];
-  readonly cellSize: number;
   readonly followers: readonly AiNavFollowerDebug[];
-  /** Which planner answers path requests; absent means the grid. */
-  readonly planner?: "recast" | "grid";
+  /** `"recast"` once the nav mesh planner is up; `"none"` when it could not load (no AI can plan). */
+  readonly planner?: "recast" | "none";
   /** Recast tiles currently loaded, summed over agent profiles. */
   readonly navMeshTiles?: number;
   /** Loaded Recast tiles whose geometry changed and await a rebuild. */

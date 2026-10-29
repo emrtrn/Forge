@@ -791,9 +791,9 @@ export interface LayoutBlockingVolume {
 
 /**
  * Placed AI Navigation Volume (à la Unreal's NavMesh Bounds Volume): a box-shaped
- * authoring volume that limits where the first grid navigation implementation is
- * allowed to search. When no volume exists, runtime keeps the legacy automatic
- * start/goal bounds fallback for old levels.
+ * authoring volume that limits where the nav mesh is built and where path
+ * endpoints may lie. Without any volume the nav mesh is unbounded and streams
+ * around the AI pawns and the player.
  */
 export interface LayoutAiNavigationVolume {
   id: string;

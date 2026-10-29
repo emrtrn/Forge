@@ -90,8 +90,8 @@ activated and unloaded with their cell around the pawn:
   (`StreamedActorStateCache`, in memory for the level's lifetime). A static or
   script-moved actor returns at its authored pose.
 - **AI navigation.** Streamed colliders enter and leave the physics static indexes
-  incrementally; the nav grid cache keys on those lists, so a streamed wall blocks
-  paths and an unloaded one stops blocking them.
+  incrementally and log their area as dirty; the Recast nav tiles under it are
+  rebuilt, so a streamed wall blocks paths and an unloaded one stops blocking them.
 - **Painted foliage (Phase 6).** The level's `<Level>.foliage.json` becomes an
   index (`foliageCells`, groups with no instances) and the instances live in
   `<Level>.cells/foliage/<x_z>.foliage.json`, by position on the `foliage` grid.

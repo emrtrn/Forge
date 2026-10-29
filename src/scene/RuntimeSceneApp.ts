@@ -2435,10 +2435,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return (
       this.runtimeServices.resolve(aiDebugService)?.navigation() ?? {
         blockers: [],
-        inflatedBlockers: [],
         agentClearances: [],
         bounds: [],
-        cellSize: 0,
         followers: [],
       }
     );

@@ -13,7 +13,7 @@
  * lets the host keep only the tiles around its "invokers" (AI pawns, the
  * player) loaded in an open world (Unreal's Navigation Invoker).
  *
- * Agent contract matches {@link NavAgent} and the grid planner it replaces:
+ * Agent contract is {@link NavAgent}:
  * `radius + clearancePadding` erodes walls, `height` is the required headroom,
  * `stepHeight` is the climbable ledge and `maxSlopeAngleDeg` the walkable
  * slope. Detour has one symmetric climb, so `maxStepDown` is not modelled; a
@@ -26,7 +26,7 @@
  */
 import type * as RecastCore from "@recast-navigation/core";
 import type { Vec3 } from "../scene/layout";
-import type { NavAabb, NavAgent, NavVec2, PathResult } from "./gridNavigation";
+import type { NavAabb, NavAgent, NavVec2, PathResult } from "./navigationTypes";
 import {
   buildRecastTileBytes,
   createTileRcConfig,
@@ -88,8 +88,7 @@ export interface RecastNavMeshOptions {
   readonly cellHeight?: number;
   /**
    * Authored navigation bounds (AI Navigation Volumes). When present only tiles
-   * overlapping a bound are built and path endpoints must lie inside one, as
-   * with the grid planner.
+   * overlapping a bound are built and path endpoints must lie inside one.
    */
   readonly bounds?: readonly NavAabb[];
   /** Detail-mesh sampling in cells / cell heights (see {@link RecastTileConfigOptions}). */
@@ -413,7 +412,7 @@ export class RecastNavMesh {
     );
     if (!result.success || result.path.length === 0) return { status: "failure", points: [], visited: 0 };
     // A partial corridor ends at the polygon nearest the goal; only a path that
-    // actually reaches it counts, like the grid planner.
+    // actually reaches it counts.
     const last = result.path[result.path.length - 1]!;
     if (Math.hypot(last.x - goal[0], last.z - goal[2]) > this.cellSize * 2 + finiteOr(this.agent.radius, 0)) {
       return { status: "failure", points: [], visited: result.path.length };

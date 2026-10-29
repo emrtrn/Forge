@@ -5,9 +5,9 @@
  * Owns the {@link AISubsystem} (one controller per possessed NPC pawn, its
  * blackboard, its Behavior Tree or StateTree runner, perception and Target Point
  * routes), the authored AI asset library those runners are built from, and the
- * whole path-following stack behind `moveTo`: the baked nav grid and its
- * revision cache, per-agent clearance profiles, the walkable-floor sampler,
- * waypoint advance, stuck recovery and local separation steering.
+ * whole path-following stack behind `moveTo`: the streamed Recast/Detour nav
+ * mesh, per-agent profiles, the walkable-floor snap, waypoint advance, stuck
+ * recovery and local separation steering.
  *
  * It ticks in the `decision` slot — before the `movement` slot, so the intent an
  * agent produces this frame is consumed by the same frame's movement solve. The
@@ -41,6 +41,7 @@ import {
 } from "@engine/ai/behaviorAsset";
 import type { AiMoveRequest } from "@engine/ai/behaviorRunner";
 import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
+import type { AiNavReachability } from "@engine/ai/queryRunner";
 import { createTargetPointIndex, targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
 import { assetPath, assetType } from "@engine/assets/manifest";
 import type { PhysicsSurfaceTriangle } from "@engine/behavior/behaviorSubsystem";
@@ -48,13 +49,10 @@ import type { CharacterMoveIntent } from "@engine/movement/characterMovementSubs
 import { navFloorSampler } from "@engine/navigation/navFloorSampler";
 import {
   advanceWaypoint,
-  findGridPath,
-  searchNavGrid,
-  NavGridCache,
   type NavAabb,
   type NavAgent,
   type PathFollowingState,
-} from "@engine/navigation/gridNavigation";
+} from "@engine/navigation/navigationTypes";
 import {
   freshStuckState,
   isStuck,
@@ -75,7 +73,6 @@ import { RecastTileWorkerPool } from "./recastTileWorkerPool";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
-  inflateNavBlocker2d,
   type AiNavAgentClearanceView,
   type AiPerceptionView,
   type AiQueryCandidateView,
@@ -120,7 +117,6 @@ const RECAST_VIEW_REFRESH_SECONDS = 0.5;
 
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
-const AI_NAV_GRID_SAFETY_MARGIN = AI_NAV_CELL_SIZE * 0.5;
 /**
  * Acceptance radius for intermediate path waypoints. Kept tight (independent of
  * the authored final-goal acceptance) so a generous goal tolerance can't make
@@ -135,14 +131,6 @@ const AI_SPLINE_SEPARATION_WEIGHT = 0.25;
 const AI_SPLINE_TANGENT_STEERING_WEIGHT = 0.35;
 /** Stuck recoveries (replans) per goal before the move fails outright. */
 const AI_MAX_STUCK_REPLANS = 2;
-/**
- * Granularity the agent foot height is snapped to when keying a baked nav grid.
- * Baking is per foot-plane (it decides which blockers are vertical obstacles), so
- * without bucketing an agent's per-frame Y jitter would rebuild the grid every
- * tick. Half a cell is coarse enough to keep the cache stable on flat ground yet
- * fine enough to separate distinct floors.
- */
-const AI_NAV_FOOT_Y_BUCKET = AI_NAV_CELL_SIZE;
 
 /**
  * Script messages promoted to AI stimuli. Damage/alert make an agent aware of an
@@ -169,11 +157,6 @@ interface AiPathFollowing {
   stuck: StuckState;
   /** Stuck-recovery replans burned on the current goal. */
   replans: number;
-}
-
-function bucketNavFootY(footY: number): number {
-  if (!Number.isFinite(footY)) return 0;
-  return Math.round(footY / AI_NAV_FOOT_Y_BUCKET) * AI_NAV_FOOT_Y_BUCKET;
 }
 
 /** Cheap order-sensitive signature of authored nav bounds for cache invalidation. */
@@ -235,22 +218,14 @@ export function createAiModule(): CapabilityModule {
   let elapsedSeconds = 0;
 
   const pathFollowing = new Map<string, AiPathFollowing>();
-  /**
-   * Bakes one nav grid per agent profile and reuses it across path queries while
-   * static blockers + nav bounds are unchanged (the Unreal navmesh-bake analogue).
-   * Keyed by {@link navRevisionToken}; rebuilds automatically when that token
-   * changes. Only used when an AI Navigation Volume supplies query-independent
-   * bounds — otherwise the grid extent depends on start/goal and can't be baked.
-   */
-  const navGridCache = new NavGridCache();
   /** Last static-blocker array identity seen; a new reference bumps the revision. */
   let navBlockerRevisionRef: readonly NavAabb[] | null = null;
   let navSurfaceRevisionRef: readonly PhysicsSurfaceTriangle[] | null = null;
   let navBlockerRevision = 0;
   /**
-   * Recast/Detour planner (OPEN_WORLD_PLAN Faz 9). Created once the wasm has
-   * loaded and only for a host that hands out collider triangles; until then,
-   * and for any other host, paths come from the grid planner.
+   * Recast/Detour planner (OPEN_WORLD_PLAN Faz 9), the only path planner.
+   * Created once the wasm has loaded, for a host that hands out collider
+   * triangles; without it moves and `navReachable` queries fail.
    */
   let recastPlanner: RecastPlanner | null = null;
   /** The planner's tile worker lanes; shut down with the planner. */
@@ -311,14 +286,14 @@ export function createAiModule(): CapabilityModule {
   }
 
   function effectiveClearanceRadius(agent: NavAgent): number {
-    return Math.max(0, agent.radius) + Math.max(0, agent.clearancePadding ?? 0) + AI_NAV_GRID_SAFETY_MARGIN;
+    return Math.max(0, agent.radius) + Math.max(0, agent.clearancePadding ?? 0);
   }
 
   /**
-   * Revision token for the baked nav grid cache: bumps a counter whenever the
-   * physics static-blocker array is rebuilt (identity changes on spawn/destroy/
-   * move/collision-toggle) and folds in an authored-bounds signature, so any
-   * change to obstacles or nav volumes invalidates every cached grid.
+   * Static-geometry revision for a host without a dirty-region log: bumps a
+   * counter whenever the physics static-blocker or surface array is rebuilt
+   * (identity changes on spawn/destroy/move/collision-toggle) and folds in an
+   * authored-bounds signature, so any change drops every nav tile.
    */
   function navRevisionToken(
     blockers: readonly NavAabb[],
@@ -336,7 +311,7 @@ export function createAiModule(): CapabilityModule {
     return `${navBlockerRevision}|${navBoundsSignature(bounds)}`;
   }
 
-  /** Loads the wasm and creates the Recast planner; a failure leaves the grid planner in charge. */
+  /** Loads the wasm and creates the Recast planner; on failure AI cannot plan, which is reported once. */
   async function ensureRecastPlanner(): Promise<void> {
     if (recastPlanner || !host()?.navigation.forEachNavigationTriangleInRect) return;
     try {
@@ -364,13 +339,13 @@ export function createAiModule(): CapabilityModule {
           : {}),
       });
     } catch (error) {
-      console.warn(`[ai] Recast navigation unavailable, using the grid planner: ${describeLoadError(error)}`);
+      console.error(`[ai] Recast navigation unavailable; AI pawns cannot plan paths: ${describeLoadError(error)}`);
     }
   }
 
   /**
-   * The walkable floor nearest a Detour corner, from the same role-aware probe
-   * the grid bakes with. Corners sit on the voxelized mesh, up to a cell height
+   * The walkable floor nearest a Detour corner, from physics' role-aware floor
+   * probe. Corners sit on the voxelized mesh, up to a cell height
    * off the floor, and the follower's vertical acceptance is tighter than that.
    */
   function snapToNavFloor(agent: NavAgent, point: Vec3): number {
@@ -402,7 +377,7 @@ export function createAiModule(): CapabilityModule {
   /**
    * Hands the host's static-geometry changes to the Recast planner: dirty
    * rectangles turn their tiles stale. A host without the dirty log falls back
-   * to the grid cache's revision token, where any change drops every tile.
+   * to {@link navRevisionToken}, where any change drops every tile.
    */
   function applyRecastNavigationChanges(planner: RecastPlanner): void {
     const navigation = host()?.navigation;
@@ -453,36 +428,16 @@ export function createAiModule(): CapabilityModule {
   }
 
   function buildPath(entityId: string, start: Vec3, goal: Vec3): RecastPlanResult {
-    const navigation = host()?.navigation;
-    if (!navigation) return { status: "failure" as const, points: [], visited: 0 };
-    const bounds = navigationBounds();
-    const agent = navAgentForEntity(entityId);
-    if (recastPlanner) {
-      applyRecastNavigationChanges(recastPlanner);
-      return recastPlanner.findPath({ agent, start, goal: [...goal], bounds });
-    }
-    const blockers = navigation.staticNavigationBlockerAabbs();
-    if (bounds.length === 0) {
-      // No authored AI Navigation Volume: the grid extent is derived from
-      // start/goal, so it is single-query only and can't be baked/reused.
-      return findGridPath({ start, goal: [...goal], agent, blockers, cellSize: AI_NAV_CELL_SIZE });
-    }
-    const surfaces = navigation.staticNavigationSurfaceTriangles(!navigation.staticNavigationSurfaceSamplesAt);
-    // Bounded case: bake once per agent profile and reuse across queries. The
-    // grid rebuilds automatically when a static blocker moves or a nav volume is
-    // edited (both fold into the revision token), so there is no manual build.
-    const navFootY = bucketNavFootY(start[1]);
-    const grid = navGridCache.getOrBuild(navRevisionToken(blockers, surfaces, bounds), {
-      agent,
-      blockers,
-      bounds,
-      footY: navFootY,
-      cellSize: AI_NAV_CELL_SIZE,
-      sampleFloorYs: navFloorSampler(blockers, surfaces, bounds, agent, navFootY,
-        navigation.staticNavigationSurfaceSamplesAt?.bind(navigation)),
-    });
-    if (!grid) return { status: "failure" as const, points: [], visited: 0 };
-    return searchNavGrid(grid, start, goal);
+    if (!recastPlanner) return { status: "failure" as const, points: [], visited: 0 };
+    applyRecastNavigationChanges(recastPlanner);
+    return recastPlanner.findPath({ agent: navAgentForEntity(entityId), start, goal: [...goal], bounds: navigationBounds() });
+  }
+
+  /** `navReachable` for AI queries: the pawn's own profile on the nav mesh. */
+  function navReachability(entityId: string, from: Vec3, to: Vec3): AiNavReachability {
+    if (!recastPlanner) return "unreachable";
+    applyRecastNavigationChanges(recastPlanner);
+    return recastPlanner.reachability({ agent: navAgentForEntity(entityId), start: from, goal: to, bounds: navigationBounds() });
   }
 
   function requestMove(request: AiMoveRequest): AiBehaviorStatus {
@@ -590,8 +545,8 @@ export function createAiModule(): CapabilityModule {
       pathFollowing.delete(entityId);
       return null;
     }
-    // Stuck recovery: no planar progress for a while means something the grid
-    // doesn't know about (usually another agent) is blocking the lane. Replan
+    // Stuck recovery: no planar progress for a while means something the nav
+    // mesh doesn't know about (usually another agent) is blocking the lane. Replan
     // from the current position, and fail the move once replanning stops helping.
     follow.stuck = updateStuckState(follow.stuck, transform.position, deltaSeconds);
     if (isStuck(follow.stuck)) {
@@ -762,7 +717,6 @@ export function createAiModule(): CapabilityModule {
   function navigationDebugSnapshot(): AiNavigationDebugSnapshot {
     const blockers = host()?.navigation.staticNavigationBlockerAabbs() ?? [];
     const agentClearances = agentClearanceView();
-    const maxClearance = Math.max(0, ...agentClearances.map((clearance) => clearance.radius));
     const followers: AiNavFollowerDebug[] = [...pathFollowing.entries()].map(([entityId, follow]) => ({
       entityId,
       status: follow.state.status,
@@ -777,13 +731,10 @@ export function createAiModule(): CapabilityModule {
     }));
     return {
       blockers,
-      inflatedBlockers:
-        maxClearance > 0 ? blockers.map((blocker) => inflateNavBlocker2d(blocker, maxClearance)) : [],
       agentClearances,
       bounds: navigationBounds(),
-      cellSize: AI_NAV_CELL_SIZE,
       followers,
-      planner: recastPlanner ? "recast" : "grid",
+      planner: recastPlanner ? "recast" : "none",
       ...(recastPlanner
         ? {
           navMeshTiles: recastPlanner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0),
@@ -844,7 +795,6 @@ export function createAiModule(): CapabilityModule {
     if (
       snapshot.followers.length === 0 &&
       snapshot.blockers.length === 0 &&
-      snapshot.inflatedBlockers.length === 0 &&
       snapshot.agentClearances.length === 0 &&
       snapshot.bounds.length === 0 &&
       perception.length === 0 &&
@@ -853,10 +803,8 @@ export function createAiModule(): CapabilityModule {
     ) return;
     navigationView = createAiNavigationView({
       blockers: snapshot.blockers,
-      inflatedBlockers: snapshot.inflatedBlockers,
       agentClearances: snapshot.agentClearances,
       bounds: snapshot.bounds,
-      cellSize: snapshot.cellSize,
       followers: snapshot.followers,
       perception,
       queries,
@@ -893,6 +841,7 @@ export function createAiModule(): CapabilityModule {
         perceptionSourceFilter: isPerceptionSource,
         qualityFocusPosition: () => aiHost.qualityFocusPosition(),
         moveTo: (request) => requestMove(request),
+        navReachable: (entityId, from, to) => navReachability(entityId, [...from], [...to]),
         splineRegistry,
         // Resolved per call: a bus-less host (a headless test, a shell that
         // registers no behavior subsystem) simply drops what the AI says.
@@ -914,8 +863,8 @@ export function createAiModule(): CapabilityModule {
           if (entityById.has(entity.id)) return;
           entityById.set(entity.id, entity);
           ai?.addEntity(entity);
-          // Nav grids are keyed by the host's live geometry revisions, not by
-          // this entity list. Existing paths retain their waypoints until the
+          // Nav tiles follow the host's static-geometry changes, not this
+          // entity list. Existing paths retain their waypoints until the
           // normal goal change / stuck replan; adding an actor does not reset them.
         },
         removeEntity: (entityId) => {
@@ -1002,7 +951,6 @@ export function createAiModule(): CapabilityModule {
       removeNavigationView();
       removeRecastView();
       pathFollowing.clear();
-      navGridCache.clear();
       recastPlanner?.clear();
       navBlockerRevisionRef = null;
       navSurfaceRevisionRef = null;
@@ -1018,7 +966,6 @@ export function createAiModule(): CapabilityModule {
       removeNavigationView();
       removeRecastView();
       pathFollowing.clear();
-      navGridCache.clear();
       recastPlanner?.dispose();
       recastPlanner = null;
       recastTileWorkers?.dispose();

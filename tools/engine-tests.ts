@@ -145,7 +145,7 @@ import {
 } from "../engine/ai/behaviorAsset";
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
-import { NAV_REACHABLE_BLOCKER_MARGIN, runAiQuery } from "../engine/ai/queryRunner";
+import { runAiQuery, type AiNavReachability } from "../engine/ai/queryRunner";
 import { splineCollisionCells, splineSegmentCells, streamedSplineCollisionGeneratorIds, trimeshCellParts } from "../engine/scene/splineCollisionCells";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
@@ -162,16 +162,7 @@ import {
   createDefaultAiTaskRegistry,
 } from "../engine/ai/behaviorRunner";
 import { AiStateTreeRunner } from "../engine/ai/stateTreeRunner";
-import {
-  findGridPath,
-  advanceWaypoint,
-  buildNavGrid,
-  searchNavGrid,
-  NavGridCache,
-  type NavAabb,
-  type NavBlocker,
-  type NavGridBuildRequest,
-} from "../engine/navigation/gridNavigation";
+import { advanceWaypoint, type NavAabb, type NavBlocker } from "../engine/navigation/navigationTypes";
 import type { Vec3 } from "../engine/scene/layout";
 import {
   createDefaultSplineComponentData,
@@ -390,7 +381,6 @@ import { LoadProgressTracker, formatLoadDetail } from "../engine/loading/loadPro
 import {
   createAiNavigationView,
   disposeAiNavigationView,
-  inflateNavBlocker2d,
 } from "../engine/render-three/aiNavigationView";
 import {
   SubsystemProfiler,
@@ -9338,612 +9328,6 @@ check("resolvePlanarMovementSubstepped: preserves wall slide on a fast diagonal 
 
 // P1.3/P1.4 — slope surface math (src/game/slopeSurface.ts). The AABB model walks
 // on flat tops; a ramp needs the true interpolated surface height + a slope gate.
-check("grid navigation finds a path around a static blocker", () => {
-  const wall: Aabb3 = { min: [-0.25, 0, -1], max: [0.25, 2, 1] };
-  const path = findGridPath({
-    start: [-2, 0, 0],
-    goal: [2, 0, 0],
-    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
-    blockers: [wall],
-    cellSize: 0.5,
-    boundsPadding: 1,
-  });
-  assert.equal(path.status, "success");
-  assert.deepEqual(path.points[0], [-2, 0, 0]);
-  assert.deepEqual(path.points[path.points.length - 1], [2, 0, 0]);
-  assert.ok(path.points.some((point) => Math.abs(point[2]) > 1.25), `path=${JSON.stringify(path.points)}`);
-  for (const point of path.points) {
-    const insideWallX = point[0] >= wall.min[0] - 0.25 && point[0] <= wall.max[0] + 0.25;
-    const insideWallZ = point[2] >= wall.min[2] - 0.25 && point[2] <= wall.max[2] + 0.25;
-    assert.equal(insideWallX && insideWallZ, false, `waypoint inside inflated wall: ${point}`);
-  }
-});
-
-check("grid navigation fails when the goal cell is blocked", () => {
-  const box: Aabb3 = { min: [0.5, 0, -0.5], max: [1.5, 2, 0.5] };
-  const path = findGridPath({
-    start: [-1, 0, 0],
-    goal: [1, 0, 0],
-    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
-    blockers: [box],
-    cellSize: 0.5,
-    boundsPadding: 1,
-  });
-  assert.equal(path.status, "failure");
-  assert.deepEqual(path.points, []);
-});
-
-check("grid navigation honors authored navigation bounds", () => {
-  const bounds: Aabb3[] = [{ min: [-2, -1, -2], max: [2, 3, 2] }];
-  const inside = findGridPath({
-    start: [-1, 0, 0],
-    goal: [1, 0, 0],
-    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
-    blockers: [],
-    bounds,
-    cellSize: 0.5,
-  });
-  assert.equal(inside.status, "success");
-  assert.deepEqual(inside.points[0], [-1, 0, 0]);
-  assert.deepEqual(inside.points[inside.points.length - 1], [1, 0, 0]);
-
-  const outside = findGridPath({
-    start: [-1, 0, 0],
-    goal: [3, 0, 0],
-    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
-    blockers: [],
-    bounds,
-    cellSize: 0.5,
-  });
-  assert.equal(outside.status, "failure");
-  assert.deepEqual(outside.points, []);
-});
-
-check("grid navigation safety margin erodes blockers by half a cell", () => {
-  // A 2.0-wide lane between two walls; the only crossing is through the gap.
-  const wallL: Aabb3 = { min: [-3, 0, -0.5], max: [-1, 2, 0.5] };
-  const wallR: Aabb3 = { min: [1, 0, -0.5], max: [3, 2, 0.5] };
-  const bounds: Aabb3[] = [{ min: [-3, -1, -6], max: [3, 3, 6] }];
-  const open = findGridPath({
-    start: [0, 0, -4],
-    goal: [0, 0, 4],
-    agent: { radius: 0.25, height: 1.8 },
-    blockers: [wallL, wallR],
-    bounds,
-    cellSize: 0.5,
-    safetyMargin: 0,
-  });
-  assert.equal(open.status, "success"); // tiny erosion leaves the gap open
-
-  const shut = findGridPath({
-    start: [0, 0, -4],
-    goal: [0, 0, 4],
-    agent: { radius: 0.25, height: 1.8 },
-    blockers: [wallL, wallR],
-    bounds,
-    cellSize: 0.5,
-    safetyMargin: 1.5,
-  });
-  assert.equal(shut.status, "failure"); // a large safety margin erodes the lane shut
-});
-
-check("grid navigation clearance padding erodes obstacles by extra slack", () => {
-  // Same lane; isolate clearancePadding by disabling the grid safety margin.
-  const wallL: Aabb3 = { min: [-3, 0, -0.5], max: [-1, 2, 0.5] };
-  const wallR: Aabb3 = { min: [1, 0, -0.5], max: [3, 2, 0.5] };
-  const bounds: Aabb3[] = [{ min: [-3, -1, -6], max: [3, 3, 6] }];
-  const open = findGridPath({
-    start: [0, 0, -4],
-    goal: [0, 0, 4],
-    agent: { radius: 0.25, height: 1.8, clearancePadding: 0 },
-    blockers: [wallL, wallR],
-    bounds,
-    cellSize: 0.5,
-    safetyMargin: 0,
-  });
-  assert.equal(open.status, "success");
-
-  const padded = findGridPath({
-    start: [0, 0, -4],
-    goal: [0, 0, 4],
-    agent: { radius: 0.25, height: 1.8, clearancePadding: 1.5 },
-    blockers: [wallL, wallR],
-    bounds,
-    cellSize: 0.5,
-    safetyMargin: 0,
-  });
-  assert.equal(padded.status, "failure"); // padding keeps the agent clear of both walls
-});
-
-check("grid navigation: a rotated wall's oriented footprint frees the area its AABB bloats over", () => {
-  // A long thin wall rotated 45° — its enclosing AABB is a big square, but the
-  // oriented footprint is only the thin diagonal strip. A pocket cell sits inside
-  // the AABB yet well clear of the strip: walkable under the footprint, falsely
-  // blocked under the bloated AABB.
-  const center: [number, number, number] = [0, 0, 0];
-  const half: [number, number, number] = [1, 1, 0.1];
-  const rotation: [number, number, number] = [0, 45, 0];
-  const box = rotatedBoxAabb([0, 0, 0], center, half, rotation);
-  const footprint = rotatedBoxFootprintXZ([0, 0, 0], center, half, rotation);
-  assert.ok(footprint && footprint.length >= 3);
-  const rotatedWall: NavBlocker = { min: box.min, max: box.max, footprint: footprint! };
-  const plainAabb: NavBlocker = { min: box.min, max: box.max };
-  const bounds: Aabb3[] = [{ min: [-1.5, -1, -1.5], max: [1.5, 3, 1.5] }];
-  const agent = { radius: 0.2, height: 1.8, clearancePadding: 0 };
-  const build = (blocker: NavBlocker) =>
-    buildNavGrid({ agent, blockers: [blocker], bounds, footY: 0, cellSize: 0.25, safetyMargin: 0 })!;
-  const gridFootprint = build(rotatedWall);
-  const gridAabb = build(plainAabb);
-  const passableAt = (grid: typeof gridFootprint, x: number, z: number): boolean => {
-    const cx = Math.round((x - grid.originX) / grid.cellSize);
-    const cz = Math.round((z - grid.originZ) / grid.cellSize);
-    if (cx < 0 || cz < 0 || cx >= grid.cols || cz >= grid.rows) return false;
-    return grid.passable[cz * grid.cols + cx] === 1;
-  };
-  // The 45° wall runs along the z = -x anti-diagonal, so (0.5, 0.5) sits inside
-  // the enclosing AABB but ~0.7 from the strip: walkable only once bloat is gone.
-  assert.equal(passableAt(gridFootprint, 0.5, 0.5), true);
-  assert.equal(passableAt(gridAabb, 0.5, 0.5), false);
-  const passableCount = (grid: typeof gridFootprint): number =>
-    grid.passable.reduce((sum, value) => sum + value, 0);
-  assert.ok(
-    passableCount(gridFootprint) > passableCount(gridAabb),
-    `oriented footprint keeps more area walkable (${passableCount(gridFootprint)} > ${passableCount(gridAabb)})`,
-  );
-});
-
-check("grid navigation: a rotated wall routes a short path where its bloated AABB forces a detour", () => {
-  const center: [number, number, number] = [0, 0, 0];
-  const half: [number, number, number] = [1, 1, 0.1];
-  const rotation: [number, number, number] = [0, 45, 0];
-  const box = rotatedBoxAabb([0, 0, 0], center, half, rotation);
-  const footprint = rotatedBoxFootprintXZ([0, 0, 0], center, half, rotation)!;
-  const rotatedWall: NavBlocker = { min: box.min, max: box.max, footprint };
-  const plainAabb: NavBlocker = { min: box.min, max: box.max };
-  const bounds: Aabb3[] = [{ min: [-1.6, -1, -1.6], max: [1.6, 3, 1.6] }];
-  const agent = { radius: 0.2, height: 1.8, clearancePadding: 0 };
-  // Both endpoints sit in the NE pocket (the wall runs along z = -x); the footprint
-  // lets the agent cut straight across it, the square AABB forces a detour.
-  const start: [number, number, number] = [1.4, 0, 0.3];
-  const goal: [number, number, number] = [0.3, 0, 1.4];
-  const query = (blocker: NavBlocker) =>
-    findGridPath({ start, goal, agent, blockers: [blocker], bounds, cellSize: 0.25, safetyMargin: 0 });
-  const pathLenXZ = (points: readonly (readonly number[])[]): number => {
-    let length = 0;
-    for (let i = 1; i < points.length; i += 1) {
-      length += Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![2] - points[i - 1]![2]);
-    }
-    return length;
-  };
-  const withFootprint = query(rotatedWall);
-  const withAabb = query(plainAabb);
-  assert.equal(withFootprint.status, "success");
-  assert.equal(withAabb.status, "success");
-  assert.ok(
-    pathLenXZ(withFootprint.points) < pathLenXZ(withAabb.points) - 0.3,
-    `footprint path ${pathLenXZ(withFootprint.points).toFixed(2)} shorter than AABB detour ${pathLenXZ(withAabb.points).toFixed(2)}`,
-  );
-});
-
-check("grid navigation keeps narrow-corner waypoints outside capsule clearance", () => {
-  const wall: Aabb3 = { min: [-0.25, 0, -0.25], max: [0.75, 2, 0.75] };
-  const clearance = 0.5;
-  const inflatedWall: Aabb3 = {
-    min: [wall.min[0] - clearance, wall.min[1], wall.min[2] - clearance],
-    max: [wall.max[0] + clearance, wall.max[1], wall.max[2] + clearance],
-  };
-  const path = findGridPath({
-    start: [-1.5, 0, 0],
-    goal: [0.5, 0, 1.75],
-    agent: { radius: 0.25, height: 1.8, clearancePadding: 0.25 },
-    blockers: [wall],
-    bounds: [{ min: [-3, -1, -2], max: [3, 3, 4] }],
-    cellSize: 0.5,
-    safetyMargin: 0,
-  });
-  assert.equal(path.status, "success");
-  for (const point of path.points) {
-    const insideInflatedX = point[0] >= inflatedWall.min[0] && point[0] <= inflatedWall.max[0];
-    const insideInflatedZ = point[2] >= inflatedWall.min[2] && point[2] <= inflatedWall.max[2];
-    assert.equal(insideInflatedX && insideInflatedZ, false, `waypoint inside capsule clearance: ${point}`);
-  }
-  for (let i = 0; i < path.points.length - 1; i += 1) {
-    assert.equal(
-      segmentHitsTestAabb2d(path.points[i]!, path.points[i + 1]!, inflatedWall),
-      false,
-      `segment ${i} crosses capsule clearance: ${JSON.stringify(path.points)}`,
-    );
-  }
-});
-
-// Pinned on the baked penalty table, not on emitted waypoints: a flat grid's
-// final path is string-pulled, so wherever the taut line is already clear the
-// clearance cost stays a search preference and never reaches the output.
-check("grid navigation adds clearance cost so cells near a corridor wall cost more", () => {
-  const wallL: Aabb3 = { min: [-4, 0, -5], max: [-2, 2, 5] };
-  const wallR: Aabb3 = { min: [2, 0, -5], max: [4, 2, 5] };
-  const grid = buildNavGrid({
-    agent: { radius: 0, height: 1.8 },
-    blockers: [wallL, wallR],
-    bounds: [{ min: [-4, -1, -6], max: [4, 3, 6] }],
-    footY: 0,
-    cellSize: 0.5,
-    safetyMargin: 0,
-  });
-  assert.ok(grid);
-  const penaltyAt = (x: number, z: number): number => {
-    const col = Math.round((x - grid.originX) / grid.cellSize);
-    const row = Math.round((z - grid.originZ) / grid.cellSize);
-    return grid.penalty[row * grid.cols + col]!;
-  };
-  assert.equal(penaltyAt(0, 0), 0, "corridor middle must be free of clearance cost");
-  assert.ok(penaltyAt(-1.5, 0) > 0, "a cell hugging the wall must carry clearance cost");
-  assert.ok(penaltyAt(-1.5, 0) > penaltyAt(-1, 0));
-  assert.ok(penaltyAt(-1, 0) > penaltyAt(-0.5, 0));
-});
-
-check("grid navigation string-pulls a flat-grid route instead of emitting the A* staircase", () => {
-  const straight = findGridPath({
-    start: [-4, 0, -4],
-    goal: [4, 0, 1],
-    agent: { radius: 0.25, height: 1.8 },
-    blockers: [],
-    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
-    cellSize: 0.5,
-    safetyMargin: 0,
-  });
-  assert.equal(straight.status, "success");
-  // Open ground on a shallow diagonal is where 8-neighbour A* alternates E/NE
-  // every cell; taut, it is one segment.
-  assert.deepEqual(straight.points, [[-4, 0, -4], [4, 0, 1]]);
-
-  // A heightfield grid must keep the conservative cell route: `segmentSafe` there
-  // cannot see floor holes, ledge erosion or step limits.
-  const heightfield = buildNavGrid({
-    agent: { radius: 0.25, height: 1.8 },
-    blockers: [],
-    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
-    footY: 0,
-    cellSize: 0.5,
-    safetyMargin: 0,
-    sampleFloorY: () => 0,
-  });
-  assert.ok(heightfield);
-  assert.equal(heightfield.flatFloor, false);
-  const stepped = searchNavGrid(heightfield, [-4, 0, -4], [4, 0, 1]);
-  assert.equal(stepped.status, "success");
-  assert.ok(
-    stepped.points.length > straight.points.length,
-    `heightfield route should not be pulled taut: ${JSON.stringify(stepped.points)}`,
-  );
-});
-
-check("grid navigation compression keeps grid points when a shortcut would cross a blocker", () => {
-  const wall: Aabb3 = { min: [-0.25, 0, 0], max: [0.1, 2, 0.35] };
-  // The goal is chosen so the taut start→goal line runs straight through the
-  // wall: string-pulling must refuse it and keep a corner waypoint instead.
-  const path = findGridPath({
-    start: [-0.45, 0, 0.3],
-    goal: [2.3, 0, 0.2],
-    agent: { radius: 0, height: 1.8 },
-    blockers: [wall],
-    bounds: [{ min: [-2, -1, -2], max: [4, 3, 4] }],
-    cellSize: 0.5,
-    safetyMargin: 0,
-  });
-  assert.equal(path.status, "success");
-  assert.ok(
-    path.points.length > 2,
-    `expected a corner waypoint around the wall: ${JSON.stringify(path.points)}`,
-  );
-  for (let i = 0; i < path.points.length - 1; i += 1) {
-    assert.equal(
-      segmentHitsTestAabb2d(path.points[i]!, path.points[i + 1]!, wall),
-      false,
-      `segment ${i} crosses blocker: ${JSON.stringify(path.points)}`,
-    );
-  }
-});
-
-check("nav grid baked once matches dynamic findGridPath across many queries", () => {
-  // Bake a single grid over authored bounds + a wall, then reuse it for many
-  // start/goal pairs. Each baked search must equal a fresh dynamic path — this is
-  // the load-bearing guarantee for the cache path (bake once, query many).
-  const wall: NavAabb = { min: [-0.25, 0, -1], max: [0.25, 2, 1] };
-  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
-  const agent = { radius: 0.25, height: 1.8, stepHeight: 0.45 };
-  const grid = buildNavGrid({ agent, blockers: [wall], bounds, footY: 0, cellSize: 0.5 });
-  assert.ok(grid, "grid should build over authored bounds");
-  const queries: Array<{ start: [number, number, number]; goal: [number, number, number] }> = [
-    { start: [-2, 0, 0], goal: [2, 0, 0] },
-    { start: [-2, 0, -2], goal: [2, 0, 2] },
-    { start: [0, 0, -2.5], goal: [0, 0, 2.5] },
-    { start: [-2.5, 0, 2], goal: [2.5, 0, -2] },
-    { start: [1, 0, 0], goal: [1, 0, 0] }, // same cell
-    { start: [-2, 0, 0], goal: [5, 0, 0] }, // goal outside bounds -> failure
-  ];
-  for (const { start, goal } of queries) {
-    const baked = searchNavGrid(grid!, start, goal);
-    const dynamic = findGridPath({ start, goal, agent, blockers: [wall], bounds, cellSize: 0.5 });
-    assert.deepEqual(baked, dynamic, `baked != dynamic for ${JSON.stringify({ start, goal })}`);
-  }
-});
-
-check("nav grid step height filters a ground slab so walkable cells remain", () => {
-  // Reproduces the editor walkable-area preview: a floor collider spans the whole
-  // volume. Without a step height it reads as a vertical obstacle and blocks every
-  // cell; a realistic step height must filter it so cells stay walkable.
-  // Floor top sits just above the bake plane (volume sank slightly into ground):
-  // within a realistic step height, but a vertical obstacle without one.
-  const floor: NavAabb = { min: [-3, -0.5, -3], max: [3, 0.2, 3] };
-  const bounds: NavAabb[] = [{ min: [-3, 0, -3], max: [3, 4, 3] }];
-  const countPassable = (grid: ReturnType<typeof buildNavGrid>): number => {
-    if (!grid) return 0;
-    let count = 0;
-    for (let i = 0; i < grid.passable.length; i += 1) count += grid.passable[i]!;
-    return count;
-  };
-
-  const withoutStep = buildNavGrid({
-    agent: { radius: 0.35, height: 1.8, clearancePadding: 0.1 },
-    blockers: [floor],
-    bounds,
-    footY: 0,
-    cellSize: 0.5,
-  });
-  assert.equal(countPassable(withoutStep), 0, "no step height => ground slab blocks every cell");
-
-  const withStep = buildNavGrid({
-    agent: { radius: 0.35, height: 1.8, stepHeight: 0.45, clearancePadding: 0.1 },
-    blockers: [floor],
-    bounds,
-    footY: 0,
-    cellSize: 0.5,
-  });
-  assert.ok(countPassable(withStep) > 0, "step height filters the ground slab, leaving walkable cells");
-});
-
-check("nav grid heightfield connects stair-like floor samples and preserves waypoint heights", () => {
-  const grid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.55, maxStepDown: 0.55 },
-    blockers: [],
-    bounds: [{ min: [0, -1, 0], max: [3, 3, 0] }],
-    footY: 0,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorY: (x, z) => (Math.abs(z) < 1e-6 ? x * 0.5 : null),
-  });
-  assert.ok(grid, "heightfield grid should build");
-  const path = searchNavGrid(grid!, [0, 0, 0], [3, 1.5, 0]);
-  assert.equal(path.status, "success");
-  assert.ok(
-    path.points.some((point) => point[1] === 0.5) && path.points.some((point) => point[1] === 1),
-    `expected stair waypoint heights to survive compression: ${JSON.stringify(path.points)}`,
-  );
-});
-
-check("nav grid heightfield bakes stacked floors by the requested layer", () => {
-  const lowerFloor: NavAabb = { min: [-2, -0.2, -2], max: [2, 0, 2] };
-  const upperFloor: NavAabb = { min: [-2, 2, -2], max: [2, 2.2, 2] };
-  const blockers = [lowerFloor, upperFloor];
-  const bounds: NavAabb[] = [{ min: [-2, -1, -2], max: [2, 3, 2] }];
-  const sampleLayer = (preferredFloorY: number) => (x: number, z: number): number | null =>
-    findGroundAt([x, 3, z], blockers, {
-      footprintHalf: [0, 0],
-      maxStepUp: 0,
-      maxStepDown: 4,
-      preferredFloorY,
-    })?.floorY ?? null;
-  const cellFloorAt = (grid: NonNullable<ReturnType<typeof buildNavGrid>>, x: number, z: number): number => {
-    const cx = Math.round((x - grid.originX) / grid.cellSize);
-    const cz = Math.round((z - grid.originZ) / grid.cellSize);
-    const idx = cz * grid.cols + cx;
-    assert.equal(grid.passable[idx], 1, `expected passable cell at ${x},${z}`);
-    return grid.floorY[idx]!;
-  };
-
-  const lowerGrid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
-    blockers,
-    bounds,
-    footY: 0,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorY: sampleLayer(0),
-  });
-  const upperGrid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
-    blockers,
-    bounds,
-    footY: 2.2,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorY: sampleLayer(2.2),
-  });
-
-  assert.ok(lowerGrid, "lower-layer grid should build");
-  assert.ok(upperGrid, "upper-layer grid should build");
-  assert.equal(cellFloorAt(lowerGrid!, 0, 0), 0);
-  assert.ok(Math.abs(cellFloorAt(upperGrid!, 0, 0) - 2.2) < 1e-6);
-});
-
-check("nav grid multi-layer heightfield keeps upper and lower floors at the same XZ", () => {
-  const grid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.6, maxStepDown: 0.6 },
-    blockers: [],
-    bounds: [{ min: [0, -1, 0], max: [6, 3, 0] }],
-    footY: 2,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorYs: (x, z) => {
-      if (Math.abs(z) > 1e-6) return null;
-      const floors = [0];
-      if (x <= 2.5) floors.push(2);
-      if (Math.abs(x - 3) < 1e-6) floors.push(1.5);
-      if (Math.abs(x - 4) < 1e-6) floors.push(1);
-      if (Math.abs(x - 5) < 1e-6) floors.push(0.5);
-      return floors;
-    },
-  });
-  assert.ok(grid, "multi-layer grid should build");
-  assert.ok(grid!.layerFloorY && grid!.layerFloorY.length > grid!.passable.length, "stacked layers should be retained");
-
-  const path = searchNavGrid(grid!, [0, 2, 0], [0, 0, 0]);
-  assert.equal(path.status, "success");
-  assert.ok(path.points.some((point) => Math.abs(point[1] - 2) < 1e-6), `path includes upper floor: ${JSON.stringify(path.points)}`);
-  assert.ok(path.points.some((point) => Math.abs(point[1]) < 1e-6), `path reaches lower floor: ${JSON.stringify(path.points)}`);
-});
-
-check("nav grid multi-layer endpoint projection avoids vertical-only first waypoints", () => {
-  const grid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.5 },
-    blockers: [],
-    bounds: [{ min: [0, -1, 0], max: [3, 3, 0] }],
-    footY: 0,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorYs: (x, z) => (Math.abs(z) < 1e-6 && x >= 0 && x <= 3 ? [0] : null),
-  });
-  assert.ok(grid, "multi-layer grid should build");
-
-  const path = searchNavGrid(grid!, [0, 0.3, 0], [3, 0, 0]);
-  assert.equal(path.status, "success");
-  assert.notDeepEqual(path.points[1], [0, 0, 0], `first movement waypoint must not be vertical-only: ${JSON.stringify(path.points)}`);
-});
-
-check("nav grid heightfield segment shortcut ignores blockers below the segment floor", () => {
-  const lowerWall: NavAabb = { min: [1.5, 0, -0.25], max: [2.5, 0.4, 0.25] };
-  const grid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.45 },
-    blockers: [lowerWall],
-    bounds: [{ min: [0, -1, 0], max: [4, 3, 0] }],
-    footY: 2,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorY: (_x, z) => (Math.abs(z) < 1e-6 ? 2 : null),
-  });
-  assert.ok(grid, "heightfield grid should build");
-
-  const path = searchNavGrid(grid!, [0, 2, 0], [4, 2, 0]);
-  assert.equal(path.status, "success");
-  assert.deepEqual(path.points, [[0, 2, 0], [4, 2, 0]]);
-});
-
-check("nav grid heightfield rejects neighbor steps above the agent step height", () => {
-  const grid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
-    blockers: [],
-    bounds: [{ min: [0, -1, 0], max: [2, 3, 0] }],
-    footY: 0,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorY: (x, z) => (Math.abs(z) < 1e-6 ? (x < 1 ? 0 : 1) : null),
-  });
-  assert.ok(grid, "heightfield grid should build");
-  const path = searchNavGrid(grid!, [0, 0, 0], [2, 1, 0]);
-  assert.equal(path.status, "failure");
-});
-
-check("ledge erosion insets a raised platform edge by the agent clearance", () => {
-  const agent = { radius: 0.35, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45, clearancePadding: 0 };
-  const bounds: NavAabb[] = [{ min: [-2, -1, -2], max: [6, 4, 6] }];
-  // A raised platform (y=2) over [0,4] x [0,4], surrounded by void (a fall on every
-  // side). The platform sits well inside the volume, so its rim is a genuine ledge,
-  // not the (separately eroded) authored-bounds edge.
-  const sampleFloorYs = (x: number, z: number): number[] | null =>
-    x >= 0 && x <= 4 && z >= 0 && z <= 4 ? [2] : null;
-  const grid = buildNavGrid({ agent, blockers: [], bounds, footY: 2, cellSize: 0.5, safetyMargin: 0.25, sampleFloorYs })!;
-  assert.ok(grid, "platform grid builds");
-  const cellPassable = (g: NonNullable<ReturnType<typeof buildNavGrid>>, x: number, z: number): boolean => {
-    const cx = Math.round((x - g.originX) / g.cellSize);
-    const cz = Math.round((z - g.originZ) / g.cellSize);
-    return cx >= 0 && cz >= 0 && cx < g.cols && cz < g.rows && g.passable[cz * g.cols + cx] === 1;
-  };
-  // Interior stays walkable; the outer lip (within clearance 0.60 of the drop) is inset.
-  assert.equal(cellPassable(grid, 2, 2), true, "platform interior remains walkable");
-  assert.equal(cellPassable(grid, 0, 2), false, "platform x=0 lip is eroded (fall border)");
-  assert.equal(cellPassable(grid, 4, 2), false, "platform x=4 lip is eroded (fall border)");
-  assert.equal(cellPassable(grid, 2, 0), false, "platform z=0 lip is eroded (fall border)");
-  // A radius-0 build has no fall border, so it keeps strictly more walkable cells.
-  const bare = buildNavGrid({
-    agent: { ...agent, radius: 0 },
-    blockers: [],
-    bounds,
-    footY: 2,
-    cellSize: 0.5,
-    safetyMargin: 0,
-    sampleFloorYs,
-  })!;
-  const count = (g: NonNullable<ReturnType<typeof buildNavGrid>>): number => g.passable.reduce((s, v) => s + v, 0);
-  assert.ok(count(grid) < count(bare), `ledge erosion removes edge cells (${count(grid)} < ${count(bare)})`);
-});
-
-check("ledge erosion keeps a step-down within maxStepDown (a shallow join is not a ledge)", () => {
-  const agent = { radius: 0.35, height: 1.8, stepHeight: 0.5, maxStepDown: 0.5, clearancePadding: 0 };
-  const bounds: NavAabb[] = [{ min: [-2, -1, -2], max: [8, 4, 8] }];
-  // Upper apron (y=0.4) for x<=3, lower floor (y=0) for x>3; the 0.4 m drop is within
-  // maxStepDown, so the seam is a walkable join (like a ramp meeting the ground), not
-  // a fall edge, and must survive erosion.
-  const sampleFloorYs = (x: number, z: number): number[] | null => {
-    if (x < 0 || x > 6 || z < 0 || z > 6) return null;
-    return [x <= 3 ? 0.4 : 0];
-  };
-  const grid = buildNavGrid({ agent, blockers: [], bounds, footY: 0, cellSize: 0.5, safetyMargin: 0.25, sampleFloorYs })!;
-  assert.ok(grid, "join grid builds");
-  const cellPassable = (x: number, z: number): boolean => {
-    const cx = Math.round((x - grid.originX) / grid.cellSize);
-    const cz = Math.round((z - grid.originZ) / grid.cellSize);
-    return cx >= 0 && cz >= 0 && cx < grid.cols && cz < grid.rows && grid.passable[cz * grid.cols + cx] === 1;
-  };
-  // The interior seam cells stay walkable, and a path crosses the shallow step-down.
-  assert.equal(cellPassable(3, 3), true, "upper side of the shallow seam stays walkable");
-  assert.equal(cellPassable(3.5, 3), true, "lower side of the shallow seam stays walkable");
-  const path = searchNavGrid(grid, [1, 0.4, 3], [5, 0, 3]);
-  assert.equal(path.status, "success", "agent crosses the shallow step-down join");
-});
-
-// Height-aware two-level layout with a one-cell hole at x=3: lower floor (y=0)
-// for x<=2, an unwalkable hole at x=3, an upper platform (y=2) for x>=4.
-function twoLevelHeightfieldGrid() {
-  return buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
-    blockers: [],
-    bounds: [{ min: [0, -1, 0], max: [6, 4, 0] }],
-    footY: 0,
-    cellSize: 1,
-    safetyMargin: 0,
-    sampleFloorY: (x, z) => {
-      if (Math.abs(z) > 1e-6) return null;
-      if (x <= 2.5) return 0;
-      if (x >= 3.5) return 2;
-      return null; // hole at x=3
-    },
-  });
-}
-
-check("searchNavGrid projects a goal on a hole cell to the height-nearest walkable cell (upper)", () => {
-  const grid = twoLevelHeightfieldGrid();
-  assert.ok(grid, "grid should build");
-  // Goal rounds onto the x=3 hole but sits at the upper platform height, so it
-  // must project up to x=4 (y=2), not down to x=2 (y=0), and stay reachable from
-  // an upper-platform start.
-  const path = searchNavGrid(grid!, [5, 2, 0], [3, 2, 0]);
-  assert.equal(path.status, "success");
-  const end = path.points[path.points.length - 1]!;
-  assert.ok(Math.abs(end[1] - 2) < 1e-6, `goal projected to upper platform height: ${JSON.stringify(end)}`);
-});
-
-check("searchNavGrid projects a hole-cell goal down to the lower floor when its height is low", () => {
-  const grid = twoLevelHeightfieldGrid();
-  assert.ok(grid, "grid should build");
-  // Same hole cell, but a low goal height: it must project down to x=2 (y=0),
-  // reachable from a lower-floor start — the projection is height-aware.
-  const path = searchNavGrid(grid!, [0, 0, 0], [3, 0, 0]);
-  assert.equal(path.status, "success");
-  const end = path.points[path.points.length - 1]!;
-  assert.ok(Math.abs(end[1]) < 1e-6, `goal projected to lower floor height: ${JSON.stringify(end)}`);
-});
-
 check("resolveNavAgentProfile prefers authored navAgent size over an oversized collider", () => {
   // Regression: a character actor placed at scale 0.3 whose actor-script capsule
   // collider is authored at radius 1 / halfHeight 3 reports UNSCALED half-extents
@@ -10025,89 +9409,6 @@ check("resolveCharacterCapsule keeps legacy movement fallback for old character 
   assert.equal(fallback.source, "default");
   assert.equal(fallback.radius, 0.3);
   assert.equal(fallback.halfHeight, 0.9);
-});
-
-check("searchNavGrid still fails when no walkable cell lies within the projection radius", () => {
-  const grid = buildNavGrid({
-    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
-    blockers: [],
-    bounds: [{ min: [0, -1, 0], max: [8, 3, 0] }],
-    footY: 0,
-    cellSize: 1,
-    safetyMargin: 0,
-    // Only x<=1 is walkable; the rest of the volume is a void.
-    sampleFloorY: (x, z) => (Math.abs(z) < 1e-6 && x <= 1.5 ? 0 : null),
-  });
-  assert.ok(grid, "grid should build");
-  // Goal at x=7 has no walkable cell within 2 cells -> projection can't rescue it.
-  const path = searchNavGrid(grid!, [0, 0, 0], [7, 0, 0]);
-  assert.equal(path.status, "failure");
-});
-
-check("NavGridCache reuses a baked grid until the token changes", () => {
-  const cache = new NavGridCache();
-  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
-  const req: NavGridBuildRequest = {
-    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
-    blockers: [],
-    bounds,
-    footY: 0,
-    cellSize: 0.5,
-  };
-  const a = cache.getOrBuild("rev-1", req);
-  const b = cache.getOrBuild("rev-1", req);
-  assert.ok(a && b);
-  assert.equal(a, b, "same token + agent returns the identical cached grid");
-  assert.equal(cache.size, 1);
-  const c = cache.getOrBuild("rev-2", req);
-  assert.notEqual(c, a, "a new token rebuilds the grid");
-  assert.equal(cache.size, 1, "same agent profile keeps a single cache slot");
-});
-
-check("NavGridCache keys separate grids per agent profile", () => {
-  const cache = new NavGridCache();
-  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
-  const small = cache.getOrBuild("rev", { agent: { radius: 0.2, height: 1.8 }, blockers: [], bounds, footY: 0, cellSize: 0.5 });
-  const large = cache.getOrBuild("rev", { agent: { radius: 0.6, height: 1.8 }, blockers: [], bounds, footY: 0, cellSize: 0.5 });
-  assert.ok(small && large);
-  assert.notEqual(small, large, "different agent radius => different grid");
-  assert.equal(cache.size, 2);
-  const smallAgain = cache.getOrBuild("rev", { agent: { radius: 0.2, height: 1.8 }, blockers: [], bounds, footY: 0, cellSize: 0.5 });
-  assert.equal(smallAgain, small, "same profile + token reuses the grid");
-});
-
-check("nav grid rebuild after a blocker moves reroutes the path (auto-rebuild)", () => {
-  const cache = new NavGridCache();
-  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
-  const agent = { radius: 0.25, height: 1.8, stepHeight: 0.45 };
-  const start: [number, number, number] = [-2.5, 0, 0];
-  const goal: [number, number, number] = [2.5, 0, 0];
-
-  // A wall blocking the direct lane forces the route to detour in +Z.
-  const before = cache.getOrBuild("rev-1", {
-    agent,
-    blockers: [{ min: [-0.25, 0, -3], max: [0.25, 2, 0.5] }],
-    bounds,
-    footY: 0,
-    cellSize: 0.5,
-  });
-  assert.ok(before);
-  const beforePath = searchNavGrid(before!, start, goal);
-  assert.equal(beforePath.status, "success");
-  assert.ok(beforePath.points.some((point) => point[2] > 0.5), "detours around the wall");
-
-  // Same agent profile, new revision token, wall gone: the cache must rebuild
-  // (not serve the stale grid) and the route straightens out.
-  const after = cache.getOrBuild("rev-2", { agent, blockers: [], bounds, footY: 0, cellSize: 0.5 });
-  assert.ok(after);
-  assert.notEqual(after, before, "a moved blocker (new token) rebuilds the grid");
-  assert.equal(cache.size, 1, "rebuild replaces the slot, not adds one");
-  const afterPath = searchNavGrid(after!, start, goal);
-  assert.equal(afterPath.status, "success");
-  assert.ok(
-    afterPath.points.every((point) => Math.abs(point[2]) < 0.5),
-    `straight line once clear: ${JSON.stringify(afterPath.points)}`,
-  );
 });
 
 check("advanceWaypoint keeps intermediate waypoints tight and honors the final acceptance", () => {
@@ -10728,62 +10029,6 @@ check("walkable stair emits riser nav blockers tagged with their role; auto does
   assert.ok(
     autoBlockers.every((b) => b.navigationRole !== "walkable"),
     "auto blockers are not tagged walkable, so erosion keeps walling them",
-  );
-});
-
-// End-to-end demonstration of the role fix: identical riser blockers erode the
-// tread strip (untagged -> the bug) but are excluded from erosion when tagged
-// `walkable` (the fix), while ground seeding via `sampleFloorY` is untouched.
-// Real asset geometry: 0.2 m rise, 0.24 m tread, agent radius 0.35 + clearance
-// 0.1 + safety 0.25 = 0.70 m. The stair is modelled wide (|z| <= 2 m) because
-// ledge erosion now insets each flank by the clearance radius; a real staircase
-// wider than the agent keeps a navigable interior, whereas a one-cell strip would
-// (correctly) be entirely inside the fall border.
-check("nav grid erosion excludes walkable blockers so a walkable staircase is climbable", () => {
-  const rise = 0.2;
-  const tread = 0.24;
-  const nSteps = 8;
-  const agent = { radius: 0.35, height: 1.8, stepHeight: 0.5, maxStepDown: 0.5, clearancePadding: 0.1 };
-  const runLength = nSteps * tread;
-  const bounds: NavAabb[] = [{ min: [-2, -1, -3], max: [runLength + 2, 3, 3] }];
-  // A wide stair corridor along +X; null off the strip so there is no way around.
-  const sampleFloorY = (x: number, z: number): number | null => {
-    if (Math.abs(z) > 2) return null;
-    const step = Math.min(nSteps, Math.max(0, Math.round(x / tread)));
-    return step * rise;
-  };
-  // One vertical riser wall (thin AABB + line footprint) at each step's front edge,
-  // spanning the full stair width so untagged erosion walls the whole corridor.
-  const risers: NavBlocker[] = [];
-  for (let k = 1; k <= nSteps; k += 1) {
-    const edgeX = k * tread - tread / 2;
-    risers.push({
-      min: [edgeX - 0.02, (k - 1) * rise, -3],
-      max: [edgeX + 0.02, k * rise, 3],
-      footprint: [
-        [edgeX, -3],
-        [edgeX, 3],
-      ],
-    });
-  }
-  const start: Vec3 = [0, 0, 0];
-  const goal: Vec3 = [runLength, nSteps * rise, 0];
-
-  const walled = buildNavGrid({ agent, blockers: risers, bounds, footY: 0, cellSize: tread, safetyMargin: 0.25, sampleFloorY });
-  assert.ok(walled, "walled grid builds");
-  assert.equal(
-    searchNavGrid(walled!, start, goal).status,
-    "failure",
-    "untagged risers erode the tread strip -> staircase unreachable (the bug)",
-  );
-
-  const walkableRisers: NavBlocker[] = risers.map((r) => ({ ...r, navigationRole: "walkable" as const }));
-  const climbable = buildNavGrid({ agent, blockers: walkableRisers, bounds, footY: 0, cellSize: tread, safetyMargin: 0.25, sampleFloorY });
-  assert.ok(climbable, "walkable grid builds");
-  assert.equal(
-    searchNavGrid(climbable!, start, goal).status,
-    "success",
-    "walkable-tagged risers are excluded from erosion -> identical heightfield is navigable",
   );
 });
 
@@ -27139,7 +26384,7 @@ check("AI query runner filters candidates and picks the best scored actor", () =
   assert.ok(result.candidates.find((candidate) => candidate.entityId === "too-far-cover")?.failedTests.includes("distance"));
 });
 
-check("AI query runner supports generated points and nav reachable filtering", () => {
+check("AI query runner asks the host nav mesh whether each candidate is reachable", () => {
   const controller = new AIController("ai:enemy", "enemy", new Blackboard());
   const asset = normalizeAiQueryAsset({
     schema: 1,
@@ -27147,26 +26392,32 @@ check("AI query runner supports generated points and nav reachable filtering", (
     generators: [{ kind: "actorsByTag", tag: "cover" }],
     tests: [{ kind: "navReachable", score: "linear" }],
   });
-  const result = runAiQuery(asset, {
-    controller,
-    entities: [
-      { id: "enemy", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
-      {
-        id: "clear-cover",
-        tags: ["cover"],
-        components: { Transform: { position: [0, 0, 2], rotation: [0, 0, 0], scale: [1, 1, 1] } },
-      },
-      {
-        id: "blocked-cover",
-        tags: ["cover"],
-        components: { Transform: { position: [3, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
-      },
-    ],
-    navBounds: [{ min: [-1, -1, -1], max: [1, 2, 3] }],
-  });
+  const cover = (id: string, position: Vec3) =>
+    ({ id, tags: ["cover"], components: { Transform: { position, rotation: [0, 0, 0], scale: [1, 1, 1] } } }) as Entity;
+  const entities = [
+    { id: "enemy", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+    cover("clear-cover", [0, 0, 2]),
+    cover("walled-cover", [3, 0, 0]),
+    cover("far-cover", [60, 0, 0]),
+  ] as Entity[];
+  const asked: Array<[Vec3, Vec3]> = [];
+  const navReachable = (from: Vec3, to: Vec3): AiNavReachability => {
+    asked.push([from, to]);
+    return to[0] === 3 ? "unreachable" : to[0] === 60 ? "pending" : "reachable";
+  };
+  const reason = (result: ReturnType<typeof runAiQuery>, id: string) =>
+    result.candidates.find((candidate) => candidate.entityId === id)?.testResults?.[0]?.reason;
+
+  const result = runAiQuery(asset, { controller, entities, navReachable });
   assert.equal(result.status, "success");
   assert.equal(result.winner?.entityId, "clear-cover");
-  assert.ok(result.candidates.find((candidate) => candidate.entityId === "blocked-cover")?.failedTests.includes("navReachable"));
+  assert.deepEqual(asked.map(([from]) => from), [[0, 0, 0], [0, 0, 0], [0, 0, 0]], "asked from the querier");
+  assert.equal(reason(result, "walled-cover"), "unreachable");
+  assert.equal(reason(result, "far-cover"), "nav-pending", "unbuilt tiles fail this run, distinctly");
+
+  const blind = runAiQuery(asset, { controller, entities });
+  assert.equal(blind.status, "failure", "no nav mesh: nothing is reachable");
+  assert.equal(reason(blind, "clear-cover"), "no-navigation");
 });
 
 check("AI query runner asks blockersNear for each trace's square instead of a full list", () => {
@@ -27200,19 +26451,6 @@ check("AI query runner asks blockersNear for each trace's square instead of a fu
   assert.deepEqual(failed(sight, "hidden"), ["lineOfSight"]);
   assert.deepEqual(calls, [[0, 2, 2], [2, 0, 2]], "line of sight asks for the segment's own square");
 
-  calls.length = 0;
-  const reach = runAiQuery(normalizeAiQueryAsset({
-    schema: 1,
-    type: "query",
-    generators: [{ kind: "actorsByTag", tag: "cover" }],
-    tests: [{ kind: "navReachable" }],
-  }), { controller, entities, blockersNear, navBounds: [{ min: [-1, -1, -1], max: [6, 2, 6] }] });
-  assert.equal(reach.winner?.entityId, "open");
-  assert.deepEqual(failed(reach, "hidden"), ["navReachable"]);
-  assert.deepEqual(calls, [
-    [0, 2, 2 + NAV_REACHABLE_BLOCKER_MARGIN],
-    [2, 0, 2 + NAV_REACHABLE_BLOCKER_MARGIN],
-  ], "nav reachability adds the detour margin");
 });
 
 check("AiBehaviorRunner executes selector/sequence/decorator/wait task and messages", () => {
@@ -28542,6 +27780,58 @@ check("AiBehaviorRunner runQueryToBlackboard throttles repeated query runs", () 
   assert.equal(runs, 2);
 });
 
+check("AISubsystem hands queries the host nav mesh reachability for the querying pawn", () => {
+  const asked: string[] = [];
+  const ai = new AISubsystem({
+    navReachable: (pawnEntityId, _from, to) => {
+      asked.push(pawnEntityId);
+      return to[0] === 2 ? "reachable" : "unreachable";
+    },
+  });
+  ai.setAssetLibrary({
+    blackboards: new Map([
+      ["assets/AI/Reach.blackboard.json", normalizeAiBlackboardAsset({
+        schema: 1, type: "blackboard", keys: [{ key: "bestCover", kind: "entity", default: null }],
+      })],
+    ]),
+    behaviors: new Map([
+      ["assets/AI/Reach.behavior.json", normalizeAiBehaviorTreeAsset({
+        schema: 1,
+        type: "behaviorTree",
+        blackboard: "assets/AI/Reach.blackboard.json",
+        root: {
+          kind: "task",
+          task: "forge.runQueryToBlackboard",
+          params: { query: "assets/AI/Reach.query.json", resultKey: "bestCover" },
+        },
+      })],
+    ]),
+    queries: new Map([
+      ["assets/AI/Reach.query.json", normalizeAiQueryAsset({
+        schema: 1,
+        type: "query",
+        generators: [{ kind: "actorsByTag", tag: "cover" }],
+        // The unreachable cover is nearer: only the nav test can pick the other.
+        tests: [{ kind: "navReachable" }, { kind: "distance", max: 10, score: "inverse" }],
+      })],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: { behaviorTree: "assets/AI/Reach.behavior.json" },
+      },
+    },
+    { id: "cover-walled", tags: ["cover"], components: { Transform: { position: [1, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+    { id: "cover-open", tags: ["cover"], components: { Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.equal(ai.getControllerForPawn("enemy")?.blackboard.getEntity("bestCover"), "cover-open");
+  assert.ok(asked.length >= 2 && asked.every((id) => id === "enemy"), "asked for the querying pawn's profile");
+});
+
 check("AISubsystem records last query result in controller debug snapshots", () => {
   const ai = new AISubsystem();
   ai.setAssetLibrary({
@@ -29794,30 +29084,26 @@ check("createAiNavigationView draws AI perception sight cone and hearing radius"
   disposeAiNavigationView(view);
 });
 
-check("createAiNavigationView draws inflated blockers and agent clearance rings", () => {
+check("createAiNavigationView draws blocker footprints and agent clearance rings, no planner grid", () => {
   const view = createAiNavigationView({
     blockers: [{ min: [0, 0, 0], max: [1, 2, 1] }],
-    inflatedBlockers: [{ min: [-0.5, 0, -0.5], max: [1.5, 2, 1.5] }],
     agentClearances: [{ entityId: "enemy", position: [3, 0, 0], radius: 0.7 }],
   });
-  assert.ok(view.getObjectByName("ai-nav-blockers"), "raw blocker footprint drawn");
-  assert.ok(view.getObjectByName("ai-nav-inflated-blockers"), "inflated forbidden footprint drawn");
+  assert.ok(view.getObjectByName("ai-nav-blockers"), "blocker footprint drawn");
   assert.ok(view.getObjectByName("ai-nav-agent-clearance"), "agent clearance ring drawn");
+  assert.equal(view.getObjectByName("ai-nav-grid"), undefined, "the walkable area is the Recast view's, not a grid");
   disposeAiNavigationView(view);
 });
 
-check("createAiNavigationView draws rotated inflated blockers as oriented footprints", () => {
+check("createAiNavigationView draws a rotated blocker as its oriented footprint", () => {
   const half: Vec3 = [2, 1.5, 0.1];
   const aabb = rotatedBoxAabb([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
   const footprint = rotatedBoxFootprintXZ([0, 0, 0], [0, 0, 0], half, [0, 45, 0])!;
-  const inflated = inflateNavBlocker2d({ ...aabb, footprint }, 0.5);
-  assert.ok(inflated.footprint && inflated.footprint.length >= 3, "inflated blocker preserves oriented footprint");
-
-  const view = createAiNavigationView({ inflatedBlockers: [inflated] });
-  const lines = view.getObjectByName("ai-nav-inflated-blockers") as
+  const view = createAiNavigationView({ blockers: [{ ...aabb, footprint }] });
+  const lines = view.getObjectByName("ai-nav-blockers") as
     | { geometry: { getAttribute(name: string): { count: number; getX(index: number): number; getZ(index: number): number } } }
     | undefined;
-  assert.ok(lines, "inflated blocker line segments drawn");
+  assert.ok(lines, "blocker line segments drawn");
   const position = lines.geometry.getAttribute("position");
   const uniqueX = new Set<string>();
   const uniqueZ = new Set<string>();
@@ -29828,29 +29114,6 @@ check("createAiNavigationView draws rotated inflated blockers as oriented footpr
   assert.ok(uniqueX.size > 2, "oriented footprint has more than an AABB's two X edges");
   assert.ok(uniqueZ.size > 2, "oriented footprint has more than an AABB's two Z edges");
   disposeAiNavigationView(view);
-});
-
-check("createAiNavigationView fills baked walkable cells and disposes the mesh", () => {
-  const view = createAiNavigationView({
-    bounds: [{ min: [-1, 0, -1], max: [1, 2, 1] }],
-    passableCells: [
-      [-0.5, 0, -0.5],
-      [0, 1, 0],
-      [0.5, 0, 0.5],
-    ],
-    cellSize: 0.5,
-  });
-  const fill = view.getObjectByName("ai-nav-passable");
-  assert.ok(fill, "walkable-cell fill mesh drawn");
-  // 3 cells * 2 triangles * 3 verts * 3 components = 54 position floats.
-  const position = (fill as { geometry: { getAttribute(name: string): { count: number; getY(index: number): number } } }).geometry.getAttribute("position");
-  assert.equal(position.count, 18, "two triangles per passable cell");
-  assert.ok(position.getY(6) > position.getY(0), "passable fill preserves per-cell floor height");
-  disposeAiNavigationView(view);
-
-  const empty = createAiNavigationView({ bounds: [{ min: [-1, 0, -1], max: [1, 2, 1] }], passableCells: [] });
-  assert.equal(empty.getObjectByName("ai-nav-passable"), undefined, "no fill mesh when there are no walkable cells");
-  disposeAiNavigationView(empty);
 });
 
 check("createAiNavigationView draws selected AI agent radius and clearance rings", () => {
@@ -29867,22 +29130,6 @@ check("createAiNavigationView draws selected AI agent radius and clearance rings
   });
   assert.ok(view.getObjectByName("ai-nav-selected-agent-radius"), "selected agent radius ring drawn");
   assert.ok(view.getObjectByName("ai-nav-selected-agent-clearance"), "selected clearance ring drawn");
-  disposeAiNavigationView(view);
-});
-
-check("createAiNavigationView highlights path segments that violate inflated clearance", () => {
-  const view = createAiNavigationView({
-    inflatedBlockers: [{ min: [0.25, 0, -0.25], max: [0.75, 2, 0.25] }],
-    followers: [
-      {
-        status: "following",
-        waypointIndex: 1,
-        path: [[-1, 0, 0], [1, 0, 0]],
-      },
-    ],
-  });
-  assert.ok(view.getObjectByName("ai-nav-path"), "base path remains visible");
-  assert.ok(view.getObjectByName("ai-nav-path-clearance-violation"), "violating path segment is highlighted");
   disposeAiNavigationView(view);
 });
 

@@ -34,7 +34,7 @@
  */
 import type { Vec3 } from "../scene/layout";
 import type { RecastTileConfig, RecastTileInput } from "./recastTileBuild";
-import type { NavAabb, NavAgent, PathResult } from "./gridNavigation";
+import type { NavAabb, NavAgent, PathResult } from "./navigationTypes";
 import {
   recastTileKey,
   RecastNavMesh,
@@ -192,6 +192,28 @@ export class RecastPlanner {
   }
 
   findPath(request: RecastPlanRequest): RecastPlanResult {
+    const result = this.searchPath(request);
+    const snap = this.options.snapHeight;
+    if (result.status !== "success" || !snap) return result;
+    return {
+      ...result,
+      points: result.points.map((point): Vec3 => [point[0], snap(request.agent, point), point[2]]),
+    };
+  }
+
+  /**
+   * Whether an agent can walk from `start` to `goal` — the same corridor and
+   * Detour search as {@link findPath}, without building the path's points.
+   * `"pending"` while the corridor's tiles are not built yet; they are queued
+   * like a path request's (AI queries' reachability test).
+   */
+  reachability(request: RecastPlanRequest): "reachable" | "unreachable" | "pending" {
+    const result = this.searchPath(request);
+    return result.status === "pending" ? "pending" : result.status === "success" ? "reachable" : "unreachable";
+  }
+
+  /** The corridor's tiles (built or queued), then a Detour search over them. */
+  private searchPath(request: RecastPlanRequest): RecastPlanResult {
     const mesh = this.meshFor(request.agent, request.bounds);
     const corridor = this.corridorTiles(mesh, request.start, request.goal);
     for (const tile of corridor) mesh.touchTile(tile.x, tile.z, this.now);
@@ -205,13 +227,7 @@ export class RecastPlanner {
       this.requested.set(mesh, waiting);
       return { status: "pending", points: [], visited: 0 };
     }
-    const result = mesh.findPath(request.start, request.goal);
-    const snap = this.options.snapHeight;
-    if (result.status !== "success" || !snap) return result;
-    return {
-      ...result,
-      points: result.points.map((point): Vec3 => [point[0], snap(request.agent, point), point[2]]),
-    };
+    return mesh.findPath(request.start, request.goal);
   }
 
   /**

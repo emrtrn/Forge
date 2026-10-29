@@ -1,6 +1,6 @@
 import type { Group, Scene } from "three";
 
-import type { NavAabb, NavAgent } from "@engine/navigation/gridNavigation";
+import type { NavAabb, NavAgent } from "@engine/navigation/navigationTypes";
 import { loadRecastModules, type RecastModules } from "@engine/navigation/recastNavMesh";
 import { RecastPlanner, type RecastTileWorker } from "@engine/navigation/recastPlanner";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";

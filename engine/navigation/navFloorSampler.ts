@@ -1,7 +1,7 @@
 import type { PhysicsSurfaceTriangle } from "../behavior/behaviorSubsystem";
 import { collapseCoincidentFloors, findGroundLayersAt } from "../movement/characterCollision";
 import { slopeCosFromDegrees, type GroundSurfaceSample } from "../movement/slopeSurface";
-import type { NavAabb, NavAgent } from "./gridNavigation";
+import type { NavAabb, NavAgent } from "./navigationTypes";
 
 const AI_NAV_MIN_TOP_SUPPORT_RADIUS = 0.15;
 
@@ -43,9 +43,9 @@ export function navFloorSampler(
     // keeping the highest of each cluster. A solid floor mesh (`complexAsSimple`)
     // reports both its top face and its slab underside/thickness as walkable
     // layers a few centimetres apart; CharacterMovement grounds the pawn on the
-    // highest one, but the multi-layer nav grid would otherwise keep the lower
-    // phantom layer and route the path through it — leaving interior waypoints
-    // below the walking pawn. The follower's tight vertical acceptance can't
+    // highest one, but the floor snap would otherwise pick the lower phantom
+    // layer for a path corner — leaving interior waypoints below the walking
+    // pawn. The follower's tight vertical acceptance can't
     // clear that gap, so the agent stalls a few steps in. Surfaces within the
     // agent's step height are one floor it can freely traverse, so this matches
     // movement while leaving genuinely distinct floors (upper platforms) intact.

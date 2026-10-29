@@ -13,7 +13,7 @@
  * passed in.
  */
 import type * as RecastCore from "@recast-navigation/core";
-import type { NavAgent, NavVec2 } from "./gridNavigation";
+import type { NavAgent, NavVec2 } from "./navigationTypes";
 
 type Core = typeof RecastCore;
 export type RecastRcConfig = ReturnType<Core["createRcConfig"]>;

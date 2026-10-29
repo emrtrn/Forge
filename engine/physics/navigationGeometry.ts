@@ -1,9 +1,9 @@
 /**
  * Static collider geometry as Recast input triangles (OPEN_WORLD_PLAN Faz 9).
  *
- * The grid planner reads physics through its movement abstraction (blocker
- * AABBs + walkable surface triangles). Recast voxelizes real geometry, so this
- * module emits each static collider's own shape instead: a box primitive as
+ * The movement model reads physics as blocker AABBs + walkable surface
+ * triangles. Recast voxelizes real geometry, so this module emits each static
+ * collider's own shape instead: a box primitive as
  * its 12 oriented triangles, a trimesh as authored, a heightfield quad by
  * quad. Shapes the movement model also approximates (sphere, capsule,
  * cylinder, cone, convex) are emitted as their oriented box, the same

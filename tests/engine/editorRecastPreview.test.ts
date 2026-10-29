@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Scene, type Mesh } from "three";
 
-import type { NavAgent } from "../../engine/navigation/gridNavigation";
+import type { NavAgent } from "../../engine/navigation/navigationTypes";
 import { loadRecastModules } from "../../engine/navigation/recastNavMesh";
 import type { Entity } from "../../engine/scene/entity";
 import type { Vec3 } from "../../engine/scene/layout";

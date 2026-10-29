@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "type": "behaviorTree",
+  "blackboard": "assets/starter-content/AI/EQS_Test.blackboard.json",
+  "root": {
+    "id": "eqs-test-root",
+    "kind": "sequence",
+    "children": [
+      {
+        "id": "pick-nearest-reachable-target",
+        "kind": "task",
+        "task": "forge.runQueryToBlackboard",
+        "params": {
+          "query": "assets/starter-content/AI/EQS_Test.query.json",
+          "resultKey": "eqsTarget"
+        }
+      },
+      {
+        "id": "walk-to-target",
+        "kind": "task",
+        "task": "forge.moveToBlackboard",
+        "params": {
+          "key": "eqsTarget",
+          "speed": 2.5,
+          "acceptanceRadius": 0.6
+        }
+      },
+      {
+        "id": "rest-at-target",
+        "kind": "wait",
+        "seconds": 2
+      }
+    ]
+  }
+}

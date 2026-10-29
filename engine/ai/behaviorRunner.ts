@@ -470,12 +470,21 @@ function moveToPositionTask(context: AiTaskContext): AiBehaviorStatus {
   });
 }
 
+/**
+ * Moves to the position in a Blackboard key — a vec3, or an entity id whose
+ * current position is read each tick (Unreal's MoveTo takes either; an AI
+ * query that picks an actor writes its id).
+ */
 function moveToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
   if (!context.moveTo) return "failure";
   const key = stringParam(context.params.key);
   if (!key) return "failure";
   const value = context.blackboard.get(key);
-  const position = Array.isArray(value) ? vec3Param(value) : null;
+  const position = Array.isArray(value)
+    ? vec3Param(value)
+    : typeof value === "string" && value.length > 0
+      ? context.world?.entityPosition(value) ?? null
+      : null;
   if (!position) return "failure";
   const speed = optionalNonNegativeNumberParam(context.params.speed);
   const acceptanceRadius = optionalNonNegativeNumberParam(

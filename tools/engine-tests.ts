@@ -160,6 +160,7 @@ import {
   advanceSplinePatrolDistance,
   createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
+  type AiMoveRequest,
 } from "../engine/ai/behaviorRunner";
 import { AiStateTreeRunner } from "../engine/ai/stateTreeRunner";
 import { advanceWaypoint, type NavAabb, type NavBlocker } from "../engine/navigation/navigationTypes";
@@ -27574,6 +27575,41 @@ check("AiBehaviorRunner built-in startConversation emits the conversation trigge
   assert.deepEqual(messages[0]?.payload, {
     conversationId: "assets/Dialog/CONV_Welcome.conversation.json",
   });
+});
+
+check("AiBehaviorRunner moveToBlackboard follows an entity key to the entity's current position", () => {
+  const bb = new Blackboard([
+    { key: "bestCover", kind: "entity", default: "cover-a" },
+    { key: "missing", kind: "entity", default: "gone" },
+  ]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.moveToBlackboard", params: { key: "bestCover", acceptanceRadius: 0.5 } },
+  });
+  const coverPosition: Vec3 = [3, 0, 1];
+  const moves: Vec3[] = [];
+  const options = {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    world: { entityPosition: (entityId: string) => (entityId === "cover-a" ? coverPosition : null) },
+    moveTo: (request: AiMoveRequest) => {
+      moves.push([...request.position] as Vec3);
+      return "running" as const;
+    },
+  };
+  const runner = new AiBehaviorRunner(controller, asset, options);
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  coverPosition[0] = 4;
+  runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  assert.deepEqual(moves, [[3, 0, 1], [4, 0, 1]], "re-read every tick, so a moving actor is followed");
+
+  const lost = new AiBehaviorRunner(controller, normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.moveToBlackboard", params: { key: "missing" } },
+  }), options);
+  assert.equal(lost.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "failure", "an entity with no position fails");
 });
 
 check("AiBehaviorRunner runQueryToBlackboard stores the winning query entity", () => {

@@ -20592,6 +20592,141 @@
       "license": "Unknown"
     },
     {
+      "id": "eqs-test-blackboard",
+      "name": "EQS Test.Blackboard",
+      "assetType": "blackboard",
+      "category": "AI",
+      "path": "assets/starter-content/AI/EQS_Test.blackboard.json",
+      "tags": [
+        "demo",
+        "ai",
+        "eqs"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 143
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "eqs-test-behavior-tree",
+      "name": "EQS Test.Behavior",
+      "assetType": "behaviorTree",
+      "category": "AI",
+      "path": "assets/starter-content/AI/EQS_Test.behavior.json",
+      "tags": [
+        "demo",
+        "ai",
+        "eqs"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 799
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "eqs-test-query",
+      "name": "EQS Test.Query",
+      "assetType": "aiQuery",
+      "category": "AI",
+      "path": "assets/starter-content/AI/EQS_Test.query.json",
+      "tags": [
+        "demo",
+        "ai",
+        "eqs"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 318
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ai-eqs-tester-actor",
+      "name": "AI EQS Tester.Actor",
+      "assetType": "prefab",
+      "category": "Script",
+      "path": "assets/starter-content/Script/AI_EQS_Tester.actor.json",
+      "tags": [
+        "demo",
+        "ai",
+        "eqs"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2130
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "eqs-target-actor",
+      "name": "EQS Target.Actor",
+      "assetType": "prefab",
+      "category": "Script",
+      "path": "assets/starter-content/Script/EQS_Target.actor.json",
+      "tags": [
+        "demo",
+        "ai",
+        "eqs"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 501
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "m-moss-material",
       "name": "M Moss.Material",
       "assetType": "material",

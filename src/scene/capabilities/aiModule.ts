@@ -40,6 +40,7 @@ import {
   type AiBlackboardAsset,
 } from "@engine/ai/behaviorAsset";
 import type { AiMoveRequest } from "@engine/ai/behaviorRunner";
+import { normalizeAiQueryAsset, type AiQueryAsset } from "@engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
 import type { AiNavReachability } from "@engine/ai/queryRunner";
 import { createTargetPointIndex, targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
@@ -603,10 +604,11 @@ export function createAiModule(): CapabilityModule {
     const blackboards = new Map<string, AiBlackboardAsset>();
     const behaviors = new Map<string, AiBehaviorTreeAsset>();
     const stateTrees = new Map<string, AiStateTreeAsset>();
+    const queries = new Map<string, AiQueryAsset>();
     await Promise.all(
       (manifest?.assets ?? []).map(async (asset) => {
         const type = assetType(asset);
-        if (type !== "blackboard" && type !== "behaviorTree" && type !== "stateTree") return;
+        if (type !== "blackboard" && type !== "behaviorTree" && type !== "stateTree" && type !== "aiQuery") return;
         const path = assetPath(asset);
         try {
           const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
@@ -620,6 +622,11 @@ export function createAiModule(): CapabilityModule {
             const stateTree = normalizeAiStateTreeAsset(json);
             stateTrees.set(asset.id, stateTree);
             stateTrees.set(path, stateTree);
+          } else if (type === "aiQuery") {
+            // Behavior trees name a query by id or path (`forge.runQueryToBlackboard`).
+            const query = normalizeAiQueryAsset(json);
+            queries.set(asset.id, query);
+            queries.set(path, query);
           } else {
             const behavior = normalizeAiBehaviorTreeAsset(json);
             behaviors.set(asset.id, behavior);
@@ -630,7 +637,7 @@ export function createAiModule(): CapabilityModule {
         }
       }),
     );
-    ai?.setAssetLibrary({ blackboards, behaviors, stateTrees });
+    ai?.setAssetLibrary({ blackboards, behaviors, stateTrees, queries });
   }
 
   /** Target Point patrol route overlay: markers, `next` links, active AI highlight. */

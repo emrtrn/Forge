@@ -454,7 +454,88 @@
   "reflectionPlanes": [],
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
-  "blockingVolumes": [],
+  "blockingVolumes": [
+    {
+      "id": "eqs-pen-north",
+      "name": "EQS Pen North",
+      "position": [
+        0.5,
+        1,
+        -9.35
+      ],
+      "size": [
+        3.6,
+        2,
+        0.3
+      ],
+      "renderInGame": true,
+      "color": "#6b7a8f"
+    },
+    {
+      "id": "eqs-pen-south",
+      "name": "EQS Pen South",
+      "position": [
+        0.5,
+        1,
+        -12.65
+      ],
+      "size": [
+        3.6,
+        2,
+        0.3
+      ],
+      "renderInGame": true,
+      "color": "#6b7a8f"
+    },
+    {
+      "id": "eqs-pen-west",
+      "name": "EQS Pen West",
+      "position": [
+        -1.15,
+        1,
+        -11
+      ],
+      "size": [
+        0.3,
+        2,
+        3.6
+      ],
+      "renderInGame": true,
+      "color": "#6b7a8f"
+    },
+    {
+      "id": "eqs-pen-east",
+      "name": "EQS Pen East",
+      "position": [
+        2.15,
+        1,
+        -11
+      ],
+      "size": [
+        0.3,
+        2,
+        3.6
+      ],
+      "renderInGame": true,
+      "color": "#6b7a8f"
+    },
+    {
+      "id": "eqs-detour-wall",
+      "name": "EQS Detour Wall",
+      "position": [
+        4,
+        1,
+        -9.5
+      ],
+      "size": [
+        2,
+        2,
+        0.3
+      ],
+      "renderInGame": true,
+      "color": "#6b7a8f"
+    }
+  ],
   "aiNavigationVolumes": [
     {
       "id": "ai-navigation-volume-1",
@@ -569,6 +650,54 @@
         "acceptanceRadius": 0.35,
         "lookAheadDistance": 2.2
       }
+    },
+    {
+      "classRef": "assets/starter-content/Script/AI_EQS_Tester.actor.json",
+      "name": "EQS Tester",
+      "position": [
+        0.5,
+        0,
+        -7
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 180,
+      "scale": 0.4
+    },
+    {
+      "classRef": "assets/starter-content/Script/EQS_Target.actor.json",
+      "name": "EQS Target A (penned)",
+      "position": [
+        0.5,
+        0,
+        -11
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "scale": 0.5
+    },
+    {
+      "classRef": "assets/starter-content/Script/EQS_Target.actor.json",
+      "name": "EQS Target B (reachable)",
+      "position": [
+        5.5,
+        0,
+        -12
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "scale": 0.5
+    },
+    {
+      "classRef": "assets/starter-content/Script/EQS_Target.actor.json",
+      "name": "EQS Target C (off nav volume)",
+      "position": [
+        9,
+        0,
+        -10
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "scale": 0.5
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "type": "blackboard",
+  "keys": [
+    {
+      "key": "eqsTarget",
+      "kind": "entity",
+      "default": null
+    }
+  ]
+}

@@ -319,6 +319,69 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
     });
   });
 
+  await checkAsync("ai module loads AI query assets so behavior trees can run them", async () => {
+    const files: Record<string, unknown> = {
+      "BB_Query": { schema: 1, type: "blackboard", keys: [{ key: "bestCover", kind: "entity", default: null }] },
+      "BT_Query": {
+        schema: 1,
+        type: "behaviorTree",
+        blackboard: "AI/BB_Query.blackboard.json",
+        root: { kind: "task", task: "forge.runQueryToBlackboard", params: { query: "Q_Cover", resultKey: "bestCover" } },
+      },
+      "Q_Cover": {
+        schema: 1,
+        type: "query",
+        generators: [{ kind: "actorsByClassRef", classRef: "Script/Cover.actor.json" }],
+        tests: [{ kind: "distance", max: 20, score: "inverse" }],
+      },
+    };
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const name = Object.keys(files).find((key) => String(input).includes(key));
+      return name
+        ? ({ ok: true, json: async () => files[name] } as unknown as Response)
+        : ({ ok: false, json: async () => ({}) } as unknown as Response);
+    }) as typeof globalThis.fetch;
+    try {
+      const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+      host.provide(aiHostService, testAiHost());
+      host.provide(assetManifestService, async () => ({
+        assets: [
+          { id: "BB_Query", type: "blackboard", path: "AI/BB_Query.blackboard.json" },
+          { id: "BT_Query", type: "behaviorTree", path: "AI/BT_Query.behavior.json" },
+          { id: "Q_Cover", assetType: "aiQuery", path: "AI/Q_Cover.query.json" },
+        ],
+      }) as never);
+      const registry = createCapabilityRegistry([createAiModule()]);
+      registry.runtimeStart(host);
+      const subsystems: Subsystem[] = [];
+      host.installSubsystems((subsystem) => subsystems.push(subsystem));
+      const cover = (id: string, position: [number, number, number]) => ({
+        id,
+        components: {
+          [TRANSFORM_COMPONENT]: { position, rotation: [0, 0, 0], scale: [1, 1, 1] },
+          ScriptActor: { classRef: "Script/Cover.actor.json" },
+        },
+      }) as unknown as Entity;
+      const pawn = {
+        id: "npc:0",
+        components: {
+          [TRANSFORM_COMPONENT]: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          [AI_CONTROLLER_COMPONENT]: { behaviorTree: "BT_Query" },
+        },
+      } as unknown as Entity;
+      await host.resolve(aiCommandsService)!.prepareLevel(LAYOUT);
+      host.entitySinks()[0]!.setEntities([pawn, cover("cover-far", [9, 0, 0]), cover("cover-near", [3, 0, 0])]);
+      for (const subsystem of subsystems) subsystem.update?.({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+      const controller = host.resolve(aiDebugService)!.controllers().controllers[0]!;
+      const best = controller.blackboard.entries.find((entry) => entry.key === "bestCover");
+      assert.equal(best?.value, "cover-near", "the query ran: the asset was loaded by id");
+      registry.dispose();
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   await checkAsync("ai module bridges script messages into stimuli and drops them on teardown", async () => {
     await withStubbedFetch(async () => {
       const bus = testBus();

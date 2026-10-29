@@ -18,6 +18,12 @@ export const SMOKE_SPLINE_SCENE = "layouts/__playwright-smoke-spline.level.json"
 export const SMOKE_ROAD_TERRAIN = "landscapes/smoke-road.terrain.json";
 const SMOKE_ROAD_TILE = "landscapes/smoke-road.tiles/0_0.tile.bin";
 const RUNTIME_PARITY_SCENE = "layouts/RuntimeParity.level.json";
+/**
+ * Test-only levels (`fixtures/levels/`, e.g. LandscapeTest, OffroadTest) are
+ * copied here in the isolated public directory; `public/` never ships them, so
+ * the project's own Levels folder stays the user's to create and delete in.
+ */
+export const SMOKE_TEST_LEVELS = "test-levels";
 const SMOKE_MENU = "assets/__playwright-smoke-menu.ui.json";
 
 export function assertSmokeRoot(root) {
@@ -334,6 +340,7 @@ export async function prepareSmokeProject(root = smokeRunRoot(), sourceRoot = RE
     recursive: true, dereference: true,
     filter: (path) => !/[\\/]public[\\/]layouts[\\/]OpenWorldTest\.(level\.json|landscapes)$/.test(path),
   });
+  await cp(resolve(FIXTURES, "levels"), smokePublicPath(SMOKE_TEST_LEVELS, root), { recursive: true });
   await mkdir(resolve(root, "src/game/scripts"), { recursive: true });
   const manifest = await readJson(smokePublicPath("project.3dgame.json", root));
   const assets = await readJson(smokePublicPath("assets/manifest.json", root));

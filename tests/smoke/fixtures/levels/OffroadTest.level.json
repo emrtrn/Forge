@@ -46,7 +46,7 @@
         0,
         0
       ],
-      "dataRef": "assets/starter-content/Levels/OffroadTest.landscapes/offroad.terrain.json"
+      "dataRef": "test-levels/OffroadTest.landscapes/offroad.terrain.json"
     }
   ],
   "actors": [

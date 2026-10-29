@@ -5,7 +5,7 @@ import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
 import { TerrainSurfaceSampler, worldTerrainSurfaceSource } from "../../engine/terrain/terrainSurface";
 import { terrainGlobalMapPath, terrainTilePath } from "../../engine/terrain/terrainTypes";
 import {
-  generateOffroadTestWorld, offroadTestLevel, OFFROAD_TEST_LEVEL, OFFROAD_TEST_START, OFFROAD_TEST_TERRAIN,
+  generateOffroadTestWorld, offroadTestFixtureFile, offroadTestLevel, OFFROAD_TEST_LEVEL, OFFROAD_TEST_START, OFFROAD_TEST_TERRAIN,
 } from "../../tools/world/offroadTestWorld";
 
 type Check = (label: string, fn: () => void) => void;
@@ -13,7 +13,7 @@ type Check = (label: string, fn: () => void) => void;
 export function registerOffroadTestWorldTests(check: Check): void {
   check("offroad test level: committed files match the generator (rerun npm run world:offroad)", () => {
     const world = generateOffroadTestWorld();
-    const read = (path: string) => readFileSync(`public/${path}`);
+    const read = (path: string) => readFileSync(offroadTestFixtureFile(path));
     assert.deepEqual(normalizeWorldTerrain(JSON.parse(read(OFFROAD_TEST_TERRAIN).toString("utf8"))), world.def);
     for (const [key, bytes] of world.tileBytes) {
       assert.ok(read(terrainTilePath(OFFROAD_TEST_TERRAIN, key)).equals(bytes), `tile ${key}`);

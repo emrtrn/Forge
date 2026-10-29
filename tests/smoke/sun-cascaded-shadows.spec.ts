@@ -102,9 +102,9 @@ test("Cascaded Shadows: on a 16-texture-unit GPU a textured 5-layer terrain leve
   level.lights = level.lights.map((light: { type: string }) => light.type === "directional"
     ? { ...light, name: "Sun", castShadow: true, cascadedShadows: true }
     : light);
-  // The starter LandscapeTest terrain (5 paint layers) plus a Sky Light capture: the
+  // The LandscapeTest fixture terrain (5 paint layers) plus a Sky Light capture: the
   // environment map and its BRDF table are two more units on the lit terrain.
-  level.landscapes = [{ id: "landscape-1", name: "Landscape", position: [0, 0, 0], dataRef: "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json" }];
+  level.landscapes = [{ id: "landscape-1", name: "Landscape", position: [0, 0, 0], dataRef: "test-levels/LandscapeTest.landscapes/landscape-1.terrain.json" }];
   level.skyAtmosphere = { skyLightCapture: { intensity: 1 } };
   await page.route(`**/${LEVEL}`, (route) => route.fulfill({ json: level }));
   await page.route("**/project.3dgame.json", async (route) => {

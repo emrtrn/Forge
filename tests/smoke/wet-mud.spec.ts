@@ -113,7 +113,7 @@ test("wet mud fifth layer renders broken water patches with subtle moving normal
   await page.evaluate(() => (window as any).__wetMudQa.side());
   await page.screenshot({ path: info.outputPath("wet-mud-puddles-side.png") });
   // 0.5 m authored spacing + one detail level = 25 cm vertices, matching
-  // LandscapeTest at its existing 1 m spacing / two detail levels.
+  // the LandscapeTest fixture at its existing 1 m spacing / two detail levels.
   await page.evaluate(() => (window as any).__wetMudQa.tracks(Math.PI / 7, 0.55, 1));
   await page.screenshot({ path: info.outputPath("wet-mud-diagonal-25cm.png") });
   await page.evaluate(() => (window as any).__wetMudQa.tracks(0, 0.25, 1));

@@ -23,7 +23,7 @@ for (const material of ["mud", "snow"]) {
             smaaAllowed: false, shadowsEnabled: false, particleDensity: 0.3, grassDensity: 0, foliageCullDistanceScale: 0.3 } } } }));
     });
     // Override only response data in flight; authored scene, terrain and assets stay untouched.
-    const terrainRoot = smokePublicPath("assets/starter-content/Levels/LandscapeTest.landscapes");
+    const terrainRoot = smokePublicPath("test-levels/LandscapeTest.landscapes");
     const definition = JSON.parse(await readFile(resolve(terrainRoot, "landscape-1.terrain.json"), "utf8"));
     const tile = decodeTerrainTile(await readFile(resolve(terrainRoot, "landscape-1.tiles/2_1.tile.bin")));
     const height = terrainHeightAt(definition, { tile: (x, z) => x === 2 && z === 1 ? tile : undefined }, 12, -43.84)!;

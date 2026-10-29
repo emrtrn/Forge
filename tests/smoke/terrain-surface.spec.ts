@@ -6,7 +6,8 @@ import { expect, test, type Page } from "./test";
  * runtime builds a surface sampler from its layers, and the wheel provider
  * resolves the heightfield collider to it.
  *
- * Opens the committed `OffroadTest` level (the car starts on the dirt road) by
+ * Opens the `OffroadTest` fixture level (`fixtures/levels/`, served as
+ * `test-levels/`; the car starts on the dirt road) by
  * rewriting the project's `defaultScene` in flight. Each run rewrites the
  * terrain definition in flight too: neutral, mud and snow on the road layers.
  * The `?debug` `vehicle surface:` line shows
@@ -18,8 +19,8 @@ import { expect, test, type Page } from "./test";
  * `terrain detail:` the CDLOD nodes refined inside the track window (a custom
  * quality profile keeps the detail levels on; headless calibration picks low).
  */
-const LEVEL = "assets/starter-content/Levels/OffroadTest.level.json";
-const TERRAIN = "assets/starter-content/Levels/OffroadTest.landscapes/offroad.terrain.json";
+const LEVEL = "test-levels/OffroadTest.level.json";
+const TERRAIN = "test-levels/OffroadTest.landscapes/offroad.terrain.json";
 
 test.setTimeout(240_000);
 

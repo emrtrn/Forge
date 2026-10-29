@@ -551,12 +551,14 @@ export function validateAssetManifest(
     const companion = path.replace(/\.(collision|materials|uvw|vertexcolors|skeleton)\.json$/i, "");
     if (companion !== path && [".glb", ".gltf"].some((ext) => manifestPaths.has(companion + ext))) continue;
     // Level-owned terrain (`<level>.landscapes/<id>.terrain.json`), painted
-    // foliage (`<level>.foliage.json`), Mesh Paint (`<level>.meshpaint.json`)
-    // and World Partition / foliage cell files
+    // foliage (`<level>.foliage.json`), Mesh Paint (`<level>.meshpaint.json`),
+    // baked water foam (`<level>.foam/<hash>.foam.json`) and World Partition /
+    // foliage cell files
     // (`<level>.cells/...`) belong to their registered level, the same way; a
     // sidecar without one stays visible. Foliage Type assets are `*.foliagetype.json`.
     // Cells first: a foliage cell is itself named `<x_z>.foliage.json`.
     const level = /^(.*)\.cells\/.+\.json$/i.exec(path)?.[1]
+      ?? /^(.*)\.foam\/[a-f0-9]{64}\.foam\.json$/i.exec(path)?.[1]
       ?? /^(.*)\.landscapes\/[^/]+\.terrain\.json$/i.exec(path)?.[1]
       ?? /^(.*)\.(?:foliage|meshpaint)\.json$/i.exec(path)?.[1];
     if (level && [".level.json", ".layout.json"].some((ext) => manifestPaths.has(level + ext))) continue;

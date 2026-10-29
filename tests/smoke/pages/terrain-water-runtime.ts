@@ -14,7 +14,7 @@ import type { Object3D, PerspectiveCamera, Scene, ShaderMaterial, Texture, Vecto
 // physics wires and no production globals or authored-content writes.
 const forge = await createForgeRuntime({ canvas: document.querySelector("canvas")!,
   modules: createDefaultRuntimeModules(), gameModules: [createGameModule()], debug: false });
-await forge.loadLevel("assets/starter-content/Levels/LandscapeTest.level.json");
+await forge.loadLevel("test-levels/LandscapeTest.level.json");
 forge.start();
 let reflectedPixels: Uint8Array | null = null;
 let captureSerial = 0;

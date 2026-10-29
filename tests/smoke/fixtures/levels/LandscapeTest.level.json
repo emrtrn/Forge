@@ -1881,7 +1881,7 @@
         0,
         0
       ],
-      "dataRef": "assets/starter-content/Levels/LandscapeTest.landscapes/landscape-1.terrain.json",
+      "dataRef": "test-levels/LandscapeTest.landscapes/landscape-1.terrain.json",
       "name": "Landscape"
     }
   ],
@@ -1962,7 +1962,7 @@
         "scale": 0.8,
         "speed": 0.3,
         "bake": {
-          "manifest": "assets/starter-content/Levels/LandscapeTest.foam/4d1726263d2633b0433a8de4cfb036d4702533f9674dc274ddef919c527067e5.foam.json",
+          "manifest": "test-levels/LandscapeTest.foam/4d1726263d2633b0433a8de4cfb036d4702533f9674dc274ddef919c527067e5.foam.json",
           "fingerprint": "aa3a11bbf6022f6cb0a6a755ea2e9396edff3f6f1c425420e1a0f4c90dcdbf8a"
         }
       },

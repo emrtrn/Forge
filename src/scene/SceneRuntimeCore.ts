@@ -223,8 +223,8 @@ const shadowFitCorner = new Vector3();
  * target, so the covered slab is anchored to wherever the light actor happens to
  * sit — not to the world. A symmetric `±half` frustum therefore only covers the
  * map when the actor stands above its centre and high enough that nothing falls
- * behind `near`; an authored sun placed low and off to one side (LandscapeTest's
- * sits at y≈9 near the origin of a 1 km terrain) left most of the level outside
+ * behind `near`; an authored sun placed low and off to one side (one test level's
+ * sat at y≈9 near the origin of a 1 km terrain) left most of the level outside
  * the frustum: no shadows at all, until the sun actor is dragged next to a caster.
  * (Ported from ThreeAges, where the same bug hid shadows across an RTS map.)
  *

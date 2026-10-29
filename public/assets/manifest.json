@@ -21044,52 +21044,6 @@
       "license": "CC-BY-4.0"
     },
     {
-      "id": "landscapetest-level",
-      "name": "Landscape Test.Level",
-      "assetType": "level",
-      "category": "Levels",
-      "path": "assets/starter-content/Levels/LandscapeTest.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Levels",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 104
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "offroadtest-level",
-      "name": "Offroad Test.Level",
-      "assetType": "level",
-      "category": "Levels",
-      "path": "assets/starter-content/Levels/OffroadTest.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Levels",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 1166
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "kenney-grass",
       "name": "Grass",
       "assetType": "staticMesh",
@@ -21157,9 +21111,9 @@
       "id": "lt-meadow-bc",
       "name": "LT Meadow Base Color",
       "assetType": "texture",
-      "category": "LandscapeTest/Textures",
-      "path": "assets/LandscapeTest/Textures/LT_Meadow_BC.webp",
-      "thumbnail": "assets/LandscapeTest/Textures/LT_Meadow_BC.webp",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Meadow_BC.webp",
+      "thumbnail": "assets/starter-content/Textures/LT_Meadow_BC.webp",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21173,7 +21127,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Textures",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21189,9 +21143,9 @@
       "id": "lt-wet-mud-bc",
       "name": "LT Wet Mud Base Color",
       "assetType": "texture",
-      "category": "LandscapeTest/Textures",
-      "path": "assets/LandscapeTest/Textures/LT_Wet_Mud_BC.webp",
-      "thumbnail": "assets/LandscapeTest/Textures/LT_Wet_Mud_BC.webp",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Wet_Mud_BC.webp",
+      "thumbnail": "assets/starter-content/Textures/LT_Wet_Mud_BC.webp",
       "tags": [
         "terrain",
         "mud",
@@ -21205,7 +21159,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "landscape-test",
+        "loadGroup": "Textures",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21213,7 +21167,7 @@
       },
       "source": {
         "origin": "OpenAI image_gen",
-        "pack": "Forge LandscapeTest",
+        "pack": "Forge Starter Content",
         "packVersion": "0.1"
       },
       "license": "AI-generated project asset"
@@ -21222,9 +21176,9 @@
       "id": "lt-wet-mud-roughness",
       "name": "LT Wet Mud Roughness",
       "assetType": "texture",
-      "category": "LandscapeTest/Textures",
-      "path": "assets/LandscapeTest/Textures/LT_Wet_Mud_Roughness.webp",
-      "thumbnail": "assets/LandscapeTest/Textures/LT_Wet_Mud_Roughness.webp",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Wet_Mud_Roughness.webp",
+      "thumbnail": "assets/starter-content/Textures/LT_Wet_Mud_Roughness.webp",
       "tags": [
         "terrain",
         "mud",
@@ -21239,7 +21193,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "landscape-test",
+        "loadGroup": "Textures",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21247,7 +21201,7 @@
       },
       "source": {
         "origin": "OpenAI image_gen",
-        "pack": "Forge LandscapeTest",
+        "pack": "Forge Starter Content",
         "packVersion": "0.1"
       },
       "license": "AI-generated project asset"
@@ -21256,8 +21210,8 @@
       "id": "lt-wet-mud",
       "name": "LT Wet Mud",
       "assetType": "material",
-      "category": "LandscapeTest/Materials",
-      "path": "assets/LandscapeTest/Materials/lt-wet-mud.material.json",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/lt-wet-mud.material.json",
       "tags": [
         "terrain",
         "mud",
@@ -21271,7 +21225,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "landscape-test",
+        "loadGroup": "Materials",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21279,7 +21233,7 @@
       },
       "source": {
         "origin": "forge",
-        "pack": "Forge LandscapeTest",
+        "pack": "Forge Starter Content",
         "packVersion": "0.1"
       },
       "license": "CC0-1.0"
@@ -21288,9 +21242,9 @@
       "id": "lt-earth-bc",
       "name": "LT Earth and Gravel Base Color",
       "assetType": "texture",
-      "category": "LandscapeTest/Textures",
-      "path": "assets/LandscapeTest/Textures/LT_Earth_BC.webp",
-      "thumbnail": "assets/LandscapeTest/Textures/LT_Earth_BC.webp",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Earth_BC.webp",
+      "thumbnail": "assets/starter-content/Textures/LT_Earth_BC.webp",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21304,7 +21258,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Textures",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21320,9 +21274,9 @@
       "id": "lt-snow-roughness",
       "name": "LT Alpine Snow Roughness",
       "assetType": "texture",
-      "category": "LandscapeTest/Textures",
-      "path": "assets/LandscapeTest/Textures/LT_Snow_Roughness.webp",
-      "thumbnail": "assets/LandscapeTest/Textures/LT_Snow_Roughness.webp",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Snow_Roughness.webp",
+      "thumbnail": "assets/starter-content/Textures/LT_Snow_Roughness.webp",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21337,7 +21291,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Textures",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21345,7 +21299,7 @@
       },
       "source": {
         "origin": "OpenAI image_gen",
-        "pack": "Forge LandscapeTest",
+        "pack": "Forge Starter Content",
         "packVersion": "0.1"
       },
       "license": "AI-generated project asset"
@@ -21354,9 +21308,9 @@
       "id": "lt-snow-bc",
       "name": "LT Alpine Snow Base Color",
       "assetType": "texture",
-      "category": "LandscapeTest/Textures",
-      "path": "assets/LandscapeTest/Textures/LT_Snow_BC.png",
-      "thumbnail": "assets/LandscapeTest/Textures/LT_Snow_BC.png",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Snow_BC.png",
+      "thumbnail": "assets/starter-content/Textures/LT_Snow_BC.png",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21370,7 +21324,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Textures",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21379,7 +21333,7 @@
       "license": "Project-local generated texture, 2026-10-24",
       "source": {
         "origin": "OpenAI imagegen",
-        "pack": "LandscapeTest alpine terrain",
+        "pack": "Forge Starter Content",
         "packVersion": "2026-10-24"
       }
     },
@@ -21387,8 +21341,8 @@
       "id": "lt-meadow",
       "name": "LT Alpine Meadow",
       "assetType": "material",
-      "category": "LandscapeTest/Materials",
-      "path": "assets/LandscapeTest/Materials/lt-meadow.material.json",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/lt-meadow.material.json",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21402,7 +21356,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Materials",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21410,7 +21364,7 @@
       },
       "source": {
         "origin": "forge",
-        "pack": "LandscapeTest authored terrain"
+        "pack": "Forge Starter Content"
       },
       "license": "Project-local material; texture source metadata retained"
     },
@@ -21418,8 +21372,8 @@
       "id": "lt-earth",
       "name": "LT Earth and Scree",
       "assetType": "material",
-      "category": "LandscapeTest/Materials",
-      "path": "assets/LandscapeTest/Materials/lt-earth.material.json",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/lt-earth.material.json",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21433,7 +21387,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Materials",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21441,7 +21395,7 @@
       },
       "source": {
         "origin": "forge",
-        "pack": "LandscapeTest authored terrain"
+        "pack": "Forge Starter Content"
       },
       "license": "Project-local material; texture source metadata retained"
     },
@@ -21449,8 +21403,8 @@
       "id": "lt-rock",
       "name": "LT Weathered Mountain Rock",
       "assetType": "material",
-      "category": "LandscapeTest/Materials",
-      "path": "assets/LandscapeTest/Materials/lt-rock.material.json",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/lt-rock.material.json",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21464,7 +21418,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Materials",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21472,7 +21426,7 @@
       },
       "source": {
         "origin": "forge",
-        "pack": "LandscapeTest authored terrain"
+        "pack": "Forge Starter Content"
       },
       "license": "Project-local material; texture source metadata retained"
     },
@@ -21480,8 +21434,8 @@
       "id": "lt-snow",
       "name": "LT Alpine Snow",
       "assetType": "material",
-      "category": "LandscapeTest/Materials",
-      "path": "assets/LandscapeTest/Materials/lt-snow.material.json",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/lt-snow.material.json",
       "tags": [
         "landscape-test",
         "terrain",
@@ -21495,7 +21449,7 @@
         "allowScale": false
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Materials",
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
@@ -21503,7 +21457,7 @@
       },
       "source": {
         "origin": "forge",
-        "pack": "LandscapeTest authored terrain"
+        "pack": "Forge Starter Content"
       },
       "license": "Project-local material; texture source metadata retained"
     },
@@ -21511,8 +21465,8 @@
       "id": "lt-alpine-pine",
       "name": "LT Alpine Pine",
       "assetType": "staticMesh",
-      "category": "LandscapeTest/Environment",
-      "path": "assets/LandscapeTest/Models/LT_Alpine_Pine.glb",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/LT_Alpine_Pine.glb",
       "tags": [
         "landscape-test",
         "environment"
@@ -21525,7 +21479,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Environment",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -21541,8 +21495,8 @@
       "id": "lt-valley-tree",
       "name": "LT Valley Tree",
       "assetType": "staticMesh",
-      "category": "LandscapeTest/Environment",
-      "path": "assets/LandscapeTest/Models/LT_Valley_Tree.glb",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/LT_Valley_Tree.glb",
       "tags": [
         "landscape-test",
         "environment"
@@ -21555,7 +21509,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Environment",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -21571,8 +21525,8 @@
       "id": "lt-meadow-tuft",
       "name": "LT Meadow Tuft",
       "assetType": "staticMesh",
-      "category": "LandscapeTest/Environment",
-      "path": "assets/LandscapeTest/Models/LT_Meadow_Tuft.glb",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/LT_Meadow_Tuft.glb",
       "tags": [
         "landscape-test",
         "environment"
@@ -21585,7 +21539,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Environment",
         "castShadow": true,
         "receiveShadow": true,
         "collision": false,
@@ -21601,8 +21555,8 @@
       "id": "lt-boulder-a",
       "name": "LT Boulder A",
       "assetType": "staticMesh",
-      "category": "LandscapeTest/Environment",
-      "path": "assets/LandscapeTest/Models/LT_Boulder_A.glb",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/LT_Boulder_A.glb",
       "tags": [
         "landscape-test",
         "environment"
@@ -21615,7 +21569,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Environment",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -21631,8 +21585,8 @@
       "id": "lt-boulder-b",
       "name": "LT Boulder B",
       "assetType": "staticMesh",
-      "category": "LandscapeTest/Environment",
-      "path": "assets/LandscapeTest/Models/LT_Boulder_B.glb",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/LT_Boulder_B.glb",
       "tags": [
         "landscape-test",
         "environment"
@@ -21645,7 +21599,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "LandscapeTest",
+        "loadGroup": "Environment",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -21818,7 +21772,12 @@
       "assetType": "texture",
       "category": "Textures",
       "path": "assets/starter-content/Textures/T_Sand_Dry_BC.png",
-      "tags": ["sand", "dry", "pebbles", "terrain"],
+      "tags": [
+        "sand",
+        "dry",
+        "pebbles",
+        "terrain"
+      ],
       "placeable": false,
       "placement": {
         "surface": "floor",
@@ -21846,7 +21805,12 @@
       "assetType": "material",
       "category": "Materials",
       "path": "assets/starter-content/Materials/M_Sand_Dry.material.json",
-      "tags": ["sand", "dry", "pebbles", "terrain"],
+      "tags": [
+        "sand",
+        "dry",
+        "pebbles",
+        "terrain"
+      ],
       "placeable": false,
       "placement": {
         "surface": "floor",

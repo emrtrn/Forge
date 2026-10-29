@@ -36,7 +36,7 @@ await internal.projectReady;
 const waterDeadline = performance.now() + 60_000;
 while (internal.riverWaterObjects.length !== internal.layout.riverWaters?.filter((w) => !w.hidden).length
   || internal.lakes?.objects.size !== internal.layout.waterBodies?.filter((w) => !w.hidden).length) {
-  if (performance.now() > waterDeadline) throw new Error("LandscapeTest river/lake did not finish publishing");
+  if (performance.now() > waterDeadline) throw new Error("Review level river/lake did not finish publishing");
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
 // Publication count can match before the streamed bed finishes rebuilding

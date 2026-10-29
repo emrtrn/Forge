@@ -14,10 +14,10 @@ test("terrain water runtime: LandscapeTest GAZ-52 contacts drive environment-lit
         terrainTrackDetailLevels: 2, terrainWaterQuality: "high" } } } })));
   await page.route("**/project.3dgame.json", async (route) => {
     const response = await route.fetch(); const project = await response.json();
-    project.editor.defaultScene = "assets/starter-content/Levels/LandscapeTest.level.json";
+    project.editor.defaultScene = "test-levels/LandscapeTest.level.json";
     await route.fulfill({ response, json: project });
   });
-  await page.route("**/Levels/LandscapeTest.level.json", async (route) => {
+  await page.route("**/test-levels/LandscapeTest.level.json", async (route) => {
     const response = await route.fetch(); const level = await response.json();
     // Keep the actual terrain, lights, atmosphere, post-process and truck.
     // Unrelated streamed props add CPU software-renderer cost, not water coverage.

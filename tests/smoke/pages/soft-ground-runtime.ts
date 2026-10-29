@@ -1,4 +1,4 @@
-/** Test-only host: real LandscapeTest and runtime, with a repeatable entry velocity. */
+/** Test-only host: the LandscapeTest fixture level and real runtime, with a repeatable entry velocity. */
 import type { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { createForgeRuntime } from "@/scene/ForgeRuntime";
 import { createDefaultRuntimeModules } from "@/scene/capabilities/defaultRuntimeModules";
@@ -13,7 +13,7 @@ async function boot() {
     modules: [...createDefaultRuntimeModules(), { id: "soft-ground-qa", onRuntimeStart(host) { services = host; } }],
     gameModules: [createGameModule()],
   });
-  await forge.loadLevel("assets/starter-content/Levels/LandscapeTest.level.json");
+  await forge.loadLevel("test-levels/LandscapeTest.level.json");
   // Keep entry-velocity injection entirely in the test host, with no debug API
   // or new save/motion contract in the production runtime.
   const physics = (forge.app as unknown as { physicsSubsystem: PhysicsSubsystem }).physicsSubsystem;

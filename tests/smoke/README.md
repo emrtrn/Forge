@@ -10,8 +10,12 @@ authoring writes use the copied public directory. No links to writable authoring
 files are used. Generated behavior stubs also resolve inside the disposable cwd.
 
 `fixtures/` owns the base level, AI actor/behavior/closed route, save/load menu
-and a three-segment asphalt road descriptor. The project default scene and
-editable demo landscape do not define these scenarios. Real starter templates
+and a three-segment asphalt road descriptor. `fixtures/levels/` holds the
+test-only levels (LandscapeTest, OffroadTest) with their terrain, cell and foam
+sidecars; the launcher copies them to `test-levels/` in the run's public
+directory, so specs load `test-levels/<Name>.level.json` and `public/` ships no
+test level. `npm run world:offroad` regenerates OffroadTest there. The project
+default scene and editable demo landscape do not define these scenarios. Real starter templates
 and production assets are copied as dependencies, so their integration remains
 under test.
 

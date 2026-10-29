@@ -6,7 +6,7 @@
  *
  * Paint layers name built-in physical materials (grass and dirt stay neutral),
  * which is what the level exists to exercise. Small enough to commit: `npm run
- * world:offroad` rewrites it deterministically (the manifest record is kept by hand).
+ * world:offroad` rewrites it deterministically into the smoke fixtures.
  */
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
@@ -18,10 +18,16 @@ import {
 } from "../../engine/terrain/terrainTypes";
 import { worldTerrainActorPosition } from "../../engine/terrain/worldTerrainActor";
 
-// Beside the other starter test levels, so the Content Browser can open it; the
-// level is registered in the manifest and owns its terrain folder.
-export const OFFROAD_TEST_LEVEL = "assets/starter-content/Levels/OffroadTest.level.json";
-export const OFFROAD_TEST_TERRAIN = "assets/starter-content/Levels/OffroadTest.landscapes/offroad.terrain.json";
+// A test fixture, not project content: it lives in `tests/smoke/fixtures/levels/`
+// and the smoke launcher copies it to `test-levels/` in the isolated public
+// directory. These are the public-relative paths the runtime loads.
+export const OFFROAD_TEST_LEVEL = "test-levels/OffroadTest.level.json";
+export const OFFROAD_TEST_TERRAIN = "test-levels/OffroadTest.landscapes/offroad.terrain.json";
+/** Repo-relative file behind a `test-levels/` public path. */
+export function offroadTestFixtureFile(path: string): string {
+  if (!path.startsWith("test-levels/")) throw new Error(`Not a test level path: ${path}`);
+  return `tests/smoke/fixtures/levels/${path.slice("test-levels/".length)}`;
+}
 
 const TILES = 2;
 const TILE_QUADS = 128;

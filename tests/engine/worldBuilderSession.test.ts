@@ -65,6 +65,8 @@ function harness(files: Record<string, unknown> = {}) {
   /** Every preview the host was asked to draw (null = cleared), and every focus request. */
   const shown: Array<StagePreview | null> = [];
   const focused: Array<PreviewItem | null> = [];
+  /** Every recipe the layer was asked to draw (null = cleared). */
+  const layers: Array<{ sites: number } | null> = [];
   let postStatus = 200;
   const host: WorldBuilderHost = {
     scenePath: () => LEVEL,
@@ -77,6 +79,10 @@ function harness(files: Record<string, unknown> = {}) {
       for (const change of changes) if (change.landscapeId === terrain.id) terrain.splines = structuredClone(change[side]);
     },
     applyPads: async (pads) => void baked.push([...pads]),
+    showRecipeLayer: (recipe) => {
+      layers.push(recipe ? { sites: recipe.generated.sites.length } : null);
+      return recipe?.generated.sites.filter((site) => site.core).length ?? 0;
+    },
     showPreview: (preview) => {
       shown.push(preview);
       return preview?.items.filter((item) => item.placement || item.path?.length).length ?? 0;
@@ -92,7 +98,7 @@ function harness(files: Record<string, unknown> = {}) {
       return postStatus === 200 ? respond(200, { ok: true }) : respond(postStatus, { ok: false, error: "nope" });
     },
   );
-  return { session, history, layout, terrain, rebuilt, statuses, posts, baked, shown, focused, setPostStatus: (status: number) => { postStatus = status; } };
+  return { session, history, layout, terrain, rebuilt, statuses, posts, baked, shown, focused, layers, setPostStatus: (status: number) => { postStatus = status; } };
 }
 
 export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): Promise<void> {
@@ -107,6 +113,24 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     await session.load();
     assert.equal(session.getView().state, "loaded");
     assert.equal(session.dryRun("planBlockout")!.added.length, 2);
+  });
+
+  await checkAsync("world builder session: the recipe layer follows load, apply and undo, and can be hidden", async () => {
+    const { session, history, layers } = harness({ [RECIPE_URL]: planRecipe() });
+    await session.load();
+    assert.deepEqual(layers.at(-1), { sites: 0 });
+    assert.deepEqual(session.getView().layer, { visible: true, drawn: 0 });
+    session.apply("settlementSites");
+    assert.deepEqual(layers.at(-1), { sites: 1 });
+    assert.deepEqual(session.getView().layer, { visible: true, drawn: 1 }, "the site's grown core");
+    history.undo();
+    assert.deepEqual(session.getView().layer.drawn, 0);
+    history.redo();
+    session.toggleLayer();
+    assert.equal(layers.at(-1), null);
+    assert.deepEqual(session.getView().layer, { visible: false, drawn: 0 });
+    session.toggleLayer();
+    assert.deepEqual(session.getView().layer, { visible: true, drawn: 1 });
   });
 
   await checkAsync("world builder session: a level without a recipe can create one as an undo step", async () => {

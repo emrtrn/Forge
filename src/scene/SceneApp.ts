@@ -336,6 +336,7 @@ import { WorldTerrainEditSession } from "@/editor/terrainStore";
 import { WorldBuilderSession } from "@/editor/worldBuilderSession";
 import type { PreviewItem, StagePreview } from "@/editor/worldBuilderPreview";
 import { WorldBuilderPreviewOverlay } from "./worldBuilderPreviewOverlay";
+import { WorldBuilderRecipeOverlay } from "./worldBuilderRecipeOverlay";
 import {
   applyPlacementGroupChanges,
   type PlacementGroupChange,
@@ -1423,10 +1424,13 @@ export class SceneApp {
     terrains: () => this.worldBuilderTerrains(),
     applySplineChanges: (changes, side) => this.applyWorldBuilderSplineChanges(changes, side),
     applyPads: (pads) => this.applyWorldBuilderPads(pads),
+    showRecipeLayer: (recipe) => this.worldBuilderRecipeLayer.show(recipe),
     showPreview: (preview) => this.worldBuilderPreview.show(preview),
     focusPreview: (preview, item) => this.focusWorldBuilderPreview(preview, item),
     onStatus: (message, tone) => this.onStatus?.(message, tone),
   });
+  /** Viewport layer of the World Builder recipe's generated data (settlement cores). */
+  private readonly worldBuilderRecipeLayer = new WorldBuilderRecipeOverlay((x, z) => this.worldTerrainHeightAt(x, z));
   /** Viewport layer of the last World Builder dry run (T10). */
   private readonly worldBuilderPreview = new WorldBuilderPreviewOverlay((assetId) => {
     // Shape bounds come from the procedural model, which a level without that shape has not built yet.
@@ -1931,6 +1935,7 @@ export class SceneApp {
     this.gizmoGroup.visible = false;
     this.scene.add(tagSceneSource(this.gizmoGroup, EDITOR_OVERLAY_SOURCE));
     this.scene.add(tagSceneSource(this.worldBuilderPreview.group, EDITOR_OVERLAY_SOURCE));
+    this.scene.add(tagSceneSource(this.worldBuilderRecipeLayer.group, EDITOR_OVERLAY_SOURCE));
 
     // Register subsystems before scene load adds work to them (e.g. character
     // animations push mixers during loadActiveProjectScene) and before the
@@ -15563,8 +15568,10 @@ export class SceneApp {
   }
 
   private emitHistoryChanged(): void {
-    // A dry run preview was planned against the level before this step.
+    // A dry run preview was planned against the level before this step; the
+    // recipe layer follows the ground, which the step may have moved.
     this.worldBuilder.clearPreview();
+    this.worldBuilder.refreshLayer();
     this.onHistoryChanged?.(this.getHistoryState());
   }
 

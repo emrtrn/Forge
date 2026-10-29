@@ -867,6 +867,8 @@
 .world-builder-swatch-removed { background: #ef5350; }
 .world-builder-swatch-kept { background: #5dade2; }
 .world-builder-swatch-blocked { background: #c06cff; }
+/* Recipe layer; matches WorldBuilderRecipeOverlay's CORE_COLOR. */
+.world-builder-swatch-core { background: #ffd166; }
 .world-partition-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
 .world-partition-summary strong { color: var(--forge-text); font-weight: 600; }
 .world-partition-map {

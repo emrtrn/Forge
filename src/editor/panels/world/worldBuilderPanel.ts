@@ -40,6 +40,7 @@ export class WorldBuilderPanel {
     else if (action === "apply") session.apply(stageId);
     else if (action === "apply-pads") await session.applyPads();
     else if (action === "preview-clear") session.clearPreview();
+    else if (action === "layer-toggle") session.toggleLayer();
     else if (action === "preview-focus") {
       session.focusPreview(id);
       return;
@@ -77,11 +78,20 @@ function renderRecipe(view: WorldBuilderView): string {
       ${counts}
       ${profile}
       ${renderList("Load issues", view.issues, "world-builder-error")}
+      ${view.state === "loaded" ? renderLayer(view.layer) : ""}
     </div>
     <div class="world-builder-actions">
       ${view.state === "missing" || view.state === "invalid" ? '<button type="button" data-wb-action="create" data-testid="world-builder-create">Create Recipe</button>' : ""}
       <button type="button" data-wb-action="reload" ${view.dirty || view.state === "loading" ? "disabled title=\"Save or undo recipe changes first\"" : ""}>Reload From Disk</button>
     </div>
+  </div>`;
+}
+
+function renderLayer(layer: WorldBuilderView["layer"]): string {
+  const count = layer.visible ? `${layer.drawn} settlement core${layer.drawn === 1 ? "" : "s"}` : "hidden";
+  return `<div data-testid="world-builder-layer" data-drawn="${layer.drawn}">
+    <span class="world-builder-swatch world-builder-swatch-core"></span>Viewport: ${count}
+    <button type="button" class="world-builder-change" data-wb-action="layer-toggle" data-testid="world-builder-layer-toggle">${layer.visible ? "Hide" : "Show"}</button>
   </div>`;
 }
 

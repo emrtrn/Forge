@@ -333,6 +333,13 @@ test("World Builder village: the settlement chain places coloured buildings and 
     await expect(page.getByTestId("world-builder-report")).not.toContainText("Errors");
   }
   await expect(page.getByTestId("world-builder-apply-pads")).toBeEnabled();
+  // The recipe layer draws the village's grown core (data-drawn is the overlay's own count).
+  const layer = page.getByTestId("world-builder-layer");
+  await expect(layer).toHaveAttribute("data-drawn", "1");
+  await page.getByTestId("world-builder-layer-toggle").click();
+  await expect(layer).toHaveAttribute("data-drawn", "0");
+  await page.getByTestId("world-builder-layer-toggle").click();
+  await expect(layer).toHaveAttribute("data-drawn", "1");
   await page.getByTestId("world-builder-apply-pads").click();
   // The bake is async (tile demand); wait for it, or fences would read the ground before it.
   await expect(page.getByTestId("editor-status")).toContainText("Pads applied", { timeout: 30_000 });

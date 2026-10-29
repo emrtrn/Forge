@@ -10,6 +10,11 @@
  * order would leave generated objects looking manual, blocking the stage and
  * outliving their plan element.
  *
+ * The recipe's generated data — for now each settlement's core — is drawn
+ * in the viewport as a layer the host keeps in step with the recipe (load,
+ * apply, undo/redo and any history step, since a terrain edit moves the ground
+ * it follows); the panel can hide it.
+ *
  * A dry run that touches an object is also shown in the viewport (T10):
  * the session builds the preview and the host draws it. Apply accepts it,
  * Clear Preview drops it, and any history step drops it too, since the level
@@ -49,6 +54,8 @@ export interface WorldBuilderHost {
   applySplineChanges(changes: readonly TerrainSplineChange[], side: "before" | "after"): void;
   /** Bakes pads into the terrains under them as undoable terrain commands, and reports. */
   applyPads(pads: readonly TerrainPad[]): Promise<void>;
+  /** Draws the recipe's generated layer (null clears it); returns how many settlement cores it drew. */
+  showRecipeLayer(recipe: WorldRecipe | null): number;
   /** Draws a dry run's preview in the viewport (null clears it); returns how many items it drew. */
   showPreview(preview: StagePreview | null): number;
   /** Frames one preview item, or the whole preview when `item` is null. */
@@ -84,6 +91,8 @@ export interface WorldBuilderView {
   lastPlan: StagePlan | null;
   /** The dry run shown in the viewport, and how many of its items were drawn. */
   preview: { preview: StagePreview; drawn: number } | null;
+  /** The recipe layer in the viewport: shown or hidden, and how many cores it drew. */
+  layer: { visible: boolean; drawn: number };
 }
 
 type Fetcher = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -99,6 +108,7 @@ export class WorldBuilderSession {
   private profileView: WorldBuilderView["profile"] = null;
   private lastPlan: StagePlan | null = null;
   private preview: { preview: StagePreview; drawn: number } | null = null;
+  private layer = { visible: true, drawn: 0 };
   private loadedFor = "";
 
   constructor(
@@ -121,6 +131,7 @@ export class WorldBuilderSession {
     this.profileView = null;
     this.lastPlan = null;
     this.clearPreview();
+    this.refreshLayer();
     this.saveRevision.reset();
     const response = await this.fetchJson(projectFileUrl(worldRecipePath(scenePath))).catch(() => null);
     if (this.loadedFor !== scenePath) return;
@@ -134,7 +145,20 @@ export class WorldBuilderSession {
     }
     // Stages read the profile, so the recipe counts as loaded only with it.
     await this.loadProfile();
-    if (this.loadedFor === scenePath) this.state = state;
+    if (this.loadedFor !== scenePath) return;
+    this.state = state;
+    this.refreshLayer();
+  }
+
+  /** Redraws the recipe layer, e.g. after the ground under it changed. */
+  refreshLayer(): void {
+    this.layer.drawn = this.host.showRecipeLayer(this.layer.visible ? this.recipe : null);
+  }
+
+  /** Shows or hides the recipe layer. */
+  toggleLayer(): void {
+    this.layer.visible = !this.layer.visible;
+    this.refreshLayer();
   }
 
   /** Re-reads the recipe from disk, e.g. after an AI rewrote it. Refuses over unsaved edits. */
@@ -277,6 +301,7 @@ export class WorldBuilderSession {
       })),
       lastPlan: this.lastPlan,
       preview: this.preview,
+      layer: { ...this.layer },
     };
   }
 
@@ -328,6 +353,7 @@ export class WorldBuilderSession {
   private setRecipe(recipe: WorldRecipe | null): void {
     this.recipe = recipe;
     this.saveRevision.markDirty();
+    this.refreshLayer();
   }
 
   private async loadProfile(): Promise<void> {

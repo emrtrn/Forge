@@ -76,6 +76,11 @@ export function createSkyObject(): Sky {
   sky.material.depthTest = false;
   sky.renderOrder = -1;
   sky.frustumCulled = false;
+  // The water reflection already samples the environment. A low-resolution
+  // planar capture must not rasterise this enormous HDR solar disc again.
+  sky.userData.waterReflectionBackground = true;
+  sky.userData.waterSunDiscRadiance = new Vector3();
+  sky.userData.waterSunDiscDirection = new Vector3(0, 1, 0);
   // Background geometry is never a pick target.
   sky.raycast = () => {};
   installSkyLocalToneMappingExposure(sky);
@@ -106,11 +111,37 @@ export function applySkyUniforms(sky: Sky, resolved: ResolvedSkyAtmosphere): voi
   // Volumetric Clouds) and we don't need to animate the `time` uniform.
   if (uniforms.cloudCoverage) uniforms.cloudCoverage.value = 0;
   sky.visible = !resolved.hidden;
+  updateWaterSunDisc(sky);
 }
 
 /** Sets the sky's sun-disc/horizon position from a ground->sun direction. */
 export function applySkySunDirection(sky: Sky, sunDirection: Vector3): void {
   (sky.material.uniforms.sunPosition!.value as Vector3).copy(sunDirection);
+  updateWaterSunDisc(sky);
+}
+
+/** The live Sky's linear solar core, before tone mapping/bloom. Reproduce its
+ * atmospheric extinction on the CPU; no capture, pixel readback or new texture.
+ * Coefficients match the installed three.js Sky shader. This only supplies
+ * water metadata and never changes the authored backdrop or its exposure. */
+function updateWaterSunDisc(sky: Sky): void {
+  const u = sky.material.uniforms;
+  const direction = (sky.userData.waterSunDiscDirection ??= new Vector3()) as Vector3;
+  const radiance = (sky.userData.waterSunDiscRadiance ??= new Vector3()) as Vector3;
+  direction.copy(u.sunPosition!.value as Vector3).normalize();
+  const y = MathUtils.clamp(direction.y, 0, 1);
+  if (direction.y <= 0 || (u.showSunDisc && u.showSunDisc.value <= 0)) { radiance.set(0, 0, 0); return; }
+  const zenith = Math.acos(y);
+  const opticalPath = 1 / (y + 0.15 * Math.pow(93.885 - zenith * 180 / Math.PI, -1.253));
+  const energy = 1000 * Math.max(0, 1 - Math.exp(-(1.6110731556870734 - zenith) / 1.5));
+  const rayleigh = Number(u.rayleigh!.value), mie = Number(u.mieCoefficient!.value);
+  const turbidity = Number(u.turbidity!.value);
+  const mieScale = 0.434 * (0.2 * turbidity * 1e-17) * mie;
+  const core = energy * 19000 * 0.04 * (u.showSunDisc ? Number(u.showSunDisc.value) : 1);
+  const extinction = (r: number, m: number) => Math.exp(-opticalPath * (r * rayleigh * 8400 + m * mieScale * 1250));
+  radiance.set(core * extinction(5.804542996261093e-6, 1.8399918514433978e14),
+    core * extinction(1.3562911419845635e-5, 2.7798023919660528e14),
+    core * extinction(3.0265902468824876e-5, 4.0790479543861094e14));
 }
 
 const LIGHT_FORWARD = new Vector3(0, 0, -1);

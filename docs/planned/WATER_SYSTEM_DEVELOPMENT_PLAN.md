@@ -1,11 +1,25 @@
 # Forge Su Sistemi — Görsel Gelişim ve Entegrasyon Planı
 
-Tarih: 29 Ekim 2026 · Durum: V1b ilk uygulaması yapıldı; kullanıcı görsel kabulü ve yeni GPU maliyeti açık.
+Tarih: 29 Ekim 2026 · Durum: V1b ve V1c + güneş parıltısı uygulandı; son Lake görünümü kullanıcı tarafından kabul edildi. Teknik doğrulama ve yeni GPU maliyeti açık.
 
 **Uygulama notu:** Kullanıcı önceliğiyle V1b köpük malzemesi öne alındı.
 Ortak 512² doku, yoğunluğa bağlı desen ve kabarıklık ışıklandırması Lake/River'a
 uygulandı. [Uygulama, doğrulama ve açık sınırlar](../reports/WATER_FOAM_MATERIAL_V1B_2026-10-29.md).
 V0'ın geniş kapsamı ve P0 genel kabulü tamamlanmış sayılmaz.
+
+**Son uygulama:** Lake ortam/planar yansıma birleşimi ve Lake/River ortak GGX
+güneş parıltısı eklendi. Kullanıcının açık isteğiyle bu teslimde TypeScript,
+test, build veya tarayıcı kontrolü çalıştırılmadı. [Uygulama ve elle kontrol
+notları](../reports/WATER_REFLECTION_SUN_GLINT_2026-10-29.md). V1c kabul
+maddelerinin teknik doğrulaması yapılmış sayılmaz.
+
+Kullanıcının ardından paylaştığı görüntüler üzerine paralel mikro-normal
+bantları düzensiz gradyanlarla değiştirildi; atmosfer mesh'inin planar'a güneş
+diskini tekrar çizmesi engellendi. Bloom öncesi sonlu HDR güneş yansıması
+eklendi. Kullanıcı son Lake görüntüsü için “şuan çok daha iyi, görsel kabul
+tamam” onayını verdi. Kabul, gösterilen göl görünümüne aittir; River, bütün
+kalite/gece/gölge senaryoları ve performans kabulüne genişletilmez. Ayrıntılar
+aynı uygulama raporundadır. Sonraki onaylı kapsam V2a Lake kırılmadır.
 
 **Hedef:** Mevcut Lake/River altyapısını koruyarak suyun renk, ışık, köpük ve kırılma kalitesini geliştirmek; daha sonra kalıcı köpük, rüzgârlı yüzey, nesne izi, su altı ve Ocean çalışmalarını ayrı teslimlerle ilerletmek.
 
@@ -143,6 +157,13 @@ Başlangıç noktası: [waterFoam.ts](../../engine/render-three/waterFoam.ts) ve
 ### V1c — Ortam / planar yansıma sürekliliği
 
 Başlangıç noktası: [waterEnvironment.ts](../../engine/render-three/waterEnvironment.ts) ve mevcut planar paylaşımı.
+
+**Uygulama notu:** Ortam temeli, alpha kapsamıyla planar birleştirme ve ortak
+GGX/parıltı kodu eklendi; doğrulama kullanıcı isteğiyle yapılmadı. Lake'te
+authored `Off` bütün ortam/planar yansımayı kapatır. Kalite tavanı planar'ı
+kapattığında ise `Low` yolu mevcut ortamı ödünç alır; yeni capture açılmaz.
+Nehir mevcut ortam/probe yolunu kullanır; yeni River planar adaptörü eklenmedi.
+Güneş parıltısı bu teslimde V4 dalga hareketinden bağımsız malzeme gelişimidir.
 
 - [ ] Mevcut ortam/probe verisini temel yansıma olarak değerlendir; geçerli planar katkısını bununla birleştir. Roughness/mip, Fresnel, renk uzayı ve tone mapping'i birlikte kontrol et.
 - [ ] Planar off/on ve kalite geçişlerinde güneş/ortam katkısını iki kez ekleme; probe/sky verisinin bulunmadığı durumda mevcut güvenli görünümü koru.
@@ -301,11 +322,15 @@ Kaynak referansı, entegrasyon raporunda incelenen **`ce9248fa20afbdf63fd4c11709
 
 ## 13. Sonraki oturumun somut başlangıcı
 
-**Güncel durum:** Köpük önceliğiyle V1b ilk uygulaması teslim edildi. Sonraki
-görsel adım, bu malzemeyi kullanıcının gerçek Lake/River sahnesinde değerlendirip
-gerekli görünüm ayarını yapmaktır; yeni GPU maliyeti ayrıca ölçülmelidir.
+**Güncel durum:** V1b köpüğün ardından V1c ortam/planar birleşimi ve Lake/River
+GGX güneş parıltısı kodlandı. Kullanıcı, görüntüler üzerinden yapılan son
+düzeltmenin Lake görünümünü kabul etti. Kullanıcının isteğiyle otomatik veya
+tarayıcı doğrulaması yapılmadı; tür/build/engine ve GPU maliyeti açık kalır.
+Sonraki onaylı adım, mevcut değişiklikleri kapsamlı olmayan ayrı bir su commit'i
+olarak kaydetmek ve ardından yalnız V2a Lake kırılmayı uygulamaktır. Yeni
+görünümün kontrolünü kullanıcı yapar. River kırılma bu adımın kapsamında değildir.
 Aşağıdaki sıra, planın ilk oluşturulduğu andaki başlangıç önerisidir.
 
 İlk uygulama adımı **V0 ve P0 baseline**: ayrı Lake/eğimli River fixture'ı, sabit kameralar, üç görünümün başlangıç değerleri ve güncel kaynak ölçümü. Sonraki adım V1a ile optik denge, ardından V1b ortak köpük malzemesidir. Yeni kalıcı alanların gerekip gerekmediği ve efekt bütçeleri fixture sonuçlarıyla netleştirilir.
 
-Bu plan hazırlanırken engine/editor kodu, sahne/terrain, bağımlılıklar ve önceki plan/raporlar değiştirilmedi. Yeni işlerin hiçbirine uygulandı veya kabul edildi durumu verilmedi.
+Bu plan ilk hazırlanırken engine/editor kodu, sahne/terrain, bağımlılıklar ve önceki plan/raporlar değiştirilmedi. Sonraki uygulamalar yukarıdaki teslim notlarıyla izlenir; kodlanmış olmak kabul edilmiş olmak anlamına gelmez.

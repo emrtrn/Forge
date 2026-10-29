@@ -14,6 +14,12 @@ float waterNoise(vec2 point) {
 float waterFresnel(float viewCosine) {
   return 0.02 + 0.98 * pow(1.0 - clamp(viewCosine, 0.0, 1.0), 5.0);
 }
+// Roughness-aware grazing reflectance, as in Ultra-Water OceanSurface.js
+// (MIT, Humpalumps; public/licenses/ultra-water.txt).
+float waterRoughFresnel(float viewCosine, float roughness) {
+  float f90 = max(1.0 - 0.7 * roughness, 0.02);
+  return 0.02 + (f90 - 0.02) * pow(1.0 - clamp(viewCosine, 0.0, 1.0), 5.0);
+}
 // Snell: the ray inside water never has the air-side grazing cosine of zero.
 float waterPath(float depth, float airCosine) {
   float waterCosine = sqrt(max(0.0, 1.0 - (1.0 - airCosine * airCosine) / (1.333 * 1.333)));

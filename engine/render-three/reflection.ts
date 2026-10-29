@@ -70,6 +70,9 @@ export function captureSkyEnvironment(
   const previousToneMapping = renderer.toneMapping;
   renderer.toneMapping = NoToneMapping;
   const target = pmrem.fromScene(envScene, 0, 0.1, CAPTURE_FAR);
+  // Water removes only this captured solar hotspot before adding its own
+  // finite analytic sun. Other PBR materials retain the original environment.
+  target.texture.userData.waterSkySunDirection = sunDirection.toArray();
   renderer.toneMapping = previousToneMapping;
 
   captureSky.geometry.dispose();

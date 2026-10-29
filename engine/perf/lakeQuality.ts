@@ -28,7 +28,10 @@ export function qualityLake(lake: LayoutLakeWaterBody, quality: LakeQuality): La
     causticsEnabled: a.causticsEnabled && quality.causticsAllowed,
     foamEnabled: a.foamEnabled && quality.foamAllowed,
     shoreWetnessEnabled: a.shoreWetnessEnabled && quality.shoreWetnessAllowed,
-    reflectionMode: quality.reflectionQuality === "off" ? "off" : a.reflectionMode,
-    reflectionQuality: quality.reflectionQuality === "medium" && a.reflectionQuality === "high" ? "medium" : a.reflectionQuality,
+    // A graphics-tier ceiling disables the extra planar capture, while an
+    // authored Off still disables reflection altogether. Low borrows the sky.
+    reflectionMode: a.reflectionMode,
+    reflectionQuality: quality.reflectionQuality === "off" ? "low"
+      : quality.reflectionQuality === "medium" && a.reflectionQuality === "high" ? "medium" : a.reflectionQuality,
   } };
 }

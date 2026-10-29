@@ -64,7 +64,9 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         opacity: { value: appearance.opacity }, bedVisibility: { value: appearance.bedVisibility },
         absorptionDistance: { value: appearance.absorptionDistance }, reflectionTexture: { value: null },
         reflectionTexelSize: { value: new Vector2(1, 1) },
-        reflectionMatrix: { value: new Matrix4() }, reflectionStrength: { value: 0 } },
+        reflectionMatrix: { value: new Matrix4() }, planarReflectionEnabled: { value: 0 },
+        reflectionStrength: { value: appearance.reflectionMode === "off" ? 0 : appearance.reflectionStrength },
+        sunGlintDetail: { value: quality.reflectionQuality === "off" || appearance.reflectionQuality === "low" ? 0 : 1 } },
       vertexShader: `#include <fog_pars_vertex>
         #include <common>
         #include <shadowmap_pars_vertex>
@@ -91,6 +93,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         uniform vec3 deepColor;uniform vec3 shallowColor;uniform float opacity;
         uniform float bedVisibility;uniform float absorptionDistance;
         uniform sampler2D reflectionTexture;uniform float reflectionStrength;uniform vec2 reflectionTexelSize;
+        uniform float planarReflectionEnabled;uniform float sunGlintDetail;
         varying float vDepth;varying vec2 vUv;varying vec4 vReflection;varying vec3 vWorldPosition;varying vec2 vWaveSlope;
         ${WATER_OPTICS_GLSL}
         ${RIVER_SUN_SHADOW_GLSL}
@@ -104,18 +107,18 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ${LAKE_RIPPLES_GLSL}
         // Small, resolution-aware Gaussian footprint. Reuse the existing planar
         // target; a calm lake keeps a reflection without a razor-sharp bank.
-        vec3 lakeReflection(vec2 uv,float roughness){
+        vec4 lakeReflection(vec2 uv,float roughness){
           vec2 t=reflectionTexelSize*mix(.75,4.,roughness);
           vec2 lo=reflectionTexelSize*.5,hi=vec2(1.)-lo;
-          vec3 c=texture2D(reflectionTexture,clamp(uv,lo,hi)).rgb*4.;
-          c+=texture2D(reflectionTexture,clamp(uv+vec2(t.x,0.),lo,hi)).rgb*2.;
-          c+=texture2D(reflectionTexture,clamp(uv-vec2(t.x,0.),lo,hi)).rgb*2.;
-          c+=texture2D(reflectionTexture,clamp(uv+vec2(0.,t.y),lo,hi)).rgb*2.;
-          c+=texture2D(reflectionTexture,clamp(uv-vec2(0.,t.y),lo,hi)).rgb*2.;
-          c+=texture2D(reflectionTexture,clamp(uv+t,lo,hi)).rgb;
-          c+=texture2D(reflectionTexture,clamp(uv-t,lo,hi)).rgb;
-          c+=texture2D(reflectionTexture,clamp(uv+vec2(t.x,-t.y),lo,hi)).rgb;
-          c+=texture2D(reflectionTexture,clamp(uv+vec2(-t.x,t.y),lo,hi)).rgb;
+          vec4 c=texture2D(reflectionTexture,clamp(uv,lo,hi))*4.;
+          c+=texture2D(reflectionTexture,clamp(uv+vec2(t.x,0.),lo,hi))*2.;
+          c+=texture2D(reflectionTexture,clamp(uv-vec2(t.x,0.),lo,hi))*2.;
+          c+=texture2D(reflectionTexture,clamp(uv+vec2(0.,t.y),lo,hi))*2.;
+          c+=texture2D(reflectionTexture,clamp(uv-vec2(0.,t.y),lo,hi))*2.;
+          c+=texture2D(reflectionTexture,clamp(uv+t,lo,hi));
+          c+=texture2D(reflectionTexture,clamp(uv-t,lo,hi));
+          c+=texture2D(reflectionTexture,clamp(uv+vec2(t.x,-t.y),lo,hi));
+          c+=texture2D(reflectionTexture,clamp(uv+vec2(-t.x,t.y),lo,hi));
           return c/16.;
         }
         void main(){
@@ -147,20 +150,36 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         normal=normalize(geometric+vec3(n.x*.10*shoreBlend,0.,n.y*.10*shoreBlend));
         float roughness=lakeFilteredRoughness(normal);
         float sunVisibility=riverSunVisibility();
-        vec3 glint=lakeSunGlint(normal,viewDirection,roughness,sunVisibility);
+        vec3 glint=waterSunGlint(normal,viewDirection,roughness,sunVisibility)
+          *waterSunSparkle(vWorldPosition,time,sunGlintDetail)*step(0.,viewDirection.y);
         float viewCosine=clamp(abs(dot(normal,viewDirection)),0.,1.);
-        float fresnel=waterFresnel(viewCosine);
+        float fresnel=waterRoughFresnel(viewCosine,roughness);
         vec3 color=mix(deepColor,shallowColor,exp(-d/2.2));
         vec3 surfaceLight=waterSurfaceLight(normal,viewDirection,roughness,sunVisibility);
         color*=surfaceLight;
         float reflectionAmount=0.;
         vec3 reflected=vec3(0.);
-        if(reflectionStrength>0. && viewDirection.y>=0. && vReflection.w>0.){
-          vec2 r=vReflection.xy/vReflection.w+n*.006;
-          if(all(greaterThanEqual(r,vec2(0.)))&&all(lessThanEqual(r,vec2(1.)))){
-            reflectionAmount=clamp(reflectionStrength*fresnel,0.,1.)*smoothstep(0.,.08,d);
-            reflected=lakeReflection(r,roughness);
+        if(reflectionStrength>0. && viewDirection.y>=0.){
+          vec3 direction=reflect(-viewDirection,normal);direction.y=abs(direction.y);
+          vec3 radiance=waterReflectedEnvironment(vWorldPosition,direction,roughness);
+          float coverage=waterEnvironmentCoverage(vWorldPosition);
+          if(planarReflectionEnabled>.5 && vReflection.w>0.){
+            vec2 r=vReflection.xy/vReflection.w+n*.006;
+            if(all(greaterThanEqual(r,vec2(0.)))&&all(lessThanEqual(r,vec2(1.)))){
+              vec2 border=min(r,vec2(1.)-r);
+              float edge=smoothstep(0.,.025,min(border.x,border.y));
+              // Premultiplied planar geometry replaces the environment only
+              // where it has coverage. Blurred empty pixels retain the sky.
+              vec4 planar=lakeReflection(r,roughness)*edge;
+              float alpha=clamp(planar.a,0.,1.);
+              radiance=radiance*(1.-alpha)+planar.rgb;
+              coverage=coverage*(1.-alpha)+alpha;
+            }
           }
+          // Missing sky/probes must not make a partial planar sample darken
+          // the bed a second time. Convert coverage back to straight radiance.
+          reflected=radiance/max(coverage,.00001);
+          reflectionAmount=clamp(reflectionStrength*fresnel*coverage,0.,1.)*smoothstep(0.,.08,d);
         }
         float transmission=waterTransmission(d,path,bedVisibility,absorptionDistance);
         float wetness=smoothstep(0.,.35,d);
@@ -236,7 +255,8 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     if (!quality.foamAllowed) { this.material.uniforms.contactCount!.value = 0; this.material.uniforms.contactOpacity!.value = 0; }
     this.foamTexture = foam; this.receiveShadow = true;
     this.position.set(...data.position); this.name = `Lake:${lake.id}`;
-    this.userData.waterBodyId = lake.id; this.source = source; this.strength = appearance.reflectionStrength;
+    this.userData.waterBodyId = lake.id; this.source = source;
+    this.strength = appearance.reflectionMode === "off" ? 0 : appearance.reflectionStrength;
     this.userData.waterSceneTransmission = true;
     this.layers.enable(31); // Water layer marker; the reflection source hides registered consumers.
     source?.addConsumer(this);
@@ -249,6 +269,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera);
       this.source?.update(renderer, scene, camera);
+      if (this.source) this.material.uniforms.planarReflectionEnabled!.value = this.source.hasCapture ? 1 : 0;
       const snapshot = readWaterScene(renderer, scene, camera);
       this.material.uniforms.waterSceneEnabled!.value = snapshot ? 1 : 0;
       // This path already composites the bed into an opaque final pixel. AO
@@ -270,6 +291,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   /** Switch only presentation resources. Geometry, bounds, normals and wave time stay intact. */
   applyQuality(quality: LakeQuality, source: PlanarReflectionSource | null, bakedFoam?: LakeFoamData, preparedFoam?: DataTexture | null): void {
     const a = resolveLakeAppearance(this.lake), uniforms = this.material.uniforms;
+    uniforms.sunGlintDetail!.value = quality.reflectionQuality === "off" || a.reflectionQuality === "low" ? 0 : 1;
     const foam = quality.foamAllowed && a.foamEnabled ? this.foamTexture ?? preparedFoam ?? createLakeFoamMask(this.lake, this.data, a.foamWidth) : null;
     let bake: ReturnType<typeof lakeFoamTexture> | null = null;
     try {
@@ -331,7 +353,8 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const image = binding?.texture.image as { width: number; height: number } | undefined;
     this.material.uniforms.reflectionTexelSize!.value.set(1 / (image?.width || 1), 1 / (image?.height || 1));
     this.material.uniforms.reflectionMatrix!.value = binding?.textureMatrix ?? new Matrix4();
-    this.material.uniforms.reflectionStrength!.value = binding ? this.strength : 0;
+    this.material.uniforms.planarReflectionEnabled!.value = binding ? 1 : 0;
+    this.material.uniforms.reflectionStrength!.value = this.strength;
   }
   dispose() { for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
     this.foamMaterial.dispose();

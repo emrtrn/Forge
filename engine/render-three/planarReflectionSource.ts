@@ -1,5 +1,6 @@
 import {
   Box3,
+  Color,
   HalfFloatType,
   Matrix4,
   NoToneMapping,
@@ -149,6 +150,7 @@ export class PlanarReflectionSource {
   /** Scratch for the per-frame coverage gate, which must not allocate. */
   private readonly consumerBounds = new Box3();
   private readonly viewProjection = new Matrix4();
+  private readonly clearColor = new Color();
 
   constructor(planeY: number, quality: PlanarReflectionQuality) {
     const settings = QUALITY_SETTINGS[quality];
@@ -318,21 +320,37 @@ export class PlanarReflectionSource {
     reflectionCamera.projectionMatrixInverse.copy(projection).invert();
 
     const hidden = [...this.consumers].map((consumer) => [consumer, consumer.visible] as const);
+    // Sky Atmosphere is a mesh, not scene.background. Clearing the latter is
+    // insufficient: the dome would write its clipped, blocky HDR sun into the
+    // planar target and defeat the environment/geometry coverage blend.
+    scene.traverseVisible(object => {
+      if (object.userData.waterReflectionBackground === true) hidden.push([object, object.visible]);
+    });
     for (const [consumer] of hidden) consumer.visible = false;
     const previousTarget = renderer.getRenderTarget();
     const previousToneMapping = renderer.toneMapping;
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
     const previousXrEnabled = renderer.xr.enabled;
+    const previousBackground = scene.background;
+    const previousClearAlpha = renderer.getClearAlpha();
+    renderer.getClearColor(this.clearColor);
     try {
       renderer.xr.enabled = false;
       renderer.shadowMap.autoUpdate = false;
       renderer.toneMapping = NoToneMapping;
+      // Capture premultiplied scene coverage over transparent black. The water
+      // already borrows a roughness-filtered sky; the planar pass only adds the
+      // scene geometry. Restore both scene and renderer state even on failure.
+      scene.background = null;
+      renderer.setClearColor(0x000000, 0);
       renderer.setRenderTarget(this.renderTarget);
       renderer.state.buffers.depth.setMask(true);
       if (renderer.autoClear === false) renderer.clear();
       renderer.render(scene, reflectionCamera);
       this.captured = true;
     } finally {
+      scene.background = previousBackground;
+      renderer.setClearColor(this.clearColor, previousClearAlpha);
       renderer.xr.enabled = previousXrEnabled;
       renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
       renderer.toneMapping = previousToneMapping;

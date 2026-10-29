@@ -328,7 +328,6 @@ void main() {
     ? vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2])
     : cameraPosition - vWorldPosition;
   viewDirection /= max(length(viewDirection), 0.000001);
-  if (clipDryBed > 0.5 && vWaterDepth <= 0.001) discard;
   float bankSpeed = mix(1.0, 0.38, pow(vShoreDistance, 2.0));
   vec2 advected = vec2(vRiverUv.x * 3.0 - time * flowSpeed * vFlowSpeedMultiplier * bankSpeed, vRiverUv.y * 8.0);
   vec2 warp = vec2(waterNoise(advected * 0.21), waterNoise(advected * 0.19 + vec2(9.3, 2.7))) - 0.5;
@@ -347,9 +346,15 @@ void main() {
   vec2 slope = flowingNormal * (0.22 + vRapidness * 0.12) + currentSlope;
   vec3 opticalNormal = normalize(surfaceNormal + hasNormalMap
     * (tangent * slope.x + bitangent * slope.y));
+  // Derivatives precede discard, so dry-bank helper fragments do not make the
+  // filtered highlights unstable. Low detail keeps the continuous GGX lobe.
+  float reflectionRoughness = waterFilteredRoughness(opticalNormal, 0.38 + (1.0 - waterDetail) * 0.2);
+  float sunRoughness = waterFilteredRoughness(opticalNormal, 0.28);
+  float sunSparkle = waterSunSparkle(vWorldPosition, time, waterDetail);
+  if (clipDryBed > 0.5 && vWaterDepth <= 0.001) discard;
   float viewCosine = clamp(abs(dot(opticalNormal, viewDirection)), 0.0, 1.0);
   // Air/water F0 is approximately 0.02. Strength remains an authored multiplier.
-  float fresnel = waterFresnel(viewCosine);
+  float fresnel = waterRoughFresnel(viewCosine, reflectionRoughness);
   float depth = clamp(vWaterDepth / 2.2, 0.0, 1.0);
   // Ribbon width is not a measurement of bed depth or distance to a rock.
   float shallow = 1.0 - depth;
@@ -406,7 +411,9 @@ void main() {
   }
   #endif
   float foam = realContactEnabled>.5 ? clamp(max(shoreFoam,obstacleFoam) + rapidFoam*(1.-max(shoreFoam,obstacleFoam)), 0., 1.) : clamp(shoreFoam+rapidFoam,0.,1.);
-  vec3 reflected = min(waterReflectedEnvironment(vWorldPosition, reflect(-viewDirection, opticalNormal), 0.38 + (1.0 - waterDetail) * 0.2), vec3(2.0));
+  vec3 reflectionDirection = reflect(-viewDirection, opticalNormal);
+  reflectionDirection.y = abs(reflectionDirection.y);
+  vec3 reflected = min(waterReflectedEnvironment(vWorldPosition, reflectionDirection, reflectionRoughness), vec3(2.0));
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
   float hasEnvironment = step(0.0001, waterEnvironmentIntensity + waterProbeIntensity);
   float reflectionAmount = clamp(reflectionStrength * (0.025 + fresnel * 0.425) * aboveSurface * hasEnvironment
@@ -424,8 +431,8 @@ void main() {
   vec4 foamDetail=waterFoamReady>.5 ? waterFoamDetail(foamWorld,time,materialScale,materialSpeed) : vec4(.5);
   vec3 litFoam=waterFoamLighting(foamDetail,foam,surfaceNormal,viewDirection,foamColor,sunVisibility);
   gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectionAmount * wetness,
-    litFoam, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28, sunVisibility)
-      * wetness * smoothstep(0.03, 0.3, vWaterDepth) * 0.35);
+    litFoam, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, sunRoughness, sunVisibility)
+      * sunSparkle * aboveSurface * wetness * smoothstep(0.03, 0.3, vWaterDepth) * 0.35);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>

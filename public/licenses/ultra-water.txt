@@ -1,11 +1,24 @@
-Forge water foam material attribution
+Forge water material attribution
 
 Adapted from Humpalumps/Ultra-Water at commit
 ce9248fa20afbdf63fd4c11709f68d7368aca0a0:
 src/water/bakeTextures.js (offline procedural texture generation),
-src/water/OceanSurface.js (foam erosion and billow lighting).
+src/water/OceanSurface.js (foam erosion and billow lighting, environment/planar
+coverage composition, roughness-aware Fresnel, GGX sun and facet sparkle).
 Forge changes: offline CPU bake, shared texture lifetime, existing Lake/River
 contact masks, authored scale/flow, Forge lighting/shadows and alpha composition.
+Reflection changes: reuse Forge PMREM and shared planar targets, transparent
+geometry capture, coverage-aware fallback, existing quality ceilings and Off.
+Sun changes: perceptual roughness converted to GGX alpha, finite peak footprint,
+Forge linear-light scaling, filtered river/lake normals, bounded two-scale hash
+facets in place of the demo's Poisson counts, distance fade and horizon gating.
+
+The water solar-disc atmospheric extinction in skyAtmosphere.ts additionally
+adapts coefficients and equations from the installed three.js Sky.js shader.
+Copyright (c) 2010-2026 three.js authors.
+MIT License (permission text below).
+Forge changes: CPU metadata for water only, finite analytic reflection and
+roughness-dependent core/GGX energy split; authored sky rendering is unchanged.
 
 Hash without Sine (hash22), Dave Hoskins:
 https://www.shadertoy.com/view/4djSRW

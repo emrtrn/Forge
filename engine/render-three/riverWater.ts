@@ -4,15 +4,15 @@ import {
   DoubleSide,
   Float32BufferAttribute,
   Mesh,
-  PlaneGeometry,
   ShaderMaterial,
   Texture,
   UniformsLib,
   UniformsUtils,
   Vector2,
   type DataTexture,
+  type DataArrayTexture,
+  Scene,
 } from "three";
-import { PLANAR_REFLECTION_EXCLUDED_LAYER } from "./planarReflectionSource";
 
 import type { ForgeLandscapeSpline, LandscapeSplinePolylineSample } from "@engine/scene/landscape";
 import { splineToPolyline } from "@engine/scene/landscape";
@@ -24,7 +24,12 @@ import type {
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
 import { createWaterEnvironmentUniforms, updateWaterEnvironment, WATER_ENVIRONMENT_GLSL, type WaterEnvironmentProbes } from "./waterEnvironment";
 import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
-import { createWaterShoreMask, riverContactSegments, riverContactSettings, WATER_FOAM_GLSL, WATER_CONTACT_GLSL, createWaterContactUniforms } from "./waterFoam";
+import { createWaterShoreMask, riverContactSegments, WATER_FOAM_GLSL, WATER_CONTACT_GLSL, createWaterContactUniforms } from "./waterFoam";
+import { RiverSurfaceQuery } from "../terrain/riverSurface";
+import { riverFoamSurfaceFingerprint } from "./lakeFoamBake";
+import { lakeFoamTexture, LAKE_GEOMETRY_FOAM_GLSL } from "./lakeFoamTexture";
+import type { LakeFoamData } from "../scene/lakeFoamBake";
+import { registerRiverCaustics } from "./terrain/terrainCaustics";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
@@ -304,6 +309,7 @@ ${WATER_ENVIRONMENT_GLSL}
 ${RIVER_SUN_SHADOW_GLSL}
 ${WATER_FOAM_GLSL}
 ${WATER_CONTACT_GLSL}
+${LAKE_GEOMETRY_FOAM_GLSL}
 uniform float realContactEnabled;
 uniform sampler2D realShoreMask;
 uniform vec2 realShoreOrigin;
@@ -386,6 +392,16 @@ void main() {
       distanceToContact,time,contactScale,contactSpeed)*hasRealShore;
   }
   float obstacleFoam=waterObstacleFoam(vContactPosition,vContactFlow,flowSpeed*vFlowSpeedMultiplier,time);
+  #ifdef FORGE_LAKE_GEOMETRY_FOAM
+  obstacleFoam=lakeGeometryFoam(vWorldPosition.xz,time);
+  vec2 wakeDirection=vContactFlow/max(length(vContactFlow),.0001);
+  float wakeSpeed=max(0.,flowSpeed*vFlowSpeedMultiplier);
+  // Three bounded downstream taps of the baked obstacle mask. No authored sources.
+  for(int wake=1;wake<=3;wake++) {
+    float distance=float(wake)*.65*min(2.,wakeSpeed);
+    obstacleFoam=max(obstacleFoam,lakeGeometryFoam(vWorldPosition.xz-wakeDirection*distance,time)*(.45-float(wake)*.1)*min(1.,wakeSpeed));
+  }
+  #endif
   float foam = realContactEnabled>.5 ? clamp(max(shoreFoam,obstacleFoam) + rapidFoam*(1.-max(shoreFoam,obstacleFoam)), 0., 1.) : clamp(shoreFoam+rapidFoam,0.,1.);
   vec3 reflected = min(waterReflectedEnvironment(vWorldPosition, reflect(-viewDirection, opticalNormal), 0.38 + (1.0 - waterDetail) * 0.2), vec3(2.0));
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
@@ -413,6 +429,7 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   rotation: Vec3;
   /** Repeating grayscale noise used to break up inward shore-wave fronts. */
   foamNoiseMap: Texture | null;
+  bakedFoam?: LakeFoamData;
   /** Existing sky/probe maps, borrowed from the owning scene. No new render pass. */
   environmentProbes?: WaterEnvironmentProbes;
 }
@@ -420,6 +437,12 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
 export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   readonly isRiverWaterObject = true;
   private readonly contactTexture: DataTexture | null;
+  private readonly bakedTexture: DataArrayTexture | null;
+  private effectSurface: RiverSurfaceQuery | undefined;
+  private releaseCaustics: () => void = () => {};
+  readonly effectErrors: string[] = [];
+  getSurface(): RiverSurfaceQuery { return this.effectSurface ??= new RiverSurfaceQuery(this.ribbon, [...this.position.toArray()] as Vec3); }
+  private readonly ribbon: RiverWaterRibbonData;
 
   constructor(item: RiverWaterRenderItem, normalMap: Texture | null) {
     const ribbon = buildRiverWaterRibbon(item.spline, {
@@ -430,14 +453,23 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       foamStamps: item.foamStamps,
       segmentProfiles: item.segmentProfiles,
     });
-    const contact = item.contactFoam?.enabled === true;
+    const contact = item.contactFoam?.enabled === true || !!item.geometryFoam;
+    let surface: RiverSurfaceQuery | undefined;
+    let bake: ReturnType<typeof lakeFoamTexture> | null = null;
+    const errors:string[]=[];
+    if(item.caustics?.enabled || (item.geometryFoam?.enabled && item.bakedFoam)) {
+      try {
+        surface=new RiverSurfaceQuery(ribbon,item.position);
+        if(item.geometryFoam?.enabled&&item.bakedFoam?.metadata.surface==="river"&&item.bakedFoam.metadata.surfaceFingerprint===riverFoamSurfaceFingerprint(surface)) bake=lakeFoamTexture(item.bakedFoam);
+      } catch(error) { errors.push(String(error)); }
+    }
     const min = [Infinity,Infinity], max = [-Infinity,-Infinity];
     for(let i=0;i<ribbon.positions.length;i+=3) {
       min[0]=Math.min(min[0]!,ribbon.positions[i]!); min[1]=Math.min(min[1]!,ribbon.positions[i+2]!);
       max[0]=Math.max(max[0]!,ribbon.positions[i]!); max[1]=Math.max(max[1]!,ribbon.positions[i+2]!);
     }
-    const segments=contact ? riverContactSegments(ribbon.positions,ribbon.bedDepths,ribbon.indices) : [];
-    const contactTexture=segments.length ? createWaterShoreMask(min,max,segments,item.contactFoam!.shoreWidth) : null;
+    const segments=item.contactFoam?.enabled ? riverContactSegments(ribbon.positions,ribbon.bedDepths,ribbon.indices) : [];
+    const contactTexture=segments.length ? createWaterShoreMask(min,max,segments,(item.contactFoam?.shoreWidth??.5)) : null;
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(ribbon.positions, 3));
     geometry.setAttribute("uv", new Float32BufferAttribute(ribbon.uvs, 2));
@@ -450,6 +482,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.setIndex(ribbon.indices);
     geometry.computeBoundingSphere();
     const material = new ShaderMaterial({
+      defines: bake ? { FORGE_LAKE_GEOMETRY_FOAM: 1 } : {},
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       uniforms: {
@@ -457,7 +490,11 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ...UniformsUtils.clone(UniformsLib.lights),
         ...createRiverSunShadowUniforms(),
         ...createWaterEnvironmentUniforms(),
-        ...createWaterContactUniforms(riverContactSettings(item.contactFoam,ribbon.positions,ribbon.bedDepths,ribbon.indices)),
+        ...createWaterContactUniforms(item.contactFoam?{...item.contactFoam,obstacles:[]}:undefined),
+        geometryFoamMask: {value:bake?.texture??null},geometryFoamMin:{value:new Vector2(...(item.bakedFoam?.metadata.min??[0,0]) as [number,number])},
+        geometryFoamSize:{value:new Vector2(item.bakedFoam?item.bakedFoam.metadata.max[0]-item.bakedFoam.metadata.min[0]:1,item.bakedFoam?item.bakedFoam.metadata.max[1]-item.bakedFoam.metadata.min[1]:1)},
+        geometryFoamGrid:{value:bake?.grid??new Vector2(1,1)},geometryFoamTile:{value:bake?.tile??new Vector2(1,1)},
+        geometryFoamStrength:{value:item.geometryFoam?.strength??0},geometryFoamScale:{value:item.geometryFoam?.scale??.8},geometryFoamSpeed:{value:item.geometryFoam?.speed??.3},
         realContactEnabled: { value: contact ? 1 : 0 }, realShoreMask: { value: contactTexture },
         hasRealShore: { value: contactTexture ? 1 : 0 },
         realShoreOrigin: { value: new Vector2(...min as [number,number]) },
@@ -493,6 +530,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       side: DoubleSide,
     });
     super(geometry, material);
+    this.ribbon=ribbon; this.effectSurface=surface; this.bakedTexture=bake?.texture??null;
+    this.effectErrors.push(...errors);
     this.contactTexture = contactTexture;
     this.name = item.name;
     this.position.set(...item.position);
@@ -509,10 +548,13 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.castShadow = false;
     this.receiveShadow = true;
     this.renderOrder = 1;
-    for (const stamp of item.foamStamps) {
-      if (stamp.kind !== "point") continue;
-      this.add(createRiverWaterRadialFoamObject(stamp, item));
-    }
+    this.addEventListener("added",()=>{
+      if(item.caustics?.enabled && this.parent instanceof Scene) {
+        try { this.releaseCaustics=registerRiverCaustics(this.parent,item,this.getSurface(),this); }
+        catch(error) { this.effectErrors.push(String(error)); console.warn("[river-caustics]",item.id,error); }
+      }
+    });
+    this.addEventListener("removed",()=>{this.releaseCaustics();this.releaseCaustics=()=>{};});
     this.onBeforeRender = (_renderer, scene, camera) => {
       this.material.uniforms["time"]!.value = performance.now() / 1000;
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
@@ -521,6 +563,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   }
 
   dispose(): void {
+    this.releaseCaustics(); this.releaseCaustics=()=>{};
+    this.bakedTexture?.dispose();
     this.contactTexture?.dispose();
     for (const child of this.children) {
       if (child instanceof Mesh) {
@@ -533,105 +577,6 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.geometry.dispose();
     this.material.dispose();
   }
-}
-
-const RING_FOAM_VERTEX_SHADER = `
-varying vec2 vUv;
-varying vec3 vWorldPosition;
-#include <shadowmap_pars_vertex>
-void main() {
-  vUv = uv;
-  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-  vWorldPosition = worldPosition.xyz;
-  #include <shadowmap_vertex>
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`;
-
-const RADIAL_FOAM_FRAGMENT_SHADER = `
-uniform sampler2D foamNoiseMap;
-uniform float hasFoamNoiseMap;
-uniform float time;
-uniform float intensity;
-uniform vec3 foamColor;
-uniform float foamOpacity;
-uniform float shoreWaveSpacing;
-uniform float shoreWaveSpeed;
-uniform float shoreWaveReach;
-uniform float shoreWaveBreakupScale;
-varying vec2 vUv;
-varying vec3 vWorldPosition;
-${WATER_OPTICS_GLSL}
-${WATER_ENVIRONMENT_GLSL}
-${RIVER_SUN_SHADOW_GLSL}
-
-void main() {
-  vec2 centred = vUv - 0.5;
-  float radialDistance = length(centred) * 2.0;
-  float angle = atan(centred.y, centred.x) * 0.159154943 + 0.5;
-  vec2 radialNoiseUv = vec2(angle * 2.4 - time * shoreWaveSpeed * 0.035, radialDistance * 3.0) * max(shoreWaveBreakupScale, 0.1);
-  float textureBreakup = texture2D(foamNoiseMap, radialNoiseUv).r;
-  float breakup = mix(0.72, textureBreakup, hasFoamNoiseMap);
-  float fadeStart = max(0.01, shoreWaveReach * 0.62);
-  float radialZone = 1.0 - smoothstep(fadeStart, max(fadeStart + 0.01, shoreWaveReach), radialDistance);
-  // Irregular moving patches, not complete concentric white rings. This is
-  // an authored presentation stamp, not obstacle hydrodynamics.
-  float foamPatch = waterNoise(centred * vec2(9.0, 13.0) * max(shoreWaveSpacing, 0.1)
-    + vec2(time * shoreWaveSpeed * 0.7, -time * shoreWaveSpeed * 0.4));
-  float radialBands = smoothstep(0.53, 0.82, foamPatch + (breakup - 0.5) * 0.3);
-  float alpha = radialZone * radialBands * smoothstep(0.40, 0.76, breakup) * intensity * foamOpacity * 0.48;
-  if (alpha <= 0.002) discard;
-  gl_FragColor = vec4(foamColor * mix(vec3(0.34), vec3(0.72), riverSunVisibility()), alpha);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}`;
-
-/**
- * Creates an obstacle-centred version of the regular shore-wave foam for one point stamp.
- * It is parented under the river ribbon, so authored landscape transforms are
- * inherited. Layer 31 keeps it out of planar-reflection captures.
- */
-function createRiverWaterRadialFoamObject(
-  stamp: LayoutRiverWaterFoamStamp,
-  item: RiverWaterRenderItem,
-): Mesh<PlaneGeometry, ShaderMaterial> {
-  const radius = Math.max(0.05, stamp.radius);
-  const geometry = new PlaneGeometry(radius * 2, radius * 2, 1, 1);
-  const material = new ShaderMaterial({
-    vertexShader: RING_FOAM_VERTEX_SHADER,
-    fragmentShader: RADIAL_FOAM_FRAGMENT_SHADER,
-    lights: true,
-    uniforms: {
-      ...UniformsUtils.clone(UniformsLib.lights),
-      ...createWaterEnvironmentUniforms(),
-      ...createRiverSunShadowUniforms(),
-      foamNoiseMap: { value: item.foamNoiseMap },
-      hasFoamNoiseMap: { value: item.foamNoiseMap ? 1 : 0 },
-      time: { value: 0 },
-      intensity: { value: stamp.intensity },
-      foamColor: { value: new Color(item.foamColor) },
-      foamOpacity: { value: item.foamOpacity },
-      shoreWaveSpacing: { value: item.shoreWaveSpacing },
-      shoreWaveSpeed: { value: item.shoreWaveSpeed },
-      shoreWaveReach: { value: item.shoreWaveReach },
-      shoreWaveBreakupScale: { value: item.shoreWaveBreakupScale },
-    },
-    transparent: true,
-    depthWrite: false,
-    side: DoubleSide,
-  });
-  const overlay = new Mesh(geometry, material);
-  overlay.name = `radial-foam:${stamp.id}`;
-  overlay.position.set(stamp.position[0], stamp.position[1] + 0.025, stamp.position[2]);
-  overlay.rotation.x = -Math.PI / 2;
-  overlay.renderOrder = 2;
-  overlay.receiveShadow = true;
-  overlay.layers.enable(PLANAR_REFLECTION_EXCLUDED_LAYER);
-  overlay.raycast = () => {};
-  overlay.onBeforeRender = (_renderer, scene, camera) => {
-    updateRiverSunShadow(material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
-    material.uniforms["time"]!.value = performance.now() / 1000;
-  };
-  return overlay;
 }
 
 export type RiverWaterObjectLike = RiverWaterObject;

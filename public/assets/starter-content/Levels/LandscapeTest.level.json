@@ -1920,6 +1920,13 @@
           }
         ]
       },
+      "geometryFoam": {
+        "enabled": true,
+        "width": 1,
+        "strength": 0.8,
+        "scale": 0.8,
+        "speed": 0.3
+      },
       "foamStamps": [],
       "reflectionMode": "environment",
       "reflectionQuality": "high"

@@ -55,7 +55,8 @@
   },
   "worldCells": [
     "0_0",
-    "1_0"
+    "1_0",
+    "1_1"
   ],
   "skyAtmosphere": {
     "rayleigh": 1.4,
@@ -166,56 +167,6 @@
         "wheelRippleWidth": 1,
         "wheelRippleWavelength": 0.6,
         "wheelRippleLifetime": 4,
-        "foamScale": 2,
-        "foamSpeed": 2,
-        "causticsStrength": 1,
-        "causticsScale": 1,
-        "causticsSpeed": 2,
-        "causticsDepthFade": 1,
-        "reflectionMode": "sharedPlanar",
-        "reflectionQuality": "medium"
-      }
-    },
-    {
-      "schema": 1,
-      "kind": "lake",
-      "mode": "fillExisting",
-      "coordinateSpace": "world",
-      "id": "lake-2",
-      "terrainRef": "landscape-1",
-      "bounds": {
-        "min": [
-          98,
-          124
-        ],
-        "max": [
-          163,
-          189
-        ]
-      },
-      "seed": [
-        130.1348363408665,
-        156.64497959127345
-      ],
-      "surfaceLevel": -0.15591979677032342,
-      "name": "Lake 2",
-      "appearance": {
-        "wheelRipplesEnabled": true,
-        "shoreWetnessEnabled": true,
-        "foamEnabled": true,
-        "causticsEnabled": true,
-        "absorptionDistance": 2,
-        "surfaceStrength": 2,
-        "surfaceRoughness": 0.2,
-        "normalScale": 1,
-        "rippleSpeed": 2,
-        "wheelRippleStrength": 3,
-        "wheelRippleSpeed": 1.8,
-        "wheelRippleWidth": 1,
-        "wheelRippleWavelength": 0.6,
-        "wheelRippleLifetime": 4,
-        "wheelRippleInterval": 0.12,
-        "shoreWetnessWidth": 1,
         "foamScale": 2,
         "foamSpeed": 2,
         "causticsStrength": 1,

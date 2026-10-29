@@ -6,6 +6,14 @@ açıklamaları Türkçedir. Doğrulama ve açık sınırlar
 [uygulama raporundadır](../reports/LAKE_GEOMETRY_FOAM_BAKE_2026-10-28.md).
 Bu belge önceki elle elips/kapsül yaklaşımının yerine geçen ana akışı tanımlar.
 
+2026-10-29 ek: River'ın eğimli yüzeyine uyarlama tamamlandı. Kullanıcı kararıyla
+manuel Lake/River engel teması ve Radial Foam arayüz/çizim yolu emekliye ayrıldı.
+Yalnız Calculate/Recalculate ile gerçek geometri hesabı kullanılır; eski kayıtlar
+veri kaybı olmadan saklanır. F4 donanım ve 20 UI yaşam döngüsü sonuçları,
+kalan büyük dünya/transient tepe sınırları ve tamamlanan insan görsel kabulü
+[River/F4 raporundadır](../reports/WATER_RIVER_EFFECTS_F4_2026-10-29.md).
+Aşağıdaki ilk Lake kapsamındaki "River sonraki dilim" ifadeleri tarihseldir.
+
 ## 1. Kullanıcı akışı ve kapsam
 
 1. Kullanıcı kayaları, kayalık kümelerini veya iskele gibi statik engelleri

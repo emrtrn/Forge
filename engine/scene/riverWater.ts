@@ -1,4 +1,6 @@
 import { validateWaterContactFoam, type WaterContactFoam } from "./waterContactFoam";
+import { validateLakeGeometryFoam, type LakeGeometryFoam } from "./lakeFoamBake";
+import { validateWaterCaustics, type WaterCaustics } from "./waterCaustics";
 import type {
   LayoutRiverWater,
   LayoutRiverWaterFoamStamp,
@@ -7,6 +9,8 @@ import type {
 
 /** Resolved presentation settings for a spline-driven River Water Body. */
 export interface ResolvedRiverWater {
+  geometryFoam?: LakeGeometryFoam;
+  caustics?: WaterCaustics;
   id: string;
   name: string;
   hidden: boolean;
@@ -103,6 +107,8 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     shoreWaveReach: actor?.shoreWaveReach ?? defaults.shoreWaveReach,
     shoreWaveBreakupScale: actor?.shoreWaveBreakupScale ?? defaults.shoreWaveBreakupScale,
     ...(actor?.contactFoam ? { contactFoam: validateWaterContactFoam(actor.contactFoam) } : {}),
+    ...(actor?.geometryFoam ? { geometryFoam: validateLakeGeometryFoam(actor.geometryFoam) } : {}),
+    ...(actor?.caustics ? { caustics: validateWaterCaustics(actor.caustics) } : {}),
     foamStamps: actor?.foamStamps?.map((stamp) => ({
       ...stamp,
       position: [...stamp.position],

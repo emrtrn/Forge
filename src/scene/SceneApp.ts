@@ -1,5 +1,8 @@
+import { LakeFoamStore } from "./lakeFoamStore";
+import { validateWaterCaustics, type WaterCaustics } from "@engine/scene/waterCaustics";
+import { validateLakeGeometryFoam, type LakeGeometryFoam } from "@engine/scene/lakeFoamBake";
 import { lakeFoamSaveSteps } from "@/editor/lakeFoamSaveSteps";
-import { bakeLakeGeometryFoam, foamSource, foamFingerprint, wetFoamFingerprint } from "@engine/render-three/lakeFoamBake";
+import { bakeLakeGeometryFoam, bakeRiverGeometryFoam, riverFoamSurfaceFingerprint, foamSource, foamFingerprint, wetFoamFingerprint } from "@engine/render-three/lakeFoamBake";
 import { defaultLakeGeometryFoam, encodeLakeFoam } from "@engine/scene/lakeFoamBake";
 import { validateWaterContactFoam, type WaterContactFoam } from "@engine/scene/waterContactFoam";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
@@ -933,6 +936,8 @@ export interface RiverWaterDetailsView {
   reflectionQuality: "low" | "medium" | "high";
   reflectionStrength: number;
   contactFoam?: WaterContactFoam;
+  geometryFoam?: LakeGeometryFoam;
+  caustics?: WaterCaustics;
   foamStamps: LayoutRiverWaterFoamStamp[];
   segmentProfiles: LayoutRiverWaterSegmentProfile[];
   splineSegments: Array<{ id: string; startPointId: string; endPointId: string }>;
@@ -961,6 +966,8 @@ export type RiverWaterDetailsPatch = Partial<Pick<
   | "reflectionGroup"
   | "reflectionQuality"
   | "reflectionStrength"
+  | "geometryFoam"
+  | "caustics"
   | "contactFoam"
   | "foamStamps"
   | "segmentProfiles"
@@ -1112,6 +1119,8 @@ function cloneRiverWater(water: LayoutRiverWater): LayoutRiverWater {
   return {
     ...water,
     ...(water.contactFoam ? { contactFoam: structuredClone(water.contactFoam) } : {}),
+    ...(water.geometryFoam ? { geometryFoam: structuredClone(water.geometryFoam) } : {}),
+    ...(water.caustics ? { caustics: structuredClone(water.caustics) } : {}),
     ...(water.foamStamps
       ? {
           foamStamps: water.foamStamps.map((stamp) => ({
@@ -1585,6 +1594,10 @@ export class SceneApp {
   } | null = null;
   private metadataSchema: MetadataSchema | null = null;
   private layout: RoomLayout | null = null;
+  private readonly riverFoam = new LakeFoamStore();
+  private riverFoamAborter = new AbortController();
+  private riverFoamJob: { id:string; controller:AbortController; progress:string } | null = null;
+  private readonly riverFoamMessages = new Map<string,string>();
   private lakeFoamJob: { id:string; controller:AbortController; progress:string } | null = null;
   private readonly lakeFoamMessages = new Map<string,string>();
   private models = new Map<string, GLTF>();
@@ -2110,6 +2123,8 @@ export class SceneApp {
     this.riverWaterObjects = [];
     for (const source of this.riverReflectionSources) this.waterReflections.release(source);
     this.riverReflectionSources = [];
+    this.riverFoamJob?.controller.abort(); this.riverFoamJob=null;
+    this.riverFoamAborter.abort(); this.riverFoam.clear(); this.riverFoamMessages.clear();
     this.lakeFoamJob?.controller.abort(); this.lakeFoamJob=null;
     this.lakes?.dispose();
     if (this.lakeTimer) clearTimeout(this.lakeTimer);
@@ -4112,7 +4127,7 @@ export class SceneApp {
         const session = this.worldTerrainSessions.get(document);
         return session ? [[id, session] as const] : [];
       })),
-      lakeFoamSteps: () => lakeFoamSaveSteps(this.lakes?.foam,this.layout?.waterBodies ?? []),
+      lakeFoamSteps: () => [...lakeFoamSaveSteps(this.lakes?.foam,this.layout?.waterBodies ?? []),...lakeFoamSaveSteps(this.riverFoam,this.layout?.riverWaters??[])],
       foliageData: this.foliageData,
       meshPaintData: this.meshPaintData,
       worldRecipe: this.worldBuilder,
@@ -4120,6 +4135,7 @@ export class SceneApp {
   }
 
   private async loadActiveProjectScene(): Promise<void> {
+    this.cancelRiverGeometryFoam();this.riverFoamAborter.abort();this.riverFoam.clear();this.riverFoamMessages.clear();
     this.activeProject = await loadActiveProject();
     this.restoreEditorCameraPose(this.activeProject.manifest.editor.defaultScene);
     this.assetLoader = new AssetLoader(this.activeProject.manifest, this.renderer);
@@ -7428,34 +7444,7 @@ export class SceneApp {
     if (!object || !landscape) return;
     const existing = object.getObjectByName("river-water-foam-overlay");
     if (existing instanceof Group) this.disposeSplineOverlayGroup(existing);
-    if (this.selection?.kind !== "landscape" || this.selection.index !== index || this.landscapeSculptSettings.editMode !== "water") return;
-    const waterId = this.landscapeSculptSettings.activeRiverWaterId;
-    const water = this.layout?.riverWaters?.find((entry) => entry.id === waterId && entry.landscapeRef === landscape.id);
-    if (!water) return;
-    const stamps = resolveRiverWater(water).foamStamps.filter((stamp) => stamp.kind === "point");
-    if (stamps.length === 0) return;
-    const overlay = new Group();
-    overlay.name = "river-water-foam-overlay";
-    if (water.coordinateSpace === "world") overlay.position.copy(object.position).negate();
-    const activeId = this.landscapeSculptSettings.activeRiverWaterFoamStampId;
-    for (const stamp of stamps) {
-      const active = stamp.id === activeId;
-      const geometry = new RingGeometry(0.2, 0.38, 20);
-        const material = new MeshBasicMaterial({
-          color: active ? 0xffd23f : 0x50d8ff,
-          depthTest: false,
-          transparent: true,
-          opacity: active ? 1 : 0.9,
-        });
-        const marker = new Mesh(geometry, material);
-      marker.name = `river-water-foam-marker:${stamp.id}`;
-      marker.position.set(stamp.position[0], stamp.position[1] + 0.08, stamp.position[2]);
-        marker.rotation.x = -Math.PI / 2;
-        marker.renderOrder = 24;
-        marker.raycast = () => {};
-      overlay.add(marker);
-    }
-    object.add(overlay);
+    // Manual foam markers are retired; old serialized stamps remain untouched.
   }
 
   private refreshAllRiverWaterFoamOverlays(): void {
@@ -7589,7 +7578,7 @@ export class SceneApp {
 
   async calculateLakeGeometryFoam(): Promise<void> {
     const state=this.getLakeEditorState(),lake=state.source,layout=this.layout,controller=this.lakes;
-    if(!lake||lake.locked||state.draft||this.lakeFoamJob||!layout||!controller)return;
+    if(!lake||lake.locked||state.draft||this.lakeFoamJob||this.riverFoamJob||!layout||!controller)return;
     const wet=controller.results.get(lake.id);if(wet?.status!=="ready"){this.onStatus?.("Lake surface must be ready before calculating foam","warning");return;}
     const levelPath=this.activeProject?.manifest.editor.defaultScene;if(!levelPath)return;
     const job={id:lake.id,controller:new AbortController(),progress:"Collecting geometry"};this.lakeFoamJob=job;this.emitSelectionChanged();
@@ -7637,6 +7626,75 @@ export class SceneApp {
       const message=job.controller.signal.aborted?"Cancelled; previous foam preserved":String(error);
       this.lakeFoamMessages.set(lake.id,message);this.onStatus?.(message,"warning");
     } finally {if(this.lakeFoamJob===job)this.lakeFoamJob=null;this.emitSelectionChanged();}
+  }
+
+  private selectedRiverFoam(id:string) {
+    if(this.selection?.kind!=="landscape")return null;
+    const terrain=this.layout?.landscapes?.[this.selection.index];
+    const water=this.layout?.riverWaters?.find(w=>w.id===id&&w.landscapeRef===terrain?.id);
+    return water&&terrain&&!terrain.locked&&!water.locked&&this.landscapeSculptSettings.activeRiverWaterId===id?water:null;
+  }
+  private riverGeometryFingerprint(id:string):string {
+    const water=this.layout?.riverWaters?.find(w=>w.id===id),document=water?this.worldTerrains.get(water.landscapeRef):undefined;
+    const object=this.riverWaterObjects.find(o=>o.userData.riverWaterId===id);
+    const instances=this.layout?.instances.map(g=>({assetId:g.assetId,placements:g.placements.map(p=>({matrix:composePlacementMatrix(p).elements,hidden:p.hidden===true}))}));
+    return foamFingerprint(JSON.stringify({instances,spline:document?.def.splines?.find(s=>s.id===water?.splineRef),
+      surface:object?riverFoamSurfaceFingerprint(object.getSurface()):null,width:water?.geometryFoam?.width??defaultLakeGeometryFoam().width}));
+  }
+  getRiverGeometryFoamState(id:string) {
+    const water=this.layout?.riverWaters?.find(w=>w.id===id),job=this.riverFoamJob,busy=job?.id===id;
+    let stale=false,message="Not calculated";
+    try {stale=!!water?.geometryFoam?.bake&&water.geometryFoam.bake.fingerprint!==this.riverGeometryFingerprint(id);}
+    catch(error){message=String(error);}
+    if(water?.geometryFoam?.bake)message=stale?"Recalculation required":"Ready";
+    const object=this.riverWaterObjects.find(o=>o.userData.riverWaterId===id);
+    return {busy,stale,message:busy?job.progress:this.riverFoamMessages.get(id)??object?.effectErrors[0]??message};
+  }
+  cancelRiverGeometryFoam():void {this.riverFoamJob?.controller.abort();}
+  clearRiverGeometryFoam(id:string):void {
+    const water=this.selectedRiverFoam(id);if(!water)return;
+    this.cancelRiverGeometryFoam();const settings={...(water.geometryFoam??defaultLakeGeometryFoam())};delete settings.bake;
+    this.riverFoamMessages.delete(id);this.setSelectedLandscapeRiverWater(id,{geometryFoam:settings});
+  }
+  async calculateRiverGeometryFoam(id:string):Promise<void> {
+    const water=this.selectedRiverFoam(id),layout=this.layout,object=this.riverWaterObjects.find(o=>o.userData.riverWaterId===id);
+    const level=this.activeProject?.manifest.editor.defaultScene;
+    if(!water||!layout||!object||!level||this.riverFoamJob||this.lakeFoamJob)return;
+    const job={id,controller:new AbortController(),progress:"Collecting geometry"};this.riverFoamJob=job;this.emitSelectionChanged();
+    try {
+      const surface=object.getSurface(),fingerprint=this.riverGeometryFingerprint(id),width=water.geometryFoam?.width??defaultLakeGeometryFoam().width;
+      const document=this.worldTerrains.get(water.landscapeRef),revision=document?this.worldTerrainSessions.get(document)?.editRevision??0:0;
+      const sources:ReturnType<typeof foamSource>[]=[],versions:string[]=[];
+      let tick=performance.now();
+      for(const group of layout.instances) {
+        if(group.assetId.startsWith("marker:")||/character|vehicle|foliage|vegetation|grass|plant|tree/i.test(this.assetCategory(group.assetId))||!group.placements.some(p=>!p.hidden))continue;
+        if(!this.models.has(group.assetId)&&!await this.ensureAssetLoaded(group.assetId))throw new Error(`Missing geometry: ${group.assetId}`);
+        if(job.controller.signal.aborted)throw new DOMException("Cancelled","AbortError");
+        const model=this.models.get(group.assetId);if(!model)throw new Error(`Missing geometry: ${group.assetId}`);
+        const localBounds=this.localBounds.get(group.assetId)??new Box3().setFromObject(model.scene);
+        for(const [index,placement] of group.placements.entries())if(!placement.hidden) {
+          const matrix=composePlacementMatrix(placement),b=localBounds.clone().applyMatrix4(matrix),o=surface.origin;
+          if(b.max.x>=surface.min[0]+o[0]-width&&b.min.x<=surface.max[0]+o[0]+width&&b.max.z>=surface.min[1]+o[2]-width&&b.min.z<=surface.max[1]+o[2]+width&&b.max.y>=surface.levels[0]+o[1]&&b.min.y<=surface.levels[1]+o[1]) {
+            const source=foamSource(`${group.assetId}:${index}`,model.scene,matrix);sources.push(source);
+            for(const part of source.parts)versions.push(`${part.geometry.uuid}:${(part.geometry.getAttribute("position") as {version?:number})?.version??0}:${part.geometry.index?.version??0}`);
+          }
+          if(sources.length>4096)throw new Error("over-budget: River foam source count exceeds 4096");
+          if(performance.now()-tick>3){await new Promise<void>(resolve=>setTimeout(resolve,0));tick=performance.now();if(job.controller.signal.aborted)throw new DOMException("Cancelled","AbortError");}
+        }
+      }
+      let updated=0;
+      const data=await bakeRiverGeometryFoam(surface,sources,width,fingerprint,job.controller.signal,text=>{job.progress=text;if(performance.now()-updated>200){updated=performance.now();this.emitSelectionChanged();}});
+      const current=()=>this.layout===layout&&this.selectedRiverFoam(id)&&this.riverWaterObjects.includes(object)&&!job.controller.signal.aborted&&
+        this.riverGeometryFingerprint(id)===fingerprint&&(document?this.worldTerrainSessions.get(document)?.editRevision??0:0)===revision&&
+        versions.join("|")===sources.flatMap(s=>s.parts.map(p=>`${p.geometry.uuid}:${(p.geometry.getAttribute("position") as {version?:number})?.version??0}:${p.geometry.index?.version??0}`)).join("|");
+      if(!current())throw new Error("Source changed; calculate foam again");
+      const bake=await this.riverFoam.stage(level,encodeLakeFoam(data));
+      if(!current()){this.riverFoam.discard(bake.manifest);throw new Error("Source changed; calculate foam again");}
+      this.setSelectedLandscapeRiverWater(id,{geometryFoam:{...(this.selectedRiverFoam(id)!.geometryFoam??defaultLakeGeometryFoam()),bake}});
+      this.riverFoamMessages.set(id,`${data.metadata.sources} objects, ${data.metadata.segments} segments, ${(data.metadata.milliseconds/1000).toFixed(2)} s`);
+      this.onStatus?.("River geometry foam calculated. Save to keep this result.","success");
+    }catch(error){const message=job.controller.signal.aborted?"Cancelled; previous foam preserved":String(error);this.riverFoamMessages.set(id,message);this.onStatus?.(message,"warning");}
+    finally{if(this.riverFoamJob===job)this.riverFoamJob=null;this.emitSelectionChanged();}
   }
 
   getLakeEditorState() {
@@ -7909,6 +7967,8 @@ export class SceneApp {
   private async buildRiverWaters(includeLakes = true): Promise<void> {
     if (includeLakes) this.rebuildLakes();
     const build = ++this.riverWaterBuild;
+    this.riverFoamAborter.abort(); this.riverFoamAborter=new AbortController();
+    const foamSignal=this.riverFoamAborter.signal;
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
@@ -7936,10 +7996,23 @@ export class SceneApp {
         const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
         const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
+        let bakedFoam;
+        if(resolved.geometryFoam?.enabled && resolved.geometryFoam.bake) {
+          try {
+            const data=await this.riverFoam.read(resolved.geometryFoam.bake.manifest,foamSignal);
+            if(data.metadata.fingerprint!==resolved.geometryFoam.bake.fingerprint)throw new Error("River foam fingerprint mismatch");
+            const used=[...this.riverWaterObjects,...(this.lakes?.objects.values()??[])].reduce((n,o)=>n+(o.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength??0),0);
+            const {nx,nz}=data.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
+            if(used+tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th)>32*1024**2)throw new Error("over-budget: combined water geometry foam exceeds 32 MiB");
+            bakedFoam=data; this.riverFoamMessages.delete(resolved.id);
+          }catch(error){if(foamSignal.aborted)return;this.riverFoamMessages.set(resolved.id,String(error));console.warn("[river-foam]",resolved.id,error);}
+        }
+        if(build!==this.riverWaterBuild)return;
         const item: RiverWaterRenderItem = {
           ...resolved,
           ...source,
           foamNoiseMap,
+          ...(bakedFoam?{bakedFoam}:{}),
           environmentProbes: () => this.eligibleProbeBakes(),
         };
         const object = createRiverWaterObject(item, normalMap);
@@ -10762,6 +10835,8 @@ export class SceneApp {
           reflectionQuality: resolved.reflectionQuality,
           reflectionStrength: resolved.reflectionStrength,
           ...(resolved.contactFoam ? { contactFoam: structuredClone(resolved.contactFoam) } : {}),
+          ...(resolved.geometryFoam ? { geometryFoam: structuredClone(resolved.geometryFoam) } : {}),
+          ...(resolved.caustics ? { caustics: structuredClone(resolved.caustics) } : {}),
           foamStamps: resolved.foamStamps.map((stamp) => ({
             ...stamp,
             position: [...stamp.position] as Vec3,
@@ -10819,6 +10894,8 @@ export class SceneApp {
     if (patch.reflectionStrength !== undefined) {
       next.reflectionStrength = Number(clamp(patch.reflectionStrength, 0, 1).toFixed(3));
     }
+    if(patch.geometryFoam!==undefined)next.geometryFoam=validateLakeGeometryFoam(patch.geometryFoam);
+    if(patch.caustics!==undefined)next.caustics=validateWaterCaustics(patch.caustics);
     if (patch.contactFoam !== undefined) next.contactFoam = validateWaterContactFoam(patch.contactFoam);
     if (patch.foamStamps !== undefined) {
       next.foamStamps = patch.foamStamps.map((stamp) => ({

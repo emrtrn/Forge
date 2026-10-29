@@ -36,7 +36,7 @@ export async function registerWaterFoamTests(check: Check): Promise<void> {
     }
     const geometry = await buildLakeGeometry(await prepareLakeSnapshot(doc, doc.lake));
     const object = new LakeWaterObject({ ...doc.lake, contactFoam }, geometry, null);
-    assert.equal(object.material.uniforms.contactCount!.value, 1);
+    assert.equal(object.material.uniforms.contactCount!.value, 0, "manual contacts remain loadable but are retired from rendering");
     object.dispose();
     for(const position of [[0,14,0], [30,14,0], [-20,30,-12], [-20,0,-12]]) {
       const invalid = new LakeWaterObject({ ...doc.lake, contactFoam: { ...contactFoam, obstacles: [{ ...contactFoam.obstacles[0]!, position: position as [number,number,number] }] } },geometry,null);

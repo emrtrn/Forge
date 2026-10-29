@@ -454,6 +454,11 @@ export class TerrainRenderer {
       }
       // No wet shore in this scene: compile the texture lookup out entirely,
       // so inactive effects do not consume a GPU texture unit.
+      const riverCaustics = (this.materials.uniforms.uRiverCausticCount!.value as number) > 0 ? 1 : 0;
+      if (defines.FORGE_TERRAIN_RIVER_CAUSTICS !== riverCaustics) {
+        defines.FORGE_TERRAIN_RIVER_CAUSTICS = riverCaustics;
+        this.materials.material.needsUpdate = true;
+      }
       const wetShore = (this.materials.uniforms.uShoreWetCount!.value as number) > 0 ? 1 : 0;
       if (defines.FORGE_TERRAIN_WET_SHORES !== wetShore) {
         defines.FORGE_TERRAIN_WET_SHORES = wetShore;

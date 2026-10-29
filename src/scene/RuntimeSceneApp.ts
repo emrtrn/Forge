@@ -1,3 +1,4 @@
+import { LakeFoamStore } from "./lakeFoamStore";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
@@ -989,6 +990,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private riverWaterObjects: RiverWaterObjectLike[] = [];
   private riverWaterBuild = 0;
   private lakes: LakeWaterController | null = null;
+  private readonly riverFoam = new LakeFoamStore();
+  private riverFoamAborter = new AbortController();
   private readonly waterReflections = new WaterReflectionRegistry();
   private riverReflectionSources: PlanarReflectionSource[] = [];
   private readonly riverWaterTextures = new Map<string, Texture>();
@@ -1986,6 +1989,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.landscapeObjects = [];
     this.riverWaterBuild += 1;
+    this.riverFoamAborter.abort(); this.riverFoam.clear();
     this.lakes?.dispose();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -3517,6 +3521,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.landscapeObjects = [];
     this.riverWaterBuild += 1;
+    this.riverFoamAborter.abort(); this.riverFoam.clear();
     this.lakes?.dispose();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -5896,6 +5901,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
     this.riverWaterBuild += 1;
+    this.riverFoamAborter.abort(); this.riverFoam.clear();
     this.lakes?.dispose();
     this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
@@ -5985,6 +5991,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeRiverWaters(): Promise<void> {
     await this.buildRuntimeLakes();
     const build = ++this.riverWaterBuild;
+    this.riverFoamAborter.abort();this.riverFoamAborter=new AbortController();
+    const foamSignal=this.riverFoamAborter.signal;
     for (const object of this.riverWaterObjects) {
       this.scene.remove(object);
       disposeRiverWaterObject(object);
@@ -6016,11 +6024,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
         const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
+        let bakedFoam;
+        if(resolved.geometryFoam?.enabled&&resolved.geometryFoam.bake) {
+          try {
+            const data=await this.riverFoam.read(resolved.geometryFoam.bake.manifest,foamSignal);
+            if(data.metadata.fingerprint!==resolved.geometryFoam.bake.fingerprint)throw new Error("River foam fingerprint mismatch");
+            const used=[...this.riverWaterObjects,...(this.lakes?.objects.values()??[])].reduce((n,o)=>n+(o.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength??0),0);
+            const {nx,nz}=data.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
+            if(used+tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th)>32*1024**2)throw new Error("over-budget: combined water geometry foam exceeds 32 MiB");
+            bakedFoam=data;
+          }catch(error){if(foamSignal.aborted)return;console.warn("[river-foam]",resolved.id,error);}
+        }
+        if(build!==this.riverWaterBuild)return;
         const object = createRiverWaterObject(
           {
             ...resolved,
             ...source,
             foamNoiseMap,
+            ...(bakedFoam?{bakedFoam}:{}),
             environmentProbes: () => this.eligibleProbeBakes(),
           },
           normalMap,

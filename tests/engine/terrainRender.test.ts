@@ -287,7 +287,7 @@ export function registerTerrainRenderTests(check: Check): void {
 
   check("terrain renderer: the paint layers share one array sampler, as the cascade budget counts", () => {
     // Normals ×2, weights ×2, track field, shared water array, connected Lake faces and wet shore distance.
-    assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 8);
+    assert.equal(TERRAIN_LIT_FIXED_SAMPLERS, 9);
     const { source } = reliefTerrain(65, 1, 1);
     const compile = (material: MeshBasicMaterial, renderer: WebGLRenderer) => {
       const shader = { vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader, uniforms: {} } as WebGLProgramParametersWithUniforms;
@@ -310,7 +310,7 @@ export function registerTerrainRenderTests(check: Check): void {
         // three's own samplers sit behind #includes; every sampler line here is the terrain's.
         const own = shader.fragmentShader.match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm) ?? [];
         assert.equal(own.length, terrainLitFragmentSamplers(textured), `${layerCount} layers, textured ${textured}`);
-        assert.equal(terrain.litFragmentSamplers, textured ? 9 : 8);
+        assert.equal(terrain.litFragmentSamplers, textured ? 10 : 9);
         assert.equal(material.customProgramCacheKey(), `forge-terrain-cdlod-l${textured ? 1 : 0}`, "the layer count is not part of the program");
         assert.ok(!/uLayerTex\d/.test(shader.fragmentShader), "no per-layer samplers");
         if (textured) {

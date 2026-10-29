@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CubeUVReflectionMapping, DirectionalLight, Mesh, PerspectiveCamera, Scene, Vector3, WebGLRenderTarget } from "three";
+import { CubeUVReflectionMapping, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderTarget } from "three";
 import { createWaterEnvironmentUniforms, updateWaterEnvironment } from "../../engine/render-three/waterEnvironment";
 import { createRiverSunShadowUniforms, updateRiverSunShadow } from "../../engine/render-three/riverSunShadow";
 import { SunCascadeShadow } from "../../engine/render-three/sunCascadeShadow";
@@ -105,22 +105,15 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.equal(object.geometry.getAttribute("waterDepth").getX(positions.count - 1), 4);
     assert.equal(object.geometry.getAttribute("flowDirection").getX(0), 1);
     assert.equal(object.geometry.getAttribute("flowDirection").getY(0), 0);
-    assert.equal(object.children.length, 1);
-    const stamp = object.children[0]!;
-    assert.ok(stamp instanceof Mesh);
-    assert.ok(!Array.isArray(stamp.material));
-    assert.equal(stamp.name, "radial-foam:point");
-    assert.deepEqual(stamp.position.toArray(), [-1, 3.525, 0]);
+    assert.equal(object.children.length, 0, "legacy radial foam stays serialized but no longer renders");
     assert.equal(object.material.depthWrite, false);
     assert.equal(object.material.uniforms.reflectionStrength!.value, water.reflectionStrength);
     assert.equal(object.material.uniforms.waterEnvironmentIntensity!.value, 0, "No map is fabricated before a scene supplies one");
     let geometryDisposals = 0, materialDisposals = 0;
     object.geometry.addEventListener("dispose", () => { geometryDisposals++; });
-    stamp.geometry.addEventListener("dispose", () => { geometryDisposals++; });
     object.material.addEventListener("dispose", () => { materialDisposals++; });
-    stamp.material.addEventListener("dispose", () => { materialDisposals++; });
     object.dispose();
-    assert.equal(geometryDisposals, 2); assert.equal(materialDisposals, 2);
+    assert.equal(geometryDisposals, 1); assert.equal(materialDisposals, 1);
     assert.deepEqual({ spline, water }, before);
   });
 
@@ -188,7 +181,7 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.deepEqual(source.foamStamps[0]!.position, [-32, 1.5, -16]);
     const object = createRiverWaterObject({ ...doc.water, ...source, foamNoiseMap: null }, null);
     assert.equal(object.position.y + object.geometry.getAttribute("position").getY(0), 9);
-    assert.equal(object.children[0]!.position.x, -32); object.dispose();
+    assert.equal(object.children.length, 0); object.dispose();
     assert.deepEqual(doc.def, before);
   });
 

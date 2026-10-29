@@ -5,6 +5,9 @@ export interface LakeGeometryFoam {
 }
 export interface LakeFoamMetadata {
   schema: 1; min: [number, number]; max: [number, number]; level: number;
+  /** Absent in existing Lake artifacts. River masks retain their fixed world frame. */
+  surface?: "river";
+  surfaceFingerprint?: string;
   width: number; nx: number; nz: number; sources: number; triangles: number;
   segments: number; milliseconds: number; fingerprint: string;
 }
@@ -43,7 +46,10 @@ export function validateLakeFoamMetadata(value: unknown): LakeFoamMetadata {
   const min=pair(v.min), max=pair(v.max), nx=integer(v.nx,4096), nz=integer(v.nz,4096), width=number(v.width,.1,4);
   if(v.schema!==1 || !nx || !nz || max[0]<=min[0] || max[1]<=min[1] || nx*nz>LAKE_FOAM_MAX_BYTES ||
     (max[0]-min[0])/nx>width/4+1e-9 || (max[1]-min[1])/nz>width/4+1e-9 || typeof v.fingerprint!=="string" || !/^[a-f0-9]{64}$/.test(v.fingerprint)) throw new Error("Invalid Lake foam dimensions/fingerprint");
-  return {schema:1,min,max,nx,nz,width,level:number(v.level,-1e9,1e9),sources:integer(v.sources,4096),triangles:integer(v.triangles,2e6),segments:integer(v.segments,131072),milliseconds:number(v.milliseconds,0,86400000),fingerprint:v.fingerprint};
+  if(v.surface!==undefined&&v.surface!=="river")throw new Error("Invalid foam surface");
+  if(v.surfaceFingerprint!==undefined&&(typeof v.surfaceFingerprint!=="string"||!/^[a-f0-9]{64}$/.test(v.surfaceFingerprint)))throw new Error("Invalid foam surface fingerprint");
+  if(v.surface==="river"&&v.surfaceFingerprint===undefined)throw new Error("Invalid River foam surface fingerprint");
+  return {schema:1,min,max,nx,nz,width,...(v.surface==="river"?{surface:"river" as const}:{}),...(typeof v.surfaceFingerprint==="string"?{surfaceFingerprint:v.surfaceFingerprint}:{}),level:number(v.level,-1e9,1e9),sources:integer(v.sources,4096),triangles:integer(v.triangles,2e6),segments:integer(v.segments,131072),milliseconds:number(v.milliseconds,0,86400000),fingerprint:v.fingerprint};
 }
 export function encodeLakeFoam(data: LakeFoamData): Uint8Array {
   const metadata=validateLakeFoamMetadata(data.metadata);

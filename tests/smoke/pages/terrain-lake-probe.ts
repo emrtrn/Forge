@@ -1,3 +1,5 @@
+import { terrainCausticsResources } from "@engine/render-three/terrain/terrainCaustics";
+import { riverFoamSurfaceFingerprint } from "@engine/render-three/lakeFoamBake";
 import type { RiverWaterObject } from "@engine/render-three/riverWater";
 import { Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
 import type { LakeWaterController } from "@/scene/lakeWaterController";
@@ -20,6 +22,7 @@ export function installLakeProbe(app: unknown) {
     postProcessPipeline: { render(dt: number): void } | null;
     worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
     getLakeEditorState?: SceneApp["getLakeEditorState"];
+    getRiverGeometryFoamState?: SceneApp["getRiverGeometryFoamState"];
     worldTerrainSessions?: WeakMap<WorldTerrainDocument, WorldTerrainEditSession>;
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
@@ -222,6 +225,89 @@ export function installLakeProbe(app: unknown) {
         return { available: true, device, frames: 300, viewport: renderer.getSize(new Vector2()).toArray(), baselineP95Ms: p95(off), causticsP95Ms: p95(on), pairedDeltaP95Ms: p95(on.map((v, i) => v - off[i]!)), additionalCalls: calls[1]! - calls[0]! };
       } finally { queries.forEach(q => gl.deleteQuery(q.query)); restore.forEach(fn => fn()); }
     },
+    effectsFrame(reverse=false,enabled=true,time=0,night=false) {
+      cancelAnimationFrame(a.frameHandle);
+      a.camera.near=.1;a.camera.far=2000;a.camera.position.set(reverse?-35:8,28,reverse?-30:15);a.camera.lookAt(-14,11,-12);a.camera.updateProjectionMatrix();a.camera.updateMatrixWorld(true);
+      const restore:Array<()=>void>=[];
+      a.scene.traverse((node:any)=>{
+        if(night&&node.isDirectionalLight){const intensity=node.intensity;node.intensity=0;restore.push(()=>node.intensity=intensity);}
+        const terrain=node.userData.forgeTerrain,u=node.material?.uniforms;
+        if(!terrain&&!((node.isRiverWaterObject||node.userData.waterBodyId)&&u))return;
+        const before=node.onBeforeRender,foam=u?.geometryFoamStrength?.value,opacity=u?.foamOpacity?.value;
+        node.onBeforeRender=(...args:any[])=>{before(...args);if(terrain){const uniforms=terrain.materials.uniforms;uniforms.uCausticTime.value=time;if(!enabled)uniforms.uCausticCount.value=0;}
+          else{if(u.time)u.time.value=time;if(!enabled){if(u.geometryFoamStrength)u.geometryFoamStrength.value=0;if(u.foamOpacity)u.foamOpacity.value=0;}}};
+        restore.push(()=>{node.onBeforeRender=before;if(foam!==undefined)u.geometryFoamStrength.value=foam;if(opacity!==undefined)u.foamOpacity.value=opacity;});
+      });
+      try {
+        for(const object of a.landscapeObjects)updateLandscapeLod(object,a.camera);
+        if(a.postProcessPipeline)a.postProcessPipeline.render(0);else a.renderer.render(a.scene,a.camera);
+        const gl=a.renderer.getContext(),size=rendererSize();const pixels=new Uint8Array(size[0]*size[1]*4);gl.readPixels(0,0,size[0],size[1],gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+        const samples:number[]=[];for(let i=0;i<pixels.length;i+=64)samples.push(pixels[i]!,pixels[i+1]!,pixels[i+2]!);
+        return {samples,glError:gl.getError(),resources:(window as any).__lakeQA.resources()};
+      }finally{restore.reverse().forEach(fn=>fn());}
+      function rendererSize(){return a.renderer.getDrawingBufferSize(new Vector2()).toArray();}
+    },
+    resources() {
+      const textures=new Set<any>(),geometries=new Set<any>();let cpuBufferBytes=0,riverAtlasBytes=0,geometryFoamBytes=0,causticMaskBytes=0;
+      a.scene.traverse((node:any)=>{
+        if(node.isRiverWaterObject||node.userData.waterBodyId){
+          if(node.geometry&&!geometries.has(node.geometry)){
+            geometries.add(node.geometry);for(const attribute of Object.values(node.geometry.attributes) as any[])cpuBufferBytes+=attribute.array.byteLength;
+            cpuBufferBytes+=node.geometry.index?.array.byteLength??0;
+          }
+          const mask=node.material?.uniforms?.geometryFoamMask?.value;if(mask&&!textures.has(mask)){textures.add(mask);geometryFoamBytes+=mask.image.data.byteLength;}
+        }
+        const u=node.userData.forgeTerrain?.materials.uniforms;
+        for(const key of ["uCausticMask","uRiverCausticData"]){const t=u?.[key]?.value;if(t&&!textures.has(t)){textures.add(t);if(key==="uRiverCausticData")riverAtlasBytes+=t.image.data.byteLength;else causticMaskBytes+=t.image.data.byteLength;}}
+      });
+      const owned=terrainCausticsResources(a.scene);riverAtlasBytes=owned.atlasBytes;causticMaskBytes=owned.patternBytes;cpuBufferBytes+=owned.indexBytes;
+      return {causticsBodies:owned.bodies,causticsRivers:owned.rivers,textures:a.renderer.info.memory.textures,geometries:a.renderer.info.memory.geometries,cpuBufferBytes,riverAtlasBytes,geometryFoamBytes,causticMaskBytes,
+        gpuEffectBaseBytes:riverAtlasBytes+geometryFoamBytes+causticMaskBytes,gpuEffectWithMipsBytes:riverAtlasBytes+geometryFoamBytes+Math.ceil(causticMaskBytes*4/3)};
+    },
+    async effectsGpuPilot(mode="all") {
+      cancelAnimationFrame(a.frameHandle);
+      const renderer=a.renderer,gl=renderer.getContext() as WebGL2RenderingContext;
+      const debug=gl.getExtension("WEBGL_debug_renderer_info"),device=debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
+      const ext=gl.getExtension("EXT_disjoint_timer_query_webgl2");
+      if(!ext||/swiftshader|llvmpipe|software/i.test(device))return {available:false,device,reason:"Hardware timer unavailable"};
+      let enabled=true;const restore:Array<()=>void>=[],queries:Array<{query:WebGLQuery;enabled:boolean}>=[],off:number[]=[],on:number[]=[],calls:number[]=[];
+      const autoReset=renderer.info.autoReset;renderer.info.autoReset=false;
+      a.scene.traverse((node:any)=>{
+        const terrain=node.userData.forgeTerrain,uniforms=node.material?.uniforms;
+        if(!terrain&&!((node.isRiverWaterObject||node.userData.waterBodyId)&&uniforms))return;
+        const before=node.onBeforeRender,foam=uniforms?.geometryFoamStrength?.value,opacity=uniforms?.foamOpacity?.value;
+        node.onBeforeRender=(...args:any[])=>{
+          before(...args);
+          if(terrain){const u=terrain.materials.uniforms;if(!enabled&&mode!=="foam")u.uCausticCount.value=0;u.uCausticTime.value=0;}
+          else {
+            if(uniforms.time)uniforms.time.value=0;
+            node.setSurfaceWaveTime?.(0);
+            if(!enabled&&mode!=="caustics"){if(uniforms.geometryFoamStrength)uniforms.geometryFoamStrength.value=0;if(uniforms.foamOpacity)uniforms.foamOpacity.value=0;}
+            else {if(foam!==undefined)uniforms.geometryFoamStrength.value=foam;if(opacity!==undefined)uniforms.foamOpacity.value=opacity;}
+          }
+        };
+        restore.push(()=>{node.onBeforeRender=before;if(foam!==undefined)uniforms.geometryFoamStrength.value=foam;if(opacity!==undefined)uniforms.foamOpacity.value=opacity;});
+      });
+      const frame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+      const render=(value:boolean)=>{enabled=value;renderer.info.reset();if(a.postProcessPipeline)a.postProcessPipeline.render(0);else renderer.render(a.scene,a.camera);};
+      try {
+        for(let i=0;i<10;i++){render(false);render(true);await frame();}
+        if(gl.getQuery(ext.TIME_ELAPSED_EXT,gl.CURRENT_QUERY))return {available:false,device,reason:"GPU query already owned"};
+        for(let pair=0;pair<300;pair++) {
+          for(const value of pair%2?[true,false]:[false,true]) {
+            const query=gl.createQuery()!;gl.beginQuery(ext.TIME_ELAPSED_EXT,query);render(value);gl.endQuery(ext.TIME_ELAPSED_EXT);gl.flush();queries.push({query,enabled:value});
+            if(pair===299)calls.push(renderer.info.render.calls);
+          }
+          await frame();
+        }
+        for(let i=0;i<120&&queries.some(q=>!gl.getQueryParameter(q.query,gl.QUERY_RESULT_AVAILABLE));i++)await frame();
+        if(gl.getParameter(ext.GPU_DISJOINT_EXT)||queries.some(q=>!gl.getQueryParameter(q.query,gl.QUERY_RESULT_AVAILABLE)))return {available:false,device,reason:"Disjoint or incomplete GPU query"};
+        for(const entry of queries)(entry.enabled?on:off).push(gl.getQueryParameter(entry.query,gl.QUERY_RESULT)/1e6);
+        const p95=(values:number[])=>[...values].sort((a,b)=>a-b)[Math.ceil(values.length*.95)-1]!;
+        return {available:true,device,mode,pairs:300,viewport:renderer.getSize(new Vector2()).toArray(),postProcess:!!a.postProcessPipeline,
+          baselineP95Ms:p95(off),enabledP95Ms:p95(on),pairedDeltaP95Ms:p95(on.map((v,i)=>v-off[i]!)),additionalDraws:calls[0]!-calls[1]!,glError:gl.getError(),off,on};
+      }finally {for(const {query} of queries)gl.deleteQuery(query);restore.forEach(fn=>fn());renderer.info.autoReset=autoReset;}
+    },
     editor() {
       return { state: a.getLakeEditorState?.(), selection: a.selection,
         terrain: [...(a.worldTerrains ?? a.worldTerrainDocuments ?? [])].map(([id, doc]) => {
@@ -285,7 +371,7 @@ export function installLakeProbe(app: unknown) {
       if (a.postProcessPipeline) a.postProcessPipeline.render(0); else a.renderer.render(a.scene, a.camera);
     },
     snapshot() {
-      return { baked:[...(a.lakes?.objects.values()??[])].map(o=>({active:!!o.material.defines.FORGE_LAKE_GEOMETRY_FOAM,bytes:o.material.uniforms.geometryFoamMask?.value?.image?.data?.length??0})), riverContacts: a.riverWaterObjects?.map(o => o.material.uniforms.contactCount?.value ?? 0) ?? [], contacts: [...(a.lakes?.objects.values() ?? [])].map(o => o.material.uniforms.contactCount?.value ?? 0), source: a.getLakeEditorState?.().source ?? a.layout?.waterBodies?.[0] ?? null,
+      return { riverState:(a.layout?.riverWaters??[]).map(w=>a.getRiverGeometryFoamState?.(w.id)),riverSource: structuredClone(a.layout?.riverWaters??[]),riverBaked:a.riverWaterObjects?.map(o=>({active:!!o.material.defines.FORGE_LAKE_GEOMETRY_FOAM,bytes:o.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength??0,errors:o.effectErrors,manual:o.material.uniforms.contactCount?.value??0,surface:riverFoamSurfaceFingerprint(o.getSurface())})),baked:[...(a.lakes?.objects.values()??[])].map(o=>({active:!!o.material.defines.FORGE_LAKE_GEOMETRY_FOAM,bytes:o.material.uniforms.geometryFoamMask?.value?.image?.data?.length??0})), riverContacts: a.riverWaterObjects?.map(o => o.material.uniforms.contactCount?.value ?? 0) ?? [], contacts: [...(a.lakes?.objects.values() ?? [])].map(o => o.material.uniforms.contactCount?.value ?? 0), source: a.getLakeEditorState?.().source ?? a.layout?.waterBodies?.[0] ?? null,
         results: [...(a.lakes?.results ?? [])].map(([id, r]) => {
         let hash = 2166136261;
         for (const buffer of [r.positions, r.depths, r.indices]) for (const v of new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)) hash = Math.imul(hash ^ v, 16777619);

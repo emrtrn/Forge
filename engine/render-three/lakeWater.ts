@@ -1,6 +1,5 @@
 import { lakeFoamTexture, LAKE_GEOMETRY_FOAM_GLSL } from "./lakeFoamTexture";
 import type { LakeFoamData } from "../scene/lakeFoamBake";
-import { LakeSurfaceQuery } from "../terrain/lakeInteraction";
 import { LAKE_SURFACE_GLSL } from "./lakeSurface";
 import { createLakeRippleUniforms, LAKE_RIPPLES_GLSL, updateLakeRippleUniforms } from "./lakeRipples";
 import type { LakeRipple } from "../terrain/lakeInteraction";
@@ -33,12 +32,10 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   constructor(private readonly lake: LayoutLakeWaterBody, private readonly data: LakeGeometry, normal: Texture | null,
     source: PlanarReflectionSource | null = null, bakedFoam?: LakeFoamData, quality: LakeQuality = FULL_LAKE_QUALITY) {
     const appearance = resolveLakeAppearance(lake);
-    const query = lake.contactFoam?.enabled ? new LakeSurfaceQuery(data) : null;
-    const contactSettings = !lake.geometryFoam && lake.contactFoam ? { ...lake.contactFoam, obstacles: lake.contactFoam.obstacles.filter(o =>
-      query?.depthAt(o.position[0],o.position[2]) != null && Math.abs(lake.surfaceLevel-o.position[1])<o.halfHeight) } : undefined;
+    const contactSettings = undefined; // Manual obstacle contacts are retired; immutable geometry bake is the only source.
     const foam = quality.foamAllowed && appearance.foamEnabled ? createLakeFoamMask(lake, data, appearance.foamWidth) : null;
     let bake: ReturnType<typeof lakeFoamTexture> | null;
-    try { bake = quality.foamAllowed && lake.geometryFoam?.enabled && bakedFoam && Math.abs(lake.surfaceLevel-bakedFoam.metadata.level)<1e-6 ? lakeFoamTexture(bakedFoam) : null; }
+    try { bake = quality.foamAllowed && lake.geometryFoam?.enabled && bakedFoam && bakedFoam.metadata.surface!=="river" && Math.abs(lake.surfaceLevel-bakedFoam.metadata.level)<1e-6 ? lakeFoamTexture(bakedFoam) : null; }
     catch (error) { foam?.dispose(); throw error; }
     const waves = lakeWaveParameters(appearance, data.position[0], data.position[2]);
     const geometry = new BufferGeometry();
@@ -274,7 +271,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const foam = quality.foamAllowed && a.foamEnabled ? this.foamTexture ?? createLakeFoamMask(this.lake, this.data, a.foamWidth) : null;
     let bake: ReturnType<typeof lakeFoamTexture> | null = null;
     try {
-      if (quality.foamAllowed && this.lake.geometryFoam?.enabled && !this.geometryFoamTexture && bakedFoam &&
+      if (quality.foamAllowed && this.lake.geometryFoam?.enabled && !this.geometryFoamTexture && bakedFoam && bakedFoam.metadata.surface!=="river" &&
         Math.abs(this.lake.surfaceLevel - bakedFoam.metadata.level) < 1e-6) bake = lakeFoamTexture(bakedFoam);
     } catch (error) { if (foam !== this.foamTexture) foam?.dispose(); throw error; }
     const geometryFoam = quality.foamAllowed && this.lake.geometryFoam?.enabled ? this.geometryFoamTexture ?? bake?.texture ?? null : null;

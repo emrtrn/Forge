@@ -1,4 +1,4 @@
-import { renderWaterContactFoamDetails } from "./waterContactFoamDetails";
+import { renderRiverEffectsDetails } from "./riverEffectsDetails";
 import type { SceneApp } from "@/scene/SceneApp";
 import type { SpecialActorDetailsOptions } from "./specialActorDetails";
 import { LANDSCAPE_EDIT_MODES, landscapeModeSelect } from "./specialActorDetails";
@@ -20,7 +20,7 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
       ${landscapeModeSelect({ ...app.getLandscapeSculptSettings(), editMode: "water" }, context.busy ? "disabled" : "", LANDSCAPE_EDIT_MODES)}
       ${options ? `<label class="detail-toggle"><input type="checkbox" data-detail-toggle="locked" ${context.locked ? "checked" : ""} /><span>Lock Movement</span></label>` : ""}
     </div>`;
-  if (options) renderRiverWaterDetails(options, app.getLakeEditorState().available);
+  if (options) renderRiverWaterDetails(options, app.getLakeEditorState().available, app);
   else body.insertAdjacentHTML("beforeend", `<div class="detail-section"><div class="detail-section-title">Water</div>
     <button type="button" class="detail-action-button" data-water-terrain ${context.busy ? "disabled" : ""}>Back to Water</button>
     ${context.busy ? '<div class="detail-hint">Finish point selection, then create or discard the Lake draft before switching tools.</div>' : ""}
@@ -47,7 +47,7 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
   if (!options) renderLakeDetails(body, app);
 }
 
-function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake: boolean): void {
+function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake: boolean, app: SceneApp): void {
   const { body, selection } = options;
   const lockedAttr = selection.locked ? "disabled" : "";
   const settings = options.getLandscapeSculptSettings();
@@ -79,11 +79,6 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
         <label class="detail-row"><span>Inward Speed</span><input data-river-water-number="shoreWaveSpeed" type="number" min="0" max="10" step="0.05" value="${activeRiverWater.shoreWaveSpeed}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Shore Wave Reach</span><input data-river-water-number="shoreWaveReach" type="number" min="0.05" max="1" step="0.05" value="${activeRiverWater.shoreWaveReach}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Breakup Scale</span><input data-river-water-number="shoreWaveBreakupScale" type="number" min="0.1" max="10" step="0.05" value="${activeRiverWater.shoreWaveBreakupScale}" ${lockedAttr} /></label>
-        <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-foam-add="ring" ${lockedAttr}>+ Add Radial Foam</button></div>
-        <div class="landscape-layer-list">${activeRiverWater.foamStamps.filter((stamp) => stamp.kind === "point").map((stamp) => {
-          const id = escapeHtml(stamp.id);
-          return `<div class="detail-subsection-title"><span>${id} (Radial Foam)</span><span><button type="button" class="detail-action-button" data-river-water-foam-select="${id}:start" ${lockedAttr}>Move Gizmo</button><button type="button" class="detail-action-button" data-river-water-foam-delete="${id}" ${lockedAttr}>Delete</button></span></div><div class="detail-hint">Select the marker or Move Gizmo to position this Radial Foam.</div><label class="detail-row"><span>Radius</span><input data-river-water-foam-number="${id}:radius" type="number" min="0.1" step="0.1" value="${stamp.radius}" ${lockedAttr} /></label><label class="detail-row"><span>Intensity</span><input data-river-water-foam-number="${id}:intensity" type="number" min="0" max="1" step="0.05" value="${stamp.intensity}" ${lockedAttr} /></label>`;
-        }).join("") || "<div class=\"detail-hint\">Add Radial Foam for rocks and piers.</div>"}</div>
       </div><div class="detail-section" data-detail-section="river-reflection"><div class="detail-section-title">Reflection</div>
         <label class="detail-row"><span>Mode</span><select data-river-water-reflection="reflectionMode" ${lockedAttr}><option value="off" ${activeRiverWater.reflectionMode === "off" ? "selected" : ""}>Off</option><option value="environment" ${activeRiverWater.reflectionMode === "environment" ? "selected" : ""}>Environment / Captures</option></select></label>
         <label class="detail-row"><span>Quality</span><select data-river-water-reflection="reflectionQuality" ${lockedAttr}>${["low", "medium", "high"].map((quality) => `<option value="${quality}" ${activeRiverWater.reflectionQuality === quality ? "selected" : ""}>${quality}</option>`).join("")}</select></label>
@@ -98,7 +93,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
       ${availableRiverSplines.length ? "" : `<button type="button" class="detail-action-button" data-water-create-spline ${lockedAttr}>Create Spline</button>`}
     </div>`;
   body.insertAdjacentHTML("beforeend", riverWaterCreateMarkup + '<div data-water-bodies-slot></div>' + riverWaterMarkup);
-  if (activeRiverWater) renderWaterContactFoamDetails(body, activeRiverWater.contactFoam, activeRiverWater.contactOrigin ?? [0, activeRiverWater.surfaceLevel, 0], selection.locked, contactFoam => { options.setSelectedLandscapeRiverWater(activeRiverWater.id, { contactFoam }); options.refreshDetails(); }, true);
+  if (activeRiverWater) renderRiverEffectsDetails(body,app,activeRiverWater,!!selection.locked);
   applyWaterTooltips(body);
   body.querySelector("[data-water-create-spline]")?.addEventListener("click", () => {
     options.setLandscapeSculptSettings({ editMode: "splines", splineTool: "draw" });
@@ -138,55 +133,6 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
       const key = input.dataset.riverWaterColor as "deepColor" | "shallowColor" | "foamColor" | undefined;
       if (!water || !key) return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: input.value } as RiverWaterDetailsPatch);
-      options.refreshDetails();
-    });
-  });
-  body.querySelectorAll<HTMLButtonElement>("[data-river-water-foam-add]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const water = selectedRiverWater();
-      const kind = button.dataset.riverWaterFoamAdd;
-      if (!water || kind !== "ring") return;
-      options.beginSelectedLandscapeRiverWaterRingFoam(water.id);
-      options.refreshDetails();
-    });
-  });
-  body.querySelectorAll<HTMLButtonElement>("[data-river-water-foam-delete]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const water = selectedRiverWater();
-      const stampId = button.dataset.riverWaterFoamDelete;
-      if (!water || !stampId) return;
-      options.removeSelectedLandscapeRiverWaterFoamStamp(water.id, stampId);
-      options.refreshDetails();
-    });
-  });
-  body.querySelectorAll<HTMLButtonElement>("[data-river-water-foam-select]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const water = selectedRiverWater();
-      const [stampId, anchor] = (button.dataset.riverWaterFoamSelect ?? "").split(":");
-      if (!water || !stampId || anchor !== "start") return;
-      options.setLandscapeSculptSettings({
-        activeRiverWaterId: water.id,
-        activeRiverWaterFoamStampId: stampId,
-        activeRiverWaterFoamStampAnchor: "start",
-      });
-      options.refreshDetails();
-    });
-  });
-  body.querySelectorAll<HTMLInputElement>("[data-river-water-foam-number]").forEach((input) => {
-    input.addEventListener("change", () => {
-      const water = selectedRiverWater();
-      const [stampId, key] = (input.dataset.riverWaterFoamNumber ?? "").split(":") as [
-        string,
-        "radius" | "intensity",
-      ];
-      const value = Number(input.value);
-      if (!water || !stampId || !["radius", "intensity"].includes(key) || !Number.isFinite(value)) return;
-      options.setSelectedLandscapeRiverWater(water.id, {
-        foamStamps: water.foamStamps.map((stamp) => {
-          if (stamp.id !== stampId) return stamp;
-          return { ...stamp, [key]: value };
-        }),
-      });
       options.refreshDetails();
     });
   });

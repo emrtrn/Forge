@@ -1,7 +1,7 @@
 import type { LakeFoamStore } from "@/scene/lakeFoamStore";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import type { EditorSaveStep } from "./editorSaveCoordinator";
-export function lakeFoamSaveSteps(store:LakeFoamStore|undefined,bodies:readonly LayoutLakeWaterBody[]):EditorSaveStep[] {
+export function lakeFoamSaveSteps(store:LakeFoamStore|undefined,bodies:readonly Pick<LayoutLakeWaterBody,"geometryFoam">[]):EditorSaveStep[] {
   const paths=new Set(bodies.flatMap(l=>l.geometryFoam?.bake?[l.geometryFoam.bake.manifest]:[]));
   return [...paths].flatMap(path=>{const item=store?.artifact(path);if(!item)return [];
     return [{path,write:async()=>{

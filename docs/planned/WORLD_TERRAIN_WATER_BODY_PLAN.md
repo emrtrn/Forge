@@ -1,5 +1,27 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel uygulama — River caustics, otomatik geometri köpüğü ve F4 — 2026-10-29
+
+C4 River caustics, çizilen nehir üçgenlerinin yerel yüksekliği/wet derinliği ve
+akış yönüyle mevcut terrain ışık katmanına bağlandı. River Obstacle Foam,
+Lake ile aynı Calculate/Recalculate/Cancel/Clear ve kalıcı binary maske akışını
+kullanır; gerçek mesh kesişimi eğimli su yüzüne kırpılır. Reload/Play tarama yapmaz.
+
+Kullanıcı kararı: **yalnız otomatik köpük**. Manuel engel temas alanları ve
+Radial Foam yerleştirme/düzenleme kontrolleri kaldırıldı; Lake/River çizimi eski
+manuel kaynakları kullanmaz. Eski kayıtlar veri kaybı olmadan korunur. Aşağıdaki
+F2–F3 manuel proxy/iz ve C4 açık kayıtları bu güncelleme bakımından tarihseldir.
+
+F4'te RTX 3060 / Chrome / D3D11 / 1920×1080 / post-process koşusunda bir Lake
+ve bir eğimli River ölçüldü: 300 AB/BA çift örnekte ortak ek GPU p95 **0,568 ms**,
+ek draw **0**. Efekt dokuları mip payıyla **1,90 MiB**. 20 UI Clear→Undo
+tekrarında 36 texture / 19 geometri ve buffer byte'ları başlangıç/son aynı.
+Bu sınırlı fixture büyük dünya/transient tepe/ana thread kabulünü kapatmaz.
+**F4 masaüstü görsel kabulü tamamlandı:** Kullanıcı 2026-10-29'da paylaşılan ön
+görünüm ve ters açıdaki otomatik taş köpüğü/dip ışığı yoğunluğunu “Görünüm uygun”
+yanıtıyla onayladı. Büyük dünya/transient tepe/ana thread kabulü ayrı açık kalır.
+[Uygulama, ölçüm, görseller ve kalan kabul sınırları](../reports/WATER_RIVER_EFFECTS_F4_2026-10-29.md).
+
 ## Güncel uygulama — Lake grafik kalite profilleri — 2026-10-29
 
 Lake görünümü mevcut grafik kalite menüsüne ve adaptif sisteme bağlandı.
@@ -436,7 +458,7 @@ altında ve güneş alan dipte görünür. Materyal boyamak su veya fizik oluşt
   ışıldamaz. Derinlikte sönme, güneş/gölge etkisi ve kıyıda yumuşak geçiş.
   Terrain'in mevcut çiziminde uygulanır; her kare CPU geometri üretimi veya
   ek sahne capture hedeflenmez. Maskeler bounded'dır ve yaşam döngüsünde silinir.
-- [ ] **C4 — River:** aynı çekirdek; yerel nehir yüzey yüksekliği ve akış yönü.
+- [x] **C4 — River:** yerel nehir yüzey yüksekliği ve akış yönüyle uygulandı (2026-10-29); güncel kayıt en üsttedir.
   Eğimli nehirlerde tek dünya su kotu varsayılmaz. Lake teslimine dahil değildir.
 - [x] **C5 — Kontroller/kabul:** Lake Details'ta aç/kapat, şiddet, metre cinsinden
   desen boyutu, hız ve derinlikte sönme. Eski kayıtlarda efekt kapalı; ortak

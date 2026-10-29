@@ -1040,8 +1040,21 @@ function layoutEditorPlugin(): Plugin {
             if(createHash("sha256").update(bytes).digest("hex")!==hash)throw new Error("Lake foam checksum mismatch");
             const atomic=async(path:string,content:Uint8Array|string)=>{
               const target=resolvePublicPath(path),temporary=`${target}.${randomUUID()}.tmp`;
+              const expected=Buffer.from(content);
+              const matches=async()=>{
+                try {return (await stat(target)).size===expected.length&&(await readFile(target)).equals(expected);}
+                catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return false;throw error;}
+              };
+              // Content-addressed artifacts are immutable. Re-saving an undo
+              // reference must not replace a binary Chrome may still be reading
+              // (Windows rejects that rename with EPERM).
+              if(await matches())return;
               await mkdir(resolve(target,".."),{recursive:true});
-              try {await writeFile(temporary,content);await rename(temporary,target);}
+              try {
+                await writeFile(temporary,content);
+                try {await rename(temporary,target);}
+                catch(error){if(!await matches())throw error;}
+              }
               finally {await unlink(temporary).catch((error:NodeJS.ErrnoException)=>{if(error.code!=="ENOENT")throw error;});}
             };
             await atomic(payload.dataPath,bytes);

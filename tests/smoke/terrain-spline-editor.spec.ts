@@ -268,9 +268,8 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBe(3);
   await page.locator("[data-landscape-mode]").selectOption("splines");
   await page.locator("[data-landscape-mode]").selectOption("water");
-  await page.locator('[data-river-water-foam-add="ring"]').click();
-  await page.mouse.click(view.x + view.width * 0.5, view.y + view.height * 0.5);
-  await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.foam.length).toBe(1);
+  await expect(page.locator('[data-river-water-foam-add="ring"]')).toHaveCount(0);
+  await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.foam.length).toBe(0);
   const lock = page.locator('[data-detail-toggle="locked"]');
   await lock.check(); await expect(height).toBeDisabled();
   await lock.uncheck(); await expect(height).toBeEnabled();
@@ -278,7 +277,7 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
   expect(saved.riverWaters[0].coordinateSpace).toBe("world"); expect(saved.riverWaters[0].surfaceLevel).toBe(7);
   const editor = (await riverSnapshot(page)).waters[0];
-  expect(editor.foam[0].world[1]).toBeCloseTo(7.025, 5);
+  expect(editor.foam).toEqual([]);
   const time = editor.time;
   await expect.poll(async () => (await riverSnapshot(page)).waters[0].time).toBeGreaterThan(time + 0.2);
   await page.screenshot({ path: info.outputPath("world-river-editor.png") });

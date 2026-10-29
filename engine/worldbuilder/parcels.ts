@@ -15,6 +15,7 @@
  * in a fixed order from a seeded random stream: deterministic. Pure;
  * dependency-free.
  */
+import { inCore, type CoreShape } from "./core";
 import { insidePolygon } from "./field";
 import type { StreetLine } from "./masks";
 import type { WorldPoint } from "./normalize";
@@ -35,6 +36,8 @@ export interface ParcelRequest {
   settlement: string;
   center: WorldPoint;
   coreRadius: number;
+  /** The core's outline when it grew over the ground; absent: the disc of `coreRadius`. */
+  coreOutline?: readonly WorldPoint[];
   streets: readonly StreetLine[];
   frontage: [number, number];
   depth: [number, number];
@@ -70,10 +73,11 @@ export function subdivideStreets(request: ParcelRequest): ParcelResult {
   const dropped: Record<ParcelDropReason, number> = { road: 0, water: 0, protected: 0, offTerrain: 0, overlap: 0, shape: 0 };
   const rank = (line: StreetLine): number => (line.roadClass === undefined ? ROAD_CLASSES.length : ROAD_CLASSES.indexOf(line.roadClass));
   const streets = [...request.streets].sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const core: CoreShape = { center: request.center, radius: request.coreRadius, ...(request.coreOutline ? { outline: request.coreOutline } : {}) };
 
   for (const street of streets) {
     const path = measure(street);
-    const range = coreRange(path, request.center, request.coreRadius);
+    const range = coreRange(path, core);
     if (!range) continue;
     for (const side of [1, -1] as const) {
       const depth = lerp(request.depth, random());
@@ -89,7 +93,7 @@ export function subdivideStreets(request: ParcelRequest): ParcelResult {
           continue;
         }
         const centroid = polygonCentroid(candidate.polygon);
-        if (Math.hypot(centroid[0] - request.center[0], centroid[1] - request.center[1]) > request.coreRadius) continue;
+        if (!inCore(core, centroid)) continue;
         const samples = [...candidate.polygon, ...candidate.inner, centroid];
         const blocked = samples.map(request.blockedAt).find((reason) => reason !== null);
         if (blocked) {
@@ -155,13 +159,13 @@ function sample(path: MeasuredLine, s: number): { point: WorldPoint; tangent: Wo
 }
 
 /** First and last arc length where the street is within the core; null when it never is. */
-function coreRange(path: MeasuredLine, center: WorldPoint, radius: number): [number, number] | null {
+function coreRange(path: MeasuredLine, core: CoreShape): [number, number] | null {
   const total = path.at[path.at.length - 1]!;
   let first: number | null = null;
   let last: number | null = null;
   for (let s = 0; s <= total; s += CORE_STEP) {
     const { point } = sample(path, s);
-    if (Math.hypot(point[0] - center[0], point[1] - center[1]) <= radius) {
+    if (inCore(core, point)) {
       first ??= s;
       last = s;
     }

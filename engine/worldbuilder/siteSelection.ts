@@ -3,12 +3,18 @@
  *
  * The plan's centre is the starting point; the selector may slide it within
  * the search radius to the best local score and reports the slide. A candidate
- * centre is scored over the settlement's built-up core (`estimateCoreRadius`):
+ * centre is scored over its surroundings — the built-up core
+ * (`estimateCoreRadius`), at most `CENTRE_SCORE_RADIUS`: the core itself then
+ * grows over the ground (`growCore`), so a valley floor too narrow for the
+ * whole disc still takes a village:
  *
- * - flatness: mean slope over the core against the slope limit (local roads'
+ * - flatness: mean slope over the surroundings against the slope limit (local roads'
  *   `maxSlopeDeg` by default) — steeper is excluded;
- * - water: near is good, but a centre lower than `floodMargin` above the
- *   nearby water's level is excluded as flood-prone, and one in water too;
+ * - water: near is good, but a centre lower than the flood margin above the
+ *   nearby water's level is excluded as flood-prone, and one in water too.
+ *   The level is the water surface nearest the centre (a stream falls along
+ *   its course; a lake is level), and reach and margin follow the water's
+ *   kind (`FLOOD_BY_KIND`): a stream floods a narrow strip, a river a plain;
  * - roads: near a road (realised spline or planned edge) is good;
  * - optional aspect: facing `preferredAspect` (e.g. a sunny side) is good;
  * - distance from the plan's centre costs a little, so intent wins ties.
@@ -28,8 +34,17 @@ import type { RouteContext } from "./route";
 
 export const DEFAULT_SEARCH_RADIUS = 150;
 export const DEFAULT_FLOOD_MARGIN = 3;
-/** Water within this distance of a centre can flood it, metres. */
-const FLOOD_REACH = 200;
+/** Water within this distance of a centre can flood it, metres (rivers and unknown kinds). */
+export const FLOOD_REACH = 200;
+/** Flood reach and margin by plan water kind; other kinds flood as a river. */
+export const FLOOD_BY_KIND: Readonly<Record<string, { reach: number; margin: number }>> = {
+  stream: { reach: 30, margin: 1 },
+  creek: { reach: 30, margin: 1 },
+  lake: { reach: 100, margin: 2 },
+  pond: { reach: 30, margin: 1 },
+};
+/** Spacing of the level samples along a water's centre line, metres. */
+const LEVEL_STEP = 8;
 /** A centre closer than this to water stands in it, metres. */
 const WATER_CLEARANCE = 5;
 /** Water proximity: full score within the first, none beyond the second, metres. */
@@ -44,6 +59,8 @@ const DEFAULT_PARCEL_AREA = 400;
 /** Share of a settlement's area taken by streets and gaps. */
 const CIRCULATION_SHARE = 0.3;
 const MIN_CORE_RADIUS = 20;
+/** A centre is scored over at most this radius of its surroundings, metres. */
+export const CENTRE_SCORE_RADIUS = 40;
 const MAX_SITE_CELLS = 256;
 
 const WEIGHTS = { slope: 0.45, water: 0.2, road: 0.25, aspect: 0.1, shift: 0.15 } as const;
@@ -53,7 +70,7 @@ export interface SiteOptions {
   searchRadius?: number;
   /** Default: the region profile's local-road `maxSlopeDeg`. */
   maxSlopeDeg?: number;
-  /** Height a centre must keep above nearby water, metres. */
+  /** Height a centre must keep above nearby water, metres; default by the water's kind. */
   floodMargin?: number;
   /** Unit XZ direction the ground should face (downhill), e.g. towards the sun. */
   preferredAspect?: WorldPoint;
@@ -117,9 +134,9 @@ export function selectSite(
 ): SiteResult {
   const searchRadius = options.searchRadius ?? settlement.radius ?? DEFAULT_SEARCH_RADIUS;
   const maxSlope = options.maxSlopeDeg ?? resolveRoadClass(profile, "local").maxSlopeDeg;
-  const floodMargin = options.floodMargin ?? DEFAULT_FLOOD_MARGIN;
   const [cx, cz] = settlement.center;
-  const half = searchRadius + coreRadius;
+  const scoreRadius = Math.min(coreRadius, CENTRE_SCORE_RADIUS);
+  const half = searchRadius + scoreRadius;
   const spec = gridSpecForBounds(
     { min: [cx - half, cz - half], max: [cx + half, cz + half] },
     Math.max(options.cellSize ?? 4, (2 * half) / MAX_SITE_CELLS),
@@ -127,7 +144,7 @@ export function selectSite(
 
   const heights = heightField(spec, context.sampleHeight);
   const slopes = slopeField(heights);
-  const core = coreMeans(slopes, Math.max(1, Math.round((coreRadius * 0.886) / spec.cellSize)));
+  const core = coreMeans(slopes, Math.max(1, Math.round((scoreRadius * 0.886) / spec.cellSize)));
   const water = waterLevels(spec, context);
   const roads = roadSources(context).sources;
   const roadDistance = roads.length > 0 ? distanceField(spec, roads, ROAD_NEAR[1]) : null;
@@ -141,7 +158,7 @@ export function selectSite(
     for (const source of water) {
       const distance = source.distance.values[index]!;
       if (distance <= WATER_CLEARANCE) return "water";
-      if (distance < FLOOD_REACH && height < source.level + floodMargin) return "flood";
+      if (distance < source.reach && height < source.level[index]! + (options.floodMargin ?? source.margin)) return "flood";
       waterDistance = Math.min(waterDistance ?? Infinity, distance);
     }
     const coreSlope = core.mean[index]!;
@@ -216,7 +233,7 @@ export function selectSite(
 }
 
 /** Mean of a field over a (2k+1)² window and the window's no-data share, by summed-area tables. */
-function coreMeans(field: Field, k: number): { mean: Float32Array; offShare: Float32Array } {
+export function coreMeans(field: Field, k: number): { mean: Float32Array; offShare: Float32Array } {
   const { width, depth, values } = field;
   const sums = new Float64Array((width + 1) * (depth + 1));
   const gaps = new Float64Array((width + 1) * (depth + 1));
@@ -258,15 +275,60 @@ function coreMeans(field: Field, k: number): { mean: Float32Array; offShare: Flo
   return { mean, offShare };
 }
 
-/** Each plan water's distance field and level: the lowest terrain under its outline or centre line. */
-function waterLevels(spec: GridSpec, context: RouteContext): Array<{ distance: Field; level: number }> {
-  const result: Array<{ distance: Field; level: number }> = [];
-  for (const source of waterSources(context).sources) {
-    const points = source.kind === "polygon" ? source.polygon : source.kind === "polyline" ? source.points : [source.position];
-    const levels = points.map(([x, z]) => context.sampleHeight(x, z)).filter((height): height is number => height !== null);
-    if (levels.length === 0) continue;
-    result.push({ distance: distanceField(spec, [source], FLOOD_REACH), level: Math.min(...levels) });
-  }
+export interface WaterLevel {
+  /** Distance to the water per cell, metres, capped at `FLOOD_REACH`. */
+  distance: Field;
+  /** Water surface level per cell within `reach`: a lake's lowest shore, a stream's nearest point. */
+  level: Float32Array;
+  /** Flood reach and margin of the water's kind (`FLOOD_BY_KIND`). */
+  reach: number;
+  margin: number;
+}
+
+/** Each plan water's distance field, local level and flood reach. */
+export function waterLevels(spec: GridSpec, context: RouteContext): WaterLevel[] {
+  const result: WaterLevel[] = [];
+  const sources = waterSources(context).sources;
+  context.recipe.plan.water.forEach((water, index) => {
+    const source = sources[index];
+    if (!source) return;
+    const flood = FLOOD_BY_KIND[water.kind] ?? { reach: FLOOD_REACH, margin: DEFAULT_FLOOD_MARGIN };
+    const distance = distanceField(spec, [source], FLOOD_REACH);
+    const level = new Float32Array(spec.width * spec.depth).fill(Number.NaN);
+    if (source.kind === "polyline") {
+      // Level samples along the centre line; each cell takes the nearest one's.
+      const samples: Array<{ point: WorldPoint; height: number }> = [];
+      for (let leg = 1; leg < source.points.length; leg += 1) {
+        const a = source.points[leg - 1]!;
+        const b = source.points[leg]!;
+        const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / LEVEL_STEP));
+        for (let step = leg === 1 ? 0 : 1; step <= steps; step += 1) {
+          const point: WorldPoint = [a[0] + ((b[0] - a[0]) * step) / steps, a[1] + ((b[1] - a[1]) * step) / steps];
+          const height = context.sampleHeight(point[0], point[1]);
+          if (height !== null) samples.push({ point, height });
+        }
+      }
+      if (samples.length === 0) return;
+      for (let cell = 0; cell < level.length; cell += 1) {
+        if (distance.values[cell]! >= flood.reach) continue;
+        const [x, z] = cellCenter(spec, cell % spec.width, Math.floor(cell / spec.width));
+        let best = Infinity;
+        for (const sample of samples) {
+          const d = (sample.point[0] - x) ** 2 + (sample.point[1] - z) ** 2;
+          if (d < best) {
+            best = d;
+            level[cell] = sample.height;
+          }
+        }
+      }
+    } else {
+      const points = source.kind === "polygon" ? source.polygon : [source.position];
+      const heights = points.map(([x, z]) => context.sampleHeight(x, z)).filter((height): height is number => height !== null);
+      if (heights.length === 0) return;
+      level.fill(Math.min(...heights));
+    }
+    result.push({ distance, level, reach: flood.reach, margin: flood.margin });
+  });
   return result;
 }
 

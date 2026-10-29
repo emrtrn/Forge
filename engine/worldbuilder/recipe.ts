@@ -212,8 +212,10 @@ export interface GeneratedPad {
 export interface GeneratedSite {
   settlement: string;
   center: WorldPoint;
-  /** Built-up core radius the program needs, metres. */
+  /** Built-up core radius the program needs, metres; with `core`, how far the core reaches from the centre. */
   coreRadius: number;
+  /** Outline of the core grown over buildable ground; absent: the disc of `coreRadius`. */
+  core?: WorldPoint[];
   /** Site score 0..1; absent when the site was not scored (a protected settlement keeps its planned centre). */
   score?: number;
   dwellings: number;
@@ -555,9 +557,11 @@ function normalizeSites(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedSit
     if (!isNonNegativeInteger(site.dwellings)) return reject(c, `${p}.dwellings`, "must be a non-negative integer");
     if (seen.has(site.settlement)) return reject(c, `${p}.settlement`, `repeats settlement "${site.settlement}"`);
     const score = site.score === undefined ? null : requireNumber(c, `${p}.score`, site.score, 0, 1);
+    const core = optionalPolygon(c, `${p}.core`, site.core);
     // Field order matches what the stage writes, so a reloaded recipe compares equal to a re-run's.
     const result: GeneratedSite = {
-      settlement: site.settlement, center, coreRadius, ...(score === null ? {} : { score }), dwellings: site.dwellings, program: [],
+      settlement: site.settlement, center, coreRadius, ...(core === undefined ? {} : { core }),
+      ...(score === null ? {} : { score }), dwellings: site.dwellings, program: [],
     };
     result.program = arrayOf(c, `${p}.program`, site.program ?? [], (c2, p2, line) => {
       if (!isRecord(line)) return reject(c2, p2, "must be an object");

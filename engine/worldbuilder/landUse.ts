@@ -22,6 +22,7 @@
  * Lines it cannot place are reported with the reason. Pure and deterministic;
  * dependency-free.
  */
+import { coreSpans, inCore, pointAlong, type CoreShape } from "./core";
 import { sourceDistance, type DistanceSource } from "./field";
 import type { StreetLine } from "./masks";
 import type { WorldPoint } from "./normalize";
@@ -222,7 +223,11 @@ export function mergedPolygon(run: ReadonlyArray<{ polygon: readonly WorldPoint[
 }
 
 /** Points where the streets cross the core's edge: the settlement's entrances. */
-export function coreEntrances(lines: readonly StreetLine[], center: WorldPoint, radius: number): WorldPoint[] {
+export function coreEntrances(
+  lines: readonly StreetLine[], center: WorldPoint, radius: number, outline?: readonly WorldPoint[],
+): WorldPoint[] {
+  const core: CoreShape = { center, radius, ...(outline ? { outline } : {}) };
+  if (outline) return grownCoreEntrances(lines, core);
   const entrances: WorldPoint[] = [];
   for (const line of lines) {
     let previous: WorldPoint | null = null;
@@ -233,10 +238,26 @@ export function coreEntrances(lines: readonly StreetLine[], center: WorldPoint, 
       for (let step = leg === 1 ? 0 : 1; step <= steps; step += 1) {
         const t = step / steps;
         const point: WorldPoint = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-        if (previous && inside(previous, center, radius) !== inside(point, center, radius)) {
+        if (previous && inCore(core, previous) !== inCore(core, point)) {
           entrances.push([Number(((previous[0] + point[0]) / 2).toFixed(2)), Number(((previous[1] + point[1]) / 2).toFixed(2))]);
         }
         previous = point;
+      }
+    }
+  }
+  return entrances;
+}
+
+/** Where streets enter or leave a grown core for good, not each time its ragged edge crosses them. */
+function grownCoreEntrances(lines: readonly StreetLine[], core: CoreShape): WorldPoint[] {
+  const entrances: WorldPoint[] = [];
+  for (const line of lines) {
+    const total = line.points.slice(1).reduce((sum, point, index) => sum + Math.hypot(point[0] - line.points[index]![0], point[1] - line.points[index]![1]), 0);
+    for (const [start, end] of coreSpans(core, line.points)) {
+      for (const s of [start > 0 ? start : null, end < total ? end : null]) {
+        if (s === null) continue;
+        const [x, z] = pointAlong(line.points, s);
+        entrances.push([Number(x.toFixed(2)), Number(z.toFixed(2))]);
       }
     }
   }
@@ -486,6 +507,3 @@ function distance(a: WorldPoint, b: WorldPoint): number {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 }
 
-function inside(point: WorldPoint, center: WorldPoint, radius: number): boolean {
-  return Math.hypot(point[0] - center[0], point[1] - center[1]) <= radius;
-}

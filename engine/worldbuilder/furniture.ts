@@ -22,6 +22,7 @@
  * Only roads a spline realises are anchors; every road line is an obstacle.
  * Pure and deterministic. Dependency-free.
  */
+import { circleCrossings, coreSpans, inCore, type CoreShape } from "./core";
 import type { LayoutPlacement } from "../scene/layout";
 import { SHAPE_PRIMITIVE_SIZE } from "../scene/shapes";
 import { sourceDistance, type DistanceSource } from "./field";
@@ -69,6 +70,8 @@ export interface FurnitureRequest {
   lines: readonly FurnitureLine[];
   center: WorldPoint;
   coreRadius: number;
+  /** The core's outline when it grew over the ground; absent: the disc of `coreRadius`. */
+  coreOutline?: readonly WorldPoint[];
   /** The plan's gate nodes of this settlement; none means the core-edge crossings. */
   gateNodes: readonly WorldPoint[];
   trafficSide: TrafficSide;
@@ -120,7 +123,7 @@ export function planFurniture(request: FurnitureRequest): FurnitureResult {
   const outcomes: RuleOutcome[] = request.rules.map(() => ({ placed: 0, spots: 0, blocked: {} }));
   const roads: DistanceSource[] = request.lines.map((line) => ({ kind: "polyline", points: line.points, radii: line.halfWidths }));
   const anchors = request.lines.filter((line) => line.heights !== undefined && line.roadClass !== undefined && line.points.length >= 2);
-  const inCore = (point: WorldPoint) => distance(point, request.center) <= request.coreRadius;
+  const core: CoreShape = { center: request.center, radius: request.coreRadius, ...(request.coreOutline ? { outline: request.coreOutline } : {}) };
   let junctions: Junction[] | null = null;
 
   const order = request.rules.map((_, index) => index)
@@ -134,7 +137,7 @@ export function planFurniture(request: FurnitureRequest): FurnitureResult {
     // Each spot is a list of alternatives; the first free one wins.
     const spots: Spot[][] = [];
     if (rule.placement === "gate") {
-      for (const gate of entrances(lines, request.center, request.coreRadius, request.gateNodes)) {
+      for (const gate of entrances(lines, core, request.gateNodes)) {
         const alternatives: Spot[] = [];
         for (const side of [sideSign(request.trafficSide), -sideSign(request.trafficSide)]) {
           for (const shift of GATE_SHIFTS) {
@@ -150,7 +153,7 @@ export function planFurniture(request: FurnitureRequest): FurnitureResult {
     } else if (rule.placement === "junction") {
       junctions ??= findJunctions(request.lines);
       for (const junction of junctions) {
-        if (!inCore(junction.center) || !junction.arms.some((arm) => arm.roadClass !== undefined && classes.has(arm.roadClass))) continue;
+        if (!inCore(core, junction.center) || !junction.arms.some((arm) => arm.roadClass !== undefined && classes.has(arm.roadClass))) continue;
         const radius = Math.max(width, depth) / 2;
         spots.push(junctionGaps(junction).map((gap) => {
           const clearance = gap.halfWidth + FURNITURE_MARGIN + radius;
@@ -163,13 +166,13 @@ export function planFurniture(request: FurnitureRequest): FurnitureResult {
       for (const line of lines) {
         const length = polylineLength(line.points);
         for (let s = spacing / 2; s < length; s += spacing) {
-          if (!inCore(pointAt(line, s).point)) continue;
+          if (!inCore(core, pointAt(line, s).point)) continue;
           const alternatives: Spot[] = [];
           for (const side of [sideSign(request.trafficSide), -sideSign(request.trafficSide)]) {
             for (const shift of side === sideSign(request.trafficSide) ? INTERVAL_SHIFTS : [0]) {
               if (Math.abs(shift) >= spacing / 3) continue;
               const at = pointAt(line, s + shift);
-              if (!inCore(at.point)) continue;
+              if (!inCore(core, at.point)) continue;
               const lateral = scale(rightOf(at.tangent), side);
               const offset = at.halfWidth + FURNITURE_MARGIN + depth / 2;
               alternatives.push({ center: add(at.point, scale(lateral, offset)), face: scale(lateral, -1), base: at.height });
@@ -299,11 +302,11 @@ interface Entrance {
 /**
  * Where the anchor roads enter the settlement: at each gate node (its nearest
  * point on a road, the road's inward direction towards the centre), or
- * without gate nodes wherever a road crosses the core's edge.
+ * without gate nodes wherever a road crosses the core's edge — for a grown
+ * core, where it enters or leaves for good (`coreSpans`).
  */
-function entrances(
-  lines: readonly FurnitureLine[], center: WorldPoint, coreRadius: number, gateNodes: readonly WorldPoint[],
-): Entrance[] {
+function entrances(lines: readonly FurnitureLine[], core: CoreShape, gateNodes: readonly WorldPoint[]): Entrance[] {
+  const { center, radius: coreRadius } = core;
   const found: Entrance[] = [];
   if (gateNodes.length > 0) {
     for (const node of gateNodes) {
@@ -320,6 +323,14 @@ function entrances(
     return found;
   }
   for (const line of lines) {
+    if (core.outline) {
+      const total = line.points.slice(1).reduce((sum, point, index) => sum + distance(line.points[index]!, point), 0);
+      for (const [start, end] of coreSpans(core, line.points)) {
+        if (start > 0) found.push({ line, s: start, direction: 1 });
+        if (end < total) found.push({ line, s: end, direction: -1 });
+      }
+      continue;
+    }
     let s = 0;
     for (let leg = 1; leg < line.points.length; leg += 1) {
       const a = line.points[leg - 1]!;
@@ -335,20 +346,6 @@ function entrances(
     }
   }
   return found;
-}
-
-/** Parameters in [0, 1) where segment a→b crosses the circle. */
-function circleCrossings(a: WorldPoint, b: WorldPoint, center: WorldPoint, radius: number): number[] {
-  const d = sub(b, a);
-  const f = sub(a, center);
-  const qa = d[0] * d[0] + d[1] * d[1];
-  if (qa === 0) return [];
-  const qb = 2 * (f[0] * d[0] + f[1] * d[1]);
-  const qc = f[0] * f[0] + f[1] * f[1] - radius * radius;
-  const disc = qb * qb - 4 * qa * qc;
-  if (disc <= 0) return [];
-  const root = Math.sqrt(disc);
-  return [(-qb - root) / (2 * qa), (-qb + root) / (2 * qa)].filter((t) => t >= 0 && t < 1);
 }
 
 // ---------------------------------------------------------------- junctions

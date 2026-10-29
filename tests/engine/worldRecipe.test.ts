@@ -49,7 +49,9 @@ function maximalRecipe(): Record<string, unknown> {
     },
     generated: {
       sites: [{
-        settlement: "village_01", center: [318, 152.5], coreRadius: 146, score: 0.812, dwellings: 74,
+        settlement: "village_01", center: [318, 152.5], coreRadius: 160,
+        core: [[200, 100], [460, 110.5], [450, 210], [190, 190]],
+        score: 0.812, dwellings: 74,
         program: [
           { role: "open.square", count: 1, siting: "center", source: "profile" },
           { role: "building.transport.depot", count: 1, siting: "entrance", source: "recipe" },

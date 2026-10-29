@@ -107,6 +107,7 @@ export const furnitureStage: WorldStage = {
         lines,
         center: site.center,
         coreRadius: site.coreRadius,
+        ...(site.core ? { coreOutline: site.core } : {}),
         gateNodes: recipe.plan.roadGraph.nodes
           .filter((node) => node.kind === "gate" && node.settlement === settlement.id)
           .map((node) => node.position),

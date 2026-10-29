@@ -66,7 +66,7 @@ export const landUseStage: WorldStage = {
         program: site.program,
         profile,
         edgeClass: (edge) => edges.get(edge),
-        entrances: coreEntrances(streets, site.center, site.coreRadius),
+        entrances: coreEntrances(streets, site.center, site.coreRadius, site.core),
         water,
         sampleHeight: input.sampleHeight,
         seed: ((settlement.seed ?? hashSeed(recipe.seed, settlement.id)) ^ SEED_SALT) >>> 0,

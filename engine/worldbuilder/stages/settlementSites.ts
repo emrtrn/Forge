@@ -3,40 +3,42 @@
  * (World Builder plan v0.4 §13.3, §13.5; F1 step 9).
  *
  * Writes `recipe.generated.sites` — the chosen centre, the built-up core
- * radius and the resolved program the parcel and land-use stages read — and a
- * flat disc marker of the core on the terrain, so the user sees where each
- * settlement landed. A slide from the planned centre is reported with its
- * reason. With no valid site the settlement gets no site and no marker, and
- * the report says why: the stage does not put a village somewhere bad.
+ * and the resolved program the parcel and land-use stages read. It places
+ * nothing in the level: v1 stood a flat disc on the core, which on sloping
+ * ground floated above it on one side and sank on the other, and v2 removes
+ * it (the editor draws the core instead). A slide from the planned centre is
+ * reported with its reason. With no valid site the settlement gets no site,
+ * and the report says why: the stage does not put a village somewhere bad.
+ *
+ * The core grows from the centre over buildable ground until it holds the
+ * area the program needs (`growCore`, v2): along a valley a village runs along
+ * the valley instead of a disc reaching up its sides. Ground that holds less
+ * is reported.
  *
  * A protected settlement keeps the site it has (or its planned centre); its
  * program is still refreshed.
  */
-import type { LayoutPlacement } from "../../scene/layout";
-import { SHAPE_PRIMITIVE_SIZE, shapeAssetId } from "../../scene/shapes";
+import { growCore, type CoreGrowth } from "../core";
 import { deriveSettlementProgram } from "../program";
-import type { GeneratedSite, PlanSettlement } from "../recipe";
+import type { GeneratedSite } from "../recipe";
+import { resolveRoadClass } from "../roadClass";
 import { estimateCoreRadius, selectSite } from "../siteSelection";
-import type { GeneratedPlacement, StageInput, StageOutput, WorldStage } from "../stage";
+import type { StageInput, StageOutput, WorldStage } from "../stage";
 
 export const SETTLEMENT_SITES_STAGE_ID = "settlementSites";
 
-/** Placement id of a settlement's core marker. */
+/** Placement id of the core disc v1 placed; a v2 run removes it. */
 export function siteMarkerId(settlementId: string): string {
   return `wb-site-${settlementId}`;
 }
 
-/** Marker disc thickness, metres. */
-const MARKER_HEIGHT = 0.5;
-
 export const settlementSitesStage: WorldStage = {
   id: SETTLEMENT_SITES_STAGE_ID,
   label: "Settlement sites",
-  version: 1,
+  version: 2,
   run(input: StageInput): StageOutput {
     const { recipe, profile } = input;
     const sites: GeneratedSite[] = [];
-    const placements: GeneratedPlacement[] = [];
     const warnings: string[] = [];
 
     for (const settlement of recipe.plan.settlements) {
@@ -57,7 +59,8 @@ export const settlementSitesStage: WorldStage = {
         site = {
           settlement: settlement.id,
           center: kept?.center ?? settlement.center,
-          coreRadius,
+          coreRadius: kept?.core ? kept.coreRadius : coreRadius,
+          ...(kept?.core ? { core: kept.core } : {}),
           ...(kept?.score === undefined ? {} : { score: kept.score }),
           dwellings: program.dwellings,
           program: program.lines,
@@ -69,33 +72,42 @@ export const settlementSitesStage: WorldStage = {
           continue;
         }
         if (chosen.shift > 0) warnings.push(`${name}: moved ${Math.round(chosen.shift)} m from the planned centre (${chosen.reason})`);
+        const core = growCore(input, chosen.center, Math.PI * coreRadius * coreRadius, {
+          maxSlopeDeg: resolveRoadClass(profile, "local").maxSlopeDeg,
+        });
+        const short = coreShortfall(core);
+        if (short) warnings.push(`${name}: ${short}`);
         site = {
           settlement: settlement.id,
           center: chosen.center,
-          coreRadius,
+          coreRadius: core.reach,
+          core: core.outline,
           score: chosen.score!,
           dwellings: program.dwellings,
           program: program.lines,
         };
       }
       sites.push(site);
-      placements.push(marker(settlement, site, input, warnings));
     }
-    return { placements, generated: { sites }, warnings };
+    return { placements: [], generated: { sites }, warnings };
   },
 };
 
-function marker(settlement: PlanSettlement, site: GeneratedSite, input: StageInput, warnings: string[]): GeneratedPlacement {
-  const [x, z] = site.center;
-  const ground = input.sampleHeight(x, z);
-  if (ground === null) warnings.push(`settlement ${settlement.id}: its site is off the terrain; the marker stands at y = 0`);
-  const diameter = (2 * site.coreRadius) / SHAPE_PRIMITIVE_SIZE;
-  const placement: LayoutPlacement & { id: string } = {
-    id: siteMarkerId(settlement.id),
-    role: "marker.settlement.site",
-    name: `${settlement.id} site`,
-    position: [x, (ground ?? 0) + MARKER_HEIGHT / 2, z],
-    scale: [diameter, MARKER_HEIGHT / SHAPE_PRIMITIVE_SIZE, diameter],
-  };
-  return { assetId: shapeAssetId("cylinder"), placement };
+const STOP_TEXT: Record<keyof CoreGrowth["stopped"], string> = {
+  steep: "steep ground",
+  water: "water",
+  flood: "flood-prone ground",
+  protected: "protected areas",
+  offTerrain: "the terrain's edge",
+  reach: "its farthest reach",
+};
+
+/** Text for a core that holds less than 90 % of its area, naming what stopped it; null when it holds enough. */
+function coreShortfall(core: CoreGrowth): string | null {
+  if (core.area >= 0.9 * core.targetArea) return null;
+  const stops = (Object.entries(core.stopped) as Array<[keyof CoreGrowth["stopped"], number]>)
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason]) => STOP_TEXT[reason]);
+  const share = Math.round((100 * core.area) / Math.max(1, core.targetArea));
+  return `the buildable ground around its centre holds ${share}% of the core its program needs (stopped by ${stops.join(", ")})`;
 }

@@ -79,6 +79,7 @@ export const parcelsStage: WorldStage = {
           settlement: settlement.id,
           center: site.center,
           coreRadius: site.coreRadius,
+          ...(site.core ? { coreOutline: site.core } : {}),
           streets: streets.lines,
           frontage: spec.frontage,
           depth: spec.depth,

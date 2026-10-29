@@ -99,6 +99,7 @@ export const streetsStage: WorldStage = {
         idPrefix: streetSplinePrefix(settlement.id),
         center: site.center,
         coreRadius: site.coreRadius,
+        ...(site.core ? { coreOutline: site.core } : {}),
         streets: lines,
         width: spec.width,
         maxSlopeDeg: spec.maxSlopeDeg,

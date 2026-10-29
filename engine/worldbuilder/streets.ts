@@ -22,6 +22,7 @@
  *
  * Seeded and deterministic. Pure; dependency-free.
  */
+import { inCore, lengthInCore, type CoreShape } from "./core";
 import type { StreetLine } from "./masks";
 import type { WorldPoint } from "./normalize";
 import { mulberry32 } from "./parcels";
@@ -51,6 +52,8 @@ export interface InnerStreetRequest {
   idPrefix: string;
   center: WorldPoint;
   coreRadius: number;
+  /** The core's outline when it grew over the ground; absent: the disc of `coreRadius`. */
+  coreOutline?: readonly WorldPoint[];
   /** Streets already there; branches start on them and must keep clear of them. */
   streets: readonly StreetLine[];
   width: number;
@@ -103,7 +106,7 @@ export function growInnerStreets(request: InnerStreetRequest): InnerStreetResult
   const random = mulberry32(request.seed);
   const halfWidth = request.width / 2;
   const lines: Line[] = request.streets.map((street) => ({ points: street.points, halfWidths: street.halfWidths }));
-  const before = lines.reduce((sum, line) => sum + 2 * insideLength(line.points, request.center, request.coreRadius), 0);
+  const before = lines.reduce((sum, line) => sum + 2 * lengthInCore(coreOf(request), line.points), 0);
   let frontage = before;
   const coreSlopeDeg = meanSlope(request);
   const flat = coreSlopeDeg < CONTOUR_MIN_SLOPE_DEG;
@@ -136,7 +139,7 @@ export function growInnerStreets(request: InnerStreetRequest): InnerStreetResult
     lines.push({ points: street.points, halfWidths: street.points.map(() => halfWidth) });
     // Its first half spacing lies in the parcels of the street it leaves, and so does its last when it joins one.
     const overlap = (street.joined ? 1 : 0.5) * request.spacing;
-    frontage += 2 * Math.max(0, insideLength(street.points, request.center, request.coreRadius) - overlap);
+    frontage += 2 * Math.max(0, lengthInCore(coreOf(request), street.points) - overlap);
     addBranches(lines.length - 1);
   }
   return { streets, frontage: { before: round1(before), after: round1(frontage) }, coreSlopeDeg: round1(coreSlopeDeg), flat };
@@ -154,7 +157,7 @@ function branchesOf(index: number, line: Line, request: InnerStreetRequest, rand
   const total = polylineLength(line.points);
   for (let s = request.spacing; s < total; s += request.spacing) {
     const { point, tangent, halfWidth } = sampleLine(line, s);
-    if (distance(point, request.center) > request.coreRadius) continue;
+    if (!inCore(coreOf(request), point)) continue;
     for (const side of [1, -1] as const) {
       const normal: WorldPoint = [-tangent[1] * side, tangent[0] * side];
       branches.push({
@@ -208,7 +211,7 @@ function grow(
       }
     }
     if (!next) break;
-    if (distance(next, request.center) > request.coreRadius || request.blockedAt(next)) break;
+    if (!inCore(coreOf(request), next) || request.blockedAt(next)) break;
 
     let stop = false;
     for (let index = 0; index < lines.length; index += 1) {
@@ -256,7 +259,7 @@ function meanSlope(request: InnerStreetRequest): number {
   for (let i = -2; i <= 2; i += 1) {
     for (let j = -2; j <= 2; j += 1) {
       const point: WorldPoint = [request.center[0] + (i * request.coreRadius) / 3, request.center[1] + (j * request.coreRadius) / 3];
-      if (distance(point, request.center) > request.coreRadius) continue;
+      if (!inCore(coreOf(request), point)) continue;
       const gradient = gradientAt(point, request.sampleHeight);
       if (!gradient) continue;
       sum += (Math.atan(Math.hypot(gradient[0], gradient[1])) * 180) / Math.PI;
@@ -311,19 +314,8 @@ function nearestOnLine(line: Line, point: WorldPoint): { point: WorldPoint; tang
 }
 
 /** Length of a polyline inside the circle, sampled every metre. */
-function insideLength(points: readonly WorldPoint[], center: WorldPoint, radius: number): number {
-  let inside = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const a = points[index - 1]!;
-    const b = points[index]!;
-    const span = distance(a, b);
-    const steps = Math.max(1, Math.ceil(span));
-    for (let step = 0; step < steps; step += 1) {
-      const t = (step + 0.5) / steps;
-      if (distance([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], center) <= radius) inside += span / steps;
-    }
-  }
-  return inside;
+function coreOf(request: InnerStreetRequest): CoreShape {
+  return { center: request.center, radius: request.coreRadius, ...(request.coreOutline ? { outline: request.coreOutline } : {}) };
 }
 
 function polylineLength(points: readonly WorldPoint[]): number {

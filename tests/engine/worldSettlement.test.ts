@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { growCore, inCore } from "../../engine/worldbuilder/core";
 import { deriveSettlementProgram, type ProgramExtension } from "../../engine/worldbuilder/program";
 import { createWorldRecipe, normalizeWorldRecipe, type PlanSettlement, type WorldRecipe } from "../../engine/worldbuilder/recipe";
 import { normalizeRegionProfile, type RegionProfile } from "../../engine/worldbuilder/regionProfile";
@@ -160,21 +161,20 @@ export function registerWorldSettlementTests(check: Check): void {
     assert.deepEqual(again, east, "deterministic");
   });
 
-  check("world settlement: the stage writes sites, programs and core markers; a re-run is empty after save + reload (WB-02)", () => {
+  check("world settlement: the stage writes sites, programs and grown cores, no placements; a re-run is empty after save + reload (WB-02)", () => {
     const recipe = createWorldRecipe("sites_test", 2);
     recipe.plan.settlements.push(village());
     const first = planStage(settlementSitesStage, stageInput(recipe, () => 5));
     assert.deepEqual(first.errors, []);
-    assert.deepEqual(first.added, [siteMarkerId("v1")]);
+    assert.deepEqual([first.added, first.groupChanges], [[], []], "v2 places no core disc");
     const site = first.recipeAfter.generated.sites[0]!;
-    assert.deepEqual({ ...site, program: site.program.length }, {
-      settlement: "v1", center: [0, 0], coreRadius: 146, score: site.score, dwellings: 74, program: 4,
+    assert.deepEqual({ ...site, core: site.core!.length > 3, program: site.program.length }, {
+      settlement: "v1", center: [0, 0], coreRadius: site.coreRadius, core: true, score: site.score, dwellings: 74, program: 4,
     });
-    const marker = first.groupChanges[0]!;
-    assert.equal(marker.assetId, "shape:cylinder");
-    assert.deepEqual(marker.after![0], {
-      id: "wb-site-v1", role: "marker.settlement.site", name: "v1 site", position: [0, 5.25, 0], scale: [584, 1, 584],
-    });
+    // Flat open ground: the core is about the 146 m disc the program needs.
+    assert.ok(site.coreRadius >= 146 && site.coreRadius <= 160, `reach ${site.coreRadius}`);
+    assert.ok(inCore({ center: site.center, radius: site.coreRadius, outline: site.core }, [140, 0]));
+    assert.ok(!inCore({ center: site.center, radius: site.coreRadius, outline: site.core }, [0, 170]));
 
     const layout = emptyLayout();
     applyPlacementGroupChanges(layout, first.groupChanges, "after");
@@ -186,7 +186,7 @@ export function registerWorldSettlementTests(check: Check): void {
     assert.equal(again.empty, true);
   });
 
-  check("world settlement: no valid site removes the site and its marker; a protected settlement keeps its site", () => {
+  check("world settlement: no valid site removes the site; a protected settlement keeps its site and core", () => {
     const recipe = createWorldRecipe("sites_test", 2);
     recipe.plan.settlements.push(village(), village({ id: "v2", center: [400, 0], protected: true }));
     const first = planStage(settlementSitesStage, stageInput(recipe, () => 5));
@@ -195,11 +195,43 @@ export function registerWorldSettlementTests(check: Check): void {
 
     // The ground turns into a wall: v1 has nowhere to go, protected v2 stays.
     const wall = planStage(settlementSitesStage, { ...stageInput(first.recipeAfter, (x, z) => x + z), layout });
-    assert.deepEqual(wall.removed, [siteMarkerId("v1")]);
     assert.deepEqual(wall.recipeAfter.generated.sites.map((entry) => [entry.settlement, entry.center]), [["v2", [400, 0]]]);
     assert.ok(wall.warnings.includes(
       "settlement v1: no buildable site within 150 m (100% steeper than the limit); it gets no site — move its centre or widen its radius",
     ), wall.warnings.join(" | "));
+  });
+
+  check("world settlement: a core grows along a valley, not up its sides, and reports what stopped it", () => {
+    // A valley along X: flat within 30 m of z = 0, walls rising 1:1 beyond.
+    const valley = (_x: number, z: number) => Math.max(0, Math.abs(z) - 30);
+    const core = growCore(context(valley), [0, 0], Math.PI * 130 * 130, { maxSlopeDeg: 14 });
+    const xs = core.outline.map(([x]) => Math.abs(x));
+    const zs = core.outline.map(([, z]) => Math.abs(z));
+    assert.ok(Math.max(...zs) <= 36, `stays on the floor (|z| ≤ ${Math.max(...zs)})`);
+    assert.ok(Math.max(...xs) > 200, `runs along the valley (|x| up to ${Math.max(...xs)})`);
+    assert.ok(core.area < core.targetArea && core.area > 0.5 * core.targetArea, `${core.area} of ${core.targetArea} m²`);
+    assert.ok((core.stopped.steep ?? 0) > 0 && (core.stopped.reach ?? 0) > 0, JSON.stringify(core.stopped));
+    assert.deepEqual(growCore(context(valley), [0, 0], Math.PI * 130 * 130, { maxSlopeDeg: 14 }), core, "deterministic");
+
+    // The stage reports the shortfall.
+    const recipe = createWorldRecipe("sites_test", 2);
+    recipe.plan.settlements.push(village());
+    const plan = planStage(settlementSitesStage, stageInput(recipe, valley));
+    assert.ok(plan.warnings.some((warning) => /^settlement v1: the buildable ground around its centre holds \d+% of the core its program needs \(stopped by steep ground/.test(warning)),
+      plan.warnings.join(" | "));
+  });
+
+  check("world settlement: a v2 run removes the core disc a v1 run placed", () => {
+    const recipe = createWorldRecipe("sites_test", 2);
+    recipe.plan.settlements.push(village());
+    const first = planStage(settlementSitesStage, stageInput(recipe, () => 5));
+    const disc = { id: siteMarkerId("v1"), role: "marker.settlement.site", name: "v1 site", position: [0, 5.25, 0] as [number, number, number], scale: [584, 1, 584] as [number, number, number] };
+    const layout = { ...emptyLayout(), instances: [{ assetId: "shape:cylinder", placements: [disc] }] };
+    const v1 = structuredClone(first.recipeAfter);
+    v1.generators.settlementSites = 1;
+    v1.ownership.placements[disc.id] = { stage: "settlementSites" };
+    const again = planStage(settlementSitesStage, { ...stageInput(v1, () => 5), layout });
+    assert.deepEqual(again.removed, [siteMarkerId("v1")]);
   });
 
   check("world settlement: game program rows reach the stage and a slide is reported", () => {

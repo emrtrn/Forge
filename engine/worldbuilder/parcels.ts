@@ -8,7 +8,12 @@
  * where streets enclose a block, the strips of its sides form the block's
  * street ring and parcels that would overlap another road, water, a protected
  * area or an earlier parcel are dropped, so a parcel always fronts a street
- * and never lies on one. Parcels steeper than the slope limit are kept as
+ * and never lies on one. Before a slot is dropped for a road or an earlier
+ * parcel behind it, it is tried once more at the profile's shallowest depth:
+ * lots by a junction or squeezed between streets are shallower, as in a real
+ * plan. Still blocked, the next slot starts `SLIDE_STEP` further on instead
+ * of a whole frontage, so the frontage resumes right past a crossing street;
+ * a run of blocked slots counts as one dropped parcel. Parcels steeper than the slope limit are kept as
  * open land (§13.5: "eğimi profil sınırını aşan parsel açık alan olur").
  *
  * Streets are processed by class (highest first) then id, sides and frontages
@@ -27,6 +32,8 @@ export const PARCEL_VERGE = 0.5;
 const EDGE_STEP = 4;
 /** Arc-length step used to find where a street is inside the core, metres. */
 const CORE_STEP = 2;
+/** A slot blocked by a road or a parcel moves on this far before the next try, metres. */
+const SLIDE_STEP = 4;
 /** Neighbouring parcels share an edge; this much inset keeps that from counting as overlap. */
 const OVERLAP_INSET = 0.25;
 
@@ -64,6 +71,8 @@ export interface PlannedParcel {
 export interface ParcelResult {
   parcels: PlannedParcel[];
   dropped: Record<ParcelDropReason, number>;
+  /** Parcels kept at the shallowest depth after the side's own depth hit a road or a parcel. */
+  shallow: number;
 }
 
 export function subdivideStreets(request: ParcelRequest): ParcelResult {
@@ -71,6 +80,7 @@ export function subdivideStreets(request: ParcelRequest): ParcelResult {
   const parcels: PlannedParcel[] = [];
   const shrunk: Array<{ polygon: WorldPoint[]; box: Box }> = [];
   const dropped: Record<ParcelDropReason, number> = { road: 0, water: 0, protected: 0, offTerrain: 0, overlap: 0, shape: 0 };
+  let shallow = 0;
   const rank = (line: StreetLine): number => (line.roadClass === undefined ? ROAD_CLASSES.length : ROAD_CLASSES.indexOf(line.roadClass));
   const streets = [...request.streets].sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const core: CoreShape = { center: request.center, radius: request.coreRadius, ...(request.coreOutline ? { outline: request.coreOutline } : {}) };
@@ -82,37 +92,46 @@ export function subdivideStreets(request: ParcelRequest): ParcelResult {
     for (const side of [1, -1] as const) {
       const depth = lerp(request.depth, random());
       let start = range[0];
+      let sliding = false;
       while (start < range[1]) {
         const frontage = lerp(request.frontage, random());
         const end = Math.min(start + frontage, range[1]);
         if (end - start < request.frontage[0] * 0.75) break;
-        const candidate = parcelPolygon(path, start, end, side, depth);
+        const slot = start;
         start = end;
-        if (!candidate) {
-          dropped.shape += 1;
+        // The side's depth first; on a road or an earlier parcel behind it, the shallowest depth once more.
+        const depths = request.depth[0] < depth ? [depth, request.depth[0]] : [depth];
+        let placed: Fit | null = null;
+        let reason: ParcelDropReason | null = null;
+        for (const tryDepth of depths) {
+          const fit = fitParcel(path, slot, end, side, tryDepth, core, request, shrunk);
+          if (fit === null) {
+            reason = null;
+            break;
+          }
+          if ("reason" in fit) {
+            reason = fit.reason;
+            if (fit.reason === "road" || fit.reason === "overlap") continue;
+            break;
+          }
+          placed = fit;
+          if (tryDepth !== depth) shallow += 1;
+          break;
+        }
+        if (!placed) {
+          if (reason === "road" || reason === "overlap") {
+            if (!sliding) dropped[reason] += 1;
+            sliding = true;
+            start = Math.min(end, slot + SLIDE_STEP);
+          } else if (reason) {
+            dropped[reason] += 1;
+          }
           continue;
         }
-        const centroid = polygonCentroid(candidate.polygon);
-        if (!inCore(core, centroid)) continue;
-        const samples = [...candidate.polygon, ...candidate.inner, centroid];
-        const blocked = samples.map(request.blockedAt).find((reason) => reason !== null);
-        if (blocked) {
-          dropped[blocked] += 1;
-          continue;
-        }
-        const heights = samples.map(([x, z]) => request.sampleHeight(x, z));
-        if (heights.some((height) => height === null)) {
-          dropped.offTerrain += 1;
-          continue;
-        }
-        const inset = insetPolygon(candidate.polygon, centroid, OVERLAP_INSET);
-        const box = boxOf(inset);
-        if (shrunk.some((other) => boxesTouch(box, other.box) && polygonsOverlap(inset, other.polygon))) {
-          dropped.overlap += 1;
-          continue;
-        }
+        sliding = false;
+        const { candidate, samples, heights, inset, box } = placed;
         shrunk.push({ polygon: inset, box });
-        const slopeDeg = planeSlope(samples, heights as number[]);
+        const slopeDeg = planeSlope(samples, heights);
         parcels.push({
           id: `${request.settlement}.p${parcels.length + 1}`,
           polygon: candidate.polygon.map(roundPoint),
@@ -124,7 +143,44 @@ export function subdivideStreets(request: ParcelRequest): ParcelResult {
       }
     }
   }
-  return { parcels, dropped };
+  return { parcels, dropped, shallow };
+}
+
+interface Fit {
+  candidate: Candidate;
+  samples: WorldPoint[];
+  heights: number[];
+  inset: WorldPoint[];
+  box: Box;
+}
+
+/**
+ * The parcel in one slot at one depth: null when its centre is outside the
+ * core (not a drop), why it would be dropped, or the parcel and its samples.
+ */
+function fitParcel(
+  path: MeasuredLine,
+  start: number,
+  end: number,
+  side: 1 | -1,
+  depth: number,
+  core: CoreShape,
+  request: ParcelRequest,
+  shrunk: ReadonlyArray<{ polygon: WorldPoint[]; box: Box }>,
+): Fit | { reason: ParcelDropReason } | null {
+  const candidate = parcelPolygon(path, start, end, side, depth);
+  if (!candidate) return { reason: "shape" };
+  const centroid = polygonCentroid(candidate.polygon);
+  if (!inCore(core, centroid)) return null;
+  const samples = [...candidate.polygon, ...candidate.inner, centroid];
+  const blocked = samples.map(request.blockedAt).find((value) => value !== null);
+  if (blocked) return { reason: blocked };
+  const heights = samples.map(([x, z]) => request.sampleHeight(x, z));
+  if (heights.some((height) => height === null)) return { reason: "offTerrain" };
+  const inset = insetPolygon(candidate.polygon, centroid, OVERLAP_INSET);
+  const box = boxOf(inset);
+  if (shrunk.some((other) => boxesTouch(box, other.box) && polygonsOverlap(inset, other.polygon))) return { reason: "overlap" };
+  return { candidate, samples, heights: heights as number[], inset, box };
 }
 
 // ---------------------------------------------------------------- street geometry

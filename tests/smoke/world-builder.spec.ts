@@ -379,8 +379,7 @@ test("World Builder village: the settlement chain places coloured buildings and 
   expect(changed).toBeGreaterThan(0);
 
   // Apply Pads levelled the ground: stages reading it near the pads (sites, streets, parcels) would
-  // re-sample, but land use reads the ground only to rank the lowest parcels for industry (the
-  // pads move it too little to change that here), buildings stand on their own pads and
+  // re-sample, but land use ranks low ground by its street's spline level, buildings stand on their own pads and
   // furniture at its road's spline level; the fences already follow the baked ground.
   await bootEditor();
   for (const stage of ["landUse", "buildings", "furniture", "fences"]) {

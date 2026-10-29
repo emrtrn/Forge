@@ -4,8 +4,10 @@
  * height, no terrain files. Pinned here: the track up the slope stays within
  * its limit (a serpentine); the hamlet drawn on the steep slope above the
  * bench settles on the bench (not down on the floor) and its stranded road
- * node is reported; and the known gap left — the valley village short of
- * parcels — so a fix shows up as a deliberate change to this test.
+ * node is reported; the valley village gets a parcel per program need
+ * (shallower lots and frontages resuming past crossing streets); and the
+ * known gap left — one dwelling without a lot once the large roles and open
+ * land are placed — so a fix shows up as a deliberate change to this test.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -15,6 +17,7 @@ import type { TerrainSpline } from "../../engine/terrain/terrainTypes";
 import { normalizeRegionProfile } from "../../engine/worldbuilder/regionProfile";
 import { applyPlacementGroupChanges, planStage, type StagePlan, type StageTerrain } from "../../engine/worldbuilder/stage";
 import { createDefaultWorldStages } from "../../engine/worldbuilder/stages";
+import { landUseStage } from "../../engine/worldbuilder/stages/landUse";
 import {
   generateWbTestValley,
   WB_TEST_VALLEY_HALF,
@@ -49,7 +52,7 @@ function runChain() {
     });
     recipe = plan.recipeAfter;
   }
-  return { recipe, layout, splines: terrains[0]!.splines, plans };
+  return { recipe, layout, terrains, profile, splines: terrains[0]!.splines, plans };
 }
 
 let chained: ReturnType<typeof runChain> | null = null;
@@ -101,21 +104,37 @@ export function registerWbTestValleyTests(check: Check): void {
     const [x, z] = hamlet.center;
     assert.ok(Math.abs(z - wbTestValleyBenchZ(x)) < 25, `on the bench, not the floor (${hamlet.center})`);
     assert.ok(z - wbTestValleyAxisZ(x) > 80, "well up from the valley axis");
-    assert.equal(recipe.generated.parcels.filter((parcel) => parcel.settlement === "hamlet").length, 11, "all 11 program needs");
+    assert.ok(recipe.generated.parcels.filter((parcel) => parcel.settlement === "hamlet").length >= 11, "a parcel for each of its 11 program needs");
     const warnings = plans.get("settlementSites")!.warnings;
     assert.ok(warnings.some((warning) => /^settlement hamlet: moved \d+ m from the planned centre \(the planned centre is steeper than the limit\)$/.test(warning)));
     assert.ok(warnings.some((warning) => warning.startsWith("settlement hamlet: its road node hamlet-end is outside the chosen core")),
       "the track was built to the planned spot: the user moves the node");
   });
 
-  check("wb test valley: known gap — the valley village is short of parcels", () => {
-    const { recipe } = chain();
+  check("wb test valley: the valley village gets a parcel per need; known gap — one dwelling left without a lot", () => {
+    const { recipe, plans } = chain();
     const site = recipe.generated.sites.find((entry) => entry.settlement === "village")!;
     const needs = site.dwellings + site.program.reduce((sum, line) => sum + line.count, 0);
     const parcels = recipe.generated.parcels.filter((parcel) => parcel.settlement === "village").length;
-    // The core grown along the floor holds more than the disc did (25 of 44), not yet all.
+    // The disc gave 25 parcels, the grown core 33, shallow retries and sliding past crossing streets 45.
     assert.equal(needs, 44);
-    assert.ok(parcels >= 38, `${parcels} parcels`);
-    assert.ok(parcels < needs, "known gap: fixed? then pin the new count");
+    assert.ok(parcels >= needs, `${parcels} parcels`);
+    const unplaced = plans.get("landUse")!.warnings
+      .map((warning) => /^settlement village: no suitable parcel for (\d+) of 40 building\.residential\.detached/.exec(warning))
+      .find((match) => match !== null);
+    assert.ok(unplaced, "known gap: every dwelling placed? then pin it");
+    assert.ok(Number(unplaced[1]) <= 1, `${unplaced[1]} dwellings without a lot`);
+  });
+
+  check("wb test valley: land use ranks low ground by its street's level, so re-levelled parcels (Apply Pads) leave it up to date", () => {
+    const { recipe, layout, terrains, profile } = chain();
+    // Bumps of up to ±4 m under the parcels, as levelling pads would make; the road splines keep their level.
+    const relevelled = (x: number, z: number) => {
+      const height = wbTestValleyHeight(x, z);
+      return height === null ? null : height + 4 * Math.sin(x / 7) * Math.cos(z / 5);
+    };
+    const plan = planStage(landUseStage, { recipe, layout, profile, sampleHeight: relevelled, terrains });
+    assert.deepEqual(plan.errors, []);
+    assert.equal(plan.empty, true, "land use did not move with the ground");
   });
 }

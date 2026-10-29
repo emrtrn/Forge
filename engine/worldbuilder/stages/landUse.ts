@@ -12,9 +12,16 @@
  * gives the land-use split, the merged lots, the vacant parcels, neighbouring
  * pairs with negative compatibility and every program line it could not place,
  * with the reason. A protected settlement keeps its parcels as they are.
+ *
+ * Low ground (industry downstream) is ranked by the level of the street in
+ * front of a parcel — the nearest road spline's centre line — not by the
+ * ground under it (v2): Apply Pads levels the parcels and would re-rank them,
+ * leaving the stage stale after the bake. A street no spline realises yet has
+ * no level; the ground is read there.
  */
 import { assignLandUse, coreEntrances, landUseBase, type UnmetReason } from "../landUse";
-import { streetLines, waterSources } from "../masks";
+import { streetLines, waterSources, type StreetLine } from "../masks";
+import type { WorldPoint } from "../normalize";
 import type { GeneratedParcel } from "../recipe";
 import type { StageInput, StageOutput, WorldStage } from "../stage";
 import { LAND_USES } from "../vocabulary";
@@ -34,7 +41,7 @@ const UNMET_TEXT: Record<UnmetReason, string> = {
 export const landUseStage: WorldStage = {
   id: LAND_USE_STAGE_ID,
   label: "Land use",
-  version: 1,
+  version: 2,
   run(input: StageInput): StageOutput {
     const { recipe, profile } = input;
     const warnings: string[] = [];
@@ -68,7 +75,7 @@ export const landUseStage: WorldStage = {
         edgeClass: (edge) => edges.get(edge),
         entrances: coreEntrances(streets, site.center, site.coreRadius, site.core),
         water,
-        sampleHeight: input.sampleHeight,
+        sampleHeight: (x, z) => streetLevel(streets, [x, z]) ?? input.sampleHeight(x, z),
         seed: ((settlement.seed ?? hashSeed(recipe.seed, settlement.id)) ^ SEED_SALT) >>> 0,
       });
       for (const parcel of result.parcels) rewritten.set(parcel.id, parcel);
@@ -95,3 +102,27 @@ export const landUseStage: WorldStage = {
     return { placements: [], generated: { parcels }, warnings };
   },
 };
+
+/** A street front is this close to its parcels' centres, metres; farther lines are another street's. */
+const STREET_REACH = 60;
+
+/** Centre-line level of the nearest street a spline realises, within `STREET_REACH`; null without one. */
+function streetLevel(streets: readonly StreetLine[], point: WorldPoint): number | null {
+  let best: { distance: number; height: number } | null = null;
+  for (const line of streets) {
+    const heights = line.heights;
+    if (!heights) continue;
+    for (let index = 1; index < line.points.length; index += 1) {
+      const a = line.points[index - 1]!;
+      const b = line.points[index]!;
+      const dx = b[0] - a[0];
+      const dz = b[1] - a[1];
+      const lengthSq = dx * dx + dz * dz;
+      const t = lengthSq === 0 ? 0 : Math.min(1, Math.max(0, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dz) / lengthSq));
+      const distance = Math.hypot(point[0] - (a[0] + dx * t), point[1] - (a[1] + dz * t));
+      if (distance > STREET_REACH || (best && distance >= best.distance)) continue;
+      best = { distance, height: heights[index - 1]! + (heights[index]! - heights[index - 1]!) * t };
+    }
+  }
+  return best?.height ?? null;
+}

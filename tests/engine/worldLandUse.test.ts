@@ -95,7 +95,8 @@ export function registerWorldLandUseTests(check: Check): void {
     for (const shop of shops) assert.equal(shop.frontage, "main", `${shop.id} fronts the collector`);
 
     const pond = { kind: "polygon" as const, polygon: plan.recipeAfter.plan.water[0]!.polygon! };
-    const [workshop] = hostsOf(parcels, "building.industrial.workshop");
+    const [workshop, ...extra] = hostsOf(parcels, "building.industrial.workshop");
+    assert.equal(extra.length, 0, "one workshop (its lot may take a neighbour)");
     const wet = (parcel: GeneratedParcel) => sourceDistance(polygonCentroid(parcel.polygon), pond);
     const nearer = parcels.filter((parcel) => wet(parcel) < wet(workshop!)).length;
     assert.ok(nearer <= parcels.length / 4, `${nearer} parcels lie nearer the pond than the workshop`);
@@ -105,7 +106,7 @@ export function registerWorldLandUseTests(check: Check): void {
     assert.ok(vacant.length > 0);
     const outermostHome = Math.max(...homes.map(centre));
     for (const parcel of vacant) assert.ok(centre(parcel) >= outermostHome - 12, `${parcel.id} vacant at ${centre(parcel)} m`);
-    assert.match(plan.warnings[0]!, /^settlement v1: \d+ parcels → 16 residential, 2 commercial, \d+ civic, 1 industrial, \d+ open, \d+ vacant; \d+ large roles took \d+ parcels$/);
+    assert.match(plan.warnings[0]!, /^settlement v1: \d+ parcels → 16 residential, 2 commercial, \d+ civic, \d+ industrial, \d+ open, \d+ vacant; \d+ large roles took \d+ parcels$/);
     assert.deepEqual(plan.added, []);
   });
 

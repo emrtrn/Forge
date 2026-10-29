@@ -117,6 +117,14 @@ export function registerWorldParcelTests(check: Check): void {
     }
     assert.ok(parcels.some((parcel) => parcel.edge === "cross"), "the cross street fronts parcels too");
     assertNoOverlap(parcels);
+    // Past the cross street (half width 3 m) the main street's strips resume within a slide step, not a whole frontage.
+    for (const side of [1, -1]) {
+      const starts = parcels
+        .filter((parcel) => parcel.edge === "main" && Math.sign(parcel.polygon[0]![1]) === side)
+        .map((parcel) => Math.min(...parcel.polygon.map(([x]) => x)))
+        .filter((x) => x > 0);
+      assert.ok(Math.min(...starts) <= 3 + 4 + PARCEL_VERGE, `the strip resumes ${Math.min(...starts)} m east of the cross street`);
+    }
   });
 
   check("world parcels: steep ground becomes open land; runs are deterministic, seeds vary the frontages", () => {

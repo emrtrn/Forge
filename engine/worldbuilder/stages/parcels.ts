@@ -45,7 +45,7 @@ const DROP_TEXT: Record<ParcelDropReason, string> = {
 export const parcelsStage: WorldStage = {
   id: PARCELS_STAGE_ID,
   label: "Parcels",
-  version: 1,
+  version: 2,
   run(input: StageInput): StageOutput {
     const { recipe, profile } = input;
     const warnings: string[] = [];

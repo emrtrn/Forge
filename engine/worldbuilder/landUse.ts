@@ -84,6 +84,7 @@ export interface LandUseRequest {
   /** Where streets cross the core edge (`coreEntrances`). */
   entrances: readonly WorldPoint[];
   water: readonly DistanceSource[];
+  /** Level of a parcel at its centre, for ranking low ground (the stage reads its street's level). */
   sampleHeight: (x: number, z: number) => number | null;
   seed: number;
 }

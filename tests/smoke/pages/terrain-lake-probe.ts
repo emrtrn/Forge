@@ -42,6 +42,17 @@ export function installLakeProbe(app: unknown) {
     },
     riverPreparationPending() { return riverGate?.entered ?? false; },
     releaseRiverPreparation() { riverGate?.release(); },
+    riverFoamSamples(points: readonly [number,number][]) {
+      const u=a.riverWaterObjects?.[0]?.material.uniforms,texture=u?.geometryFoamMask?.value;
+      if(!texture)return null;
+      const min=u!.geometryFoamMin!.value,size=u!.geometryFoamSize!.value,grid=u!.geometryFoamGrid!.value,tile=u!.geometryFoamTile!.value;
+      const cols=Math.ceil(grid.x/tile.x),bytes=texture.image.data as Uint8Array;
+      return points.map(([x,z])=>{
+        const ix=Math.floor((x-min.x)/size.x*grid.x),iz=Math.floor((z-min.y)/size.y*grid.y);
+        if(ix<0||iz<0||ix>=grid.x||iz>=grid.y)return 255;
+        return bytes[(Math.floor(iz/tile.y)*cols+Math.floor(ix/tile.x))*tile.x*tile.y+(iz%tile.y)*tile.x+ix%tile.x];
+      });
+    },
     quality() {
       let caustics = 0, wetShore = 0;
       a.scene.traverse((node: any) => {

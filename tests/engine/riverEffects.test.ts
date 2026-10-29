@@ -10,6 +10,8 @@ import { createTerrainCausticsUniforms, updateTerrainCaustics, registerLakeCaust
 import { createLakeFixture } from "./fixtures/lakeFixture";
 import { buildLakeGeometry, prepareLakeSnapshot } from "../../engine/terrain/terrainLakeWater";
 import { validateRiverWater } from "../../tools/saveValidator";
+import { defaultWaterShoreWetness } from "../../engine/scene/waterShoreWetness";
+import { createTerrainShoreWetnessUniforms, updateTerrainShoreWetness, terrainShoreWetnessAt } from "../../engine/render-three/terrain/terrainShoreWetness";
 
 export function riverEffectFixture(origin:[number,number,number]=[0,0,0]):RiverWaterRenderItem {
   return {...resolveRiverWater({id:"river",landscapeRef:"terrain",splineRef:"s",surfaceLevel:2,flowSpeed:.5,waveAmplitude:0,
@@ -18,6 +20,45 @@ export function riverEffectFixture(origin:[number,number,number]=[0,0,0]):RiverW
     position:origin,rotation:[0,0,0],sampleSpacing:1,heightAt:(x,z)=>Math.abs(x)>3?4:1-z/8,foamNoiseMap:null};
 }
 export async function registerRiverEffectsTests(check:(label:string,run:()=>Promise<void>)=>Promise<void>):Promise<void> {
+  await check("River wet shore: strict save/runtime settings and independent clones",async()=>{
+    const shoreWetness={...defaultWaterShoreWetness(),enabled:true,width:1.2,strength:.7};
+    const source={...riverEffectFixture(),shoreWetness};
+    assert.deepEqual(validateRiverWater(source).shoreWetness,shoreWetness);
+    const resolved=resolveRiverWater(source);assert.deepEqual(resolved.shoreWetness,shoreWetness);
+    resolved.shoreWetness!.width=3;assert.equal(shoreWetness.width,1.2);
+    assert.equal(resolveRiverWater({id:"old",landscapeRef:"t",splineRef:"s"}).shoreWetness,undefined);
+    for(const bad of [{enabled:1},{width:0},{width:4.1},{strength:2},{strength:NaN}]) {
+      assert.throws(()=>validateRiverWater({...source,shoreWetness:{...shoreWetness,...bad}}),/shore wetness/);
+      assert.throws(()=>resolveRiverWater({...source,shoreWetness:{...shoreWetness,...bad}} as unknown as typeof source),/shore wetness/);
+    }
+  });
+  await check("River wet shore: local bank heights, large origins, hidden/terrain gates, shared atlas and quality lifecycle",async()=>{
+    for(const origin of [[0,0,0],[1e6,13,-1e6]] as [number,number,number][]) {
+      const scene=new Scene(),u={...createTerrainCausticsUniforms(),...createTerrainShoreWetnessUniforms()};
+      const base=riverEffectFixture(origin),item={...base,caustics:{...base.caustics!,enabled:false},
+        shoreWetness:{...defaultWaterShoreWetness(),enabled:true},heightAt:(x:number,z:number)=>1-z/8+Math.abs(x)*.8};
+      const object=new RiverWaterObject(item,null);scene.add(object);
+      const update=()=>{updateTerrainCaustics(u,scene,"terrain");updateTerrainShoreWetness(u,scene,"terrain");};
+      update();assert.deepEqual(object.effectErrors,[]);assert.equal(u.uShoreWetCount.value,1);
+      assert.equal(u.uCausticArea.value[0]!.z,0,"wet shore alone must not turn on caustic light");
+      assert.equal(u.uShoreWetRiver.value[0]!.x,0,"wet shore borrows the exact River atlas");
+      const samples=[4,12].map(z=>terrainShoreWetnessAt(scene,origin[0]+1.4,origin[1]+1-z/8+1.4*.8,origin[2]+z,"terrain"));
+      assert.ok(samples.every(v=>v>.1),`both slopes have a wet bank: ${samples}`);
+      assert.ok(Math.abs(samples[0]!-samples[1]!)<.03,"height follows the slope, not a global waterline");
+      assert.equal(terrainShoreWetnessAt(scene,origin[0]+1.4,origin[1]-10,origin[2]+4,"terrain"),0);
+      assert.equal(terrainShoreWetnessAt(scene,origin[0]+1.4,origin[1]+1.62,origin[2]+4,"other"),0);
+      object.visible=false;update();assert.equal(u.uShoreWetParams.value[0]!.w,0);object.visible=true;
+      const bytes=(u.uShoreWetMask.value as unknown as {image:{data:Uint8Array}}).image.data.byteLength;
+      assert.equal(bytes,1024*1024*2,"same per-body RG atlas budget as Lake");
+      for(let cycle=0;cycle<20;cycle++) {
+        object.setShoreWetnessAllowed(false);update();assert.equal(u.uShoreWetCount.value,0);assert.equal(u.uRiverCausticData.value,null);
+        object.setShoreWetnessAllowed(true);update();assert.equal(u.uShoreWetCount.value,1);
+      }
+      const texture=u.uShoreWetMask.value as unknown as {addEventListener:(name:string,fn:()=>void)=>void};let disposed=0;
+      texture.addEventListener("dispose",()=>disposed++);scene.remove(object);object.dispose();object.dispose();update();
+      assert.equal(disposed,1);assert.equal(u.uShoreWetMask.value,null);assert.equal(u.uRiverCausticData.value,null);
+    }
+  });
   await check("River caustics: replacing a Lake retains the unchanged River atlas and aligned layer uniforms", async () => {
     const scene = new Scene(), u = createTerrainCausticsUniforms();
     const river = new RiverWaterObject(riverEffectFixture(), null); scene.add(river);

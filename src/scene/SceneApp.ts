@@ -1,5 +1,6 @@
 import { LakeFoamStore } from "./lakeFoamStore";
 import { validateWaterCaustics, type WaterCaustics } from "@engine/scene/waterCaustics";
+import { validateWaterShoreWetness, type WaterShoreWetness } from "@engine/scene/waterShoreWetness";
 import { validateLakeGeometryFoam, type LakeGeometryFoam } from "@engine/scene/lakeFoamBake";
 import { lakeFoamSaveSteps } from "@/editor/lakeFoamSaveSteps";
 import { bakeLakeGeometryFoam, bakeRiverGeometryFoam, riverFoamSurfaceFingerprint, foamSource, foamFingerprint, wetFoamFingerprint } from "@engine/render-three/lakeFoamBake";
@@ -942,6 +943,7 @@ export interface RiverWaterDetailsView {
   contactFoam?: WaterContactFoam;
   geometryFoam?: LakeGeometryFoam;
   caustics?: WaterCaustics;
+  shoreWetness?: WaterShoreWetness;
   foamStamps: LayoutRiverWaterFoamStamp[];
   segmentProfiles: LayoutRiverWaterSegmentProfile[];
   splineSegments: Array<{ id: string; startPointId: string; endPointId: string }>;
@@ -972,6 +974,7 @@ export type RiverWaterDetailsPatch = Partial<Pick<
   | "reflectionStrength"
   | "geometryFoam"
   | "caustics"
+  | "shoreWetness"
   | "contactFoam"
   | "foamStamps"
   | "segmentProfiles"
@@ -1125,6 +1128,7 @@ function cloneRiverWater(water: LayoutRiverWater): LayoutRiverWater {
     ...(water.contactFoam ? { contactFoam: structuredClone(water.contactFoam) } : {}),
     ...(water.geometryFoam ? { geometryFoam: structuredClone(water.geometryFoam) } : {}),
     ...(water.caustics ? { caustics: structuredClone(water.caustics) } : {}),
+    ...(water.shoreWetness ? { shoreWetness: structuredClone(water.shoreWetness) } : {}),
     ...(water.foamStamps
       ? {
           foamStamps: water.foamStamps.map((stamp) => ({
@@ -3295,6 +3299,7 @@ export class SceneApp {
     setTerrainSelfShadow(quality.terrainSelfShadow);
     setTerrainFarTiling(quality.terrainFarTiling);
     void this.lakes?.setQuality(lakeQuality(quality)).catch(error => console.warn("[lake-quality]", error));
+    for(const river of this.riverWaterObjects)river.setShoreWetnessAllowed(quality.lakeShoreWetnessAllowed);
     this.fitSunShadowToScene();
     this.applyPostProcess();
   }
@@ -7769,8 +7774,10 @@ export class SceneApp {
   private selectedRiverFoam(id:string) {
     if(this.selection?.kind!=="landscape")return null;
     const terrain=this.layout?.landscapes?.[this.selection.index];
-    const water=this.layout?.riverWaters?.find(w=>w.id===id&&w.landscapeRef===terrain?.id);
-    return water&&terrain&&!terrain.locked&&!water.locked&&this.landscapeSculptSettings.activeRiverWaterId===id?water:null;
+    const waters=this.layout?.riverWaters?.filter(w=>w.landscapeRef===terrain?.id)??[];
+    // Match the Water panel's first-river fallback after Reload or terrain selection.
+    const water=waters.find(w=>w.id===this.landscapeSculptSettings.activeRiverWaterId)??waters[0];
+    return water?.id===id&&terrain&&!terrain.locked&&!water.locked?water:null;
   }
   private riverGeometryFingerprint(id:string):string {
     const water=this.layout?.riverWaters?.find(w=>w.id===id),document=water?this.worldTerrains.get(water.landscapeRef):undefined;
@@ -8156,6 +8163,7 @@ export class SceneApp {
         const object = createRiverWaterObject(item, normalMap);
         object.raycast = () => {};
         object.userData.riverWaterId = resolved.id;
+        object.setShoreWetnessAllowed(this.editorQuality.lakeShoreWetnessAllowed);
         this.scene.add(object);
         this.riverWaterObjects.push(object);
       } catch (error) {
@@ -10976,6 +10984,7 @@ export class SceneApp {
           ...(resolved.contactFoam ? { contactFoam: structuredClone(resolved.contactFoam) } : {}),
           ...(resolved.geometryFoam ? { geometryFoam: structuredClone(resolved.geometryFoam) } : {}),
           ...(resolved.caustics ? { caustics: structuredClone(resolved.caustics) } : {}),
+          ...(resolved.shoreWetness ? { shoreWetness: structuredClone(resolved.shoreWetness) } : {}),
           foamStamps: resolved.foamStamps.map((stamp) => ({
             ...stamp,
             position: [...stamp.position] as Vec3,
@@ -11035,6 +11044,7 @@ export class SceneApp {
     }
     if(patch.geometryFoam!==undefined)next.geometryFoam=validateLakeGeometryFoam(patch.geometryFoam);
     if(patch.caustics!==undefined)next.caustics=validateWaterCaustics(patch.caustics);
+    if(patch.shoreWetness!==undefined)next.shoreWetness=validateWaterShoreWetness(patch.shoreWetness);
     if (patch.contactFoam !== undefined) next.contactFoam = validateWaterContactFoam(patch.contactFoam);
     if (patch.foamStamps !== undefined) {
       next.foamStamps = patch.foamStamps.map((stamp) => ({

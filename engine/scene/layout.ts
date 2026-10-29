@@ -1,5 +1,6 @@
 import type { LakeGeometryFoam } from "./lakeFoamBake";
 import type { WaterCaustics } from "./waterCaustics";
+import type { WaterShoreWetness } from "./waterShoreWetness";
 import type { WaterContactFoam } from "./waterContactFoam";
 import type {
   CollisionEnabled,
@@ -948,6 +949,7 @@ export interface LayoutRiverWaterSegmentProfile {
  * navigation fields: RTS traversal stays authored by blockers and bridge markers.
  */
 export interface LayoutRiverWater {
+  shoreWetness?: WaterShoreWetness;
   geometryFoam?: LakeGeometryFoam;
   caustics?: WaterCaustics;
   id: string;

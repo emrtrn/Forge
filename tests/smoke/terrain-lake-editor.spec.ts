@@ -12,6 +12,7 @@ import { worldTerrainActorPosition } from "../../engine/terrain/worldTerrainActo
 import { expect, test, type Page, type APIRequestContext } from "./test";
 import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
 import { defaultUserSettings } from "../../engine/persistence/userSettingsStore";
+import { SHAPE_PRIMITIVE_SIZE } from "../../engine/scene/shapes";
 
 const LEVEL = "layouts/__playwright-lake-world.level.json", TERRAIN = "landscapes/__playwright-lake-world.terrain.json";
 const snapshot = (page: Page) => page.evaluate(() => (window as any).__lakeQA.snapshot());
@@ -273,6 +274,90 @@ test("River automatic geometry foam and caustics UI Save Reload Play; manual con
   expect(capture.samples.filter((v:number,i:number)=>Math.abs(v-off.samples[i])>3).length).toBeGreaterThan(30);
   expect(moved.samples.filter((v:number,i:number)=>Math.abs(v-capture.samples[i])>3).length).toBeGreaterThan(30);
   await page.screenshot({path:info.outputPath("river-automatic-runtime.png")});expect(errors).toEqual([]);
+});
+
+test("River obstacle foam Recalculate follows moved rocks after reopening the Water panel",async({page,request},info)=>{
+  test.setTimeout(180_000);
+  const {errors}=await setup(page,request,true,false,false,false,true,false,false,false,true,false,true);await ready(page);
+  const terrainBefore=await terrainHash();
+  const expand=async()=>{
+    const section=page.locator('[data-detail-section="lake-geometry-foam"]');
+    if(await section.evaluate(e=>e.classList.contains("collapsed")))await section.locator('.detail-section-toggle').click();
+  };
+  await page.locator('[data-river-water-create]').click();await expand();
+  const calculate=page.locator('[data-geometry-foam-calculate]');
+  await expect(calculate).toBeEnabled();await calculate.click();
+  await expect.poll(async()=>(await snapshot(page)).riverBaked[0]?.active).toBe(true);
+  const original=(await snapshot(page)).riverSource[0].geometryFoam.bake.manifest;
+  const points=[[-20+SHAPE_PRIMITIVE_SIZE*2+.2,-12],[-16+SHAPE_PRIMITIVE_SIZE*2+.2,-12]];
+  const mask=()=>page.evaluate(points=>(window as any).__lakeQA.riverFoamSamples(points),points);
+  expect((await mask())[0]).toBeLessThan(200);expect((await mask())[1]).toBe(255);
+  await save(page);
+  // Reload restores an existing river without a transient activeRiverWaterId.
+  await page.reload({waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await page.getByTestId("outliner-row").filter({hasText:"Foam Rock A"}).first().click();
+  await page.getByTestId("detail-px").fill("-16");await page.getByTestId("detail-px").press("Tab");
+  await page.getByTestId("outliner-row").filter({hasText:"Lake QA Terrain"}).first().click();
+  await page.locator('[data-landscape-mode]').selectOption("water");await expand();
+  await expect(page.locator('[data-geometry-foam-status]')).toContainText("Recalculation required");
+  await expect(calculate).toHaveText("Recalculate");await expect(calculate).toBeEnabled();await calculate.click();
+  await expect.poll(async()=>(await snapshot(page)).riverSource[0].geometryFoam.bake.manifest,{timeout:15_000}).not.toBe(original);
+  await expect.poll(async()=>(await snapshot(page)).riverState[0].stale).toBe(false);
+  await expect.poll(async()=>(await snapshot(page)).riverBaked[0]?.active).toBe(true);
+  expect(await mask()).toEqual([255,expect.any(Number)]);expect((await mask())[1]).toBeLessThan(200);
+  const updated=(await snapshot(page)).riverSource[0].geometryFoam.bake.manifest;
+  await page.getByTestId("editor-undo").click();
+  await expect.poll(async()=>(await snapshot(page)).riverSource[0].geometryFoam.bake.manifest).toBe(original);
+  await page.getByTestId("editor-redo").click();
+  await expect.poll(async()=>(await snapshot(page)).riverSource[0].geometryFoam.bake.manifest).toBe(updated);
+  await expect.poll(async()=>(await snapshot(page)).riverBaked[0]?.active).toBe(true);
+  await page.locator('[data-geometry-foam-clear]').click();
+  await expect.poll(async()=>(await snapshot(page)).riverBaked[0]?.active).toBe(false);
+  await page.getByTestId("editor-undo").click();
+  await expect.poll(async()=>(await snapshot(page)).riverBaked[0]?.active).toBe(true);
+  await save(page);
+  await page.reload({waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).riverBaked[0]?.active).toBe(true);
+  expect((await mask())[0]).toBe(255);expect((await mask())[1]).toBeLessThan(200);
+  await page.screenshot({path:info.outputPath("river-recalculated-after-move.png")});
+  expect(await terrainHash()).toBe(terrainBefore);expect(errors).toEqual([]);
+});
+
+test("River Wet Shore follows slope and survives settings undo Save Reload Play and quality changes",async({page,request},info)=>{
+  test.setTimeout(240_000);
+  const {errors}=await setup(page,request,true,false,false,false,true,false,false,false,false,false,true);await ready(page);
+  const before=await terrainHash();await page.locator('[data-river-water-create]').click();
+  const expand=async(key:string)=>{const section=page.locator(`[data-detail-section="${key}"]`);if(await section.evaluate(e=>e.classList.contains("collapsed")))await section.locator('.detail-section-toggle').click();};
+  await expand("river-surface");
+  const width=page.locator('[data-river-water-number="widthScale"]');await width.fill("10");await width.press("Tab");
+  await expect.poll(async()=>(await snapshot(page)).riverState[0]?.ready).toBe(true);
+  await expand("river-wet-shore");
+  const toggle=page.getByRole("checkbox",{name:"River Wet Shore Enabled"});await expect(toggle).not.toBeChecked();await toggle.check();
+  await expect.poll(async()=>(await snapshot(page)).riverSource[0].shoreWetness?.enabled).toBe(true);
+  const field=page.locator('[data-river-wet-shore-number="width"]');await field.fill("1.5");await field.press("Tab");
+  await expect.poll(async()=>(await snapshot(page)).riverState[0]?.ready).toBe(true);
+  const frame=(wet:boolean)=>page.evaluate(wet=>(window as any).__lakeQA.causticsFrame(false,0,true,false,false,false,false,0,true,false,wet),wet);
+  const off=await frame(false),on=await frame(true);
+  expect(on.glError).toBe(0);expect(on.wetShoreActive).toBe(true);
+  expect(on.samples.filter((v:number,i:number)=>Math.abs(v-off.samples[i])>3).length).toBeGreaterThan(50);
+  expect((await snapshot(page)).riverSource[0].caustics?.enabled??false).toBe(false);
+  await page.screenshot({path:info.outputPath("river-wet-shore.png")});
+  const authored=(await snapshot(page)).riverSource[0].shoreWetness;
+  for(const level of ["Low","Medium","Ultra"] as const) {
+    await page.getByTestId("quality-button").hover();await page.locator("[data-quality-popover] button",{hasText:level}).click();
+    await expect(page.locator("[data-quality-label]")).toHaveText(level);
+    await expect.poll(async()=>(await frame(true)).wetShoreActive).toBe(level!=="Low");
+    expect((await snapshot(page)).riverSource[0].shoreWetness).toEqual(authored);
+  }
+  await toggle.uncheck();await expect.poll(async()=>(await snapshot(page)).riverSource[0].shoreWetness.enabled).toBe(false);
+  await page.getByTestId("editor-undo").click();await expect.poll(async()=>(await snapshot(page)).riverSource[0].shoreWetness.enabled).toBe(true);
+  await save(page);
+  const saved=JSON.parse(await readFile(smokePublicPath(LEVEL),"utf8"));expect(saved.riverWaters[0].shoreWetness).toEqual({enabled:true,width:1.5,strength:.65});
+  await page.reload({waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).riverState[0]?.ready).toBe(true);expect((await frame(true)).wetShoreActive).toBe(true);
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html",{waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
+  await expect.poll(async()=>(await snapshot(page)).riverBaked.length).toBe(1);
+  expect((await frame(true)).wetShoreActive).toBe(true);expect(await terrainHash()).toBe(before);expect(errors).toEqual([]);
 });
 
 test("Lake caustics and sandy pebble normals animate, persist through UI Save/Reload and render in runtime", async ({ page, request }, info) => {

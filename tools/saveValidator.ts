@@ -1,5 +1,6 @@
 import { validateLakeGeometryFoam } from "../engine/scene/lakeFoamBake";
 import { validateWaterCaustics } from "../engine/scene/waterCaustics";
+import { validateWaterShoreWetness } from "../engine/scene/waterShoreWetness";
 import { validateWaterContactFoam } from "../engine/scene/waterContactFoam";
 import { validateWaterBodies } from "../engine/scene/waterBody";
 export { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal } from "./terrainSaveValidator";
@@ -1222,6 +1223,7 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (input.contactFoam !== undefined) water.contactFoam = validateWaterContactFoam(input.contactFoam);
   if (input.geometryFoam !== undefined) water.geometryFoam = validateLakeGeometryFoam(input.geometryFoam);
   if (input.caustics !== undefined) water.caustics = validateWaterCaustics(input.caustics);
+  if (input.shoreWetness !== undefined) water.shoreWetness = validateWaterShoreWetness(input.shoreWetness);
   if (input.foamStamps !== undefined) {
     if (!Array.isArray(input.foamStamps) || input.foamStamps.length > 64) {
       throw new Error("river water foamStamps must be an array of at most 64 entries");

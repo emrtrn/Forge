@@ -2303,6 +2303,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     void this.lakes?.setQuality(lakeQuality(settings)).catch(error => console.warn("[lake-quality]", error));
+    for(const river of this.riverWaterObjects)river.setShoreWetnessAllowed(settings.lakeShoreWetnessAllowed);
     this.applyRuntimePostProcess();
   }
 
@@ -6047,6 +6048,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           normalMap,
         );
         object.raycast = () => {};
+        object.setShoreWetnessAllowed(this.qualitySettings.lakeShoreWetnessAllowed);
         this.scene.add(tagSceneSource(object, "river-water"));
         this.riverWaterObjects.push(object);
       } catch (error) {

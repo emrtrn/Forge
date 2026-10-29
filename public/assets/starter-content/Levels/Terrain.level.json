@@ -143,12 +143,12 @@
       "geometryFoam": {
         "enabled": true,
         "width": 1,
-        "strength": 1,
-        "scale": 1,
+        "strength": 0.5,
+        "scale": 0.5,
         "speed": 1,
         "bake": {
-          "manifest": "assets/starter-content/Levels/Terrain.foam/84f9f100cbc8013d50e786c6802017cde9239cc3d6b814993a2ac09dd843daf6.foam.json",
-          "fingerprint": "796258466f6df39745f60198e818716913627c6af38a133bd10e046c111c76dd"
+          "manifest": "assets/starter-content/Levels/Terrain.foam/983666a0d265f3f27a92dab55ee6c465b7a5fb784549b4e1e6106dad4a95268e.foam.json",
+          "fingerprint": "74f47c9c66780b85e8f154f2385660932fcb4a88d11c6981fa53092e773f580f"
         }
       },
       "caustics": {
@@ -157,6 +157,11 @@
         "scale": 1.5,
         "speed": 1,
         "depthFade": 2
+      },
+      "shoreWetness": {
+        "enabled": true,
+        "width": 1,
+        "strength": 0.65
       }
     }
   ],
@@ -221,8 +226,9 @@
         "wheelRippleWidth": 1,
         "wheelRippleWavelength": 0.6,
         "wheelRippleLifetime": 4,
-        "foamScale": 2,
-        "foamSpeed": 2,
+        "foamOpacity": 0.7,
+        "foamScale": 1,
+        "foamSpeed": 0.5,
         "causticsStrength": 1.5,
         "causticsScale": 1,
         "causticsSpeed": 2,

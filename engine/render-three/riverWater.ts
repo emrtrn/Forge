@@ -30,6 +30,7 @@ import { riverFoamSurfaceFingerprint } from "./lakeFoamBake";
 import { lakeFoamTexture, LAKE_GEOMETRY_FOAM_GLSL } from "./lakeFoamTexture";
 import type { LakeFoamData } from "../scene/lakeFoamBake";
 import { registerRiverCaustics } from "./terrain/terrainCaustics";
+import { registerRiverShoreWetness } from "./terrain/terrainShoreWetness";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
 import { WaterFoamMaterial } from "./waterFoamMaterial";
 
@@ -450,6 +451,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private readonly foamMaterial = new WaterFoamMaterial();
   private effectSurface: RiverSurfaceQuery | undefined;
   private releaseCaustics: () => void = () => {};
+  private releaseShore: () => void = () => {};
+  private shoreAllowed = true;
+  private refreshTerrainEffects:()=>void=()=>{};
   readonly effectErrors: string[] = [];
   getSurface(): RiverSurfaceQuery { return this.effectSurface ??= new RiverSurfaceQuery(this.ribbon, [...this.position.toArray()] as Vec3); }
   private readonly ribbon: RiverWaterRibbonData;
@@ -467,7 +471,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     let surface: RiverSurfaceQuery | undefined;
     let bake: ReturnType<typeof lakeFoamTexture> | null = null;
     const errors:string[]=[];
-    if(item.caustics?.enabled || (item.geometryFoam?.enabled && item.bakedFoam)) {
+    if(item.caustics?.enabled || item.shoreWetness?.enabled || (item.geometryFoam?.enabled && item.bakedFoam)) {
       try {
         surface=new RiverSurfaceQuery(ribbon,item.position);
         if(item.geometryFoam?.enabled&&item.bakedFoam?.metadata.surface==="river"&&item.bakedFoam.metadata.surfaceFingerprint===riverFoamSurfaceFingerprint(surface)) bake=lakeFoamTexture(item.bakedFoam);
@@ -559,13 +563,21 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.castShadow = false;
     this.receiveShadow = true;
     this.renderOrder = 1;
-    this.addEventListener("added",()=>{
-      if(item.caustics?.enabled && this.parent instanceof Scene) {
-        try { this.releaseCaustics=registerRiverCaustics(this.parent,item,this.getSurface(),this); }
-        catch(error) { this.effectErrors.push(String(error)); console.warn("[river-caustics]",item.id,error); }
+    this.refreshTerrainEffects=()=>{
+      this.releaseShore();this.releaseShore=()=>{};this.releaseCaustics();this.releaseCaustics=()=>{};
+      if(this.parent instanceof Scene && (item.caustics?.enabled || (item.shoreWetness?.enabled&&this.shoreAllowed))) {
+        const water={...item,...(item.shoreWetness?{shoreWetness:{...item.shoreWetness,enabled:item.shoreWetness.enabled&&this.shoreAllowed}}:{})};
+        try { this.releaseCaustics=registerRiverCaustics(this.parent,water,this.getSurface(),this); }
+        catch(error) { this.effectErrors.push(String(error)); console.warn("[river-caustics]",item.id,error); return; }
+        try {this.releaseShore=registerRiverShoreWetness(this.parent,water,this.getSurface(),this);}
+        catch(error) {
+          if(!item.caustics?.enabled){this.releaseCaustics();this.releaseCaustics=()=>{};}
+          this.effectErrors.push(String(error));console.warn("[river-wet-shore]",item.id,error);
+        }
       }
-    });
-    this.addEventListener("removed",()=>{this.releaseCaustics();this.releaseCaustics=()=>{};});
+    };
+    this.addEventListener("added",this.refreshTerrainEffects);
+    this.addEventListener("removed",()=>{this.releaseShore();this.releaseShore=()=>{};this.releaseCaustics();this.releaseCaustics=()=>{};});
     this.onBeforeRender = (_renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
       this.foamMaterial.update(item.foamOpacity > 0, scene, camera);
@@ -575,7 +587,13 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     };
   }
 
+  setShoreWetnessAllowed(allowed:boolean):void {
+    if(this.shoreAllowed===allowed)return;
+    this.shoreAllowed=allowed;this.refreshTerrainEffects();
+  }
+
   dispose(): void {
+    this.releaseShore();this.releaseShore=()=>{};
     this.foamMaterial.dispose();
     this.releaseCaustics(); this.releaseCaustics=()=>{};
     this.bakedTexture?.dispose();

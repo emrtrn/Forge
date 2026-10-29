@@ -57,12 +57,17 @@ function registerSource(scene:Scene, source:Source):()=>void {
 }
 
 export function registerRiverCaustics(scene: Scene, water: ResolvedRiverWater, surface: RiverSurfaceQuery, object: Object3D): () => void {
-  if (!water.caustics?.enabled) return () => {};
+  // Wet shores borrow the exact same ribbon atlas, even with caustic light off.
+  if (!water.caustics?.enabled && !water.shoreWetness?.enabled) return () => {};
   const sizes=[surface,...[...(registries.get(scene)?.sources.values()??[])].flatMap(s=>s.river?[s.river]:[])];
   if(sizes.reduce((n,s)=>n+s.nx*s.nz+s.triangles.length+4*s.data.indices.length/3,0)>1024*1024)throw new Error("over-budget: River caustics atlas exceeds 16 MiB");
   const {origin,min}=surface;
   const coverage={min:[min[0]+origin[0],min[1]+origin[2]] as [number,number],nx:surface.nx,nz:surface.nz,spacing:surface.spacing,triangles:new Uint8Array(0)};
   return registerSource(scene,{water,coverage,object,river:surface,flowSpeed:water.flowSpeed});
+}
+
+export function terrainRiverSurfaceIndex(scene: Scene, object: Object3D): number {
+  return registries.get(scene)?.layers.findIndex(source=>source.object===object&&!!source.river)??-1;
 }
 
 export function createTerrainCausticsUniforms() {
@@ -120,7 +125,7 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
   let i = 0, riverIndex=0;
   for (const { lake, water, coverage, object, river, flowSpeed } of sources) {
     const caustics=water?.caustics;
-    const a=lake?resolveLakeAppearance(lake):{causticsStrength:caustics!.strength,causticsScale:caustics!.scale,causticsSpeed:caustics!.speed,causticsDepthFade:caustics!.depthFade};
+    const a=lake?resolveLakeAppearance(lake):{causticsStrength:caustics?.enabled?caustics.strength:0,causticsScale:caustics?.scale??1.5,causticsSpeed:caustics?.speed??.25,causticsDepthFade:caustics?.depthFade??4};
     const terrain=lake?.terrainRef??water!.landscapeRef,level=lake?.surfaceLevel??river!.origin[1];
     let visible = true;
     for (let parent: Object3D | null = object; parent; parent = parent.parent) visible &&= parent.visible;

@@ -3,9 +3,21 @@ import { defaultLakeGeometryFoam } from "@engine/scene/lakeFoamBake";
 import { defaultWaterCaustics, type WaterCaustics } from "@engine/scene/waterCaustics";
 import { defaultWaterContactFoam } from "@engine/scene/waterContactFoam";
 import { renderGeometryFoamDetails } from "./lakeGeometryFoamDetails";
+import { defaultWaterShoreWetness } from "@engine/scene/waterShoreWetness";
 
 export function renderRiverEffectsDetails(parent:HTMLElement,app:SceneApp,water:RiverWaterDetailsView,locked:boolean):void {
   const edit=(patch:Parameters<SceneApp["setSelectedLandscapeRiverWater"]>[1])=>app.setSelectedLandscapeRiverWater(water.id,patch);
+  const wet=water.shoreWetness??defaultWaterShoreWetness(),wetSection=document.createElement("div");
+  wetSection.className="detail-section";wetSection.dataset.detailSection="river-wet-shore";
+  wetSection.innerHTML=`<div class="detail-section-title" title="Nehir tabanını ve kıyıdaki dar bandı yerel su yüksekliğine göre koyulaştırır ve parlaklaştırır.">Wet Shore</div>
+    <label class="detail-toggle"><input type="checkbox" aria-label="River Wet Shore Enabled" data-river-wet-shore ${wet.enabled?"checked":""} ${locked?"disabled":""}> Enabled</label>`;
+  wetSection.querySelector<HTMLInputElement>("input")!.addEventListener("change",e=>edit({shoreWetness:{...wet,enabled:(e.target as HTMLInputElement).checked}}));
+  for(const [key,label,min,max,step,title] of [["width","Wet Band Width (m)",.2,4,.1,"Kuru kıyıdaki ıslak bandın metre cinsinden genişliği."],["strength","Wet Band Strength",0,1,.05,"Taban ve kıyı ıslaklığının görsel şiddeti; terrain boyamasını değiştirmez."]] as const) {
+    const row=document.createElement("label");row.className="detail-row";row.textContent=label;row.title=title;
+    const input=document.createElement("input");input.type="number";input.min=String(min);input.max=String(max);input.step=String(step);input.value=String(wet[key]);input.disabled=locked;input.dataset.riverWetShoreNumber=key;
+    input.addEventListener("change",()=>{if(input.checkValidity()&&Number.isFinite(input.valueAsNumber))edit({shoreWetness:{...wet,[key]:input.valueAsNumber}});});row.append(input);wetSection.append(row);
+  }
+  parent.append(wetSection);
   renderGeometryFoamDetails(parent,water.geometryFoam??defaultLakeGeometryFoam(),app.getRiverGeometryFoamState(water.id),locked,false,{
     calculate:()=>void app.calculateRiverGeometryFoam(water.id),cancel:()=>app.cancelRiverGeometryFoam(),
     clear:()=>app.clearRiverGeometryFoam(water.id),edit:geometryFoam=>edit({geometryFoam}),

@@ -15,7 +15,8 @@ import {
 import type { WorldPoint } from "@engine/worldbuilder/normalize";
 import type { PlanProvenance, WorldRecipe, WorldReference } from "@engine/worldbuilder/recipe";
 import type { LandUse } from "@engine/worldbuilder/vocabulary";
-import type { RecipeLayerCounts, RecipeLayerOptions, UnderlayState } from "@/editor/worldBuilderLayer";
+import { LOW_CONFIDENCE, type RecipeLayerCounts, type RecipeLayerOptions, type UnderlayState } from "@/editor/worldBuilderLayer";
+import type { PlanElementKind, PlanRef } from "@/editor/worldBuilderPlanEdit";
 
 /** Layer colours; the panel legend uses the same values. */
 export const LAYER_COLORS = {
@@ -26,6 +27,8 @@ export const LAYER_COLORS = {
   region: 0x4fd1c5,
   landmark: 0xff8fab,
   lowConfidence: 0xff5c5c,
+  protected: 0xb388ff,
+  selected: 0x3dff9a,
   pad: 0xe0e0e0,
 } as const;
 
@@ -40,8 +43,6 @@ export const LAND_USE_COLORS: Record<LandUse, number> = {
 };
 const UNASSIGNED_PARCEL = 0xbdbdbd;
 
-/** Plan elements below this confidence are drawn in `LAYER_COLORS.lowConfidence` (user decision: fixed 0.5). */
-export const LOW_CONFIDENCE = 0.5;
 /** Lines stand this far above the ground so they clear it between samples, metres. */
 const LIFT = 0.6;
 /** Ground samples along a line, metres apart. */
@@ -67,7 +68,8 @@ type Style = { color: number; dashed: boolean };
  * camera and slid against the plan lines; the shared terrain shader is not
  * touched), the plan (settlements, road graph,
  * water, regions, landmarks — low-confidence elements red, inferred ones
- * dashed) and the generated data (settlement cores, parcels by land use,
+ * dashed; protected regions as boxes; the element selected for a hand
+ * correction in `LAYER_COLORS.selected`) and the generated data (settlement cores, parcels by land use,
  * pads). Lines follow the ground; everything is drawn over the scene and never
  * picked. Editor-only and render-side: it reads the recipe and the terrain
  * height and changes neither.
@@ -76,7 +78,7 @@ export class WorldBuilderRecipeOverlay {
   readonly group = new Group();
   private readonly loader = new TextureLoader();
   private texture: { path: string; texture: Texture | null; failed: boolean } | null = null;
-  private last: { recipe: WorldRecipe | null; options: RecipeLayerOptions } | null = null;
+  private last: { recipe: WorldRecipe | null; options: RecipeLayerOptions; selection: PlanRef | null } | null = null;
 
   constructor(
     private readonly sampleHeight: (x: number, z: number) => number | null,
@@ -88,9 +90,9 @@ export class WorldBuilderRecipeOverlay {
   }
 
   /** Replaces the drawn layer. */
-  show(recipe: WorldRecipe | null, options: RecipeLayerOptions): RecipeLayerCounts {
+  show(recipe: WorldRecipe | null, options: RecipeLayerOptions, selection: PlanRef | null = null): RecipeLayerCounts {
     this.clear();
-    this.last = { recipe, options };
+    this.last = { recipe, options, selection };
     const counts: RecipeLayerCounts = { underlay: "none", plan: 0, lowConfidence: 0, cores: 0, parcels: 0, pads: 0 };
     if (!recipe) return counts;
     counts.underlay = this.underlay(recipe.reference, options);
@@ -104,7 +106,7 @@ export class WorldBuilderRecipeOverlay {
       }
       return entry.values;
     };
-    if (options.plan) this.drawPlan(recipe, counts, batch);
+    if (options.plan) this.drawPlan(recipe, selection, counts, batch);
     if (options.generated) this.drawGenerated(recipe, counts, batch);
     for (const { style, values } of batches.values()) {
       if (values.length === 0) continue;
@@ -127,11 +129,12 @@ export class WorldBuilderRecipeOverlay {
     }
   }
 
-  private drawPlan(recipe: WorldRecipe, counts: RecipeLayerCounts, batch: (style: Style) => number[]): void {
-    const style = (element: PlanProvenance, color: number): Style => {
+  private drawPlan(recipe: WorldRecipe, selection: PlanRef | null, counts: RecipeLayerCounts, batch: (style: Style) => number[]): void {
+    const style = (element: PlanProvenance, color: number, kind?: PlanElementKind, id?: string): Style => {
       counts.plan += 1;
       const low = element.confidence !== undefined && element.confidence < LOW_CONFIDENCE;
       if (low) counts.lowConfidence += 1;
+      if (kind && selection?.kind === kind && selection.id === id) return { color: LAYER_COLORS.selected, dashed: false };
       return { color: low ? LAYER_COLORS.lowConfidence : color, dashed: element.observed === false };
     };
     const { plan } = recipe;
@@ -145,25 +148,33 @@ export class WorldBuilderRecipeOverlay {
       if (water.polygon) this.loop(water.polygon, batch(look), look.dashed);
     }
     for (const landmark of plan.landmarks) {
-      const values = batch(style(landmark, LAYER_COLORS.landmark));
+      const values = batch(style(landmark, LAYER_COLORS.landmark, "landmark", landmark.id));
       this.post(landmark.position, CENTRE_POST * 0.6, values);
       this.cross(landmark.position, MARK, values);
     }
     for (const settlement of plan.settlements) {
-      const look = style(settlement, LAYER_COLORS.settlement);
+      const look = style(settlement, LAYER_COLORS.settlement, "settlement", settlement.id);
       const values = batch(look);
       this.cross(settlement.center, 2 * MARK, values);
       if (settlement.radius !== undefined) this.loop(circle(settlement.center, settlement.radius), values, look.dashed);
       if (settlement.boundary) this.loop(settlement.boundary, values, look.dashed);
     }
     const nodes = new Map(plan.roadGraph.nodes.map((node) => [node.id, node] as const));
-    for (const node of plan.roadGraph.nodes) this.post(node.position, NODE_POST, batch(style(node, LAYER_COLORS.road)));
+    for (const node of plan.roadGraph.nodes) this.post(node.position, NODE_POST, batch(style(node, LAYER_COLORS.road, "node", node.id)));
     for (const edge of plan.roadGraph.edges) {
       const from = nodes.get(edge.from);
       const to = nodes.get(edge.to);
       if (!from || !to) continue;
-      const look = style(edge, LAYER_COLORS.road);
+      const look = style(edge, LAYER_COLORS.road, "edge", edge.id);
       this.line([from.position, ...(edge.guide ?? []), to.position], batch(look), look.dashed);
+      for (const point of edge.guide ?? []) this.cross(point, MARK * 0.5, batch(look));
+    }
+    // Ownership, not plan: drawn with it and not counted as a plan element.
+    for (const region of recipe.ownership.protectedRegions) {
+      const selected = selection?.kind === "protected" && selection.id === region.id;
+      const [x0, z0] = region.min;
+      const [x1, z1] = region.max;
+      this.loop([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], batch({ color: selected ? LAYER_COLORS.selected : LAYER_COLORS.protected, dashed: !selected }), !selected);
     }
   }
 
@@ -249,7 +260,7 @@ export class WorldBuilderRecipeOverlay {
 
   private redraw(): void {
     if (!this.last) return;
-    this.onUnderlayChanged(this.show(this.last.recipe, this.last.options));
+    this.onUnderlayChanged(this.show(this.last.recipe, this.last.options, this.last.selection));
   }
 
   // ---------------------------------------------------------------- lines on the ground

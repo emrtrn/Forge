@@ -20,6 +20,12 @@
  * the session builds the preview and the host draws it. Apply accepts it,
  * Clear Preview drops it, and any history step drops it too, since the level
  * it was planned against has changed.
+ *
+ * The plan can be corrected by hand (§13.2 step 4, 15b): move, add and delete
+ * its elements and protected regions. Each correction is one undo step checked
+ * by the recipe normalizer, and the touched element becomes `manual`
+ * (`worldBuilderPlanEdit.ts`). The selected element is a viewer state, like
+ * the layer switches: not saved, not undone.
  */
 import type { EditorCommand } from "@editor/core/history";
 import type { RoomLayout } from "@engine/scene/layout";
@@ -30,6 +36,8 @@ import {
   normalizeWorldRecipe,
   worldRecipePath,
   type GeneratedPad,
+  type ProtectedRegion,
+  type WorldPlan,
   type WorldRecipe,
   type WorldReference,
 } from "@engine/worldbuilder/recipe";
@@ -43,6 +51,7 @@ import {
   type WorldStage,
 } from "@engine/worldbuilder/stage";
 import { createDefaultWorldStages } from "@engine/worldbuilder/stages";
+import type { RoadClass } from "@engine/worldbuilder/vocabulary";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { SaveRevision, type EditorSaveStep } from "./editorSaveCoordinator";
 import { gameProgramExtensions } from "./gameEditorRegistry";
@@ -52,6 +61,19 @@ import {
   type RecipeLayerCounts,
   type RecipeLayerOptions,
 } from "./worldBuilderLayer";
+import {
+  addGuidePoint,
+  addPlanElement,
+  deleteGuidePoint,
+  deletePlanElement,
+  hasPlanElement,
+  movePlanPoint,
+  updatePlanElement,
+  type PlanElementFields,
+  type PlanElementKind,
+  type PlanPointRef,
+  type PlanRef,
+} from "./worldBuilderPlanEdit";
 import { buildStagePreview, type PreviewItem, type StagePreview } from "./worldBuilderPreview";
 
 export interface WorldBuilderHost {
@@ -59,6 +81,8 @@ export interface WorldBuilderHost {
   layout(): RoomLayout | null;
   /** World-space terrain height, or null off-terrain / over a tile not loaded. */
   sampleHeight(x: number, z: number): number | null;
+  /** The ground point the viewport looks at, where a plan element added from the panel goes. */
+  viewTarget(): [number, number] | null;
   executeCommand(command: EditorCommand): void;
   /** Writes one side of the group changes into the layout and rebuilds those groups. */
   applyGroupChanges(changes: readonly PlacementGroupChange[], side: "before" | "after"): void;
@@ -72,7 +96,7 @@ export interface WorldBuilderHost {
    * Draws the recipe layer (null clears it) and returns what it drew. An
    * underlay image loads later; the host then calls `layerRedrawn`.
    */
-  showRecipeLayer(recipe: WorldRecipe | null, options: RecipeLayerOptions): RecipeLayerCounts;
+  showRecipeLayer(recipe: WorldRecipe | null, options: RecipeLayerOptions, selection: PlanRef | null): RecipeLayerCounts;
   /** Draws a dry run's preview in the viewport (null clears it); returns how many items it drew. */
   showPreview(preview: StagePreview | null): number;
   /** Frames one preview item, or the whole preview when `item` is null. */
@@ -111,6 +135,8 @@ export interface WorldBuilderView {
   /** The recipe layer in the viewport: what it shows and what it drew. */
   layer: { options: RecipeLayerOptions; counts: RecipeLayerCounts };
   reference: WorldReference | null;
+  /** The plan and protected regions for the hand-correction list, and the selected element. */
+  planEdit: { plan: WorldPlan; protectedRegions: ProtectedRegion[]; selection: PlanRef | null } | null;
 }
 
 type Fetcher = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -128,6 +154,7 @@ export class WorldBuilderSession {
   private preview: { preview: StagePreview; drawn: number } | null = null;
   private layerOptions: RecipeLayerOptions = { ...DEFAULT_RECIPE_LAYER_OPTIONS };
   private layerCounts: RecipeLayerCounts = { ...EMPTY_RECIPE_LAYER_COUNTS };
+  private selection: PlanRef | null = null;
   /** Called when the view changed outside a panel action (an underlay finished loading). */
   onChange: (() => void) | null = null;
   private loadedFor = "";
@@ -151,6 +178,7 @@ export class WorldBuilderSession {
     this.profile = null;
     this.profileView = null;
     this.lastPlan = null;
+    this.selection = null;
     this.clearPreview();
     this.refreshLayer();
     this.saveRevision.reset();
@@ -173,7 +201,9 @@ export class WorldBuilderSession {
 
   /** Redraws the recipe layer, e.g. after the ground under it changed. */
   refreshLayer(): void {
-    this.layerCounts = this.host.showRecipeLayer(this.recipe, { ...this.layerOptions });
+    // An undo can take the selected element away.
+    if (this.selection && (!this.recipe || !hasPlanElement(this.recipe, this.selection))) this.selection = null;
+    this.layerCounts = this.host.showRecipeLayer(this.recipe, { ...this.layerOptions }, this.selection);
   }
 
   /** The host redrew the layer on its own (an underlay image loaded or failed). */
@@ -218,6 +248,52 @@ export class WorldBuilderSession {
       undo: () => this.setRecipe(structuredClone(before)),
     });
     return true;
+  }
+
+  /** Selects a plan element for the panel and highlights it in the viewport (null clears). */
+  selectPlan(ref: PlanRef | null): void {
+    this.selection = ref && this.recipe && hasPlanElement(this.recipe, ref) ? { kind: ref.kind, id: ref.id } : null;
+    this.refreshLayer();
+  }
+
+  /** Moves one plan point (a drop in the viewport, or a typed position). */
+  movePlanPoint(ref: PlanPointRef, point: [number, number]): boolean {
+    return this.editPlan("move", (recipe) => movePlanPoint(recipe, ref, point));
+  }
+
+  /**
+   * Adds a plan element at `at`, or where the viewport looks, and selects it.
+   * An edge joins `link.from` and `link.to`.
+   */
+  addPlanElement(kind: PlanElementKind, at?: [number, number] | null, link?: { from?: string; to?: string; roadClass?: RoadClass }): boolean {
+    const point = at ?? this.host.viewTarget() ?? [0, 0];
+    let added: PlanRef | null = null;
+    const done = this.editPlan(`add ${kind}`, (recipe) => {
+      const result = addPlanElement(recipe, kind, point, link);
+      added = result?.ref ?? null;
+      return result?.recipe ?? null;
+    });
+    if (done && added) this.selectPlan(added);
+    return done;
+  }
+
+  /** Deletes a plan element (default: the selected one) with everything that names it. */
+  deletePlanElement(ref: PlanRef | null = this.selection): boolean {
+    if (!ref) return false;
+    return this.editPlan(`delete ${ref.kind}`, (recipe) => deletePlanElement(recipe, ref));
+  }
+
+  /** Sets typed fields of a plan element. */
+  updatePlanElement(ref: PlanRef, fields: PlanElementFields): boolean {
+    return this.editPlan(`edit ${ref.kind}`, (recipe) => updatePlanElement(recipe, ref, fields));
+  }
+
+  addGuidePoint(edgeId: string): boolean {
+    return this.editPlan("add guide point", (recipe) => addGuidePoint(recipe, edgeId)?.recipe ?? null);
+  }
+
+  deleteGuidePoint(edgeId: string, index: number): boolean {
+    return this.editPlan("delete guide point", (recipe) => deleteGuidePoint(recipe, edgeId, index));
   }
 
   /** Re-reads the recipe from disk, e.g. after an AI rewrote it. Refuses over unsaved edits. */
@@ -362,6 +438,9 @@ export class WorldBuilderSession {
       preview: this.preview,
       layer: { options: { ...this.layerOptions }, counts: { ...this.layerCounts } },
       reference: recipe?.reference ? structuredClone(recipe.reference) : null,
+      planEdit: recipe
+        ? { plan: structuredClone(recipe.plan), protectedRegions: structuredClone(recipe.ownership.protectedRegions), selection: this.selection }
+        : null,
     };
   }
 
@@ -400,6 +479,36 @@ export class WorldBuilderSession {
       terrains: this.host.terrains(),
       programExtensions: gameProgramExtensions(),
     });
+  }
+
+  /**
+   * Runs one hand correction as an undo step. Refused with a status when the
+   * normalizer finds a problem the recipe did not have before; a no-op edit
+   * adds no step.
+   */
+  private editPlan(action: string, edit: (recipe: WorldRecipe) => WorldRecipe | null): boolean {
+    if (!this.recipe) {
+      this.host.onStatus("Create or load a world recipe first.", "warning");
+      return false;
+    }
+    const before = structuredClone(this.recipe);
+    const edited = edit(structuredClone(before));
+    if (!edited) return false;
+    const known = new Set(normalizeWorldRecipe(JSON.parse(JSON.stringify(before))).issues);
+    const { recipe: checked, issues } = normalizeWorldRecipe(JSON.parse(JSON.stringify(edited)));
+    const problem = issues.find((entry) => !known.has(entry));
+    if (!checked || problem) {
+      this.host.onStatus(`Plan edit refused: ${problem ?? "the recipe would not be valid"}.`, "error");
+      return false;
+    }
+    if (JSON.stringify(checked) === JSON.stringify(before)) return false;
+    const after = checked;
+    this.host.executeCommand({
+      label: `World Builder: ${action}`,
+      redo: () => this.setRecipe(structuredClone(after)),
+      undo: () => this.setRecipe(structuredClone(before)),
+    });
+    return true;
   }
 
   /** Recipe pads whose building placement is in the level. */

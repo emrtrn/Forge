@@ -1424,7 +1424,8 @@ export class SceneApp {
     terrains: () => this.worldBuilderTerrains(),
     applySplineChanges: (changes, side) => this.applyWorldBuilderSplineChanges(changes, side),
     applyPads: (pads) => this.applyWorldBuilderPads(pads),
-    showRecipeLayer: (recipe, options) => this.worldBuilderRecipeLayer.show(recipe, options),
+    viewTarget: () => this.worldBuilderViewTarget(),
+    showRecipeLayer: (recipe, options, selection) => this.worldBuilderRecipeLayer.show(recipe, options, selection),
     showPreview: (preview) => this.worldBuilderPreview.show(preview),
     focusPreview: (preview, item) => this.focusWorldBuilderPreview(preview, item),
     onStatus: (message, tone) => this.onStatus?.(message, tone),
@@ -2754,6 +2755,24 @@ export class SceneApp {
     this.cameraController.markViewChanged();
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(item ? `Focused ${item.id}.` : `Focused the ${preview.stageLabel} preview.`, "info");
+  }
+
+  /**
+   * Where the view ray from the viewport centre meets the ground (World
+   * Builder adds a plan element there); without ground, a point ahead.
+   */
+  private worldBuilderViewTarget(): [number, number] {
+    const camera = this.editorViewportCamera();
+    const direction = camera.getWorldDirection(new Vector3());
+    const point = camera.position.clone();
+    for (let travelled = 0; travelled < 4000; travelled += 2) {
+      point.addScaledVector(direction, 2);
+      const ground = this.worldTerrainHeightAt(point.x, point.z) ?? 0;
+      if (point.y <= ground) return [point.x, point.z];
+    }
+    const flat = new Vector3(direction.x, 0, direction.z);
+    if (flat.lengthSq() > 0) flat.normalize().multiplyScalar(50);
+    return [camera.position.x + flat.x, camera.position.z + flat.z];
   }
 
   getWorldSettings(): EditorWorldSettings {

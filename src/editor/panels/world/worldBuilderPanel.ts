@@ -1,6 +1,8 @@
-import type { WorldReference } from "@engine/worldbuilder/recipe";
+import { ROAD_NODE_KINDS, type ProtectedRegion, type WorldPlan, type WorldReference } from "@engine/worldbuilder/recipe";
+import { ROAD_CLASSES, type RoadClass } from "@engine/worldbuilder/vocabulary";
 import type { StagePlan } from "@engine/worldbuilder/stage";
-import type { RecipeLayerOptions, UnderlayState } from "@/editor/worldBuilderLayer";
+import { LOW_CONFIDENCE, type RecipeLayerOptions, type UnderlayState } from "@/editor/worldBuilderLayer";
+import { PLAN_ELEMENT_KINDS, type PlanElementFields, type PlanElementKind, type PlanRef } from "@/editor/worldBuilderPlanEdit";
 import { PREVIEW_CHANGES, previewItemDrawable, type PreviewChange, type PreviewItem } from "@/editor/worldBuilderPreview";
 import type { WorldBuilderSession, WorldBuilderView } from "@/editor/worldBuilderSession";
 
@@ -24,13 +26,24 @@ export interface WorldBuilderPanelOptions {
  * its object, Focus frames them all and Clear Preview drops the drawing.
  * Viewport Layers switch the recipe layer's parts (reference image, plan,
  * generated data) and set the reference image (an undoable recipe edit).
+ * Plan Corrections list the plan's elements and protected regions: a row
+ * selects one (highlighted in the viewport), its fields and Add / Delete are
+ * hand corrections, each one undo step (§13.2 step 4).
  */
 export class WorldBuilderPanel {
   constructor(private readonly options: WorldBuilderPanelOptions) {
     options.body.addEventListener("click", (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-wb-action]");
       if (!button || button.disabled) return;
-      void this.run(button.dataset.wbAction ?? "", button.dataset.wbStage ?? "", button.dataset.wbId);
+      void this.run(button.dataset.wbAction ?? "", button.dataset.wbStage ?? "", button.dataset.wbId, button.dataset);
+    });
+    // A typed plan field is one correction when it is committed (Enter or leaving the field).
+    options.body.addEventListener("change", (event) => {
+      const field = (event.target as HTMLElement).closest<HTMLInputElement | HTMLSelectElement>("[data-wb-field]");
+      if (!field) return;
+      const selection = options.session.getView().planEdit?.selection;
+      if (selection) options.session.updatePlanElement(selection, this.readPlanFields());
+      this.update();
     });
     // Live while dragging, without redrawing the panel under the slider.
     options.body.addEventListener("input", (event) => {
@@ -48,8 +61,9 @@ export class WorldBuilderPanel {
     this.options.body.innerHTML = renderView(this.options.session.getView());
   }
 
-  private async run(action: string, stageId: string, id?: string): Promise<void> {
+  private async run(action: string, stageId: string, id?: string, data: DOMStringMap = {}): Promise<void> {
     const { session } = this.options;
+    const kind = data.wbKind as PlanElementKind | undefined;
     if (action === "create") session.createRecipe();
     else if (action === "reload") await session.reload();
     else if (action === "dry-run") session.dryRun(stageId);
@@ -64,11 +78,53 @@ export class WorldBuilderPanel {
       const reference = this.readReferenceForm();
       if (reference) session.setReference(reference);
     } else if (action === "reference-remove") session.setReference(null);
+    else if (action === "plan-select" && kind && id) session.selectPlan({ kind, id });
+    else if (action === "plan-add" && kind) session.addPlanElement(kind);
+    else if (action === "plan-delete") session.deletePlanElement();
+    else if (action === "plan-connect" && id) {
+      const to = this.planControl("connect-to");
+      if (to) session.addPlanElement("edge", null, { from: id, to, roadClass: this.planControl("connect-class") as RoadClass });
+    } else if (action === "guide-add" && id) session.addGuidePoint(id);
+    else if (action === "guide-delete" && id) session.deleteGuidePoint(id, Number(data.wbIndex));
     else if (action === "preview-focus") {
       session.focusPreview(id);
       return;
     }
     this.update();
+  }
+
+  private planControl(name: string): string {
+    return this.options.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-plan="${name}"]`)?.value.trim() ?? "";
+  }
+
+  /** The selected element's typed fields; an empty optional number clears it. */
+  private readPlanFields(): PlanElementFields {
+    const value = (name: string) => this.options.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-field="${name}"]`)?.value.trim();
+    const number = (name: string) => {
+      const text = value(name);
+      return text === undefined || text === "" ? null : Number(text);
+    };
+    const point = (x: string, z: string): [number, number] | undefined => {
+      const px = number(x);
+      const pz = number(z);
+      return px === null || pz === null ? undefined : [px, pz];
+    };
+    const fields: PlanElementFields = {};
+    const position = point("x", "z");
+    if (position) fields.position = position;
+    const min = point("min-x", "min-z");
+    if (min) fields.min = min;
+    const max = point("max-x", "max-z");
+    if (max) fields.max = max;
+    const kind = value("kind");
+    if (kind) fields.kind = kind;
+    if (value("population") !== undefined) fields.population = number("population");
+    if (value("radius") !== undefined) fields.radius = number("radius");
+    const nodeKind = value("node-kind");
+    if (nodeKind) fields.nodeKind = nodeKind as (typeof ROAD_NODE_KINDS)[number];
+    const roadClass = value("road-class");
+    if (roadClass) fields.roadClass = roadClass as RoadClass;
+    return fields;
   }
 
   private readReferenceForm(): WorldReference | null {
@@ -112,6 +168,7 @@ function renderView(view: WorldBuilderView): string {
   return `<div class="world-builder-panel" data-testid="world-builder-panel">
     ${renderRecipe(view)}
     ${view.state === "loaded" ? renderLayers(view) : ""}
+    ${view.planEdit ? renderPlanEdit(view.planEdit) : ""}
     ${view.state === "loaded" ? renderStages(view) : ""}
     ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null) : ""}
     ${view.preview ? renderPreview(view.preview.preview.items, view.preview.drawn) : ""}
@@ -173,7 +230,7 @@ function renderLayers(view: WorldBuilderView): string {
         <input type="range" min="0" max="1" step="0.05" value="${options.opacity}" data-wb-opacity data-testid="world-builder-underlay-opacity">
       </label>
       <div data-testid="world-builder-layer-plan" data-drawn="${options.plan ? counts.plan : 0}" data-low="${options.plan ? counts.lowConfidence : 0}">Plan: ${plan} ${toggle("plan")}</div>
-      <div class="world-builder-legend">${swatch("settlement", "settlement")} ${swatch("road", "road")} ${swatch("water", "water")} ${swatch("region", "region")} ${swatch("landmark", "landmark")} ${swatch("low", "confidence &lt; 0.5")} · dashed: inferred</div>
+      <div class="world-builder-legend">${swatch("settlement", "settlement")} ${swatch("road", "road")} ${swatch("water", "water")} ${swatch("region", "region")} ${swatch("landmark", "landmark")} ${swatch("protected", "protected")} ${swatch("selected", "selected")} ${swatch("low", "confidence &lt; 0.5")} · dashed: inferred</div>
       <div data-testid="world-builder-layer-generated" data-cores="${options.generated ? counts.cores : 0}" data-parcels="${options.generated ? counts.parcels : 0}" data-pads="${options.generated ? counts.pads : 0}">Generated: ${generated} ${toggle("generated")}</div>
       <div class="world-builder-legend">${swatch("core", "core")} ${swatch("pad", "pad")} · parcels by land use</div>
     </div>
@@ -200,6 +257,116 @@ function renderReferenceForm(reference: WorldReference | null): string {
       <button type="button" data-wb-action="reference-set" data-testid="world-builder-reference-set">Set Reference</button>
       ${reference ? '<button type="button" data-wb-action="reference-remove" data-testid="world-builder-reference-remove">Remove</button>' : ""}
     </div>
+  </div>`;
+}
+
+const PLAN_KIND_LABELS: Record<PlanElementKind, string> = {
+  settlement: "Settlement",
+  node: "Road node",
+  edge: "Road edge",
+  landmark: "Landmark",
+  protected: "Protected region",
+};
+
+interface PlanRow {
+  ref: PlanRef;
+  label: string;
+  /** `manual`, `reference`, …; absent for protected regions (ownership, not plan). */
+  source?: string;
+  low: boolean;
+}
+
+function planRows(plan: WorldPlan, protectedRegions: readonly ProtectedRegion[]): PlanRow[] {
+  const low = (confidence: number | undefined) => confidence !== undefined && confidence < LOW_CONFIDENCE;
+  return [
+    ...plan.settlements.map((entry): PlanRow => ({ ref: { kind: "settlement", id: entry.id }, label: entry.type, source: entry.source, low: low(entry.confidence) })),
+    ...plan.roadGraph.nodes.map((entry): PlanRow => ({ ref: { kind: "node", id: entry.id }, label: entry.kind, source: entry.source, low: low(entry.confidence) })),
+    ...plan.roadGraph.edges.map((entry): PlanRow => ({ ref: { kind: "edge", id: entry.id }, label: `${entry.from} → ${entry.to}, ${entry.roadClass}`, source: entry.source, low: low(entry.confidence) })),
+    ...plan.landmarks.map((entry): PlanRow => ({ ref: { kind: "landmark", id: entry.id }, label: entry.kind, source: entry.source, low: low(entry.confidence) })),
+    ...protectedRegions.map((entry): PlanRow => ({ ref: { kind: "protected", id: entry.id }, label: entry.kind, low: false })),
+  ];
+}
+
+function renderPlanEdit(edit: NonNullable<WorldBuilderView["planEdit"]>): string {
+  const { selection } = edit;
+  const rows = planRows(edit.plan, edit.protectedRegions);
+  const groups = PLAN_ELEMENT_KINDS.map((kind) => {
+    const own = rows.filter((row) => row.ref.kind === kind);
+    if (own.length === 0) return "";
+    const items = own.map((row) => {
+      const selected = selection?.kind === kind && selection.id === row.ref.id;
+      const tags = [row.source, row.low ? "low confidence" : ""].filter(Boolean).join(", ");
+      return `<li><button type="button" class="world-builder-change${selected ? " world-builder-selected" : ""}" data-wb-action="plan-select" data-wb-kind="${kind}" data-wb-id="${escapeHtml(row.ref.id)}" data-testid="world-builder-plan-${kind}-${escapeHtml(row.ref.id)}" data-source="${escapeHtml(row.source ?? "")}">${escapeHtml(row.ref.id)} <span class="world-builder-path">${escapeHtml(row.label)}${tags ? ` · ${escapeHtml(tags)}` : ""}</span></button></li>`;
+    }).join("");
+    return `<div>${PLAN_KIND_LABELS[kind]}s (${own.length})<ul class="world-builder-list">${items}</ul></div>`;
+  }).join("");
+  const add = (["settlement", "node", "landmark", "protected"] as const).map((kind) =>
+    `<button type="button" data-wb-action="plan-add" data-wb-kind="${kind}" data-testid="world-builder-plan-add-${kind}">+ ${PLAN_KIND_LABELS[kind]}</button>`).join("");
+  return `<div class="detail-section" data-testid="world-builder-plan-edit">
+    <div class="detail-section-title">Plan Corrections</div>
+    <div class="world-builder-summary">
+      <div>Each correction is one undo step; a corrected element becomes manual. New elements go where the viewport looks.</div>
+      ${groups || "<div>The plan is empty.</div>"}
+    </div>
+    <div class="world-builder-actions">${add}</div>
+    ${selection ? renderPlanSelection(edit, selection) : ""}
+  </div>`;
+}
+
+function renderPlanSelection(edit: NonNullable<WorldBuilderView["planEdit"]>, selection: PlanRef): string {
+  const { plan } = edit;
+  const input = (name: string, current: number | string | undefined, type = "number") =>
+    `<input type="${type}" data-wb-field="${name}" data-testid="world-builder-plan-field-${name}" value="${escapeHtml(current === undefined ? "" : String(current))}">`;
+  const select = (name: string, options: readonly string[], current: string) =>
+    `<select data-wb-field="${name}" data-testid="world-builder-plan-field-${name}">${options.map((option) =>
+      `<option value="${escapeHtml(option)}" ${option === current ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>`;
+  const position = (point: readonly [number, number]) =>
+    `<label class="world-builder-row">Position x ${input("x", point[0])} z ${input("z", point[1])}</label>`;
+  let fields = "";
+  let extra = "";
+  if (selection.kind === "settlement") {
+    const settlement = plan.settlements.find((entry) => entry.id === selection.id);
+    if (!settlement) return "";
+    fields = `${position(settlement.center)}
+      <label class="world-builder-row">Type ${input("kind", settlement.type, "text")}</label>
+      <label class="world-builder-row">Population ${input("population", settlement.population)} Search radius ${input("radius", settlement.radius)}</label>`;
+  } else if (selection.kind === "node") {
+    const node = plan.roadGraph.nodes.find((entry) => entry.id === selection.id);
+    if (!node) return "";
+    const others = plan.roadGraph.nodes.filter((entry) => entry.id !== node.id);
+    fields = `${position(node.position)}
+      <label class="world-builder-row">Kind ${select("node-kind", ROAD_NODE_KINDS, node.kind)}</label>`;
+    extra = others.length === 0 ? "" : `<label class="world-builder-row">Connect to
+        <select data-wb-plan="connect-to" data-testid="world-builder-plan-connect-to">${others.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.id)}</option>`).join("")}</select>
+        <select data-wb-plan="connect-class" data-testid="world-builder-plan-connect-class">${ROAD_CLASSES.map((entry) => `<option value="${entry}" ${entry === "local" ? "selected" : ""}>${entry}</option>`).join("")}</select>
+        <button type="button" data-wb-action="plan-connect" data-wb-id="${escapeHtml(node.id)}" data-testid="world-builder-plan-connect">Add Edge</button>
+      </label>`;
+  } else if (selection.kind === "edge") {
+    const edge = plan.roadGraph.edges.find((entry) => entry.id === selection.id);
+    if (!edge) return "";
+    const guide = (edge.guide ?? []).map((point, index) =>
+      `<li>${point[0]}, ${point[1]} <button type="button" class="world-builder-change" data-wb-action="guide-delete" data-wb-id="${escapeHtml(edge.id)}" data-wb-index="${index}" data-testid="world-builder-plan-guide-delete-${index}">remove</button></li>`).join("");
+    fields = `<div>${escapeHtml(edge.from)} → ${escapeHtml(edge.to)}</div>
+      <label class="world-builder-row">Road class ${select("road-class", ROAD_CLASSES, edge.roadClass)}</label>`;
+    extra = `<div data-testid="world-builder-plan-guide" data-count="${edge.guide?.length ?? 0}">Guide points (${edge.guide?.length ?? 0}) — a corridor hint, not the final route<ul class="world-builder-list">${guide}</ul></div>
+      <div class="world-builder-actions"><button type="button" data-wb-action="guide-add" data-wb-id="${escapeHtml(edge.id)}" data-testid="world-builder-plan-guide-add">Add Guide Point</button></div>`;
+  } else if (selection.kind === "landmark") {
+    const landmark = plan.landmarks.find((entry) => entry.id === selection.id);
+    if (!landmark) return "";
+    fields = `${position(landmark.position)}
+      <label class="world-builder-row">Kind ${input("kind", landmark.kind, "text")}</label>`;
+  } else {
+    const region = edit.protectedRegions.find((entry) => entry.id === selection.id);
+    if (!region) return "";
+    fields = `<label class="world-builder-row">Kind ${input("kind", region.kind, "text")}</label>
+      <label class="world-builder-row">Min x ${input("min-x", region.min[0])} z ${input("min-z", region.min[1])}</label>
+      <label class="world-builder-row">Max x ${input("max-x", region.max[0])} z ${input("max-z", region.max[1])}</label>`;
+  }
+  return `<div class="world-builder-reference" data-testid="world-builder-plan-selection" data-kind="${selection.kind}" data-id="${escapeHtml(selection.id)}">
+    <div><strong>${PLAN_KIND_LABELS[selection.kind]} ${escapeHtml(selection.id)}</strong></div>
+    ${fields}
+    ${extra}
+    <div class="world-builder-actions"><button type="button" data-wb-action="plan-delete" data-testid="world-builder-plan-delete">Delete ${PLAN_KIND_LABELS[selection.kind]}</button></div>
   </div>`;
 }
 

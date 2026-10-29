@@ -15,6 +15,9 @@ export interface RecipeLayerOptions {
   opacity: number;
 }
 
+/** Plan elements below this confidence are drawn apart (user decision: fixed 0.5). */
+export const LOW_CONFIDENCE = 0.5;
+
 export const DEFAULT_RECIPE_LAYER_OPTIONS: Readonly<RecipeLayerOptions> = { underlay: true, plan: true, generated: true, opacity: 0.6 };
 
 /**

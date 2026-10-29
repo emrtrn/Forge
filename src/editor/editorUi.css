@@ -861,6 +861,7 @@
 /* Dry run preview (T10); swatch colours match WorldBuilderPreviewOverlay's PREVIEW_COLORS. */
 .world-builder-change { all: unset; cursor: pointer; color: var(--forge-text); }
 .world-builder-change:hover, .world-builder-change:focus-visible { text-decoration: underline; }
+.world-builder-selected { color: #3dff9a; font-weight: 600; }
 .world-builder-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; vertical-align: baseline; }
 .world-builder-swatch-added { background: #3ddc84; }
 .world-builder-swatch-updated { background: #f5b041; }
@@ -874,6 +875,8 @@
 .world-builder-swatch-water { background: #4aa3ff; }
 .world-builder-swatch-region { background: #4fd1c5; }
 .world-builder-swatch-landmark { background: #ff8fab; }
+.world-builder-swatch-protected { background: #b388ff; }
+.world-builder-swatch-selected { background: #3dff9a; }
 .world-builder-swatch-low { background: #ff5c5c; }
 .world-builder-swatch-pad { background: #e0e0e0; }
 .world-builder-legend { font-size: 11px; }

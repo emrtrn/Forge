@@ -2,7 +2,8 @@
  * World Builder F1, steps 5b and 6b: the editor session around the Stage
  * Runner — loading the open level's recipe and profile, dry run vs apply, one
  * undo step for level + terrain splines + recipe, and the recipe's place in the
- * Save Layout turn (first, before terrains and the level).
+ * Save Layout turn (first, before terrains and the level). Step 15b: hand
+ * corrections to the plan, each one undo step that makes the element manual.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -72,6 +73,7 @@ function harness(files: Record<string, unknown> = {}) {
     scenePath: () => LEVEL,
     layout: () => layout,
     sampleHeight: () => 1,
+    viewTarget: () => [5, 5],
     executeCommand: (command) => void history.execute(command),
     applyGroupChanges: (changes, side) => rebuilt.push(...applyPlacementGroupChanges(layout, changes, side)),
     terrains: () => [{ ...terrain, splines: structuredClone(terrain.splines) }],
@@ -436,5 +438,104 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.equal(session.getView().planCounts!.pads, 1);
     await session.applyPads();
     assert.deepEqual(baked, [[{ polygon: square, height: 4.5, falloff: PAD_FALLOFF }]]);
+  });
+
+  await checkAsync("world builder session: moving a plan point is one undo step that makes the element manual", async () => {
+    const recipe = planRecipe();
+    Object.assign(recipe.plan.settlements[0]!, { observed: false, confidence: 0.3, boundary: [[0, 10], [20, 10], [20, 30]] });
+    const { session, history } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    assert.equal(session.movePlanPoint({ kind: "settlement", id: "village" }, [15, 25]), true);
+    const moved = session.getView().planEdit!.plan.settlements[0]!;
+    assert.deepEqual(moved.center, [15, 25]);
+    assert.deepEqual(moved.boundary, [[5, 15], [25, 15], [25, 35]], "the boundary moves with the centre");
+    assert.equal(moved.source, "manual");
+    assert.equal("observed" in moved, false, "the reference's estimates no longer apply");
+    assert.equal("confidence" in moved, false);
+    assert.equal(history.state().undoLabel, "World Builder: move");
+    assert.equal(session.getView().dirty, true);
+    assert.equal(session.movePlanPoint({ kind: "settlement", id: "village" }, [15, 25]), false, "a no-op adds no step");
+    history.undo();
+    const restored = session.getView().planEdit!.plan.settlements[0]!;
+    assert.deepEqual([restored.center, restored.source, restored.confidence], [[10, 20], "reference", 0.3]);
+  });
+
+  await checkAsync("world builder session: plan elements are added where the viewport looks, selected, and edited by field", async () => {
+    const { session, history, statuses } = harness({ [RECIPE_URL]: roadRecipe() });
+    await session.load();
+    assert.equal(session.addPlanElement("node"), true);
+    let edit = session.getView().planEdit!;
+    assert.deepEqual(edit.selection, { kind: "node", id: "node-1" });
+    assert.deepEqual(edit.plan.roadGraph.nodes.at(-1), { id: "node-1", source: "manual", position: [5, 5], kind: "end" });
+    assert.equal(session.addPlanElement("edge", null, { from: "a", to: "node-1", roadClass: "track" }), true);
+    assert.deepEqual(session.getView().planEdit!.plan.roadGraph.edges.at(-1), { id: "edge-1", source: "manual", from: "a", to: "node-1", roadClass: "track" });
+    assert.equal(session.addPlanElement("edge", null, { from: "a", to: "a" }), false, "an edge needs two nodes");
+    assert.equal(session.updatePlanElement({ kind: "node", id: "node-1" }, { position: [7, 8], nodeKind: "junction" }), true);
+    edit = session.getView().planEdit!;
+    assert.deepEqual(edit.plan.roadGraph.nodes.at(-1), { id: "node-1", source: "manual", position: [7, 8], kind: "junction" });
+    assert.equal(session.addPlanElement("settlement", [40, 40]), true);
+    assert.equal(session.updatePlanElement({ kind: "settlement", id: "settlement-1" }, { kind: "hamlet", population: 30, radius: 25 }), true);
+    assert.equal(session.updatePlanElement({ kind: "settlement", id: "settlement-1" }, { radius: null }), true, "an empty optional field clears it");
+    const settlement = session.getView().planEdit!.plan.settlements[0]!;
+    assert.deepEqual(settlement, { id: "settlement-1", source: "manual", center: [40, 40], type: "hamlet", population: 30 });
+    assert.equal(session.updatePlanElement({ kind: "settlement", id: "settlement-1" }, { population: -3 }), false);
+    assert.match(statuses.at(-1)!, /^Plan edit refused: plan\.settlements\[0\]\.population/);
+    // Undo walks back one correction at a time; the selection goes with the element.
+    for (let step = 0; step < 6; step += 1) history.undo();
+    assert.equal(session.getView().planEdit!.plan.roadGraph.nodes.length, 2);
+    assert.equal(session.getView().planEdit!.selection, null);
+  });
+
+  await checkAsync("world builder session: deleting a plan element drops what names it, as one undo step", async () => {
+    const recipe = roadRecipe();
+    recipe.plan.settlements.push({ id: "village", source: "reference", center: [10, 20], type: "village" });
+    recipe.plan.roadGraph.nodes[0]!.settlement = "village";
+    recipe.generated.sites.push({ settlement: "village", center: [10, 20], coreRadius: 30, dwellings: 4, program: [] });
+    recipe.generated.parcels.push({ id: "p1", settlement: "village", polygon: [[0, 0], [4, 0], [4, 4]], frontage: "main" });
+    recipe.ownership.splines["wb-road-main"] = { stage: "roads", edge: "main" };
+    const { session, history } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    session.selectPlan({ kind: "node", id: "b" });
+    assert.equal(session.deletePlanElement(), true, "the selected element by default");
+    let after = session.getView();
+    assert.deepEqual(after.planEdit!.plan.roadGraph.edges, [], "the node's edges go with it");
+    assert.equal(after.planEdit!.selection, null);
+    assert.equal(history.state().undoLabel, "World Builder: delete node");
+    assert.equal(session.deletePlanElement({ kind: "settlement", id: "village" }), true);
+    after = session.getView();
+    assert.equal(after.planEdit!.plan.roadGraph.nodes[0]!.settlement, undefined);
+    assert.equal(after.planCounts!.settlements, 0);
+    assert.equal(after.layer.counts.cores, 0);
+    history.undo();
+    history.undo();
+    const restored = session.getView().planEdit!.plan;
+    assert.equal(restored.roadGraph.edges.length, 1);
+    assert.equal(restored.roadGraph.nodes[0]!.settlement, "village");
+  });
+
+  await checkAsync("world builder session: edge guide points and protected regions are hand corrections too", async () => {
+    const { session, history, statuses } = harness({ [RECIPE_URL]: roadRecipe() });
+    await session.load();
+    const guide = () => session.getView().planEdit!.plan.roadGraph.edges[0]!.guide;
+    assert.equal(session.addGuidePoint("main"), true);
+    assert.deepEqual(guide(), [[10, 0], [20, 0]], "a guide starts with two points (its minimum)");
+    assert.equal(session.movePlanPoint({ kind: "guide", id: "main", index: 1 }, [20, 6]), true);
+    assert.equal(session.addGuidePoint("main"), true);
+    assert.equal(guide()!.length, 3);
+    assert.equal(session.deleteGuidePoint("main", 0), true);
+    assert.equal(session.deleteGuidePoint("main", 0), true);
+    assert.equal(guide(), undefined, "a guide of one point is dropped; the edge runs straight");
+
+    assert.equal(session.addPlanElement("protected"), true);
+    const region = () => session.getView().planEdit!.protectedRegions[0]!;
+    assert.deepEqual(region(), { id: "protected-1", kind: "manual", min: [-11, -11], max: [21, 21] });
+    assert.equal(session.movePlanPoint({ kind: "protected", id: "protected-1", corner: "max" }, [-20, 0]), true);
+    assert.deepEqual([region().min, region().max], [[-20, -11], [-11, 0]], "a corner dragged past the other swaps them");
+    assert.equal(session.updatePlanElement({ kind: "protected", id: "protected-1" }, { min: [0, 0], max: [0, 5] }), false);
+    assert.match(statuses.at(-1)!, /^Plan edit refused: ownership\.protectedRegions\[0\]/);
+    assert.equal(session.deletePlanElement({ kind: "protected", id: "protected-1" }), true);
+    assert.deepEqual(session.getView().planEdit!.protectedRegions, []);
+    history.undo();
+    assert.equal(session.getView().planEdit!.protectedRegions.length, 1);
   });
 }

@@ -106,6 +106,14 @@ export interface RecastPlannerOptions extends Omit<RecastNavMeshOptions, "bounds
   readonly snapHeight?: (agent: NavAgent, point: Vec3) => number;
 }
 
+/** One profile's loaded tiles for a debug view (see {@link RecastPlanner.debugMeshes}). */
+export interface RecastDebugMesh {
+  readonly profile: string;
+  readonly tileSize: number;
+  readonly tiles: readonly { readonly x: number; readonly z: number; readonly stale: boolean }[];
+  geometry(): { positions: number[]; indices: number[] };
+}
+
 export interface RecastStreamingStats {
   /** Tiles built (or, with a worker, finished and added) by the last update. */
   readonly built: number;
@@ -152,6 +160,8 @@ export class RecastPlanner {
   private readonly inFlight = new Map<RecastNavMesh, Map<string, string>>();
   private readonly pendingBuilds = new Set<Promise<void>>();
   private completed: CompletedTile[] = [];
+  /** Bumped when the mesh set changes, so {@link debugRevision} never repeats across meshes. */
+  private meshEpoch = 0;
 
   constructor(
     private readonly modules: RecastModules,
@@ -315,14 +325,36 @@ export class RecastPlanner {
     return this.lastStats;
   }
 
-  /** Triangles of every loaded mesh (debug drawing). */
-  debugGeometry(): { positions: number[]; indices: number[] }[] {
-    return [...this.meshes.values()].map((mesh) => mesh.debugGeometry());
+  /**
+   * Changes whenever a debug drawing of the meshes would: a tile added,
+   * dropped or turned stale, or a mesh created or cleared.
+   */
+  debugRevision(): string {
+    let tiles = 0;
+    for (const mesh of this.meshes.values()) tiles += mesh.debugRevision;
+    return `${this.meshEpoch}:${tiles}`;
+  }
+
+  /** Every agent profile's mesh, for debug drawing; `geometry()` reads the Detour mesh on demand. */
+  debugMeshes(): RecastDebugMesh[] {
+    return [...this.meshes.entries()].map(([profile, mesh]) => {
+      const stale = new Set(mesh.staleTileKeys());
+      return {
+        profile,
+        tileSize: mesh.tileSize,
+        tiles: mesh.loadedTileKeys().map((key) => {
+          const [x, z] = parseTileKey(key);
+          return { x, z, stale: stale.has(key) };
+        }),
+        geometry: () => mesh.debugGeometry(),
+      };
+    });
   }
 
   clear(): void {
     for (const mesh of this.meshes.values()) mesh.dispose();
     this.meshes.clear();
+    this.meshEpoch += 1;
     this.requested.clear();
     // Builds still at the worker belong to disposed meshes; their results are ignored.
     this.inFlight.clear();
@@ -438,6 +470,7 @@ export class RecastPlanner {
         ...(bounds.length > 0 ? { bounds } : {}),
       });
       this.meshes.set(key, mesh);
+      this.meshEpoch += 1;
     }
     return mesh;
   }

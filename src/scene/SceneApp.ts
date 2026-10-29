@@ -56,6 +56,7 @@ import {
   isMultiTileTerrain,
   terrainTileHeightfield,
   worldTerrainActorPosition,
+  worldTerrainColliderEntities,
   worldTerrainExtent,
   worldTerrainPlacementIssues,
 } from "@engine/terrain/worldTerrainActor";
@@ -171,9 +172,7 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import { collapseCoincidentFloors, findGroundLayersAt } from "@engine/movement/characterCollision";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
-import { slopeCosFromDegrees } from "@engine/movement/slopeSurface";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
 import {
   assetPath,
@@ -198,7 +197,6 @@ import {
 import {
   collisionWireEntries,
   collisionWireboxes,
-  collisionSurfaceTriangles,
   heightfieldWireGeometry,
   type CollisionWireEntry,
 } from "@engine/render-three/collisionView";
@@ -217,7 +215,7 @@ import {
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
 } from "@engine/render-three/materials";
-import { buildNavGrid, type NavAabb, type NavAgent, type NavBlocker } from "@engine/navigation/gridNavigation";
+import { type NavAabb, type NavAgent, type NavBlocker } from "@engine/navigation/gridNavigation";
 import { convexHullXZ } from "@engine/physics/rotatedBox";
 import {
   attachActorLight,
@@ -592,6 +590,7 @@ import { VEHICLE_COMPONENT } from "@engine/scene/components";
 import type { SceneJsonValue } from "@engine/scene/entity";
 import type { VehicleOverrides } from "@engine/physics/vehicle/vehicleTypes";
 import type { Entity } from "@engine/scene/entity";
+import { EditorRecastPreview, type EditorRecastPreviewInput } from "./editorRecastPreview";
 import { createCharacterSceneObject, entityCharacterItem, tintedMaterial } from "@engine/render-three/models";
 import { actorInstanceToEntity, resolveActorInstanceVariables } from "@engine/scene/actorInstance";
 import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
@@ -1184,12 +1183,17 @@ const AI_NAV_DEBUG_CELL_SIZE = 0.5;
 const AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS = AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS;
 const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING;
 const AI_NAV_DEBUG_GRID_SAFETY_MARGIN = AI_NAV_DEBUG_CELL_SIZE * 0.5;
-const AI_NAV_DEBUG_MIN_TOP_SUPPORT_RADIUS = 0.15;
-/** Standing height + step height of the default agent the walkable-area preview bakes for. */
+/** Standing height + step height of the default agent the nav mesh preview builds for. */
 const AI_NAV_DEBUG_AGENT_HEIGHT = 1.8;
 const AI_NAV_DEBUG_AGENT_STEP_HEIGHT = 0.45;
 const AI_NAV_DEBUG_AGENT_STEP_DOWN = 0.5;
 const AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG = 50;
+/** Nav mesh preview without volumes: tiles within this distance of the camera. */
+const AI_NAV_PREVIEW_CAMERA_RADIUS = 48;
+/** The camera point snaps to this grid (the Recast tile size) before it keys a rebuild. */
+const AI_NAV_PREVIEW_SNAP = 32;
+/** Largest radius one AI Navigation Volume asks the preview to build. */
+const AI_NAV_PREVIEW_MAX_RADIUS = 128;
 
 interface AiNavDebugProfile {
   readonly agentRadius: number;
@@ -1687,6 +1691,8 @@ export class SceneApp {
   private worldTerrainCollisionWiresDirty = false;
   /** "Show > AI Navigation" overlay: nav grid + blocking footprints, off by default. */
   private aiNavigationView: Group | null = null;
+  /** Recast polygons of "Show > AI Navigation" (R4); rebuilt after edits go quiet. */
+  private readonly recastPreview: EditorRecastPreview;
   private showAiNavigation = false;
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
@@ -1748,6 +1754,7 @@ export class SceneApp {
     this.renderer = this.sceneShell.renderer;
     this.scene = this.sceneShell.scene;
     this.camera = this.sceneShell.camera;
+    this.recastPreview = new EditorRecastPreview({ scene: this.scene });
     // No `hold` is passed: this viewport has no time control, and it does not
     // need one — gameplay, physics and AI are already switched off while
     // authoring, and what still moves (a scrolling material, a drifting sky,
@@ -2094,6 +2101,7 @@ export class SceneApp {
     this.selectionOutline?.dispose();
     this.selectionOutline = null;
     this.removeAiNavigationView();
+    this.recastPreview.dispose();
     for (const object of this.aiNavigationVolumeObjects) {
       this.scene.remove(object);
       disposeAiNavigationVolumeObject(object);
@@ -14737,6 +14745,8 @@ export class SceneApp {
    */
   rebakeAiNavigation(): void {
     void this.refreshCollisionDefs();
+    // Forget the last nav mesh preview so it rebuilds even from unchanged input.
+    this.recastPreview.clear();
     this.updateAiNavigationView();
     this.onStatus?.("AI Navigation rebaked.", "info");
   }
@@ -15027,7 +15037,10 @@ export class SceneApp {
 
   private updateAiNavigationView(): void {
     this.removeAiNavigationView();
-    if (!this.showAiNavigation || !this.layout) return;
+    if (!this.showAiNavigation || !this.layout) {
+      this.recastPreview.clear();
+      return;
+    }
     const blockers = this.editorNavBlockers();
     const profile = this.aiNavDebugProfile();
     const inflatedBlockers = blockers.map((blocker) => inflateNavBlocker2d(blocker, profile.clearanceRadius));
@@ -15036,7 +15049,9 @@ export class SceneApp {
     const queries = this.aiQueryView();
     const routes = this.aiTargetPointRouteView();
     const agentClearances = this.aiAgentClearanceView(profile);
-    const passableCells = this.aiNavPassableCells(blockers, bounds, profile);
+    // The walkable area is the Recast mesh the runtime plans on, built off
+    // the frame from the live layout (debounced; see EditorRecastPreview).
+    this.recastPreview.request(() => this.editorRecastPreviewInput(bounds));
     if (
       blockers.length === 0 &&
       inflatedBlockers.length === 0 &&
@@ -15051,7 +15066,6 @@ export class SceneApp {
     this.aiNavigationView = createAiNavigationView({
       blockers,
       inflatedBlockers,
-      passableCells,
       bounds,
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
       perception,
@@ -15060,111 +15074,6 @@ export class SceneApp {
       agentClearances,
     });
     this.scene.add(this.aiNavigationView);
-  }
-
-  /**
-   * Walkable cell centers of the baked nav grid for the default debug agent —
-   * drawn as the green walkable-area fill. Only meaningful inside authored AI
-   * Navigation Volumes (they give the grid a fixed extent); returns [] otherwise.
-   * Baked at the volume floor so floor-level obstacles erode the area while an
-   * agent still reads as able to stand under high overhangs (vertical filtering).
-   */
-  private aiNavPassableCells(
-    blockers: readonly NavBlocker[],
-    bounds: readonly NavAabb[],
-    profile: AiNavDebugProfile,
-  ): Vec3[] {
-    if (bounds.length === 0) return [];
-    let floorY = Infinity;
-    for (const bound of bounds) floorY = Math.min(floorY, bound.min[1]);
-    if (!Number.isFinite(floorY)) return [];
-    const agent: NavAgent = {
-      radius: profile.agentRadius,
-      // Realistic standing agent, not the full volume height — a beam above head
-      // height must not paint the floor under it as blocked.
-      height: AI_NAV_DEBUG_AGENT_HEIGHT,
-      // Without a step height the ground slab itself (top ~= floor) reads as a
-      // vertical obstacle and blocks every cell, so nothing renders green.
-      stepHeight: AI_NAV_DEBUG_AGENT_STEP_HEIGHT,
-      maxStepDown: AI_NAV_DEBUG_AGENT_STEP_DOWN,
-      maxSlopeAngleDeg: AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG,
-      clearancePadding: profile.clearancePadding,
-    };
-    const grid = buildNavGrid({
-      agent,
-      blockers,
-      bounds,
-      footY: floorY,
-      sampleFloorYs: this.aiNavDebugFloorSampler(blockers, bounds, agent, floorY),
-      cellSize: AI_NAV_DEBUG_CELL_SIZE,
-      safetyMargin: AI_NAV_DEBUG_GRID_SAFETY_MARGIN,
-    });
-    if (!grid) return [];
-    const cells: Vec3[] = [];
-    if (grid.layerOffsets && grid.layerCell && grid.layerFloorY) {
-      for (let i = 0; i < grid.layerFloorY.length; i += 1) {
-        const cell = grid.layerCell[i] ?? 0;
-        const x = cell % grid.cols;
-        const z = Math.floor(cell / grid.cols);
-        cells.push([grid.originX + x * grid.cellSize, grid.layerFloorY[i] ?? floorY, grid.originZ + z * grid.cellSize]);
-      }
-      return cells;
-    }
-    for (let z = 0; z < grid.rows; z += 1) {
-      for (let x = 0; x < grid.cols; x += 1) {
-        const idx = z * grid.cols + x;
-        if (grid.passable[idx] !== 1) continue;
-        cells.push([grid.originX + x * grid.cellSize, grid.floorY[idx] ?? floorY, grid.originZ + z * grid.cellSize]);
-      }
-    }
-    return cells;
-  }
-
-  private aiNavDebugFloorSampler(
-    blockers: readonly NavBlocker[],
-    bounds: readonly NavAabb[],
-    agent: NavAgent,
-    preferredFloorY: number,
-  ): (x: number, z: number) => readonly number[] | null {
-    const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
-    const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG);
-    // Live surfaces from the layout (like `editorNavBlockers`), NOT the physics
-    // cache — physics static bodies are only populated at scene load, so a deleted
-    // or moved ramp would otherwise leave its walkable cells frozen in the preview.
-    const surfaces = this.layout
-      ? collisionSurfaceTriangles(this.layout, this.complexCollisionMeshes, this.collisionDefs)
-      : [];
-    return (x, z) => {
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (const bound of bounds) {
-        if (x < bound.min[0] || x > bound.max[0] || z < bound.min[2] || z > bound.max[2]) continue;
-        minY = Math.min(minY, bound.min[1]);
-        maxY = Math.max(maxY, bound.max[1]);
-      }
-      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY < minY) return null;
-      const hits = findGroundLayersAt([x, maxY, z], blockers, {
-        footprintHalf,
-        maxStepUp: 0,
-        maxStepDown: maxY - minY,
-        surfaces,
-        maxSlopeCos,
-        preferredFloorY,
-        requiredSupportRadius: Math.min(Math.max(0, agent.radius), AI_NAV_DEBUG_MIN_TOP_SUPPORT_RADIUS),
-        // Recast walkableHeight, mirroring the runtime sampler: a floor layer with
-        // less than the agent's height of clearance above it (a ramp/stair body
-        // overhead) is not walkable, so no green cells are painted under ramps.
-        requiredHeadroom: Math.max(0, agent.height),
-        respectNavigationRole: true,
-      });
-      // Same collapse as the runtime sampler: near-coincident surfaces (a solid
-      // floor's top face vs. its slab underside) are one navigable floor.
-      const layers = collapseCoincidentFloors(
-        hits.map((hit) => hit.floorY),
-        Math.max(agent.stepHeight ?? 0, 1e-3),
-      );
-      return layers.length > 0 ? layers : null;
-    };
   }
 
   /**
@@ -15333,6 +15242,50 @@ export class SceneApp {
     for (const { helper } of this.collisionWireChunks.values()) disposeCollisionWire(helper);
     this.collisionWireChunks.clear();
     this.collisionWireEntryCache.clear();
+  }
+
+  /**
+   * The nav mesh preview's input: the live layout's collider entities plus
+   * collidable World Terrain tiles, the debug agent profile, and where to
+   * build — every authored AI Navigation Volume whole, or without volumes
+   * the tiles around the camera (snapped to the tile grid, so orbiting does
+   * not rebuild).
+   */
+  private editorRecastPreviewInput(bounds: readonly NavAabb[]): EditorRecastPreviewInput | null {
+    if (!this.layout) return null;
+    const entities: Entity[] = [...this.getSceneDocument().entities];
+    for (const actor of this.layout.landscapes ?? []) {
+      const resolved = resolveLandscape(actor);
+      const world = this.worldTerrains.get(actor.id);
+      if (!world || !resolved.collision) continue;
+      entities.push(...worldTerrainColliderEntities({ id: actor.id, name: resolved.name, collision: true }, world));
+    }
+    const profile = this.aiNavDebugProfile();
+    const agent: NavAgent = {
+      radius: profile.agentRadius,
+      height: AI_NAV_DEBUG_AGENT_HEIGHT,
+      stepHeight: AI_NAV_DEBUG_AGENT_STEP_HEIGHT,
+      maxStepDown: AI_NAV_DEBUG_AGENT_STEP_DOWN,
+      maxSlopeAngleDeg: AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG,
+      clearancePadding: profile.clearancePadding,
+    };
+    if (bounds.length > 0) {
+      let radius = 0;
+      const invokers: Vec3[] = bounds.map((bound) => {
+        radius = Math.max(radius, Math.hypot(bound.max[0] - bound.min[0], bound.max[2] - bound.min[2]) / 2);
+        return [(bound.min[0] + bound.max[0]) / 2, (bound.min[1] + bound.max[1]) / 2, (bound.min[2] + bound.max[2]) / 2];
+      });
+      return { entities, agent, bounds, invokers, buildRadius: Math.min(radius, AI_NAV_PREVIEW_MAX_RADIUS) };
+    }
+    const snap = (value: number) => (Math.floor(value / AI_NAV_PREVIEW_SNAP) + 0.5) * AI_NAV_PREVIEW_SNAP;
+    const camera = this.camera.position;
+    return {
+      entities,
+      agent,
+      bounds,
+      invokers: [[snap(camera.x), 0, snap(camera.z)]],
+      buildRadius: AI_NAV_PREVIEW_CAMERA_RADIUS,
+    };
   }
 
   private removeAiNavigationView(): void {

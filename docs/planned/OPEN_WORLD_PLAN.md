@@ -2673,8 +2673,28 @@ Sözleşme (grid'le aynı `NavAgent`): `radius + clearancePadding` duvarı aşı
       sıklaştırma ölçümü (sentetik 1 m tepeli arazi, tile başına): 6/1 ~17 ms
       maks. dikey sapma 0,83 m · 8/1 ~10 ms 0,75 m · 10/1 ~8 ms 0,68 m ·
       16/2 ~6–8 ms 1,61 m — karar kullanıcıda.
-- [ ] **R4 — Debug/editör yüzeyi.** "Show > AI Navigation" Recast poligonlarını
+- [x] **R4 — Debug/editör yüzeyi.** "Show > AI Navigation" Recast poligonlarını
       çizer (runtime `?debug` + editör), yüklü tile'lar görünür.
+      *Tamam (2026-10-29):* `engine/render-three/recastNavMeshView.ts` Detour
+      mesh'inin kendi üçgenlerini yarı saydam dolgu + kenar olarak, her yüklü
+      tile'ı çerçeve olarak çizer (bayat tile turuncu). `RecastNavMesh.debugRevision`
+      tile eklenince/düşünce/bayatlayınca artar; `RecastPlanner.debugRevision()` +
+      `debugMeshes()` (geometri istek üzerine). Runtime `?debug`: aiModule
+      görünümü yalnız revizyon değişince, en sık 0,5 s'de bir, en çok tile'ı
+      olan profil için yeniden kurar (her kare kurulan overlay'den ayrı).
+      Editör: fiziği yalnız sahne yüklenirken dolduğu için
+      `src/scene/editorRecastPreview.ts` canlı layout'tan (sahne entity'leri +
+      collidable World Terrain tile'ları) atılabilir bir `PhysicsSubsystem`
+      kurar ve runtime'ın akış kurallarıyla bir `RecastPlanner`'ı worker
+      lane'lerinde `settle` eder. İstekler 400 ms gecikmeli; tetiklenince girdi
+      bir kez okunur, imzası aynıysa (ör. seçim değişimi) kurulmaz, eskiyen
+      kurulum atılır. Hacim varsa her hacim bütün olarak (yarıçap en çok
+      128 m), yoksa kameranın çevresi (32 m ızgaraya oturtulmuş, 48 m). Editörün
+      grid tabanlı yeşil hücre dolgusu kaldırıldı (runtime artık Recast ile
+      planlıyor; grid'in kendisi R5 kararına kadar duruyor). "Rebake Navigation"
+      önizlemeyi de zorla yeniden kurar. Testler: revizyon/çizim, editör
+      önizlemesi (gecikme, aynı girdi kurmaz, düzenleme kurar, boş girdi gizler),
+      aiModule `?debug` görünümü.
 - [ ] **R5 — Grid emekliliği kararı.** Parity kabulünden sonra (kullanıcı
       smoke'u) grid yalnız yedek mi kalır, kaldırılır mı.
 

@@ -142,6 +142,7 @@ export class RecastNavMesh {
    */
   private readonly generations = new Map<string, number>();
   private epoch = 0;
+  private revision = 0;
   private disposed = false;
 
   constructor(modules: RecastModules, agent: NavAgent, source: NavTriangleSource, options: RecastNavMeshOptions = {}) {
@@ -214,12 +215,24 @@ export class RecastNavMesh {
       this.stale.add(key);
       marked += 1;
     }
+    if (marked > 0) this.revision += 1;
     return marked;
   }
 
   markAllStale(): void {
     this.epoch += 1;
     for (const key of this.tiles.keys()) this.stale.add(key);
+    if (this.tiles.size > 0) this.revision += 1;
+  }
+
+  /** Bumped whenever a tile is added, removed or turns stale: debug views redraw on a change. */
+  get debugRevision(): number {
+    return this.revision;
+  }
+
+  /** Loaded tiles awaiting a rebuild (debug). */
+  staleTileKeys(): string[] {
+    return [...this.stale];
   }
 
   /** Opaque geometry generation of a tile; compare before adding an asynchronously built result. */
@@ -342,6 +355,7 @@ export class RecastNavMesh {
     }
     this.tiles.set(key, tileRef);
     if (used !== undefined) this.lastUsed.set(key, used);
+    this.revision += 1;
     return tileRef !== 0;
   }
 
@@ -353,6 +367,7 @@ export class RecastNavMesh {
     this.tiles.delete(key);
     this.stale.delete(key);
     this.lastUsed.delete(key);
+    this.revision += 1;
   }
 
   /** Drops every loaded tile whose key is not in `keep`. Returns how many were dropped. */

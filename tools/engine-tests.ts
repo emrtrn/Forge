@@ -1103,6 +1103,7 @@ import { registerGpuSweepSessionTests } from "../tests/engine/gpuSweepSession.te
 import { registerPerfWitnessTests } from "../tests/engine/perfWitness.test";
 import { registerStaticQueriesTests } from "../tests/engine/staticQueries.test";
 import { registerRecastNavMeshTests } from "../tests/engine/recastNavMesh.test";
+import { registerEditorRecastPreviewTests } from "../tests/engine/editorRecastPreview.test";
 import { registerTerrainOrphanTests } from "../tests/engine/terrainOrphans.test";
 import { registerTerrainGlobalMapFileTests } from "../tests/engine/terrainGlobalMapFile.test";
 import { registerTerrainRendererTests } from "../tests/engine/terrainRenderer.test";
@@ -1246,6 +1247,7 @@ registerRuntimeParityLevelTests(check);
 await registerForgeGameModuleTests(check, checkAsync);
 registerRuntimeCapabilityModuleTests(check);
 await registerRecastNavMeshTests(checkAsync);
+await registerEditorRecastPreviewTests(checkAsync);
 await registerAiModuleTests(checkAsync);
 await registerAiCharacterAnimationModuleTests(checkAsync);
 await registerAudioModuleTests(checkAsync);

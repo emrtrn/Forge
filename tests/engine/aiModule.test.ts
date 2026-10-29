@@ -414,7 +414,8 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
       physics.setEntities([staticBox("ground", [0, -0.5, 0], [40, 1, 40]), staticBox("wall", [0, 1.5, 0], [12, 3, 1])]);
 
       const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
-      host.provide(aiHostService, testAiHost({ navigation: physics }));
+      // `?debug`: the nav mesh view is drawn into the level's scene too.
+      host.provide(aiHostService, testAiHost({ navigation: physics, debug: true }));
       host.provide(assetManifestService, async () => ({
         assets: [{ id: "BT_Walk", type: "behaviorTree", path: "AI/BT_Walk.behaviortree.json" }],
       }) as never);
@@ -446,7 +447,8 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
       } as unknown as Entity;
       await host.resolve(aiCommandsService)!.prepareLevel(layout);
       host.entitySinks()[0]!.setEntities([walker]);
-      await registry.levelLoaded(levelContext(host, layout, [walker]));
+      const context = levelContext(host, layout, [walker]);
+      await registry.levelLoaded(context);
       const debug = host.resolve(aiDebugService)!;
       let frame = 0;
       const tick = () => {
@@ -472,7 +474,15 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
       assert.ok(path.length >= 3, `string-pulled around a wall end: ${JSON.stringify(path)}`);
       assert.ok(path.slice(1, -1).every((point) => Math.abs(point[0]) >= 6), "corners clear the wall's ends");
       assert.ok(path.every((point) => Math.abs(point[1]) < 1e-3), "corners snapped onto the ground's top");
+
+      const navMeshView = context.scene.getObjectByName("ai-navmesh-debug-view");
+      assert.ok(navMeshView, "?debug draws the loaded Recast polygons");
+      assert.ok(navMeshView.getObjectByName("ai-navmesh-polygons"));
+      assert.ok(navMeshView.getObjectByName("ai-navmesh-tiles"));
+      tick();
+      assert.equal(context.scene.getObjectByName("ai-navmesh-debug-view"), navMeshView, "unchanged tiles keep the view");
       registry.dispose();
+      assert.equal(context.scene.getObjectByName("ai-navmesh-debug-view"), undefined, "dispose removes it");
     } finally {
       globalThis.fetch = original;
     }

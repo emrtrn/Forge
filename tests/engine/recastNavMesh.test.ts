@@ -5,6 +5,8 @@ import { RecastPlanner, type RecastTileWorker } from "../../engine/navigation/re
 import { buildRecastTileBytes, createTileRcConfig, type RecastTileConfig, type RecastTileInput } from "../../engine/navigation/recastTileBuild";
 import { createRecastTileHandler, type RecastTileWorkerRequest } from "../../engine/navigation/workers/recastTileWorker";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
+import { createRecastNavMeshView } from "../../engine/render-three/recastNavMeshView";
+import type { LineSegments, Mesh } from "three";
 import type { NavigationRole } from "../../engine/scene/collision";
 import type { ColliderComponent, ColliderPrimitive } from "../../engine/scene/components";
 import type { Entity } from "../../engine/scene/entity";
@@ -497,6 +499,43 @@ export async function registerRecastNavMeshTests(checkAsync: CheckAsync): Promis
     assert.ok(fallback.built > 0 && fallback.submitted === undefined, JSON.stringify(fallback));
     assert.equal(worker.pending(), 0, "nothing more is sent to the failed worker");
     assert.equal(planner.findPath(request).status, "success", "main-thread builds answer it");
+    planner.dispose();
+  });
+
+  await checkAsync("recast debug: the revision follows tile changes and the view draws polygons, tiles and stale tiles", async () => {
+    const physics = new PhysicsSubsystem();
+    physics.setEntities([ground("ground", 60)]);
+    const planner = new RecastPlanner(modules, {
+      forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) => physics.forEachNavigationTriangleInRect(minX, minZ, maxX, maxZ, visit),
+    }, { buildRadius: 20, frameBudgetMs: 1000, maxSyncBuilds: 0 });
+    const empty = planner.debugRevision();
+    const invokers = [{ position: [16, 0, 16] as Vec3, agent: AGENT }];
+    planner.update({ invokers, bounds: [], now: 0 });
+    const built = planner.debugRevision();
+    assert.notEqual(built, empty, "building tiles changes the revision");
+    planner.update({ invokers, bounds: [], now: 0.1 });
+    assert.equal(planner.debugRevision(), built, "an idle update keeps it");
+
+    const [mesh] = planner.debugMeshes();
+    assert.ok(mesh && mesh.tiles.length > 0 && mesh.tiles.every((tile) => !tile.stale));
+    const { positions, indices } = mesh.geometry();
+    const view = createRecastNavMeshView({ positions, indices, tiles: mesh.tiles, tileSize: mesh.tileSize });
+    const fill = view.getObjectByName("ai-navmesh-polygons") as Mesh;
+    assert.equal(fill.geometry.index!.count, indices.length, "every Detour triangle is filled");
+    assert.ok(fill.geometry.getAttribute("position").getY(0) > positions[1]!, "lifted off the floor");
+    assert.ok(view.getObjectByName("ai-navmesh-edges"));
+    const outlines = view.getObjectByName("ai-navmesh-tiles") as LineSegments;
+    assert.equal(outlines.geometry.getAttribute("position").count, mesh.tiles.length * 8, "four edges per tile");
+    assert.equal(view.getObjectByName("ai-navmesh-stale-tiles"), undefined);
+
+    planner.invalidateRect(10, 10, 12, 12);
+    assert.notEqual(planner.debugRevision(), built, "a stale tile changes it");
+    const [staleMesh] = planner.debugMeshes();
+    const staleView = createRecastNavMeshView({ ...staleMesh!.geometry(), tiles: staleMesh!.tiles, tileSize: staleMesh!.tileSize });
+    assert.ok(staleView.getObjectByName("ai-navmesh-stale-tiles"), "stale tiles get their own outline");
+    planner.clear();
+    assert.equal(planner.debugMeshes().length, 0);
+    assert.notEqual(planner.debugRevision(), built, "a cleared planner never repeats an old revision");
     planner.dispose();
   });
 }

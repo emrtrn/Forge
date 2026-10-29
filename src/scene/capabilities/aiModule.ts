@@ -65,7 +65,12 @@ import {
 } from "@engine/navigation/localAvoidance";
 import { resolveNavAgentProfile } from "@engine/navigation/navAgentProfile";
 import { loadRecastModules } from "@engine/navigation/recastNavMesh";
-import { RecastPlanner, type RecastInvoker, type RecastPlanResult } from "@engine/navigation/recastPlanner";
+import {
+  RecastPlanner,
+  type RecastDebugMesh,
+  type RecastInvoker,
+  type RecastPlanResult,
+} from "@engine/navigation/recastPlanner";
 import { RecastTileWorkerPool } from "./recastTileWorkerPool";
 import {
   createAiNavigationView,
@@ -76,6 +81,7 @@ import {
   type AiQueryCandidateView,
   type AiTargetPointRouteView,
 } from "@engine/render-three/aiNavigationView";
+import { createRecastNavMeshView } from "@engine/render-three/recastNavMeshView";
 import { aiNavigationVolumeAabb } from "@engine/render-three/aiNavigationVolume";
 import { resolveCharacterCapsule } from "@engine/scene/capsule";
 import {
@@ -109,6 +115,8 @@ export const AI_MODULE_ID = "ai";
 
 /** Longest the loading screen waits for the nav tiles around the spawn. */
 const RECAST_SETTLE_TIMEOUT_MS = 5000;
+/** Shortest interval between two redraws of the `?debug` nav mesh view. */
+const RECAST_VIEW_REFRESH_SECONDS = 0.5;
 
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
@@ -250,6 +258,14 @@ export function createAiModule(): CapabilityModule {
   /** Entities of the built level, for reading authored agent/movement components. */
   let entityById = new Map<string, Entity>();
   let navigationView: Group | null = null;
+  /**
+   * The Recast polygons under `?debug` (R4). Unlike the per-frame overlay it is
+   * rebuilt only when the loaded tiles change, at most every
+   * {@link RECAST_VIEW_REFRESH_SECONDS}: reading a large Detour mesh is not free.
+   */
+  let recastView: Group | null = null;
+  let recastViewRevision: string | null = null;
+  let recastViewBuiltAt = -Infinity;
   let stimulusUnsubs: Array<() => void> = [];
 
   const host = () => services?.resolve(aiHostService) ?? null;
@@ -788,6 +804,36 @@ export function createAiModule(): CapabilityModule {
     navigationView = null;
   }
 
+  function removeRecastView(): void {
+    recastViewRevision = null;
+    if (!recastView) return;
+    scene?.remove(recastView);
+    disposeAiNavigationView(recastView);
+    recastView = null;
+  }
+
+  /** Redraws the loaded nav mesh of the profile with the most tiles when it changed. */
+  function updateRecastView(): void {
+    if (!scene || !recastPlanner) {
+      removeRecastView();
+      return;
+    }
+    const revision = recastPlanner.debugRevision();
+    if (revision === recastViewRevision) return;
+    if (recastView && elapsedSeconds - recastViewBuiltAt < RECAST_VIEW_REFRESH_SECONDS) return;
+    removeRecastView();
+    recastViewRevision = revision;
+    recastViewBuiltAt = elapsedSeconds;
+    let mesh: RecastDebugMesh | null = null;
+    for (const candidate of recastPlanner.debugMeshes()) {
+      if (!mesh || candidate.tiles.length > mesh.tiles.length) mesh = candidate;
+    }
+    if (!mesh || mesh.tiles.length === 0) return;
+    const { positions, indices } = mesh.geometry();
+    recastView = createRecastNavMeshView({ positions, indices, tiles: mesh.tiles, tileSize: mesh.tileSize });
+    scene.add(recastView);
+  }
+
   function updateNavigationView(): void {
     removeNavigationView();
     if (!scene) return;
@@ -945,12 +991,16 @@ export function createAiModule(): CapabilityModule {
       // World-space overlay only, rebuilt from this frame's resolved state. It is
       // added to the scene rather than projected, so it does not need to wait for
       // the Game Mode's camera the way screen-space UI does.
-      if (debug) updateNavigationView();
+      if (debug) {
+        updateNavigationView();
+        updateRecastView();
+      }
     },
 
     onLevelUnloaded() {
       clearStimulusBridge();
       removeNavigationView();
+      removeRecastView();
       pathFollowing.clear();
       navGridCache.clear();
       recastPlanner?.clear();
@@ -966,6 +1016,7 @@ export function createAiModule(): CapabilityModule {
     dispose() {
       clearStimulusBridge();
       removeNavigationView();
+      removeRecastView();
       pathFollowing.clear();
       navGridCache.clear();
       recastPlanner?.dispose();

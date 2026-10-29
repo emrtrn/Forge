@@ -1,8 +1,9 @@
 import { ROAD_NODE_KINDS, type ProtectedRegion, type WorldPlan, type WorldReference } from "@engine/worldbuilder/recipe";
 import { ROAD_CLASSES, type RoadClass } from "@engine/worldbuilder/vocabulary";
 import type { StagePlan } from "@engine/worldbuilder/stage";
+import { SETTLEMENT_SITES_STAGE_ID } from "@engine/worldbuilder/stages/settlementSites";
 import { LOW_CONFIDENCE, type RecipeLayerOptions, type UnderlayState } from "@/editor/worldBuilderLayer";
-import { PLAN_ELEMENT_KINDS, type PlanElementFields, type PlanElementKind, type PlanRef } from "@/editor/worldBuilderPlanEdit";
+import { PLAN_ELEMENT_KINDS, type PlanElementFields, type PlanElementKind, type PlanRef, type StrandedNode } from "@/editor/worldBuilderPlanEdit";
 import { PREVIEW_CHANGES, previewItemDrawable, type PreviewChange, type PreviewItem } from "@/editor/worldBuilderPreview";
 import type { WorldBuilderSession, WorldBuilderView } from "@/editor/worldBuilderSession";
 
@@ -30,7 +31,9 @@ export interface WorldBuilderPanelOptions {
  * selects one (highlighted in the viewport), its fields and Add / Delete are
  * hand corrections, each one undo step (§13.2 step 4). Edit in Viewport
  * turns on the viewport handles (drag a point over the ground; Delete removes
- * the selected element, Escape deselects).
+ * the selected element, Escape deselects). A road node the applied sites
+ * left outside its settlement gets Move to Site, in the Settlement Sites
+ * report and on the selected node.
  */
 export class WorldBuilderPanel {
   constructor(private readonly options: WorldBuilderPanelOptions) {
@@ -87,7 +90,8 @@ export class WorldBuilderPanel {
     else if (action === "plan-connect" && id) {
       const to = this.planControl("connect-to");
       if (to) session.addPlanElement("edge", null, { from: id, to, roadClass: this.planControl("connect-class") as RoadClass });
-    } else if (action === "guide-add" && id) session.addGuidePoint(id);
+    } else if (action === "node-to-site" && id) session.moveNodeToSite(id);
+    else if (action === "guide-add" && id) session.addGuidePoint(id);
     else if (action === "guide-delete" && id) session.deleteGuidePoint(id, Number(data.wbIndex));
     else if (action === "preview-focus") {
       session.focusPreview(id);
@@ -173,7 +177,7 @@ function renderView(view: WorldBuilderView): string {
     ${view.state === "loaded" ? renderLayers(view) : ""}
     ${view.planEdit ? renderPlanEdit(view.planEdit) : ""}
     ${view.state === "loaded" ? renderStages(view) : ""}
-    ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null) : ""}
+    ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null, view.planEdit?.stranded ?? []) : ""}
     ${view.preview ? renderPreview(view.preview.preview.items, view.preview.drawn) : ""}
   </div>`;
 }
@@ -341,8 +345,10 @@ function renderPlanSelection(edit: NonNullable<WorldBuilderView["planEdit"]>, se
     const node = plan.roadGraph.nodes.find((entry) => entry.id === selection.id);
     if (!node) return "";
     const others = plan.roadGraph.nodes.filter((entry) => entry.id !== node.id);
+    const stranded = edit.stranded.find((entry) => entry.node === node.id);
     fields = `${position(node.position)}
-      <label class="world-builder-row">Kind ${select("node-kind", ROAD_NODE_KINDS, node.kind)}</label>`;
+      <label class="world-builder-row">Kind ${select("node-kind", ROAD_NODE_KINDS, node.kind)}</label>
+      ${stranded ? `<div>Outside the ${escapeHtml(stranded.settlement)} site ${moveToSiteButton(stranded)}</div>` : ""}`;
     extra = others.length === 0 ? "" : `<label class="world-builder-row">Connect to
         <select data-wb-plan="connect-to" data-testid="world-builder-plan-connect-to">${others.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.id)}</option>`).join("")}</select>
         <select data-wb-plan="connect-class" data-testid="world-builder-plan-connect-class">${ROAD_CLASSES.map((entry) => `<option value="${entry}" ${entry === "local" ? "selected" : ""}>${entry}</option>`).join("")}</select>
@@ -401,8 +407,12 @@ function renderStages(view: WorldBuilderView): string {
     <div class="detail-section"><div class="detail-section-title">Terrain</div>${terrain}</div>`;
 }
 
-/** `previewed`: the preview list below names the kept and blocked objects. */
-function renderPlan(plan: StagePlan, previewed: boolean): string {
+/**
+ * `previewed`: the preview list below names the kept and blocked objects.
+ * `stranded`: road nodes outside the applied sites, offered a fix under the
+ * Settlement Sites report (after a dry run they are still the applied ones).
+ */
+function renderPlan(plan: StagePlan, previewed: boolean, stranded: readonly StrandedNode[]): string {
   const verdict = plan.errors.length > 0
     ? '<span class="world-builder-error">Errors — cannot apply</span>'
     : plan.empty ? "Up to date" : "Changes pending";
@@ -418,8 +428,19 @@ function renderPlan(plan: StagePlan, previewed: boolean): string {
       ${previewed ? "" : renderList("Kept", plan.kept.map((entry) => `${entry.id} (${keptLabel(entry.reason)})`))}
       ${previewed ? "" : renderList("Blocked", plan.blocked.map((entry) => `${entry.id} (${blockedLabel(entry.reason)})`))}
       ${renderList("Warnings", plan.warnings)}
+      ${plan.stageId === SETTLEMENT_SITES_STAGE_ID ? renderStranded(stranded) : ""}
     </div>
   </div>`;
+}
+
+function renderStranded(stranded: readonly StrandedNode[]): string {
+  if (stranded.length === 0) return "";
+  const rows = stranded.map((entry) => `<li>${escapeHtml(entry.node)} is outside the ${escapeHtml(entry.settlement)} site ${moveToSiteButton(entry)}</li>`).join("");
+  return `<div data-testid="world-builder-stranded" data-count="${stranded.length}">Road nodes outside their site (${stranded.length}) — move one, then run Roads<ul class="world-builder-list">${rows}</ul></div>`;
+}
+
+function moveToSiteButton(entry: StrandedNode): string {
+  return `<button type="button" class="world-builder-change" data-wb-action="node-to-site" data-wb-id="${escapeHtml(entry.node)}" data-testid="world-builder-node-to-site-${escapeHtml(entry.node)}" title="Move to ${entry.to[0]}, ${entry.to[1]} on the site's edge; one undo step">Move to Site</button>`;
 }
 
 const CHANGE_LABELS: Record<PreviewChange, string> = {

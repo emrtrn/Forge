@@ -587,7 +587,7 @@ test("World Builder plan corrections: panel fields, viewport handle drag, add an
   expect(errors).toEqual([]);
 });
 
-test("World Builder test valley: the generated mountain level opens, its terrain loads and the roads route over it (step 19)", async ({ page, request }) => {
+test("World Builder test valley: the generated mountain level opens, its terrain loads, the roads route over it and the stranded hamlet node moves to its site (step 19)", async ({ page, request }) => {
   test.setTimeout(180_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -617,5 +617,14 @@ test("World Builder test valley: the generated mountain level opens, its terrain
   await page.getByTestId("world-builder-apply-roads").click();
   await page.getByTestId("world-builder-dry-run-settlementSites").click();
   await expect(page.getByTestId("world-builder-report")).toContainText("settlement hamlet: moved");
+
+  // The hamlet slid to the bench; its track's end node is offered Move to Site, and the track follows it.
+  await page.getByTestId("world-builder-apply-settlementSites").click();
+  await expect(page.getByTestId("world-builder-stranded")).toHaveAttribute("data-count", "1");
+  await page.getByTestId("world-builder-node-to-site-hamlet-end").click();
+  await expect(page.getByTestId("world-builder-stranded")).toHaveCount(0);
+  await expect(page.getByTestId("world-builder-plan-node-hamlet-end")).toHaveAttribute("data-source", "manual");
+  await page.getByTestId("world-builder-dry-run-roads").click();
+  await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~1 updated · −0 removed · 2 unchanged");
   expect(errors).toEqual([]);
 });

@@ -11,8 +11,11 @@
  * it as inferred or low-confidence. Deleting an element also drops what names
  * it — a node's edges, an edge's parcel frontages and spline ownership links,
  * a settlement's generated sites, parcels and pads and the links of its nodes
- * and landmarks — so the recipe stays valid.
+ * and landmarks — so the recipe stays valid. A road node left outside the
+ * site its settlement slid to can be moved onto that site's core edge in one
+ * step (`moveNodeToSite`).
  */
+import { inCore, type CoreShape } from "@engine/worldbuilder/core";
 import type { WorldPoint } from "@engine/worldbuilder/normalize";
 import type {
   PlanLandmark,
@@ -269,6 +272,79 @@ export function updatePlanElement(recipe: WorldRecipe, ref: PlanRef, fields: Pla
   }
   markManual(element as PlanProvenance);
   return next;
+}
+
+/** How far inside the generated core a node moved to its site lands, metres. */
+export const SITE_NODE_INSET = 4;
+
+/** A road node linked to a settlement whose generated site does not hold it, and where it would go. */
+export interface StrandedNode {
+  node: string;
+  settlement: string;
+  /** The core edge nearest the node, `SITE_NODE_INSET` inside. */
+  to: WorldPoint;
+}
+
+/**
+ * Road nodes linked to a settlement (`settlement`) that lie outside its
+ * generated core: the site slid away from the plan (the settlementSites stage
+ * reports it), so the road built to the node stops short of the settlement.
+ * Read from the recipe's applied sites; a settlement without one has nothing
+ * to reach yet.
+ */
+export function strandedRoadNodes(recipe: WorldRecipe): StrandedNode[] {
+  const sites = new Map(recipe.generated.sites.map((site) => [site.settlement, site] as const));
+  const stranded: StrandedNode[] = [];
+  for (const node of recipe.plan.roadGraph.nodes) {
+    const site = node.settlement ? sites.get(node.settlement) : undefined;
+    if (!site) continue;
+    const core: CoreShape = { center: site.center, radius: site.coreRadius, ...(site.core ? { outline: site.core } : {}) };
+    if (inCore(core, node.position)) continue;
+    stranded.push({ node: node.id, settlement: site.settlement, to: siteEdgePoint(core, node.position) });
+  }
+  return stranded;
+}
+
+/**
+ * Moves a stranded node onto its settlement's site (the road then reaches the
+ * settlement on the next Roads run); null when the node is not stranded. The
+ * plan stays the user's: this is the hand correction the report asks for,
+ * done in one step, and the node turns manual like any other.
+ */
+export function moveNodeToSite(recipe: WorldRecipe, nodeId: string): WorldRecipe | null {
+  const stranded = strandedRoadNodes(recipe).find((entry) => entry.node === nodeId);
+  return stranded ? movePlanPoint(recipe, { kind: "node", id: nodeId }, stranded.to) : null;
+}
+
+/** The core edge point nearest `from`, `SITE_NODE_INSET` inside (tenth of a metre); the centre when the core is too thin. */
+function siteEdgePoint(core: CoreShape, from: WorldPoint): WorldPoint {
+  const tenth = (point: WorldPoint): WorldPoint => [Math.round(point[0] * 10) / 10, Math.round(point[1] * 10) / 10];
+  if (!core.outline || core.outline.length < 3) {
+    const away = span(core.center, from);
+    return away === 0 ? tenth(core.center) : tenth(lerp(core.center, from, Math.max(0, core.radius - SITE_NODE_INSET) / away));
+  }
+  const outline = core.outline;
+  let best: { point: WorldPoint; normal: WorldPoint; distance: number } | null = null;
+  for (let index = 0; index < outline.length; index += 1) {
+    const a = outline[index]!;
+    const b = outline[(index + 1) % outline.length]!;
+    const length = span(a, b);
+    if (length === 0) continue;
+    const t = Math.min(1, Math.max(0, ((from[0] - a[0]) * (b[0] - a[0]) + (from[1] - a[1]) * (b[1] - a[1])) / (length * length)));
+    const point = lerp(a, b, t);
+    const distance = span(point, from);
+    if (!best || distance < best.distance) best = { point, normal: [-(b[1] - a[1]) / length, (b[0] - a[0]) / length], distance };
+  }
+  if (best) {
+    // The outline's winding is not fixed: the inside is whichever side the core holds.
+    for (let inset = SITE_NODE_INSET; inset >= 0.5; inset /= 2) {
+      for (const sign of [1, -1]) {
+        const point = tenth([best.point[0] + sign * inset * best.normal[0], best.point[1] + sign * inset * best.normal[1]]);
+        if (inCore(core, point)) return point;
+      }
+    }
+  }
+  return tenth(core.center);
 }
 
 /** `<kind>-<n>` with the lowest n no plan element or protected region uses. */

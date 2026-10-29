@@ -460,6 +460,30 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.deepEqual([restored.center, restored.source, restored.confidence], [[10, 20], "reference", 0.3]);
   });
 
+  await checkAsync("world builder session: Move to Site puts a node stranded outside its settlement's site on the core edge, one undo step", async () => {
+    const recipe = roadRecipe();
+    recipe.plan.settlements.push({ id: "village", source: "reference", center: [60, 0], type: "village" });
+    Object.assign(recipe.plan.roadGraph.nodes[1]!, { settlement: "village", source: "reference", confidence: 0.4 });
+    // The site slid 20 m east; its core is a 20 m square, so the planned node (30, 0) is 10 m short of it.
+    recipe.generated.sites.push({
+      settlement: "village", center: [50, 0], coreRadius: 15, core: [[40, -10], [60, -10], [60, 10], [40, 10]],
+      dwellings: 4, program: [],
+    });
+    const { session, history } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    assert.deepEqual(session.getView().planEdit!.stranded, [{ node: "b", settlement: "village", to: [44, 0] }], "the nearest edge, 4 m in");
+    assert.equal(session.moveNodeToSite("a"), false, "a node without a settlement is not stranded");
+    assert.equal(session.moveNodeToSite("b"), true);
+    const moved = session.getView().planEdit!.plan.roadGraph.nodes[1]!;
+    assert.deepEqual([moved.position, moved.source, "confidence" in moved], [[44, 0], "manual", false]);
+    assert.deepEqual(session.getView().planEdit!.stranded, []);
+    assert.equal(history.state().undoLabel, "World Builder: move node to site");
+    assert.equal(session.moveNodeToSite("b"), false, "no longer stranded");
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan.roadGraph.nodes[1]!.position, [30, 0]);
+    assert.equal(session.getView().planEdit!.stranded.length, 1);
+  });
+
   await checkAsync("world builder session: plan elements are added where the viewport looks, selected, and edited by field", async () => {
     const { session, history, statuses } = harness({ [RECIPE_URL]: roadRecipe() });
     await session.load();

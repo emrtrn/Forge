@@ -28,6 +28,8 @@
  * the layer switches: not saved, not undone. In Edit Plan mode the layer
  * draws a handle on every movable plan point; the host drags one over the
  * ground (drawn from an uncommitted copy) and the drop is one move step.
+ * A road node left outside the site its settlement slid to is listed
+ * (`stranded`) and Move to Site puts it on the core edge in one step.
  */
 import type { EditorCommand } from "@editor/core/history";
 import type { RoomLayout } from "@engine/scene/layout";
@@ -70,15 +72,18 @@ import {
   deleteGuidePoint,
   deletePlanElement,
   hasPlanElement,
+  moveNodeToSite,
   movePlanPoint,
   planPoints,
   pointElement,
+  strandedRoadNodes,
   updatePlanElement,
   type PlanElementFields,
   type PlanElementKind,
   type PlanPoint,
   type PlanPointRef,
   type PlanRef,
+  type StrandedNode,
 } from "./worldBuilderPlanEdit";
 import { buildStagePreview, type PreviewItem, type StagePreview } from "./worldBuilderPreview";
 
@@ -141,8 +146,18 @@ export interface WorldBuilderView {
   /** The recipe layer in the viewport: what it shows and what it drew. */
   layer: { options: RecipeLayerOptions; counts: RecipeLayerCounts };
   reference: WorldReference | null;
-  /** The plan and protected regions for the hand-correction list, and the selected element. */
-  planEdit: { plan: WorldPlan; protectedRegions: ProtectedRegion[]; selection: PlanRef | null; editing: boolean; handles: number } | null;
+  /**
+   * The plan and protected regions for the hand-correction list, the selected
+   * element, and the road nodes the applied sites left stranded.
+   */
+  planEdit: {
+    plan: WorldPlan;
+    protectedRegions: ProtectedRegion[];
+    selection: PlanRef | null;
+    editing: boolean;
+    handles: number;
+    stranded: StrandedNode[];
+  } | null;
 }
 
 type Fetcher = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -339,6 +354,11 @@ export class WorldBuilderSession {
     return this.editPlan(`edit ${ref.kind}`, (recipe) => updatePlanElement(recipe, ref, fields));
   }
 
+  /** Moves a road node stranded outside its settlement's site onto the site's core edge. */
+  moveNodeToSite(nodeId: string): boolean {
+    return this.editPlan("move node to site", (recipe) => moveNodeToSite(recipe, nodeId));
+  }
+
   addGuidePoint(edgeId: string): boolean {
     return this.editPlan("add guide point", (recipe) => addGuidePoint(recipe, edgeId)?.recipe ?? null);
   }
@@ -496,6 +516,7 @@ export class WorldBuilderSession {
             selection: this.selection,
             editing: this.planEditing,
             handles: this.planHandles().length,
+            stranded: strandedRoadNodes(recipe),
           }
         : null,
     };

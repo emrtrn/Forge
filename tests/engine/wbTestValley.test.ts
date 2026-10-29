@@ -4,7 +4,8 @@
  * height, no terrain files. Pinned here: the track up the slope stays within
  * its limit (a serpentine); the hamlet drawn on the steep slope above the
  * bench settles on the bench (not down on the floor) and its stranded road
- * node is reported; the valley village gets a parcel per program need
+ * node is reported, and Move to Site plus a Roads re-run brings the track to
+ * it; the valley village gets a parcel per program need
  * (shallower lots and frontages resuming past crossing streets); and the
  * known gap left — one dwelling without a lot once the large roles and open
  * land are placed — so a fix shows up as a deliberate change to this test.
@@ -14,6 +15,7 @@ import { readFileSync } from "node:fs";
 
 import type { RoomLayout } from "../../engine/scene/layout";
 import type { TerrainSpline } from "../../engine/terrain/terrainTypes";
+import { inCore } from "../../engine/worldbuilder/core";
 import { normalizeRegionProfile } from "../../engine/worldbuilder/regionProfile";
 import { applyPlacementGroupChanges, planStage, type StagePlan, type StageTerrain } from "../../engine/worldbuilder/stage";
 import { createDefaultWorldStages } from "../../engine/worldbuilder/stages";
@@ -27,6 +29,7 @@ import {
   wbTestValleyHeight,
   wbTestValleyRecipe,
 } from "../../tools/world/wbTestValley";
+import { moveNodeToSite, strandedRoadNodes } from "../../src/editor/worldBuilderPlanEdit";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -109,6 +112,32 @@ export function registerWbTestValleyTests(check: Check): void {
     assert.ok(warnings.some((warning) => /^settlement hamlet: moved \d+ m from the planned centre \(the planned centre is steeper than the limit\)$/.test(warning)));
     assert.ok(warnings.some((warning) => warning.startsWith("settlement hamlet: its road node hamlet-end is outside the chosen core")),
       "the track was built to the planned spot: the user moves the node");
+  });
+
+  check("wb test valley: Move to Site puts the stranded node on the bench and the re-run track reaches the hamlet", () => {
+    const { recipe, layout, terrains, profile } = chain();
+    assert.deepEqual(strandedRoadNodes(recipe).map((entry) => entry.node), ["hamlet-end"]);
+    const fixed = moveNodeToSite(recipe, "hamlet-end")!;
+    assert.deepEqual(strandedRoadNodes(fixed), []);
+    const node = fixed.plan.roadGraph.nodes.find((entry) => entry.id === "hamlet-end")!;
+    assert.equal(node.source, "manual");
+
+    const stages = createDefaultWorldStages();
+    const roads = planStage(stages.find((stage) => stage.id === "roads")!, { recipe: fixed, layout, profile, sampleHeight: wbTestValleyHeight, terrains });
+    assert.deepEqual(roads.errors, []);
+    assert.deepEqual(roads.updated, ["wb-road-hamlet-track"], "only the track moves");
+    const after = roads.splineChanges.find((entry) => entry.landscapeId === WB_TEST_VALLEY_TERRAIN_ID)!.after as TerrainSpline[];
+    const track = after.find((spline) => spline.id === "wb-road-hamlet-track")!;
+    const hamlet = fixed.generated.sites.find((entry) => entry.settlement === "hamlet")!;
+    const end = track.points.at(-1)!.position;
+    assert.ok(inCore({ center: hamlet.center, radius: hamlet.coreRadius, outline: hamlet.core! }, [end[0], end[2]]), `track ends at ${end}`);
+    assert.ok(steepestGrade(track) <= 20.5, `track climbs ${steepestGrade(track)}°`);
+
+    const sites = planStage(stages.find((stage) => stage.id === "settlementSites")!, {
+      recipe: roads.recipeAfter, layout, profile, sampleHeight: wbTestValleyHeight,
+      terrains: terrains.map((terrain) => ({ ...terrain, splines: after })),
+    });
+    assert.ok(!sites.warnings.some((warning) => warning.includes("outside the chosen core")), sites.warnings.join("\n"));
   });
 
   check("wb test valley: the valley village gets a parcel per need; known gap — one dwelling left without a lot", () => {

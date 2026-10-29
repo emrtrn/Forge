@@ -70,8 +70,25 @@ test("World Builder tab: dry run, apply as one undo step, save the recipe, up to
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+3 added · ~0 updated · −0 removed · 0 unchanged");
   await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+  // T10 preview: the viewport layer drew all three (data-drawn is the overlay's own count), listed by change.
+  const preview = page.getByTestId("world-builder-preview");
+  await expect(preview).toHaveAttribute("data-drawn", "3");
+  await expect(page.getByTestId("world-builder-preview-added")).toHaveAttribute("data-count", "3");
+  await page.getByTestId("world-builder-change-wb-blockout-landmark-depot").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Focused wb-blockout-landmark-depot");
+  await page.getByTestId("world-builder-preview-focus").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Focused the Plan blockout preview");
+  await page.getByTestId("world-builder-preview-clear").click();
+  await expect(preview).toHaveCount(0);
+  await expect(page.getByTestId("world-builder-report")).toBeVisible();
+  await page.locator('[data-outliner-tab="scene"]').click();
+  await expect(markerRows()).toHaveCount(0);
+  await page.getByTestId("world-builder-tab").click();
 
+  await page.getByTestId("world-builder-dry-run-planBlockout").click();
+  await expect(preview).toHaveAttribute("data-drawn", "3");
   await page.getByTestId("world-builder-apply-planBlockout").click();
+  await expect(preview).toHaveCount(0);
   await expect(page.getByTestId("world-builder-recipe")).toContainText("unsaved");
   await expect(page.getByTestId("world-builder-panel")).toContainText("3 generated objects");
   await page.locator('[data-outliner-tab="scene"]').click();
@@ -79,7 +96,13 @@ test("World Builder tab: dry run, apply as one undo step, save the recipe, up to
 
   await page.getByTestId("editor-undo").click();
   await expect(markerRows()).toHaveCount(0);
+  // A history step drops a preview planned against the level before it.
+  await page.getByTestId("world-builder-tab").click();
+  await page.getByTestId("world-builder-dry-run-planBlockout").click();
+  await expect(preview).toHaveAttribute("data-drawn", "3");
   await page.getByTestId("editor-redo").click();
+  await expect(preview).toHaveCount(0);
+  await page.locator('[data-outliner-tab="scene"]').click();
   await expect(markerRows()).toHaveCount(3);
 
   const recipeSaved = page.waitForResponse((res) => res.url().endsWith("/__save-worldrecipe") && res.request().method() === "POST");
@@ -296,6 +319,8 @@ test("World Builder village: the settlement chain places coloured buildings and 
   }
   await expect(page.getByTestId("world-builder-apply-pads")).toBeEnabled();
   await page.getByTestId("world-builder-apply-pads").click();
+  // The bake is async (tile demand); wait for it, or fences would read the ground before it.
+  await expect(page.getByTestId("editor-status")).toContainText("Pads applied", { timeout: 30_000 });
   // Fences follow the ground, so they come after the bake.
   await page.getByTestId("world-builder-apply-fences").click();
   await expect(page.getByTestId("world-builder-report")).toContainText("Changes pending");

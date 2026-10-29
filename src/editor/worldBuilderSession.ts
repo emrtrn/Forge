@@ -9,6 +9,11 @@
  * an object that is not on disk, reported as deleted by hand; the reverse
  * order would leave generated objects looking manual, blocking the stage and
  * outliving their plan element.
+ *
+ * A dry run that touches an object is also shown in the viewport (T10):
+ * the session builds the preview and the host draws it. Apply accepts it,
+ * Clear Preview drops it, and any history step drops it too, since the level
+ * it was planned against has changed.
  */
 import type { EditorCommand } from "@editor/core/history";
 import type { RoomLayout } from "@engine/scene/layout";
@@ -28,6 +33,7 @@ import { createDefaultWorldStages } from "@engine/worldbuilder/stages";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { SaveRevision, type EditorSaveStep } from "./editorSaveCoordinator";
 import { gameProgramExtensions } from "./gameEditorRegistry";
+import { buildStagePreview, type PreviewItem, type StagePreview } from "./worldBuilderPreview";
 
 export interface WorldBuilderHost {
   scenePath(): string;
@@ -43,6 +49,10 @@ export interface WorldBuilderHost {
   applySplineChanges(changes: readonly TerrainSplineChange[], side: "before" | "after"): void;
   /** Bakes pads into the terrains under them as undoable terrain commands, and reports. */
   applyPads(pads: readonly TerrainPad[]): Promise<void>;
+  /** Draws a dry run's preview in the viewport (null clears it); returns how many items it drew. */
+  showPreview(preview: StagePreview | null): number;
+  /** Frames one preview item, or the whole preview when `item` is null. */
+  focusPreview(preview: StagePreview, item: PreviewItem | null): void;
   onStatus(message: string, tone: "success" | "warning" | "error"): void;
 }
 
@@ -68,6 +78,8 @@ export interface WorldBuilderView {
   stages: readonly WorldBuilderStageView[];
   /** The last dry run or apply, for the report. */
   lastPlan: StagePlan | null;
+  /** The dry run shown in the viewport, and how many of its items were drawn. */
+  preview: { preview: StagePreview; drawn: number } | null;
 }
 
 type Fetcher = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -82,6 +94,7 @@ export class WorldBuilderSession {
   private profile: RegionProfile | null = null;
   private profileView: WorldBuilderView["profile"] = null;
   private lastPlan: StagePlan | null = null;
+  private preview: { preview: StagePreview; drawn: number } | null = null;
   private loadedFor = "";
 
   constructor(
@@ -103,6 +116,7 @@ export class WorldBuilderSession {
     this.profile = null;
     this.profileView = null;
     this.lastPlan = null;
+    this.clearPreview();
     this.saveRevision.reset();
     const response = await this.fetchJson(projectFileUrl(worldRecipePath(scenePath))).catch(() => null);
     if (this.loadedFor !== scenePath) return;
@@ -147,11 +161,35 @@ export class WorldBuilderSession {
     });
   }
 
-  /** Plans a stage without changing anything. */
+  /**
+   * Plans a stage without changing anything. A plan that adds, updates,
+   * removes, keeps or blocks an object is previewed in the viewport — kept and
+   * blocked ones too, though they alone leave the plan empty.
+   */
   dryRun(stageId: string): StagePlan | null {
     const plan = this.plan(stageId);
-    if (plan) this.lastPlan = plan;
+    if (!plan) return null;
+    this.lastPlan = plan;
+    const layout = this.host.layout();
+    const preview = layout ? buildStagePreview(plan, layout, this.host.terrains()) : null;
+    if (preview && preview.items.length > 0) this.preview = { preview, drawn: this.host.showPreview(preview) };
+    else this.clearPreview();
     return plan;
+  }
+
+  /** Drops the viewport preview of the last dry run. */
+  clearPreview(): void {
+    if (!this.preview) return;
+    this.preview = null;
+    this.host.showPreview(null);
+  }
+
+  /** Frames a preview item by id, or the whole preview. */
+  focusPreview(id?: string): void {
+    if (!this.preview) return;
+    const item = id ? this.preview.preview.items.find((entry) => entry.id === id) ?? null : null;
+    if (id && !item) return;
+    this.host.focusPreview(this.preview.preview, item);
   }
 
   /** Plans and applies a stage as one undoable step. False when nothing was applied. */
@@ -159,6 +197,7 @@ export class WorldBuilderSession {
     const plan = this.plan(stageId);
     if (!plan) return false;
     this.lastPlan = plan;
+    this.clearPreview();
     if (plan.errors.length > 0) {
       this.host.onStatus(`${plan.stageLabel} has errors; nothing was applied. ${plan.errors[0]}`, "error");
       return false;
@@ -229,6 +268,7 @@ export class WorldBuilderSession {
         recordedVersion: recipe?.generators[stage.id] ?? null,
       })),
       lastPlan: this.lastPlan,
+      preview: this.preview,
     };
   }
 

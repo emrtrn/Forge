@@ -334,6 +334,8 @@ import {
 import { EditorSaveSession, type EditorSaveSource } from "@/editor/editorSaveCoordinator";
 import { WorldTerrainEditSession } from "@/editor/terrainStore";
 import { WorldBuilderSession } from "@/editor/worldBuilderSession";
+import type { PreviewItem, StagePreview } from "@/editor/worldBuilderPreview";
+import { WorldBuilderPreviewOverlay } from "./worldBuilderPreviewOverlay";
 import {
   applyPlacementGroupChanges,
   type PlacementGroupChange,
@@ -1421,8 +1423,12 @@ export class SceneApp {
     terrains: () => this.worldBuilderTerrains(),
     applySplineChanges: (changes, side) => this.applyWorldBuilderSplineChanges(changes, side),
     applyPads: (pads) => this.applyWorldBuilderPads(pads),
+    showPreview: (preview) => this.worldBuilderPreview.show(preview),
+    focusPreview: (preview, item) => this.focusWorldBuilderPreview(preview, item),
     onStatus: (message, tone) => this.onStatus?.(message, tone),
   });
+  /** Viewport layer of the last World Builder dry run (T10). */
+  private readonly worldBuilderPreview = new WorldBuilderPreviewOverlay((assetId) => this.localBounds.get(assetId) ?? null);
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
   private landscapeLayerMaterialCache = new Map<string, ForgeMaterialLayer>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
@@ -1920,6 +1926,7 @@ export class SceneApp {
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
     this.scene.add(tagSceneSource(this.gizmoGroup, EDITOR_OVERLAY_SOURCE));
+    this.scene.add(tagSceneSource(this.worldBuilderPreview.group, EDITOR_OVERLAY_SOURCE));
 
     // Register subsystems before scene load adds work to them (e.g. character
     // animations push mixers during loadActiveProjectScene) and before the
@@ -2706,6 +2713,34 @@ export class SceneApp {
     this.cameraController.markViewChanged();
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(`Moved the camera to ${Math.round(x)}, ${Math.round(z)}.`, "info");
+  }
+
+  /**
+   * Frames a World Builder preview item, or the whole preview, along the
+   * current view direction. Unlike Focus Selected the distance is not capped:
+   * a stage can touch a whole settlement.
+   */
+  private focusWorldBuilderPreview(preview: StagePreview, item: PreviewItem | null): void {
+    const box = this.worldBuilderPreview.worldBox(preview, item);
+    if (!box) {
+      this.onStatus?.(item ? `${item.id} has nothing to show in the viewport.` : "The preview has nothing to show in the viewport.", "warning");
+      return;
+    }
+    const camera = this.editorViewportCamera();
+    const viewDirection = camera.getWorldDirection(new Vector3());
+    if (viewDirection.lengthSq() === 0) viewDirection.copy(SCENE_CAMERA_TARGET).sub(camera.position).normalize();
+    const target = box.getCenter(new Vector3());
+    const radius = Math.max(box.getSize(new Vector3()).length() * 0.5, 1);
+    if (camera instanceof OrthographicCamera) {
+      this.orthoViewHeight = clamp(radius * 2.4, ORTHO_MIN_VIEW_HEIGHT, ORTHO_MAX_VIEW_HEIGHT);
+      this.updateOrthoProjection();
+    }
+    camera.position.copy(target).addScaledVector(viewDirection, -radius * 1.8);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(target);
+    this.cameraController.markViewChanged();
+    this.cameraController.syncAnglesFromCurrentView();
+    this.onStatus?.(item ? `Focused ${item.id}.` : `Focused the ${preview.stageLabel} preview.`, "info");
   }
 
   getWorldSettings(): EditorWorldSettings {
@@ -15511,6 +15546,8 @@ export class SceneApp {
   }
 
   private emitHistoryChanged(): void {
+    // A dry run preview was planned against the level before this step.
+    this.worldBuilder.clearPreview();
     this.onHistoryChanged?.(this.getHistoryState());
   }
 

@@ -1,8 +1,11 @@
 import type { StagePlan } from "@engine/worldbuilder/stage";
+import { PREVIEW_CHANGES, previewItemDrawable, type PreviewChange, type PreviewItem } from "@/editor/worldBuilderPreview";
 import type { WorldBuilderSession, WorldBuilderView } from "@/editor/worldBuilderSession";
 
 /** At most this many ids are listed per report line; the rest are counted. */
 const LISTED_IDS = 8;
+/** At most this many rows per change in the preview list; the rest are counted. */
+const LISTED_CHANGES = 40;
 
 export interface WorldBuilderPanelOptions {
   body: HTMLElement;
@@ -12,14 +15,16 @@ export interface WorldBuilderPanelOptions {
 /**
  * World Builder panel (plan v0.4 §6.2, §7.1): the open level's recipe, its
  * region profile, the stages with Dry Run / Apply, and the last plan's report.
- * Apply is one undo step; the recipe is written by Save Layout.
+ * Apply is one undo step; the recipe is written by Save Layout. A dry run with
+ * changes is drawn in the viewport (T10) and listed by change; a row frames
+ * its object, Focus frames them all and Clear Preview drops the drawing.
  */
 export class WorldBuilderPanel {
   constructor(private readonly options: WorldBuilderPanelOptions) {
     options.body.addEventListener("click", (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-wb-action]");
       if (!button || button.disabled) return;
-      void this.run(button.dataset.wbAction ?? "", button.dataset.wbStage ?? "");
+      void this.run(button.dataset.wbAction ?? "", button.dataset.wbStage ?? "", button.dataset.wbId);
     });
   }
 
@@ -27,13 +32,18 @@ export class WorldBuilderPanel {
     this.options.body.innerHTML = renderView(this.options.session.getView());
   }
 
-  private async run(action: string, stageId: string): Promise<void> {
+  private async run(action: string, stageId: string, id?: string): Promise<void> {
     const { session } = this.options;
     if (action === "create") session.createRecipe();
     else if (action === "reload") await session.reload();
     else if (action === "dry-run") session.dryRun(stageId);
     else if (action === "apply") session.apply(stageId);
     else if (action === "apply-pads") await session.applyPads();
+    else if (action === "preview-clear") session.clearPreview();
+    else if (action === "preview-focus") {
+      session.focusPreview(id);
+      return;
+    }
     this.update();
   }
 }
@@ -42,7 +52,8 @@ function renderView(view: WorldBuilderView): string {
   return `<div class="world-builder-panel" data-testid="world-builder-panel">
     ${renderRecipe(view)}
     ${view.state === "loaded" ? renderStages(view) : ""}
-    ${view.lastPlan ? renderPlan(view.lastPlan) : ""}
+    ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null) : ""}
+    ${view.preview ? renderPreview(view.preview.preview.items, view.preview.drawn) : ""}
   </div>`;
 }
 
@@ -98,7 +109,8 @@ function renderStages(view: WorldBuilderView): string {
     <div class="detail-section"><div class="detail-section-title">Terrain</div>${terrain}</div>`;
 }
 
-function renderPlan(plan: StagePlan): string {
+/** `previewed`: the preview list below names the kept and blocked objects. */
+function renderPlan(plan: StagePlan, previewed: boolean): string {
   const verdict = plan.errors.length > 0
     ? '<span class="world-builder-error">Errors — cannot apply</span>'
     : plan.empty ? "Up to date" : "Changes pending";
@@ -111,9 +123,48 @@ function renderPlan(plan: StagePlan): string {
       <div data-testid="world-builder-counts">+${plan.added.length} added · ~${plan.updated.length} updated · −${plan.removed.length} removed · ${plan.unchanged} unchanged</div>
       ${bounds}
       ${renderList("Errors", plan.errors, "world-builder-error")}
-      ${renderList("Kept", plan.kept.map((entry) => `${entry.id} (${keptLabel(entry.reason)})`))}
-      ${renderList("Blocked", plan.blocked.map((entry) => `${entry.id} (${blockedLabel(entry.reason)})`))}
+      ${previewed ? "" : renderList("Kept", plan.kept.map((entry) => `${entry.id} (${keptLabel(entry.reason)})`))}
+      ${previewed ? "" : renderList("Blocked", plan.blocked.map((entry) => `${entry.id} (${blockedLabel(entry.reason)})`))}
       ${renderList("Warnings", plan.warnings)}
+    </div>
+  </div>`;
+}
+
+const CHANGE_LABELS: Record<PreviewChange, string> = {
+  added: "Added",
+  updated: "Updated",
+  removed: "Removed",
+  kept: "Kept",
+  blocked: "Blocked",
+};
+
+function renderPreview(items: readonly PreviewItem[], drawn: number): string {
+  const groups = PREVIEW_CHANGES.map((change) => {
+    const own = items.filter((item) => item.change === change);
+    if (own.length === 0) return "";
+    const rows = own.slice(0, LISTED_CHANGES).map((item) => {
+      const reason = item.reason ? ` (${REASON_LABELS[item.reason]})` : "";
+      const detail = item.assetId ?? (item.kind === "spline" ? "spline" : "");
+      const label = `${escapeHtml(item.id)}${escapeHtml(reason)}${detail ? ` <span class="world-builder-path">${escapeHtml(detail)}</span>` : ""}`;
+      return previewItemDrawable(item)
+        ? `<li><button type="button" class="world-builder-change" data-wb-action="preview-focus" data-wb-id="${escapeHtml(item.id)}" data-testid="world-builder-change-${escapeHtml(item.id)}">${label}</button></li>`
+        : `<li data-testid="world-builder-change-${escapeHtml(item.id)}">${label}</li>`;
+    }).join("");
+    const more = own.length > LISTED_CHANGES ? `<li>… ${own.length - LISTED_CHANGES} more</li>` : "";
+    return `<div data-testid="world-builder-preview-${change}" data-count="${own.length}">
+      <span class="world-builder-swatch world-builder-swatch-${change}"></span>${CHANGE_LABELS[change]} (${own.length})
+      <ul class="world-builder-list">${rows}${more}</ul>
+    </div>`;
+  }).join("");
+  return `<div class="detail-section" data-testid="world-builder-preview" data-drawn="${drawn}">
+    <div class="detail-section-title">Preview</div>
+    <div class="world-builder-summary">
+      <div>${drawn} of ${items.length} objects drawn in the viewport · Apply accepts, Undo rolls back</div>
+      ${groups}
+    </div>
+    <div class="world-builder-actions">
+      <button type="button" data-wb-action="preview-focus" data-testid="world-builder-preview-focus" ${drawn === 0 ? "disabled" : ""}>Focus</button>
+      <button type="button" data-wb-action="preview-clear" data-testid="world-builder-preview-clear">Clear Preview</button>
     </div>
   </div>`;
 }
@@ -138,6 +189,9 @@ const BLOCKED_LABELS: Record<StagePlan["blocked"][number]["reason"], string> = {
   protected: "protected region",
   locked: "locked terrain",
 };
+
+/** Kept and blocked reasons share `protected` / `locked`, with the same label. */
+const REASON_LABELS: Record<NonNullable<PreviewItem["reason"]>, string> = { ...KEPT_LABELS, ...BLOCKED_LABELS };
 
 function keptLabel(reason: StagePlan["kept"][number]["reason"]): string {
   return KEPT_LABELS[reason];

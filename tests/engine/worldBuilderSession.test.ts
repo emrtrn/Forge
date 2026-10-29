@@ -18,6 +18,7 @@ import { applyPlacementGroupChanges } from "../../engine/worldbuilder/stage";
 import { EditorSaveSession, type EditorSaveSource } from "../../src/editor/editorSaveCoordinator";
 import type { WorldTerrainEditSession } from "../../src/editor/terrainStore";
 import { WorldBuilderSession, type WorldBuilderHost } from "../../src/editor/worldBuilderSession";
+import type { PreviewItem, StagePreview } from "../../src/editor/worldBuilderPreview";
 
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 
@@ -61,6 +62,9 @@ function harness(files: Record<string, unknown> = {}) {
   const statuses: string[] = [];
   const posts: Array<{ url: string; body: unknown }> = [];
   const baked: TerrainPad[][] = [];
+  /** Every preview the host was asked to draw (null = cleared), and every focus request. */
+  const shown: Array<StagePreview | null> = [];
+  const focused: Array<PreviewItem | null> = [];
   let postStatus = 200;
   const host: WorldBuilderHost = {
     scenePath: () => LEVEL,
@@ -73,6 +77,11 @@ function harness(files: Record<string, unknown> = {}) {
       for (const change of changes) if (change.landscapeId === terrain.id) terrain.splines = structuredClone(change[side]);
     },
     applyPads: async (pads) => void baked.push([...pads]),
+    showPreview: (preview) => {
+      shown.push(preview);
+      return preview?.items.filter((item) => item.placement || item.path?.length).length ?? 0;
+    },
+    focusPreview: (_preview, item) => void focused.push(item),
     onStatus: (message) => statuses.push(message),
   };
   const session = new WorldBuilderSession(
@@ -83,7 +92,7 @@ function harness(files: Record<string, unknown> = {}) {
       return postStatus === 200 ? respond(200, { ok: true }) : respond(postStatus, { ok: false, error: "nope" });
     },
   );
-  return { session, history, layout, terrain, rebuilt, statuses, posts, baked, setPostStatus: (status: number) => { postStatus = status; } };
+  return { session, history, layout, terrain, rebuilt, statuses, posts, baked, shown, focused, setPostStatus: (status: number) => { postStatus = status; } };
 }
 
 export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): Promise<void> {
@@ -153,6 +162,108 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.equal(session.getView().planCounts!.owned, 0);
     history.redo();
     assert.equal(session.getView().planCounts!.owned, 2);
+  });
+
+  await checkAsync("world builder session: a dry run is previewed without changing anything; apply and Clear Preview drop it", async () => {
+    const { session, history, layout, terrain, shown, focused } = harness({ [RECIPE_URL]: planRecipe() });
+    await session.load();
+    const level = structuredClone(layout);
+    const recipeBefore = structuredClone(session.getView().planCounts);
+
+    session.dryRun("planBlockout");
+    const preview = session.getView().preview!;
+    assert.deepEqual(preview.preview.items.map((item) => [item.id, item.change, item.assetId]), [
+      ["wb-blockout-settlement-village", "added", "shape:cube"],
+      ["wb-blockout-landmark-depot", "added", "shape:cube"],
+    ]);
+    assert.equal(preview.drawn, 2);
+    assert.deepEqual(preview.preview.items[0]!.placement!.position.slice(0, 1), [10]);
+    assert.deepEqual(layout, level, "the preview reads the plan, it does not write the level");
+    assert.deepEqual(session.getView().planCounts, recipeBefore);
+    assert.equal(session.getView().dirty, false);
+    assert.equal(history.state().canUndo, false, "a dry run is not a history step");
+
+    session.focusPreview("wb-blockout-landmark-depot");
+    session.focusPreview();
+    session.focusPreview("not-in-the-preview");
+    assert.deepEqual(focused.map((item) => item?.id ?? null), ["wb-blockout-landmark-depot", null]);
+
+    session.clearPreview();
+    assert.equal(session.getView().preview, null);
+    assert.equal(shown.at(-1), null);
+    assert.ok(session.getView().lastPlan, "the report outlives its preview");
+
+    session.dryRun("planBlockout");
+    assert.ok(session.getView().preview);
+    assert.equal(session.apply("planBlockout"), true);
+    assert.equal(session.getView().preview, null, "apply accepts the preview");
+    assert.equal(shown.at(-1), null);
+
+    // Up to date: nothing to preview. Moving a generated cube by hand keeps it (kept, drawn where it stands).
+    session.dryRun("planBlockout");
+    assert.equal(session.getView().preview, null);
+    const cubes = layout.instances.find((group) => group.assetId === "shape:cube")!;
+    cubes.placements[0]!.position = [11, 0, 20];
+    session.dryRun("planBlockout");
+    const kept = session.getView().preview!.preview.items;
+    assert.deepEqual(kept.map((item) => [item.id, item.change, item.reason]), [["wb-blockout-settlement-village", "kept", "editedByHand"]]);
+    assert.deepEqual(kept[0]!.placement!.position, [11, 0, 20]);
+
+    // Deleted by hand: listed, nothing to draw.
+    cubes.placements.splice(0, 1);
+    session.dryRun("planBlockout");
+    const deleted = session.getView().preview!;
+    assert.deepEqual(deleted.preview.items.map((item) => [item.id, item.reason, item.placement]), [["wb-blockout-settlement-village", "deletedByHand", undefined]]);
+    assert.equal(deleted.drawn, 0);
+    assert.equal(terrain.splines.length, 0);
+  });
+
+  await checkAsync("world builder session: a moved plan element previews as updated (old and new), a dropped one as removed", async () => {
+    const files: Record<string, unknown> = { [RECIPE_URL]: planRecipe() };
+    const { session, layout, posts } = harness(files);
+    await session.load();
+    session.apply("planBlockout");
+    await session.captureSave()!.write();
+    const saved = structuredClone((posts.at(-1)!.body as { recipe: ReturnType<typeof createWorldRecipe> }).recipe);
+    saved.plan.settlements[0]!.center = [14, 20];
+    saved.plan.landmarks = [];
+    files[RECIPE_URL] = saved;
+    await session.load();
+    const level = structuredClone(layout);
+
+    session.dryRun("planBlockout");
+    const items = session.getView().preview!.preview.items;
+    assert.deepEqual(items.map((item) => [item.id, item.change]), [
+      ["wb-blockout-settlement-village", "updated"],
+      ["wb-blockout-landmark-depot", "removed"],
+    ]);
+    assert.equal(items[0]!.placement!.position[0], 14);
+    assert.equal(items[0]!.before!.position[0], 10);
+    assert.equal(items[1]!.placement!.position[2], -30, "a removed object is drawn where it stands");
+    assert.equal(session.getView().preview!.drawn, 2);
+    assert.deepEqual(layout, level);
+  });
+
+  await checkAsync("world builder session: a spline stage previews its splines as world line pieces", async () => {
+    const { session, terrain } = harness({ [RECIPE_URL]: roadRecipe() });
+    await session.load();
+    session.dryRun("roads");
+    const [road] = session.getView().preview!.preview.items;
+    assert.equal(road!.id, "wb-road-main");
+    assert.equal(road!.kind, "spline");
+    assert.equal(road!.change, "added");
+    assert.ok(road!.path!.length > 0);
+    const xs = road!.path!.flatMap(([start, end]) => [start[0], end[0]]);
+    assert.ok(Math.min(...xs) <= 0.5 && Math.max(...xs) >= 29.5, `the path spans the edge: ${xs.join(",")}`);
+    assert.deepEqual(terrain.splines, [], "the preview does not write the terrain");
+
+    session.apply("roads");
+    // A hand edit on the road keeps it; the preview draws it where it is now.
+    terrain.splines[0]!.points[0]!.position = [0, 5, 3];
+    session.dryRun("roads");
+    const [kept] = session.getView().preview!.preview.items;
+    assert.equal(kept!.change, "kept");
+    assert.ok(kept!.path!.some(([start, end]) => start[2] === 3 || end[2] === 3));
   });
 
   await checkAsync("world builder session: roads apply swaps terrain splines and the recipe as one undo step", async () => {

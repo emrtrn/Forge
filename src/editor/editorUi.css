@@ -858,6 +858,15 @@
 .world-builder-list { margin: 2px 0 0; padding-left: 16px; }
 .world-builder-dirty { color: #ff9b52; font-size: 11px; }
 .world-builder-error { color: #ff7a7a; }
+/* Dry run preview (T10); swatch colours match WorldBuilderPreviewOverlay's PREVIEW_COLORS. */
+.world-builder-change { all: unset; cursor: pointer; color: var(--forge-text); }
+.world-builder-change:hover, .world-builder-change:focus-visible { text-decoration: underline; }
+.world-builder-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; vertical-align: baseline; }
+.world-builder-swatch-added { background: #3ddc84; }
+.world-builder-swatch-updated { background: #f5b041; }
+.world-builder-swatch-removed { background: #ef5350; }
+.world-builder-swatch-kept { background: #5dade2; }
+.world-builder-swatch-blocked { background: #c06cff; }
 .world-partition-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
 .world-partition-summary strong { color: var(--forge-text); font-weight: 600; }
 .world-partition-map {

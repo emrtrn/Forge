@@ -147,8 +147,8 @@
         "scale": 1,
         "speed": 1,
         "bake": {
-          "manifest": "assets/starter-content/Levels/Terrain.foam/60c19ccbc37a84320a7e95c4f3f4e118bef252f7891ea966096cb1313f22ee2d.foam.json",
-          "fingerprint": "5d5cee4fb274e61439072ab9b549d05641febf03db28d1284a96429d2e7f92da"
+          "manifest": "assets/starter-content/Levels/Terrain.foam/84f9f100cbc8013d50e786c6802017cde9239cc3d6b814993a2ac09dd843daf6.foam.json",
+          "fingerprint": "796258466f6df39745f60198e818716913627c6af38a133bd10e046c111c76dd"
         }
       },
       "caustics": {
@@ -223,7 +223,7 @@
         "wheelRippleLifetime": 4,
         "foamScale": 2,
         "foamSpeed": 2,
-        "causticsStrength": 1,
+        "causticsStrength": 1.5,
         "causticsScale": 1,
         "causticsSpeed": 2,
         "causticsDepthFade": 1,

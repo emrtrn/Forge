@@ -8,6 +8,7 @@ import { levelTerrainPath, terrainGlobalMapPath, terrainTilePath, type WorldTerr
 import { worldTerrainActorPosition } from "../../engine/terrain/worldTerrainActor";
 import { createFlatWorldTerrain } from "../../engine/terrain/worldTerrainCreate";
 import { createWorldRecipe, worldRecipePath, type WorldRecipe } from "../../engine/worldbuilder/recipe";
+import { generateWbTestValley, WB_TEST_VALLEY_LEVEL, WB_TEST_VALLEY_PROFILE, WB_TEST_VALLEY_TERRAIN } from "../../tools/world/wbTestValley";
 import { expect, test } from "./test";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
 
@@ -584,5 +585,38 @@ test("World Builder plan corrections: panel fields, viewport handle drag, add an
   expect(saved.ownership.protectedRegions.map((region) => region.id)).toEqual(["protected-1"]);
   expect(saved.plan.roadGraph.nodes.map((node) => node.id)).toEqual(["a", "b"]);
   expect(saved.plan.roadGraph.edges.map((edge) => edge.id)).toEqual(["main"]);
+  expect(errors).toEqual([]);
+});
+
+test("World Builder test valley: the generated mountain level opens, its terrain loads and the roads route over it (step 19)", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
+
+  // What `npm run world:valley` writes, into the isolated smoke public directory.
+  const valley = generateWbTestValley();
+  for (const [key, bytes] of valley.tileBytes) await writeFileIn(terrainTilePath(WB_TEST_VALLEY_TERRAIN, key), bytes);
+  await writeFileIn(terrainGlobalMapPath(WB_TEST_VALLEY_TERRAIN), valley.globalBytes);
+  await writeJson(WB_TEST_VALLEY_TERRAIN, valley.def);
+  await writeJson(WB_TEST_VALLEY_LEVEL, valley.level);
+  await writeJson(worldRecipePath(WB_TEST_VALLEY_LEVEL), valley.recipe);
+  await writeFileIn(WB_TEST_VALLEY_PROFILE, await readFile(resolve(REPO_ROOT, "tests/engine/fixtures/neutral.regionprofile.json")));
+  expect((await request.post("/__open-level", { data: { path: WB_TEST_VALLEY_LEVEL } })).ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.clear());
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/?editor&wbTestValley=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("world-builder-tab").click();
+  await expect(page.getByTestId("world-builder-recipe")).toContainText("wb_test_valley", { timeout: 30_000 });
+  await expect(page.getByTestId("world-builder-panel")).toContainText("Neutral test profile (loaded)");
+
+  // The terrain is loaded: the track's planned line is too steep and is routed over it.
+  await page.getByTestId("world-builder-dry-run-roads").click();
+  await expect(page.getByTestId("world-builder-counts")).toHaveText("+3 added · ~0 updated · −0 removed · 0 unchanged");
+  await expect(page.getByTestId("world-builder-report")).toContainText("road hamlet-track: the planned line climbs");
+  await page.getByTestId("world-builder-apply-roads").click();
+  await page.getByTestId("world-builder-dry-run-settlementSites").click();
+  await expect(page.getByTestId("world-builder-report")).toContainText("settlement hamlet: moved");
   expect(errors).toEqual([]);
 });

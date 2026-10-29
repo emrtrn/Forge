@@ -86,7 +86,8 @@ function noise(x: number, z: number, seed: number): number {
   return top + (bottom - top) * uz;
 }
 
-function fbm(x: number, z: number, octaves: number, seed: number): number {
+/** Fractal value noise, roughly −0.5..0.5 (also used by the World Builder test valley). */
+export function fbm(x: number, z: number, octaves: number, seed: number): number {
   let sum = 0;
   let amplitude = 0.5;
   for (let octave = 0; octave < octaves; octave += 1) {

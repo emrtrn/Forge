@@ -7,6 +7,8 @@ import { defaultWaterContactFoam } from "@engine/scene/waterContactFoam";
 import { LakeWaterObject } from "@engine/render-three/lakeWater";
 import { createLakeFixture } from "../../engine/fixtures/lakeFixture";
 import { buildLakeGeometry, prepareLakeSnapshot } from "@engine/terrain/terrainLakeWater";
+import { FULL_LAKE_QUALITY } from "@engine/perf/lakeQuality";
+import type { LakeFoamData } from "@engine/scene/lakeFoamBake";
 
 const renderer=new WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
 renderer.setSize(800,600); document.body.append(renderer.domElement);
@@ -31,6 +33,7 @@ for(const o of contactFoam.obstacles) {
 const riverBake=await bakeRiverGeometryFoam(water.getSurface(),riverRocks.map((rock,i)=>foamSource(`river-${i}`,rock,new Matrix4())),.4,"b".repeat(64),new AbortController().signal);
 water.removeFromParent();water.dispose();water=new RiverWaterObject({...riverItem,geometryFoam:defaultLakeGeometryFoam(),bakedFoam:riverBake},null);scene.add(water);
 let time=0;
+let lakeBake:LakeFoamData;
 const before=water.onBeforeRender;
 water.onBeforeRender=(...args)=>{before.apply(water,args);water.material.uniforms.time!.value=time;};
 const doc=createLakeFixture();
@@ -58,6 +61,7 @@ const beforeLake=lake.onBeforeRender;lake.onBeforeRender=(...args)=>{beforeLake.
     baked:!!water.material.uniforms.geometryFoamMask!.value,shore:!!water.material.uniforms.realShoreMask!.value,flow:Array.from(water.geometry.getAttribute("flowDirection").array.slice(0,2))};
 },async geometryBake() {
   const data=await bakeLakeGeometryFoam(doc.lake,lakeGeometry,lakeRocks.map((rock,i)=>foamSource(`rock-${i}`,rock,new Matrix4())),.4,"a".repeat(64),new AbortController().signal);
+  lakeBake=data;
   lake.removeFromParent();lake.dispose();
   lake=new LakeWaterObject({...doc.lake,geometryFoam:defaultLakeGeometryFoam()},lakeGeometry,null,null,data);lakeScene.add(lake);
   const before=lake.onBeforeRender;lake.onBeforeRender=(...args)=>{before.apply(lake,args);lake.material.uniforms.time!.value=time;};
@@ -70,6 +74,41 @@ const beforeLake=lake.onBeforeRender;lake.onBeforeRender=(...args)=>{beforeLake.
   const gl=renderer.getContext(),pixels=new Uint8Array(800*600*4);gl.readPixels(0,0,800,600,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
   const samples=[];for(let i=0;i<pixels.length;i+=16)samples.push(pixels[i],pixels[i+1],pixels[i+2]);
   return {samples,error:gl.getError(),calls:renderer.info.render.calls};
+},materialState() {
+  const a=lake.material.uniforms,b=water.material.uniforms,texture=a.waterFoamMap!.value;
+  return {lakeReady:a.waterFoamReady!.value,riverReady:b.waterFoamReady!.value,
+    shared:!!texture&&texture===b.waterFoamMap!.value,width:texture?.image?.width,height:texture?.image?.height,
+    textures:renderer.info.memory.textures,geometries:renderer.info.memory.geometries};
+},materialView(kind:"lake"|"river",t=3,lighting:"day"|"shadow"|"night"="day",far=false,reverse=false,foamEnabled=true) {
+  time=t;
+  lake.material.uniforms.geometryFoamStrength!.value=foamEnabled?1:0;
+  water.material.uniforms.foamOpacity!.value=foamEnabled?1:0;
+  const active=kind==="lake"?lakeScene:scene;
+  active.traverse(o=>{if(o instanceof AmbientLight)o.intensity=lighting==="night"?0:.65;
+    if(o instanceof DirectionalLight)o.intensity=lighting==="day"?2.2:0;});
+  const focus=kind==="lake"?[-20,12,-12]:[0,-.25,5];
+  const distance=far?22:3.8;
+  camera.position.set(focus[0]!+(reverse?-1:1)*distance,focus[1]!+distance*.75,focus[2]!+distance);
+  camera.lookAt(focus[0]!,focus[1]!,focus[2]!);camera.updateMatrixWorld(true);renderer.render(active,camera);
+  const gl=renderer.getContext(),pixels=new Uint8Array(800*600*4);gl.readPixels(0,0,800,600,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+  const samples=[];for(let i=0;i<pixels.length;i+=16)samples.push(pixels[i],pixels[i+1],pixels[i+2]);
+  return {samples,error:gl.getError(),calls:renderer.info.render.calls};
+},materialCycles(count=20) {
+  const original=water.material.uniforms.waterFoamMap!.value;
+  let isolated=true;
+  for(let i=0;i<count;i++) {
+    lake.applyQuality({...FULL_LAKE_QUALITY,foamAllowed:false},null,lakeBake);
+    isolated&&=lake.material.uniforms.waterFoamMap!.value===null&&water.material.uniforms.waterFoamMap!.value===original;
+    lake.applyQuality(FULL_LAKE_QUALITY,null,lakeBake);renderer.render(lakeScene,camera);
+    isolated&&=lake.material.uniforms.waterFoamMap!.value===original;
+  }
+  return {isolated,textures:renderer.info.memory.textures,geometries:renderer.info.memory.geometries};
+},disposeMaterialScene() {
+  const textures=new Set([lake.material.uniforms.waterFoamMap!.value,lake.material.uniforms.geometryFoamMask!.value,
+    water.material.uniforms.geometryFoamMask!.value,water.material.uniforms.realShoreMask!.value].filter(Boolean));
+  let disposed=0;for(const texture of textures)texture.addEventListener("dispose",()=>disposed++);
+  lake.removeFromParent();water.removeFromParent();lake.dispose();water.dispose();renderer.render(lakeScene,camera);
+  return {textures:renderer.info.memory.textures,geometries:renderer.info.memory.geometries,owned:textures.size,disposed};
 }};
 await (window as any).__contactQA.geometryBake();
 (window as any).__contactQA.frame();

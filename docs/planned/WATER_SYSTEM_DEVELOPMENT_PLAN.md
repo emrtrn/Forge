@@ -1,6 +1,11 @@
 # Forge Su Sistemi — Görsel Gelişim ve Entegrasyon Planı
 
-Tarih: 29 Ekim 2026 · Durum: plan; bu dokümanla uygulama başlatılmadı.
+Tarih: 29 Ekim 2026 · Durum: V1b ilk uygulaması yapıldı; kullanıcı görsel kabulü ve yeni GPU maliyeti açık.
+
+**Uygulama notu:** Kullanıcı önceliğiyle V1b köpük malzemesi öne alındı.
+Ortak 512² doku, yoğunluğa bağlı desen ve kabarıklık ışıklandırması Lake/River'a
+uygulandı. [Uygulama, doğrulama ve açık sınırlar](../reports/WATER_FOAM_MATERIAL_V1B_2026-10-29.md).
+V0'ın geniş kapsamı ve P0 genel kabulü tamamlanmış sayılmaz.
 
 **Hedef:** Mevcut Lake/River altyapısını koruyarak suyun renk, ışık, köpük ve kırılma kalitesini geliştirmek; daha sonra kalıcı köpük, rüzgârlı yüzey, nesne izi, su altı ve Ocean çalışmalarını ayrı teslimlerle ilerletmek.
 
@@ -50,7 +55,10 @@ Mevcut durum aşağıdaki yerel plan ve raporlardan alınmıştır. Bu doküman 
 
 ## 3. Çalışma hatları ve teslim sırası
 
-Aşağıdaki işlerin tamamı bu plan oluşturulurken **başlanmadı** durumundadır. “Mevcut” olarak anlatılan özellikler §2'deki önceki teslimlerdir.
+Aşağıdaki işlerin tamamı bu plan oluşturulurken **başlanmadı** durumundaydı.
+Sonrasında kullanıcı önceliğiyle V1b'nin ilk uygulaması yapıldı; kalan kabul
+sınırları yukarıdaki uygulama raporundadır. “Mevcut” olarak anlatılan özellikler
+§2'deki önceki teslimlerdir.
 
 | Kimlik | İş | Öncelik / bağımlılık | Teslim |
 | --- | --- | --- | --- |
@@ -292,6 +300,11 @@ Kaynak referansı, entegrasyon raporunda incelenen **`ce9248fa20afbdf63fd4c11709
 - İncelemede Ultra-Water `three ^0.186.1` / `vite ^8.3.5`, Forge ise `three 0.184.0` / `vite ^7.0.0` kullanıyor. İlk pakette toplu bağımlılık yükseltmesi planlanmaz; uygulama anında gerçek sürümler ve shader/API uyumu yeniden kontrol edilir.
 
 ## 13. Sonraki oturumun somut başlangıcı
+
+**Güncel durum:** Köpük önceliğiyle V1b ilk uygulaması teslim edildi. Sonraki
+görsel adım, bu malzemeyi kullanıcının gerçek Lake/River sahnesinde değerlendirip
+gerekli görünüm ayarını yapmaktır; yeni GPU maliyeti ayrıca ölçülmelidir.
+Aşağıdaki sıra, planın ilk oluşturulduğu andaki başlangıç önerisidir.
 
 İlk uygulama adımı **V0 ve P0 baseline**: ayrı Lake/eğimli River fixture'ı, sabit kameralar, üç görünümün başlangıç değerleri ve güncel kaynak ölçümü. Sonraki adım V1a ile optik denge, ardından V1b ortak köpük malzemesidir. Yeni kalıcı alanların gerekip gerekmediği ve efekt bütçeleri fixture sonuçlarıyla netleştirilir.
 

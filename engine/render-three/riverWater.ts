@@ -31,6 +31,7 @@ import { lakeFoamTexture, LAKE_GEOMETRY_FOAM_GLSL } from "./lakeFoamTexture";
 import type { LakeFoamData } from "../scene/lakeFoamBake";
 import { registerRiverCaustics } from "./terrain/terrainCaustics";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
+import { WaterFoamMaterial } from "./waterFoamMaterial";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
 
@@ -392,14 +393,15 @@ void main() {
       distanceToContact,time,contactScale,contactSpeed)*hasRealShore;
   }
   float obstacleFoam=waterObstacleFoam(vContactPosition,vContactFlow,flowSpeed*vFlowSpeedMultiplier,time);
+  vec2 foamFlowOffset=vContactFlow/max(length(vContactFlow),.0001)*time*flowSpeed*vFlowSpeedMultiplier;
   #ifdef FORGE_LAKE_GEOMETRY_FOAM
-  obstacleFoam=lakeGeometryFoam(vWorldPosition.xz,time);
+  obstacleFoam=lakeGeometryFoamFlow(vWorldPosition.xz,time,foamFlowOffset);
   vec2 wakeDirection=vContactFlow/max(length(vContactFlow),.0001);
   float wakeSpeed=max(0.,flowSpeed*vFlowSpeedMultiplier);
   // Three bounded downstream taps of the baked obstacle mask. No authored sources.
   for(int wake=1;wake<=3;wake++) {
     float distance=float(wake)*.65*min(2.,wakeSpeed);
-    obstacleFoam=max(obstacleFoam,lakeGeometryFoam(vWorldPosition.xz-wakeDirection*distance,time)*(.45-float(wake)*.1)*min(1.,wakeSpeed));
+    obstacleFoam=max(obstacleFoam,lakeGeometryFoamFlow(vWorldPosition.xz-wakeDirection*distance,time,foamFlowOffset-wakeDirection*distance)*(.45-float(wake)*.1)*min(1.,wakeSpeed));
   }
   #endif
   float foam = realContactEnabled>.5 ? clamp(max(shoreFoam,obstacleFoam) + rapidFoam*(1.-max(shoreFoam,obstacleFoam)), 0., 1.) : clamp(shoreFoam+rapidFoam,0.,1.);
@@ -413,8 +415,15 @@ void main() {
   float bedTransmission = waterTransmission(vWaterDepth, pathDepth, bedVisibility, absorptionDistance);
   float bedOpacity = 1.0 - bedTransmission;
   float authoredOpacity = opacity * wetness * mix(0.58, 1.0, smoothstep(0.0, 3.0, vWaterDepth));
+  vec2 foamWorld=vWorldPosition.xz-foamFlowOffset;
+  float materialScale=contactScale,materialSpeed=contactSpeed;
+  #ifdef FORGE_LAKE_GEOMETRY_FOAM
+  if(obstacleFoam>shoreFoam) { materialScale=geometryFoamScale;materialSpeed=geometryFoamSpeed; }
+  #endif
+  vec4 foamDetail=waterFoamReady>.5 ? waterFoamDetail(foamWorld,time,materialScale,materialSpeed) : vec4(.5);
+  vec3 litFoam=waterFoamLighting(foamDetail,foam,surfaceNormal,viewDirection,foamColor,sunVisibility);
   gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectionAmount * wetness,
-    foamColor * mix(vec3(0.34), vec3(0.72), sunVisibility), foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28, sunVisibility)
+    litFoam, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, 0.28, sunVisibility)
       * wetness * smoothstep(0.03, 0.3, vWaterDepth) * 0.35);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -438,6 +447,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   readonly isRiverWaterObject = true;
   private readonly contactTexture: DataTexture | null;
   private readonly bakedTexture: DataArrayTexture | null;
+  private readonly foamMaterial = new WaterFoamMaterial();
   private effectSurface: RiverSurfaceQuery | undefined;
   private releaseCaustics: () => void = () => {};
   readonly effectErrors: string[] = [];
@@ -530,6 +540,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       side: DoubleSide,
     });
     super(geometry, material);
+    Object.assign(material.uniforms, this.foamMaterial.uniforms);
     this.ribbon=ribbon; this.effectSurface=surface; this.bakedTexture=bake?.texture??null;
     this.effectErrors.push(...errors);
     this.contactTexture = contactTexture;
@@ -556,6 +567,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     });
     this.addEventListener("removed",()=>{this.releaseCaustics();this.releaseCaustics=()=>{};});
     this.onBeforeRender = (_renderer, scene, camera) => {
+      if (scene.overrideMaterial) return;
+      this.foamMaterial.update(item.foamOpacity > 0, scene, camera);
       this.material.uniforms["time"]!.value = performance.now() / 1000;
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera, item.environmentProbes?.());
@@ -563,6 +576,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   }
 
   dispose(): void {
+    this.foamMaterial.dispose();
     this.releaseCaustics(); this.releaseCaustics=()=>{};
     this.bakedTexture?.dispose();
     this.contactTexture?.dispose();

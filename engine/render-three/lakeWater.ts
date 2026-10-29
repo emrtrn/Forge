@@ -18,6 +18,7 @@ import { createWaterSceneUniforms, readWaterScene, WATER_SCENE_GLSL } from "./wa
 import { createLakeFoamMask, WATER_FOAM_GLSL, createWaterContactUniforms, WATER_CONTACT_GLSL } from "./waterFoam";
 import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
 import { FULL_LAKE_QUALITY, type LakeQuality } from "../perf/lakeQuality";
+import { WaterFoamMaterial } from "./waterFoamMaterial";
 
 /** Bounded vertical waves over the exact wet mesh; the shoreline stays pinned. */
 export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
@@ -25,6 +26,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private readonly strength: number;
   private foamTexture: DataTexture | null;
   private geometryFoamTexture: DataArrayTexture | null;
+  private readonly foamMaterial = new WaterFoamMaterial();
   private quality: LakeQuality;
   private readonly contactCount: number;
   readonly waveParameters: LakeWaveParameters;
@@ -91,11 +93,11 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         uniform sampler2D reflectionTexture;uniform float reflectionStrength;uniform vec2 reflectionTexelSize;
         varying float vDepth;varying vec2 vUv;varying vec4 vReflection;varying vec3 vWorldPosition;varying vec2 vWaveSlope;
         ${WATER_OPTICS_GLSL}
+        ${RIVER_SUN_SHADOW_GLSL}
+        ${WATER_ENVIRONMENT_GLSL}
         ${WATER_FOAM_GLSL}
         ${LAKE_GEOMETRY_FOAM_GLSL}
         ${WATER_CONTACT_GLSL}
-        ${RIVER_SUN_SHADOW_GLSL}
-        ${WATER_ENVIRONMENT_GLSL}
         ${WATER_SCENE_GLSL}
         ${LAKE_SURFACE_GLSL}
         uniform vec2 lakeRippleOrigin;
@@ -202,9 +204,12 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
             waterObstacleFoam(vContactPosition,vec2(0.),0.,time)*contactOpacity);
           coverage=max(coverage,bakedCoverage);
           float sun=riverSunVisibility();
-          vec3 foamLight=waterSurfaceLight(vec3(0.,1.,0.),viewDirection,.8,sun)*.4
-            +waterSunColor*max(waterSunDirection.y,0.)*.2*sun*waterLightingEnabled;
-          vec3 foamColor=vec3(.82,.87,.84)*foamLight;
+          float materialScale=foamScale,materialSpeed=foamSpeed;
+          #ifdef FORGE_LAKE_GEOMETRY_FOAM
+          if(bakedCoverage>0.) { materialScale=geometryFoamScale; materialSpeed=geometryFoamSpeed; }
+          #endif
+          vec4 foamDetail=waterFoamReady>.5 ? waterFoamDetail(vWorldPosition.xz,time,materialScale,materialSpeed) : vec4(.5);
+          vec3 foamColor=waterFoamLighting(foamDetail,coverage,geometric,viewDirection,vec3(.82,.87,.84),sun);
           // Mix premultiplied radiance, then return straight alpha. This also
           // covers the bed/reflection in the scene-snapshot and fallback paths.
           float alpha=coverage+(1.-coverage)*gl_FragColor.a;
@@ -225,6 +230,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.boundingBox!.min.y -= waves.height; geometry.boundingBox!.max.y += waves.height;
     geometry.boundingSphere!.radius += waves.height;
     this.geometryFoamTexture = bake?.texture ?? null;
+    Object.assign(this.material.uniforms, this.foamMaterial.uniforms);
     this.quality = { ...quality };
     this.contactCount = this.material.uniforms.contactCount!.value;
     if (!quality.foamAllowed) { this.material.uniforms.contactCount!.value = 0; this.material.uniforms.contactOpacity!.value = 0; }
@@ -237,6 +243,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const started = performance.now();
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
+      this.foamMaterial.update(this.quality.foamAllowed && (!!this.foamTexture || !!this.geometryFoamTexture), scene, camera);
       this.material.uniforms.time!.value = (performance.now() - started) / 1000;
       if (!this.externalWaveTime) this.material.uniforms.surfaceWaveTime!.value = lakeWaveTime(performance.now() / 1000, waves);
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
@@ -292,6 +299,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       this.source = source; source?.addConsumer(this);
     }
     this.quality = { ...quality };
+    if (!quality.foamAllowed) this.foamMaterial.dispose();
     uniforms.wheelRippleCount!.value = Math.min(uniforms.wheelRippleCount!.value, quality.maxRipples);
   }
   setSurfaceWaveTime(seconds: number): void {
@@ -326,6 +334,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms.reflectionStrength!.value = binding ? this.strength : 0;
   }
   dispose() { for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
+    this.foamMaterial.dispose();
     this.foamTexture?.dispose(); this.foamTexture = null; this.material.uniforms.foamMask!.value = null;
     this.geometryFoamTexture?.dispose(); this.geometryFoamTexture = null; this.material.uniforms.geometryFoamMask!.value = null;
     this.source?.removeConsumer(this); this.source = null; this.setPlanarReflectionBinding(null); this.geometry.dispose(); this.material.dispose(); }

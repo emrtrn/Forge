@@ -457,12 +457,12 @@
   "blockingVolumes": [
     {
       "id": "eqs-pen-north",
-      "name": "EQS Pen North",
       "position": [
         0.5,
         1,
         -9.35
       ],
+      "name": "EQS Pen North",
       "size": [
         3.6,
         2,
@@ -473,12 +473,12 @@
     },
     {
       "id": "eqs-pen-south",
-      "name": "EQS Pen South",
       "position": [
         0.5,
         1,
         -12.65
       ],
+      "name": "EQS Pen South",
       "size": [
         3.6,
         2,
@@ -489,12 +489,12 @@
     },
     {
       "id": "eqs-pen-west",
-      "name": "EQS Pen West",
       "position": [
         -1.15,
         1,
         -11
       ],
+      "name": "EQS Pen West",
       "size": [
         0.3,
         2,
@@ -505,12 +505,12 @@
     },
     {
       "id": "eqs-pen-east",
-      "name": "EQS Pen East",
       "position": [
         2.15,
         1,
         -11
       ],
+      "name": "EQS Pen East",
       "size": [
         0.3,
         2,
@@ -521,12 +521,12 @@
     },
     {
       "id": "eqs-detour-wall",
-      "name": "EQS Detour Wall",
       "position": [
         4,
         1,
         -9.5
       ],
+      "name": "EQS Detour Wall",
       "size": [
         2,
         2,
@@ -653,48 +653,48 @@
     },
     {
       "classRef": "assets/starter-content/Script/AI_EQS_Tester.actor.json",
-      "name": "EQS Tester",
       "position": [
         0.5,
         0,
         -7
       ],
+      "name": "EQS Tester",
       "scaleLocked": true,
       "rotationYDeg": 180,
       "scale": 0.4
     },
     {
       "classRef": "assets/starter-content/Script/EQS_Target.actor.json",
-      "name": "EQS Target A (penned)",
       "position": [
         0.5,
         0,
         -11
       ],
+      "name": "EQS Target A (penned)",
       "scaleLocked": true,
       "rotationYDeg": 0,
       "scale": 0.5
     },
     {
       "classRef": "assets/starter-content/Script/EQS_Target.actor.json",
-      "name": "EQS Target B (reachable)",
       "position": [
         5.5,
         0,
         -12
       ],
+      "name": "EQS Target B (reachable)",
       "scaleLocked": true,
       "rotationYDeg": 0,
       "scale": 0.5
     },
     {
       "classRef": "assets/starter-content/Script/EQS_Target.actor.json",
-      "name": "EQS Target C (off nav volume)",
       "position": [
         9,
         0,
         -10
       ],
+      "name": "EQS Target C (off nav volume)",
       "scaleLocked": true,
       "rotationYDeg": 0,
       "scale": 0.5

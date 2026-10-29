@@ -187,7 +187,7 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   river.material.uniforms.waterLightingEnabled!.value = options.sunTest ? 1 : 0;
   if (options.sunTest) {
     if (options.sunTerm === "body" || options.sunTerm === "ibl") river.material.fragmentShader = river.material.fragmentShader.replace(
-      "waterSunGlint(opticalNormal, viewDirection, 0.28, sunVisibility)", "vec3(0.0)");
+      "waterSunGlint(opticalNormal, viewDirection, sunRoughness, sunVisibility)", "vec3(0.0)");
     if (options.sunTerm === "glint" || options.sunTerm === "ibl") river.material.fragmentShader = river.material.fragmentShader.replace(
       "waterSurfaceLight(opticalNormal, viewDirection, 0.38, sunVisibility)", "waterSurfaceLight(opticalNormal, viewDirection, 0.38, 0.0)");
   }

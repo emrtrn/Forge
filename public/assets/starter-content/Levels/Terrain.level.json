@@ -30,6 +30,10 @@
     {
       "assetId": "lt-boulder-b",
       "placements": []
+    },
+    {
+      "assetId": "commonbush",
+      "placements": []
     }
   ],
   "characters": [],
@@ -98,7 +102,7 @@
       ],
       "name": "Directional Light",
       "rotation": [
-        -55,
+        -70,
         35,
         0
       ],
@@ -217,6 +221,8 @@
         "surfaceRoughness": 0.2,
         "normalScale": 1,
         "rippleSpeed": 2,
+        "reflectionStrength": 0.5,
+        "refractionStrength": 1,
         "surfaceWaveHeight": 0.04,
         "surfaceWaveLength": 6,
         "surfaceWavePeriod": 2,
@@ -234,7 +240,7 @@
         "causticsSpeed": 2,
         "causticsDepthFade": 1,
         "reflectionMode": "sharedPlanar",
-        "reflectionQuality": "medium"
+        "reflectionQuality": "high"
       }
     }
   ],

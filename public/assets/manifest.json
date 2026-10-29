@@ -21966,6 +21966,29 @@
         "packVersion": "2026-10-28"
       },
       "license": "Project-local material; Poly Haven CC0 textures"
+    },
+    {
+      "id": "m-cobble-stone-material",
+      "name": "M Cobble Stone.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Cobble_Stone.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 688
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -12,6 +12,12 @@ import {
   type HeightfieldCellEntries,
 } from "./heightfieldStatic";
 import { classifyStaticTriangle } from "./staticTriangles";
+import {
+  forEachBodyNavigationObstacle,
+  forEachBodyNavigationTriangle,
+  type NavigationObstacleVisitor,
+  type NavigationTriangleVisitor,
+} from "./navigationGeometry";
 import { sampleTriangleHeight, type GroundSurfaceSample } from "../movement/slopeSurface";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import {
@@ -999,6 +1005,42 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (includeHeightfields) this.staticNavigationSurfaceCache = surfaces;
     else this.staticNavigationNonHeightfieldSurfaceCache = surfaces;
     return surfaces;
+  }
+
+  /**
+   * Recast input for one nav tile: the collider triangles of every enabled
+   * static body overlapping the X/Z rectangle (`navigationGeometry.ts`).
+   * `ignored` bodies are left out, as in the grid planner's lists.
+   */
+  forEachNavigationTriangleInRect(
+    minX: number,
+    minZ: number,
+    maxX: number,
+    maxZ: number,
+    visit: NavigationTriangleVisitor,
+  ): void {
+    const rect = { minX, minZ, maxX, maxZ };
+    for (const [id, record] of this.staticRecords) {
+      if (record.navigationRole === "ignored" || this.collisionDisabled.has(id)) continue;
+      const body = this.bodiesById.get(id);
+      if (body) forEachBodyNavigationTriangle(body.transform, body.collider, rect, visit);
+    }
+  }
+
+  /** Null-area volumes of enabled `obstacleOnly` static bodies overlapping the X/Z rectangle. */
+  forEachNavigationObstacleInRect(
+    minX: number,
+    minZ: number,
+    maxX: number,
+    maxZ: number,
+    visit: NavigationObstacleVisitor,
+  ): void {
+    const rect = { minX, minZ, maxX, maxZ };
+    for (const [id, record] of this.staticRecords) {
+      if (record.navigationRole !== "obstacleOnly" || this.collisionDisabled.has(id)) continue;
+      const body = this.bodiesById.get(id);
+      if (body) forEachBodyNavigationObstacle(body.transform, body.collider, rect, visit);
+    }
   }
 
   /** Point samples in the full surface list's order, without expanding heightfields. */

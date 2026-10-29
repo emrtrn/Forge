@@ -649,6 +649,25 @@ export interface AiNavigationQuery {
   staticNavigationSurfaceTriangles(includeHeightfields?: boolean): readonly PhysicsSurfaceTriangle[];
   /** Ordered point samples, including heightfields, for floor seeding and headroom. */
   staticNavigationSurfaceSamplesAt?(x: number, z: number): readonly GroundSurfaceSample[];
+  /**
+   * Recast nav tile input: static collider triangles overlapping the X/Z
+   * rectangle. Without it the capability keeps the grid planner.
+   */
+  forEachNavigationTriangleInRect?(
+    minX: number,
+    minZ: number,
+    maxX: number,
+    maxZ: number,
+    visit: (a: Vec3, b: Vec3, c: Vec3) => void,
+  ): void;
+  /** Recast nav tile input: `obstacleOnly` volumes (convex XZ footprint + Y span) whose floor is never walkable. */
+  forEachNavigationObstacleInRect?(
+    minX: number,
+    minZ: number,
+    maxX: number,
+    maxZ: number,
+    visit: (footprint: readonly (readonly [number, number])[], minY: number, maxY: number) => void,
+  ): void;
   /** Collider size an agent profile falls back to when nothing is authored. */
   colliderHalfExtents(entityId: string): readonly [number, number, number] | null;
 }

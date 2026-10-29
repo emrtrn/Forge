@@ -195,6 +195,39 @@ export function rotatedBoxFootprintXZ(
 }
 
 /**
+ * The 8 world corners of the same box {@link rotatedBoxAabb} encloses, indexed
+ * by sign bits `(x > 0) << 2 | (y > 0) << 1 | (z > 0)` in the box's local frame.
+ */
+export function rotatedBoxCorners(
+  origin: Vec3,
+  localCenter: Vec3,
+  half: Vec3,
+  bodyRotation: Vec3,
+  primitiveRotation?: Vec3,
+): Vec3[] {
+  const bodyMatrix = isZeroRotation(bodyRotation) ? IDENTITY : rotationMatrixFromEulerDegrees(bodyRotation);
+  const boxAxes = primitiveRotation !== undefined && !isZeroRotation(primitiveRotation)
+    ? multiplyMat3(bodyMatrix, rotationMatrixFromEulerDegrees(primitiveRotation))
+    : bodyMatrix;
+  const worldCenter = applyMat3(bodyMatrix, localCenter);
+  const corners: Vec3[] = [];
+  for (let index = 0; index < 8; index += 1) {
+    const local: Vec3 = [
+      index & 4 ? half[0] : -half[0],
+      index & 2 ? half[1] : -half[1],
+      index & 1 ? half[2] : -half[2],
+    ];
+    const offset = applyMat3(boxAxes, local);
+    corners.push([
+      origin[0] + worldCenter[0] + offset[0],
+      origin[1] + worldCenter[1] + offset[1],
+      origin[2] + worldCenter[2] + offset[2],
+    ]);
+  }
+  return corners;
+}
+
+/**
  * 2D convex hull (Andrew's monotone chain, CCW) of XZ points, or `undefined` when
  * the points are degenerate (fewer than 3 non-collinear). Small fixed input (box
  * corners), so the O(n log n) sort cost is negligible. Exported so the editor's

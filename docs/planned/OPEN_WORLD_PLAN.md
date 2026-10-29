@@ -2569,14 +2569,55 @@ yaması, ışık grubu, materyal kaydı, profil bağlantısı ve smoke Claude'da
       (512 m aralıkta 3,9 mm) içinde aynı yüksekliği görür (ölçülen 2,2–3,9 mm;
       dokunulmamış tile da oluşturulurken u16 yazıldığı için aynı payla kayar).
 
-## Faz 9 — Yapay zekâ navigasyonu (tile'lı nav)
+## Faz 9 — Yapay zekâ navigasyonu (tile'lı nav, Recast/Detour)
 
-- [ ] Nav grid'i `main` hücreleriyle hizalı tile'lara bölünür; tile'lar
-      yalnız AI ajanlarının ve oyuncunun etrafında (Unreal "Navigation
-      Invoker") kurulur, `MAX_GRID_CELLS` tile başına uygulanır.
-- [ ] Tile'lar arası yol: kaba tile grafiği + tile içi A*.
-- [ ] Yüklü olmayan hücredeki AI'lar askıda (mevcut uzak güncelleme Hz'i ile
-      uyumlu).
+**Karar (2026-10-29):** Tile'lı nav kendi 2D grid'imizin üstüne yazılmıyor;
+Recast/Detour'un wasm portu (`@recast-navigation/core` 0.43.1, MIT, wasm
+~340 KB, yalnız AI çalışan level'da tembel yüklenir) kullanılıyor. İlk plandaki
+"kaba tile grafiği + tile içi A*" Detour'un tile'lı navmesh'inde hazır: tile'lar
+bağımsız kurulup eklenir/çıkarılır, yol tile sınırlarından kesintisiz geçer.
+Recast çok katlı zemini, merdiveni, rampayı ve tavan boşluğunu (headroom)
+voksel düzeyinde çözüyor; grid'de bunlar için yazılmış özel kurallar
+(çok katmanlı hücre, erozyon/headroom kapıları) Recast'te kendiliğinden var.
+Grid planlayıcı kaldırılmıyor: wasm yüklenene kadar ve host üçgen kaynağı
+vermediğinde yedek olarak kalır; emekliliği ayrı karar (R5).
+
+Sözleşme (grid'le aynı `NavAgent`): `radius + clearancePadding` duvarı aşındırır,
+`height` gereken tavan boşluğu, `stepHeight` tırmanılabilir basamak,
+`maxSlopeAngleDeg` yürünebilir eğim. Detour'da tek simetrik tırmanma var;
+`maxStepDown` modellenmez (basamaktan yüksek düşüş planlanmaz). Tile 32 m
+(varsayılan 128 m `main` hücresine 4×4 hizalı), voksel 0,2 m × 0,1 m.
+
+- [x] **R1 — motor modülü + fizik geometrisi + testler.**
+      *Tamam (2026-10-29):* `engine/navigation/recastNavMesh.ts` (`RecastNavMesh`:
+      tile başına kur/çıkar, `ensureTilesInRect`, `retainTiles`, `findPath`,
+      AI Navigation Volume sınırları, debug geometrisi; wasm
+      `loadRecastModules` ile dinamik). Tile hattı Recast'in kendi örneğinin
+      kopyası, tek farkı `obstacleOnly` hacimlerinin aşındırmadan önce null
+      alan olarak işaretlenmesi — Recast basamaktan alçak yürünmez yüzeyi
+      bordür sayıp tekrar zemin yapıyor, yalnız alan işaretlemesi bunu kapatır.
+      Fizik tarafı `engine/physics/navigationGeometry.ts` +
+      `PhysicsSubsystem.forEachNavigationTriangleInRect` /
+      `forEachNavigationObstacleInRect`: collider'ın kendi şekli (yönlü kutu,
+      trimesh, dikdörtgen altındaki heightfield quad'ları; diğer şekiller yönlü
+      kutu), grid'in AABB/yüzey soyutlaması değil. 9 motor testi
+      (`tests/engine/recastNavMesh.test.ts`): duvar dolanma, rampa, basamak
+      sınırı, `obstacleOnly` levha, tavan boşluğu, heightfield + tile dikişi,
+      tile düşür/yeniden kur, sınırlar, döndürülmüş kutu.
+- [ ] **R2 — AI capability bağlantısı.** `aiModule.buildPath` Recast'i
+      kullanır (profil başına bir `RecastNavMesh`, fizik revizyonunda
+      tile'lar yeniden kurulur); wasm hazır değilken / host üçgen vermiyorsa
+      grid. Köşe yükseklikleri fiziğin zemin sorgusuna oturtulur (follower'ın
+      dar dikey kabulü için). Kapı: `aiModule` testleri + `ai-patrol` smoke.
+- [ ] **R3 — Navigation Invoker akışı.** Tile'lar yalnız AI ajanlarının ve
+      oyuncunun çevresinde kurulur (kare başına bütçe, histerezisli düşürme);
+      yolu yüklü olmayan zemine uzanan istek, başlangıç–hedef dikdörtgenindeki
+      tile'ları sınırlı sayıda eşzamanlı kurar. Yüklü olmayan hücredeki AI'lar
+      askıda (mevcut uzak güncelleme Hz'i ile uyumlu).
+- [ ] **R4 — Debug/editör yüzeyi.** "Show > AI Navigation" Recast poligonlarını
+      çizer (runtime `?debug` + editör), yüklü tile'lar görünür.
+- [ ] **R5 — Grid emekliliği kararı.** Parity kabulünden sonra (kullanıcı
+      smoke'u) grid yalnız yedek mi kalır, kaldırılır mı.
 
 ## Faz 10 — İsteğe bağlı genişletmeler
 

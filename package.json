@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
+    "@recast-navigation/core": "0.43.1",
     "meshoptimizer": "^1.1.1",
     "three": "0.184.0"
   },

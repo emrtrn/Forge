@@ -21831,29 +21831,6 @@
         "packVersion": "2026-10-28"
       },
       "license": "Project-local material; Poly Haven CC0 textures"
-    },
-    {
-      "id": "worldbuildmap-level",
-      "name": "World Build Map.Level",
-      "assetType": "level",
-      "category": "Levels",
-      "path": "assets/starter-content/Levels/WorldBuildMap.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Levels",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 104
-      },
-      "license": "Unknown"
     }
   ]
 }

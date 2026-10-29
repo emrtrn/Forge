@@ -64,6 +64,8 @@ import {
   type StuckState,
 } from "@engine/navigation/localAvoidance";
 import { resolveNavAgentProfile } from "@engine/navigation/navAgentProfile";
+import { loadRecastModules } from "@engine/navigation/recastNavMesh";
+import { RecastPlanner } from "@engine/navigation/recastPlanner";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
@@ -230,6 +232,12 @@ export function createAiModule(): CapabilityModule {
   let navBlockerRevisionRef: readonly NavAabb[] | null = null;
   let navSurfaceRevisionRef: readonly PhysicsSurfaceTriangle[] | null = null;
   let navBlockerRevision = 0;
+  /**
+   * Recast/Detour planner (OPEN_WORLD_PLAN Faz 9). Created once the wasm has
+   * loaded and only for a host that hands out collider triangles; until then,
+   * and for any other host, paths come from the grid planner.
+   */
+  let recastPlanner: RecastPlanner | null = null;
   /** Entities of the built level, for reading authored agent/movement components. */
   let entityById = new Map<string, Entity>();
   let navigationView: Group | null = null;
@@ -303,12 +311,66 @@ export function createAiModule(): CapabilityModule {
     return `${navBlockerRevision}|${navBoundsSignature(bounds)}`;
   }
 
+  /** Loads the wasm and creates the Recast planner; a failure leaves the grid planner in charge. */
+  async function ensureRecastPlanner(): Promise<void> {
+    if (recastPlanner || !host()?.navigation.forEachNavigationTriangleInRect) return;
+    try {
+      const modules = await loadRecastModules();
+      recastPlanner ??= new RecastPlanner(modules, {
+        forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) =>
+          host()?.navigation.forEachNavigationTriangleInRect?.(minX, minZ, maxX, maxZ, visit),
+        forEachObstacleInRect: (minX, minZ, maxX, maxZ, visit) =>
+          host()?.navigation.forEachNavigationObstacleInRect?.(minX, minZ, maxX, maxZ, visit),
+      }, { snapHeight: snapToNavFloor });
+    } catch (error) {
+      console.warn(`[ai] Recast navigation unavailable, using the grid planner: ${describeLoadError(error)}`);
+    }
+  }
+
+  /**
+   * The walkable floor nearest a Detour corner, from the same role-aware probe
+   * the grid bakes with. Corners sit on the voxelized mesh, up to a cell height
+   * off the floor, and the follower's vertical acceptance is tighter than that.
+   */
+  function snapToNavFloor(agent: NavAgent, point: Vec3): number {
+    const navigation = host()?.navigation;
+    if (!navigation) return point[1];
+    const window = Math.max(0, agent.stepHeight ?? 0) + AI_NAV_CELL_SIZE;
+    const samplesAt = navigation.staticNavigationSurfaceSamplesAt?.bind(navigation);
+    const layers = navFloorSampler(
+      navigation.staticNavigationBlockerAabbs(),
+      samplesAt ? [] : navigation.staticNavigationSurfaceTriangles(),
+      [{ min: [point[0], point[1] - window, point[2]], max: [point[0], point[1] + window, point[2]] }],
+      agent,
+      point[1],
+      samplesAt,
+    )(point[0], point[2]);
+    if (!layers) return point[1];
+    let best = point[1];
+    let bestDistance = Infinity;
+    for (const layer of layers) {
+      const distance = Math.abs(layer - point[1]);
+      if (distance < bestDistance) {
+        best = layer;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
   function buildPath(entityId: string, start: Vec3, goal: Vec3) {
     const navigation = host()?.navigation;
     if (!navigation) return { status: "failure" as const, points: [], visited: 0 };
     const bounds = navigationBounds();
     const agent = navAgentForEntity(entityId);
     const blockers = navigation.staticNavigationBlockerAabbs();
+    if (recastPlanner) {
+      // The same revision the grid cache keys on: any static-geometry change
+      // drops every Recast tile and the next requests rebuild what they need.
+      const surfaces = navigation.staticNavigationSurfaceTriangles(!navigation.staticNavigationSurfaceSamplesAt);
+      recastPlanner.setRevision(navRevisionToken(blockers, surfaces, bounds));
+      return recastPlanner.findPath({ agent, start, goal: [...goal], bounds });
+    }
     if (bounds.length === 0) {
       // No authored AI Navigation Volume: the grid extent is derived from
       // start/goal, so it is single-query only and can't be baked/reused.
@@ -621,6 +683,10 @@ export function createAiModule(): CapabilityModule {
       bounds: navigationBounds(),
       cellSize: AI_NAV_CELL_SIZE,
       followers,
+      planner: recastPlanner ? "recast" : "grid",
+      ...(recastPlanner
+        ? { navMeshTiles: recastPlanner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0) }
+        : {}),
     };
   }
 
@@ -725,7 +791,7 @@ export function createAiModule(): CapabilityModule {
       runtimeServices.provide(aiCommandsService, {
         prepareLevel: async (levelLayout) => {
           layout = levelLayout;
-          await loadAiAssets();
+          await Promise.all([loadAiAssets(), ensureRecastPlanner()]);
           ai?.setTargetPoints(targetPointEntriesFromLayout(levelLayout.targetPoints));
         },
         updateEntityTransform: (entityId, transform) => {
@@ -779,6 +845,7 @@ export function createAiModule(): CapabilityModule {
       removeNavigationView();
       pathFollowing.clear();
       navGridCache.clear();
+      recastPlanner?.clear();
       navBlockerRevisionRef = null;
       navSurfaceRevisionRef = null;
       entityById = new Map();
@@ -793,6 +860,8 @@ export function createAiModule(): CapabilityModule {
       removeNavigationView();
       pathFollowing.clear();
       navGridCache.clear();
+      recastPlanner?.dispose();
+      recastPlanner = null;
       ai?.dispose();
       ai = null;
       services = null;

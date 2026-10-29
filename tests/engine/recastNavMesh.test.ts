@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { NavAgent, PathResult } from "../../engine/navigation/gridNavigation";
 import { loadRecastModules, RecastNavMesh, type RecastModules, type RecastNavMeshOptions } from "../../engine/navigation/recastNavMesh";
+import { RecastPlanner } from "../../engine/navigation/recastPlanner";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import type { NavigationRole } from "../../engine/scene/collision";
 import type { ColliderComponent, ColliderPrimitive } from "../../engine/scene/components";
@@ -224,5 +225,44 @@ export async function registerRecastNavMeshTests(checkAsync: CheckAsync): Promis
     const result = path(mesh, [-6, 0, -6], [5, 0, -8]);
     assert.equal(result.status, "success");
     mesh.dispose();
+  });
+
+  await checkAsync("recast planner: per-profile meshes, revision drops, capped tile builds, snapped heights", async () => {
+    const physics = new PhysicsSubsystem();
+    physics.setEntities([ground("ground", 200)]);
+    let triangleQueries = 0;
+    const planner = new RecastPlanner(modules, {
+      forEachTriangleInRect: (minX, minZ, maxX, maxZ, visit) => {
+        triangleQueries += 1;
+        physics.forEachNavigationTriangleInRect(minX, minZ, maxX, maxZ, visit);
+      },
+    }, { maxTilesPerRequest: 6, snapHeight: () => 0.05 });
+    planner.setRevision(1);
+    const near = planner.findPath({ agent: AGENT, start: [1, 0, 1], goal: [10, 0, 10], bounds: [] });
+    assert.equal(near.status, "success");
+    assert.ok(near.points.every((point) => point[1] === 0.05), "every corner went through snapHeight");
+    const tiles = () => planner.loadedTiles().reduce((total, entry) => total + entry.tiles.length, 0);
+    // Endpoint tiles (1) + at most 6 more for the margin rectangle.
+    assert.ok(tiles() <= 7, `capped: ${tiles()}`);
+
+    const wide: NavAgent = { ...AGENT, radius: 0.8 };
+    assert.equal(planner.findPath({ agent: wide, start: [1, 0, 1], goal: [10, 0, 10], bounds: [] }).status, "success");
+    assert.equal(planner.loadedTiles().length, 2, "one mesh per agent profile");
+
+    // Same revision: loaded tiles are reused; only tiles the cap left out get built.
+    const queries = triangleQueries;
+    const loaded = tiles();
+    planner.setRevision(1);
+    assert.equal(planner.findPath({ agent: AGENT, start: [2, 0, 2], goal: [9, 0, 9], bounds: [] }).status, "success");
+    assert.equal(triangleQueries - queries, tiles() - loaded);
+    // New revision: every mesh is dropped and rebuilt on demand.
+    planner.setRevision(2);
+    assert.equal(planner.loadedTiles().length, 0);
+    assert.equal(planner.findPath({ agent: AGENT, start: [2, 0, 2], goal: [9, 0, 9], bounds: [] }).status, "success");
+    assert.ok(triangleQueries > queries);
+    // A far endpoint still gets its own tile even when the cap is spent.
+    const far = planner.findPath({ agent: AGENT, start: [1, 0, 1], goal: [150, 0, 150], bounds: [] });
+    assert.equal(far.status, "failure", "the corridor between them is not loaded under the cap");
+    planner.dispose();
   });
 }

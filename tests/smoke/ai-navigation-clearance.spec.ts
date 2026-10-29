@@ -73,7 +73,9 @@ test("runtime AI Navigation clearance smoke: patrol path follows waypoints in de
   await expect(page.locator("#debug-stats")).toContainText(/controllers: [1-9]/, {
     timeout: 30_000,
   });
-  await expect(page.locator("#debug-stats")).toContainText(/ai nav \([1-9]\)/, {
+  // Paths come from the Recast nav mesh (OPEN_WORLD_PLAN Faz 9), whose tiles the
+  // patrol's own requests built.
+  await expect(page.locator("#debug-stats")).toContainText(/ai nav \([1-9]\) recast tiles:[1-9]/, {
     timeout: 30_000,
   });
   await expect(page.locator("#debug-stats")).toContainText(/following wp:\d+\/[2-9]\d*/, {

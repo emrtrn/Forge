@@ -763,6 +763,10 @@ export interface AiNavigationDebugSnapshot {
   readonly bounds: readonly NavAabb[];
   readonly cellSize: number;
   readonly followers: readonly AiNavFollowerDebug[];
+  /** Which planner answers path requests; absent means the grid. */
+  readonly planner?: "recast" | "grid";
+  /** Recast tiles currently loaded, summed over agent profiles. */
+  readonly navMeshTiles?: number;
 }
 
 /** Read side of the `?debug` AI overlays: controllers and path following. */

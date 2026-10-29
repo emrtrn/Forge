@@ -2604,11 +2604,26 @@ Sözleşme (grid'le aynı `NavAgent`): `radius + clearancePadding` duvarı aşı
       (`tests/engine/recastNavMesh.test.ts`): duvar dolanma, rampa, basamak
       sınırı, `obstacleOnly` levha, tavan boşluğu, heightfield + tile dikişi,
       tile düşür/yeniden kur, sınırlar, döndürülmüş kutu.
-- [ ] **R2 — AI capability bağlantısı.** `aiModule.buildPath` Recast'i
+- [x] **R2 — AI capability bağlantısı.** `aiModule.buildPath` Recast'i
       kullanır (profil başına bir `RecastNavMesh`, fizik revizyonunda
       tile'lar yeniden kurulur); wasm hazır değilken / host üçgen vermiyorsa
       grid. Köşe yükseklikleri fiziğin zemin sorgusuna oturtulur (follower'ın
       dar dikey kabulü için). Kapı: `aiModule` testleri + `ai-patrol` smoke.
+      *Tamam (2026-10-29):* `engine/navigation/recastPlanner.ts`
+      (`RecastPlanner`: profil + nav volume başına bir mesh, grid cache'iyle aynı
+      revizyon token'ı değişince hepsi düşer; istek başlangıç/hedef tile'larını
+      + bir tile paylı dikdörtgeni en çok 64 tile kurar; köşeler
+      `snapHeight` ile zemine oturur). `aiModule` wasm'ı `prepareLevel`'de
+      yükler (yükleme hatası → uyarı + grid). Debug snapshot'ı `planner` +
+      `navMeshTiles` taşır, `?debug` satırı `ai nav (N) recast tiles:T`.
+      Testler: planlayıcı (profil/revizyon/sınır/snap) + `aiModule` uçtan uca
+      (gerçek `PhysicsSubsystem`, BT `forge.moveToPosition`, duvar dolanan
+      zemine oturmuş yol); `ai-navigation-clearance` runtime smoke'u
+      `recast tiles:` görmeyi bekliyor; `ai-patrol` + `ai-navigation-volume`
+      smoke'ları geçti. Wasm ayrı tembel chunk (726 KB, gzip 218 KB).
+      Bilinen sınır: herhangi bir statik geometri değişimi (ör. collision
+      aç/kapa) tüm tile'ları düşürür — grid'in tam yeniden bake'iyle aynı;
+      kirli-tile yeniden kurma R3 ile gelir.
 - [ ] **R3 — Navigation Invoker akışı.** Tile'lar yalnız AI ajanlarının ve
       oyuncunun çevresinde kurulur (kare başına bütçe, histerezisli düşürme);
       yolu yüklü olmayan zemine uzanan istek, başlangıç–hedef dikdörtgenindeki

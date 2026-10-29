@@ -783,7 +783,8 @@ function vehicleAiDebugText(app: RuntimeStatsApp): string {
  * crowd of moving NPCs can't flood the overlay.
  */
 export function formatAiNavDebug(snapshot: AiNavigationDebugSnapshot, topN = 4): string[] {
-  const lines = [`ai nav (${snapshot.followers.length})`];
+  const planner = snapshot.planner === "recast" ? ` recast tiles:${snapshot.navMeshTiles ?? 0}` : "";
+  const lines = [`ai nav (${snapshot.followers.length})${planner}`];
   for (const follower of snapshot.followers.slice(0, Math.max(0, topN))) {
     const waypoint =
       follower.pathLength > 0 ? ` wp:${follower.waypointIndex}/${follower.pathLength}` : "";

@@ -10,6 +10,8 @@ import assert from "node:assert/strict";
 import { PerspectiveCamera, Scene } from "three";
 
 import { EngineApp } from "../../engine/core/EngineApp";
+import type { Subsystem } from "../../engine/core/Subsystem";
+import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import { AISubsystem } from "../../engine/ai/aiSubsystem";
 import { normalizeAiBehaviorTreeAsset } from "../../engine/ai/behaviorAsset";
 import { normalizeAiStateTreeAsset } from "../../engine/ai/stateTreeAsset";
@@ -32,6 +34,7 @@ import {
   aiDebugService,
   aiHostService,
   assetManifestService,
+  characterMovementQueryService,
   scriptMessageBusService,
   type AiHost,
   type ScriptMessageBus,
@@ -384,5 +387,81 @@ export async function registerAiModuleTests(checkAsync: CheckAsync): Promise<voi
     assert.equal(host.resolve(aiCommandsService), undefined);
     assert.equal(host.resolve(aiDebugService), undefined);
     registry.dispose();
+  });
+
+  await checkAsync("ai module plans moveTo through Recast when the host hands out collider triangles", async () => {
+    const walkTree = {
+      schema: 1,
+      type: "behaviorTree",
+      id: "BT_Walk",
+      root: { kind: "task", task: "forge.moveToPosition", params: { position: [0, 0, 8] } },
+    };
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      String(input).includes("BT_Walk")
+        ? ({ ok: true, json: async () => walkTree } as unknown as Response)
+        : ({ ok: false, json: async () => ({}) } as unknown as Response)) as typeof globalThis.fetch;
+    try {
+      // A real physics world: a ground slab and a wall between the pawn and its goal.
+      const physics = new PhysicsSubsystem();
+      const staticBox = (id: string, position: [number, number, number], size: [number, number, number]) => ({
+        id,
+        components: {
+          [TRANSFORM_COMPONENT]: { position, rotation: [0, 0, 0], scale: [1, 1, 1] },
+          Collider: { shape: "box", size, isStatic: true, isSensor: false },
+        },
+      }) as unknown as Entity;
+      physics.setEntities([staticBox("ground", [0, -0.5, 0], [40, 1, 40]), staticBox("wall", [0, 1.5, 0], [12, 3, 1])]);
+
+      const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
+      host.provide(aiHostService, testAiHost({ navigation: physics }));
+      host.provide(assetManifestService, async () => ({
+        assets: [{ id: "BT_Walk", type: "behaviorTree", path: "AI/BT_Walk.behaviortree.json" }],
+      }) as never);
+      const pawnTransform = { position: [0, 0, -8] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] };
+      host.provide(characterMovementQueryService, {
+        transformOf: (entityId) => (entityId === "npc:0" ? pawnTransform : null),
+        velocityOf: () => null,
+        forEachCharacter: () => {},
+        launch: () => {},
+      });
+      const registry = createCapabilityRegistry([createAiModule()]);
+      registry.runtimeStart(host);
+      const subsystems: Subsystem[] = [];
+      host.installSubsystems((subsystem) => subsystems.push(subsystem));
+
+      const layout = {
+        name: "recast",
+        aiNavigationVolumes: [
+          { id: "nav", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], size: [30, 6, 30] },
+        ],
+      } as unknown as RoomLayout;
+      const walker = {
+        id: "npc:0",
+        name: "npc:0",
+        components: {
+          [TRANSFORM_COMPONENT]: pawnTransform,
+          [AI_CONTROLLER_COMPONENT]: { behaviorTree: "BT_Walk" },
+        },
+      } as unknown as Entity;
+      await host.resolve(aiCommandsService)!.prepareLevel(layout);
+      host.entitySinks()[0]!.setEntities([walker]);
+      await registry.levelLoaded(levelContext(host, layout, [walker]));
+      for (const subsystem of subsystems) subsystem.update?.({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+
+      const navigation = host.resolve(aiDebugService)!.navigation();
+      assert.equal(navigation.planner, "recast");
+      assert.ok((navigation.navMeshTiles ?? 0) > 0, "the request built the tiles it needed");
+      const follower = navigation.followers.find((entry) => entry.entityId === "npc:0");
+      assert.ok(follower, "the move request is being followed");
+      assert.equal(follower.status, "following");
+      const path = follower.path;
+      assert.ok(path.length >= 3, `string-pulled around a wall end: ${JSON.stringify(path)}`);
+      assert.ok(path.slice(1, -1).every((point) => Math.abs(point[0]) >= 6), "corners clear the wall's ends");
+      assert.ok(path.every((point) => Math.abs(point[1]) < 1e-3), "corners snapped onto the ground's top");
+      registry.dispose();
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 }

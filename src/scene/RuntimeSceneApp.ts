@@ -2,6 +2,7 @@ import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainD
 import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
 import { LakeWaterController } from "./lakeWaterController";
+import { lakeQuality } from "@engine/perf/lakeQuality";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import {
   normalizeWorldPartitionSettings,
@@ -2297,6 +2298,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     setTerrainSelfShadow(settings.terrainSelfShadow);
     setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
+    void this.lakes?.setQuality(lakeQuality(settings)).catch(error => console.warn("[lake-quality]", error));
     this.applyRuntimePostProcess();
   }
 
@@ -5966,6 +5968,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeLakes(): Promise<void> {
     const terrain = (id: string): WorldTerrainDocument | undefined => this.worldTerrainDocuments.get(id);
     this.lakes ??= new LakeWaterController({ scene: this.scene, editor: false, document: terrain, reflections: this.waterReflections,
+      quality: lakeQuality(this.qualitySettings),
       vehicles: this.runtimeServices.resolve(vehicleHostService),
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find((a) => a.id === id), document = terrain(id);

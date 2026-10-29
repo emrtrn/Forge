@@ -1,5 +1,55 @@
 # World Terrain — Yol, Nehir ve Water Body Çalışma Planı
 
+## Güncel uygulama — Lake grafik kalite profilleri — 2026-10-29
+
+Lake görünümü mevcut grafik kalite menüsüne ve adaptif sisteme bağlandı.
+Düşükte caustics/köpük/ıslak kıyı/planar kapalı ve en çok 8 teker dalgası;
+Ortada köpük/ıslak kıyı izinli, caustics/planar kapalı ve 12 dalga;
+Yüksekte caustics izinli, planar en fazla medium ve 24 dalga;
+Ultra'da planar en fazla high ve 24 dalga. Bunlar authored ayarların üst
+sınırıdır; kapalı özellik açılmaz. Editör ve açık Play sekmesi canlı güncellenir.
+
+Profil değişimi Lake geometrisini/normal buffer'ını yeniden hesaplamaz.
+Kapanan efektlerin GPU maskeleri, decoded runtime foam cache'i ve kullanılmayan
+yansıma kaynakları bırakılır; editörün pending bake/undo artifact'ları korunur.
+Kaydedilmiş görünüm ve terrain verisi değişmez. Tam gate **2.095 engine kontrolü**
+ve dört browser senaryosu geçti. Önceki rebuild takılması ve yeni kodun donanım
+performans ölçümü ayrı açık kalır.
+[Uygulama ve doğrulama raporu](../reports/LAKE_QUALITY_2026-10-29.md).
+
+## Güncel ölçüm — Lake performans kabulü — 2026-10-29
+
+Gerçek RTX 3060 / Chrome / D3D11 üzerinde tam ekran **1920×1080 runtime**,
+post-process ve dört CSM ile ölçüm yapıldı. Tekrar aracı: `npm.cmd run perf:lake`.
+İzole fixture'lar kullanıldı; authored sahne/terrain ve engine shader'ı değişmedi.
+GPU için 300 çift örnek, rebuild için 5 hazırlık + 30 ölçüm; cache kapalı açılış
+için 10 ayrı context kaydedildi. 4.096×4.096 m dünya 256 tile, sekiz Lake ve
+toplam 259.200 çalışma hücresi içerir.
+
+- Bütün Lake etkilerinin birlikte ek GPU p95'i: küçük fixture **0,551 ms**,
+  65.536 hücreli tek gövde **0,983 ms**, sekiz gövde caustics profili **1,839 ms**,
+  köpük/ıslak kıyı açık **2,208 ms**, ortak planar yansımalı **2,222 ms**.
+  Küçük fixture'ın gözlenen GPU sonucu büyük dünya kabulü yerine geçmez.
+- Tam özellikli sekiz Lake rebuild p95'i yaklaşık **737 ms**; rebuild
+  penceresinde **65,994 ms** ana thread görevi ve >50 ms görevler gözlendi.
+  Bu görevler render/GC dahil bütün tarayıcı penceresidir; Lake'e özel her iş
+  diliminin ≤4 ms olduğunu kanıtlamaz. Ana thread kabulü açık kalır.
+- Browser heap/backing storage ile Chrome private/working-set tepeleri
+  örneklendi. Tam özellikli rebuild'de backing storage tepesi yaklaşık
+  **265,5 MiB**. Lake'e ait ek CPU ≤64 MiB ve GPU ≤32 MiB transient bütçesi
+  toplam process belleğinden ayrılmadığı için kapanmadı. 35 rebuild'de kaynak
+  sayıları/buffer byte'ı başlangıç seviyesine döndü; undo/reload ömrü ayrıdır.
+- 360 m geniş hesap alanında varsayılan 1 m köpük bandı 1024 texel/eksen
+  sınırını aşıyor. Bu profil `over-budget` olarak kaydedildi; ölçülen tam
+  özellikli varyant köpük/ıslak kıyı için açıkça **2 m** bant kullanır.
+- **Genel Lake performans kabulü kapanmadı.** Eski **3,719 ms** caustics
+  pilotu farklı kamera/render/query koşullarının tarihsel kaydı olarak korunur;
+  bu iş bir shader optimizasyonu veya kontrollü önce/sonra karşılaştırması değildir.
+
+Sayısal tablolar, cold navigasyon sınırı, kontrol gürültüsü, donanım/driver,
+bellek yöntemi, ham trace yolları ve sonraki dar işler:
+[Lake performans raporu](../reports/LAKE_PERFORMANCE_2026-10-29.md).
+
 ## Güncel karar — Göl aracından isteğe bağlı geometri köpüğü hesabı — 2026-10-28
 
 Kullanıcı her taş için elle temas alanı yerleştirmeyi uygun bulmadı. Yeni ana

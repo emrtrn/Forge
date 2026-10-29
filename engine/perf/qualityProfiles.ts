@@ -98,6 +98,12 @@ export interface QualitySettings {
   terrainFarTiling: boolean;
   /** Local puddle ripple resolution and planar reflection tier (low = sky only). */
   terrainWaterQuality: "low" | "medium" | "high";
+  /** Runtime/viewport ceilings; never enable an effect disabled on the Lake. */
+  lakeCausticsAllowed: boolean;
+  lakeFoamAllowed: boolean;
+  lakeShoreWetnessAllowed: boolean;
+  lakeReflectionQuality: "off" | "medium" | "high";
+  lakeMaxRipples: number;
 }
 
 /**
@@ -143,6 +149,11 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     terrainSelfShadow: true,
     terrainFarTiling: true,
     terrainWaterQuality: "high",
+    lakeCausticsAllowed: true,
+    lakeFoamAllowed: true,
+    lakeShoreWetnessAllowed: true,
+    lakeReflectionQuality: "high",
+    lakeMaxRipples: 24,
   },
   high: {
     renderScale: 1.0,
@@ -164,6 +175,11 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     terrainSelfShadow: true,
     terrainFarTiling: true,
     terrainWaterQuality: "high",
+    lakeCausticsAllowed: true,
+    lakeFoamAllowed: true,
+    lakeShoreWetnessAllowed: true,
+    lakeReflectionQuality: "medium",
+    lakeMaxRipples: 24,
   },
   medium: {
     renderScale: 0.85,
@@ -185,6 +201,11 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     terrainSelfShadow: false,
     terrainFarTiling: false,
     terrainWaterQuality: "medium",
+    lakeCausticsAllowed: false,
+    lakeFoamAllowed: true,
+    lakeShoreWetnessAllowed: true,
+    lakeReflectionQuality: "off",
+    lakeMaxRipples: 12,
   },
   low: {
     renderScale: 0.7,
@@ -206,6 +227,11 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     terrainSelfShadow: false,
     terrainFarTiling: false,
     terrainWaterQuality: "low",
+    lakeCausticsAllowed: false,
+    lakeFoamAllowed: false,
+    lakeShoreWetnessAllowed: false,
+    lakeReflectionQuality: "off",
+    lakeMaxRipples: 8,
   },
 };
 
@@ -349,6 +375,15 @@ function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | nul
   num("terrainTrackDetailLevels");
   bool("terrainSelfShadow");
   bool("terrainFarTiling");
+  bool("lakeCausticsAllowed");
+  bool("lakeFoamAllowed");
+  bool("lakeShoreWetnessAllowed");
+  if (typeof raw.lakeMaxRipples === "number" && Number.isFinite(raw.lakeMaxRipples)) {
+    out.lakeMaxRipples = Math.max(0, Math.min(24, Math.floor(raw.lakeMaxRipples)));
+  }
+  if (raw.lakeReflectionQuality === "off" || raw.lakeReflectionQuality === "medium" || raw.lakeReflectionQuality === "high") {
+    out.lakeReflectionQuality = raw.lakeReflectionQuality;
+  }
   if (raw.terrainWaterQuality === "low" || raw.terrainWaterQuality === "medium" || raw.terrainWaterQuality === "high") {
     out.terrainWaterQuality = raw.terrainWaterQuality;
   }

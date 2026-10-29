@@ -113,7 +113,12 @@ export function lakeWheelContact(id: string, wheel: VehicleWheelState, width: nu
 export class LakeRippleState {
   readonly ripples: LakeRipple[] = [];
   private previous = new Map<string, { contact: LakeWheelContact; cooldown: number }>();
+  private limit = LAKE_MAX_RIPPLES;
   constructor(private readonly settings: typeof LAKE_WHEEL_RIPPLE_DEFAULTS = LAKE_WHEEL_RIPPLE_DEFAULTS) {}
+  setLimit(limit: number): void {
+    this.limit = Number.isFinite(limit) ? Math.max(0, Math.min(LAKE_MAX_RIPPLES, Math.floor(limit))) : LAKE_MAX_RIPPLES;
+    if (this.ripples.length > this.limit) this.ripples.splice(0, this.ripples.length - this.limit);
+  }
   advance(dt: number, contacts: readonly LakeWheelContact[]): void {
     if (!this.settings.wheelRipplesEnabled || this.settings.wheelRippleStrength <= 0) { this.clear(); return; }
     if (!Number.isFinite(dt) || dt <= 0) return;
@@ -137,7 +142,7 @@ export class LakeRippleState {
       next.set(c.id, { contact: { ...c }, cooldown });
     }
     this.previous = next;
-    if (this.ripples.length > LAKE_MAX_RIPPLES) this.ripples.splice(0, this.ripples.length - LAKE_MAX_RIPPLES);
+    if (this.ripples.length > this.limit) this.ripples.splice(0, this.ripples.length - this.limit);
   }
   clear(): void { this.ripples.length = 0; this.previous.clear(); }
 }

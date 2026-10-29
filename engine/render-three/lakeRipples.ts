@@ -8,10 +8,11 @@ export function createLakeRippleUniforms(settings: typeof LAKE_WHEEL_RIPPLE_DEFA
       settings.wheelRippleSpeed, settings.wheelRippleWidth, settings.wheelRippleLifetime) },
     wheelRippleWavelength: { value: settings.wheelRippleWavelength } };
 }
-export function updateLakeRippleUniforms(uniforms: ReturnType<typeof createLakeRippleUniforms>, ripples: readonly LakeRipple[], x: number, z: number): void {
-  uniforms.wheelRippleCount.value = Math.min(LAKE_MAX_RIPPLES, ripples.length);
+export function updateLakeRippleUniforms(uniforms: ReturnType<typeof createLakeRippleUniforms>, ripples: readonly LakeRipple[], x: number, z: number, limit = LAKE_MAX_RIPPLES): void {
+  uniforms.wheelRippleCount.value = Math.min(LAKE_MAX_RIPPLES, ripples.length, limit);
   for (let i = 0; i < uniforms.wheelRippleCount.value; i++) {
-    const r = ripples[i]!; uniforms.wheelRipples.value[i]!.set(r.x - x, r.z - z, r.age, r.strength);
+    const r = ripples[ripples.length - uniforms.wheelRippleCount.value + i]!;
+    uniforms.wheelRipples.value[i]!.set(r.x - x, r.z - z, r.age, r.strength);
   }
 }
 /** Bounded analytic wavefronts in metres; normals only, no new render passes. */

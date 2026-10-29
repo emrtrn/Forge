@@ -11,6 +11,7 @@ import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../en
 import { worldTerrainActorPosition } from "../../engine/terrain/worldTerrainActor";
 import { expect, test, type Page, type APIRequestContext } from "./test";
 import { SMOKE_SPLINE_SCENE, smokePublicPath } from "./smokeProject.mjs";
+import { defaultUserSettings } from "../../engine/persistence/userSettingsStore";
 
 const LEVEL = "layouts/__playwright-lake-world.level.json", TERRAIN = "landscapes/__playwright-lake-world.terrain.json";
 const snapshot = (page: Page) => page.evaluate(() => (window as any).__lakeQA.snapshot());
@@ -29,7 +30,7 @@ async function number(page: Page, key: string, value: number) {
   if (["minX", "minZ", "maxX", "maxZ", "width", "length", "seedX", "seedZ"].includes(key)) await expandLake(page);
   const field = page.locator(`[data-lake-number="${key}"]`); await field.fill(String(value)); await field.press("Tab");
 }
-async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false, wavePasses = false, foamRocks = false) {
+async function setup(page: Page, request: APIRequestContext, seeded = false, streamed = false, bed = false, foreground = false, waterSystem = false, caustics = false, steep = false, wavePasses = false, foamRocks = false, qualityCase = false) {
   const doc = createLakeFixture();
   if (steep) for (const entry of doc.def.tiles) entry.maxHeight = 18;
   if (steep) for (const tile of doc.tiles.values()) {
@@ -39,6 +40,8 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
     doc.def.layers[0]!.material = "m-shallow-water-bed";
     doc.lake.appearance = { causticsEnabled: true, causticsStrength: 1.5, causticsScale: 1.5, causticsDepthFade: 6 };
   }
+  if (qualityCase) doc.lake.appearance = { ...doc.lake.appearance, foamEnabled: true, shoreWetnessEnabled: true,
+    reflectionMode: "sharedPlanar", reflectionQuality: "high", reflectionGroup: "quality" };
   if (waterSystem) doc.def.splines = [{ id: "water-path", coordinateSpace: "world", points: [
     { id: "a", position: [-20, 12, -12], width: 4, falloff: 2 },
     { id: "b", position: [20, 12, -12], width: 4, falloff: 2 },
@@ -74,8 +77,17 @@ async function setup(page: Page, request: APIRequestContext, seeded = false, str
   await write(LEVEL, JSON.stringify(level)); expect((await request.post("/__open-level", { data: { path: LEVEL } })).ok()).toBeTruthy();
   const camera = new PerspectiveCamera(); camera.position.set(0, 90, 85); camera.lookAt(0, 10, 0);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.addInitScript(({ key, pose }) => { localStorage.clear(); localStorage.setItem(key, pose); }, {
+  const settings = defaultUserSettings();
+  // These feature regressions inspect authored effects at Ultra. Quality changes
+  // made through the UI must survive Reload/Play rather than being reset by QA.
+  const preferences = JSON.stringify({ schema: 1, updatedAt: new Date().toISOString(), payload: { ...settings,
+    graphics: { ...settings.graphics, selectedQualityLevel: "ultra", manuallySelected: true, adaptiveOptimizationEnabled: false } } });
+  await page.addInitScript(({ key, pose, preferences }) => {
+    if (!localStorage.getItem("forge.userSettings")) localStorage.setItem("forge.userSettings", preferences);
+    localStorage.setItem(key, pose);
+  }, {
     key: `forge.editor.cameraPose.${encodeURIComponent(LEVEL)}`, pose: JSON.stringify({ position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), up: [0, 1, 0] }),
+    preferences,
   });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
@@ -97,6 +109,69 @@ async function save(page: Page) {
   const response = page.waitForResponse((r) => r.url().endsWith("/__save-layout") && r.request().method() === "POST", { timeout: 120_000 });
   await button.click(); expect((await response).ok()).toBeTruthy(); await expect(button).toBeEnabled({ timeout: 120_000 });
 }
+
+test("Lake quality menu releases effects, preserves geometry and authored settings, and updates live Play", async ({ page, request }, info) => {
+  test.setTimeout(300_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true, false, false, false, true);
+  await ready(page);
+  const quality = (p: Page) => p.evaluate(() => (window as any).__lakeQA.quality());
+  const before = await quality(page), terrainBefore = await terrainHash();
+  const geometry = before.objects[0].geometry, authored = before.source;
+  type Level = "Low" | "Medium" | "High" | "Ultra";
+  const pick = async (label: Level) => {
+    await page.getByTestId("quality-button").hover();
+    await page.locator("[data-quality-popover] button", { hasText: label }).click();
+    await expect(page.locator("[data-quality-label]")).toHaveText(label);
+  };
+  const verify = async (p: Page, level: Level) => {
+    const [caustics, wetShore, foam, reflection, rippleCount] = {
+      Low: [0, 0, false, 0, 8], Medium: [0, 1, true, 0, 12], High: [1, 1, true, 256, 24], Ultra: [1, 1, true, 512, 24],
+    }[level]!;
+    await expect.poll(async () => {
+      const s = await quality(p);
+      return { caustics: s.caustics, wetShore: s.wetShore, foam: s.objects[0]?.foam, reflection: s.objects[0]?.reflection, errors: s.errors };
+    }, { timeout: 45_000 }).toEqual({ caustics, wetShore, foam, reflection, errors: [] });
+    const s = await quality(p); expect(s.glError).toBe(0); expect(s.source).toEqual(authored);
+    expect(s.objects[0]).toMatchObject({ normal: true, waveHeight: before.objects[0].waveHeight, shoreBlend: before.objects[0].shoreBlend,
+      surfaceStrength: before.objects[0].surfaceStrength });
+    // Read the cap synchronously, before the next real physics step ages the QA waves.
+    expect(await p.evaluate(() => (window as any).__lakeQA.qualityRipples())).toEqual([rippleCount]);
+    return s;
+  };
+  const records = [];
+  for (const level of ["Ultra", "Low", "Medium", "High", "Ultra", "Low"] as const) {
+    await pick(level); const s = await verify(page, level);
+    expect(s.objects[0].geometry).toBe(geometry); records.push({ level, ...s });
+    await page.screenshot({ path: info.outputPath(`lake-quality-editor-${level.toLowerCase()}.png`) });
+  }
+  await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance).toEqual(authored[0].appearance);
+  expect(await terrainHash()).toBe(terrainBefore);
+  const play = await page.context().newPage();
+  const resume = async () => {
+    const button = play.getByRole("button", { name: "Resume", exact: true });
+    if (await button.isVisible()) await button.click();
+  };
+  play.on("pageerror", e => errors.push(e.message));
+  play.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+  await play.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded", timeout: 120_000 });
+  await play.waitForFunction(() => !!(window as any).__lakeQA, null, { timeout: 120_000 });
+  await resume();
+  await verify(play, "Low"); const runtimeGeometry = (await quality(play)).objects[0].geometry;
+  for (const level of ["Medium", "High", "Ultra", "Low"] as const) {
+    await page.bringToFront(); await pick(level); await play.bringToFront();
+    await resume();
+    const s = await verify(play, level); expect(s.objects[0].geometry).toBe(runtimeGeometry);
+    records.push({ level: `Play ${level}`, ...s });
+    await play.screenshot({ path: info.outputPath(`lake-quality-runtime-${level.toLowerCase()}.png`) });
+  }
+  await play.reload({ waitUntil: "domcontentloaded" });
+  await play.waitForFunction(() => !!(window as any).__lakeQA, null, { timeout: 120_000 });
+  await resume();
+  await verify(play, "Low"); expect(errors).toEqual([]);
+  await writeFile(info.outputPath("lake-quality.json"), JSON.stringify({ records, errors, authoredPreserved: true, terrainPreserved: true }, null, 2));
+});
 
 test("Lake geometry foam Calculate Recalculate undo and binary Save Reload Play",async({page,request},info)=>{
   test.setTimeout(300_000);

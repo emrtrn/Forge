@@ -13,6 +13,8 @@ import { LakeWaterObject } from "@engine/render-three/lakeWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import type { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import { registerLakeCaustics } from "@engine/render-three/terrain/terrainCaustics";
+import { FULL_LAKE_QUALITY, qualityLake, type LakeQuality } from "@engine/perf/lakeQuality";
+import type { LakeFoamData } from "@engine/scene/lakeFoamBake";
 
 /** Lake water (m) over a contact that soaks a tyre; thinner films at the very shore do not. */
 const SOAKING_DEPTH = 0.02;
@@ -23,6 +25,7 @@ export interface LakeWaterContext {
   scene: Scene;
   editor: boolean;
   reflections?: WaterReflectionRegistry;
+  quality?: LakeQuality;
   document: (terrainRef: string) => WorldTerrainDocument | undefined;
   load: (terrainRef: string, key: string, signal?: AbortSignal) => Promise<TerrainTileData>;
   normal: (id: string) => Promise<Texture | null>;
@@ -30,10 +33,23 @@ export interface LakeWaterContext {
   vehicles?: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "onPhysicsStep" | "isSurfaceFxActive"> | undefined;
 }
 
+interface LakePresentation {
+  source: LayoutLakeWaterBody;
+  effective: LayoutLakeWaterBody;
+  object: LakeWaterObject;
+  shore: () => void;
+  caustics: () => void;
+}
+function foamAllocation(data: LakeFoamData): number {
+  const { nx, nz } = data.metadata, w = Math.min(1024, nx), h = Math.min(1024, nz);
+  return w * h * Math.ceil(nx / w) * Math.ceil(nz / h);
+}
+
 /** One serialized CPU job and at most four temporary reads, with per-body publication. */
 export class LakeWaterController {
   readonly foam = new LakeFoamStore();
   readonly foamErrors = new Map<string,string>();
+  readonly qualityErrors = new Map<string, string>();
   readonly results = new Map<string, LakeGeometry>();
   readonly objects = new Map<string, LakeWaterObject>();
   readonly helpers = new Group();
@@ -45,7 +61,94 @@ export class LakeWaterController {
   private interactions = new Map<string, { lake: LayoutLakeWaterBody; query: LakeSurfaceQuery; state: LakeRippleState }>();
   private unsubscribePhysics: (() => void) | null = null;
   private waveTime = 0;
-  constructor(private readonly context: LakeWaterContext) { context.scene.add(this.helpers); this.helpers.layers.set(31); }
+  private quality: LakeQuality;
+  private qualityAborter = new AbortController();
+  private readonly presentations = new Map<string, LakePresentation>();
+  constructor(private readonly context: LakeWaterContext) {
+    this.quality = { ...(context.quality ?? FULL_LAKE_QUALITY) };
+    context.scene.add(this.helpers); this.helpers.layers.set(31);
+  }
+  /** Serialized with geometry publications; changing a profile never calls the geometry builder. */
+  setQuality(quality: LakeQuality): Promise<void> {
+    if ((Object.keys(FULL_LAKE_QUALITY) as (keyof LakeQuality)[]).every(key => quality[key] === this.quality[key])) return this.chain;
+    this.quality = { ...quality };
+    this.qualityAborter.abort(); this.qualityAborter = new AbortController();
+    const signal = AbortSignal.any([this.aborter.signal, this.qualityAborter.signal]);
+    if (!quality.foamAllowed) { this.foam.clearLoaded(); this.foamErrors.clear(); }
+    const work = async () => {
+      if (signal.aborted) return;
+      for (const [id, p] of this.presentations) {
+        if (signal.aborted) return;
+        const geometry = this.results.get(id);
+        if (geometry?.status !== "ready" || !p.object.parent) continue;
+        let bakedFoam;
+        if (quality.foamAllowed && p.source.geometryFoam?.enabled && p.source.geometryFoam.bake && !p.object.material.uniforms.geometryFoamMask!.value) {
+          const used = [...this.objects].reduce((sum, [other, object]) => sum + (other === id ? 0 : object.material.uniforms.geometryFoamMask!.value?.image?.data?.byteLength ?? 0), 0);
+          bakedFoam = await this.readFoam(p.source, signal, 32 * 1024 ** 2 - used);
+        }
+        if (signal.aborted || this.presentations.get(id) !== p) return;
+        const effective = qualityLake(p.source, quality), old = resolveLakeAppearance(p.effective), next = resolveLakeAppearance(effective);
+        let shore: (() => void) | undefined, caustics: (() => void) | undefined;
+        try {
+          // Stage new masks first; a rejected visual budget leaves the current surface intact.
+          if (next.shoreWetnessEnabled && !old.shoreWetnessEnabled) shore = registerLakeShoreWetness(this.context.scene, effective, geometry, p.object);
+          if (next.causticsEnabled && !old.causticsEnabled) caustics = registerLakeCaustics(this.context.scene, effective, geometry, p.object);
+          p.object.applyQuality(quality, this.reflectionFor(effective), bakedFoam);
+          if (!next.shoreWetnessEnabled) { p.shore(); p.shore = () => {}; }
+          else if (shore) p.shore = shore;
+          if (!next.causticsEnabled) { p.caustics(); p.caustics = () => {}; }
+          else if (caustics) p.caustics = caustics;
+          p.effective = effective;
+          const interaction = this.interactions.get(id);
+          interaction?.state.setLimit(quality.maxRipples);
+          p.object.setWheelRipples(interaction?.state.ripples ?? []);
+          this.qualityErrors.delete(id);
+        } catch (error) {
+          shore?.(); caustics?.();
+          this.qualityErrors.set(id, String(error)); console.warn("[lake-quality]", id, error);
+        }
+        // Mask creation/upload is presentation work; do not batch eight bodies into one job.
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+      }
+      this.pruneReflections(); this.context.changed?.();
+    };
+    this.chain = this.chain.then(work, work); return this.chain;
+  }
+  private async readFoam(lake: LayoutLakeWaterBody, signal: AbortSignal, budget: number): Promise<LakeFoamData | undefined> {
+    if (!lake.geometryFoam?.bake) return undefined;
+    this.foamErrors.delete(lake.id);
+    try {
+      const data = await this.foam.read(lake.geometryFoam.bake.manifest, signal);
+      if (signal.aborted) return undefined;
+      if (data.metadata.fingerprint !== lake.geometryFoam.bake.fingerprint) throw new Error("Lake foam reference fingerprint mismatch");
+      if (foamAllocation(data) > budget) throw new Error("over-budget: total Lake foam textures exceed 32 MiB");
+      return data;
+    } catch (error) {
+      if (!signal.aborted) { this.foamErrors.set(lake.id, String(error)); console.warn("[lake-foam]", lake.id, error); }
+      return undefined;
+    }
+  }
+  private reflectionFor(lake: LayoutLakeWaterBody): PlanarReflectionSource | null {
+    const a = resolveLakeAppearance(lake);
+    if (lake.hidden || a.reflectionMode !== "sharedPlanar" || a.reflectionQuality === "low") return null;
+    const key = `${a.reflectionGroup}:${lake.surfaceLevel}:${a.reflectionQuality}`;
+    let source = this.reflection.get(key);
+    if (!source) {
+      source = this.context.reflections?.acquire(a.reflectionGroup, lake.surfaceLevel, a.reflectionQuality) ?? new PlanarReflectionSource(lake.surfaceLevel, a.reflectionQuality);
+      this.reflection.set(key, source);
+    }
+    return source;
+  }
+  private pruneReflections(): void {
+    for (const [key, source] of this.reflection) {
+      if (![...this.objects.values()].some(object => object.reflectionSource === source)) { this.release(source); this.reflection.delete(key); }
+    }
+  }
+  private releasePresentation(id: string, object: LakeWaterObject): void {
+    const p = this.presentations.get(id);
+    if (p?.object !== object) return;
+    p.shore(); p.caustics(); this.presentations.delete(id);
+  }
   select(id: string | null) { this.selected = id; for (const child of this.helpers.children) child.visible = child.userData.waterBodyId === id; }
   invalidate() { this.aborter.abort(); this.results.clear(); this.clearInteractions(); }
   private clearInteractions(): void {
@@ -98,6 +201,7 @@ export class LakeWaterController {
     }
   }
   rebuild(bodies: readonly LayoutLakeWaterBody[]): Promise<void> {
+    if (this.qualityAborter.signal.aborted) this.qualityAborter = new AbortController();
     this.clearInteractions();
     if (!this.context.editor && !this.unsubscribePhysics) this.unsubscribePhysics = this.context.vehicles?.onPhysicsStep?.(dt => this.advanceWheelInteractions(dt)) ?? null;
     this.aborter.abort(); this.aborter = new AbortController(); const signal = this.aborter.signal, generation = ++this.generation;
@@ -130,30 +234,22 @@ export class LakeWaterController {
         if (signal.aborted || generation !== this.generation) return;
         let bakedFoam;
         this.foamErrors.delete(lake.id);
-        if(result.status==="ready" && lake.geometryFoam?.bake) {
-          try {
-            bakedFoam=await this.foam.read(lake.geometryFoam.bake.manifest,signal);
-            if(bakedFoam.metadata.fingerprint!==lake.geometryFoam.bake.fingerprint)throw new Error("Lake foam reference fingerprint mismatch");
-            const {nx,nz}=bakedFoam.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
-            const allocation=tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th);
-            if(foamBytes+allocation>32*1024**2)throw new Error("over-budget: total Lake foam textures exceed 32 MiB");
-            foamBytes+=allocation;
-          } catch(error) {bakedFoam=undefined;if(signal.aborted)return;this.foamErrors.set(lake.id,String(error));console.warn("[lake-foam]",lake.id,error);}
+        if(result.status==="ready" && this.quality.foamAllowed && lake.geometryFoam?.enabled && lake.geometryFoam.bake) {
+          bakedFoam = await this.readFoam(lake, AbortSignal.any([signal, this.qualityAborter.signal]), 32 * 1024 ** 2 - foamBytes);
+          if (bakedFoam) foamBytes += foamAllocation(bakedFoam);
         }
         if(signal.aborted || generation!==this.generation)return;
         this.remove(lake.id); this.results.set(lake.id, result);
         if (result.status === "ready") {
-          const a = resolveLakeAppearance(lake);
-          let reflection: PlanarReflectionSource | null = null;
-          if (a.reflectionMode === "sharedPlanar" && a.reflectionQuality !== "low") {
-            const key = `${a.reflectionGroup}:${lake.surfaceLevel}:${a.reflectionQuality}`;
-            reflection = this.reflection.get(key) ?? this.context.reflections?.acquire(a.reflectionGroup, lake.surfaceLevel, a.reflectionQuality) ?? new PlanarReflectionSource(lake.surfaceLevel, a.reflectionQuality);
-            this.reflection.set(key, reflection);
-          }
+          const a = resolveLakeAppearance(lake), effective = qualityLake(lake, this.quality);
           let object: LakeWaterObject | undefined;
           try {
-            object = new LakeWaterObject(lake, result, normal, reflection, bakedFoam);
-            object.addEventListener("removed", registerLakeShoreWetness(this.context.scene, lake, result, object));
+            object = new LakeWaterObject(lake, result, normal, this.reflectionFor(effective), bakedFoam, this.quality);
+            const shore = registerLakeShoreWetness(this.context.scene, effective, result, object);
+            const caustics = registerLakeCaustics(this.context.scene, effective, result, object);
+            this.presentations.set(lake.id, { source: lake, effective, object, shore, caustics });
+            const owner = object;
+            object.addEventListener("removed", () => this.releasePresentation(lake.id, owner));
           }
           catch (error) {
             object?.dispose();
@@ -168,17 +264,14 @@ export class LakeWaterController {
           if (!this.context.editor && this.unsubscribePhysics) object.setSurfaceWaveTime(this.waveTime);
           if (!this.context.editor) object.raycast = () => {};
           this.objects.set(lake.id, object); this.context.scene.add(object);
-          this.interactions.set(lake.id, { lake, query: new LakeSurfaceQuery(result), state: new LakeRippleState(a) });
-          object.addEventListener("removed", registerLakeCaustics(this.context.scene, lake, result, object));
+          const state = new LakeRippleState(a); state.setLimit(this.quality.maxRipples);
+          this.interactions.set(lake.id, { lake, query: new LakeSurfaceQuery(result), state });
+          this.qualityErrors.delete(lake.id);
         }
         if (this.context.editor) this.addHelper(lake, result);
         this.context.changed?.();
       }
-      // Sources are cheap while off; dispose unused captures after every publication pass.
-      for (const [key, source] of this.reflection) {
-        const active = sources.some((w) => { const a = resolveLakeAppearance(w); return !w.hidden && this.objects.has(w.id) && a.reflectionMode === "sharedPlanar" && `${a.reflectionGroup}:${w.surfaceLevel}:${a.reflectionQuality}` === key; });
-        if (!active) { this.release(source); this.reflection.delete(key); }
-      }
+      this.pruneReflections();
     };
     this.chain = this.chain.then(work, work); return this.chain;
   }
@@ -204,13 +297,14 @@ export class LakeWaterController {
   }
   private remove(id: string) {
     this.interactions.delete(id);
+    this.qualityErrors.delete(id);
     const object = this.objects.get(id); if (object) { object.removeFromParent(); object.dispose(); this.objects.delete(id); }
     for (const child of [...this.helpers.children]) if (child.userData.waterBodyId === id) {
       child.removeFromParent(); child.traverse((o) => { if (o instanceof Mesh || o instanceof LineSegments) { o.geometry.dispose(); o.material.dispose(); } });
     }
   }
   private release(source: PlanarReflectionSource) { if (this.context.reflections) this.context.reflections.release(source); else source.dispose(); }
-  dispose() { this.foam.clear(); this.foamErrors.clear(); this.unsubscribePhysics?.(); this.unsubscribePhysics = null; this.waveTime = 0; this.clearInteractions(); this.aborter.abort(); ++this.generation; for (const id of this.objects.keys()) this.remove(id);
+  dispose() { this.qualityAborter.abort(); this.foam.clear(); this.foamErrors.clear(); this.qualityErrors.clear(); this.unsubscribePhysics?.(); this.unsubscribePhysics = null; this.waveTime = 0; this.clearInteractions(); this.aborter.abort(); ++this.generation; for (const id of this.objects.keys()) this.remove(id);
     for (const child of [...this.helpers.children]) this.remove(child.userData.waterBodyId as string);
     this.results.clear(); for (const source of this.reflection.values()) this.release(source); this.reflection.clear(); }
 }

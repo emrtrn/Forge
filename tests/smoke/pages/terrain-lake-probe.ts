@@ -24,6 +24,27 @@ export function installLakeProbe(app: unknown) {
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    quality() {
+      let caustics = 0, wetShore = 0;
+      a.scene.traverse((node: any) => {
+        const u = node.userData.forgeTerrain?.materials.uniforms;
+        if (u) { caustics = Math.max(caustics, u.uCausticCount.value); wetShore = Math.max(wetShore, u.uShoreWetCount.value); }
+      });
+      return { caustics, wetShore, errors: [...(a.lakes?.qualityErrors ?? [])],
+        source: structuredClone(a.layout?.waterBodies), textures: a.renderer.info.memory.textures,
+        objects: [...(a.lakes?.objects ?? [])].map(([id, object]) => ({ id, geometry: object.geometry.uuid,
+          foam: !!object.material.uniforms.foamMask!.value, geometryFoam: !!object.material.uniforms.geometryFoamMask!.value,
+          reflection: (object.reflectionSource?.binding.texture.image as { width: number } | undefined)?.width ?? 0,
+          normal: !!object.material.uniforms.normalMap!.value, waveHeight: object.waveParameters.height,
+          shoreBlend: object.material.uniforms.shoreBlendDepth!.value, surfaceStrength: object.material.uniforms.surfaceStrength!.value })),
+        glError: a.renderer.getContext().getError() };
+    },
+    qualityRipples() {
+      return [...(a.lakes?.objects.values() ?? [])].map(object => {
+        object.setWheelRipples(Array.from({ length: 24 }, (_, i) => ({ x: -20 + i * .1, z: -12, age: .1, strength: .5 })));
+        return object.material.uniforms.wheelRippleCount!.value;
+      });
+    },
     surfaceFrame(time = 0, encoded = false, direct = false) {
       const restore: Array<() => void> = [];
       for (const object of a.lakes!.objects.values()) if (encoded) {

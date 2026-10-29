@@ -4,6 +4,7 @@ import { defaultLakeGeometryFoam, encodeLakeFoam } from "@engine/scene/lakeFoamB
 import { validateWaterContactFoam, type WaterContactFoam } from "@engine/scene/waterContactFoam";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { LakeWaterController } from "./lakeWaterController";
+import { lakeQuality } from "@engine/perf/lakeQuality";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import { createLakeAppearance, validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
@@ -3154,6 +3155,7 @@ export class SceneApp {
     for (const record of this.lightObjects) this.applyShadowMapSize(record.light);
     setTerrainSelfShadow(quality.terrainSelfShadow);
     setTerrainFarTiling(quality.terrainFarTiling);
+    void this.lakes?.setQuality(lakeQuality(quality)).catch(error => console.warn("[lake-quality]", error));
     this.fitSunShadowToScene();
     this.applyPostProcess();
   }
@@ -7516,6 +7518,7 @@ export class SceneApp {
 
   private lakeController(): LakeWaterController {
     return this.lakes ??= new LakeWaterController({ scene: this.scene, editor: true, reflections: this.waterReflections,
+      quality: lakeQuality(this.editorQuality),
       document: (id) => this.lakeDocument(id),
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find((a) => a.id === id), document = this.lakeDocument(id);

@@ -34,9 +34,12 @@ export class LakeFoamStore {
     while([...this.loaded.values()].reduce((n,v)=>n+v.pixels.length,0)+data.pixels.length>32*1024**2) {
       const first=this.loaded.keys().next().value;if(first===undefined)break;this.loaded.delete(first);
     }
+    if(signal?.aborted)throw new DOMException("Lake foam cancelled","AbortError");
     this.loaded.set(path,data);return data;
   }
   artifact(path:string){return this.pending.get(path);}
   discard(path:string){this.pending.delete(path);}
+  /** Runtime quality changes must never discard editor pending/undo artifacts. */
+  clearLoaded(){this.loaded.clear();}
   clear(){this.pending.clear();this.loaded.clear();}
 }

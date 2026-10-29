@@ -17,24 +17,30 @@ import { createWaterSceneUniforms, readWaterScene, WATER_SCENE_GLSL } from "./wa
 
 import { createLakeFoamMask, WATER_FOAM_GLSL, createWaterContactUniforms, WATER_CONTACT_GLSL } from "./waterFoam";
 import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
+import { FULL_LAKE_QUALITY, type LakeQuality } from "../perf/lakeQuality";
 
 /** Bounded vertical waves over the exact wet mesh; the shoreline stays pinned. */
 export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
-  private readonly source: PlanarReflectionSource | null;
+  private source: PlanarReflectionSource | null;
   private readonly strength: number;
-  private readonly foamTexture: DataTexture | null;
-  private readonly geometryFoamTexture: DataArrayTexture | null;
+  private foamTexture: DataTexture | null;
+  private geometryFoamTexture: DataArrayTexture | null;
+  private quality: LakeQuality;
+  private readonly contactCount: number;
   readonly waveParameters: LakeWaveParameters;
   private externalWaveTime = false;
   private readonly waveOverrides = new Map<"normal" | "depth", Mesh<BufferGeometry, MeshNormalMaterial | MeshDepthMaterial>>();
-  constructor(lake: LayoutLakeWaterBody, data: LakeGeometry, normal: Texture | null, source: PlanarReflectionSource | null = null, bakedFoam?: LakeFoamData) {
+  constructor(private readonly lake: LayoutLakeWaterBody, private readonly data: LakeGeometry, normal: Texture | null,
+    source: PlanarReflectionSource | null = null, bakedFoam?: LakeFoamData, quality: LakeQuality = FULL_LAKE_QUALITY) {
     const appearance = resolveLakeAppearance(lake);
     const query = lake.contactFoam?.enabled ? new LakeSurfaceQuery(data) : null;
     const contactSettings = !lake.geometryFoam && lake.contactFoam ? { ...lake.contactFoam, obstacles: lake.contactFoam.obstacles.filter(o =>
       query?.depthAt(o.position[0],o.position[2]) != null && Math.abs(lake.surfaceLevel-o.position[1])<o.halfHeight) } : undefined;
-    const bake = lake.geometryFoam?.enabled && bakedFoam && Math.abs(lake.surfaceLevel-bakedFoam.metadata.level)<1e-6 ? lakeFoamTexture(bakedFoam) : null;
+    const foam = quality.foamAllowed && appearance.foamEnabled ? createLakeFoamMask(lake, data, appearance.foamWidth) : null;
+    let bake: ReturnType<typeof lakeFoamTexture> | null;
+    try { bake = quality.foamAllowed && lake.geometryFoam?.enabled && bakedFoam && Math.abs(lake.surfaceLevel-bakedFoam.metadata.level)<1e-6 ? lakeFoamTexture(bakedFoam) : null; }
+    catch (error) { foam?.dispose(); throw error; }
     const waves = lakeWaveParameters(appearance, data.position[0], data.position[2]);
-    const foam = appearance.foamEnabled ? createLakeFoamMask(lake, data, appearance.foamWidth) : null;
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new BufferAttribute(data.positions, 3));
     geometry.setAttribute("waterDepth", new BufferAttribute(data.depths, 1));
@@ -227,6 +233,9 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.boundingBox!.min.y -= waves.height; geometry.boundingBox!.max.y += waves.height;
     geometry.boundingSphere!.radius += waves.height;
     this.geometryFoamTexture = bake?.texture ?? null;
+    this.quality = { ...quality };
+    this.contactCount = this.material.uniforms.contactCount!.value;
+    if (!quality.foamAllowed) { this.material.uniforms.contactCount!.value = 0; this.material.uniforms.contactOpacity!.value = 0; }
     this.foamTexture = foam; this.receiveShadow = true;
     this.position.set(...data.position); this.name = `Lake:${lake.id}`;
     this.userData.waterBodyId = lake.id; this.source = source; this.strength = appearance.reflectionStrength;
@@ -240,7 +249,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       if (!this.externalWaveTime) this.material.uniforms.surfaceWaveTime!.value = lakeWaveTime(performance.now() / 1000, waves);
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera);
-      source?.update(renderer, scene, camera);
+      this.source?.update(renderer, scene, camera);
       const snapshot = readWaterScene(renderer, scene, camera);
       this.material.uniforms.waterSceneEnabled!.value = snapshot ? 1 : 0;
       // This path already composites the bed into an opaque final pixel. AO
@@ -256,7 +265,42 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     };
   }
   setWheelRipples(ripples: readonly LakeRipple[]): void {
-    updateLakeRippleUniforms(this.material.uniforms as ReturnType<typeof createLakeRippleUniforms>, ripples, this.position.x, this.position.z);
+    updateLakeRippleUniforms(this.material.uniforms as ReturnType<typeof createLakeRippleUniforms>, ripples, this.position.x, this.position.z, this.quality.maxRipples);
+  }
+  get reflectionSource(): PlanarReflectionSource | null { return this.source; }
+  /** Switch only presentation resources. Geometry, bounds, normals and wave time stay intact. */
+  applyQuality(quality: LakeQuality, source: PlanarReflectionSource | null, bakedFoam?: LakeFoamData): void {
+    const a = resolveLakeAppearance(this.lake), uniforms = this.material.uniforms;
+    const foam = quality.foamAllowed && a.foamEnabled ? this.foamTexture ?? createLakeFoamMask(this.lake, this.data, a.foamWidth) : null;
+    let bake: ReturnType<typeof lakeFoamTexture> | null = null;
+    try {
+      if (quality.foamAllowed && this.lake.geometryFoam?.enabled && !this.geometryFoamTexture && bakedFoam &&
+        Math.abs(this.lake.surfaceLevel - bakedFoam.metadata.level) < 1e-6) bake = lakeFoamTexture(bakedFoam);
+    } catch (error) { if (foam !== this.foamTexture) foam?.dispose(); throw error; }
+    const geometryFoam = quality.foamAllowed && this.lake.geometryFoam?.enabled ? this.geometryFoamTexture ?? bake?.texture ?? null : null;
+    if (foam !== this.foamTexture) this.foamTexture?.dispose();
+    if (geometryFoam !== this.geometryFoamTexture) this.geometryFoamTexture?.dispose();
+    this.foamTexture = foam; this.geometryFoamTexture = geometryFoam;
+    uniforms.foamMask!.value = foam; uniforms.foamOpacity!.value = foam ? a.foamOpacity : 0;
+    uniforms.contactCount!.value = quality.foamAllowed ? this.contactCount : 0;
+    uniforms.contactOpacity!.value = quality.foamAllowed ? a.foamOpacity : 0;
+    uniforms.geometryFoamMask!.value = geometryFoam;
+    if (bake && bakedFoam) {
+      uniforms.geometryFoamMin!.value.set(...bakedFoam.metadata.min);
+      uniforms.geometryFoamSize!.value.set(bakedFoam.metadata.max[0] - bakedFoam.metadata.min[0], bakedFoam.metadata.max[1] - bakedFoam.metadata.min[1]);
+      uniforms.geometryFoamGrid!.value.copy(bake.grid); uniforms.geometryFoamTile!.value.copy(bake.tile);
+    }
+    if (!!this.material.defines.FORGE_LAKE_GEOMETRY_FOAM !== !!geometryFoam) {
+      if (geometryFoam) this.material.defines.FORGE_LAKE_GEOMETRY_FOAM = 1;
+      else delete this.material.defines.FORGE_LAKE_GEOMETRY_FOAM;
+      this.material.needsUpdate = true;
+    }
+    if (this.source !== source) {
+      this.source?.removeConsumer(this); this.setPlanarReflectionBinding(null);
+      this.source = source; source?.addConsumer(this);
+    }
+    this.quality = { ...quality };
+    uniforms.wheelRippleCount!.value = Math.min(uniforms.wheelRippleCount!.value, quality.maxRipples);
   }
   setSurfaceWaveTime(seconds: number): void {
     this.externalWaveTime = true;
@@ -289,7 +333,10 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms.reflectionMatrix!.value = binding?.textureMatrix ?? new Matrix4();
     this.material.uniforms.reflectionStrength!.value = binding ? this.strength : 0;
   }
-  dispose() { for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear(); this.foamTexture?.dispose(); this.geometryFoamTexture?.dispose(); this.source?.removeConsumer(this); this.geometry.dispose(); this.material.dispose(); }
+  dispose() { for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
+    this.foamTexture?.dispose(); this.foamTexture = null; this.material.uniforms.foamMask!.value = null;
+    this.geometryFoamTexture?.dispose(); this.geometryFoamTexture = null; this.material.uniforms.geometryFoamMask!.value = null;
+    this.source?.removeConsumer(this); this.source = null; this.setPlanarReflectionBinding(null); this.geometry.dispose(); this.material.dispose(); }
 }
 
 /** Replace the existing override-pass water draw with its displacing variant. */

@@ -15,6 +15,7 @@
     "check:assets": "node tools/run-asset-manifest-health.mjs --baseline tools/baselines/asset-health.json",
     "perf:assets": "node tools/run-asset-perf-report.mjs",
     "perf:browser": "node tools/browser-perf-report.mjs",
+    "perf:lake": "tsc --noEmit -p tools/perf/tsconfig.lake.json && node tools/lake-performance-report.mjs",
     "perf:quality": "node tools/quality-matrix-report.mjs",
     "audio:manifest": "node tools/sync-audio-manifest.mjs",
     "audio:loudness": "node tools/audit-audio-loudness.mjs",

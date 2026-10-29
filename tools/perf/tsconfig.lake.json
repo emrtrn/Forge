@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.smoke.json",
+  "include": ["lakePerformanceProject.ts", "../../tests/smoke/pages/lake-performance.ts"]
+}

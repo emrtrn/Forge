@@ -392,18 +392,14 @@ test("World Builder village: the settlement chain places coloured buildings and 
 const REFERENCE_LEVEL = "layouts/__playwright-world-builder-reference.level.json";
 const REFERENCE_IMAGE = "layouts/__playwright-world-builder-reference.png";
 
-test("World Builder reference: the underlay and the plan layer draw, switch, and the reference is an undoable recipe edit (WB-13)", async ({ page, request }) => {
-  test.setTimeout(180_000);
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
-
-  const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
-  await writeJson(REFERENCE_LEVEL, { ...base, name: "__playwright-world-builder-reference" });
-  await writeFileIn(REFERENCE_IMAGE, await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/reference-underlay.png")));
+/**
+ * Eight plan elements over a reference image; the hamlet is inferred with low
+ * confidence (red, dashed). The guide points of `main` lie in the editor's
+ * default top view, so a test can drag one.
+ */
+function referenceRecipe(): WorldRecipe {
   const recipe = createWorldRecipe("playwright_world_builder_reference", 3);
   recipe.reference = { image: REFERENCE_IMAGE, origin: [-40, -40], size: [80, 80], view: "topDown" };
-  // Eight plan elements; the hamlet is inferred with low confidence (red, dashed).
   recipe.plan.settlements.push(
     { id: "village", source: "reference", observed: true, confidence: 0.8, center: [-10, -10], radius: 15, type: "village" },
     { id: "hamlet", source: "reference", observed: false, confidence: 0.3, center: [20, 20], type: "hamlet" },
@@ -413,10 +409,22 @@ test("World Builder reference: the underlay and the plan layer draw, switch, and
     { id: "a", source: "reference", position: [-35, -10], kind: "end" },
     { id: "b", source: "reference", position: [35, 20], kind: "end" },
   );
-  recipe.plan.roadGraph.edges.push({ id: "main", source: "reference", from: "a", to: "b", roadClass: "local", guide: [[-10, 0], [10, 5]] });
+  recipe.plan.roadGraph.edges.push({ id: "main", source: "reference", from: "a", to: "b", roadClass: "local", guide: [[-5, 0], [5, 3]] });
   recipe.plan.water.push({ id: "creek", source: "reference", kind: "stream", path: [[-40, 30], [40, 35]] });
   recipe.plan.regions.push({ id: "forest", source: "reference", kind: "forest.conifer", polygon: [[10, -35], [35, -35], [35, -10]] });
-  await writeJson(worldRecipePath(REFERENCE_LEVEL), recipe);
+  return recipe;
+}
+
+test("World Builder reference: the underlay and the plan layer draw, switch, and the reference is an undoable recipe edit (WB-13)", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
+
+  const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
+  await writeJson(REFERENCE_LEVEL, { ...base, name: "__playwright-world-builder-reference" });
+  await writeFileIn(REFERENCE_IMAGE, await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/reference-underlay.png")));
+  await writeJson(worldRecipePath(REFERENCE_LEVEL), referenceRecipe());
   expect((await request.post("/__open-level", { data: { path: REFERENCE_LEVEL } })).ok()).toBeTruthy();
   await page.addInitScript(() => localStorage.clear());
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -451,5 +459,130 @@ test("World Builder reference: the underlay and the plan layer draw, switch, and
   await page.getByTestId("editor-undo").click();
   await expect(underlay).toHaveAttribute("data-state", "shown");
   await expect(page.getByTestId("world-builder-reference-size-x")).toHaveValue("80");
+  expect(errors).toEqual([]);
+});
+
+const CORRECTION_LEVEL = "layouts/__playwright-world-builder-corrections.level.json";
+/** The handles in the order the layer draws them: settlements, nodes, landmarks, guide points. */
+const HANDLE_OWNERS = [["settlement", "village"], ["settlement", "hamlet"], ["node", "a"], ["node", "b"], ["landmark", "depot"], ["edge", "main"], ["edge", "main"]];
+
+test("World Builder plan corrections: panel fields, viewport handle drag, add and Delete, each one undo step that makes the element manual (WB-13, 15b)", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
+
+  const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
+  await writeJson(CORRECTION_LEVEL, { ...base, name: "__playwright-world-builder-corrections" });
+  await writeFileIn(REFERENCE_IMAGE, await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/reference-underlay.png")));
+  await writeJson(worldRecipePath(CORRECTION_LEVEL), referenceRecipe());
+  expect((await request.post("/__open-level", { data: { path: CORRECTION_LEVEL } })).ok()).toBeTruthy();
+  await page.addInitScript(() => {
+    localStorage.clear();
+    // Every renderer: the editor makes more than the viewport's (thumbnails).
+    const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __wbRenderers: any[] };
+    w.__wbRenderers = [];
+    w.__THREE_DEVTOOLS__ = new EventTarget();
+    w.__THREE_DEVTOOLS__.addEventListener("observe", (event) => {
+      const object = (event as CustomEvent).detail;
+      if (object?.isWebGLRenderer) w.__wbRenderers.push(object);
+    });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/?editor&worldBuilderCorrections=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("world-builder-tab").click();
+  await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_reference", { timeout: 30_000 });
+  const plan = page.getByTestId("world-builder-layer-plan");
+  const recipeStatus = page.getByTestId("world-builder-recipe");
+  await expect(plan).toHaveAttribute("data-low", "1");
+
+  // Panel: a typed field corrects the low-confidence hamlet; it turns manual and stops being red.
+  const hamlet = page.getByTestId("world-builder-plan-settlement-hamlet");
+  await expect(hamlet).toHaveAttribute("data-source", "reference");
+  await hamlet.click();
+  await expect(page.getByTestId("world-builder-plan-selection")).toHaveAttribute("data-id", "hamlet");
+  await page.getByTestId("world-builder-plan-field-population").fill("40");
+  await page.getByTestId("world-builder-plan-field-population").press("Enter");
+  await expect(page.getByTestId("world-builder-plan-settlement-hamlet")).toHaveAttribute("data-source", "manual");
+  await expect(plan).toHaveAttribute("data-low", "0");
+  await expect(recipeStatus).toContainText("unsaved");
+  await page.getByTestId("editor-undo").click();
+  await expect(page.getByTestId("world-builder-plan-settlement-hamlet")).toHaveAttribute("data-source", "reference");
+  await expect(plan).toHaveAttribute("data-low", "1");
+
+  // Viewport: Edit in Viewport puts a handle on every movable point; from the top view, drag one in view.
+  await page.locator("[data-camera-button]").hover();
+  await page.locator('[data-camera-view="top"]').click();
+  await expect(page.locator("[data-camera-label]")).toHaveText("Top");
+  await page.getByTestId("world-builder-plan-edit-toggle").click();
+  const handles = page.getByTestId("world-builder-plan-handles");
+  await expect(handles).toHaveAttribute("data-editing", "true");
+  await expect(handles).toHaveAttribute("data-handles", String(HANDLE_OWNERS.length));
+  // Project the handles with the camera of the next frame that draws them.
+  const target = await page.evaluate(() => new Promise<{ index: number; x: number; y: number } | null>((done) => {
+    const w = window as unknown as { __wbRenderers: any[] };
+    const restore: Array<() => void> = [];
+    for (const renderer of w.__wbRenderers) {
+      const render = renderer.render;
+      restore.push(() => { renderer.render = render; });
+      renderer.render = function (scene: any, camera: any) {
+        let points: any = null;
+        scene?.traverse?.((node: any) => { if (node.name === "world-builder-plan-handles") points = node; });
+        if (points) {
+          for (const undo of restore) undo();
+          done(project(points, camera, renderer.domElement.getBoundingClientRect()));
+        }
+        return render.call(this, scene, camera);
+      };
+    }
+    function project(points: any, camera: any, rect: DOMRect) {
+      const position = points.geometry.getAttribute("position");
+      let best: { index: number; x: number; y: number; distance: number } | null = null;
+      for (let index = 0; index < position.count; index += 1) {
+        const ndc = points.position.clone().set(position.getX(index), position.getY(index), position.getZ(index)).project(camera);
+        const x = rect.left + (ndc.x * 0.5 + 0.5) * rect.width;
+        const y = rect.top + (-ndc.y * 0.5 + 0.5) * rect.height;
+        const inside = Math.abs(ndc.x) < 0.8 && Math.abs(ndc.y) < 0.8 && ndc.z > -1 && ndc.z < 1;
+        const distance = Math.hypot(ndc.x, ndc.y);
+        if (inside && (!best || distance < best.distance)) best = { index, x, y, distance };
+      }
+      return best ? { index: best.index, x: best.x, y: best.y } : null;
+    }
+  }));
+  expect(target, "a plan handle is in view").not.toBeNull();
+  const [kind, id] = HANDLE_OWNERS[target!.index]!;
+  await page.mouse.move(target!.x, target!.y);
+  await page.mouse.down();
+  await page.mouse.move(target!.x + 30, target!.y + 10, { steps: 4 });
+  await page.mouse.move(target!.x + 60, target!.y + 20, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.getByTestId("world-builder-plan-selection")).toHaveAttribute("data-id", id!);
+  await expect(page.getByTestId(`world-builder-plan-${kind}-${id}`)).toHaveAttribute("data-source", "manual");
+  await page.getByTestId("editor-undo").click();
+  await expect(page.getByTestId(`world-builder-plan-${kind}-${id}`)).toHaveAttribute("data-source", "reference");
+
+  // Add a road node where the view looks, connect it, then Delete removes it and its edge.
+  await page.getByTestId("world-builder-plan-add-node").click();
+  await expect(page.getByTestId("world-builder-plan-selection")).toHaveAttribute("data-id", "node-1");
+  await page.getByTestId("world-builder-plan-connect-to").selectOption("a");
+  await page.getByTestId("world-builder-plan-connect").click();
+  await expect(page.getByTestId("world-builder-plan-edge-edge-1")).toBeVisible();
+  await page.getByTestId("world-builder-plan-node-node-1").click();
+  await page.locator("#game-canvas").hover({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Delete");
+  await expect(page.getByTestId("world-builder-plan-node-node-1")).toHaveCount(0);
+  await expect(page.getByTestId("world-builder-plan-edge-edge-1")).toHaveCount(0);
+
+  // A protected region is saved with the recipe.
+  await page.getByTestId("world-builder-plan-add-protected").click();
+  await expect(page.getByTestId("world-builder-plan-protected-protected-1")).toBeVisible();
+  const recipeSaved = page.waitForResponse((res) => res.url().endsWith("/__save-worldrecipe") && res.request().method() === "POST");
+  await page.getByTestId("editor-save").click();
+  expect((await recipeSaved).ok()).toBeTruthy();
+  const saved = await readJson<WorldRecipe>(worldRecipePath(CORRECTION_LEVEL));
+  expect(saved.ownership.protectedRegions.map((region) => region.id)).toEqual(["protected-1"]);
+  expect(saved.plan.roadGraph.nodes.map((node) => node.id)).toEqual(["a", "b"]);
+  expect(saved.plan.roadGraph.edges.map((edge) => edge.id)).toEqual(["main"]);
   expect(errors).toEqual([]);
 });

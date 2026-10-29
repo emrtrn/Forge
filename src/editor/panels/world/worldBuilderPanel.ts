@@ -28,7 +28,9 @@ export interface WorldBuilderPanelOptions {
  * generated data) and set the reference image (an undoable recipe edit).
  * Plan Corrections list the plan's elements and protected regions: a row
  * selects one (highlighted in the viewport), its fields and Add / Delete are
- * hand corrections, each one undo step (§13.2 step 4).
+ * hand corrections, each one undo step (§13.2 step 4). Edit in Viewport
+ * turns on the viewport handles (drag a point over the ground; Delete removes
+ * the selected element, Escape deselects).
  */
 export class WorldBuilderPanel {
   constructor(private readonly options: WorldBuilderPanelOptions) {
@@ -79,6 +81,7 @@ export class WorldBuilderPanel {
       if (reference) session.setReference(reference);
     } else if (action === "reference-remove") session.setReference(null);
     else if (action === "plan-select" && kind && id) session.selectPlan({ kind, id });
+    else if (action === "plan-edit-toggle") session.setPlanEditing(!session.getView().planEdit?.editing);
     else if (action === "plan-add" && kind) session.addPlanElement(kind);
     else if (action === "plan-delete") session.deletePlanElement();
     else if (action === "plan-connect" && id) {
@@ -306,6 +309,10 @@ function renderPlanEdit(edit: NonNullable<WorldBuilderView["planEdit"]>): string
     <div class="detail-section-title">Plan Corrections</div>
     <div class="world-builder-summary">
       <div>Each correction is one undo step; a corrected element becomes manual. New elements go where the viewport looks.</div>
+      <div data-testid="world-builder-plan-handles" data-editing="${edit.editing}" data-handles="${edit.handles}">${edit.editing
+        ? `Editing in the viewport: ${edit.handles} handles — drag a point onto the ground; Delete removes the selected element, Escape deselects.`
+        : "Viewport handles are off."}
+        <button type="button" data-wb-action="plan-edit-toggle" data-testid="world-builder-plan-edit-toggle">${edit.editing ? "Stop Editing" : "Edit in Viewport"}</button></div>
       ${groups || "<div>The plan is empty.</div>"}
     </div>
     <div class="world-builder-actions">${add}</div>

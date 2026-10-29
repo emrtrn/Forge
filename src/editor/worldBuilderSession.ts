@@ -25,7 +25,9 @@
  * its elements and protected regions. Each correction is one undo step checked
  * by the recipe normalizer, and the touched element becomes `manual`
  * (`worldBuilderPlanEdit.ts`). The selected element is a viewer state, like
- * the layer switches: not saved, not undone.
+ * the layer switches: not saved, not undone. In Edit Plan mode the layer
+ * draws a handle on every movable plan point; the host drags one over the
+ * ground (drawn from an uncommitted copy) and the drop is one move step.
  */
 import type { EditorCommand } from "@editor/core/history";
 import type { RoomLayout } from "@engine/scene/layout";
@@ -59,6 +61,7 @@ import {
   DEFAULT_RECIPE_LAYER_OPTIONS,
   EMPTY_RECIPE_LAYER_COUNTS,
   type RecipeLayerCounts,
+  type RecipeLayerEdit,
   type RecipeLayerOptions,
 } from "./worldBuilderLayer";
 import {
@@ -68,9 +71,12 @@ import {
   deletePlanElement,
   hasPlanElement,
   movePlanPoint,
+  planPoints,
+  pointElement,
   updatePlanElement,
   type PlanElementFields,
   type PlanElementKind,
+  type PlanPoint,
   type PlanPointRef,
   type PlanRef,
 } from "./worldBuilderPlanEdit";
@@ -96,7 +102,7 @@ export interface WorldBuilderHost {
    * Draws the recipe layer (null clears it) and returns what it drew. An
    * underlay image loads later; the host then calls `layerRedrawn`.
    */
-  showRecipeLayer(recipe: WorldRecipe | null, options: RecipeLayerOptions, selection: PlanRef | null): RecipeLayerCounts;
+  showRecipeLayer(recipe: WorldRecipe | null, options: RecipeLayerOptions, edit: RecipeLayerEdit): RecipeLayerCounts;
   /** Draws a dry run's preview in the viewport (null clears it); returns how many items it drew. */
   showPreview(preview: StagePreview | null): number;
   /** Frames one preview item, or the whole preview when `item` is null. */
@@ -136,7 +142,7 @@ export interface WorldBuilderView {
   layer: { options: RecipeLayerOptions; counts: RecipeLayerCounts };
   reference: WorldReference | null;
   /** The plan and protected regions for the hand-correction list, and the selected element. */
-  planEdit: { plan: WorldPlan; protectedRegions: ProtectedRegion[]; selection: PlanRef | null } | null;
+  planEdit: { plan: WorldPlan; protectedRegions: ProtectedRegion[]; selection: PlanRef | null; editing: boolean; handles: number } | null;
 }
 
 type Fetcher = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -155,6 +161,9 @@ export class WorldBuilderSession {
   private layerOptions: RecipeLayerOptions = { ...DEFAULT_RECIPE_LAYER_OPTIONS };
   private layerCounts: RecipeLayerCounts = { ...EMPTY_RECIPE_LAYER_COUNTS };
   private selection: PlanRef | null = null;
+  private planEditing = false;
+  /** The recipe drawn while a plan point is dragged; never committed itself. */
+  private dragged: WorldRecipe | null = null;
   /** Called when the view changed outside a panel action (an underlay finished loading). */
   onChange: (() => void) | null = null;
   private loadedFor = "";
@@ -179,6 +188,8 @@ export class WorldBuilderSession {
     this.profileView = null;
     this.lastPlan = null;
     this.selection = null;
+    this.planEditing = false;
+    this.dragged = null;
     this.clearPreview();
     this.refreshLayer();
     this.saveRevision.reset();
@@ -203,7 +214,10 @@ export class WorldBuilderSession {
   refreshLayer(): void {
     // An undo can take the selected element away.
     if (this.selection && (!this.recipe || !hasPlanElement(this.recipe, this.selection))) this.selection = null;
-    this.layerCounts = this.host.showRecipeLayer(this.recipe, { ...this.layerOptions }, this.selection);
+    this.layerCounts = this.host.showRecipeLayer(this.dragged ?? this.recipe, { ...this.layerOptions }, {
+      selection: this.selection,
+      handles: this.planHandlesShown(),
+    });
   }
 
   /** The host redrew the layer on its own (an underlay image loaded or failed). */
@@ -254,6 +268,43 @@ export class WorldBuilderSession {
   selectPlan(ref: PlanRef | null): void {
     this.selection = ref && this.recipe && hasPlanElement(this.recipe, ref) ? { kind: ref.kind, id: ref.id } : null;
     this.refreshLayer();
+  }
+
+  /** Switches Edit Plan mode: plan points get viewport handles. A viewer state. */
+  setPlanEditing(on: boolean): void {
+    this.planEditing = on && this.recipe !== null;
+    this.dragged = null;
+    this.refreshLayer();
+  }
+
+  /** The selected plan element while Edit Plan mode is on (keyboard shortcuts act on it), else null. */
+  planEditSelection(): PlanRef | null {
+    return this.planEditing ? this.selection : null;
+  }
+
+  /** The plan points the viewport offers as handles: none outside Edit Plan mode or with the plan layer hidden. */
+  planHandles(): PlanPoint[] {
+    return this.planHandlesShown() && this.recipe ? planPoints(this.recipe) : [];
+  }
+
+  /** The host picked a handle: its element is selected. */
+  beginPlanDrag(ref: PlanPointRef): void {
+    this.selectPlan(pointElement(ref));
+    this.onChange?.();
+  }
+
+  /** Draws the plan with the dragged point at `point`, without committing it. */
+  dragPlanPoint(ref: PlanPointRef, point: [number, number]): void {
+    if (!this.recipe) return;
+    this.dragged = movePlanPoint(this.recipe, ref, point);
+    this.refreshLayer();
+  }
+
+  /** Drops the dragged point at `point` as one move step; null cancels the drag. */
+  endPlanDrag(ref: PlanPointRef, point: [number, number] | null): void {
+    this.dragged = null;
+    if (!point || !this.movePlanPoint(ref, point)) this.refreshLayer();
+    this.onChange?.();
   }
 
   /** Moves one plan point (a drop in the viewport, or a typed position). */
@@ -439,7 +490,13 @@ export class WorldBuilderSession {
       layer: { options: { ...this.layerOptions }, counts: { ...this.layerCounts } },
       reference: recipe?.reference ? structuredClone(recipe.reference) : null,
       planEdit: recipe
-        ? { plan: structuredClone(recipe.plan), protectedRegions: structuredClone(recipe.ownership.protectedRegions), selection: this.selection }
+        ? {
+            plan: structuredClone(recipe.plan),
+            protectedRegions: structuredClone(recipe.ownership.protectedRegions),
+            selection: this.selection,
+            editing: this.planEditing,
+            handles: this.planHandles().length,
+          }
         : null,
     };
   }
@@ -509,6 +566,10 @@ export class WorldBuilderSession {
       undo: () => this.setRecipe(structuredClone(before)),
     });
     return true;
+  }
+
+  private planHandlesShown(): boolean {
+    return this.planEditing && this.layerOptions.plan && this.recipe !== null;
   }
 
   /** Recipe pads whose building placement is in the level. */

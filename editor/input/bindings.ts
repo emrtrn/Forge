@@ -34,6 +34,10 @@ export interface EditorInputBindings {
   endFoliageStroke(event: PointerEvent): boolean;
   updateFoliageBrushHover(clientX: number, clientY: number): void;
   clearFoliageBrushHover(): void;
+  /** A handle drawn by an editor overlay (e.g. World Builder's Edit Plan); true when it owns the pointer. */
+  beginOverlayHandleDrag(event: PointerEvent): boolean;
+  updateOverlayHandleDrag(event: PointerEvent): boolean;
+  endOverlayHandleDrag(event: PointerEvent): boolean;
 
   isCameraNavigationActive(): boolean;
   cameraNavigationPointerId(): number | null;
@@ -117,6 +121,9 @@ export function bindEditorInputEvents(
       return;
     }
 
+    // Overlay handles sit on top of the scene, so they win over the selection's gizmo.
+    if (event.button === 0 && bindings.beginOverlayHandleDrag(event)) return;
+
     const gizmoHandle = bindings.pickGizmoHandle(event.clientX, event.clientY);
     if (gizmoHandle && bindings.hasSelection()) {
       bindings.startGizmoDrag(gizmoHandle, event);
@@ -150,6 +157,7 @@ export function bindEditorInputEvents(
       return;
     }
 
+    if (bindings.updateOverlayHandleDrag(event)) return;
     if (bindings.updateMeshPaintStroke(event)) return;
     if (bindings.updateFoliageStroke(event)) return;
     if (bindings.updateLandscapeSculpt(event)) return;
@@ -189,6 +197,7 @@ export function bindEditorInputEvents(
       if (drag) bindings.commitPointerDrag(drag);
       bindings.updateGizmo();
     }
+    bindings.endOverlayHandleDrag(event);
     if (bindings.endMeshPaintStroke(event)) {
       bindings.updateGizmo();
     }

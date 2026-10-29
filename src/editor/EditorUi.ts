@@ -1429,6 +1429,17 @@ export class EditorUi {
       return;
     }
 
+    // World Builder's Edit Plan owns Escape/Delete for its selected plan element.
+    if (this.app.worldBuilder.planEditSelection()) {
+      if (event.code === "Escape" || event.code === "Delete" || event.code === "Backspace") {
+        event.preventDefault();
+        if (event.code === "Escape") this.app.worldBuilder.selectPlan(null);
+        else this.app.worldBuilder.deletePlanElement();
+        this.app.worldBuilder.onChange?.();
+        return;
+      }
+    }
+
     // Foliage Mode owns Escape/Delete for its instance selection (which is separate
     // from the scene selection); let every other shortcut fall through.
     if (this.app.isFoliageModeActive()) {

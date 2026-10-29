@@ -20,6 +20,14 @@ export const LOW_CONFIDENCE = 0.5;
 
 export const DEFAULT_RECIPE_LAYER_OPTIONS: Readonly<RecipeLayerOptions> = { underlay: true, plan: true, generated: true, opacity: 0.6 };
 
+/** Hand-correction state the layer shows: the selected plan element and, in Edit Plan mode, point handles. */
+export interface RecipeLayerEdit {
+  selection: { kind: string; id: string } | null;
+  handles: boolean;
+}
+
+export const NO_RECIPE_LAYER_EDIT: Readonly<RecipeLayerEdit> = { selection: null, handles: false };
+
 /**
  * `none`: the recipe has no reference image; `perspective`: its image is a
  * perspective view, which does not lie on the ground.

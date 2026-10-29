@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  Color,
   DoubleSide,
   Float32BufferAttribute,
   Group,
@@ -8,6 +9,8 @@ import {
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
+  Points,
+  PointsMaterial,
   SRGBColorSpace,
   Texture,
   TextureLoader,
@@ -15,8 +18,15 @@ import {
 import type { WorldPoint } from "@engine/worldbuilder/normalize";
 import type { PlanProvenance, WorldRecipe, WorldReference } from "@engine/worldbuilder/recipe";
 import type { LandUse } from "@engine/worldbuilder/vocabulary";
-import { LOW_CONFIDENCE, type RecipeLayerCounts, type RecipeLayerOptions, type UnderlayState } from "@/editor/worldBuilderLayer";
-import type { PlanElementKind, PlanRef } from "@/editor/worldBuilderPlanEdit";
+import {
+  LOW_CONFIDENCE,
+  NO_RECIPE_LAYER_EDIT,
+  type RecipeLayerCounts,
+  type RecipeLayerEdit,
+  type RecipeLayerOptions,
+  type UnderlayState,
+} from "@/editor/worldBuilderLayer";
+import { planPoints, pointElement, type PlanElementKind } from "@/editor/worldBuilderPlanEdit";
 
 /** Layer colours; the panel legend uses the same values. */
 export const LAYER_COLORS = {
@@ -53,6 +63,9 @@ const GAP = 3;
 const CENTRE_POST = 12;
 const NODE_POST = 4;
 const MARK = 3;
+/** Edit Plan handles: screen pixels, and how far above the ground they stand, metres. */
+const HANDLE_SIZE = 9;
+export const HANDLE_LIFT = LIFT;
 /** The underlay lies this far above the ground it follows, metres. */
 const UNDERLAY_LIFT = 0.3;
 /** Underlay grid cell, metres, and the most cells along one side. */
@@ -69,7 +82,8 @@ type Style = { color: number; dashed: boolean };
  * touched), the plan (settlements, road graph,
  * water, regions, landmarks — low-confidence elements red, inferred ones
  * dashed; protected regions as boxes; the element selected for a hand
- * correction in `LAYER_COLORS.selected`) and the generated data (settlement cores, parcels by land use,
+ * correction in `LAYER_COLORS.selected`, and in Edit Plan mode a screen-sized
+ * handle on every movable plan point) and the generated data (settlement cores, parcels by land use,
  * pads). Lines follow the ground; everything is drawn over the scene and never
  * picked. Editor-only and render-side: it reads the recipe and the terrain
  * height and changes neither.
@@ -78,7 +92,7 @@ export class WorldBuilderRecipeOverlay {
   readonly group = new Group();
   private readonly loader = new TextureLoader();
   private texture: { path: string; texture: Texture | null; failed: boolean } | null = null;
-  private last: { recipe: WorldRecipe | null; options: RecipeLayerOptions; selection: PlanRef | null } | null = null;
+  private last: { recipe: WorldRecipe | null; options: RecipeLayerOptions; edit: RecipeLayerEdit } | null = null;
 
   constructor(
     private readonly sampleHeight: (x: number, z: number) => number | null,
@@ -90,9 +104,10 @@ export class WorldBuilderRecipeOverlay {
   }
 
   /** Replaces the drawn layer. */
-  show(recipe: WorldRecipe | null, options: RecipeLayerOptions, selection: PlanRef | null = null): RecipeLayerCounts {
+  show(recipe: WorldRecipe | null, options: RecipeLayerOptions, edit: RecipeLayerEdit = NO_RECIPE_LAYER_EDIT): RecipeLayerCounts {
     this.clear();
-    this.last = { recipe, options, selection };
+    this.last = { recipe, options, edit };
+    const { selection } = edit;
     const counts: RecipeLayerCounts = { underlay: "none", plan: 0, lowConfidence: 0, cores: 0, parcels: 0, pads: 0 };
     if (!recipe) return counts;
     counts.underlay = this.underlay(recipe.reference, options);
@@ -117,19 +132,20 @@ export class WorldBuilderRecipeOverlay {
       lines.raycast = () => {};
       this.group.add(lines);
     }
+    if (options.plan && edit.handles) this.drawHandles(recipe, selection);
     return counts;
   }
 
   clear(): void {
     for (const child of [...this.group.children]) {
-      const drawable = child as LineSegments<BufferGeometry, LineBasicMaterial> | Mesh<BufferGeometry, MeshBasicMaterial>;
+      const drawable = child as LineSegments<BufferGeometry, LineBasicMaterial> | Mesh<BufferGeometry, MeshBasicMaterial> | Points<BufferGeometry, PointsMaterial>;
       drawable.geometry.dispose();
       drawable.material.dispose();
       this.group.remove(child);
     }
   }
 
-  private drawPlan(recipe: WorldRecipe, selection: PlanRef | null, counts: RecipeLayerCounts, batch: (style: Style) => number[]): void {
+  private drawPlan(recipe: WorldRecipe, selection: RecipeLayerEdit["selection"], counts: RecipeLayerCounts, batch: (style: Style) => number[]): void {
     const style = (element: PlanProvenance, color: number, kind?: PlanElementKind, id?: string): Style => {
       counts.plan += 1;
       const low = element.confidence !== undefined && element.confidence < LOW_CONFIDENCE;
@@ -176,6 +192,29 @@ export class WorldBuilderRecipeOverlay {
       const [x1, z1] = region.max;
       this.loop([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], batch({ color: selected ? LAYER_COLORS.selected : LAYER_COLORS.protected, dashed: !selected }), !selected);
     }
+  }
+
+  private drawHandles(recipe: WorldRecipe, selection: RecipeLayerEdit["selection"]): void {
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const tint = new Color();
+    for (const { ref, point } of planPoints(recipe)) {
+      const element = pointElement(ref);
+      positions.push(point[0], (this.sampleHeight(point[0], point[1]) ?? 0) + HANDLE_LIFT, point[1]);
+      tint.setHex(selection?.kind === element.kind && selection.id === element.id ? LAYER_COLORS.selected : 0xffffff);
+      colors.push(tint.r, tint.g, tint.b);
+    }
+    if (positions.length === 0) return;
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+    const handles = new Points(geometry, new PointsMaterial({
+      size: HANDLE_SIZE, sizeAttenuation: false, vertexColors: true, depthTest: false, depthWrite: false, transparent: true,
+    }));
+    handles.name = "world-builder-plan-handles";
+    handles.renderOrder = 28;
+    handles.raycast = () => {};
+    this.group.add(handles);
   }
 
   private drawGenerated(recipe: WorldRecipe, counts: RecipeLayerCounts, batch: (style: Style) => number[]): void {
@@ -260,7 +299,7 @@ export class WorldBuilderRecipeOverlay {
 
   private redraw(): void {
     if (!this.last) return;
-    this.onUnderlayChanged(this.show(this.last.recipe, this.last.options, this.last.selection));
+    this.onUnderlayChanged(this.show(this.last.recipe, this.last.options, this.last.edit));
   }
 
   // ---------------------------------------------------------------- lines on the ground

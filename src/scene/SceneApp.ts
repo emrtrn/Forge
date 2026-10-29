@@ -336,7 +336,8 @@ import { WorldTerrainEditSession } from "@/editor/terrainStore";
 import { WorldBuilderSession } from "@/editor/worldBuilderSession";
 import type { PreviewItem, StagePreview } from "@/editor/worldBuilderPreview";
 import { WorldBuilderPreviewOverlay } from "./worldBuilderPreviewOverlay";
-import { WorldBuilderRecipeOverlay } from "./worldBuilderRecipeOverlay";
+import { HANDLE_LIFT, WorldBuilderRecipeOverlay } from "./worldBuilderRecipeOverlay";
+import type { PlanPointRef } from "@/editor/worldBuilderPlanEdit";
 import {
   applyPlacementGroupChanges,
   type PlacementGroupChange,
@@ -1256,6 +1257,8 @@ export interface LayoutSaveResult {
 
 export type LayoutSaver =(payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
 
+/** How close to a World Builder Edit Plan handle a press must land, screen pixels. */
+const WORLD_BUILDER_HANDLE_REACH = 12;
 const ORTHO_MIN_VIEW_HEIGHT = 3;
 const ORTHO_MAX_VIEW_HEIGHT = 80;
 const ORTHO_DEFAULT_VIEW_HEIGHT = 10;
@@ -1430,6 +1433,8 @@ export class SceneApp {
     focusPreview: (preview, item) => this.focusWorldBuilderPreview(preview, item),
     onStatus: (message, tone) => this.onStatus?.(message, tone),
   });
+  /** The Edit Plan handle being dragged; `point` stays null until the pointer has moved. */
+  private worldBuilderPlanDrag: { pointerId: number; ref: PlanPointRef; startX: number; startY: number; point: [number, number] | null } | null = null;
   /** Viewport layer of the World Builder recipe: reference underlay, plan and generated data. */
   private readonly worldBuilderRecipeLayer = new WorldBuilderRecipeOverlay(
     (x, z) => this.worldTerrainHeightAt(x, z),
@@ -2755,6 +2760,58 @@ export class SceneApp {
     this.cameraController.markViewChanged();
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(item ? `Focused ${item.id}.` : `Focused the ${preview.stageLabel} preview.`, "info");
+  }
+
+  /**
+   * Edit Plan (World Builder 15b): a left press within reach of a plan handle
+   * selects its element and drags the point over the ground; the drop is one
+   * undo step. A press that misses every handle falls through to normal
+   * picking, and a press released without moving only selects.
+   */
+  private beginWorldBuilderPlanDrag(event: PointerEvent): boolean {
+    const handles = this.worldBuilder.planHandles();
+    if (handles.length === 0) return false;
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    const camera = this.editorViewportCamera();
+    const projected = new Vector3();
+    let best: { ref: PlanPointRef; distance: number } | null = null;
+    for (const { ref, point } of handles) {
+      projected.set(point[0], (this.worldTerrainHeightAt(point[0], point[1]) ?? 0) + HANDLE_LIFT, point[1]).project(camera);
+      if (projected.z < -1 || projected.z > 1) continue;
+      const distance = Math.hypot(
+        (projected.x * 0.5 + 0.5) * rect.width - (event.clientX - rect.left),
+        (-projected.y * 0.5 + 0.5) * rect.height - (event.clientY - rect.top),
+      );
+      if (distance <= WORLD_BUILDER_HANDLE_REACH && (!best || distance < best.distance)) best = { ref, distance };
+    }
+    if (!best) return false;
+    this.worldBuilderPlanDrag = { pointerId: event.pointerId, ref: best.ref, startX: event.clientX, startY: event.clientY, point: null };
+    this.canvas.setPointerCapture(event.pointerId);
+    this.worldBuilder.beginPlanDrag(best.ref);
+    return true;
+  }
+
+  private updateWorldBuilderPlanDrag(event: PointerEvent): boolean {
+    const drag = this.worldBuilderPlanDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return false;
+    // A few pixels of jitter on a click is not a move.
+    if (!drag.point && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 3) return true;
+    const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY)?.point
+      ?? this.picker.clientToPlane(event.clientX, event.clientY, this.floorPlane);
+    if (!hit) return true;
+    drag.point = [Math.round(hit.x * 100) / 100, Math.round(hit.z * 100) / 100];
+    this.worldBuilder.dragPlanPoint(drag.ref, drag.point);
+    return true;
+  }
+
+  private endWorldBuilderPlanDrag(event: PointerEvent): boolean {
+    const drag = this.worldBuilderPlanDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return false;
+    this.worldBuilderPlanDrag = null;
+    if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
+    this.worldBuilder.endPlanDrag(drag.ref, event.type === "pointerup" ? drag.point : null);
+    return true;
   }
 
   /**
@@ -13444,6 +13501,9 @@ export class SceneApp {
       endFoliageStroke: (event) => this.endFoliageStroke(event),
       updateFoliageBrushHover: (clientX, clientY) => this.updateFoliageBrushHover(clientX, clientY),
       clearFoliageBrushHover: () => this.clearFoliageBrushHover(),
+      beginOverlayHandleDrag: (event) => this.beginWorldBuilderPlanDrag(event),
+      updateOverlayHandleDrag: (event) => this.updateWorldBuilderPlanDrag(event),
+      endOverlayHandleDrag: (event) => this.endWorldBuilderPlanDrag(event),
       isCameraNavigationActive: () => this.cameraController.isNavigating,
       cameraNavigationPointerId: () => this.cameraController.navigationPointerId,
       updateCameraLook: (movementX, movementY) => this.cameraController.updateLook(movementX, movementY),

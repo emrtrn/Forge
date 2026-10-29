@@ -538,4 +538,33 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     history.undo();
     assert.equal(session.getView().planEdit!.protectedRegions.length, 1);
   });
+
+  await checkAsync("world builder session: Edit Plan handles drag a point uncommitted; the drop is one move step", async () => {
+    const { session, history, layers } = harness({ [RECIPE_URL]: roadRecipe() });
+    await session.load();
+    assert.deepEqual(session.planHandles(), [], "no handles outside Edit Plan mode");
+    session.setPlanEditing(true);
+    assert.deepEqual(session.planHandles().map((handle) => handle.ref), [{ kind: "node", id: "a" }, { kind: "node", id: "b" }]);
+    assert.equal(session.getView().planEdit!.handles, 2);
+    session.setLayerOptions({ plan: false });
+    assert.equal(session.planHandles().length, 0, "a hidden plan offers no handles");
+    session.setLayerOptions({ plan: true });
+    const drawn = layers.length;
+    session.beginPlanDrag({ kind: "node", id: "b" });
+    assert.deepEqual(session.planEditSelection(), { kind: "node", id: "b" });
+    session.dragPlanPoint({ kind: "node", id: "b" }, [40, 10]);
+    assert.ok(layers.length > drawn, "the drag redraws the layer");
+    assert.equal(history.state().canUndo, false, "dragging commits nothing");
+    assert.deepEqual(session.getView().planEdit!.plan.roadGraph.nodes[1]!.position, [30, 0]);
+    session.endPlanDrag({ kind: "node", id: "b" }, null);
+    assert.equal(history.state().canUndo, false, "a cancelled drag leaves the plan alone");
+    session.dragPlanPoint({ kind: "node", id: "b" }, [40, 10]);
+    session.endPlanDrag({ kind: "node", id: "b" }, [40, 10]);
+    assert.deepEqual(session.getView().planEdit!.plan.roadGraph.nodes[1]!.position, [40, 10]);
+    assert.equal(history.state().undoLabel, "World Builder: move");
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan.roadGraph.nodes[1]!.position, [30, 0]);
+    session.setPlanEditing(false);
+    assert.equal(session.planEditSelection(), null, "shortcuts act only in Edit Plan mode");
+  });
 }

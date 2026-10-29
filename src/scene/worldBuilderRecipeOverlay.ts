@@ -52,15 +52,20 @@ const GAP = 3;
 const CENTRE_POST = 12;
 const NODE_POST = 4;
 const MARK = 3;
-/** The underlay floats this far above the highest ground it covers, metres. */
-const UNDERLAY_LIFT = 1;
-const UNDERLAY_HEIGHT_SAMPLES = 16;
+/** The underlay lies this far above the ground it follows, metres. */
+const UNDERLAY_LIFT = 0.3;
+/** Underlay grid cell, metres, and the most cells along one side. */
+const UNDERLAY_CELL = 4;
+const UNDERLAY_MAX_SEGMENTS = 128;
 
 type Style = { color: number; dashed: boolean };
 
 /**
  * Viewport layer of a World Builder recipe (plan v0.4 T36, T23): the reference
- * image laid flat over the ground it covers, the plan (settlements, road graph,
+ * image laid over the ground it covers (a grid of its own following the
+ * terrain height — a flat plane floated above the ridges, hid below a low
+ * camera and slid against the plan lines; the shared terrain shader is not
+ * touched), the plan (settlements, road graph,
  * water, regions, landmarks — low-confidence elements red, inferred ones
  * dashed) and the generated data (settlement cores, parcels by land use,
  * pads). Lines follow the ground; everything is drawn over the scene and never
@@ -214,20 +219,28 @@ export class WorldBuilderRecipeOverlay {
     if (this.texture.failed) return "error";
     if (!this.texture.texture) return "loading";
     const [width, depth] = reference.size;
-    let top = -Infinity;
-    for (let j = 0; j <= UNDERLAY_HEIGHT_SAMPLES; j += 1) {
-      for (let i = 0; i <= UNDERLAY_HEIGHT_SAMPLES; i += 1) {
-        const height = this.sampleHeight(reference.origin[0] + (width * i) / UNDERLAY_HEIGHT_SAMPLES, reference.origin[1] + (depth * j) / UNDERLAY_HEIGHT_SAMPLES);
-        if (height !== null) top = Math.max(top, height);
-      }
-    }
+    const columns = Math.max(1, Math.min(UNDERLAY_MAX_SEGMENTS, Math.round(width / UNDERLAY_CELL)));
+    const rows = Math.max(1, Math.min(UNDERLAY_MAX_SEGMENTS, Math.round(depth / UNDERLAY_CELL)));
     // Plane in XY, laid onto XZ: its top edge (the image's top row) goes to −Z, the reference's origin side.
-    const geometry = new PlaneGeometry(width, depth);
+    const geometry = new PlaneGeometry(width, depth, columns, rows);
     geometry.rotateX(-Math.PI / 2);
+    geometry.translate(reference.origin[0] + width / 2, 0, reference.origin[1] + depth / 2);
+    // Each grid corner takes the ground's height; off the terrain it keeps the lowest known one.
+    const position = geometry.getAttribute("position");
+    const heights = new Array<number | null>(position.count);
+    let lowest = Infinity;
+    for (let index = 0; index < position.count; index += 1) {
+      heights[index] = this.sampleHeight(position.getX(index), position.getZ(index));
+      if (heights[index] !== null) lowest = Math.min(lowest, heights[index]!);
+    }
+    for (let index = 0; index < position.count; index += 1) {
+      position.setY(index, (heights[index] ?? (Number.isFinite(lowest) ? lowest : 0)) + UNDERLAY_LIFT);
+    }
+    position.needsUpdate = true;
+    geometry.computeBoundingSphere();
     const mesh = new Mesh(geometry, new MeshBasicMaterial({
       map: this.texture.texture, transparent: true, opacity: options.opacity, depthTest: false, depthWrite: false, side: DoubleSide,
     }));
-    mesh.position.set(reference.origin[0] + width / 2, (Number.isFinite(top) ? top : 0) + UNDERLAY_LIFT, reference.origin[1] + depth / 2);
     mesh.renderOrder = 26;
     mesh.raycast = () => {};
     this.group.add(mesh);

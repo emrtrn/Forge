@@ -37,9 +37,12 @@ export async function registerLakeQualityTests(check: Check): Promise<void> {
     const f = fixture(), original = structuredClone(f.lake);
     const low = resolveLakeAppearance(qualityLake(f.lake, q("low")));
     assert.equal(low.foamEnabled, false); assert.equal(low.shoreWetnessEnabled, false);
-    assert.equal(low.causticsEnabled, false); assert.equal(low.reflectionMode, "off");
+    assert.equal(low.causticsEnabled, false);
+    // A tier ceiling drops the planar capture (Low borrows the sky) but keeps the authored mode.
+    assert.equal(low.reflectionMode, original.appearance!.reflectionMode); assert.equal(low.reflectionQuality, "low");
     const medium = resolveLakeAppearance(qualityLake(f.lake, q("medium")));
-    assert.equal(medium.foamEnabled, true); assert.equal(medium.causticsEnabled, false); assert.equal(medium.reflectionMode, "off");
+    assert.equal(medium.foamEnabled, true); assert.equal(medium.causticsEnabled, false);
+    assert.equal(medium.reflectionMode, original.appearance!.reflectionMode); assert.equal(medium.reflectionQuality, "low");
     assert.equal(resolveLakeAppearance(qualityLake(f.lake, q("high"))).reflectionQuality, "medium");
     assert.deepEqual(f.lake, original, "the profile layer never writes authored settings");
     f.lake.appearance!.reflectionQuality = "medium";

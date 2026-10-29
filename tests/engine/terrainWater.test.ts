@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { TerrainWaterState, terrainWaterRenderDepth, TERRAIN_WATER_MAX_IMPULSES, TERRAIN_WATER_MAX_RIPPLES, TERRAIN_WATER_RIPPLE_LIFETIME, type TerrainWaterContact } from "../../engine/render-three/terrain/terrainWaterState";
 import { TerrainWater, setTerrainWaterQuality } from "../../engine/render-three/terrain/terrainWater";
 import { normalizeGraphicsPreferences, QUALITY_PROFILES } from "../../engine/perf/qualityProfiles";
-import { BoxGeometry, Mesh, MeshBasicMaterial, OrthographicCamera, PerspectiveCamera, Scene, Vector4, WebGLRenderTarget, type WebGLRenderer } from "three";
+import { BoxGeometry, Color, Mesh, MeshBasicMaterial, OrthographicCamera, PerspectiveCamera, Scene, Vector4, WebGLRenderTarget, type WebGLRenderer } from "three";
 import { applyPlanarObliqueClip, isPlanarReflectionCamera, PlanarReflectionSource } from "../../engine/render-three/planarReflectionSource";
 
 const contact = (patch: Partial<TerrainWaterContact> = {}): TerrainWaterContact => ({ id: "wheel", x: 0, y: 3,
@@ -177,10 +177,15 @@ export function registerTerrainWaterTests(check: (name: string, fn: () => void) 
     let calls = 0;
     const fake = { xr: { enabled: true }, shadowMap: { autoUpdate: true }, toneMapping: 4, autoClear: true,
       getRenderTarget: () => current, setRenderTarget: (value: WebGLRenderTarget) => { current = value; },
+      clearColor: 0x336699, clearAlpha: 1,
+      getClearColor(color: Color) { return color.setHex(this.clearColor); },
+      getClearAlpha() { return this.clearAlpha; },
+      setClearColor(color: Color | number, alpha: number) { this.clearColor = typeof color === "number" ? color : color.getHex(); this.clearAlpha = alpha; },
       state: { buffers: { depth: { setMask: () => {} } } },
       render: (_scene: Scene, nested: PerspectiveCamera) => {
         calls++; assert.ok(isPlanarReflectionCamera(nested)); assert.equal(proxy.visible, false);
         assert.equal(nested.reversedDepth, camera.reversedDepth);
+        assert.equal(fake.clearAlpha, 0, "planar capture clears to transparent black");
         if (calls === 1) secondary.update(fake, new Scene(), nested);
       },
     } as unknown as WebGLRenderer;
@@ -190,6 +195,7 @@ export function registerTerrainWaterTests(check: (name: string, fn: () => void) 
       assert.equal(calls, 1); assert.equal(source.hasCapture, true);
       assert.equal(proxy.visible, true); assert.equal(current, target);
       assert.equal(fake.xr.enabled, true); assert.equal(fake.shadowMap.autoUpdate, true); assert.equal(fake.toneMapping, 4);
+      assert.equal(fake.clearColor, 0x336699); assert.equal(fake.clearAlpha, 1, "the renderer's clear colour is restored");
       const image = source.binding.texture;
       source.setPlaneHeight(0.1);
       assert.equal(source.hasCapture, false); assert.equal(source.binding.texture, image, "elevation changes reuse the GPU target");

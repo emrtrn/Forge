@@ -10,10 +10,11 @@
  * order would leave generated objects looking manual, blocking the stage and
  * outliving their plan element.
  *
- * The recipe's generated data — for now each settlement's core — is drawn
- * in the viewport as a layer the host keeps in step with the recipe (load,
- * apply, undo/redo and any history step, since a terrain edit moves the ground
- * it follows); the panel can hide it.
+ * The recipe is drawn in the viewport as a layer (T36, T23): its reference
+ * image laid over the ground, its plan and its generated data. The host keeps
+ * it in step with the recipe (load, apply, undo/redo and any history step,
+ * since a terrain edit moves the ground it follows); the panel switches its
+ * parts. Setting the reference image is an undoable recipe edit.
  *
  * A dry run that touches an object is also shown in the viewport (T10):
  * the session builds the preview and the host draws it. Apply accepts it,
@@ -24,7 +25,14 @@ import type { EditorCommand } from "@editor/core/history";
 import type { RoomLayout } from "@engine/scene/layout";
 import type { TerrainPad } from "@engine/terrain/terrainPads";
 import { PAD_FALLOFF } from "@engine/worldbuilder/buildings";
-import { createWorldRecipe, normalizeWorldRecipe, worldRecipePath, type GeneratedPad, type WorldRecipe } from "@engine/worldbuilder/recipe";
+import {
+  createWorldRecipe,
+  normalizeWorldRecipe,
+  worldRecipePath,
+  type GeneratedPad,
+  type WorldRecipe,
+  type WorldReference,
+} from "@engine/worldbuilder/recipe";
 import { normalizeRegionProfile, type RegionProfile } from "@engine/worldbuilder/regionProfile";
 import {
   planStage,
@@ -38,6 +46,12 @@ import { createDefaultWorldStages } from "@engine/worldbuilder/stages";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { SaveRevision, type EditorSaveStep } from "./editorSaveCoordinator";
 import { gameProgramExtensions } from "./gameEditorRegistry";
+import {
+  DEFAULT_RECIPE_LAYER_OPTIONS,
+  EMPTY_RECIPE_LAYER_COUNTS,
+  type RecipeLayerCounts,
+  type RecipeLayerOptions,
+} from "./worldBuilderLayer";
 import { buildStagePreview, type PreviewItem, type StagePreview } from "./worldBuilderPreview";
 
 export interface WorldBuilderHost {
@@ -54,8 +68,11 @@ export interface WorldBuilderHost {
   applySplineChanges(changes: readonly TerrainSplineChange[], side: "before" | "after"): void;
   /** Bakes pads into the terrains under them as undoable terrain commands, and reports. */
   applyPads(pads: readonly TerrainPad[]): Promise<void>;
-  /** Draws the recipe's generated layer (null clears it); returns how many settlement cores it drew. */
-  showRecipeLayer(recipe: WorldRecipe | null): number;
+  /**
+   * Draws the recipe layer (null clears it) and returns what it drew. An
+   * underlay image loads later; the host then calls `layerRedrawn`.
+   */
+  showRecipeLayer(recipe: WorldRecipe | null, options: RecipeLayerOptions): RecipeLayerCounts;
   /** Draws a dry run's preview in the viewport (null clears it); returns how many items it drew. */
   showPreview(preview: StagePreview | null): number;
   /** Frames one preview item, or the whole preview when `item` is null. */
@@ -91,8 +108,9 @@ export interface WorldBuilderView {
   lastPlan: StagePlan | null;
   /** The dry run shown in the viewport, and how many of its items were drawn. */
   preview: { preview: StagePreview; drawn: number } | null;
-  /** The recipe layer in the viewport: shown or hidden, and how many cores it drew. */
-  layer: { visible: boolean; drawn: number };
+  /** The recipe layer in the viewport: what it shows and what it drew. */
+  layer: { options: RecipeLayerOptions; counts: RecipeLayerCounts };
+  reference: WorldReference | null;
 }
 
 type Fetcher = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -108,7 +126,10 @@ export class WorldBuilderSession {
   private profileView: WorldBuilderView["profile"] = null;
   private lastPlan: StagePlan | null = null;
   private preview: { preview: StagePreview; drawn: number } | null = null;
-  private layer = { visible: true, drawn: 0 };
+  private layerOptions: RecipeLayerOptions = { ...DEFAULT_RECIPE_LAYER_OPTIONS };
+  private layerCounts: RecipeLayerCounts = { ...EMPTY_RECIPE_LAYER_COUNTS };
+  /** Called when the view changed outside a panel action (an underlay finished loading). */
+  onChange: (() => void) | null = null;
   private loadedFor = "";
 
   constructor(
@@ -152,13 +173,51 @@ export class WorldBuilderSession {
 
   /** Redraws the recipe layer, e.g. after the ground under it changed. */
   refreshLayer(): void {
-    this.layer.drawn = this.host.showRecipeLayer(this.layer.visible ? this.recipe : null);
+    this.layerCounts = this.host.showRecipeLayer(this.recipe, { ...this.layerOptions });
   }
 
-  /** Shows or hides the recipe layer. */
-  toggleLayer(): void {
-    this.layer.visible = !this.layer.visible;
+  /** The host redrew the layer on its own (an underlay image loaded or failed). */
+  layerRedrawn(counts: RecipeLayerCounts): void {
+    this.layerCounts = counts;
+    this.onChange?.();
+  }
+
+  /** Switches parts of the recipe layer or its underlay opacity. A viewer setting: not saved, not undone. */
+  setLayerOptions(options: Partial<RecipeLayerOptions>): void {
+    const opacity = options.opacity === undefined ? this.layerOptions.opacity : Math.min(1, Math.max(0, options.opacity));
+    this.layerOptions = { ...this.layerOptions, ...options, opacity };
     this.refreshLayer();
+  }
+
+  /**
+   * Sets (or with null removes) the recipe's reference image as one undo step.
+   * Refused with a status when the recipe normalizer rejects it.
+   */
+  setReference(reference: WorldReference | null): boolean {
+    if (!this.recipe) {
+      this.host.onStatus("Create or load a world recipe first.", "warning");
+      return false;
+    }
+    const before = structuredClone(this.recipe);
+    const after = structuredClone(this.recipe);
+    if (reference) after.reference = structuredClone(reference);
+    else delete after.reference;
+    const { recipe: checked, issues } = normalizeWorldRecipe(JSON.parse(JSON.stringify(after)));
+    const problems = issues.filter((entry) => entry.startsWith("reference"));
+    if (!checked || problems.length > 0) {
+      this.host.onStatus(`Reference not set: ${problems[0] ?? "the recipe would not be valid"}.`, "error");
+      return false;
+    }
+    if (JSON.stringify(checked.reference ?? null) === JSON.stringify(before.reference ?? null)) return false;
+    const next = structuredClone(this.recipe);
+    if (checked.reference) next.reference = checked.reference;
+    else delete next.reference;
+    this.host.executeCommand({
+      label: reference ? "World Builder: set reference" : "World Builder: remove reference",
+      redo: () => this.setRecipe(structuredClone(next)),
+      undo: () => this.setRecipe(structuredClone(before)),
+    });
+    return true;
   }
 
   /** Re-reads the recipe from disk, e.g. after an AI rewrote it. Refuses over unsaved edits. */
@@ -301,7 +360,8 @@ export class WorldBuilderSession {
       })),
       lastPlan: this.lastPlan,
       preview: this.preview,
-      layer: { ...this.layer },
+      layer: { options: { ...this.layerOptions }, counts: { ...this.layerCounts } },
+      reference: recipe?.reference ? structuredClone(recipe.reference) : null,
     };
   }
 

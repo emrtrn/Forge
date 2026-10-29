@@ -1424,13 +1424,17 @@ export class SceneApp {
     terrains: () => this.worldBuilderTerrains(),
     applySplineChanges: (changes, side) => this.applyWorldBuilderSplineChanges(changes, side),
     applyPads: (pads) => this.applyWorldBuilderPads(pads),
-    showRecipeLayer: (recipe) => this.worldBuilderRecipeLayer.show(recipe),
+    showRecipeLayer: (recipe, options) => this.worldBuilderRecipeLayer.show(recipe, options),
     showPreview: (preview) => this.worldBuilderPreview.show(preview),
     focusPreview: (preview, item) => this.focusWorldBuilderPreview(preview, item),
     onStatus: (message, tone) => this.onStatus?.(message, tone),
   });
-  /** Viewport layer of the World Builder recipe's generated data (settlement cores). */
-  private readonly worldBuilderRecipeLayer = new WorldBuilderRecipeOverlay((x, z) => this.worldTerrainHeightAt(x, z));
+  /** Viewport layer of the World Builder recipe: reference underlay, plan and generated data. */
+  private readonly worldBuilderRecipeLayer = new WorldBuilderRecipeOverlay(
+    (x, z) => this.worldTerrainHeightAt(x, z),
+    (path) => projectFileUrl(path),
+    (counts) => this.worldBuilder.layerRedrawn(counts),
+  );
   /** Viewport layer of the last World Builder dry run (T10). */
   private readonly worldBuilderPreview = new WorldBuilderPreviewOverlay((assetId) => {
     // Shape bounds come from the procedural model, which a level without that shape has not built yet.

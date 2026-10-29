@@ -10,6 +10,7 @@ import {
   normalizeWorldRecipe,
   worldRecipePath,
 } from "../../engine/worldbuilder/recipe";
+import { referenceBounds, referenceToWorld, worldToReference } from "../../engine/worldbuilder/reference";
 import { collectDroppedFields } from "../../tools/droppedFields";
 import { validateSaveWorldRecipePayload } from "../../tools/saveValidator";
 
@@ -81,6 +82,16 @@ function issuesOf(recipe: Record<string, unknown>): string[] {
 }
 
 export function registerWorldRecipeTests(check: Check): void {
+  check("world recipe: a reference maps image points to the world, top-left at its origin, down = +Z (WB-13)", () => {
+    const reference = { origin: [-200, -100] as [number, number], size: [400, 200] as [number, number] };
+    assert.deepEqual(referenceToWorld(reference, [0, 0]), [-200, -100]);
+    assert.deepEqual(referenceToWorld(reference, [1, 1]), [200, 100]);
+    assert.deepEqual(referenceToWorld(reference, [0.25, 0.5]), [-100, 0]);
+    assert.deepEqual(worldToReference(reference, [-100, 0]), [0.25, 0.5]);
+    assert.deepEqual(worldToReference(reference, [300, -150]), [1.25, -0.25], "off the image is outside 0..1");
+    assert.deepEqual(referenceBounds(reference), { min: [-200, -100], max: [200, 100] });
+  });
+
   check("world recipe: sidecar path follows the level naming rule", () => {
     assert.equal(worldRecipePath("assets/starter-content/Levels/Valley.level.json"), "assets/starter-content/Levels/Valley.worldrecipe.json");
     assert.equal(worldRecipePath("/layouts/playground.json"), "layouts/playground.worldrecipe.json");

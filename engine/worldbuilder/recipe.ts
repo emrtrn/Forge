@@ -78,7 +78,11 @@ export interface PlanProvenance {
   confidence?: number;
 }
 
-/** A reference image laid over the world: its top-left corner and extent in metres. */
+/**
+ * A reference image laid over the world: the world point under its top-left
+ * corner and the extent it covers, metres. Image right is +X, image down is +Z
+ * (`reference.ts` maps normalised image points to the world).
+ */
 export interface WorldReference {
   /** Public-root-relative image path. */
   image?: string;

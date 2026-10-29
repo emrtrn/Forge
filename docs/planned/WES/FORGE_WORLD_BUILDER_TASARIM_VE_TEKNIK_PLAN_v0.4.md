@@ -100,7 +100,7 @@
 | Placement kimliği | `[KOD]` **MEVCUT** (2026-10-28, F1 adım 1): `LayoutPlacement.id?` + `role?`, `engine/scene/placementIdentity.ts`, `validatePlacement` (layout içinde tekil), çoğaltma yeni `id` alır, `tests/engine/placementIdentity.test.ts`. v0.4 bulgusu, öncesi: | `LayoutPlacement` (`engine/scene/layout.ts`) `id` taşımaz; placement'lar `LayoutModelInstances { assetId, placements[] }` altında asset'e göre gruplanır. Yalnız ebeveyn olunca `nodeId` alır. Editör seçim kimlikleri indeks tabanlıdır (`editor/core/sceneObjects.ts`). Light, Blocking Volume, Landscape gibi actor'lerde `id` var. → Placeholder → model değişimi placement'ı başka bir asset grubuna taşır; kimlik için yeni alan gerekir (§13.4) |
 | Primitive şekiller | `[KOD]` MEVCUT | `engine/scene/shapes.ts`: `shape:cube/sphere/cylinder/cone/plane` sentetik asset id'li sıradan placement. → Yapı placeholder'ının doğal biçimi (§13.4) |
 | Blockout fırçası | `[KOD]` MEVCUT | `LayoutBlockingVolume`: box/cylinder/cone/sphere, `color`, `renderInGame`, `id`. → Elle blockout için uygun; üretilen yapı için değil (§13.4) |
-| Referans görseli altlığı, OSM içe aktarma | YOK | Kodda `underlay`/`referenceImage`/OSM yok. → T36, T37 (§4.5) |
+| Referans görseli altlığı + plan katmanı (gösterim) | `[KOD]` **MEVCUT** (2026-10-29, F1 adım 15; T36 gösterimi, T23'ün semantik katmanı) | Kullanıcı kararları: altlık arazinin üstünde **düz, derinliksiz** bir doku düzlemi (terrain shader'ına dokunulmaz; perspektif görsel yatırılmaz, durum `perspective`), düşük güven sabit `confidence < 0,5`, test görseli nötr yer tutucu PNG (`tests/smoke/fixtures/reference-underlay.png`, renkli köşeler yönü gösterir), **elle düzeltme ayrı dilim (15b, YOK)**, maske gösterimi sonraya. Konvansiyon: `reference.origin` görselin sol üst köşesinin dünya noktası, görselde sağ = +X, aşağı = +Z (editörün tepeden görünümü); `engine/worldbuilder/reference.ts` (`referenceToWorld`/`worldToReference`, T35 de kullanır). `src/scene/worldBuilderRecipeOverlay.ts`: altlık + plan (yerleşim merkezi/yarıçap/sınır beyaz, yol grafı turuncu, su mavi, bölge camgöbeği, işaret pembe; düşük güven kırmızı, `observed: false` kesikli) + üretilen (çekirdek sarı, parsel arazi kullanımı renginde, ped açık gri); çizgiler zemini izler, seçilemez. Panel 'Viewport Layers': üç parça aç/kapa + altlık saydamlığı (izleyici ayarı, tarayıcı deposu; recipe'ye girmez, undo değil), referans formu (görsel yolu, sol üst, boyut, görünüm) = tek undo adımı, normalizer reddederse durum mesajı. Smoke WB-13 (`world-builder.spec.ts`: altlık `shown`, plan 8 öğe / 1 düşük güven, aç/kapa, formdan ayar + undo). OSM içe aktarma YOK → T37 |
 
 > **Deformasyon terimleri** (v0.2 uyarısı korunur, durumla):
 > - (1) Editörde yükseklik değiştirme: MEVCUT.
@@ -292,7 +292,7 @@ Terrain tarafında kirli bölge ve undo patch altyapısı mevcuttur (`engine/ter
 | **T20** | Exclusion / Clearance Volumes | YENİ → maske **MEVCUT** (F1 adım 7, `engine/worldbuilder/masks.ts`); hacim/giriş önü yok | Foliage ve placement için ortak hacim/maske |
 | **T21** | Road & Building Conform | KISMİ | Spline deform (yol) MEVCUT; bina pedi MEVCUT (F1 adım 12b veri `recipe.generated.pads`, 12c elle Apply Pads bake + undo, `engine/terrain/terrainPads.ts`); yeniden üretilebilir deform katmanı YOK. Ped modeli `[AÇIK]` (§13.10) |
 | **T22** | Actor/Navigation Authoring | KISMİ | AI nav volume, grid nav (`MAX_GRID_CELLS = 20000`), spline path follower; tile'lı nav OPEN_WORLD Faz 9 |
-| **T23** | World Overview / Debug Map | KISMİ | World Partition paneli + minimap (`worldMapView.ts`). Semantik katmanlar (POI, yol grafı, hata) YENİ |
+| **T23** | World Overview / Debug Map | KISMİ | World Partition paneli + minimap (`worldMapView.ts`). Viewport'ta semantik katman (plan: POI, yerleşim, yol grafı, su, bölge; üretilen: çekirdek, parsel, ped) **MEVCUT** (F1 adım 15, §0.1); harita görünümünde semantik katman ve hata katmanı YENİ |
 
 ### 4.3. P2 — Görsel kalite, ölçek, otomasyon
 
@@ -333,7 +333,7 @@ P0/P1/P2 takvim değildir. Sıra, F1 prototipinden sonra yeniden değerlendirili
 |---|---|---|---|
 | **T34** | Region Profile | YENİ | `*.regionprofile.json` şeması + normalizer; yol/parsel/imar/program/rol tabloları (§13.4). Fork verisi; motor kültürel veri taşımaz |
 | **T35** | Reference Image Interpreter | YENİ | AI (Claude görsel) dünya görselinden Semantic World Plan taslağı yazar; editör dışında (§13.2) |
-| **T36** | Reference Underlay | YENİ | Görseli editörde araziye tepeden yatırır, plan katmanını üstüne çizer; hibrit düzeltmenin yüzeyi (§13.2) |
+| **T36** | Reference Underlay | YENİ → gösterim **MEVCUT** (F1 adım 15: düz altlık + plan katmanı + referans formu; §0.1); elle plan düzeltme (15b) YENİ | Görseli editörde araziye tepeden yatırır, plan katmanını üstüne çizer; hibrit düzeltmenin yüzeyi (§13.2) |
 | **T37** | OSM Import & Scale | YENİ | `tools/` altında dev-time; yol grafı, bina izi, arazi kullanımı, donatı; topoloji ölçeklenir, ölçüler bölge profilinden gelir (§13.6) |
 | **T38** | Road Graph | YENİ | Topoloji verisi (düğüm/kenar/sınıf); spline'lar bundan üretilir (§5.2'deki "bağlantı grafı") |
 | **T39** | Land-Use Allocator | YENİ → **MEVCUT** (F1 adım 11: `engine/worldbuilder/landUse.ts`, aşama `landUse`; büyük rol için parsel birleştirme `partOf`) | Parsellere rol dağıtımı: program + puan + uyumluluk tablosu (§13.5) |
@@ -577,7 +577,7 @@ Doğrulama sonucu | Manuel override korundu mu (sayı)
 |---|---|---|---|
 | **F0 — Envanter** | Mevcut araçların gerçek kapasitesi | §0.1 ve §4 | **Bu belgeyle büyük ölçüde kapandı.** Kalan: T04/T07/T09 API ayrıntıları F1 başında |
 | **F1 — Recipe çekirdeği** | Şema (`settlements`/`roadGraph`/`regionProfile` alanlarının yeri dahil), sahiplik kaydı, `LayoutPlacement.id`, tek stage'li runner (`roads`), dry-run, tek undo, `inspectCapabilities` | Aynı recipe güvenle tekrar çalışıyor (WB-01/02/08) | Sıradaki |
-| **F1b — Referanstan plan** (v0.4) | Semantic World Plan şeması, görsel yorumlayıcı (T35), Reference Underlay + plan katmanı (T36), üç test görseli | AI planı görselin üstünde doğru yerde; kullanıcı editörde düzeltebiliyor (WB-13) | F1 ile paralel başlayabilir |
+| **F1b — Referanstan plan** (v0.4) | Semantic World Plan şeması, görsel yorumlayıcı (T35), Reference Underlay + plan katmanı (T36), üç test görseli | AI planı görselin üstünde doğru yerde; kullanıcı editörde düzeltebiliyor (WB-13) | Şema (recipe `plan` + kaynak/güven) ve T36 gösterimi MEVCUT (adım 15); elle düzeltme (15b), T35 ve test görselleri (karar 16) açık |
 | **F2 — Terrain + Roads + Water** | 03/04/05/07 stage'leri mevcut araçlarla; makro arazi plan bölgelerinden | Test level'ı tekrar üretilebilir; dikişler geçerli (WB-03/04/05) | — |
 | **F3a — Yol ağı** (v0.4) | Yol grafı (T38), maliyet haritası + rota çözücü (T14), T/Y kavşak (T15), geçit placeholder'ı (T16) | Hedefler bağlı, eğim/dönüş profile uygun (WB-03/06) | — |
 | **F3b — Yerleşim** (v0.4) | Bölge profili (T34), yer seçimi + program + ada/parsel (T18), arazi kullanımı (T39), rol placeholder'ı (T40), ped (T21) | WB-06/09/14/15/16/17 | — |

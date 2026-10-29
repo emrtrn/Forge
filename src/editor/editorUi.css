@@ -867,8 +867,20 @@
 .world-builder-swatch-removed { background: #ef5350; }
 .world-builder-swatch-kept { background: #5dade2; }
 .world-builder-swatch-blocked { background: #c06cff; }
-/* Recipe layer; matches WorldBuilderRecipeOverlay's CORE_COLOR. */
+/* Recipe layer; matches WorldBuilderRecipeOverlay's LAYER_COLORS. */
 .world-builder-swatch-core { background: #ffd166; }
+.world-builder-swatch-settlement { background: #ffffff; }
+.world-builder-swatch-road { background: #ff9f43; }
+.world-builder-swatch-water { background: #4aa3ff; }
+.world-builder-swatch-region { background: #4fd1c5; }
+.world-builder-swatch-landmark { background: #ff8fab; }
+.world-builder-swatch-low { background: #ff5c5c; }
+.world-builder-swatch-pad { background: #e0e0e0; }
+.world-builder-legend { font-size: 11px; }
+.world-builder-row { display: flex; align-items: center; gap: 6px; }
+.world-builder-row input[type="number"] { width: 72px; }
+.world-builder-row input[type="text"] { flex: 1; min-width: 0; }
+.world-builder-reference { display: grid; gap: 4px; margin-top: 6px; font-size: 12px; }
 .world-partition-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
 .world-partition-summary strong { color: var(--forge-text); font-weight: 600; }
 .world-partition-map {

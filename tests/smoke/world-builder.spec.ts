@@ -333,13 +333,14 @@ test("World Builder village: the settlement chain places coloured buildings and 
     await expect(page.getByTestId("world-builder-report")).not.toContainText("Errors");
   }
   await expect(page.getByTestId("world-builder-apply-pads")).toBeEnabled();
-  // The recipe layer draws the village's grown core (data-drawn is the overlay's own count).
-  const layer = page.getByTestId("world-builder-layer");
-  await expect(layer).toHaveAttribute("data-drawn", "1");
-  await page.getByTestId("world-builder-layer-toggle").click();
-  await expect(layer).toHaveAttribute("data-drawn", "0");
-  await page.getByTestId("world-builder-layer-toggle").click();
-  await expect(layer).toHaveAttribute("data-drawn", "1");
+  // The recipe layer draws the village's grown core and its parcels (the overlay's own counts).
+  const generated = page.getByTestId("world-builder-layer-generated");
+  await expect(generated).toHaveAttribute("data-cores", "1");
+  expect(Number(await generated.getAttribute("data-parcels"))).toBeGreaterThan(5);
+  await page.getByTestId("world-builder-layer-toggle-generated").click();
+  await expect(generated).toHaveAttribute("data-cores", "0");
+  await page.getByTestId("world-builder-layer-toggle-generated").click();
+  await expect(generated).toHaveAttribute("data-cores", "1");
   await page.getByTestId("world-builder-apply-pads").click();
   // The bake is async (tile demand); wait for it, or fences would read the ground before it.
   await expect(page.getByTestId("editor-status")).toContainText("Pads applied", { timeout: 30_000 });
@@ -385,5 +386,70 @@ test("World Builder village: the settlement chain places coloured buildings and 
     await page.getByTestId(`world-builder-dry-run-${stage}`).click();
     await expect(page.getByTestId("world-builder-report")).toContainText("Up to date");
   }
+  expect(errors).toEqual([]);
+});
+
+const REFERENCE_LEVEL = "layouts/__playwright-world-builder-reference.level.json";
+const REFERENCE_IMAGE = "layouts/__playwright-world-builder-reference.png";
+
+test("World Builder reference: the underlay and the plan layer draw, switch, and the reference is an undoable recipe edit (WB-13)", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
+
+  const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
+  await writeJson(REFERENCE_LEVEL, { ...base, name: "__playwright-world-builder-reference" });
+  await writeFileIn(REFERENCE_IMAGE, await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/reference-underlay.png")));
+  const recipe = createWorldRecipe("playwright_world_builder_reference", 3);
+  recipe.reference = { image: REFERENCE_IMAGE, origin: [-40, -40], size: [80, 80], view: "topDown" };
+  // Eight plan elements; the hamlet is inferred with low confidence (red, dashed).
+  recipe.plan.settlements.push(
+    { id: "village", source: "reference", observed: true, confidence: 0.8, center: [-10, -10], radius: 15, type: "village" },
+    { id: "hamlet", source: "reference", observed: false, confidence: 0.3, center: [20, 20], type: "hamlet" },
+  );
+  recipe.plan.landmarks.push({ id: "depot", source: "reference", observed: true, confidence: 0.7, kind: "logistics.depot", position: [25, -25] });
+  recipe.plan.roadGraph.nodes.push(
+    { id: "a", source: "reference", position: [-35, -10], kind: "end" },
+    { id: "b", source: "reference", position: [35, 20], kind: "end" },
+  );
+  recipe.plan.roadGraph.edges.push({ id: "main", source: "reference", from: "a", to: "b", roadClass: "local", guide: [[-10, 0], [10, 5]] });
+  recipe.plan.water.push({ id: "creek", source: "reference", kind: "stream", path: [[-40, 30], [40, 35]] });
+  recipe.plan.regions.push({ id: "forest", source: "reference", kind: "forest.conifer", polygon: [[10, -35], [35, -35], [35, -10]] });
+  await writeJson(worldRecipePath(REFERENCE_LEVEL), recipe);
+  expect((await request.post("/__open-level", { data: { path: REFERENCE_LEVEL } })).ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.clear());
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/?editor&worldBuilderReference=${Date.now()}`);
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("world-builder-tab").click();
+  await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_reference", { timeout: 30_000 });
+  await expect(page.getByTestId("world-builder-panel")).not.toContainText("Load issues");
+
+  const underlay = page.getByTestId("world-builder-layer-underlay");
+  const plan = page.getByTestId("world-builder-layer-plan");
+  await expect(underlay).toHaveAttribute("data-state", "shown", { timeout: 15_000 });
+  await expect(plan).toHaveAttribute("data-drawn", "8");
+  await expect(plan).toHaveAttribute("data-low", "1");
+  await page.getByTestId("world-builder-layer-toggle-underlay").click();
+  await expect(underlay).toHaveAttribute("data-state", "hidden");
+  await page.getByTestId("world-builder-layer-toggle-underlay").click();
+  await expect(underlay).toHaveAttribute("data-state", "shown");
+  await page.getByTestId("world-builder-layer-toggle-plan").click();
+  await expect(plan).toHaveAttribute("data-drawn", "0");
+  await page.getByTestId("world-builder-layer-toggle-plan").click();
+  await expect(plan).toHaveAttribute("data-drawn", "8");
+  await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+
+  // The reference is a recipe edit: set from the form, one undo step.
+  await page.getByTestId("world-builder-reference-size-x").fill("120");
+  await page.getByTestId("world-builder-reference-view").selectOption("perspective");
+  await page.getByTestId("world-builder-reference-set").click();
+  await expect(page.getByTestId("world-builder-recipe")).toContainText("unsaved");
+  await expect(underlay).toHaveAttribute("data-state", "perspective");
+  await expect(page.getByTestId("world-builder-reference-size-x")).toHaveValue("120");
+  await page.getByTestId("editor-undo").click();
+  await expect(underlay).toHaveAttribute("data-state", "shown");
+  await expect(page.getByTestId("world-builder-reference-size-x")).toHaveValue("80");
   expect(errors).toEqual([]);
 });

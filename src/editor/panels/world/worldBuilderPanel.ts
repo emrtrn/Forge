@@ -1,4 +1,6 @@
+import type { WorldReference } from "@engine/worldbuilder/recipe";
 import type { StagePlan } from "@engine/worldbuilder/stage";
+import type { RecipeLayerOptions, UnderlayState } from "@/editor/worldBuilderLayer";
 import { PREVIEW_CHANGES, previewItemDrawable, type PreviewChange, type PreviewItem } from "@/editor/worldBuilderPreview";
 import type { WorldBuilderSession, WorldBuilderView } from "@/editor/worldBuilderSession";
 
@@ -6,6 +8,8 @@ import type { WorldBuilderSession, WorldBuilderView } from "@/editor/worldBuilde
 const LISTED_IDS = 8;
 /** At most this many rows per change in the preview list; the rest are counted. */
 const LISTED_CHANGES = 40;
+/** Per-viewer layer switches and underlay opacity (browser storage; never in the recipe). */
+const LAYER_STORAGE_KEY = "forge.worldBuilder.layers";
 
 export interface WorldBuilderPanelOptions {
   body: HTMLElement;
@@ -18,6 +22,8 @@ export interface WorldBuilderPanelOptions {
  * Apply is one undo step; the recipe is written by Save Layout. A dry run with
  * changes is drawn in the viewport (T10) and listed by change; a row frames
  * its object, Focus frames them all and Clear Preview drops the drawing.
+ * Viewport Layers switch the recipe layer's parts (reference image, plan,
+ * generated data) and set the reference image (an undoable recipe edit).
  */
 export class WorldBuilderPanel {
   constructor(private readonly options: WorldBuilderPanelOptions) {
@@ -26,6 +32,16 @@ export class WorldBuilderPanel {
       if (!button || button.disabled) return;
       void this.run(button.dataset.wbAction ?? "", button.dataset.wbStage ?? "", button.dataset.wbId);
     });
+    // Live while dragging, without redrawing the panel under the slider.
+    options.body.addEventListener("input", (event) => {
+      const slider = (event.target as HTMLElement).closest<HTMLInputElement>("input[data-wb-opacity]");
+      if (!slider) return;
+      options.session.setLayerOptions({ opacity: Number(slider.value) });
+      this.storeLayerOptions();
+    });
+    const stored = readLayerOptions();
+    if (stored) options.session.setLayerOptions(stored);
+    options.session.onChange = () => this.update();
   }
 
   update(): void {
@@ -40,18 +56,62 @@ export class WorldBuilderPanel {
     else if (action === "apply") session.apply(stageId);
     else if (action === "apply-pads") await session.applyPads();
     else if (action === "preview-clear") session.clearPreview();
-    else if (action === "layer-toggle") session.toggleLayer();
+    else if (action === "layer-toggle") {
+      const part = id as "underlay" | "plan" | "generated";
+      session.setLayerOptions({ [part]: !session.getView().layer.options[part] });
+      this.storeLayerOptions();
+    } else if (action === "reference-set") {
+      const reference = this.readReferenceForm();
+      if (reference) session.setReference(reference);
+    } else if (action === "reference-remove") session.setReference(null);
     else if (action === "preview-focus") {
       session.focusPreview(id);
       return;
     }
     this.update();
   }
+
+  private readReferenceForm(): WorldReference | null {
+    const field = (name: string) => this.options.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-ref="${name}"]`)?.value.trim() ?? "";
+    const number = (name: string) => Number(field(name));
+    const image = field("image");
+    const reference: WorldReference = {
+      origin: [number("origin-x"), number("origin-z")],
+      size: [number("size-x"), number("size-z")],
+      ...(image ? { image } : {}),
+    };
+    const view = field("view");
+    if (view === "topDown" || view === "perspective") reference.view = view;
+    return reference;
+  }
+
+  private storeLayerOptions(): void {
+    try {
+      localStorage.setItem(LAYER_STORAGE_KEY, JSON.stringify(this.options.session.getView().layer.options));
+    } catch {
+      // Storage may be unavailable (private window); the switches then last this session.
+    }
+  }
+}
+
+function readLayerOptions(): Partial<RecipeLayerOptions> | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY) ?? "null") as unknown;
+    if (!value || typeof value !== "object") return null;
+    const stored = value as Record<string, unknown>;
+    const options: Partial<RecipeLayerOptions> = {};
+    for (const key of ["underlay", "plan", "generated"] as const) if (typeof stored[key] === "boolean") options[key] = stored[key] as boolean;
+    if (typeof stored.opacity === "number" && Number.isFinite(stored.opacity)) options.opacity = stored.opacity;
+    return options;
+  } catch {
+    return null;
+  }
 }
 
 function renderView(view: WorldBuilderView): string {
   return `<div class="world-builder-panel" data-testid="world-builder-panel">
     ${renderRecipe(view)}
+    ${view.state === "loaded" ? renderLayers(view) : ""}
     ${view.state === "loaded" ? renderStages(view) : ""}
     ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null) : ""}
     ${view.preview ? renderPreview(view.preview.preview.items, view.preview.drawn) : ""}
@@ -78,7 +138,6 @@ function renderRecipe(view: WorldBuilderView): string {
       ${counts}
       ${profile}
       ${renderList("Load issues", view.issues, "world-builder-error")}
-      ${view.state === "loaded" ? renderLayer(view.layer) : ""}
     </div>
     <div class="world-builder-actions">
       ${view.state === "missing" || view.state === "invalid" ? '<button type="button" data-wb-action="create" data-testid="world-builder-create">Create Recipe</button>' : ""}
@@ -87,11 +146,60 @@ function renderRecipe(view: WorldBuilderView): string {
   </div>`;
 }
 
-function renderLayer(layer: WorldBuilderView["layer"]): string {
-  const count = layer.visible ? `${layer.drawn} settlement core${layer.drawn === 1 ? "" : "s"}` : "hidden";
-  return `<div data-testid="world-builder-layer" data-drawn="${layer.drawn}">
-    <span class="world-builder-swatch world-builder-swatch-core"></span>Viewport: ${count}
-    <button type="button" class="world-builder-change" data-wb-action="layer-toggle" data-testid="world-builder-layer-toggle">${layer.visible ? "Hide" : "Show"}</button>
+const UNDERLAY_TEXT: Record<UnderlayState, string> = {
+  none: "none — set one below",
+  hidden: "hidden",
+  perspective: "a perspective view; only a top-down image lies on the ground",
+  loading: "loading…",
+  shown: "shown",
+  error: "the image failed to load",
+};
+
+function renderLayers(view: WorldBuilderView): string {
+  const { options, counts } = view.layer;
+  const toggle = (part: "underlay" | "plan" | "generated") =>
+    `<button type="button" class="world-builder-change" data-wb-action="layer-toggle" data-wb-id="${part}" data-testid="world-builder-layer-toggle-${part}">${options[part] ? "Hide" : "Show"}</button>`;
+  const swatch = (name: string, label: string) => `<span class="world-builder-swatch world-builder-swatch-${name}"></span>${label}`;
+  const low = counts.lowConfidence > 0 ? `, ${counts.lowConfidence} low confidence` : "";
+  const plan = options.plan ? `${counts.plan} elements${low}` : "hidden";
+  const generated = options.generated
+    ? `${counts.cores} settlement cores, ${counts.parcels} parcels, ${counts.pads} pads`
+    : "hidden";
+  return `<div class="detail-section" data-testid="world-builder-layers">
+    <div class="detail-section-title">Viewport Layers</div>
+    <div class="world-builder-summary">
+      <div data-testid="world-builder-layer-underlay" data-state="${counts.underlay}">Reference image: ${UNDERLAY_TEXT[counts.underlay]} ${toggle("underlay")}</div>
+      <label class="world-builder-row">Opacity
+        <input type="range" min="0" max="1" step="0.05" value="${options.opacity}" data-wb-opacity data-testid="world-builder-underlay-opacity">
+      </label>
+      <div data-testid="world-builder-layer-plan" data-drawn="${options.plan ? counts.plan : 0}" data-low="${options.plan ? counts.lowConfidence : 0}">Plan: ${plan} ${toggle("plan")}</div>
+      <div class="world-builder-legend">${swatch("settlement", "settlement")} ${swatch("road", "road")} ${swatch("water", "water")} ${swatch("region", "region")} ${swatch("landmark", "landmark")} ${swatch("low", "confidence &lt; 0.5")} · dashed: inferred</div>
+      <div data-testid="world-builder-layer-generated" data-cores="${options.generated ? counts.cores : 0}" data-parcels="${options.generated ? counts.parcels : 0}" data-pads="${options.generated ? counts.pads : 0}">Generated: ${generated} ${toggle("generated")}</div>
+      <div class="world-builder-legend">${swatch("core", "core")} ${swatch("pad", "pad")} · parcels by land use</div>
+    </div>
+    ${renderReferenceForm(view.reference)}
+  </div>`;
+}
+
+function renderReferenceForm(reference: WorldReference | null): string {
+  const value = (number: number | undefined) => (number === undefined ? "" : String(number));
+  const input = (name: string, current: string, type = "number", extra = "") =>
+    `<input type="${type}" data-wb-ref="${name}" data-testid="world-builder-reference-${name}" value="${escapeHtml(current)}" ${extra}>`;
+  const view = reference?.view ?? "topDown";
+  return `<div class="world-builder-reference">
+    <label class="world-builder-row">Image ${input("image", reference?.image ?? "", "text", 'placeholder="assets/…/reference.png"')}</label>
+    <label class="world-builder-row">Top-left x ${input("origin-x", value(reference?.origin[0]))} z ${input("origin-z", value(reference?.origin[1]))}</label>
+    <label class="world-builder-row">Size x ${input("size-x", value(reference?.size[0]), "number", 'min="0"')} z ${input("size-z", value(reference?.size[1]), "number", 'min="0"')}</label>
+    <label class="world-builder-row">View
+      <select data-wb-ref="view" data-testid="world-builder-reference-view">
+        <option value="topDown" ${view === "topDown" ? "selected" : ""}>top-down</option>
+        <option value="perspective" ${view === "perspective" ? "selected" : ""}>perspective</option>
+      </select>
+    </label>
+    <div class="world-builder-actions">
+      <button type="button" data-wb-action="reference-set" data-testid="world-builder-reference-set">Set Reference</button>
+      ${reference ? '<button type="button" data-wb-action="reference-remove" data-testid="world-builder-reference-remove">Remove</button>' : ""}
+    </div>
   </div>`;
 }
 

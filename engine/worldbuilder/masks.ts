@@ -62,6 +62,8 @@ export interface StreetLine {
   roadClass?: RoadClass;
   points: WorldPoint[];
   halfWidths: number[];
+  /** Centre-line height per point, metres; only lines a spline realises have it. */
+  heights?: number[];
 }
 
 /**
@@ -95,11 +97,13 @@ export function streetLines(input: MaskInput): { lines: StreetLine[]; warnings: 
             ...(roadClass === undefined ? {} : { roadClass }),
             points: [start],
             halfWidths: [piece.start.width / 2],
+            heights: [piece.start.position[1]],
           };
           lines.push(current);
         }
         current.points.push(xz(piece.end.position));
         current.halfWidths.push(piece.end.width / 2);
+        current.heights!.push(piece.end.position[1]);
       }
     }
     if (local > 0) warnings.push(`terrain ${terrain.id} has ${local} spline(s) in terrain-local coordinates; they are not in road masks`);

@@ -217,15 +217,16 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
 const VILLAGE_LEVEL = "layouts/__playwright-world-builder-village.level.json";
 const VILLAGE_TERRAIN_REF = levelTerrainPath(VILLAGE_LEVEL, TERRAIN_ID);
 const VILLAGE_PROFILE = "layouts/__playwright-world-builder.regionprofile.json";
-const VILLAGE_STAGES = ["roads", "settlementSites", "streets", "parcels", "landUse", "buildings"];
+const VILLAGE_STAGES = ["roads", "settlementSites", "streets", "parcels", "landUse", "buildings", "furniture"];
 
 /**
- * World Builder F1 steps 9–12: the settlement chain on a slope — roads, site,
- * inner streets, parcels, land use, coloured building placeholders — then
- * Apply Pads bakes the pads into the terrain; everything saves, and after a
- * reload the buildings are up to date with their baked pads.
+ * World Builder F1 steps 9–13: the settlement chain on a slope — roads, site,
+ * inner streets, parcels, land use, coloured building placeholders, street
+ * furniture — then Apply Pads bakes the pads into the terrain; everything
+ * saves, and after a reload the buildings and furniture are up to date with
+ * their baked pads.
  */
-test("World Builder village: the settlement chain places coloured buildings, Apply Pads bakes their pads", async ({ page, request }) => {
+test("World Builder village: the settlement chain places coloured buildings and furniture, Apply Pads bakes their pads", async ({ page, request }) => {
   test.setTimeout(300_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -304,6 +305,11 @@ test("World Builder village: the settlement chain places coloured buildings, App
   expect(buildings.length).toBeGreaterThan(5);
   expect(buildings.every((placement) => /^#[0-9a-f]{6}$/i.test(placement.color ?? "") && placement.role)).toBe(true);
   expect(savedRecipe.generated.pads.map((pad) => pad.id).sort()).toEqual(buildings.map((placement) => placement.id).sort());
+  // The main street is local: entrance signs, no collector lights.
+  const signs = ((await readJson<RoomLayout>(VILLAGE_LEVEL)).instances.find((group) => group.assetId === "shape:cube")?.placements ?? [])
+    .filter((placement) => placement.id?.startsWith("wb-furniture-village-"));
+  expect(signs.length).toBeGreaterThan(0);
+  expect(signs.every((placement) => placement.role === "prop.sign.settlementName" && placement.color === "#f5cf3a")).toBe(true);
   // The pads changed the ground under the village.
   let changed = 0;
   for (const [key, bytes] of tileBytes) {
@@ -313,9 +319,10 @@ test("World Builder village: the settlement chain places coloured buildings, App
   expect(changed).toBeGreaterThan(0);
 
   // Apply Pads levelled the ground: stages reading it near the pads (sites, streets, parcels) would
-  // re-sample, but land use does not read the ground and buildings stand on their own pads.
+  // re-sample, but land use does not read the ground, buildings stand on their own pads and
+  // furniture at its road's spline level.
   await bootEditor();
-  for (const stage of ["landUse", "buildings"]) {
+  for (const stage of ["landUse", "buildings", "furniture"]) {
     await page.getByTestId(`world-builder-dry-run-${stage}`).click();
     await expect(page.getByTestId("world-builder-report")).toContainText("Up to date");
   }

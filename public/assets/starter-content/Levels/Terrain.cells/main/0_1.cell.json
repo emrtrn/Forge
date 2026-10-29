@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "0_1",
+  "instances": [
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            113.92,
+            -2.2,
+            148.74
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    }
+  ],
+  "reflectionCaptures": [
+    {
+      "id": "reflection-capture-1",
+      "position": [
+        126.38,
+        0.69,
+        150.8
+      ],
+      "name": "Sphere Reflection Capture",
+      "radius": 20,
+      "parallax": true
+    }
+  ]
+}

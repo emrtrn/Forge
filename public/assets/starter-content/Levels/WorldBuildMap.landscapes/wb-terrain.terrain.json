@@ -1,0 +1,775 @@
+{
+  "schema": 1,
+  "type": "worldTerrain",
+  "name": "WB Terrain",
+  "tileQuads": 64,
+  "spacing": 2,
+  "tilesX": 2,
+  "tilesZ": 2,
+  "origin": [
+    -128,
+    3,
+    -128
+  ],
+  "heightMin": -256,
+  "heightMax": 256,
+  "layers": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "color": "#5f9449"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "color": "#7f8485"
+    },
+    {
+      "id": "snow",
+      "name": "Snow",
+      "color": "#dce7ec"
+    }
+  ],
+  "tiles": [
+    {
+      "key": "0_0",
+      "minHeight": -7.679999828338623,
+      "maxHeight": 0.0284000001847744
+    },
+    {
+      "key": "1_0",
+      "minHeight": -7.679999828338623,
+      "maxHeight": 0.0284000001847744
+    },
+    {
+      "key": "0_1",
+      "minHeight": 0,
+      "maxHeight": 7.679999828338623
+    },
+    {
+      "key": "1_1",
+      "minHeight": 0,
+      "maxHeight": 7.679999828338623
+    }
+  ],
+  "collision": true,
+  "splines": [
+    {
+      "id": "wb-road-main",
+      "points": [
+        {
+          "id": "p0",
+          "position": [
+            -120,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p1",
+          "position": [
+            -110,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p2",
+          "position": [
+            -100,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p3",
+          "position": [
+            -90,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p4",
+          "position": [
+            -80,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p5",
+          "position": [
+            -70,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p6",
+          "position": [
+            -60,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p7",
+          "position": [
+            -50,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p8",
+          "position": [
+            -40,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p9",
+          "position": [
+            -30,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p10",
+          "position": [
+            -20,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p11",
+          "position": [
+            -10,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p12",
+          "position": [
+            0,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p13",
+          "position": [
+            10,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p14",
+          "position": [
+            20,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p15",
+          "position": [
+            30,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p16",
+          "position": [
+            40,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p17",
+          "position": [
+            50,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p18",
+          "position": [
+            60,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p19",
+          "position": [
+            70,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p20",
+          "position": [
+            80,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p21",
+          "position": [
+            90,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p22",
+          "position": [
+            100,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p23",
+          "position": [
+            110,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p24",
+          "position": [
+            120,
+            3,
+            0
+          ],
+          "width": 6,
+          "falloff": 3
+        }
+      ],
+      "segments": [
+        {
+          "id": "s0",
+          "startPointId": "p0",
+          "endPointId": "p1",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s1",
+          "startPointId": "p1",
+          "endPointId": "p2",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s2",
+          "startPointId": "p2",
+          "endPointId": "p3",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s3",
+          "startPointId": "p3",
+          "endPointId": "p4",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s4",
+          "startPointId": "p4",
+          "endPointId": "p5",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s5",
+          "startPointId": "p5",
+          "endPointId": "p6",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s6",
+          "startPointId": "p6",
+          "endPointId": "p7",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s7",
+          "startPointId": "p7",
+          "endPointId": "p8",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s8",
+          "startPointId": "p8",
+          "endPointId": "p9",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s9",
+          "startPointId": "p9",
+          "endPointId": "p10",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s10",
+          "startPointId": "p10",
+          "endPointId": "p11",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s11",
+          "startPointId": "p11",
+          "endPointId": "p12",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s12",
+          "startPointId": "p12",
+          "endPointId": "p13",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s13",
+          "startPointId": "p13",
+          "endPointId": "p14",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s14",
+          "startPointId": "p14",
+          "endPointId": "p15",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s15",
+          "startPointId": "p15",
+          "endPointId": "p16",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s16",
+          "startPointId": "p16",
+          "endPointId": "p17",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s17",
+          "startPointId": "p17",
+          "endPointId": "p18",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s18",
+          "startPointId": "p18",
+          "endPointId": "p19",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s19",
+          "startPointId": "p19",
+          "endPointId": "p20",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s20",
+          "startPointId": "p20",
+          "endPointId": "p21",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s21",
+          "startPointId": "p21",
+          "endPointId": "p22",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s22",
+          "startPointId": "p22",
+          "endPointId": "p23",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s23",
+          "startPointId": "p23",
+          "endPointId": "p24",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        }
+      ],
+      "name": "main",
+      "smooth": true,
+      "coordinateSpace": "world"
+    },
+    {
+      "id": "wb-street-village-1",
+      "points": [
+        {
+          "id": "p0",
+          "position": [
+            10,
+            2.82,
+            -3
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p1",
+          "position": [
+            8.764,
+            2.346,
+            -10.904
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p2",
+          "position": [
+            7.024,
+            1.877,
+            -18.713
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p3",
+          "position": [
+            6.26,
+            1.399,
+            -26.676
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p4",
+          "position": [
+            6.123,
+            0.919,
+            -34.675
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p5",
+          "position": [
+            6.898,
+            0.442,
+            -42.637
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p6",
+          "position": [
+            8.365,
+            -0.03,
+            -50.501
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p7",
+          "position": [
+            10.359,
+            -0.495,
+            -58.249
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "p8",
+          "position": [
+            12.252,
+            -0.961,
+            -66.022
+          ],
+          "width": 6,
+          "falloff": 3
+        }
+      ],
+      "segments": [
+        {
+          "id": "s0",
+          "startPointId": "p0",
+          "endPointId": "p1",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s1",
+          "startPointId": "p1",
+          "endPointId": "p2",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s2",
+          "startPointId": "p2",
+          "endPointId": "p3",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s3",
+          "startPointId": "p3",
+          "endPointId": "p4",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s4",
+          "startPointId": "p4",
+          "endPointId": "p5",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s5",
+          "startPointId": "p5",
+          "endPointId": "p6",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s6",
+          "startPointId": "p6",
+          "endPointId": "p7",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        },
+        {
+          "id": "s7",
+          "startPointId": "p7",
+          "endPointId": "p8",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          }
+        }
+      ],
+      "name": "wb-street-village-1",
+      "smooth": true,
+      "coordinateSpace": "world"
+    }
+  ]
+}

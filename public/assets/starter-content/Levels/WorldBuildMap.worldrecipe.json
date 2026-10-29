@@ -1,0 +1,2726 @@
+{
+  "schemaVersion": 1,
+  "recipeId": "WorldBuildMap",
+  "seed": 4,
+  "generators": {
+    "buildings": 1,
+    "fences": 1,
+    "furniture": 1,
+    "landUse": 1,
+    "parcels": 1,
+    "planBlockout": 1,
+    "roads": 3,
+    "settlementSites": 1,
+    "streets": 1
+  },
+  "plan": {
+    "regions": [],
+    "water": [],
+    "landmarks": [],
+    "settlements": [
+      {
+        "id": "village",
+        "source": "manual",
+        "center": [
+          0,
+          0
+        ],
+        "type": "village",
+        "radius": 40,
+        "population": 45
+      }
+    ],
+    "roadGraph": {
+      "nodes": [
+        {
+          "id": "west",
+          "source": "manual",
+          "position": [
+            -120,
+            0
+          ],
+          "kind": "end"
+        },
+        {
+          "id": "east",
+          "source": "manual",
+          "position": [
+            120,
+            0
+          ],
+          "kind": "end"
+        }
+      ],
+      "edges": [
+        {
+          "id": "main",
+          "source": "manual",
+          "from": "west",
+          "to": "east",
+          "roadClass": "local"
+        }
+      ]
+    }
+  },
+  "generated": {
+    "sites": [
+      {
+        "settlement": "village",
+        "center": [
+          0,
+          0
+        ],
+        "coreRadius": 71,
+        "score": 0.761,
+        "dwellings": 15,
+        "program": [
+          {
+            "role": "building.commercial.shop",
+            "count": 1,
+            "siting": "mainRoad",
+            "source": "profile"
+          },
+          {
+            "role": "building.industrial.workshop",
+            "count": 1,
+            "siting": "downstream",
+            "source": "profile"
+          }
+        ]
+      }
+    ],
+    "parcels": [
+      {
+        "id": "village.p1",
+        "settlement": "village",
+        "polygon": [
+          [
+            -70,
+            3.5
+          ],
+          [
+            -66.472,
+            3.5
+          ],
+          [
+            -62.943,
+            3.5
+          ],
+          [
+            -59.415,
+            3.5
+          ],
+          [
+            -55.887,
+            3.5
+          ],
+          [
+            -52.358,
+            3.5
+          ],
+          [
+            -48.83,
+            3.5
+          ],
+          [
+            -48.83,
+            34.91
+          ],
+          [
+            -52.358,
+            34.91
+          ],
+          [
+            -55.887,
+            34.91
+          ],
+          [
+            -59.415,
+            34.91
+          ],
+          [
+            -62.943,
+            34.91
+          ],
+          [
+            -66.472,
+            34.91
+          ],
+          [
+            -70,
+            34.91
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p1"
+      },
+      {
+        "id": "village.p2",
+        "settlement": "village",
+        "polygon": [
+          [
+            -48.83,
+            3.5
+          ],
+          [
+            -45.17,
+            3.5
+          ],
+          [
+            -41.51,
+            3.5
+          ],
+          [
+            -37.85,
+            3.5
+          ],
+          [
+            -34.19,
+            3.5
+          ],
+          [
+            -30.53,
+            3.5
+          ],
+          [
+            -26.87,
+            3.5
+          ],
+          [
+            -26.87,
+            34.91
+          ],
+          [
+            -30.53,
+            34.91
+          ],
+          [
+            -34.19,
+            34.91
+          ],
+          [
+            -37.85,
+            34.91
+          ],
+          [
+            -41.51,
+            34.91
+          ],
+          [
+            -45.17,
+            34.91
+          ],
+          [
+            -48.83,
+            34.91
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p2"
+      },
+      {
+        "id": "village.p3",
+        "settlement": "village",
+        "polygon": [
+          [
+            -26.87,
+            3.5
+          ],
+          [
+            -23.428,
+            3.5
+          ],
+          [
+            -19.987,
+            3.5
+          ],
+          [
+            -16.545,
+            3.5
+          ],
+          [
+            -13.103,
+            3.5
+          ],
+          [
+            -9.662,
+            3.5
+          ],
+          [
+            -6.22,
+            3.5
+          ],
+          [
+            -6.22,
+            34.91
+          ],
+          [
+            -9.662,
+            34.91
+          ],
+          [
+            -13.103,
+            34.91
+          ],
+          [
+            -16.545,
+            34.91
+          ],
+          [
+            -19.987,
+            34.91
+          ],
+          [
+            -23.428,
+            34.91
+          ],
+          [
+            -26.87,
+            34.91
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p3"
+      },
+      {
+        "id": "village.p4",
+        "settlement": "village",
+        "polygon": [
+          [
+            -6.22,
+            3.5
+          ],
+          [
+            -2.713,
+            3.5
+          ],
+          [
+            0.793,
+            3.5
+          ],
+          [
+            4.3,
+            3.5
+          ],
+          [
+            7.807,
+            3.5
+          ],
+          [
+            11.313,
+            3.5
+          ],
+          [
+            14.82,
+            3.5
+          ],
+          [
+            14.82,
+            34.91
+          ],
+          [
+            11.313,
+            34.91
+          ],
+          [
+            7.807,
+            34.91
+          ],
+          [
+            4.3,
+            34.91
+          ],
+          [
+            0.793,
+            34.91
+          ],
+          [
+            -2.713,
+            34.91
+          ],
+          [
+            -6.22,
+            34.91
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "commercial",
+        "role": "building.commercial.shop",
+        "placement": "wb-building-village.p4"
+      },
+      {
+        "id": "village.p5",
+        "settlement": "village",
+        "polygon": [
+          [
+            14.82,
+            3.5
+          ],
+          [
+            18.468,
+            3.5
+          ],
+          [
+            22.116,
+            3.5
+          ],
+          [
+            25.764,
+            3.5
+          ],
+          [
+            29.412,
+            3.5
+          ],
+          [
+            33.06,
+            3.5
+          ],
+          [
+            33.06,
+            34.91
+          ],
+          [
+            29.412,
+            34.91
+          ],
+          [
+            25.764,
+            34.91
+          ],
+          [
+            22.116,
+            34.91
+          ],
+          [
+            18.468,
+            34.91
+          ],
+          [
+            14.82,
+            34.91
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p5"
+      },
+      {
+        "id": "village.p6",
+        "settlement": "village",
+        "polygon": [
+          [
+            33.06,
+            3.5
+          ],
+          [
+            36.557,
+            3.5
+          ],
+          [
+            40.053,
+            3.5
+          ],
+          [
+            43.55,
+            3.5
+          ],
+          [
+            47.047,
+            3.5
+          ],
+          [
+            50.543,
+            3.5
+          ],
+          [
+            54.04,
+            3.5
+          ],
+          [
+            54.04,
+            34.91
+          ],
+          [
+            50.543,
+            34.91
+          ],
+          [
+            47.047,
+            34.91
+          ],
+          [
+            43.55,
+            34.91
+          ],
+          [
+            40.053,
+            34.91
+          ],
+          [
+            36.557,
+            34.91
+          ],
+          [
+            33.06,
+            34.91
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p6"
+      },
+      {
+        "id": "village.p7",
+        "settlement": "village",
+        "polygon": [
+          [
+            54.04,
+            3.5
+          ],
+          [
+            58.03,
+            3.5
+          ],
+          [
+            62.02,
+            3.5
+          ],
+          [
+            66.01,
+            3.5
+          ],
+          [
+            70,
+            3.5
+          ],
+          [
+            70,
+            34.91
+          ],
+          [
+            66.01,
+            34.91
+          ],
+          [
+            62.02,
+            34.91
+          ],
+          [
+            58.03,
+            34.91
+          ],
+          [
+            54.04,
+            34.91
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p7"
+      },
+      {
+        "id": "village.p8",
+        "settlement": "village",
+        "polygon": [
+          [
+            -70,
+            -3.5
+          ],
+          [
+            -66.598,
+            -3.5
+          ],
+          [
+            -63.197,
+            -3.5
+          ],
+          [
+            -59.795,
+            -3.5
+          ],
+          [
+            -56.393,
+            -3.5
+          ],
+          [
+            -52.992,
+            -3.5
+          ],
+          [
+            -49.59,
+            -3.5
+          ],
+          [
+            -49.59,
+            -36.89
+          ],
+          [
+            -52.992,
+            -36.89
+          ],
+          [
+            -56.393,
+            -36.89
+          ],
+          [
+            -59.795,
+            -36.89
+          ],
+          [
+            -63.197,
+            -36.89
+          ],
+          [
+            -66.598,
+            -36.89
+          ],
+          [
+            -70,
+            -36.89
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "industrial",
+        "role": "building.industrial.workshop",
+        "placement": "wb-building-village.p8"
+      },
+      {
+        "id": "village.p9",
+        "settlement": "village",
+        "polygon": [
+          [
+            -49.59,
+            -3.5
+          ],
+          [
+            -45.894,
+            -3.5
+          ],
+          [
+            -42.198,
+            -3.5
+          ],
+          [
+            -38.502,
+            -3.5
+          ],
+          [
+            -34.806,
+            -3.5
+          ],
+          [
+            -31.11,
+            -3.5
+          ],
+          [
+            -31.11,
+            -36.89
+          ],
+          [
+            -34.806,
+            -36.89
+          ],
+          [
+            -38.502,
+            -36.89
+          ],
+          [
+            -42.198,
+            -36.89
+          ],
+          [
+            -45.894,
+            -36.89
+          ],
+          [
+            -49.59,
+            -36.89
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p9"
+      },
+      {
+        "id": "village.p10",
+        "settlement": "village",
+        "polygon": [
+          [
+            -31.11,
+            -3.5
+          ],
+          [
+            -27.582,
+            -3.5
+          ],
+          [
+            -24.053,
+            -3.5
+          ],
+          [
+            -20.525,
+            -3.5
+          ],
+          [
+            -16.997,
+            -3.5
+          ],
+          [
+            -13.468,
+            -3.5
+          ],
+          [
+            -9.94,
+            -3.5
+          ],
+          [
+            -9.94,
+            -36.89
+          ],
+          [
+            -13.468,
+            -36.89
+          ],
+          [
+            -16.997,
+            -36.89
+          ],
+          [
+            -20.525,
+            -36.89
+          ],
+          [
+            -24.053,
+            -36.89
+          ],
+          [
+            -27.582,
+            -36.89
+          ],
+          [
+            -31.11,
+            -36.89
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p10"
+      },
+      {
+        "id": "village.p11",
+        "settlement": "village",
+        "polygon": [
+          [
+            13.37,
+            -3.5
+          ],
+          [
+            17.05,
+            -3.5
+          ],
+          [
+            20.73,
+            -3.5
+          ],
+          [
+            24.41,
+            -3.5
+          ],
+          [
+            28.09,
+            -3.5
+          ],
+          [
+            31.77,
+            -3.5
+          ],
+          [
+            35.45,
+            -3.5
+          ],
+          [
+            35.45,
+            -36.89
+          ],
+          [
+            31.77,
+            -36.89
+          ],
+          [
+            28.09,
+            -36.89
+          ],
+          [
+            24.41,
+            -36.89
+          ],
+          [
+            20.73,
+            -36.89
+          ],
+          [
+            17.05,
+            -36.89
+          ],
+          [
+            13.37,
+            -36.89
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p11"
+      },
+      {
+        "id": "village.p12",
+        "settlement": "village",
+        "polygon": [
+          [
+            35.45,
+            -3.5
+          ],
+          [
+            39.185,
+            -3.5
+          ],
+          [
+            42.92,
+            -3.5
+          ],
+          [
+            46.655,
+            -3.5
+          ],
+          [
+            50.39,
+            -3.5
+          ],
+          [
+            54.125,
+            -3.5
+          ],
+          [
+            57.86,
+            -3.5
+          ],
+          [
+            57.86,
+            -36.89
+          ],
+          [
+            54.125,
+            -36.89
+          ],
+          [
+            50.39,
+            -36.89
+          ],
+          [
+            46.655,
+            -36.89
+          ],
+          [
+            42.92,
+            -36.89
+          ],
+          [
+            39.185,
+            -36.89
+          ],
+          [
+            35.45,
+            -36.89
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p12"
+      },
+      {
+        "id": "village.p13",
+        "settlement": "village",
+        "polygon": [
+          [
+            57.86,
+            -3.5
+          ],
+          [
+            60.895,
+            -3.5
+          ],
+          [
+            63.93,
+            -3.5
+          ],
+          [
+            66.965,
+            -3.5
+          ],
+          [
+            70,
+            -3.5
+          ],
+          [
+            70,
+            -36.89
+          ],
+          [
+            66.965,
+            -36.89
+          ],
+          [
+            63.93,
+            -36.89
+          ],
+          [
+            60.895,
+            -36.89
+          ],
+          [
+            57.86,
+            -36.89
+          ]
+        ],
+        "frontage": "main",
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p13"
+      },
+      {
+        "id": "village.p14",
+        "settlement": "village",
+        "polygon": [
+          [
+            10.485,
+            -42.962
+          ],
+          [
+            11.109,
+            -46.522
+          ],
+          [
+            11.862,
+            -50.09
+          ],
+          [
+            12.756,
+            -53.622
+          ],
+          [
+            13.731,
+            -57.308
+          ],
+          [
+            38.26,
+            -51.03
+          ],
+          [
+            37.205,
+            -47.039
+          ],
+          [
+            36.534,
+            -44.397
+          ],
+          [
+            35.966,
+            -41.701
+          ],
+          [
+            35.53,
+            -39.246
+          ]
+        ],
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p14"
+      },
+      {
+        "id": "village.p15",
+        "settlement": "village",
+        "polygon": [
+          [
+            3.782,
+            -45.366
+          ],
+          [
+            4.406,
+            -48.707
+          ],
+          [
+            5.124,
+            -52.021
+          ],
+          [
+            5.969,
+            -55.34
+          ],
+          [
+            6.806,
+            -58.484
+          ],
+          [
+            7.592,
+            -61.646
+          ],
+          [
+            -23.789,
+            -69.299
+          ],
+          [
+            -24.485,
+            -66.494
+          ],
+          [
+            -25.22,
+            -63.737
+          ],
+          [
+            -26.349,
+            -59.283
+          ],
+          [
+            -27.248,
+            -55.134
+          ],
+          [
+            -28.045,
+            -50.872
+          ]
+        ],
+        "landUse": "residential",
+        "role": "building.residential.detached",
+        "placement": "wb-building-village.p15"
+      }
+    ],
+    "pads": [
+      {
+        "id": "wb-building-village.p1",
+        "settlement": "village",
+        "polygon": [
+          [
+            -65.705,
+            5
+          ],
+          [
+            -53.125,
+            5
+          ],
+          [
+            -53.125,
+            17.6
+          ],
+          [
+            -65.705,
+            17.6
+          ]
+        ],
+        "height": 3.68
+      },
+      {
+        "id": "wb-building-village.p2",
+        "settlement": "village",
+        "polygon": [
+          [
+            -43.555,
+            5
+          ],
+          [
+            -32.145,
+            5
+          ],
+          [
+            -32.145,
+            17.28
+          ],
+          [
+            -43.555,
+            17.28
+          ]
+        ],
+        "height": 3.67
+      },
+      {
+        "id": "wb-building-village.p3",
+        "settlement": "village",
+        "polygon": [
+          [
+            -24.01,
+            5
+          ],
+          [
+            -9.08,
+            5
+          ],
+          [
+            -9.08,
+            17.79
+          ],
+          [
+            -24.01,
+            17.79
+          ]
+        ],
+        "height": 3.68
+      },
+      {
+        "id": "wb-building-village.p4",
+        "settlement": "village",
+        "polygon": [
+          [
+            -3.25,
+            3.5
+          ],
+          [
+            11.85,
+            3.5
+          ],
+          [
+            11.85,
+            20.07
+          ],
+          [
+            -3.25,
+            20.07
+          ]
+        ],
+        "height": 3.66
+      },
+      {
+        "id": "wb-building-village.p5",
+        "settlement": "village",
+        "polygon": [
+          [
+            16.965,
+            5
+          ],
+          [
+            30.915,
+            5
+          ],
+          [
+            30.915,
+            16.85
+          ],
+          [
+            16.965,
+            16.85
+          ]
+        ],
+        "height": 3.66
+      },
+      {
+        "id": "wb-building-village.p6",
+        "settlement": "village",
+        "polygon": [
+          [
+            36.09,
+            5
+          ],
+          [
+            51.01,
+            5
+          ],
+          [
+            51.01,
+            18.7
+          ],
+          [
+            36.09,
+            18.7
+          ]
+        ],
+        "height": 3.71
+      },
+      {
+        "id": "wb-building-village.p7",
+        "settlement": "village",
+        "polygon": [
+          [
+            54.6,
+            5
+          ],
+          [
+            69.44,
+            5
+          ],
+          [
+            69.44,
+            18.92
+          ],
+          [
+            54.6,
+            18.92
+          ]
+        ],
+        "height": 3.72
+      },
+      {
+        "id": "wb-building-village.p8",
+        "settlement": "village",
+        "polygon": [
+          [
+            -69.295,
+            -8
+          ],
+          [
+            -50.295,
+            -8
+          ],
+          [
+            -50.295,
+            -23.72
+          ],
+          [
+            -69.295,
+            -23.72
+          ]
+        ],
+        "height": 2.05
+      },
+      {
+        "id": "wb-building-village.p9",
+        "settlement": "village",
+        "polygon": [
+          [
+            -46.865,
+            -5
+          ],
+          [
+            -33.835,
+            -5
+          ],
+          [
+            -33.835,
+            -17.27
+          ],
+          [
+            -46.865,
+            -17.27
+          ]
+        ],
+        "height": 2.33
+      },
+      {
+        "id": "wb-building-village.p10",
+        "settlement": "village",
+        "polygon": [
+          [
+            -27.17,
+            -5
+          ],
+          [
+            -13.88,
+            -5
+          ],
+          [
+            -13.88,
+            -16.84
+          ],
+          [
+            -27.17,
+            -16.84
+          ]
+        ],
+        "height": 2.34
+      },
+      {
+        "id": "wb-building-village.p11",
+        "settlement": "village",
+        "polygon": [
+          [
+            17.765,
+            -5
+          ],
+          [
+            31.055,
+            -5
+          ],
+          [
+            31.055,
+            -18.48
+          ],
+          [
+            17.765,
+            -18.48
+          ]
+        ],
+        "height": 2.3
+      },
+      {
+        "id": "wb-building-village.p12",
+        "settlement": "village",
+        "polygon": [
+          [
+            40.83,
+            -5
+          ],
+          [
+            52.48,
+            -5
+          ],
+          [
+            52.48,
+            -18.86
+          ],
+          [
+            40.83,
+            -18.86
+          ]
+        ],
+        "height": 2.28
+      },
+      {
+        "id": "wb-building-village.p13",
+        "settlement": "village",
+        "polygon": [
+          [
+            58.36,
+            -5
+          ],
+          [
+            69.5,
+            -5
+          ],
+          [
+            69.5,
+            -16.73
+          ],
+          [
+            58.36,
+            -16.73
+          ]
+        ],
+        "height": 2.35
+      },
+      {
+        "id": "wb-building-village.p14",
+        "settlement": "village",
+        "polygon": [
+          [
+            11.657,
+            -43.166
+          ],
+          [
+            15.023,
+            -56.467
+          ],
+          [
+            26.56,
+            -53.547
+          ],
+          [
+            23.193,
+            -40.246
+          ]
+        ],
+        "height": 0.1
+      },
+      {
+        "id": "wb-building-village.p15",
+        "settlement": "village",
+        "polygon": [
+          [
+            2.53,
+            -47.912
+          ],
+          [
+            5.587,
+            -59.919
+          ],
+          [
+            -5.335,
+            -62.7
+          ],
+          [
+            -8.391,
+            -50.693
+          ]
+        ],
+        "height": -0.32
+      }
+    ]
+  },
+  "generation": {
+    "preserveManualOverrides": true,
+    "stages": [
+      "planBlockout",
+      "roads",
+      "settlementSites",
+      "streets",
+      "parcels",
+      "landUse",
+      "buildings",
+      "furniture",
+      "fences"
+    ]
+  },
+  "ownership": {
+    "placements": {
+      "wb-blockout-roadNode-east": {
+        "stage": "planBlockout",
+        "outputHash": "ccd68a8422b8f602"
+      },
+      "wb-blockout-roadNode-west": {
+        "stage": "planBlockout",
+        "outputHash": "d8354773dcb8c145"
+      },
+      "wb-blockout-settlement-village": {
+        "stage": "planBlockout",
+        "outputHash": "e95699f6efac6814"
+      },
+      "wb-building-village.p1": {
+        "stage": "buildings",
+        "outputHash": "58bbde21c664560f"
+      },
+      "wb-building-village.p10": {
+        "stage": "buildings",
+        "outputHash": "9ec691e701f6075d"
+      },
+      "wb-building-village.p11": {
+        "stage": "buildings",
+        "outputHash": "ecebd7c90ec5d9cb"
+      },
+      "wb-building-village.p12": {
+        "stage": "buildings",
+        "outputHash": "0f11514614480b60"
+      },
+      "wb-building-village.p13": {
+        "stage": "buildings",
+        "outputHash": "de7bb0370c8f0505"
+      },
+      "wb-building-village.p14": {
+        "stage": "buildings",
+        "outputHash": "278232c8b2912d86"
+      },
+      "wb-building-village.p15": {
+        "stage": "buildings",
+        "outputHash": "ad0e36c4b8ebfea6"
+      },
+      "wb-building-village.p2": {
+        "stage": "buildings",
+        "outputHash": "e4d34329eb253f33"
+      },
+      "wb-building-village.p3": {
+        "stage": "buildings",
+        "outputHash": "b9149591977881c3"
+      },
+      "wb-building-village.p4": {
+        "stage": "buildings",
+        "outputHash": "b18ff0a5dd4ae413"
+      },
+      "wb-building-village.p5": {
+        "stage": "buildings",
+        "outputHash": "e6283dca5d4f7a94"
+      },
+      "wb-building-village.p6": {
+        "stage": "buildings",
+        "outputHash": "ff4e0c11bb397e6f"
+      },
+      "wb-building-village.p7": {
+        "stage": "buildings",
+        "outputHash": "1b9b415931ec8713"
+      },
+      "wb-building-village.p8": {
+        "stage": "buildings",
+        "outputHash": "88d3a2e1bd1d5cd3"
+      },
+      "wb-building-village.p9": {
+        "stage": "buildings",
+        "outputHash": "51f8f9e47c2117aa"
+      },
+      "wb-fence-village.p1-1": {
+        "stage": "fences",
+        "outputHash": "548622297e3bf26b"
+      },
+      "wb-fence-village.p1-10": {
+        "stage": "fences",
+        "outputHash": "ca056c675f5e193d"
+      },
+      "wb-fence-village.p1-11": {
+        "stage": "fences",
+        "outputHash": "3c7c8af301181ce5"
+      },
+      "wb-fence-village.p1-12": {
+        "stage": "fences",
+        "outputHash": "73025d01d4d01a0f"
+      },
+      "wb-fence-village.p1-13": {
+        "stage": "fences",
+        "outputHash": "11778513d6b87f91"
+      },
+      "wb-fence-village.p1-14": {
+        "stage": "fences",
+        "outputHash": "7e088a429fe0d568"
+      },
+      "wb-fence-village.p1-15": {
+        "stage": "fences",
+        "outputHash": "1a5101b5b926ebb7"
+      },
+      "wb-fence-village.p1-16": {
+        "stage": "fences",
+        "outputHash": "78b034beca71d4f8"
+      },
+      "wb-fence-village.p1-17": {
+        "stage": "fences",
+        "outputHash": "ce728868c49b22de"
+      },
+      "wb-fence-village.p1-18": {
+        "stage": "fences",
+        "outputHash": "8b84c841bd841213"
+      },
+      "wb-fence-village.p1-19": {
+        "stage": "fences",
+        "outputHash": "5f7ee566044d7430"
+      },
+      "wb-fence-village.p1-2": {
+        "stage": "fences",
+        "outputHash": "1c8344633ece2211"
+      },
+      "wb-fence-village.p1-20": {
+        "stage": "fences",
+        "outputHash": "78fe81efba7f4b5d"
+      },
+      "wb-fence-village.p1-21": {
+        "stage": "fences",
+        "outputHash": "0b03659371a29741"
+      },
+      "wb-fence-village.p1-22": {
+        "stage": "fences",
+        "outputHash": "1c3f3276068336f4"
+      },
+      "wb-fence-village.p1-23": {
+        "stage": "fences",
+        "outputHash": "3ebb00660256d38c"
+      },
+      "wb-fence-village.p1-24": {
+        "stage": "fences",
+        "outputHash": "207542cabc5c6ef4"
+      },
+      "wb-fence-village.p1-25": {
+        "stage": "fences",
+        "outputHash": "748cbbbcda4f4a42"
+      },
+      "wb-fence-village.p1-26": {
+        "stage": "fences",
+        "outputHash": "4209096992604367"
+      },
+      "wb-fence-village.p1-27": {
+        "stage": "fences",
+        "outputHash": "0c8c0e7e6907d050"
+      },
+      "wb-fence-village.p1-28": {
+        "stage": "fences",
+        "outputHash": "36d17259627b79bf"
+      },
+      "wb-fence-village.p1-3": {
+        "stage": "fences",
+        "outputHash": "807099cdb635ce23"
+      },
+      "wb-fence-village.p1-4": {
+        "stage": "fences",
+        "outputHash": "b16eed758b942fbb"
+      },
+      "wb-fence-village.p1-5": {
+        "stage": "fences",
+        "outputHash": "d5fee8438fcaebf1"
+      },
+      "wb-fence-village.p1-6": {
+        "stage": "fences",
+        "outputHash": "54999980c091d166"
+      },
+      "wb-fence-village.p1-7": {
+        "stage": "fences",
+        "outputHash": "4cb6af4763b65c75"
+      },
+      "wb-fence-village.p1-8": {
+        "stage": "fences",
+        "outputHash": "f80ba314685d616e"
+      },
+      "wb-fence-village.p1-9": {
+        "stage": "fences",
+        "outputHash": "77663257d3e3bd35"
+      },
+      "wb-fence-village.p10-1": {
+        "stage": "fences",
+        "outputHash": "fb2f8389a39f47b7"
+      },
+      "wb-fence-village.p10-10": {
+        "stage": "fences",
+        "outputHash": "8f9556902baa8806"
+      },
+      "wb-fence-village.p10-11": {
+        "stage": "fences",
+        "outputHash": "fb7628fbdad67d7d"
+      },
+      "wb-fence-village.p10-12": {
+        "stage": "fences",
+        "outputHash": "8f1e1236bea2ce08"
+      },
+      "wb-fence-village.p10-13": {
+        "stage": "fences",
+        "outputHash": "da298959eec1e2b3"
+      },
+      "wb-fence-village.p10-14": {
+        "stage": "fences",
+        "outputHash": "41f9f8b94521e1d3"
+      },
+      "wb-fence-village.p10-15": {
+        "stage": "fences",
+        "outputHash": "965e781c5fea6c7a"
+      },
+      "wb-fence-village.p10-16": {
+        "stage": "fences",
+        "outputHash": "a1b1cc705ddb2d5e"
+      },
+      "wb-fence-village.p10-17": {
+        "stage": "fences",
+        "outputHash": "a5468365c15719ef"
+      },
+      "wb-fence-village.p10-18": {
+        "stage": "fences",
+        "outputHash": "2c7c4780d80ecd06"
+      },
+      "wb-fence-village.p10-19": {
+        "stage": "fences",
+        "outputHash": "b49c8e790d4eb61b"
+      },
+      "wb-fence-village.p10-2": {
+        "stage": "fences",
+        "outputHash": "29648972ca604af8"
+      },
+      "wb-fence-village.p10-20": {
+        "stage": "fences",
+        "outputHash": "9939168c9147cb16"
+      },
+      "wb-fence-village.p10-21": {
+        "stage": "fences",
+        "outputHash": "22ace8296186d3bf"
+      },
+      "wb-fence-village.p10-3": {
+        "stage": "fences",
+        "outputHash": "07bb1af45d60dc2a"
+      },
+      "wb-fence-village.p10-4": {
+        "stage": "fences",
+        "outputHash": "efbba3e124f8ea73"
+      },
+      "wb-fence-village.p10-5": {
+        "stage": "fences",
+        "outputHash": "9890814af299caac"
+      },
+      "wb-fence-village.p10-6": {
+        "stage": "fences",
+        "outputHash": "0449168d2553f19f"
+      },
+      "wb-fence-village.p10-7": {
+        "stage": "fences",
+        "outputHash": "e508e03612885848"
+      },
+      "wb-fence-village.p10-8": {
+        "stage": "fences",
+        "outputHash": "34a8e7d12f454aab"
+      },
+      "wb-fence-village.p10-9": {
+        "stage": "fences",
+        "outputHash": "8136a429076d4eb3"
+      },
+      "wb-fence-village.p11-1": {
+        "stage": "fences",
+        "outputHash": "68ffe39573d100f3"
+      },
+      "wb-fence-village.p11-10": {
+        "stage": "fences",
+        "outputHash": "e8cbd07c5ac0cba6"
+      },
+      "wb-fence-village.p11-11": {
+        "stage": "fences",
+        "outputHash": "87c18eff321a7935"
+      },
+      "wb-fence-village.p11-12": {
+        "stage": "fences",
+        "outputHash": "4dfbbe1a3fc29460"
+      },
+      "wb-fence-village.p11-13": {
+        "stage": "fences",
+        "outputHash": "db83caa596a92113"
+      },
+      "wb-fence-village.p11-14": {
+        "stage": "fences",
+        "outputHash": "bc09091dc12d3733"
+      },
+      "wb-fence-village.p11-15": {
+        "stage": "fences",
+        "outputHash": "e6e515b0717032b2"
+      },
+      "wb-fence-village.p11-16": {
+        "stage": "fences",
+        "outputHash": "515d4e91c6e473ef"
+      },
+      "wb-fence-village.p11-17": {
+        "stage": "fences",
+        "outputHash": "bc645e76333b5458"
+      },
+      "wb-fence-village.p11-18": {
+        "stage": "fences",
+        "outputHash": "e4788839bd24513b"
+      },
+      "wb-fence-village.p11-19": {
+        "stage": "fences",
+        "outputHash": "393587afcd6dc7a1"
+      },
+      "wb-fence-village.p11-2": {
+        "stage": "fences",
+        "outputHash": "4e2e6dcf36753d45"
+      },
+      "wb-fence-village.p11-20": {
+        "stage": "fences",
+        "outputHash": "f41c1def9bb9a009"
+      },
+      "wb-fence-village.p11-21": {
+        "stage": "fences",
+        "outputHash": "778f4bbf1dec7d35"
+      },
+      "wb-fence-village.p11-22": {
+        "stage": "fences",
+        "outputHash": "08f83a7024d79316"
+      },
+      "wb-fence-village.p11-23": {
+        "stage": "fences",
+        "outputHash": "cbab2773289f85dd"
+      },
+      "wb-fence-village.p11-24": {
+        "stage": "fences",
+        "outputHash": "192f729b188676bd"
+      },
+      "wb-fence-village.p11-25": {
+        "stage": "fences",
+        "outputHash": "303fe610962b42e2"
+      },
+      "wb-fence-village.p11-26": {
+        "stage": "fences",
+        "outputHash": "96957a75f4006df7"
+      },
+      "wb-fence-village.p11-27": {
+        "stage": "fences",
+        "outputHash": "ef8ffe9039460aa6"
+      },
+      "wb-fence-village.p11-28": {
+        "stage": "fences",
+        "outputHash": "28832b8ca95d806e"
+      },
+      "wb-fence-village.p11-29": {
+        "stage": "fences",
+        "outputHash": "d20fcd7002d9b96a"
+      },
+      "wb-fence-village.p11-3": {
+        "stage": "fences",
+        "outputHash": "29a3233130057b0f"
+      },
+      "wb-fence-village.p11-30": {
+        "stage": "fences",
+        "outputHash": "cfea20a4e304371a"
+      },
+      "wb-fence-village.p11-4": {
+        "stage": "fences",
+        "outputHash": "347cca81c8b5cb87"
+      },
+      "wb-fence-village.p11-5": {
+        "stage": "fences",
+        "outputHash": "e2bc93ed13ef644f"
+      },
+      "wb-fence-village.p11-6": {
+        "stage": "fences",
+        "outputHash": "bea3e004976da01e"
+      },
+      "wb-fence-village.p11-7": {
+        "stage": "fences",
+        "outputHash": "6d396ce028f0a00e"
+      },
+      "wb-fence-village.p11-8": {
+        "stage": "fences",
+        "outputHash": "57288c83ae421779"
+      },
+      "wb-fence-village.p11-9": {
+        "stage": "fences",
+        "outputHash": "19f0f65321a7eb19"
+      },
+      "wb-fence-village.p12-1": {
+        "stage": "fences",
+        "outputHash": "fb79ac3451fd1c52"
+      },
+      "wb-fence-village.p12-10": {
+        "stage": "fences",
+        "outputHash": "80582457bd8db07d"
+      },
+      "wb-fence-village.p12-11": {
+        "stage": "fences",
+        "outputHash": "923133741fe37a3e"
+      },
+      "wb-fence-village.p12-12": {
+        "stage": "fences",
+        "outputHash": "3161330b86eca895"
+      },
+      "wb-fence-village.p12-13": {
+        "stage": "fences",
+        "outputHash": "c5d1ace65c2345b8"
+      },
+      "wb-fence-village.p12-14": {
+        "stage": "fences",
+        "outputHash": "fed2dde6ed0b18a8"
+      },
+      "wb-fence-village.p12-15": {
+        "stage": "fences",
+        "outputHash": "3ebc320fc7c4980d"
+      },
+      "wb-fence-village.p12-16": {
+        "stage": "fences",
+        "outputHash": "3d6a6e66411468c4"
+      },
+      "wb-fence-village.p12-17": {
+        "stage": "fences",
+        "outputHash": "1c12ac810884855b"
+      },
+      "wb-fence-village.p12-18": {
+        "stage": "fences",
+        "outputHash": "3f4173827a7f2ba0"
+      },
+      "wb-fence-village.p12-19": {
+        "stage": "fences",
+        "outputHash": "1e3c4742b054741c"
+      },
+      "wb-fence-village.p12-2": {
+        "stage": "fences",
+        "outputHash": "4cccccf26a19ffe4"
+      },
+      "wb-fence-village.p12-20": {
+        "stage": "fences",
+        "outputHash": "8bcc80c8781b07d6"
+      },
+      "wb-fence-village.p12-21": {
+        "stage": "fences",
+        "outputHash": "11828b700529f946"
+      },
+      "wb-fence-village.p12-3": {
+        "stage": "fences",
+        "outputHash": "708b607796097815"
+      },
+      "wb-fence-village.p12-4": {
+        "stage": "fences",
+        "outputHash": "66c6ada5dcebdba3"
+      },
+      "wb-fence-village.p12-5": {
+        "stage": "fences",
+        "outputHash": "071516b6edd14c70"
+      },
+      "wb-fence-village.p12-6": {
+        "stage": "fences",
+        "outputHash": "055cc203467703e5"
+      },
+      "wb-fence-village.p12-7": {
+        "stage": "fences",
+        "outputHash": "f246fb0f08091899"
+      },
+      "wb-fence-village.p12-8": {
+        "stage": "fences",
+        "outputHash": "6f079772f1330bfc"
+      },
+      "wb-fence-village.p12-9": {
+        "stage": "fences",
+        "outputHash": "1f9bc6929d6df19c"
+      },
+      "wb-fence-village.p13-1": {
+        "stage": "fences",
+        "outputHash": "f54d50862e16b3d4"
+      },
+      "wb-fence-village.p13-10": {
+        "stage": "fences",
+        "outputHash": "f6ffc37892eaceca"
+      },
+      "wb-fence-village.p13-11": {
+        "stage": "fences",
+        "outputHash": "c8ba20c1452d17eb"
+      },
+      "wb-fence-village.p13-12": {
+        "stage": "fences",
+        "outputHash": "1cb7d9bf8880b749"
+      },
+      "wb-fence-village.p13-13": {
+        "stage": "fences",
+        "outputHash": "f806032c02274862"
+      },
+      "wb-fence-village.p13-14": {
+        "stage": "fences",
+        "outputHash": "8adbb5feacf1f564"
+      },
+      "wb-fence-village.p13-15": {
+        "stage": "fences",
+        "outputHash": "3b8f2d35817f56af"
+      },
+      "wb-fence-village.p13-16": {
+        "stage": "fences",
+        "outputHash": "76576d374f4bacb5"
+      },
+      "wb-fence-village.p13-17": {
+        "stage": "fences",
+        "outputHash": "c8da79631929bcd9"
+      },
+      "wb-fence-village.p13-2": {
+        "stage": "fences",
+        "outputHash": "0268881cef570b76"
+      },
+      "wb-fence-village.p13-3": {
+        "stage": "fences",
+        "outputHash": "de681675df25763f"
+      },
+      "wb-fence-village.p13-4": {
+        "stage": "fences",
+        "outputHash": "f7953135239a65d7"
+      },
+      "wb-fence-village.p13-5": {
+        "stage": "fences",
+        "outputHash": "bf4ecc564ba4ae50"
+      },
+      "wb-fence-village.p13-6": {
+        "stage": "fences",
+        "outputHash": "412bb1530d048385"
+      },
+      "wb-fence-village.p13-7": {
+        "stage": "fences",
+        "outputHash": "bf9590bd99f218bf"
+      },
+      "wb-fence-village.p13-8": {
+        "stage": "fences",
+        "outputHash": "d20242872da3ce2d"
+      },
+      "wb-fence-village.p13-9": {
+        "stage": "fences",
+        "outputHash": "99fc098e7bb35678"
+      },
+      "wb-fence-village.p14-1": {
+        "stage": "fences",
+        "outputHash": "6ad2e3aee823ada0"
+      },
+      "wb-fence-village.p14-10": {
+        "stage": "fences",
+        "outputHash": "86d3516b49b55a79"
+      },
+      "wb-fence-village.p14-11": {
+        "stage": "fences",
+        "outputHash": "fafa539f917538bd"
+      },
+      "wb-fence-village.p14-12": {
+        "stage": "fences",
+        "outputHash": "14e684127c80f264"
+      },
+      "wb-fence-village.p14-13": {
+        "stage": "fences",
+        "outputHash": "6cb07e9feb5ad50d"
+      },
+      "wb-fence-village.p14-14": {
+        "stage": "fences",
+        "outputHash": "286240af8a0d21cd"
+      },
+      "wb-fence-village.p14-15": {
+        "stage": "fences",
+        "outputHash": "663930ef9879a235"
+      },
+      "wb-fence-village.p14-16": {
+        "stage": "fences",
+        "outputHash": "6d3ff95092c11716"
+      },
+      "wb-fence-village.p14-17": {
+        "stage": "fences",
+        "outputHash": "8a1f2b84c96ad8ca"
+      },
+      "wb-fence-village.p14-18": {
+        "stage": "fences",
+        "outputHash": "65079b253d8a5e67"
+      },
+      "wb-fence-village.p14-19": {
+        "stage": "fences",
+        "outputHash": "cc262eea26e8ca40"
+      },
+      "wb-fence-village.p14-2": {
+        "stage": "fences",
+        "outputHash": "c9590de483dbf576"
+      },
+      "wb-fence-village.p14-20": {
+        "stage": "fences",
+        "outputHash": "9c7fe4d33f531385"
+      },
+      "wb-fence-village.p14-21": {
+        "stage": "fences",
+        "outputHash": "0f2804c2e1d09d74"
+      },
+      "wb-fence-village.p14-22": {
+        "stage": "fences",
+        "outputHash": "3fd7c532133f2344"
+      },
+      "wb-fence-village.p14-23": {
+        "stage": "fences",
+        "outputHash": "39a27449ade047b3"
+      },
+      "wb-fence-village.p14-3": {
+        "stage": "fences",
+        "outputHash": "b20bdf62bdcbc398"
+      },
+      "wb-fence-village.p14-4": {
+        "stage": "fences",
+        "outputHash": "6b37e95034f1f456"
+      },
+      "wb-fence-village.p14-5": {
+        "stage": "fences",
+        "outputHash": "ee95446f0031a0f5"
+      },
+      "wb-fence-village.p14-6": {
+        "stage": "fences",
+        "outputHash": "67bddfee6b3615ec"
+      },
+      "wb-fence-village.p14-7": {
+        "stage": "fences",
+        "outputHash": "1f55523955d7ae47"
+      },
+      "wb-fence-village.p14-8": {
+        "stage": "fences",
+        "outputHash": "b10eaffd619c91c3"
+      },
+      "wb-fence-village.p14-9": {
+        "stage": "fences",
+        "outputHash": "ebbeb00316165911"
+      },
+      "wb-fence-village.p15-1": {
+        "stage": "fences",
+        "outputHash": "7c12b69b31425451"
+      },
+      "wb-fence-village.p15-10": {
+        "stage": "fences",
+        "outputHash": "64c7e24b5e3ffc51"
+      },
+      "wb-fence-village.p15-11": {
+        "stage": "fences",
+        "outputHash": "b15a3b03fba00765"
+      },
+      "wb-fence-village.p15-12": {
+        "stage": "fences",
+        "outputHash": "2ec69dd8ebfc52ae"
+      },
+      "wb-fence-village.p15-13": {
+        "stage": "fences",
+        "outputHash": "ffc37374c3dbd4fe"
+      },
+      "wb-fence-village.p15-14": {
+        "stage": "fences",
+        "outputHash": "01939fc61a2a91c0"
+      },
+      "wb-fence-village.p15-15": {
+        "stage": "fences",
+        "outputHash": "6d06c524569ec92a"
+      },
+      "wb-fence-village.p15-16": {
+        "stage": "fences",
+        "outputHash": "85dc421004fa5c0e"
+      },
+      "wb-fence-village.p15-17": {
+        "stage": "fences",
+        "outputHash": "c9a0c3261fa523ec"
+      },
+      "wb-fence-village.p15-18": {
+        "stage": "fences",
+        "outputHash": "4c48a8ddde145a0f"
+      },
+      "wb-fence-village.p15-19": {
+        "stage": "fences",
+        "outputHash": "b19ee778e009c9ca"
+      },
+      "wb-fence-village.p15-2": {
+        "stage": "fences",
+        "outputHash": "2eac2602a737ef00"
+      },
+      "wb-fence-village.p15-20": {
+        "stage": "fences",
+        "outputHash": "05481884f0f50492"
+      },
+      "wb-fence-village.p15-21": {
+        "stage": "fences",
+        "outputHash": "c55aaf9511bd23f7"
+      },
+      "wb-fence-village.p15-22": {
+        "stage": "fences",
+        "outputHash": "98e67c0387926bad"
+      },
+      "wb-fence-village.p15-23": {
+        "stage": "fences",
+        "outputHash": "70894fb0b84759e6"
+      },
+      "wb-fence-village.p15-24": {
+        "stage": "fences",
+        "outputHash": "568ee7031a60b2e9"
+      },
+      "wb-fence-village.p15-25": {
+        "stage": "fences",
+        "outputHash": "a1a15a05934c7a57"
+      },
+      "wb-fence-village.p15-26": {
+        "stage": "fences",
+        "outputHash": "a1d88c02c864be48"
+      },
+      "wb-fence-village.p15-27": {
+        "stage": "fences",
+        "outputHash": "6d136a5155b0e793"
+      },
+      "wb-fence-village.p15-28": {
+        "stage": "fences",
+        "outputHash": "14cc3a887ccacaf2"
+      },
+      "wb-fence-village.p15-29": {
+        "stage": "fences",
+        "outputHash": "69f4c9fe24bfd728"
+      },
+      "wb-fence-village.p15-3": {
+        "stage": "fences",
+        "outputHash": "1fa9d49c57f2c7ba"
+      },
+      "wb-fence-village.p15-30": {
+        "stage": "fences",
+        "outputHash": "d9c37bd5ef24e4df"
+      },
+      "wb-fence-village.p15-4": {
+        "stage": "fences",
+        "outputHash": "1649b85adda2a9dc"
+      },
+      "wb-fence-village.p15-5": {
+        "stage": "fences",
+        "outputHash": "8c73844ac7cddd58"
+      },
+      "wb-fence-village.p15-6": {
+        "stage": "fences",
+        "outputHash": "69933f06018acfbc"
+      },
+      "wb-fence-village.p15-7": {
+        "stage": "fences",
+        "outputHash": "1ad9be0c54d2c32a"
+      },
+      "wb-fence-village.p15-8": {
+        "stage": "fences",
+        "outputHash": "536cffb2d76350d4"
+      },
+      "wb-fence-village.p15-9": {
+        "stage": "fences",
+        "outputHash": "284aba086e8b62ca"
+      },
+      "wb-fence-village.p2-1": {
+        "stage": "fences",
+        "outputHash": "4d8741eb9d69aa0d"
+      },
+      "wb-fence-village.p2-10": {
+        "stage": "fences",
+        "outputHash": "af4676a5c64de933"
+      },
+      "wb-fence-village.p2-11": {
+        "stage": "fences",
+        "outputHash": "770119011aed437b"
+      },
+      "wb-fence-village.p2-12": {
+        "stage": "fences",
+        "outputHash": "bf5fb617179547b5"
+      },
+      "wb-fence-village.p2-13": {
+        "stage": "fences",
+        "outputHash": "63d7f565873f33fb"
+      },
+      "wb-fence-village.p2-14": {
+        "stage": "fences",
+        "outputHash": "492938a092346dae"
+      },
+      "wb-fence-village.p2-15": {
+        "stage": "fences",
+        "outputHash": "3c07b293bc5caa45"
+      },
+      "wb-fence-village.p2-16": {
+        "stage": "fences",
+        "outputHash": "1fcb89ed74dee85f"
+      },
+      "wb-fence-village.p2-17": {
+        "stage": "fences",
+        "outputHash": "d8d50a7504f39b03"
+      },
+      "wb-fence-village.p2-18": {
+        "stage": "fences",
+        "outputHash": "acaa45efd4daa39d"
+      },
+      "wb-fence-village.p2-19": {
+        "stage": "fences",
+        "outputHash": "1cb4c388d47db446"
+      },
+      "wb-fence-village.p2-2": {
+        "stage": "fences",
+        "outputHash": "afc7e1154af18327"
+      },
+      "wb-fence-village.p2-20": {
+        "stage": "fences",
+        "outputHash": "ad502a83168b6e39"
+      },
+      "wb-fence-village.p2-3": {
+        "stage": "fences",
+        "outputHash": "15dc757197994ccb"
+      },
+      "wb-fence-village.p2-4": {
+        "stage": "fences",
+        "outputHash": "c0b6e583eacbe85d"
+      },
+      "wb-fence-village.p2-5": {
+        "stage": "fences",
+        "outputHash": "6d2a4cdc6b07bc02"
+      },
+      "wb-fence-village.p2-6": {
+        "stage": "fences",
+        "outputHash": "3bab0376eebfd304"
+      },
+      "wb-fence-village.p2-7": {
+        "stage": "fences",
+        "outputHash": "02467d9b71b1aeb9"
+      },
+      "wb-fence-village.p2-8": {
+        "stage": "fences",
+        "outputHash": "9cc6478c39945ec6"
+      },
+      "wb-fence-village.p2-9": {
+        "stage": "fences",
+        "outputHash": "6cfc268371c73261"
+      },
+      "wb-fence-village.p3-1": {
+        "stage": "fences",
+        "outputHash": "fce007b18e8f458b"
+      },
+      "wb-fence-village.p3-10": {
+        "stage": "fences",
+        "outputHash": "59d9a7acd9f8a2ce"
+      },
+      "wb-fence-village.p3-11": {
+        "stage": "fences",
+        "outputHash": "13e3159ad108f878"
+      },
+      "wb-fence-village.p3-12": {
+        "stage": "fences",
+        "outputHash": "cb1c2a26f7f1f078"
+      },
+      "wb-fence-village.p3-13": {
+        "stage": "fences",
+        "outputHash": "9e6deab2393b921c"
+      },
+      "wb-fence-village.p3-14": {
+        "stage": "fences",
+        "outputHash": "9d89d535a5b9bc4f"
+      },
+      "wb-fence-village.p3-15": {
+        "stage": "fences",
+        "outputHash": "9f9ea2b9ff5c473f"
+      },
+      "wb-fence-village.p3-16": {
+        "stage": "fences",
+        "outputHash": "610624edff15e6c3"
+      },
+      "wb-fence-village.p3-17": {
+        "stage": "fences",
+        "outputHash": "2e2a081b325fdac1"
+      },
+      "wb-fence-village.p3-18": {
+        "stage": "fences",
+        "outputHash": "aa257e70afd081da"
+      },
+      "wb-fence-village.p3-19": {
+        "stage": "fences",
+        "outputHash": "5f09ad39283646e7"
+      },
+      "wb-fence-village.p3-2": {
+        "stage": "fences",
+        "outputHash": "b0240c2ca20609fe"
+      },
+      "wb-fence-village.p3-20": {
+        "stage": "fences",
+        "outputHash": "1032e3bf338fd4b5"
+      },
+      "wb-fence-village.p3-3": {
+        "stage": "fences",
+        "outputHash": "b48ae549373b2817"
+      },
+      "wb-fence-village.p3-4": {
+        "stage": "fences",
+        "outputHash": "cb8ceb1b98ce7a89"
+      },
+      "wb-fence-village.p3-5": {
+        "stage": "fences",
+        "outputHash": "2b86c6807951fe2a"
+      },
+      "wb-fence-village.p3-6": {
+        "stage": "fences",
+        "outputHash": "ba0446608fadcb2a"
+      },
+      "wb-fence-village.p3-7": {
+        "stage": "fences",
+        "outputHash": "31270fc2ecb26f6c"
+      },
+      "wb-fence-village.p3-8": {
+        "stage": "fences",
+        "outputHash": "a766ae076185904d"
+      },
+      "wb-fence-village.p3-9": {
+        "stage": "fences",
+        "outputHash": "92d1e5c2fca1d28c"
+      },
+      "wb-fence-village.p5-1": {
+        "stage": "fences",
+        "outputHash": "c700a38ed2dd2c80"
+      },
+      "wb-fence-village.p5-10": {
+        "stage": "fences",
+        "outputHash": "8e022a65525e4213"
+      },
+      "wb-fence-village.p5-11": {
+        "stage": "fences",
+        "outputHash": "85cb5e11bdb271bf"
+      },
+      "wb-fence-village.p5-12": {
+        "stage": "fences",
+        "outputHash": "56e6a8e21ea23c58"
+      },
+      "wb-fence-village.p5-13": {
+        "stage": "fences",
+        "outputHash": "7c57226eb67cf3ec"
+      },
+      "wb-fence-village.p5-14": {
+        "stage": "fences",
+        "outputHash": "9fc6b604efb3b0ce"
+      },
+      "wb-fence-village.p5-15": {
+        "stage": "fences",
+        "outputHash": "fdc88a77e73279cd"
+      },
+      "wb-fence-village.p5-16": {
+        "stage": "fences",
+        "outputHash": "d63c13594a7baf1b"
+      },
+      "wb-fence-village.p5-17": {
+        "stage": "fences",
+        "outputHash": "7701e70c770f84b2"
+      },
+      "wb-fence-village.p5-18": {
+        "stage": "fences",
+        "outputHash": "6138a992b3fb9fc8"
+      },
+      "wb-fence-village.p5-19": {
+        "stage": "fences",
+        "outputHash": "f4e553c931f0f2fb"
+      },
+      "wb-fence-village.p5-2": {
+        "stage": "fences",
+        "outputHash": "0808e599d4365953"
+      },
+      "wb-fence-village.p5-20": {
+        "stage": "fences",
+        "outputHash": "5a7dfd76c85ae94c"
+      },
+      "wb-fence-village.p5-21": {
+        "stage": "fences",
+        "outputHash": "88752dcc12fc7a62"
+      },
+      "wb-fence-village.p5-22": {
+        "stage": "fences",
+        "outputHash": "2589bc00ba6198be"
+      },
+      "wb-fence-village.p5-23": {
+        "stage": "fences",
+        "outputHash": "bf1b4eaf63d359c1"
+      },
+      "wb-fence-village.p5-24": {
+        "stage": "fences",
+        "outputHash": "fd9bcc4ecdc5eb00"
+      },
+      "wb-fence-village.p5-25": {
+        "stage": "fences",
+        "outputHash": "d26f179fefd53359"
+      },
+      "wb-fence-village.p5-3": {
+        "stage": "fences",
+        "outputHash": "967b99e9bf1102ff"
+      },
+      "wb-fence-village.p5-4": {
+        "stage": "fences",
+        "outputHash": "17c81da756094ee9"
+      },
+      "wb-fence-village.p5-5": {
+        "stage": "fences",
+        "outputHash": "ff6e3be319bfe781"
+      },
+      "wb-fence-village.p5-6": {
+        "stage": "fences",
+        "outputHash": "9eb2b8ba71ae69dc"
+      },
+      "wb-fence-village.p5-7": {
+        "stage": "fences",
+        "outputHash": "498333979362c4f5"
+      },
+      "wb-fence-village.p5-8": {
+        "stage": "fences",
+        "outputHash": "c0c3cfbe0abf51b4"
+      },
+      "wb-fence-village.p5-9": {
+        "stage": "fences",
+        "outputHash": "bd39f6949d84de66"
+      },
+      "wb-fence-village.p6-1": {
+        "stage": "fences",
+        "outputHash": "d8b4331b55819da1"
+      },
+      "wb-fence-village.p6-10": {
+        "stage": "fences",
+        "outputHash": "4ef391708462d82e"
+      },
+      "wb-fence-village.p6-11": {
+        "stage": "fences",
+        "outputHash": "f32edb7a32e2346c"
+      },
+      "wb-fence-village.p6-12": {
+        "stage": "fences",
+        "outputHash": "d377f77a2df57b30"
+      },
+      "wb-fence-village.p6-13": {
+        "stage": "fences",
+        "outputHash": "ed380beae4409320"
+      },
+      "wb-fence-village.p6-14": {
+        "stage": "fences",
+        "outputHash": "4c68c029d35d497f"
+      },
+      "wb-fence-village.p6-15": {
+        "stage": "fences",
+        "outputHash": "2e398baa8a3c5294"
+      },
+      "wb-fence-village.p6-16": {
+        "stage": "fences",
+        "outputHash": "248990d13615725f"
+      },
+      "wb-fence-village.p6-17": {
+        "stage": "fences",
+        "outputHash": "bdbeb76ffe4c03b1"
+      },
+      "wb-fence-village.p6-18": {
+        "stage": "fences",
+        "outputHash": "6679126e1f5e3d50"
+      },
+      "wb-fence-village.p6-19": {
+        "stage": "fences",
+        "outputHash": "079909ca66432eb0"
+      },
+      "wb-fence-village.p6-2": {
+        "stage": "fences",
+        "outputHash": "c1e7f015f44f0577"
+      },
+      "wb-fence-village.p6-20": {
+        "stage": "fences",
+        "outputHash": "c57127a5ba481577"
+      },
+      "wb-fence-village.p6-3": {
+        "stage": "fences",
+        "outputHash": "8651c377de92ef9d"
+      },
+      "wb-fence-village.p6-4": {
+        "stage": "fences",
+        "outputHash": "991ff03440095576"
+      },
+      "wb-fence-village.p6-5": {
+        "stage": "fences",
+        "outputHash": "8b40c9ee7c281f90"
+      },
+      "wb-fence-village.p6-6": {
+        "stage": "fences",
+        "outputHash": "006a3cf53582af4b"
+      },
+      "wb-fence-village.p6-7": {
+        "stage": "fences",
+        "outputHash": "9e89583463e35562"
+      },
+      "wb-fence-village.p6-8": {
+        "stage": "fences",
+        "outputHash": "4c74c99969b3865b"
+      },
+      "wb-fence-village.p6-9": {
+        "stage": "fences",
+        "outputHash": "144180bc9d9040ea"
+      },
+      "wb-fence-village.p7-1": {
+        "stage": "fences",
+        "outputHash": "65d9ffe85a4a5cce"
+      },
+      "wb-fence-village.p7-10": {
+        "stage": "fences",
+        "outputHash": "6ceb058e931ab114"
+      },
+      "wb-fence-village.p7-11": {
+        "stage": "fences",
+        "outputHash": "aaa1049493bd978a"
+      },
+      "wb-fence-village.p7-12": {
+        "stage": "fences",
+        "outputHash": "6df4237d7a3349b3"
+      },
+      "wb-fence-village.p7-13": {
+        "stage": "fences",
+        "outputHash": "c45119bc97e9fa32"
+      },
+      "wb-fence-village.p7-14": {
+        "stage": "fences",
+        "outputHash": "17a0de580c3c78f2"
+      },
+      "wb-fence-village.p7-15": {
+        "stage": "fences",
+        "outputHash": "dbd1122cc95f3a7a"
+      },
+      "wb-fence-village.p7-16": {
+        "stage": "fences",
+        "outputHash": "6d7fd15385d5783d"
+      },
+      "wb-fence-village.p7-2": {
+        "stage": "fences",
+        "outputHash": "257d0afede389630"
+      },
+      "wb-fence-village.p7-3": {
+        "stage": "fences",
+        "outputHash": "433b87bfcbdbd05d"
+      },
+      "wb-fence-village.p7-4": {
+        "stage": "fences",
+        "outputHash": "c18c338751182831"
+      },
+      "wb-fence-village.p7-5": {
+        "stage": "fences",
+        "outputHash": "877e9bfe0ccae4ec"
+      },
+      "wb-fence-village.p7-6": {
+        "stage": "fences",
+        "outputHash": "6cf97b6955a8fd53"
+      },
+      "wb-fence-village.p7-7": {
+        "stage": "fences",
+        "outputHash": "f061af36d270091c"
+      },
+      "wb-fence-village.p7-8": {
+        "stage": "fences",
+        "outputHash": "23acf007f2f916ad"
+      },
+      "wb-fence-village.p7-9": {
+        "stage": "fences",
+        "outputHash": "5f052d0f7b19af79"
+      },
+      "wb-fence-village.p9-1": {
+        "stage": "fences",
+        "outputHash": "97f56676ca7282d0"
+      },
+      "wb-fence-village.p9-10": {
+        "stage": "fences",
+        "outputHash": "6abf12c649be7bfc"
+      },
+      "wb-fence-village.p9-11": {
+        "stage": "fences",
+        "outputHash": "14695159876c842f"
+      },
+      "wb-fence-village.p9-12": {
+        "stage": "fences",
+        "outputHash": "36ba5809bca76eff"
+      },
+      "wb-fence-village.p9-13": {
+        "stage": "fences",
+        "outputHash": "0df051a41e72973e"
+      },
+      "wb-fence-village.p9-14": {
+        "stage": "fences",
+        "outputHash": "ba5ec349ff6eee53"
+      },
+      "wb-fence-village.p9-15": {
+        "stage": "fences",
+        "outputHash": "6b7a072d3766f57b"
+      },
+      "wb-fence-village.p9-16": {
+        "stage": "fences",
+        "outputHash": "e73cca66b6d0d72c"
+      },
+      "wb-fence-village.p9-17": {
+        "stage": "fences",
+        "outputHash": "c729e70bb96c2aad"
+      },
+      "wb-fence-village.p9-18": {
+        "stage": "fences",
+        "outputHash": "ce00185659da3ffc"
+      },
+      "wb-fence-village.p9-19": {
+        "stage": "fences",
+        "outputHash": "8371199cd06986da"
+      },
+      "wb-fence-village.p9-2": {
+        "stage": "fences",
+        "outputHash": "870de0bfae19db6d"
+      },
+      "wb-fence-village.p9-20": {
+        "stage": "fences",
+        "outputHash": "64fcdb8c8e3fc5d2"
+      },
+      "wb-fence-village.p9-21": {
+        "stage": "fences",
+        "outputHash": "2c98f5f65da2c350"
+      },
+      "wb-fence-village.p9-22": {
+        "stage": "fences",
+        "outputHash": "be27afe5f29e5ef3"
+      },
+      "wb-fence-village.p9-23": {
+        "stage": "fences",
+        "outputHash": "6a57f628f8c110aa"
+      },
+      "wb-fence-village.p9-24": {
+        "stage": "fences",
+        "outputHash": "2e2af5337d573c8d"
+      },
+      "wb-fence-village.p9-25": {
+        "stage": "fences",
+        "outputHash": "2f925fb54950b577"
+      },
+      "wb-fence-village.p9-26": {
+        "stage": "fences",
+        "outputHash": "b08da337350f370d"
+      },
+      "wb-fence-village.p9-27": {
+        "stage": "fences",
+        "outputHash": "1f6d5b6e308f63b8"
+      },
+      "wb-fence-village.p9-3": {
+        "stage": "fences",
+        "outputHash": "38cd8730e961ae16"
+      },
+      "wb-fence-village.p9-4": {
+        "stage": "fences",
+        "outputHash": "0ebe35d2926f1bc8"
+      },
+      "wb-fence-village.p9-5": {
+        "stage": "fences",
+        "outputHash": "bca4342261c2db50"
+      },
+      "wb-fence-village.p9-6": {
+        "stage": "fences",
+        "outputHash": "b3042cb51d05638b"
+      },
+      "wb-fence-village.p9-7": {
+        "stage": "fences",
+        "outputHash": "c6a7ab859059cb7b"
+      },
+      "wb-fence-village.p9-8": {
+        "stage": "fences",
+        "outputHash": "56603a4513bdbd67"
+      },
+      "wb-fence-village.p9-9": {
+        "stage": "fences",
+        "outputHash": "6605ea72850333a0"
+      },
+      "wb-furniture-village-prop.sign.settlementName-1": {
+        "stage": "furniture",
+        "outputHash": "b9853a60797a869e"
+      },
+      "wb-furniture-village-prop.sign.settlementName-2": {
+        "stage": "furniture",
+        "outputHash": "4ffb781cde05ea82"
+      },
+      "wb-parcel-village.p1": {
+        "stage": "parcels",
+        "outputHash": "516c4587068b9a39"
+      },
+      "wb-parcel-village.p10": {
+        "stage": "parcels",
+        "outputHash": "7e448e473f0feb71"
+      },
+      "wb-parcel-village.p11": {
+        "stage": "parcels",
+        "outputHash": "81a97735f590abf7"
+      },
+      "wb-parcel-village.p12": {
+        "stage": "parcels",
+        "outputHash": "1b6c25b5aaa18d8f"
+      },
+      "wb-parcel-village.p13": {
+        "stage": "parcels",
+        "outputHash": "e1506580e1c5eb4e"
+      },
+      "wb-parcel-village.p14": {
+        "stage": "parcels",
+        "outputHash": "431f410a5432f2b4"
+      },
+      "wb-parcel-village.p15": {
+        "stage": "parcels",
+        "outputHash": "6bd82e53e1cbc785"
+      },
+      "wb-parcel-village.p2": {
+        "stage": "parcels",
+        "outputHash": "2424978bc0fa20d9"
+      },
+      "wb-parcel-village.p3": {
+        "stage": "parcels",
+        "outputHash": "de016851ffb705b7"
+      },
+      "wb-parcel-village.p4": {
+        "stage": "parcels",
+        "outputHash": "079f3d18684a6462"
+      },
+      "wb-parcel-village.p5": {
+        "stage": "parcels",
+        "outputHash": "c211f13edb80e7e8"
+      },
+      "wb-parcel-village.p6": {
+        "stage": "parcels",
+        "outputHash": "e08f16ac16c94d86"
+      },
+      "wb-parcel-village.p7": {
+        "stage": "parcels",
+        "outputHash": "887b318c7ce7abea"
+      },
+      "wb-parcel-village.p8": {
+        "stage": "parcels",
+        "outputHash": "f295b8cd45969847"
+      },
+      "wb-parcel-village.p9": {
+        "stage": "parcels",
+        "outputHash": "92bac02ea98fec9c"
+      },
+      "wb-site-village": {
+        "stage": "settlementSites",
+        "outputHash": "6f47f97fb39506d9"
+      }
+    },
+    "splines": {
+      "wb-road-main": {
+        "stage": "roads",
+        "outputHash": "1cabe62ff27abc15",
+        "edge": "main"
+      },
+      "wb-street-village-1": {
+        "stage": "streets",
+        "outputHash": "25d541392206f017"
+      }
+    },
+    "foliageRules": {},
+    "protectedRegions": []
+  },
+  "regionProfile": "assets/starter-content/Levels/WorldBuildMap.regionprofile.json"
+}

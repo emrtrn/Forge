@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "1_1",
+  "instances": [
+    {
+      "assetId": "lt-boulder-a",
+      "placements": [
+        {
+          "position": [
+            147.62,
+            -2.2,
+            167.98
+          ],
+          "rotationYDeg": 0,
+          "scale": 1.6
+        }
+      ]
+    }
+  ]
+}

@@ -55,7 +55,9 @@
   },
   "worldCells": [
     "0_0",
-    "1_0"
+    "1_0",
+    "0_1",
+    "1_1"
   ],
   "skyAtmosphere": {
     "rayleigh": 1.4,
@@ -69,6 +71,21 @@
     "softness": 0.5,
     "scale": 2,
     "speed": 0.1
+  },
+  "postProcess": {
+    "toneMapping": "neutral",
+    "antialias": "smaa",
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1,
+      "intensity": 1
+    }
   },
   "lights": [
     {
@@ -103,6 +120,44 @@
       ],
       "dataRef": "assets/starter-content/Levels/Terrain.landscapes/landscape-1.terrain.json",
       "name": "Landscape"
+    }
+  ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "landscapeRef": "landscape-1",
+      "splineRef": "spline-1",
+      "name": "River Water 1",
+      "coordinateSpace": "world",
+      "surfaceLevel": -1,
+      "flowSpeed": 0.1,
+      "normalScale": 1,
+      "waveAmplitude": 0.1,
+      "contactFoam": {
+        "enabled": true,
+        "shoreWidth": 0.6,
+        "scale": 0.8,
+        "speed": 0.3,
+        "obstacles": []
+      },
+      "geometryFoam": {
+        "enabled": true,
+        "width": 1,
+        "strength": 1,
+        "scale": 1,
+        "speed": 1,
+        "bake": {
+          "manifest": "assets/starter-content/Levels/Terrain.foam/60c19ccbc37a84320a7e95c4f3f4e118bef252f7891ea966096cb1313f22ee2d.foam.json",
+          "fingerprint": "5d5cee4fb274e61439072ab9b549d05641febf03db28d1284a96429d2e7f92da"
+        }
+      },
+      "caustics": {
+        "enabled": true,
+        "strength": 1,
+        "scale": 1.5,
+        "speed": 1,
+        "depthFade": 2
+      }
     }
   ],
   "waterBodies": [

@@ -148,7 +148,7 @@ export function normalizeWorldEnvironment(value: unknown): WorldEnvironmentNorma
   if (sunPath) {
     const next: NonNullable<LayoutWorldEnvironment["sunPath"]> = {};
     const azimuth = num(sunPath.azimuthDeg, "sunPath.azimuthDeg", -360, 360);
-    assign(next, "azimuthDeg", azimuth === undefined ? undefined : wrapDegrees(azimuth));
+    assign(next, "azimuthDeg", azimuth === undefined ? undefined : Number(wrapDegrees(azimuth).toFixed(3)) % 360);
     assign(next, "noonElevationDeg", num(sunPath.noonElevationDeg, "sunPath.noonElevationDeg", 5, 90));
     assign(next, "sunriseHour", num(sunPath.sunriseHour, "sunPath.sunriseHour", 0, 23.5));
     assign(next, "sunsetHour", num(sunPath.sunsetHour, "sunPath.sunsetHour", 0.5, 24));
@@ -207,8 +207,8 @@ export function normalizeWorldEnvironment(value: unknown): WorldEnvironmentNorma
 
 /** Wraps degrees into [0, 360). */
 export function wrapDegrees(degrees: number): number {
-  const wrapped = Number((((degrees % 360) + 360) % 360).toFixed(3));
-  return wrapped === 360 ? 0 : wrapped;
+  const wrapped = ((degrees % 360) + 360) % 360;
+  return wrapped >= 360 ? 0 : wrapped;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

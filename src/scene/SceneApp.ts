@@ -227,6 +227,7 @@ import { resolveSkyAtmosphere } from "@engine/render-three/skyAtmosphere";
 import { resolveHeightFog } from "@engine/render-three/heightFog";
 import { resolveCloudLayer } from "@engine/render-three/cloudLayer";
 import { resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
+import { initialWorldEnvironmentForSun } from "@engine/environment/sunPath";
 import {
   applyPostProcessToneMapping,
   createPostProcessAntialiasPass,
@@ -13355,7 +13356,13 @@ export class SceneApp {
       this.onStatus?.("World Environment already exists - selected it.", "info");
       return;
     }
-    this.commitWorldEnvironment({}, "Add World Environment");
+    // Start from the hour/sun path that reproduce the current Sun, so adding
+    // the actor does not move the light (ENV-00b).
+    const sun = this.sunLightActor();
+    this.commitWorldEnvironment(
+      initialWorldEnvironmentForSun(sun ? readRotation(sun) : null),
+      "Add World Environment",
+    );
     this.select({ kind: "worldEnvironment" });
     this.onStatus?.("Added World Environment.", "info");
   }

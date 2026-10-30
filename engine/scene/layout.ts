@@ -1052,6 +1052,7 @@ export interface LayoutRiverWater {
   /** Tint used by shore, rapid and strip foam. */
   foamColor?: string;
   /** Visual blend strength of shore, rapid and strip foam, 0..1. */
+  crestFoamEnabled?: boolean; crestFoamStrength?: number; crestFoamThreshold?: number;
   foamOpacity?: number;
   /** Number of visible inward-moving shore-wave bands per bank. */
   shoreWaveSpacing?: number;
@@ -1124,6 +1125,7 @@ export interface LayoutLakeWaterBody {
     /** Wet tyre prints after leaving the water: length (m), first-print wetness (0..1), drying time (s). */
     wheelWetTrailEnabled?: boolean; wheelWetTrailLength?: number; wheelWetTrailStrength?: number; wheelWetTrailDrySeconds?: number;
     shoreWetnessEnabled?: boolean; shoreWetnessWidth?: number; shoreWetnessStrength?: number;
+    crestFoamEnabled?: boolean; crestFoamStrength?: number; crestFoamThreshold?: number;
     foamEnabled?: boolean; foamOpacity?: number; foamWidth?: number; foamScale?: number; foamSpeed?: number;
     causticsEnabled?: boolean; causticsStrength?: number; causticsScale?: number;
     causticsSpeed?: number; causticsDepthFade?: number;

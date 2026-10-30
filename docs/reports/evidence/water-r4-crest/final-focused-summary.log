@@ -1,0 +1,5 @@
+﻿(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 [chromium] › tests\smoke\terrain-lake-editor.spec.ts:119:1 › Lake crest foam controls survive undo Save Reload and runtime (1.6m)
+  ok 2 [chromium] › tests\smoke\water-crest-foam.spec.ts:3:1 › Lake and River crest foam follows raised waves, controls, lighting and quality (49.6s)
+
+  2 passed (2.5m)

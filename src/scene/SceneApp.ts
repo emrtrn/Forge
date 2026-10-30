@@ -1,3 +1,4 @@
+import { validateWaterCrestFoam } from "@engine/scene/waterCrestFoam";
 import { LakeFoamStore } from "./lakeFoamStore";
 import { validateWaterCaustics, type WaterCaustics } from "@engine/scene/waterCaustics";
 import { validateWaterShoreWetness, type WaterShoreWetness } from "@engine/scene/waterShoreWetness";
@@ -947,6 +948,7 @@ export interface RiverWaterDetailsView {
   absorptionDistance: number;
   waveAmplitude: number;
   waveLength: number;
+  crestFoamEnabled: boolean; crestFoamStrength: number; crestFoamThreshold: number;
   foamColor: string;
   foamOpacity: number;
   shoreWaveSpacing: number;
@@ -982,6 +984,7 @@ export type RiverWaterDetailsPatch = Partial<Pick<
   | "absorptionDistance"
   | "waveAmplitude"
   | "waveLength"
+  | "crestFoamEnabled" | "crestFoamStrength" | "crestFoamThreshold"
   | "foamColor"
   | "foamOpacity"
   | "shoreWaveSpacing"
@@ -3344,9 +3347,9 @@ export class SceneApp {
     setTerrainSelfShadow(quality.terrainSelfShadow);
     setTerrainFarTiling(quality.terrainFarTiling);
     void this.lakes?.setQuality(lakeQuality(quality)).catch(error => console.warn("[lake-quality]", error));
+    if (!quality.lakeFoamAllowed) this.riverFoam.clearLoaded();
     for(const river of this.riverWaterObjects) {
-      river.setShoreWetnessAllowed(quality.lakeShoreWetnessAllowed);
-      river.setRefractionAllowed(quality.lakeReflectionQuality !== "off");
+      void river.applyQuality(lakeQuality(quality));
     }
     this.fitSunShadowToScene();
     this.applyPostProcess();
@@ -8196,29 +8199,34 @@ export class SceneApp {
         const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
         const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
-        let bakedFoam;
-        if(resolved.geometryFoam?.enabled && resolved.geometryFoam.bake) {
-          try {
-            const data=await this.riverFoam.read(resolved.geometryFoam.bake.manifest,foamSignal);
-            if(data.metadata.fingerprint!==resolved.geometryFoam.bake.fingerprint)throw new Error("River foam fingerprint mismatch");
-            const used=[...this.riverWaterObjects,...(this.lakes?.objects.values()??[])].reduce((n,o)=>n+(o.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength??0),0);
-            const {nx,nz}=data.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
-            if(used+tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th)>32*1024**2)throw new Error("over-budget: combined water geometry foam exceeds 32 MiB");
-            bakedFoam=data; this.riverFoamMessages.delete(resolved.id);
-          }catch(error){if(foamSignal.aborted)return;this.riverFoamMessages.set(resolved.id,String(error));console.warn("[river-foam]",resolved.id,error);}
-        }
+        const loadBakedFoam = async () => {
+          let bakedFoam;
+          if(resolved.geometryFoam?.enabled && resolved.geometryFoam.bake) {
+            try {
+              const data=await this.riverFoam.read(resolved.geometryFoam.bake.manifest,foamSignal);
+              if (!this.editorQuality.lakeFoamAllowed) { this.riverFoam.clearLoaded(); return; }
+              if(data.metadata.fingerprint!==resolved.geometryFoam.bake.fingerprint)throw new Error("River foam fingerprint mismatch");
+              const used=[...this.riverWaterObjects,...(this.lakes?.objects.values()??[])].reduce((n,o)=>n+(o.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength??0),0);
+              const {nx,nz}=data.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
+              if(used+tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th)>32*1024**2)throw new Error("over-budget: combined water geometry foam exceeds 32 MiB");
+              bakedFoam=data; this.riverFoamMessages.delete(resolved.id);
+            }catch(error){if(foamSignal.aborted)return;this.riverFoamMessages.set(resolved.id,String(error));console.warn("[river-foam]",resolved.id,error);}
+          }
+          return bakedFoam;
+        };
+        const bakedFoam = this.editorQuality.lakeFoamAllowed && resolved.foamOpacity > 0 ? await loadBakedFoam() : undefined;
         if(build!==this.riverWaterBuild)return;
         const item: RiverWaterRenderItem = {
           ...resolved,
           ...source,
-          foamNoiseMap,
+          foamNoiseMap, loadBakedFoam, quality: lakeQuality(this.editorQuality),
           ...(bakedFoam?{bakedFoam}:{}),
           environmentProbes: () => this.eligibleProbeBakes(),
         };
         const object = createRiverWaterObject({...item, refractionAllowed: this.editorQuality.lakeReflectionQuality !== "off"}, normalMap);
         object.raycast = () => {};
         object.userData.riverWaterId = resolved.id;
-        object.setShoreWetnessAllowed(this.editorQuality.lakeShoreWetnessAllowed);
+        void object.applyQuality(lakeQuality(this.editorQuality));
         this.scene.add(object);
         this.riverWaterObjects.push(object);
       } catch (error) {
@@ -11030,6 +11038,7 @@ export class SceneApp {
           absorptionDistance: resolved.absorptionDistance,
           waveAmplitude: resolved.waveAmplitude,
           waveLength: resolved.waveLength,
+          crestFoamEnabled: resolved.crestFoamEnabled, crestFoamStrength: resolved.crestFoamStrength, crestFoamThreshold: resolved.crestFoamThreshold,
           foamColor: resolved.foamColor,
           foamOpacity: resolved.foamOpacity,
           shoreWaveSpacing: resolved.shoreWaveSpacing,
@@ -11084,6 +11093,7 @@ export class SceneApp {
     if (patch.absorptionDistance !== undefined) next.absorptionDistance = Number(clamp(patch.absorptionDistance, 0.01, 100).toFixed(3));
     if (patch.waveAmplitude !== undefined) next.waveAmplitude = Number(clamp(patch.waveAmplitude, 0, 1).toFixed(3));
     if (patch.waveLength !== undefined) next.waveLength = Number(clamp(patch.waveLength, 0.1, 100).toFixed(3));
+    Object.assign(next, validateWaterCrestFoam(patch));
     if (patch.foamColor !== undefined) next.foamColor = patch.foamColor;
     if (patch.foamOpacity !== undefined) next.foamOpacity = Number(clamp(patch.foamOpacity, 0, 1).toFixed(3));
     if (patch.shoreWaveSpacing !== undefined) next.shoreWaveSpacing = Number(clamp(patch.shoreWaveSpacing, 0.5, 20).toFixed(3));

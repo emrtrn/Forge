@@ -256,6 +256,12 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await refraction.fill("1.2"); await refraction.press("Enter");
   await page.getByTestId("editor-undo").click(); await expect(refraction).toHaveValue("0.65");
   await page.getByTestId("editor-redo").click(); await expect(refraction).toHaveValue("1.2");
+  const crest = page.locator('[data-river-crest-number="crestFoamStrength"]');
+  await crest.fill("0.6"); await crest.press("Tab");
+  const crestEnabled = page.getByRole("checkbox", { name: "River Crest Foam Enabled" });
+  await crestEnabled.uncheck();
+  await page.getByTestId("editor-undo").click(); await expect(crestEnabled).toBeChecked();
+  await page.getByTestId("editor-redo").click(); await expect(crestEnabled).not.toBeChecked();
   // The river bed uses the existing multi-tile patch/undo path.
   await page.locator("[data-landscape-mode]").selectOption("splines");
   const offset = page.locator('[data-landscape-segment-number="deform.targetOffset"]');
@@ -288,6 +294,8 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   expect(saved.riverWaters[0].surfaceStrength).toBe(1.6);
   expect(saved.riverWaters[0].surfaceRoughness).toBe(0.24);
   expect(saved.riverWaters[0].refractionStrength).toBe(1.2);
+  expect(saved.riverWaters[0].crestFoamStrength).toBe(.6);
+  expect(saved.riverWaters[0].crestFoamEnabled).toBe(false);
   const editor = (await riverSnapshot(page)).waters[0];
   expect(editor.foam).toEqual([]);
   const time = editor.time;
@@ -300,11 +308,13 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await expect(height).toHaveValue("7"); await expect(flow).toHaveValue("1.2");
   await expect(strength).toHaveValue("1.6"); await expect(roughness).toHaveValue("0.24");
   await expect(refraction).toHaveValue("1.2");
+  await expect(crest).toHaveValue("0.6"); await expect(crestEnabled).not.toBeChecked();
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.triangles).toBe(editor.triangles);
   await page.goto("/tests/smoke/pages/terrain-spline-runtime.html", { waitUntil: "domcontentloaded" });
   await expect.poll(async () => page.evaluate(() => Boolean((window as any).__riverQA)), { timeout: 90_000 }).toBe(true);
   const runtime = (await riverSnapshot(page)).waters[0];
   expect(runtime.surfaceStrength).toBe(1.6); expect(runtime.surfaceRoughness).toBe(0.24);
+  expect(runtime.crestFoamStrength).toBe(0);
   expect([0,1.2]).toContain(runtime.refractionStrength);
   expect(runtime.refractionBytes).toBeLessThanOrEqual(8*1024*1024);
   expect(runtime.samples).toEqual(editor.samples); expect(runtime.foam).toEqual(editor.foam);
@@ -315,10 +325,13 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await page.evaluate(() => { (window as any).__riverQA.quality("low"); (window as any).__riverQA.frame(); });
   const runtimeLow = (await riverSnapshot(page)).waters[0];
   expect(runtimeLow.refractionStrength).toBe(0); expect(runtimeLow.refractionBytes).toBe(0);
+  expect(runtimeLow.foamOpacity).toBe(0);
   await page.evaluate(() => { (window as any).__riverQA.quality("high"); (window as any).__riverQA.frame(); });
   const runtimeRestored = (await riverSnapshot(page)).waters[0];
   expect(runtimeRestored.refractionStrength).toBe(1.2); expect(runtimeRestored.refractionBytes).toBe(runtimeHigh.refractionBytes);
   expect(runtimeRestored.samples).toEqual(editor.samples);
+  expect(runtimeRestored.crestFoamStrength).toBe(0);
+  expect(runtimeRestored.foamOpacity).toBe(runtimeHigh.foamOpacity);
   await page.evaluate(() => (window as any).__riverQA.frame());
   await page.screenshot({ path: info.outputPath("world-river-runtime.png") });
   await page.setViewportSize({ width: 1100, height: 720 });

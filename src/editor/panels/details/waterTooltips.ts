@@ -31,6 +31,8 @@ const descriptions: Record<string, string> = {
   "reset-wet-trail": "Yalnız ıslak iz ayarlarını varsayılan değerlere (5 m, 1, 40 s) döndürür. Bu işlem geri alınabilir.",
   flowSpeed: "Nehir akış deseninin ilerleme hızı.", rippleSpeed: "Göl yüzeyindeki dalga deseninin hareket hızı.",
   waveAmplitude: "Dalganın yüzey yüksekliğine etkisi.", waveLength: "Dalga tepeleri arasındaki mesafe.",
+  crestFoamStrength: "Dalga tepesi köpüğünün yoğunluğu; 0 köpüğü kapatır.",
+  crestFoamThreshold: "Köpük için gereken göreli dalga yüksekliği. Büyük değer yalnız en yüksek tepelerde köpük bırakır.",
   foamColor: "Otomatik kıyı, kaya teması ve akıntı köpüklerinin rengi.", foamOpacity: "Otomatik kıyı, kaya teması ve akıntı köpüklerinin görünürlük düzeyi.",
   shoreWaveSpacing: "Kıyı köpüğü dalgalarının bantları arasındaki mesafe.",
   shoreWaveSpeed: "Köpük dalgalarının kıyıya doğru ilerleme hızı.",

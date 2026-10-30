@@ -362,6 +362,26 @@ kayaların uzaması veya başka kot/gövdeden renk sızması yok. Bu dilim ayrı
 
 #### R4 — Köpük dengesi, kayıt ve kalite entegrasyonu
 
+İlk uygulama ve teknik kabul kaydı:
+[R4 Lake/River dalga tepesi köpüğü raporu](../reports/WATER_R4_CREST_FOAM_2026-10-30.md).
+Kullanıcı sahnesinde görsel kabul ve gerçek GPU maliyeti açık kalır; aşağıdaki
+maddeler rapor bağlantısıyla otomatik kapanmaz.
+
+30 Ekim ek kapsam: Kullanıcının görsel referansındaki gibi **Lake ve River dalga
+tepelerinde parçalı beyaz köpük**. Mevcut çizilen geometrik dalganın pozitif
+yükselmesinden üretilir; yeni dalga modeli, ekstra render geçişi veya köpük geçmişi
+eklenmez. Kıyı ve engel köpüğü korunur.
+
+- [ ] Ortak dalga tepesi maskesi; düz/dalgası kapalı suda sıfır, kuru kıyıda sönüm,
+  River akışına bağlı parçalanma ve ortak köpük ışığı. Gündüz/gölge/gece ve
+  yakın/uzak karşılaştırması; Lake/River için ayrı aç/kapat, yoğunluk ve eşik.
+- [ ] `crestFoamEnabled`, `crestFoamStrength`, `crestFoamThreshold`: Lake appearance
+  ve River layout/read/save/Details/undo yolunda aynı sözleşme. Eksik alanlar
+  kayda otomatik yazılmaz; kullanıcının kayıtlı kapalı tercihi korunur.
+- [ ] River köpük/caustics kalite tavanları editör, runtime ve adaptif geçişlerde
+  Lake politikasıyla aynı uygulanır; bake kalite yükselince yeniden kullanılır,
+  geç yüklemeler kapatılmış/dispose edilmiş suyu yeniden canlandırmaz.
+
 - [ ] Lake referansıyla köpük rengi/ışığını karşılaştır; River'ın rapid, kıyı ve
   aşağı akış engel dağılımını koru. Mevcut Calculate/Recalculate/Clear ve kalıcı
   bake akışı değişmesin; manuel temas aracı veya runtime yeniden bake eklenmesin.

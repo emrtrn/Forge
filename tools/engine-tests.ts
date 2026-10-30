@@ -23775,6 +23775,7 @@ check("uniqueBlockingVolumeId/Name avoid collisions", () => {
 
 check("River Water Body resolves defaults and only saves presentation fields", () => {
   assert.deepEqual(resolveRiverWater(null), {
+    crestFoamEnabled: true, crestFoamStrength: .75, crestFoamThreshold: .35,
     id: "river-water",
     name: "River Water",
     hidden: false,

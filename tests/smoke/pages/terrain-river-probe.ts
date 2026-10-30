@@ -60,6 +60,8 @@ export function installRiverProbe(app: unknown) {
           surfaceRoughness: water.material.uniforms.surfaceRoughness!.value,
           refractionStrength: water.material.uniforms.riverRefractionStrength!.value,
           refractionBytes: water.userData.riverRefractionBytes ?? 0,
+          crestFoamStrength: water.material.uniforms.crestFoamStrength!.value,
+          foamOpacity: water.material.uniforms.foamOpacity!.value,
           foam: water.children.map((child) => ({ name: child.name, world: child.getWorldPosition(water.position.clone()).toArray() })) };
       }), streamingPending: pendingTerrainLoads(internal), resident: [...(internal.worldTerrains ?? internal.worldTerrainDocuments ?? new Map()).values()].map((doc) => doc.tiles.size) };
     },

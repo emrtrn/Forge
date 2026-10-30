@@ -11,9 +11,68 @@ import { LakeWaterObject } from "../../engine/render-three/lakeWater";
 import { validateWaterBody, resolveLakeAppearance } from "../../engine/scene/waterBody";
 import { buildLakeGeometry, prepareLakeSnapshot } from "../../engine/terrain/terrainLakeWater";
 import { createLakeFixture } from "./fixtures/lakeFixture";
+import { validateRiverWater } from "../../tools/saveValidator";
+import { resolveWaterCrestFoam } from "../../engine/scene/waterCrestFoam";
+import { FULL_LAKE_QUALITY } from "../../engine/perf/lakeQuality";
+import { riverEffectFixture } from "./riverEffects.test";
+import { defaultWaterContactFoam } from "../../engine/scene/waterContactFoam";
+import { bakeRiverGeometryFoam } from "../../engine/render-three/lakeFoamBake";
+import type { LakeFoamData } from "../../engine/scene/lakeFoamBake";
 
 type Check = (label: string, run: () => Promise<void>) => Promise<void>;
 export async function registerWaterFoamTests(check: Check): Promise<void> {
+  await check("Crest foam: shared strict read/save contract, omitted defaults and authored Off", async () => {
+    const river = { id: "r", landscapeRef: "t", splineRef: "s" }, lake = createLakeFixture().lake;
+    assert.equal(validateRiverWater(river).crestFoamEnabled, undefined);
+    assert.equal(validateWaterBody(lake).appearance, undefined);
+    assert.equal(resolveRiverWater(river).crestFoamEnabled, true);
+    assert.equal(resolveLakeAppearance(lake).crestFoamEnabled, true);
+    const settings = { crestFoamEnabled: false, crestFoamStrength: .6, crestFoamThreshold: .8 };
+    assert.deepEqual(resolveWaterCrestFoam(settings), settings);
+    const saved = validateRiverWater({ ...river, ...settings });
+    for (const key of Object.keys(settings) as Array<keyof typeof settings>) assert.equal(saved[key], settings[key]);
+    assert.deepEqual(validateWaterBody({ ...lake, appearance: settings }).appearance, settings);
+    for (const bad of [{ crestFoamEnabled: 1 }, { crestFoamStrength: NaN }, { crestFoamStrength: -1 }, { crestFoamThreshold: 1.1 }, { crestFoamThreshold: "0.5" }]) {
+      assert.throws(() => validateRiverWater({ ...river, ...bad }), /crest foam/);
+      assert.throws(() => validateWaterBody({ ...lake, appearance: bad }), /crest foam/);
+      assert.throws(() => resolveRiverWater({ ...river, ...bad } as never), /crest foam/);
+      assert.throws(() => resolveLakeAppearance({ ...lake, appearance: bad } as never), /crest foam/);
+    }
+  });
+  await check("Crest foam: River quality releases masks, preserves geometry and rejects late bake revival", async () => {
+    const item = { ...riverEffectFixture(), contactFoam: { ...defaultWaterContactFoam(), enabled: true } }, scene = new Scene();
+    const low = { ...FULL_LAKE_QUALITY, foamAllowed: false, causticsAllowed: false, shoreWetnessAllowed: false, reflectionQuality: "off" as const };
+    let reads = 0, finish!: (value: LakeFoamData) => void;
+    const river = new RiverWaterObject({ ...item, quality: low, loadBakedFoam: () => { reads++; return new Promise(resolve => { finish = resolve; }); } }, null);
+    scene.add(river);
+    const positions = river.geometry.getAttribute("position").array, before = JSON.stringify(item);
+    const bake = await bakeRiverGeometryFoam(river.getSurface(), [], .4, "c".repeat(64), new AbortController().signal);
+    assert.equal(river.material.uniforms.foamOpacity!.value, 0);
+    assert.equal(river.material.uniforms.realShoreMask!.value, null);
+    assert.equal(river.material.uniforms.crestFoamStrength!.value, 0);
+    const pending = river.applyQuality(FULL_LAKE_QUALITY);
+    assert.equal(reads, 1);
+    assert.ok(river.material.uniforms.realShoreMask!.value);
+    await river.applyQuality(low); finish(bake); await pending;
+    assert.equal(river.material.uniforms.geometryFoamMask!.value, null);
+    for (let i = 0; i < 5; i++) {
+      const pending = river.applyQuality(FULL_LAKE_QUALITY);
+      await river.applyQuality(low); finish(bake); await pending;
+      assert.equal(river.geometry.getAttribute("position").array, positions);
+      assert.equal(river.material.uniforms.realShoreMask!.value, null);
+    }
+    assert.equal(JSON.stringify(item), before);
+    const restored = river.applyQuality(FULL_LAKE_QUALITY); finish(bake); await restored;
+    assert.ok(river.material.uniforms.geometryFoamMask!.value);
+    await river.applyQuality(low);
+    const late = river.applyQuality(FULL_LAKE_QUALITY); river.dispose(); finish(bake); await late;
+    await river.applyQuality(FULL_LAKE_QUALITY);
+    assert.equal(river.material.uniforms.geometryFoamMask!.value, null);
+    assert.equal(river.userData.riverRefractionBytes, undefined);
+    const off = new RiverWaterObject({ ...item, crestFoamEnabled: false }, null);
+    await off.applyQuality(low); await off.applyQuality(FULL_LAKE_QUALITY);
+    assert.equal(off.material.uniforms.crestFoamStrength!.value, 0); off.dispose();
+  });
   await check("Lake mask rebuild: stable layers reuse allocations and upload only the changed body's exact coverage", async () => {
     const doc = createLakeFixture(), geometry = await buildLakeGeometry(await prepareLakeSnapshot(doc, doc.lake));
     const scene = new Scene(), a = new Group(), b = new Group(); scene.add(a, b);

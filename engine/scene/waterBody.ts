@@ -1,3 +1,4 @@
+import { resolveWaterCrestFoam, validateWaterCrestFoam } from "./waterCrestFoam";
 import { validateLakeGeometryFoam } from "./lakeFoamBake";
 import { validateWaterContactFoam } from "./waterContactFoam";
 import type { LayoutLakeWaterBody } from "./layout";
@@ -134,6 +135,7 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
       if (!["low", "medium", "high"].includes(String(source.reflectionQuality))) throw new Error("Invalid Lake reflectionQuality");
       appearance.reflectionQuality = source.reflectionQuality as "low" | "medium" | "high";
     }
+    Object.assign(appearance, validateWaterCrestFoam(source));
     out.appearance = appearance;
   }
   return out;
@@ -158,5 +160,5 @@ export function resolveLakeAppearance(lake: LayoutLakeWaterBody) {
     ...LAKE_WHEEL_WET_TRAIL_DEFAULTS, shoreWetnessEnabled: false, shoreWetnessWidth: 1, shoreWetnessStrength: 0.65,
     shoreBlendDepth: 0.25, foamEnabled: false, foamOpacity: 0.7, foamWidth: 1, foamScale: 0.8, foamSpeed: 0.3,
     reflectionStrength: d.reflectionStrength, causticsEnabled: false, causticsStrength: 1,
-    causticsScale: 1.5, causticsSpeed: 0.25, causticsDepthFade: 4, ...lake.appearance };
+    causticsScale: 1.5, causticsSpeed: 0.25, causticsDepthFade: 4, ...lake.appearance, ...resolveWaterCrestFoam(lake.appearance ?? {}) };
 }

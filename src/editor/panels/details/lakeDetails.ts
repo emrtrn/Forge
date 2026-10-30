@@ -91,6 +91,11 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${field("Wet Band Width (m)", "shoreWetnessWidth", a.shoreWetnessWidth, "0.1", 'min="0.2" max="4"')}
       ${field("Wet Band Strength", "shoreWetnessStrength", a.shoreWetnessStrength, "0.05", 'min="0" max="1"')}
     `, true));
+    section.insertAdjacentHTML("beforeend", group("crest-foam", "Wave Crest Foam", `
+      <label class="detail-toggle" title="Dalganın yükselen tepelerinde parçalı köpük oluşturur. Düz suda köpük üretmez."><input type="checkbox" data-lake-crest-foam aria-label="Lake Crest Foam Enabled" ${a.crestFoamEnabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${field("Crest Foam Strength", "crestFoamStrength", a.crestFoamStrength, "0.05", 'min="0" max="1"')}
+      ${field("Crest Foam Threshold", "crestFoamThreshold", a.crestFoamThreshold, "0.05", 'min="0" max="1"')}
+    `, true));
     section.insertAdjacentHTML("beforeend", group("foam", "Shore Foam", `
       <label class="detail-toggle"><input type="checkbox" data-lake-foam aria-label="Shore Foam Enabled" ${a.foamEnabled ? "checked" : ""} ${disabled}> Enabled</label>
       ${field("Foam Opacity", "foamOpacity", a.foamOpacity, "0.05", 'min="0" max="1"')}
@@ -156,6 +161,7 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   for (const input of section.querySelectorAll<HTMLInputElement>("[data-lake-color]")) input.addEventListener("change", () => app.editLake({ appearance: { ...lake.appearance, [input.dataset.lakeColor!]: input.value } }));
   for (const key of ["hidden", "locked"] as const) section.querySelector<HTMLInputElement>(`[data-lake-${key}]`)?.addEventListener("change", (e) => app.editLake({ [key]: (e.target as HTMLInputElement).checked }));
   section.querySelector<HTMLInputElement>("[data-lake-wet-shore]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, shoreWetnessEnabled: (e.target as HTMLInputElement).checked } }));
+  section.querySelector<HTMLInputElement>("[data-lake-crest-foam]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, crestFoamEnabled: (e.target as HTMLInputElement).checked } }));
   section.querySelector<HTMLInputElement>("[data-lake-foam]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, foamEnabled: (e.target as HTMLInputElement).checked } }));
   section.querySelector<HTMLInputElement>("[data-lake-caustics]")?.addEventListener("change", (e) => app.editLake({ appearance: { ...lake.appearance, causticsEnabled: (e.target as HTMLInputElement).checked } }));
   const reflection = section.querySelector<HTMLSelectElement>("[data-lake-reflection]")!;

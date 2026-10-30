@@ -116,6 +116,34 @@ async function save(page: Page) {
   await button.click(); const saved=await response;expect(saved.ok(),await saved.text()).toBeTruthy(); await expect(button).toBeEnabled({ timeout: 120_000 });
 }
 
+test("Lake crest foam controls survive undo Save Reload and runtime", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  const { errors } = await setup(page, request, true);
+  await ready(page, 180_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "crest-foam");
+  const enabled = page.getByRole("checkbox", { name: "Lake Crest Foam Enabled" });
+  await expect(enabled).toBeChecked();
+  await number(page, "crestFoamStrength", .6); await number(page, "crestFoamThreshold", .5);
+  await enabled.uncheck(); await page.getByTestId("editor-undo").click(); await expect(enabled).toBeChecked();
+  await page.getByTestId("editor-redo").click(); await expect(enabled).not.toBeChecked();
+  await ready(page); await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.waterBodies[0].appearance).toMatchObject({ crestFoamEnabled: false, crestFoamStrength: .6, crestFoamThreshold: .5 });
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 180_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "crest-foam");
+  await expect(enabled).not.toBeChecked();
+  await expect(page.locator('[data-lake-number="crestFoamStrength"]')).toHaveValue("0.6");
+  await expect(page.locator('[data-lake-number="crestFoamThreshold"]')).toHaveValue("0.5");
+  await enabled.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("lake-crest-controls.png") });
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 180_000);
+  const runtime = await snapshot(page);
+  expect(runtime.source.appearance).toMatchObject({ crestFoamEnabled: false, crestFoamStrength: .6, crestFoamThreshold: .5 });
+  expect(runtime.crestFoam[0]).toEqual({ strength: 0, threshold: .5 });
+  expect(errors).toEqual([]);
+});
+
 test("Lake quality menu releases effects, preserves geometry and authored settings, and updates live Play", async ({ page, request }, info) => {
   test.setTimeout(300_000);
   const { errors } = await setup(page, request, true, false, false, false, false, true, false, false, false, true);

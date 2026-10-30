@@ -1,0 +1,65 @@
+  ok 11 [chromium] › tests\smoke\river-water-optics.spec.ts:241:1 › river sunlight: existing single/cascade shadows attenuate both sun terms, preserve IBL and fallback (16.7s)
+  ok 12 [chromium] › tests\smoke\river-water-optics.spec.ts:263:1 › River surface: flat interface matches Lake Fresnel energy at top and grazing angles (9.0s)
+  ok 13 [chromium] › tests\smoke\river-water-optics.spec.ts:281:1 › River surface: slope, transformed orthographic view, animation and strength-zero remain stable (10.7s)
+  ok 14 [chromium] › tests\smoke\river-water-optics.spec.ts:301:1 › River surface: twenty quality switches retain borrowed resources (25.8s)
+  ok 15 [chromium] › tests\smoke\river-water-optics.spec.ts:315:1 › River R2: actual bed depth controls spectral transmission on sloped and transformed surfaces (11.1s)
+  ok 16 [chromium] › tests\smoke\river-water-optics.spec.ts:339:1 › River R2: visible dry shore fades water and foam despite a deep baked ribbon (11.6s)
+  ok 17 [chromium] › tests\smoke\river-water-optics.spec.ts:356:1 › River R2: volume sunlight respects single and cascade shadows (7.5s)
+  ok 18 [chromium] › tests\smoke\river-water-optics.spec.ts:375:1 › River R2: shared copy excludes earlier water and releases on repeated consumer switches (36.5s)
+  ok 19 [chromium] › tests\smoke\river-water-optics.spec.ts:414:1 › River R3: sloped refraction moves the bed, preserves transforms, zero/Low/direct release the atlas (16.5s)
+  ok 20 [chromium] › tests\smoke\river-water-optics.spec.ts:440:1 › River R3: foreground rock, real holes, dry bank and shallow edge cannot leak shifted colour (11.5s)
+  ok 21 [chromium] › tests\smoke\river-water-optics.spec.ts:461:1 › River R3: vertex waves, mixed water levels and twenty quality ceilings keep one snapshot and bounded resources (1.0m)
+  ok 22 [chromium] › tests\smoke\river-water-optics.spec.ts:496:1 › River flow regression: high speed retains 2D normals after minutes and hours without accumulating shear (9.0s)
+  ok 23 [chromium] › tests\smoke\river-water-optics.spec.ts:510:1 › River sun regression: shared-vertex wave normals remove diagonal jumps under HDR sun and bloom (6.7s)
+  ok 24 [chromium] › tests\smoke\terrain-lake-editor.spec.ts:119:1 › Lake crest foam controls survive undo Save Reload and runtime (1.2m)
+  x  25 [chromium] › tests\smoke\terrain-lake-editor.spec.ts:146:1 › Lake quality menu releases effects, preserves geometry and authored settings, and updates live Play (5.6m)
+(node:8736) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 26 [chromium] › tests\smoke\terrain-lake-editor.spec.ts:261:1 › River automatic geometry foam and caustics UI Save Reload Play (1.6m)
+[spline-editor] seeded fixture ready; artifacts: C:\Users\emret\Desktop\Forge\test-results\terrain-spline-editor-mult-6642b-ndo-Save-Reload-and-runtime-chromium
+  ok 27 [chromium] › tests\smoke\terrain-spline-editor.spec.ts:228:1 › multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/Reload and runtime (4.2m)
+  ok 28 [chromium] › tests\smoke\water-contact-foam.spec.ts:3:1 › Shared foam material: Lake/River detail, lighting, quality leases and final disposal (38.1s)
+  ok 29 [chromium] › tests\smoke\water-contact-foam.spec.ts:40:1 › Foam material: a late image cannot revive a disposed scene (4.9s)
+  ok 30 [chromium] › tests\smoke\water-contact-foam.spec.ts:60:1 › Foam material: missing texture retains the procedural fallback (6.8s)
+  ok 31 [chromium] › tests\smoke\water-contact-foam.spec.ts:73:1 › Lake baked geometry foam follows actual rock meshes and animates without extra draws (10.3s)
+  ok 32 [chromium] › tests\smoke\water-contact-foam.spec.ts:86:1 › River real shore and obstacle wakes render, animate downstream and share the existing draw (17.4s)
+  ok 33 [chromium] › tests\smoke\water-crest-foam.spec.ts:3:1 › Lake and River crest foam follows raised waves, controls, lighting and quality (46.7s)
+
+
+  1) [chromium] › tests\smoke\terrain-lake-editor.spec.ts:146:1 › Lake quality menu releases effects, preserves geometry and authored settings, and updates live Play
+
+    Test timeout of 300000ms exceeded.
+
+    Error: locator.click: Test timeout of 300000ms exceeded.
+    Call log:
+      - waiting for locator('[data-quality-popover] button').filter({ hasText: 'Ultra' })
+        - locator resolved to <button class="" type="button" data-quality-choice="ultra">Ultra</button>
+      - attempting click action
+        - waiting for element to be visible, enabled and stable
+
+
+      154 |   type Level = "Low" | "Medium" | "High" | "Ultra";
+      155 |   const pick = async (label: Level) => {
+    > 156 |     await page.getByTestId("quality-button").hover();
+          |                                                      ^
+      157 |     await page.locator("[data-quality-popover] button", { hasText: label }).click();
+      158 |     await expect(page.locator("[data-quality-label]")).toHaveText(label);
+      159 |   };
+        at pick (C:\Users\emret\Desktop\Forge\tests\smoke\terrain-lake-editor.spec.ts:156:77)
+        at C:\Users\emret\Desktop\Forge\tests\smoke\terrain-lake-editor.spec.ts:196:32
+
+    Error Context: test-results\terrain-lake-editor-Lake-q-2e9c4-tings-and-updates-live-Play-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\terrain-lake-editor-Lake-q-2e9c4-tings-and-updates-live-Play-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\terrain-lake-editor-Lake-q-2e9c4-tings-and-updates-live-Play-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  Slow test file: [chromium] › tests\smoke\river-water-optics.spec.ts (6.1m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 failed
+    [chromium] › tests\smoke\terrain-lake-editor.spec.ts:146:1 › Lake quality menu releases effects, preserves geometry and authored settings, and updates live Play
+  32 passed (20.9m)

@@ -1,3 +1,4 @@
+import { resolveWaterCrestFoam, type WaterCrestFoamSettings } from "./waterCrestFoam";
 import { validateWaterContactFoam, type WaterContactFoam } from "./waterContactFoam";
 import { validateLakeGeometryFoam, type LakeGeometryFoam } from "./lakeFoamBake";
 import { validateWaterCaustics, type WaterCaustics } from "./waterCaustics";
@@ -9,7 +10,7 @@ import type {
 } from "./layout";
 
 /** Resolved presentation settings for a spline-driven River Water Body. */
-export interface ResolvedRiverWater {
+export interface ResolvedRiverWater extends Required<WaterCrestFoamSettings> {
   shoreWetness?: WaterShoreWetness;
   geometryFoam?: LakeGeometryFoam;
   caustics?: WaterCaustics;
@@ -50,6 +51,7 @@ export interface ResolvedRiverWater {
 }
 
 export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
+  ...resolveWaterCrestFoam({}),
   id: "river-water",
   name: "River Water",
   hidden: false,
@@ -115,6 +117,7 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     widthScale: actor?.widthScale ?? defaults.widthScale,
     flowSpeed: actor?.flowSpeed ?? defaults.flowSpeed,
     ...resolveRiverSurface(actor ?? {}),
+    ...resolveWaterCrestFoam(actor ?? {}),
     normalScale: actor?.normalScale ?? defaults.normalScale,
     normalTexture: actor?.normalTexture?.trim() || defaults.normalTexture,
     deepColor: actor?.deepColor ?? defaults.deepColor,

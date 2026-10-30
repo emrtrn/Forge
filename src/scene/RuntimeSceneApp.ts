@@ -2308,9 +2308,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     void this.lakes?.setQuality(lakeQuality(settings)).catch(error => console.warn("[lake-quality]", error));
+    if (!settings.lakeFoamAllowed) this.riverFoam.clearLoaded();
     for(const river of this.riverWaterObjects) {
-      river.setShoreWetnessAllowed(settings.lakeShoreWetnessAllowed);
-      river.setRefractionAllowed(settings.lakeReflectionQuality !== "off");
+      void river.applyQuality(lakeQuality(settings));
     }
     this.applyRuntimePostProcess();
   }
@@ -6044,23 +6044,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const normalMap = await this.loadRuntimeRiverWaterTexture(resolved.normalTexture, "normal");
         const foamNoiseMap = await this.loadRuntimeRiverWaterTexture("perlin-noise", "foam noise");
         if (build !== this.riverWaterBuild) return;
-        let bakedFoam;
-        if(resolved.geometryFoam?.enabled&&resolved.geometryFoam.bake) {
-          try {
-            const data=await this.riverFoam.read(resolved.geometryFoam.bake.manifest,foamSignal);
-            if(data.metadata.fingerprint!==resolved.geometryFoam.bake.fingerprint)throw new Error("River foam fingerprint mismatch");
-            const used=[...this.riverWaterObjects,...(this.lakes?.objects.values()??[])].reduce((n,o)=>n+(o.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength??0),0);
-            const {nx,nz}=data.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
-            if(used+tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th)>32*1024**2)throw new Error("over-budget: combined water geometry foam exceeds 32 MiB");
-            bakedFoam=data;
-          }catch(error){if(foamSignal.aborted)return;console.warn("[river-foam]",resolved.id,error);}
-        }
+        const loadBakedFoam = async () => {
+          let bakedFoam;
+          if(resolved.geometryFoam?.enabled&&resolved.geometryFoam.bake) {
+            try {
+              const data=await this.riverFoam.read(resolved.geometryFoam.bake.manifest,foamSignal);
+              if (!this.qualitySettings.lakeFoamAllowed) { this.riverFoam.clearLoaded(); return; }
+              if(data.metadata.fingerprint!==resolved.geometryFoam.bake.fingerprint)throw new Error("River foam fingerprint mismatch");
+              const used=[...this.riverWaterObjects,...(this.lakes?.objects.values()??[])].reduce((n,o)=>n+(o.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength??0),0);
+              const {nx,nz}=data.metadata,tw=Math.min(1024,nx),th=Math.min(1024,nz);
+              if(used+tw*th*Math.ceil(nx/tw)*Math.ceil(nz/th)>32*1024**2)throw new Error("over-budget: combined water geometry foam exceeds 32 MiB");
+              bakedFoam=data;
+            }catch(error){if(foamSignal.aborted)return;console.warn("[river-foam]",resolved.id,error);}
+          }
+          return bakedFoam;
+        };
+        const bakedFoam = this.qualitySettings.lakeFoamAllowed && resolved.foamOpacity > 0 ? await loadBakedFoam() : undefined;
         if(build!==this.riverWaterBuild)return;
         const object = createRiverWaterObject(
           {
             ...resolved,
             ...source,
-            foamNoiseMap,
+            foamNoiseMap, loadBakedFoam, quality: lakeQuality(this.qualitySettings),
             refractionAllowed: this.qualitySettings.lakeReflectionQuality !== "off",
             ...(bakedFoam?{bakedFoam}:{}),
             environmentProbes: () => this.eligibleProbeBakes(),
@@ -6068,7 +6073,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           normalMap,
         );
         object.raycast = () => {};
-        object.setShoreWetnessAllowed(this.qualitySettings.lakeShoreWetnessAllowed);
+        void object.applyQuality(lakeQuality(this.qualitySettings));
         this.scene.add(tagSceneSource(object, "river-water"));
         this.riverWaterObjects.push(object);
       } catch (error) {

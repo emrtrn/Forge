@@ -7,6 +7,16 @@ import { defaultWaterShoreWetness } from "@engine/scene/waterShoreWetness";
 
 export function renderRiverEffectsDetails(parent:HTMLElement,app:SceneApp,water:RiverWaterDetailsView,locked:boolean):void {
   const edit=(patch:Parameters<SceneApp["setSelectedLandscapeRiverWater"]>[1])=>app.setSelectedLandscapeRiverWater(water.id,patch);
+  const crest=document.createElement("div"); crest.className="detail-section"; crest.dataset.detailSection="river-crest-foam";
+  crest.innerHTML=`<div class="detail-section-title" title="Dalganın yükselen tepelerinde akışla taşınan parçalı köpük oluşturur.">Wave Crest Foam</div>
+    <label class="detail-toggle"><input type="checkbox" aria-label="River Crest Foam Enabled" ${water.crestFoamEnabled?"checked":""} ${locked?"disabled":""}> Enabled</label>`;
+  crest.querySelector<HTMLInputElement>("input")!.addEventListener("change",e=>edit({crestFoamEnabled:(e.target as HTMLInputElement).checked}));
+  for(const [key,label,title] of [["crestFoamStrength","Strength","Dalga tepesi köpüğünün yoğunluğu; 0 köpüğü kapatır."],["crestFoamThreshold","Threshold","Köpük için gereken göreli dalga yüksekliği. Büyük değer yalnız en yüksek tepelerde köpük bırakır."]] as const) {
+    const row=document.createElement("label");row.className="detail-row";row.textContent=label;row.title=title;
+    const input=document.createElement("input");input.type="number";input.min="0";input.max="1";input.step=".05";input.value=String(water[key]);input.disabled=locked;input.dataset.riverCrestNumber=key;
+    input.addEventListener("change",()=>{if(input.checkValidity()&&Number.isFinite(input.valueAsNumber))edit({[key]:input.valueAsNumber});});row.append(input);crest.append(row);
+  }
+  parent.append(crest);
   const wet=water.shoreWetness??defaultWaterShoreWetness(),wetSection=document.createElement("div");
   wetSection.className="detail-section";wetSection.dataset.detailSection="river-wet-shore";
   wetSection.innerHTML=`<div class="detail-section-title" title="Nehir tabanını ve kıyıdaki dar bandı yerel su yüksekliğine göre koyulaştırır ve parlaklaştırır.">Wet Shore</div>

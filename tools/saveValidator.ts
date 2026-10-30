@@ -1,3 +1,4 @@
+import { validateWaterCrestFoam } from "../engine/scene/waterCrestFoam";
 import { resolveRiverSurface } from "../engine/scene/riverWater";
 import { validateLakeGeometryFoam } from "../engine/scene/lakeFoamBake";
 import { validateWaterCaustics } from "../engine/scene/waterCaustics";
@@ -1192,6 +1193,7 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (widthScale !== undefined) water.widthScale = Number(widthScale.toFixed(3));
   const flowSpeed = validateOptionalNumber(input.flowSpeed, "river water flowSpeed", 0, 10);
   if (flowSpeed !== undefined) water.flowSpeed = Number(flowSpeed.toFixed(3));
+  Object.assign(water, validateWaterCrestFoam(input));
   const surface = resolveRiverSurface(input);
   if (input.surfaceStrength !== undefined) water.surfaceStrength = Number(surface.surfaceStrength.toFixed(3));
   if (input.surfaceRoughness !== undefined) water.surfaceRoughness = Number(surface.surfaceRoughness.toFixed(3));

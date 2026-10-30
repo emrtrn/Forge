@@ -31,7 +31,7 @@ for(const o of contactFoam.obstacles) {
   stone.position.set(...o.position);stone.scale.set(o.radii[0],o.halfHeight,o.radii[1]);stone.rotation.y=-o.rotation*Math.PI/180;scene.add(stone);riverRocks.push(stone);
 }
 const riverBake=await bakeRiverGeometryFoam(water.getSurface(),riverRocks.map((rock,i)=>foamSource(`river-${i}`,rock,new Matrix4())),.4,"b".repeat(64),new AbortController().signal);
-water.removeFromParent();water.dispose();water=new RiverWaterObject({...riverItem,geometryFoam:defaultLakeGeometryFoam(),bakedFoam:riverBake},null);scene.add(water);
+water.removeFromParent();water.dispose();water=new RiverWaterObject({...riverItem,geometryFoam:defaultLakeGeometryFoam(),bakedFoam:riverBake,loadBakedFoam:async()=>riverBake},null);scene.add(water);
 let time=0;
 let lakeBake:LakeFoamData;
 const before=water.onBeforeRender;
@@ -93,7 +93,7 @@ const beforeLake=lake.onBeforeRender;lake.onBeforeRender=(...args)=>{beforeLake.
   const gl=renderer.getContext(),pixels=new Uint8Array(800*600*4);gl.readPixels(0,0,800,600,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
   const samples=[];for(let i=0;i<pixels.length;i+=16)samples.push(pixels[i],pixels[i+1],pixels[i+2]);
   return {samples,error:gl.getError(),calls:renderer.info.render.calls};
-},materialCycles(count=20) {
+},async materialCycles(count=20) {
   const original=water.material.uniforms.waterFoamMap!.value;
   let isolated=true;
   for(let i=0;i<count;i++) {
@@ -101,6 +101,10 @@ const beforeLake=lake.onBeforeRender;lake.onBeforeRender=(...args)=>{beforeLake.
     isolated&&=lake.material.uniforms.waterFoamMap!.value===null&&water.material.uniforms.waterFoamMap!.value===original;
     lake.applyQuality(FULL_LAKE_QUALITY,null,lakeBake);renderer.render(lakeScene,camera);
     isolated&&=lake.material.uniforms.waterFoamMap!.value===original;
+    await water.applyQuality({...FULL_LAKE_QUALITY,foamAllowed:false});
+    isolated&&=water.material.uniforms.waterFoamMap!.value===null&&lake.material.uniforms.waterFoamMap!.value===original;
+    await water.applyQuality(FULL_LAKE_QUALITY);renderer.render(scene,camera);
+    isolated&&=water.material.uniforms.waterFoamMap!.value===original&&!!water.material.uniforms.geometryFoamMask!.value;
   }
   return {isolated,textures:renderer.info.memory.textures,geometries:renderer.info.memory.geometries};
 },disposeMaterialScene() {

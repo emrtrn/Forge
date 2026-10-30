@@ -1,3 +1,5 @@
+import { createWaterCrestFoamUniforms, WATER_CREST_FOAM_GLSL } from "./waterCrestFoam";
+import { FULL_LAKE_QUALITY, type LakeQuality } from "../perf/lakeQuality";
 import {
   BufferGeometry,
   BufferAttribute,
@@ -258,6 +260,7 @@ uniform float time;
 uniform float flowSpeed;
 uniform float waveAmplitude;
 uniform float waveLength;
+varying vec2 vCrestWave;
 ${RIVER_WAVE_GLSL}
 ${RIVER_SHADING_NORMAL_GLSL}
 void main() {
@@ -270,7 +273,9 @@ void main() {
   vFoamMask = foamMask;
   vFlowSpeedMultiplier = flowSpeedMultiplier;
   vec3 displaced = position;
-  displaced.y += riverVertexWave(uv, shoreDistance, rapidness, flowSpeedMultiplier, time, flowSpeed, waveAmplitude, waveLength);
+  float wave = riverVertexWave(uv, shoreDistance, rapidness, flowSpeedMultiplier, time, flowSpeed, waveAmplitude, waveLength);
+  displaced.y += wave;
+  vCrestWave=vec2(wave,waveAmplitude*1.35);
   vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
   vWorldPosition = worldPosition.xyz;
   vFlowTangent = mat3(modelMatrix) * vec3(flowDirection.x, 0.0, flowDirection.y);
@@ -326,6 +331,7 @@ ${RIVER_REFRACTION_GLSL}
 #endif
 ${RIVER_SUN_SHADOW_GLSL}
 ${WATER_FOAM_GLSL}
+${WATER_CREST_FOAM_GLSL}
 ${WATER_CONTACT_GLSL}
 ${LAKE_GEOMETRY_FOAM_GLSL}
 uniform float realContactEnabled;
@@ -443,6 +449,7 @@ void main() {
   }
   #endif
   float foam = realContactEnabled>.5 ? clamp(max(shoreFoam,obstacleFoam) + rapidFoam*(1.-max(shoreFoam,obstacleFoam)), 0., 1.) : clamp(shoreFoam+rapidFoam,0.,1.);
+  foam=max(foam,waterCrestFoam(vContactPosition.xz-foamFlowOffset,time,contactScale,min(vWaterDepth,visibleDepth)));
   vec3 reflectionDirection = reflect(-viewDirection, opticalNormal);
   reflectionDirection.y = abs(reflectionDirection.y);
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
@@ -462,7 +469,7 @@ void main() {
   if(obstacleFoam>shoreFoam) { materialScale=geometryFoamScale;materialSpeed=geometryFoamSpeed; }
   #endif
   vec4 foamDetail=waterFoamReady>.5 ? waterFoamDetail(foamWorld,time,materialScale,materialSpeed) : vec4(.5);
-  vec3 litFoam=waterFoamLighting(foamDetail,foam,surfaceNormal,viewDirection,foamColor,sunVisibility);
+  vec3 litFoam=waterFoamLighting(foamDetail,foam,shadingNormal,viewDirection,foamColor,sunVisibility);
   float reflectedCoverage = reflectionAmount;
   wetness = smoothstep(0.0, 0.35, vWaterDepth);
   gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectedCoverage,
@@ -508,6 +515,7 @@ void main() {
 export interface RiverWaterRenderItem extends ResolvedRiverWater {
   /** Transient graphics ceiling; never serialized over authored settings. */
   refractionAllowed?: boolean;
+  quality?: LakeQuality;
   spline: ForgeLandscapeSpline;
   heightAt?: (x: number, z: number) => number | null;
   sampleSpacing?: number;
@@ -516,14 +524,16 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   /** Repeating grayscale noise used to break up inward shore-wave fronts. */
   foamNoiseMap: Texture | null;
   bakedFoam?: LakeFoamData;
+  loadBakedFoam?: () => Promise<LakeFoamData | undefined>;
   /** Existing sky/probe maps, borrowed from the owning scene. No new render pass. */
   environmentProbes?: WaterEnvironmentProbes;
 }
 
 export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   readonly isRiverWaterObject = true;
-  private readonly contactTexture: DataTexture | null;
-  private readonly bakedTexture: DataArrayTexture | null;
+  private contactTexture: DataTexture | null;
+  private bakedTexture: DataArrayTexture | null;
+  private qualityRevision = 0;
   private readonly foamMaterial = new WaterFoamMaterial();
   private refractionSurface: ReturnType<typeof createRiverRefractionSurface> | null = null;
   private refractionAllowed: boolean;
@@ -534,12 +544,18 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private releaseCaustics: () => void = () => {};
   private releaseShore: () => void = () => {};
   private shoreAllowed = true;
+  private quality: LakeQuality;
+  private readonly item: RiverWaterRenderItem;
   private refreshTerrainEffects:()=>void=()=>{};
   readonly effectErrors: string[] = [];
   getSurface(): RiverSurfaceQuery { return this.effectSurface ??= new RiverSurfaceQuery(this.ribbon, [...this.position.toArray()] as Vec3); }
   private readonly ribbon: RiverWaterRibbonData;
 
   constructor(item: RiverWaterRenderItem, normalMap: Texture | null) {
+    const quality = item.quality ?? FULL_LAKE_QUALITY;
+    // The store owns CPU bake data. A disabled GPU consumer must not pin it.
+    const bakedFoam = item.bakedFoam;
+    item = { ...item }; delete item.bakedFoam;
     const ribbon = buildRiverWaterRibbon(item.spline, {
       surfaceLevel: item.surfaceLevel,
       widthScale: item.widthScale,
@@ -552,10 +568,10 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     let surface: RiverSurfaceQuery | undefined;
     let bake: ReturnType<typeof lakeFoamTexture> | null = null;
     const errors:string[]=[];
-    if(item.caustics?.enabled || item.shoreWetness?.enabled || (item.geometryFoam?.enabled && item.bakedFoam)) {
+    if((item.caustics?.enabled && quality.causticsAllowed) || (item.shoreWetness?.enabled && quality.shoreWetnessAllowed) || (quality.foamAllowed && item.geometryFoam?.enabled && bakedFoam)) {
       try {
         surface=new RiverSurfaceQuery(ribbon,item.position);
-        if(item.geometryFoam?.enabled&&item.bakedFoam?.metadata.surface==="river"&&item.bakedFoam.metadata.surfaceFingerprint===riverFoamSurfaceFingerprint(surface)) bake=lakeFoamTexture(item.bakedFoam);
+        if(quality.foamAllowed&&item.geometryFoam?.enabled&&bakedFoam?.metadata.surface==="river"&&bakedFoam.metadata.surfaceFingerprint===riverFoamSurfaceFingerprint(surface)) bake=lakeFoamTexture(bakedFoam);
       } catch(error) { errors.push(String(error)); }
     }
     const min = [Infinity,Infinity], max = [-Infinity,-Infinity];
@@ -563,7 +579,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       min[0]=Math.min(min[0]!,ribbon.positions[i]!); min[1]=Math.min(min[1]!,ribbon.positions[i+2]!);
       max[0]=Math.max(max[0]!,ribbon.positions[i]!); max[1]=Math.max(max[1]!,ribbon.positions[i+2]!);
     }
-    const segments=item.contactFoam?.enabled ? riverContactSegments(ribbon.positions,ribbon.bedDepths,ribbon.indices) : [];
+    const segments=quality.foamAllowed && item.contactFoam?.enabled ? riverContactSegments(ribbon.positions,ribbon.bedDepths,ribbon.indices) : [];
     const contactTexture=segments.length ? createWaterShoreMask(min,max,segments,(item.contactFoam?.shoreWidth??.5)) : null;
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(ribbon.positions, 3));
@@ -591,15 +607,15 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ...UniformsUtils.clone(UniformsLib.lights),
         ...createRiverSunShadowUniforms(),
         ...createWaterEnvironmentUniforms(),
-        ...createWaterSceneUniforms(),
+        ...createWaterSceneUniforms(), ...createWaterCrestFoamUniforms(item, quality.foamAllowed),
         riverRefractionSurface: { value: null }, riverRefractionSize: { value: new Vector2(1, 1) },
         riverRefractionMin: { value: new Vector2() }, riverRefractionGrid: { value: new Vector2(1, 1) },
         riverRefractionBases: { value: new Vector3() },
         riverRefractionSpacing: { value: 1 }, riverRefractionStrength: { value: 0 },
         riverViewToLocal: { value: new Matrix4() }, riverLocalToView: { value: new Matrix4() },
         ...createWaterContactUniforms(item.contactFoam?{...item.contactFoam,obstacles:[]}:undefined),
-        geometryFoamMask: {value:bake?.texture??null},geometryFoamMin:{value:new Vector2(...(item.bakedFoam?.metadata.min??[0,0]) as [number,number])},
-        geometryFoamSize:{value:new Vector2(item.bakedFoam?item.bakedFoam.metadata.max[0]-item.bakedFoam.metadata.min[0]:1,item.bakedFoam?item.bakedFoam.metadata.max[1]-item.bakedFoam.metadata.min[1]:1)},
+        geometryFoamMask: {value:bake?.texture??null},geometryFoamMin:{value:new Vector2(...(bakedFoam?.metadata.min??[0,0]) as [number,number])},
+        geometryFoamSize:{value:new Vector2(bakedFoam?bakedFoam.metadata.max[0]-bakedFoam.metadata.min[0]:1,bakedFoam?bakedFoam.metadata.max[1]-bakedFoam.metadata.min[1]:1)},
         geometryFoamGrid:{value:bake?.grid??new Vector2(1,1)},geometryFoamTile:{value:bake?.tile??new Vector2(1,1)},
         geometryFoamStrength:{value:item.geometryFoam?.strength??0},geometryFoamScale:{value:item.geometryFoam?.scale??.8},geometryFoamSpeed:{value:item.geometryFoam?.speed??.3},
         realContactEnabled: { value: contact ? 1 : 0 }, realShoreMask: { value: contactTexture },
@@ -622,7 +638,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         waveAmplitude: { value: item.waveAmplitude },
         waveLength: { value: item.waveLength },
         foamColor: { value: new Color(item.foamColor) },
-        foamOpacity: { value: item.foamOpacity },
+        foamOpacity: { value: quality.foamAllowed ? item.foamOpacity : 0 },
         shoreWaveSpacing: { value: item.shoreWaveSpacing },
         shoreWaveSpeed: { value: item.shoreWaveSpeed },
         shoreWaveReach: { value: item.shoreWaveReach },
@@ -630,7 +646,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         foamNoiseMap: { value: item.foamNoiseMap },
         hasFoamNoiseMap: { value: item.foamNoiseMap ? 1 : 0 },
         reflectionStrength: { value: item.reflectionMode === "off" ? 0 : item.reflectionStrength },
-        waterDetail: { value: item.reflectionQuality === "low" ? 0 : 1 },
+        waterDetail: { value: quality.reflectionQuality === "off" || item.reflectionQuality === "low" ? 0 : 1 },
       },
       transparent: true,
       fog: true,
@@ -640,8 +656,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     });
     super(geometry, material);
     Object.assign(material.uniforms, this.foamMaterial.uniforms);
+    this.item = item; this.quality = { ...quality }; this.shoreAllowed = quality.shoreWetnessAllowed;
     this.ribbon=ribbon; this.effectSurface=surface; this.bakedTexture=bake?.texture??null;
-    this.refractionAllowed = item.refractionAllowed ?? true;
+    this.refractionAllowed = (item.refractionAllowed ?? true) && quality.reflectionQuality !== "off";
     this.authoredRefractionStrength = item.refractionStrength;
     this.authoredRefractionQuality = item.reflectionQuality !== "low";
     this.refreshRefractionSurface();
@@ -665,13 +682,13 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.userData.waterSceneTransmission = true;
     this.refreshTerrainEffects=()=>{
       this.releaseShore();this.releaseShore=()=>{};this.releaseCaustics();this.releaseCaustics=()=>{};
-      if(this.parent instanceof Scene && (item.caustics?.enabled || (item.shoreWetness?.enabled&&this.shoreAllowed))) {
-        const water={...item,...(item.shoreWetness?{shoreWetness:{...item.shoreWetness,enabled:item.shoreWetness.enabled&&this.shoreAllowed}}:{})};
+      if(this.parent instanceof Scene && ((item.caustics?.enabled && this.quality.causticsAllowed) || (item.shoreWetness?.enabled&&this.shoreAllowed))) {
+        const water={...item,...(item.caustics?{caustics:{...item.caustics,enabled:item.caustics.enabled&&this.quality.causticsAllowed}}:{}),...(item.shoreWetness?{shoreWetness:{...item.shoreWetness,enabled:item.shoreWetness.enabled&&this.shoreAllowed}}:{})};
         try { this.releaseCaustics=registerRiverCaustics(this.parent,water,this.getSurface(),this); }
         catch(error) { this.effectErrors.push(String(error)); console.warn("[river-caustics]",item.id,error); return; }
         try {this.releaseShore=registerRiverShoreWetness(this.parent,water,this.getSurface(),this);}
         catch(error) {
-          if(!item.caustics?.enabled){this.releaseCaustics();this.releaseCaustics=()=>{};}
+          if(!(item.caustics?.enabled && this.quality.causticsAllowed)){this.releaseCaustics();this.releaseCaustics=()=>{};}
           this.effectErrors.push(String(error));console.warn("[river-wet-shore]",item.id,error);
         }
       }
@@ -704,11 +721,77 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         this.material.uniforms.waterSceneColor!.value = null;
         this.material.uniforms.waterSceneDepth!.value = null;
       }
-      this.foamMaterial.update(item.foamOpacity > 0, scene, camera);
+      this.foamMaterial.update(this.quality.foamAllowed && item.foamOpacity > 0, scene, camera);
       this.material.uniforms["time"]!.value = performance.now() / 1000;
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera, item.environmentProbes?.());
     };
+  }
+
+  /** Presentation-only ceiling, shared by editor/runtime/adaptive transitions.
+   * Late bake loads cannot revive disposed or newly disabled consumers. */
+  async applyQuality(quality: LakeQuality): Promise<void> {
+    if (this.disposed) return;
+    const revision = ++this.qualityRevision;
+    const terrainChanged = quality.causticsAllowed !== this.quality.causticsAllowed || quality.shoreWetnessAllowed !== this.shoreAllowed;
+    this.quality = { ...quality };
+    const item = this.item, u = this.material.uniforms;
+    this.setRefractionAllowed(quality.reflectionQuality !== "off");
+    this.shoreAllowed = quality.shoreWetnessAllowed;
+    if (terrainChanged) this.refreshTerrainEffects();
+    u.waterDetail!.value = quality.reflectionQuality === "off" || item.reflectionQuality === "low" ? 0 : 1;
+    u.foamOpacity!.value = quality.foamAllowed ? item.foamOpacity : 0;
+    u.crestFoamStrength!.value = createWaterCrestFoamUniforms(item, quality.foamAllowed).crestFoamStrength.value;
+    if (!quality.foamAllowed) {
+      this.foamMaterial.dispose();
+      this.contactTexture?.dispose(); this.contactTexture = null;
+      this.bakedTexture?.dispose(); this.bakedTexture = null;
+    } else if (item.foamOpacity > 0 && item.contactFoam?.enabled && !this.contactTexture) {
+      const shore = riverContactSegments(this.ribbon.positions, this.ribbon.bedDepths, this.ribbon.indices);
+      if (shore.length) {
+        const min = u.realShoreOrigin!.value as Vector2, size = u.realShoreSize!.value as Vector2;
+        this.contactTexture = createWaterShoreMask(min.toArray(), [min.x + size.x, min.y + size.y], shore, item.contactFoam.shoreWidth);
+      }
+    }
+    u.realShoreMask!.value = this.contactTexture;
+    u.hasRealShore!.value = this.contactTexture ? 1 : 0;
+    u.contactCount!.value = 0; // Manual obstacle sources remain retired.
+    this.bindFoamBake();
+    if (!quality.foamAllowed || item.foamOpacity <= 0 || !item.geometryFoam?.enabled || this.bakedTexture || !item.loadBakedFoam) return;
+    try {
+      const data = await item.loadBakedFoam();
+      if (this.disposed || revision !== this.qualityRevision || !this.quality.foamAllowed || !data) return;
+      if (data.metadata.surface !== "river" || data.metadata.surfaceFingerprint !== riverFoamSurfaceFingerprint(this.getSurface())) return;
+      // Recheck immediately before allocation: several quality recoveries can
+      // finish their reads together, after their original loader budget check.
+      let used = 0;
+      this.parent?.traverse(object => {
+        if (object instanceof Mesh && object.material instanceof ShaderMaterial) {
+          used += object.material.uniforms.geometryFoamMask?.value?.image?.data?.byteLength ?? 0;
+        }
+      });
+      const { nx, nz } = data.metadata, tw = Math.min(1024, nx), th = Math.min(1024, nz);
+      if (used + tw * th * Math.ceil(nx / tw) * Math.ceil(nz / th) > 32 * 1024 ** 2) throw new Error("over-budget: combined water geometry foam exceeds 32 MiB");
+      const bake = lakeFoamTexture(data);
+      this.bakedTexture = bake.texture;
+      u.geometryFoamMin!.value.set(...data.metadata.min);
+      u.geometryFoamSize!.value.set(data.metadata.max[0] - data.metadata.min[0], data.metadata.max[1] - data.metadata.min[1]);
+      u.geometryFoamGrid!.value.copy(bake.grid); u.geometryFoamTile!.value.copy(bake.tile);
+      this.bindFoamBake();
+    } catch (error) {
+      if (!this.disposed && revision === this.qualityRevision) {
+        this.effectErrors.push(String(error)); console.warn("[river-quality]", item.id, error);
+      }
+    }
+  }
+
+  private bindFoamBake(): void {
+    this.material.uniforms.geometryFoamMask!.value = this.bakedTexture;
+    const enabled = !!this.bakedTexture;
+    if (!!this.material.defines.FORGE_LAKE_GEOMETRY_FOAM === enabled) return;
+    if (enabled) this.material.defines.FORGE_LAKE_GEOMETRY_FOAM = 1;
+    else delete this.material.defines.FORGE_LAKE_GEOMETRY_FOAM;
+    this.material.needsUpdate = true;
   }
 
   /** Quality switches release only this consumer's atlas, never shared scene snapshots. */
@@ -744,7 +827,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   }
 
   setShoreWetnessAllowed(allowed:boolean):void {
-    if(this.shoreAllowed===allowed)return;
+    if(this.disposed || this.shoreAllowed===allowed)return;
     this.shoreAllowed=allowed;this.refreshTerrainEffects();
   }
 
@@ -758,6 +841,12 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.refractionSurface?.texture.dispose();
     this.refractionSurface = null;
     this.contactTexture?.dispose();
+    this.contactTexture = null; this.bakedTexture = null;
+    this.material.uniforms.geometryFoamMask!.value = null;
+    this.material.uniforms.realShoreMask!.value = null;
+    this.material.uniforms.riverRefractionSurface!.value = null;
+    this.material.uniforms.riverRefractionStrength!.value = 0;
+    delete this.userData.riverRefractionBytes;
     for (const child of this.children) {
       if (child instanceof Mesh) {
         child.geometry.dispose();

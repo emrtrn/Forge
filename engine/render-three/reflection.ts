@@ -50,6 +50,8 @@ export function captureSkyEnvironment(
   renderer: WebGLRenderer,
   sky: ResolvedSkyAtmosphere,
   sunDirection: Vector3,
+  /** Cube face size of the capture; a moving sun captures often and smaller. */
+  size = 256,
 ): WebGLRenderTarget {
   const pmrem = new PMREMGenerator(renderer);
   const envScene = new Scene();
@@ -69,7 +71,7 @@ export function captureSkyEnvironment(
 
   const previousToneMapping = renderer.toneMapping;
   renderer.toneMapping = NoToneMapping;
-  const target = pmrem.fromScene(envScene, 0, 0.1, CAPTURE_FAR);
+  const target = pmrem.fromScene(envScene, 0, 0.1, CAPTURE_FAR, { size });
   // Water removes only this captured solar hotspot before adding its own
   // finite analytic sun. Other PBR materials retain the original environment.
   target.texture.userData.waterSkySunDirection = sunDirection.toArray();

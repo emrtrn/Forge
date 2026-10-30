@@ -6577,7 +6577,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private updateWorldEnvironment(): void {
     const result = this.environment.applyWorldEnvironment(this.layout, {
       state: this.worldEnvironmentState(),
-      nowMs: performance.now(),
+      dynamicClock: this.runtimeServices.resolve(worldEnvironmentService)?.running ?? false,
       sun: this.sun,
       ambient: this.ambientLight,
     });

@@ -13,7 +13,15 @@ import {
 } from "../../engine/environment/worldEnvironment";
 import type { LayoutWorldEnvironment, RoomLayout } from "../../engine/scene/layout";
 import { resolveEnvironment, stateFromDefaults } from "../../engine/environment/environmentResolve";
-import { angleBetweenDeg, shouldRecapture } from "../../engine/environment/recapturePolicy";
+import {
+  angleBetweenDeg,
+  RECAPTURE_HIGH_SUN_ANGLE_DEG,
+  RECAPTURE_HORIZON_ANGLE_DEG,
+  recaptureAngleDeg,
+  shouldRecapture,
+  skyLightCompensation,
+  skyLightLevel,
+} from "../../engine/environment/recapturePolicy";
 import {
   deriveSunPathFromDirection,
   directionFromAngles,
@@ -301,17 +309,40 @@ export function registerWorldEnvironmentTimeTests(check: Check): void {
     assert.deepEqual(authored, snapshot);
   });
 
-  check("world environment recapture: 3° or a new key, 2 s apart, never while scrubbing (ENV-18)", () => {
-    const north: Vec3 = [0, 0.5, 0.866];
-    const last = { sunDirection: north, captureKey: "clear:0:summer", timeMs: 1000 };
-    const rotated = (deg: number): Vec3 => directionFromAngles(deg, 30);
-    assert.equal(shouldRecapture(null, { sunDirection: north, captureKey: "k", nowMs: 0 }), true);
-    assert.equal(shouldRecapture(last, { sunDirection: north, captureKey: "clear:0:summer", nowMs: 99999 }), false);
-    assert.equal(shouldRecapture(last, { sunDirection: rotated(2), captureKey: "clear:0:summer", nowMs: 99999 }), false);
-    assert.equal(shouldRecapture(last, { sunDirection: rotated(3.5), captureKey: "clear:0:summer", nowMs: 2500 }), false);
-    assert.equal(shouldRecapture(last, { sunDirection: rotated(3.5), captureKey: "clear:0:summer", nowMs: 3000 }), true);
-    assert.equal(shouldRecapture(last, { sunDirection: north, captureKey: "rain:1:summer", nowMs: 3000 }), true);
-    assert.equal(shouldRecapture(last, { sunDirection: rotated(40), captureKey: "k", nowMs: 99999, scrubbing: true }), false);
-    assert.equal(shouldRecapture(last, { sunDirection: rotated(40), captureKey: "k", nowMs: 1100, immediate: true }), true);
+  check("world environment recapture: by sun movement, finest at the horizon, never by time or while scrubbing (ENV-18)", () => {
+    const key = "clear:0:summer";
+    const at = (azimuth: number, elevation: number) => ({
+      sunDirection: directionFromAngles(azimuth, elevation),
+      sunElevationDeg: elevation,
+      captureKey: key,
+    });
+    const high = at(0, 45);
+    assert.equal(shouldRecapture(null, at(0, 45)), true);
+    assert.equal(shouldRecapture(high, at(0, 45)), false);
+    // High sun: 3° steps. No clock is involved, so a fast sun just captures more often.
+    assert.equal(shouldRecapture(high, at(2.5, 45)), false);
+    assert.equal(shouldRecapture(high, at(0, 48.1)), true);
+    // At sunrise the sky changes most per degree: 0.5° steps.
+    const dawn = at(90, 0.5);
+    assert.equal(shouldRecapture(dawn, at(90, 0.9)), false);
+    assert.equal(shouldRecapture(dawn, at(90, 1.1)), true);
+    assert.equal(recaptureAngleDeg(0), RECAPTURE_HORIZON_ANGLE_DEG);
+    assert.equal(recaptureAngleDeg(60), RECAPTURE_HIGH_SUN_ANGLE_DEG);
+    assert.ok(recaptureAngleDeg(10) > RECAPTURE_HORIZON_ANGLE_DEG && recaptureAngleDeg(10) < RECAPTURE_HIGH_SUN_ANGLE_DEG);
+    // Weather/season captures at once; scrubbing never captures.
+    assert.equal(shouldRecapture(high, { ...at(0, 45), captureKey: "rain:1:summer" }), true);
+    assert.equal(shouldRecapture(high, { ...at(40, 10), scrubbing: true }), false);
+  });
+
+  check("world environment sky light: compensation bridges brightness between captures", () => {
+    near(skyLightCompensation(30, 30), 1, 1e-12);
+    // Captured at sunrise, the sun now higher: the stale sky is brightened, not left dim.
+    assert.ok(skyLightCompensation(0, 15) > 1);
+    // Captured at noon, the sun now setting: darkened.
+    assert.ok(skyLightCompensation(50, 0) < 1);
+    // Continuous in the current elevation (no step of its own).
+    near(skyLightCompensation(5, 10.0001), skyLightCompensation(5, 10), 1e-4);
+    assert.ok(skyLightLevel(-20) > 0 && skyLightLevel(-20) < skyLightLevel(0) && skyLightLevel(0) < skyLightLevel(30));
+    assert.equal(skyLightCompensation(-30, 60), 5, "clamped");
   });
 }

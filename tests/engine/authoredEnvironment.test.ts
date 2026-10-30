@@ -64,7 +64,7 @@ export function registerAuthoredEnvironmentTests(check: Check): void {
     env.applyFog(layout);
     const before = aim(sun);
     for (const [l, state] of [[layout, at(0, layoutWith({}))], [layoutWith({}), null], [layoutWith({ hidden: true }), at(0, layoutWith({}))]] as const) {
-      const result = env.applyWorldEnvironment(l, { state, nowMs: 0, sun, ambient });
+      const result = env.applyWorldEnvironment(l, { state, sun, ambient });
       assert.deepEqual(result, { active: false, sunMoved: false });
     }
     assert.equal(sun.intensity, 3);
@@ -80,7 +80,7 @@ export function registerAuthoredEnvironmentTests(check: Check): void {
     env.applyFog(layout);
     const snapshot = structuredClone(layout);
     const fog = scene.fog;
-    const noon = env.applyWorldEnvironment(layout, { state: at(12, layout), nowMs: 0, sun, ambient });
+    const noon = env.applyWorldEnvironment(layout, { state: at(12, layout), sun, ambient });
     assert.deepEqual(noon, { active: true, sunMoved: true });
     const expected = evaluateSunLight(12, resolveWorldEnvironment(layout.worldEnvironment)).lightDirection;
     assert.ok(aim(sun).distanceTo(new Vector3(...expected).negate()) < 1e-9);
@@ -90,21 +90,21 @@ export function registerAuthoredEnvironmentTests(check: Check): void {
     assert.equal(ambient.intensity, 0.5);
     assert.equal(scene.fog, fog, "fog is updated in place, not reallocated");
     assert.equal((scene.fog as FogExp2).color.getHexString(), "445566");
-    assert.equal(env.applyWorldEnvironment(layout, { state: at(12, layout), nowMs: 16, sun, ambient }).sunMoved, false);
+    assert.equal(env.applyWorldEnvironment(layout, { state: at(12, layout), sun, ambient }).sunMoved, false);
     assert.deepEqual(layout, snapshot, "the layout actors are never written");
   });
 
   check("world environment binding: night dims to the moon, raises exposure and keeps an ambient floor", () => {
     const { env, sun, ambient, renderer } = rig();
     const layout = layoutWith({});
-    env.applyWorldEnvironment(layout, { state: at(0, layout), nowMs: 0, sun, ambient });
+    env.applyWorldEnvironment(layout, { state: at(0, layout), sun, ambient });
     const night = resolveWorldEnvironment({}).night;
     assert.ok(Math.abs(sun.intensity - 3 * night.moonIntensity) < 1e-9);
     assert.ok(Math.abs(ambient.intensity - 0.5 * night.ambientFloor) < 1e-9);
     assert.ok(renderer.toneMappingExposure > 0.8);
     assert.ok(aim(sun).y < 0, "the moon shines from above");
     // Applying again does not compound the multipliers.
-    env.applyWorldEnvironment(layout, { state: at(0, layout), nowMs: 16, sun, ambient });
+    env.applyWorldEnvironment(layout, { state: at(0, layout), sun, ambient });
     assert.ok(Math.abs(sun.intensity - 3 * night.moonIntensity) < 1e-9);
     assert.ok(Math.abs(ambient.intensity - 0.5 * night.ambientFloor) < 1e-9);
   });
@@ -112,11 +112,11 @@ export function registerAuthoredEnvironmentTests(check: Check): void {
   check("world environment binding: an owner edit while active becomes the new base", () => {
     const { env, sun, ambient } = rig();
     const layout = layoutWith({});
-    env.applyWorldEnvironment(layout, { state: at(12, layout), nowMs: 0, sun, ambient });
+    env.applyWorldEnvironment(layout, { state: at(12, layout), sun, ambient });
     // The editor re-syncs the light from the layout after an edit.
     sun.intensity = 5;
     ambient.intensity = 0.25;
-    env.applyWorldEnvironment(layout, { state: at(12, layout), nowMs: 16, sun, ambient });
+    env.applyWorldEnvironment(layout, { state: at(12, layout), sun, ambient });
     assert.equal(sun.intensity, 5);
     assert.equal(ambient.intensity, 0.25);
   });
@@ -126,10 +126,10 @@ export function registerAuthoredEnvironmentTests(check: Check): void {
     const layout = layoutWith({ weather: { preset: "fog" } });
     env.applyFog(layout);
     const authoredAim = aim(sun);
-    env.applyWorldEnvironment(layout, { state: at(20, layout), nowMs: 0, sun, ambient });
+    env.applyWorldEnvironment(layout, { state: at(20, layout), sun, ambient });
     assert.notEqual(sun.intensity, 3);
     assert.ok((scene.fog as FogExp2).density > 0.02);
-    const ended = env.applyWorldEnvironment(layout, { state: null, nowMs: 16, sun, ambient });
+    const ended = env.applyWorldEnvironment(layout, { state: null, sun, ambient });
     assert.deepEqual(ended, { active: false, sunMoved: true });
     assert.equal(sun.intensity, 3);
     assert.equal(sun.color.getHexString(), "ffeedd");

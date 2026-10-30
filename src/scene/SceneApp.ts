@@ -2066,7 +2066,7 @@ export class SceneApp {
       this.updateGizmoScreenScale();
       this.environment.update(deltaSeconds);
       this.advanceWorldEnvironmentPreview(deltaSeconds);
-      this.updateWorldEnvironment(now);
+      this.updateWorldEnvironment();
       const foliageCamera = this.editorViewportCamera().position;
       this.foliageRing?.update([foliageCamera.x, foliageCamera.z], 1, 1, 2);
       this.foliageBinding?.updateCulling(foliageCamera);
@@ -13370,11 +13370,11 @@ export class SceneApp {
    * shared binding (sun light, ambient, sky, fog, clouds, IBL); the layout is
    * never written. A moved sun refits the bounds-fitted shadow.
    */
-  private updateWorldEnvironment(nowMs: number): void {
+  private updateWorldEnvironment(): void {
     const result = this.environment.applyWorldEnvironment(this.layout, {
       state: this.worldEnvironmentState(),
-      nowMs,
       scrubbing: this.worldEnvironmentScrubbing,
+      dynamicClock: this.worldEnvironmentPreviewPlaying,
       sun: this.sun,
       ambient: this.ambientLight,
     });

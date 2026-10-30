@@ -72,7 +72,10 @@ import {
   type ResolvedEnvironment,
   type WorldEnvironmentState,
 } from "../environment/environmentResolve";
-import { shouldRecapture, type CaptureRecord } from "../environment/recapturePolicy";
+import { shouldRecapture, skyLightCompensation, type CaptureRecord } from "../environment/recapturePolicy";
+
+/** Sky Light capture size while the clock runs; ambient bounce and sky reflections are low-frequency. */
+export const DYNAMIC_CAPTURE_SIZE = 128;
 import { normalizeWorldEnvironment, resolveWorldEnvironment } from "../environment/worldEnvironment";
 import type { ResolvedHeightFog } from "../scene/heightFog";
 
@@ -80,10 +83,14 @@ import type { ResolvedHeightFog } from "../scene/heightFog";
 export interface WorldEnvironmentFrame {
   /** The live WES state (editor preview / Play capability); null = no state, authored look. */
   state: WorldEnvironmentState | null;
-  /** Real milliseconds, for the IBL recapture interval. */
-  nowMs: number;
   /** The editor clock slider is being dragged: no IBL capture until release. */
   scrubbing?: boolean;
+  /**
+   * The clock is running (Play with a day length, editor preview playback):
+   * the sun moves continuously, so the Sky Light is captured often and at
+   * {@link DYNAMIC_CAPTURE_SIZE}.
+   */
+  dynamicClock?: boolean;
   /** The Sun's three light, overridden in place (never the layout actor). */
   sun: DirectionalLight | null;
   ambient: AmbientLight | null;
@@ -139,6 +146,7 @@ export class AuthoredEnvironment {
   /** The World Environment override rendered this frame; null renders the authored look. */
   private override: ResolvedEnvironment | null = null;
   private lastCapture: CaptureRecord | null = null;
+  private dynamicClock = false;
   private readonly sunSlot = new SunLightOverride();
   private readonly ambientSlot = new NumberOverride();
   private readonly exposureSlot = new NumberOverride();
@@ -261,7 +269,17 @@ export class AuthoredEnvironment {
     if (recapture || !this.reflectionTarget) {
       this.disposeReflectionTarget();
       const sunDirection = this.sunDirection() ?? new Vector3(0, 1, 0);
-      this.reflectionTarget = captureSkyEnvironment(this.renderer, this.withSkyOverride(sky), sunDirection);
+      const size = this.override && this.dynamicClock ? DYNAMIC_CAPTURE_SIZE : undefined;
+      this.reflectionTarget = captureSkyEnvironment(this.renderer, this.withSkyOverride(sky), sunDirection, size);
+      // Whoever asked for it (the policy, or a shell after an edit), this is the
+      // sun the World Environment's brightness compensation now starts from.
+      this.lastCapture = this.override
+        ? {
+            sunDirection: this.override.sunDirection,
+            sunElevationDeg: this.override.sunElevationDeg,
+            captureKey: this.override.captureKey,
+          }
+        : null;
     }
 
     applyReflectionEnvironment(
@@ -342,18 +360,31 @@ export class AuthoredEnvironment {
     this.applyAmbient(frame.ambient, this.override.ambientMultiplier);
     this.applyExposure(this.override.exposureMultiplier);
 
-    const capture = {
-      sunDirection: this.override.sunDirection,
-      captureKey: this.override.captureKey,
-      nowMs: frame.nowMs,
-      scrubbing: frame.scrubbing === true,
-      immediate: !wasActive,
-    };
-    if (sky && !sky.hidden && shouldRecapture(this.lastCapture, capture)) {
-      this.applyReflection(layout, true);
-      this.lastCapture = { sunDirection: capture.sunDirection, captureKey: capture.captureKey, timeMs: frame.nowMs };
+    this.dynamicClock = frame.dynamicClock === true;
+    if (sky && !sky.hidden) {
+      const capture = {
+        sunDirection: this.override.sunDirection,
+        sunElevationDeg: this.override.sunElevationDeg,
+        captureKey: this.override.captureKey,
+        scrubbing: frame.scrubbing === true,
+      };
+      if (!wasActive || shouldRecapture(this.lastCapture, capture)) this.applyReflection(layout, true);
+      this.compensateSkyLight(sky);
     }
     return { active: true, sunMoved };
+  }
+
+  /**
+   * Between captures the Sky Light still shows the sky of the last one; scaling
+   * its intensity by how much brighter or darker the sky is now keeps sunrise
+   * and sunset continuous, so the next capture only corrects color.
+   */
+  private compensateSkyLight(sky: ReturnType<typeof resolveSkyAtmosphere>): void {
+    if (!this.override || !this.lastCapture || !this.reflectionTarget) return;
+    if (this.scene.environment !== this.reflectionTarget.texture) return;
+    const authored = resolveReflection(sky.skyLightCapture).intensity;
+    this.scene.environmentIntensity = authored
+      * skyLightCompensation(this.lastCapture.sunElevationDeg, this.override.sunElevationDeg);
   }
 
   /** The World Environment override rendered last frame (null = authored look), for tests and diagnostics. */

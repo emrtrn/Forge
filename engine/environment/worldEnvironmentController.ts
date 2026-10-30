@@ -61,6 +61,11 @@ export class WorldEnvironmentController implements WorldEnvironmentService {
     return this.state !== null;
   }
 
+  /** The clock is running (an active World Environment with a day length). */
+  get running(): boolean {
+    return this.clock !== null && this.clock.dayLength > 0;
+  }
+
   get revision(): number {
     return this.stateRevision;
   }

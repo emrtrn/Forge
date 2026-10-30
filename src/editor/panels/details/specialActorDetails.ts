@@ -56,6 +56,8 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   editableAssets: readonly EditableAsset[];
   targetPoints: readonly TargetPointReference[];
   setDetailsScale: (scale: Vec3) => void;
+  /** The selected light is the Sun whose aim a World Environment drives (rotation is read-only then). */
+  sunManagedByWorldEnvironment: boolean;
   setSelectedLightSettings: (values: Partial<LayoutLightActor>) => void;
   setSelectedReflectionPlane: (patch: { color?: string; resolution?: number | undefined }) => void;
   setSelectedReflectiveSurface: (patch: {
@@ -1091,7 +1093,10 @@ export function renderLightDetails(options: SpecialActorDetailsOptions): void {
         <span class="detail-value">${escapeHtml(selection.lightType ?? "light")}</span>
       </div>
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
-      ${!isPoint ? vectorRow("Rotation", "r", selection.rotation, 1, selection.locked) : ""}
+      ${!isPoint ? vectorRow("Rotation", "r", selection.rotation, 1, selection.locked || options.sunManagedByWorldEnvironment) : ""}
+      ${options.sunManagedByWorldEnvironment
+        ? `<div class="detail-hint" data-sun-managed-by-wes>Sun path is managed by the World Environment: edit its time and Sun Path instead.</div>`
+        : ""}
       <div class="detail-section">
         <div class="detail-section-title">Light</div>
         <label class="detail-row">

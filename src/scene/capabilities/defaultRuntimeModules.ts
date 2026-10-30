@@ -29,11 +29,14 @@ import { createVehicleTelemetryModule } from "./vehicleTelemetryModule";
 import { createVfxModule } from "./vfxModule";
 import { createWorldStreamingModule } from "./worldStreamingModule";
 import { createWorldPartitionModule } from "./worldPartitionModule";
+import { createWorldEnvironmentModule } from "./worldEnvironmentModule";
 
 export function createDefaultRuntimeModules(): CapabilityModule[] {
   return [
     createWorldStreamingModule(),
     createWorldPartitionModule(),
+    // Time of day, season and weather; off, Play renders the authored look.
+    createWorldEnvironmentModule(),
     createMovingPlatformModule(),
     createSplineFollowerModule(),
     // Wheel visuals and engine sound only: the `Vehicle` component drives

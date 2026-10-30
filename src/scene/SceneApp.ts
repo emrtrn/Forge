@@ -228,6 +228,17 @@ import { resolveHeightFog } from "@engine/render-three/heightFog";
 import { resolveCloudLayer } from "@engine/render-three/cloudLayer";
 import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
 import { stateFromDefaults, type WorldEnvironmentState } from "@engine/environment/environmentResolve";
+import { wrapHour } from "@engine/environment/worldClock";
+
+/** The editor's World Environment preview, as the Details preview strip shows it. */
+export interface WorldEnvironmentPreview {
+  state: WorldEnvironmentState;
+  /** The preview differs from the level defaults (Reset / Make Default apply). */
+  modified: boolean;
+  playing: boolean;
+  /** Preview playback speed in game hours per real second. */
+  hoursPerSecond: number;
+}
 import { initialWorldEnvironmentForSun } from "@engine/environment/sunPath";
 import {
   applyPostProcessToneMapping,
@@ -1731,11 +1742,18 @@ export class SceneApp {
   private pointerDrag: GizmoPointerDrag | null = null;
   private readonly editorSceneController: EditorSceneController;
   private unbindEditorInput: (() => void) | null = null;
+  /** World Environment preview (editor-only, never saved); null shows the level defaults. */
+  private worldEnvironmentPreviewState: WorldEnvironmentState | null = null;
+  private worldEnvironmentPreviewPlaying = false;
+  private worldEnvironmentPreviewSpeed = 1;
+  private worldEnvironmentScrubbing = false;
   private layoutSaver: LayoutSaver | null = null;
 
   /** Called every frame with the smoothed delta; used by the debug overlay. */
   onFrame: ((deltaMs: number) => void) | null = null;
   onSelectionChanged: ((selection: EditableSelection | null) => void) | null = null;
+  /** The World Environment preview (clock, season, weather) changed; never a layout change. */
+  onWorldEnvironmentPreviewChanged: ((preview: WorldEnvironmentPreview | null) => void) | null = null;
   onSceneObjectsChanged: ((objects: EditableSceneObject[]) => void) | null = null;
   onHistoryChanged: ((state: EditorHistoryState) => void) | null = null;
   onWorldSettingsChanged: ((settings: EditorWorldSettings) => void) | null = null;
@@ -2047,6 +2065,7 @@ export class SceneApp {
       this.updateMeshPaintFlow(deltaSeconds);
       this.updateGizmoScreenScale();
       this.environment.update(deltaSeconds);
+      this.advanceWorldEnvironmentPreview(deltaSeconds);
       this.updateWorldEnvironment(now);
       const foliageCamera = this.editorViewportCamera().position;
       this.foliageRing?.update([foliageCamera.x, foliageCamera.z], 1, 1, 2);
@@ -4311,6 +4330,8 @@ export class SceneApp {
       return null;
     });
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
+    // A reopened level shows its World Environment defaults, never the last preview.
+    this.resetWorldEnvironmentPreview();
     this.meshPaintData = await loadMeshPaintData(this.activeProject.manifest.editor.defaultScene);
     this.editorSaves.meshPaintSaveRevision.reset();
     // Normalize world widgets so the editor never reads a malformed anchor (the
@@ -13353,16 +13374,141 @@ export class SceneApp {
     const result = this.environment.applyWorldEnvironment(this.layout, {
       state: this.worldEnvironmentState(),
       nowMs,
+      scrubbing: this.worldEnvironmentScrubbing,
       sun: this.sun,
       ambient: this.ambientLight,
     });
     if (result.sunMoved) this.fitSunShadowToScene();
   }
 
-  /** The viewport's World Environment state: the level defaults. */
-  private worldEnvironmentState(): WorldEnvironmentState | null {
+  /** The level's World Environment defaults, or null when there is none (or it is hidden). */
+  private worldEnvironmentDefaults(): WorldEnvironmentState | null {
     const actor = this.layout?.worldEnvironment;
-    return actor ? stateFromDefaults(resolveWorldEnvironment(normalizeWorldEnvironment(actor).environment)) : null;
+    if (!actor) return null;
+    const env = resolveWorldEnvironment(normalizeWorldEnvironment(actor).environment);
+    return env.hidden ? null : stateFromDefaults(env);
+  }
+
+  /**
+   * The viewport's World Environment state: the preview while one is being
+   * made, else the level defaults (WES v0.3 §12). The preview is editor-shell
+   * state only: it is never saved, never dirties the layout and never reaches Play.
+   */
+  private worldEnvironmentState(): WorldEnvironmentState | null {
+    const defaults = this.worldEnvironmentDefaults();
+    if (!defaults) return null;
+    return this.worldEnvironmentPreviewState ?? defaults;
+  }
+
+  /** The preview strip's state, or null when the level has no active World Environment. */
+  getWorldEnvironmentPreview(): WorldEnvironmentPreview | null {
+    const state = this.worldEnvironmentState();
+    if (!state) return null;
+    return {
+      state: structuredClone(state),
+      modified: this.worldEnvironmentPreviewState !== null,
+      playing: this.worldEnvironmentPreviewPlaying,
+      hoursPerSecond: this.worldEnvironmentPreviewSpeed,
+    };
+  }
+
+  /**
+   * Changes the preview (not the level). `scrubbing` holds the Sky Light
+   * capture while the clock slider is dragged; release with `scrubbing: false`.
+   */
+  setWorldEnvironmentPreview(
+    patch: Partial<Pick<WorldEnvironmentState, "hour" | "season">> & {
+      weather?: Partial<WorldEnvironmentState["weather"]>;
+      surface?: Partial<WorldEnvironmentState["surface"]>;
+    },
+    options: { scrubbing?: boolean } = {},
+  ): void {
+    const current = this.worldEnvironmentState();
+    if (!current) return;
+    const next: WorldEnvironmentState = {
+      hour: patch.hour === undefined ? current.hour : wrapHour(patch.hour),
+      season: patch.season ?? current.season,
+      weather: { ...current.weather, ...patch.weather },
+      surface: { ...current.surface, ...patch.surface },
+    };
+    // The Winter button brings the snow cover to the actor's winter coverage (§12, E-016).
+    if (patch.season === "winter" && patch.surface?.snowCoverage === undefined) {
+      next.surface.snowCoverage = resolveWorldEnvironment(this.layout?.worldEnvironment).surface.winterSnowCoverage;
+    }
+    this.worldEnvironmentPreviewState = next;
+    if (options.scrubbing !== undefined) this.worldEnvironmentScrubbing = options.scrubbing;
+    this.emitWorldEnvironmentPreview();
+  }
+
+  setWorldEnvironmentPreviewPlaying(playing: boolean): void {
+    if (!this.worldEnvironmentState()) return;
+    this.worldEnvironmentPreviewPlaying = playing;
+    this.emitWorldEnvironmentPreview();
+  }
+
+  setWorldEnvironmentPreviewSpeed(hoursPerSecond: number): void {
+    if (!Number.isFinite(hoursPerSecond) || hoursPerSecond <= 0) return;
+    this.worldEnvironmentPreviewSpeed = hoursPerSecond;
+    this.emitWorldEnvironmentPreview();
+  }
+
+  /** "Reset": the preview goes back to the level defaults. Not an undo step — no data changes. */
+  resetWorldEnvironmentPreview(): void {
+    this.worldEnvironmentPreviewState = null;
+    this.worldEnvironmentPreviewPlaying = false;
+    this.worldEnvironmentScrubbing = false;
+    this.emitWorldEnvironmentPreview();
+  }
+
+  /** "Make Default": writes the preview into the level defaults as one undo step. */
+  applyWorldEnvironmentPreviewAsDefaults(): void {
+    const preview = this.worldEnvironmentPreviewState;
+    const authored = this.layout?.worldEnvironment;
+    if (!preview || !authored) return;
+    this.setWorldEnvironment({
+      time: { ...authored.time, hour: Number(preview.hour.toFixed(3)) % 24 },
+      season: preview.season,
+      weather: { ...authored.weather, preset: preview.weather.preset, intensity: preview.weather.intensity },
+      surface: { ...authored.surface, snowCoverage: preview.surface.snowCoverage, wetness: preview.surface.wetness },
+    }, "Make World Environment Preview Default");
+    this.worldEnvironmentPreviewState = null;
+    this.worldEnvironmentPreviewPlaying = false;
+    this.emitWorldEnvironmentPreview();
+  }
+
+  /** Which environment actors the level has (the preview warns when a weather preset needs a missing one). */
+  getEnvironmentActorPresence(): Set<"cloudLayer" | "heightFog" | "skyAtmosphere"> {
+    const present = new Set<"cloudLayer" | "heightFog" | "skyAtmosphere">();
+    if (this.layout?.cloudLayer && !this.layout.cloudLayer.hidden) present.add("cloudLayer");
+    if (this.layout?.heightFog && !this.layout.heightFog.hidden) present.add("heightFog");
+    if (this.layout?.skyAtmosphere && !this.layout.skyAtmosphere.hidden) present.add("skyAtmosphere");
+    return present;
+  }
+
+  /** Whether the given Outliner id is the Sun whose aim the World Environment drives. */
+  isSunManagedByWorldEnvironment(id: string): boolean {
+    if (!this.worldEnvironmentDefaults()) return false;
+    const index = this.sunLightIndex();
+    return index >= 0 && id === `light:${index}`;
+  }
+
+  /** Preview playback: the clock runs on wall time at the preview speed. */
+  private advanceWorldEnvironmentPreview(deltaSeconds: number): void {
+    if (!this.worldEnvironmentPreviewPlaying) return;
+    const current = this.worldEnvironmentState();
+    if (!current) {
+      this.worldEnvironmentPreviewPlaying = false;
+      return;
+    }
+    this.worldEnvironmentPreviewState = {
+      ...structuredClone(current),
+      hour: wrapHour(current.hour + deltaSeconds * this.worldEnvironmentPreviewSpeed),
+    };
+    this.emitWorldEnvironmentPreview();
+  }
+
+  private emitWorldEnvironmentPreview(): void {
+    this.onWorldEnvironmentPreviewChanged?.(this.getWorldEnvironmentPreview());
   }
 
   /** The World Environment actor exactly as authored (sparse), or undefined when none is placed. */
@@ -13393,6 +13539,7 @@ export class SceneApp {
   removeWorldEnvironment(): void {
     if (!this.layout?.worldEnvironment) return;
     this.commitWorldEnvironment(undefined, "Delete World Environment");
+    this.resetWorldEnvironmentPreview();
   }
 
   /**

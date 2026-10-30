@@ -87,6 +87,12 @@ const COVERAGE_RULES: readonly CoverageRule[] = [
       ].filter((widget) => typeof widget === "string" && widget.length > 0).length;
     },
   },
+  {
+    // Without the clock module Play renders the authored sky/sun/fog unchanged.
+    moduleId: "world-environment",
+    authored: "World Environment actor",
+    count: (_entities, layout) => (layout.worldEnvironment && !layout.worldEnvironment.hidden ? 1 : 0),
+  },
 ];
 
 export interface CapabilityCoverageInput {

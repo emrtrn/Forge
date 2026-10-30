@@ -1,6 +1,8 @@
 import type { LayoutWorldEnvironment, Vec3 } from "@engine/scene/layout";
-import type { EditableSelection } from "@/scene/SceneApp";
-import { SEASONS, WEATHER_PRESETS } from "@engine/environment/worldEnvironment";
+import type { EditableSelection, WorldEnvironmentPreview } from "@/scene/SceneApp";
+import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
+import { weatherPresetRequirements } from "@engine/environment/weatherPresets";
+import { SEASONS, WEATHER_PRESETS, type Season, type WeatherPreset } from "@engine/environment/worldEnvironment";
 
 /**
  * Details panel of the singleton World Environment (WES) actor: the level
@@ -19,7 +21,24 @@ export interface WorldEnvironmentDetailsOptions {
     patch: { [K in keyof LayoutWorldEnvironment]?: LayoutWorldEnvironment[K] | undefined },
     label?: string,
   ) => void;
+  /** The preview strip's state; null when the actor is hidden (no preview). */
+  preview: WorldEnvironmentPreview | null;
+  /** Which environment actors the level has, for the "preset needs" warning (§7.2). */
+  presentActors: ReadonlySet<"cloudLayer" | "heightFog" | "skyAtmosphere">;
+  setPreview: (
+    patch: Partial<Pick<WorldEnvironmentState, "hour" | "season">> & {
+      weather?: Partial<WorldEnvironmentState["weather"]>;
+      surface?: Partial<WorldEnvironmentState["surface"]>;
+    },
+    options?: { scrubbing?: boolean },
+  ) => void;
+  setPreviewPlaying: (playing: boolean) => void;
+  setPreviewSpeed: (hoursPerSecond: number) => void;
+  resetPreview: () => void;
+  makePreviewDefault: () => void;
 }
+
+const PREVIEW_SPEEDS = [0.25, 1, 4];
 
 type GroupKey = "time" | "sunPath" | "night" | "weather" | "surface";
 
@@ -115,6 +134,7 @@ export function renderWorldEnvironmentDetails(options: WorldEnvironmentDetailsOp
         <span>Name</span>
         <input data-wes-name type="text" value="${escapeHtml(env.name)}" placeholder="World Environment" />
       </label>
+      ${options.preview ? previewStrip(options.preview) : `<div class="detail-hint">Hidden: the authored sky, fog and sun render unchanged.</div>`}
       <div class="detail-section" data-wes-defaults>
         <div class="detail-section-title">Level Defaults</div>
         <label class="detail-row">
@@ -176,12 +196,142 @@ export function renderWorldEnvironmentDetails(options: WorldEnvironmentDetailsOp
       if (group && key) patchGroup(group, key, input.value);
     });
   });
+  bindPreviewStrip(options);
+  if (options.preview) updateWorldEnvironmentPreviewStrip(body, options.preview, options.presentActors);
+
   const altitude = body.querySelector<HTMLInputElement>("[data-wes-altitude]");
   altitude?.addEventListener("change", () => {
     const raw = altitude.value.trim();
     const value = Number(raw);
     patchGroup("surface", "snowMinAltitude", raw === "" ? undefined : Number.isFinite(value) ? value : undefined);
   });
+}
+
+/**
+ * The Preview strip (§12): changes here are never saved and never dirty the
+ * level; "Make Default" writes them as one undo step, "Reset" drops them.
+ */
+function previewStrip(preview: WorldEnvironmentPreview): string {
+  const button = (attr: string, value: string, label: string): string =>
+    `<button type="button" class="detail-button" ${attr}="${value}">${label}</button>`;
+  return `
+      <div class="detail-section" data-wes-preview>
+        <div class="detail-section-title">Preview <span class="detail-hint">not saved</span></div>
+        <label class="detail-row">
+          <span>Time <span data-wes-preview-hour-label>${formatHour(preview.state.hour)}</span></span>
+          <input data-wes-preview-hour type="range" min="0" max="23.99" step="0.01" value="${preview.state.hour}" />
+        </label>
+        <div class="detail-row">
+          <span>Play</span>
+          <span>
+            <button type="button" class="detail-button" data-wes-preview-play>${preview.playing ? "Pause" : "Play"}</button>
+            <select data-wes-preview-speed>
+              ${PREVIEW_SPEEDS.map((speed) => `<option value="${speed}" ${speed === preview.hoursPerSecond ? "selected" : ""}>${speed} h/s</option>`).join("")}
+            </select>
+          </span>
+        </div>
+        <div class="detail-row"><span>Season</span><span>${SEASONS.map((season) => button("data-wes-preview-season", season, titleCase(season))).join("")}</span></div>
+        <div class="detail-row"><span>Weather</span><span>${WEATHER_PRESETS.map((preset) => button("data-wes-preview-weather", preset, titleCase(preset))).join("")}</span></div>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-wes-preview-number="weather.intensity" type="range" min="0" max="1" step="0.05" value="${preview.state.weather.intensity}" />
+        </label>
+        <label class="detail-row">
+          <span>Snow Cover</span>
+          <input data-wes-preview-number="surface.snowCoverage" type="range" min="0" max="1" step="0.05" value="${preview.state.surface.snowCoverage}" />
+        </label>
+        <label class="detail-row">
+          <span>Wetness</span>
+          <input data-wes-preview-number="surface.wetness" type="range" min="0" max="1" step="0.05" value="${preview.state.surface.wetness}" />
+        </label>
+        <div class="detail-hint" data-wes-preview-needs></div>
+        <div class="detail-hint">Snow and wetness are preview state until terrain and materials consume them (K2).</div>
+        <div class="detail-row">
+          <button type="button" class="detail-button" data-wes-preview-default>Make Default</button>
+          <button type="button" class="detail-button" data-wes-preview-reset>Reset</button>
+        </div>
+      </div>`;
+}
+
+function bindPreviewStrip(options: WorldEnvironmentDetailsOptions): void {
+  const { body } = options;
+  const hour = body.querySelector<HTMLInputElement>("[data-wes-preview-hour]");
+  hour?.addEventListener("input", () => options.setPreview({ hour: Number(hour.value) }, { scrubbing: true }));
+  hour?.addEventListener("change", () => options.setPreview({ hour: Number(hour.value) }, { scrubbing: false }));
+  const play = body.querySelector<HTMLButtonElement>("[data-wes-preview-play]");
+  // The strip updates in place, so the button's label (not the render-time state) says what a click does.
+  play?.addEventListener("click", () => options.setPreviewPlaying(play.textContent === "Play"));
+  body.querySelector<HTMLSelectElement>("[data-wes-preview-speed]")?.addEventListener("change", (event) => {
+    options.setPreviewSpeed(Number((event.currentTarget as HTMLSelectElement).value));
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-wes-preview-season]").forEach((button) => {
+    button.addEventListener("click", () => options.setPreview({ season: button.dataset.wesPreviewSeason as Season }));
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-wes-preview-weather]").forEach((button) => {
+    button.addEventListener("click", () =>
+      options.setPreview({ weather: { preset: button.dataset.wesPreviewWeather as WeatherPreset } }));
+  });
+  body.querySelectorAll<HTMLInputElement>("[data-wes-preview-number]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const [group, key] = (input.dataset.wesPreviewNumber ?? "").split(".");
+      const value = Number(input.value);
+      if (group === "weather" && key === "intensity") options.setPreview({ weather: { intensity: value } });
+      if (group === "surface" && (key === "snowCoverage" || key === "wetness")) options.setPreview({ surface: { [key]: value } });
+    });
+  });
+  body.querySelector("[data-wes-preview-default]")?.addEventListener("click", () => options.makePreviewDefault());
+  body.querySelector("[data-wes-preview-reset]")?.addEventListener("click", () => options.resetPreview());
+}
+
+/**
+ * Brings an open preview strip up to date in place — the clock runs every
+ * frame while previewing, and re-rendering the panel would drop a slider drag.
+ */
+export function updateWorldEnvironmentPreviewStrip(
+  body: HTMLElement,
+  preview: WorldEnvironmentPreview,
+  presentActors: ReadonlySet<"cloudLayer" | "heightFog" | "skyAtmosphere">,
+): void {
+  const { state } = preview;
+  const hour = body.querySelector<HTMLInputElement>("[data-wes-preview-hour]");
+  if (hour && document.activeElement !== hour) hour.value = String(state.hour);
+  const label = body.querySelector("[data-wes-preview-hour-label]");
+  if (label) label.textContent = formatHour(state.hour);
+  const play = body.querySelector("[data-wes-preview-play]");
+  if (play) play.textContent = preview.playing ? "Pause" : "Play";
+  body.querySelectorAll<HTMLButtonElement>("[data-wes-preview-season]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.wesPreviewSeason === state.season);
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-wes-preview-weather]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.wesPreviewWeather === state.weather.preset);
+  });
+  body.querySelectorAll<HTMLInputElement>("[data-wes-preview-number]").forEach((input) => {
+    if (document.activeElement === input) return;
+    const [group, key] = (input.dataset.wesPreviewNumber ?? "").split(".");
+    const source = group === "weather" ? state.weather : state.surface;
+    const value = (source as unknown as Record<string, number>)[key ?? ""];
+    if (value !== undefined) input.value = String(value);
+  });
+  for (const selector of ["[data-wes-preview-default]", "[data-wes-preview-reset]"]) {
+    const button = body.querySelector<HTMLButtonElement>(selector);
+    if (button) button.disabled = !preview.modified;
+  }
+  const needs = body.querySelector("[data-wes-preview-needs]");
+  if (needs) {
+    const missing = weatherPresetRequirements(state.weather.preset).filter((actor) => !presentActors.has(actor));
+    needs.textContent = missing.length > 0
+      ? `${titleCase(state.weather.preset)} needs ${missing.map(actorLabel).join(", ")} to show fully; WES never adds them.`
+      : "";
+  }
+}
+
+function actorLabel(actor: "cloudLayer" | "heightFog" | "skyAtmosphere"): string {
+  return actor === "cloudLayer" ? "a Cloud Layer" : actor === "heightFog" ? "an Exponential Height Fog" : "a Sky Atmosphere";
+}
+
+function formatHour(hour: number): string {
+  const minutes = Math.floor(hour * 60) % (24 * 60);
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
 function colorRow(field: string, label: string, value: string): string {

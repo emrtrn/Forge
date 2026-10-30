@@ -32,6 +32,7 @@ import type {
 } from "./RuntimeSceneApp";
 import type { SceneCostSnapshot } from "./runtimeDebugSnapshot";
 import type { TerrainDeformationSnapshot } from "./capabilities/runtimeServiceKeys";
+import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
 
 const UPDATE_INTERVAL_MS = 500;
 
@@ -73,6 +74,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       vfxDebugText(app) +
       terrainStreamingText(app) +
       worldPartitionText(app) +
+      worldEnvironmentText(app) +
       gameModeDebugText(app) +
       vehicleSurfaceText(app) +
       terrainDeformationText(app) +
@@ -493,6 +495,19 @@ function terrainDeformationText(app: RuntimeStatsApp): string {
 function vehicleSurfaceText(app: RuntimeStatsApp): string {
   const snapshot = app.getVehicleSurfaceSnapshot?.();
   return snapshot ? `\n${formatVehicleSurfaceDebug(snapshot)}\n${formatVehicleSinkDebug(snapshot)}` : "";
+}
+
+/** The World Environment line: clock, season and weather (absent without an active actor). */
+function worldEnvironmentText(app: RuntimeStatsApp): string {
+  const state = app.getWorldEnvironmentSnapshot?.();
+  return state ? `
+${formatWorldEnvironment(state)}` : "";
+}
+
+export function formatWorldEnvironment(state: WorldEnvironmentState): string {
+  const minutes = Math.floor(state.hour * 60) % (24 * 60);
+  const clock = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  return `world env: ${clock} ${state.season} ${state.weather.preset} ${state.weather.intensity.toFixed(2)}`;
 }
 
 function worldPartitionText(app: RuntimeStatsApp): string {

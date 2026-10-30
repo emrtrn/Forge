@@ -66,6 +66,7 @@ import type { SplineRegistry } from "@engine/scene/splineRegistry";
 import type { BehaviorRegistry } from "@engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistryHost } from "@engine/behavior/behaviorHost";
 import type { ActorScriptDef } from "@engine/scene/actorScript";
+import type { WorldEnvironmentController } from "@engine/environment/worldEnvironmentController";
 
 import type { GameModeDefinition, RuntimeCharacterRef } from "../gameModeTypes";
 import type { LocaleRegistry } from "@engine/ui/uiLocale";
@@ -311,6 +312,14 @@ export interface ScriptMessageBus {
 }
 
 export const scriptMessageBusService = runtimeServiceKey<ScriptMessageBus>("script-message-bus");
+
+/**
+ * The live World Environment (time of day, season, weather) of the current
+ * level. `active` is false when the level has no (visible) World Environment.
+ * Provided by: `worldEnvironmentModule`.
+ */
+export const worldEnvironmentService =
+  runtimeServiceKey<WorldEnvironmentController>("world-environment");
 
 /**
  * Plays a resolved dialogue line's audio and hands back a stop handle, or null

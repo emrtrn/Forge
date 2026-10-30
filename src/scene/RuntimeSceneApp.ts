@@ -22,8 +22,7 @@ import {
   VIEW_DISTANCE_FOG_WARN_OPACITY,
 } from "@engine/world/viewDistance";
 import { resolveHeightFog } from "@engine/scene/heightFog";
-import { stateFromDefaults, type WorldEnvironmentState } from "@engine/environment/environmentResolve";
-import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
+import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
 import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
@@ -104,6 +103,7 @@ import {
   uiHostService,
   uiPresenterService,
   uiViewModelService,
+  worldEnvironmentService,
   type AiNavigationDebugSnapshot,
   type AudioCommands,
   type CharacterMovementQuery,
@@ -690,6 +690,8 @@ export interface RuntimeStatsApp {
   getTerrainDeformationSnapshot?(): TerrainDeformationSnapshot | null;
   /** Optional: terrain CDLOD nodes refined inside the track window, and the quality's detail levels. */
   getTerrainTrackDetailSnapshot?(): TerrainTrackDetailSnapshot;
+  /** Optional: the live World Environment (clock, season, weather); null when the level has none. */
+  getWorldEnvironmentSnapshot?(): WorldEnvironmentState | null;
   getWorldPartitionSnapshot?(): (WorldPartitionSnapshot & {
     models?: AssetResidencySnapshot;
     statics?: { cells: number; pending: number };
@@ -2539,6 +2541,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         return { surface: id ?? "neutral", frictionSlipScale: sample.frictionSlipScale, rollingResistance: sample.rollingResistance, ...sink };
       }),
     };
+  }
+
+  getWorldEnvironmentSnapshot(): WorldEnvironmentState | null {
+    const state = this.worldEnvironmentState();
+    return state ? structuredClone(state) : null;
   }
 
   getWorldPartitionSnapshot(): (WorldPartitionSnapshot & {
@@ -6577,10 +6584,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (result.sunMoved) this.fitSunShadowToScene();
   }
 
-  /** The live World Environment state; the level defaults until the Play clock drives it. */
+  /** The live World Environment state from the Play clock; null (authored look) when its module is off. */
   private worldEnvironmentState(): WorldEnvironmentState | null {
-    const actor = this.layout?.worldEnvironment;
-    return actor ? stateFromDefaults(resolveWorldEnvironment(normalizeWorldEnvironment(actor).environment)) : null;
+    return this.runtimeServices.resolve(worldEnvironmentService)?.current() ?? null;
   }
 
   /** Applies global Post Process renderer properties after Sky tone mapping. */

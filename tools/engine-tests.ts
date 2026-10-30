@@ -1029,6 +1029,7 @@ import { registerPlacementColorTests } from "../tests/engine/placementColor.test
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerWorldEnvironmentTests, registerWorldEnvironmentTimeTests } from "../tests/engine/worldEnvironment.test";
 import { registerAuthoredEnvironmentTests } from "../tests/engine/authoredEnvironment.test";
+import { registerWorldEnvironmentModuleTests } from "../tests/engine/worldEnvironmentModule.test";
 import { registerRegionProfileTests } from "../tests/engine/regionProfile.test";
 import { registerWorldStageTests } from "../tests/engine/worldStage.test";
 import { registerWorldRoadsTests } from "../tests/engine/worldRoads.test";
@@ -1220,6 +1221,7 @@ registerWorldRecipeTests(check);
 registerWorldEnvironmentTests(check);
 registerWorldEnvironmentTimeTests(check);
 registerAuthoredEnvironmentTests(check);
+registerWorldEnvironmentModuleTests(check);
 registerRegionProfileTests(check);
 registerWorldStageTests(check);
 registerWorldRoadsTests(check);

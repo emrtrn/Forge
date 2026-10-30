@@ -151,7 +151,10 @@ import { WorldPartitionPanel } from "./panels/world/worldPartitionPanel";
 import { WorldBuilderPanel } from "./panels/world/worldBuilderPanel";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
 import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
-import { renderWorldEnvironmentDetails } from "./panels/details/worldEnvironmentDetails";
+import {
+  renderWorldEnvironmentDetails,
+  updateWorldEnvironmentPreviewStrip,
+} from "./panels/details/worldEnvironmentDetails";
 import { createFoliageType } from "@engine/scene/foliage";
 import {
   OUTLINER_FILTER_TYPES,
@@ -810,6 +813,13 @@ export class EditorUi {
       this.detailsBaseline = null;
       this.renderDetails(selection);
       this.outlinerScrollTargetId = selection?.id ?? null;
+    };
+    this.app.onWorldEnvironmentPreviewChanged = (preview) => {
+      if (this.selected?.kind !== "worldEnvironment" || !preview) return;
+      // In place: the clock ticks every frame while previewing.
+      if (this.detailsBody.querySelector("[data-wes-preview]")) {
+        updateWorldEnvironmentPreviewStrip(this.detailsBody, preview, this.app.getEnvironmentActorPresence());
+      }
     };
     this.app.onSceneObjectsChanged = (objects) => this.renderOutliner(objects);
     this.app.onHistoryChanged = (state) => this.renderHistory(state);
@@ -4479,6 +4489,7 @@ export class EditorUi {
       setDetailsScale: (scale) => {
         this.detailsScale = scale;
       },
+      sunManagedByWorldEnvironment: this.app.isSunManagedByWorldEnvironment(selection.id),
       beginDetailsEdit: () => this.beginDetailsEdit(),
       applyDetails: () => this.applyDetails(),
       applyScaleInput: (input) => this.applyScaleInput(input),
@@ -4654,6 +4665,13 @@ export class EditorUi {
         },
         authored: this.app.getWorldEnvironmentDefaults() ?? {},
         setWorldEnvironment: (patch, label) => this.app.setWorldEnvironment(patch, label),
+        preview: this.app.getWorldEnvironmentPreview(),
+        presentActors: this.app.getEnvironmentActorPresence(),
+        setPreview: (patch, options) => this.app.setWorldEnvironmentPreview(patch, options),
+        setPreviewPlaying: (playing) => this.app.setWorldEnvironmentPreviewPlaying(playing),
+        setPreviewSpeed: (speed) => this.app.setWorldEnvironmentPreviewSpeed(speed),
+        resetPreview: () => this.app.resetWorldEnvironmentPreview(),
+        makePreviewDefault: () => this.app.applyWorldEnvironmentPreviewAsDefaults(),
       });
       this.finalizeDetailsRender(selection);
       return;

@@ -226,7 +226,8 @@ import {
 import { resolveSkyAtmosphere } from "@engine/render-three/skyAtmosphere";
 import { resolveHeightFog } from "@engine/render-three/heightFog";
 import { resolveCloudLayer } from "@engine/render-three/cloudLayer";
-import { resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
+import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
+import { stateFromDefaults, type WorldEnvironmentState } from "@engine/environment/environmentResolve";
 import { initialWorldEnvironmentForSun } from "@engine/environment/sunPath";
 import {
   applyPostProcessToneMapping,
@@ -2046,6 +2047,7 @@ export class SceneApp {
       this.updateMeshPaintFlow(deltaSeconds);
       this.updateGizmoScreenScale();
       this.environment.update(deltaSeconds);
+      this.updateWorldEnvironment(now);
       const foliageCamera = this.editorViewportCamera().position;
       this.foliageRing?.update([foliageCamera.x, foliageCamera.z], 1, 1, 2);
       this.foliageBinding?.updateCulling(foliageCamera);
@@ -13336,11 +13338,31 @@ export class SceneApp {
   }
 
   /**
-   * Re-applies the World Environment to the viewport. The actor stores level
-   * defaults only; the render override comes with the atmosphere binding.
+   * Re-applies the World Environment to the viewport. The render loop applies
+   * it every frame ({@link updateWorldEnvironment}); a change of the actor just
+   * needs the next frame.
    */
-  private applyWorldEnvironment(): void {
-    // The atmosphere binding (WES-004) resolves and applies the override here.
+  private applyWorldEnvironment(): void {}
+
+  /**
+   * Renders the World Environment over the authored environment through the
+   * shared binding (sun light, ambient, sky, fog, clouds, IBL); the layout is
+   * never written. A moved sun refits the bounds-fitted shadow.
+   */
+  private updateWorldEnvironment(nowMs: number): void {
+    const result = this.environment.applyWorldEnvironment(this.layout, {
+      state: this.worldEnvironmentState(),
+      nowMs,
+      sun: this.sun,
+      ambient: this.ambientLight,
+    });
+    if (result.sunMoved) this.fitSunShadowToScene();
+  }
+
+  /** The viewport's World Environment state: the level defaults. */
+  private worldEnvironmentState(): WorldEnvironmentState | null {
+    const actor = this.layout?.worldEnvironment;
+    return actor ? stateFromDefaults(resolveWorldEnvironment(normalizeWorldEnvironment(actor).environment)) : null;
   }
 
   /** The World Environment actor exactly as authored (sparse), or undefined when none is placed. */

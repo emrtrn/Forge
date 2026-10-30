@@ -22,6 +22,8 @@ import {
   VIEW_DISTANCE_FOG_WARN_OPACITY,
 } from "@engine/world/viewDistance";
 import { resolveHeightFog } from "@engine/scene/heightFog";
+import { stateFromDefaults, type WorldEnvironmentState } from "@engine/environment/environmentResolve";
+import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
 import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
@@ -1854,6 +1856,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.perfRegion(FRAME_REGION_DEBUG_WIRES, mark);
       mark = this.perfMark();
       this.environment.update(simulationMs / 1000);
+      this.updateWorldEnvironment();
       this.perfRegion(FRAME_REGION_ENVIRONMENT, mark);
       mark = this.perfMark();
       this.foliageCellStreaming?.update([this.camera.position.x, this.camera.position.z]);
@@ -6557,6 +6560,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     updateSunFollowShadow(sun, this.camera.position, this.followShadowForward, {
       halfExtent: FOLLOW_SHADOW_HALF_EXTENT * this.qualitySettings.shadowDistanceScale,
     });
+  }
+
+  /**
+   * Renders the World Environment (time of day, weather) over the authored
+   * environment: the shared binding overrides the Sun's three light, ambient,
+   * sky, fog and clouds; a moved sun refits the bounds-fitted shadow.
+   */
+  private updateWorldEnvironment(): void {
+    const result = this.environment.applyWorldEnvironment(this.layout, {
+      state: this.worldEnvironmentState(),
+      nowMs: performance.now(),
+      sun: this.sun,
+      ambient: this.ambientLight,
+    });
+    if (result.sunMoved) this.fitSunShadowToScene();
+  }
+
+  /** The live World Environment state; the level defaults until the Play clock drives it. */
+  private worldEnvironmentState(): WorldEnvironmentState | null {
+    const actor = this.layout?.worldEnvironment;
+    return actor ? stateFromDefaults(resolveWorldEnvironment(normalizeWorldEnvironment(actor).environment)) : null;
   }
 
   /** Applies global Post Process renderer properties after Sky tone mapping. */

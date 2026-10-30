@@ -2,6 +2,12 @@
 
 Tarih: 29 Ekim 2026 · Durum: V1b ve V1c + güneş parıltısı uygulandı; son Lake görünümü kullanıcı tarafından kabul edildi. Teknik doğrulama ve yeni GPU maliyeti açık.
 
+**30 Ekim 2026 güncellemesi — River görsel yakınlaştırma:** Kullanıcı, memnun
+olduğu Lake görünümünü referans alarak River yüzeyinin iyileştirilmesini istedi.
+Kod karşılaştırmasına dayanan uygulama planı [§7.1](#71-river-görsel-yakınlaştırma-planı--30-ekim-2026)
+altındadır. Bu teslim yalnız planlamadır; River uygulaması ve görsel/performans
+kabulü henüz yapılmadı. Lake'in kabul edilmiş görünümü korunacak referanstır.
+
 **Uygulama notu:** Kullanıcı önceliğiyle V1b köpük malzemesi öne alındı.
 Ortak 512² doku, yoğunluğa bağlı desen ve kabarıklık ışıklandırması Lake/River'a
 uygulandı. [Uygulama, doğrulama ve açık sınırlar](../reports/WATER_FOAM_MATERIAL_V1B_2026-10-29.md).
@@ -204,14 +210,164 @@ Başlangıç noktası: [waterSceneSnapshot.ts](../../engine/render-three/waterSc
 
 ### V2b — River
 
-**Ertelendi:** Kullanıcının 29 Ekim 2026 kararıyla nehir ayrı ve daha kapsamlı
-bir çalışmada ele alınacak. Bu Lake test/commit teslimi V2b'yi başlatmaz.
+**Planlandı, uygulama başlamadı:** 29 Ekim'de ayrı çalışmaya ertelenen River,
+30 Ekim kullanıcı isteğiyle aşağıdaki görsel yakınlaştırma planında ele alındı.
+V2b kırılma bu çalışmanın R3 dilimidir; planın yazılması uygulama kabulü değildir.
 
 - [ ] Lake sonucu kabul edildikten sonra River render yolunun snapshot erişimini ve yerel yüzey kotunu ayrı incele.
 - [ ] Eğime, yerel derinliğe ve gerçek River üçgenlerine bağlı doğrulamayla adaptör geliştir; sıfır deniz seviyesi varsayımı kullanma.
 - [ ] Lake/River birlikteyken snapshot paylaşımı, optik tutarlılık, fallback ve kaynak ömrünü doğrula.
 
 **Çıkış:** Lake için geçen kontrol seti eğimli River'da da geçer. River bağlantısı hazır değilse V2a ayrı teslim edilir ve V2b açık kalır; iki gövde türü için tamamlandı denmez.
+
+### 7.1. River görsel yakınlaştırma planı — 30 Ekim 2026
+
+**Hedef:** River'ın renk, dip geçirgenliği, mikro yüzey, yansıma ve güneş
+parıltısını kabul edilmiş Lake malzemesine yaklaştırmak. Spline eğimi, yerel su
+kotu, akış yönü/hızı, kıyıda yavaşlama ve rapid bölgeleri korunur. Lake'in
+görünümü değiştirilmez; ortak yardımcı çıkarılırsa Lake sonucu regresyonla
+korunur. Aynı malzeme hissi hedeflenir, akan nehrin hareketsiz göle dönüşmesi değil.
+
+#### Koddan başlangıç bulguları
+
+İncelenen kaynak `f06cacdd` sürümüdür. Bunlar statik kod bulgularıdır;
+aynı ışık/kamera altında görsel veya GPU ölçümü yapılmış sayılmaz.
+
+| Alan | Lake | River | Uygulamadaki karşılığı |
+| --- | --- | --- | --- |
+| Dip/kırılma | `lakeWater.ts`: scene color/depth, kanal bazlı soğurma ve su sütunu boyunca renk bütünleştirme; `lakeRefraction.ts`: doğrulanan UV kaydırma | `riverWater.ts`: geometriye işlenmiş derinlik, şeffaf `waterComposite`; scene snapshot/kırılma yok | R2 dip optiği, R3 yerel yüzey doğrulamalı kırılma |
+| Yansıma | Ortam/probe + kapsama göre planar birleşimi, doğrudan rough Fresnel | Yalnız ortam/probe; RGB `2.0` tavanı ve `0.025 + fresnel * 0.425` ağırlığı | R1 ortam enerjisi ve açı davranışı |
+| Güneş | Ortak GGX ve sparkle, yüzeyle ortak roughness | Aynı yardımcılar; ek `0.35` çarpanı ve sığlık sönümü; güneş roughness `0.28` | R1 aynı ışıkta dengelenmiş parlama |
+| Mikro yüzey | `lakeSurface.ts`: üç normal örneği, döndürülmüş katmanlar, analitik gradyanlar, uzak ince detay sönümü | Akış UV'sinde iki normal, iri akıntı yamaları; yüzey şiddeti/roughness ayrı kontrol edilmiyor | R1 akış uzayına uyarlanan çok ölçekli detay |
+| Renk | Üstel derinlik geçişi; snapshot yolunda bütünleştirilmiş saçılma | 2.2 m'ye kadar doğrusal geçiş, renge `0.84–1.16` türbülans çarpanı | R2 derinlik bantlarını ve boyalı yüzey hissini azaltma |
+| Kıyı | Kaynak ve görünür derinlik, noise'lu blend; köpük dahil gerçek dibe geçiş | Kuru dip discard ve sığlık alpha'sı; Lake'in son birleşim bandı yok | R2 su/köpük için tutarlı kıyı geçişi |
+| Köpük | Ortak `WaterFoamMaterial`, kıyı/bake maskeleri, taban renk `(.82,.87,.84)` | Ortak malzeme; rapid köpüğü, akış ve aşağı akış bake örnekleri, varsayılan `#e8fff5` | R4 ortak ışık/renk hissi, River dağılımını koruma |
+
+Kaynaklar: `engine/render-three/{lakeWater,riverWater,lakeSurface,waterOptics,
+waterEnvironment,waterSunGlint,waterSceneSnapshot,lakeRefraction,waterFoamMaterial}.ts`;
+ayarlar `engine/scene/{waterBody,riverWater}.ts`.
+
+Lake runtime fallback'i ile editörün `createLakeAppearance()` başlangıcı aynı
+değildir. Örneğin editör profili surfaceStrength `2`, roughness `0.2`, absorption
+`2` ve sharedPlanar kullanırken eski kayıt fallback'inde sırasıyla `1`, `0.22`,
+`4` ve reflection off bulunur. River varsayılan opacity `0.65`, Lake fallback
+`0.35`'tir. Bu sayılar kabul edilmiş sahnenin etkin değerleri sanılmayacak;
+R0'da kayıtlı değerler, kalite tavanları ve aktif render yolu birlikte çıkarılacak.
+
+#### R0 — Referansı sabitleme ve karşılaştırma zemini
+
+- [ ] Kullanıcının kabul ettiği Lake/sahne kimliğini ve etkin görünüm değerlerini
+  belirle; kaynak commit'i, ışık/exposure, post-process, kalite/adaptif durum,
+  çözünürlük ve kameraları kaydet. Belirsizse görünümü tahmin ederek değiştirme.
+- [ ] Kullanıcı sahnesini düzenlemeden ayrı fixture'da düz, eğimli, virajlı,
+  sığ/derin River; taş teması, kuru kıyı ve farklı kotlu Lake/River hazırla.
+- [ ] İki karşılaştırma yap: mevcut ayarlarla önce/sonra ve eşit renk/ışık/değerlerle
+  malzeme farkı. Planar kapalı Lake de çekilsin; geometri yansıması eksikliği ile
+  temel malzeme farkı ayrı ölçülsün.
+- [ ] Gündüz/gölge/gece, üstten/eğik/yatay, yakın/uzak görüntü ve hareket dizisi
+  üret. Mevcut draw/capture, CPU/GPU ve bellek başlangıcını kaydet.
+
+**Çıkış:** Kabul edilmiş Lake'e dokunmadan tekrarlanabilir River baseline'ı.
+
+#### R1 — Mikro yüzey, ortam yansıması ve güneş parıltısı
+
+- [ ] Lake'in çok ölçekli mikro detay ve footprint sönümünü River'ın eğime bağlı
+  tangent/bitangent uzayına uyarla; desen akışla taşınsın. Göldeki dünya-XZ
+  normalini eğimli nehre doğrudan yapıştırma. Kıyıda yavaşlama ve rapid etkisi kalsın.
+- [ ] Surface strength/roughness için açık River sözleşmesi oluştur; normalScale
+  doku ölçeği olarak kalsın. Güneş ve ortam roughness ilişkisini Lake ile tutarlı
+  yap; bağımsız katsayı gerekiyorsa görsel gerekçe ve ölçümle kaydet.
+- [ ] `0.35` güneş çarpanı, yansıma RGB tavanı ve daraltılmış Fresnel'i tek tek
+  karşılaştır; körlemesine kaldırma. HDR/bloom öncesi sonlu enerji, gece/gölge
+  davranışı ve düşük kalite kararlılığını koruyarak Lake'e yakın profili seç.
+- [ ] İlk dilimde yeni River planar capture ekleme. Mevcut ortam/probe yolunu
+  iyileştir; planar'sız giderilemeyen farkı sonuçlarda açıkça belirt.
+
+**Çıkış:** Akış okunur kalırken ince detay ve güneş/ortam tepkisi Lake ile
+uyumlu; uzakta titreme, çizgilenme veya patlayan highlight yok.
+
+#### R2 — Dip optiği, renk ve kıyı geçişi
+
+- [ ] Paylaşılan `WaterSceneSnapshot` yoluna River tüketicisini bağla. River-only
+  sahnede de çalışsın; ilk su çiziminden önceki opaque renk/depth bir kez alınsın.
+  Çizim sırası, çoklu su ve örtüşen yüzeylerin kapsamı açıkça tanımlansın;
+  Lake'i içeren veya nehrin kendisini tekrar örnekleyen geri besleme oluşmasın.
+- [ ] Görünür dip ile yerel River yüzeyi arasındaki su yolundan soğurma ve
+  saçılmayı hesapla. Eğime uygun yerel derinlik tanımı kullan; normal yönündeki
+  kalınlığı düşey derinlikle karıştırma. Lake'in sabit kot varsayımını taşıma.
+- [ ] Kanal bazlı soğurma ve bütünleştirilmiş sığ/derin renk yaklaşımını paylaş
+  veya River'a uyarla. Renk türbülansını azaltmayı ayrı karşılaştır; akış hissini
+  yalnız dip rengini dalgalandırarak üretme. Güneş/gölge katkılarını ayrıca doğrula.
+- [ ] Gerçek kaynak su kapsamı ve görünür dip derinliğiyle kıyı geçişi oluştur;
+  normal ve köpük de bu geçişe katılsın. Kuru alan, eksik tile ve dar su kanalı
+  davranışını koru; blend su kapsamını genişletmesin.
+- [ ] Snapshot yoksa mevcut güvenli şeffaf optik yoluna dön; çift dip birleşimi,
+  halo ve render target'a bağlı/çözümlenmemiş texture okuması olmasın.
+
+**Çıkış:** Önce kırılma kapalıyken dip/renk/kıyı tutarlı; Lake ortak yardımcı
+değişikliğinden etkilenmiyor. Snapshot desteği genel performans kabulü değildir.
+
+#### R3 — V2b: Eğimli River kırılması
+
+- [ ] Yerel yüzey yüksekliği/eğimi ve gerçek River üçgen kapsaması sağlayan
+  adaptör tasarla. Aday ve ara UV'deki ışın-yüzey kesişimini yerel suyla doğrula;
+  Lake'in yatay düzlem/bağlı havza maskesini aynen kullanma.
+- [ ] Mevcut River sorgusunu yeniden kullanma olanağını incele; shader için ek
+  maske/alan gerekirse çözünürlük, doğruluk, GPU maliyeti, revision ve sahipliğini
+  önceden belirt. Her kare terrain veya sahne mesh taraması ekleme.
+- [ ] Ekran kenarı, ön plandaki kaya/kara, kuru hücre, farklı kot ve komşu gövde
+  örneklerini reddet; sığlık/yatay bakışta etkiyi azalt, UV kaymasını piksel
+  bütçesiyle sınırla. Başarısız örnekte doğrulanmış kaydırmasız dibe dön.
+- [ ] Strength `0`, destek yokluğu ve kalite kapalı durumunu doğrula. Yalnız
+  River bulunan sahne, Lake+River ve ters çizim sırası ayrı kontrol edilsin.
+
+**Çıkış:** Hareketli yüzey dipte kontrollü kırılma üretir; kıyı çekilmesi,
+kayaların uzaması veya başka kot/gövdeden renk sızması yok. Bu dilim ayrı kabul alır.
+
+#### R4 — Köpük dengesi, kayıt ve kalite entegrasyonu
+
+- [ ] Lake referansıyla köpük rengi/ışığını karşılaştır; River'ın rapid, kıyı ve
+  aşağı akış engel dağılımını koru. Mevcut Calculate/Recalculate/Clear ve kalıcı
+  bake akışı değişmesin; manuel temas aracı veya runtime yeniden bake eklenmesin.
+- [ ] Yeni kalıcı alanlar için layout tipleri, `resolveRiverWater`, ortak
+  validator/save allowlist, Details ve serialization testlerini birlikte güncelle.
+  Eski kayıtların mevcut görünümünü koruyan sürüm/profil veya açık opt-in yolu
+  seç; iyileştirmeyi bütün sahnelere sessizce dayatma. İngilizce UI/Türkçe tooltip.
+- [ ] River kalite tavanlarını mevcut Lake politikasıyla açıkça eşleştir;
+  authored kapalı etki açılmasın. Düşük/Orta fallback ve adaptif geçişler kayıtlı
+  değerleri değiştirmesin. Kırılma kapalıyken gereksiz maske/update işi kalmasın;
+  başka su tüketicisinin kullandığı snapshot kaynağı bırakılmasın.
+
+**Çıkış:** Save/Reload/Play, undo/redo, kalite geçişi ve level travel tutarlı;
+geçerli bake verisi ve kullanıcı sahneleri korunuyor.
+
+#### Teslim sırası ve kabul
+
+Sıra **R0 → R1 → R2 → R3 → R4**; her dilim ayrı önce/sonra kanıtı ve geri alma
+noktasıyla teslim edilir. Veri uyumluluğu/kalite kuralları ilgili alan ilk eklendiği
+anda uygulanır; R4'e kadar ertelenmez. Geometrik dalga modeli ilk kapsamda
+değişmez; gerekirse CPU sorgusu, bounds ve yardımcı depth/normal geçişleriyle
+birlikte ayrı tasarlanır. Planar River, akış simülasyonu, V3 köpük geçmişi,
+Ocean ve Lake görünümünü yeniden tasarlama bu teslimin dışında kalır.
+
+- [ ] İlgili dilim tamamlandığında uygun kontroller topluca çalıştırılır:
+  `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify` ve değişen
+  davranışı kapsayan Playwright editor/runtime testleri. Ara görsel ayarlarda
+  aynı geniş test koşusu gereksiz tekrarlanmaz.
+- [ ] §11 görsel/hareket/kayıt/yaşam döngüsü matrisi River fixture'larına
+  uygulanır; Lake referans görüntüsü aynı koşullarda regresyon için karşılaştırılır.
+- [ ] Aynı gerçek GPU'da baseline/sonuç AB/BA ölçümü yapılır: GPU p50/p95,
+  CPU kare/dilim, draw/capture, texture/buffer byte ve transient tepe raporlanır.
+  Snapshot kopyası ile ek sahne render'ı ayrı sayılır; gövde sayısı ve quality
+  geçişlerinde maliyet sınırsız büyümez. R0 sonrasında sayısal bütçe belirlenir;
+  ölçüm yoksa performans kabulü açık kalır.
+- [ ] Sonuç raporu her dilimi uygulandı/teknik doğrulandı/görsel kabul edildi/
+  performans kabul edildi olarak ayrı kaydeder. Kullanıcının River için görsel
+  onayı alınmadan Lake onayı River'a genişletilmez.
+
+**İlk somut uygulama:** R0 etkin Lake referansını ve River baseline'ını kaydetmek,
+ardından R1'i izole fixture'da geliştirmek. Bu doküman commit'i bu adımları
+uygulamaz ve yeni test/GPU sonucu iddia etmez.
 
 ## 8. V3–V4 — Hareketin sonraki gelişimi
 
@@ -341,6 +497,9 @@ Kaynak referansı, entegrasyon raporunda incelenen **`ce9248fa20afbdf63fd4c11709
 - İncelemede Ultra-Water `three ^0.186.1` / `vite ^8.3.5`, Forge ise `three 0.184.0` / `vite ^7.0.0` kullanıyor. İlk pakette toplu bağımlılık yükseltmesi planlanmaz; uygulama anında gerçek sürümler ve shader/API uyumu yeniden kontrol edilir.
 
 ## 13. Sonraki oturumun somut başlangıcı
+
+**30 Ekim güncel yön:** Sonraki River çalışması §7.1'deki R0 ile başlar;
+ardından R1–R4 izlenir. Aşağıdaki 29 Ekim kaydı geçmiş teslim bağlamıdır.
 
 **Güncel durum:** V1b köpüğün ardından V1c ortam/planar birleşimi ve Lake/River
 GGX güneş parıltısı kodlandı. Kullanıcı, görüntüler üzerinden yapılan son

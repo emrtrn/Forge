@@ -34,6 +34,10 @@
     {
       "assetId": "commonbush",
       "placements": []
+    },
+    {
+      "assetId": "lt-alpine-pine",
+      "placements": []
     }
   ],
   "characters": [],
@@ -51,9 +55,9 @@
         }
       }
     },
+    "staticObjectsCastShadow": true,
     "backgroundColor": "#a9c9df",
     "ambientColor": "#cfdeed",
-    "ambientIntensity": 0.55,
     "viewDistance": 600,
     "gameMode": "forge.vehicle"
   },
@@ -67,7 +71,15 @@
     "rayleigh": 1.4,
     "turbidity": 3,
     "mie": 0.003,
-    "mieDirectionalG": 0.8
+    "mieDirectionalG": 0.8,
+    "skyLightCapture": {
+      "intensity": 0.5
+    }
+  },
+  "heightFog": {
+    "mode": "exp",
+    "color": "#a4d0fe",
+    "density": 0.003296
   },
   "cloudLayer": {
     "coverage": 0.22,
@@ -77,7 +89,7 @@
     "speed": 0.1
   },
   "postProcess": {
-    "toneMapping": "neutral",
+    "toneMapping": "aces",
     "antialias": "smaa",
     "bloom": {
       "enabled": true,
@@ -89,6 +101,16 @@
       "enabled": true,
       "radius": 1,
       "intensity": 1
+    }
+  },
+  "worldEnvironment": {
+    "time": {
+      "hour": 9.801,
+      "dayLengthMinutes": 1
+    },
+    "sunPath": {
+      "azimuthDeg": 96.947,
+      "noonElevationDeg": 60
     }
   },
   "lights": [
@@ -107,8 +129,9 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 2,
-      "castShadow": true
+      "intensity": 5,
+      "castShadow": true,
+      "cascadedShadows": true
     }
   ],
   "reflectionCaptures": [],

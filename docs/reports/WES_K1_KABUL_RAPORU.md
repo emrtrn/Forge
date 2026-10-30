@@ -40,7 +40,7 @@
 | **ENV-14** | ✅ | 30/60/144 Hz'de aynı saat (1e-9) |
 | **ENV-15** | ✅ | Smoke: scrub + hava + mevsim önizlemesi sonrası 2.5 s boyunca **hiç save isteği yok**; "Make Default" tek undo adımı (undo/redo kayda yansıyor); yeniden açınca önizleme yerine varsayılan geliyor; Play varsayılandan başlıyor (`world env: 18:00 winter cloudy 1.00`) |
 | **ENV-16** | ✅ (K1 kapsamında) | K1 shader yaması eklemiyor; `onBeforeCompile` zincirine dokunulmadı. Binding authored layout actor'lerine hiç yazmıyor (test: layout snapshot'ı değişmiyor). Runtime'da program sayısı WES açık/kapalı aynı (23) |
-| **ENV-18** | ✅ | ≥ 3° ya da yeni hava/mevsim anahtarı gelince, en az 2 s arayla yeniden yakalama; scrub sırasında yakalama yok, bırakınca bir kez (`recapturePolicy` testleri). Smoke'ta scrub `scrubbing` bayrağıyla gidiyor |
+| **ENV-18** | ✅ | Yeniden yakalama güneşin hareketine bağlı (süreye değil): ufukta 0.5°, yüksek güneşte 3° adım; yeni hava/mevsim anahtarında hemen; scrub sırasında yok, bırakınca bir kez (`recapturePolicy` testleri). İlk sürümdeki "en az 2 s" kuralı `93834fc0` ile kaldırıldı, bkz. §6.9 |
 
 ## 4. Ekran görüntüleri
 
@@ -73,7 +73,7 @@ Gerçek tarayıcıda yapılacak kontrol:
 - SwiftShader kare süreleri (p50/p95) gerçek GPU'yu temsil etmez. **Gerçek GPU'da ölçülmedi.**
 - IBL yakalama süresi tek başına ölçülmedi.
 - Normal bir gün uzunluğunda (ör. 24 dk) güneş 3°'yi ~12 s'de katediyor, yani yakalama 6 kat seyrek.
-- E-015 (WES'e özel GPU/FPS eşikleri) hâlâ açık. Gerçek GPU'da `perf:browser` ile WES kapalı/açık ölçümü ve yakalama süresi ölçümü gerekiyor. Gerekirse `RECAPTURE_MIN_INTERVAL_MS` / `RECAPTURE_MIN_ANGLE_DEG` ayarlanacak.
+- E-015 (WES'e özel GPU/FPS eşikleri) hâlâ açık. Gerçek GPU'da `perf:browser` ile WES kapalı/açık ölçümü ve yakalama süresi ölçümü gerekiyor. Gerekirse `RECAPTURE_HORIZON_ANGLE_DEG` / `RECAPTURE_HIGH_SUN_ANGLE_DEG` ayarlanır ya da bir kare bütçesi eklenir.
 
 ## 6. v0.3'ten sapmalar
 
@@ -85,6 +85,9 @@ Gerçek tarayıcıda yapılacak kontrol:
 6. **Sun rotasyonu yalnızca Details'te salt okunur.** Gizmo hâlâ döndürebiliyor; plan bunu bir UI kısıtı olarak tanımlıyor.
 7. **Ekler:** `?debug`'a `world env:` satırı eklendi. `capabilityCoverage`'a kural eklendi: modülü çıkaran bir fork, "World Environment actor işlevsiz" uyarısı alıyor.
 8. **Önizleme oynatma hızı:** 0.25 / 1 / 4 oyun saati / gerçek saniye.
+9. **Sky Light yakalaması (K1 sonrası düzeltmeler, 2026-10-30):**
+   - `93834fc0`: yakalama süreye değil güneş hareketine bağlandı (ufukta 0.5°, yüksekte 3°). İki yakalama arasında `scene.environmentIntensity` her kare `skyLightCompensation` ile ölçekleniyor. Saat akarken yakalama 128 px.
+   - `78dbab19`: yakalama güneş diski olmadan yapılıyor. Disk, half-float PMREM'i Inf/NaN yapıyordu; ortam ışığı küçük açı farklarında patlak/normal arasında gidip geliyordu. Bu WES'ten önce de vardı. `sky-light-capture.spec` bunu koruyor. Kullanıcı ekranda doğruladı: atlama yok.
 
 ## 7. Açık kalanlar
 
@@ -93,4 +96,30 @@ Gerçek tarayıcıda yapılacak kontrol:
 | Görsel kabul kareleri | Kullanıcı, gerçek tarayıcıda | §4 |
 | GPU perf + IBL yakalama süresi (E-015) | Gerçek GPU | §5 |
 | `sun-cascaded-shadows` 16-unit vakası | Ayrı inceleme | WES'ten bağımsız |
+| **Gece aydınlatması (sıradaki iş)** | Kod | Gece sahne neredeyse siyah; §8 |
 | K2 başlangıcı | E-023 içerik boşlukları: kış çıplak ağaç mesh'i, çatı modeli | K2 talimatı bu rapor kabul edildikten sonra yazılacak |
+| `river-water-optics` 2–3 vakası | Ayrı inceleme | Bu makinede WES'ten önce de kırık |
+
+## 8. Sıradaki iş: ay ışığı ve gece ortam ışığı
+
+**Gözlem (2026-10-30):** Kullanıcının 0.25 h/s önizleme kaydı (`docs/video/bandicam 2026-10-30 11-42-18-009_frames_0.5s`). Gece karelerinde (0001–0007, 0105–0110) ortalama parlaklık 0–255 ölçeğinde 0.1–0.5. Sahne, araç dahil fiilen görünmüyor. Gece "karanlık ama okunur" olmalı (plan §6.2–6.3).
+
+**Gece ışığını bugün belirleyen her şey ve şüpheler:**
+
+| Kaynak | Bugünkü davranış | Şüphe |
+|---|---|---|
+| Ay (aynı directional ışık) | `authored şiddet × night.moonIntensity (0.08)`, renk `#9fb4ff`, 30° yükseklik. Ufukta 0..-6° arasında söner (`sunPath.ts`) | Authored güneş şiddetine oranlı. ACES + düşük exposure altında 0.08× pratikte sıfır |
+| Ortam ışığı (`AmbientLight`) | `authored ambient × max(ambientFloor 0.15, daylight)` | Sky Atmosphere olan level'larda kabuk yedek ambient'i emekliye ayırıyor (`hasAuthoredSkyLight`). Authored ambient 0 ise taban da 0 |
+| Sky Light (IBL) | Güneş ufkun altındayken yakalanan gökyüzü neredeyse siyah. `skyLightLevel` tabanı 0.04 | Gece IBL tabanı yok. Disk düzeltmesinden sonra gece yakalaması da doğru biçimde karanlık |
+| Exposure | Gece ×1.35 (`environmentResolve.ts`, `NIGHT_EXPOSURE`) | Göz uyumu için zayıf |
+
+**Yapılacaklar:**
+1. Ölç: gece karesinde hangi katkının (ay / ambient / IBL / exposure) ne kadar ışık verdiğini `?debug` ya da headless ölçümle ayır. Gün ortası ile oranla.
+2. Kabul ölçütünü kullanıcıyla belirle. Örnek: gece ortalama parlaklığı gün ortasının %8–20'si; araç ve yol seçilebiliyor; gökyüzü zeminden açık.
+3. Aday çözümler; ölçüme göre biri ya da birkaçı:
+   - Ay şiddetini authored güneşten bağımsız bir taban değere bağlamak.
+   - Gece ortam ışığına mutlak bir taban (`night.ambientFloor`'u authored ambient'ten bağımsız hale getirmek ya da yeni bir `night.ambient` alanı).
+   - Gece için Sky Light yoğunluk tabanı ya da ay renginde düşük bir ortam katkısı.
+   - Exposure eğrisini güçlendirmek.
+   - Yeni alan eklenirse `normalizeWorldEnvironment` + drift testi + Details güncellenir (CLAUDE.md allowlist kuralı).
+4. Kanıt: `environmentResolve`/`sunPath` birim testleri (gece katkılarının tabanı) ve gece için bir parlaklık smoke'u, `sky-light-capture.spec`'e benzer biçimde. Kullanıcı gerçek tarayıcıda gece/şafak geçişini doğrular.

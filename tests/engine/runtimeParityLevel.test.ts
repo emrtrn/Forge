@@ -330,6 +330,22 @@ export function registerRuntimeParityLevelTests(check: Check): void {
     assert.match(withoutBehaviors[0] ?? "", /No behavior catalog registered/);
   });
 
+  check("parity level: its World Environment runs on the template's default capabilities", () => {
+    const layout = parityLayout();
+    assert.ok(layout.worldEnvironment, "the parity level authors a World Environment");
+    assert.notEqual(layout.worldEnvironment.hidden, true);
+    const registered = createDefaultRuntimeModules().map((module) => module.id);
+    assert.ok(registered.includes("world-environment"), "the template ships the World Environment clock");
+    // A fork that drops the clock is told the actor is inert, by name.
+    const warnings = collectUnsupportedCapabilities({
+      entities: [],
+      layout,
+      registered: registered.filter((id) => id !== "world-environment"),
+    });
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? "", /"world-environment" is not registered, so 1 authored World Environment actor/);
+  });
+
   check("parity level: it needs no gameplay — no game mode, no characters", () => {
     const layout = parityLayout();
     // The DoD is that a *zero-gameplay* starter opens this level and sees the

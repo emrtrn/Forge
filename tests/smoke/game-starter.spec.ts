@@ -61,6 +61,9 @@ test("game-starter smoke: a zero-gameplay app renders the parity level end to en
   // No game module at all: nothing publishes a Game Mode catalog, so the runtime
   // starts no session and possesses nothing — and the level still renders. That
   // is exactly the "scene content is never gameplay's responsibility" claim.
+  // The level's World Environment runs on the default Play clock from its
+  // authored defaults (08:19, summer, clear; day length 0 holds the hour).
+  await expect(stats).toContainText("world env: 08:19 summer clear 1.00", { timeout: 30_000 });
   await expect(stats).toContainText("mode: —");
   await expect(stats).toContainText("possessed: none");
 

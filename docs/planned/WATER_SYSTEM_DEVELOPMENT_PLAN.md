@@ -2,6 +2,12 @@
 
 Tarih: 29 Ekim 2026 · Durum: V1b ve V1c + güneş parıltısı uygulandı; son Lake görünümü kullanıcı tarafından kabul edildi. Teknik doğrulama ve yeni GPU maliyeti açık.
 
+**30 Ekim — RDR2 tarzı görünüm:** Köpük dokusu Voronoi kenar ağından (caustic
+görünümü) kabarcık kümesine geçti; tepe köpüğü artık dalga **dikliğiyle** oluşur
+(`crestFoamThreshold` anlamı değişti), River'da rapid beyaz suyu ve akış aşağı
+köpük izi, Lake'te rüzgâr lekeleri ve kıyı dalgalanması, seyrek caustics.
+[Plan](WATER_RDR2_LOOK_PLAN.md) · [rapor](../reports/WATER_RDR2_LOOK_2026-10-30.md).
+
 **30 Ekim — tek River yüzeyi kararı:** Kullanıcı isteğiyle Legacy/Lake-like
 ayrımı kaldırıldı. R1/R2 yüzeyi bütün nehirlerde varsayılandır; stil seçimi ve
 `surfaceStyle` veri alanı yoktur. Surface Strength/Roughness kontrolleri kalır.

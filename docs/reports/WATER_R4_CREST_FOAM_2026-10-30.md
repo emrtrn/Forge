@@ -2,6 +2,11 @@
 
 Tarih: 30 Ekim 2026. Ana kapsam: [Water System §7.1 R4](../planned/WATER_SYSTEM_DEVELOPMENT_PLAN.md).
 
+> **Sonraki değişiklik (aynı gün):** Aşağıdaki “göreli yükseklik” eşiği ve
+> value-noise lekeleri [RDR2 görünüm çalışmasında](WATER_RDR2_LOOK_2026-10-30.md)
+> dalga dikliği eşiğiyle ve yeni köpük dokusuyla değiştirildi. Alanlar ve
+> varsayılanlar aynı; `crestFoamThreshold` artık dikliği (0→0,02 … 1→0,12) ifade eder.
+
 ## Uygulama
 
 Kullanıcının görsel referansındaki yükselen su üzerinde parçalı beyaz köpük,

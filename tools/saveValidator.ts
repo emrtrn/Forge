@@ -919,7 +919,7 @@ export function validateLightActor(value: unknown): Record<string, unknown> {
   if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
     light.color = input.color;
   }
-  const intensity = validateOptionalNumber(input.intensity, "light.intensity", 0, 20);
+  const intensity = validateOptionalNumber(input.intensity, "light.intensity", 0, Infinity);
   if (intensity !== undefined) light.intensity = intensity;
   if (input.castShadow !== undefined) {
     if (typeof input.castShadow !== "boolean") throw new Error("light.castShadow must be boolean");

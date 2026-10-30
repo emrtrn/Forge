@@ -8792,6 +8792,19 @@ check("save validator allowlist keeps known placement fields, drops unknown ones
   assert.equal("nested" in placement, false);
 });
 
+check("save validator light intensity accepts high finite values and rejects invalid values", () => {
+  for (const type of ["point", "spot", "directional"]) {
+    const actor = { id: "lamp", type, position: [0, 1, 0] };
+    for (const intensity of [0, 20, 50, 10000, 1000000]) {
+      assert.equal(validateLightActor({ ...actor, intensity }).intensity, intensity);
+    }
+    for (const intensity of [-1, NaN, Infinity, -Infinity]) {
+      assert.throws(() => validateLightActor({ ...actor, intensity }), /invalid light\.intensity/);
+    }
+    assert.equal(validateLightActor(actor).intensity, undefined);
+  }
+});
+
 check("save validator allowlist keeps known light fields, drops unknown ones", () => {
   const light = validateLightActor({
     id: "lamp",

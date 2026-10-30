@@ -1105,7 +1105,7 @@ export function renderLightDetails(options: SpecialActorDetailsOptions): void {
         </label>
         <label class="detail-row">
           <span>Intensity</span>
-          <input data-light-number="intensity" type="number" step="0.1" min="0" max="20"
+          <input data-light-number="intensity" type="number" step="0.1" min="0"
             value="${selection.intensity ?? 1}" ${lockedAttr} />
         </label>
         ${
@@ -1172,6 +1172,10 @@ export function renderLightDetails(options: SpecialActorDetailsOptions): void {
       const key = input.dataset.lightNumber;
       const value = Number(input.value);
       if (!Number.isFinite(value)) return;
+      if (key === "intensity" && value < 0) {
+        input.value = String(selection.intensity ?? 1);
+        return;
+      }
       if (key === "intensity") options.setSelectedLightSettings({ intensity: value });
       if (key === "distance") options.setSelectedLightSettings({ distance: value });
       if (key === "decay") options.setSelectedLightSettings({ decay: value });

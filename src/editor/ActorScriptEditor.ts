@@ -1775,7 +1775,7 @@ export class ActorScriptEditor {
       if (!key) return;
       const apply = (): void => {
         const n = Number(input.value);
-        if (Number.isFinite(n)) node.props[key] = n;
+        if (Number.isFinite(n) && (key !== "intensity" || n >= 0)) node.props[key] = n;
         this.markDirty();
       };
       input.addEventListener("input", () => {
@@ -2724,7 +2724,7 @@ function lightFields(node: ComponentTemplateNode): string {
       <span>Color</span>
       <input type="color" data-as-light-color value="${escapeHtml(color)}" />
     </label>
-    ${numberField("intensity", "Intensity", intensity, 'step="0.1" min="0" max="20"')}
+    ${numberField("intensity", "Intensity", intensity, 'step="0.1" min="0"')}
     ${
       isPoint || isSpot
         ? numberField("distance", "Distance", distance, 'step="0.1" min="0" max="100"') +

@@ -179,8 +179,8 @@
         "scale": 0.5,
         "speed": 1,
         "bake": {
-          "manifest": "assets/starter-content/Levels/Terrain.foam/983666a0d265f3f27a92dab55ee6c465b7a5fb784549b4e1e6106dad4a95268e.foam.json",
-          "fingerprint": "74f47c9c66780b85e8f154f2385660932fcb4a88d11c6981fa53092e773f580f"
+          "manifest": "assets/starter-content/Levels/Terrain.foam/20de60ef88d4d276e185db1520b49ae114378a02acb7d8a38a7057aec7ff6887.foam.json",
+          "fingerprint": "e9ea186c1209de67bf9ef90ec4f15609c67658087c90ef337b0d243a3df0d685"
         }
       },
       "caustics": {
@@ -244,8 +244,8 @@
         "shoreWetnessEnabled": true,
         "foamEnabled": true,
         "causticsEnabled": true,
-        "absorptionDistance": 1,
-        "surfaceStrength": 2,
+        "absorptionDistance": 2,
+        "surfaceStrength": 1,
         "surfaceRoughness": 0.3,
         "normalScale": 1,
         "rippleSpeed": 2,
@@ -268,7 +268,9 @@
         "causticsSpeed": 1,
         "causticsDepthFade": 1,
         "reflectionMode": "sharedPlanar",
-        "reflectionQuality": "medium"
+        "reflectionQuality": "medium",
+        "crestFoamEnabled": true,
+        "crestFoamStrength": 0.75
       }
     }
   ],

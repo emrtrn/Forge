@@ -1,6 +1,6 @@
 import { expect, test } from "./test";
 
-test("Lake and River crest foam follows raised waves, controls, lighting and quality", async ({ page }, info) => {
+test("Lake and River crest foam follows steep raised waves, controls, lighting and quality", async ({ page }, info) => {
   await page.setViewportSize({ width: 1280, height: 820 });
   const errors: string[] = [];
   page.on("pageerror", e => errors.push(e.message));

@@ -58,6 +58,15 @@ float riverVertexWave(vec2 uv, float shore, float rapid, float multiplier,
   return (sin(phase) + sin(phase * 1.73 + uv.y * 5.0) * 0.35)
     * amplitude * centre * (0.65 + rapid * 0.35);
 }
+// Downstream slope of the same wave per metre (one UV unit spans tileLength m).
+float riverVertexWaveSlope(vec2 uv, float shore, float rapid, float multiplier,
+  float clock, float speed, float amplitude, float wavelength, float tileLength) {
+  float centre = pow(max(0.0, 1.0 - shore), 1.6);
+  float k = 6.283185 / max(wavelength, 0.01);
+  float phase = uv.x * k - clock * speed * multiplier * 2.0;
+  return (cos(phase) + cos(phase * 1.73 + uv.y * 5.0) * 0.35 * 1.73) * k
+    * amplitude * centre * (0.65 + rapid * 0.35) / max(tileLength, 0.0001);
+}
 `;
 
 export const RIVER_SHADING_NORMAL_GLSL = /* glsl */ `

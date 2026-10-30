@@ -90,7 +90,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         varying vec2 vCrestWave;
         ${LAKE_WAVES_GLSL}
         void main(){vContactPosition=position;vFoamUv=(position.xz-foamOrigin)/foamSize;vUv=uv;
-        vec3 displaced=position;vec3 wave=lakeWaveSample(position.xz,waterDepth,waterDepthSlope);float height=wave.x;displaced.y+=height;vWaveSlope=wave.yz;vCrestWave=vec2(height,surfaceWaveHeight);
+        vec3 displaced=position;vec3 wave=lakeWaveSample(position.xz,waterDepth,waterDepthSlope);float height=wave.x;displaced.y+=height;vWaveSlope=wave.yz;vCrestWave=vec2(height,length(wave.yz));
         vDepth=max(0.,waterDepth+height);vec4 world=modelMatrix*vec4(displaced,1.);vWorldPosition=world.xyz;
         vReflection=reflectionMatrix*world;vec4 mvPosition=viewMatrix*world;gl_Position=projectionMatrix*mvPosition;
         vec4 worldPosition=world;
@@ -105,6 +105,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         uniform float surfaceWaveClock; uniform float time;uniform float rippleSpeed;uniform float normalScale;
         uniform vec3 deepColor;uniform vec3 shallowColor;uniform float opacity;
         uniform float bedVisibility;uniform float absorptionDistance;
+        uniform vec4 surfaceWaveComponents[3];
         uniform sampler2D reflectionTexture;uniform float reflectionStrength;uniform vec2 reflectionTexelSize;
         uniform float planarReflectionEnabled;uniform float sunGlintDetail;
         varying float vDepth;varying vec2 vUv;varying vec4 vReflection;varying vec3 vWorldPosition;varying vec2 vWaveSlope;
@@ -140,6 +141,16 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         float d=max(0.,vDepth);
         vec2 p=vWorldPosition.xz*normalScale*.12;
         vec2 n=lakeSurfaceSlopes(p,time*rippleSpeed);
+        // Wind patches (cat's paws): broad areas drifting downwind with calmer or
+        // rougher micro detail, so the reflection sharpens and breaks across the
+        // lake instead of carrying one uniform ripple. Direction = wave direction.
+        vec2 windDirection=surfaceWaveComponents[0].xy/max(length(surfaceWaveComponents[0].xy),.000001);
+        vec2 windDrift=windDirection*time*.35;
+        float gust=smoothstep(.3,.75,waterNoise((vWorldPosition.xz-windDrift)*.035)*.65
+          +waterNoise((vWorldPosition.xz-windDrift*1.7)*.09+vec2(5.3,1.7))*.35);
+        // Refraction keeps the unmodulated detail; it was accepted on its own.
+        vec2 refractionSlopes=n;
+        n*=mix(.4,1.3,gust);
         n+=lakeWheelSlopes(vWorldPosition.xz-lakeRippleOrigin);
         vec3 normal=normalize(vec3(n.x*.10,1.,n.y*.10));
         vec3 viewDirection=isOrthographic?vec3(viewMatrix[0][2],viewMatrix[1][2],viewMatrix[2][2]):cameraPosition-vWorldPosition;
@@ -164,7 +175,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         float shoreBlend=shoreBlendDepth>0.?smoothstep(0.,max(edgeWidth,.0001),edgeDepth):1.;
         vec3 geometric=normalize(vec3(-vWaveSlope.x,1.,-vWaveSlope.y));
         normal=normalize(geometric+vec3(n.x*.10*shoreBlend,0.,n.y*.10*shoreBlend));
-        float roughness=lakeFilteredRoughness(normal);
+        float roughness=clamp(lakeFilteredRoughness(normal)+(gust-.5)*.08,.04,1.);
         float sunVisibility=riverSunVisibility();
         vec3 glint=waterSunGlint(normal,viewDirection,roughness,sunVisibility)
           *waterSunSparkle(vWorldPosition,time,sunGlintDetail)*step(0.,viewDirection.y);
@@ -207,7 +218,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           visibleBed=texture2D(waterSceneColor,screenUv).rgb;
           vec3 refractedBed=visibleBed;
           float refractedPath=path;
-          lakeRefract(screenUv,normal,surfaceViewPosition,vWorldPosition.y,edgeDepth,refractedBed,refractedPath);
+          lakeRefract(screenUv,normalize(geometric+vec3(refractionSlopes.x*.10*shoreBlend,0.,refractionSlopes.y*.10*shoreBlend)),surfaceViewPosition,vWorldPosition.y,edgeDepth,refractedBed,refractedPath);
           // Tint controls spectral loss, rather than adding a dark colour over
           // an otherwise unfiltered brown bed. Keep the authored opacity floor.
           vec3 tint=deepColor/max(max(deepColor.r,deepColor.g),max(deepColor.b,.00001));
@@ -239,7 +250,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           float shore=foamOpacity>0.?texture2D(foamMask,vFoamUv).r:1.;
           // Geometry already clips to the connected wet component, including
           // islands. Distance only controls the band inside that valid water.
-          float coverage=max(waterFoamPatches(vWorldPosition.xz,shore,time,foamScale,foamSpeed)*foamOpacity,
+          float coverage=max(waterShoreLapping(vWorldPosition.xz,shore,time,foamScale,foamSpeed)*foamOpacity,
             waterObstacleFoam(vContactPosition,vec2(0.),0.,time)*contactOpacity);
           coverage=max(max(coverage,bakedCoverage),crestCoverage);
           float sun=riverSunVisibility();

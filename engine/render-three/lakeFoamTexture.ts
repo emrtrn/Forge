@@ -22,13 +22,16 @@ float geometryFoamTexel(ivec2 p) {
   int cols=int(ceil(geometryFoamGrid.x/geometryFoamTile.x));
   return texelFetch(geometryFoamMask,ivec3(p%tile,cell.y*cols+cell.x),0).r;
 }
-float lakeGeometryFoamFlow(vec2 world,float time,vec2 flowOffset) {
+// Normalised distance to the baked contact; 1 outside the bake.
+float lakeGeometryFoamDistance(vec2 world) {
   vec2 uv=(world-geometryFoamMin)/geometryFoamSize;
-  if(any(lessThan(uv,vec2(0.)))||any(greaterThan(uv,vec2(1.))))return 0.;
+  if(any(lessThan(uv,vec2(0.)))||any(greaterThan(uv,vec2(1.))))return 1.;
   vec2 p=uv*geometryFoamGrid-.5,f=fract(p);ivec2 q=ivec2(floor(p));
-  float distance=mix(mix(geometryFoamTexel(q),geometryFoamTexel(q+ivec2(1,0)),f.x),
+  return mix(mix(geometryFoamTexel(q),geometryFoamTexel(q+ivec2(1,0)),f.x),
     mix(geometryFoamTexel(q+ivec2(0,1)),geometryFoamTexel(q+ivec2(1,1)),f.x),f.y);
-  return waterFoamPatches(world-flowOffset,distance,time,geometryFoamScale,geometryFoamSpeed)*geometryFoamStrength;
+}
+float lakeGeometryFoamFlow(vec2 world,float time,vec2 flowOffset) {
+  return waterFoamPatches(world-flowOffset,lakeGeometryFoamDistance(world),time,geometryFoamScale,geometryFoamSpeed)*geometryFoamStrength;
 }
 float lakeGeometryFoam(vec2 world,float time) {
   return lakeGeometryFoamFlow(world,time,vec2(0.));

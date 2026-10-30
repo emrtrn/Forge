@@ -58,10 +58,23 @@ vec4 waterFoamDetail(vec2 world, float time, float scale, float speed) {
   vec4 broad=texture2D(waterFoamMap,uv*.37+vec2(.37,.19));
   return vec4(fine.r*.7+broad.r*.3, fine.g, fine.ba);
 }
+// River variant: x runs downstream, y across, both in metres. The tile is
+// stretched along the flow so foam reads as drifting streaks, not round blots.
+vec4 waterFoamDetailFlow(vec2 flowMetres, float scale, float stretch) {
+  vec2 uv=vec2(flowMetres.x/max(stretch,1.),flowMetres.y)/max(scale,.01)*.16;
+  vec4 fine=texture2D(waterFoamMap,uv);
+  vec4 broad=texture2D(waterFoamMap,uv*.37+vec2(.37,.19));
+  return vec4(fine.r*.7+broad.r*.3, fine.g, fine.ba);
+}
+// The baked R channel is rank-equalised: a density covers about that fraction
+// of the tile. Dense foam is solid, thinning foam breaks into lace and then
+// scattered bubbles; thin foam stays translucent over the water colour.
 float waterFoamErosion(float density, float pattern) {
   density=clamp(density,0.,1.);
-  float aa=max(fwidth(pattern),.035);
-  return smoothstep(1.02-density-aa,1.22-density+aa,pattern)*sqrt(density);
+  float edge=1.-density;
+  float aa=max(fwidth(pattern),.03);
+  return smoothstep(edge-aa,edge+.08+aa,pattern)*mix(.55,1.,smoothstep(.15,.7,density))
+    *smoothstep(0.,.04,density);
 }
 vec3 waterFoamLighting(vec4 detail, float density, vec3 normal, vec3 viewDirection,
     vec3 tint, float sunVisibility) {

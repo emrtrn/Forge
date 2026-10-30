@@ -176,25 +176,41 @@ float waterObstacleFoam(vec3 p, vec2 flow, float velocity, float time) {
  * World-anchored, two-scale patches rather than complete white contour rings. */
 export const WATER_FOAM_GLSL = /* glsl */ `
 ${WATER_FOAM_MATERIAL_GLSL}
+// Density falls off quadratically from the contact: thick at the waterline,
+// broken lace and loose bubbles towards the edge of the authored band.
+float waterFoamBand(float distanceToShore) {
+  float band=1.-smoothstep(0.,1.,distanceToShore);
+  return band*band;
+}
+// Texture-less fallback keeps the same clustered character (never an edge net).
+float waterFoamFallbackPattern(vec2 p, vec2 drift, float footprint) {
+  float broad=waterNoise(p*.8+drift);
+  float detail=waterNoise(p*3.1-drift*1.7+vec2(17.3,9.2));
+  return mix(broad*.7+detail*.3,.5,smoothstep(.06,.25,footprint));
+}
 float waterFoamPatchesFiltered(vec2 world, float distanceToShore, float time, float scale, float speed, float footprint) {
   vec2 p = world / scale;
   vec2 drift = time * speed * vec2(0.11, -0.07);
-  float band = 1.0 - smoothstep(0.45, 1.0, distanceToShore);
-  if(waterFoamReady>.5) {
-    vec4 detail=waterFoamDetail(world,time,scale,speed);
-    float density=band*(.38+.62*waterNoise(p*.45+drift*.3));
-    return waterFoamErosion(density,detail.r)*band;
-  }
-  float broad = waterNoise(p + drift);
-  float detail = waterNoise(p * 3.1 - drift * 1.7 + vec2(17.3, 9.2));
-  float patches = smoothstep(0.43, 0.62, broad * 0.7 + detail * 0.3);
-  // Small broken pores keep close views from reading as smooth white fog.
-  float poreNoise = waterNoise(p * 11.0 + drift * 2.3);
-  float pores = mix(smoothstep(0.38, 0.65, poreNoise), 0.5, smoothstep(0.025, 0.12, footprint));
-  return patches * pores * band;
+  float density=waterFoamBand(distanceToShore)*(.45+.55*waterNoise(p*.45+drift*.3));
+  float pattern=waterFoamReady>.5 ? waterFoamDetail(world,time,scale,speed).r : waterFoamFallbackPattern(p,drift,footprint);
+  return waterFoamErosion(density,pattern);
 }
 float waterFoamPatches(vec2 world, float distanceToShore, float time, float scale, float speed) {
   vec2 p=world/scale;
   return waterFoamPatchesFiltered(world,distanceToShore,time,scale,speed,max(length(dFdx(p)),length(dFdy(p))));
+}
+// Calm Lake shore: no standing white contour. Sparse fronts run towards the
+// bank and their phase drifts along it, so they never close into a ring.
+float waterShoreLapping(vec2 world, float distanceToShore, float time, float scale, float speed) {
+  vec2 p=world/max(scale,.01);
+  float along=waterNoise(p*.12)*6.283185;
+  float front=.5+.5*sin(distanceToShore*9.4+time*(.6+.4*speed)+along);
+  front*=front*front;
+  float density=waterFoamBand(distanceToShore)*(.22+.4*front)
+    *(.5+.5*waterNoise(p*.45+time*speed*vec2(.03,-.02)));
+  float footprint=max(length(dFdx(p)),length(dFdy(p)));
+  float pattern=waterFoamReady>.5 ? waterFoamDetail(world,time,scale,speed).r
+    : waterFoamFallbackPattern(p,time*speed*vec2(.11,-.07),footprint);
+  return waterFoamErosion(density,pattern);
 }
 `;

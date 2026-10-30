@@ -6,24 +6,33 @@ export function createWaterCrestFoamUniforms(settings: WaterCrestFoamSettings, a
     crestFoamThreshold: { value: a.crestFoamThreshold } };
 }
 
-/** Interpolated displacement is the one actually drawn, never absolute world Y
- * or micro-normal brightness. No history buffer, extra capture or wave model. */
+/** Whitecaps from the drawn geometric wave: `vCrestWave` is (displacement,
+ * steepness |∇h|). Foam needs a steep face on the raised side, so gentle swell
+ * of any height stays clear; Threshold maps 0–1 onto the steepness range
+ * {@link crestFoamSteepness} (engine/scene/waterCrestFoam.ts). Never absolute
+ * world Y or micro-normal brightness; no history buffer or extra capture. */
 export const WATER_CREST_FOAM_GLSL = /* glsl */ `
 uniform float crestFoamStrength;
 uniform float crestFoamThreshold;
 varying vec2 vCrestWave;
+float waterCrestFoamDensity(float depth) {
+  float limit=mix(.02,.12,clamp(crestFoamThreshold,0.,1.));
+  float slope=vCrestWave.y;
+  float aa=max(fwidth(slope),.002);
+  float steep=smoothstep(limit-aa,limit*1.4+aa,slope);
+  float crest=smoothstep(0.,.006,vCrestWave.x);
+  // The pinned dry shoreline cannot become a white sheet.
+  float activity=smoothstep(.02,.18,depth);
+  return steep*crest*activity*max(crestFoamStrength,0.);
+}
+float waterCrestFoamPattern(float depth, float pattern) {
+  return waterFoamErosion(waterCrestFoamDensity(depth),pattern);
+}
 float waterCrestFoam(vec2 p, float clock, float scale, float depth) {
-  float amplitude=vCrestWave.y;
-  float crest=max(0.,vCrestWave.x)/max(amplitude,.00001);
-  float aa=max(fwidth(crest),.025);
-  if(crestFoamStrength<=0. || amplitude<=.003) return 0.;
-  float ridge=smoothstep(crestFoamThreshold-aa,min(1.01,crestFoamThreshold+.22)+aa,crest);
-  // Tiny ripples and the pinned dry shoreline cannot become white sheets.
-  float activity=smoothstep(.003,.035,amplitude)*smoothstep(.02,.18,depth);
-  vec2 q=p/max(scale,.1);
-  float pattern=waterNoise(q*2.7+clock*vec2(.09,-.07))*.65
-    +waterNoise(q*7.1-clock*vec2(.05,.11)+vec2(3.7,8.1))*.35;
-  float patches=smoothstep(.42,.72,pattern);
-  return clamp(ridge*patches*activity*crestFoamStrength,0.,1.);
+  float pattern=waterFoamReady>.5 ? waterFoamDetail(p,clock,scale,.3).r
+    : waterFoamFallbackPattern(p/max(scale,.1)*2.7,clock*vec2(.09,-.07),0.);
+  // Whitecaps are sporadic: only some steep crests break at any moment.
+  float gusts=mix(.25,1.,smoothstep(.3,.7,waterNoise(p*.11+clock*vec2(.02,-.015))));
+  return waterFoamErosion(waterCrestFoamDensity(depth)*gusts,pattern);
 }
 `;

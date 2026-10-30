@@ -32,7 +32,7 @@ const descriptions: Record<string, string> = {
   flowSpeed: "Nehir akış deseninin ilerleme hızı.", rippleSpeed: "Göl yüzeyindeki dalga deseninin hareket hızı.",
   waveAmplitude: "Dalganın yüzey yüksekliğine etkisi.", waveLength: "Dalga tepeleri arasındaki mesafe.",
   crestFoamStrength: "Dalga tepesi köpüğünün yoğunluğu; 0 köpüğü kapatır.",
-  crestFoamThreshold: "Köpük için gereken göreli dalga yüksekliği. Büyük değer yalnız en yüksek tepelerde köpük bırakır.",
+  crestFoamThreshold: "Köpük için gereken dalga dikliği (metre başına yükselme, 0→0,02 … 1→0,12). Sakin, uzun dalgalar köpürmez; büyük değer yalnız en dik tepelerde köpük bırakır.",
   foamColor: "Otomatik kıyı, kaya teması ve akıntı köpüklerinin rengi.", foamOpacity: "Otomatik kıyı, kaya teması ve akıntı köpüklerinin görünürlük düzeyi.",
   shoreWaveSpacing: "Kıyı köpüğü dalgalarının bantları arasındaki mesafe.",
   shoreWaveSpeed: "Köpük dalgalarının kıyıya doğru ilerleme hızı.",

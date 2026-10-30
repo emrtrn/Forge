@@ -26,6 +26,13 @@ export function validateWaterCrestFoam(input: WaterCrestFoamSettings): WaterCres
   return out;
 }
 
+/** Threshold 0–1 is a wave-steepness limit |∇h| (rise per metre), matching
+ * WATER_CREST_FOAM_GLSL: calm swell (e.g. 4 cm over 6 m, ~0.045) stays clear
+ * at the default, steep authored waves whitecap. */
+export function crestFoamSteepness(threshold: number): number {
+  return 0.02 + 0.1 * Math.max(0, Math.min(1, threshold));
+}
+
 export function resolveWaterCrestFoam(input: WaterCrestFoamSettings) {
   return { ...WATER_CREST_FOAM_DEFAULTS, ...validateWaterCrestFoam(input) };
 }

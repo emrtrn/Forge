@@ -11,7 +11,7 @@ export function renderRiverEffectsDetails(parent:HTMLElement,app:SceneApp,water:
   crest.innerHTML=`<div class="detail-section-title" title="Dalganın yükselen tepelerinde akışla taşınan parçalı köpük oluşturur.">Wave Crest Foam</div>
     <label class="detail-toggle"><input type="checkbox" aria-label="River Crest Foam Enabled" ${water.crestFoamEnabled?"checked":""} ${locked?"disabled":""}> Enabled</label>`;
   crest.querySelector<HTMLInputElement>("input")!.addEventListener("change",e=>edit({crestFoamEnabled:(e.target as HTMLInputElement).checked}));
-  for(const [key,label,title] of [["crestFoamStrength","Strength","Dalga tepesi köpüğünün yoğunluğu; 0 köpüğü kapatır."],["crestFoamThreshold","Threshold","Köpük için gereken göreli dalga yüksekliği. Büyük değer yalnız en yüksek tepelerde köpük bırakır."]] as const) {
+  for(const [key,label,title] of [["crestFoamStrength","Strength","Dalga tepesi köpüğünün yoğunluğu; 0 köpüğü kapatır."],["crestFoamThreshold","Threshold","Köpük için gereken dalga dikliği (metre başına yükselme, 0→0,02 … 1→0,12). Sakin, uzun dalgalar köpürmez; büyük değer yalnız en dik tepelerde köpük bırakır."]] as const) {
     const row=document.createElement("label");row.className="detail-row";row.textContent=label;row.title=title;
     const input=document.createElement("input");input.type="number";input.min="0";input.max="1";input.step=".05";input.value=String(water[key]);input.disabled=locked;input.dataset.riverCrestNumber=key;
     input.addEventListener("change",()=>{if(input.checkValidity()&&Number.isFinite(input.valueAsNumber))edit({[key]:input.valueAsNumber});});row.append(input);crest.append(row);

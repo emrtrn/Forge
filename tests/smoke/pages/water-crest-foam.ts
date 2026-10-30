@@ -24,12 +24,12 @@ function rebuild() {
   const quality = { ...FULL_LAKE_QUALITY, foamAllowed: input("quality").value !== "low" };
   if (kind === "lake") {
     water = new LakeWaterObject({ ...doc.lake, appearance: { ...settings, surfaceWavesEnabled: waves,
-      surfaceWaveHeight: .09, surfaceWaveLength: 8, surfaceWavePeriod: 3, foamEnabled: false,
+      surfaceWaveHeight: .09, surfaceWaveLength: 6, surfaceWavePeriod: 3, foamEnabled: false,
       deepColor: "#16636b", shallowColor: "#69c7b6", surfaceStrength: 1.5, opacity: .85 } }, data, null, null, undefined, quality);
     camera.position.set(-12, 22, 9); camera.lookAt(-18, 12, -12); bed.position.y = 10;
   } else {
     water = new RiverWaterObject({ ...resolveRiverWater({ id: "r", landscapeRef: "t", splineRef: "s", ...settings,
-      waveAmplitude: waves ? .09 : 0, waveLength: 3.5, foamOpacity: 1,
+      waveAmplitude: waves ? .09 : 0, waveLength: 1.5, foamOpacity: 1,
       contactFoam: { enabled: false, shoreWidth: .5, scale: .8, speed: .3, obstacles: [] },
       deepColor: "#16636b", shallowColor: "#69c7b6", opacity: .85 }),
       quality, foamNoiseMap: null, position: [0, 0, 0], rotation: [0, 0, 0], sampleSpacing: .25, heightAt: () => -3,
@@ -49,8 +49,8 @@ function frame(t = clock, debug = false, far = false) {
   if (water instanceof LakeWaterObject) water.setSurfaceWaveTime(t);
   const saved = water.material.fragmentShader;
   if (debug) {
-    const point = water instanceof LakeWaterObject ? "vContactPosition.xz,surfaceWaveClock,foamScale,edgeDepth" : "vContactPosition.xz-foamFlowOffset,time,contactScale,min(vWaterDepth,visibleDepth)";
-    water.material.fragmentShader = saved.replace("#include <tonemapping_fragment>", `gl_FragColor=vec4(max(vCrestWave.x,0.)/max(vCrestWave.y,.00001),waterCrestFoam(${point}),0.,1.);`)
+    const crest = water instanceof LakeWaterObject ? "waterCrestFoam(vContactPosition.xz,surfaceWaveClock,foamScale,edgeDepth)" : "crestFoam";
+    water.material.fragmentShader = saved.replace("#include <tonemapping_fragment>", `gl_FragColor=vec4(vCrestWave.x>0.?1.:0.,${crest},0.,1.);`)
       .replace("#include <colorspace_fragment>", "").replace("#include <fog_fragment>", "");
     water.material.needsUpdate = true;
   }

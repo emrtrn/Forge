@@ -162,7 +162,11 @@ float forgeCausticPattern(vec2 p, float t, int layer, float scale) {
   vec2 uv = p + warp * 0.24;
   float a = textureLod(uCausticMask, vec3(fract(uv + drift), layer), lod).b;
   float b = textureLod(uCausticMask, vec3(fract(vec2(-uv.y, uv.x) * 1.37 - drift + 0.61), layer), lod).b;
-  return max(a, b * 0.75);
+  // Two networks at different scale/direction lit only where they overlap:
+  // broken, shifting light patches instead of one continuous polygon net.
+  // Peaks stay as bright as the earlier max() union; mean energy is about half,
+  // deliberately: caustics should read as sparse sunlit flecks, not a net.
+  return min(1.5, sqrt(a * b) * 2.4);
 }
 float forgeCausticLight(vec3 sun) {
   if (uCausticCount == 0 || uTerrainView > 0.5 || sun.y < 0.05) return 0.0;

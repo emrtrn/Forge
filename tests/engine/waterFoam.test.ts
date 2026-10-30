@@ -4,23 +4,176 @@ import { registerLakeCaustics, createTerrainCausticsUniforms, updateTerrainCaust
 import type { TerrainUniforms } from "../../engine/render-three/terrain/terrainMaterial";
 import type { DataArrayTexture } from "three";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { inflateSync } from "node:zlib";
 import { createLakeFoamMask, createWaterShoreMask, riverContactSegments } from "../../engine/render-three/waterFoam";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
-import { RiverWaterObject } from "../../engine/render-three/riverWater";
+import { buildRiverWaterRibbon, riverFoamTrail, RIVER_FOAM_TRAIL_LENGTH, RiverWaterObject } from "../../engine/render-three/riverWater";
 import { LakeWaterObject } from "../../engine/render-three/lakeWater";
-import { validateWaterBody, resolveLakeAppearance } from "../../engine/scene/waterBody";
+import { LAKE_SURFACE_WAVE_DEFAULTS, validateWaterBody, resolveLakeAppearance } from "../../engine/scene/waterBody";
 import { buildLakeGeometry, prepareLakeSnapshot } from "../../engine/terrain/terrainLakeWater";
 import { createLakeFixture } from "./fixtures/lakeFixture";
 import { validateRiverWater } from "../../tools/saveValidator";
-import { resolveWaterCrestFoam } from "../../engine/scene/waterCrestFoam";
+import { crestFoamSteepness, resolveWaterCrestFoam } from "../../engine/scene/waterCrestFoam";
 import { FULL_LAKE_QUALITY } from "../../engine/perf/lakeQuality";
 import { riverEffectFixture } from "./riverEffects.test";
 import { defaultWaterContactFoam } from "../../engine/scene/waterContactFoam";
 import { bakeRiverGeometryFoam } from "../../engine/render-three/lakeFoamBake";
 import type { LakeFoamData } from "../../engine/scene/lakeFoamBake";
+import type { ForgeLandscapeSpline } from "../../engine/scene/landscape";
+import { lakeWaveParameters, LAKE_WAVE_COMPONENTS } from "../../engine/terrain/lakeWaves";
 
 type Check = (label: string, run: () => Promise<void>) => Promise<void>;
 export async function registerWaterFoamTests(check: Check): Promise<void> {
+  await check("Water look: river foam trail decays downstream from rapids", async () => {
+    assert.equal(RIVER_FOAM_TRAIL_LENGTH, 25);
+    const distances = [0, 5, 10, 40, 41], rapidness = [0, 0.8, 0, 0, 0.3];
+    const expected = [0, 0.8, 0.8 * Math.exp(-5 / 25), 0.8 * Math.exp(-35 / 25),
+      Math.max(0.3, 0.8 * Math.exp(-35 / 25) * Math.exp(-1 / 25))];
+    const trail = riverFoamTrail(distances, rapidness);
+    assert.equal(trail.length, expected.length);
+    trail.forEach((value, i) => {
+      assert.ok(Math.abs(value - expected[i]!) < 1e-9, `trail sample ${i}: ${value} vs ${expected[i]}`);
+      assert.ok(value >= rapidness[i]!, "carried foam never suppresses local rapids");
+    });
+    assert.equal(trail[0], rapidness[0], "the chain starts without inherited foam");
+    assert.deepEqual(riverFoamTrail([100], [0.6]), [0.6], "a new chain starts at its own rapidness");
+  });
+  await check("Water look: ribbon carries trail and lateral offsets per vertex", async () => {
+    const spline = (xs: number[]): ForgeLandscapeSpline => ({
+      id: "foam-trail", points: xs.map((x, i) => ({
+        id: String(i), position: [x, 0, 0], width: 3, falloff: 1,
+      })), segments: xs.slice(1).map((_, i) => ({
+        id: `s${i}`, startPointId: String(i), endPointId: String(i + 1),
+      })),
+    });
+    const options = { surfaceLevel: 0, widthScale: 1, sampleSpacing: 1 };
+    const straight = buildRiverWaterRibbon(spline([0, 48]), options);
+    const profiled = buildRiverWaterRibbon(spline([0, 12, 48]), { ...options,
+      segmentProfiles: [{ splineSegmentRef: "s0", rapidness: 0.8, flowSpeedMultiplier: 1 }],
+    });
+    // Without a terrain height query, ribbons have five lateral vertices per row.
+    const columns = 5;
+    for (const ribbon of [straight, profiled]) {
+      const vertices = ribbon.positions.length / 3;
+      assert.ok(vertices > columns);
+      assert.equal(ribbon.foamMasks.length, vertices);
+      assert.equal(ribbon.lateralOffsets.length, vertices);
+      assert.equal(vertices % columns, 0);
+      for (let row = 0; row < vertices / columns; row++) {
+        const start = row * columns;
+        assert.ok(ribbon.lateralOffsets[start]! < 0);
+        assert.ok(Math.abs(ribbon.lateralOffsets[start + 2]!) < 1e-9, "centre is on the spline");
+        for (let column = 0; column < columns; column++) {
+          assert.ok(Math.abs(ribbon.lateralOffsets[start + column]!
+            + ribbon.lateralOffsets[start + columns - 1 - column]!) < 1e-9, "lateral offsets are symmetric");
+          assert.equal(ribbon.foamMasks[start + column], ribbon.foamMasks[start], "trail is constant across each row");
+        }
+      }
+    }
+    const downstream: number[] = [];
+    for (let vertex = 2; vertex < profiled.foamMasks.length; vertex += columns) {
+      const x = profiled.positions[vertex * 3]!;
+      if (x > 0 && x <= 12) assert.equal(profiled.rapidness[vertex], 0.8);
+      // The terminal sample creates its own geometric rapid; isolate calm
+      // downstream samples between the authored rapid and that endpoint.
+      if (x > 12 && x < 48) {
+        assert.equal(profiled.rapidness[vertex], 0);
+        downstream.push(profiled.foamMasks[vertex]!);
+      }
+    }
+    assert.ok(downstream.length > 2, "exercise multiple samples after the rapid segment ends");
+    downstream.forEach((value, i) => {
+      assert.ok(value > 0, "foam survives beyond the rapid segment");
+      if (i > 0) assert.ok(value < downstream[i - 1]!, "foam strictly decays through calm downstream samples");
+    });
+  });
+  await check("Water look: crest foam steepness keeps calm swell clear", async () => {
+    assert.equal(crestFoamSteepness(0), 0.02);
+    assert.ok(Math.abs(crestFoamSteepness(1) - 0.12) < 1e-9);
+    assert.ok(Math.abs(crestFoamSteepness(0.35) - 0.055) < 1e-9);
+    assert.equal(crestFoamSteepness(-1), crestFoamSteepness(0));
+    assert.equal(crestFoamSteepness(2), crestFoamSteepness(1));
+    const gradientBound = (height: number) => {
+      const parameters = lakeWaveParameters({ ...LAKE_SURFACE_WAVE_DEFAULTS,
+        surfaceWaveHeight: height, surfaceWaveLength: 6 }, 0, 0);
+      return parameters.height * parameters.components.reduce((sum, component, i) =>
+        sum + LAKE_WAVE_COMPONENTS[i]![4] * Math.hypot(component[0], component[1]), 0);
+    };
+    assert.ok(gradientBound(0.04) < crestFoamSteepness(0.35), "4 cm swell remains below the whitecap slope");
+    assert.ok(gradientBound(0.1) > crestFoamSteepness(0.35), "10 cm waves can exceed the whitecap slope");
+  });
+  await check("Water look: foam material texture is seamless, equalised and not an edge network", async () => {
+    const png = readFileSync("engine/render-three/textures/water-foam.png");
+    assert.deepEqual(png.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const idat: Buffer[] = [];
+    let width = 0, height = 0, ended = false;
+    for (let offset = 8; offset < png.length;) {
+      assert.ok(offset + 12 <= png.length, "complete PNG chunk header and CRC");
+      const length = png.readUInt32BE(offset), end = offset + 12 + length;
+      assert.ok(end <= png.length, "complete PNG chunk data");
+      const type = png.toString("ascii", offset + 4, offset + 8);
+      const data = png.subarray(offset + 8, end - 4);
+      if (type === "IHDR") {
+        assert.equal(length, 13);
+        width = data.readUInt32BE(0); height = data.readUInt32BE(4);
+        assert.equal(width, 512); assert.equal(height, 512);
+        assert.equal(data[8], 8, "RGBA8 bit depth");
+        assert.equal(data[9], 6, "RGBA colour type");
+        assert.deepEqual([...data.subarray(10)], [0, 0, 0], "standard compression/filtering, no interlace");
+      } else if (type === "IDAT") idat.push(data);
+      else if (type === "IEND") { ended = true; break; }
+      offset = end;
+    }
+    assert.equal(width, 512); assert.equal(height, 512);
+    assert.ok(ended && idat.length > 0, "PNG contains image data and an end chunk");
+    const stride = 1 + width * 4, rows = inflateSync(Buffer.concat(idat));
+    assert.equal(rows.length, height * stride);
+    const red = new Uint8Array(width * height), histogram = new Array<number>(8).fill(0);
+    for (let y = 0; y < height; y++) {
+      assert.equal(rows[y * stride], 0, `row ${y} uses PNG filter type 0`);
+      for (let x = 0; x < width; x++) {
+        const value = rows[y * stride + 1 + x * 4]!;
+        red[y * width + x] = value;
+        histogram[Math.floor(value / 32)]! += 1;
+      }
+    }
+    const fractions = histogram.map(count => count / red.length);
+    fractions.forEach((fraction, bin) => assert.ok(fraction >= 0.09 && fraction <= 0.16,
+      `equalised R bin ${bin}: ${fraction * 100}%`));
+    let interior = 0, topBottom = 0, leftRight = 0;
+    for (let y = 0; y < height - 1; y++) for (let x = 0; x < width; x++) {
+      interior += Math.abs(red[y * width + x]! - red[(y + 1) * width + x]!);
+    }
+    for (let x = 0; x < width; x++) topBottom += Math.abs(red[x]! - red[(height - 1) * width + x]!);
+    for (let y = 0; y < height; y++) leftRight += Math.abs(red[y * width]! - red[y * width + width - 1]!);
+    interior /= width * (height - 1); topBottom /= width; leftRight /= height;
+    assert.ok(topBottom < 3 * interior, `top/bottom seam ${topBottom} vs interior ${interior}`);
+    assert.ok(leftRight < 3 * interior, `left/right seam ${leftRight} vs interior ${interior}`);
+    const foam = red.map(value => value / 255 >= 0.7 ? 1 : 0);
+    const foamPixels = foam.reduce((sum, value) => sum + value, 0);
+    assert.ok(foamPixels > 0 && foamPixels < red.length);
+    const visited = new Uint8Array(red.length), queue = new Int32Array(red.length);
+    let components = 0, largest = 0;
+    for (let pixel = 0; pixel < foam.length; pixel++) {
+      if (!foam[pixel] || visited[pixel]) continue;
+      components++;
+      let head = 0, tail = 1;
+      queue[0] = pixel; visited[pixel] = 1;
+      while (head < tail) {
+        const current = queue[head++]!, x = current % width, y = Math.floor(current / width);
+        const neighbours = [y * width + (x + width - 1) % width, y * width + (x + 1) % width,
+          ((y + height - 1) % height) * width + x, ((y + 1) % height) * width + x];
+        for (const neighbour of neighbours) if (foam[neighbour] && !visited[neighbour]) {
+          visited[neighbour] = 1; queue[tail++] = neighbour;
+        }
+      }
+      largest = Math.max(largest, tail);
+    }
+    const largestFraction = largest / foamPixels;
+    // A Voronoi-edge network joins most foam into one giant component.
+    assert.ok(largestFraction < 0.6, `largest wrapped component contains ${largestFraction * 100}% of foam`);
+  });
   await check("Crest foam: shared strict read/save contract, omitted defaults and authored Off", async () => {
     const river = { id: "r", landscapeRef: "t", splineRef: "s" }, lake = createLakeFixture().lake;
     assert.equal(validateRiverWater(river).crestFoamEnabled, undefined);

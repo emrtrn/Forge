@@ -55,7 +55,10 @@ export interface RiverWaterRibbonData {
   shoreDistances: number[];
   waterDepths: number[];
   rapidness: number[];
+  /** Build-time downstream whitewater trail (rapidness carried with decay). */
   foamMasks: number[];
+  /** Signed metres from the centreline, for flow-aligned foam sampling. */
+  lateralOffsets: number[];
   flowSpeedMultipliers: number[];
   indices: number[];
 }
@@ -89,6 +92,20 @@ const EPSILON = 1e-5;
 const DEFAULT_SAMPLE_SPACING = 1.25;
 const DEFAULT_NORMAL_TILE_LENGTH = 3;
 const MAX_RIVER_VERTICES = 1_048_576;
+/** Metres over which rapid whitewater thins out downstream. */
+export const RIVER_FOAM_TRAIL_LENGTH = 25;
+
+/** Rapidness carried downstream with exponential decay: whitewater below a
+ * rapid thins into trailing streaks. One pass per chain at build time; each
+ * chain (including independent branches) starts without inherited foam. */
+export function riverFoamTrail(distances: readonly number[], rapidness: readonly number[], length = RIVER_FOAM_TRAIL_LENGTH): number[] {
+  const trail: number[] = [];
+  for (let i = 0; i < rapidness.length; i += 1) {
+    const carried = i > 0 ? trail[i - 1]! * Math.exp(-Math.max(0, distances[i]! - distances[i - 1]!) / Math.max(length, EPSILON)) : 0;
+    trail.push(Math.max(rapidness[i]!, carried));
+  }
+  return trail;
+}
 
 /**
  * Resolves the common directed Landscape-spline case into continuous chains.
@@ -165,6 +182,7 @@ export function buildRiverWaterRibbon(
   const waterDepths: number[] = [];
   const rapidness: number[] = [];
   const foamMasks: number[] = [];
+  const lateralOffsets: number[] = [];
   const flowSpeedMultipliers: number[] = [];
   const indices: number[] = [];
   const valid: boolean[] = [];
@@ -179,6 +197,7 @@ export function buildRiverWaterRibbon(
   let vertexBase = 0;
   for (const chain of riverChains(spline, sampleSpacing)) {
     if (positions.length / 3 + chain.length * width > MAX_RIVER_VERTICES) throw new Error("River Water exceeds the ribbon vertex budget");
+    const chainRapidness: number[] = [];
     for (let index = 0; index < chain.length; index += 1) {
       const sample = chain[index]!;
       const previous = chain[Math.max(0, index - 1)]!;
@@ -199,6 +218,7 @@ export function buildRiverWaterRibbon(
       const localRapidness = Math.min(1, turn * 1.5 + slope * 0.75);
       const profile = profiles.get(sample.segmentId);
       const segmentRapidness = Math.max(localRapidness, profile?.rapidness ?? 0);
+      chainRapidness.push(segmentRapidness);
       const flowSpeedMultiplier = profile?.flowSpeedMultiplier ?? 1;
       const sideX = -flowZ;
       const sideZ = flowX;
@@ -219,9 +239,12 @@ export function buildRiverWaterRibbon(
         bedDepths.push(terrainHeight === null ? 0 : surfaceHeight - terrainHeight);
         waterDepths.push(terrainHeight === null ? 0 : Math.max(0, surfaceHeight - terrainHeight));
         rapidness.push(segmentRapidness);
-        foamMasks.push(0);
+        lateralOffsets.push(offset);
         flowSpeedMultipliers.push(flowSpeedMultiplier);
       }
+    }
+    for (const value of riverFoamTrail(chain.map((sample) => sample.distance), chainRapidness)) {
+      for (let lateral = 0; lateral < width; lateral += 1) foamMasks.push(value);
     }
     for (let row = 0; row < chain.length - 1; row += 1) {
       for (let lateral = 0; lateral < width - 1; lateral += 1) {
@@ -233,7 +256,7 @@ export function buildRiverWaterRibbon(
     }
     vertexBase += chain.length * width;
   }
-  return { bedDepths, positions, uvs, flowDirections, shoreDistances, waterDepths, rapidness, foamMasks, flowSpeedMultipliers, indices };
+  return { bedDepths, positions, uvs, flowDirections, shoreDistances, waterDepths, rapidness, foamMasks, lateralOffsets, flowSpeedMultipliers, indices };
 }
 
 const VERTEX_SHADER = `
@@ -245,6 +268,8 @@ attribute float waterDepth;
 attribute float rapidness;
 attribute float foamMask;
 attribute float flowSpeedMultiplier;
+attribute float riverLateral;
+varying float vRiverLateral;
 varying vec3 vContactPosition;
 varying vec2 vContactFlow;
 varying vec2 vRiverUv;
@@ -272,10 +297,13 @@ void main() {
   vRapidness = rapidness;
   vFoamMask = foamMask;
   vFlowSpeedMultiplier = flowSpeedMultiplier;
+  vRiverLateral = riverLateral;
   vec3 displaced = position;
   float wave = riverVertexWave(uv, shoreDistance, rapidness, flowSpeedMultiplier, time, flowSpeed, waveAmplitude, waveLength);
   displaced.y += wave;
-  vCrestWave=vec2(wave,waveAmplitude*1.35);
+  // Steepness per metre; rapids whitecap at gentler slopes than a smooth glide.
+  vCrestWave=vec2(wave,abs(riverVertexWaveSlope(uv, shoreDistance, rapidness, flowSpeedMultiplier, time, flowSpeed,
+    waveAmplitude, waveLength, ${DEFAULT_NORMAL_TILE_LENGTH.toFixed(1)}))*(1.0+rapidness*1.5));
   vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
   vWorldPosition = worldPosition.xyz;
   vFlowTangent = mat3(modelMatrix) * vec3(flowDirection.x, 0.0, flowDirection.y);
@@ -320,6 +348,7 @@ varying float vFlowSpeedMultiplier;
 varying vec3 vWorldPosition;
 varying vec3 vFlowTangent;
 varying vec3 vShadingNormal;
+varying float vRiverLateral;
 
 ${WATER_OPTICS_GLSL}
 ${WATER_ENVIRONMENT_GLSL}
@@ -339,6 +368,11 @@ uniform sampler2D realShoreMask;
 uniform vec2 realShoreOrigin;
 uniform vec2 realShoreSize;
 uniform float hasRealShore;
+// Lengthwise breakup of trailing whitewater; m = metres downstream x across.
+float riverFoamStreak(vec2 m) {
+  return smoothstep(0.35, 0.75, waterNoise(vec2(m.x * 0.06, m.y * 0.7)) * 0.7
+    + waterNoise(vec2(m.x * 0.15, m.y * 1.9) + vec2(5.2, 1.3)) * 0.3);
+}
 void main() {
   // Derivatives include spline slope, vertex waves and the object's transform.
   // Evaluate them before discard so shoreline quads retain valid derivatives.
@@ -366,7 +400,8 @@ void main() {
   float localSpeed = vFlowSpeedMultiplier * bankSpeed;
   vec2 slopeA = lakeSurfaceSlopes((baseSurfaceUv - vec2(flowPhases.x * localSpeed, 0.0)) * normalScale * 0.12, time * flowSpeed);
   vec2 slopeB = lakeSurfaceSlopes((baseSurfaceUv - vec2(flowPhases.y * localSpeed, 0.0)) * normalScale * 0.12, time * flowSpeed);
-  vec2 slope = mix(slopeB, slopeA, flowPhases.z) * 0.10 * (1.0 + vRapidness * 0.5);
+  // Rapids chop harder than glides and pools.
+  vec2 slope = mix(slopeB, slopeA, flowPhases.z) * 0.10 * mix(0.8, 1.6, vRapidness);
   float visibleDepth = max(vWaterDepth, 0.0);
   float visiblePath = waterPath(visibleDepth, abs(dot(surfaceNormal, viewDirection)));
   vec2 screenUv = gl_FragCoord.xy / waterSceneSize;
@@ -389,15 +424,13 @@ void main() {
     * (tangent * slope.x + bitangent * slope.y));
   // Derivatives precede discard, so dry-bank helper fragments do not make the
   // filtered highlights unstable. Low detail keeps the continuous GGX lobe.
-  float reflectionRoughness = waterFilteredRoughness(opticalNormal, surfaceRoughness + (1.0 - waterDetail) * 0.15);
+  float reflectionRoughness = waterFilteredRoughness(opticalNormal, surfaceRoughness + (1.0 - waterDetail) * 0.15 + vRapidness * 0.06);
   float sunRoughness = reflectionRoughness;
   float sunSparkle = waterSunSparkle(vWorldPosition, time, waterDetail);
   if (clipDryBed > 0.5 && vWaterDepth <= 0.001) discard;
   float viewCosine = clamp(abs(dot(opticalNormal, viewDirection)), 0.0, 1.0);
   // Air/water F0 is approximately 0.02. Strength remains an authored multiplier.
   float fresnel = waterRoughFresnel(viewCosine, reflectionRoughness);
-  float turbulence = waterNoise(advected * vec2(0.35, 1.7)) * 0.55
-    + waterNoise(advected * vec2(0.67, 3.4) + vec2(7.3, 1.2)) * 0.45;
   vec3 color = mix(deepColor, shallowColor, exp(-visibleDepth / 2.2));
   float sunVisibility = riverSunVisibility();
   color *= waterSurfaceLight(opticalNormal, viewDirection, 0.38, sunVisibility);
@@ -427,29 +460,54 @@ void main() {
   float shallowContact = smoothstep(0.0, 0.08, vWaterDepth)
     * (1.0 - smoothstep(0.08, 0.8, vWaterDepth));
   float shoreFoam = shoreZone * shoreBands * smoothstep(0.46, 0.78, shoreBreakup) * shallowContact * 0.55;
-  float brokenCrest = smoothstep(0.67, 0.88, waterNoise(advected * vec2(0.4, 3.8) + warp * 2.0))
-    * smoothstep(0.42, 0.72, turbulence);
-  float rapidFoam = smoothstep(0.035, 0.3, vRapidness) * brokenCrest * foamBreakup * 0.75;
   if(realContactEnabled>.5) {
     vec2 shoreUv=(vContactPosition.xz-realShoreOrigin)/realShoreSize;
     float distanceToContact=hasRealShore>.5 ? texture2D(realShoreMask,shoreUv).r : 1.;
     shoreFoam=waterFoamPatches((vContactPosition.xz-vContactFlow/max(length(vContactFlow),.0001)*time*flowSpeed*vFlowSpeedMultiplier),
       distanceToContact,time,contactScale,contactSpeed)*hasRealShore;
   }
-  float obstacleFoam=waterObstacleFoam(vContactPosition,vContactFlow,flowSpeed*vFlowSpeedMultiplier,time);
-  vec2 foamFlowOffset=vContactFlow/max(length(vContactFlow),.0001)*time*flowSpeed*vFlowSpeedMultiplier;
+  // Baked obstacle contact as a density: thick upstream of the rock, then three
+  // bounded downstream taps of the same mask for the trailing wake.
+  float obstacleDensity=0.;
   #ifdef FORGE_LAKE_GEOMETRY_FOAM
-  obstacleFoam=lakeGeometryFoamFlow(vWorldPosition.xz,time,foamFlowOffset);
   vec2 wakeDirection=vContactFlow/max(length(vContactFlow),.0001);
   float wakeSpeed=max(0.,flowSpeed*vFlowSpeedMultiplier);
-  // Three bounded downstream taps of the baked obstacle mask. No authored sources.
+  obstacleDensity=waterFoamBand(lakeGeometryFoamDistance(vWorldPosition.xz));
   for(int wake=1;wake<=3;wake++) {
     float distance=float(wake)*.65*min(2.,wakeSpeed);
-    obstacleFoam=max(obstacleFoam,lakeGeometryFoamFlow(vWorldPosition.xz-wakeDirection*distance,time,foamFlowOffset-wakeDirection*distance)*(.45-float(wake)*.1)*min(1.,wakeSpeed));
+    obstacleDensity=max(obstacleDensity,waterFoamBand(lakeGeometryFoamDistance(vWorldPosition.xz-wakeDirection*distance))
+      *(.45-float(wake)*.1)*min(1.,wakeSpeed));
   }
+  obstacleDensity*=geometryFoamStrength;
   #endif
+  // One flow-aligned foam frame (metres downstream x across) for whitewater,
+  // wakes and crests: streaks stretch with the current. Two overlapping
+  // windows keep bank shear from stretching it without bound.
+  float materialScale=contactScale;
+  #ifdef FORGE_LAKE_GEOMETRY_FOAM
+  if(obstacleDensity>shoreFoam) materialScale=geometryFoamScale;
+  #endif
+  vec3 foamPhases=riverFlowPhases(time, flowSpeed, 24.0);
+  float foamAlong=vRiverUv.x*${DEFAULT_NORMAL_TILE_LENGTH.toFixed(1)};
+  float foamSpeed=vFlowSpeedMultiplier*bankSpeed;
+  vec2 foamFlowA=vec2(foamAlong-foamPhases.x*foamSpeed, vRiverLateral);
+  vec2 foamFlowB=vec2(foamAlong-foamPhases.y*foamSpeed, vRiverLateral);
+  vec4 foamDetail=waterFoamReady>.5
+    ? mix(waterFoamDetailFlow(foamFlowB,materialScale,3.0),waterFoamDetailFlow(foamFlowA,materialScale,3.0),foamPhases.z)
+    : vec4(mix(waterFoamFallbackPattern(foamFlowB*vec2(.33,1.)/max(materialScale,.1),vec2(0.),0.),
+        waterFoamFallbackPattern(foamFlowA*vec2(.33,1.)/max(materialScale,.1),vec2(0.),0.),foamPhases.z),.5,.5,.5);
+  float streaks=mix(riverFoamStreak(foamFlowB),riverFoamStreak(foamFlowA),foamPhases.z);
+  // Rapids churn white; below them the build-time trail thins into streaks
+  // that gather in the current rather than along the banks.
+  float whitewater=smoothstep(.15,.7,vRapidness)*mix(.75,1.,streaks);
+  float trailFoam=vFoamMask*streaks*mix(.45,1.,1.-vShoreDistance)*.7;
+  float rapidFoam=waterFoamErosion(max(whitewater,trailFoam),foamDetail.r);
+  float obstacleFoam=max(waterObstacleFoam(vContactPosition,vContactFlow,flowSpeed*vFlowSpeedMultiplier,time),
+    waterFoamErosion(obstacleDensity,foamDetail.r));
   float foam = realContactEnabled>.5 ? clamp(max(shoreFoam,obstacleFoam) + rapidFoam*(1.-max(shoreFoam,obstacleFoam)), 0., 1.) : clamp(shoreFoam+rapidFoam,0.,1.);
-  foam=max(foam,waterCrestFoam(vContactPosition.xz-foamFlowOffset,time,contactScale,min(vWaterDepth,visibleDepth)));
+  // Standing-wave crests break where the current streaks, not as even bars.
+  float crestFoam=waterFoamErosion(waterCrestFoamDensity(min(vWaterDepth,visibleDepth))*mix(.25,1.,streaks),foamDetail.r);
+  foam=max(foam,crestFoam);
   vec3 reflectionDirection = reflect(-viewDirection, opticalNormal);
   reflectionDirection.y = abs(reflectionDirection.y);
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
@@ -463,12 +521,6 @@ void main() {
   float bedTransmission = waterTransmission(vWaterDepth, pathDepth, bedVisibility, absorptionDistance);
   float bedOpacity = 1.0 - bedTransmission;
   float authoredOpacity = opacity * wetness * mix(0.58, 1.0, smoothstep(0.0, 3.0, vWaterDepth));
-  vec2 foamWorld=vWorldPosition.xz-foamFlowOffset;
-  float materialScale=contactScale,materialSpeed=contactSpeed;
-  #ifdef FORGE_LAKE_GEOMETRY_FOAM
-  if(obstacleFoam>shoreFoam) { materialScale=geometryFoamScale;materialSpeed=geometryFoamSpeed; }
-  #endif
-  vec4 foamDetail=waterFoamReady>.5 ? waterFoamDetail(foamWorld,time,materialScale,materialSpeed) : vec4(.5);
   vec3 litFoam=waterFoamLighting(foamDetail,foam,shadingNormal,viewDirection,foamColor,sunVisibility);
   float reflectedCoverage = reflectionAmount;
   wetness = smoothstep(0.0, 0.35, vWaterDepth);
@@ -589,6 +641,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.setAttribute("waterDepth", new Float32BufferAttribute(contact ? ribbon.bedDepths : ribbon.waterDepths, 1));
     geometry.setAttribute("rapidness", new Float32BufferAttribute(ribbon.rapidness, 1));
     geometry.setAttribute("foamMask", new Float32BufferAttribute(ribbon.foamMasks, 1));
+    geometry.setAttribute("riverLateral", new Float32BufferAttribute(ribbon.lateralOffsets, 1));
     geometry.setAttribute("flowSpeedMultiplier", new Float32BufferAttribute(ribbon.flowSpeedMultipliers, 1));
     geometry.setIndex(ribbon.indices);
     const waveFrames = riverWaveFrames(ribbon);

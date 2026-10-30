@@ -25,7 +25,9 @@ export function terrainCausticPattern(): Uint8Array {
       if (d < first) { second = first; first = d; } else if (d < second) second = d;
     }
     const distance = Math.sqrt(second) - Math.sqrt(first);
-    const t = Math.max(0, Math.min(1, (distance - 0.015) / 0.09));
+    // Wide soft lines: the shader multiplies two layers, so only their
+    // overlaps survive and they need enough width to form patches.
+    const t = Math.max(0, Math.min(1, (distance - 0.01) / 0.16));
     const u = (x + 0.5) / side * Math.PI * 2, v = (y + 0.5) / side * Math.PI * 2;
     const offset = (y * side + x) * 2;
     data[offset] = Math.round(255 * (1 - t * t * (3 - 2 * t)));

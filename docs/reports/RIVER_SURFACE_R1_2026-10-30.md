@@ -1,5 +1,10 @@
 # River yüzeyi — R0 referans kaydı ve R1 ilk uygulama
 
+**Güncel karar:** Kullanıcı isteğiyle Legacy/Lake-like seçimi kaldırıldı ve
+R1/R2 yüzeyi bütün nehirlerde varsayılan oldu.
+[Sadeleştirme raporu](RIVER_SURFACE_UNIFIED_2026-10-30.md).
+Aşağıdaki profil kullanım ve doğrulama notları ilk teslimin geçmiş kaydıdır.
+
 Tarih: 30 Ekim 2026. Ana plan: [§7.1 River görsel yakınlaştırma](../planned/WATER_SYSTEM_DEVELOPMENT_PLAN.md#71-river-görsel-yakınlaştırma-planı--30-ekim-2026).
 
 Durum: R1 mikro yüzey/ortam yansıması/güneş parıltısı uygulandı; seçilebilir

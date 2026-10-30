@@ -4,6 +4,7 @@ import type { RiverWaterObject } from "@engine/render-three/riverWater";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import type { TerrainEditorStreaming } from "@engine/terrain/terrainEditorStreaming";
 import { pendingTerrainLoads } from "./terrain-probe-state";
+import { QUALITY_PROFILES } from "@engine/perf/qualityProfiles";
 
 interface RiverProbeApp {
   camera: PerspectiveCamera;
@@ -23,6 +24,11 @@ interface RiverProbeApp {
 export function installRiverProbe(app: unknown) {
   const internal = app as RiverProbeApp;
   (window as any).__riverQA = {
+    quality(level: "low" | "high") {
+      const runtime = app as { applyQualitySettings?: (settings: typeof QUALITY_PROFILES.high) => void };
+      if (!runtime.applyQualitySettings) throw new Error("Runtime quality control required");
+      runtime.applyQualitySettings(QUALITY_PROFILES[level]);
+    },
     // Test camera only; stops gameplay updates so screenshots share one view.
     frame() {
       cancelAnimationFrame(internal.frameHandle);
@@ -50,9 +56,10 @@ export function installRiverProbe(app: unknown) {
           time: water.material.uniforms["time"]!.value,
           flowSpeed: water.material.uniforms["flowSpeed"]!.value,
           reflection: water.material.uniforms["reflectionStrength"]!.value,
-          surfaceStyle: water.material.defines.FORGE_RIVER_LAKE_SURFACE === 1 ? "lake" : "legacy",
           surfaceStrength: water.material.uniforms.surfaceStrength!.value,
           surfaceRoughness: water.material.uniforms.surfaceRoughness!.value,
+          refractionStrength: water.material.uniforms.riverRefractionStrength!.value,
+          refractionBytes: water.userData.riverRefractionBytes ?? 0,
           foam: water.children.map((child) => ({ name: child.name, world: child.getWorldPosition(water.position.clone()).toArray() })) };
       }), streamingPending: pendingTerrainLoads(internal), resident: [...(internal.worldTerrains ?? internal.worldTerrainDocuments ?? new Map()).values()].map((doc) => doc.tiles.size) };
     },

@@ -23783,9 +23783,9 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     surfaceLevel: 0,
     widthScale: 1,
     flowSpeed: 0.35,
-    surfaceStyle: "legacy",
     surfaceStrength: 2,
     surfaceRoughness: 0.2,
+    refractionStrength: 0.65,
     normalScale: 1,
     normalTexture: "t-water-n",
     deepColor: "#164c50",
@@ -23827,11 +23827,6 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     shoreWaveSpeed: 0.4,
     shoreWaveReach: 0.4,
     shoreWaveBreakupScale: 1.1,
-    foamStamps: [
-      { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
-      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
-      { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
-    ],
     segmentProfiles: [
       { splineSegmentRef: "segment-2", flowSpeedMultiplier: 1.5, rapidness: 0.7 },
     ],
@@ -23859,11 +23854,6 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     shoreWaveSpeed: 0.4,
     shoreWaveReach: 0.4,
     shoreWaveBreakupScale: 1.1,
-    foamStamps: [
-      { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
-      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
-      { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
-    ],
     segmentProfiles: [
       { splineSegmentRef: "segment-2", flowSpeedMultiplier: 1.5, rapidness: 0.7 },
     ],
@@ -23894,12 +23884,6 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     resolveRiverWater({ id: "b", landscapeRef: "l", splineRef: "s", reflectionQuality: "medium" }).reflectionStrength,
   );
   assert.throws(() => validateRiverWater({ id: "river-1", landscapeRef: "landscape-1" }));
-  assert.throws(() => validateRiverWater({
-    id: "river-1",
-    landscapeRef: "landscape-1",
-    splineRef: "spline-1",
-    foamStamps: [{ id: "bad-strip", kind: "strip", position: [0, 0, 0], radius: 1, intensity: 1 }],
-  }));
   const shared = resolveRiverWater({
     id: "river-1",
     landscapeRef: "landscape-1",

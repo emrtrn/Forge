@@ -6,8 +6,8 @@ const descriptions: Record<string, string> = {
   bedVisibility: "Su altındaki tabanın görünürlüğü. 0 tabanı gizler, 1 görünür kılar.",
   absorptionDistance: "Işığın suda soğurulma mesafesi (metre). Küçük değerlerde derin su daha çabuk opaklaşır.",
   refractionStrength: "Gölün altındaki görüntünün küçük dalgalarla bükülmesi. 0 kapalıdır; başlangıç 0,65. Yüksek/Ultra grafik kalitesinde, post-process renk/depth görüntüsü bulunan yolda etkindir. Sığ kıyıda ve nesne kenarlarında azaltılır.",
-  surfaceStrength: "Küçük yüzey dalgalarının normal şiddeti. 0 mikro dalgaları kapatır; nehir geometrisini ve akış hızını değiştirmez. Nehirde yalnız Lake-like profili kullanır.",
-  surfaceRoughness: "Yüzey yansıması ve güneş parıltısının pürüzlülüğü. Küçük değer daha keskin, büyük değer daha yayvan yansıma üretir. Nehirde yalnız Lake-like profili kullanır.",
+  surfaceStrength: "Küçük yüzey dalgalarının normal şiddeti. 0 mikro dalgaları kapatır; nehir geometrisini ve akış hızını değiştirmez.",
+  surfaceRoughness: "Yüzey yansıması ve güneş parıltısının pürüzlülüğü. Küçük değer daha keskin, büyük değer daha yayvan yansıma üretir.",
   normalScale: "Yüzeydeki küçük dalga deseninin ölçeği.",
   "surface-waves": "Göl geometrisinin hafif yükselip alçalmasını açar/kapatır. Ortalama su seviyesi ve gerçek kıyı korunur.",
   surfaceWaveHeight: "Ortalama seviyeden azami düşey sapma (santimetre). 2 değeri en fazla ±2 cm harekettir; 0 düz yüzeydir. Sığ kıyıda daha küçüktür.",
@@ -29,11 +29,10 @@ const descriptions: Record<string, string> = {
   wheelWetTrailStrength: "İzin ilk, en ıslak kısmının koyuluğu ve parlaklığı. 0 iz bırakmaz, 1 kıyıdaki ıslak zemin kadar belirgindir.",
   wheelWetTrailDrySeconds: "Tam ıslak bir izin tamamen kuruması için geçen süre (saniye). İzin zayıf ucu daha çabuk kurur.",
   "reset-wet-trail": "Yalnız ıslak iz ayarlarını varsayılan değerlere (5 m, 1, 40 s) döndürür. Bu işlem geri alınabilir.",
-  surfaceStyle: "Legacy mevcut nehir görünümünü korur. Lake-like, akış yönünü koruyarak gölün küçük dalga, yansıma ve güneş parıltısı yaklaşımını kullanır. Henüz göl kırılması veya planar yansıma eklemez.",
   flowSpeed: "Nehir akış deseninin ilerleme hızı.", rippleSpeed: "Göl yüzeyindeki dalga deseninin hareket hızı.",
   waveAmplitude: "Dalganın yüzey yüksekliğine etkisi.", waveLength: "Dalga tepeleri arasındaki mesafe.",
-  foamColor: "Kıyı ve dairesel köpüklerin rengi.", foamOpacity: "Kıyı ve dairesel köpüklerin görünürlük düzeyi.",
-  shoreWaveSpacing: "Kıyı ve dairesel köpük dalgalarının bantları arasındaki mesafe.",
+  foamColor: "Otomatik kıyı, kaya teması ve akıntı köpüklerinin rengi.", foamOpacity: "Otomatik kıyı, kaya teması ve akıntı köpüklerinin görünürlük düzeyi.",
+  shoreWaveSpacing: "Kıyı köpüğü dalgalarının bantları arasındaki mesafe.",
   shoreWaveSpeed: "Köpük dalgalarının kıyıya doğru ilerleme hızı.",
   shoreWaveReach: "Köpük dalgalarının kıyıdan suya doğru kapladığı alan.",
   shoreWaveBreakupScale: "Köpük desenini parçalayan düzensizliğin ölçeği.",
@@ -68,6 +67,7 @@ export function applyWaterTooltips(body: HTMLElement): void {
       if (key === "group") key = "reflectionGroup";
     }
     let description = descriptions[key ?? ""];
+    if (control.dataset.riverWaterNumber === "refractionStrength") description = "Nehir altındaki görüntünün küçük dalgalarla bükülmesi. 0 kapalıdır; başlangıç 0,65. Eğim ve gerçek nehir sınırı doğrulanır. Yüksek/Ultra grafik kalitesinde, nehrin ayrıntısı Low değilse ve uygun ekran görüntüsü varsa etkindir. Sığ kıyıda ve yatay bakışta azalır.";
     if (control.dataset.riverWaterReflection === "reflectionMode") description = "Nehirde mevcut sky light ve sphere capture haritalarından soluk çevre yansıması kullanır. Ek planar çizimi oluşturmaz.";
     if (control.dataset.riverWaterReflection === "reflectionQuality") description = "Çevre yansımasının yumuşaklığını ve normal katmanı ayrıntısını belirler. Nehir için yeni yansıma hedefi oluşturulmaz.";
     if (control.hasAttribute("data-river-water-delete")) description = descriptions.delete;

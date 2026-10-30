@@ -1,0 +1,26 @@
+{
+  "scope": "CPU source/atlas budget only; no browser or GPU acceptance",
+  "level": "assets/starter-content/Levels/Terrain.level.json",
+  "levelHash": "eb4ffafdb0cec71007eef780e64ed719a0e615c51b24e59c7769183e16c4f2b4",
+  "terrainPath": "assets/starter-content/Levels/Terrain.landscapes/landscape-1.terrain.json",
+  "terrainHash": "f53e52d256299f28c949e1358518490362d41d4864c5d7e6d51c9d3bc13beb21",
+  "reads": {
+    "assets/starter-content/Levels/Terrain.landscapes/landscape-1.global.bin": "a96cb405790401790512be342816531aaac68f54747f441557f8231c9a48ed53",
+    "assets/starter-content/Levels/Terrain.landscapes/landscape-1.tiles/0_0.tile.bin": "44f81d20fab7c2e1a5c9037690d45f36c7cc46e13ac03cb04368d094e920c945",
+    "assets/starter-content/Levels/Terrain.landscapes/landscape-1.tiles/1_0.tile.bin": "7eac6d9649b62b00696e47c352959f60fb1b7dabfb06e0475f1a5e58a7478d03",
+    "assets/starter-content/Levels/Terrain.landscapes/landscape-1.tiles/0_1.tile.bin": "d9ae1c9e79ed5a2ba1d67c3619578bbad6212bdd61867f2faaf9b94267e24209",
+    "assets/starter-content/Levels/Terrain.landscapes/landscape-1.tiles/1_1.tile.bin": "83f7bda305983d714f69bd4d0f6aa50188bb600082bd883161f74c777c5c1dc4"
+  },
+  "vertices": 2756,
+  "triangles": 5064,
+  "atlasBytes": 557056,
+  "grid": [
+    171,
+    96
+  ],
+  "texture": [
+    1024,
+    34
+  ],
+  "surfaceLevel": -1
+}

@@ -93,8 +93,7 @@ let reflectionDraws = 0, reflectionCaptures = 0, motion = false;
 const captureWitness = new Map<PlanarReflectionSource, { total: number; camera: number[] }>();
 let variant: Variant = "after", view = "river-upper";
 let fixedTime = 12;
-const radialObjects = internal.riverWaterObjects.flatMap(w => w.children.filter((c): c is Mesh<import("three").BufferGeometry, ShaderMaterial> => c instanceof Mesh && c.material instanceof ShaderMaterial));
-const currentShaders = new Map([...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? []), ...(riverReview ? radialObjects : [])]
+const currentShaders = new Map([...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]
   .map((water) => [water, { vertex: water.material.vertexShader, fragment: water.material.fragmentShader }]));
 const expand = (shader: string) => shader.replaceAll("${WATER_OPTICS_GLSL}", WATER_OPTICS_GLSL)
   .replaceAll("${WATER_ENVIRONMENT_GLSL}", WATER_ENVIRONMENT_GLSL)
@@ -153,7 +152,7 @@ function setVariant(next: Variant) {
   for (const water of [...internal.riverWaterObjects, ...(internal.lakes?.objects.values() ?? [])]) water.visible = next !== "off";
   for (const water of internal.lakes?.objects.values() ?? []) water.userData.waterSceneTransmission = next !== "off";
   for (const [water, current] of currentShaders) {
-    const shaders = next === "before" && !bedReview ? ("isRiverWaterObject" in water ? baselineShaders.river : radialObjects.includes(water) ? riverBaseline.radial : riverReview ? current : baselineShaders.lake) : current;
+    const shaders = next === "before" && !bedReview ? ("isRiverWaterObject" in water ? baselineShaders.river : riverReview ? current : baselineShaders.lake) : current;
     const vertex = expand(shaders.vertex), fragment = expand(shaders.fragment);
     if (water.material.fragmentShader !== fragment || water.material.vertexShader !== vertex) {
       water.material.vertexShader = vertex; water.material.fragmentShader = fragment; water.material.needsUpdate = true;

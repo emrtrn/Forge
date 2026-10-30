@@ -67,10 +67,11 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
         <label class="detail-row"><span>Opacity</span><input data-river-water-number="opacity" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.opacity}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Bed Visibility</span><input data-river-water-number="bedVisibility" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.bedVisibility}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Absorption Distance</span><input data-river-water-number="absorptionDistance" type="number" min="0.01" max="100" step="0.05" value="${activeRiverWater.absorptionDistance}" ${lockedAttr} /></label>
+        <label class="detail-row"><span>Refraction Strength</span><input data-river-water-number="refractionStrength" type="number" min="0" max="2" step="0.05" value="${activeRiverWater.refractionStrength}" ${lockedAttr} /></label>
+        ${activeRiverWater.refractionWarning ? `<div class="detail-note" data-river-refraction-status title="${escapeHtml(activeRiverWater.refractionWarning)}">Refraction unavailable; bed optics retained.</div>` : ""}
       </div><div class="detail-section" data-detail-section="river-flow"><div class="detail-section-title">Flow & Waves</div>
-        <label class="detail-row"><span>Surface Style</span><select data-river-water-reflection="surfaceStyle" ${lockedAttr}><option value="legacy" ${activeRiverWater.surfaceStyle === "legacy" ? "selected" : ""}>Legacy</option><option value="lake" ${activeRiverWater.surfaceStyle === "lake" ? "selected" : ""}>Lake-like</option></select></label>
-        <label class="detail-row"><span>Surface Strength</span><input data-river-water-number="surfaceStrength" type="number" min="0" max="2" step="0.05" value="${activeRiverWater.surfaceStrength}" ${lockedAttr} ${activeRiverWater.surfaceStyle === "legacy" ? "disabled" : ""} /></label>
-        <label class="detail-row"><span>Surface Roughness</span><input data-river-water-number="surfaceRoughness" type="number" min="0.04" max="1" step="0.01" value="${activeRiverWater.surfaceRoughness}" ${lockedAttr} ${activeRiverWater.surfaceStyle === "legacy" ? "disabled" : ""} /></label>
+        <label class="detail-row"><span>Surface Strength</span><input data-river-water-number="surfaceStrength" type="number" min="0" max="2" step="0.05" value="${activeRiverWater.surfaceStrength}" ${lockedAttr} /></label>
+        <label class="detail-row"><span>Surface Roughness</span><input data-river-water-number="surfaceRoughness" type="number" min="0.04" max="1" step="0.01" value="${activeRiverWater.surfaceRoughness}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Flow Speed</span><input data-river-water-number="flowSpeed" type="number" min="0" max="10" step="0.05" value="${activeRiverWater.flowSpeed}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Normal Scale</span><input data-river-water-number="normalScale" type="number" min="0.05" max="20" step="0.05" value="${activeRiverWater.normalScale}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Wave Amplitude</span><input data-river-water-number="waveAmplitude" type="number" min="0" max="1" step="0.01" value="${activeRiverWater.waveAmplitude}" ${lockedAttr} /></label>
@@ -123,7 +124,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
   body.querySelectorAll<HTMLInputElement>("[data-river-water-number]").forEach((input) => {
     input.addEventListener("change", () => {
       const water = selectedRiverWater();
-      const key = input.dataset.riverWaterNumber as keyof Pick<RiverWaterDetailsPatch, "surfaceLevel" | "widthScale" | "flowSpeed" | "normalScale" | "surfaceStrength" | "surfaceRoughness" | "opacity" | "bedVisibility" | "absorptionDistance" | "waveAmplitude" | "waveLength" | "foamOpacity" | "shoreWaveSpacing" | "shoreWaveSpeed" | "shoreWaveReach" | "shoreWaveBreakupScale" | "reflectionStrength"> | undefined;
+      const key = input.dataset.riverWaterNumber as keyof Pick<RiverWaterDetailsPatch, "surfaceLevel" | "widthScale" | "flowSpeed" | "normalScale" | "surfaceStrength" | "surfaceRoughness" | "refractionStrength" | "opacity" | "bedVisibility" | "absorptionDistance" | "waveAmplitude" | "waveLength" | "foamOpacity" | "shoreWaveSpacing" | "shoreWaveSpeed" | "shoreWaveReach" | "shoreWaveBreakupScale" | "reflectionStrength"> | undefined;
       const value = Number(input.value);
       if (!water || !key || !Number.isFinite(value)) return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: value } as RiverWaterDetailsPatch);
@@ -142,10 +143,9 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
   body.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-river-water-reflection]").forEach((input) => {
     input.addEventListener("change", () => {
       const water = selectedRiverWater();
-      const key = input.dataset.riverWaterReflection as "surfaceStyle" | "reflectionMode" | "reflectionGroup" | "reflectionQuality" | undefined;
+      const key = input.dataset.riverWaterReflection as "reflectionMode" | "reflectionGroup" | "reflectionQuality" | undefined;
       if (!water || !key) return;
       const value = input.value;
-      if (key === "surfaceStyle" && value !== "legacy" && value !== "lake") return;
       if (key === "reflectionMode" && value !== "off" && value !== "environment") return;
       if (key === "reflectionQuality" && value !== "low" && value !== "medium" && value !== "high") return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: value } as RiverWaterDetailsPatch);

@@ -53,16 +53,13 @@ export function registerWorldTerrainMoveTests(check: Check): void {
     assert.equal(moveWorldTerrain({ origin: DEF.origin }, "terrain", [], [1, 0, 0]).splines, undefined);
   });
 
-  check("world terrain move: this terrain's world-frame River Waters shift surface and foam; local ones follow by themselves", () => {
+  check("world terrain move: this terrain's world-frame River Waters shift surface height; local ones follow by themselves", () => {
     const river = (id: string, landscapeRef: string, world: boolean): LayoutRiverWater => ({
       id, landscapeRef, splineRef: "path", ...(world ? { coordinateSpace: "world" as const } : {}), surfaceLevel: 4,
-      foamStamps: [{ id: "f", kind: "strip", position: [1, 4, 2], endPosition: [3, 4, 5], radius: 2, strength: 0.5 }],
     } as unknown as LayoutRiverWater);
     const rivers = [river("world", "terrain", true), river("local", "terrain", false), river("other", "elsewhere", true)];
     const result = moveWorldTerrain({ origin: [0, 0, 0] }, "terrain", [], [10, 2, -1], rivers);
     assert.equal(result.rivers[0]!.surfaceLevel, 6);
-    assert.deepEqual(result.rivers[0]!.foamStamps![0]!.position, [11, 6, 1]);
-    assert.deepEqual(result.rivers[0]!.foamStamps![0]!.endPosition, [13, 6, 4]);
     assert.equal(result.rivers[1], rivers[1], "centre-local data already follows the terrain");
     assert.equal(result.rivers[2], rivers[2], "another terrain's river is untouched");
     assert.equal(rivers[0]!.surfaceLevel, 4, "inputs are never mutated");

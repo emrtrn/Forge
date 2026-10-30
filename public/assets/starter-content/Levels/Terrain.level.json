@@ -106,7 +106,7 @@
   "worldEnvironment": {
     "time": {
       "hour": 9.801,
-      "dayLengthMinutes": 1
+      "dayLengthMinutes": 60
     },
     "sunPath": {
       "azimuthDeg": 96.947,
@@ -157,8 +157,13 @@
       "name": "River Water 1",
       "coordinateSpace": "world",
       "surfaceLevel": -1,
-      "flowSpeed": 0.1,
+      "flowSpeed": 0.6,
+      "surfaceStrength": 1,
+      "refractionStrength": 1,
       "normalScale": 1,
+      "opacity": 0.65,
+      "bedVisibility": 0.8,
+      "absorptionDistance": 3,
       "waveAmplitude": 0.1,
       "contactFoam": {
         "enabled": true,
@@ -180,10 +185,10 @@
       },
       "caustics": {
         "enabled": true,
-        "strength": 1,
-        "scale": 1.5,
+        "strength": 0.5,
+        "scale": 1,
         "speed": 1,
-        "depthFade": 2
+        "depthFade": 1
       },
       "shoreWetness": {
         "enabled": true,
@@ -239,9 +244,9 @@
         "shoreWetnessEnabled": true,
         "foamEnabled": true,
         "causticsEnabled": true,
-        "absorptionDistance": 2,
+        "absorptionDistance": 1,
         "surfaceStrength": 2,
-        "surfaceRoughness": 0.2,
+        "surfaceRoughness": 0.3,
         "normalScale": 1,
         "rippleSpeed": 2,
         "reflectionStrength": 0.5,
@@ -258,12 +263,12 @@
         "foamOpacity": 0.7,
         "foamScale": 1,
         "foamSpeed": 0.5,
-        "causticsStrength": 1.5,
+        "causticsStrength": 1,
         "causticsScale": 1,
-        "causticsSpeed": 2,
+        "causticsSpeed": 1,
         "causticsDepthFade": 1,
         "reflectionMode": "sharedPlanar",
-        "reflectionQuality": "high"
+        "reflectionQuality": "medium"
       }
     }
   ],

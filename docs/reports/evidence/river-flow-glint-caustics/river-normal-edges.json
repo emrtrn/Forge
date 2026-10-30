@@ -1,0 +1,604 @@
+{
+  "face": {
+    "options": {
+      "reflectionQuality": "medium",
+      "lakePlanar": true,
+      "surfaceStrength": 0,
+      "surfaceRoughness": 0.22,
+      "flowSpeed": 1,
+      "sampleSpacing": 1,
+      "realNormalMap": false,
+      "hdrSun": false,
+      "bloom": false,
+      "faceShading": false,
+      "unboundedFlow": false,
+      "normalDiagnostic": "geometric",
+      "refractionStrength": 0,
+      "refractionQA": false,
+      "refractionAllowed": true,
+      "waveAmplitude": 0.1,
+      "foreground": false,
+      "hole": false,
+      "dryBank": false,
+      "sunTest": false,
+      "shadowCaster": false,
+      "shadowSystem": "single",
+      "sunTerm": "all",
+      "sceneTransmission": false,
+      "sceneBedDepth": null,
+      "kind": "river",
+      "isolateReflection": false,
+      "angle": "top",
+      "pipeline": "direct",
+      "depth": 2,
+      "reflection": "off",
+      "visible": true,
+      "bedVisibility": 1,
+      "absorptionDistance": 2,
+      "opacity": 1,
+      "foamOpacity": 0,
+      "time": 60,
+      "normalMap": false,
+      "calibration": false,
+      "exposure": 0.2,
+      "transformed": false,
+      "slope": 0,
+      "orthographic": false,
+      "localProbe": false,
+      "companion": false,
+      "companionKind": "river",
+      "companionHeight": 0,
+      "reverseOrder": false,
+      "earlyGlass": false
+    },
+    "centre": [
+      [
+        132,
+        255,
+        130
+      ],
+      [
+        135,
+        255,
+        130
+      ],
+      [
+        134,
+        255,
+        127
+      ],
+      [
+        129,
+        255,
+        124
+      ],
+      [
+        123,
+        255,
+        123
+      ],
+      [
+        121,
+        255,
+        124
+      ]
+    ],
+    "stamp": [
+      [
+        132,
+        255,
+        130
+      ],
+      [
+        134,
+        255,
+        130.33333333333334
+      ],
+      [
+        134,
+        255,
+        127
+      ],
+      [
+        132.66666666666666,
+        255,
+        130.66666666666666
+      ],
+      [
+        134,
+        255,
+        130.33333333333334
+      ],
+      [
+        134,
+        255,
+        127
+      ],
+      [
+        134,
+        255,
+        132
+      ],
+      [
+        134,
+        255,
+        130.33333333333334
+      ],
+      [
+        131.33333333333334,
+        255,
+        125
+      ],
+      [
+        134,
+        255,
+        132
+      ],
+      [
+        134,
+        255,
+        130.33333333333334
+      ],
+      [
+        130,
+        255,
+        124
+      ],
+      [
+        130.66666666666666,
+        255,
+        132
+      ],
+      [
+        130.22222222222223,
+        255,
+        129
+      ],
+      [
+        129.33333333333334,
+        255,
+        124
+      ],
+      [
+        129,
+        255,
+        132
+      ],
+      [
+        129,
+        255,
+        128.66666666666666
+      ],
+      [
+        129,
+        255,
+        124
+      ],
+      [
+        129,
+        255,
+        131.33333333333334
+      ],
+      [
+        129,
+        255,
+        128.66666666666666
+      ],
+      [
+        129,
+        255,
+        124
+      ],
+      [
+        129,
+        255,
+        131
+      ],
+      [
+        129,
+        255,
+        128.66666666666666
+      ],
+      [
+        127.66666666666667,
+        255,
+        123.33333333333333
+      ],
+      [
+        129,
+        255,
+        131
+      ],
+      [
+        129,
+        255,
+        128.66666666666666
+      ],
+      [
+        127,
+        255,
+        123
+      ]
+    ],
+    "edge": [
+      [
+        128,
+        255,
+        127
+      ],
+      [
+        128,
+        255,
+        127
+      ],
+      [
+        128,
+        255,
+        127
+      ],
+      [
+        128,
+        255,
+        127
+      ],
+      [
+        128,
+        255,
+        127
+      ],
+      [
+        128,
+        255,
+        127
+      ]
+    ],
+    "refractionSamples": [],
+    "protectedSamples": [],
+    "redPixels": 0,
+    "normalStats": {
+      "along": 1041.5475820488832,
+      "across": 1073.6149110814308,
+      "anisotropy": 1.030788155611159,
+      "edgeP95": 5,
+      "edgeCount": 160
+    },
+    "sunDiscRadiance": [
+      0,
+      0,
+      0
+    ],
+    "camera": {
+      "position": [
+        0,
+        12,
+        0.001
+      ],
+      "quaternion": [
+        -0.7070773177902668,
+        0,
+        0,
+        0.7071362433552122
+      ],
+      "kind": "perspective",
+      "fov": 48,
+      "near": 0.01,
+      "far": 100
+    },
+    "viewport": {
+      "width": 800,
+      "height": 480,
+      "dpr": 1
+    },
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "gpuTimerAvailable": false,
+    "textures": 3,
+    "drawCalls": 2,
+    "sceneTransmission": 0,
+    "refraction": 0,
+    "refractionBytes": 0,
+    "refractionFallback": null,
+    "glError": 0,
+    "frameCopies": 0
+  },
+  "smooth": {
+    "options": {
+      "reflectionQuality": "medium",
+      "lakePlanar": true,
+      "surfaceStrength": 0,
+      "surfaceRoughness": 0.22,
+      "flowSpeed": 1,
+      "sampleSpacing": 1,
+      "realNormalMap": false,
+      "hdrSun": false,
+      "bloom": false,
+      "faceShading": false,
+      "unboundedFlow": false,
+      "normalDiagnostic": "smooth",
+      "refractionStrength": 0,
+      "refractionQA": false,
+      "refractionAllowed": true,
+      "waveAmplitude": 0.1,
+      "foreground": false,
+      "hole": false,
+      "dryBank": false,
+      "sunTest": false,
+      "shadowCaster": false,
+      "shadowSystem": "single",
+      "sunTerm": "all",
+      "sceneTransmission": false,
+      "sceneBedDepth": null,
+      "kind": "river",
+      "isolateReflection": false,
+      "angle": "top",
+      "pipeline": "direct",
+      "depth": 2,
+      "reflection": "off",
+      "visible": true,
+      "bedVisibility": 1,
+      "absorptionDistance": 2,
+      "opacity": 1,
+      "foamOpacity": 0,
+      "time": 60,
+      "normalMap": false,
+      "calibration": false,
+      "exposure": 0.2,
+      "transformed": false,
+      "slope": 0,
+      "orthographic": false,
+      "localProbe": false,
+      "companion": false,
+      "companionKind": "river",
+      "companionHeight": 0,
+      "reverseOrder": false,
+      "earlyGlass": false
+    },
+    "centre": [
+      [
+        132,
+        255,
+        128.55555555555554
+      ],
+      [
+        133.55555555555554,
+        255,
+        129
+      ],
+      [
+        132,
+        255,
+        128
+      ],
+      [
+        128,
+        255,
+        126.33333333333333
+      ],
+      [
+        124,
+        255,
+        125.22222222222223
+      ],
+      [
+        122.88888888888889,
+        255,
+        126
+      ]
+    ],
+    "stamp": [
+      [
+        133,
+        255,
+        130
+      ],
+      [
+        133.66666666666666,
+        255,
+        129
+      ],
+      [
+        132.33333333333334,
+        255,
+        128
+      ],
+      [
+        133,
+        255,
+        130
+      ],
+      [
+        133,
+        255,
+        129
+      ],
+      [
+        132,
+        255,
+        128
+      ],
+      [
+        132,
+        255,
+        130
+      ],
+      [
+        132,
+        255,
+        129
+      ],
+      [
+        131,
+        255,
+        128
+      ],
+      [
+        131,
+        255,
+        130
+      ],
+      [
+        132,
+        255,
+        128.33333333333334
+      ],
+      [
+        131,
+        255,
+        127
+      ],
+      [
+        131,
+        255,
+        129.44444444444446
+      ],
+      [
+        131,
+        255,
+        128
+      ],
+      [
+        130,
+        255,
+        127
+      ],
+      [
+        130,
+        255,
+        129.33333333333334
+      ],
+      [
+        130,
+        255,
+        128
+      ],
+      [
+        129,
+        255,
+        126
+      ],
+      [
+        129.66666666666666,
+        255,
+        129.33333333333334
+      ],
+      [
+        129,
+        255,
+        127.88888888888889
+      ],
+      [
+        128,
+        255,
+        126
+      ],
+      [
+        128.55555555555554,
+        255,
+        129
+      ],
+      [
+        128,
+        255,
+        127
+      ],
+      [
+        127,
+        255,
+        126
+      ],
+      [
+        127.44444444444444,
+        255,
+        129
+      ],
+      [
+        127,
+        255,
+        127
+      ],
+      [
+        126,
+        255,
+        125.33333333333333
+      ]
+    ],
+    "edge": [
+      [
+        128,
+        255,
+        128
+      ],
+      [
+        128,
+        255,
+        127
+      ],
+      [
+        127,
+        255,
+        127
+      ],
+      [
+        127,
+        255,
+        127
+      ],
+      [
+        127,
+        255,
+        127
+      ],
+      [
+        127,
+        255,
+        127
+      ]
+    ],
+    "refractionSamples": [],
+    "protectedSamples": [],
+    "redPixels": 0,
+    "normalStats": {
+      "along": 730.1472938724971,
+      "across": 703.6781927660551,
+      "anisotropy": 0.9637482719876186,
+      "edgeP95": 1,
+      "edgeCount": 160
+    },
+    "sunDiscRadiance": [
+      0,
+      0,
+      0
+    ],
+    "camera": {
+      "position": [
+        0,
+        12,
+        0.001
+      ],
+      "quaternion": [
+        -0.7070773177902668,
+        0,
+        0,
+        0.7071362433552122
+      ],
+      "kind": "perspective",
+      "fov": 48,
+      "near": 0.01,
+      "far": 100
+    },
+    "viewport": {
+      "width": 800,
+      "height": 480,
+      "dpr": 1
+    },
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "gpuTimerAvailable": false,
+    "textures": 3,
+    "drawCalls": 2,
+    "sceneTransmission": 0,
+    "refraction": 0,
+    "refractionBytes": 0,
+    "refractionFallback": null,
+    "glError": 0,
+    "frameCopies": 0
+  }
+}

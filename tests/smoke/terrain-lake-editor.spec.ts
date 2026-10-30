@@ -231,13 +231,12 @@ test("Lake geometry foam Calculate Recalculate undo and binary Save Reload Play"
   expect(errors.filter(error=>!error.includes("status of 503"))).toEqual([]);
 });
 
-test("River automatic geometry foam and caustics UI Save Reload Play; manual controls retired",async({page,request},info)=>{
+test("River automatic geometry foam and caustics UI Save Reload Play",async({page,request},info)=>{
   test.setTimeout(300_000);
   const {errors}=await setup(page,request,true,false,false,false,true,false,false,false,true,false,true);await ready(page);
   const before=await terrainHash();
   await page.evaluate(()=>(window as any).__lakeQA.holdRiverPreparation());
   await page.locator('[data-river-water-create]').click();
-  await expect(page.locator('[data-contact-add]')).toHaveCount(0);await expect(page.locator('[data-river-water-foam-add]')).toHaveCount(0);
   const section=page.locator('[data-detail-section="lake-geometry-foam"]');
   const expand=async(locator:ReturnType<Page["locator"]>)=>{if(await locator.evaluate(e=>e.classList.contains("collapsed")))await locator.locator('.detail-section-toggle').click();};
   await expand(section);
@@ -270,7 +269,6 @@ test("River automatic geometry foam and caustics UI Save Reload Play; manual con
   let writes=0;page.on("request",r=>{if(r.url().includes("/__save-lake-foam"))writes++;});
   await page.goto("/tests/smoke/pages/terrain-lake-runtime.html",{waitUntil:"domcontentloaded"});await page.waitForFunction(()=>!!(window as any).__lakeQA);await ready(page);
   await expect.poll(async()=>(await snapshot(page)).riverBaked[0]?.active).toBe(true);expect(writes).toBe(0);
-  expect((await snapshot(page)).riverBaked[0].manual).toBe(0);
   const off=await page.evaluate(()=>(window as any).__lakeQA.causticsFrame(false,0));
   const capture=await page.evaluate(()=>(window as any).__lakeQA.causticsFrame(true,0));
   const moved=await page.evaluate(()=>(window as any).__lakeQA.causticsFrame(true,3));

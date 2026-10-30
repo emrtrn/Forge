@@ -1,10 +1,11 @@
 import { DataTexture, FloatType, NearestFilter, RGBAFormat } from "three";
 import type { RiverSurfaceQuery } from "../../terrain/riverSurface";
+export const RIVER_CAUSTIC_TRIANGLE_TEXELS = 6;
 
 /** One bounded float atlas: cell ranges, triangle references, then exact ribbon faces.
  * Positions stay local, preserving precision at large world origins. */
 export function riverCausticAtlas(surfaces: readonly RiverSurfaceQuery[]) {
-  const sizes=surfaces.map(s=>s.nx*s.nz+s.triangles.length+4*s.data.indices.length/3);
+  const sizes=surfaces.map(s=>s.nx*s.nz+s.triangles.length+RIVER_CAUSTIC_TRIANGLE_TEXELS*s.data.indices.length/3);
   const texels=sizes.reduce((n,v)=>n+v,0);
   if(texels>1024*1024)throw new Error("over-budget: River caustics atlas exceeds 16 MiB");
   const width=Math.min(1024,Math.max(1,texels)),height=Math.max(1,Math.ceil(texels/width));
@@ -13,15 +14,13 @@ export function riverCausticAtlas(surfaces: readonly RiverSurfaceQuery[]) {
   for(const s of surfaces) {
     offsets.push(start);const cells=s.nx*s.nz,refs=start+cells,tris=refs+s.triangles.length,d=s.data;
     for(let c=0;c<cells;c++)data.set([refs+s.offsets[c]!,s.offsets[c+1]!-s.offsets[c]!,0,0],(start+c)*4);
-    for(let i=0;i<s.triangles.length;i++)data[(refs+i)*4]=tris+s.triangles[i]!*4;
+    for(let i=0;i<s.triangles.length;i++)data[(refs+i)*4]=tris+s.triangles[i]!*RIVER_CAUSTIC_TRIANGLE_TEXELS;
     for(let t=0;t<d.indices.length/3;t++) {
-      let fx=0,fz=0,m=0;
       for(let k=0;k<3;k++) {
         const i=d.indices[t*3+k]!;
-        data.set([d.positions[i*3]!,d.positions[i*3+2]!,d.positions[i*3+1]!,d.bedDepths[i]!],(tris+t*4+k)*4);
-        fx+=d.flowDirections[i*2]!/3;fz+=d.flowDirections[i*2+1]!/3;m+=d.flowSpeedMultipliers[i]!/3;
+        data.set([d.positions[i*3]!,d.positions[i*3+2]!,d.positions[i*3+1]!,d.bedDepths[i]!],(tris+t*RIVER_CAUSTIC_TRIANGLE_TEXELS+k)*4);
+        data.set([d.flowDirections[i*2]!,d.flowDirections[i*2+1]!,d.flowSpeedMultipliers[i]!,0],(tris+t*RIVER_CAUSTIC_TRIANGLE_TEXELS+3+k)*4);
       }
-      data.set([fx,fz,m,0],(tris+t*4+3)*4);
     }
     start+=sizes[offsets.length-1]!;
   }
@@ -54,7 +53,9 @@ bool riverCausticSample(vec2 world,vec4 grid,vec4 info,out float level,out vec2 
     vec3 weights=vec3(1.-u-v,u,v);
     if(any(lessThan(weights,vec3(-.000001)))||dot(weights,vec3(a.w,b.w,c.w))<=.00001)continue;
     level=dot(weights,vec3(a.z,b.z,c.z));
-    vec4 motion=riverCausticRead(t+3);flow=motion.xy/max(length(motion.xy),.00001)*motion.z*info.w;
+    // The exact same vertex values meet on both sides of every shared edge.
+    vec4 motion=riverCausticRead(t+3)*weights.x+riverCausticRead(t+4)*weights.y+riverCausticRead(t+5)*weights.z;
+    flow=motion.xy/max(length(motion.xy),.00001)*motion.z*info.w;
     return true;
   }
   return false;

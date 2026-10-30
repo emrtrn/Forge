@@ -1,9 +1,9 @@
-import { DepthTexture, HalfFloatType, Matrix4, UnsignedIntType, Vector2, WebGLRenderTarget,
+import { BufferGeometry, DepthTexture, Group, HalfFloatType, Matrix4, Mesh, MeshBasicMaterial, UnsignedIntType, Vector2, WebGLRenderTarget,
   type Camera, type Scene, type WebGLRenderer } from "three";
 
 const snapshots = new WeakMap<Scene, WaterSceneSnapshot>();
 
-/** One lazy colour/depth copy at the first lake draw, shared by all lakes.
+/** One colour/depth copy after opaque drawing, shared by Lake and River.
  * No second scene render. Nested planar cameras and direct/MSAA paths fall back
  * to the baked terrain depth instead of reading an unresolved/attached texture.
  */
@@ -12,15 +12,35 @@ export class WaterSceneSnapshot {
   private camera: Camera | null = null;
   private copied = false;
   private enabled = false;
+  // An empty transparent mesh runs onBeforeRender but submits no GPU draw.
+  // Its group/order put the copy before transparent water or glass, regardless
+  // of water insertion order. It never participates in depth/normal overrides.
+  private readonly boundary = new Group();
+  private readonly marker = new Mesh(new BufferGeometry(), new MeshBasicMaterial({
+    transparent: true, depthWrite: false, colorWrite: false,
+  }));
   private readonly depthOwners = new Map<WebGLRenderTarget, DepthTexture>();
   copies = 0;
-  constructor(private readonly scene: Scene) { snapshots.set(scene, this); }
+  constructor(private readonly scene: Scene) {
+    snapshots.set(scene, this);
+    this.boundary.name = "WaterSceneSnapshot.boundary";
+    this.boundary.renderOrder = this.marker.renderOrder = -Infinity;
+    this.boundary.visible = false;
+    this.marker.frustumCulled = false;
+    this.marker.onBeforeRender = (renderer, renderedScene, camera) => {
+      if (!renderedScene.overrideMaterial) this.read(renderer, camera);
+    };
+    this.boundary.add(this.marker);
+    scene.add(this.boundary);
+  }
 
   begin(camera: Camera, targets: readonly WebGLRenderTarget[]): void {
     this.camera = camera; this.copied = false;
     let needed = false;
     this.scene.traverseVisible(object => { if (object.userData.waterSceneTransmission === true) needed = true; });
     this.enabled = needed;
+    this.boundary.visible = needed;
+    this.marker.layers.mask = camera.layers.mask;
     if (!needed) {
       this.target?.dispose(); this.target = null;
       for (const [target, depth] of this.depthOwners) if (target.depthTexture === depth) {
@@ -62,6 +82,8 @@ export class WaterSceneSnapshot {
   }
 
   dispose(): void {
+    this.boundary.removeFromParent();
+    this.marker.geometry.dispose(); this.marker.material.dispose();
     this.target?.dispose(); this.target = null;
     this.depthOwners.clear(); // The composer owns and disposes its attachments.
     if (snapshots.get(this.scene) === this) snapshots.delete(this.scene);

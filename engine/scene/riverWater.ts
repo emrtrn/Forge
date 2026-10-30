@@ -22,9 +22,9 @@ export interface ResolvedRiverWater {
   surfaceLevel: number;
   widthScale: number;
   flowSpeed: number;
-  surfaceStyle: "legacy" | "lake";
   surfaceStrength: number;
   surfaceRoughness: number;
+  refractionStrength: number;
   normalScale: number;
   normalTexture: string;
   deepColor: string;
@@ -58,9 +58,9 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   surfaceLevel: 0,
   widthScale: 1,
   flowSpeed: 0.35,
-  surfaceStyle: "legacy",
   surfaceStrength: 2,
   surfaceRoughness: 0.2,
+  refractionStrength: 0.65,
   normalScale: 1,
   normalTexture: "t-water-n",
   deepColor: "#164c50",
@@ -86,21 +86,18 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   reflectionStrength: 0.34,
 };
 
-/** Shared read/save guard for the opt-in surface contract. Never coerces bad data. */
-export function resolveRiverSurface(actor: Pick<LayoutRiverWater, "surfaceStyle" | "surfaceStrength" | "surfaceRoughness">) {
-  if (actor.surfaceStyle !== undefined && actor.surfaceStyle !== "legacy" && actor.surfaceStyle !== "lake") {
-    throw new Error("river water surfaceStyle must be legacy or lake");
-  }
-  for (const [key, min, max] of [["surfaceStrength", 0, 2], ["surfaceRoughness", 0.04, 1]] as const) {
+/** Shared read/save guard for the River micro surface. Never coerces bad data. */
+export function resolveRiverSurface(actor: Pick<LayoutRiverWater, "surfaceStrength" | "surfaceRoughness" | "refractionStrength">) {
+  for (const [key, min, max] of [["surfaceStrength", 0, 2], ["surfaceRoughness", 0.04, 1], ["refractionStrength", 0, 2]] as const) {
     const value = actor[key];
     if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max)) {
       throw new Error(`river water ${key} must be a finite number in ${min}..${max}`);
     }
   }
   return {
-    surfaceStyle: actor.surfaceStyle ?? RIVER_WATER_DEFAULTS.surfaceStyle,
     surfaceStrength: actor.surfaceStrength ?? RIVER_WATER_DEFAULTS.surfaceStrength,
     surfaceRoughness: actor.surfaceRoughness ?? RIVER_WATER_DEFAULTS.surfaceRoughness,
+    refractionStrength: actor.refractionStrength ?? RIVER_WATER_DEFAULTS.refractionStrength,
   };
 }
 

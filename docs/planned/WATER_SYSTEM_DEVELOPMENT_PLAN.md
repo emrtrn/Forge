@@ -2,10 +2,32 @@
 
 Tarih: 29 Ekim 2026 · Durum: V1b ve V1c + güneş parıltısı uygulandı; son Lake görünümü kullanıcı tarafından kabul edildi. Teknik doğrulama ve yeni GPU maliyeti açık.
 
+**30 Ekim — tek River yüzeyi kararı:** Kullanıcı isteğiyle Legacy/Lake-like
+ayrımı kaldırıldı. R1/R2 yüzeyi bütün nehirlerde varsayılandır; stil seçimi ve
+`surfaceStyle` veri alanı yoktur. Surface Strength/Roughness kontrolleri kalır.
+Manuel köpük testleri temizlendi; otomatik bake/kıyı/köpük malzemesi testleri korunur.
+[Sadeleştirme raporu](../reports/RIVER_SURFACE_UNIFIED_2026-10-30.md).
+Aşağıdaki seçilebilir profil notları önceki teslim geçmişidir.
+
+**R3 ilk uygulama:** Eğimli River için gerçek üçgen/yerel yüzey doğrulamalı ekran
+kırılması eklendi. Refraction Strength 0–2 (başlangıç 0,65); Yüksek/Ultra grafik
+tavanında ve uygun snapshot yolunda çalışır. R3 doğrulaması ve açık görsel/GPU
+sınırları [raporda](../reports/RIVER_REFRACTION_R3_2026-10-30.md) izlenir.
+
+**River akış/parıltı/caustic düzeltmesi:** Yüksek Flow Speed ile zaman içinde
+biriken normal UV kayması iki fazlı sınırlı taşımaya geçirildi; ışıklandırma ortak
+vertex normallerini kullanırken kırılma gerçek üçgen yüzeyini korur. Caustic atlası
+köşe akışını barycentric olarak birleştirir ve zamanla büyüyen taşımayı sınırlar.
+[Düzeltme ve doğrulama raporu](../reports/RIVER_FLOW_GLINT_CAUSTICS_FIX_2026-10-30.md).
+
+**Son görsel kabul:** Kullanıcı akış/parıltı/caustic düzeltmelerini sahnede gördü
+ve mevcut görünümü kabul etti. Aşağıdaki önceki açık görsel kabul notları teslim
+geçmişidir; gerçek GPU maliyeti ve production tarayıcı kabulü ayrıca açık kalır.
+
 **30 Ekim 2026 güncellemesi — River görsel yakınlaştırma:** Kullanıcı, memnun
 olduğu Lake görünümünü referans alarak River yüzeyinin iyileştirilmesini istedi.
 Kod karşılaştırmasına dayanan uygulama planı [§7.1](#71-river-görsel-yakınlaştırma-planı--30-ekim-2026)
-altındadır. R1 ilk uygulaması seçilebilir profil olarak eklendi; River insan
+altındadır. R1 ve R2 ilk uygulamaları seçilebilir profil olarak eklendi; River insan
 görsel kabulü ve gerçek GPU performans kabulü açık. Lake'in kabul edilmiş
 görünümü korunacak referanstır.
 
@@ -227,7 +249,9 @@ V2b kırılma bu çalışmanın R3 dilimidir; planın yazılması uygulama kabul
 roughness, Lake'e yakın ortam Fresnel'i ve güneş parıltısı eklendi. Eski nehirler
 Legacy kalır; Lake ve kullanıcı sahneleri değiştirilmedi.
 [R0 referansı, kullanım ve doğrulama raporu](../reports/RIVER_SURFACE_R1_2026-10-30.md).
-R0 görsel/donanım matrisi, River insan görsel kabulü, R2 dip optiği ve R3 kırılma
+R2 dip optiği, renk ve kıyı geçişi aynı Lake-like profiline eklendi;
+[uygulama ve doğrulama raporu](../reports/RIVER_BED_OPTICS_R2_2026-10-30.md).
+R0 görsel/donanım matrisi, River insan görsel kabulü ve R3 kırılma
 açıktır; aşağıdaki aşama listesi tam kabul yerine geçmez.
 
 **Hedef:** River'ın renk, dip geçirgenliği, mikro yüzey, yansıma ve güneş
@@ -317,6 +341,10 @@ değişikliğinden etkilenmiyor. Snapshot desteği genel performans kabulü değ
 
 #### R3 — V2b: Eğimli River kırılması
 
+İlk uygulama, kayıt/kalite kapısı ve sınırlı atlas sahipliği kodlandı.
+[R3 uygulama raporu](../reports/RIVER_REFRACTION_R3_2026-10-30.md).
+Aşağıdaki maddeler genel görsel/donanım kabulü yerine otomatik kapanmaz.
+
 - [ ] Yerel yüzey yüksekliği/eğimi ve gerçek River üçgen kapsaması sağlayan
   adaptör tasarla. Aday ve ara UV'deki ışın-yüzey kesişimini yerel suyla doğrula;
   Lake'in yatay düzlem/bağlı havza maskesini aynen kullanma.
@@ -339,8 +367,8 @@ kayaların uzaması veya başka kot/gövdeden renk sızması yok. Bu dilim ayrı
   bake akışı değişmesin; manuel temas aracı veya runtime yeniden bake eklenmesin.
 - [ ] Yeni kalıcı alanlar için layout tipleri, `resolveRiverWater`, ortak
   validator/save allowlist, Details ve serialization testlerini birlikte güncelle.
-  Eski kayıtların mevcut görünümünü koruyan sürüm/profil veya açık opt-in yolu
-  seç; iyileştirmeyi bütün sahnelere sessizce dayatma. İngilizce UI/Türkçe tooltip.
+  30 Ekim kullanıcı kararıyla bütün nehirler tek R1/R2 yüzeyini kullanır;
+  kaldırılmış stil alanı yeniden eklenmez. İngilizce UI/Türkçe tooltip.
 - [ ] River kalite tavanlarını mevcut Lake politikasıyla açıkça eşleştir;
   authored kapalı etki açılmasın. Düşük/Orta fallback ve adaptif geçişler kayıtlı
   değerleri değiştirmesin. Kırılma kapalıyken gereksiz maske/update işi kalmasın;
@@ -508,8 +536,12 @@ Kaynak referansı, entegrasyon raporunda incelenen **`ce9248fa20afbdf63fd4c11709
 ## 13. Sonraki oturumun somut başlangıcı
 
 **30 Ekim güncel yön:** §7.1 R0 kayıtlı referansı ve R1 ilk uygulaması
-[raporda](../reports/RIVER_SURFACE_R1_2026-10-30.md) izlenir. Sonraki kod dilimi
-R2 dip optiğidir; R0 görsel/donanım baseline'ı ve insan görsel kabulü açıktır.
+[R1 raporunda](../reports/RIVER_SURFACE_R1_2026-10-30.md), R2 dip optiği
+[R2 raporunda](../reports/RIVER_BED_OPTICS_R2_2026-10-30.md), R3 kırılma
+[R3 raporunda](../reports/RIVER_REFRACTION_R3_2026-10-30.md) izlenir. R3 görsel
+kabulünden sonraki kod dilimi R4 köpük/kalite bütünleştirmesidir. R3'te yeni
+kırılmanın kayıt ve kalite kapısı uygulanır; bu, R4'ün bütün River efektleri için
+tamamlandığı anlamına gelmez. R0 görsel/donanım baseline'ı ve insan kabulü açıktır.
 Aşağıdaki 29 Ekim kaydı geçmiş teslim bağlamıdır.
 
 **Güncel durum:** V1b köpüğün ardından V1c ortam/planar birleşimi ve Lake/River

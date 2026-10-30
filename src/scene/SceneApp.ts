@@ -936,9 +936,10 @@ export interface RiverWaterDetailsView {
   flowSpeed: number;
   normalScale: number;
   normalTexture: string;
-  surfaceStyle: "legacy" | "lake";
   surfaceStrength: number;
   surfaceRoughness: number;
+  refractionStrength: number;
+  refractionWarning: string;
   deepColor: string;
   shallowColor: string;
   opacity: number;
@@ -971,9 +972,9 @@ export type RiverWaterDetailsPatch = Partial<Pick<
   | "widthScale"
   | "flowSpeed"
   | "normalScale"
-  | "surfaceStyle"
   | "surfaceStrength"
   | "surfaceRoughness"
+  | "refractionStrength"
   | "deepColor"
   | "shallowColor"
   | "opacity"
@@ -3343,7 +3344,10 @@ export class SceneApp {
     setTerrainSelfShadow(quality.terrainSelfShadow);
     setTerrainFarTiling(quality.terrainFarTiling);
     void this.lakes?.setQuality(lakeQuality(quality)).catch(error => console.warn("[lake-quality]", error));
-    for(const river of this.riverWaterObjects)river.setShoreWetnessAllowed(quality.lakeShoreWetnessAllowed);
+    for(const river of this.riverWaterObjects) {
+      river.setShoreWetnessAllowed(quality.lakeShoreWetnessAllowed);
+      river.setRefractionAllowed(quality.lakeReflectionQuality !== "off");
+    }
     this.fitSunShadowToScene();
     this.applyPostProcess();
   }
@@ -8211,7 +8215,7 @@ export class SceneApp {
           ...(bakedFoam?{bakedFoam}:{}),
           environmentProbes: () => this.eligibleProbeBakes(),
         };
-        const object = createRiverWaterObject(item, normalMap);
+        const object = createRiverWaterObject({...item, refractionAllowed: this.editorQuality.lakeReflectionQuality !== "off"}, normalMap);
         object.raycast = () => {};
         object.userData.riverWaterId = resolved.id;
         object.setShoreWetnessAllowed(this.editorQuality.lakeShoreWetnessAllowed);
@@ -11015,9 +11019,10 @@ export class SceneApp {
           flowSpeed: resolved.flowSpeed,
           normalScale: resolved.normalScale,
           normalTexture: resolved.normalTexture,
-          surfaceStyle: resolved.surfaceStyle,
           surfaceStrength: resolved.surfaceStrength,
           surfaceRoughness: resolved.surfaceRoughness,
+          refractionStrength: resolved.refractionStrength,
+          refractionWarning: String(this.riverWaterObjects.find(o => o.userData.riverWaterId === resolved.id)?.userData.riverRefractionFallback ?? ""),
           deepColor: resolved.deepColor,
           shallowColor: resolved.shallowColor,
           opacity: resolved.opacity,
@@ -11069,9 +11074,9 @@ export class SceneApp {
     if (patch.widthScale !== undefined) next.widthScale = Number(clamp(patch.widthScale, 0.05, 10).toFixed(3));
     if (patch.flowSpeed !== undefined) next.flowSpeed = Number(clamp(patch.flowSpeed, 0, 10).toFixed(3));
     if (patch.normalScale !== undefined) next.normalScale = Number(clamp(patch.normalScale, 0.05, 20).toFixed(3));
-    if (patch.surfaceStyle !== undefined) next.surfaceStyle = patch.surfaceStyle === "lake" ? "lake" : "legacy";
     if (patch.surfaceStrength !== undefined) next.surfaceStrength = Number(clamp(patch.surfaceStrength, 0, 2).toFixed(3));
     if (patch.surfaceRoughness !== undefined) next.surfaceRoughness = Number(clamp(patch.surfaceRoughness, 0.04, 1).toFixed(3));
+    if (patch.refractionStrength !== undefined) next.refractionStrength = Number(clamp(patch.refractionStrength, 0, 2).toFixed(3));
     if (patch.deepColor !== undefined) next.deepColor = patch.deepColor;
     if (patch.shallowColor !== undefined) next.shallowColor = patch.shallowColor;
     if (patch.opacity !== undefined) next.opacity = Number(clamp(patch.opacity, 0, 1).toFixed(3));

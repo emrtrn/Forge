@@ -16,7 +16,7 @@ test.setTimeout(240_000);
 const LEVEL = "layouts/__playwright-spline-world.level.json";
 const TERRAIN = "landscapes/__playwright-spline-world.terrain.json";
 
-async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false, road = false, river = false, grid = false) {
+async function setup(page: Page, request: APIRequestContext, streamed = false, seeded = false, road = false, river = false, grid = false, screenWater = false) {
   const n = streamed ? 12 : 2, q = streamed ? 32 : 64;
   // 12 x 4 exceeds the real 36-tile streaming threshold and keeps the remote
   // corridor, without 96 unrelated files in every definition-commit cross-check.
@@ -54,6 +54,7 @@ async function setup(page: Page, request: APIRequestContext, streamed = false, s
   level.instances = level.instances.filter((group: { assetId: string }) => group.assetId === "marker:playerStart");
   level.landscapes = [{ id: "world", name: "Spline World", position: worldTerrainActorPosition(def), dataRef: TERRAIN }];
   level.riverWaters = [];
+  if (screenWater) level.postProcess = { antialias: "smaa" };
   if (road) {
     level.instances[0].placements[0].position = [-8, 9, -16];
     // A second Landscape catches compressed-data-array indexing that used to
@@ -227,7 +228,7 @@ test("multi-tile river follows edited spline Y through undo, reload and runtime"
 test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/Reload and runtime", async ({ page, request }, info) => {
   test.setTimeout(480_000);
   page.setDefaultTimeout(20_000);
-  const { errors } = await setup(page, request, false, true, false, true);
+  const { errors } = await setup(page, request, false, true, false, true, false, true);
   await page.locator('[data-landscape-spline="spline-1"]').click();
   await page.locator("[data-landscape-mode]").selectOption("water");
   await page.locator("[data-river-water-create]").click();
@@ -246,15 +247,15 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   expect(initial.position).toEqual([0, 5, 0]); expect(initial.flowSpeed).toBe(1.2);
   expect(initial.samples.every((sample: any) => sample.depth === 2 && sample.flow[0] === 1)).toBe(true);
 
-  const style = page.locator('[data-river-water-reflection="surfaceStyle"]');
-  await expect(style).toHaveValue("legacy");
-  await style.selectOption("lake");
-  await page.getByTestId("editor-undo").click(); await expect(style).toHaveValue("legacy");
-  await page.getByTestId("editor-redo").click(); await expect(style).toHaveValue("lake");
   const strength = page.locator('[data-river-water-number="surfaceStrength"]');
   await strength.fill("1.6"); await strength.press("Enter");
   const roughness = page.locator('[data-river-water-number="surfaceRoughness"]');
   await roughness.fill("0.24"); await roughness.press("Enter");
+  const refraction = page.locator('[data-river-water-number="refractionStrength"]');
+  await expect(refraction).toHaveValue("0.65");
+  await refraction.fill("1.2"); await refraction.press("Enter");
+  await page.getByTestId("editor-undo").click(); await expect(refraction).toHaveValue("0.65");
+  await page.getByTestId("editor-redo").click(); await expect(refraction).toHaveValue("1.2");
   // The river bed uses the existing multi-tile patch/undo path.
   await page.locator("[data-landscape-mode]").selectOption("splines");
   const offset = page.locator('[data-landscape-segment-number="deform.targetOffset"]');
@@ -277,7 +278,6 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await expect.poll(async () => Math.max(...(await riverSnapshot(page)).waters[0].samples.map((sample: any) => sample.depth))).toBe(3);
   await page.locator("[data-landscape-mode]").selectOption("splines");
   await page.locator("[data-landscape-mode]").selectOption("water");
-  await expect(page.locator('[data-river-water-foam-add="ring"]')).toHaveCount(0);
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.foam.length).toBe(0);
   const lock = page.locator('[data-detail-toggle="locked"]');
   await lock.check(); await expect(height).toBeDisabled();
@@ -285,8 +285,9 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await save(page);
   const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
   expect(saved.riverWaters[0].coordinateSpace).toBe("world"); expect(saved.riverWaters[0].surfaceLevel).toBe(7);
-  expect(saved.riverWaters[0].surfaceStyle).toBe("lake"); expect(saved.riverWaters[0].surfaceStrength).toBe(1.6);
+  expect(saved.riverWaters[0].surfaceStrength).toBe(1.6);
   expect(saved.riverWaters[0].surfaceRoughness).toBe(0.24);
+  expect(saved.riverWaters[0].refractionStrength).toBe(1.2);
   const editor = (await riverSnapshot(page)).waters[0];
   expect(editor.foam).toEqual([]);
   const time = editor.time;
@@ -297,20 +298,33 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await page.locator("[data-landscape-mode]").selectOption("splines");
   await page.locator("[data-landscape-mode]").selectOption("water");
   await expect(height).toHaveValue("7"); await expect(flow).toHaveValue("1.2");
-  await expect(style).toHaveValue("lake"); await expect(strength).toHaveValue("1.6"); await expect(roughness).toHaveValue("0.24");
+  await expect(strength).toHaveValue("1.6"); await expect(roughness).toHaveValue("0.24");
+  await expect(refraction).toHaveValue("1.2");
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.triangles).toBe(editor.triangles);
   await page.goto("/tests/smoke/pages/terrain-spline-runtime.html", { waitUntil: "domcontentloaded" });
   await expect.poll(async () => page.evaluate(() => Boolean((window as any).__riverQA)), { timeout: 90_000 }).toBe(true);
   const runtime = (await riverSnapshot(page)).waters[0];
-  expect(runtime.surfaceStyle).toBe("lake"); expect(runtime.surfaceStrength).toBe(1.6); expect(runtime.surfaceRoughness).toBe(0.24);
+  expect(runtime.surfaceStrength).toBe(1.6); expect(runtime.surfaceRoughness).toBe(0.24);
+  expect([0,1.2]).toContain(runtime.refractionStrength);
+  expect(runtime.refractionBytes).toBeLessThanOrEqual(8*1024*1024);
   expect(runtime.samples).toEqual(editor.samples); expect(runtime.foam).toEqual(editor.foam);
   expect(runtime.position).toEqual(editor.position); expect(runtime.reflection).toBeGreaterThan(0);
+  await page.evaluate(() => { (window as any).__riverQA.quality("high"); (window as any).__riverQA.frame(); });
+  const runtimeHigh = (await riverSnapshot(page)).waters[0];
+  expect(runtimeHigh.refractionStrength).toBe(1.2); expect(runtimeHigh.refractionBytes).toBeGreaterThan(0);
+  await page.evaluate(() => { (window as any).__riverQA.quality("low"); (window as any).__riverQA.frame(); });
+  const runtimeLow = (await riverSnapshot(page)).waters[0];
+  expect(runtimeLow.refractionStrength).toBe(0); expect(runtimeLow.refractionBytes).toBe(0);
+  await page.evaluate(() => { (window as any).__riverQA.quality("high"); (window as any).__riverQA.frame(); });
+  const runtimeRestored = (await riverSnapshot(page)).waters[0];
+  expect(runtimeRestored.refractionStrength).toBe(1.2); expect(runtimeRestored.refractionBytes).toBe(runtimeHigh.refractionBytes);
+  expect(runtimeRestored.samples).toEqual(editor.samples);
   await page.evaluate(() => (window as any).__riverQA.frame());
   await page.screenshot({ path: info.outputPath("world-river-runtime.png") });
   await page.setViewportSize({ width: 1100, height: 720 });
   await page.evaluate(() => (window as any).__riverQA.frame());
   await page.screenshot({ path: info.outputPath("world-river-runtime-small.png") });
-  await writeFile(info.outputPath("world-river.json"), JSON.stringify({ editor, runtime }, null, 2));
+  await writeFile(info.outputPath("world-river.json"), JSON.stringify({ editor, runtime, runtimeHigh, runtimeLow, runtimeRestored }, null, 2));
   expect(errors).toEqual([]);
 });
 

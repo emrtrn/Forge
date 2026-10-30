@@ -1,0 +1,2152 @@
+[
+  {
+    "orthographic": false,
+    "shallow": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": true,
+        "sceneBedDepth": 0.1,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": false,
+        "slope": 0.12,
+        "orthographic": false,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          121,
+          124,
+          124
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120.44444444444444,
+          124,
+          124
+        ]
+      ],
+      "stamp": [
+        [
+          120,
+          124,
+          124
+        ],
+        [
+          80.55555555555556,
+          83.11111111111111,
+          83
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          124,
+          124
+        ],
+        [
+          80.33333333333333,
+          83.33333333333333,
+          83
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          123.66666666666667,
+          123
+        ],
+        [
+          80.33333333333333,
+          82.66666666666667,
+          82.33333333333333
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          123.66666666666667,
+          123
+        ],
+        [
+          80.33333333333333,
+          82.66666666666667,
+          82.33333333333333
+        ],
+        [
+          1.2222222222222223,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          53.888888888888886,
+          55.77777777777778,
+          55.22222222222222
+        ],
+        [
+          80.33333333333333,
+          82.66666666666667,
+          82.33333333333333
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.666666666666664,
+          41.77777777777778
+        ],
+        [
+          120,
+          123.66666666666667,
+          123
+        ]
+      ],
+      "edge": [
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          123.44444444444444,
+          123.33333333333333
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "kind": "perspective",
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 7,
+      "drawCalls": 3,
+      "sceneTransmission": 1,
+      "glError": 0,
+      "frameCopies": 1
+    },
+    "deep": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": true,
+        "sceneBedDepth": 5,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": false,
+        "slope": 0.12,
+        "orthographic": false,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          29,
+          70,
+          67.11111111111111
+        ],
+        [
+          29,
+          53,
+          44
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ]
+      ],
+      "stamp": [
+        [
+          29,
+          53,
+          44
+        ],
+        [
+          29,
+          59,
+          51.888888888888886
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          61,
+          54.55555555555556
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ]
+      ],
+      "edge": [
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "kind": "perspective",
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 9,
+      "drawCalls": 3,
+      "sceneTransmission": 1,
+      "glError": 0,
+      "frameCopies": 1
+    },
+    "moved": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": true,
+        "sceneBedDepth": 5,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": true,
+        "slope": 0.12,
+        "orthographic": false,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          29,
+          70,
+          67.11111111111111
+        ],
+        [
+          29,
+          53,
+          44
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ]
+      ],
+      "stamp": [
+        [
+          29,
+          53,
+          44
+        ],
+        [
+          29,
+          59,
+          51.888888888888886
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          61,
+          54.55555555555556
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ]
+      ],
+      "edge": [
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ],
+        [
+          29,
+          55,
+          47
+        ]
+      ],
+      "camera": {
+        "position": [
+          100.00089120736006,
+          29,
+          -79.99954640387857
+        ],
+        "quaternion": [
+          -0.602800752409748,
+          0.36961108351335237,
+          0.36958028387309816,
+          0.6028509878988402
+        ],
+        "kind": "perspective",
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 9,
+      "drawCalls": 3,
+      "sceneTransmission": 1,
+      "glError": 0,
+      "frameCopies": 1
+    },
+    "fallback": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": false,
+        "sceneBedDepth": 5,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": false,
+        "slope": 0.12,
+        "orthographic": false,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          105,
+          111,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ]
+      ],
+      "stamp": [
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          49.44444444444444,
+          59.44444444444444,
+          57.333333333333336
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          80.11111111111111,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ]
+      ],
+      "edge": [
+        [
+          16,
+          32,
+          33
+        ],
+        [
+          16,
+          32,
+          33
+        ],
+        [
+          16,
+          32,
+          33
+        ],
+        [
+          16,
+          32,
+          33
+        ],
+        [
+          16,
+          32,
+          33
+        ],
+        [
+          16,
+          32,
+          33
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "kind": "perspective",
+        "fov": 48,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 10,
+      "drawCalls": 3,
+      "sceneTransmission": 0,
+      "glError": 0,
+      "frameCopies": 0
+    }
+  },
+  {
+    "orthographic": true,
+    "shallow": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": true,
+        "sceneBedDepth": 0.1,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": false,
+        "slope": 0.12,
+        "orthographic": true,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          121,
+          124,
+          124
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          124,
+          124
+        ]
+      ],
+      "stamp": [
+        [
+          120,
+          124,
+          124
+        ],
+        [
+          81,
+          83,
+          83
+        ],
+        [
+          1,
+          1.7777777777777777,
+          1
+        ],
+        [
+          120,
+          124,
+          124
+        ],
+        [
+          80.33333333333333,
+          83.33333333333333,
+          83
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          124,
+          123
+        ],
+        [
+          80.33333333333333,
+          82.66666666666667,
+          82.33333333333333
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          80.33333333333333,
+          82.66666666666667,
+          82.33333333333333
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          54.44444444444444,
+          55.77777777777778,
+          55.22222222222222
+        ],
+        [
+          80.33333333333333,
+          82.66666666666667,
+          82.33333333333333
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          120,
+          123,
+          123
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          40.666666666666664,
+          42.333333333333336,
+          41.666666666666664
+        ],
+        [
+          120,
+          123,
+          123
+        ]
+      ],
+      "edge": [
+        [
+          120,
+          124,
+          124
+        ],
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          120,
+          124,
+          124
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          120,
+          124,
+          123.66666666666667
+        ],
+        [
+          1,
+          1.3333333333333333,
+          1
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "kind": "orthographic",
+        "fov": null,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 10,
+      "drawCalls": 3,
+      "sceneTransmission": 1,
+      "glError": 0,
+      "frameCopies": 1
+    },
+    "deep": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": true,
+        "sceneBedDepth": 5,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": false,
+        "slope": 0.12,
+        "orthographic": true,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ]
+      ],
+      "stamp": [
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          61,
+          54.55555555555556
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ]
+      ],
+      "edge": [
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "kind": "orthographic",
+        "fov": null,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 10,
+      "drawCalls": 3,
+      "sceneTransmission": 1,
+      "glError": 0,
+      "frameCopies": 1
+    },
+    "moved": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": true,
+        "sceneBedDepth": 5,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": true,
+        "slope": 0.12,
+        "orthographic": true,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ]
+      ],
+      "stamp": [
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          61,
+          54.55555555555556
+        ],
+        [
+          29,
+          65,
+          60.333333333333336
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          59,
+          51.666666666666664
+        ],
+        [
+          29,
+          71,
+          69
+        ]
+      ],
+      "edge": [
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ],
+        [
+          29,
+          71,
+          69
+        ],
+        [
+          29,
+          53,
+          43
+        ]
+      ],
+      "camera": {
+        "position": [
+          100.00089120736006,
+          29,
+          -79.99954640387857
+        ],
+        "quaternion": [
+          -0.602800752409748,
+          0.36961108351335237,
+          0.36958028387309816,
+          0.6028509878988402
+        ],
+        "kind": "orthographic",
+        "fov": null,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 10,
+      "drawCalls": 3,
+      "sceneTransmission": 1,
+      "glError": 0,
+      "frameCopies": 1
+    },
+    "fallback": {
+      "options": {
+        "reflectionQuality": "medium",
+        "surfaceStyle": "lake",
+        "surfaceStrength": 0,
+        "surfaceRoughness": 0.22,
+        "pointFoam": false,
+        "baselineFoam": false,
+        "sunTest": false,
+        "shadowCaster": false,
+        "shadowSystem": "single",
+        "sunTerm": "all",
+        "sceneTransmission": false,
+        "sceneBedDepth": 5,
+        "kind": "river",
+        "isolateReflection": false,
+        "angle": "top",
+        "pipeline": "composer",
+        "depth": 1,
+        "reflection": "off",
+        "visible": true,
+        "bedVisibility": 1,
+        "absorptionDistance": 3,
+        "opacity": 0,
+        "foamOpacity": 0,
+        "time": 0,
+        "normalMap": false,
+        "calibration": false,
+        "exposure": 0.2,
+        "transformed": false,
+        "slope": 0.12,
+        "orthographic": true,
+        "localProbe": false,
+        "companion": false,
+        "reverseOrder": false,
+        "earlyGlass": false
+      },
+      "centre": [
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ]
+      ],
+      "stamp": [
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          49.44444444444444,
+          59.44444444444444,
+          57.333333333333336
+        ],
+        [
+          71.66666666666667,
+          79.66666666666667,
+          78
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          38.333333333333336,
+          49.333333333333336,
+          47
+        ],
+        [
+          105,
+          110,
+          109
+        ]
+      ],
+      "edge": [
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ],
+        [
+          105,
+          110,
+          109
+        ],
+        [
+          5,
+          19,
+          16
+        ]
+      ],
+      "camera": {
+        "position": [
+          0,
+          12,
+          0.001
+        ],
+        "quaternion": [
+          -0.7070773177902668,
+          0,
+          0,
+          0.7071362433552122
+        ],
+        "kind": "orthographic",
+        "fov": null,
+        "near": 0.01,
+        "far": 100
+      },
+      "viewport": {
+        "width": 800,
+        "height": 480,
+        "dpr": 1
+      },
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "gpuTimerAvailable": false,
+      "textures": 11,
+      "drawCalls": 3,
+      "sceneTransmission": 0,
+      "glError": 0,
+      "frameCopies": 0
+    }
+  }
+]

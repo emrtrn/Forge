@@ -3,7 +3,8 @@ import type { LayoutLakeWaterBody } from "../../scene/layout";
 import { resolveLakeAppearance } from "../../scene/waterBody";
 import type { LakeGeometry } from "../../terrain/terrainLakeWater";
 import type { TerrainUniforms } from "./terrainMaterial";
-import { riverCausticAtlas, RIVER_CAUSTIC_GLSL } from "./riverCausticAtlas";
+import { riverCausticAtlas, RIVER_CAUSTIC_GLSL, RIVER_CAUSTIC_TRIANGLE_TEXELS } from "./riverCausticAtlas";
+import { RIVER_FLOW_GLSL } from "../riverFlow";
 import type { RiverSurfaceQuery } from "../../terrain/riverSurface";
 import type { ResolvedRiverWater } from "../../scene/riverWater";
 import { terrainCausticPattern } from "./terrainCausticPattern";
@@ -60,7 +61,7 @@ export function registerRiverCaustics(scene: Scene, water: ResolvedRiverWater, s
   // Wet shores borrow the exact same ribbon atlas, even with caustic light off.
   if (!water.caustics?.enabled && !water.shoreWetness?.enabled) return () => {};
   const sizes=[surface,...[...(registries.get(scene)?.sources.values()??[])].flatMap(s=>s.river?[s.river]:[])];
-  if(sizes.reduce((n,s)=>n+s.nx*s.nz+s.triangles.length+4*s.data.indices.length/3,0)>1024*1024)throw new Error("over-budget: River caustics atlas exceeds 16 MiB");
+  if(sizes.reduce((n,s)=>n+s.nx*s.nz+s.triangles.length+RIVER_CAUSTIC_TRIANGLE_TEXELS*s.data.indices.length/3,0)>1024*1024)throw new Error("over-budget: River caustics atlas exceeds 16 MiB");
   const {origin,min}=surface;
   const coverage={min:[min[0]+origin[0],min[1]+origin[2]] as [number,number],nx:surface.nx,nz:surface.nz,spacing:surface.spacing,triangles:new Uint8Array(0)};
   return registerSource(scene,{water,coverage,object,river:surface,flowSpeed:water.flowSpeed});
@@ -149,6 +150,7 @@ uniform vec2 uCausticMotion[8]; // speed, extinction depth
 varying vec3 vCausticWorld;
 float forgeCausticFootprint = 0.0;
 ${RIVER_CAUSTIC_GLSL}
+${RIVER_FLOW_GLSL}
 
 // Evolve two filtered light networks with a moving warp. Explicit LOD keeps
 // derivatives outside divergent mask/body branches and avoids repeated SFU work.
@@ -193,7 +195,19 @@ float forgeCausticLight(vec3 sun) {
     // inputs remain bounded. The world position anchors all tile seams.
     vec2 refracted = -sun.xz / 1.333;
     vec2 samplePosition = vCausticWorld.xz - refracted * depth / sqrt(max(0.01, 1.0 - dot(refracted, refracted)));
-    float pattern = forgeCausticPattern((samplePosition-flow*uCausticTime) / area.w, uCausticTime * motion.x, ${i}, area.w);
+    float pattern;
+    #if FORGE_TERRAIN_RIVER_CAUSTICS > 0
+    if (uCausticRiver[${i}].x >= 0.0 && abs(uCausticRiver[${i}].w) > 0.00001) {
+      vec3 phases = riverFlowPhases(uCausticTime, uCausticRiver[${i}].w, area.w * 2.0);
+      vec2 localFlow = flow / abs(uCausticRiver[${i}].w);
+      float first = forgeCausticPattern((samplePosition-localFlow*phases.x)/area.w,uCausticTime*motion.x,${i},area.w);
+      float second = forgeCausticPattern((samplePosition-localFlow*phases.y)/area.w,uCausticTime*motion.x,${i},area.w);
+      pattern = mix(second, first, phases.z);
+    } else
+    #endif
+    {
+      pattern = forgeCausticPattern(samplePosition / area.w, uCausticTime * motion.x, ${i}, area.w);
+    }
     float fade = smoothstep(0.0, 0.12, depth) * exp(-depth / motion.y) * smoothstep(0.05, 0.3, sun.y);
     result = max(result, pattern * fade * area.z);
     }

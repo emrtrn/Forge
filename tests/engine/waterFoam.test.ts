@@ -4,12 +4,8 @@ import { registerLakeCaustics, createTerrainCausticsUniforms, updateTerrainCaust
 import type { TerrainUniforms } from "../../engine/render-three/terrain/terrainMaterial";
 import type { DataArrayTexture } from "three";
 import assert from "node:assert/strict";
-import { createLakeFoamMask, createWaterContactUniforms, createWaterShoreMask, riverContactSegments, riverContactSettings } from "../../engine/render-three/waterFoam";
-import { defaultWaterContactFoam, validateWaterContactFoam } from "../../engine/scene/waterContactFoam";
-import { validateRiverWater } from "../../tools/saveValidator";
+import { createLakeFoamMask, createWaterShoreMask, riverContactSegments } from "../../engine/render-three/waterFoam";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
-import { moveWorldTerrain } from "../../engine/terrain/worldTerrainMove";
-import { prepareTerrainRiverWaterSource } from "../../engine/terrain/terrainRiverWater";
 import { RiverWaterObject } from "../../engine/render-three/riverWater";
 import { LakeWaterObject } from "../../engine/render-three/lakeWater";
 import { validateWaterBody, resolveLakeAppearance } from "../../engine/scene/waterBody";
@@ -52,46 +48,7 @@ export async function registerWaterFoamTests(check: Check): Promise<void> {
     releaseB.forEach(release => release()); update();
     assert.equal(wet.uShoreWetMask.value, null); assert.equal(light.uCausticMask.value, null);
   });
-  await check("Water contact foam: shared strict save/runtime schema, old defaults and independent clones", async () => {
-    const contactFoam = { ...defaultWaterContactFoam(), enabled: true, obstacles: [{ id: "rock", kind: "ellipse" as const,
-      position: [-20,12,-12] as [number,number,number], radii: [2,1] as [number,number], rotation: 30, halfHeight: 1,
-      width: .3, strength: .8, wakeLength: 4 }] };
-    const doc = createLakeFixture();
-    assert.deepEqual(validateWaterBody({ ...doc.lake, contactFoam }).contactFoam, contactFoam);
-    const river = { id: "river", landscapeRef: "terrain", splineRef: "spline", contactFoam };
-    assert.deepEqual(validateRiverWater(river).contactFoam, contactFoam);
-    assert.deepEqual(resolveRiverWater(river).contactFoam, contactFoam);
-    resolveRiverWater(river).contactFoam!.obstacles[0]!.position[0] = 999;
-    assert.equal(contactFoam.obstacles[0]!.position[0], -20);
-    assert.equal(resolveRiverWater({ ...river, contactFoam: undefined } as unknown as typeof river).contactFoam, undefined);
-    for (const bad of [{ ...contactFoam, enabled: 1 }, { ...contactFoam, obstacles: Array(17).fill(contactFoam.obstacles[0]) },
-      { ...contactFoam, obstacles: [...contactFoam.obstacles,...contactFoam.obstacles] },
-      ...[{ position: [NaN,0,0] }, { radii: [0,1] }, { halfHeight: -1 }, { hidden: "yes" }, { wakeLength: 31 }].map(patch => ({ ...contactFoam, obstacles: [{ ...contactFoam.obstacles[0], ...patch }] }))]) {
-      assert.throws(() => validateWaterContactFoam(bad), /Invalid contact foam/);
-      assert.throws(() => validateRiverWater({ ...river, contactFoam: bad }), /Invalid contact foam/);
-      assert.throws(() => validateWaterBody({ ...doc.lake, contactFoam: bad }), /Invalid contact foam/);
-    }
-    const geometry = await buildLakeGeometry(await prepareLakeSnapshot(doc, doc.lake));
-    const object = new LakeWaterObject({ ...doc.lake, contactFoam }, geometry, null);
-    assert.equal(object.material.uniforms.contactCount!.value, 0, "manual contacts remain loadable but are retired from rendering");
-    object.dispose();
-    for(const position of [[0,14,0], [30,14,0], [-20,30,-12], [-20,0,-12]]) {
-      const invalid = new LakeWaterObject({ ...doc.lake, contactFoam: { ...contactFoam, obstacles: [{ ...contactFoam.obstacles[0]!, position: position as [number,number,number] }] } },geometry,null);
-      assert.equal(invalid.material.uniforms.contactCount!.value,0,"dry island, disconnected basin, air and submerged sources rejected"); invalid.dispose();
-    }
-    const uniforms = createWaterContactUniforms(contactFoam,[-1e6,0,-1e6]);
-    assert.equal(uniforms.contactCentre.value[0]!.x,1e6-20);
-    assert.equal(createWaterContactUniforms({ ...contactFoam, enabled: false }).contactCount.value,0);
-    assert.equal(createWaterContactUniforms({ ...contactFoam, obstacles: [{ ...contactFoam.obstacles[0]!, hidden: true }] }).contactCount.value,0);
-    const moved=moveWorldTerrain(doc.def,"terrain",[{...doc.lake,contactFoam}],[5,3,7],[{...river,coordinateSpace:"world"}]);
-    assert.deepEqual(moved.lakes[0]!.contactFoam!.obstacles[0]!.position,[-15,15,-5]);
-    assert.deepEqual(moved.rivers[0]!.contactFoam!.obstacles[0]!.position,[-15,15,-5]);
-    assert.deepEqual(contactFoam.obstacles[0]!.position,[-20,12,-12],"moves never mutate source/undo state");
-    doc.def.splines=[{id:"spline",coordinateSpace:"world",points:[{id:"a",position:[-20,12,-12],width:4,falloff:2},{id:"b",position:[20,12,-12],width:4,falloff:2}],segments:[{id:"ab",startPointId:"a",endPointId:"b"}]}];
-    const source=await prepareTerrainRiverWaterSource(doc,resolveRiverWater({...river,coordinateSpace:"world",surfaceLevel:12}));
-    assert.deepEqual(source.contactFoam!.obstacles[0]!.position,[-20,2,-12],"world proxies resolve in the exact same local frame as river geometry");
-  });
-  await check("River contact foam: real wet/dry contours, submerged ribbon/hole exclusion, distance field and source gate", async () => {
+  await check("River contact foam: real wet/dry contours, ribbon/hole exclusion and distance field", async () => {
     const positions = [0,2,0, 4,3,0, 0,2,4, 4,3,4], indices=[0,1,2,1,3,2];
     const depths=[1,-1,1,-1];
     const shore=riverContactSegments(positions,depths,indices);
@@ -101,15 +58,12 @@ export async function registerWaterFoamTests(check: Check): Promise<void> {
     assert.deepEqual(riverContactSegments(positions,depths,[]),[],"holes are not shores");
     const mask=createWaterShoreMask([0,0],[4,4],shore,.4);
     assert.equal(mask.image.width,40); assert.ok(mask.image.data.some(v=>v<64)); mask.dispose();
-    const settings = { ...defaultWaterContactFoam(), enabled:true, obstacles:[{ id:"pier",kind:"capsule" as const,position:[1,2.25,1] as [number,number,number],radii:[1,.5] as [number,number],halfHeight:1,rotation:0,width:.2,strength:1,wakeLength:5 }] };
-    assert.equal(riverContactSettings(settings,positions,depths,indices)!.obstacles.length,1);
-    for(const position of [[3,2.75,1],[10,2,10],[1,10,1]]) assert.equal(riverContactSettings({ ...settings,obstacles:[{ ...settings.obstacles[0]!,position:position as [number,number,number] }] },positions,depths,indices)!.obstacles.length,0);
-    const object=new RiverWaterObject({...resolveRiverWater({id:"river",landscapeRef:"terrain",splineRef:"spline",contactFoam:settings}),
+    const object=new RiverWaterObject({...resolveRiverWater({id:"river",landscapeRef:"terrain",splineRef:"spline",contactFoam:{enabled:true,shoreWidth:.6,scale:.8,speed:.3,obstacles:[]}}),
       spline:{id:"spline",points:[{id:"a",position:[0,0,0],width:4,falloff:1},{id:"b",position:[0,0,8],width:4,falloff:1}],segments:[{id:"ab",startPointId:"a",endPointId:"b"}]},
       position:[0,0,0],rotation:[0,0,0],foamNoiseMap:null,heightAt:x=>Math.abs(x)-2},null);
     const texture=object.material.uniforms.realShoreMask!.value;
     assert.ok(texture);let disposed=false;texture.addEventListener("dispose",()=>{disposed=true;});
-    assert.equal(object.children.length,0,"obstacles add no overlay meshes/draws");object.dispose();assert.equal(disposed,true);
+    assert.equal(object.children.length,0,"shore foam adds no overlay meshes/draws");object.dispose();assert.equal(disposed,true);
   });
   await check("Lake wet shore: reversible scene ownership, visibility, terrain binding and unchanged terrain data", async () => {
     const doc = createLakeFixture(); doc.lake.appearance = { shoreWetnessEnabled: true };

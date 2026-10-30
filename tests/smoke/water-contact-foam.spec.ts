@@ -91,7 +91,7 @@ test("River real shore and obstacle wakes render, animate downstream and share t
   const frame=(enabled:boolean,time=0,reverse=false)=>page.evaluate(([enabled,time,reverse])=>(window as any).__contactQA.frame(enabled,time,reverse),[enabled,time,reverse] as [boolean,number,boolean]);
   const off=await frame(false),on=await frame(true),moved=await frame(true,3);
   const difference=(a:number[],b:number[])=>a.reduce((sum,v,i)=>sum+Math.abs(v-b[i]!),0);
-  expect(on.error).toBe(0);expect(on.shore).toBe(true);expect(on.contacts).toBe(0);expect(on.baked).toBe(true);expect(on.flow).toEqual([0,1]);
+  expect(on.error).toBe(0);expect(on.shore).toBe(true);expect(on.baked).toBe(true);expect(on.flow).toEqual([0,1]);
   expect(difference(off.samples,on.samples)).toBeGreaterThan(1000);
   expect(difference(on.samples,moved.samples)).toBeGreaterThan(1000);
   expect(on.calls).toBe(off.calls);

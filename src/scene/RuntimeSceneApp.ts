@@ -2308,7 +2308,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     void this.lakes?.setQuality(lakeQuality(settings)).catch(error => console.warn("[lake-quality]", error));
-    for(const river of this.riverWaterObjects)river.setShoreWetnessAllowed(settings.lakeShoreWetnessAllowed);
+    for(const river of this.riverWaterObjects) {
+      river.setShoreWetnessAllowed(settings.lakeShoreWetnessAllowed);
+      river.setRefractionAllowed(settings.lakeReflectionQuality !== "off");
+    }
     this.applyRuntimePostProcess();
   }
 
@@ -6058,6 +6061,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             ...resolved,
             ...source,
             foamNoiseMap,
+            refractionAllowed: this.qualitySettings.lakeReflectionQuality !== "off",
             ...(bakedFoam?{bakedFoam}:{}),
             environmentProbes: () => this.eligibleProbeBakes(),
           },

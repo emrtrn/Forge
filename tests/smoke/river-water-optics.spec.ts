@@ -260,31 +260,12 @@ test("river sunlight: existing single/cascade shadows attenuate both sun terms, 
   }
   await evidence(info,"sun-shadow",measurements);
 });
-
-
-test("retired river point foam: legacy records cannot re-enable manual rings in either surface style", async ({page},info) => {
-  const shots = [];
-  for (const surfaceStyle of ["legacy","lake"] as const) {
-    for (const angle of ["top","grazing"] as const) {
-      const off = await frame(page,{surfaceStyle,pointFoam:false,foamOpacity:0.92,angle,depth:5,opacity:1,
-        bedVisibility:0,pipeline:"composer",time:12,reflection:"off",sunTest:false,baselineFoam:false});
-      const legacyRecord = await frame(page,{pointFoam:true});
-      expect(legacyRecord.glError).toBe(0);
-      expect(legacyRecord.stamp).toEqual(off.stamp);
-      expect(legacyRecord.edge).toEqual(off.edge);
-      shots.push({surfaceStyle,angle,off,legacyRecord});
-    }
-  }
-  await evidence(info,"retired-point-foam",shots);
-});
-
-
-test("Lake-like river: flat interface matches Lake Fresnel energy at top and grazing angles", async ({ page }, info) => {
+test("River surface: flat interface matches Lake Fresnel energy at top and grazing angles", async ({ page }, info) => {
   const measurements = [];
   for (const angle of ["top", "grazing"] as const) {
     const signals: number[] = [];
     for (const kind of ["river", "lake"] as const) {
-      const red = await frame(page, { kind, surfaceStyle:"lake", surfaceStrength:0, surfaceRoughness:0.2,
+      const red = await frame(page, { kind, lakePlanar:false, surfaceStrength:0, surfaceRoughness:0.2,
         isolateReflection:true, angle, depth:2, opacity:0, bedVisibility:1, absorptionDistance:100,
         reflection:"red", pipeline:"composer", normalMap:false });
       const blue = await frame(page, {reflection:"blue"});
@@ -297,10 +278,10 @@ test("Lake-like river: flat interface matches Lake Fresnel energy at top and gra
   await evidence(info,"lake-like-interface",measurements);
 });
 
-test("Lake-like river: slope, transformed orthographic view, animation and strength-zero remain stable", async ({ page }, info) => {
+test("River surface: slope, transformed orthographic view, animation and strength-zero remain stable", async ({ page }, info) => {
   const measurements = [];
   for (const orthographic of [false,true]) {
-    const base = await frame(page,{surfaceStyle:"lake",surfaceStrength:2,surfaceRoughness:0.2,
+    const base = await frame(page,{surfaceStrength:2,surfaceRoughness:0.2,
       isolateReflection:true,normalMap:true,slope:0.12,angle:"grazing",reflection:"red",opacity:1,pipeline:"composer",orthographic,time:0,transformed:false});
     const moved = await frame(page,{transformed:true});
     expect(Math.max(...moved.centre.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-base.centre[i]![c]!))))).toBeLessThan(3);
@@ -315,34 +296,231 @@ test("Lake-like river: slope, transformed orthographic view, animation and stren
   await evidence(info,"lake-like-motion",measurements);
 });
 
-test("Lake-like river: opt-in removes legacy sun attenuation without extra reflection targets", async ({ page }, info) => {
-  // Warm both programs and their borrowed textures before counting repeated switches.
-  await frame(page,{surfaceStyle:"lake",surfaceStrength:0,reflection:"off",sunTest:true,sunTerm:"glint",pipeline:"composer"});
-  const legacy = await frame(page,{surfaceStyle:"legacy",surfaceStrength:0,surfaceRoughness:0.2,
-    isolateReflection:true,normalMap:false,angle:"grazing",depth:2,opacity:1,
-    reflection:"off",sunTest:true,sunTerm:"glint",pipeline:"composer",time:0});
-  await page.screenshot({path:info.outputPath("river-legacy-sun.png")});
-  const enhanced = await frame(page,{surfaceStyle:"lake"});
-  await page.screenshot({path:info.outputPath("river-lake-like-sun.png")});
-  expect(channel(enhanced,0)).toBeGreaterThan(channel(legacy,0)+2);
-  expect(enhanced.textures).toBe(legacy.textures);
-  const rebound = await frame(page,{surfaceStyle:"legacy"});
-  expect(rebound.centre).toEqual(legacy.centre);
-  expect(enhanced.glError).toBe(0);
-  await evidence(info,"lake-like-sun",{legacy,enhanced,rebound});
-});
 
 
-test("Lake-like river: twenty style and quality switches retain borrowed resources", async ({page},info) => {
-  await frame(page,{surfaceStyle:"lake",normalMap:true,reflection:"red",reflectionQuality:"high"});
-  const warmed = await frame(page,{surfaceStyle:"legacy",reflectionQuality:"low"});
+test("River surface: twenty quality switches retain borrowed resources", async ({page},info) => {
+  await frame(page,{normalMap:true,reflection:"red",reflectionQuality:"high"});
+  const warmed = await frame(page,{reflectionQuality:"low"});
   const samples = [];
   for(let cycle=0;cycle<20;cycle++) {
-    const shot = await frame(page,{surfaceStyle:cycle%2 ? "legacy":"lake",
+    const shot = await frame(page,{
       reflection:cycle%3 ? "red":"off", reflectionQuality:cycle%2 ? "low":"high"});
     expect(shot.textures).toBe(warmed.textures);
     expect(shot.glError).toBe(0);
     samples.push({cycle,textures:shot.textures});
   }
   await evidence(info,"lake-like-lifecycle",{warmed,samples});
+});
+
+test("River R2: actual bed depth controls spectral transmission on sloped and transformed surfaces", async ({page},info) => {
+  const shots = [];
+  for (const orthographic of [false,true]) {
+    const shallow = await frame(page,{kind:"river",sceneTransmission:true,pipeline:"composer",
+      orthographic,slope:0.12,depth:1,sceneBedDepth:0.1,opacity:0,bedVisibility:1,absorptionDistance:3,
+      reflection:"off",surfaceStrength:0,transformed:false});
+    const deep = await frame(page,{sceneBedDepth:5});
+    expect(shallow.sceneTransmission).toBe(1);
+    expect(deep.frameCopies).toBe(1);
+    expect(deep.glError).toBe(0);
+    expect(contrast(shallow)).toBeGreaterThan(contrast(deep)+10);
+    expect(channel(deep,1)-channel(deep,0)).toBeGreaterThan(3);
+    const moved = await frame(page,{transformed:true});
+    expect(Math.max(...moved.centre.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-deep.centre[i]![c]!))))).toBeLessThan(3);
+    const fallback = await frame(page,{sceneTransmission:false,transformed:false});
+    expect(fallback.sceneTransmission).toBe(0);
+    expect(contrast(fallback)).toBeGreaterThan(contrast(deep)+10);
+    shots.push({orthographic,shallow,deep,moved,fallback});
+    await frame(page,{sceneTransmission:true});
+    await page.screenshot({path:info.outputPath(`river-r2-depth-${orthographic}.png`)});
+  }
+  await evidence(info,"river-r2-depth",shots);
+});
+
+test("River R2: visible dry shore fades water and foam despite a deep baked ribbon", async ({page},info) => {
+  const shots = [];
+  for (const orthographic of [false,true]) {
+    const off = await frame(page,{sceneTransmission:true,pipeline:"composer",orthographic,
+      slope:0.12,depth:5,sceneBedDepth:0,visible:false,reflection:"red",normalMap:true,
+      surfaceStrength:2,foamOpacity:0.92,opacity:0.65});
+    for (const sceneBedDepth of [0,0.005,0.02,0.1,1]) {
+      const on = await frame(page,{visible:true,sceneBedDepth});
+      expect(on.glError).toBe(0);
+      if (sceneBedDepth <= 0.005) expect(Math.max(...on.centre.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-off.centre[i]![c]!))))).toBeLessThan(3);
+      shots.push({orthographic,sceneBedDepth,off,on});
+    }
+    await page.screenshot({path:info.outputPath(`river-r2-shore-${orthographic}.png`)});
+  }
+  await evidence(info,"river-r2-shore",shots);
+});
+
+test("River R2: volume sunlight respects single and cascade shadows", async ({page},info) => {
+  const shots = [];
+  for (const shadowSystem of ["single","cascade","disabled"] as const) {
+    const clear = await frame(page,{sceneTransmission:true,pipeline:"composer",
+      sunTest:true,sunTerm:"all",shadowSystem,shadowCaster:false,angle:"grazing",depth:5,
+      absorptionDistance:0.5,opacity:1,bedVisibility:0,calibration:true,reflection:"off",surfaceStrength:0,exposure:1});
+    const shadow = await frame(page,{shadowCaster:true});
+    const differences = clear.centre.map((p,i)=>mean(p)-mean(shadow.centre[i]!));
+    if (shadowSystem === "disabled") expect(Math.max(...differences.map(Math.abs))).toBeLessThan(2);
+    else {
+      expect(mean(differences.slice(0,3))).toBeGreaterThan(2);
+      expect(Math.abs(mean(differences.slice(3)))).toBeLessThan(2);
+    }
+    expect(shadow.glError).toBe(0);
+    shots.push({shadowSystem,clear,shadow,differences});
+  }
+  await evidence(info,"river-r2-shadow",shots);
+});
+
+test("River R2: shared copy excludes earlier water and releases on repeated consumer switches", async ({page},info) => {
+  const shots = [];
+  for (const kind of ["river","lake"] as const) {
+    const base = await frame(page,{kind,sceneTransmission:true,pipeline:"composer",depth:2,
+      opacity:0.35,bedVisibility:0.9,reflection:"off",surfaceStrength:0,companion:false,reverseOrder:false});
+    const earlierWater = await frame(page,{companion:true,reverseOrder:true});
+    expect(earlierWater.frameCopies).toBe(1);
+    expect(earlierWater.centre).toEqual(base.centre);
+    const glass = await frame(page,{companion:false,earlyGlass:true});
+    expect(glass.centre).toEqual(base.centre);
+    expect(glass.frameCopies).toBe(1);
+    await frame(page,{earlyGlass:false,companion:true});
+    const reverse = await frame(page,{reverseOrder:false});
+    expect(reverse.frameCopies).toBe(1);
+    expect(reverse.glError).toBe(0);
+    shots.push({kind,base,earlierWater,glass,reverse});
+  }
+  // Normalize both composer attachments after the preceding Lake/companion
+  // scenarios before measuring the River-only allocate/release cycle.
+  await frame(page,{kind:"river",companion:false,visible:false});
+  const warm = await frame(page,{visible:true});
+  for (let cycle=0;cycle<20;cycle++) {
+    const hidden = await frame(page,{visible:false});
+    expect(hidden.sceneTransmission).toBe(0);
+    expect(hidden.frameCopies).toBe(0);
+    expect(hidden.textures).toBeLessThan(warm.textures);
+    expect(hidden.drawCalls + 1).toBe(warm.drawCalls);
+    const restored = await frame(page,{visible:true});
+    expect(restored.textures).toBe(warm.textures);
+    expect(restored.frameCopies).toBe(1);
+    expect(restored.centre).toEqual(warm.centre);
+    expect(restored.glError).toBe(0);
+  }
+  const direct = await frame(page,{pipeline:"direct"});
+  expect(direct.sceneTransmission).toBe(0);
+  expect(direct.glError).toBe(0);
+  await evidence(info,"river-r2-shared-copy",{shots,warm,direct});
+});
+
+test("River R3: sloped refraction moves the bed, preserves transforms, zero/Low/direct release the atlas", async ({page},info) => {
+  const measurements=[];
+  const diff=(a:Snapshot,b:Snapshot)=>a.refractionSamples.reduce((sum,p,i)=>sum+p.reduce((n,v,c)=>n+Math.abs(v-b.refractionSamples[i]![c]!),0),0);
+  for(const orthographic of [false,true]) {
+    const off=await frame(page,{kind:"river",refractionQA:true,refractionStrength:0,sceneTransmission:true,pipeline:"composer",
+      surfaceStrength:2,normalMap:true,slope:.12,depth:1,opacity:0,bedVisibility:1,absorptionDistance:8,orthographic,time:1});
+    const on=await frame(page,{refractionStrength:1.5});
+    await evidence(info,"river-r3-progress",{orthographic,off,on,difference:diff(on,off)});
+    expect(on.refractionFallback).toBeNull();expect(on.refraction).toBe(1.5);
+    expect(on.refractionBytes).toBeGreaterThan(0);expect(on.refractionBytes).toBeLessThanOrEqual(8*1024*1024);
+    expect(diff(on,off)).toBeGreaterThan(10);expect(on.drawCalls).toBe(off.drawCalls);
+    const moved=await frame(page,{transformed:true});
+    expect(diff(moved,on)).toBeLessThan(20);
+    const low=await frame(page,{transformed:false,reflectionQuality:"low"});
+    expect(low.refraction).toBe(0);expect(low.refractionBytes).toBe(0);
+    const direct=await frame(page,{reflectionQuality:"medium",pipeline:"direct"});
+    expect(direct.refraction).toBe(0);
+    const restored=await frame(page,{pipeline:"composer",refractionStrength:0});
+    expect(restored.refractionSamples).toEqual(off.refractionSamples);
+    measurements.push({orthographic,off,on,moved,low,direct,restored});
+    await frame(page,{refractionStrength:1.5});
+    await page.screenshot({path:info.outputPath(`river-r3-${orthographic}.png`)});
+  }
+  await evidence(info,"river-r3-motion",measurements);
+});
+
+test("River R3: foreground rock, real holes, dry bank and shallow edge cannot leak shifted colour", async ({page},info)=>{
+  const shots=[];
+  for(const patch of [{foreground:true,hole:false,dryBank:false,depth:1},
+    {foreground:false,hole:true,dryBank:false,depth:1},
+    {foreground:false,hole:false,dryBank:true,depth:1},
+    {foreground:false,hole:false,dryBank:false,depth:.005}]) {
+    const off=await frame(page,{refractionQA:true,sceneTransmission:true,pipeline:"composer",normalMap:true,
+      surfaceStrength:2,refractionStrength:0,opacity:0,bedVisibility:1,absorptionDistance:8,time:2,...patch});
+    const on=await frame(page,{refractionStrength:2});
+    await evidence(info,"river-r3-guard-progress",{patch,off,on});
+    expect(on.glError).toBe(0);expect(on.refractionFallback).toBeNull();
+    if(patch.foreground) expect(on.redPixels).toBe(off.redPixels);
+    if(patch.hole) expect(on.protectedSamples).toEqual(off.protectedSamples);
+    if(patch.dryBank) expect(on.protectedSamples.filter((_,i)=>i%2===1)).toEqual(off.protectedSamples.filter((_,i)=>i%2===1));
+    if(patch.depth<.02) expect(on.refractionSamples).toEqual(off.refractionSamples);
+    shots.push({patch,off,on});
+    await page.screenshot({path:info.outputPath(`river-r3-guard-${shots.length}.png`)});
+  }
+  await evidence(info,"river-r3-guards",shots);
+});
+
+test("River R3: vertex waves, mixed water levels and twenty quality ceilings keep one snapshot and bounded resources", async({page},info)=>{
+  test.setTimeout(240_000);
+  const shots=[];
+  for(const time of [1,4]) {
+    const off=await frame(page,{refractionQA:true,refractionStrength:0,sceneTransmission:true,pipeline:"composer",normalMap:true,
+      surfaceStrength:2,waveAmplitude:.1,time,depth:1,opacity:0,bedVisibility:1,absorptionDistance:8});
+    const on=await frame(page,{refractionStrength:1.5});
+    expect(on.refraction).toBe(1.5);expect(on.glError).toBe(0);
+    expect(on.refractionSamples).not.toEqual(off.refractionSamples);
+    for(const companionHeight of [-.4,.4]) {
+      const mixed=await frame(page,{companion:true,companionKind:"lake",companionHeight,reverseOrder:true});
+      expect(mixed.refractionSamples).toEqual(on.refractionSamples);
+      expect(mixed.frameCopies).toBe(1);expect(mixed.glError).toBe(0);
+      const reverse=await frame(page,{reverseOrder:false});
+      expect(reverse.frameCopies).toBe(1);expect(reverse.glError).toBe(0);
+      shots.push({time,off,on,mixed,reverse});
+      await frame(page,{companion:false});
+    }
+  }
+  await frame(page,{refractionAllowed:false,companion:false});
+  const warm=await frame(page,{refractionAllowed:true});
+  const cycles=[];
+  for(let cycle=0;cycle<20;cycle++) {
+    const low=await frame(page,{refractionAllowed:false});
+    expect(low.refraction).toBe(0);expect(low.refractionBytes).toBe(0);
+    expect(low.textures).toBe(warm.textures-1);
+    const restored=await frame(page,{refractionAllowed:true});
+    expect(restored.refraction).toBe(1.5);expect(restored.textures).toBe(warm.textures);
+    expect(restored.refractionSamples).toEqual(warm.refractionSamples);
+    expect(restored.frameCopies).toBe(1);expect(restored.glError).toBe(0);
+    cycles.push({cycle,textures:restored.textures,bytes:restored.refractionBytes});
+  }
+  await evidence(info,"river-r3-mixed-lifecycle",{shots,warm,cycles});
+});
+
+test("River flow regression: high speed retains 2D normals after minutes and hours without accumulating shear",async({page},info)=>{
+  const shots=[];
+  for(const flowSpeed of [1,5])for(const time of [60,3600]) {
+    const before=await frame(page,{normalDiagnostic:"optical",realNormalMap:true,normalMap:true,unboundedFlow:true,
+      surfaceStrength:2,waveAmplitude:0,flowSpeed,time,sampleSpacing:1,depth:2,opacity:1,pipeline:"direct"});
+    const after=await frame(page,{unboundedFlow:false});
+    shots.push({flowSpeed,time,before,after});await evidence(info,"river-flow-progress",shots);
+    expect(after.glError).toBe(0);expect(after.normalStats!.along).toBeGreaterThan(100);
+    expect(after.normalStats!.anisotropy).toBeLessThan(3);
+    if(time===60) expect(before.normalStats!.anisotropy).toBeGreaterThan(after.normalStats!.anisotropy*1.5);
+  }
+  await evidence(info,"river-flow-bounded",shots);
+});
+
+test("River sun regression: shared-vertex wave normals remove diagonal jumps under HDR sun and bloom",async({page},info)=>{
+  const face=await frame(page,{normalDiagnostic:"geometric",waveAmplitude:.1,sampleSpacing:1,surfaceStrength:0,
+    flowSpeed:1,time:60,depth:2,opacity:1,pipeline:"direct"});
+  const smooth=await frame(page,{normalDiagnostic:"smooth"});
+  await evidence(info,"river-normal-edges",{face,smooth});
+  expect(face.normalStats!.edgeCount).toBeGreaterThan(100);
+  expect(face.normalStats!.edgeP95).toBeGreaterThan(2);
+  expect(smooth.normalStats!.edgeP95).toBeLessThan(face.normalStats!.edgeP95*.7);
+  const before=await frame(page,{normalDiagnostic:"beauty",hdrSun:true,bloom:true,faceShading:true,unboundedFlow:true,
+    realNormalMap:true,normalMap:true,surfaceStrength:2,surfaceRoughness:.2,angle:"grazing",pipeline:"composer",flowSpeed:1,time:60});
+  await page.screenshot({path:info.outputPath("river-hdr-before.png")});
+  const after=await frame(page,{faceShading:false,unboundedFlow:false});
+  await page.screenshot({path:info.outputPath("river-hdr-after.png")});
+  expect(after.sunDiscRadiance[0]).toBeGreaterThan(1000);expect(after.glError).toBe(0);
+  expect(after.drawCalls).toBe(before.drawCalls);
+  await evidence(info,"river-hdr-sun",{before,after});
 });

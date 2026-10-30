@@ -12,6 +12,7 @@ import { prepareTerrainRiverWaterSource } from "../../engine/terrain/terrainRive
 import { createTerrainSplinePatches } from "../../engine/terrain/terrainSplines";
 import { createFlatTerrainTile, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { validateRiverWater } from "../../tools/saveValidator";
+import { createRiverRefractionSurface, RIVER_REFRACTION_LIMITS } from "../../engine/render-three/riverRefraction";
 
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 function fixture() {
@@ -28,27 +29,28 @@ function fixture() {
   })), segments: [0, 1].map((i) => ({ id: `s${i}`, startPointId: String(i), endPointId: String(i + 1),
     deform: { enabled: true, flatten: true, raiseTerrain: true, lowerTerrain: true, targetOffset: -2 } })) }];
   const water = resolveRiverWater({ id: "water", landscapeRef: "terrain", splineRef: "river", coordinateSpace: "world", surfaceLevel: 9,
-    segmentProfiles: [{ splineSegmentRef: "s1", flowSpeedMultiplier: 2, rapidness: 0.8 }],
-    foamStamps: [{ id: "ring", kind: "point", position: [def.origin[0] + 32, 9, def.origin[2] + 16], radius: 2, intensity: 0.5 }] });
+    segmentProfiles: [{ splineSegmentRef: "s1", flowSpeedMultiplier: 2, rapidness: 0.8 }] });
   return { def, tiles, water };
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
-  await checkAsync("terrain river: Lake-like surface opt-in survives save/read and rejects malformed settings", async () => {
+  await checkAsync("terrain river: surface controls survive save/read and rejects malformed settings", async () => {
     const base = { id: "river", landscapeRef: "land", splineRef: "spline" };
-    assert.equal(resolveRiverWater(base).surfaceStyle, "legacy");
-    assert.equal(validateRiverWater(base).surfaceStyle, undefined, "old records must not acquire a new style on save");
-    const source = { ...base, surfaceStyle: "lake" as const, surfaceStrength: 1.75, surfaceRoughness: 0.24 };
+    assert.equal(resolveRiverWater(base).surfaceStrength, 2);
+    assert.equal(validateRiverWater(base).surfaceStrength, undefined, "omitted controls remain omitted on save");
+    const source = { ...base, surfaceStrength: 1.75, surfaceRoughness: 0.24, refractionStrength: 1.1 };
     const saved = validateRiverWater(source);
     assert.deepEqual(saved, source);
     const resolved = resolveRiverWater(saved);
-    assert.equal(resolved.surfaceStyle, "lake");
     assert.equal(resolved.surfaceStrength, 1.75);
     assert.equal(resolved.surfaceRoughness, 0.24);
-    for (const patch of [{surfaceStyle:"unknown"}, {surfaceStrength:NaN}, {surfaceStrength:-1},
-      {surfaceStrength:2.1}, {surfaceRoughness:0}, {surfaceRoughness:Infinity}, {surfaceRoughness:"0.2"}]) {
-      assert.throws(() => validateRiverWater({...source,...patch}), /river water surface/);
-      assert.throws(() => resolveRiverWater({...source,...patch} as typeof source), /river water surface/);
+    assert.equal(resolved.refractionStrength, 1.1);
+    assert.equal(resolveRiverWater(base).refractionStrength, 0.65);
+    for (const patch of [{surfaceStrength:NaN}, {surfaceStrength:-1},
+      {surfaceStrength:2.1}, {surfaceRoughness:0}, {surfaceRoughness:Infinity}, {surfaceRoughness:"0.2"},
+      {refractionStrength:-1}, {refractionStrength:2.1}, {refractionStrength:NaN}, {refractionStrength:"1"}]) {
+      assert.throws(() => validateRiverWater({...source,...patch}), /river water (surface|refraction)/);
+      assert.throws(() => resolveRiverWater({...source,...patch} as typeof source), /river water (surface|refraction)/);
     }
     const spline = { id: "spline", points: [
       {id:"a",position:[0,2,0] as [number,number,number],width:3,falloff:0},
@@ -56,14 +58,73 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
       segments:[{id:"ab",startPointId:"a",endPointId:"b"}] };
     const item = {...resolved,spline,position:[0,0,0] as [number,number,number],rotation:[0,0,0] as [number,number,number],foamNoiseMap:null};
     const enhanced = createRiverWaterObject(item,null);
-    const legacy = createRiverWaterObject({...item,surfaceStyle:"legacy"},null);
-    assert.deepEqual(enhanced.geometry.getAttribute("position").array,legacy.geometry.getAttribute("position").array,
-      "a material edit must not change slope, bounds or baked water coverage");
-    assert.equal(enhanced.material.defines.FORGE_RIVER_LAKE_SURFACE,1);
-    assert.equal(legacy.material.defines.FORGE_RIVER_LAKE_SURFACE,undefined);
+    assert.equal(enhanced.userData.waterSceneTransmission, true);
     assert.equal(enhanced.material.uniforms.surfaceStrength!.value,1.75);
     assert.equal(enhanced.material.uniforms.surfaceRoughness!.value,0.24);
-    enhanced.dispose();legacy.dispose();
+    enhanced.dispose();
+  });
+  await checkAsync("River refraction: exact atlas keeps sloped triangles, signed depth, holes and bounded bytes", async () => {
+    const spline = {id:"r",points:[{id:"a",position:[0,3,0] as [number,number,number],width:2,falloff:0},
+      {id:"b",position:[8,1,0] as [number,number,number],width:2,falloff:0}],segments:[{id:"ab",startPointId:"a",endPointId:"b"}]};
+    const ribbon = buildRiverWaterRibbon(spline,{surfaceLevel:3,widthScale:1,sampleSpacing:.5,
+      heightAt:(x,z)=>x>3&&x<5?null:z>1?5:0});
+    const before = structuredClone(ribbon);
+    const atlas = createRiverRefractionSurface(ribbon);
+    assert.ok(atlas.bytes <= RIVER_REFRACTION_LIMITS.bytes);
+    assert.equal(atlas.texture.image.data.byteLength,atlas.bytes);
+    const pixels = atlas.texture.image.data as Float32Array;
+    for(let v=0;v<ribbon.positions.length/3;v++) {
+      const i=(atlas.bases.z+v*3)*4;
+      assert.deepEqual(Array.from(pixels.slice(i,i+4)),[...ribbon.positions.slice(v*3,v*3+3),ribbon.bedDepths[v]!].map(Math.fround));
+      assert.deepEqual(Array.from(pixels.slice(i+4,i+8)),[...ribbon.uvs.slice(v*2,v*2+2),ribbon.shoreDistances[v]!,ribbon.rapidness[v]!].map(Math.fround));
+      assert.equal(pixels[i+8],Math.fround(ribbon.flowSpeedMultipliers[v]!));
+    }
+    for(let t=0;t<ribbon.indices.length/3;t++) assert.deepEqual(Array.from(pixels.slice((atlas.bases.y+t)*4,(atlas.bases.y+t)*4+3)),ribbon.indices.slice(t*3,t*3+3));
+    for(let c=0;c<atlas.grid.x*atlas.grid.y;c++) assert.ok(pixels[c*4+1]!<=16);
+    assert.ok(ribbon.bedDepths.some(d=>d<0));
+    assert.deepEqual(ribbon,before,"atlas preparation never changes the source wet/dry geometry");
+    atlas.texture.dispose();
+    assert.throws(()=>createRiverRefractionSurface({...ribbon,indices:[-1,0,1]}),/triangle index/);
+    assert.throws(()=>createRiverRefractionSurface({...ribbon,uvs:[NaN,...ribbon.uvs.slice(1)]}),/attributes/);
+    assert.throws(()=>createRiverRefractionSurface({...ribbon,indices:Array.from({length:17},()=>ribbon.indices.slice(0,3)).flat()}),/16 candidate/);
+    assert.throws(()=>createRiverRefractionSurface({...ribbon,positions:new Array((RIVER_REFRACTION_LIMITS.vertices+1)*3).fill(0)}),/budget/);
+  });
+  await checkAsync("River refraction: strength zero and Low skip allocation; mesh disposal owns the atlas", async () => {
+    const spline={id:"r",points:[{id:"a",position:[0,0,0] as [number,number,number],width:2,falloff:0},
+      {id:"b",position:[8,-1,0] as [number,number,number],width:2,falloff:0}],segments:[{id:"ab",startPointId:"a",endPointId:"b"}]};
+    const base={...resolveRiverWater({id:"r",landscapeRef:"l",splineRef:"r"}),spline,position:[1e6,12,-1e6] as [number,number,number],rotation:[0,30,0] as [number,number,number],foamNoiseMap:null};
+    for(const patch of [{refractionStrength:0},{reflectionQuality:"low" as const}]) {
+      const object=createRiverWaterObject({...base,...patch},null);
+      assert.equal(object.material.defines.FORGE_RIVER_REFRACTION,undefined);
+      assert.equal(object.userData.riverRefractionBytes,undefined);
+      object.dispose();
+    }
+    const object=createRiverWaterObject(base,null);
+    assert.equal(object.material.defines.FORGE_RIVER_REFRACTION,1);
+    const atlas=()=>(object as unknown as {refractionSurface:ReturnType<typeof createRiverRefractionSurface>}).refractionSurface;
+    let disposed=0;atlas().texture.addEventListener("dispose",()=>disposed++);
+    const positions=object.geometry.getAttribute("position").array;
+    for(let cycle=0;cycle<20;cycle++) {
+      object.setRefractionAllowed(false);
+      assert.equal(disposed,cycle+1);
+      assert.equal(object.userData.riverRefractionBytes,undefined);
+      assert.equal(object.material.uniforms.riverRefractionStrength!.value,0);
+      object.setRefractionAllowed(true);
+      assert.equal(object.geometry.getAttribute("position").array,positions);
+      assert.equal(object.material.defines.FORGE_RIVER_REFRACTION,1);
+      atlas().texture.addEventListener("dispose",()=>disposed++);
+    }
+    object.dispose();object.setRefractionAllowed(false);object.setRefractionAllowed(true);object.dispose();
+    assert.equal(disposed,21,"a disposed mesh cannot revive its atlas through a late quality update");
+    const branches={id:"dense",points:Array.from({length:17},(_,i)=>[
+      {id:`a${i}`,position:[0,0,0] as [number,number,number],width:2,falloff:0},
+      {id:`b${i}`,position:[8,-1,0] as [number,number,number],width:2,falloff:0}]).flat(),
+      segments:Array.from({length:17},(_,i)=>({id:`s${i}`,startPointId:`a${i}`,endPointId:`b${i}`}))};
+    const fallback=createRiverWaterObject({...base,spline:branches},null);
+    assert.equal(fallback.material.defines.FORGE_RIVER_REFRACTION,undefined);
+    assert.match(fallback.userData.riverRefractionFallback,/budget|exceeded|exceeds/);
+    assert.ok(fallback.geometry.index!.count>0,"budget overflow preserves the R2 surface");
+    fallback.dispose();
   });
   await checkAsync("terrain river: sun receiver matches camera light layers and releases cascade state", async () => {
     const scene = new Scene(), camera = new PerspectiveCamera(), uniforms = createRiverSunShadowUniforms();
@@ -116,13 +177,12 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.equal(disposed, 0, "Water does not dispose scene-owned textures");
     global.dispose(); local.dispose();
   });
-  await checkAsync("terrain river: optical rendering preserves transformed slope, point stamps and resource disposal", async () => {
+  await checkAsync("terrain river: optical rendering preserves transformed slope and resource disposal", async () => {
     const spline = { id: "sloped", points: [
       { id: "a", position: [-2, 3, 0] as [number, number, number], width: 1, falloff: 0 },
       { id: "b", position: [2, 5, 0] as [number, number, number], width: 1, falloff: 0 },
     ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }] };
-    const water = resolveRiverWater({ id: "optics", landscapeRef: "terrain", splineRef: "sloped", surfaceLevel: 3,
-      foamStamps: [{ id: "point", kind: "point", position: [-1, 3.5, 0], radius: 0.5, intensity: 0.7 }] });
+    const water = resolveRiverWater({ id: "optics", landscapeRef: "terrain", splineRef: "sloped", surfaceLevel: 3 });
     const before = structuredClone({ spline, water });
     const object = createRiverWaterObject({ ...water, spline, heightAt: () => 1,
       position: [20, 7, -30], rotation: [0, 90, 0], foamNoiseMap: null }, null);
@@ -136,7 +196,6 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.equal(object.geometry.getAttribute("waterDepth").getX(positions.count - 1), 4);
     assert.equal(object.geometry.getAttribute("flowDirection").getX(0), 1);
     assert.equal(object.geometry.getAttribute("flowDirection").getY(0), 0);
-    assert.equal(object.children.length, 0, "legacy radial foam stays serialized but no longer renders");
     assert.equal(object.material.depthWrite, false);
     assert.equal(object.material.uniforms.reflectionStrength!.value, water.reflectionStrength);
     assert.equal(object.material.uniforms.waterEnvironmentIntensity!.value, 0, "No map is fabricated before a scene supplies one");
@@ -209,7 +268,6 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
       assert.equal(ribbon.waterDepths[i], Math.max(0, source.surfaceLevel - height!));
       assert.equal(ribbon.flowDirections[i * 2], 1); assert.equal(ribbon.flowDirections[i * 2 + 1], 0);
     }
-    assert.deepEqual(source.foamStamps[0]!.position, [-32, 1.5, -16]);
     const object = createRiverWaterObject({ ...doc.water, ...source, foamNoiseMap: null }, null);
     assert.equal(object.position.y + object.geometry.getAttribute("position").getY(0), 9);
     assert.equal(object.children.length, 0); object.dispose();
@@ -261,7 +319,7 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.throws(() => validateRiverWater({ ...doc.water, coordinateSpace: "guess" }), /coordinateSpace/);
     const { coordinateSpace: _space, ...legacy } = doc.water;
     const source = await prepareTerrainRiverWaterSource(doc, legacy);
-    assert.equal(source.surfaceLevel, 9); assert.deepEqual(source.foamStamps, legacy.foamStamps);
+    assert.equal(source.surfaceLevel, 9);
     assert.equal(validateRiverWater(legacy).coordinateSpace, undefined);
   });
 }

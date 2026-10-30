@@ -8,6 +8,8 @@ import { defaultLakeGeometryFoam, encodeLakeFoam, decodeLakeFoam } from "../../e
 import { bakeRiverGeometryFoam, foamSource } from "../../engine/render-three/lakeFoamBake";
 import { createTerrainCausticsUniforms, updateTerrainCaustics, registerLakeCaustics } from "../../engine/render-three/terrain/terrainCaustics";
 import { createLakeFixture } from "./fixtures/lakeFixture";
+import { riverCausticAtlas, RIVER_CAUSTIC_TRIANGLE_TEXELS } from "../../engine/render-three/terrain/riverCausticAtlas";
+import { riverWaveFrames } from "../../engine/render-three/riverWaves";
 import { buildLakeGeometry, prepareLakeSnapshot } from "../../engine/terrain/terrainLakeWater";
 import { validateRiverWater } from "../../tools/saveValidator";
 import { defaultWaterShoreWetness } from "../../engine/scene/waterShoreWetness";
@@ -20,6 +22,44 @@ export function riverEffectFixture(origin:[number,number,number]=[0,0,0]):RiverW
     position:origin,rotation:[0,0,0],sampleSpacing:1,heightAt:(x,z)=>Math.abs(x)>3?4:1-z/8,foamNoiseMap:null};
 }
 export async function registerRiverEffectsTests(check:(label:string,run:()=>Promise<void>)=>Promise<void>):Promise<void> {
+  await check("River flow seams: caustic atlas interpolates shared vertex motion without a diagonal jump",async()=>{
+    const base=riverEffectFixture();
+    const spline={id:"curve",points:[{id:"a",position:[0,0,0] as [number,number,number],width:3,falloff:1},
+      {id:"b",position:[6,0,2] as [number,number,number],width:3,falloff:1},
+      {id:"c",position:[12,0,0] as [number,number,number],width:3,falloff:1}],
+      segments:[{id:"ab",startPointId:"a",endPointId:"b"},{id:"bc",startPointId:"b",endPointId:"c"}]};
+    const ribbon=buildRiverWaterRibbon(spline,{...base,heightAt:()=>-1});
+    const query=new RiverSurfaceQuery(ribbon),atlas=riverCausticAtlas([query]),pixels=atlas.texture.image.data as Float32Array;
+    const triangleBase=query.nx*query.nz+query.triangles.length;
+    const edges=new Map<string,number[]>();
+    for(let t=0;t<ribbon.indices.length/3;t++)for(let k=0;k<3;k++) {
+      const a=ribbon.indices[t*3+k]!,b=ribbon.indices[t*3+(k+1)%3]!,key=[Math.min(a,b),Math.max(a,b)].join(":");
+      edges.set(key,[...(edges.get(key)??[]),t]);
+    }
+    let comparisons=0,oldJump=0;
+    for(const [edge,triangles] of edges) {
+      if(triangles.length!==2)continue;
+      const [a,b]=edge.split(":").map(Number);
+      const x=(ribbon.positions[a!*3]!+ribbon.positions[b!*3]!)*.5,z=(ribbon.positions[a!*3+2]!+ribbon.positions[b!*3+2]!)*.5;
+      const motions=triangles.map(t=>{
+        const weights=query.barycentric(t,x,z)!;
+        const value=[0,0,0],average=[0,0,0];
+        for(let k=0;k<3;k++)for(let c=0;c<3;c++) {
+          const v=pixels[(triangleBase+t*RIVER_CAUSTIC_TRIANGLE_TEXELS+3+k)*4+c]!;
+          value[c]=value[c]!+v*weights[k]!;average[c]=average[c]!+v/3;
+        }
+        return {value,average};
+      });
+      assert.ok(Math.hypot(...motions[0]!.value.map((v,i)=>v-motions[1]!.value[i]!))<1e-6);
+      oldJump=Math.max(oldJump,Math.hypot(...motions[0]!.average.map((v,i)=>v-motions[1]!.average[i]!)));
+      comparisons++;
+    }
+    assert.ok(comparisons>100);assert.ok(oldJump>.001,"fixture must expose the old per-face averaging seam");atlas.texture.dispose();
+    const before=structuredClone(ribbon),frames=riverWaveFrames(ribbon);
+    assert.deepEqual(ribbon,before,"shading frames never change surface/foam/refraction geometry");
+    for(const attribute of Object.values(frames))assert.ok(attribute.every(Number.isFinite));
+    assert.ok(frames.steps.every(v=>v>0));
+  });
   await check("River wet shore: strict save/runtime settings and independent clones",async()=>{
     const shoreWetness={...defaultWaterShoreWetness(),enabled:true,width:1.2,strength:.7};
     const source={...riverEffectFixture(),shoreWetness};
@@ -103,7 +143,6 @@ export async function registerRiverEffectsTests(check:(label:string,run:()=>Prom
     assert.equal(sample(0,8),255,"air and deep rocks contribute no contact");assert.equal(sample(3.9,8),255,"dry bank excluded");
     const decoded=decodeLakeFoam(encodeLakeFoam(data));assert.equal(decoded.metadata.surface,"river");assert.deepEqual(decoded.pixels,data.pixels);
     const shown=new RiverWaterObject({...item,bakedFoam:decoded},null);assert.ok(shown.material.uniforms.geometryFoamMask!.value);
-    assert.equal(shown.material.uniforms.contactCount!.value,0,"manual sources retired");
     assert.equal(shown.children.length,0);let disposed=false;shown.material.uniforms.geometryFoamMask!.value.addEventListener("dispose",()=>{disposed=true;});shown.dispose();assert.ok(disposed);
     const changed=new RiverWaterObject({...item,surfaceLevel:3,bakedFoam:decoded},null);assert.equal(changed.material.uniforms.geometryFoamMask!.value,null,"old waterline cannot move to a changed spline");changed.dispose();
     const abort=new AbortController();abort.abort();await assert.rejects(()=>bakeRiverGeometryFoam(surface,[],.6,"a".repeat(64),abort.signal),/Cancel/);

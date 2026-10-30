@@ -223,15 +223,15 @@ function previewStrip(preview: WorldEnvironmentPreview): string {
         </label>
         <div class="detail-row">
           <span>Play</span>
-          <span>
+          <span class="wes-preview-buttons">
             <button type="button" class="detail-button" data-wes-preview-play>${preview.playing ? "Pause" : "Play"}</button>
             <select data-wes-preview-speed>
               ${PREVIEW_SPEEDS.map((speed) => `<option value="${speed}" ${speed === preview.hoursPerSecond ? "selected" : ""}>${speed} h/s</option>`).join("")}
             </select>
           </span>
         </div>
-        <div class="detail-row"><span>Season</span><span>${SEASONS.map((season) => button("data-wes-preview-season", season, titleCase(season))).join("")}</span></div>
-        <div class="detail-row"><span>Weather</span><span>${WEATHER_PRESETS.map((preset) => button("data-wes-preview-weather", preset, titleCase(preset))).join("")}</span></div>
+        <div class="detail-row"><span>Season</span><span class="wes-preview-buttons">${SEASONS.map((season) => button("data-wes-preview-season", season, titleCase(season))).join("")}</span></div>
+        <div class="detail-row"><span>Weather</span><span class="wes-preview-buttons">${WEATHER_PRESETS.map((preset) => button("data-wes-preview-weather", preset, titleCase(preset))).join("")}</span></div>
         <label class="detail-row">
           <span>Intensity</span>
           <input data-wes-preview-number="weather.intensity" type="range" min="0" max="1" step="0.05" value="${preview.state.weather.intensity}" />
@@ -246,7 +246,7 @@ function previewStrip(preview: WorldEnvironmentPreview): string {
         </label>
         <div class="detail-hint" data-wes-preview-needs></div>
         <div class="detail-hint">Snow and wetness are preview state until terrain and materials consume them (K2).</div>
-        <div class="detail-row">
+        <div class="wes-preview-buttons">
           <button type="button" class="detail-button" data-wes-preview-default>Make Default</button>
           <button type="button" class="detail-button" data-wes-preview-reset>Reset</button>
         </div>

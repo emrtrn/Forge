@@ -2389,6 +2389,31 @@
   justify-content: center;
 }
 
+/* World Environment preview strip: compact button rows (season, weather, play, default/reset). */
+.wes-preview-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.editor-shell .wes-preview-buttons .detail-button {
+  width: auto;
+  flex: 1 1 auto;
+  padding: 4px 6px;
+}
+
+.editor-shell .wes-preview-buttons .detail-button.is-active {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+  color: #e6f0ff;
+}
+
+.wes-preview-buttons select {
+  flex: 0 0 auto;
+  width: auto;
+}
+
 /* Component section title with an inline action (e.g. Remove Component). */
 .detail-component-title {
   display: flex;

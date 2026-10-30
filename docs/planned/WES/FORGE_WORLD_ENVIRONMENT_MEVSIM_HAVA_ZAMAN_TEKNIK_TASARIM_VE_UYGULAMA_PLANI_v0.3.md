@@ -5,8 +5,7 @@
 **Sürüm:** 0.3 — repo doğrulamalı teknik plan
 **Tarih:** 27 Ekim 2026
 **Doğrulanan kod:** `main` @ `f9aa05f` (three `0.184.0`, `WebGLRenderer`)
-**Durum:** K0 (repo incelemesi) bu belgeyle **kapandı**. K1 uygulamaya hazır.
-**Henüz WES kodu yazılmadı.**
+**Durum:** K0 (repo incelemesi) bu belgeyle **kapandı**. **K1 kod tarafı 2026-10-30'da tamamlandı** (WES-002 … WES-005, `main`); görsel kabul kareleri ve GPU ölçümü açık. Sapmalar ve sonuçlar: [K1 kabul raporu](../../reports/WES_K1_KABUL_RAPORU.md) §6.
 **İlgili:** [World Builder v0.4](FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.4.md) · [K1 görev talimatı](FORGE_WES_K1_GOREV_TALIMATI_v0.2.md) · [OPEN_WORLD_PLAN](../OPEN_WORLD_PLAN.md) · [TERRAIN_DEFORMATION_PLAN](../TERRAIN_DEFORMATION_PLAN.md)
 
 > **Etiketler**
@@ -858,6 +857,7 @@ Her bilet `main`'e doğrudan gider (CLAUDE.md iş kuralı).
 
 | Sürüm | Tarih | Değişiklik |
 |---|---|---|
+| 0.3 + K1 | 2026-10-30 | K1 uygulandı; plan metni değişmedi, v0.3'ten sapmalar kabul raporu §6'da (ayrı Details dosyası, `setWeather` geçişi K3'e, "eksik actor'leri ekle" düğmesi yok, override her karede uygulanıyor). |
 | **0.3** | **2026-10-27** | `main@f9aa05f` üzerinde repo doğrulaması; K0 kapandı. Yetenek matrisi, düzeltilen varsayımlar, bağlayıcı kısıtlar. E-005/007/009/010/011/013/014 kapandı; E-018–E-025 eklendi. Modül yerleşimi, `LayoutWorldEnvironment` sözleşmesi, override ilkesi, IBL kadansı, terrain/materyal/foliage entegrasyonu, yağış renderer kararı, birikim modeli, editör UX'i, dosya bazlı WES-002–016 ve ENV-16–18 eklendi. |
 | 0.2 | 2026-10-26 | Dört ürün kararı onaylandı; K0–K6 ve WES-001–013 kırılımı (repo açılmadan). |
 | 0.1 | 2026-10-26 | İlk araştırma: Unreal/Unity/three.js/glTF değerlendirmesi, mimari taslak, test/faz/karar defteri. |

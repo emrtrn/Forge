@@ -1,0 +1,18 @@
+{
+  "off": {
+    "frame ": "frame 209.3ms p95 216.7 spikes 25",
+    "environment": "environment        0.04 / 0.10 / 0.40 0%",
+    "render ": "render             9.95 / 1.30 / 463.10 86%",
+    "memory": "memory",
+    "geo ": "geo 12 tex 16 prog 23"
+  },
+  "on": {
+    "frame ": "frame 692.6ms p95 1699.9 spikes 9",
+    "environment": "environment        5.85 / 0.10 / 27.00 23%",
+    "render ": "render             18.52 / 0.90 / 385.70 71%",
+    "memory": "memory",
+    "geo ": "geo 12 tex 16 prog 23"
+  },
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+  "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)"
+}

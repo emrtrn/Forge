@@ -98,7 +98,10 @@ engine/editor.
   (`applyTransformFields` / `validateLightActor` / `validateReflectionPlane` /
   `validateBlockingVolume` / `validateSkyAtmosphere` / `validateHeightFog` /
   `validateCloudLayer` / `validateReflection` / `validatePostProcess`, imported by
-  `vite.config.ts`) or it is silently dropped on save. Current placement collision overrides
+  `vite.config.ts`) or it is silently dropped on save. The World Environment
+  (`LayoutWorldEnvironment`, WES) is the exception: `validateWorldEnvironment` reuses
+  `normalizeWorldEnvironment` (`engine/environment/worldEnvironment.ts`), so its new
+  fields go in that normalizer. Current placement collision overrides
   (`collisionPreset`, `collisionEnabled`, `objectType`, `responses`,
   `physicalMaterialId`, `generateOverlapEvents`, `simulationGeneratesHitEvents`)
   live in `applyTransformFields`. Placement-only identity — `id` (unique per

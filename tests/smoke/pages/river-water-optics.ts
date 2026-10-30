@@ -16,6 +16,10 @@ import { SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
 import { PostProcessPipeline } from "@engine/render-three/postProcess";
 
 export interface OpticsOptions {
+  reflectionQuality: "low" | "medium" | "high";
+  surfaceStyle: "legacy" | "lake";
+  surfaceStrength: number;
+  surfaceRoughness: number;
   pointFoam: boolean;
   baselineFoam: boolean;
   sunTest: boolean;
@@ -120,6 +124,7 @@ const spline: ForgeLandscapeSpline = {
   ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }],
 };
 let options: OpticsOptions = {
+  reflectionQuality: "medium", surfaceStyle: "legacy", surfaceStrength: 1, surfaceRoughness: 0.22,
   pointFoam: false, baselineFoam: false, sunTest: false, shadowCaster: false, shadowSystem: "single", sunTerm: "all",
   sceneTransmission: false,
   sceneBedDepth: null,
@@ -143,6 +148,8 @@ function frame(patch: Partial<OpticsOptions> = {}) {
       surfaceLevel: -8 * options.slope, bedVisibility: options.calibration ? 0 : options.bedVisibility, absorptionDistance: options.absorptionDistance,
       opacity: options.opacity, foamOpacity: options.foamOpacity, waveAmplitude: 0,
       foamStamps: options.pointFoam ? [{id:"test",kind:"point",position:[0,0,0],radius:3,intensity:1}] : [],
+      reflectionQuality: options.reflectionQuality,
+      surfaceStyle: options.surfaceStyle, surfaceStrength: options.surfaceStrength, surfaceRoughness: options.surfaceRoughness,
       reflectionStrength: 1,
       reflectionMode: options.reflection === "off" ? "off" : "environment",
       ...(options.calibration ? { deepColor: "#808080", shallowColor: "#808080" } : {}),
@@ -158,6 +165,8 @@ function frame(patch: Partial<OpticsOptions> = {}) {
       terrainRef: "fixture", bounds: { min: [-8, -4], max: [8, 4] }, seed: [0, 0], surfaceLevel: 0,
       appearance: { opacity: options.opacity, bedVisibility: options.bedVisibility, absorptionDistance: options.absorptionDistance,
         reflectionStrength: 1, rippleSpeed: 0.15,
+        reflectionMode: options.reflection === "off" ? "off" : "sharedPlanar",
+        ...(options.surfaceStyle === "lake" ? {surfaceStrength: options.surfaceStrength, surfaceRoughness: options.surfaceRoughness, surfaceWavesEnabled:false} : {}),
         ...(options.isolateReflection ? { deepColor: "#000000", shallowColor: "#000000" } : {}) } }, {
       status: "ready", message: "fixture", position: [0, 0, 0], escapeLevel: null,
       positions: new Float32Array(geometry.getAttribute("position").array),
@@ -165,7 +174,7 @@ function frame(patch: Partial<OpticsOptions> = {}) {
       uvs: new Float32Array(geometry.getAttribute("uv").array), indices: new Uint32Array(geometry.index!.array),
       shore: new Float32Array(), cuts: new Float32Array(), cells: 1, bytes: 0, buildMs: 0,
     }, options.normalMap ? normals : null);
-    if (options.reflection !== "off") lake.setPlanarReflectionBinding({
+    if (options.reflection !== "off" && options.surfaceStyle !== "lake") lake.setPlanarReflectionBinding({
       texture: planarTextures[options.reflection],
       textureMatrix: new Matrix4().set(.03, 0, 0, .5, 0, 0, .03, .5, 0, 0, 0, 0, 0, 0, 0, 1),
     });
@@ -173,7 +182,13 @@ function frame(patch: Partial<OpticsOptions> = {}) {
   }
   // Test-only deterministic clock; production's onBeforeRender uses wall time.
   const beforeRender = river.onBeforeRender;
-  river.onBeforeRender = function (...args) { beforeRender.apply(this, args); river.material.uniforms.time!.value = options.time; };
+  river.onBeforeRender = function (...args) {
+    beforeRender.apply(this, args);
+    river.material.uniforms.time!.value = options.time;
+    // Freeze geometric Lake waves too: screenshots/rebuild duration must not
+    // change the fixture while comparisons hold the optical clock constant.
+    if (river.material.uniforms.surfaceWaveTime) river.material.uniforms.surfaceWaveTime.value = options.time;
+  };
   for (const child of river.children) {
     const stamp = child as Mesh<PlaneGeometry, import("three").ShaderMaterial>;
     const stampBefore = stamp.onBeforeRender;

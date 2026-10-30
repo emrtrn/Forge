@@ -50,6 +50,9 @@ export function installRiverProbe(app: unknown) {
           time: water.material.uniforms["time"]!.value,
           flowSpeed: water.material.uniforms["flowSpeed"]!.value,
           reflection: water.material.uniforms["reflectionStrength"]!.value,
+          surfaceStyle: water.material.defines.FORGE_RIVER_LAKE_SURFACE === 1 ? "lake" : "legacy",
+          surfaceStrength: water.material.uniforms.surfaceStrength!.value,
+          surfaceRoughness: water.material.uniforms.surfaceRoughness!.value,
           foam: water.children.map((child) => ({ name: child.name, world: child.getWorldPosition(water.position.clone()).toArray() })) };
       }), streamingPending: pendingTerrainLoads(internal), resident: [...(internal.worldTerrains ?? internal.worldTerrainDocuments ?? new Map()).values()].map((doc) => doc.tiles.size) };
     },

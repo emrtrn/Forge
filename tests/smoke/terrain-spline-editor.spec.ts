@@ -246,6 +246,15 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   expect(initial.position).toEqual([0, 5, 0]); expect(initial.flowSpeed).toBe(1.2);
   expect(initial.samples.every((sample: any) => sample.depth === 2 && sample.flow[0] === 1)).toBe(true);
 
+  const style = page.locator('[data-river-water-reflection="surfaceStyle"]');
+  await expect(style).toHaveValue("legacy");
+  await style.selectOption("lake");
+  await page.getByTestId("editor-undo").click(); await expect(style).toHaveValue("legacy");
+  await page.getByTestId("editor-redo").click(); await expect(style).toHaveValue("lake");
+  const strength = page.locator('[data-river-water-number="surfaceStrength"]');
+  await strength.fill("1.6"); await strength.press("Enter");
+  const roughness = page.locator('[data-river-water-number="surfaceRoughness"]');
+  await roughness.fill("0.24"); await roughness.press("Enter");
   // The river bed uses the existing multi-tile patch/undo path.
   await page.locator("[data-landscape-mode]").selectOption("splines");
   const offset = page.locator('[data-landscape-segment-number="deform.targetOffset"]');
@@ -276,6 +285,8 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await save(page);
   const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
   expect(saved.riverWaters[0].coordinateSpace).toBe("world"); expect(saved.riverWaters[0].surfaceLevel).toBe(7);
+  expect(saved.riverWaters[0].surfaceStyle).toBe("lake"); expect(saved.riverWaters[0].surfaceStrength).toBe(1.6);
+  expect(saved.riverWaters[0].surfaceRoughness).toBe(0.24);
   const editor = (await riverSnapshot(page)).waters[0];
   expect(editor.foam).toEqual([]);
   const time = editor.time;
@@ -286,10 +297,12 @@ test("multi-tile river UI, exact sculpt depth, foam and flow survive undo, Save/
   await page.locator("[data-landscape-mode]").selectOption("splines");
   await page.locator("[data-landscape-mode]").selectOption("water");
   await expect(height).toHaveValue("7"); await expect(flow).toHaveValue("1.2");
+  await expect(style).toHaveValue("lake"); await expect(strength).toHaveValue("1.6"); await expect(roughness).toHaveValue("0.24");
   await expect.poll(async () => (await riverSnapshot(page)).waters[0]?.triangles).toBe(editor.triangles);
   await page.goto("/tests/smoke/pages/terrain-spline-runtime.html", { waitUntil: "domcontentloaded" });
   await expect.poll(async () => page.evaluate(() => Boolean((window as any).__riverQA)), { timeout: 90_000 }).toBe(true);
   const runtime = (await riverSnapshot(page)).waters[0];
+  expect(runtime.surfaceStyle).toBe("lake"); expect(runtime.surfaceStrength).toBe(1.6); expect(runtime.surfaceRoughness).toBe(0.24);
   expect(runtime.samples).toEqual(editor.samples); expect(runtime.foam).toEqual(editor.foam);
   expect(runtime.position).toEqual(editor.position); expect(runtime.reflection).toBeGreaterThan(0);
   await page.evaluate(() => (window as any).__riverQA.frame());

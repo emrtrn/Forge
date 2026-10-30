@@ -262,22 +262,87 @@ test("river sunlight: existing single/cascade shadows attenuate both sun terms, 
 });
 
 
-test("river point foam: local patch coverage, opacity and motion survive without white rings", async ({page},info) => {
+test("retired river point foam: legacy records cannot re-enable manual rings in either surface style", async ({page},info) => {
   const shots = [];
-  for (const angle of ["top","grazing"] as const) {
-    const off = await frame(page,{pointFoam:true, foamOpacity:0, angle, depth:5, opacity:1, bedVisibility:0,
-      pipeline:"composer", time:12, reflection:"off", sunTest:false, baselineFoam:false});
-    const before = await frame(page,{foamOpacity:0.92,baselineFoam:true});
-    await page.screenshot({path:info.outputPath(`stamp-${angle}-before.png`)});
-    const after = await frame(page,{baselineFoam:false});
-    await page.screenshot({path:info.outputPath(`stamp-${angle}-after.png`)});
-    const moving = await frame(page,{time:14});
-    await page.screenshot({path:info.outputPath(`stamp-${angle}-time14.png`)});
-    shots.push({angle,off,before,after,moving});
-    expect(after.glError).toBe(0);
-    expect(Math.max(...after.stamp.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-off.stamp[i]![c]!))))).toBeGreaterThan(1);
-    expect(Math.max(...moving.stamp.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-after.stamp[i]![c]!))))).toBeGreaterThan(1);
-    expect(after.edge).toEqual(off.edge);
+  for (const surfaceStyle of ["legacy","lake"] as const) {
+    for (const angle of ["top","grazing"] as const) {
+      const off = await frame(page,{surfaceStyle,pointFoam:false,foamOpacity:0.92,angle,depth:5,opacity:1,
+        bedVisibility:0,pipeline:"composer",time:12,reflection:"off",sunTest:false,baselineFoam:false});
+      const legacyRecord = await frame(page,{pointFoam:true});
+      expect(legacyRecord.glError).toBe(0);
+      expect(legacyRecord.stamp).toEqual(off.stamp);
+      expect(legacyRecord.edge).toEqual(off.edge);
+      shots.push({surfaceStyle,angle,off,legacyRecord});
+    }
   }
-  await evidence(info,"point-foam",shots);
+  await evidence(info,"retired-point-foam",shots);
+});
+
+
+test("Lake-like river: flat interface matches Lake Fresnel energy at top and grazing angles", async ({ page }, info) => {
+  const measurements = [];
+  for (const angle of ["top", "grazing"] as const) {
+    const signals: number[] = [];
+    for (const kind of ["river", "lake"] as const) {
+      const red = await frame(page, { kind, surfaceStyle:"lake", surfaceStrength:0, surfaceRoughness:0.2,
+        isolateReflection:true, angle, depth:2, opacity:0, bedVisibility:1, absorptionDistance:100,
+        reflection:"red", pipeline:"composer", normalMap:false });
+      const blue = await frame(page, {reflection:"blue"});
+      signals.push(channel(red,0)-channel(blue,0)); measurements.push({kind,angle,red,blue});
+      expect(red.glError).toBe(0);expect(blue.glError).toBe(0);
+    }
+    expect(signals[0]!).toBeGreaterThan(0);
+    expect(Math.abs(signals[0]!-signals[1]!)).toBeLessThan(3);
+  }
+  await evidence(info,"lake-like-interface",measurements);
+});
+
+test("Lake-like river: slope, transformed orthographic view, animation and strength-zero remain stable", async ({ page }, info) => {
+  const measurements = [];
+  for (const orthographic of [false,true]) {
+    const base = await frame(page,{surfaceStyle:"lake",surfaceStrength:2,surfaceRoughness:0.2,
+      isolateReflection:true,normalMap:true,slope:0.12,angle:"grazing",reflection:"red",opacity:1,pipeline:"composer",orthographic,time:0,transformed:false});
+    const moved = await frame(page,{transformed:true});
+    expect(Math.max(...moved.centre.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-base.centre[i]![c]!))))).toBeLessThan(3);
+    const animated = await frame(page,{time:4,transformed:false});
+    expect(Math.max(...animated.centre.flatMap((p,i)=>p.map((v,c)=>Math.abs(v-base.centre[i]![c]!))))).toBeGreaterThan(0.2);
+    const calm = await frame(page,{surfaceStrength:0,time:0});
+    const later = await frame(page,{time:4});
+    expect(later.centre).toEqual(calm.centre);
+    expect(animated.glError).toBe(0);
+    measurements.push({orthographic,base,moved,animated,calm,later});
+  }
+  await evidence(info,"lake-like-motion",measurements);
+});
+
+test("Lake-like river: opt-in removes legacy sun attenuation without extra reflection targets", async ({ page }, info) => {
+  // Warm both programs and their borrowed textures before counting repeated switches.
+  await frame(page,{surfaceStyle:"lake",surfaceStrength:0,reflection:"off",sunTest:true,sunTerm:"glint",pipeline:"composer"});
+  const legacy = await frame(page,{surfaceStyle:"legacy",surfaceStrength:0,surfaceRoughness:0.2,
+    isolateReflection:true,normalMap:false,angle:"grazing",depth:2,opacity:1,
+    reflection:"off",sunTest:true,sunTerm:"glint",pipeline:"composer",time:0});
+  await page.screenshot({path:info.outputPath("river-legacy-sun.png")});
+  const enhanced = await frame(page,{surfaceStyle:"lake"});
+  await page.screenshot({path:info.outputPath("river-lake-like-sun.png")});
+  expect(channel(enhanced,0)).toBeGreaterThan(channel(legacy,0)+2);
+  expect(enhanced.textures).toBe(legacy.textures);
+  const rebound = await frame(page,{surfaceStyle:"legacy"});
+  expect(rebound.centre).toEqual(legacy.centre);
+  expect(enhanced.glError).toBe(0);
+  await evidence(info,"lake-like-sun",{legacy,enhanced,rebound});
+});
+
+
+test("Lake-like river: twenty style and quality switches retain borrowed resources", async ({page},info) => {
+  await frame(page,{surfaceStyle:"lake",normalMap:true,reflection:"red",reflectionQuality:"high"});
+  const warmed = await frame(page,{surfaceStyle:"legacy",reflectionQuality:"low"});
+  const samples = [];
+  for(let cycle=0;cycle<20;cycle++) {
+    const shot = await frame(page,{surfaceStyle:cycle%2 ? "legacy":"lake",
+      reflection:cycle%3 ? "red":"off", reflectionQuality:cycle%2 ? "low":"high"});
+    expect(shot.textures).toBe(warmed.textures);
+    expect(shot.glError).toBe(0);
+    samples.push({cycle,textures:shot.textures});
+  }
+  await evidence(info,"lake-like-lifecycle",{warmed,samples});
 });

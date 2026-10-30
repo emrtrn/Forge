@@ -34,6 +34,37 @@ function fixture() {
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain river: Lake-like surface opt-in survives save/read and rejects malformed settings", async () => {
+    const base = { id: "river", landscapeRef: "land", splineRef: "spline" };
+    assert.equal(resolveRiverWater(base).surfaceStyle, "legacy");
+    assert.equal(validateRiverWater(base).surfaceStyle, undefined, "old records must not acquire a new style on save");
+    const source = { ...base, surfaceStyle: "lake" as const, surfaceStrength: 1.75, surfaceRoughness: 0.24 };
+    const saved = validateRiverWater(source);
+    assert.deepEqual(saved, source);
+    const resolved = resolveRiverWater(saved);
+    assert.equal(resolved.surfaceStyle, "lake");
+    assert.equal(resolved.surfaceStrength, 1.75);
+    assert.equal(resolved.surfaceRoughness, 0.24);
+    for (const patch of [{surfaceStyle:"unknown"}, {surfaceStrength:NaN}, {surfaceStrength:-1},
+      {surfaceStrength:2.1}, {surfaceRoughness:0}, {surfaceRoughness:Infinity}, {surfaceRoughness:"0.2"}]) {
+      assert.throws(() => validateRiverWater({...source,...patch}), /river water surface/);
+      assert.throws(() => resolveRiverWater({...source,...patch} as typeof source), /river water surface/);
+    }
+    const spline = { id: "spline", points: [
+      {id:"a",position:[0,2,0] as [number,number,number],width:3,falloff:0},
+      {id:"b",position:[12,-1,0] as [number,number,number],width:3,falloff:0}],
+      segments:[{id:"ab",startPointId:"a",endPointId:"b"}] };
+    const item = {...resolved,spline,position:[0,0,0] as [number,number,number],rotation:[0,0,0] as [number,number,number],foamNoiseMap:null};
+    const enhanced = createRiverWaterObject(item,null);
+    const legacy = createRiverWaterObject({...item,surfaceStyle:"legacy"},null);
+    assert.deepEqual(enhanced.geometry.getAttribute("position").array,legacy.geometry.getAttribute("position").array,
+      "a material edit must not change slope, bounds or baked water coverage");
+    assert.equal(enhanced.material.defines.FORGE_RIVER_LAKE_SURFACE,1);
+    assert.equal(legacy.material.defines.FORGE_RIVER_LAKE_SURFACE,undefined);
+    assert.equal(enhanced.material.uniforms.surfaceStrength!.value,1.75);
+    assert.equal(enhanced.material.uniforms.surfaceRoughness!.value,0.24);
+    enhanced.dispose();legacy.dispose();
+  });
   await checkAsync("terrain river: sun receiver matches camera light layers and releases cascade state", async () => {
     const scene = new Scene(), camera = new PerspectiveCamera(), uniforms = createRiverSunShadowUniforms();
     const hidden = new DirectionalLight(0xffffff, 20), fill = new DirectionalLight(0xffffff, 1), sun = new DirectionalLight(0xffffff, 5);

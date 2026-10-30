@@ -5,8 +5,9 @@ Tarih: 29 Ekim 2026 · Durum: V1b ve V1c + güneş parıltısı uygulandı; son 
 **30 Ekim 2026 güncellemesi — River görsel yakınlaştırma:** Kullanıcı, memnun
 olduğu Lake görünümünü referans alarak River yüzeyinin iyileştirilmesini istedi.
 Kod karşılaştırmasına dayanan uygulama planı [§7.1](#71-river-görsel-yakınlaştırma-planı--30-ekim-2026)
-altındadır. Bu teslim yalnız planlamadır; River uygulaması ve görsel/performans
-kabulü henüz yapılmadı. Lake'in kabul edilmiş görünümü korunacak referanstır.
+altındadır. R1 ilk uygulaması seçilebilir profil olarak eklendi; River insan
+görsel kabulü ve gerçek GPU performans kabulü açık. Lake'in kabul edilmiş
+görünümü korunacak referanstır.
 
 **Uygulama notu:** Kullanıcı önceliğiyle V1b köpük malzemesi öne alındı.
 Ortak 512² doku, yoğunluğa bağlı desen ve kabarıklık ışıklandırması Lake/River'a
@@ -222,6 +223,13 @@ V2b kırılma bu çalışmanın R3 dilimidir; planın yazılması uygulama kabul
 
 ### 7.1. River görsel yakınlaştırma planı — 30 Ekim 2026
 
+**İlk uygulama — R1:** Seçilebilir `Lake-like` River mikro yüzeyi, ortak
+roughness, Lake'e yakın ortam Fresnel'i ve güneş parıltısı eklendi. Eski nehirler
+Legacy kalır; Lake ve kullanıcı sahneleri değiştirilmedi.
+[R0 referansı, kullanım ve doğrulama raporu](../reports/RIVER_SURFACE_R1_2026-10-30.md).
+R0 görsel/donanım matrisi, River insan görsel kabulü, R2 dip optiği ve R3 kırılma
+açıktır; aşağıdaki aşama listesi tam kabul yerine geçmez.
+
 **Hedef:** River'ın renk, dip geçirgenliği, mikro yüzey, yansıma ve güneş
 parıltısını kabul edilmiş Lake malzemesine yaklaştırmak. Spline eğimi, yerel su
 kotu, akış yönü/hızı, kıyıda yavaşlama ve rapid bölgeleri korunur. Lake'in
@@ -365,9 +373,10 @@ Ocean ve Lake görünümünü yeniden tasarlama bu teslimin dışında kalır.
   performans kabul edildi olarak ayrı kaydeder. Kullanıcının River için görsel
   onayı alınmadan Lake onayı River'a genişletilmez.
 
-**İlk somut uygulama:** R0 etkin Lake referansını ve River baseline'ını kaydetmek,
-ardından R1'i izole fixture'da geliştirmek. Bu doküman commit'i bu adımları
-uygulamaz ve yeni test/GPU sonucu iddia etmez.
+**İlk planlama kaydı:** R0 etkin Lake referansını ve River baseline'ını kaydetmek,
+ardından R1'i izole fixture'da geliştirmek önerildi. İlk doküman commit'i bu
+adımları uygulamadı. Sonraki R1 uygulaması ve testleri yukarıdaki rapordadır;
+GPU ve insan görsel kabulü hâlâ açıktır.
 
 ## 8. V3–V4 — Hareketin sonraki gelişimi
 
@@ -498,8 +507,10 @@ Kaynak referansı, entegrasyon raporunda incelenen **`ce9248fa20afbdf63fd4c11709
 
 ## 13. Sonraki oturumun somut başlangıcı
 
-**30 Ekim güncel yön:** Sonraki River çalışması §7.1'deki R0 ile başlar;
-ardından R1–R4 izlenir. Aşağıdaki 29 Ekim kaydı geçmiş teslim bağlamıdır.
+**30 Ekim güncel yön:** §7.1 R0 kayıtlı referansı ve R1 ilk uygulaması
+[raporda](../reports/RIVER_SURFACE_R1_2026-10-30.md) izlenir. Sonraki kod dilimi
+R2 dip optiğidir; R0 görsel/donanım baseline'ı ve insan görsel kabulü açıktır.
+Aşağıdaki 29 Ekim kaydı geçmiş teslim bağlamıdır.
 
 **Güncel durum:** V1b köpüğün ardından V1c ortam/planar birleşimi ve Lake/River
 GGX güneş parıltısı kodlandı. Kullanıcı, görüntüler üzerinden yapılan son

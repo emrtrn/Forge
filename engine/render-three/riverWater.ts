@@ -33,6 +33,7 @@ import { registerRiverCaustics } from "./terrain/terrainCaustics";
 import { registerRiverShoreWetness } from "./terrain/terrainShoreWetness";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
 import { WaterFoamMaterial } from "./waterFoamMaterial";
+import { LAKE_SURFACE_GLSL } from "./lakeSurface";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
 
@@ -278,7 +279,7 @@ uniform sampler2D normalMap;
 uniform float time;
 uniform float flowSpeed;
 uniform float normalScale;
-uniform float hasNormalMap;
+uniform float hasNormal;
 uniform float clipDryBed;
 uniform vec3 deepColor;
 uniform vec3 shallowColor;
@@ -308,6 +309,9 @@ varying vec3 vFlowTangent;
 
 ${WATER_OPTICS_GLSL}
 ${WATER_ENVIRONMENT_GLSL}
+#ifdef FORGE_RIVER_LAKE_SURFACE
+${LAKE_SURFACE_GLSL}
+#endif
 ${RIVER_SUN_SHADOW_GLSL}
 ${WATER_FOAM_GLSL}
 ${WATER_CONTACT_GLSL}
@@ -344,12 +348,26 @@ void main() {
   tangent /= max(length(tangent), 0.000001);
   vec3 bitangent = cross(surfaceNormal, tangent);
   vec2 slope = flowingNormal * (0.22 + vRapidness * 0.12) + currentSlope;
-  vec3 opticalNormal = normalize(surfaceNormal + hasNormalMap
+  #ifdef FORGE_RIVER_LAKE_SURFACE
+  // Lake micro detail travels in the River flow frame, including bank slowing.
+  // Only the optical normal changes; spline elevation and vertex waves stay intact.
+  slope = lakeSurfaceSlopes(advected * normalScale * 0.12, time * flowSpeed)
+    * 0.10 * (1.0 + vRapidness * 0.5);
+  #endif
+  float slopeEnabled = hasNormal;
+  #ifdef FORGE_RIVER_LAKE_SURFACE
+  slopeEnabled = 1.0;
+  #endif
+  vec3 opticalNormal = normalize(surfaceNormal + slopeEnabled
     * (tangent * slope.x + bitangent * slope.y));
   // Derivatives precede discard, so dry-bank helper fragments do not make the
   // filtered highlights unstable. Low detail keeps the continuous GGX lobe.
   float reflectionRoughness = waterFilteredRoughness(opticalNormal, 0.38 + (1.0 - waterDetail) * 0.2);
   float sunRoughness = waterFilteredRoughness(opticalNormal, 0.28);
+  #ifdef FORGE_RIVER_LAKE_SURFACE
+  reflectionRoughness = waterFilteredRoughness(opticalNormal, surfaceRoughness + (1.0 - waterDetail) * 0.15);
+  sunRoughness = reflectionRoughness;
+  #endif
   float sunSparkle = waterSunSparkle(vWorldPosition, time, waterDetail);
   if (clipDryBed > 0.5 && vWaterDepth <= 0.001) discard;
   float viewCosine = clamp(abs(dot(opticalNormal, viewDirection)), 0.0, 1.0);
@@ -418,6 +436,13 @@ void main() {
   float hasEnvironment = step(0.0001, waterEnvironmentIntensity + waterProbeIntensity);
   float reflectionAmount = clamp(reflectionStrength * (0.025 + fresnel * 0.425) * aboveSurface * hasEnvironment
     * (1.0 - foam * foamOpacity * 0.65), 0.0, 1.0);
+  #ifdef FORGE_RIVER_LAKE_SURFACE
+  float environmentCoverage = waterEnvironmentCoverage(vWorldPosition);
+  reflected = waterReflectedEnvironment(vWorldPosition, reflectionDirection, reflectionRoughness)
+    / max(environmentCoverage, 0.00001);
+  reflectionAmount = clamp(reflectionStrength * fresnel * environmentCoverage, 0.0, 1.0)
+    * aboveSurface * smoothstep(0.0, 0.08, vWaterDepth);
+  #endif
   float wetness = smoothstep(0.0, 0.12, vWaterDepth);
   float pathDepth = waterPath(vWaterDepth, abs(dot(surfaceNormal, viewDirection)));
   float bedTransmission = waterTransmission(vWaterDepth, pathDepth, bedVisibility, absorptionDistance);
@@ -430,9 +455,16 @@ void main() {
   #endif
   vec4 foamDetail=waterFoamReady>.5 ? waterFoamDetail(foamWorld,time,materialScale,materialSpeed) : vec4(.5);
   vec3 litFoam=waterFoamLighting(foamDetail,foam,surfaceNormal,viewDirection,foamColor,sunVisibility);
-  gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectionAmount * wetness,
+  float reflectedCoverage = reflectionAmount * wetness;
+  float sunGain = smoothstep(0.03, 0.3, vWaterDepth) * 0.35;
+  #ifdef FORGE_RIVER_LAKE_SURFACE
+  reflectedCoverage = reflectionAmount;
+  sunGain = 1.0;
+  wetness = smoothstep(0.0, 0.35, vWaterDepth);
+  #endif
+  gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectedCoverage,
     litFoam, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, sunRoughness, sunVisibility)
-      * sunSparkle * aboveSurface * wetness * smoothstep(0.03, 0.3, vWaterDepth) * 0.35);
+      * sunSparkle * aboveSurface * wetness * sunGain);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>
@@ -503,7 +535,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.setIndex(ribbon.indices);
     geometry.computeBoundingSphere();
     const material = new ShaderMaterial({
-      defines: bake ? { FORGE_LAKE_GEOMETRY_FOAM: 1 } : {},
+      defines: { ...(bake ? { FORGE_LAKE_GEOMETRY_FOAM: 1 } : {}),
+        ...(item.surfaceStyle === "lake" ? { FORGE_RIVER_LAKE_SURFACE: 1 } : {}) },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       uniforms: {
@@ -524,7 +557,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         time: { value: 0 },
         flowSpeed: { value: item.flowSpeed },
         normalScale: { value: item.normalScale },
-        hasNormalMap: { value: normalMap ? 1 : 0 },
+        surfaceStrength: { value: item.surfaceStrength },
+        surfaceRoughness: { value: item.surfaceRoughness },
+        hasNormal: { value: normalMap ? 1 : 0 },
         clipDryBed: { value: item.heightAt ? 1 : 0 },
         deepColor: { value: new Color(item.deepColor) },
         shallowColor: { value: new Color(item.shallowColor) },

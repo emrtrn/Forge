@@ -1026,6 +1026,11 @@ export interface LayoutRiverWater {
   widthScale?: number;
   /** UV-space normal-flow speed in repeats per second. */
   flowSpeed?: number;
+  /** Explicit opt-in to Lake-like micro surface and interface lighting; absent keeps legacy rendering. */
+  surfaceStyle?: "legacy" | "lake";
+  /** Micro-normal amplitude (0..2) and perceptual interface roughness (0.04..1). */
+  surfaceStrength?: number;
+  surfaceRoughness?: number;
   /** Repetition multiplier for the flowing normal texture. */
   normalScale?: number;
   /** Manifest texture asset id; absent uses the built-in water normal default. */

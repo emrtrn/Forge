@@ -597,6 +597,61 @@ export interface LayoutPostProcess {
   tint?: number;
 }
 
+/**
+ * Singleton environment actor: World Environment (WES) — time of day, season,
+ * weather and the (K2) visual snow/wetness cover. It stores **level defaults**
+ * only: the editor preview and the Play clock are runtime state and never write
+ * here, and WES never writes the Sun/Sky/Fog/Cloud actors either — it overrides
+ * their render objects. All fields are optional; absent reads the defaults in
+ * `engine/environment/worldEnvironment.ts`, which also holds the normalizer the
+ * loader and the save validator share.
+ */
+export interface LayoutWorldEnvironment {
+  /** Display name in the Outliner. Absent means "World Environment". */
+  name?: string;
+  /** true turns WES off: the authored sky/fog/sun render exactly as without the actor. */
+  hidden?: boolean;
+  time?: {
+    /** Level default hour, 0 ≤ h < 24. */
+    hour?: number;
+    /** Play: real minutes per 24 game hours; 0 stops the clock. */
+    dayLengthMinutes?: number;
+  };
+  sunPath?: {
+    /** Compass direction of the noon sun in degrees (0 = +Z). */
+    azimuthDeg?: number;
+    /** Noon sun elevation, 5..90 degrees. */
+    noonElevationDeg?: number;
+    sunriseHour?: number;
+    sunsetHour?: number;
+  };
+  night?: {
+    /** Intensity multiplier of the directional light while it is the moon. */
+    moonIntensity?: number;
+    moonColor?: string;
+    /** Lower bound of the night ambient as a fraction of the authored ambient. */
+    ambientFloor?: number;
+  };
+  season?: "spring" | "summer" | "autumn" | "winter";
+  weather?: {
+    preset?: "clear" | "cloudy" | "rain" | "snow" | "fog";
+    /** 0..1 blend from `clear` to the preset. */
+    intensity?: number;
+  };
+  /** K2 visual cover; never physics. */
+  surface?: {
+    snowCoverage?: number;
+    wetness?: number;
+    winterSnowCoverage?: number;
+    snowColor?: string;
+    snowSlopeStartDeg?: number;
+    snowSlopeEndDeg?: number;
+    /** World Y; null = no altitude limit. */
+    snowMinAltitude?: number | null;
+    snowAltitudeBlend?: number;
+  };
+}
+
 export interface LayoutLightActor {
   /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
   spatiallyLoaded?: boolean;
@@ -1090,6 +1145,8 @@ export interface RoomLayout {
   reflection?: LayoutReflection;
   /** Optional singleton global Post Process settings actor. */
   postProcess?: LayoutPostProcess;
+  /** Optional singleton World Environment (WES: time of day, season, weather) actor. */
+  worldEnvironment?: LayoutWorldEnvironment;
   lights?: LayoutLightActor[];
   /** Placed Planar Reflection (mirror) actors. */
   reflectionPlanes?: LayoutReflectionPlane[];

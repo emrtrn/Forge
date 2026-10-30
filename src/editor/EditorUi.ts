@@ -151,6 +151,7 @@ import { WorldPartitionPanel } from "./panels/world/worldPartitionPanel";
 import { WorldBuilderPanel } from "./panels/world/worldBuilderPanel";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
 import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
+import { renderWorldEnvironmentDetails } from "./panels/details/worldEnvironmentDetails";
 import { createFoliageType } from "@engine/scene/foliage";
 import {
   OUTLINER_FILTER_TYPES,
@@ -2281,6 +2282,9 @@ export class EditorUi {
     });
     singleton("postProcess", "Post Process", "Visual Effects", "postprocess", () =>
       this.app.addPostProcess(),
+    );
+    singleton("worldEnvironment", "World Environment", "Visual Effects", "worldEnvironment", () =>
+      this.app.addWorldEnvironment(),
     );
 
     singleton("landscape", "Landscape", "Terrain", "terrain", () => void this.addLandscape());
@@ -4638,6 +4642,19 @@ export class EditorUi {
     }
     if (selection.kind === "post" && selection.post) {
       renderPostDetails(this.environmentDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
+      return;
+    }
+    if (selection.kind === "worldEnvironment" && selection.worldEnvironment) {
+      renderWorldEnvironmentDetails({
+        body: this.detailsBody,
+        selection,
+        setDetailsScale: (scale) => {
+          this.detailsScale = scale;
+        },
+        authored: this.app.getWorldEnvironmentDefaults() ?? {},
+        setWorldEnvironment: (patch, label) => this.app.setWorldEnvironment(patch, label),
+      });
       this.finalizeDetailsRender(selection);
       return;
     }

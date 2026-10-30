@@ -1,3 +1,4 @@
+import type { ResolvedWorldEnvironment } from "@engine/environment/worldEnvironment";
 import type {
   BrushShape,
   LayoutAudio,
@@ -78,6 +79,9 @@ export interface EditableCloud {
   scale: number;
   speed: number;
 }
+
+/** Resolved World Environment (WES) level defaults for the Details panel (singleton actor). */
+export type EditableWorldEnvironment = ResolvedWorldEnvironment;
 
 /**
  * Resolved Sphere Reflection Capture fields for the Details panel. Unlike the
@@ -297,6 +301,8 @@ export interface EditableSelection {
   fog?: EditableFog;
   /** Resolved Cloud Layer settings; present only when `kind === "cloud"`. */
   cloud?: EditableCloud;
+  /** Resolved World Environment defaults; present only when `kind === "worldEnvironment"`. */
+  worldEnvironment?: EditableWorldEnvironment;
   /** Resolved Sphere Reflection Capture settings; present only when `kind === "reflectionCapture"`. */
   reflectionCapture?: EditableReflectionCapture;
   /** Resolved Reflective Surface settings; present only when `kind === "reflectiveSurface"`. */

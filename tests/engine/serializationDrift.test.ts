@@ -24,6 +24,8 @@ import { PHYSICAL_MATERIAL_IDS } from "../../engine/scene/collision";
 import { normalizeAssetCollisionDef } from "../../src/scene/assetCollisionLoader";
 import type { RoomLayout } from "../../engine/scene/layout";
 import { normalizeWorldWidget } from "../../engine/ui/uiWorldWidget";
+import { normalizeWorldEnvironment } from "../../engine/environment/worldEnvironment";
+import { maximalWorldEnvironment } from "./worldEnvironment.test";
 import {
   DEFAULT_WORLD_PARTITION,
   mergeWorldCells,
@@ -250,6 +252,14 @@ export function registerSerializationDriftTests(check: Check): void {
       () => validateLayout({ ...partitionFixture(), lights: [{ id: "sun", type: "directional", position: [0, 10, 0], cascadedShadows: "yes" }] }),
       /light\.cascadedShadows must be boolean/,
     );
+  });
+
+  check("serialization drift: every World Environment field the normalizer keeps survives a save", () => {
+    const worldEnvironment = normalizeWorldEnvironment(maximalWorldEnvironment()).environment;
+    const layout = { ...partitionFixture(), worldEnvironment };
+    const saved = validateLayout(layout) as RoomLayout;
+    assert.deepEqual(saved.worldEnvironment, maximalWorldEnvironment());
+    assertNoDrift(layout, saved, "layout");
   });
 
   check("serialization drift: a Height Fog fitted to a long view distance keeps its density", () => {

@@ -716,7 +716,8 @@ export class EditorSceneController {
         selection.kind === "reflectionCapture" ||
         selection.kind === "worldWidget" ||
         selection.kind === "landscape" ||
-        selection.kind === "post"
+        selection.kind === "post" ||
+        selection.kind === "worldEnvironment"
       ) {
         continue;
       }
@@ -1420,7 +1421,7 @@ export class EditorSceneController {
       return duplicateSelection;
     }
 
-    if (selection.kind === "post") {
+    if (selection.kind === "post" || selection.kind === "worldEnvironment") {
       return null;
     }
 

@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 
 import { collectDroppedFields, formatDroppedFieldWarning } from "../../tools/droppedFields";
 import { validateLayout, validateSavePayload } from "../../tools/saveValidator";
+import { maximalWorldEnvironment } from "./worldEnvironment.test";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -42,6 +43,11 @@ export function registerDroppedFieldTests(check: Check): void {
     const report = collectDroppedFields(layout, saved.layout, "layout", 100);
     assert.deepEqual(report.paths, []);
     assert.equal(formatDroppedFieldWarning(report, "partition.level.json"), null);
+  });
+
+  check("a World Environment actor produces no dropped-field warning", () => {
+    const layout = { ...playgroundLayout(), worldEnvironment: maximalWorldEnvironment() };
+    assert.deepEqual(collectDroppedFields(layout, validateLayout(layout), "layout", 100).paths, []);
   });
 
   check("smoke scene fixtures survive the save allowlist without dropped fields", () => {

@@ -40,6 +40,8 @@ export const ACTOR_TYPE_ICONS = {
   cloud: S('<path d="M4.5 12h6.6a2.6 2.6 0 0 0 .2-5.18A3.4 3.4 0 0 0 5 6.2 2.9 2.9 0 0 0 4.5 12z"/>'),
   /** Post process volume — an aperture / lens. */
   postprocess: S('<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4L5.4 7h5.2zM13.2 6.6l-2.6 4.5-2.6-4.5M4.7 12.4L7.3 8H2.1"/>'),
+  /** World Environment (time of day / season / weather) — a crescent moon and a star. */
+  worldEnvironment: S('<path d="M9.4 2.6a5.6 5.6 0 1 0 4 8.6A4.6 4.6 0 0 1 9.4 2.6z"/><path d="M12.4 2.2v2.2M11.3 3.3h2.2"/>'),
   /** Reflection capture — concentric ring. */
   reflection: S('<circle cx="8" cy="8" r="5.6"/><path d="M8 2.6a5.4 5.4 0 0 1 0 10.8"/>'),
   /** Sound cue / audio actor — a speaker. */

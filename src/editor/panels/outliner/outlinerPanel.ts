@@ -349,7 +349,7 @@ function formatPosition(position: [number, number, number]): string {
 function outlinerFilterType(object: EditableSceneObject): OutlinerFilterType {
   if (object.kind === "character") return "character";
   if (object.kind === "light") return "light";
-  if (["sky", "fog", "cloud", "post"].includes(object.kind)) return "environment";
+  if (["sky", "fog", "cloud", "post", "worldEnvironment"].includes(object.kind)) return "environment";
   if (["blockingVolume", "aiNavigationVolume"].includes(object.kind)) return "volume";
   if (object.kind === "landscape") return "terrain";
   if (object.kind === "worldWidget") return "widget";
@@ -364,6 +364,7 @@ function outlinerIcon(object: EditableSceneObject): ActorTypeIcon {
   if (["sky", "fog"].includes(object.kind)) return "atmosphere";
   if (object.kind === "cloud") return "cloud";
   if (object.kind === "post") return "postprocess";
+  if (object.kind === "worldEnvironment") return "worldEnvironment";
   if (["reflectionPlane", "reflectiveSurface", "reflectionCapture"].includes(object.kind)) return "reflection";
   if (["blockingVolume", "aiNavigationVolume"].includes(object.kind)) return "volume";
   if (object.kind === "landscape") return "terrain";

@@ -226,6 +226,7 @@ import {
 import { resolveSkyAtmosphere } from "@engine/render-three/skyAtmosphere";
 import { resolveHeightFog } from "@engine/render-three/heightFog";
 import { resolveCloudLayer } from "@engine/render-three/cloudLayer";
+import { resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
 import {
   applyPostProcessToneMapping,
   createPostProcessAntialiasPass,
@@ -526,6 +527,7 @@ import type {
   LayoutInteraction,
   LayoutLightActor,
   LayoutHeightFog,
+  LayoutWorldEnvironment,
   LayoutMovingPlatform,
   LayoutParticleEmitter,
   LayoutPlacement,
@@ -2385,6 +2387,11 @@ export class SceneApp {
       this.setPostProcess({ name: next.length > 0 ? next : undefined }, "Rename Post Process");
       return;
     }
+    if (selection.kind === "worldEnvironment") {
+      const next = name.trim();
+      this.setWorldEnvironment({ name: next.length > 0 ? next : undefined }, "Rename World Environment");
+      return;
+    }
     this.renameSelection(selection, name);
   }
 
@@ -2409,6 +2416,10 @@ export class SceneApp {
     }
     if (selection.kind === "post") {
       this.setPostProcess({ hidden }, hidden ? "Hide Post Process" : "Show Post Process");
+      return;
+    }
+    if (selection.kind === "worldEnvironment") {
+      this.setWorldEnvironment({ hidden }, hidden ? "Hide World Environment" : "Show World Environment");
       return;
     }
     if (this.editorSceneController.selectedCount > 1 && this.isSelectionSelected(selection)) {
@@ -3714,6 +3725,10 @@ export class SceneApp {
       this.removePostProcess();
       return;
     }
+    if (this.selection?.kind === "worldEnvironment" && this.editorSceneController.selectedCount <= 1) {
+      this.removeWorldEnvironment();
+      return;
+    }
     if (
       this.selection?.kind === "reflectionPlane" &&
       this.editorSceneController.selectedCount <= 1
@@ -4964,7 +4979,8 @@ export class SceneApp {
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "post"
+      selection.kind === "post" ||
+      selection.kind === "worldEnvironment"
     ) return;
 
     if (selection.kind === "light") {
@@ -13319,6 +13335,81 @@ export class SceneApp {
   }
 
   /**
+   * Re-applies the World Environment to the viewport. The actor stores level
+   * defaults only; the render override comes with the atmosphere binding.
+   */
+  private applyWorldEnvironment(): void {
+    // The atmosphere binding (WES-004) resolves and applies the override here.
+  }
+
+  /** The World Environment actor exactly as authored (sparse), or undefined when none is placed. */
+  getWorldEnvironmentDefaults(): LayoutWorldEnvironment | undefined {
+    return this.layout?.worldEnvironment ? structuredClone(this.layout.worldEnvironment) : undefined;
+  }
+
+  /** Adds the singleton World Environment actor (or selects the existing one). */
+  addWorldEnvironment(): void {
+    if (!this.layout) return;
+    if (this.layout.worldEnvironment) {
+      this.select({ kind: "worldEnvironment" });
+      this.onStatus?.("World Environment already exists - selected it.", "info");
+      return;
+    }
+    this.commitWorldEnvironment({}, "Add World Environment");
+    this.select({ kind: "worldEnvironment" });
+    this.onStatus?.("Added World Environment.", "info");
+  }
+
+  /** Removes the singleton World Environment actor (undoable). */
+  removeWorldEnvironment(): void {
+    if (!this.layout?.worldEnvironment) return;
+    this.commitWorldEnvironment(undefined, "Delete World Environment");
+  }
+
+  /**
+   * Applies a partial edit to the World Environment level defaults as one
+   * undoable command. Grouped fields (`time`, `sunPath`, ...) are replaced whole,
+   * so a caller patches a group by passing the merged group.
+   */
+  setWorldEnvironment(
+    patch: { [K in keyof LayoutWorldEnvironment]?: LayoutWorldEnvironment[K] | undefined },
+    label = "Edit World Environment",
+  ): void {
+    if (!this.layout?.worldEnvironment) return;
+    const next: LayoutWorldEnvironment = { ...this.layout.worldEnvironment };
+    for (const key of Object.keys(patch) as Array<keyof LayoutWorldEnvironment>) {
+      const value = patch[key];
+      if (value === undefined) delete next[key];
+      else (next as Record<string, unknown>)[key] = value;
+    }
+    this.commitWorldEnvironment(next, label);
+  }
+
+  /** Single undoable World Environment mutation (the body of every WES default command). */
+  private commitWorldEnvironment(nextEnvironment: LayoutWorldEnvironment | undefined, label: string): void {
+    if (!this.layout) return;
+    const previousEnvironment = this.layout.worldEnvironment
+      ? structuredClone(this.layout.worldEnvironment)
+      : undefined;
+
+    const apply = (environment: LayoutWorldEnvironment | undefined): void => {
+      if (!this.layout) return;
+      if (environment) this.layout.worldEnvironment = structuredClone(environment);
+      else delete this.layout.worldEnvironment;
+      this.applyWorldEnvironment();
+      if (!this.layout.worldEnvironment && this.selection?.kind === "worldEnvironment") this.select(null);
+      else this.emitSelectionChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(nextEnvironment),
+      undo: () => apply(previousEnvironment),
+    });
+  }
+
+  /**
    * World-settings edits persist immediately (debounced) so the user never has
    * to press Save for scene rendering tweaks.
    */
@@ -13451,6 +13542,10 @@ export class SceneApp {
     if (selection.kind === "post") {
       this.applySkyAtmosphere();
       this.applyPostProcess();
+      return;
+    }
+    if (selection.kind === "worldEnvironment") {
+      this.applyWorldEnvironment();
       return;
     }
     // World-widget markers carry no hidden flag (always shown in the editor).
@@ -14383,6 +14478,9 @@ export class SceneApp {
     if (selection.kind === "post") {
       return resolvePostProcess(this.layout?.postProcess ?? null).name;
     }
+    if (selection.kind === "worldEnvironment") {
+      return resolveWorldEnvironment(this.layout?.worldEnvironment ?? null).name;
+    }
     if (selection.kind === "reflectionPlane") {
       return resolveReflectionPlane(this.layout?.reflectionPlanes?.[selection.index] ?? null).name;
     }
@@ -14524,7 +14622,8 @@ export class SceneApp {
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "post"
+      selection.kind === "post" ||
+      selection.kind === "worldEnvironment"
     ) {
       return null;
     }
@@ -14660,7 +14759,7 @@ export class SceneApp {
       return this.selectionOutline.cloneRenderableMeshes(actorObject);
     }
 
-    if (selection.kind === "post") {
+    if (selection.kind === "post" || selection.kind === "worldEnvironment") {
       return null;
     }
 
@@ -15316,7 +15415,8 @@ export class SceneApp {
       this.selection.kind === "sky" ||
       this.selection.kind === "fog" ||
       this.selection.kind === "cloud" ||
-      this.selection.kind === "post"
+      this.selection.kind === "post" ||
+      this.selection.kind === "worldEnvironment"
     ) {
       return;
     }
@@ -15451,6 +15551,7 @@ export class SceneApp {
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
       selection.kind === "post" ||
+      selection.kind === "worldEnvironment" ||
       selection.kind === "worldWidget"
     ) {
       return null;
@@ -15662,6 +15763,7 @@ export class SceneApp {
     if (selection.kind === "fog") return Boolean(this.layout.heightFog);
     if (selection.kind === "cloud") return Boolean(this.layout.cloudLayer);
     if (selection.kind === "post") return Boolean(this.layout.postProcess);
+    if (selection.kind === "worldEnvironment") return Boolean(this.layout.worldEnvironment);
     if (selection.kind === "reflectionPlane") {
       return Boolean(this.layout.reflectionPlanes?.[selection.index]);
     }

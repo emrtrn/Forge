@@ -82,6 +82,7 @@ import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 import { normalizeSplineComponentData } from "../engine/scene/spline";
 import { normalizeSplineGenerators } from "../engine/scene/splineGenerator";
 import { normalizeWorldRecipe, worldRecipePath } from "../engine/worldbuilder/recipe";
+import { normalizeWorldEnvironment } from "../engine/environment/worldEnvironment";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -1746,6 +1747,21 @@ export function validateCloudLayer(value: unknown): Record<string, unknown> | nu
 }
 
 /**
+ * Allowlist validator for the singleton World Environment (WES) actor. Reuses
+ * {@link normalizeWorldEnvironment} as the single source of field shape, so a
+ * field the runtime normalizer does not keep cannot survive a save either (and
+ * shows up in `dropped[]`). Repairs (clamps, unknown enums) are applied rather
+ * than rejected, matching the loader. A present actor at its defaults
+ * round-trips as `{}`; only `undefined` returns null.
+ */
+export function validateWorldEnvironment(value: unknown): Record<string, unknown> | null {
+  if (value === undefined) return null;
+  const { environment } = normalizeWorldEnvironment(value);
+  if (!environment) throw new Error("worldEnvironment must be an object");
+  return environment as Record<string, unknown>;
+}
+
+/**
  * Allowlist validator for the singleton Reflection Environment (Sky Light) actor.
  * Faz 1 persists the capture source + reflection intensity. Like the other
  * singleton environment actors, a present all-defaults actor round-trips as `{}`
@@ -2033,6 +2049,7 @@ export function validateLayout(value: unknown): unknown {
   const cloudLayer = validateCloudLayer(layout.cloudLayer);
   const reflection = validateReflection(layout.reflection);
   const postProcess = validatePostProcess(layout.postProcess);
+  const worldEnvironment = validateWorldEnvironment(layout.worldEnvironment);
   const lights = layout.lights === undefined
     ? null
     : Array.isArray(layout.lights)
@@ -2188,6 +2205,7 @@ export function validateLayout(value: unknown): unknown {
   if (heightFog) output.heightFog = heightFog;
   if (cloudLayer) output.cloudLayer = cloudLayer;
   if (postProcess) output.postProcess = postProcess;
+  if (worldEnvironment) output.worldEnvironment = worldEnvironment;
   if (lights) output.lights = lights;
   if (reflectionPlanes) output.reflectionPlanes = reflectionPlanes;
   if (reflectiveSurfaces) output.reflectiveSurfaces = reflectiveSurfaces;

@@ -72,7 +72,7 @@ export function readRoomLayout(value: unknown, path: string): RoomLayout {
       }
     });
   }
-  for (const key of ["worldSettings", "skyAtmosphere", "heightFog", "cloudLayer", "reflection", "postProcess"]) {
+  for (const key of ["worldSettings", "skyAtmosphere", "heightFog", "cloudLayer", "reflection", "postProcess", "worldEnvironment"]) {
     if (input[key] !== undefined) requireRecord(input[key], `${path}.${key}`);
   }
   if (input.worldWidgets !== undefined) {

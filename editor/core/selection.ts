@@ -16,7 +16,8 @@ export type Selection =
   | { kind: "sky" }
   | { kind: "fog" }
   | { kind: "cloud" }
-  | { kind: "post" };
+  | { kind: "post" }
+  | { kind: "worldEnvironment" };
 
 export type InstanceSelection = Extract<Selection, { kind: "instance" }>;
 export type CharacterSelection = Extract<Selection, { kind: "character" }>;
@@ -47,6 +48,8 @@ export type FogSelection = Extract<Selection, { kind: "fog" }>;
 export type CloudSelection = Extract<Selection, { kind: "cloud" }>;
 /** The singleton global Post Process environment actor (no index/transform). */
 export type PostSelection = Extract<Selection, { kind: "post" }>;
+/** The singleton World Environment (WES) actor (no index/transform). */
+export type WorldEnvironmentSelection = Extract<Selection, { kind: "worldEnvironment" }>;
 
 export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "lake") return { ...selection };
@@ -72,6 +75,7 @@ export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "fog") return { kind: "fog" };
   if (selection.kind === "cloud") return { kind: "cloud" };
   if (selection.kind === "post") return { kind: "post" };
+  if (selection.kind === "worldEnvironment") return { kind: "worldEnvironment" };
   return { kind: "character", index: selection.index };
 }
 
@@ -93,6 +97,7 @@ export function selectionId(selection: Selection): string {
   if (selection.kind === "fog") return "fog";
   if (selection.kind === "cloud") return "cloud";
   if (selection.kind === "post") return "post";
+  if (selection.kind === "worldEnvironment") return "worldEnvironment";
   return `instance:${encodeURIComponent(selection.assetId)}:${selection.placementIndex}`;
 }
 
@@ -103,6 +108,7 @@ export function parseSelectionId(id: string): Selection | null {
   if (kind === "fog") return { kind: "fog" };
   if (kind === "cloud") return { kind: "cloud" };
   if (kind === "post") return { kind: "post" };
+  if (kind === "worldEnvironment") return { kind: "worldEnvironment" };
   if (kind === "character") {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "character", index } : null;
@@ -208,6 +214,7 @@ export function selectionsEqual(
   if (left.kind === "fog" && right.kind === "fog") return true;
   if (left.kind === "cloud" && right.kind === "cloud") return true;
   if (left.kind === "post" && right.kind === "post") return true;
+  if (left.kind === "worldEnvironment" && right.kind === "worldEnvironment") return true;
   if (left.kind !== "instance" || right.kind !== "instance") return false;
   return left.assetId === right.assetId && left.placementIndex === right.placementIndex;
 }

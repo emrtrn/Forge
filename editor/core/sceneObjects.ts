@@ -11,6 +11,7 @@ import { resolveAiNavigationVolume } from "@engine/scene/aiNavigationVolume";
 import { resolveTargetPoint } from "@engine/scene/targetPoint";
 import { resolveSplineActorDebug } from "@engine/scene/splineActor";
 import { resolvePostProcess } from "@engine/scene/postProcess";
+import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
 import type {
   LayoutBlockingVolume,
@@ -28,6 +29,7 @@ import type {
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
   LayoutTargetPoint,
+  LayoutWorldEnvironment,
   LayoutSplineActor,
   RoomLayout,
 } from "@engine/scene/layout";
@@ -93,6 +95,37 @@ export const CLOUD_LAYER_ASSET_ID = "cloud-layer";
 
 /** Stable Outliner/Details asset id shown for the singleton Post Process actor. */
 export const POST_PROCESS_ASSET_ID = "post-process";
+
+/** Stable Outliner/Details asset id shown for the singleton World Environment (WES). */
+export const WORLD_ENVIRONMENT_ASSET_ID = "world-environment";
+
+/**
+ * Builds the transform-less Details/Outliner view-model for the World
+ * Environment singleton; the resolved (normalized) level defaults ride along in
+ * {@link EditableSelection.worldEnvironment}.
+ */
+function buildWorldEnvironmentEditableSelection(environment: LayoutWorldEnvironment): EditableSelection {
+  const resolved = resolveWorldEnvironment(normalizeWorldEnvironment(environment).environment);
+  return {
+    id: "worldEnvironment",
+    kind: "worldEnvironment",
+    assetId: WORLD_ENVIRONMENT_ASSET_ID,
+    category: "visual-effects",
+    label: resolved.name,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    pivot: [0, 0, 0],
+    scaleLocked: true,
+    locked: false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    worldEnvironment: resolved,
+    metadata: {},
+  };
+}
 
 /**
  * Builds the transform-less Details/Outliner view-model for the Sky Atmosphere
@@ -635,6 +668,16 @@ export function buildSceneObjects(
     });
   }
 
+  if (layout.worldEnvironment) {
+    const selection: Selection = { kind: "worldEnvironment" };
+    objects.push({
+      ...buildWorldEnvironmentEditableSelection(layout.worldEnvironment),
+      selected: deps.isSelected(selection),
+      hidden: layout.worldEnvironment.hidden ?? false,
+      locked: false,
+    });
+  }
+
   layout.actors?.forEach((actor, index) => {
     const selection: Selection = { kind: "actor", index };
     objects.push({
@@ -880,6 +923,11 @@ export function buildEditableSelection(
   if (selection.kind === "post") {
     if (!layout.postProcess) return null;
     return buildPostEditableSelection(layout.postProcess);
+  }
+
+  if (selection.kind === "worldEnvironment") {
+    if (!layout.worldEnvironment) return null;
+    return buildWorldEnvironmentEditableSelection(layout.worldEnvironment);
   }
 
   if (selection.kind === "reflectionPlane") {

@@ -66,15 +66,20 @@ export function captureSkyEnvironment(
   // Match the live sky: some three builds ship a clouds-extended Sky â€” keep this a
   // pure atmosphere so the captured IBL is just sky scattering.
   if (uniforms.cloudCoverage) uniforms.cloudCoverage.value = 0;
+  // No sun disc in the capture. Its ×19000 HDR core overflows the half-float
+  // cube faces, so the prefiltered environment became Inf/NaN wherever the
+  // disc landed on a texel: PBR ambient flipped between washed-out and normal
+  // with fractions of a degree of sun movement (WES recaptures exposed it).
+  // The sun's direct light is the directional light; the sky's glow stays.
+  if (uniforms.showSunDisc) uniforms.showSunDisc.value = 0;
   (uniforms.sunPosition!.value as Vector3).copy(sunDirection);
   envScene.add(captureSky);
 
   const previousToneMapping = renderer.toneMapping;
   renderer.toneMapping = NoToneMapping;
   const target = pmrem.fromScene(envScene, 0, 0.1, CAPTURE_FAR, { size });
-  // Water removes only this captured solar hotspot before adding its own
-  // finite analytic sun. Other PBR materials retain the original environment.
-  target.texture.userData.waterSkySunDirection = sunDirection.toArray();
+  // No `waterSkySunDirection`: there is no captured solar hotspot for water to
+  // suppress, so it adds only its own finite analytic sun.
   renderer.toneMapping = previousToneMapping;
 
   captureSky.geometry.dispose();

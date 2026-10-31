@@ -145,7 +145,9 @@ test("Lake crest foam controls survive undo Save Reload and runtime", async ({ p
 });
 
 test("Lake quality menu releases effects, preserves geometry and authored settings, and updates live Play", async ({ page, request }, info) => {
-  test.setTimeout(300_000);
+  // Ten menu switches across two pages at Ultra: headless SwiftShader spends ~2 s
+  // per frame here, so the run takes ~7 min (it passed well inside 300 s headed).
+  test.setTimeout(600_000);
   const { errors } = await setup(page, request, true, false, false, false, false, true, false, false, false, true);
   await ready(page);
   const quality = (p: Page) => p.evaluate(() => (window as any).__lakeQA.quality());
@@ -595,8 +597,13 @@ test("Lake refraction bends the bed, preserves dry areas and persists through Sa
   const off = await capture(0), on = await capture(1.5), restored = await capture(0);
   expect(on.snapshotUsed).toBe(true); expect(on.refractionMask).toBe(true); expect(on.refractionPower).toBe(1.5);
   expect(on.glError).toBe(0); expect(on.calls).toBe(off.calls);
-  const changed = on.samples.filter((v: number, i: number) => Math.abs(v - off.samples[i]!) > 2).length;
-  expect(changed, "depth-validated refraction must change visible bed pixels").toBeGreaterThan(10);
+  // Count sampled pixels, not channels past a delta: over this dim, even bed the
+  // shift is a few levels, and a >2 delta only caught the odd edge pixel that
+  // happened to land on the 8 px grid. Rendering is deterministic (restored must
+  // equal off below), so every difference here comes from refraction (~2200/8272).
+  let changed = 0;
+  for (let i = 0; i < off.samples.length; i += 3) if ([0, 1, 2].some((c) => on.samples[i + c] !== off.samples[i + c])) changed++;
+  expect(changed, "depth-validated refraction must change visible bed pixels").toBeGreaterThan(1000);
   expect(restored.samples).toEqual(off.samples);
   const dryOff = await capture(0, true), dryOn = await capture(1.5, true);
   for (const key of ["dry", "island", "separate"]) expect(dryOn.probes[key]).toEqual(dryOff.probes[key]);

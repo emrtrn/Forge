@@ -427,6 +427,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         </label>
       </div>
       ` : ""}
+      ${settings.editMode === "splines" ? actorLockSection(selection) : ""}
       ${settings.editMode !== "sculpt" || worldTerrain ? "" : landscapeSizeSection(resolution, lockedAttr)}
     `;
 

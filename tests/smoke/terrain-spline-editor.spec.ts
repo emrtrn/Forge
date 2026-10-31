@@ -405,6 +405,7 @@ test("multi-tile spline Draw, point gizmo and snap survive Save and reload", asy
   await page.locator("[data-landscape-spline-point-snap]").click();
   await expect(y).toHaveValue("5");
   const lock = page.locator('[data-detail-toggle="locked"]');
+  await expect(lock, "Landscape spline Details must expose the actor lock").toHaveCount(1);
   await lock.check(); await expect(x).toBeDisabled();
   await lock.uncheck(); await expect(x).toBeEnabled();
 
@@ -541,6 +542,7 @@ test("multi-tile road mesh controls persist and Play collides with the rendered 
   await page.getByTestId("editor-undo").click();
   await save(page);
   const lock = page.locator('[data-detail-toggle="locked"]');
+  await expect(lock, "Landscape spline Details must expose the actor lock").toHaveCount(1);
   await lock.check(); await expect(flag("enabled")).toBeDisabled();
   await lock.uncheck(); await expect(flag("enabled")).toBeEnabled();
   await page.locator('[data-landscape-spline-tool="edit"]').click();

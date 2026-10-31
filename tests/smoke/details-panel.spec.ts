@@ -24,19 +24,27 @@ for (const tilesX of [1, 2]) {
     const heading = (name: string) => details.getByRole("button", { name, exact: true });
     const heightmap = heading("Heightmap");
     await expect(mode).toHaveValue("sculpt");
-    await expect(mode.locator("option")).toHaveText(tilesX === 1 ? ["Sculpt", "Paint", "Splines"] : ["Sculpt", "Paint"]);
-    await expect(details.locator(".detail-section-toggle").nth(0)).toHaveText("Landscape Mode");
-    await expect(details.locator(".detail-section-toggle").nth(1)).toHaveText("Heightmap");
-    await expect(details.locator(".detail-section-toggle").nth(2)).toHaveText("Tiles");
-    await expect(details.locator(".detail-section-toggle").nth(3)).toHaveText("Others");
+    // Every Landscape is a World Terrain; one or many tiles offer the same modes.
+    await expect(mode.locator("option")).toHaveText(["Sculpt", "Paint", "Splines", "Water"]);
+    // Every section below Landscape Mode belongs to Sculpt; resize and Expand
+    // exist for a single tile only.
+    await expect(details.locator(".detail-section-toggle")).toHaveText(tilesX === 1
+      ? ["Landscape Mode", "Heightmap", "Landscape Size", "Expand", "Tiles", "Others"]
+      : ["Landscape Mode", "Heightmap", "Tiles", "Others"]);
     await heightmap.click();
     await heading("Tiles").click();
 
-    const expectAccordion = async () => {
+    // Collapsed/expanded state survives mode, tool and layer refreshes; Paint and
+    // Splines show only Landscape Mode, so Sculpt's sections reappear as left.
+    const expectAccordion = async (sculpt = false) => {
       await expect(heading("Landscape Mode")).toHaveAttribute("aria-expanded", "true");
-      await expect(heightmap).toHaveAttribute("aria-expanded", "false");
-      await expect(heading("Tiles")).toHaveAttribute("aria-expanded", "false");
-      await expect(heading("Others")).toHaveAttribute("aria-expanded", "true");
+      if (sculpt) {
+        await expect(heightmap).toHaveAttribute("aria-expanded", "false");
+        await expect(heading("Tiles")).toHaveAttribute("aria-expanded", "false");
+        await expect(heading("Others")).toHaveAttribute("aria-expanded", "true");
+      } else {
+        for (const name of ["Heightmap", "Tiles", "Others"]) await expect(heading(name)).toHaveCount(0);
+      }
       await expect(details.locator(".detail-section-title")).toHaveCount(0);
       await expect(details.locator(".detail-heading")).toHaveCount(0);
       await expect(details.locator("[data-details-sections-toggle]")).toHaveCount(1);
@@ -55,23 +63,24 @@ for (const tilesX of [1, 2]) {
     await mode.selectOption("sculpt");
     await details.locator('[data-landscape-tool="smooth"]').click();
     await expect(details.locator('[data-landscape-tool="smooth"]')).toHaveClass("active");
+    await expectAccordion(true);
+    await mode.selectOption("splines");
+    await details.locator('[data-landscape-spline-tool="edit"]').click();
     await expectAccordion();
-    if (tilesX === 1) {
-      await mode.selectOption("splines");
-      await details.locator('[data-landscape-spline-tool="edit"]').click();
-      await expectAccordion();
-    }
     await mode.selectOption("paint");
     await expectAccordion();
+    await mode.selectOption("sculpt");
+    await expectAccordion(true);
 
-    // Lock can be reversed after a full refresh; the replacement selector follows it.
+    // Lock (Sculpt's Others section) can be reversed after a full refresh; the
+    // replacement selector follows it.
     const lock = details.getByRole("checkbox", { name: "Lock Movement", exact: true });
     await lock.check();
     await expect(mode).toBeDisabled();
-    await expectAccordion();
+    await expectAccordion(true);
     await lock.uncheck();
     await expect(mode).toBeEnabled();
-    await expectAccordion();
+    await expectAccordion(true);
 
     const allSections = details.locator("[data-details-sections-toggle]");
     await allSections.click();
@@ -79,10 +88,10 @@ for (const tilesX of [1, 2]) {
     await expect(allSections).toHaveAttribute("aria-label", "Expand all sections");
     await allSections.click();
     await expect(mode).toBeVisible();
+    await mode.selectOption("sculpt");
     await heightmap.click();
     await heading("Tiles").click();
-    await mode.selectOption("sculpt");
-    await expectAccordion();
+    await expectAccordion(true);
     await page.screenshot({ path: testInfo.outputPath("landscape-mode.png") });
     expect(errors).toEqual([]);
   });

@@ -24,18 +24,22 @@ export function isPlanarReflectionCamera(camera: Camera): boolean { return refle
  * In reversed-Z the near inequality is w-z, rather than z+w. The inverse
  * projection also handles orthographic cameras without perspective shortcuts. */
 export function applyPlanarObliqueClip(projection: Matrix4, plane: Vector4, reversed: boolean, bias = 0.003): void {
+  // Bias in camera-space metres. Altering projection[10] directly scales the
+  // offset by eye depth and can move an orthographic clip plane by metres.
+  const clipped = plane.clone();
+  clipped.w -= bias;
   const q = new Vector4(Math.sign(plane.x), Math.sign(plane.y), reversed ? 0 : 1, 1)
     .applyMatrix4(projection.clone().invert());
-  const dot = plane.dot(q);
+  const dot = clipped.dot(q);
   if (Math.abs(dot) < 1e-8) return;
-  const c = plane.clone().multiplyScalar((reversed ? 1 : 2) / dot);
+  const c = clipped.multiplyScalar((reversed ? 1 : 2) / dot);
   const e = projection.elements;
   if (reversed) {
     e[2] = e[3]! - c.x; e[6] = e[7]! - c.y;
-    e[10] = e[11]! - c.z + bias; e[14] = e[15]! - c.w;
+    e[10] = e[11]! - c.z; e[14] = e[15]! - c.w;
   } else {
     e[2] = c.x - e[3]!; e[6] = c.y - e[7]!;
-    e[10] = c.z - e[11]! - bias; e[14] = c.w - e[15]!;
+    e[10] = c.z - e[11]!; e[14] = c.w - e[15]!;
   }
 }
 
@@ -129,8 +133,8 @@ export function planarReflectionScreenCoverage(bounds: Box3, viewProjection: Mat
 }
 
 /**
- * One horizontal planar-reflection render source shared by every consumer in a
- * River Water Body group. It intentionally owns no visible geometry: consumers
+ * One world-space planar-reflection render source shared by coplanar consumers.
+ * It intentionally owns no visible geometry: consumers
  * call {@link update} during their draw, while this source hides all consumers
  * for the nested scene render and restores them afterwards.
  */
@@ -139,22 +143,23 @@ export class PlanarReflectionSource {
   /** Kept stable so a consumer can retain the matrix while the target changes. */
   readonly binding: PlanarReflectionBinding;
   private renderTarget: WebGLRenderTarget | null;
-  private planeY: number;
+  private readonly plane: Plane;
   private readonly reflectionCameras = new WeakMap<Camera, Camera>();
   private readonly consumers = new Set<PlanarReflectionConsumer>();
   private minUpdateMs = Infinity;
   private lastUpdateAt = -Infinity;
   private rendering = false;
   private captured = false;
+  private capturedCamera: Camera | null = null;
   get hasCapture(): boolean { return this.captured; }
   /** Scratch for the per-frame coverage gate, which must not allocate. */
   private readonly consumerBounds = new Box3();
   private readonly viewProjection = new Matrix4();
   private readonly clearColor = new Color();
 
-  constructor(planeY: number, quality: PlanarReflectionQuality) {
+  constructor(planeY: number | Plane, quality: PlanarReflectionQuality) {
     const settings = QUALITY_SETTINGS[quality];
-    this.planeY = planeY;
+    this.plane = typeof planeY === "number" ? new Plane(new Vector3(0, 1, 0), -planeY) : planeY.clone().normalize();
     this.minUpdateMs = settings.minUpdateMs;
     this.renderTarget = this.createRenderTarget(quality);
     this.binding = {
@@ -184,8 +189,15 @@ export class PlanarReflectionSource {
   /** Moving local water films reuse their targets; only the projection/capture
    * becomes invalid when their horizontal reference level changes. */
   setPlaneHeight(planeY: number): void {
-    if (!Number.isFinite(planeY) || planeY === this.planeY) return;
-    this.planeY = planeY;
+    if (!Number.isFinite(planeY)) return;
+    this.setPlane(new Plane(new Vector3(0, 1, 0), -planeY));
+  }
+
+  /** A world-space plane; changing it invalidates the previous capture. */
+  setPlane(plane: Plane): void {
+    const next = plane.clone().normalize();
+    if (this.plane.equals(next)) return;
+    this.plane.copy(next);
     this.captured = false;
     this.lastUpdateAt = -Infinity;
   }
@@ -227,11 +239,12 @@ export class PlanarReflectionSource {
   }
 
   /** Updates at most once per profile interval, even when several ribbons draw in one frame. */
-  update(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
+  update(renderer: WebGLRenderer, scene: Scene, camera: Camera, bounds?: Box3): void {
     if (this.rendering || isPlanarReflectionCamera(camera) || !this.renderTarget) return;
+    if (this.capturedCamera !== camera) { this.captured = false; this.lastUpdateAt = -Infinity; }
     // Before the interval check, and without stamping `lastUpdateAt`: a frame
     // skipped for being invisible must not also postpone the frame after it.
-    const coverage = this.screenCoverage(camera);
+    const coverage = bounds ? planarReflectionScreenCoverage(bounds, this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)) : this.screenCoverage(camera);
     if (coverage !== null && coverage < PLANAR_REFLECTION_MIN_SCREEN_COVERAGE) return;
     const now = performance.now();
     if (now - this.lastUpdateAt < this.minUpdateMs) return;
@@ -266,8 +279,8 @@ export class PlanarReflectionSource {
 
   private renderReflection(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
     const reflectionCamera = this.getReflectionCamera(camera);
-    const reflectorPosition = new Vector3(0, this.planeY, 0);
-    const normal = new Vector3(0, 1, 0);
+    const reflectorPosition = this.plane.coplanarPoint(new Vector3());
+    const normal = this.plane.normal;
     const cameraPosition = new Vector3().setFromMatrixPosition(camera.matrixWorld);
     const view = new Vector3().subVectors(reflectorPosition, cameraPosition);
     if (view.dot(normal) > 0) return;
@@ -324,7 +337,9 @@ export class PlanarReflectionSource {
     // insufficient: the dome would write its clipped, blocky HDR sun into the
     // planar target and defeat the environment/geometry coverage blend.
     scene.traverseVisible(object => {
-      if (object.userData.waterReflectionBackground === true) hidden.push([object, object.visible]);
+      if (object.userData.waterReflectionBackground === true || object.userData.waterSceneTransmission === true) {
+        if (!this.consumers.has(object)) hidden.push([object, object.visible]);
+      }
     });
     const previousTarget = renderer.getRenderTarget();
     const previousToneMapping = renderer.toneMapping;
@@ -348,6 +363,7 @@ export class PlanarReflectionSource {
       if (renderer.autoClear === false) renderer.clear();
       renderer.render(scene, reflectionCamera);
       this.captured = true;
+      this.capturedCamera = camera;
     } finally {
       scene.background = previousBackground;
       renderer.setClearColor(this.clearColor, previousClearAlpha);

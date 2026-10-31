@@ -1,3 +1,5 @@
+import type { WaterReflectionRegistry } from "./waterReflectionRegistry";
+import { RiverPlanarSurface, createRiverPlanarUniforms, effectiveRiverReflectionQuality, RIVER_PLANAR_GLSL } from "./riverPlanarReflection";
 import { createWaterCrestFoamUniforms, WATER_CREST_FOAM_GLSL } from "./waterCrestFoam";
 import { FULL_LAKE_QUALITY, type LakeQuality } from "../perf/lakeQuality";
 import {
@@ -262,6 +264,8 @@ export function buildRiverWaterRibbon(
 const VERTEX_SHADER = `
 #include <fog_pars_vertex>
 #include <shadowmap_pars_vertex>
+attribute vec4 riverPlanarWeights;
+varying vec4 vRiverPlanarWeights;
 attribute vec2 flowDirection;
 attribute float shoreDistance;
 attribute float waterDepth;
@@ -289,6 +293,7 @@ varying vec2 vCrestWave;
 ${RIVER_WAVE_GLSL}
 ${RIVER_SHADING_NORMAL_GLSL}
 void main() {
+  vRiverPlanarWeights = riverPlanarWeights;
   vContactPosition = position;
   vContactFlow=flowDirection;
   vRiverUv = uv;
@@ -315,6 +320,7 @@ void main() {
 }`;
 
 const FRAGMENT_SHADER = `
+${RIVER_PLANAR_GLSL}
 #include <fog_pars_fragment>
 uniform sampler2D normalMap;
 uniform float time;
@@ -512,8 +518,12 @@ void main() {
   reflectionDirection.y = abs(reflectionDirection.y);
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
   float environmentCoverage = waterEnvironmentCoverage(vWorldPosition);
-  vec3 reflected = waterReflectedEnvironment(vWorldPosition, reflectionDirection, reflectionRoughness)
-    / max(environmentCoverage, 0.00001);
+  vec3 reflected = waterReflectedEnvironment(vWorldPosition, reflectionDirection, reflectionRoughness);
+  vec4 planar = riverPlanar(vWorldPosition, slope, reflectionRoughness);
+  float planarCoverage = clamp(planar.a, 0.0, 1.0);
+  reflected = reflected * (1.0 - planarCoverage) + planar.rgb;
+  environmentCoverage = environmentCoverage * (1.0 - planarCoverage) + planarCoverage;
+  reflected /= max(environmentCoverage, 0.00001);
   float reflectionAmount = clamp(reflectionStrength * fresnel * environmentCoverage, 0.0, 1.0)
     * aboveSurface * smoothstep(0.0, 0.08, vWaterDepth);
   float wetness = smoothstep(0.0, 0.12, vWaterDepth);
@@ -568,6 +578,7 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   /** Transient graphics ceiling; never serialized over authored settings. */
   refractionAllowed?: boolean;
   quality?: LakeQuality;
+  reflections?: WaterReflectionRegistry;
   spline: ForgeLandscapeSpline;
   heightAt?: (x: number, z: number) => number | null;
   sampleSpacing?: number;
@@ -598,6 +609,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private shoreAllowed = true;
   private quality: LakeQuality;
   private readonly item: RiverWaterRenderItem;
+  private readonly planar: RiverPlanarSurface;
   private refreshTerrainEffects:()=>void=()=>{};
   readonly effectErrors: string[] = [];
   getSurface(): RiverSurfaceQuery { return this.effectSurface ??= new RiverSurfaceQuery(this.ribbon, [...this.position.toArray()] as Vec3); }
@@ -659,6 +671,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ...UniformsUtils.clone(UniformsLib.fog),
         ...UniformsUtils.clone(UniformsLib.lights),
         ...createRiverSunShadowUniforms(),
+        ...createRiverPlanarUniforms(),
         ...createWaterEnvironmentUniforms(),
         ...createWaterSceneUniforms(), ...createWaterCrestFoamUniforms(item, quality.foamAllowed),
         riverRefractionSurface: { value: null }, riverRefractionSize: { value: new Vector2(1, 1) },
@@ -710,6 +723,10 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     super(geometry, material);
     Object.assign(material.uniforms, this.foamMaterial.uniforms);
     this.item = item; this.quality = { ...quality }; this.shoreAllowed = quality.shoreWetnessAllowed;
+    this.planar = new RiverPlanarSurface(this, ribbon, item.reflectionGroup ?? `river:${item.id}`,
+      item.reflectionMode === "off" || item.reflectionStrength <= 0 ? null : effectiveRiverReflectionQuality(item.reflectionQuality, quality.reflectionQuality), item.reflections);
+    this.addEventListener("added", () => { if (!this.disposed) this.planar.attachToScene(); });
+    this.addEventListener("removed", () => this.planar.detach());
     this.ribbon=ribbon; this.effectSurface=surface; this.bakedTexture=bake?.texture??null;
     this.refractionAllowed = (item.refractionAllowed ?? true) && quality.reflectionQuality !== "off";
     this.authoredRefractionStrength = item.refractionStrength;
@@ -750,6 +767,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.addEventListener("removed",()=>{this.releaseShore();this.releaseShore=()=>{};this.releaseCaustics();this.releaseCaustics=()=>{};});
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
+      this.planar.attachToScene();
       // Every River reads the same pre-transparency snapshot as Lake.
       const snapshot = readWaterScene(renderer, scene, camera);
       const transmission = !!snapshot;
@@ -789,6 +807,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const terrainChanged = quality.causticsAllowed !== this.quality.causticsAllowed || quality.shoreWetnessAllowed !== this.shoreAllowed;
     this.quality = { ...quality };
     const item = this.item, u = this.material.uniforms;
+    this.planar.setQuality(item.reflectionMode === "off" || item.reflectionStrength <= 0 ? null
+      : effectiveRiverReflectionQuality(item.reflectionQuality, quality.reflectionQuality));
     this.setRefractionAllowed(quality.reflectionQuality !== "off");
     this.shoreAllowed = quality.shoreWetnessAllowed;
     if (terrainChanged) this.refreshTerrainEffects();
@@ -887,6 +907,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.planar.detach();
     this.releaseShore();this.releaseShore=()=>{};
     this.foamMaterial.dispose();
     this.releaseCaustics(); this.releaseCaustics=()=>{};

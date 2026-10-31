@@ -1312,9 +1312,10 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
       return saved;
     });
   }
-  if (input.reflectionMode === "sharedPlanar" || input.reflectionMode === "environment") water.reflectionMode = input.reflectionMode;
-  else if (input.reflectionMode !== undefined && input.reflectionMode !== "off") {
-    throw new Error("river water reflectionMode must be off, environment or legacy sharedPlanar");
+  if (input.reflectionMode === "sharedPlanar" || input.reflectionMode === "environment") water.reflectionMode = "sharedPlanar";
+  else if (input.reflectionMode === "off") water.reflectionMode = "off";
+  else if (input.reflectionMode !== undefined) {
+    throw new Error("river water reflectionMode must be off, sharedPlanar or legacy environment");
   }
   if (typeof input.reflectionGroup === "string" && input.reflectionGroup.length > 0) {
     water.reflectionGroup = input.reflectionGroup;

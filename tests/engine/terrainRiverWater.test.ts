@@ -146,12 +146,14 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.equal(uniforms.riverSunCascadeCount.value, 0);
     assert.deepEqual(uniforms.riverSunShadowFade.value.toArray(), [1e9,1e9]);
   });
-  await checkAsync("terrain river: environment and legacy reflection modes save without planar leases", async () => {
+  await checkAsync("terrain river: legacy environment migrates to planar and explicit Off round-trips", async () => {
     const base = { id: "river", landscapeRef: "land", splineRef: "spline" };
-    assert.equal(resolveRiverWater({ ...base, reflectionMode: "sharedPlanar" }).reflectionMode, "environment");
+    assert.equal(resolveRiverWater({ ...base, reflectionMode: "sharedPlanar" }).reflectionMode, "sharedPlanar");
     assert.equal(resolveRiverWater({ ...base, reflectionMode: "off" }).reflectionMode, "off");
-    assert.equal(validateRiverWater({ ...base, reflectionMode: "environment" }).reflectionMode, "environment");
+    assert.equal(validateRiverWater({ ...base, reflectionMode: "environment" }).reflectionMode, "sharedPlanar");
     assert.equal(validateRiverWater({ ...base, reflectionMode: "sharedPlanar" }).reflectionMode, "sharedPlanar");
+    assert.equal(resolveRiverWater(validateRiverWater({ ...base, reflectionMode: "off" }) as any).reflectionMode, "off");
+    assert.equal(resolveRiverWater({ ...base, reflectionMode: "environment" }).reflectionMode, "sharedPlanar");
   });
   await checkAsync("terrain river: environment rebind, probe removal and borrowed texture lifetime", async () => {
     const global = new WebGLRenderTarget(768, 1024), local = new WebGLRenderTarget(336, 256);

@@ -44,7 +44,7 @@ export interface ResolvedRiverWater extends Required<WaterCrestFoamSettings> {
   contactFoam?: WaterContactFoam;
   foamStamps: readonly LayoutRiverWaterFoamStamp[];
   segmentProfiles: readonly LayoutRiverWaterSegmentProfile[];
-  reflectionMode: "off" | "environment";
+  reflectionMode: "off" | "sharedPlanar";
   reflectionGroup: string | null;
   reflectionQuality: "low" | "medium" | "high";
   reflectionStrength: number;
@@ -80,7 +80,7 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   shoreWaveBreakupScale: 1.25,
   foamStamps: [],
   segmentProfiles: [],
-  reflectionMode: "environment",
+  reflectionMode: "sharedPlanar",
   reflectionGroup: null,
   reflectionQuality: "medium",
   // Scales the angle-dependent Fresnel reflection and fades it under visible
@@ -160,11 +160,12 @@ export function uniqueRiverWaterId(waters: readonly LayoutRiverWater[]): string 
 }
 
 /**
- * Legacy API: rivers never lease planar targets. Keep old callers source-compatible.
+ * Legacy horizontal key. Sloped rivers use their full world-space plane in the reflection registry.
  */
 export function riverWaterReflectionGroupKey(
-  _water: Pick<ResolvedRiverWater, "reflectionMode" | "reflectionGroup" | "reflectionQuality">,
-  _worldPlaneY: number,
+  water: Pick<ResolvedRiverWater, "reflectionMode" | "reflectionGroup" | "reflectionQuality">,
+  worldPlaneY: number,
 ): string | null {
-  return null;
+  return water.reflectionMode === "off" || water.reflectionQuality === "low" ? null
+    : `${water.reflectionGroup ?? "water"}:${worldPlaneY}:${water.reflectionQuality}`;
 }

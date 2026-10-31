@@ -390,7 +390,6 @@ import {
   resolveRiverWater,
   type RiverWaterObjectLike,
 } from "@engine/render-three/riverWater";
-import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
 import type { WorldUiDebugSnapshot } from "@/ui/WorldUiSubsystem";
 import { LocaleRegistry, normalizeUiLocaleTable } from "@engine/ui/uiLocale";
@@ -997,7 +996,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly riverFoam = new LakeFoamStore();
   private riverFoamAborter = new AbortController();
   private readonly waterReflections = new WaterReflectionRegistry();
-  private riverReflectionSources: PlanarReflectionSource[] = [];
   private readonly riverWaterTextures = new Map<string, Texture>();
   /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
   private landscapeLayerTextures: Texture[] = [];
@@ -2002,8 +2000,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
-    this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
     for (const texture of this.riverWaterTextures.values()) texture.dispose();
@@ -3541,8 +3537,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
-    this.riverReflectionSources = [];
     for (const texture of this.landscapeLayerTextures) texture.dispose();
     this.landscapeLayerTextures = [];
     this.landscapeColliderEntities = [];
@@ -6018,8 +6012,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
-    this.riverReflectionSources = [];
 
     const waters = this.layout?.riverWaters ?? [];
     if (waters.length === 0) return;
@@ -6065,7 +6057,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           {
             ...resolved,
             ...source,
-            foamNoiseMap, loadBakedFoam, quality: lakeQuality(this.qualitySettings),
+            foamNoiseMap, loadBakedFoam, reflections: this.waterReflections, quality: lakeQuality(this.qualitySettings),
             refractionAllowed: this.qualitySettings.lakeReflectionQuality !== "off",
             ...(bakedFoam?{bakedFoam}:{}),
             environmentProbes: () => this.eligibleProbeBakes(),

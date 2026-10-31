@@ -70,8 +70,8 @@ export function applyWaterTooltips(body: HTMLElement): void {
     }
     let description = descriptions[key ?? ""];
     if (control.dataset.riverWaterNumber === "refractionStrength") description = "Nehir altındaki görüntünün küçük dalgalarla bükülmesi. 0 kapalıdır; başlangıç 0,65. Eğim ve gerçek nehir sınırı doğrulanır. Yüksek/Ultra grafik kalitesinde, nehrin ayrıntısı Low değilse ve uygun ekran görüntüsü varsa etkindir. Sığ kıyıda ve yatay bakışta azalır.";
-    if (control.dataset.riverWaterReflection === "reflectionMode") description = "Nehirde mevcut sky light ve sphere capture haritalarından soluk çevre yansıması kullanır. Ek planar çizimi oluşturmaz.";
-    if (control.dataset.riverWaterReflection === "reflectionQuality") description = "Çevre yansımasının yumuşaklığını ve normal katmanı ayrıntısını belirler. Nehir için yeni yansıma hedefi oluşturulmaz.";
+    if (control.dataset.riverWaterReflection === "reflectionMode") description = "Nehir yüzeyinin yerel eğimine uygun düzlemsel yansıma üretir. Off yansımayı kapatır.";
+    if (control.dataset.riverWaterReflection === "reflectionQuality") description = "Low çevre yansıması kullanır. Medium 256 px, High 512 px yerel planar yansıma üretir; görünür kesimler sahne bütçesini paylaşır.";
     if (control.hasAttribute("data-river-water-delete")) description = descriptions.delete;
     if (control.hasAttribute("data-river-water-foam-number")) description = control.dataset.riverWaterFoamNumber?.endsWith(":radius") ? "Dairesel köpüğün yarıçapı (metre)." : "Dairesel köpüğün yoğunluğu. 0 görünmez, 1 tam yoğunluktur.";
     if (control.hasAttribute("data-river-water-foam-add")) description = "Suya veya araziye tıklayarak kaya ve iskele çevresi için dairesel köpük ekler.";

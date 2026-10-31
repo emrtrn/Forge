@@ -293,7 +293,6 @@ import {
   type RiverWaterRenderItem,
 } from "@engine/render-three/riverWater";
 import { uniqueRiverWaterId } from "@engine/scene/riverWater";
-import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import {
   FoliageRenderBinding,
   foliageInstanceFromRoll,
@@ -956,7 +955,7 @@ export interface RiverWaterDetailsView {
   shoreWaveSpeed: number;
   shoreWaveReach: number;
   shoreWaveBreakupScale: number;
-  reflectionMode: "off" | "environment";
+  reflectionMode: "off" | "sharedPlanar";
   reflectionGroup: string;
   reflectionQuality: "low" | "medium" | "high";
   reflectionStrength: number;
@@ -1415,8 +1414,6 @@ export class SceneApp {
   private lakeSeedAbort = new AbortController();
   private lakeDrag: { before: LayoutLakeWaterBody; edge: number; pointerId: number; draft: boolean } | null = null;
   private lakeTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Shared planar reflection sources, one per River Water Body plane/group. */
-  private riverReflectionSources: PlanarReflectionSource[] = [];
   /** Loaded normal maps owned by the editor water preview. */
   private readonly riverWaterTextures = new Map<string, Texture>();
   /** Instanced spline-mesh groups (Faz 6 Road Tool) parented under each landscape, by index. */
@@ -2192,8 +2189,6 @@ export class SceneApp {
       disposeRiverWaterObject(water);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
-    this.riverReflectionSources = [];
     this.riverFoamJob?.controller.abort(); this.riverFoamJob=null;
     this.riverFoamAborter.abort(); this.riverFoam.clear(); this.riverFoamMessages.clear();
     this.lakeFoamJob?.controller.abort(); this.lakeFoamJob=null;
@@ -8179,8 +8174,6 @@ export class SceneApp {
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
-    for (const source of this.riverReflectionSources) this.waterReflections.release(source);
-    this.riverReflectionSources = [];
     const waters = this.layout?.riverWaters ?? [];
     for (const actor of waters) {
       try {
@@ -8221,7 +8214,7 @@ export class SceneApp {
         const item: RiverWaterRenderItem = {
           ...resolved,
           ...source,
-          foamNoiseMap, loadBakedFoam, quality: lakeQuality(this.editorQuality),
+          foamNoiseMap, loadBakedFoam, reflections: this.waterReflections, quality: lakeQuality(this.editorQuality),
           ...(bakedFoam?{bakedFoam}:{}),
           environmentProbes: () => this.eligibleProbeBakes(),
         };
@@ -11102,7 +11095,7 @@ export class SceneApp {
     if (patch.shoreWaveSpeed !== undefined) next.shoreWaveSpeed = Number(clamp(patch.shoreWaveSpeed, 0, 10).toFixed(3));
     if (patch.shoreWaveReach !== undefined) next.shoreWaveReach = Number(clamp(patch.shoreWaveReach, 0.05, 1).toFixed(3));
     if (patch.shoreWaveBreakupScale !== undefined) next.shoreWaveBreakupScale = Number(clamp(patch.shoreWaveBreakupScale, 0.1, 10).toFixed(3));
-    if (patch.reflectionMode !== undefined) next.reflectionMode = patch.reflectionMode === "environment" ? "environment" : "off";
+    if (patch.reflectionMode !== undefined) next.reflectionMode = patch.reflectionMode === "sharedPlanar" ? "sharedPlanar" : "off";
     if (patch.reflectionGroup !== undefined) {
       const group = patch.reflectionGroup.trim();
       if (group) next.reflectionGroup = group;

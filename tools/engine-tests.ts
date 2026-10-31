@@ -1,3 +1,4 @@
+import { registerRiverPlanarReflectionTests } from "../tests/engine/riverPlanarReflection.test";
 import { registerRiverEffectsTests } from "../tests/engine/riverEffects.test";
 import { registerLakeGeometryFoamTests } from "../tests/engine/lakeGeometryFoam.test";
 import { registerLakeQualityTests } from "../tests/engine/lakeQuality.test";
@@ -1296,6 +1297,7 @@ await registerTerrainSplineDataAsyncTests(checkAsync);
 await registerTerrainSplineEditingTests(check, checkAsync);
 await registerTerrainSplineMeshTests(checkAsync);
 await registerTerrainRiverWaterTests(checkAsync);
+await registerRiverPlanarReflectionTests(checkAsync);
 await registerTerrainLakeWaterTests(checkAsync);
 await registerLakeInteractionTests(checkAsync);
 await registerLakeQualityTests(checkAsync);
@@ -23804,7 +23806,7 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     shoreWaveBreakupScale: 1.25,
     foamStamps: [],
     segmentProfiles: [],
-    reflectionMode: "environment",
+    reflectionMode: "sharedPlanar",
     reflectionGroup: null,
     reflectionQuality: "medium",
     reflectionStrength: 0.34,
@@ -23893,9 +23895,9 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     reflectionGroup: "river-a",
     reflectionQuality: "high",
   });
-  assert.equal(riverWaterReflectionGroupKey(shared, -1.4), null);
+  assert.equal(riverWaterReflectionGroupKey(shared, -1.4), "river-a:-1.4:high");
   assert.equal(riverWaterReflectionGroupKey({ ...shared, reflectionQuality: "low" }, -1.4), null);
-  assert.equal(riverWaterReflectionGroupKey(shared, -1.5), null);
+  assert.equal(riverWaterReflectionGroupKey(shared, -1.5), "river-a:-1.5:high");
   assert.equal(PLANAR_REFLECTION_EXCLUDED_LAYER, 31);
   assert.equal(planarReflectionLayerMask(0xffffffff) >>> 0, 0x7fffffff);
 });

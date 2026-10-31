@@ -1067,8 +1067,7 @@ export interface LayoutRiverWater {
   contactFoam?: WaterContactFoam;
   /** Static flow/rapid overrides keyed by Landscape spline segment id. */
   segmentProfiles?: LayoutRiverWaterSegmentProfile[];
-  /** `sharedPlanar` lets same-plane bodies share one reflection render; default is off. */
-  /** sharedPlanar is retained for legacy River files and resolves to environment. */
+  /** Local planar reflection; legacy environment reads as sharedPlanar. Off is preserved. */
   reflectionMode?: "off" | "environment" | "sharedPlanar";
   /** Optional shared planar-reflection group. Bodies on different planes must not share it. */
   reflectionGroup?: string;

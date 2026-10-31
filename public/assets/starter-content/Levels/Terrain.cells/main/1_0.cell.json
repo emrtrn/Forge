@@ -18,5 +18,22 @@
         }
       ]
     }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
+      "position": [
+        183.45,
+        0,
+        121.82
+      ],
+      "rotationYDeg": 0,
+      "rotation": [
+        0,
+        -60,
+        0
+      ],
+      "scale": 1
+    }
   ]
 }

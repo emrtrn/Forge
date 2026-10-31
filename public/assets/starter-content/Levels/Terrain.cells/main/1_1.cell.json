@@ -17,38 +17,6 @@
           "scale": 1.6
         }
       ]
-    },
-    {
-      "assetId": "lt-alpine-pine",
-      "placements": [
-        {
-          "position": [
-            196.7,
-            0,
-            131.71
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 20
-        }
-      ]
-    }
-  ],
-  "actors": [
-    {
-      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
-      "position": [
-        168.92,
-        0,
-        128.9
-      ],
-      "rotationYDeg": 0,
-      "rotation": [
-        0,
-        -120,
-        0
-      ],
-      "scale": 1
     }
   ]
 }

@@ -103,25 +103,6 @@
       "intensity": 1
     }
   },
-  "worldEnvironment": {
-    "time": {
-      "hour": 14,
-      "dayLengthMinutes": 0
-    },
-    "sunPath": {
-      "azimuthDeg": 96.947,
-      "noonElevationDeg": 60
-    },
-    "season": "summer",
-    "weather": {
-      "preset": "clear",
-      "intensity": 1
-    },
-    "surface": {
-      "snowCoverage": 0,
-      "wetness": 0
-    }
-  },
   "lights": [
     {
       "id": "directional-light-mvmufu99-6m4",
@@ -231,13 +212,13 @@
       "surfaceLevel": -1,
       "geometryFoam": {
         "enabled": true,
-        "width": 1.5,
-        "strength": 0.4,
-        "scale": 0.6,
+        "width": 2,
+        "strength": 0.5,
+        "scale": 1,
         "speed": 1,
         "bake": {
-          "manifest": "assets/starter-content/Levels/Terrain.foam/62b56e85937632c5686e27e1ca6308801c62cc0f9db7df3f136a0551146faf16.foam.json",
-          "fingerprint": "721cd56f48bed0846f5c2831b1af284e2ffdca9b3c4148d0b03e196d87f2469a"
+          "manifest": "assets/starter-content/Levels/Terrain.foam/86c40aa61102efdb07d4d89558a69f47c04c8b797c559c1c28b6c86204eb8ba3.foam.json",
+          "fingerprint": "436a5f31413ea3e4329827cb3b8d1cbe43cf2a5d3ba87d708caef117fb3c6cba"
         }
       },
       "contactFoam": {
@@ -250,29 +231,33 @@
       "name": "Lake 1",
       "appearance": {
         "surfaceWavesEnabled": true,
+        "wheelWetTrailEnabled": true,
         "shoreWetnessEnabled": true,
         "foamEnabled": true,
         "causticsEnabled": true,
-        "opacity": 0.4,
+        "opacity": 0.5,
         "bedVisibility": 0.8,
-        "absorptionDistance": 2,
+        "absorptionDistance": 1,
         "surfaceStrength": 1,
         "surfaceRoughness": 0.2,
         "normalScale": 2,
         "rippleSpeed": 2,
         "reflectionStrength": 0.8,
-        "refractionStrength": 2,
-        "surfaceWaveHeight": 0.06,
-        "surfaceWaveLength": 6,
-        "surfaceWavePeriod": 10,
+        "refractionStrength": 1,
+        "surfaceWaveHeight": 0.08,
+        "surfaceWaveLength": 8,
+        "surfaceWavePeriod": 8,
         "surfaceWaveDirection": 30,
-        "surfaceWaveShoreDepth": 0.25,
+        "surfaceWaveShoreDepth": 0.2,
         "wheelRippleStrength": 3,
         "wheelRippleWidth": 1,
         "wheelRippleWavelength": 0.6,
         "wheelRippleLifetime": 4,
-        "foamOpacity": 0.7,
-        "foamWidth": 1,
+        "wheelWetTrailLength": 10,
+        "wheelWetTrailStrength": 1,
+        "wheelWetTrailDrySeconds": 40,
+        "foamOpacity": 0.8,
+        "foamWidth": 1.6,
         "foamScale": 1,
         "foamSpeed": 0.5,
         "causticsStrength": 0.4,
@@ -280,10 +265,10 @@
         "causticsSpeed": 2,
         "causticsDepthFade": 0.4,
         "reflectionMode": "sharedPlanar",
-        "reflectionQuality": "low",
+        "reflectionQuality": "medium",
         "crestFoamEnabled": true,
         "crestFoamStrength": 1,
-        "crestFoamThreshold": 0.2
+        "crestFoamThreshold": 0.25
       }
     }
   ],

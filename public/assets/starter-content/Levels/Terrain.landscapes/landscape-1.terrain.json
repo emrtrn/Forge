@@ -36,9 +36,14 @@
     {
       "id": "snow",
       "name": "Snow",
-      "color": "#dce7ec"
+      "color": "#dce7ec",
+      "physicalMaterial": "snow"
     },
     {
+      "physicalMaterialOverrides": {
+        "rollingResistanceAtRest": 0,
+        "tractionCoefficient": 0.8
+      },
       "id": "layer-1",
       "name": "Layer 5",
       "color": "#55493b",
@@ -46,6 +51,10 @@
       "physicalMaterial": "sand"
     },
     {
+      "physicalMaterialOverrides": {
+        "tractionCoefficient": 1,
+        "digRate": 0.1
+      },
       "id": "layer-2",
       "name": "Layer 6",
       "color": "#55493b",
@@ -71,8 +80,8 @@
     },
     {
       "key": "1_1",
-      "minHeight": -3.2773938179016113,
-      "maxHeight": 0.9101701378822327
+      "minHeight": -2.546099901199341,
+      "maxHeight": 1.058609962463379
     }
   ],
   "collision": true,

@@ -1,3 +1,4 @@
+import { registerWaterWheelInteractionTests } from "../tests/engine/waterWheelInteraction.test";
 import { registerRiverPlanarReflectionTests } from "../tests/engine/riverPlanarReflection.test";
 import { registerRiverEffectsTests } from "../tests/engine/riverEffects.test";
 import { registerLakeGeometryFoamTests } from "../tests/engine/lakeGeometryFoam.test";
@@ -1300,6 +1301,7 @@ await registerTerrainRiverWaterTests(checkAsync);
 await registerRiverPlanarReflectionTests(checkAsync);
 await registerTerrainLakeWaterTests(checkAsync);
 await registerLakeInteractionTests(checkAsync);
+await registerWaterWheelInteractionTests(checkAsync);
 await registerLakeQualityTests(checkAsync);
 await registerLakeSchedulingTests(checkAsync);
 await registerTerrainCausticsTests(checkAsync);

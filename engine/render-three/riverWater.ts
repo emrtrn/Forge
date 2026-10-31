@@ -1,3 +1,9 @@
+import { createWaterWheelFoamUniforms, updateWaterWheelFoamUniforms, WATER_WHEEL_FOAM_GLSL } from "./waterWheelFoam";
+import { createLakeRippleUniforms, updateLakeRippleUniforms, LAKE_RIPPLES_GLSL } from "./lakeRipples";
+import { LakeRippleState } from "../terrain/lakeInteraction";
+import { waterWheelContact, WaterWheelFoamState, type WaterWheelContact, type WaterWheelVehicle } from "../terrain/waterWheelInteraction";
+import { RiverWheelSurface } from "./riverWheelSurface";
+import { vehicleWheelWidth } from "../physics/surface/sinkage";
 import type { WaterReflectionRegistry } from "./waterReflectionRegistry";
 import { RiverPlanarSurface, createRiverPlanarUniforms, effectiveRiverReflectionQuality, RIVER_PLANAR_GLSL } from "./riverPlanarReflection";
 import { createWaterCrestFoamUniforms, WATER_CREST_FOAM_GLSL } from "./waterCrestFoam";
@@ -366,6 +372,9 @@ ${RIVER_REFRACTION_GLSL}
 #endif
 ${RIVER_SUN_SHADOW_GLSL}
 ${WATER_FOAM_GLSL}
+${WATER_WHEEL_FOAM_GLSL}
+${LAKE_RIPPLES_GLSL}
+uniform vec2 wheelRippleOrigin;
 ${WATER_CREST_FOAM_GLSL}
 ${WATER_CONTACT_GLSL}
 ${LAKE_GEOMETRY_FOAM_GLSL}
@@ -426,8 +435,9 @@ void main() {
   float edgeDepth = min(max(vWaterDepth, 0.0), visibleDepth);
   float edgeNoise = waterNoise(vWorldPosition.xz * 0.9 + time * vec2(0.013, -0.009));
   float shoreBlend = smoothstep(0.0, 0.12 * mix(0.85, 1.15, edgeNoise), edgeDepth);
+  vec2 wheelSlope=waterWheelSlopes(vWorldPosition.xz-wheelRippleOrigin, -shadingNormal.xz/max(shadingNormal.y,.05));
   vec3 opticalNormal = normalize(shadingNormal + shoreBlend
-    * (tangent * slope.x + bitangent * slope.y));
+    * (tangent * slope.x + bitangent * slope.y + vec3(wheelSlope.x,0.,wheelSlope.y)*.10));
   // Derivatives precede discard, so dry-bank helper fragments do not make the
   // filtered highlights unstable. Low detail keeps the continuous GGX lobe.
   float reflectionRoughness = waterFilteredRoughness(opticalNormal, surfaceRoughness + (1.0 - waterDetail) * 0.15 + vRapidness * 0.06);
@@ -514,12 +524,14 @@ void main() {
   // Standing-wave crests break where the current streaks, not as even bars.
   float crestFoam=waterFoamErosion(waterCrestFoamDensity(min(vWaterDepth,visibleDepth))*mix(.25,1.,streaks),foamDetail.r);
   foam=max(foam,crestFoam);
+  float wheelFoam=waterWheelFoam(vWorldPosition.xz,-shadingNormal.xz/max(shadingNormal.y,.05),foamDetail.r);
+  float foamCoverage=max(foam*foamOpacity,wheelFoam);
   vec3 reflectionDirection = reflect(-viewDirection, opticalNormal);
   reflectionDirection.y = abs(reflectionDirection.y);
   float aboveSurface = step(0.0, dot(surfaceNormal, viewDirection));
   float environmentCoverage = waterEnvironmentCoverage(vWorldPosition);
   vec3 reflected = waterReflectedEnvironment(vWorldPosition, reflectionDirection, reflectionRoughness);
-  vec4 planar = riverPlanar(vWorldPosition, slope, reflectionRoughness);
+  vec4 planar = riverPlanar(vWorldPosition, slope + wheelSlope, reflectionRoughness);
   float planarCoverage = clamp(planar.a, 0.0, 1.0);
   reflected = reflected * (1.0 - planarCoverage) + planar.rgb;
   environmentCoverage = environmentCoverage * (1.0 - planarCoverage) + planarCoverage;
@@ -531,11 +543,11 @@ void main() {
   float bedTransmission = waterTransmission(vWaterDepth, pathDepth, bedVisibility, absorptionDistance);
   float bedOpacity = 1.0 - bedTransmission;
   float authoredOpacity = opacity * wetness * mix(0.58, 1.0, smoothstep(0.0, 3.0, vWaterDepth));
-  vec3 litFoam=waterFoamLighting(foamDetail,foam,shadingNormal,viewDirection,foamColor,sunVisibility);
+  vec3 litFoam=waterFoamLighting(foamDetail,max(foam,wheelFoam),shadingNormal,viewDirection,foamColor,sunVisibility);
   float reflectedCoverage = reflectionAmount;
   wetness = smoothstep(0.0, 0.35, vWaterDepth);
   gl_FragColor = waterComposite(color, max(authoredOpacity, bedOpacity), reflected, reflectedCoverage,
-    litFoam, foam * foamOpacity, waterSunGlint(opticalNormal, viewDirection, sunRoughness, sunVisibility)
+    litFoam, foamCoverage, waterSunGlint(opticalNormal, viewDirection, sunRoughness, sunVisibility)
       * sunSparkle * aboveSurface * wetness);
   if (waterSceneEnabled > 0.5) {
     vec3 visibleBed = texture2D(waterSceneColor, screenUv).rgb;
@@ -562,7 +574,7 @@ void main() {
     vec3 radiance = mix(body, reflected, r)
       + waterSunGlint(opticalNormal, viewDirection, sunRoughness, sunVisibility)
         * sunSparkle * aboveSurface * visibleWetness;
-    radiance = mix(radiance, litFoam, clamp(foam * foamOpacity, 0.0, 1.0));
+    radiance = mix(radiance, litFoam, clamp(foamCoverage, 0.0, 1.0));
     // Already contains the bed: alpha blending it again would double the bed.
     // Fade foam and the complete interface to the same visible/source boundary.
     gl_FragColor = vec4(mix(visibleBed, radiance, shoreBlend), 1.0);
@@ -610,6 +622,11 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private quality: LakeQuality;
   private readonly item: RiverWaterRenderItem;
   private readonly planar: RiverPlanarSurface;
+  private readonly wheelRipples = new LakeRippleState();
+  private readonly wheelFoam = new WaterWheelFoamState();
+  private wheelSurface: RiverWheelSurface | null = null;
+  private wheelSurfaceFailed = false;
+  private wheelTime: number | null = null;
   private refreshTerrainEffects:()=>void=()=>{};
   readonly effectErrors: string[] = [];
   getSurface(): RiverSurfaceQuery { return this.effectSurface ??= new RiverSurfaceQuery(this.ribbon, [...this.position.toArray()] as Vec3); }
@@ -671,7 +688,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ...UniformsUtils.clone(UniformsLib.fog),
         ...UniformsUtils.clone(UniformsLib.lights),
         ...createRiverSunShadowUniforms(),
-        ...createRiverPlanarUniforms(),
+        ...createRiverPlanarUniforms(), ...createLakeRippleUniforms(), ...createWaterWheelFoamUniforms(),
+        wheelRippleOrigin: { value: new Vector2() },
         ...createWaterEnvironmentUniforms(),
         ...createWaterSceneUniforms(), ...createWaterCrestFoamUniforms(item, quality.foamAllowed),
         riverRefractionSurface: { value: null }, riverRefractionSize: { value: new Vector2(1, 1) },
@@ -726,7 +744,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.planar = new RiverPlanarSurface(this, ribbon, item.reflectionGroup ?? `river:${item.id}`,
       item.reflectionMode === "off" || item.reflectionStrength <= 0 ? null : effectiveRiverReflectionQuality(item.reflectionQuality, quality.reflectionQuality), item.reflections);
     this.addEventListener("added", () => { if (!this.disposed) this.planar.attachToScene(); });
-    this.addEventListener("removed", () => this.planar.detach());
+    this.addEventListener("removed", () => { this.planar.detach(); this.clearWheelInteractions(); });
     this.ribbon=ribbon; this.effectSurface=surface; this.bakedTexture=bake?.texture??null;
     this.refractionAllowed = (item.refractionAllowed ?? true) && quality.reflectionQuality !== "off";
     this.authoredRefractionStrength = item.refractionStrength;
@@ -792,11 +810,50 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         this.material.uniforms.waterSceneColor!.value = null;
         this.material.uniforms.waterSceneDepth!.value = null;
       }
-      this.foamMaterial.update(this.quality.foamAllowed && item.foamOpacity > 0, scene, camera);
-      this.material.uniforms["time"]!.value = performance.now() / 1000;
+      this.foamMaterial.update(this.quality.foamAllowed && (item.foamOpacity > 0 || this.wheelFoam.puffs.length > 0), scene, camera);
+      this.material.uniforms["time"]!.value = this.wheelTime ?? performance.now() / 1000;
       updateRiverSunShadow(this.material.uniforms as ReturnType<typeof createRiverSunShadowUniforms>, scene, camera);
       updateWaterEnvironment(this.material.uniforms as ReturnType<typeof createWaterEnvironmentUniforms>, scene, camera, item.environmentProbes?.());
     };
+  }
+
+  /** Fixed-step presentation only; the river never changes vehicle forces or terrain. */
+  advanceWheelInteractions(dt: number, vehicles: readonly WaterWheelVehicle[]): void {
+    if (this.disposed || !Number.isFinite(dt) || dt <= 0) return;
+    this.wheelTime = (this.wheelTime ?? 0) + dt;
+    this.material.uniforms.time!.value = this.wheelTime;
+    let visible = this.visible;
+    for (let parent = this.parent; parent; parent = parent.parent) visible &&= parent.visible;
+    if (!visible || !this.parent) { this.clearWheelInteractions(); return; }
+    const contacts: WaterWheelContact[] = [];
+    if (vehicles.length && !this.wheelSurfaceFailed && this.quality.maxRipples > 0) {
+      try {
+        this.updateWorldMatrix(true, false);
+        this.wheelSurface ??= new RiverWheelSurface(this.ribbon, this.item.flowSpeed, this.item.waveAmplitude, this.item.waveLength);
+        this.wheelSurface.update(this.matrixWorld);
+        for (const vehicle of vehicles) vehicle.state?.wheels.forEach((wheel, i) => {
+          const contact = waterWheelContact(`${vehicle.id}:${i}`, wheel, vehicleWheelWidth(vehicle.definition?.wheels[i] ?? wheel),
+            (x, z) => this.wheelSurface!.sampleAt(x, z, this.wheelTime!));
+          if (contact) contacts.push(contact);
+        });
+      } catch (error) {
+        this.wheelSurfaceFailed = true; this.effectErrors.push(String(error)); this.userData.riverWheelFallback = String(error);
+      }
+    }
+    this.wheelRipples.setLimit(this.quality.maxRipples); this.wheelRipples.advance(dt, contacts);
+    this.wheelFoam.setLimit(this.quality.maxRipples);
+    if (this.quality.foamAllowed) this.wheelFoam.advance(dt, contacts); else this.wheelFoam.clear();
+    this.bindWheelInteractions();
+  }
+  clearWheelInteractions(): void {
+    this.wheelRipples.clear(); this.wheelFoam.clear(); this.bindWheelInteractions();
+  }
+  private bindWheelInteractions(): void {
+    const origin = new Vector3().setFromMatrixPosition(this.matrixWorld), u = this.material.uniforms;
+    u.wheelRippleOrigin!.value.set(origin.x, origin.z);
+    updateLakeRippleUniforms(u as ReturnType<typeof createLakeRippleUniforms>, this.wheelRipples.ripples, origin.x, origin.z, this.quality.maxRipples);
+    updateWaterWheelFoamUniforms(u as ReturnType<typeof createWaterWheelFoamUniforms>, this.wheelFoam.puffs,
+      origin.x, origin.z, this.quality.foamAllowed ? this.quality.maxRipples : 0);
   }
 
   /** Presentation-only ceiling, shared by editor/runtime/adaptive transitions.
@@ -806,6 +863,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const revision = ++this.qualityRevision;
     const terrainChanged = quality.causticsAllowed !== this.quality.causticsAllowed || quality.shoreWetnessAllowed !== this.shoreAllowed;
     this.quality = { ...quality };
+    this.wheelRipples.setLimit(quality.maxRipples); this.wheelFoam.setLimit(quality.maxRipples);
+    if (!quality.foamAllowed) this.wheelFoam.clear();
+    this.bindWheelInteractions();
     const item = this.item, u = this.material.uniforms;
     this.planar.setQuality(item.reflectionMode === "off" || item.reflectionStrength <= 0 ? null
       : effectiveRiverReflectionQuality(item.reflectionQuality, quality.reflectionQuality));
@@ -907,7 +967,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.planar.detach();
+    this.planar.detach(); this.clearWheelInteractions(); this.wheelSurface = null;
     this.releaseShore();this.releaseShore=()=>{};
     this.foamMaterial.dispose();
     this.releaseCaustics(); this.releaseCaustics=()=>{};

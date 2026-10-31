@@ -21,7 +21,7 @@ uniform int wheelRippleCount;
 uniform vec4 wheelRippleParams;
 uniform float wheelRippleWavelength;
 uniform vec4 wheelRipples[${LAKE_MAX_RIPPLES}];
-vec2 lakeWheelSlopes(vec2 localPosition) {
+vec2 waterWheelSlopes(vec2 localPosition, vec2 surfaceSlope) {
   vec2 slope=vec2(0.);
   float footprint=max(length(dFdx(localPosition)),length(dFdy(localPosition)));
   float resolved=1.-smoothstep(wheelRippleWavelength*.22,wheelRippleWavelength,footprint);
@@ -29,11 +29,13 @@ vec2 lakeWheelSlopes(vec2 localPosition) {
     if(i>=wheelRippleCount) break;
     vec4 r=wheelRipples[i];
     vec2 delta=localPosition-r.xy;
-    float d=length(delta),front=.15+r.z*wheelRippleParams.y;
+    float height=dot(delta,surfaceSlope);
+    float d=sqrt(dot(delta,delta)+height*height),front=.15+r.z*wheelRippleParams.y;
     float envelope=exp(-pow((d-front)/wheelRippleParams.z,2.))*smoothstep(0.,.06,r.z)
       *pow(max(0.,1.-r.z/wheelRippleParams.w),2.);
-    slope+=delta/max(d,.001)*cos((d-front)*6.2831853/wheelRippleWavelength)*envelope*r.w*1.6*wheelRippleParams.x*resolved;
+    slope+=(delta+surfaceSlope*height)/max(d,.001)*cos((d-front)*6.2831853/wheelRippleWavelength)*envelope*r.w*1.6*wheelRippleParams.x*resolved;
   }
   return slope;
 }
+vec2 lakeWheelSlopes(vec2 localPosition) { return waterWheelSlopes(localPosition,vec2(0.)); }
 `;

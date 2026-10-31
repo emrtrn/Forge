@@ -1,3 +1,4 @@
+import { createWaterWheelFoamUniforms, updateWaterWheelFoamUniforms, WATER_WHEEL_FOAM_GLSL } from "./waterWheelFoam";
 import { lakeFoamTexture, LAKE_GEOMETRY_FOAM_GLSL } from "./lakeFoamTexture";
 import type { LakeFoamData } from "../scene/lakeFoamBake";
 import { createWaterCrestFoamUniforms, WATER_CREST_FOAM_GLSL } from "./waterCrestFoam";
@@ -55,7 +56,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         geometryFoamGrid: { value: bake?.grid ?? new Vector2(1,1) }, geometryFoamTile: { value: bake?.tile ?? new Vector2(1,1) },
         geometryFoamStrength: { value: lake.geometryFoam?.strength ?? 0 }, geometryFoamScale: { value: lake.geometryFoam?.scale ?? .8 }, geometryFoamSpeed: { value: lake.geometryFoam?.speed ?? .3 },
         ...UniformsUtils.clone(UniformsLib.fog), ...UniformsUtils.clone(UniformsLib.lights), ...createRiverSunShadowUniforms(),
-        ...createLakeRippleUniforms(appearance), lakeRippleOrigin: { value: new Vector2(data.position[0], data.position[2]) },
+        ...createWaterWheelFoamUniforms(), ...createLakeRippleUniforms(appearance), lakeRippleOrigin: { value: new Vector2(data.position[0], data.position[2]) },
         surfaceWaveClock: { value: 0 },
         ...createLakeWaveUniforms(waves), ...createWaterCrestFoamUniforms(appearance, quality.foamAllowed),
         ...createWaterContactUniforms(contactSettings, data.position), contactOpacity: { value: appearance.foamOpacity },
@@ -113,6 +114,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         ${RIVER_SUN_SHADOW_GLSL}
         ${WATER_ENVIRONMENT_GLSL}
         ${WATER_FOAM_GLSL}
+        ${WATER_WHEEL_FOAM_GLSL}
         ${LAKE_GEOMETRY_FOAM_GLSL}
         ${WATER_CONTACT_GLSL}
         ${WATER_SCENE_GLSL}
@@ -246,13 +248,19 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           bakedCoverage=lakeGeometryFoam(vWorldPosition.xz,time);
         #endif
         float crestCoverage=waterCrestFoam(vContactPosition.xz,surfaceWaveClock,foamScale,edgeDepth);
-        if(foamOpacity>0. || contactCount>0 || bakedCoverage>0. || crestCoverage>0.) {
+        float wheelCoverage=0.;
+        if(wheelFoamCount>0) {
+          float wheelPattern=waterFoamReady>.5 ? waterFoamDetail(vWorldPosition.xz,time,.8,.3).r
+            : waterFoamFallbackPattern((vWorldPosition.xz-wheelFoamOrigin)/.8,vec2(0.),0.);
+          wheelCoverage=waterWheelFoam(vWorldPosition.xz,vec2(0.),wheelPattern);
+        }
+        if(foamOpacity>0. || contactCount>0 || bakedCoverage>0. || crestCoverage>0. || wheelCoverage>0.) {
           float shore=foamOpacity>0.?texture2D(foamMask,vFoamUv).r:1.;
           // Geometry already clips to the connected wet component, including
           // islands. Distance only controls the band inside that valid water.
           float coverage=max(waterShoreLapping(vWorldPosition.xz,shore,time,foamScale,foamSpeed)*foamOpacity,
             waterObstacleFoam(vContactPosition,vec2(0.),0.,time)*contactOpacity);
-          coverage=max(max(coverage,bakedCoverage),crestCoverage);
+          coverage=max(max(max(coverage,bakedCoverage),crestCoverage),wheelCoverage);
           float sun=riverSunVisibility();
           float materialScale=foamScale,materialSpeed=foamSpeed;
           #ifdef FORGE_LAKE_GEOMETRY_FOAM
@@ -298,7 +306,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const started = performance.now();
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
-      this.foamMaterial.update(this.quality.foamAllowed && (!!this.foamTexture || !!this.geometryFoamTexture || (waves.height > 0 && this.material.uniforms.crestFoamStrength!.value > 0)), scene, camera);
+      this.foamMaterial.update(this.quality.foamAllowed && (this.material.uniforms.wheelFoamCount!.value > 0 || !!this.foamTexture || !!this.geometryFoamTexture || (waves.height > 0 && this.material.uniforms.crestFoamStrength!.value > 0)), scene, camera);
       this.material.uniforms.time!.value = (performance.now() - started) / 1000;
       if (!this.externalWaveTime) this.material.uniforms.surfaceWaveTime!.value = lakeWaveTime(performance.now() / 1000, waves);
       this.material.uniforms.surfaceWaveClock!.value = this.material.uniforms.surfaceWaveTime!.value;
@@ -323,6 +331,10 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   }
   setWheelRipples(ripples: readonly LakeRipple[]): void {
     updateLakeRippleUniforms(this.material.uniforms as ReturnType<typeof createLakeRippleUniforms>, ripples, this.position.x, this.position.z, this.quality.maxRipples);
+  }
+  setWheelFoam(puffs: readonly LakeRipple[]): void {
+    updateWaterWheelFoamUniforms(this.material.uniforms as ReturnType<typeof createWaterWheelFoamUniforms>, puffs,
+      this.position.x, this.position.z, this.quality.foamAllowed ? this.quality.maxRipples : 0);
   }
   get reflectionSource(): PlanarReflectionSource | null { return this.source; }
   /** Switch only presentation resources. Geometry, bounds, normals and wave time stay intact. */
@@ -367,7 +379,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     if (refractionAllowed && !this.refractionMask) {
       this.userData.lakeRefractionFallback = "Connected-face grid missing or exceeds 2048 texels per mask axis.";
     } else delete this.userData.lakeRefractionFallback;
-    if (!quality.foamAllowed) this.foamMaterial.dispose();
+    if (!quality.foamAllowed) { this.foamMaterial.dispose(); uniforms.wheelFoamCount!.value = 0; }
     uniforms.wheelRippleCount!.value = Math.min(uniforms.wheelRippleCount!.value, quality.maxRipples);
   }
   setSurfaceWaveTime(seconds: number): void {
@@ -402,7 +414,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms.planarReflectionEnabled!.value = binding ? 1 : 0;
     this.material.uniforms.reflectionStrength!.value = this.strength;
   }
-  dispose() { for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
+  dispose() { this.setWheelFoam([]); this.setWheelRipples([]); for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
     this.refractionMask?.dispose(); this.refractionMask = null; this.material.uniforms.lakeRefractionMask!.value = null;
     this.foamMaterial.dispose();
     this.foamTexture?.dispose(); this.foamTexture = null; this.material.uniforms.foamMask!.value = null;

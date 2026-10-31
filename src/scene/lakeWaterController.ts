@@ -1,3 +1,5 @@
+import { WaterWheelFoamState } from "@engine/terrain/waterWheelInteraction";
+import type { RiverWaterObjectLike } from "@engine/render-three/riverWater";
 import { LakeFoamStore } from "./lakeFoamStore";
 import { registerLakeShoreWetness, terrainShoreWetnessAt, prepareLakeShoreMask, assertLakeShoreCapacity } from "@engine/render-three/terrain/terrainShoreWetness";
 import { LakeSurfaceQuery, LakeRippleState, lakeWheelContact, type LakeWheelContact } from "@engine/terrain/lakeInteraction";
@@ -35,6 +37,7 @@ export interface LakeWaterContext {
   changed?: () => void;
   /** Optional load-time QA instrumentation; no per-frame collection. */
   onWorkSlice?: ((slice: WorkSlice) => void) | undefined;
+  rivers?: () => readonly RiverWaterObjectLike[];
   vehicles?: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "onPhysicsStep" | "isSurfaceFxActive"> | undefined;
 }
 
@@ -64,7 +67,7 @@ export class LakeWaterController {
   private chain: Promise<void> = Promise.resolve();
   private reflection = new Map<string, PlanarReflectionSource>();
   private selected: string | null = null;
-  private interactions = new Map<string, { lake: LayoutLakeWaterBody; query: LakeSurfaceQuery; state: LakeRippleState }>();
+  private interactions = new Map<string, { lake: LayoutLakeWaterBody; query: LakeSurfaceQuery; state: LakeRippleState; foam: WaterWheelFoamState }>();
   private unsubscribePhysics: (() => void) | null = null;
   private waveTime = 0;
   private quality: LakeQuality;
@@ -114,6 +117,9 @@ export class LakeWaterController {
           p.effective = effective;
           const interaction = this.interactions.get(id);
           interaction?.state.setLimit(quality.maxRipples);
+          interaction?.foam.setLimit(quality.maxRipples);
+          if (!quality.foamAllowed) interaction?.foam.clear();
+          p.object.setWheelFoam(interaction?.foam.puffs ?? []);
           p.object.setWheelRipples(interaction?.state.ripples ?? []);
           this.qualityErrors.delete(id);
         } catch (error) {
@@ -166,7 +172,8 @@ export class LakeWaterController {
   invalidate() { this.aborter.abort(); this.results.clear(); this.clearInteractions(); }
   private clearInteractions(): void {
     this.interactions.clear();
-    for (const object of this.objects.values()) object.setWheelRipples([]);
+    for (const object of this.objects.values()) { object.setWheelRipples([]); object.setWheelFoam([]); }
+    for (const river of this.context.rivers?.() ?? []) river.clearWheelInteractions();
   }
   /**
    * The visible Lake whose connected water or visibly wet shore soaks a tyre
@@ -194,14 +201,15 @@ export class LakeWaterController {
     this.waveTime += dt;
     for (const object of this.objects.values()) object.setSurfaceWaveTime(this.waveTime);
     const host = this.context.vehicles;
-    if (!host || !this.interactions.size) return;
+    if (!host) return;
     const vehicles = host.vehicleIds().filter(id => host.isSurfaceFxActive?.(id) !== false)
       .map(id => ({ id, state: host.vehicleState(id), definition: host.vehicleDefinition(id) }));
+    for (const river of this.context.rivers?.() ?? []) river.advanceWheelInteractions(dt, vehicles);
     for (const [id, interaction] of this.interactions) {
       const object = this.objects.get(id);
       let visible = !!object;
       for (let p = object?.parent; p; p = p.parent) visible &&= p.visible;
-      if (!object || !object.visible || !visible) { interaction.state.clear(); object?.setWheelRipples([]); continue; }
+      if (!object || !object.visible || !visible) { interaction.state.clear(); interaction.foam.clear(); object?.setWheelRipples([]); object?.setWheelFoam([]); continue; }
       const contacts: LakeWheelContact[] = [];
       for (const vehicle of vehicles) vehicle.state?.wheels.forEach((wheel, i) => {
         const contact = lakeWheelContact(`${vehicle.id}:${i}`, wheel,
@@ -211,6 +219,8 @@ export class LakeWaterController {
       });
       interaction.state.advance(dt, contacts);
       object.setWheelRipples(interaction.state.ripples);
+      if (this.quality.foamAllowed) interaction.foam.advance(dt, contacts); else interaction.foam.clear();
+      object.setWheelFoam(interaction.foam.puffs);
     }
   }
   rebuild(bodies: readonly LayoutLakeWaterBody[]): Promise<void> {
@@ -288,7 +298,8 @@ export class LakeWaterController {
             if (!this.context.editor) object.raycast = () => {};
             this.objects.set(lake.id, object); this.context.scene.add(object);
             const state = new LakeRippleState(a); state.setLimit(this.quality.maxRipples);
-            this.interactions.set(lake.id, { lake, query: staged.query, state });
+            const foam = new WaterWheelFoamState(); foam.setLimit(this.quality.maxRipples);
+            this.interactions.set(lake.id, { lake, query: staged.query, state, foam });
             this.qualityErrors.delete(lake.id); published = true;
           }
           catch (error) {

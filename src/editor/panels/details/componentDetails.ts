@@ -176,7 +176,7 @@ function renderAudioFields(audio: LayoutAudio, editableAssets: readonly Editable
         <span>Spatial</span>
       </label>
       <div class="detail-subhead">Attenuation</div>
-      <div class="detail-hint">Applies when Spatial is on. Blank = runtime default.</div>
+      <div class="detail-hint">Spatial açıkken uygulanır. Boş = runtime varsayılanı.</div>
       <label class="detail-row">
         <span>Min Distance</span>
         <input type="number" data-audio="refDistance" min="0" step="0.5"
@@ -198,7 +198,7 @@ function renderBehaviorFields(behavior: LayoutBehavior): string {
   const paramCount = behavior.params ? Object.keys(behavior.params).length : 0;
   const paramsHint =
     paramCount > 0
-      ? `<div class="detail-hint">params authored (${paramCount}); edit in layout JSON</div>`
+      ? `<div class="detail-hint">parametre girildi (${paramCount}); layout JSON'unda düzenleyin</div>`
       : "";
   return `
       <label class="detail-row">
@@ -230,9 +230,9 @@ function renderParticleFields(
       .join("");
   const missing = inList
     ? ""
-    : `<div class="detail-hint detail-hint-warning">⚠ Effect “${escapeHtml(
+    : `<div class="detail-hint detail-hint-warning">⚠ Efekt “${escapeHtml(
         particle.effectId,
-      )}” is not a known effect asset — nothing plays until the id resolves.</div>`;
+      )}” bilinen bir efekt asset'i değil; id çözülene kadar hiçbir şey oynamaz.</div>`;
   const tintOn = typeof particle.tint === "string";
   const loopValue = particle.loop === undefined ? "default" : particle.loop ? "on" : "off";
   const loopOption = (value: string, label: string): string =>
@@ -276,7 +276,7 @@ function renderParticleFields(
           ${loopOption("off", "Force one-shot")}
         </select>
       </label>
-      <div class="detail-hint">Emitter behaviour lives in the effect asset (.effect.json); these override only this placement.</div>`;
+      <div class="detail-hint">Emitter davranışı efekt asset'indedir (.effect.json); bunlar yalnızca bu yerleşimi geçersiz kılar.</div>`;
 }
 
 function renderInteractionFields(interaction: LayoutInteraction): string {
@@ -312,7 +312,7 @@ function renderMovingPlatformFields(platform: LayoutMovingPlatform): string {
           value="${platform.offset[index]}" />
       </label>`;
   return `
-      <div class="detail-hint">Offset is relative to the placed position; the platform ping-pongs there and back.</div>
+      <div class="detail-hint">Offset, yerleştirilen konuma görelidir; platform oraya gidip geri gelir.</div>
       ${axis(0, "Offset X")}
       ${axis(1, "Offset Y")}
       ${axis(2, "Offset Z")}

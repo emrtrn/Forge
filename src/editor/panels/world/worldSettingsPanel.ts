@@ -84,7 +84,7 @@ function renderWorldSettingsHtml(
           <input type="number" data-world-partition-range min="0" step="any"
             value="${partition.grids.main.loadRange}" ${partitionDisabled} />
         </label>
-        <div class="detail-hint">Saves actors into per-cell files by position. Persistent: singletons, landscapes, splines, Player Start, directional lights and actors with Spatially Loaded off.</div>
+        <div class="detail-hint">Aktörleri konumlarına göre hücre başına dosyalara kaydeder. Kalıcı (persistent) olanlar: singleton'lar, landscape'ler, spline'lar, Player Start, directional ışıklar ve Spatially Loaded kapalı aktörler.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Lighting</div>
@@ -105,7 +105,7 @@ function renderWorldSettingsHtml(
             placeholder="Camera default"
             value="${settings.viewDistance === undefined ? "" : escapeHtml(String(settings.viewDistance))}" />
         </label>
-        <div class="detail-hint">Camera far plane in Play (scaled by the game's quality setting). Empty keeps each camera's own Far Clip. Past 1000 m pair it with a Height Fog (Details &gt; Fit to View Distance) so terrain does not end in a hard edge.</div>
+        <div class="detail-hint">Play'de kameranın uzak düzlemi (oyunun kalite ayarıyla ölçeklenir). Boş bırakılırsa her kamera kendi Far Clip'ini kullanır. 1000 m'nin üstünde, arazi keskin bir kenarla bitmesin diye bir Height Fog ile eşleştirin (Details &gt; Fit to View Distance).</div>
         <label class="detail-row">
           <span>Background</span>
           <input type="color" data-world-color="backgroundColor"

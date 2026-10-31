@@ -297,7 +297,7 @@ export class VehicleAssetEditor {
       `${Math.round(def.massKg)} kg`,
       drivetrain ? drivetrain.differential.driveType : "flat force",
     ].join(" · ");
-    let drivetrainHtml = `<p class="vhe-note">No drivetrain: the car pushes with a flat ${Math.round(def.maxEngineForce)} N on its Drive wheels. Enable it in Details for torque, RPM and gears.</p>`;
+    let drivetrainHtml = `<p class="vhe-note">Drivetrain yok: araç Drive tekerleklerine sabit ${Math.round(def.maxEngineForce)} N kuvvet uygular. Tork, RPM ve vites için Details'te etkinleştirin.</p>`;
     if (drivetrain) {
       const peaks = enginePeaks(drivetrain);
       const speeds = gearTopSpeedsKmh(def);

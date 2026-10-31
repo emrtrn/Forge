@@ -134,7 +134,7 @@ export function renderWorldEnvironmentDetails(options: WorldEnvironmentDetailsOp
         <span>Name</span>
         <input data-wes-name type="text" value="${escapeHtml(env.name)}" placeholder="World Environment" />
       </label>
-      ${options.preview ? previewStrip(options.preview) : `<div class="detail-hint">Hidden: the authored sky, fog and sun render unchanged.</div>`}
+      ${options.preview ? previewStrip(options.preview) : `<div class="detail-hint">Gizli: level'daki gökyüzü, sis ve güneş değişmeden çizilir.</div>`}
       <div class="detail-section" data-wes-defaults>
         <div class="detail-section-title">Level Defaults</div>
         <label class="detail-row">
@@ -154,7 +154,7 @@ export function renderWorldEnvironmentDetails(options: WorldEnvironmentDetailsOp
           <input data-wes-number="weather.intensity" type="number" step="0.05" min="0" max="1"
             value="${env.weather.intensity}" />
         </label>
-        <div class="detail-hint">Summer + Clear keep the authored look; the clock only moves the sun.</div>
+        <div class="detail-hint">Summer + Clear level'daki görünümü korur; saat yalnızca güneşi hareket ettirir.</div>
       </div>
       ${sections.join("")}
     `;
@@ -216,7 +216,7 @@ function previewStrip(preview: WorldEnvironmentPreview): string {
     `<button type="button" class="detail-button" ${attr}="${value}">${label}</button>`;
   return `
       <div class="detail-section" data-wes-preview>
-        <div class="detail-section-title">Preview <span class="detail-hint">not saved</span></div>
+        <div class="detail-section-title">Preview <span class="detail-hint">kaydedilmez</span></div>
         <label class="detail-row">
           <span>Time <span data-wes-preview-hour-label>${formatHour(preview.state.hour)}</span></span>
           <input data-wes-preview-hour type="range" min="0" max="23.99" step="0.01" value="${preview.state.hour}" />
@@ -245,7 +245,7 @@ function previewStrip(preview: WorldEnvironmentPreview): string {
           <input data-wes-preview-number="surface.wetness" type="range" min="0" max="1" step="0.05" value="${preview.state.surface.wetness}" />
         </label>
         <div class="detail-hint" data-wes-preview-needs></div>
-        <div class="detail-hint">Snow and wetness are preview state until terrain and materials consume them (K2).</div>
+        <div class="detail-hint">Kar ve ıslaklık, arazi ve materyaller bunları kullanana kadar (K2) yalnızca önizleme durumudur.</div>
         <div class="wes-preview-buttons">
           <button type="button" class="detail-button" data-wes-preview-default>Make Default</button>
           <button type="button" class="detail-button" data-wes-preview-reset>Reset</button>

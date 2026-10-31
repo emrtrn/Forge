@@ -1408,10 +1408,11 @@
   white-space: nowrap;
 }
 
-/* Parameter name and control share the row equally (user decision 2026-10-31). */
+/* Parameter name 30%, control 70% (user decision 2026-10-31); in bounded rows
+   the extra width goes to the slider, the number box stays 62px. */
 .detail-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
   align-items: center;
   gap: 8px;
 }
@@ -1420,7 +1421,7 @@
    a marker on the label, so "pinned on this placement" reads apart from
    "inherited from the class". */
 .detail-row.actor-var-overridden {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr) auto;
 }
 
 .detail-row.actor-var-overridden > span::after {
@@ -1745,7 +1746,7 @@
 }
 
 .editor-details .detail-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
   gap: 9px;
 }
 
@@ -1755,7 +1756,7 @@
 }
 
 .editor-details .detail-row--name {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 25px;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr) 25px;
   gap: 6px;
 }
 
@@ -2287,7 +2288,7 @@
 
 .spline-generator .detail-row,
 .spline-point-editor .detail-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
 }
 
 .spline-generator .detail-row input[type="checkbox"],
@@ -4293,7 +4294,7 @@
 }
 .me-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
@@ -4857,7 +4858,7 @@
 }
 .uie-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
   gap: 8px;
   align-items: center;
   margin-bottom: 6px;
@@ -4874,7 +4875,7 @@
   color: var(--forge-text);
   font-size: 12px;
 }
-.uie-action-field { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.uie-action-field { grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); }
 .uie-action-field input[hidden] { display: none; }
 .uie-transition-field,
 .uie-a11y-field {
@@ -5687,7 +5688,7 @@
 
 .pfx-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
   align-items: center;
   gap: 8px;
 }

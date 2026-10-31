@@ -120,7 +120,7 @@ function renderTypeDetails(
     return `
     <div class="detail-section">
       <div class="detail-section-title">Type Details</div>
-      <div class="detail-hint">Select a foliage type to edit its placement rules.</div>
+      <div class="detail-hint">Yerleşim kurallarını düzenlemek için bir foliage türü seçin.</div>
     </div>`;
   }
   const meshOptions = meshAssets
@@ -160,7 +160,7 @@ function renderTypeDetails(
         ${numField("Cull Start", "data-foliage-type-num=\"cullStart\"", type.cullStart, "1", "0")}
         ${numField("Cull End", "data-foliage-type-num=\"cullEnd\"", type.cullEnd, "1", "0")}
       </details>
-      <div class="detail-hint">Scale/rotation changes apply to new paint.</div>
+      <div class="detail-hint">Ölçek/dönüş değişiklikleri yeni boyamaya uygulanır.</div>
       <button type="button" class="foliage-reapply" data-foliage-reapply title="Mevcut örneklerin ölçek ve dönüşünü güncel tür ayarlarından yeniden üret (konum korunur)">
         ${selectionCount > 0 ? `Reapply to Selection (${selectionCount})` : "Reapply to Type"}
       </button>
@@ -170,7 +170,7 @@ function renderTypeDetails(
 function renderResourceUsage(usage: FoliageResourceUsage): string {
   const typeRows =
     usage.types.length === 0
-      ? `<div class="detail-hint">No foliage painted yet.</div>`
+      ? `<div class="detail-hint">Henüz foliage boyanmadı.</div>`
       : usage.types
           .map(
             (type) => `
@@ -216,7 +216,7 @@ function renderGeneratedRules(options: FoliagePanelOptions): string {
   const landscapeOptions = selectOptions(landscapes, landscapes[0]?.id ?? "");
   const typeOptions = selectOptions(types, types[0]?.id ?? "");
   const rows = options.landscapeRules.length === 0
-    ? `<div class="detail-hint">No generated rules. Add a Landscape layer mapping below.</div>`
+    ? `<div class="detail-hint">Üretilmiş kural yok. Aşağıdan bir Landscape katman eşlemesi ekleyin.</div>`
     : options.landscapeRules.map((rule) => {
       const landscape = landscapes.find((entry) => entry.id === rule.landscapeId);
       const layers = landscape?.layers ?? [];
@@ -243,7 +243,7 @@ function renderGeneratedRules(options: FoliagePanelOptions): string {
   return `
     <div class="detail-section">
       <div class="detail-section-title">Generated Foliage</div>
-      <div class="detail-hint">Landscape layer weights generate foliage deterministically, in 32 m cells around the camera, thinning with distance. Generated instances are not saved individually.</div>
+      <div class="detail-hint">Landscape katman ağırlıkları foliage'ı kameranın çevresindeki 32 m hücrelerde deterministik olarak üretir; mesafeyle seyrelir. Üretilen örnekler tek tek kaydedilmez.</div>
       ${rows}
       <div class="foliage-generated-add">
         <label class="detail-row"><span>Landscape</span><select data-rule-new-landscape ${canAdd ? "" : "disabled"}>${landscapeOptions}</select></label>
@@ -270,7 +270,7 @@ function renderHtml(options: FoliagePanelOptions): string {
 
   const typeRows =
     types.length === 0
-      ? `<div class="detail-hint">No foliage types yet. Add one below.</div>`
+      ? `<div class="detail-hint">Henüz foliage türü yok. Aşağıdan ekleyin.</div>`
       : types
           .map(
             (type) => `
@@ -335,8 +335,8 @@ function renderHtml(options: FoliagePanelOptions): string {
       <div class="detail-section-title">Selection</div>
       <div class="detail-hint">${
         options.selectionCount > 0
-          ? `${options.selectionCount} instance${options.selectionCount === 1 ? "" : "s"} selected`
-          : "No instances selected. Use Select or Lasso."
+          ? `${options.selectionCount} örnek seçili`
+          : "Seçili örnek yok. Select veya Lasso kullanın."
       }</div>
       <div class="foliage-selection-actions">
         <button type="button" data-foliage-select-invalid title="Altında geçerli zemin olmayan örnekleri seç">Select Invalid</button>

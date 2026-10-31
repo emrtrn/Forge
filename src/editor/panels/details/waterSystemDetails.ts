@@ -23,12 +23,12 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
   if (options) renderRiverWaterDetails(options, app.getLakeEditorState().available, app);
   else body.insertAdjacentHTML("beforeend", `<div class="detail-section"><div class="detail-section-title">Water</div>
     <button type="button" class="detail-action-button" data-water-terrain ${context.busy ? "disabled" : ""}>Back to Water</button>
-    ${context.busy ? '<div class="detail-hint">Finish point selection, then create or discard the Lake draft before switching tools.</div>' : ""}
+    ${context.busy ? '<div class="detail-hint">Araç değiştirmeden önce nokta seçimini bitirin, ardından göl taslağını oluşturun ya da silin.</div>' : ""}
     </div><div data-water-bodies-slot></div>`);
   const slot = body.querySelector("[data-water-bodies-slot]");
   if (slot) slot.outerHTML = `<div class="detail-section" data-detail-section="water-bodies"><div class="detail-section-title">Water Bodies</div>
     <div class="landscape-layer-list">${context.bodies.map((water) => `<button type="button" data-water-body="${escapeHtml(water.id)}" data-water-kind="${water.kind}" class="${water.active ? "active" : ""}" aria-pressed="${water.active}" ${context.busy ? "disabled" : ""}>
-      <span>${escapeHtml(water.name)}</span><span>${water.kind === "river" ? "River" : "Lake"}</span></button>`).join("") || '<div class="detail-hint">No water bodies yet.</div>'}</div></div>`;
+      <span>${escapeHtml(water.name)}</span><span>${water.kind === "river" ? "River" : "Lake"}</span></button>`).join("") || '<div class="detail-hint">Henüz su kütlesi yok.</div>'}</div></div>`;
   body.querySelector<HTMLSelectElement>("[data-landscape-mode]")?.addEventListener("change", (event) => {
     const mode = (event.currentTarget as HTMLSelectElement).value as LandscapeEditMode;
     if (LANDSCAPE_EDIT_MODES.includes(mode)) app.selectWaterSystemTerrain(mode);
@@ -68,7 +68,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
         <label class="detail-row"><span>Bed Visibility</span><input data-river-water-number="bedVisibility" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.bedVisibility}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Absorption Distance</span><input data-river-water-number="absorptionDistance" type="number" data-slider-max="20" min="0.01" max="100" step="0.05" value="${activeRiverWater.absorptionDistance}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Refraction Strength</span><input data-river-water-number="refractionStrength" type="number" min="0" max="2" step="0.05" value="${activeRiverWater.refractionStrength}" ${lockedAttr} /></label>
-        ${activeRiverWater.refractionWarning ? `<div class="detail-note" data-river-refraction-status title="${escapeHtml(activeRiverWater.refractionWarning)}">Refraction unavailable; bed optics retained.</div>` : ""}
+        ${activeRiverWater.refractionWarning ? `<div class="detail-note" data-river-refraction-status title="${escapeHtml(activeRiverWater.refractionWarning)}">Kırılma kullanılamıyor; taban optiği korunuyor.</div>` : ""}
       </div><div class="detail-section" data-detail-section="river-flow"><div class="detail-section-title">Flow & Waves</div>
         <label class="detail-row"><span>Surface Strength</span><input data-river-water-number="surfaceStrength" type="number" min="0" max="2" step="0.05" value="${activeRiverWater.surfaceStrength}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Surface Roughness</span><input data-river-water-number="surfaceRoughness" type="number" min="0.04" max="1" step="0.01" value="${activeRiverWater.surfaceRoughness}" ${lockedAttr} /></label>
@@ -88,7 +88,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
         <label class="detail-row"><span>Quality</span><select data-river-water-reflection="reflectionQuality" ${lockedAttr}>${["low", "medium", "high"].map((quality) => `<option value="${quality}" ${activeRiverWater.reflectionQuality === quality ? "selected" : ""}>${quality}</option>`).join("")}</select></label>
         <label class="detail-row"><span>Strength</span><input data-river-water-number="reflectionStrength" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.reflectionStrength}" ${lockedAttr} /></label>
       </div>`
-    : `<div class="detail-section"><div class="detail-section-title">River Water</div><div class="detail-hint">Create a River Water Body from a completed Landscape spline. It will immediately use the spline's width and first control point height.</div></div>`;
+    : `<div class="detail-section"><div class="detail-section-title">River Water</div><div class="detail-hint">Tamamlanmış bir Landscape spline'ından nehir su kütlesi oluşturun. Spline'ın genişliğini ve ilk kontrol noktasının yüksekliğini hemen kullanır.</div></div>`;
   const riverWaterCreateMarkup = `<div class="detail-section">
       <div class="detail-section-title">Water</div>
       <label class="detail-row"><span>Source Spline</span><select data-river-water-create-spline ${availableRiverSplines.length ? lockedAttr : "disabled"}>${availableRiverSplines.map((spline) => `<option value="${escapeHtml(spline.id)}" ${riverSourceSpline?.id === spline.id ? "selected" : ""}>${escapeHtml(spline.name)} (${spline.segmentCount} segments)</option>`).join("") || "<option value=\"\">No completed unbound spline</option>"}</select></label>

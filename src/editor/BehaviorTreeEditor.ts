@@ -389,7 +389,7 @@ export class BehaviorTreeEditor {
 
   private renderOutline(state: ParseState): void {
     if (state.value === null) {
-      this.outlineHost.innerHTML = `<div class="bte-outline-empty">Fix the JSON to see the tree.</div>`;
+      this.outlineHost.innerHTML = `<div class="bte-outline-empty">Ağacı görmek için JSON'u düzeltin.</div>`;
       return;
     }
     if (!state.root) {
@@ -494,16 +494,16 @@ export class BehaviorTreeEditor {
 
   private renderNodeForm(state: ParseState): void {
     if (!isObj(state.value) || !isObj(state.root)) {
-      this.formHost.innerHTML = `<div class="bte-form-empty">Add a valid <code>root</code> node to edit nodes.</div>`;
+      this.formHost.innerHTML = `<div class="bte-form-empty">Düğümleri düzenlemek için geçerli bir <code>root</code> düğümü ekleyin.</div>`;
       return;
     }
     if (this.selectedPath === null) {
-      this.formHost.innerHTML = `<div class="bte-form-empty">Select a node in the outline to edit it.</div>`;
+      this.formHost.innerHTML = `<div class="bte-form-empty">Düzenlemek için ana hattan bir düğüm seçin.</div>`;
       return;
     }
     const node = resolveNode(state.root, this.selectedPath);
     if (!node) {
-      this.formHost.innerHTML = `<div class="bte-form-empty">Select a node in the outline to edit it.</div>`;
+      this.formHost.innerHTML = `<div class="bte-form-empty">Düzenlemek için ana hattan bir düğüm seçin.</div>`;
       return;
     }
 
@@ -557,7 +557,7 @@ export class BehaviorTreeEditor {
     } else if (isComposite(node)) {
       const count = Array.isArray(node.children) ? node.children.length : 0;
       rows.push(
-        `<div class="bte-form-hint">${count} child${count === 1 ? "" : "ren"} — use <strong>Add Child</strong> and the outline to arrange them.</div>`,
+        `<div class="bte-form-hint">${count} alt düğüm; düzenlemek için <strong>Add Child</strong> ve ana hattı kullanın.</div>`,
       );
     }
 
@@ -630,7 +630,7 @@ export class BehaviorTreeEditor {
     return `
       <div class="bte-section-sub">Decorators</div>
       <div class="bte-cards" data-bte-dec-list>${
-        cards || `<div class="bte-form-empty">No decorators.</div>`
+        cards || `<div class="bte-form-empty">Decorator yok.</div>`
       }</div>
       <div class="bte-form-add">
         <select data-bte-add-dec-kind class="bte-input bte-input-sm">${addOptions}</select>
@@ -848,7 +848,7 @@ export class BehaviorTreeEditor {
     return `
       <div class="bte-section-sub">Services</div>
       <div class="bte-cards" data-bte-svc-list>${
-        cards || `<div class="bte-form-empty">No services.</div>`
+        cards || `<div class="bte-form-empty">Service yok.</div>`
       }</div>
       <div class="bte-form-add">
         <button type="button" data-bte-add-svc class="bte-btn" title="Service ekle">+ Service</button>
@@ -875,9 +875,7 @@ export class BehaviorTreeEditor {
     ];
     if (paramCount > 0) {
       rows.push(
-        `<div class="bte-form-hint">${paramCount} param${
-          paramCount === 1 ? "" : "s"
-        } — edit in the Asset JSON pane.</div>`,
+        `<div class="bte-form-hint">${paramCount} parametre; Asset JSON bölmesinde düzenleyin.</div>`,
       );
     }
     return `

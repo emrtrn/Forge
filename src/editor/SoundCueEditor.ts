@@ -392,7 +392,7 @@ export class SoundCueEditor {
   private renderDetails(): void {
     const node = this.cue.nodes.find((n) => n.id === this.selectedId);
     if (!node) {
-      this.detailsHost.innerHTML = `<div class="sce-det-empty">Select a node to edit its properties.</div>`;
+      this.detailsHost.innerHTML = `<div class="sce-det-empty">Özelliklerini düzenlemek için bir düğüm seçin.</div>`;
       return;
     }
     const html: string[] = [`<div class="sce-det-inner">`];

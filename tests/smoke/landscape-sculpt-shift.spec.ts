@@ -66,7 +66,7 @@ for (const tiles of [1, 2]) {
     await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
     const toolButton = (tool: string) => page.locator(`[data-landscape-tool="${tool}"]`);
     await expect(toolButton("raise")).toBeVisible();
-    await expect(page.getByText("Hold Shift to swap Raise and Lower while sculpting.")).toBeVisible();
+    await expect(page.getByText("Sculpt sırasında Raise ile Lower'ı değiştirmek için Shift'e basılı tutun.")).toBeVisible();
     await page.locator('[data-landscape-number="brushSize"]').fill("3");
     await page.locator('[data-landscape-number="brushSize"]').press("Tab");
     await page.locator('[data-landscape-number="strength"]').fill("1");

@@ -106,8 +106,8 @@ export function pickWorldTerrainOptions(
             <ul class="world-terrain-notes" data-open-world-notes></ul>
           </fieldset>
           <ul class="world-terrain-problems" data-world-terrain-problems></ul>
-          <div class="detail-hint" data-world-terrain-multitile hidden>Multi-tile Splines support editing, terrain effects, mesh output and River Water.</div>
-          <div class="detail-hint">Centred on the world origin with the default Grass/Dirt/Rock/Snow layers; flat unless a heightmap is picked. Save writes the tiles into this level's terrain folder.</div>
+          <div class="detail-hint" data-world-terrain-multitile hidden>Çok tile'lı Spline'lar düzenleme, arazi etkileri, mesh çıktısı ve River Water destekler.</div>
+          <div class="detail-hint">Varsayılan Grass/Dirt/Rock/Snow katmanlarıyla dünya orijinine ortalanır; heightmap seçilmezse düzdür. Save, tile'ları bu level'ın arazi klasörüne yazar.</div>
         </form>
         <footer class="parent-class-foot">
           <button type="button" class="parent-class-cancel" data-world-terrain-cancel>Cancel</button>

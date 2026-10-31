@@ -102,19 +102,19 @@ export function registerVehicleEditorFieldsTests(check: Check): void {
     assert.match(html, /data-as-vehicle-num="maxEngineForce" value="7000" placeholder="9000"/);
     assert.match(html, /value="assets\/missing\.vehicle\.json" selected>assets\/missing\.vehicle\.json \(unknown\)/);
     assert.match(html, /value="ghost" selected>ghost \(unknown\)/);
-    assert.match(html, /4 wheels from the asset/);
+    assert.match(html, /4 tekerlek asset(?:'|&#39;)ten geliyor/);
     assert.match(
       vehicleComponentFields({ asset: ASSET_PATH }, { vehicleAssets: [], soundAssets: [], inherited: undefined }),
-      /Loading the vehicle asset/,
+      /Araç asset'i yükleniyor/,
     );
     assert.match(
       vehicleComponentFields({ asset: ASSET_PATH }, { vehicleAssets: [], soundAssets: [], inherited: null }),
-      /could not be read/,
+      /okunamadı/,
     );
     assert.match(
       vehicleComponentFields({ engineSound: null, wheels: [{ position: [0, 0, 0] }] },
         { vehicleAssets: [], soundAssets: [], inherited: truck() }),
-      /value="__silent" selected>Silent[\s\S]*1 inline wheel replace/,
+      /value="__silent" selected>Silent[\s\S]*1 satır içi tekerlek/,
     );
   });
 

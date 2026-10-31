@@ -121,7 +121,7 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${field("Min X", "minX", lake.bounds.min[0], "1")}${field("Min Z", "minZ", lake.bounds.min[1], "1")}
       ${field("Max X", "maxX", lake.bounds.max[0], "1")}${field("Max Z", "maxZ", lake.bounds.max[1], "1")}
       ${field("Fill X", "seedX", lake.seed[0])}${field("Fill Z", "seedZ", lake.seed[1])}
-      <div class="detail-hint" data-lake-escape title="Su bu yüksekliğe ulaşırsa hesaplama alanının dışına taşabilir.">Escape Level: ${state.result?.escapeLevel?.toFixed(3) ?? "—"} m</div>
+      <div class="detail-hint" data-lake-escape title="Su bu yüksekliğe ulaşırsa hesaplama alanının dışına taşabilir.">Taşma seviyesi (Escape Level): ${state.result?.escapeLevel?.toFixed(3) ?? "—"} m</div>
       <div class="detail-hint" data-lake-status>${escape(state.result?.message ?? "Calculating Lake…")}</div>
       ${button("retry", "Recalculate Water", state.picking, "", UI_ICONS.refresh)}
       <div class="detail-subhead">Light & Reflection</div>
@@ -130,7 +130,7 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       <label class="detail-row"><span>Reflection Mode</span><select data-lake-reflection ${disabled}><option value="off">Off</option><option value="sharedPlanar">Shared Planar</option></select></label>
       <label class="detail-row"><span>Reflection Quality</span><select data-lake-quality ${disabled}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
       <label class="detail-row"><span>Reflection Group</span><input data-lake-group value="${escape(a.reflectionGroup)}" ${disabled}></label>
-      <div class="detail-hint">Terrain: ${escape(lake.terrainRef)} · World Coordinates</div>
+      <div class="detail-hint">Arazi: ${escape(lake.terrainRef)} · dünya koordinatları</div>
       ${!state.draft ? button("terrain", "Select Terrain") : ""}
     `, true));
   }

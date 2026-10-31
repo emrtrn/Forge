@@ -436,7 +436,7 @@ export class StateTreeEditor {
 
   private renderOutline(state: ParseState): void {
     if (state.value === null) {
-      this.outlineHost.innerHTML = `<div class="ste-empty">Fix the JSON to see the states.</div>`;
+      this.outlineHost.innerHTML = `<div class="ste-empty">State'leri görmek için JSON'u düzeltin.</div>`;
       return;
     }
     if (!state.states || state.states.length === 0) {
@@ -508,7 +508,7 @@ export class StateTreeEditor {
     }
     const rows = this.flattenTransitions(state.states);
     if (rows.length === 0) {
-      this.tableHost.innerHTML = `<div class="ste-empty">No transitions.</div>`;
+      this.tableHost.innerHTML = `<div class="ste-empty">Transition yok.</div>`;
       return;
     }
     const body = rows
@@ -556,16 +556,16 @@ export class StateTreeEditor {
 
   private renderNodeForm(state: ParseState): void {
     if (!isObj(state.value) || !Array.isArray(state.states)) {
-      this.formHost.innerHTML = `<div class="ste-form-empty">Add a valid <code>states</code> array to edit states.</div>`;
+      this.formHost.innerHTML = `<div class="ste-form-empty">State'leri düzenlemek için geçerli bir <code>states</code> dizisi ekleyin.</div>`;
       return;
     }
     if (this.selectedPath === null) {
-      this.formHost.innerHTML = `<div class="ste-form-empty">Select a state in the outline to edit it.</div>`;
+      this.formHost.innerHTML = `<div class="ste-form-empty">Düzenlemek için ana hattan bir state seçin.</div>`;
       return;
     }
     const node = resolveState(state.value, this.selectedPath);
     if (!node) {
-      this.formHost.innerHTML = `<div class="ste-form-empty">Select a state in the outline to edit it.</div>`;
+      this.formHost.innerHTML = `<div class="ste-form-empty">Düzenlemek için ana hattan bir state seçin.</div>`;
       return;
     }
 
@@ -605,7 +605,7 @@ export class StateTreeEditor {
     return `
       <div class="ste-section-sub">Enter Conditions</div>
       <div class="ste-cards" data-ste-enter-cond-list>${
-        cards || `<div class="ste-form-empty">No enter conditions.</div>`
+        cards || `<div class="ste-form-empty">Enter condition yok.</div>`
       }</div>
       <div class="ste-form-add">
         <select data-ste-add-enter-cond-kind class="ste-input ste-input-sm">${addOptions}</select>
@@ -624,7 +624,7 @@ export class StateTreeEditor {
     return `
       <div class="ste-card-subtitle">Guard Conditions</div>
       <div class="ste-cards" data-ste-trans-cond-list>${
-        cards || `<div class="ste-form-empty">No guard conditions.</div>`
+        cards || `<div class="ste-form-empty">Guard condition yok.</div>`
       }</div>
       <div class="ste-form-add">
         <select data-ste-add-trans-cond-kind class="ste-input ste-input-sm">${addOptions}</select>
@@ -743,7 +743,7 @@ export class StateTreeEditor {
     const cards = tasks.map((task, index) => this.taskCardHtml(task, index)).join("");
     return `
       <div class="ste-section-sub">Tasks</div>
-      <div class="ste-cards" data-ste-task-list>${cards || `<div class="ste-form-empty">No tasks.</div>`}</div>
+      <div class="ste-cards" data-ste-task-list>${cards || `<div class="ste-form-empty">Task yok.</div>`}</div>
       <div class="ste-form-add">
         <button type="button" data-ste-add-task class="ste-btn" title="Task ekle">+ Task</button>
       </div>`;
@@ -753,7 +753,7 @@ export class StateTreeEditor {
     const task = isObj(raw) ? raw : {};
     const paramCount = isObj(task.params) ? Object.keys(task.params).length : 0;
     const hint = paramCount > 0
-      ? `<div class="ste-form-hint">${paramCount} param${paramCount === 1 ? "" : "s"} — edit in the Asset JSON pane.</div>`
+      ? `<div class="ste-form-hint">${paramCount} parametre; Asset JSON bölmesinde düzenleyin.</div>`
       : "";
     return `
       <div class="ste-card" data-ste-task-index="${index}">
@@ -781,7 +781,7 @@ export class StateTreeEditor {
     return `
       <div class="ste-section-sub">Transitions</div>
       <div class="ste-cards" data-ste-trans-list>${
-        cards || `<div class="ste-form-empty">No transitions.</div>`
+        cards || `<div class="ste-form-empty">Transition yok.</div>`
       }</div>
       <div class="ste-form-add">
         <button type="button" data-ste-add-trans class="ste-btn"${

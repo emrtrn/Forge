@@ -84,9 +84,9 @@ export function vehicleComponentFields(props: Props, context: VehicleFieldsConte
 
   const inherited = context.inherited;
   const status = inherited === undefined
-    ? `<p class="${note}">Loading the vehicle asset…</p>`
+    ? `<p class="${note}">Araç asset'i yükleniyor…</p>`
     : inherited === null
-      ? `<p class="${note}">The vehicle asset could not be read; Play falls back to the inline / reference-car settings.</p>`
+      ? `<p class="${note}">Araç asset'i okunamadı; Play, satır içi / referans araç ayarlarına geri döner.</p>`
       : "";
 
   const quick = VEHICLE_OVERRIDE_SCALAR_KEYS.map((key) => {
@@ -116,10 +116,10 @@ export function vehicleComponentFields(props: Props, context: VehicleFieldsConte
 
   const inlineWheels = Array.isArray(props.wheels) ? props.wheels.length : 0;
   const wheelNote = inlineWheels > 0
-    ? `${inlineWheels} inline wheel${inlineWheels === 1 ? "" : "s"} replace the asset's (raw props below).`
+    ? `${inlineWheels} satır içi tekerlek asset'inkilerin yerine geçer (ham değerler aşağıda).`
     : inherited
-      ? `${inherited.wheels.length} wheels from ${asset || context.classAsset ? "the asset" : "the reference car"}.`
-      : "Wheels come from the asset.";
+      ? `${inherited.wheels.length} tekerlek ${asset || context.classAsset ? "asset'ten" : "referans araçtan"} geliyor.`
+      : "Tekerlekler asset'ten gelir.";
 
   const assetRow = `
     <label class="${field}">
@@ -131,7 +131,7 @@ export function vehicleComponentFields(props: Props, context: VehicleFieldsConte
       <span>Engine Sound</span>
       <select data-as-vehicle-engine-sound ${disabled}>${soundOptions}</select>
     </label>`;
-  const footer = `<p class="${note}">${escapeHtml(wheelNote)} Wheels, suspension and the drivetrain are edited on the vehicle asset.</p>`;
+  const footer = `<p class="${note}">${escapeHtml(wheelNote)} Tekerlekler, süspansiyon ve drivetrain araç asset'inde düzenlenir.</p>`;
   if (details) {
     return `
       <div class="detail-section" data-actor-vehicle-section>

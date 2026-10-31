@@ -307,13 +307,13 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.alignToTerrain" ${activeSegment.mesh.alignToTerrain ? "checked" : ""} ${meshLockedAttr} /><span>Align To Terrain</span></label>
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.deform" ${activeSegment.mesh.deform ? "checked" : ""} ${meshLockedAttr} /><span>Deform Mesh Along Curve</span></label>
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.collision" ${activeSegment.mesh.collision ? "checked" : ""} ${meshLockedAttr} /><span>Mesh Collision</span></label>
-      ${activeSegment.mesh.assetId ? "" : `<div class="detail-hint">Choose a mesh to enable spline mesh output.</div>`}
-      <div class="detail-hint">Mesh length runs along local +Z. Deform Mesh creates curved geometry; it is more expensive than fitted instances. Collision is rebuilt on Play.</div>
+      ${activeSegment.mesh.assetId ? "" : `<div class="detail-hint">Spline mesh çıktısını etkinleştirmek için bir mesh seçin.</div>`}
+      <div class="detail-hint">Mesh uzunluğu yerel +Z boyuncadır. Deform Mesh kavisli geometri üretir; yerleştirilmiş örneklerden daha pahalıdır. Çarpışma Play'de yeniden oluşturulur.</div>
       <div class="landscape-heightmap-actions">
         <button type="button" class="detail-action-button" data-landscape-spline-apply-deform ${lockedAttr}>Apply Deform</button>
         <button type="button" class="detail-action-button" data-landscape-spline-apply-paint ${lockedAttr}>Apply Paint</button>
       </div>
-      <div class="detail-hint">Apply bakes the whole active spline's enabled effects into the heightfield / paint layers (destructive).</div>`
+      <div class="detail-hint">Apply, etkin spline'ın açık tüm etkilerini yükseklik alanına / boya katmanlarına işler (geri dönüşsüz).</div>`
     : "";
   const splinePanels = settings.editMode === "splines" ? `${splinePointMarkup}
     ${splineSegments.length ? `<div class="detail-section" data-detail-section="landscape-segments">
@@ -614,7 +614,7 @@ function resampleImportMarkup(importHeight: number, lockedAttr: string): string 
         <div class="landscape-heightmap-actions">
           <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG (resample)<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
         </div>
-        <div class="detail-hint">Resamples any PNG onto this grid; Import Height scales its brightness (0 m to Import Height). Re-import to change the height scale.</div>`;
+        <div class="detail-hint">Herhangi bir PNG'yi bu ızgaraya yeniden örnekler; Import Height parlaklığı ölçekler (0 m'den Import Height'a). Yükseklik ölçeğini değiştirmek için yeniden içe aktarın.</div>`;
 }
 
 /** Expand: extend a single-tile Landscape with neighbouring tiles. */
@@ -622,7 +622,7 @@ function expandSection(lockedAttr: string): string {
   return `<div class="detail-section">
         <div class="detail-section-title">Expand</div>
         <button type="button" class="detail-action-button" data-landscape-expand-world ${lockedAttr}>Expand Landscape…</button>
-        <div class="detail-hint">Keep this tile's authored surface in place and extend it with neighbouring tiles.</div>
+        <div class="detail-hint">Bu tile'ın mevcut yüzeyini yerinde tutar ve komşu tile'larla genişletir.</div>
       </div>`;
 }
 
@@ -646,7 +646,7 @@ function landscapeSizeSection(
           <span>World Size</span>
           <input data-landscape-world-size type="number" min="${resolution ? (resolution.verticesX - 1) * 0.01 : 0.01}" max="${resolution ? (resolution.verticesX - 1) * 100 : 10000}" step="0.1" value="${resolution?.worldSize ?? ""}" ${lockedAttr} />
         </label>
-        <div class="detail-hint">Changes the terrain width and depth while keeping its height and paint data.</div>
+        <div class="detail-hint">Yükseklik ve boya verisini koruyarak arazinin genişliğini ve derinliğini değiştirir.</div>
       </div>`;
 }
 
@@ -701,9 +701,9 @@ function heightmapFileSection(shape: LandscapeHeightmapShape | null, lockedAttr:
   const disabled = shape.issues.length > 0 ? "disabled" : lockedAttr;
   return `<div class="detail-section" data-landscape-heightmap>
         <div class="detail-section-title">Heightmap</div>
-        <div class="detail-hint">16-bit RAW or PNG: exactly ${width} × ${height} samples, rows along +Z. Heights are metres relative to terrain origin Y.${
-          shape.multiTile ? " Empty tiles are skipped; export fills uncovered samples with 0." : ""}</div>
-        ${shape.issues.length > 0 ? `<div class="detail-hint" data-heightmap-issues>Not available for this grid (${escapeHtml(shape.issues.join("; "))}); resample it to a preset resolution first.</div>` : ""}
+        <div class="detail-hint">16-bit RAW veya PNG: tam olarak ${width} × ${height} örnek, satırlar +Z boyunca. Yükseklikler, arazi orijininin Y değerine göre metredir.${
+          shape.multiTile ? " Boş tile'lar atlanır; dışa aktarma kapsanmayan örnekleri 0 ile doldurur." : ""}</div>
+        ${shape.issues.length > 0 ? `<div class="detail-hint" data-heightmap-issues>Bu ızgarada kullanılamaz (${escapeHtml(shape.issues.join("; "))}); önce hazır bir çözünürlüğe yeniden örnekleyin.</div>` : ""}
         <label class="detail-row"><span>RAW Byte Order</span><select data-heightmap-order ${disabled}>
           <option value="little">Little-endian</option><option value="big">Big-endian</option>
         </select></label>
@@ -717,7 +717,7 @@ function heightmapFileSection(shape: LandscapeHeightmapShape | null, lockedAttr:
           <button type="button" class="detail-action-button" data-heightmap-export="raw" ${shape.issues.length > 0 ? "disabled" : ""}>Export RAW</button>
           <button type="button" class="detail-action-button" data-heightmap-export="png" ${shape.issues.length > 0 ? "disabled" : ""}>Export PNG</button>
         </div>
-        <div class="detail-hint">Export writes little-endian RAW or 16-bit greyscale PNG; the status line reports the height range needed to re-import.</div>${extra}
+        <div class="detail-hint">Export, little-endian RAW veya 16-bit gri tonlamalı PNG yazar; durum satırı yeniden içe aktarmak için gereken yükseklik aralığını bildirir.</div>${extra}
       </div>`;
 }
 
@@ -772,7 +772,7 @@ function layerPhysicsRows(layer: LandscapeLayerView | undefined, lockedAttr: str
   if (!fields.length) return "";
   const rows = (advanced: boolean): string => fields.filter((field) => field.advanced === advanced).map((field) =>
     `<label class="detail-row" title="${escapeHtml(field.hint)}"><span>${field.label}</span><input type="number" data-landscape-physics="${field.key}" min="${field.min}" max="${field.max}" step="${field.step}" value="${Number(terrainPhysicsValue(profile, field).toPrecision(6))}" ${lockedAttr}></label>`).join("");
-  return `<div data-landscape-physics-panel><p class="detail-hint">Physics overrides apply to this layer only.</p>${rows(false)}
+  return `<div data-landscape-physics-panel><p class="detail-hint">Fizik geçersiz kılmaları yalnızca bu katmana uygulanır.</p>${rows(false)}
     <details data-landscape-physics-advanced ${advancedOpen ? "open" : ""}><summary>Advanced Physics</summary>${rows(true)}</details>
     <button type="button" class="detail-action-button" data-landscape-physics-reset ${lockedAttr}>Reset to Preset</button></div>`;
 }
@@ -907,16 +907,16 @@ function terrainSculptControls(settings: LandscapeSculptSettings, lockedAttr: st
   if (settings.tool === "noise") {
     controls = `${number("noiseScale", "Noise Scale (m)", 0.1, 1000, 0.1)}
       ${number("noiseSeed", "Noise Seed", 0, 2147483647, 1)}
-      <div class="detail-hint">Paint natural height variation. Scale sets feature size; the same seed keeps the pattern continuous across tiles.</div>`;
+      <div class="detail-hint">Doğal yükseklik çeşitliliği boyar. Scale desen boyutunu belirler; aynı seed deseni tile'lar arasında kesintisiz tutar.</div>`;
   } else if (settings.tool === "ramp") {
     controls = `${number("rampStartOffset", "Start Offset (m)", -1000, 1000, 0.1)}
       ${number("rampEndOffset", "End Offset (m)", -1000, 1000, 0.1)}
       ${number("rampShoulder", "Shoulder Width (m)", 0, 50, 0.5)}
-      <div class="detail-hint">Drag and release over the Landscape. Ramp Width is the full flat road width; Shoulder Width blends each side into the terrain. Falloff shapes only the shoulders. The road reaches the endpoint heights in one application, independently of brush Strength. A click alone makes no change.</div>`;
+      <div class="detail-hint">Landscape üzerinde sürükleyip bırakın. Ramp Width düz yolun tam genişliğidir; Shoulder Width her iki kenarı araziye karıştırır. Falloff yalnızca kenarları şekillendirir. Yol, fırça Strength'inden bağımsız olarak tek uygulamada uç noktaların yüksekliğine ulaşır. Yalnızca tıklamak bir değişiklik yapmaz.</div>`;
   } else if (settings.tool === "terrace") {
     controls = `${number("terraceStep", "Step Height (m)", 0.01, 1000, 0.1)}
       ${number("terraceSmoothing", "Step Smoothing", 0, 1, 0.05)}
-      <div class="detail-hint">Paint height steps relative to the Landscape origin. Smoothing softens the transitions between steps.</div>`;
+      <div class="detail-hint">Landscape orijinine göre yükseklik basamakları boyar. Smoothing basamaklar arası geçişleri yumuşatır.</div>`;
   } else if (settings.tool === "erosion") {
     controls = `<label class="detail-row"><span>Erosion Type</span><select data-landscape-erosion-type ${lockedAttr}>
       <option value="thermal" ${settings.erosionHydraulic ? "" : "selected"}>Thermal</option>
@@ -928,14 +928,14 @@ function terrainSculptControls(settings: LandscapeSculptSettings, lockedAttr: st
         ${number("erosionSedimentCapacity", "Sediment Capacity", 0, 20, 0.5)}
         ${number("erosionEvaporation", "Evaporation", 0, 1, 0.01)}
         ${number("erosionSeed", "Rain Seed", 0, 2147483647, 1)}
-        <div class="detail-hint">Rain flows downhill, carves channels and deposits transported soil. Increase Rain Amount or Iterations for stronger weathering. Flat terrain needs a slope for flowing-water erosion.</div>`
+        <div class="detail-hint">Yağmur yokuş aşağı akar, kanallar açar ve taşıdığı toprağı biriktirir. Daha güçlü aşınma için Rain Amount veya Iterations değerini artırın. Akan su erozyonu için düz arazide eğim gerekir.</div>`
         : `${number("erosionTalus", "Resting Angle (deg)", 0, 89, 1)}
-        <div class="detail-hint">Loose soil moves down slopes steeper than the Resting Angle and builds up below. Lower angles affect gentler slopes. Strength and Falloff control the amount of weathering.</div>`}`;
+        <div class="detail-hint">Gevşek toprak Resting Angle'dan dik yamaçlarda aşağı kayar ve aşağıda birikir. Düşük açılar daha yumuşak yamaçları da etkiler. Aşınma miktarını Strength ve Falloff belirler.</div>`}`;
   } else if (settings.tool === "flatten") {
     controls = `<label class="detail-toggle">
       <input data-landscape-flatten-clicked-height type="checkbox" ${settings.flattenUseClickedHeight ? "checked" : ""} ${lockedAttr} />
       <span>Flatten: Use Clicked Height</span></label>
-      <div class="detail-hint">Uses the height at the start of each drag and keeps it fixed until release.</div>
+      <div class="detail-hint">Her sürüklemenin başındaki yüksekliği kullanır ve bırakana kadar sabit tutar.</div>
       <label class="detail-row"><span>Flatten Target</span>
       <input data-landscape-number="flattenTargetHeight" type="number" step="0.1" value="${settings.flattenTargetHeight}"
         ${settings.flattenUseClickedHeight ? "disabled" : lockedAttr} /></label>`;
@@ -944,7 +944,7 @@ function terrainSculptControls(settings: LandscapeSculptSettings, lockedAttr: st
     ${WORLD_TERRAIN_SCULPT_TOOLS.map((tool) => `<button type="button" data-landscape-tool="${tool}"
       class="${settings.tool === tool ? "active" : ""}" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`).join("")}
     </div>
-    <div class="detail-hint">Hold Shift to swap Raise and Lower while sculpting. Ctrl: Smooth. Alt: Flatten. Ctrl+Alt: Flatten at clicked height.</div>
+    <div class="detail-hint">Sculpt sırasında Raise ile Lower'ı değiştirmek için Shift'e basılı tutun. Ctrl: Smooth. Alt: Flatten. Ctrl+Alt: tıklanan yükseklikte Flatten.</div>
     ${controls}`;
 }
 
@@ -1053,7 +1053,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-row"><span>World Size</span><span>${metres(terrain.extent[0])} × ${metres(terrain.extent[1])}</span></div>
         <div class="detail-row"><span>Spacing</span><span>${metres(terrain.spacing)}</span></div>
         <div class="detail-row"><span>Definition</span><span title="${escapeHtml(terrain.dataRef)}">${escapeHtml(terrain.dataRef.split("/").pop() ?? terrain.dataRef)}</span></div>
-        <div class="detail-hint" data-world-terrain-limits>Save writes only the edited tiles and the definition, in place. Splines support editing, terrain effects, mesh output and River Water.${singleTile ? "" : " Resizing is not available for a multi-tile Landscape yet."}</div>
+        <div class="detail-hint" data-world-terrain-limits>Save yalnızca düzenlenen tile'ları ve tanımı yerinde yazar. Spline'lar düzenleme, arazi etkileri, mesh çıktısı ve River Water destekler.${singleTile ? "" : " Çok tile'lı Landscape için yeniden boyutlandırma henüz yok."}</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Others</div>
@@ -1130,7 +1130,7 @@ export function renderLightDetails(options: SpecialActorDetailsOptions): void {
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${!isPoint ? vectorRow("Rotation", "r", selection.rotation, 1, selection.locked || options.sunManagedByWorldEnvironment) : ""}
       ${options.sunManagedByWorldEnvironment
-        ? `<div class="detail-hint" data-sun-managed-by-wes>Sun path is managed by the World Environment: edit its time and Sun Path instead.</div>`
+        ? `<div class="detail-hint" data-sun-managed-by-wes>Güneşin yolunu World Environment yönetir; bunun yerine onun saatini ve Sun Path ayarını düzenleyin.</div>`
         : ""}
       <div class="detail-section">
         <div class="detail-section-title">Light</div>
@@ -1185,7 +1185,7 @@ export function renderLightDetails(options: SpecialActorDetailsOptions): void {
               } ${lockedAttr} />
               <span>Cascaded Shadows</span>
             </label>
-            <div class="detail-hint">Sharp shadows around the camera through 2–4 cascades (count and distance follow the quality profile) instead of one map over the whole level. Applies to the level's sun.</div>`
+            <div class="detail-hint">Tüm level'a yayılan tek bir harita yerine kamera çevresinde 2–4 kademeyle (sayı ve mesafe kalite profilini izler) keskin gölgeler. Level'ın güneşine uygulanır.</div>`
             : ""
         }
       </div>
@@ -1275,7 +1275,7 @@ export function renderReflectionPlaneDetails(options: SpecialActorDetailsOptions
               .join("")}
           </select>
         </label>
-        <div class="detail-hint">Higher resolution = sharper mirror, more GPU cost.</div>
+        <div class="detail-hint">Yüksek çözünürlük = daha keskin ayna, daha fazla GPU maliyeti.</div>
       </div>
       ${actorLockSection(selection)}
     `;
@@ -1338,7 +1338,7 @@ export function renderReflectiveSurfaceDetails(options: SpecialActorDetailsOptio
           <span>Surface</span>
           <select data-surface-material ${lockedAttr}>${materialOptions}</select>
         </label>
-        <div class="detail-hint">Albedo + normal map + roughness come from this material (asphalt, marble, ...).</div>
+        <div class="detail-hint">Albedo, normal map ve roughness bu materyalden gelir (asfalt, mermer, ...).</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Reflection</div>
@@ -1379,7 +1379,7 @@ export function renderReflectiveSurfaceDetails(options: SpecialActorDetailsOptio
               .join("")}
           </select>
         </label>
-        <div class="detail-hint">Lower roughness + higher strength = sharper reflection; fresnel concentrates it at grazing angles.</div>
+        <div class="detail-hint">Düşük roughness + yüksek strength = daha keskin yansıma; fresnel onu sıyırma açılarında yoğunlaştırır.</div>
       </div>
       ${actorLockSection(selection)}
     `;
@@ -1463,7 +1463,7 @@ export function renderBlockingVolumeDetails(options: SpecialActorDetailsOptions)
           <span>Color</span>
           <input data-brush-color type="color" value="${escapeHtml(volume.color)}" ${lockedAttr} />
         </label>
-        <div class="detail-hint">Brush dimensions are world units; the transform scale multiplies them.</div>
+        <div class="detail-hint">Fırça boyutları dünya birimindedir; transform ölçeği bunları çarpar.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Actor</div>
@@ -1471,7 +1471,7 @@ export function renderBlockingVolumeDetails(options: SpecialActorDetailsOptions)
           <span>AI Navigation</span>
           <select data-brush-navigation-role ${lockedAttr}>${navigationRoleOptions}</select>
         </label>
-        <div class="detail-hint">Walkable Deck is a horizontal floor: AI agents stand on its top instead of treating it as an obstacle. Use a box fitted to a bridge deck.</div>
+        <div class="detail-hint">Walkable Deck yatay bir zemindir: AI ajanları onu engel saymak yerine üstünde durur. Köprü tabliyesine oturtulmuş bir kutu kullanın.</div>
         <label class="detail-toggle">
           <input type="checkbox" data-brush-render-in-game ${volume.renderInGame ? "checked" : ""} />
           <span>Render in Game</span>
@@ -1546,7 +1546,7 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
       <div class="detail-section">
         <div class="detail-section-title">Navigation Bounds</div>
         ${navigationVolumeDimensionRows(volume, lockedAttr)}
-        <div class="detail-hint">AI pathfinding is allowed inside this volume; the transform scale multiplies its size.</div>
+        <div class="detail-hint">Bu hacmin içinde AI yol bulmaya izin verilir; transform ölçeği boyutunu çarpar.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Preview Agent</div>
@@ -1564,7 +1564,7 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
       <div class="detail-section">
         <div class="detail-section-title">Navigation Bake</div>
         <button type="button" data-ai-nav-rebake class="detail-button">Rebake Navigation</button>
-        <div class="detail-hint">The walkable area rebakes automatically on every scene edit and at runtime. Press to force a recompute now (also reloads edited collision sidecars) and show the preview.</div>
+        <div class="detail-hint">Yürünebilir alan her sahne düzenlemesinde ve runtime'da otomatik yeniden hesaplanır. Şimdi yeniden hesaplatmak (düzenlenen çarpışma yan dosyalarını da yeniden yükler) ve önizlemeyi göstermek için basın.</div>
       </div>
       ${actorLockSection(selection)}
     `;
@@ -1781,7 +1781,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
           <label class="detail-row"><span>Forward Axis</span><select data-spline-deform-axis="forwardAxis" data-spline-generator-id="${escapeHtml(generator.id)}" ${locked}>${axisOptions(generator.forwardAxis ?? "z")}</select></label>
           <label class="detail-row"><span>Up Axis</span><select data-spline-deform-axis="upAxis" data-spline-generator-id="${escapeHtml(generator.id)}" ${locked}>${axisOptions(generator.upAxis ?? "y")}</select></label>
           <label class="detail-row"><span>Geometry</span><select data-spline-deform-geometry="${escapeHtml(generator.id)}" ${locked}><option value="segments" ${(generator.geometryMode ?? "segments") === "segments" ? "selected" : ""}>Per segment chunks</option><option value="whole" ${generator.geometryMode === "whole" ? "selected" : ""}>One whole mesh</option></select></label>
-          <div class="detail-hint">Segment chunks make point drags rebuild only the nearby geometry; whole mesh preserves a continuous source asset.</div>
+          <div class="detail-hint">Segment parçaları, nokta sürüklemelerinde yalnızca yakındaki geometriyi yeniden oluşturur; tek mesh kaynak asset'i kesintisiz korur.</div>
           <label class="detail-row"><span>Sample Steps</span><input type="number" min="2" max="128" step="1" data-spline-deform-number="sampleSteps" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.sampleSteps ?? 16}" ${locked}></label>
           <label class="detail-row"><span>UV Mode</span><select data-spline-deform-uv="${escapeHtml(generator.id)}" ${locked}><option value="stretch" ${(generator.uvMode ?? "stretch") === "stretch" ? "selected" : ""}>Stretch</option><option value="tileByDistance" ${generator.uvMode === "tileByDistance" ? "selected" : ""}>Tile by distance</option></select></label>
           <label class="detail-row"><span>UV Tile Length</span><input type="number" min="0.01" step="0.1" data-spline-deform-number="uvTileLength" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.uvTileLength ?? 1}" ${locked}></label>
@@ -2008,7 +2008,7 @@ export function renderWorldWidgetDetails(options: SpecialActorDetailsOptions): v
           <input data-ww-field="maxDistance" type="number" min="0" step="1"
             value="${widget.maxDistance}" /></label>
       </div>
-      <div class="detail-hint">World-space billboard. Anchor by a world point or an entity id; offsets nudge it. Position is edited numerically here (no gizmo yet).</div>
+      <div class="detail-hint">Dünya uzayında billboard. Bir dünya noktasına veya entity id'sine bağlanır; offset'ler onu kaydırır. Konum burada sayısal olarak düzenlenir (henüz gizmo yok).</div>
     `;
 
   body.querySelectorAll<HTMLInputElement>("[data-ww-field]").forEach((input) => {
@@ -2106,14 +2106,14 @@ export function renderReflectionCaptureDetails(options: SpecialActorDetailsOptio
         </label>
         ${
           bakeStale
-            ? `<div class="detail-hint detail-hint-warning">Bake is stale - the probe moved or near/far changed since capture. Press Recapture.</div>`
+            ? `<div class="detail-hint detail-hint-warning">Bake güncel değil: yakalamadan sonra prob taşındı ya da near/far değişti. Recapture'a basın.</div>`
             : ""
         }
         <button type="button" data-capture-recapture class="detail-button${
           bakeStale ? " detail-button-warning" : ""
         }">Recapture</button>
         <button type="button" data-capture-recapture-all class="detail-button">Recapture All</button>
-        <div class="detail-hint">Static capture: bakes a cubemap from this point - press Recapture after moving the probe or scene.</div>
+        <div class="detail-hint">Statik yakalama: bu noktadan bir cubemap oluşturur; probu veya sahneyi değiştirdikten sonra Recapture'a basın.</div>
       </div>
       ${actorLockSection(selection)}
     `;

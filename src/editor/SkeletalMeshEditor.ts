@@ -801,7 +801,7 @@ export class SkeletalMeshEditor {
           ${
             this.boneRoots.length
               ? this.boneRoots.map((node) => this.renderBoneNode(node, 0)).join("")
-              : `<div class="sm-empty">No bones found in this asset.</div>`
+              : `<div class="sm-empty">Bu asset'te kemik bulunamadı.</div>`
           }
         </div>
       </div>
@@ -814,7 +814,7 @@ export class SkeletalMeshEditor {
               <div class="sm-row"><span>Children</span><strong>${this.selectedBone.children.filter((child) => child instanceof Bone).length}</strong></div>
               <div class="sm-row"><span>World Position</span><strong>${formatVec3(this.selectedBone.getWorldPosition(new Vector3()))}</strong></div>
             `
-            : `<div class="sm-empty">Select a bone to inspect it in the viewport.</div>`
+            : `<div class="sm-empty">Viewport'ta incelemek için bir kemik seçin.</div>`
         }
       </div>
       <div class="sm-section">
@@ -839,7 +839,7 @@ export class SkeletalMeshEditor {
               : ""
           }
         </div>
-        <div class="sm-hint">Bones at/under this node blend to <strong>upperBody</strong> montages; the rest keep locomotion.</div>
+        <div class="sm-hint">Bu düğümdeki ve altındaki kemikler <strong>upperBody</strong> montajlarına karışır; geri kalanı hareket animasyonunu sürdürür.</div>
       </div>
       <div class="sm-section">
         <div class="sm-section-title">Sockets <span class="sm-count">${this.skeleton.sockets.length}</span></div>
@@ -847,12 +847,12 @@ export class SkeletalMeshEditor {
           ${
             this.selectedBone
               ? `<button type="button" class="sm-menu-item" data-skel-add-socket>Add Socket To ${escapeHtml(this.selectedBone.name || "Bone")}</button>`
-              : `<div class="sm-empty">Select a bone before adding a socket.</div>`
+              : `<div class="sm-empty">Socket eklemeden önce bir kemik seçin.</div>`
           }
           ${
             this.skeleton.sockets.length
               ? this.skeleton.sockets.map((socket) => this.renderSocketRow(socket)).join("")
-              : `<div class="sm-empty">No sockets authored yet.</div>`
+              : `<div class="sm-empty">Henüz socket eklenmedi.</div>`
           }
         </div>
       </div>
@@ -881,7 +881,7 @@ export class SkeletalMeshEditor {
             </label>
             ${
               socket.previewAssetId && !previewAsset
-                ? `<div class="sm-hint">Preview asset not found in the Content Browser manifest.</div>`
+                ? `<div class="sm-hint">Önizleme asset'i Content Browser manifest'inde bulunamadı.</div>`
                 : ""
             }
           `
@@ -921,7 +921,7 @@ export class SkeletalMeshEditor {
                     `,
                   )
                   .join("")
-              : `<div class="sm-empty">No animation clips embedded in this GLTF.</div>`
+              : `<div class="sm-empty">Bu GLTF'te gömülü animasyon klibi yok.</div>`
           }
         </div>
       </div>
@@ -951,7 +951,7 @@ export class SkeletalMeshEditor {
                 <input type="text" data-skel-crossfade value="${this.crossfadeDuration.toFixed(2)}" />
               </label>
             `
-            : `<div class="sm-empty">Select a clip to preview animation.</div>`
+            : `<div class="sm-empty">Animasyonu önizlemek için bir klip seçin.</div>`
         }
       </div>
       ${clip ? this.renderRootMotionDetails(clip) : ""}
@@ -970,7 +970,7 @@ export class SkeletalMeshEditor {
                   </label>
                 `,
               ).join("")
-            : `<div class="sm-empty">No clips available for role mapping.</div>`
+            : `<div class="sm-empty">Rol eşlemesi için kullanılabilir klip yok.</div>`
         }
       </div>
       ${this.renderBlendSpaceDetails()}
@@ -1049,12 +1049,12 @@ export class SkeletalMeshEditor {
           ${
             this.clips.length
               ? `<button type="button" class="sm-menu-item" data-skel-blend-add>Add Blend Space</button>`
-              : `<div class="sm-empty">Import a clip before authoring a blend space.</div>`
+              : `<div class="sm-empty">Blend space oluşturmadan önce bir klip içe aktarın.</div>`
           }
           ${
             this.skeleton.blendSpaces.length
               ? this.skeleton.blendSpaces.map((blend) => this.renderBlendSpaceRow(blend)).join("")
-              : `<div class="sm-empty">No blend spaces authored yet.</div>`
+              : `<div class="sm-empty">Henüz blend space eklenmedi.</div>`
           }
         </div>
       </div>
@@ -1095,7 +1095,7 @@ export class SkeletalMeshEditor {
           ${
             blend.samples.length
               ? blend.samples.map((sample, index) => this.renderBlendSampleRow(blend, sample, index)).join("")
-              : `<div class="sm-empty">Add a sample to place a clip on the axis.</div>`
+              : `<div class="sm-empty">Eksene bir klip yerleştirmek için örnek (sample) ekleyin.</div>`
           }
           <button type="button" class="sm-menu-item" data-skel-blend-sample-add>Add Sample</button>
         </div>
@@ -1162,7 +1162,7 @@ export class SkeletalMeshEditor {
             <div class="sm-blend-weights" data-skel-blend-weights>${escapeHtml(this.describeBlendWeights(blend))}</div>
           `
           : !canPreview
-            ? `<div class="sm-hint">Assign clips that exist in this asset to preview the blend.</div>`
+            ? `<div class="sm-hint">Karışımı önizlemek için bu asset'te bulunan klipleri atayın.</div>`
             : ""
       }
     `;
@@ -1177,16 +1177,16 @@ export class SkeletalMeshEditor {
           ${
             this.clips.length
               ? `<button type="button" class="sm-menu-item" data-skel-montage-add>Add Montage</button>`
-              : `<div class="sm-empty">Import a clip before authoring a montage.</div>`
+              : `<div class="sm-empty">Montaj oluşturmadan önce bir klip içe aktarın.</div>`
           }
           ${
             this.skeleton.montages.length
               ? this.skeleton.montages.map((montage) => this.renderMontageRow(montage)).join("")
-              : `<div class="sm-empty">No montages authored yet.</div>`
+              : `<div class="sm-empty">Henüz montaj eklenmedi.</div>`
           }
         </div>
         ${selected ? this.renderMontageEditor(selected) : ""}
-        <div class="sm-hint">TPS convention: an <strong>upperBody</strong> montage named “aim” (held) and “fire” (one-shot) auto-bind to RMB/LMB in Play.</div>
+        <div class="sm-hint">TPS kuralı: “aim” (basılı tutulan) ve “fire” (tek seferlik) adlı <strong>upperBody</strong> montajları Play'de otomatik olarak sağ/sol fare tuşuna bağlanır.</div>
       </div>
     `;
   }
@@ -1225,10 +1225,10 @@ export class SkeletalMeshEditor {
         <label class="sm-row sm-toggle"><input type="checkbox" data-skel-montage-loop ${montage.loop ? "checked" : ""} /><span>Loop while held</span></label>
         <label class="sm-row"><span>Blend In (s)</span><input type="text" data-skel-montage-blend="in" value="${montage.blendInSeconds}" /></label>
         <label class="sm-row"><span>Blend Out (s)</span><input type="text" data-skel-montage-blend="out" value="${montage.blendOutSeconds}" /></label>
-        <div class="sm-hint">Input is bound in game code, not here: a montage defines the clip; which key plays it lives in the Character/code map.</div>
+        <div class="sm-hint">Giriş burada değil, oyun kodunda bağlanır: montaj klibi tanımlar; hangi tuşun oynatacağı Character/kod eşlemesindedir.</div>
         ${
           montage.slot === "upperBody" && !this.skeleton.upperBodyBone
-            ? `<div class="sm-hint">Set an Upper-Body Root in Skeleton mode, or this montage plays full-body.</div>`
+            ? `<div class="sm-hint">Skeleton modunda bir Upper-Body Root ayarlayın; aksi hâlde bu montaj tüm gövdede oynar.</div>`
             : ""
         }
       </div>
@@ -1264,9 +1264,9 @@ export class SkeletalMeshEditor {
                   `,
                 )
                 .join("")
-            : `<div class="sm-empty">No material elements found.</div>`
+            : `<div class="sm-empty">Materyal öğesi bulunamadı.</div>`
         }
-        <div class="sm-hint">Assign a Material asset here to override the embedded GLB material. Save writes a .materials.json sidecar.</div>
+        <div class="sm-hint">Gömülü GLB materyalini geçersiz kılmak için buraya bir Material asset'i atayın. Save, bir .materials.json yan dosyası yazar.</div>
       </div>
       <div class="sm-section">
         <div class="sm-section-title">Sections <span class="sm-count">${this.meshSections.length}</span></div>
@@ -1283,7 +1283,7 @@ export class SkeletalMeshEditor {
                     `,
                   )
                   .join("")
-              : `<div class="sm-empty">No mesh sections found.</div>`
+              : `<div class="sm-empty">Mesh bölümü bulunamadı.</div>`
           }
         </div>
       </div>
@@ -1315,7 +1315,7 @@ export class SkeletalMeshEditor {
                 <button type="button" class="sm-menu-item" data-skel-morph-reset>Reset Morph Targets</button>
               </div>
             `
-            : `<div class="sm-empty">No morph targets found in this asset.</div>`
+            : `<div class="sm-empty">Bu asset'te morph target bulunamadı.</div>`
         }
       </div>
     `;
@@ -1795,16 +1795,16 @@ export class SkeletalMeshEditor {
           ${
             this.nodeNames.length
               ? `<button type="button" class="sm-menu-item" data-skel-body-add>Add Body</button>`
-              : `<div class="sm-empty">Load a rigged model to add bodies.</div>`
+              : `<div class="sm-empty">Gövde eklemek için rig'li bir model yükleyin.</div>`
           }
           ${
             this.skeleton.physicsBodies.length
               ? this.skeleton.physicsBodies.map((body) => this.renderBodyRow(body)).join("")
-              : `<div class="sm-empty">No collision bodies yet.</div>`
+              : `<div class="sm-empty">Henüz çarpışma gövdesi yok.</div>`
           }
         </div>
         ${selected ? this.renderBodyEditor(selected) : ""}
-        <div class="sm-hint">PhAT-lite: capsule/sphere/box bodies attached to bones for a future ragdoll. Move/Rotate/Scale with the gizmo; or set size below.</div>
+        <div class="sm-hint">PhAT-lite: ileride ragdoll için kemiklere bağlı capsule/sphere/box gövdeleri. Gizmo ile Move/Rotate/Scale yapın ya da boyutu aşağıdan girin.</div>
       </div>
       ${this.renderConstraintSection()}
     `;
@@ -1818,7 +1818,7 @@ export class SkeletalMeshEditor {
       ? `<button type="button" class="sm-menu-item is-active" data-skel-sim-toggle>■ Stop Simulation</button>`
       : canSimulate
         ? `<button type="button" class="sm-menu-item" data-skel-sim-toggle>▶ Simulate</button>`
-        : `<div class="sm-empty">Add physics bodies to simulate a ragdoll.</div>`;
+        : `<div class="sm-empty">Ragdoll simülasyonu için fizik gövdeleri ekleyin.</div>`;
     return `
       <div class="sm-section">
         <div class="sm-section-title">Simulate</div>
@@ -1939,16 +1939,16 @@ export class SkeletalMeshEditor {
           ${
             bodies.length >= 2
               ? `<button type="button" class="sm-menu-item" data-skel-constraint-add>Add Constraint</button>`
-              : `<div class="sm-empty">Add at least two bodies to link them.</div>`
+              : `<div class="sm-empty">Bağlamak için en az iki gövde ekleyin.</div>`
           }
           ${
             this.skeleton.physicsConstraints.length
               ? this.skeleton.physicsConstraints.map((constraint) => this.renderConstraintRow(constraint)).join("")
-              : `<div class="sm-empty">No constraints yet.</div>`
+              : `<div class="sm-empty">Henüz constraint yok.</div>`
           }
         </div>
         ${selected ? this.renderConstraintEditor(selected, bodies) : ""}
-        <div class="sm-hint">A cone-twist joint between two bodies (swing cone + twist limit) — the ragdoll articulation.</div>
+        <div class="sm-hint">İki gövde arasında cone-twist eklemi (swing konisi + twist sınırı): ragdoll eklem yeri.</div>
       </div>
     `;
   }
@@ -2643,9 +2643,9 @@ export class SkeletalMeshEditor {
                   `,
                 )
                 .join("")
-            : `<div class="sm-empty">No notifies on “${escapeHtml(clip.name)}”.</div>`
+            : `<div class="sm-empty">“${escapeHtml(clip.name)}” üzerinde notify yok.</div>`
         }
-        <div class="sm-hint">Markers fire by name as the playhead crosses them; game code maps names to footsteps/effects.</div>
+        <div class="sm-hint">İşaretler oynatma kafası üzerinden geçince adlarıyla tetiklenir; oyun kodu adları ayak sesi/efektlere eşler.</div>
       </div>
     `;
   }

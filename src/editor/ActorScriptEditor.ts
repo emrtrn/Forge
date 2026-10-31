@@ -393,7 +393,7 @@ export class ActorScriptEditor {
         <span>My Blueprint · Variables</span>
         <button type="button" class="as-add-btn" data-as-add-var title="Add Variable">+ Variable</button>
       </div>
-      <div class="as-list">${rows || '<div class="as-empty">No variables.</div>'}</div>
+      <div class="as-list">${rows || '<div class="as-empty">Değişken yok.</div>'}</div>
     `;
     this.blueprintHost.querySelectorAll<HTMLElement>("[data-as-var]").forEach((row) => {
       row.addEventListener("click", (event) => {
@@ -427,8 +427,8 @@ export class ActorScriptEditor {
         <span>Event Graph · Bindings</span>
         <button type="button" class="as-add-btn" data-as-add-event title="Add Binding">+ Binding</button>
       </div>
-      <div class="as-graph-hint">Each binding maps an event to a behavior script (TypeScript) + params.</div>
-      <div class="as-list">${rows || '<div class="as-empty">No event bindings.</div>'}</div>
+      <div class="as-graph-hint">Her bağlama bir olayı bir behavior script'ine (TypeScript) ve parametrelerine eşler.</div>
+      <div class="as-list">${rows || '<div class="as-empty">Olay bağlaması yok.</div>'}</div>
     `;
     this.eventsHost.querySelectorAll<HTMLElement>("[data-as-event]").forEach((row) => {
       row.addEventListener("click", (event) => {
@@ -735,7 +735,7 @@ export class ActorScriptEditor {
       </label>
       <div class="as-json-error" data-as-class-message-bindings-error></div>
       ${this.actorInspectSummary()}
-      <p class="as-details-note">This class is saved to <code>${escapeHtml(this.options.path)}</code>.</p>
+      <p class="as-details-note">Bu sınıf <code>${escapeHtml(this.options.path)}</code> konumuna kaydedilir.</p>
     `;
   }
 
@@ -901,7 +901,7 @@ export class ActorScriptEditor {
 
   private detailsComponent(): string {
     const node = this.selectedComponent();
-    if (!node) return `<div class="as-details-head">Component</div><p class="as-empty">Not found.</p>`;
+    if (!node) return `<div class="as-details-head">Component</div><p class="as-empty">Bulunamadı.</p>`;
     const isRoot = node.parent === undefined;
     const kindOptions = ACTOR_COMPONENT_KINDS.filter(
       // Hide legacy kinds unless this node already is one (so it round-trips).
@@ -1026,7 +1026,7 @@ export class ActorScriptEditor {
     if (!assetId) {
       return `
         <div class="as-section-label">Animation</div>
-        <p class="as-details-note">Pick a skeletal mesh to choose a Play-mode clip.</p>
+        <p class="as-details-note">Play modu klibini seçmek için bir skeletal mesh seçin.</p>
       `;
     }
     const clips = this.clipsByAssetId.get(assetId);
@@ -1034,7 +1034,7 @@ export class ActorScriptEditor {
       void this.ensureSkeletonLoaded(assetId, node.id);
       return `
         <div class="as-section-label">Animation</div>
-        <div class="as-inspect"><div class="as-empty">Loading clips…</div></div>
+        <div class="as-inspect"><div class="as-empty">Klipler yükleniyor…</div></div>
       `;
     }
     const known = clips.includes(current);
@@ -1050,7 +1050,7 @@ export class ActorScriptEditor {
     ].join("");
     const emptyNote =
       clips.length === 0
-        ? `<p class="as-details-note">This mesh's skeleton defines no clips yet.</p>`
+        ? `<p class="as-details-note">Bu mesh'in iskeleti henüz klip tanımlamıyor.</p>`
         : "";
     return `
       <label class="as-field">
@@ -1246,20 +1246,20 @@ export class ActorScriptEditor {
       void this.ensureSkeletonLoaded(assetId, node.id);
       return `
         <div class="as-section-label">Montage Inputs <small>read-only</small></div>
-        <div class="as-inspect"><div class="as-empty">Loading montage inputs…</div></div>
+        <div class="as-inspect"><div class="as-empty">Montaj girişleri yükleniyor…</div></div>
       `;
     }
     return `
       <div class="as-section-label">Montage Inputs <small>read-only · code-bound</small></div>
       <div class="as-inspect">
         <ul>${this.montageInputRows(montages)}</ul>
-        <div class="as-empty">Bound in code (montageInputBindings.ts); the mesh only defines clips.</div>
+        <div class="as-empty">Kodda bağlanır (montageInputBindings.ts); mesh yalnızca klipleri tanımlar.</div>
       </div>
     `;
   }
 
   private montageInputRows(montages: readonly AssetSkeletonMontageDef[]): string {
-    if (montages.length === 0) return `<li class="as-inspect-empty">no montages</li>`;
+    if (montages.length === 0) return `<li class="as-inspect-empty">montaj yok</li>`;
     const catalog = getGameEditorCatalog();
     const bindingByMontage = new Map(
       catalog.resolveMontageBindings(montages).map((binding) => [binding.montage, binding] as const),
@@ -1347,7 +1347,7 @@ export class ActorScriptEditor {
         <input type="checkbox" data-as-particle-autoplay ${autoPlay ? "checked" : ""} />
         <span>Auto Play</span>
       </label>
-      <p class="as-details-note">Emitter settings live in the effect asset (<code>.effect.json</code>).</p>
+      <p class="as-details-note">Emitter ayarları efekt asset'indedir (<code>.effect.json</code>).</p>
     `;
   }
 
@@ -2034,7 +2034,7 @@ export class ActorScriptEditor {
   private detailsVariable(): string {
     if (this.selection.kind !== "variable") return "";
     const variable = this.def.variables[this.selection.index];
-    if (!variable) return `<div class="as-details-head">Variable</div><p class="as-empty">Not found.</p>`;
+    if (!variable) return `<div class="as-details-head">Variable</div><p class="as-empty">Bulunamadı.</p>`;
     const typeOptions = METADATA_FIELD_TYPES.map(
       (type) => `<option value="${type}" ${type === variable.type ? "selected" : ""}>${type}</option>`,
     ).join("");
@@ -2120,7 +2120,7 @@ export class ActorScriptEditor {
   private detailsEvent(): string {
     if (this.selection.kind !== "event") return "";
     const binding = this.def.eventBindings[this.selection.index];
-    if (!binding) return `<div class="as-details-head">Event Binding</div><p class="as-empty">Not found.</p>`;
+    if (!binding) return `<div class="as-details-head">Event Binding</div><p class="as-empty">Bulunamadı.</p>`;
     const eventOptions = ACTOR_EVENT_KINDS.map(
       (kind) =>
         `<option value="${kind}" ${kind === binding.event ? "selected" : ""}>${ACTOR_EVENT_LABELS[kind]}</option>`,
@@ -2151,7 +2151,7 @@ export class ActorScriptEditor {
         <textarea data-as-event-params rows="8">${escapeHtml(JSON.stringify(binding.params ?? {}, null, 2))}</textarea>
       </label>
       <div class="as-json-error" data-as-event-params-error></div>
-      <p class="as-details-note">The script id resolves to a TypeScript behavior in <code>src/game/</code>. Use <strong>New Behavior stub</strong> to scaffold <code>src/game/scripts/&lt;id&gt;.ts</code>, then implement it (or ask AI) and register it in the behavior registry (<code>src/game/behaviors.ts</code>).</p>
+      <p class="as-details-note">Script id, <code>src/game/</code> içindeki bir TypeScript behavior'a çözülür. <code>src/game/scripts/&lt;id&gt;.ts</code> iskeletini oluşturmak için <strong>New Behavior stub</strong> kullanın, ardından onu yazın (ya da AI'dan isteyin) ve behavior kaydına (<code>src/game/behaviors.ts</code>) ekleyin.</p>
     `;
   }
 

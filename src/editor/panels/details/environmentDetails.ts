@@ -80,7 +80,7 @@ export function renderSkyDetails(options: EnvironmentDetailsOptions): void {
           <input data-sky-number="exposure" type="number" step="0.05" min="0" max="4"
             value="${sky.exposure}" />
         </label>
-        <div class="detail-hint">Sun direction is set by rotating the Directional Sun light.</div>
+        <div class="detail-hint">Güneş yönü, Directional Sun ışığı döndürülerek ayarlanır.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Sky Light Capture</div>
@@ -90,7 +90,7 @@ export function renderSkyDetails(options: EnvironmentDetailsOptions): void {
             value="${sky.skyLightCapture.intensity}" />
         </label>
         <button type="button" data-sky-recapture class="detail-button">Recapture from Sky</button>
-        <div class="detail-hint">Fallback PBR reflection used where no Sphere Reflection Capture applies.</div>
+        <div class="detail-hint">Sphere Reflection Capture'ın etki etmediği yerlerde kullanılan yedek PBR yansıması.</div>
       </div>
     `;
 
@@ -176,7 +176,7 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
           <input data-fog-color type="color" value="${escapeHtml(fog.color)}" />
         </label>
         ${fog.mode === "linear" ? linearRows : densityRow}
-        <div class="detail-hint">Distance-based scene fog. Height falloff is a later phase.</div>
+        <div class="detail-hint">Mesafeye dayalı sahne sisi. Yüksekliğe göre azalma sonraki bir aşamada.</div>
       </div>
       ${fogViewDistanceSection(fog, options.viewDistance)}
     `;
@@ -237,13 +237,13 @@ function fogViewDistanceSection(fog: LayoutHeightFog, viewDistance: number | nul
     return `
       <div class="detail-section">
         <div class="detail-section-title">View Distance</div>
-        <div class="detail-hint">Set World Settings &gt; View Distance to fit the fog to it.</div>
+        <div class="detail-hint">Sisi ona uydurmak için World Settings &gt; View Distance değerini ayarlayın.</div>
       </div>`;
   }
   const opacity = heightFogOpacityAt(resolveHeightFog(fog), viewDistance);
   const percent = Math.round(opacity * 100);
   const warning = opacity < VIEW_DISTANCE_FOG_WARN_OPACITY
-    ? `<div class="detail-hint" data-fog-view-warning>Terrain will end in a hard edge at the far plane.</div>`
+    ? `<div class="detail-hint" data-fog-view-warning>Arazi uzak düzlemde keskin bir kenarla bitecek.</div>`
     : "";
   return `
       <div class="detail-section">
@@ -254,7 +254,7 @@ function fogViewDistanceSection(fog: LayoutHeightFog, viewDistance: number | nul
         </div>
         ${warning}
         <button type="button" class="detail-button" data-fog-fit-view>Fit to View Distance</button>
-        <div class="detail-hint">Exponential fog reaching ${Math.round(VIEW_DISTANCE_FOG_OPACITY * 100)}% at the view distance.</div>
+        <div class="detail-hint">Görüş mesafesinde %${Math.round(VIEW_DISTANCE_FOG_OPACITY * 100)} yoğunluğa ulaşan üstel sis.</div>
       </div>`;
 }
 
@@ -303,7 +303,7 @@ export function renderCloudDetails(options: EnvironmentDetailsOptions): void {
           <input data-cloud-number="speed" type="number" step="0.05" min="0" max="5"
             value="${cloud.speed}" />
         </label>
-        <div class="detail-hint">Static procedural cloud dome. Wind 0 keeps it frozen; not volumetric.</div>
+        <div class="detail-hint">Statik prosedürel bulut kubbesi. Wind 0 onu sabit tutar; hacimsel değildir.</div>
       </div>
     `;
 
@@ -360,7 +360,7 @@ export function renderPostDetails(options: EnvironmentDetailsOptions): void {
             <option value="none" ${post.toneMapping === "none" ? "selected" : ""}>None</option>
           </select>
         </label>
-        <div class="detail-hint">Post Process controls scene exposure; Sky Atmosphere scales its own exposure locally.</div>
+        <div class="detail-hint">Sahne pozlamasını Post Process yönetir; Sky Atmosphere kendi pozlamasını yerel olarak ölçekler.</div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Anti-alias</div>

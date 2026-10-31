@@ -18,7 +18,7 @@ export function pickWorldTerrainExpansion(source: WorldTerrainExpansionSource): 
           <label><span>Original tile Z (from 0)</span><input data-field="originalZ" type="number" min="0" step="1" /></label>
           <div class="world-terrain-summary" data-world-terrain-summary aria-live="polite"></div>
           <ul class="world-terrain-problems" data-world-terrain-problems aria-live="polite"></ul>
-          <div class="detail-hint">The original tile keeps its world position, heights and paint. New heights extend the nearest edge or corner; new paint starts on layer 0, with shared vertices kept identical.</div>
+          <div class="detail-hint">Asıl tile dünya konumunu, yüksekliklerini ve boyasını korur. Yeni yükseklikler en yakın kenarı veya köşeyi uzatır; yeni boya 0. katmanda başlar, ortak köşeler aynı kalır.</div>
         </form>
         <footer class="parent-class-foot">
           <button type="button" class="parent-class-cancel" data-world-terrain-cancel>Cancel</button>

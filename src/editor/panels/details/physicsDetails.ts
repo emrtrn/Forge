@@ -49,7 +49,7 @@ export function renderPhysicsSection({
         </label>
         ${
           complexAsSimple
-            ? `<div class="detail-hint detail-hint-warning">Static-only: this asset uses â€œUse Complex Collision As Simpleâ€ collision.</div>`
+            ? `<div class="detail-hint detail-hint-warning">Yalnızca statik: bu asset “Use Complex Collision As Simple” çarpışmasını kullanır.</div>`
             : ""
         }
         <label class="detail-row">

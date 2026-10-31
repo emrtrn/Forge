@@ -1270,7 +1270,7 @@ export class StaticMeshEditor {
         </div>`,
           )
           .join("")
-      : `<div class="sm-empty">No simple collision. Use the Collision menu to add a shape.</div>`;
+      : `<div class="sm-empty">Basit çarpışma yok. Şekil eklemek için Collision menüsünü kullanın.</div>`;
     const uvwDetails = this.uvw.mapType
       ? `
         <div class="sm-prim-row ${this.activeTarget === "uvw" ? "is-selected" : ""}" data-sm-uvw-row>
@@ -1278,7 +1278,7 @@ export class StaticMeshEditor {
           <small data-sm-uvw-readout>${this.uvwReadout()}</small>
           <button type="button" class="sm-prim-del" data-sm-uvw-remove title="Remove">✕</button>
         </div>`
-      : `<div class="sm-empty">No UVW map. Use the UVW Map menu to apply a projection.</div>`;
+      : `<div class="sm-empty">UVW haritası yok. Projeksiyon uygulamak için UVW Map menüsünü kullanın.</div>`;
     const materialRows = this.materialElements
       .map((element) => {
         const suffix =
@@ -1302,7 +1302,7 @@ export class StaticMeshEditor {
         </div>`,
           )
           .join("")
-      : `<div class="sm-empty">No asset vertex-color defaults. Use Mesh Paint &gt; To Mesh, or fill this asset here.</div>`;
+      : `<div class="sm-empty">Asset için varsayılan vertex rengi yok. Mesh Paint &gt; To Mesh kullanın ya da bu asset'i buradan doldurun.</div>`;
     const fillHex = rgbHex(this.vertexColorFill);
 
     this.detailsHost.innerHTML = `
@@ -1313,7 +1313,7 @@ export class StaticMeshEditor {
       </div>
       <div class="sm-section">
         <div class="sm-section-title">Vertex Colors <span class="sm-count">${this.vertexColors.meshes.length}</span></div>
-        <div class="sm-hint">Asset defaults are stored beside the model and do not rewrite the source GLB. Placement-specific Mesh Paint remains independent.</div>
+        <div class="sm-hint">Asset varsayılanları modelin yanında saklanır, kaynak GLB'yi yeniden yazmaz. Yerleşime özel Mesh Paint bağımsız kalır.</div>
         <div class="sm-prim-list">${vertexColorRows}</div>
         <label class="sm-row"><span>Fill Color</span><input type="color" value="#${fillHex}" data-sm-vertex-color /></label>
         <label class="sm-row"><span>Fill Alpha</span><input type="number" min="0" max="1" step="0.05" value="${this.vertexColorFill[3]}" data-sm-vertex-alpha /></label>
@@ -1343,7 +1343,7 @@ export class StaticMeshEditor {
         </label>
         ${
           this.collision.complexity === "complexAsSimple"
-            ? `<div class="sm-hint">Uses the render mesh as a static trimesh collider. Static-only — placements of this asset can't Simulate Physics. Best for level geometry (walls, rooms) instead of hand-placing boxes.</div>`
+            ? `<div class="sm-hint">Render mesh'ini statik bir trimesh çarpıştırıcı olarak kullanır. Yalnızca statik: bu asset'in yerleşimleri Simulate Physics kullanamaz. Elle kutu yerleştirmek yerine level geometrisi (duvarlar, odalar) için idealdir.</div>`
             : ""
         }
         <label class="sm-row sm-toggle">

@@ -1873,7 +1873,7 @@ export class EditorUi {
 
   private renderFolderTree(): void {
     if (!this.assetTreeRoot) {
-      this.folderTree.innerHTML = `<div class="empty-details">No asset folders</div>`;
+      this.folderTree.innerHTML = `<div class="empty-details">Asset klasörü yok</div>`;
       return;
     }
     this.ensureVisibleSelectedFolder();
@@ -2508,7 +2508,7 @@ export class EditorUi {
     results.hidden = false;
     results.innerHTML =
       matches.length === 0
-        ? `<div class="add-actor-empty">No actors match “${escapeHtml(query.trim())}”</div>`
+        ? `<div class="add-actor-empty">“${escapeHtml(query.trim())}” ile eşleşen aktör yok</div>`
         : matches.map((entry) => this.addActorItemMarkup(entry, { showCategory: true })).join("");
     results.querySelectorAll<HTMLButtonElement>(".add-actor-item").forEach((button) => {
       const entry = byKey.get(button.dataset.addKey ?? "");
@@ -4993,7 +4993,7 @@ export class EditorUi {
       return `
         <div class="detail-section">
           <div class="detail-section-title">Animation</div>
-          <div class="detail-row"><span class="detail-value">Loading clips…</span></div>
+          <div class="detail-row"><span class="detail-value">Klipler yükleniyor…</span></div>
         </div>`;
     }
     const known = clips.includes(current);

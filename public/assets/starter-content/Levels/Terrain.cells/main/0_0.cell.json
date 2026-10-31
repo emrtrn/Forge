@@ -56,6 +56,15 @@
           ],
           "rotationYDeg": 0,
           "scale": 1.6
+        },
+        {
+          "position": [
+            73.81,
+            -1.72,
+            127.86
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     },

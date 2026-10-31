@@ -105,12 +105,21 @@
   },
   "worldEnvironment": {
     "time": {
-      "hour": 9.801,
-      "dayLengthMinutes": 60
+      "hour": 14,
+      "dayLengthMinutes": 0
     },
     "sunPath": {
       "azimuthDeg": 96.947,
       "noonElevationDeg": 60
+    },
+    "season": "summer",
+    "weather": {
+      "preset": "clear",
+      "intensity": 1
+    },
+    "surface": {
+      "snowCoverage": 0,
+      "wetness": 0
     }
   },
   "lights": [
@@ -179,8 +188,8 @@
         "scale": 0.5,
         "speed": 1,
         "bake": {
-          "manifest": "assets/starter-content/Levels/Terrain.foam/20de60ef88d4d276e185db1520b49ae114378a02acb7d8a38a7057aec7ff6887.foam.json",
-          "fingerprint": "e9ea186c1209de67bf9ef90ec4f15609c67658087c90ef337b0d243a3df0d685"
+          "manifest": "assets/starter-content/Levels/Terrain.foam/f036ed8cf24b1fe7c57cbcb4f07838509b8deab408ffea2def27cc17d241d5fd.foam.json",
+          "fingerprint": "c9a24e1c3d8a5659798d10ba1c4c4a474ccede50044cc7ed6a70620e0f92761b"
         }
       },
       "caustics": {
@@ -244,16 +253,18 @@
         "shoreWetnessEnabled": true,
         "foamEnabled": true,
         "causticsEnabled": true,
+        "opacity": 0.4,
+        "bedVisibility": 0.8,
         "absorptionDistance": 2,
         "surfaceStrength": 1,
-        "surfaceRoughness": 0.3,
-        "normalScale": 1,
+        "surfaceRoughness": 0.2,
+        "normalScale": 2,
         "rippleSpeed": 2,
-        "reflectionStrength": 0.5,
-        "refractionStrength": 1,
-        "surfaceWaveHeight": 0.04,
+        "reflectionStrength": 0.8,
+        "refractionStrength": 2,
+        "surfaceWaveHeight": 0.06,
         "surfaceWaveLength": 6,
-        "surfaceWavePeriod": 2,
+        "surfaceWavePeriod": 10,
         "surfaceWaveDirection": 30,
         "surfaceWaveShoreDepth": 0.25,
         "wheelRippleStrength": 3,
@@ -261,16 +272,18 @@
         "wheelRippleWavelength": 0.6,
         "wheelRippleLifetime": 4,
         "foamOpacity": 0.7,
+        "foamWidth": 1,
         "foamScale": 1,
         "foamSpeed": 0.5,
-        "causticsStrength": 1,
+        "causticsStrength": 0.4,
         "causticsScale": 1,
-        "causticsSpeed": 1,
-        "causticsDepthFade": 1,
+        "causticsSpeed": 2,
+        "causticsDepthFade": 0.4,
         "reflectionMode": "sharedPlanar",
-        "reflectionQuality": "medium",
+        "reflectionQuality": "low",
         "crestFoamEnabled": true,
-        "crestFoamStrength": 0.75
+        "crestFoamStrength": 1,
+        "crestFoamThreshold": 0.2
       }
     }
   ],

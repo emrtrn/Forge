@@ -337,8 +337,8 @@ function outlinerCellBadge(partition: OutlinerPartitionView, id: string): string
   const state = outlinerPartitionState(partition, id);
   const cell = partition.cells.get(id);
   const title = state === "persistent"
-    ? "Persistent: always loaded"
-    : `World Partition cell ${cell}: ${state === "loaded" ? "loaded" : "not loaded"} with the pawn at the camera`;
+    ? "Persistent: her zaman yüklü"
+    : `World Partition hücresi ${cell}: pawn kameradayken ${state === "loaded" ? "yüklü" : "yüklü değil"}`;
   return `<span class="outliner-cell is-${state}" data-outliner-cell="${cell ?? "persistent"}" title="${title}">${cell ?? "P"}</span>`;
 }
 

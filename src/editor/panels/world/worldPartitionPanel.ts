@@ -151,7 +151,7 @@ export class WorldPartitionPanel {
     load!.disabled = !this.selection || !streams;
     unload!.disabled = !this.selection || !streams;
     clear!.disabled = !this.selection;
-    const title = streams ? "" : "This terrain keeps every tile in memory";
+    const title = streams ? "" : "Bu arazi tüm tile'ları bellekte tutar";
     load!.title = title;
     unload!.title = title;
   }

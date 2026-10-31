@@ -111,8 +111,11 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   const depth = page.locator('[data-landscape-physics="maxDepth"]');
   await depth.fill("0.15");
   await depth.press("Tab");
+  // Out of range is clamped to the field's limit (0–5 m), as one undo step.
   await depth.fill("99");
   await depth.press("Tab");
+  await expect(depth).toHaveValue("5");
+  await page.getByTestId("editor-undo").click();
   await expect(depth).toHaveValue("0.15");
   await page.locator("[data-landscape-physics-reset]").click();
   await expect(traction).toHaveValue("0.4");

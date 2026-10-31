@@ -103,7 +103,7 @@ export interface NodeTransform {
 type GizmoMode = "select" | "translate" | "rotate" | "scale";
 
 const GIZMO_BUTTONS: ReadonlyArray<{ mode: GizmoMode; glyph: string; title: string }> = [
-  { mode: "select", glyph: "▦", title: "Select (no gizmo)" },
+  { mode: "select", glyph: "▦", title: "Seç (gizmo yok)" },
   { mode: "translate", glyph: "✥", title: "Move" },
   { mode: "rotate", glyph: "⟳", title: "Rotate" },
   { mode: "scale", glyph: "⤢", title: "Scale" },

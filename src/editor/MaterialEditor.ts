@@ -160,8 +160,8 @@ export class MaterialEditor {
         </header>
         <div class="me-editor-toolbar">
           <button type="button" data-me-tb-save title="Save (Ctrl+S)">Save</button>
-          <button type="button" data-me-apply title="Assign this material to the selected static mesh" ${options.materialId ? "" : "disabled"}>Apply to Selected</button>
-          <button type="button" data-me-browse title="Reveal in Content Browser">Browse</button>
+          <button type="button" data-me-apply title="Bu materyali seçili static mesh'e ata" ${options.materialId ? "" : "disabled"}>Apply to Selected</button>
+          <button type="button" data-me-browse title="Content Browser'da göster">Browse</button>
           <span class="me-editor-toolbar-spacer"></span>
           <span>MeshStandardMaterial first pass</span>
         </div>
@@ -305,11 +305,11 @@ export class MaterialEditor {
         ${this.textureNumberRow("Roughness Map", "roughnessTexture", "roughness", this.def.roughness, 0, 1, 0.01)}
         ${this.textureNumberRow("Metalness Map", "metalnessTexture", "metalness", this.def.metalness, 0, 1, 0.01)}
         ${this.textureNumberRow("Opacity Map", "opacityTexture", "opacity", this.def.opacity, 0, 1, 0.01)}
-        <label class="me-row" title="Use the alpha channel already stored in Base Color Map instead of a separate opacity texture."><span>Use Base Color Alpha</span><input data-me-field="useBaseColorAlphaForOpacity" type="checkbox" ${this.def.useBaseColorAlphaForOpacity ? "checked" : ""} /></label>
+        <label class="me-row" title="Ayrı bir opaklık dokusu yerine Base Color Map içinde zaten bulunan alfa kanalını kullanır."><span>Use Base Color Alpha</span><input data-me-field="useBaseColorAlphaForOpacity" type="checkbox" ${this.def.useBaseColorAlphaForOpacity ? "checked" : ""} /></label>
         ${this.textureColorNumberRow("Emissive Map", "emissiveTexture", "emissive", this.def.emissive, "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
         ${this.textureNumberRow("Ambient Occlusion Map", "aoTexture", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
         ${this.vector2Row("UV Tiling", "uvTilingX", "uvTilingY", this.def.uvTiling.x, this.def.uvTiling.y)}
-        <label class="me-row" title="Flip textures vertically on upload (three.js' default). Leave it on for engine-generated UVs — landscape layers, UVW projection, primitives. Turn it OFF when this material is assigned to a glTF/GLB mesh's material slot: glTF UVs run downward from the image top, so a flipped texture binds upside down and reads as a broken UV layout."><span>Flip Y</span><input data-me-field="flipY" type="checkbox" ${this.def.flipY ? "checked" : ""} /></label>
+        <label class="me-row" title="Dokuları yüklerken dikey çevirir (three.js varsayılanı). Motorun ürettiği UV'lerde açık bırakın: landscape katmanları, UVW projeksiyonu, primitifler. Materyal bir glTF/GLB mesh'inin materyal yuvasına atanmışsa KAPATIN: glTF UV'leri görselin üstünden aşağı doğru ilerler; çevrilmiş doku ters oturur ve UV düzeni bozuk görünür."><span>Flip Y</span><input data-me-field="flipY" type="checkbox" ${this.def.flipY ? "checked" : ""} /></label>
       </div>
       ${this.normalMotionSection()}
       ${this.layerBlendSection()}
@@ -334,7 +334,7 @@ export class MaterialEditor {
     return `
       <div class="me-section">
         <div class="me-section-title">Normal Motion</div>
-        <label class="me-row" title="Samples the same normal map twice with independent UV motion."><span>Enabled</span><input data-me-field="normalMotionEnabled" type="checkbox" ${enabled ? "checked" : ""} /></label>
+        <label class="me-row" title="Aynı normal map'i birbirinden bağımsız UV hareketiyle iki kez örnekler."><span>Enabled</span><input data-me-field="normalMotionEnabled" type="checkbox" ${enabled ? "checked" : ""} /></label>
         ${enabled ? `
           ${this.numberRow("Primary Speed X", "normalMotionPrimaryX", motion.primaryVelocity.x, -10, 10, 0.001)}
           ${this.numberRow("Primary Speed Y", "normalMotionPrimaryY", motion.primaryVelocity.y, -10, 10, 0.001)}
@@ -443,7 +443,7 @@ export class MaterialEditor {
     const disabled = enabled ? "" : "disabled";
     const title = enabled
       ? "Constant3Vector"
-      : "Constant3Vector authoring is not implemented yet; material uses the mesh normal when no normal map is assigned.";
+      : "Constant3Vector düzenleme henüz yok; normal map atanmamışsa materyal mesh normalini kullanır.";
     return `
       <label class="me-row">
         <span>${label}</span>

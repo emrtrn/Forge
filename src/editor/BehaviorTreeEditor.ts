@@ -566,11 +566,11 @@ export class BehaviorTreeEditor {
       <div class="bte-form-toolbar">
         <span class="bte-form-add">
           <select data-bte-add-kind class="bte-input bte-input-sm"${isComposite(node) ? "" : " disabled"}>${addKindOptions}</select>
-          <button type="button" data-bte-add class="bte-btn"${isComposite(node) ? "" : " disabled"} title="Add a child node">+ Add Child</button>
+          <button type="button" data-bte-add class="bte-btn"${isComposite(node) ? "" : " disabled"} title="Alt düğüm ekle">+ Add Child</button>
         </span>
-        <button type="button" data-bte-remove class="bte-btn"${canRemove ? "" : " disabled"} title="Remove this node">Remove</button>
-        <button type="button" data-bte-up class="bte-btn"${canUp ? "" : " disabled"} title="Move up among siblings">↑</button>
-        <button type="button" data-bte-down class="bte-btn"${canDown ? "" : " disabled"} title="Move down among siblings">↓</button>
+        <button type="button" data-bte-remove class="bte-btn"${canRemove ? "" : " disabled"} title="Bu düğümü kaldır">Remove</button>
+        <button type="button" data-bte-up class="bte-btn"${canUp ? "" : " disabled"} title="Kardeşler arasında yukarı taşı">↑</button>
+        <button type="button" data-bte-down class="bte-btn"${canDown ? "" : " disabled"} title="Kardeşler arasında aşağı taşı">↓</button>
       </div>
       <div class="bte-form-fields">${rows.join("")}</div>
       ${this.decoratorsSectionHtml(node)}
@@ -634,7 +634,7 @@ export class BehaviorTreeEditor {
       }</div>
       <div class="bte-form-add">
         <select data-bte-add-dec-kind class="bte-input bte-input-sm">${addOptions}</select>
-        <button type="button" data-bte-add-dec class="bte-btn" title="Add a decorator">+ Decorator</button>
+        <button type="button" data-bte-add-dec class="bte-btn" title="Decorator ekle">+ Decorator</button>
       </div>`;
   }
 
@@ -851,7 +851,7 @@ export class BehaviorTreeEditor {
         cards || `<div class="bte-form-empty">No services.</div>`
       }</div>
       <div class="bte-form-add">
-        <button type="button" data-bte-add-svc class="bte-btn" title="Add a service">+ Service</button>
+        <button type="button" data-bte-add-svc class="bte-btn" title="Service ekle">+ Service</button>
       </div>`;
   }
 

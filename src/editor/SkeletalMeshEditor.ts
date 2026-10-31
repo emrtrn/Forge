@@ -302,7 +302,7 @@ export class SkeletalMeshEditor {
             <strong data-sm-title></strong>
           </span>
           <div class="sm-editor-header-actions">
-            <button type="button" class="sm-editor-save" data-sm-save title="Save skeleton metadata (Ctrl+S)">Save</button>
+            <button type="button" class="sm-editor-save" data-sm-save title="İskelet meta verisini kaydet (Ctrl+S)">Save</button>
             <button type="button" class="sm-editor-close" data-sm-close title="Close (Esc)">✕</button>
           </div>
         </header>
@@ -666,7 +666,7 @@ export class SkeletalMeshEditor {
       <div class="sm-tool-group sm-tool-modes" aria-label="Persona mode">
         <button type="button" class="sm-tool-btn ${this.mode === "skeleton" ? "is-active" : ""}" data-skel-mode="skeleton">Skeleton</button>
         <button type="button" class="sm-tool-btn ${this.mode === "animation" ? "is-active" : ""}" data-skel-mode="animation">Animation</button>
-        <button type="button" class="sm-tool-btn ${this.mode === "physics" ? "is-active" : ""}" data-skel-mode="physics" title="PhAT-lite: bone collision bodies">Physics</button>
+        <button type="button" class="sm-tool-btn ${this.mode === "physics" ? "is-active" : ""}" data-skel-mode="physics" title="PhAT-lite: kemik çarpışma gövdeleri">Physics</button>
       </div>
       <div class="sm-tool-sep"></div>
       <div class="sm-tool-group sm-tool-visibility">

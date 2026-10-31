@@ -259,7 +259,7 @@ export class DataTableEditor {
     reset.type = "button";
     reset.className = "dte-reset";
     reset.textContent = "Reset to default";
-    reset.title = "Reset this entry to its last committed (git) values";
+    reset.title = "Bu kaydı son commit'lenmiş (git) değerlerine döndür";
     reset.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -477,7 +477,7 @@ export class DataTableEditor {
     input.className = "dte-field-input";
     if (meta?.readonly === true || (typeof meta?.readonly === "function" && meta.readonly(leaf.container as Record<string | number, unknown>))) {
       input.disabled = true;
-      if (!row.title) row.title = "This field is structural and cannot be edited.";
+      if (!row.title) row.title = "Bu alan yapısaldır, düzenlenemez.";
     } else {
       input.addEventListener("change", () => this.commitLeaf(leaf, input, entryId));
     }

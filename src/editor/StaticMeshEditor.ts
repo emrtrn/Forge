@@ -246,7 +246,7 @@ export class StaticMeshEditor {
             <strong data-sm-title></strong>
           </span>
           <div class="sm-editor-header-actions">
-            <button type="button" class="sm-editor-save" data-sm-save title="Save collision, material slots, UVW map, and vertex colors (Ctrl+S)">Save</button>
+            <button type="button" class="sm-editor-save" data-sm-save title="Çarpışmayı, materyal yuvalarını, UVW haritasını ve vertex renklerini kaydet (Ctrl+S)">Save</button>
             <button type="button" class="sm-editor-close" data-sm-close title="Close (Esc)">✕</button>
           </div>
         </header>

@@ -49,7 +49,7 @@ export function scaleRow(
       <span class="detail-vector-label">
         <span>Scale</span>
         <button type="button" class="scale-lock${locked ? " on" : ""}"
-          data-scale-lock title="${locked ? "Unlock scale ratio" : "Lock scale ratio"}"
+          data-scale-lock title="${locked ? "Ölçek oranı kilidini aç" : "Ölçek oranını kilitle"}"
           aria-label="${locked ? "Unlock scale ratio" : "Lock scale ratio"}"
           aria-pressed="${locked}">${locked ? "&#128274;" : "&#128275;"}</button>
       </span>
@@ -81,17 +81,17 @@ export function pivotRow(
     <div class="detail-actions-row">
       <button type="button" class="pivot-drag-toggle${dragActive ? " on" : ""}"
         data-pivot-drag aria-pressed="${dragActive}" ${off}
-        title="Drag the gizmo in the viewport to set the pivot">${
+        title="Pivotu ayarlamak için viewport'taki gizmoyu sürükleyin">${
           dragActive ? "&#9679; Dragging pivot" : "Drag in viewport"
         }</button>
     </div>
     <div class="detail-actions-row">
       <button type="button" data-pivot-preset="reset" ${off}
-        title="Pivot at the model origin">Reset Pivot</button>
+        title="Pivot model orijininde">Reset Pivot</button>
       <button type="button" data-pivot-preset="center" ${off}
-        title="Pivot at the bounds centre">Center Pivot</button>
+        title="Pivot sınır kutusunun merkezinde">Center Pivot</button>
       <button type="button" data-pivot-preset="base" ${off}
-        title="Pivot at the bottom centre (e.g. a hinge resting on the floor)">Use Base</button>
+        title="Pivot alt merkezde (ör. zemine oturan bir menteşe)">Use Base</button>
     </div>
   `;
 }

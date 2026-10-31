@@ -162,6 +162,7 @@ import {
   type OutlinerFilterType,
 } from "./panels/outliner/outlinerPanel";
 import { OUTLINER_PARTITION_FILTERS, type OutlinerPartitionFilter } from "@editor/core/worldPartitionOutliner";
+import { installParamFields } from "./paramFields";
 import {
   CONTENT_FILTER_ALL,
   contentItemMatchesQuery,
@@ -641,7 +642,7 @@ export class EditorUi {
             </label>
             <div class="outliner-search-actions">
               <button type="button" class="forge-btn-ghost outliner-filter-button" data-outliner-filter-button
-                data-testid="outliner-filter" aria-label="Filter scene objects" aria-expanded="false" title="Filter scene objects">${UI_ICONS.filter}</button>
+                data-testid="outliner-filter" aria-label="Filter scene objects" aria-expanded="false" title="Sahne nesnelerini filtrele">${UI_ICONS.filter}</button>
               <div class="outliner-filter-popover" data-outliner-filter-popover hidden>
                 <strong>Show types</strong>
                 ${OUTLINER_FILTER_TYPES.map(({ type, label }) => `<label><input type="checkbox" data-outliner-type-filter="${type}" checked />${label}</label>`).join("")}
@@ -699,7 +700,7 @@ export class EditorUi {
       <section class="editor-content-drawer" data-content-drawer aria-hidden="true">
         <div class="content-drawer-top">
           <div class="content-drawer-title">
-            <button type="button" class="content-drawer-collapse" data-content-toggle aria-expanded="false" aria-label="Toggle Content Drawer" title="Toggle Content Drawer">
+            <button type="button" class="content-drawer-collapse" data-content-toggle aria-expanded="false" aria-label="Toggle Content Drawer" title="Content Drawer'ı aç/kapat">
               <span class="content-drawer-chevron" aria-hidden="true">${UI_ICONS.chevronUp}</span>
               <strong>CONTENT DRAWER</strong>
             </button>
@@ -727,7 +728,7 @@ export class EditorUi {
             <input type="checkbox" data-content-development-toggle hidden />
           </div>
           <div class="content-drawer-actions">
-            <button type="button" class="forge-btn-ghost" data-content-view aria-label="Change thumbnail size" title="Thumbnail size: Medium">${UI_ICONS.grid}</button>
+            <button type="button" class="forge-btn-ghost" data-content-view aria-label="Change thumbnail size" title="Küçük resim boyutu: Medium">${UI_ICONS.grid}</button>
             <button type="button" class="forge-btn-ghost" data-content-settings aria-label="Content Drawer settings" title="Content Drawer settings">${UI_ICONS.gear}</button>
           </div>
         </div>
@@ -797,6 +798,8 @@ export class EditorUi {
     this.statusToast = requireElement(this.root, "[data-status-toast]");
     this.statusToastText = requireElement(this.root, "[data-status-toast-text]");
     requireElement(this.root, "[data-status-toast-close]").addEventListener("click", () => this.hideStatusToast());
+    // Asset editors open outside the shell, so bounded fields are handled page-wide.
+    installParamFields(document.body, (message) => this.setStatus(message, "warning"));
     this.undoButton = requireElement(this.root, '[data-action="undo"]');
     this.redoButton = requireElement(this.root, '[data-action="redo"]');
     const projectName = requireElement(this.root, "[data-project-name]");
@@ -1647,7 +1650,7 @@ export class EditorUi {
     const next = sizes[(sizes.indexOf(this.contentViewSize) + 1) % sizes.length] ?? "medium";
     this.contentViewSize = next;
     this.contentDrawer.dataset.contentView = next;
-    this.contentViewButton.title = `Thumbnail size: ${next.slice(0, 1).toUpperCase()}${next.slice(1)}`;
+    this.contentViewButton.title = `Küçük resim boyutu: ${next.slice(0, 1).toUpperCase()}${next.slice(1)}`;
     this.setStatus(`Content thumbnail size: ${next}.`, "info");
   }
 
@@ -4903,8 +4906,8 @@ export class EditorUi {
     const sections = [...this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-inspector-section-decorated]")];
     const allCollapsed = sections.length > 0 && sections.every((section) => section.classList.contains("collapsed"));
     toggle.hidden = sections.length === 0;
-    toggle.title = allCollapsed ? "Expand all sections" : "Collapse all sections";
-    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-label", allCollapsed ? "Expand all sections" : "Collapse all sections");
+    toggle.title = allCollapsed ? "Tüm bölümleri aç" : "Tüm bölümleri kapat";
     toggle.setAttribute("aria-pressed", String(allCollapsed));
     toggle.innerHTML = allCollapsed ? UI_ICONS.chevronDown : UI_ICONS.chevronUp;
   }
@@ -4956,7 +4959,7 @@ export class EditorUi {
     if (!thumb) return;
     if (!selection.materialSlot) {
       thumb.textContent = "M";
-      thumb.title = "No material assigned";
+      thumb.title = "Materyal atanmamış";
       return;
     }
     try {
@@ -4969,7 +4972,7 @@ export class EditorUi {
       image.src = imageUrl;
       thumb.replaceChildren(image);
     } catch {
-      if (thumb.isConnected) thumb.title = "Material preview unavailable";
+      if (thumb.isConnected) thumb.title = "Materyal önizlemesi kullanılamıyor";
     }
   }
 

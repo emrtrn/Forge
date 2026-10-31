@@ -197,7 +197,7 @@ export class SoundCueEditor {
       <span class="sce-badge">Sound Cue</span>
     </span>
     <div class="sce-toolbar">
-      <button type="button" class="sce-tool-btn" data-sce-play title="Evaluate and preview (requires dev server)">▶ Play Cue</button>
+      <button type="button" class="sce-tool-btn" data-sce-play title="Değerlendir ve önizle (dev sunucusu gerekir)">▶ Play Cue</button>
       <button type="button" class="sce-tool-btn" data-sce-stop title="Stop preview">■ Stop</button>
     </div>
     <div class="sce-header-actions">

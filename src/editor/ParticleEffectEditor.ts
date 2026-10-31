@@ -195,11 +195,11 @@ export class ParticleEffectEditor {
       <span class="pfx-badge">Particle Effect</span>
     </span>
     <div class="pfx-toolbar">
-      <button type="button" class="pfx-tool-btn" data-pfx-play title="Play / Pause preview">❚❚ Pause</button>
+      <button type="button" class="pfx-tool-btn" data-pfx-play title="Önizlemeyi oynat / duraklat">❚❚ Pause</button>
       <button type="button" class="pfx-tool-btn" data-pfx-restart title="Restart preview">↻ Restart</button>
     </div>
     <div class="pfx-header-actions">
-      <button type="button" class="pfx-tool-btn" data-pfx-duplicate title="Duplicate this effect">Duplicate</button>
+      <button type="button" class="pfx-tool-btn" data-pfx-duplicate title="Bu efekti çoğalt">Duplicate</button>
       <button type="button" class="pfx-save" data-pfx-save title="Save (Ctrl+S)">Save</button>
       <button type="button" class="pfx-close" data-pfx-close title="Close (Esc)">×</button>
     </div>
@@ -222,8 +222,8 @@ export class ParticleEffectEditor {
           <button type="button" data-speed="1" class="is-active">1×</button>
           <button type="button" data-speed="2">2×</button>
         </div>
-        <button type="button" class="pfx-pv-btn is-active" data-pfx-loop title="Auto-replay one-shot effects">↻ Loop</button>
-        <button type="button" class="pfx-pv-btn" data-pfx-burst title="Emit a single burst">✦ Burst</button>
+        <button type="button" class="pfx-pv-btn is-active" data-pfx-loop title="Tek seferlik efektleri otomatik yeniden oynat">↻ Loop</button>
+        <button type="button" class="pfx-pv-btn" data-pfx-burst title="Tek bir patlama (burst) yay">✦ Burst</button>
       </div>
     </div>
     <aside class="pfx-details" data-pfx-details></aside>

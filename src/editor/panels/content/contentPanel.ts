@@ -236,7 +236,7 @@ function createAssetCard(options: ContentPanelOptions, item: BrowserAssetItem): 
       }
       ${
         activeLevel
-          ? `<span class="asset-active-badge" title="Active level - locked against rename/delete">Active</span>`
+          ? `<span class="asset-active-badge" title="Aktif level; yeniden adlandırma/silmeye karşı kilitli">Active</span>`
           : ""
       }
       <span class="asset-thumb" data-asset-thumb>${escapeHtml(item.ext.toUpperCase())}</span>

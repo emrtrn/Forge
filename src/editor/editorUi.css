@@ -1408,9 +1408,10 @@
   white-space: nowrap;
 }
 
+/* Parameter name and control share the row equally (user decision 2026-10-31). */
 .detail-row {
   display: grid;
-  grid-template-columns: 86px 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
@@ -1419,7 +1420,7 @@
    a marker on the label, so "pinned on this placement" reads apart from
    "inherited from the class". */
 .detail-row.actor-var-overridden {
-  grid-template-columns: 86px 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
 }
 
 .detail-row.actor-var-overridden > span::after {
@@ -1743,14 +1744,18 @@
   font-weight: 500;
 }
 
-.editor-details .detail-row,
+.editor-details .detail-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 9px;
+}
+
 .editor-details .detail-vector {
   grid-template-columns: 66px minmax(0, 1fr);
   gap: 9px;
 }
 
 .editor-details .detail-row--name {
-  grid-template-columns: 66px minmax(0, 1fr) 25px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 25px;
   gap: 6px;
 }
 
@@ -2282,7 +2287,7 @@
 
 .spline-generator .detail-row,
 .spline-point-editor .detail-row {
-  grid-template-columns: 116px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .spline-generator .detail-row input[type="checkbox"],
@@ -2484,7 +2489,6 @@
 .lake-state.is-draft { color: var(--forge-text); box-shadow: inset 0 0 0 1px var(--forge-accent); }
 .lake-result { color: var(--forge-text-secondary); font-size: 11px; line-height: 1.5; }
 .lake-result.is-error { color: #ffb020; }
-.lake-editor .detail-row { grid-template-columns: minmax(96px, 0.9fr) minmax(0, 1.4fr); }
 .lake-editor .detail-row > span { overflow-wrap: anywhere; }
 .lake-editor .detail-hint { overflow-wrap: anywhere; }
 .lake-editor .detail-toggle { display: inline-flex; align-items: center; gap: 6px; }
@@ -4289,7 +4293,7 @@
 }
 .me-row {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
@@ -4853,7 +4857,7 @@
 }
 .uie-field {
   display: grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   margin-bottom: 6px;
@@ -4870,7 +4874,7 @@
   color: var(--forge-text);
   font-size: 12px;
 }
-.uie-action-field { grid-template-columns: 92px 1fr; }
+.uie-action-field { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .uie-action-field input[hidden] { display: none; }
 .uie-transition-field,
 .uie-a11y-field {
@@ -5683,7 +5687,7 @@
 
 .pfx-row {
   display: grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
@@ -6936,4 +6940,46 @@
 
   .editor-details .detail-section,
   .editor-content-drawer .asset-card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02); }
+}
+
+/* Bounded parameters (src/editor/paramFields.ts): visible range under the
+   name, slider + compact number box in the control half. The number box comes
+   first in the DOM so the label targets it; `order` shows the slider first. */
+:is(.detail-row, .me-row, .pfx-row, .uie-field) > span .param-range {
+  display: block;
+  margin-top: 1px;
+  color: var(--forge-text-secondary, #8593a0);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.param-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+:is(.detail-row, .me-row, .pfx-row, .uie-field) .param-control input.param-slider {
+  order: 0;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  accent-color: var(--forge-accent, #2f87ff);
+  cursor: pointer;
+}
+
+:is(.detail-row, .me-row, .pfx-row, .uie-field) .param-control input[type="number"] {
+  order: 1;
+  flex: 0 0 62px;
+  width: 62px;
+  padding: 0 4px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }

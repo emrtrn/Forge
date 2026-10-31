@@ -278,8 +278,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       </div>
       <label class="detail-row"><span>Width</span><input data-landscape-spline-point-shape="width" type="number" min="0.1" step="0.1" value="${activeSplinePoint.width}" ${lockedAttr} /></label>
       <label class="detail-row"><span>Falloff</span><input data-landscape-spline-point-shape="falloff" type="number" min="0" step="0.1" value="${activeSplinePoint.falloff}" ${lockedAttr} /></label>
-      <button type="button" class="detail-action-button" data-landscape-spline-point-delete ${multi.points.ids.size > 1 ? 'disabled title="Select one point to delete"' : lockedAttr}>Delete Point</button>
-      ${worldTerrain ? `<button type="button" class="detail-action-button" data-landscape-spline-point-snap ${multi.points.ids.size > 1 ? 'disabled title="Select one point to snap"' : lockedAttr}>Snap to Terrain</button>` : ""}</div>`
+      <button type="button" class="detail-action-button" data-landscape-spline-point-delete ${multi.points.ids.size > 1 ? 'disabled title="Silmek için bir nokta seçin"' : lockedAttr}>Delete Point</button>
+      ${worldTerrain ? `<button type="button" class="detail-action-button" data-landscape-spline-point-snap ${multi.points.ids.size > 1 ? 'disabled title="Hizalamak için bir nokta seçin"' : lockedAttr}>Snap to Terrain</button>` : ""}</div>`
     : "";
   const segmentLayerOptions = layers
     .map((layer) => `<option value="${escapeHtml(layer.id)}" ${activeSegment?.paint.layerId === layer.id ? "selected" : ""}>${escapeHtml(layerDisplayName(layer))}</option>`)
@@ -321,7 +321,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       <div class="landscape-layer-list landscape-segment-grid" role="group" aria-label="Segments" title="Ctrl: seçime ekle veya çıkar. Shift: aralık seç.">
         ${splineSegments.map((segment) => `<button type="button" data-landscape-spline-segment="${escapeHtml(segment.id)}" class="${multi.segments.ids.has(segment.id) ? "active" : ""}" aria-pressed="${multi.segments.ids.has(segment.id)}" ${lockedAttr}>${pointLabel(segment.startPointId)} &gt; ${pointLabel(segment.endPointId)}</button>`).join("")}
       </div>
-      <button type="button" class="detail-action-button" data-landscape-spline-segment-split ${multi.segments.ids.size > 1 ? 'disabled title="Select one segment to split"' : lockedAttr}>Split Segment</button>
+      <button type="button" class="detail-action-button" data-landscape-spline-segment-split ${multi.segments.ids.size > 1 ? 'disabled title="Bölmek için bir segment seçin"' : lockedAttr}>Split Segment</button>
       ${splineSegmentMarkup}</div>` : ""}` : "";
   body.innerHTML = `
       <div class="detail-heading">
@@ -893,7 +893,7 @@ function terrainBrushSizeAndStrength(settings: LandscapeSculptSettings, lockedAt
   }
   return `<label class="detail-row"><span>Brush Size</span>
     <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
-      title="Ctrl + mouse wheel over the viewport to resize the brush" value="${settings.brushSize}" ${lockedAttr} /></label>
+      title="Fırçayı boyutlandırmak için viewport üzerinde Ctrl + fare tekerleği" value="${settings.brushSize}" ${lockedAttr} /></label>
     <label class="detail-row"><span>Strength</span>
     <input data-landscape-number="strength" type="number" min="0.01" max="2" step="0.01" value="${settings.strength}" ${lockedAttr} /></label>`;
 }
@@ -1855,7 +1855,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
       <div class="spline-generator-actions"><button type="button" class="spline-action-primary" data-spline-generator-add ${locked}>+ Instance generator</button><button type="button" data-spline-rigid-generator-add ${locked}>+ Rigid segments</button><button type="button" data-spline-deform-generator-add ${locked}>+ Deformed mesh</button></div>
       </div>
       <div class="spline-details__section"><div class="spline-details__section-heading"><span>Control points</span><small>Select, shape and split the path</small></div>
-      <div class="spline-point-toolbar"><div class="spline-point-list">${pointButtons}</div><button type="button" class="spline-action-primary spline-icon-button" data-spline-point-add aria-label="Add control point" title="Add control point" ${locked}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button></div>
+      <div class="spline-point-toolbar"><div class="spline-point-list">${pointButtons}</div><button type="button" class="spline-action-primary spline-icon-button" data-spline-point-add aria-label="Add control point" title="Kontrol noktası ekle" ${locked}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button></div>
       ${pointEditor}</div>
     </section>`;
   body.querySelector<HTMLInputElement>("[data-spline-closed]")?.addEventListener("change", (event) => options.setSelectedSpline({ closed: (event.currentTarget as HTMLInputElement).checked }));

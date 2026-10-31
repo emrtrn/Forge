@@ -119,7 +119,7 @@ test("World Settings enables partition and Spatially Loaded moves a placement be
   await save();
   await page.getByTestId("outliner-row").filter({ hasText: "Partition UI Sun" }).click();
   await expect(spatiallyLoaded).toBeDisabled();
-  await expect(spatiallyLoaded).toHaveAttribute("title", "Directional lights are always persistent");
+  await expect(spatiallyLoaded).toHaveAttribute("title", "Directional ışıklar her zaman kalıcıdır (persistent)");
   await selectCube();
   await expect(spatiallyLoaded).toBeChecked();
   await spatiallyLoaded.uncheck();

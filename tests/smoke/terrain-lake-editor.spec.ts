@@ -123,6 +123,13 @@ test("Lake crest foam controls survive undo Save Reload and runtime", async ({ p
   await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "crest-foam");
   const enabled = page.getByRole("checkbox", { name: "Lake Crest Foam Enabled" });
   await expect(enabled).toBeChecked();
+  // Bounded fields show their range, carry a slider and clamp typed values.
+  const strengthRow = page.locator("label.detail-row").filter({ has: page.locator('[data-lake-number="crestFoamStrength"]') });
+  await expect(strengthRow.locator(".param-range")).toHaveText(/^0\s–\s1$/);
+  await expect(strengthRow.locator("input.param-slider")).toHaveCount(1);
+  await number(page, "crestFoamStrength", 5);
+  await expect(page.locator('[data-lake-number="crestFoamStrength"]')).toHaveValue("1");
+  await expect(page.locator("[data-status-toast-text]")).toContainText("Crest Foam Strength 0 – 1 aralığında olmalı");
   await number(page, "crestFoamStrength", .6); await number(page, "crestFoamThreshold", .5);
   await enabled.uncheck(); await page.getByTestId("editor-undo").click(); await expect(enabled).toBeChecked();
   await page.getByTestId("editor-redo").click(); await expect(enabled).not.toBeChecked();

@@ -49,13 +49,13 @@ export interface FoliagePanelOptions {
 }
 
 const TOOLS: { id: FoliageTool; label: string; tip: string }[] = [
-  { id: "select", label: "Select", tip: "Click an instance to select it (Shift/Ctrl toggles)" },
-  { id: "lasso", label: "Lasso", tip: "Drag the brush over instances to select them (Ctrl/Alt subtracts)" },
-  { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type; Shift+drag erases every type under the brush" },
-  { id: "erase", label: "Erase", tip: "Drag to erase EVERY foliage type under the brush" },
-  { id: "single", label: "Single", tip: "Left-click to place ONE instance (no drag)" },
-  { id: "fill", label: "Fill", tip: "Click a surface to fill its whole footprint with the active type" },
-  { id: "remove", label: "Remove", tip: "Drag to erase ONLY the active type under the brush" },
+  { id: "select", label: "Select", tip: "Seçmek için bir örneğe tıklayın (Shift/Ctrl seçimi değiştirir)" },
+  { id: "lasso", label: "Lasso", tip: "Örnekleri seçmek için fırçayı üzerlerinde sürükleyin (Ctrl/Alt çıkarır)" },
+  { id: "paint", label: "Paint", tip: "Etkin foliage türünü serpmek için sürükleyin; Shift+sürükleme fırça altındaki tüm türleri siler" },
+  { id: "erase", label: "Erase", tip: "Fırça altındaki TÜM foliage türlerini silmek için sürükleyin" },
+  { id: "single", label: "Single", tip: "TEK bir örnek yerleştirmek için sol tıklayın (sürüklemeden)" },
+  { id: "fill", label: "Fill", tip: "Bir yüzeye tıklayarak tüm alanını etkin türle doldurun" },
+  { id: "remove", label: "Remove", tip: "Fırça altındaki YALNIZCA etkin türü silmek için sürükleyin" },
 ];
 
 function escapeHtml(value: string): string {
@@ -161,7 +161,7 @@ function renderTypeDetails(
         ${numField("Cull End", "data-foliage-type-num=\"cullEnd\"", type.cullEnd, "1", "0")}
       </details>
       <div class="detail-hint">Scale/rotation changes apply to new paint.</div>
-      <button type="button" class="foliage-reapply" data-foliage-reapply title="Re-roll scale + rotation of existing instances from the current type settings (position kept)">
+      <button type="button" class="foliage-reapply" data-foliage-reapply title="Mevcut örneklerin ölçek ve dönüşünü güncel tür ayarlarından yeniden üret (konum korunur)">
         ${selectionCount > 0 ? `Reapply to Selection (${selectionCount})` : "Reapply to Type"}
       </button>
     </div>`;
@@ -284,7 +284,7 @@ function renderHtml(options: FoliagePanelOptions): string {
           <span class="foliage-type-count">${type.instanceCount}</span>
           <button type="button" class="foliage-type-remove" data-foliage-remove="${escapeHtml(
             type.id,
-          )}" title="Remove type + its instances">✕</button>
+          )}" title="Türü ve örneklerini kaldır">✕</button>
         </label>`,
           )
           .join("");
@@ -339,13 +339,13 @@ function renderHtml(options: FoliagePanelOptions): string {
           : "No instances selected. Use Select or Lasso."
       }</div>
       <div class="foliage-selection-actions">
-        <button type="button" data-foliage-select-invalid title="Select instances with no valid ground below">Select Invalid</button>
+        <button type="button" data-foliage-select-invalid title="Altında geçerli zemin olmayan örnekleri seç">Select Invalid</button>
         <button type="button" data-foliage-deselect ${
           options.selectionCount > 0 ? "" : "disabled"
         }>Deselect All</button>
         <button type="button" data-foliage-reattach ${
           options.selectionCount > 0 ? "" : "disabled"
-        } title="Snap selected instances to the ground below">Snap to Ground</button>
+        } title="Seçili örnekleri alttaki zemine oturt">Snap to Ground</button>
         <button type="button" class="foliage-remove-selected" data-foliage-remove-selected ${
           options.selectionCount > 0 ? "" : "disabled"
         }>Remove Selected</button>

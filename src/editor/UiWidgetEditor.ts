@@ -441,7 +441,7 @@ export class UiWidgetEditor {
       input.type = "text";
       input.value = locKey;
       input.disabled = true;
-      input.title = "Localized text key — edit the locale table to change it";
+      input.title = "Yerelleştirilmiş metin anahtarı; değiştirmek için dil tablosunu düzenleyin";
     } else if (bindPath !== null) {
       input.type = "text";
       input.placeholder = "field path, e.g. player.health";
@@ -570,7 +570,7 @@ export class UiWidgetEditor {
     play.type = "button";
     play.className = "uie-btn";
     play.textContent = "Play transition";
-    play.title = "Replay the enter animation on the preview";
+    play.title = "Giriş animasyonunu önizlemede yeniden oynat";
     play.addEventListener("click", () => this.playPreviewTransition());
     wrap.append(play);
     return wrap;

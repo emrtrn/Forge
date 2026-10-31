@@ -54,7 +54,7 @@ interface NumberField {
 const SECTIONS: Array<{ title: string; hint?: string; fields: NumberField[] }> = [
   {
     title: "Time",
-    hint: "Day length is real minutes per 24 game hours in Play; 0 keeps the clock still.",
+    hint: "Gün uzunluğu, Play'de 24 oyun saatinin kaç gerçek dakika sürdüğüdür; 0 saati durdurur.",
     fields: [
       { group: "time", key: "hour", label: "Hour", min: 0, max: 23.99, step: 0.25 },
       { group: "time", key: "dayLengthMinutes", label: "Day Length (min)", min: 0, max: 1440, step: 1 },
@@ -62,7 +62,7 @@ const SECTIONS: Array<{ title: string; hint?: string; fields: NumberField[] }> =
   },
   {
     title: "Sun Path",
-    hint: "Azimuth is the compass direction of the noon sun (0 = +Z).",
+    hint: "Azimuth, öğle güneşinin pusula yönüdür (0 = +Z).",
     fields: [
       { group: "sunPath", key: "azimuthDeg", label: "Azimuth", min: 0, max: 359.9, step: 1 },
       { group: "sunPath", key: "noonElevationDeg", label: "Noon Elevation", min: 5, max: 90, step: 1 },
@@ -79,7 +79,7 @@ const SECTIONS: Array<{ title: string; hint?: string; fields: NumberField[] }> =
   },
   {
     title: "Surface (visual)",
-    hint: "Snow and wetness are visual only; they never change tyre grip.",
+    hint: "Kar ve ıslaklık yalnızca görseldir; lastik tutuşunu değiştirmez.",
     fields: [
       { group: "surface", key: "snowCoverage", label: "Snow Coverage", min: 0, max: 1, step: 0.05 },
       { group: "surface", key: "wetness", label: "Wetness", min: 0, max: 1, step: 0.05 },

@@ -51,7 +51,7 @@ function renderVariable({ field, value, overridden }: ActorVariableView, locked:
   const disabled = locked ? "disabled" : "";
   const label = escapeHtml(field.label || field.key);
   const reset = overridden && !locked
-    ? `<button type="button" class="detail-inline-button" data-actor-var-reset="${escapeHtml(field.key)}" title="Reset to class default">↺</button>`
+    ? `<button type="button" class="detail-inline-button" data-actor-var-reset="${escapeHtml(field.key)}" title="Sınıf varsayılanına döndür">↺</button>`
     : "";
   const rowClass = overridden ? "detail-row actor-var-overridden" : "detail-row";
 

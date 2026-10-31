@@ -213,10 +213,10 @@ export class ActorScriptEditor {
           </div>
         </header>
         <div class="as-editor-toolbar">
-          <button type="button" data-as-compile title="Validate this class">▣ Compile</button>
+          <button type="button" data-as-compile title="Bu sınıfı doğrula">▣ Compile</button>
           <button type="button" data-as-tb-save title="Save (Ctrl+S)">💾 Save</button>
-          <button type="button" data-as-browse title="Reveal in Content Browser">🔎 Browse</button>
-          <button type="button" data-as-play title="Save & launch the runtime">▶ Play</button>
+          <button type="button" data-as-browse title="Content Browser'da göster">🔎 Browse</button>
+          <button type="button" data-as-play title="Kaydet ve oyunu (runtime) başlat">▶ Play</button>
           <span class="as-editor-toolbar-spacer"></span>
           <span class="as-editor-compile-status" data-as-compile-status></span>
         </div>

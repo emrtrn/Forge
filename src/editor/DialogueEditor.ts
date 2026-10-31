@@ -197,7 +197,7 @@ export class DialogueEditor {
       <span class="dlg-badge">${badge}</span>
     </span>
     <div class="dlg-toolbar">
-      <button type="button" class="dlg-tool-btn" data-dlg-preview title="Preview subtitle + audio">▶ Preview</button>
+      <button type="button" class="dlg-tool-btn" data-dlg-preview title="Altyazı ve sesi önizle">▶ Preview</button>
       <button type="button" class="dlg-tool-btn" data-dlg-stop title="Stop preview">■ Stop</button>
     </div>
     <div class="dlg-header-actions">
@@ -460,7 +460,7 @@ export class DialogueEditor {
     const previewBtn = el("button", "dlg-context-preview");
     previewBtn.type = "button";
     previewBtn.textContent = "▶";
-    previewBtn.title = "Preview this context";
+    previewBtn.title = "Bu bağlamı önizle";
     previewBtn.addEventListener("click", () => void this.previewContext(line, context));
     const removeBtn = el("button", "dlg-context-remove");
     removeBtn.type = "button";

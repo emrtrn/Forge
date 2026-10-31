@@ -158,7 +158,7 @@ export class VehicleAssetEditor {
     </span>
     <div class="pfx-toolbar"></div>
     <div class="pfx-header-actions">
-      <button type="button" class="pfx-tool-btn" data-vhe-duplicate title="Save a copy next to this asset">Duplicate</button>
+      <button type="button" class="pfx-tool-btn" data-vhe-duplicate title="Bu asset'in yanına bir kopya kaydet">Duplicate</button>
       <button type="button" class="pfx-save" data-vhe-save title="Save (Ctrl+S)">Save</button>
       <button type="button" class="pfx-close" data-vhe-close title="Close (Esc)">×</button>
     </div>
@@ -471,7 +471,7 @@ export class VehicleAssetEditor {
             ${this.flag("Handbrake", `${base}.handbrake`, wheel.handbrake)}
           </div>
           <div class="vhe-actions">
-            <button type="button" class="pfx-tool-btn" data-vhe-op="mirror-wheel" data-vhe-index="${index}" title="Add the mirror image of this wheel on the other side">Mirror</button>
+            <button type="button" class="pfx-tool-btn" data-vhe-op="mirror-wheel" data-vhe-index="${index}" title="Bu tekerleğin ayna görüntüsünü karşı tarafa ekle">Mirror</button>
             <button type="button" class="pfx-tool-btn" data-vhe-op="remove-wheel" data-vhe-index="${index}">Remove</button>
           </div>
         </div>

@@ -23,6 +23,19 @@ export const LAKE_WHEEL_WET_TRAIL_DEFAULTS = {
 export const LAKE_SURFACE_WAVE_DEFAULTS = { surfaceWavesEnabled: true, surfaceWaveHeight: .02,
   surfaceWaveLength: 12, surfaceWavePeriod: 5, surfaceWaveDirection: 30, surfaceWaveShoreDepth: .5 };
 
+/** Hard limits of numeric Lake appearance fields: the save allowlist rejects
+ * values outside them and the editor shows them as each field's range. */
+export const LAKE_APPEARANCE_RANGES = { opacity: [0, 1], bedVisibility: [0, 1], absorptionDistance: [0.01, 100],
+  surfaceStrength: [0, 2], surfaceRoughness: [0.04, 1], normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1],
+  refractionStrength: [0, 2],
+  surfaceWaveHeight: [0, .1], surfaceWaveLength: [6, 40], surfaceWavePeriod: [2, 12],
+  surfaceWaveDirection: [0, 360], surfaceWaveShoreDepth: [.1, 2],
+  wheelRippleStrength: [0, 6], wheelRippleSpeed: [0.2, 5], wheelRippleWidth: [0.1, 2],
+  wheelRippleWavelength: [0.1, 2], wheelRippleLifetime: [0.2, 4], wheelRippleInterval: [0.04, 1],
+  wheelWetTrailLength: [0.5, 10], wheelWetTrailStrength: [0, 1], wheelWetTrailDrySeconds: [5, 180],
+  shoreWetnessWidth: [0.2, 4], shoreWetnessStrength: [0, 1], shoreBlendDepth: [0, 2], foamOpacity: [0, 1], foamWidth: [0.2, 4], foamScale: [0.1, 10], foamSpeed: [0, 3],
+  causticsStrength: [0, 3], causticsScale: [0.1, 10], causticsSpeed: [0, 3], causticsDepthFade: [0.1, 30] } as const;
+
 /** Initial editor appearance, based on the accepted Terrain / Lake 1 settings.
  * Kept separate from runtime fallbacks so older saved Lakes retain their look. */
 export function createLakeAppearance(): NonNullable<LayoutLakeWaterBody["appearance"]> {
@@ -84,16 +97,6 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
         appearance[key] = source[key];
       }
     }
-    const ranges = { opacity: [0, 1], bedVisibility: [0, 1], absorptionDistance: [0.01, 100],
-      surfaceStrength: [0, 2], surfaceRoughness: [0.04, 1], normalScale: [0.05, 20], rippleSpeed: [0, 10], reflectionStrength: [0, 1],
-      refractionStrength: [0, 2],
-      surfaceWaveHeight: [0, .1], surfaceWaveLength: [6, 40], surfaceWavePeriod: [2, 12],
-      surfaceWaveDirection: [0, 360], surfaceWaveShoreDepth: [.1, 2],
-      wheelRippleStrength: [0, 6], wheelRippleSpeed: [0.2, 5], wheelRippleWidth: [0.1, 2],
-      wheelRippleWavelength: [0.1, 2], wheelRippleLifetime: [0.2, 4], wheelRippleInterval: [0.04, 1],
-      wheelWetTrailLength: [0.5, 10], wheelWetTrailStrength: [0, 1], wheelWetTrailDrySeconds: [5, 180],
-      shoreWetnessWidth: [0.2, 4], shoreWetnessStrength: [0, 1], shoreBlendDepth: [0, 2], foamOpacity: [0, 1], foamWidth: [0.2, 4], foamScale: [0.1, 10], foamSpeed: [0, 3],
-      causticsStrength: [0, 3], causticsScale: [0.1, 10], causticsSpeed: [0, 3], causticsDepthFade: [0.1, 30] } as const;
     if (source.surfaceWavesEnabled !== undefined) {
       if (typeof source.surfaceWavesEnabled !== "boolean") throw new Error("Invalid Lake surfaceWavesEnabled");
       appearance.surfaceWavesEnabled = source.surfaceWavesEnabled;
@@ -118,6 +121,7 @@ export function validateWaterBody(value: unknown): LayoutLakeWaterBody {
       if (typeof source.causticsEnabled !== "boolean") throw new Error("Invalid Lake causticsEnabled");
       appearance.causticsEnabled = source.causticsEnabled;
     }
+    const ranges = LAKE_APPEARANCE_RANGES;
     for (const key of Object.keys(ranges) as Array<keyof typeof ranges>) if (source[key] !== undefined) {
       const v = number(source[key]);
       if (v < ranges[key][0] || v > ranges[key][1]) throw new Error(`Invalid Lake ${key}`);

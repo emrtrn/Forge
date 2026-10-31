@@ -12,10 +12,10 @@ export function appendSpatiallyLoadedDetails(
   body.insertAdjacentHTML("beforeend", `
     <div class="detail-section" data-detail-section="world-partition">
       <div class="detail-section-title">World Partition</div>
-      <label class="detail-toggle" ${directional ? 'title="Directional lights are always persistent"' : ""}>
+      <label class="detail-toggle" ${directional ? 'title="Directional ışıklar her zaman kalıcıdır (persistent)"' : ""}>
         <input type="checkbox" data-detail-toggle="spatiallyLoaded" data-detail-spatially-loaded
           ${selection.spatiallyLoaded ? "checked" : ""} ${directional || selection.locked ? "disabled" : ""}
-          ${directional ? 'title="Directional lights are always persistent"' : ""} />
+          ${directional ? 'title="Directional ışıklar her zaman kalıcıdır (persistent)"' : ""} />
         <span>Spatially Loaded</span>
       </label>
     </div>`);

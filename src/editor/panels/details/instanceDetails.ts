@@ -87,11 +87,11 @@ export function renderInstanceDetails({
         ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
         <div class="detail-actions-row">
           <button type="button" data-detail-action="reset" ${lockedAttr}
-            title="Reset rotation to 0 and scale to 1">Reset</button>
+            title="Rotation'ı 0'a, Scale'i 1'e sıfırla">Reset</button>
           <button type="button" data-detail-action="copy"
-            title="Copy this transform">Copy</button>
+            title="Bu transform'u kopyala">Copy</button>
           <button type="button" data-detail-action="paste" ${lockedAttr}
-            title="Paste the copied transform">Paste</button>
+            title="Kopyalanan transform'u yapıştır">Paste</button>
         </div>
       </div>
       ${
@@ -110,9 +110,9 @@ export function renderInstanceDetails({
         <div class="detail-section-title">Placement</div>
         <div class="detail-actions-row">
           <button type="button" data-detail-action="snap-floor" ${lockedAttr}
-            title="Drop onto the surface below (End)">Snap to Floor</button>
+            title="Alttaki yüzeye bırak (End)">Snap to Floor</button>
           <button type="button" data-detail-action="snap-wall" ${wallDisabled}
-            title="Snap flush against the nearest wall">Snap to Wall</button>
+            title="En yakın duvara yasla">Snap to Wall</button>
         </div>
         <label class="detail-toggle">
           <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />

@@ -320,7 +320,7 @@ export class StateTreeEditor {
     <aside class="ste-left">
       <div class="ste-section-title ste-outline-head">
         <span>State Outline</span>
-        <button type="button" class="ste-btn ste-btn-sm" data-ste-add-root title="Add a top-level state">+ State</button>
+        <button type="button" class="ste-btn ste-btn-sm" data-ste-add-root title="Üst düzey state ekle">+ State</button>
       </div>
       <div class="ste-outline" data-ste-outline></div>
       <div class="ste-section-title">Transitions</div>
@@ -576,10 +576,10 @@ export class StateTreeEditor {
 
     this.formHost.innerHTML = `
       <div class="ste-form-toolbar">
-        <button type="button" data-ste-add-child class="ste-btn" title="Add a child state">+ Child State</button>
-        <button type="button" data-ste-remove class="ste-btn" title="Remove this state">Remove</button>
-        <button type="button" data-ste-up class="ste-btn"${canUp ? "" : " disabled"} title="Move up among siblings">↑</button>
-        <button type="button" data-ste-down class="ste-btn"${canDown ? "" : " disabled"} title="Move down among siblings">↓</button>
+        <button type="button" data-ste-add-child class="ste-btn" title="Alt state ekle">+ Child State</button>
+        <button type="button" data-ste-remove class="ste-btn" title="Bu state'i kaldır">Remove</button>
+        <button type="button" data-ste-up class="ste-btn"${canUp ? "" : " disabled"} title="Kardeşler arasında yukarı taşı">↑</button>
+        <button type="button" data-ste-down class="ste-btn"${canDown ? "" : " disabled"} title="Kardeşler arasında aşağı taşı">↓</button>
       </div>
       <div class="ste-form-fields">
         <label class="ste-form-row">
@@ -609,7 +609,7 @@ export class StateTreeEditor {
       }</div>
       <div class="ste-form-add">
         <select data-ste-add-enter-cond-kind class="ste-input ste-input-sm">${addOptions}</select>
-        <button type="button" data-ste-add-enter-cond class="ste-btn" title="Add an enter condition">+ Condition</button>
+        <button type="button" data-ste-add-enter-cond class="ste-btn" title="Giriş koşulu (enter condition) ekle">+ Condition</button>
       </div>`;
   }
 
@@ -628,7 +628,7 @@ export class StateTreeEditor {
       }</div>
       <div class="ste-form-add">
         <select data-ste-add-trans-cond-kind class="ste-input ste-input-sm">${addOptions}</select>
-        <button type="button" data-ste-add-trans-cond class="ste-btn" title="Add a guard condition">+ Condition</button>
+        <button type="button" data-ste-add-trans-cond class="ste-btn" title="Koruma koşulu (guard condition) ekle">+ Condition</button>
       </div>`;
   }
 
@@ -745,7 +745,7 @@ export class StateTreeEditor {
       <div class="ste-section-sub">Tasks</div>
       <div class="ste-cards" data-ste-task-list>${cards || `<div class="ste-form-empty">No tasks.</div>`}</div>
       <div class="ste-form-add">
-        <button type="button" data-ste-add-task class="ste-btn" title="Add a task">+ Task</button>
+        <button type="button" data-ste-add-task class="ste-btn" title="Task ekle">+ Task</button>
       </div>`;
   }
 
@@ -786,7 +786,7 @@ export class StateTreeEditor {
       <div class="ste-form-add">
         <button type="button" data-ste-add-trans class="ste-btn"${
           stateIds.length > 0 ? "" : " disabled"
-        } title="Add a transition">+ Transition</button>
+        } title="Transition ekle">+ Transition</button>
       </div>`;
   }
 

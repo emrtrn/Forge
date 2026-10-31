@@ -1,6 +1,6 @@
 import { renderLakeGeometryFoamDetails } from "./lakeGeometryFoamDetails";
 import type { SceneApp } from "@/scene/SceneApp";
-import { LAKE_SURFACE_WAVE_DEFAULTS, LAKE_WHEEL_RIPPLE_DEFAULTS, LAKE_WHEEL_WET_TRAIL_DEFAULTS, resolveLakeAppearance } from "@engine/scene/waterBody";
+import { LAKE_APPEARANCE_RANGES, LAKE_SURFACE_WAVE_DEFAULTS, LAKE_WHEEL_RIPPLE_DEFAULTS, LAKE_WHEEL_WET_TRAIL_DEFAULTS, resolveLakeAppearance } from "@engine/scene/waterBody";
 import { applyWaterTooltips } from "./waterTooltips";
 import { UI_ICONS } from "../../editorIcons";
 
@@ -17,8 +17,12 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   if (replace) body.innerHTML = "";
   const section = document.createElement("div"); section.className = "lake-editor"; section.dataset.lakePanel = "";
   const locked = !!lake?.locked, disabled = locked ? "disabled" : "";
-  const field = (label: string, key: string, value: number, step = "0.1", limits = "") =>
-    `<label class="detail-row"><span>${label}</span><input data-lake-number="${key}" aria-label="${label}" type="number" step="${step}" value="${Number(value.toFixed(6))}" ${limits} ${disabled}></label>`;
+  // Appearance fields without explicit limits take the save allowlist's range.
+  const field = (label: string, key: string, value: number, step = "0.1", limits = "") => {
+    const range = LAKE_APPEARANCE_RANGES[key as keyof typeof LAKE_APPEARANCE_RANGES];
+    const bounds = limits || (range ? `min="${range[0]}" max="${range[1]}"` : "");
+    return `<label class="detail-row"><span>${label}</span><input data-lake-number="${key}" aria-label="${label}" type="number" step="${step}" value="${Number(value.toFixed(6))}" ${bounds} ${disabled}></label>`;
+  };
   const ready = state.result?.status === "ready", error = !!state.result && !ready;
   const status = state.picking ? "Click Terrain" : state.leaving ? "Pending Draft" : state.draft ? "Draft Preview" : lake ? "Created Lake" : "Add Lake";
   const hint = state.picking ? "Sculpt ile hazırladığınız çukurun içine tıklayın. Esc nokta seçimini bitirir." :
@@ -49,13 +53,13 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       ${(["deepColor", "shallowColor"] as const).map((key) => `<label class="detail-row"><span>${key === "deepColor" ? "Deep Color" : "Shallow Color"}</span><input type="color" aria-label="${key === "deepColor" ? "Deep Color" : "Shallow Color"}" data-lake-color="${key}" value="${a[key]}" ${disabled}></label>`).join("")}
       ${field("Opacity", "opacity", a.opacity, "0.05", 'min="0" max="1"')}
       ${field("Bed Visibility", "bedVisibility", a.bedVisibility, "0.05", 'min="0" max="1"')}
-      ${field("Absorption Distance (m)", "absorptionDistance", a.absorptionDistance, "0.25", 'min="0.01" max="100"')}
+      ${field("Absorption Distance (m)", "absorptionDistance", a.absorptionDistance, "0.25", 'min="0.01" max="100" data-slider-max="20"')}
       ${field("Refraction Strength", "refractionStrength", a.refractionStrength, "0.1", 'min="0" max="2"')}
       ${field("Shore Blend Depth (m)", "shoreBlendDepth", a.shoreBlendDepth, "0.05", 'min="0" max="2"')}
       ${field("Surface Strength", "surfaceStrength", a.surfaceStrength, "0.05", 'min="0" max="2"')}
       ${field("Surface Roughness", "surfaceRoughness", a.surfaceRoughness, "0.02", 'min="0.04" max="1"')}
-      ${field("Normal Scale", "normalScale", a.normalScale)}
-      ${field("Ripple Speed", "rippleSpeed", a.rippleSpeed)}
+      ${field("Normal Scale", "normalScale", a.normalScale, "0.05", 'min="0.05" max="20" data-slider-max="5"')}
+      ${field("Ripple Speed", "rippleSpeed", a.rippleSpeed, "0.05")}
     `, true));
     section.insertAdjacentHTML("beforeend", group("surface-waves", "Surface Waves", `
       <div class="detail-hint">Yüzeyin hafif yükselip alçalması. Height, ortalama seviyeden en fazla sapmadır; kıyıda hareket söner.</div>
@@ -121,8 +125,8 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
       <div class="detail-hint" data-lake-status>${escape(state.result?.message ?? "Calculating Lake…")}</div>
       ${button("retry", "Recalculate Water", state.picking, "", UI_ICONS.refresh)}
       <div class="detail-subhead">Light & Reflection</div>
-      ${field("Absorption Distance (m)", "absorptionDistance", a.absorptionDistance)}
-      ${field("Reflection Strength", "reflectionStrength", a.reflectionStrength)}
+      ${field("Absorption Distance (m)", "absorptionDistance", a.absorptionDistance, "0.25", 'min="0.01" max="100" data-slider-max="20"')}
+      ${field("Reflection Strength", "reflectionStrength", a.reflectionStrength, "0.05")}
       <label class="detail-row"><span>Reflection Mode</span><select data-lake-reflection ${disabled}><option value="off">Off</option><option value="sharedPlanar">Shared Planar</option></select></label>
       <label class="detail-row"><span>Reflection Quality</span><select data-lake-quality ${disabled}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
       <label class="detail-row"><span>Reflection Group</span><input data-lake-group value="${escape(a.reflectionGroup)}" ${disabled}></label>

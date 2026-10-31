@@ -1,5 +1,5 @@
 /** Physical-material blending and wheel response, independent of Rapier/rendering. */
-import { resolvePhysicalMaterial } from "../../scene/collision";
+import { resolvePhysicalMaterial, type PhysicalMaterialDef } from "../../scene/collision";
 import type { EntityId } from "../../scene/entity";
 import type { VehicleVec3 } from "../vehicle/vehicleTypes";
 
@@ -94,29 +94,35 @@ export const NEUTRAL_SURFACE_SAMPLE: SurfaceSample = Object.freeze({
   deformability: 0,
 });
 
+/** Shared numeric response for presets and layer-local profiles. */
+export function surfaceSampleFromProfile(profile: PhysicalMaterialDef): SurfaceSample {
+  return {
+    frictionSlipScale: profile.vehicle?.frictionSlipScale ?? 1,
+    sideFrictionScale: profile.vehicle?.sideFrictionScale ?? 1,
+    rollingResistance: profile.vehicle?.rollingResistance ?? 0,
+    deformability: (profile.deformation?.maxDepth ?? 0) > 0 ? 1 : 0,
+    ...(profile.vehicle?.tractionCoefficient === undefined ? {} : { tractionCoefficient: profile.vehicle.tractionCoefficient }),
+    ...(profile.deformation ? { softGround: {
+      maxDepth: profile.deformation.maxDepth, compaction: profile.deformation.compaction,
+      digRate: profile.deformation.digRate, sinkResistance: profile.deformation.sinkResistance,
+      ploughResistance: profile.deformation.ploughResistance ?? 0,
+      ploughExponent: profile.deformation.ploughExponent ?? 1,
+      rollingResistanceAtRest: profile.deformation.rollingResistanceAtRest ?? 1,
+      highSpeedResistance: profile.deformation.highSpeedResistance ?? 0,
+      resistanceSpeedMps: profile.deformation.resistanceSpeedMps ?? 20 / 3.6,
+    } } : {}),
+  };
+}
+
 /** Positive finite weights are normalised; missing/unknown material blocks are neutral. */
 export function resolveSurfaceSample(
   material: string | null | undefined | readonly WeightedSurfaceMaterial[],
 ): SurfaceSample {
   if (typeof material === "string" || material == null) {
     const profile = resolvePhysicalMaterial(material ?? undefined);
-    return {
-      frictionSlipScale: profile.vehicle?.frictionSlipScale ?? 1,
-      sideFrictionScale: profile.vehicle?.sideFrictionScale ?? 1,
-      rollingResistance: profile.vehicle?.rollingResistance ?? 0,
-      deformability: (profile.deformation?.maxDepth ?? 0) > 0 ? 1 : 0,
-      ...(profile.vehicle?.tractionCoefficient === undefined ? {} : { tractionCoefficient: profile.vehicle.tractionCoefficient }),
-      ...(profile.deformation ? { softGround: {
-        maxDepth: profile.deformation.maxDepth, compaction: profile.deformation.compaction,
-        digRate: profile.deformation.digRate, sinkResistance: profile.deformation.sinkResistance,
-        ploughResistance: profile.deformation.ploughResistance ?? 0,
-        ploughExponent: profile.deformation.ploughExponent ?? 1,
-        rollingResistanceAtRest: profile.deformation.rollingResistanceAtRest ?? 1,
-        highSpeedResistance: profile.deformation.highSpeedResistance ?? 0,
-        resistanceSpeedMps: profile.deformation.resistanceSpeedMps ?? 20 / 3.6,
-      } } : {}),
-    };
+    return surfaceSampleFromProfile(profile);
   }
+
   const entries = material.filter(({ weight }) => Number.isFinite(weight) && weight > 0);
   const maxWeight = entries.reduce((max, entry) => Math.max(max, entry.weight), 0);
   if (maxWeight === 0) return NEUTRAL_SURFACE_SAMPLE;

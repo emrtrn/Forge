@@ -1,3 +1,4 @@
+import type { TerrainPhysicalMaterialOverrides } from "./terrainPhysicalMaterial";
 import type { ForgeLandscapeSpline } from "../scene/landscape";
 import type { Vec3 } from "../scene/layout";
 
@@ -49,6 +50,8 @@ export interface WorldTerrainLayerDef {
    * response; `null`/absent leaves the layer neutral (TERRAIN_DEFORMATION Faz 1b).
    */
   physicalMaterial?: string | null;
+  /** Layer-local numeric overrides; absent values inherit the built-in preset. */
+  physicalMaterialOverrides?: TerrainPhysicalMaterialOverrides;
 }
 
 /** Per-tile index entry kept in `terrain.json`, readable without fetching the tile. */

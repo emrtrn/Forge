@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { TERRAIN_PHYSICS_FIELDS } from "../../engine/terrain/terrainPhysicalMaterial";
 import type { LayoutLandscape } from "../../engine/scene/layout";
 import { createTerrainEditWorld } from "../../engine/terrain/terrainEdit";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
@@ -42,6 +43,26 @@ function fixture() {
 }
 
 export function registerTerrainDocumentTests(check: Check): void {
+  check("terrain definition: layer physics survives save and load; invalid overrides are rejected", () => {
+    const { def, tile } = fixture();
+    const overrides = Object.fromEntries(TERRAIN_PHYSICS_FIELDS.map((field) => [field.key, field.min + (field.max - field.min) / 2]));
+    def.layers[1]!.physicalMaterialOverrides = overrides;
+    const world = createTerrainEditWorld(def, [tile]);
+    const snapshot = captureWorldTerrainSave(world, ["0_0"], new Map());
+    const saved = validateSaveTerrainPayload({ path, terrain: snapshot.def }).terrain;
+    const loaded = normalizeWorldTerrain(JSON.parse(JSON.stringify(saved)));
+    assert.deepEqual(loaded.layers[1]!.physicalMaterialOverrides, overrides);
+    assert.equal(loaded.layers[0]!.physicalMaterialOverrides, undefined);
+    assert.deepEqual(collectDroppedFields(def, saved, "terrain").paths, []);
+    for (const bad of [null, [], { maxDepth: -1 }, { maxDepth: Infinity }, { maxDepth: "0.2" }, { unexpected: 1 }, { compaction: 2 }, { ploughExponent: 0 }, { resistanceSpeedMps: 0 }]) {
+      const invalid = { ...def, layers: def.layers.map((layer, index) => index === 1 ? { ...layer, physicalMaterialOverrides: bad } : layer) };
+      assert.throws(() => validateSaveTerrainPayload({ path, terrain: invalid }));
+    }
+    for (const id of [null, "stone"]) {
+      const invalid = { ...def, layers: def.layers.map((layer, index) => index === 1 ? { ...layer, physicalMaterial: id } : layer) };
+      assert.throws(() => normalizeWorldTerrain(invalid));
+    }
+  });
   check("terrain definition: maximal runtime/save shape has no serialization drift and unknown keys are reported", () => {
     const { def, path } = fixture();
     const saved = validateSaveTerrainPayload({ path, terrain: def }).terrain;

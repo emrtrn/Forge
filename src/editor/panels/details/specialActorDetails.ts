@@ -1,3 +1,4 @@
+import { TERRAIN_PHYSICS_FIELDS, resolveTerrainPhysicalMaterial, terrainPhysicsValue, type TerrainPhysicalMaterialOverrides } from "@engine/terrain/terrainPhysicalMaterial";
 import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/manifest";
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import type { ForgeSplineDeformMeshGeneratorDef, ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef, SplineMeshAxis } from "@engine/scene/splineGenerator";
@@ -158,6 +159,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   applySelectedLandscapeSplinePaint: () => void;
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
   setSelectedLandscapeLayerPhysicalMaterial: (layerId: string, physicalMaterialId: string | null) => void;
+  setSelectedLandscapeLayerPhysicalOverrides: (layerId: string, overrides: TerrainPhysicalMaterialOverrides) => void;
   importSelectedLandscapeHeightmap: (rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
   getSelectedLandscapeResolution: () => { verticesX: number; verticesZ: number; worldSize: number } | null;
   resampleSelectedLandscape: (preset: "small" | "medium" | "large") => void;
@@ -388,7 +390,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
               <span>Material</span>
               <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
             </label>
-            ${layerPhysicalMaterialRow(activeLayer, lockedAttr)}
+            ${layerPhysicalMaterialRow(activeLayer, lockedAttr, body.dataset.landscapePhysicsAdvanced === "true")}
             <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
             : terrainSculptControls(settings, lockedAttr)
         }
@@ -751,7 +753,7 @@ function bindHeightmapFileControls(options: SpecialActorDetailsOptions): void {
 }
 
 /** Physical Material picker for the active paint layer (TERRAIN_DEFORMATION Faz 1b). */
-function layerPhysicalMaterialRow(layer: LandscapeLayerView | undefined, lockedAttr: string): string {
+function layerPhysicalMaterialRow(layer: LandscapeLayerView | undefined, lockedAttr: string, advancedOpen: boolean): string {
   const current = layer?.physicalMaterial ?? null;
   const choices = [`<option value="" ${current ? "" : "selected"}>None (neutral)</option>`]
     .concat(PHYSICAL_MATERIAL_IDS.map((id) => `<option value="${id}" ${current === id ? "selected" : ""}>${id}</option>`))
@@ -759,10 +761,42 @@ function layerPhysicalMaterialRow(layer: LandscapeLayerView | undefined, lockedA
   return `<label class="detail-row">
       <span>Physical Material</span>
       <select data-landscape-layer-physical-material ${lockedAttr}>${choices}</select>
-    </label>`;
+    </label>${layerPhysicsRows(layer, lockedAttr, advancedOpen)}`;
+}
+
+function layerPhysicsRows(layer: LandscapeLayerView | undefined, lockedAttr: string, advancedOpen: boolean): string {
+  if (!layer?.physicalMaterial) return "";
+  const profile = resolveTerrainPhysicalMaterial(layer.physicalMaterial, layer.physicalMaterialOverrides);
+  const fields = TERRAIN_PHYSICS_FIELDS.filter((field) => profile[field.group]);
+  if (!fields.length) return "";
+  const rows = (advanced: boolean): string => fields.filter((field) => field.advanced === advanced).map((field) =>
+    `<label class="detail-row" title="${escapeHtml(field.hint)}"><span>${field.label}</span><input type="number" data-landscape-physics="${field.key}" min="${field.min}" max="${field.max}" step="${field.step}" value="${Number(terrainPhysicsValue(profile, field).toPrecision(6))}" ${lockedAttr}></label>`).join("");
+  return `<div data-landscape-physics-panel><p class="detail-hint">Physics overrides apply to this layer only.</p>${rows(false)}
+    <details data-landscape-physics-advanced ${advancedOpen ? "open" : ""}><summary>Advanced Physics</summary>${rows(true)}</details>
+    <button type="button" class="detail-action-button" data-landscape-physics-reset ${lockedAttr}>Reset to Preset</button></div>`;
 }
 
 function bindLayerPhysicalMaterial(options: SpecialActorDetailsOptions): void {
+  options.body.querySelector<HTMLDetailsElement>("[data-landscape-physics-advanced]")?.addEventListener("toggle", (event) => {
+    options.body.dataset.landscapePhysicsAdvanced = String((event.currentTarget as HTMLDetailsElement).open);
+  });
+  options.body.querySelectorAll<HTMLInputElement>("[data-landscape-physics]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const field = TERRAIN_PHYSICS_FIELDS.find((entry) => entry.key === input.dataset.landscapePhysics);
+      const value = input.valueAsNumber;
+      if (!field || !input.value.trim() || !Number.isFinite(value) || value < field.min || value > field.max) {
+        options.refreshDetails(); return;
+      }
+      const layerId = options.getLandscapeSculptSettings().activeLayerId;
+      const layer = options.getSelectedLandscapeLayers().find((entry) => entry.id === layerId);
+      options.setSelectedLandscapeLayerPhysicalOverrides(layerId, { ...layer?.physicalMaterialOverrides, [field.key]: value });
+      options.refreshDetails();
+    });
+  });
+  options.body.querySelector("[data-landscape-physics-reset]")?.addEventListener("click", () => {
+    options.setSelectedLandscapeLayerPhysicalOverrides(options.getLandscapeSculptSettings().activeLayerId, {});
+    options.refreshDetails();
+  });
   options.body
     .querySelector<HTMLSelectElement>("[data-landscape-layer-physical-material]")
     ?.addEventListener("change", (event) => {
@@ -968,7 +1002,7 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <span>Material</span>
         <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
       </label>
-      ${layerPhysicalMaterialRow(activeLayer, lockedAttr)}
+      ${layerPhysicalMaterialRow(activeLayer, lockedAttr, body.dataset.landscapePhysicsAdvanced === "true")}
       <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
     : settings.editMode === "sculpt"
     ? terrainSculptControls(settings, lockedAttr)

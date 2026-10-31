@@ -65,6 +65,25 @@ const BORDER = (x: number): number[] => {
 };
 
 export function registerTerrainSurfaceTests(check: Check): void {
+  check("terrain surface: layer physics overrides affect grip, soil and tracks without mutating presets", () => {
+    const preset = structuredClone(PHYSICAL_MATERIALS.mud);
+    const layers = LAYERS("mud", "mud");
+    layers[0]!.physicalMaterialOverrides = { tractionCoefficient: 0.9, maxDepth: 0.4, digRate: 0.2, recoveryRate: 0.03, ploughResistance: 0.1 };
+    const sampler = new TerrainSurfaceSampler(worldTerrainSurfaceSource(flatTerrain(layers, BORDER))!);
+    close(sampler.sampleAt([-10, 0, 0])!.tractionCoefficient!, 0.9);
+    close(sampler.sampleAt([10, 0, 0])!.tractionCoefficient!, 0.4);
+    close(sampler.sampleAt([0, 0, 0])!.tractionCoefficient!, 0.65);
+    close(sampler.sampleAt([-10, 0, 0])!.softGround!.ploughResistance, 0.1);
+    close(sampler.deformationAt([-10, 0, 0])!.maxDepth, 0.4);
+    close(sampler.deformationAt([-10, 0, 0])!.recoveryRate, 0.03);
+    close(sampler.deformationAt([0, 0, 0])!.digRate, 0.14);
+    assert.deepEqual(PHYSICAL_MATERIALS.mud, preset);
+    assert.deepEqual(sampler.sampleAt([10, 0, 0]), resolveSurfaceSample("mud"));
+    layers[0]!.physicalMaterialOverrides = { maxDepth: 0 };
+    const disabled = new TerrainSurfaceSampler(worldTerrainSurfaceSource(flatTerrain(layers, BORDER))!);
+    assert.equal(disabled.deformationAt([-10, 0, 0]), null);
+    assert.equal(disabled.sampleAt([-10, 0, 0])!.deformability, 0);
+  });
   check("terrain surface: a terrain with no physical material layer builds no source", () => {
     assert.equal(terrainLayerPhysicalMaterials([{}, { physicalMaterial: null }]), null);
     assert.deepEqual(terrainLayerPhysicalMaterials([{}, { physicalMaterial: "mud" }]), [null, "mud"]);

@@ -10,7 +10,7 @@ export interface SavedTerrain {
   size: { verticesX: number; verticesZ: number; spacing: number };
   origin: [number, number, number];
   heights: number[];
-  layers: { id: string; name: string; material?: string; physicalMaterial?: string | null; weights: number[] }[];
+  layers: { id: string; name: string; material?: string; physicalMaterial?: string | null; physicalMaterialOverrides?: Record<string, number>; weights: number[] }[];
   splines: unknown[];
 }
 

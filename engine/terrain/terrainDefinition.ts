@@ -1,4 +1,5 @@
-import { PHYSICAL_MATERIAL_IDS } from "../scene/collision";
+import { normalizeTerrainPhysicalOverrides, TERRAIN_PHYSICS_FIELDS } from "./terrainPhysicalMaterial";
+import { PHYSICAL_MATERIALS, PHYSICAL_MATERIAL_IDS } from "../scene/collision";
 import { normalizeTerrainSplines } from "./terrainSplineData";
 import {
   isValidTileQuads, parseTileKey, tileKey, TERRAIN_MAX_LAYERS, TERRAIN_MAX_TILES_PER_AXIS,
@@ -55,7 +56,14 @@ export function normalizeWorldTerrain(value: unknown): WorldTerrainDef {
       && (typeof physicalMaterial !== "string" || !PHYSICAL_MATERIAL_IDS.includes(physicalMaterial))) {
       throw new Error("invalid terrain layer physicalMaterial");
     }
-    return { id, name: text(layer.name, "layer name"), color,
+    const overrides = layer.physicalMaterialOverrides === undefined ? undefined : normalizeTerrainPhysicalOverrides(layer.physicalMaterialOverrides);
+    if (overrides && Object.keys(overrides).length) {
+      const preset = typeof physicalMaterial === "string" ? PHYSICAL_MATERIALS[physicalMaterial] : undefined;
+      for (const field of TERRAIN_PHYSICS_FIELDS) {
+        if (overrides[field.key] !== undefined && !preset?.[field.group]) throw new Error("terrain physical parameter requires a supported material block");
+      }
+    }
+    return { ...(overrides && Object.keys(overrides).length ? { physicalMaterialOverrides: overrides } : {}), id, name: text(layer.name, "layer name"), color,
       ...(layer.material === null ? { material: null } : layer.material === undefined ? {} : { material: text(layer.material, "layer material") }),
       ...(physicalMaterial === undefined ? {} : { physicalMaterial }) };
   });

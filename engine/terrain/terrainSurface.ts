@@ -8,19 +8,21 @@
  * the host's collider-material provider then answers exactly as before (I3).
  */
 import {
-  NEUTRAL_SURFACE_SAMPLE, resolveSurfaceSample, softGroundParameter,
+  NEUTRAL_SURFACE_SAMPLE, surfaceSampleFromProfile, softGroundParameter,
   type SurfaceSample, type VehicleSurfaceProvider,
 } from "../physics/surface/surfaceResponse";
 import type { VehicleVec3 } from "../physics/vehicle/vehicleTypes";
-import { resolvePhysicalMaterial, type PhysicalMaterialDef } from "../scene/collision";
+import type { PhysicalMaterialDef } from "../scene/collision";
 import type { EntityId } from "../scene/entity";
 import { terrainLayerWeightsAt } from "./terrainHeightQuery";
 import type { WorldTerrainDocument } from "./terrainLoader";
+import { resolveTerrainPhysicalMaterial, type TerrainPhysicalMaterialOverrides } from "./terrainPhysicalMaterial";
 import { tileKey } from "./terrainTypes";
 
 export interface TerrainSurfaceSource {
   /** Physical material id per paint layer (`null` = neutral), aligned with `weightsAt`. */
   readonly physicalMaterials: readonly (string | null)[];
+  readonly physicalMaterialOverrides?: readonly (TerrainPhysicalMaterialOverrides | undefined)[];
   /** Writes the layer weights under a world point into `out`; false off the terrain. */
   weightsAt(point: VehicleVec3, out: number[]): boolean;
 }
@@ -60,6 +62,7 @@ export function worldTerrainSurfaceSource({ def, tiles }: WorldTerrainDocument):
   const lookup = { tile: (x: number, z: number) => tiles.get(tileKey(x, z)) };
   return {
     physicalMaterials,
+    physicalMaterialOverrides: def.layers.map((layer) => layer.physicalMaterialOverrides),
     weightsAt: (point, out) => terrainLayerWeightsAt(def, lookup, point[0], point[2], out) !== null,
   };
 }
@@ -74,9 +77,10 @@ export class TerrainSurfaceSampler {
   private readonly weights: number[] = [];
 
   constructor(readonly source: TerrainSurfaceSource) {
-    this.layerSamples = source.physicalMaterials.map((id) => resolveSurfaceSample(id));
-    this.layerProfiles = source.physicalMaterials.map((id) => {
-      const profile = id ? resolvePhysicalMaterial(id).deformation : undefined;
+    const profiles = source.physicalMaterials.map((id, index) => resolveTerrainPhysicalMaterial(id, source.physicalMaterialOverrides?.[index]));
+    this.layerSamples = profiles.map(surfaceSampleFromProfile);
+    this.layerProfiles = profiles.map((material) => {
+      const profile = material.deformation;
       return profile && profile.maxDepth > 0 ? profile : null;
     });
   }

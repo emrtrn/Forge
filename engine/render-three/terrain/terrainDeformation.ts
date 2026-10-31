@@ -8,7 +8,8 @@ import {
   type WebGLRenderer,
 } from "three";
 
-import { PHYSICAL_MATERIALS, resolvePhysicalMaterial } from "@engine/scene/collision";
+import { PHYSICAL_MATERIALS } from "@engine/scene/collision";
+import { resolveTerrainPhysicalMaterial, type TerrainPhysicalMaterialOverrides } from "@engine/terrain/terrainPhysicalMaterial";
 import { DEFORMATION_DEPTH_SCALE, type DeformationDirtyRect, type DeformationField } from "@engine/scene/deformationField";
 import { TERRAIN_RENDER_LAYERS } from "@engine/terrain/terrainRenderData";
 
@@ -238,11 +239,11 @@ export function sharedTerrainDeformation(): TerrainDeformationTexture {
  * and strength (`vec4`), and how much the track's roughness drops (wetness).
  * Layers without a soft profile get no tint.
  */
-export function terrainDeformationLayerUniforms(physicalMaterials: readonly (string | null | undefined)[]): TerrainUniforms {
+export function terrainDeformationLayerUniforms(physicalMaterials: readonly (string | null | undefined)[], overrides?: readonly (TerrainPhysicalMaterialOverrides | undefined)[]): TerrainUniforms {
   const tints = Array.from({ length: TERRAIN_RENDER_LAYERS }, () => new Vector4(0, 0, 0, 0));
   const wetness = new Array<number>(TERRAIN_RENDER_LAYERS).fill(0);
   physicalMaterials.slice(0, TERRAIN_RENDER_LAYERS).forEach((id, index) => {
-    const profile = id ? resolvePhysicalMaterial(id).deformation : undefined;
+    const profile = id ? resolveTerrainPhysicalMaterial(id, overrides?.[index]).deformation : undefined;
     if (!profile || profile.maxDepth <= 0) return;
     tints[index]!.set(profile.tint[0], profile.tint[1], profile.tint[2], profile.tintStrength);
     wetness[index] = profile.wetness;

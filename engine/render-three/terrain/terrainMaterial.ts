@@ -115,6 +115,7 @@ export interface TerrainLayerInput {
   roughnessInAlpha?: boolean;
   /** Physical material id: its soft-surface profile tints this layer's tracks. */
   physicalMaterial?: string | null;
+  physicalMaterialOverrides?: import("../../terrain/terrainPhysicalMaterial").TerrainPhysicalMaterialOverrides;
 }
 
 export interface TerrainMaterialInputs {
@@ -514,7 +515,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   Object.assign(uniforms, deformation.uniforms);
   const litUniforms: TerrainUniforms = {
     ...uniforms,
-    ...terrainDeformationLayerUniforms(inputs.layers.map((layer) => layer.physicalMaterial)),
+    ...terrainDeformationLayerUniforms(inputs.layers.map((layer) => layer.physicalMaterial), inputs.layers.map((layer) => layer.physicalMaterialOverrides)),
   };
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });

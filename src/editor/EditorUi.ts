@@ -4564,6 +4564,8 @@ export class EditorUi {
         this.app.setSelectedLandscapeLayerMaterial(layerId, materialId),
       addSelectedLandscapeLayer: () => this.app.addSelectedLandscapeLayer(),
       removeSelectedLandscapeLayer: (layerId) => this.app.removeSelectedLandscapeLayer(layerId),
+      setSelectedLandscapeLayerPhysicalOverrides: (layerId, overrides) =>
+        this.app.setSelectedLandscapeLayerPhysicalOverrides(layerId, overrides),
       setSelectedLandscapeLayerPhysicalMaterial: (layerId, physicalMaterialId) =>
         this.app.setSelectedLandscapeLayerPhysicalMaterial(layerId, physicalMaterialId),
       importSelectedLandscapeHeightmap: (rgba, width, height, heightRange) =>

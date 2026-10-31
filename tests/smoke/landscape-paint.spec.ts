@@ -104,6 +104,38 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   // The dirt layer also becomes mud for vehicles (TERRAIN_DEFORMATION Faz 1b).
   await page.locator("[data-landscape-layer-physical-material]").selectOption("mud");
   await expect(page.locator("[data-landscape-layer-physical-material]")).toHaveValue("mud");
+  const traction = page.locator('[data-landscape-physics="tractionCoefficient"]');
+  await expect(traction).toHaveValue("0.4");
+  await traction.fill("0.75");
+  await traction.press("Tab");
+  const depth = page.locator('[data-landscape-physics="maxDepth"]');
+  await depth.fill("0.15");
+  await depth.press("Tab");
+  await depth.fill("99");
+  await depth.press("Tab");
+  await expect(depth).toHaveValue("0.15");
+  await page.locator("[data-landscape-physics-reset]").click();
+  await expect(traction).toHaveValue("0.4");
+  await expect(depth).toHaveValue("0.22");
+  await page.getByTestId("editor-undo").click();
+  await expect(traction).toHaveValue("0.75");
+  await expect(depth).toHaveValue("0.15");
+  await page.getByTestId("editor-redo").click();
+  await expect(traction).toHaveValue("0.4");
+  await page.getByTestId("editor-undo").click();
+  await expect(traction).toHaveValue("0.75");
+  await page.locator("[data-landscape-layer-physical-material]").selectOption("snow");
+  await expect(traction).toHaveValue("0.3");
+  await page.getByTestId("editor-undo").click();
+  await expect(traction).toHaveValue("0.75");
+  await expect(depth).toHaveValue("0.15");
+  await page.locator('[data-landscape-layer="grass"]').click();
+  await expect(page.locator('[data-landscape-physics-panel]')).toHaveCount(0);
+  await page.locator('[data-landscape-layer="dirt"]').click();
+  await expect(traction).toHaveValue("0.75");
+  await page.locator('[data-landscape-physics-panel] summary').click();
+  await expect(page.locator('[data-landscape-physics="recoveryRate"]')).toBeVisible();
+  await page.locator('[data-landscape-physics-panel]').screenshot({ path: "test-results/landscape-layer-physics.png" });
   await page.waitForTimeout(1500);
 
   await saveLayout(page);
@@ -117,6 +149,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   // The assigned layer material persisted into the sidecar.
   expect(dirt?.material).toBe(assignedMaterial.id);
   expect(dirt?.physicalMaterial).toBe("mud");
+  expect(dirt?.physicalMaterialOverrides).toEqual({ tractionCoefficient: 0.75, maxDepth: 0.15 });
   expect(grass?.physicalMaterial).toBeUndefined();
 
   await page.goto(`/?editor&landscapePaintReload=${Date.now()}`);
@@ -135,6 +168,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   expect(typeof reloadedDirt?.material).toBe("string");
   expect((reloadedDirt?.material ?? "").length).toBeGreaterThan(0);
   expect(reloadedDirt?.physicalMaterial).toBe("mud");
+  expect(reloadedDirt?.physicalMaterialOverrides).toEqual({ tractionCoefficient: 0.75, maxDepth: 0.15 });
   await page.locator('[data-landscape-layer="dirt"]').click();
   await expect(page.locator("[data-landscape-layer-physical-material]")).toHaveValue("mud");
 

@@ -97,7 +97,7 @@ function terrainLayerColors(
 }
 
 function terrainLayerInputs(
-  layers: readonly { id: string; color?: string; physicalMaterial?: string | null }[],
+  layers: readonly { id: string; color?: string; physicalMaterial?: string | null; physicalMaterialOverrides?: import("../terrain/terrainPhysicalMaterial").TerrainPhysicalMaterialOverrides }[],
   worldSize: number,
   layerColors?: LandscapeLayerColors,
   layerTextures?: LandscapeLayerTexture[],
@@ -110,6 +110,7 @@ function terrainLayerInputs(
       texture: texture?.texture ?? null, color, scale: texture?.textureScale ?? (texture?.tiling ?? 1) / worldSize,
       normalTexture: texture?.normalTexture ?? null,
       physicalMaterial: layers[index]?.physicalMaterial ?? null,
+      ...(layers[index]?.physicalMaterialOverrides ? { physicalMaterialOverrides: layers[index]!.physicalMaterialOverrides } : {}),
       roughness: texture?.roughness ?? 1,
       roughnessInAlpha: texture?.roughnessInAlpha ?? false,
     };

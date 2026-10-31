@@ -17,6 +17,7 @@ import { compareWorldCellKeys, normalizeWorldPartitionSettings, type WorldPartit
 import { parseWorldCellKey } from "@engine/world/worldGrid";
 import { worldMapHeightAt, worldMapFocusPosition, type WorldMapHeights, type WorldMapRect } from "@engine/world/worldMapView";
 import { SCENE_CAMERA_FAR, setCameraFarOverride } from "@engine/render-three/camera";
+import { normalizeTerrainPhysicalOverrides, type TerrainPhysicalMaterialOverrides } from "@engine/terrain/terrainPhysicalMaterial";
 import { levelTerrainPath, parseTileKey, terrainTilePath, terrainTileWorldSize, terrainWeightBlockCount, tileKey, type TerrainTileData, type WorldTerrainDef } from "@engine/terrain/terrainTypes";
 import { applyTerrainLayerState, createTerrainLayerAddition, createTerrainLayerRemoval } from "@engine/terrain/terrainLayers";
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
@@ -1059,6 +1060,7 @@ export interface LandscapeLayerView {
   material: string | null;
   /** Built-in physical material id for vehicle surface response, or `null` (neutral). */
   physicalMaterial: string | null;
+  physicalMaterialOverrides?: TerrainPhysicalMaterialOverrides;
 }
 
 /** A landscape that references a multi-tile World Terrain, as the Details panel shows it. */
@@ -11280,6 +11282,7 @@ export class SceneApp {
           : presetColor,
         material: materialId,
         physicalMaterial: ("physicalMaterial" in layer && layer.physicalMaterial) || null,
+        ...("physicalMaterialOverrides" in layer && layer.physicalMaterialOverrides ? { physicalMaterialOverrides: { ...layer.physicalMaterialOverrides } } : {}),
       };
     });
   }
@@ -11777,25 +11780,52 @@ export class SceneApp {
     const document = this.worldTerrains.get(actor.id);
     const session = document ? this.worldTerrainSessions.get(document) : undefined;
     if (!session) return;
-    const findLayer = (): { physicalMaterial?: string | null } | undefined =>
+    const findLayer = () =>
       session.world.def.layers.find((entry) => entry.id === layerId);
     const layer = findLayer();
     if (!layer || (layer.physicalMaterial ?? null) === next) return;
     const before = layer.physicalMaterial;
-    const apply = (value: string | null | undefined): void => {
+    const beforeOverrides = layer.physicalMaterialOverrides;
+    const apply = (value: string | null | undefined, overrides?: TerrainPhysicalMaterialOverrides): void => {
       const layer = findLayer();
       if (!layer || !this.layout?.landscapes?.some((entry) => entry.id === actor.id)) return;
+      if (overrides) layer.physicalMaterialOverrides = { ...overrides };
+      else delete layer.physicalMaterialOverrides;
       if (value) layer.physicalMaterial = value;
       else delete layer.physicalMaterial;
       session.markDefinitionDirty();
       this.emitSceneObjectsChanged();
+      this.emitSelectionChanged();
       this.scheduleAutoSave();
     };
     this.executeCommand({
       label: next ? "Assign Landscape Layer Physical Material" : "Clear Landscape Layer Physical Material",
       redo: () => apply(next),
-      undo: () => apply(before),
+      undo: () => apply(before, beforeOverrides),
     });
+  }
+
+  setSelectedLandscapeLayerPhysicalOverrides(layerId: string, input: TerrainPhysicalMaterialOverrides): void {
+    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const document = actor ? this.worldTerrains.get(actor.id) : undefined;
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    const layer = document?.def.layers.find((entry) => entry.id === layerId);
+    if (!actor || !session || !layer?.physicalMaterial) return;
+    const next = normalizeTerrainPhysicalOverrides(input);
+    const before = { ...layer.physicalMaterialOverrides };
+    if (JSON.stringify(before) === JSON.stringify(next)) return;
+    const apply = (value: TerrainPhysicalMaterialOverrides): void => {
+      const target = session.world.def.layers.find((entry) => entry.id === layerId);
+      if (!target || !this.layout?.landscapes?.some((entry) => entry.id === actor.id)) return;
+      if (Object.keys(value).length) target.physicalMaterialOverrides = { ...value };
+      else delete target.physicalMaterialOverrides;
+      session.markDefinitionDirty();
+      this.emitSceneObjectsChanged();
+      this.emitSelectionChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label: "Change Landscape Layer Physics", redo: () => apply(next), undo: () => apply(before) });
   }
 
   /** Undoable: every vertex becomes 100 % `layerId`. A multi-tile Landscape loads all its tiles first. */

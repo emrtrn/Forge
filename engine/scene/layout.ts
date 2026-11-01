@@ -1093,6 +1093,7 @@ export interface LakeBedRecipe {
 }
 
 export interface LayoutLakeWaterBody {
+  underwater?: import("./lakeUnderwater").LakeUnderwaterSettings;
   schema: 1;
   kind: "lake";
   mode: "fillExisting";

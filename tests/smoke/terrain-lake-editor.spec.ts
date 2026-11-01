@@ -679,6 +679,28 @@ test("Lake multiscale surface animates reflected light, preserves shore and pers
 
 // L2 QA: no-contact tyre/plane intersection, stationary/air/submerged/island
 // rejection, motion/slip wavefronts, ageing, snapshot/direct shader and unchanged terrain.
+test("Lake Underwater controls persist through undo Save Reload and work in runtime", async ({ page, request }, info) => {
+  test.setTimeout(300_000);
+  const { errors } = await setup(page, request, true, false, false, false, false, true);
+  await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "underwater");
+  const enabled = page.locator("[data-lake-underwater-enabled]"); await expect(enabled).toBeChecked();
+  const density = page.locator('[data-lake-underwater="fogDensity"]'); await density.fill("1.4"); await density.press("Enter"); await ready(page);
+  await enabled.uncheck(); await ready(page); await page.getByTestId("editor-undo").click(); await ready(page); await expect(enabled).toBeChecked();
+  await save(page);
+  expect(JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")).waterBodies[0].underwater).toMatchObject({ fogDensity: 1.4 });
+  await page.reload({ waitUntil: "domcontentloaded" }); await ready(page, 120_000);
+  await page.locator('[data-object-id="lake:0"]').click(); await expandLake(page, "underwater"); await expect(density).toHaveValue("1.4");
+  // Underwater must create the runtime composer even without a global Post Process actor.
+  const runtimeSource = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8")); delete runtimeSource.postProcess;
+  await writeFile(smokePublicPath(LEVEL), JSON.stringify(runtimeSource));
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean((window as any).__lakeQA)); await ready(page, 120_000);
+  const runtime = await page.evaluate(() => (window as any).__lakeQA.underwaterFrame());
+  expect(runtime.settings.fogDensity).toBe(1.4); expect(runtime.stats.activeBody).toBeTruthy(); expect(runtime.stats.maskDraws).toBe(2); expect(runtime.glError).toBe(0);
+  await page.screenshot({ path: info.outputPath("underwater-runtime.png") }); expect(errors).toEqual([]);
+});
+
 test("Lake wheel ripples spread and decay independently of mud and reject false surface contacts", async ({ page, request }, info) => {
   test.setTimeout(240_000);
   const { errors } = await setup(page, request, true, false, false, false, false, true);

@@ -1,3 +1,5 @@
+import { LakeUnderwaterPass, UnderwaterDepthPass, ensureUnderwaterDepth, underwaterQuality } from "./lakeUnderwaterPass";
+import type { QualitySettings } from "../perf/qualityProfiles";
 import {
   ACESFilmicToneMapping,
   DepthTexture,
@@ -395,11 +397,13 @@ function createFloatDepthTarget(): WebGLRenderTarget {
 }
 
 /**
- * Shared composer backbone for editor/runtime post-process work. F2.0 only owns
- * RenderPass/OutputPass and lets callers inject editor-only passes before output.
+ * Shared editor/runtime composer: beauty, stable depth, underwater and output.
+ * Callers supply optional scene effects and editor passes before final output.
  */
 export class PostProcessPipeline {
   private readonly waterScene: WaterSceneSnapshot;
+  private readonly underwater: LakeUnderwaterPass;
+  private readonly underwaterDepth: UnderwaterDepthPass;
   private readonly composer: EffectComposer;
   private readonly renderPass: RenderPass;
   private readonly outputPass: OutputPass;
@@ -427,6 +431,10 @@ export class PostProcessPipeline {
     this.composer = new EffectComposer(options.renderer, this.floatDepth ? createFloatDepthTarget() : undefined);
     this.renderPass = new RenderPass(options.scene, options.camera);
     this.composer.addPass(this.renderPass);
+    this.underwater = new LakeUnderwaterPass(options.scene, options.camera);
+    this.underwaterDepth = new UnderwaterDepthPass(this.underwater);
+    this.underwater.enabled = this.underwaterDepth.enabled = false;
+    this.composer.addPass(this.underwaterDepth); this.composer.addPass(this.underwater);
     this.outputPass = new OutputPass();
     this.composer.addPass(this.outputPass);
     this.composer.setSize(options.width, options.height);
@@ -447,10 +455,10 @@ export class PostProcessPipeline {
       pass.dispose();
     }
     this.effectPasses = passes;
-    const insertIndex = this.finalStageStartIndex();
-    passes.forEach((pass, offset) => {
-      this.composer.insertPass(pass, insertIndex + offset);
-    });
+    for (const pass of passes) {
+      const index = pass instanceof ForgeGtaoPass ? this.composer.passes.indexOf(this.underwater) : this.finalStageStartIndex();
+      this.composer.insertPass(pass, index);
+    }
   }
 
   setAntialiasPass(pass: Pass | null): void {
@@ -465,7 +473,18 @@ export class PostProcessPipeline {
     }
   }
 
+  requiresRendering(): boolean {
+    this.underwater.prepare(this.renderPass.camera, 0);
+    if (!this.underwater.enabled) this.underwaterDepth.dispose();
+    return this.floatDepth || this.effectPasses.length > 0 || this.injectedPasses.length > 0 || !!this.antialiasPass || this.underwater.enabled;
+  }
+  get underwaterStats() { return this.underwater.stats; }
+  setUnderwaterQuality(settings: QualitySettings, globalDof = false): void { this.underwater.quality = underwaterQuality(settings, globalDof); }
   render(deltaSeconds: number): void {
+    this.underwater.prepare(this.renderPass.camera, deltaSeconds);
+    this.underwaterDepth.enabled = this.underwater.enabled;
+    if (!this.underwater.enabled) this.underwaterDepth.dispose();
+    if (this.underwater.enabled) ensureUnderwaterDepth([this.composer.renderTarget1, this.composer.renderTarget2]);
     this.waterScene.begin(this.renderPass.camera, [this.composer.renderTarget1, this.composer.renderTarget2]);
     this.composer.render(deltaSeconds);
   }
@@ -485,7 +504,7 @@ export class PostProcessPipeline {
   }
 
   dispose(): void {
-    this.waterScene.dispose();
+    this.waterScene.dispose(); this.underwaterDepth.dispose(); this.underwater.dispose();
     for (const pass of this.effectPasses) pass.dispose();
     for (const pass of this.injectedPasses) pass.dispose();
     this.antialiasPass?.dispose();

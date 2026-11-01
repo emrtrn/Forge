@@ -13328,6 +13328,7 @@ export class SceneApp {
     applyPostProcessToneMapping(this.renderer, resolved);
     this.applySkyPostProcessExposure(resolved);
     const { width, height } = this.viewportSize();
+    this.postProcessPipeline?.setUnderwaterQuality(this.editorQuality, resolved?.dof.enabled ?? false);
     this.postProcessPipeline?.setEffectPasses(
       createPostProcessEffectPasses(resolved, {
         scene: this.scene,

@@ -1,3 +1,4 @@
+import { resolveLakeUnderwater } from "@engine/scene/lakeUnderwater";
 import { LakeFoamStore } from "./lakeFoamStore";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
 import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabilities/worldStreamingModule";
@@ -1895,7 +1896,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // Simulation time, not real time: the frame is still drawn while the world
       // is held (the GPU sweep depends on exactly that), but an animated pass must
       // not keep advancing over a scene that has stopped.
-      if (this.postProcessPipeline && !this.gpuSweepSession.bypassPostProcess) {
+      if (this.postProcessPipeline && !this.gpuSweepSession.bypassPostProcess && this.postProcessPipeline.requiresRendering()) {
         this.postProcessPipeline.render(simulationMs / 1000);
       }
       else this.renderer.render(this.scene, this.camera);
@@ -6601,7 +6602,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const resolved = authored ? applyQualityToPostProcess(authored, this.qualitySettings) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
     this.environment.applySkyPostProcessExposure(resolved, this.layout);
-    if (!hasPostProcessEffectPasses(resolved) && !this.farViewMode) {
+    if (!hasPostProcessEffectPasses(resolved) && !this.farViewMode && !this.layout?.waterBodies?.some(lake => !lake.hidden && resolveLakeUnderwater(lake).enabled)) {
       this.postProcessPipeline?.dispose();
       this.postProcessPipeline = null;
       return;
@@ -6618,6 +6619,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       height: window.innerHeight,
       floatDepth: this.farViewMode,
     });
+    this.postProcessPipeline.setUnderwaterQuality(this.qualitySettings, resolved?.dof.enabled ?? false);
     this.postProcessPipeline.setEffectPasses(
       createPostProcessEffectPasses(resolved, {
         scene: this.scene,

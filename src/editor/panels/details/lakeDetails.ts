@@ -1,3 +1,4 @@
+import { LAKE_UNDERWATER_RANGES, resolveLakeUnderwater } from "@engine/scene/lakeUnderwater";
 import { renderLakeGeometryFoamDetails } from "./lakeGeometryFoamDetails";
 import type { SceneApp } from "@/scene/SceneApp";
 import { LAKE_APPEARANCE_RANGES, LAKE_SURFACE_WAVE_DEFAULTS, LAKE_WHEEL_RIPPLE_DEFAULTS, LAKE_WHEEL_WET_TRAIL_DEFAULTS, resolveLakeAppearance } from "@engine/scene/waterBody";
@@ -42,6 +43,16 @@ export function renderLakeDetails(body: HTMLElement, app: SceneApp, replace = fa
   if (lake) {
     const a = resolveLakeAppearance(lake);
     renderLakeGeometryFoamDetails(section, app, lake, !!state.draft);
+    const underwater = resolveLakeUnderwater(lake);
+    section.insertAdjacentHTML("beforeend", group("underwater", "Underwater", `
+      <div class="detail-hint">Kamera suya girdiğinde göl renkleriyle uyumlu sis, hafif dalgalanma ve su parçacıkları.</div>
+      <label class="detail-toggle"><input type="checkbox" data-lake-underwater-enabled ${underwater.enabled ? "checked" : ""} ${disabled}> Enabled</label>
+      ${Object.entries(LAKE_UNDERWATER_RANGES).map(([key, range]) => `<label class="detail-row"><span>${({fogDensity:"Fog Density",distortionStrength:"Distortion",blurStrength:"Soft Blur",particleDensity:"Particles"} as Record<string,string>)[key]}</span><input type="number" data-lake-underwater="${key}" step="0.05" min="${range[0]}" max="${range[1]}" value="${underwater[key as keyof typeof LAKE_UNDERWATER_RANGES]}" ${disabled}></label>`).join("")}
+    `));
+    section.querySelector<HTMLInputElement>("[data-lake-underwater-enabled]")?.addEventListener("change", event => app.editLake({ underwater: { ...lake.underwater, enabled: (event.target as HTMLInputElement).checked } }));
+    section.querySelectorAll<HTMLInputElement>("[data-lake-underwater]").forEach(input => input.addEventListener("change", () => {
+      const value = Number(input.value); if (Number.isFinite(value)) app.editLake({ underwater: { ...lake.underwater, [input.dataset.lakeUnderwater!]: value } });
+    }));
     section.insertAdjacentHTML("beforeend", group("basic", "Surface", `
       <label class="detail-row"><span>Name</span><input data-lake-name aria-label="Lake Name" value="${escape(lake.name ?? lake.id)}" ${disabled}></label>
       ${field("Water Height (m)", "surfaceLevel", lake.surfaceLevel)}

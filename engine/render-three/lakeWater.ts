@@ -1,3 +1,5 @@
+import { LakeUnderwaterBody } from "./lakeUnderwaterVolume";
+import type { LakeSurfaceQuery } from "../terrain/lakeInteraction";
 import { createWaterWheelFoamUniforms, updateWaterWheelFoamUniforms, WATER_WHEEL_FOAM_GLSL } from "./waterWheelFoam";
 import { lakeFoamTexture, LAKE_GEOMETRY_FOAM_GLSL } from "./lakeFoamTexture";
 import type { LakeFoamData } from "../scene/lakeFoamBake";
@@ -26,6 +28,7 @@ import { createLakeRefractionMask, LAKE_REFRACTION_GLSL } from "./lakeRefraction
 /** Bounded vertical waves over the exact wet mesh; the shoreline stays pinned. */
 export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private source: PlanarReflectionSource | null;
+  private readonly underwaterBody: LakeUnderwaterBody;
   private readonly strength: number;
   private foamTexture: DataTexture | null;
   private geometryFoamTexture: DataArrayTexture | null;
@@ -38,7 +41,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private readonly waveOverrides = new Map<"normal" | "depth", Mesh<BufferGeometry, MeshNormalMaterial | MeshDepthMaterial>>();
   constructor(private readonly lake: LayoutLakeWaterBody, private readonly data: LakeGeometry, normal: Texture | null,
     source: PlanarReflectionSource | null = null, bakedFoam?: LakeFoamData, quality: LakeQuality = FULL_LAKE_QUALITY,
-    prepared?: { geometry: BufferGeometry; foam: DataTexture | null }) {
+    prepared?: { geometry: BufferGeometry; foam: DataTexture | null; query?: LakeSurfaceQuery }) {
     const appearance = resolveLakeAppearance(lake);
     const contactSettings = undefined; // Manual obstacle contacts are retired; immutable geometry bake is the only source.
     const foam = prepared ? prepared.foam : quality.foamAllowed && appearance.foamEnabled ? createLakeFoamMask(lake, data, appearance.foamWidth) : null;
@@ -273,17 +276,33 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
           float alpha=coverage+(1.-coverage)*gl_FragColor.a;
           gl_FragColor=vec4((foamColor*coverage+gl_FragColor.rgb*gl_FragColor.a*(1.-coverage))/max(alpha,.00001),alpha);
         }
+        if(viewDirection.y<0.) {
+          // From below, shade only the interface. The camera-volume pass owns
+          // absorption/scattering, so do not composite the bed column twice.
+          float cosine=clamp(abs(dot(normal,viewDirection)),0.,1.);
+          float critical=1.333*1.333*(1.-cosine*cosine);
+          float internalReflection=max(waterFresnel(cosine),smoothstep(.97,1.03,critical));
+          vec3 internal=max(deepColor*.5,waterReflectedEnvironment(vWorldPosition,reflect(-viewDirection,-normal),roughness)*.35);
+          if(waterSceneEnabled>.5) {
+            vec3 beyond=texture2D(waterSceneColor,screenUv).rgb;
+            gl_FragColor=vec4(mix(beyond,internal,internalReflection),1.);
+          } else gl_FragColor=vec4(internal,internalReflection);
+        }
         // Snapshot composition is opaque: fade its radiance to the real bed,
         // not alpha (which would blend an already composited bed a second time).
         // This includes foam, so it cannot replace the edge with a white line.
-        if(waterSceneEnabled>.5) {
-          gl_FragColor.rgb=mix(visibleBed,gl_FragColor.rgb,shoreBlend);
-        } else gl_FragColor.a*=shoreBlend;
+        if(viewDirection.y>=0.) {
+          if(waterSceneEnabled>.5) gl_FragColor.rgb=mix(visibleBed,gl_FragColor.rgb,shoreBlend);
+          else gl_FragColor.a*=shoreBlend;
+        }
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
         }` }));
     this.waveParameters = waves;
+    this.underwaterBody = new LakeUnderwaterBody(this, lake, data, waves, prepared?.query);
+    this.addEventListener("added", () => this.underwaterBody.attach());
+    this.addEventListener("removed", () => this.underwaterBody.detach());
     // GPU displacement never updates CPU geometry bounds automatically.
     geometry.boundingBox!.min.y -= waves.height; geometry.boundingBox!.max.y += waves.height;
     geometry.boundingSphere!.radius += waves.height;
@@ -306,6 +325,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const started = performance.now();
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
+      this.underwaterBody.attach();
       this.foamMaterial.update(this.quality.foamAllowed && (this.material.uniforms.wheelFoamCount!.value > 0 || !!this.foamTexture || !!this.geometryFoamTexture || (waves.height > 0 && this.material.uniforms.crestFoamStrength!.value > 0)), scene, camera);
       this.material.uniforms.time!.value = (performance.now() - started) / 1000;
       if (!this.externalWaveTime) this.material.uniforms.surfaceWaveTime!.value = lakeWaveTime(performance.now() / 1000, waves);
@@ -414,7 +434,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms.planarReflectionEnabled!.value = binding ? 1 : 0;
     this.material.uniforms.reflectionStrength!.value = this.strength;
   }
-  dispose() { this.setWheelFoam([]); this.setWheelRipples([]); for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
+  dispose() { this.underwaterBody.dispose(); this.setWheelFoam([]); this.setWheelRipples([]); for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
     this.refractionMask?.dispose(); this.refractionMask = null; this.material.uniforms.lakeRefractionMask!.value = null;
     this.foamMaterial.dispose();
     this.foamTexture?.dispose(); this.foamTexture = null; this.material.uniforms.foamMask!.value = null;

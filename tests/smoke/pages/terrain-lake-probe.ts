@@ -20,7 +20,7 @@ export function installLakeProbe(app: unknown) {
     riverWaterObjects?: RiverWaterObject[];
     selection: { kind: string; index?: number } | null;
     renderer: WebGLRenderer; scene: Scene; frameHandle: number; landscapeObjects: Group[];
-    postProcessPipeline: { render(dt: number): void } | null;
+    postProcessPipeline: { render(dt: number): void; underwaterStats?: unknown } | null;
     worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
     getLakeEditorState?: SceneApp["getLakeEditorState"];
     getRiverGeometryFoamState?: SceneApp["getRiverGeometryFoamState"];
@@ -28,6 +28,12 @@ export function installLakeProbe(app: unknown) {
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    underwaterFrame() {
+      cancelAnimationFrame(a.frameHandle);
+      a.camera.position.set(-20,11,-12); a.camera.lookAt(-20,11,-30); a.camera.updateMatrixWorld(true);
+      a.postProcessPipeline?.render(0);
+      return { stats: a.postProcessPipeline?.underwaterStats ?? null, settings: a.layout?.waterBodies?.[0]?.underwater, glError: a.renderer.getContext().getError() };
+    },
     holdRiverPreparation() {
       const target = app as { loadRiverWaterNormalTexture: (id: string) => Promise<unknown> };
       const original = target.loadRiverWaterNormalTexture;

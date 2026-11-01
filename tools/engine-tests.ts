@@ -1,3 +1,4 @@
+import { registerLakeUnderwaterTests } from "../tests/engine/lakeUnderwater.test";
 import { registerWaterWheelInteractionTests } from "../tests/engine/waterWheelInteraction.test";
 import { registerRiverPlanarReflectionTests } from "../tests/engine/riverPlanarReflection.test";
 import { registerRiverEffectsTests } from "../tests/engine/riverEffects.test";
@@ -1301,6 +1302,7 @@ await registerTerrainRiverWaterTests(checkAsync);
 await registerRiverPlanarReflectionTests(checkAsync);
 await registerTerrainLakeWaterTests(checkAsync);
 await registerLakeInteractionTests(checkAsync);
+await registerLakeUnderwaterTests(checkAsync);
 await registerWaterWheelInteractionTests(checkAsync);
 await registerLakeQualityTests(checkAsync);
 await registerLakeSchedulingTests(checkAsync);
@@ -25320,17 +25322,17 @@ check("createPostProcessAntialiasPass creates SMAA only when enabled", () => {
 
 check("PostProcessPipeline keeps effect, outline, SMAA, output order and lifecycles", () => {
   const pipeline = createPostProcessPipelineForTest();
-  assert.deepEqual(postProcessPipelinePassLabels(pipeline), ["RenderPass", "OutputPass"]);
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), ["RenderPass", "UnderwaterDepthPass", "LakeUnderwaterPass", "OutputPass"]);
 
   const outline = new TrackedPass("outline");
   pipeline.addPassBeforeOutput(outline);
-  assert.deepEqual(postProcessPipelinePassLabels(pipeline), ["RenderPass", "outline", "OutputPass"]);
+  assert.deepEqual(postProcessPipelinePassLabels(pipeline), ["RenderPass", "UnderwaterDepthPass", "LakeUnderwaterPass", "outline", "OutputPass"]);
 
   const bloom = new TrackedPass("bloom");
   const vignette = new TrackedPass("vignette");
   pipeline.setEffectPasses([bloom, vignette]);
   assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
-    "RenderPass",
+    "RenderPass", "UnderwaterDepthPass", "LakeUnderwaterPass",
     "bloom",
     "vignette",
     "outline",
@@ -25340,7 +25342,7 @@ check("PostProcessPipeline keeps effect, outline, SMAA, output order and lifecyc
   const smaa = new TrackedPass("smaa");
   pipeline.setAntialiasPass(smaa);
   assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
-    "RenderPass",
+    "RenderPass", "UnderwaterDepthPass", "LakeUnderwaterPass",
     "bloom",
     "vignette",
     "outline",
@@ -25353,7 +25355,7 @@ check("PostProcessPipeline keeps effect, outline, SMAA, output order and lifecyc
   assert.equal(bloom.disposed, 1);
   assert.equal(vignette.disposed, 1);
   assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
-    "RenderPass",
+    "RenderPass", "UnderwaterDepthPass", "LakeUnderwaterPass",
     "grain",
     "outline",
     "smaa",
@@ -25363,7 +25365,7 @@ check("PostProcessPipeline keeps effect, outline, SMAA, output order and lifecyc
   pipeline.setAntialiasPass(null);
   assert.equal(smaa.disposed, 1);
   assert.deepEqual(postProcessPipelinePassLabels(pipeline), [
-    "RenderPass",
+    "RenderPass", "UnderwaterDepthPass", "LakeUnderwaterPass",
     "grain",
     "outline",
     "OutputPass",

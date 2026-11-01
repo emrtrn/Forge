@@ -37,6 +37,7 @@
       "id": "snow",
       "name": "Snow",
       "color": "#dce7ec",
+      "material": "lt-snow",
       "physicalMaterial": "snow"
     },
     {
@@ -80,7 +81,7 @@
     },
     {
       "key": "1_1",
-      "minHeight": -2.546099901199341,
+      "minHeight": -2.5430076122283936,
       "maxHeight": 1.058609962463379
     }
   ],

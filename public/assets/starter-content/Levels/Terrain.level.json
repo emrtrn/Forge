@@ -147,14 +147,6 @@
       "name": "River Water 1",
       "coordinateSpace": "world",
       "surfaceLevel": -1,
-      "flowSpeed": 0.6,
-      "surfaceStrength": 1,
-      "refractionStrength": 1,
-      "normalScale": 1,
-      "opacity": 0.65,
-      "bedVisibility": 0.8,
-      "absorptionDistance": 3,
-      "waveAmplitude": 0.1,
       "contactFoam": {
         "enabled": true,
         "shoreWidth": 0.6,
@@ -164,27 +156,25 @@
       },
       "geometryFoam": {
         "enabled": true,
-        "width": 1,
-        "strength": 0.5,
-        "scale": 0.5,
-        "speed": 1,
-        "bake": {
-          "manifest": "assets/starter-content/Levels/Terrain.foam/f036ed8cf24b1fe7c57cbcb4f07838509b8deab408ffea2def27cc17d241d5fd.foam.json",
-          "fingerprint": "c9a24e1c3d8a5659798d10ba1c4c4a474ccede50044cc7ed6a70620e0f92761b"
-        }
+        "width": 0.4,
+        "strength": 0.8,
+        "scale": 0.8,
+        "speed": 0.3
       },
       "caustics": {
         "enabled": true,
-        "strength": 0.5,
-        "scale": 1,
-        "speed": 1,
-        "depthFade": 1
+        "strength": 1,
+        "scale": 1.5,
+        "speed": 0.25,
+        "depthFade": 4
       },
       "shoreWetness": {
         "enabled": true,
         "width": 1,
         "strength": 0.65
-      }
+      },
+      "reflectionQuality": "medium",
+      "reflectionStrength": 0.8
     }
   ],
   "waterBodies": [
@@ -210,6 +200,9 @@
         102.17214733788103
       ],
       "surfaceLevel": -1,
+      "underwater": {
+        "fogDensity": 0.5
+      },
       "geometryFoam": {
         "enabled": true,
         "width": 2,

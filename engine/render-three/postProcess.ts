@@ -2,6 +2,7 @@ import { LakeUnderwaterPass, UnderwaterDepthPass, ensureUnderwaterDepth, underwa
 import type { QualitySettings } from "../perf/qualityProfiles";
 import {
   ACESFilmicToneMapping,
+  Color,
   DepthTexture,
   FloatType,
   HalfFloatType,
@@ -32,6 +33,7 @@ import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
 import type { ResolvedPostProcess } from "@engine/scene/postProcess";
 import { renderSceneWithTerrainOverride } from "./terrain/terrainRenderer";
 import { renderSceneWithLakeOverride } from "./lakeWater";
+import { AoSurfaceMaterials } from "./aoSurfaceMaterials";
 import { WaterSceneSnapshot } from "./waterSceneSnapshot";
 
 export {
@@ -184,7 +186,9 @@ export function writesSceneDepth(object: Object3D): boolean {
  * self-occluding). Visibility is restored by the base pass within the same frame
  * (after the beauty RenderPass), so nothing else is affected.
  */
-class ForgeGtaoPass extends GTAOPass {
+export class ForgeGtaoPass extends GTAOPass {
+  private readonly surfaces = new AoSurfaceMaterials();
+  override dispose(): void { this.surfaces.dispose(); super.dispose(); }
   /** Overrides GTAOPass's internal (untyped) normal-pass visibility cull. */
   _overrideVisibility(): void {
     const cache = (this as unknown as { _visibilityCache: Object3D[] })._visibilityCache;
@@ -220,7 +224,19 @@ class ForgeGtaoPass extends GTAOPass {
       base.apply(this, args);
       return;
     }
-    renderSceneWithLakeOverride(this.scene, "normal", () => renderSceneWithTerrainOverride(this.scene, "normal", () => base.apply(this, args)));
+    const renderer = args[0];
+    const override = this.scene.overrideMaterial;
+    const autoClear = renderer.autoClear;
+    const alpha = renderer.getClearAlpha();
+    const color = renderer.getClearColor(new Color()).clone();
+    try {
+      renderSceneWithLakeOverride(this.scene, "normal", () => renderSceneWithTerrainOverride(this.scene, "normal", () => this.surfaces.render(this.scene, () => base.apply(this, args))));
+    } finally {
+      this.scene.overrideMaterial = override;
+      renderer.autoClear = autoClear;
+      renderer.setClearColor(color, alpha);
+      (this as unknown as { _restoreVisibility(): void })._restoreVisibility();
+    }
   }
 }
 

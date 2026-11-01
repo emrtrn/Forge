@@ -1,7 +1,7 @@
 # Su ve yaprak arkasından görünen AO: uygulama planı
 
 Tarih: 2026-11-01  
-Durum: Plan hazır; uygulama başlamadı.  
+Durum: Kısmi uygulama teslim edildi; su ve performans/görsel kabulü açık.
 Kapsam: Forge ortak editor/runtime render katmanı.
 
 ## 1. Amaç ve görülen sorun
@@ -130,3 +130,12 @@ Mevcut AO geçişinde yüz yönü, alfa kesimi ve su yüzeyi kapsamını düzelt
 
 Sonuçları docs/reports/AO_SURFACE_OCCLUSION_FIX_REPORT.md içine kanıtlarla yaz ve plan durumunu güncelle. Authored sahne/terrain/model verilerine dokunma. Branch, commit, push, deployment veya onaysız güvenlik taraması yapma. Son yanıtta değişikliği, test sonuçlarını, görsel/performans kabul durumunu ve kalan işleri kısa biçimde bildir.
 ```
+
+
+## 10. Uygulama durumu (2026-11-01)
+
+- A — Kısmi: yaprak hatası gerçek WebGL normal/depth fixture ile yeniden üretildi; su matrisi eksik.
+- B — Kısmi: slot bazlı side/alfa malzemeleri, fade aktarımı, cache/dispose ve try/finally uygulandı; keyfi özel shader ve tüm deformasyonların görsel kabulü yapılmadı.
+- C — Kısmi/karar gerekli: mevcut kompozit su slotları yüz yönü aktarımından yararlanır; snapshot fallback ve geçirgen su katman ayrımı çözülmedi. Ek geçiş/hedef seçenekleri raporda; 4.C.6 gereği uygulanmadı.
+- D — Kısmi: engine regresyonları, odaklı Playwright ve önce/sonra çıktılar mevcut; tam su/görsel matrisi ve yoğun foliage/geniş su GPU performansı eksik.
+- Teslim: `docs/reports/AO_SURFACE_OCCLUSION_FIX_REPORT.md`. Tüm kabul matrisi tamamlandı sayılmaz.

@@ -1,0 +1,85 @@
+{
+  "results": [
+    {
+      "pair": 0,
+      "fixed": false,
+      "cpuSubmitMedianMs": 0.19999999972060323,
+      "cpuSubmitP95Ms": 0.3000000002793968,
+      "lastRenderCalls": 1,
+      "triangles": 1,
+      "programs": 8,
+      "memory": {
+        "geometries": 3,
+        "textures": 9
+      }
+    },
+    {
+      "pair": 0,
+      "fixed": true,
+      "cpuSubmitMedianMs": 0.10000000009313226,
+      "cpuSubmitP95Ms": 0.5,
+      "lastRenderCalls": 1,
+      "triangles": 1,
+      "programs": 9,
+      "memory": {
+        "geometries": 3,
+        "textures": 9
+      }
+    },
+    {
+      "pair": 1,
+      "fixed": false,
+      "cpuSubmitMedianMs": 0,
+      "cpuSubmitP95Ms": 0.10000000009313226,
+      "lastRenderCalls": 1,
+      "triangles": 1,
+      "programs": 8,
+      "memory": {
+        "geometries": 3,
+        "textures": 9
+      }
+    },
+    {
+      "pair": 1,
+      "fixed": true,
+      "cpuSubmitMedianMs": 0,
+      "cpuSubmitP95Ms": 0.10000000009313226,
+      "lastRenderCalls": 1,
+      "triangles": 1,
+      "programs": 9,
+      "memory": {
+        "geometries": 3,
+        "textures": 9
+      }
+    },
+    {
+      "pair": 2,
+      "fixed": false,
+      "cpuSubmitMedianMs": 0,
+      "cpuSubmitP95Ms": 0.10000000009313226,
+      "lastRenderCalls": 1,
+      "triangles": 1,
+      "programs": 8,
+      "memory": {
+        "geometries": 3,
+        "textures": 9
+      }
+    },
+    {
+      "pair": 2,
+      "fixed": true,
+      "cpuSubmitMedianMs": 0,
+      "cpuSubmitP95Ms": 0.10000000009313226,
+      "lastRenderCalls": 1,
+      "triangles": 1,
+      "programs": 9,
+      "memory": {
+        "geometries": 3,
+        "textures": 9
+      }
+    }
+  ],
+  "renderer": "WebKit WebGL",
+  "gpuTimerAvailable": true,
+  "note": "CPU submission time only; no GPU timing or RTX acceptance. Tiny scene only."
+}

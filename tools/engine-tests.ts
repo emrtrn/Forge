@@ -1,3 +1,4 @@
+import { AoSurfaceMaterials } from "../engine/render-three/aoSurfaceMaterials";
 import { registerLakeUnderwaterTests } from "../tests/engine/lakeUnderwater.test";
 import { registerWaterWheelInteractionTests } from "../tests/engine/waterWheelInteraction.test";
 import { registerRiverPlanarReflectionTests } from "../tests/engine/riverPlanarReflection.test";
@@ -25281,6 +25282,34 @@ check("AO skips what the beauty pass never writes depth for", () => {
 
   // Non-meshes carry no material to ask; the pass's own type checks decide them.
   assert.equal(writesSceneDepth(new Group()), true);
+});
+
+
+check("AO surface slots preserve cutouts, sidedness, opt-out and restore on failure", () => {
+  const cache = new AoSurfaceMaterials();
+  const solid = new MeshBasicMaterial({ side: DoubleSide, alphaTest: .4 });
+  const blend = new MeshBasicMaterial({ depthWrite: false, transparent: true });
+  const normal = cache.get(solid);
+  assert.equal(normal.side, DoubleSide);
+  assert.equal(normal.alphaTest, .4);
+  assert.equal(cache.get(solid), normal);
+  solid.alphaTest = .7;
+  assert.equal(cache.get(solid).alphaTest, .7);
+  assert.equal(cache.get(blend).visible, false);
+  const mesh = new Mesh(new BoxGeometry(), [solid, blend]);
+  const scene = new Scene(); scene.add(mesh);
+  const original = mesh.material;
+  assert.throws(() => cache.render(scene, () => {
+    assert.notEqual(mesh.material, original);
+    assert.equal((mesh.material as MeshBasicMaterial[])[1]!.visible, false);
+    throw new Error("render failure");
+  }), /render failure/);
+  assert.equal(mesh.material, original);
+  let disposed = 0; normal.addEventListener("dispose", () => disposed++);
+  solid.dispose(); assert.equal(disposed, 1);
+  assert.notEqual(cache.get(solid), normal);
+  cache.dispose(); assert.equal(disposed, 1);
+  mesh.geometry.dispose(); blend.dispose();
 });
 
 check("createPostProcessAntialiasPass creates SMAA only when enabled", () => {

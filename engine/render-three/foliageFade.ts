@@ -105,6 +105,12 @@ export function patchFoliageFadeShader(
   return true;
 }
 
+const overrideFades = new WeakMap<Material, { uniforms: FoliageFadeUniforms; mode: FadeDistanceMode }>();
+export function applyFoliageFadeToOverride(source: Material, shader: ShaderPatch): void {
+  const fade = overrideFades.get(source);
+  if (fade) patchFoliageFadeShader(shader, fade.uniforms, fade.mode);
+}
+
 function installFade(
   material: Material,
   uniforms: FoliageFadeUniforms,
@@ -112,6 +118,7 @@ function installFade(
   priorCacheKey: (() => string) | null,
   mode: FadeDistanceMode,
 ): void {
+  overrideFades.set(material, { uniforms, mode });
   material.onBeforeCompile = (shader: ShaderPatch, renderer: WebGLRenderer) => {
     priorPatch?.call(material, shader, renderer);
     patchFoliageFadeShader(shader, uniforms, mode);

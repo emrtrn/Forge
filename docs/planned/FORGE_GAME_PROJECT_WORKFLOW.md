@@ -11,7 +11,7 @@
 
 | | Model 1: Fork + upstream | Model 2: Ortak kaynak |
 |---|---|---|
-| Durum | **Geçerli — mevcut oyunlar bununla yaşıyor** | **Hedef — ilke onaylı, uygulama ve kabul bekliyor** |
+| Durum | **Geçerli — mevcut oyunlar bununla yaşıyor** | **P1-A/P1-B/P1-C uygulandı; P2 tam kabul bekliyor** |
 | Kimin için | `minigolf`, `miniracer`, `platformer`, `freshcounter` ve benzeri mevcut oyunlar | Forge Offroad (ilk tüketici) |
 | Oyun deposunda motor kopyası | Var (Forge'un klonu) | **Yok** |
 | Forge yeniliği oyuna | `git merge upstream/main` | Oyun zaten aynı kaynağı kullanır |
@@ -320,6 +320,92 @@ yeniden başlatma gerektirmeden görüneceği vaat edilmez.
   Project Browser'ı geri getirme kararı değildir.
 
 Bu bölüm için runtime/build testi yapılmamıştır.
+
+### 2.5A P1-A güncellemesi — 2026-10-31
+
+Yeni oyunun adı **Ridgebound**; hedef klasör
+`C:/Users/emret/Desktop/Games/Ridgebound`, uzak depo
+`https://github.com/emrtrn/Ridgebound.git`.
+
+Yukarıdaki 2026-10-25 envanterinin proje kökü eksikliği için ilk dilim uygulandı:
+`FORGE_PROJECT_ROOT` ile sunucu başlatılırken oyun kökü seçilebilir. Statik
+`public/`, editör kayıt/içerik işlemleri, üretilen behavior dosyaları ve Git
+varsayılanları seçili projeye bağlanır. Değişken verilmezse Forge'un kendi proje
+kökü kullanılır. Geçersiz seçimde Forge'a sessiz dönüş yapılmaz.
+
+Bu **tam Model 2 kabulü değildir**: oyun modülü ve editör kataloğu henüz Forge
+içindeki `src/game` üzerinden yüklenir. Ridgebound klasörü/deposu henüz
+hazırlanmadı. Dış oyun modülü, bağımsız oyun build'i, temiz ortamda kurulum ve
+SP-01–SP-10 kapanışı sonraki dilimlerde doğrulanacak.
+
+İki geçici proje ile HTTP kayıt/işlem izolasyonu testleri, tam `build:verify`
+kapısı ve iki hedefli Chromium smoke testi geçti. Ayrıntılar ve kullanım:
+[Ridgebound P1-A raporu](../reports/RIDGEBOUND_P1A_PROJECT_ROOT_REPORT.md).
+
+### 2.5B P1-B güncellemesi — 2026-10-31
+
+Ridgebound'un kendi Git deposu belirtilen klasöre klonlandı; henüz commit/push
+yapılmadı. Küçük prototip sahnesi, oyun modülü, editör kataloğu ve tasarım
+kaynakları oyun deposunda bulunur. Motor/editör kaynakları kopyalanmadı.
+
+Manifestin isteğe bağlı `game` alanı oyun köküne göre iki kaynak girişi tanımlar:
+
+```json
+"game": {
+  "module": "src/game/gameModule.ts",
+  "editorCatalog": "src/game/editorCatalog.ts"
+}
+```
+
+Bu alan verilirse iki dosyanın da geçerli `src/game/*.ts` yollarında bulunması
+gerekir; eksik/hatalı girişler Forge modülüne dönmez. Alan yoksa mevcut Forge
+örneği ve yalnız veri içeren smoke projeleri ortak template modülünü kullanır.
+`@forge-game/module` ve `@forge-game/editor-catalog` yalnız ortak açılışın seçilmiş
+girişleridir; genel motor/editörün oyuna bağımlı olması için kullanılmaz.
+
+Ridgebound klasöründe `npm.cmd run check` ve `npm.cmd run dev` kullanılabilir.
+Geliştirme varsayılan olarak yalnız `127.0.0.1:5175` üzerinde açılır; editör
+`?editor` adresindedir. Oyun başlatıcısı gerçek Forge araçlarına gider. Yerel Forge
+konumu `FORGE_ROOT` veya Git dışında `forge.local.json` ile seçilebilir; varsayılan
+yerleşim `Desktop/Forge` ve `Desktop/Games/Ridgebound` şeklindedir.
+
+Oyuna ait modül, kendi editör katalog etiketi, statik dosyalar ve geçici projede
+gerçek UI ile kaydet/yükle doğrulandı. Three.js için oyun ve Forge kaynaklarının
+tek modül örneği kullandığı tarayıcıda kontrol edildi. Ayrıntılar:
+[P1-B uygulama raporu](../reports/RIDGEBOUND_P1B_PROJECT_MODULE_REPORT.md).
+
+Bağımsız oyun build'i, diğer bağımlılıkların build düzeyinde tekilleştirilmesi,
+temiz ortamda kurulum ve tam SP kabulü hâlâ P1-C/P2 işidir. Kullanıcının isteğiyle
+bu oturumda Codex Security diff taraması yapılmadı.
+
+### 2.5C P1-C güncellemesi — 2026-11-01
+
+Ridgebound bağımsız üretim build'i ve yalnız bu çıktıyı sunan preview komutu
+uygulandı. Oyun klasöründe `npm.cmd run build`, `npm.cmd run preview` ve
+`npm.cmd run verify:build` kullanılabilir. Varsayılan üretim önizlemesi
+`http://127.0.0.1:4175/` adresindedir. Alt dizin için
+`npm.cmd run build -- --base /ridgebound/` kullanılabilir.
+
+Her build `builds/<kimlik>/dist/` altında ayrı tutulur. Yayımlanacak dosyalar
+yalnız `dist/` içeriğidir. `build-record.json`, kaynak/kilit/çıktı hashlerini ve
+Git durumlarını; `inputs.json.gz`, commit edilmemiş girdiler dahil tam kaynak
+kanıtını tutar. Bu iki dosya web çıktısının dışındadır ve yayımlanmaz. Kaynak
+arşivi, ikinci bir aktif motor kopyası veya bağımsız motor release sistemi değildir.
+
+`verify:build`, girdileri boş geçici klasöre açıp kilitli bağımlılıkları yeniden
+kurar; canlı kaynak veya node_modules bağlantısı kullanmadan derler ve çıktı
+hashlerini karşılaştırır. Eksik çevrimdışı npm önbelleğinde yalnız aynı kilitle
+eksik paketleri indirerek devam eder. Son doğrulamada 27 dosya birebir eşleşti.
+
+Kök/alt dizin browser kontrolleri, üretimde `?editor` ile editör açılmaması,
+kaynak/kayıt uçlarının bulunmaması ve çizilmiş 3B sahne doğrulandı. Three.js,
+Rapier, Recast ve meshoptimizer için birer ortak paket örneği kaydedildi.
+Ridgebound'un M0 kayıt şeması henüz tanımlı değildir; rapor bunu açıkça belirtir.
+
+P1-C ayrıntıları: [Build ve yeniden üretim raporu](../reports/RIDGEBOUND_P1C_BUILD_REPORT.md).
+P2/SP kabul tablosu ve kullanıcı kabulü henüz kapanmadı; M0 oyun mantığına
+başlanmadı. Bu çalışma commit/push veya yayın yapmadı; kullanıcının talebiyle
+Codex Security taraması çalıştırılmadı.
 
 ## 2.6 Uygulama görevi ve sıra
 

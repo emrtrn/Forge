@@ -38,7 +38,7 @@ async function main(): Promise<void> {
       import("@/editor/EditorUi"),
       import("@/editor/layoutSaver"),
       import("@/editor/gameEditorRegistry"),
-      import("@/game/editorCatalog"),
+      import("@forge-game/editor-catalog"),
     ]);
     // Inversion of control: the game supplies its editor catalogs here so the
     // editor stays generic (never imports @/game). This composition root is the
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
     await Promise.all([
       import("@/scene/ForgeRuntime"),
       import("@/scene/capabilities/defaultRuntimeModules"),
-      import("@/game/gameModule"),
+      import("@forge-game/module"),
     ]);
   const forge = await createForgeRuntime({
     canvas,

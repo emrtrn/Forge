@@ -7,9 +7,9 @@ const root = smokeRunRoot();
 let server;
 try {
   await prepareSmokeProject(root);
-  // Middleware resolves public/ and generated behavior writes from cwd. Run
-  // against the disposable project while serving the real application source.
-  process.chdir(root);
+  // Select the disposable data/source root explicitly; application sources stay
+  // in Forge. No process-wide cwd mutation is needed for authoring isolation.
+  process.env.FORGE_PROJECT_ROOT = root;
   server = await createServer({
     configFile: resolve(REPO_ROOT, "vite.config.ts"),
     root: REPO_ROOT,
@@ -24,7 +24,6 @@ try {
   server.printUrls();
 } catch (error) {
   await server?.close();
-  process.chdir(REPO_ROOT);
   await cleanupSmokeProject(root);
   throw error;
 }
@@ -34,7 +33,6 @@ async function close() {
   if (closing) return;
   closing = true;
   await server.close();
-  process.chdir(REPO_ROOT);
   process.exit(0);
 }
 process.on("SIGTERM", () => { void close(); });

@@ -9,6 +9,8 @@ export interface ProjectManifest {
   version: string;
   entry: string;
   publicDir: string;
+  /** Source entry points consumed by Forge tooling, relative to the game root. */
+  game?: { module: string; editorCatalog: string };
   editor: {
     defaultScene: string;
     assetCatalog?: string;
@@ -66,6 +68,10 @@ export function readProjectManifest(value: unknown, path = "project.3dgame.json"
   const input = requireRecord(value, path);
   requireVersion(input.schema, 1, `${path}.schema`);
   for (const key of ["name", "type", "version", "entry", "publicDir"]) requireString(input[key], `${path}.${key}`);
+  if (input.game !== undefined) {
+    const game = requireRecord(input.game, `${path}.game`);
+    for (const key of ["module", "editorCatalog"]) requireString(game[key], `${path}.game.${key}`);
+  }
   const editor = requireRecord(input.editor, `${path}.editor`);
   for (const key of ["defaultScene", "assetManifest"]) requireString(editor[key], `${path}.editor.${key}`);
   for (const key of ["assetCatalog", "metadataSchema", "previewUrl"]) {

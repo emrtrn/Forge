@@ -101,6 +101,7 @@ function classifyPath(relPath) {
 
 /** The boundary an import specifier targets (alias, @/ subtree, or relative). */
 function targetLayer(spec, fileDir, root = projectRoot) {
+  if (spec === "@forge-game/module" || spec === "@forge-game/editor-catalog") return "game";
   const aliases = {
     "@engine/": "engine",
     "@editor/": "editor",

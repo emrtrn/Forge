@@ -24,6 +24,8 @@
     /* Path alias — keep in sync with vite.config.ts resolve.alias */
     "baseUrl": ".",
     "paths": {
+      "@forge-game/module": ["src/game/gameModule.ts"],
+      "@forge-game/editor-catalog": ["src/game/editorCatalog.ts"],
       "@/*": ["src/*"],
       "@engine/*": ["engine/*"],
       "@editor/*": ["editor/*"],

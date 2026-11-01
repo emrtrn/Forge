@@ -14,7 +14,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, rmdir, stat, unlink, wr
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
-import { extname, resolve, sep } from "node:path";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import {
   buildImportedAssetRecord,
@@ -30,7 +30,6 @@ import {
   validateImportAssetMeta,
   validateNewBehaviorPayload,
   resolveBehaviorStub,
-  BEHAVIOR_SCRIPTS_DIR,
   validateSaveActorPayload,
   validateSaveCollisionPayload,
   validateSaveMaterialPayload,
@@ -60,17 +59,18 @@ import {
   validateOpenLevelPayload,
 } from "./tools/saveValidator";
 import { collectDroppedFields, formatDroppedFieldWarning } from "./tools/droppedFields";
+import { createProjectPaths, type ProjectPaths } from "./tools/projectPaths";
 
-// Single-codebase template: this repo's own public/ is the project root that
-// both the game (static fetch) and the editor (authoring middleware) read/write.
+// Each dev server owns one immutable project selection. Helpers are scoped to
+// that server, so two projects in one process cannot share authoring roots.
+function layoutEditorPlugin(project: ProjectPaths): Plugin {
 const execFileAsync = promisify(execFile);
 
-const PUBLIC_DIR = resolve("public");
-const PROJECT_MANIFEST_PATH = resolve("public/project.3dgame.json");
+const PUBLIC_DIR = project.publicDir;
 // Generated behavior stubs (Actor Script editor -> New Behavior) land here. Unlike
 // the public/ authoring endpoints this writes a source file, so it is fenced to
 // exactly this directory and to the `.ts` extension (see resolveBehaviorScriptPath).
-const BEHAVIOR_SCRIPTS_ABS = resolve(BEHAVIOR_SCRIPTS_DIR);
+const BEHAVIOR_SCRIPTS_ABS = project.behaviorScriptsDir;
 
 interface ProjectManifest {
   schema: 1;
@@ -99,7 +99,7 @@ interface ProjectManifest {
 }
 
 async function readProjectManifest(): Promise<ProjectManifest> {
-  return JSON.parse(await readFile(PROJECT_MANIFEST_PATH, "utf8")) as ProjectManifest;
+  return JSON.parse(await readFile(resolvePublicPath("project.3dgame.json"), "utf8")) as ProjectManifest;
 }
 
 /**
@@ -107,13 +107,7 @@ async function readProjectManifest(): Promise<ProjectManifest> {
  * refusing anything that escapes the public directory (path-traversal guard).
  */
 function resolvePublicPath(publicRelativePath: string): string {
-  const normalized = publicRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const resolved = resolve(PUBLIC_DIR, normalized);
-  const rootWithSep = PUBLIC_DIR.endsWith(sep) ? PUBLIC_DIR : `${PUBLIC_DIR}${sep}`;
-  if (resolved !== PUBLIC_DIR && !resolved.startsWith(rootWithSep)) {
-    throw new Error(`path escapes public root: ${publicRelativePath}`);
-  }
-  return resolved;
+  return project.publicPath(publicRelativePath);
 }
 
 /**
@@ -123,18 +117,7 @@ function resolvePublicPath(publicRelativePath: string): string {
  * deliberately strict.
  */
 function resolveBehaviorScriptPath(projectRelativePath: string): string {
-  const normalized = projectRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!normalized.endsWith(".ts")) {
-    throw new Error(`behavior stub must be a .ts file: ${projectRelativePath}`);
-  }
-  const resolved = resolve(normalized);
-  const rootWithSep = BEHAVIOR_SCRIPTS_ABS.endsWith(sep)
-    ? BEHAVIOR_SCRIPTS_ABS
-    : `${BEHAVIOR_SCRIPTS_ABS}${sep}`;
-  if (!resolved.startsWith(rootWithSep)) {
-    throw new Error(`path escapes ${BEHAVIOR_SCRIPTS_DIR}: ${projectRelativePath}`);
-  }
-  return resolved;
+  return project.sourcePath(projectRelativePath);
 }
 
 interface DirTreeNode {
@@ -169,14 +152,14 @@ async function readDirTree(
         path: childRel,
         type: "dir",
         children: await readDirTree(
-          resolve(absDir, entry.name),
+          resolvePublicPath(childRel),
           childRel,
           depth - 1,
           budget,
         ),
       });
     } else if (entry.isFile()) {
-      const fileStat = await stat(resolve(absDir, entry.name));
+      const fileStat = await stat(resolvePublicPath(childRel));
       nodes.push({
         name: entry.name,
         path: childRel,
@@ -603,8 +586,8 @@ async function listFilesRecursive(absDir: string, relDir: string): Promise<strin
   const files: string[] = [];
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
-    const childAbs = resolve(absDir, entry.name);
     const childRel = relDir ? `${relDir}/${entry.name}` : entry.name;
+    const childAbs = resolvePublicPath(childRel);
     if (entry.isDirectory()) {
       files.push(...await listFilesRecursive(childAbs, childRel));
     } else if (entry.isFile()) {
@@ -891,7 +874,7 @@ async function updateProjectDefaultSceneForRename(fromFolder: string, toFolder: 
     ...project.editor,
     defaultScene: replaceFolderPrefix(project.editor.defaultScene, fromFolder, toFolder),
   };
-  await writeFile(PROJECT_MANIFEST_PATH, `${JSON.stringify(project, null, 2)}\n`, "utf8");
+  await writeFile(resolvePublicPath("project.3dgame.json"), `${JSON.stringify(project, null, 2)}\n`, "utf8");
   return true;
 }
 
@@ -920,7 +903,7 @@ async function ensureDefaultSceneSurvivesFolderDelete(folder: string): Promise<v
   const record = fallback as Record<string, unknown>;
   const next = typeof record.path === "string" ? record.path : String(record.file);
   project.editor = { ...project.editor, defaultScene: next };
-  await writeFile(PROJECT_MANIFEST_PATH, `${JSON.stringify(project, null, 2)}\n`, "utf8");
+  await writeFile(resolvePublicPath("project.3dgame.json"), `${JSON.stringify(project, null, 2)}\n`, "utf8");
 }
 
 // Endpoints that write files. These must never be reachable from the LAN even
@@ -985,11 +968,37 @@ function isLocalRequest(req: IncomingMessage): boolean {
   );
 }
 
-function layoutEditorPlugin(): Plugin {
   return {
     name: "3dgamedev-layout-editor",
+    transformIndexHtml(html) {
+      const title = project.name.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+      return html.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+    },
+    configResolved(config) {
+      if (config.command === "serve" && relative(project.publicDir, config.publicDir) !== "") {
+        throw new Error("Static publicDir must match the selected authoring project");
+      }
+    },
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        // Vite serves public files too: guard these reads before its static
+        // middleware can follow a symlink/junction out of the selected project.
+        try {
+          const pathname = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
+          if (pathname.startsWith("/@fs/")) {
+            const absolute = resolve(pathname.slice("/@fs/".length));
+            const rel = relative(PUBLIC_DIR, absolute);
+            if (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) {
+              project.publicPath(rel);
+            }
+          } else if (!pathname.startsWith("/@")) {
+            resolvePublicPath(pathname.replace(/^\//, ""));
+          }
+        } catch (error) {
+          res.statusCode = 403;
+          res.end(error instanceof Error ? error.message : String(error));
+          return;
+        }
         if (isPrivilegedUrl(req.url) && !isLocalRequest(req)) {
           res.statusCode = 403;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -1441,9 +1450,14 @@ function layoutEditorPlugin(): Plugin {
           try {
             const params = new URL(req.url, "http://localhost").searchParams;
             const relPath = validateGameDataPath(params.get("path") ?? "");
+            resolvePublicPath(relPath);
+            const repository = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: project.root });
+            if (relative(project.root, resolve(repository.stdout.trim())) !== "") {
+              throw new Error("Selected project must own its Git repository to read defaults");
+            }
             // The repo tracks these under public/; git needs the repo-relative path.
             const { stdout } = await execFileAsync("git", ["show", `HEAD:public/${relPath}`], {
-              cwd: fileURLToPath(new URL(".", import.meta.url)),
+              cwd: project.root,
               maxBuffer: 8 * 1024 * 1024,
             });
             const data = JSON.parse(stdout) as unknown;
@@ -2045,6 +2059,8 @@ function layoutEditorPlugin(): Plugin {
               res.end(JSON.stringify({ ok: false, error: `already exists: ${finalTarget.to}` }));
               return;
             }
+            // Reject linked descendants before a folder is moved or rewritten.
+            if (fromStat.isDirectory()) await listFilesRecursive(fromAbs, finalTarget.from);
             await rename(fromAbs, finalToAbs);
             const registered = fromStat.isDirectory()
               ? await renameManifestFolderEntries(finalTarget.from, finalTarget.to).catch(() => false)
@@ -2383,7 +2399,7 @@ function layoutEditorPlugin(): Plugin {
             manifest.editor = { ...manifest.editor, defaultScene: payload.path };
             const nextManifest = `${JSON.stringify(manifest, null, 2)}\n`;
             const changed = previousManifest !== nextManifest;
-            if (changed) await writeFile(PROJECT_MANIFEST_PATH, nextManifest, "utf8");
+            if (changed) await writeFile(resolvePublicPath("project.3dgame.json"), nextManifest, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed }));
           } catch (error) {
@@ -2434,7 +2450,7 @@ function layoutEditorPlugin(): Plugin {
             manifest.editor = { ...manifest.editor, ...payload.editor };
             const nextManifest = `${JSON.stringify(manifest, null, 2)}\n`;
             manifestChanged = previousManifest !== nextManifest;
-            if (manifestChanged) await writeFile(PROJECT_MANIFEST_PATH, nextManifest, "utf8");
+            if (manifestChanged) await writeFile(resolvePublicPath("project.3dgame.json"), nextManifest, "utf8");
           }
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.end(
@@ -2461,11 +2477,18 @@ function layoutEditorPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [layoutEditorPlugin()],
+export default defineConfig(() => {
+  const forgeRoot = fileURLToPath(new URL(".", import.meta.url));
+  const project = createProjectPaths({ forgeRoot, projectRoot: process.env.FORGE_PROJECT_ROOT });
+  return {
+  root: forgeRoot,
+  publicDir: project.publicDir,
+  plugins: [layoutEditorPlugin(project)],
   resolve: {
     alias: {
       // Keep in sync with tsconfig.json "paths"
+      "@forge-game/module": project.gameModulePath,
+      "@forge-game/editor-catalog": project.editorCatalogPath,
       "@": fileURLToPath(new URL("./src", import.meta.url)),
       "@engine": fileURLToPath(new URL("./engine", import.meta.url)),
       "@editor": fileURLToPath(new URL("./editor", import.meta.url)),
@@ -2473,6 +2496,8 @@ export default defineConfig({
       "@game": fileURLToPath(new URL("./game", import.meta.url)),
       "@project": fileURLToPath(new URL("./project", import.meta.url)),
     },
+    // External games resolve the same dependency instances as Forge sources.
+    dedupe: ["three", "@dimforge/rapier3d-compat", "@recast-navigation/core", "meshoptimizer"],
   },
   build: {
     // Mobile target: WebGL2-capable browsers all support ES2022 baseline features we use.
@@ -2503,5 +2528,7 @@ export default defineConfig({
   server: {
     // Expose on LAN for real-device (Android/Chrome) testing.
     host: true,
+    fs: { strict: true, allow: [forgeRoot, project.publicDir, project.gameSourceDir] },
   },
+  };
 });

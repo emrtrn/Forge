@@ -62,6 +62,7 @@ test("import guard resolves every project alias and relative imports with normal
   for (const [spec, layer] of [
     ["@editor/panel", "editor"], ["@/editor/panel", "editor"],
     ["@game/rules", "game"], ["@/game/rules", "game"],
+    ["@forge-game/module", "game"], ["@forge-game/editor-catalog", "game"],
     ["@builder/tool", "builder"], ["@project/manifest", "project"],
     ["@/project/ProjectSystem", "project"], ["../../src/scene/loader", "src"],
     ["../../editor/panel", "editor"], ["@engine/../src/editor/panel", "editor"],

@@ -177,8 +177,8 @@ export function writesSceneDepth(object: Object3D): boolean {
  *  - **`userData.noAmbientOcclusion === true`** — the explicit opt-out, for real
  *    depth-writing geometry that still should not receive AO.
  *
- * A lake that has composited its sampled bed into a final pixel is an exception:
- * its interface participates in this normal/depth pass without changing
+ * Lake and River interfaces are exceptions, including snapshot fallback:
+ * their surfaces suppress AO behind water (an intentional visual tradeoff) without changing
  * the beauty material's depthWrite or transparent sorting.
  *
  * Solid geometry — including characters — stays in and gets proper AO (see
@@ -206,7 +206,7 @@ export class ForgeGtaoPass extends GTAOPass {
         probe.isLine2 ||
         probe.isSprite ||
         object.userData.noAmbientOcclusion === true ||
-        (!writesSceneDepth(object) && object.userData.compositedWaterSurface !== true)
+        (!writesSceneDepth(object) && object.userData.aoWaterSurface !== true)
       ) {
         object.visible = false;
         cache.push(object);

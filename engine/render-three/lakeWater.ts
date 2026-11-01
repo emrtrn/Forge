@@ -323,6 +323,8 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.layers.enable(31); // Water layer marker; the reflection source hides registered consumers.
     source?.addConsumer(this);
     const started = performance.now();
+    // AO deliberately treats the visible interface as opaque, independent of refraction snapshots.
+    this.userData.aoWaterSurface = true;
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
       this.underwaterBody.attach();

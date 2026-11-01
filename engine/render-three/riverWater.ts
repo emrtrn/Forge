@@ -783,6 +783,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     };
     this.addEventListener("added",this.refreshTerrainEffects);
     this.addEventListener("removed",()=>{this.releaseShore();this.releaseShore=()=>{};this.releaseCaustics();this.releaseCaustics=()=>{};});
+    // AO deliberately treats the visible interface as opaque, independent of refraction snapshots.
+    this.userData.aoWaterSurface = true;
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
       this.planar.attachToScene();

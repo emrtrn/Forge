@@ -5,7 +5,7 @@ type Surface = Material & { map?: Texture | null; alphaMap?: Texture | null };
 /** Per-source cache: live texture/threshold changes do not allocate per frame. */
 export class AoSurfaceMaterials {
   private readonly entries = new Map<Material, { normal: MeshNormalMaterial; release: () => void }>();
-  get(source: Material, compositedWater = false): MeshNormalMaterial {
+  get(source: Material, waterSurface = false): MeshNormalMaterial {
     let entry = this.entries.get(source);
     if (!entry) {
       const normal = new MeshNormalMaterial();
@@ -49,7 +49,7 @@ export class AoSurfaceMaterials {
         normal.needsUpdate = true;
       }
     }
-    normal.visible = source.visible && (source.depthWrite || compositedWater) && source.opacity > 0;
+    normal.visible = source.visible && (source.depthWrite || waterSurface) && source.opacity > 0;
     normal.customProgramCacheKey = () => `forge-ao-surface-v1:${source.customProgramCacheKey()}`;
     return normal;
   }
@@ -60,7 +60,7 @@ export class AoSurfaceMaterials {
       // Water/terrain have dedicated displacement overrides; leave those paths intact.
       if (!mesh.isMesh || object.userData.forgeTerrain) return;
       saved.push([mesh, mesh.material]);
-      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => this.get(m, object.userData.compositedWaterSurface === true)) : this.get(mesh.material, object.userData.compositedWaterSurface === true);
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => this.get(m, object.userData.aoWaterSurface === true)) : this.get(mesh.material, object.userData.aoWaterSurface === true);
     });
     try { return render(); }
     finally { for (const [mesh, material] of saved) mesh.material = material; }

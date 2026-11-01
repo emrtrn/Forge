@@ -139,3 +139,7 @@ Sonuçları docs/reports/AO_SURFACE_OCCLUSION_FIX_REPORT.md içine kanıtlarla y
 - C — Kısmi/karar gerekli: mevcut kompozit su slotları yüz yönü aktarımından yararlanır; snapshot fallback ve geçirgen su katman ayrımı çözülmedi. Ek geçiş/hedef seçenekleri raporda; 4.C.6 gereği uygulanmadı.
 - D — Kısmi: engine regresyonları, odaklı Playwright ve önce/sonra çıktılar mevcut; tam su/görsel matrisi ve yoğun foliage/geniş su GPU performansı eksik.
 - Teslim: `docs/reports/AO_SURFACE_OCCLUSION_FIX_REPORT.md`. Tüm kabul matrisi tamamlandı sayılmaz.
+
+## 11. Onaylı kapsam sadeleştirmesi (2026-11-01)
+
+Kullanıcı ek bellek/hedef ve geçiş yerine su arkasındaki AO'nun kaybolmasını kabul etti. Bölüm 4.C.3'ün geçirgen su altında AO koruma şartı bu karar için geçerli değildir. Su arayüzü mevcut normal/depth geçişine snapshot'tan bağımsız katılır; global AO açık kalır. Yeni fullscreen geçiş/hedef eklenmez. Bu sınırlı çözüm ve doğrulama sınırları `docs/reports/AO_WATER_OCCLUSION_FIX_REPORT.md` içindedir. Önceki kısmi teslim raporu tarihsel sonuç olarak korunur; iki katmanlı su kompoziti uygulanmaz.

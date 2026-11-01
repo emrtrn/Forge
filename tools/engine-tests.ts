@@ -25285,6 +25285,24 @@ check("AO skips what the beauty pass never writes depth for", () => {
 });
 
 
+check("water AO interface ignores snapshot availability without changing beauty depth", () => {
+  const cache = new AoSurfaceMaterials();
+  const material = new MeshBasicMaterial({ side: DoubleSide, depthWrite: false, transparent: true, opacity: .3 });
+  const water = new Mesh(new BoxGeometry(), material);water.userData.aoWaterSurface = true;
+  const scene = new Scene();scene.add(water);
+  for (const snapshot of [false, true]) {
+    water.userData.compositedWaterSurface = snapshot;
+    cache.render(scene, () => {
+      const normal = water.material;
+      assert.equal(normal.visible, true);assert.equal(normal.depthWrite, true);assert.equal(normal.side, DoubleSide);
+    });
+    assert.equal(water.material, material);assert.equal(material.depthWrite, false);assert.equal(material.opacity, .3);
+  }
+  delete water.userData.aoWaterSurface;
+  cache.render(scene, () => assert.equal(water.material.visible, false));
+  cache.dispose();water.geometry.dispose();material.dispose();
+});
+
 check("AO surface slots preserve cutouts, sidedness, opt-out and restore on failure", () => {
   const cache = new AoSurfaceMaterials();
   const solid = new MeshBasicMaterial({ side: DoubleSide, alphaTest: .4 });

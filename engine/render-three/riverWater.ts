@@ -615,6 +615,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   private readonly authoredRefractionStrength: number;
   private readonly authoredRefractionQuality: boolean;
   private disposed = false;
+  private aoNormalMaterial: ShaderMaterial | null = null;
   private effectSurface: RiverSurfaceQuery | undefined;
   private releaseCaustics: () => void = () => {};
   private releaseShore: () => void = () => {};
@@ -819,6 +820,47 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     };
   }
 
+  /** Same displaced interface as beauty; the ribbon has no `normal` attribute. */
+  getAoNormalMaterial(): ShaderMaterial {
+    if (!this.aoNormalMaterial) {
+      this.aoNormalMaterial = new ShaderMaterial({
+        side: DoubleSide,
+        uniforms: Object.fromEntries(["time", "flowSpeed", "waveAmplitude", "waveLength", "clipDryBed"]
+          .map(key => [key, this.material.uniforms[key]!])),
+        vertexShader: `
+          attribute float shoreDistance;attribute float rapidness;
+          attribute float flowSpeedMultiplier;attribute float waterDepth;
+          uniform float time;uniform float flowSpeed;uniform float waveAmplitude;uniform float waveLength;
+          varying vec3 vAoNormal;varying vec3 vAoPosition;varying float vAoDepth;
+          ${RIVER_WAVE_GLSL}
+          ${RIVER_SHADING_NORMAL_GLSL}
+          void main() {
+            vec3 displaced=position;
+            displaced.y+=riverVertexWave(uv,shoreDistance,rapidness,flowSpeedMultiplier,time,flowSpeed,waveAmplitude,waveLength);
+            vec4 viewPosition=modelViewMatrix*vec4(displaced,1.);
+            vAoPosition=viewPosition.xyz;vAoDepth=waterDepth;
+            vAoNormal=mat3(viewMatrix)*riverShadingNormal(uv,vec3(shoreDistance,rapidness,flowSpeedMultiplier));
+            gl_Position=projectionMatrix*viewPosition;
+          }`,
+        fragmentShader: `
+          uniform float clipDryBed;
+          varying vec3 vAoNormal;varying vec3 vAoPosition;varying float vAoDepth;
+          void main() {
+            if(clipDryBed>.5 && vAoDepth<=.001) discard;
+            vec3 n=normalize(vAoNormal);
+            // Ribbon winding points down; orient the world-up shading normal
+            // toward the camera on either side, including orthographic views.
+            if(dot(n,isOrthographic?vec3(0.,0.,1.):-vAoPosition)<0.) n=-n;
+            gl_FragColor=vec4(n*.5+.5,1.);
+          }`,
+      });
+      this.aoNormalMaterial.allowOverride = false;
+    }
+    this.aoNormalMaterial.visible = this.material.visible && this.material.opacity > 0
+      && this.userData.aoWaterSurface === true;
+    return this.aoNormalMaterial;
+  }
+
   /** Fixed-step presentation only; the river never changes vehicle forces or terrain. */
   advanceWheelInteractions(dt: number, vehicles: readonly WaterWheelVehicle[]): void {
     if (this.disposed || !Number.isFinite(dt) || dt <= 0) return;
@@ -969,6 +1011,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.aoNormalMaterial?.dispose(); this.aoNormalMaterial = null;
     this.planar.detach(); this.clearWheelInteractions(); this.wheelSurface = null;
     this.releaseShore();this.releaseShore=()=>{};
     this.foamMaterial.dispose();

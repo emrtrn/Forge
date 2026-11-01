@@ -11,7 +11,15 @@ Kullanıcı, su altındaki AO'nun kaybolmasını kabul etti; ek render hedefi ve
 - `lakeWater.ts` ve `riverWater.ts`: yüzey nesnelerine kalıcı `userData.aoWaterSurface` işareti eklenir.
 - `postProcess.ts`: depthWrite:false istisnası snapshot'a bağlı `compositedWaterSurface` yerine bu açık yüzey işaretini kullanır. Partiküller, seçim decal'leri, ikonlar ve opt-out nesneler için genel dışlama korunur.
 - `aoSurfaceMaterials.ts`: slot normal malzemesi de aynı işareti kullanır. Snapshot olmadan bile su yüzeyi katılır; yüz yönü taşınır. Beauty malzemesi, transparan sıralaması ve `depthWrite:false` değişmez.
-- Dalgalı Lake, mevcut dalga normal/depth proxy yolunda kalır; dalga iki kez çizilmez. Düz Lake ve River mevcut normal geçişinde çizilir. Snapshot okuma, MSAA ve reversed-depth kodu değiştirilmedi.
+- Dalgalı Lake, mevcut dalga normal/depth proxy yolunda kalır; dalga iki kez çizilmez. Düz Lake mevcut normal geçişinde çizilir. River aynı geçişte kendi dalga/normal shader'ını kullanır (aşağıdaki regresyon düzeltmesi). Snapshot okuma, MSAA ve reversed-depth kodu değiştirilmedi.
+
+## River siyah yüzey regresyonu — 2026-11-01
+
+River ribbon geometrisi `normal` attribute taşımaz; yüzey normallerini kendi shader'ında hesaplar. Genel `MeshNormalMaterial` atanınca GTAO geçersiz normal verisi alıp beauty çıktısını tamamen siyaha çeviriyordu. Önceki normal/depth fark testleri, her iki durumda da aynı geçersiz normal üretilebildiği için bu hatayı yakalamadı.
+
+River artık aynı GTAO çiziminde, mevcut `RIVER_WAVE_GLSL` ve `RIVER_SHADING_NORMAL_GLSL` hesaplarını kullanan önbellekli normal malzemesi sağlar. Dalga zamanı/parametreleri beauty uniform'larıyla paylaşılır; kuru kıyı kırpması ve üst/alt bakış korunur. Malzeme River ile birlikte dispose edilir. Ek render hedefi veya çizim geçişi eklenmedi; `aoWaterSurface` davranışı ve beauty malzemesi korunur.
+
+Regresyon kontrolü: 12 Lake/River normal-depth-AO durumu artık normal vektörünün birim uzunluğunu ve sıfır olmayan AO'yu da doğrular. Ek 4 gerçek beauty→AO→output testi düz/dalgalı River ve normal/MSAA fallback yollarında 9 örnek noktasının siyaha düşmediğini kontrol eder; 16/16 Chromium testi geçti. Motor testi uniform paylaşımını, hata sonrası beauty restorasyonunu ve tek seferlik kaynak temizliğini kapsar. TypeScript, smoke TypeScript, 2.189 motor kontrolü ve tam `build:verify` (strict dist ve world-data dahil) geçti. Tarayıcı doğrulaması SwiftShader ile izole fixture üzerindedir; kullanıcının Terrain sahnesinde veya RTX üzerinde performans kabulü yapılmadı.
 
 Yeni fullscreen geçiş, tam sahne render'ı veya render target eklenmedi. Daha önce atlanan su yüzeylerinin mevcut normal geçişinde çizilmesi ve bunların mevcut cache'teki normal malzemeleri küçük bir ek maliyettir; sıfır CPU/GPU/bellek maliyeti iddia edilmez. Ek yüksek çözünürlüklü tampon yoktur.
 

@@ -146,35 +146,7 @@
       "splineRef": "spline-1",
       "name": "River Water 1",
       "coordinateSpace": "world",
-      "surfaceLevel": -1,
-      "contactFoam": {
-        "enabled": true,
-        "shoreWidth": 0.6,
-        "scale": 0.8,
-        "speed": 0.3,
-        "obstacles": []
-      },
-      "geometryFoam": {
-        "enabled": true,
-        "width": 0.4,
-        "strength": 0.8,
-        "scale": 0.8,
-        "speed": 0.3
-      },
-      "caustics": {
-        "enabled": true,
-        "strength": 1,
-        "scale": 1.5,
-        "speed": 0.25,
-        "depthFade": 4
-      },
-      "shoreWetness": {
-        "enabled": true,
-        "width": 1,
-        "strength": 0.65
-      },
-      "reflectionQuality": "medium",
-      "reflectionStrength": 0.8
+      "surfaceLevel": -1
     }
   ],
   "waterBodies": [

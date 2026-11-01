@@ -1,5 +1,6 @@
 import { Material, MeshNormalMaterial, type Mesh, type Scene, type Texture } from 'three';
 import { applyFoliageFadeToOverride } from './foliageFade';
+import { RiverWaterObject } from './riverWater';
 
 type Surface = Material & { map?: Texture | null; alphaMap?: Texture | null };
 /** Per-source cache: live texture/threshold changes do not allocate per frame. */
@@ -57,10 +58,12 @@ export class AoSurfaceMaterials {
     const saved: Array<[Mesh, Material | Material[]]> = [];
     scene.traverseVisible(object => {
       const mesh = object as Mesh;
-      // Water/terrain have dedicated displacement overrides; leave those paths intact.
+      // Terrain and displaced lakes use their existing override draws. Rivers
+      // supply normals from their wave shader, rather than a geometry attribute.
       if (!mesh.isMesh || object.userData.forgeTerrain) return;
       saved.push([mesh, mesh.material]);
-      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => this.get(m, object.userData.aoWaterSurface === true)) : this.get(mesh.material, object.userData.aoWaterSurface === true);
+      mesh.material = object instanceof RiverWaterObject ? object.getAoNormalMaterial()
+        : Array.isArray(mesh.material) ? mesh.material.map(m => this.get(m, object.userData.aoWaterSurface === true)) : this.get(mesh.material, object.userData.aoWaterSurface === true);
     });
     try { return render(); }
     finally { for (const [mesh, material] of saved) mesh.material = material; }

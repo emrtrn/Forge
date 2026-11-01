@@ -13,6 +13,7 @@ import { createTerrainSplinePatches } from "../../engine/terrain/terrainSplines"
 import { createFlatTerrainTile, tileKey, type TerrainTileData, type WorldTerrainDef } from "../../engine/terrain/terrainTypes";
 import { validateRiverWater } from "../../tools/saveValidator";
 import { createRiverRefractionSurface, RIVER_REFRACTION_LIMITS } from "../../engine/render-three/riverRefraction";
+import { AoSurfaceMaterials } from "../../engine/render-three/aoSurfaceMaterials";
 
 type CheckAsync = (label: string, fn: () => Promise<void>) => Promise<void>;
 function fixture() {
@@ -34,6 +35,32 @@ function fixture() {
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain river: AO uses the live wave interface and restores beauty after failure", async () => {
+    const { def, tiles, water } = fixture();
+    const source = await prepareTerrainRiverWaterSource({ def, tiles }, water);
+    assert.ok(source);
+    const river = createRiverWaterObject({ ...water, ...source, foamNoiseMap: null }, null);
+    const scene = new Scene(); scene.add(river);
+    const cache = new AoSurfaceMaterials(), beauty = river.material;
+    const normal = river.getAoNormalMaterial();
+    assert.equal(river.geometry.getAttribute("normal"), undefined);
+    assert.notEqual(normal, beauty);
+    assert.equal(normal.allowOverride, false);
+    assert.equal(normal.depthWrite, true);
+    for (const key of ["time", "flowSpeed", "waveAmplitude", "waveLength", "clipDryBed"]) {
+      assert.equal(normal.uniforms[key], beauty.uniforms[key], `${key} follows live beauty state`);
+    }
+    assert.throws(() => cache.render(scene, () => {
+      assert.equal(river.material, normal);
+      throw new Error("render failure");
+    }), /render failure/);
+    assert.equal(river.material, beauty);
+    assert.equal(beauty.depthWrite, false);
+    assert.equal(river.getAoNormalMaterial(), normal);
+    let releases = 0; normal.addEventListener("dispose", () => releases++);
+    cache.dispose(); river.dispose(); river.dispose();
+    assert.equal(releases, 1);
+  });
   await checkAsync("terrain river: surface controls survive save/read and rejects malformed settings", async () => {
     const base = { id: "river", landscapeRef: "land", splineRef: "spline" };
     assert.equal(resolveRiverWater(base).surfaceStrength, 2);

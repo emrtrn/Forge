@@ -9,13 +9,17 @@ This document is the working contract for future Codex/Claude tasks. If a task
 conflicts with this file, update the contract first or call out the conflict
 before changing code.
 
-> **2026-10-25 accepted direction, implementation pending:** New Offroad project
-> development will use one authoritative Forge engine/editor source and a
-> separate game repository, rather than maintaining an editable platform copy
-> inside the game fork. See
+> **2026-11-01 P1-A/B/C implemented; P2 technical and user acceptance complete:** Ridgebound
+> uses one authoritative Forge engine/editor source and a separate game
+> repository. No editable engine/editor copy lives in the game. See
 > [Shared Forge / independent game project plan](../planned/FORGE_GAME_PROJECT_WORKFLOW.md).
-> The fork-based ownership and repo-local paths below describe the existing
-> implementation until that plan's acceptance gate passes. The new plan governs
+> [P2 acceptance evidence](../reports/RIDGEBOUND_P2_ACCEPTANCE_REPORT.md).
+> Fork-based ownership below continues to describe Model 1 games; selected-project
+> paths apply to Model 2. `tools/projectPaths.ts` owns the server's data root;
+> manifest `game.module` / `game.editorCatalog` select game entries. Dev operations
+> use that same root, while production contains only the selected game's static
+> data and compiled runtime. Build records preserve both source states, the lock
+> and input/output hashes. The shared-source plan governs
 > this targeted project-loading change; generic engine/editor ownership and
 > production runtime boundaries still apply. It does not authorize restoring
 > the former Studio launcher or migrating existing games automatically.
@@ -72,13 +76,15 @@ Removed architecture:
 
 - Project Browser / launcher route.
 - External project references in `projects/*.project-ref.json`.
-- `studio` CLI and external-project packaging scripts.
+- Former `studio` CLI and its external-project packaging scripts. The new
+  explicit `run-game-project.mjs` adapter is not a Studio launcher.
 - External-project dev middleware such as `/__project`, `/__project-file`,
   `/__recent-projects`, `/__studio/*`, and `/__select-directory`.
 
 Kept dev middleware:
 
-- `/__save-layout`: writes local authoring data under this repo's `public/`.
+- `/__save-layout`: writes local authoring data under the selected project's
+  `public/`; absent explicit selection, that project is Forge itself.
 - `/__project-dir/<path>`: read-only Content Browser directory tree scoped to
   `public/`.
 - Structured sidecar/content writes: `/__save-collision`, `/__save-actor`,

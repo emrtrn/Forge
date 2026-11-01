@@ -1,6 +1,22 @@
 # Launch Workflow
 
-Single codebase: one dev server, one app, two routes.
+Shared Forge source: one dev server per selected project, two routes.
+
+## Independent game project (Ridgebound)
+
+From the Ridgebound repository, `npm.cmd run dev` serves runtime at
+`http://127.0.0.1:5175/` and editor at `http://127.0.0.1:5175/?editor`.
+`npm.cmd run check` checks the game and selected Forge together. Use
+`FORGE_ROOT` or the Git-ignored `forge.local.json` to select Forge; the default
+is `../../Forge`. The manifest's `game.module` and `game.editorCatalog` select
+the game's own source entries. Broken explicit selections fail without falling
+back to Forge public data. Restart the server to change projects.
+
+`npm.cmd run build` creates `builds/<id>/dist/`; `npm.cmd run preview` serves
+the last verified artifact on port 4175. `npm.cmd run verify:build` restores
+recorded inputs into a fresh temporary workspace and compares rebuilt hashes.
+Only `dist/` contents are deployable; input archives and build records stay local.
+See [P2 evidence](../reports/RIDGEBOUND_P2_ACCEPTANCE_REPORT.md).
 
 ## URLs
 
@@ -12,7 +28,7 @@ Start the dev server with `npm run dev` (LAN) or `npm run dev:local`
 
 ## Play / Test (one server)
 
-The game and the editor are the **same app** rendered by the same `SceneApp`, so
+The game (`RuntimeSceneApp`) and editor (`SceneApp`) share the Forge source, so
 there is no second server to run. In the editor, **P** (or the toolbar **Play**
 button) saves the current layout and opens the game route (`/`) in a new tab — the
 game loads the layout you just saved, so you test exactly what you authored.
@@ -22,7 +38,9 @@ game loads the layout you just saved, so you test exactly what you authored.
 
 ## Authoring data
 
-The editor reads and writes this repo's own `public/`:
+The editor reads and writes the selected project's `public/` (Forge's own
+project when no `FORGE_PROJECT_ROOT` is set). Save/autosave, content operations
+and sidecars use that same server-owned root:
 
 - Layout: `public/<editor.defaultScene>` (e.g. `public/layouts/render-test-room.json`)
 - Assets: `public/assets/manifest.json` + `public/assets/models/...`

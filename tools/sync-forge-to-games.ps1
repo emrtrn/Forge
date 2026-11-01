@@ -1,3 +1,5 @@
+# Model 1 forks only: requires the Forge upstream remote. Shared-source Model 2
+# projects such as Ridgebound must use their own tools/forge.mjs commands instead.
 param(
   [string]$ForgeDir = "C:\Users\emret\Desktop\Forge",
   [string]$GamesDir = "C:\Users\emret\Desktop\Games",

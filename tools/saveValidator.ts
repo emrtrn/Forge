@@ -3448,7 +3448,7 @@ export function validateGameDataPath(path: unknown): string {
   if (typeof path !== "string") {
     throw new Error("gameData payload path must be a string");
   }
-  const normalizedPath = path.replace(/\\/g, "/").replace(/^\/+/, "");
+  const normalizedPath = relativeContentPath(path);
   if (!normalizedPath.startsWith("game-data/") || !normalizedPath.endsWith(".json")) {
     throw new Error("gameData payload path must be a game-data/**.json file");
   }
@@ -3579,7 +3579,7 @@ export function validateSaveWorldRecipePayload(value: unknown): {
   if (typeof input.level !== "string" || !input.level.endsWith(".json") || input.level.includes("..")) {
     throw new Error("world recipe level must be a public-root-relative .json level path");
   }
-  const level = input.level.replace(/\\/g, "/").replace(/^\/+/, "");
+  const level = relativeContentPath(input.level);
   const { recipe, issues } = normalizeWorldRecipe(input.recipe);
   if (!recipe || issues.length > 0) {
     const quoted = issues.slice(0, WORLD_RECIPE_ISSUES_QUOTED).join("; ");
@@ -4020,6 +4020,15 @@ function sanitizeContentName(value: unknown): string {
   return trimmed;
 }
 
+/** Reject absolute paths before normalization can erase their leading slash. */
+function relativeContentPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  if (normalized.startsWith("/") || normalized.includes(":") || normalized.includes("\0")) {
+    throw new Error("content path must be project-relative");
+  }
+  return normalized.replace(/\/+$/, "");
+}
+
 /** Validates a `/__content-new` payload (folder or typed stub file to create). */
 export function validateContentNewPayload(value: unknown): ContentNewPayload {
   if (!value || typeof value !== "object") throw new Error("content payload must be an object");
@@ -4029,7 +4038,7 @@ export function validateContentNewPayload(value: unknown): ContentNewPayload {
   if (input.dir.includes("..")) throw new Error("content payload dir must not contain ..");
   const payload: ContentNewPayload = {
     kind: input.kind,
-    dir: input.dir,
+    dir: relativeContentPath(input.dir),
     name: sanitizeContentName(input.name),
   };
   if (input.kind === "script") {
@@ -4125,7 +4134,7 @@ function contentStubJson(payload: ContentNewPayload): string {
  * `<name>.<kind>.json` stubs inside `dir`.
  */
 export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFile {
-  const dir = payload.dir.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\/+/, "");
+  const dir = relativeContentPath(payload.dir);
   const join = (segment: string): string => (dir ? `${dir}/${segment}` : segment);
   if (payload.kind === "folder") {
     return { path: join(payload.name), content: null };
@@ -4193,12 +4202,12 @@ export function validateImportAssetMeta(input: { dir: unknown; name: unknown }):
   const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
   if (!ext) throw new Error("import file must have an extension");
   if (!IMPORT_ALLOWED_EXTS.has(ext)) throw new Error(`unsupported import type: .${ext}`);
-  return { dir: input.dir, name };
+  return { dir: relativeContentPath(input.dir), name };
 }
 
 /** Joins validated import metadata into a public-root-relative destination path. */
 export function resolveImportPath(meta: ImportAssetMeta): string {
-  const dir = meta.dir.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\/+/, "");
+  const dir = relativeContentPath(meta.dir);
   return dir ? `${dir}/${meta.name}` : meta.name;
 }
 
@@ -4221,7 +4230,7 @@ export function validateReimportAssetMeta(input: {
 }): ReimportAssetMeta {
   if (typeof input.path !== "string") throw new Error("reimport path must be a string");
   if (input.path.includes("..")) throw new Error("reimport path must not contain ..");
-  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const path = relativeContentPath(input.path);
   if (!path) throw new Error("reimport path must not be empty");
 
   const name = sanitizeContentName(input.name);
@@ -4250,7 +4259,7 @@ export function validateContentRenamePayload(value: unknown): ContentRenamePaylo
   const input = value as Record<string, unknown>;
   if (typeof input.path !== "string") throw new Error("rename payload path must be a string");
   if (input.path.includes("..")) throw new Error("rename payload path must not contain ..");
-  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const path = relativeContentPath(input.path);
   if (!path) throw new Error("rename payload path must not be empty");
   const name = sanitizeContentName(input.name);
   if (name.includes(".")) throw new Error("rename name must not include an extension");
@@ -4272,7 +4281,7 @@ export interface ContentRenameTarget {
  * `.material.json` survive while only the base name changes.
  */
 export function resolveContentRenameTarget(payload: ContentRenamePayload): ContentRenameTarget {
-  const from = payload.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const from = relativeContentPath(payload.path);
   const slash = from.lastIndexOf("/");
   const dir = slash >= 0 ? from.slice(0, slash) : "";
   const fileName = slash >= 0 ? from.slice(slash + 1) : from;
@@ -4293,7 +4302,7 @@ export function validateContentDeletePayload(value: unknown): ContentDeletePaylo
   const input = value as Record<string, unknown>;
   if (typeof input.path !== "string") throw new Error("delete payload path must be a string");
   if (input.path.includes("..")) throw new Error("delete payload path must not contain ..");
-  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const path = relativeContentPath(input.path);
   if (!path) throw new Error("delete payload path must not be empty");
   return { path };
 }
@@ -4326,8 +4335,8 @@ export function validateContentTransferPayload(value: unknown): ContentTransferP
   if (input.operation !== "copy" && input.operation !== "move") {
     throw new Error("content transfer operation must be copy or move");
   }
-  const source = input.source.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-  const destinationDir = input.destinationDir.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const source = relativeContentPath(input.source);
+  const destinationDir = relativeContentPath(input.destinationDir);
   if (!source) throw new Error("content transfer source must not be empty");
   if (!destinationDir) throw new Error("content transfer destinationDir must not be empty");
   return { source, destinationDir, operation: input.operation };
@@ -4347,7 +4356,7 @@ export function validateOpenLevelPayload(value: unknown): OpenLevelPayload {
   const input = value as Record<string, unknown>;
   if (typeof input.path !== "string") throw new Error("open-level payload path must be a string");
   if (input.path.includes("..")) throw new Error("open-level path must not contain ..");
-  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const path = relativeContentPath(input.path);
   if (!path) throw new Error("open-level path must not be empty");
   if (!path.toLowerCase().endsWith(".json")) throw new Error("open-level path must be a .json layout");
   return { path };

@@ -5,8 +5,8 @@ template** with a built-in editor mode. The editor is not a separate tool — it
 a dev-only mode of the same runtime (`?editor`), so every game you build from
 Forge ships its own authoring environment during development and a clean,
 runtime-only bundle in production. Forge is not tied to any single game: each
-concrete game is a **fork** of this template that swaps in its own data, assets,
-and rules while pulling engine/editor improvements back from upstream.
+concrete game supplies its own data, assets and rules. Existing games use a
+fork with upstream updates; Ridgebound uses the shared Forge source directly.
 
 ## Proven vertical
 
@@ -61,12 +61,23 @@ The full boundary contract and product envelope live in
 
 ## Making a game from Forge
 
-A game is a **fork** of this repository, not a throwaway copy. The fork keeps all
+For existing Model 1 games, a game is a **fork** of this repository, not a throwaway copy. The fork keeps all
 game-specific code and data confined to `public/` + `src/game`, sets `upstream`
 to Forge, and pulls platform improvements with
 `git fetch upstream && git merge upstream/main`. See
 [`docs/planned/FORGE_GAME_PROJECT_WORKFLOW.md`](docs/planned/FORGE_GAME_PROJECT_WORKFLOW.md) for the
 full fork/sync workflow.
+
+Ridgebound uses Model 2: engine/editor/tools stay in Forge; game code, catalog,
+manifest, scenes and design documents stay in its own repository. From Ridgebound,
+run `npm.cmd run check`, `npm.cmd run dev`, `npm.cmd run build`,
+`npm.cmd run preview`, and `npm.cmd run verify:build`. `FORGE_ROOT` or
+`forge.local.json` selects the local Forge source; `game.module` and
+`game.editorCatalog` select game entries. Invalid explicit selections fail.
+The `sync-forge-to-games` scripts are only for Model 1 forks with an upstream
+remote; do not use them for Ridgebound. See the
+[P2 acceptance report](docs/reports/RIDGEBOUND_P2_ACCEPTANCE_REPORT.md) for
+technical evidence and the user's completed visual and usage acceptance.
 
 ## Documentation
 

@@ -196,6 +196,9 @@ export function registerWorldRecipeTests(check: Check): void {
     assert.throws(() => validateSaveWorldRecipePayload({ level: "Levels/V.level.json", recipe: { schemaVersion: 9 } }), /schemaVersion must be 1/);
     assert.throws(() => validateSaveWorldRecipePayload({ level: "../V.level.json", recipe: maximalRecipe() }), /level must be/);
     assert.throws(() => validateSaveWorldRecipePayload({ level: "Levels/V.png", recipe: maximalRecipe() }), /level must be/);
+    for (const level of ["/Levels/V.level.json", "C:/Levels/V.level.json", "\\\\server\\share\\V.level.json"]) {
+      assert.throws(() => validateSaveWorldRecipePayload({ level, recipe: maximalRecipe() }), /project-relative/);
+    }
   });
 
   check("world recipe: ownership keys are written in sorted order", () => {

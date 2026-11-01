@@ -11,7 +11,7 @@
 
 | | Model 1: Fork + upstream | Model 2: Ortak kaynak |
 |---|---|---|
-| Durum | **Geçerli — mevcut oyunlar bununla yaşıyor** | **P1-A/P1-B/P1-C uygulandı; P2 tam kabul bekliyor** |
+| Durum | **Geçerli — mevcut oyunlar bununla yaşıyor** | **P2 teknik SP ve kullanıcı kabulü tamamlandı (01.11.2026)** |
 | Kimin için | `minigolf`, `miniracer`, `platformer`, `freshcounter` ve benzeri mevcut oyunlar | Forge Offroad (ilk tüketici) |
 | Oyun deposunda motor kopyası | Var (Forge'un klonu) | **Yok** |
 | Forge yeniliği oyuna | `git merge upstream/main` | Oyun zaten aynı kaynağı kullanır |
@@ -230,9 +230,11 @@ yeniden değerlendirilmelidir.
 
 # MODEL 2 — Ortak Forge kaynağı ve bağımsız oyun projesi (hedef)
 
-> Durum: **Hedef çalışma ilkesi onaylı; teknik uygulama ve kabul bekliyor.** Bu
-> bölüm çalışan özellik veya test başarısı raporu değildir. İlk tüketici: Forge
-> Offroad. Mevcut oyunlar için otomatik migrasyon kararı yoktur.
+> Durum: **P1-A/B/C uygulandı; P2 teknik SP ve kullanıcı kabulü tamamlandı.**
+> Hedef ilkeler aşağıda korunur; güncel uygulama ve test kanıtı
+> [P2 raporundadır](../reports/RIDGEBOUND_P2_ACCEPTANCE_REPORT.md).
+> İlk tüketici Ridgebound (önceki adı Forge Offroad). Mevcut oyunlar için
+> otomatik migrasyon kararı yoktur.
 
 ## 2.1 Problem ve karar
 
@@ -407,6 +409,15 @@ P2/SP kabul tablosu ve kullanıcı kabulü henüz kapanmadı; M0 oyun mantığı
 başlanmadı. Bu çalışma commit/push veya yayın yapmadı; kullanıcının talebiyle
 Codex Security taraması çalıştırılmadı.
 
+### 2.5D P2 kapanışı — 2026-11-01
+
+SP-01–SP-10 teknik kontrolleri geçti. Kullanıcı “P2 görsel ve kullanım kabulünü
+onaylıyorum” beyanıyla görsel/kullanım kapısını da kapattı. **P2 tamamlandı.**
+Yukarıdaki P1-A/B/C güncellemeleri kendi aşamalarının tarihsel durumunu anlatır;
+güncel sonuç [P2 kabul raporudur](../reports/RIDGEBOUND_P2_ACCEPTANCE_REPORT.md).
+Kullanıcı P2 kapsamı için commit/push yetkisi verdi. M0 geliştirmesi, yayın,
+bağımsız motor release sistemi ve eski oyun migrasyonu bu kapanışa dahil değildir.
+
 ## 2.6 Uygulama görevi ve sıra
 
 **P0 — En küçük teknik tasarım.** Git durumu, `AGENTS.md`, aktif kaynaklar ve
@@ -453,21 +464,24 @@ kullanıcı onayı beklenir.
 
 ## 2.8 Kabul kapısı — M0 öncesi
 
-Başlangıç durumu her satırda **TEST EDİLMEDİ**. Uygulama raporu test adı, log/görüntü
-yolu ve test edilen kaynak durumunu içermelidir.
+01.11.2026 P2 teknik doğrulaması: aşağıdaki SP maddeleri **GEÇTİ**. Kaynak
+commit'leri, commit edilmemiş düzeltme hashleri, test/build/görüntü kanıtları ve
+sınırlar [P2 kabul raporunda](../reports/RIDGEBOUND_P2_ACCEPTANCE_REPORT.md).
+**Kullanıcı görsel ve kullanım kabulü 01.11.2026 tarihinde onaylandı; P2 tamamlandı.**
+Bu tablo M0 oyun kabulü veya yayın yetkisi değildir.
 
 | ID | Kanıtlanacak davranış | Durum |
 |---|---|---|
-| SP-01 | Oyun deposu düzenlenebilir Forge motor/editör kopyası içermeden açılır. | TEST EDİLMEDİ |
-| SP-02 | Editör ve runtime seçilen oyunun manifestini, modülünü ve sahnesini kullanır. | TEST EDİLMEDİ |
-| SP-03 | Forge'daki küçük bir genel değişiklik aynı kaynaktan oyunda sınanır; dosya taşıma gerekmez. | TEST EDİLMEDİ |
-| SP-04 | Oyun değişikliği yalnız oyun deposunda; motor değişikliği yalnız Forge deposunda görünür. | TEST EDİLMEDİ |
-| SP-05 | Save/autosave ve içerik işlemleri yalnız seçili oyun köküne yazar; Forge fixture'ları ve ikinci proje değişmez. | TEST EDİLMEDİ |
-| SP-06 | Geçersiz/proje dışına taşan yollar reddedilir; yanlış köke sessiz kayıt yapılmaz. | TEST EDİLMEDİ |
-| SP-07 | Bağımsız oyun build'i önizlemede çalışır; editör, dev uçları ve makineye özel yollar çıktıya sızmaz. | TEST EDİLMEDİ |
-| SP-08 | Forge güncellemesinden sonra oyun açılış, kayıt ve temel oynanış kontrolü geçer. | TEST EDİLMEDİ |
-| SP-09 | Temiz ortamda kayıtlı oyun/Forge commit'leri ve build girdileriyle proje yeniden hazırlanabilir. | TEST EDİLMEDİ |
-| SP-10 | Forge'un mevcut örnek editör/runtime akışı ve uygun regresyon kapıları korunur. | TEST EDİLMEDİ |
+| SP-01 | Oyun deposu düzenlenebilir Forge motor/editör kopyası içermeden açılır. | GEÇTİ |
+| SP-02 | Editör ve runtime seçilen oyunun manifestini, modülünü ve sahnesini kullanır. | GEÇTİ |
+| SP-03 | Forge'daki küçük bir genel değişiklik aynı kaynaktan oyunda sınanır; dosya taşıma gerekmez. | GEÇTİ |
+| SP-04 | Oyun değişikliği yalnız oyun deposunda; motor değişikliği yalnız Forge deposunda görünür. | GEÇTİ |
+| SP-05 | Save/autosave ve içerik işlemleri yalnız seçili oyun köküne yazar; Forge fixture'ları ve ikinci proje değişmez. | GEÇTİ |
+| SP-06 | Geçersiz/proje dışına taşan yollar reddedilir; yanlış köke sessiz kayıt yapılmaz. | GEÇTİ |
+| SP-07 | Bağımsız oyun build'i önizlemede çalışır; editör, dev uçları ve makineye özel yollar çıktıya sızmaz. | GEÇTİ |
+| SP-08 | Forge güncellemesinden sonra oyun açılış, kayıt ve temel oynanış kontrolü geçer. | GEÇTİ |
+| SP-09 | Temiz ortamda kayıtlı oyun/Forge commit'leri ve build girdileriyle proje yeniden hazırlanabilir. | GEÇTİ |
+| SP-10 | Forge'un mevcut örnek editör/runtime akışı ve uygun regresyon kapıları korunur. | GEÇTİ |
 
 TypeScript değişikliğinde `npx tsc --noEmit`; ortak runtime/motor işi için
 `npm run test:engine` ve `npm run build:verify`. Editör/proje açma, dosya

@@ -21243,7 +21243,7 @@ check("content-rename target keeps the extension chain and source directory", ()
 
 check("content-delete validates payload and normalizes the path", () => {
   assert.equal(
-    validateContentDeletePayload({ path: "/assets/props/chair.glb/" }).path,
+    validateContentDeletePayload({ path: "assets/props/chair.glb/" }).path,
     "assets/props/chair.glb",
   );
   assert.throws(() => validateContentDeletePayload({ path: "" }));
@@ -21254,7 +21254,7 @@ check("content-delete validates payload and normalizes the path", () => {
 check("content-transfer validates copy/move paths and rejects traversal", () => {
   assert.deepEqual(
     validateContentTransferPayload({
-      source: "/assets/props/chair.glb/",
+      source: "assets/props/chair.glb/",
       destinationDir: "assets/archive/",
       operation: "copy",
     }),
@@ -29272,11 +29272,7 @@ check("validateSaveGameDataPayload fences writes to game-data JSON and rejects t
   const ok = validateSaveGameDataPayload({ path: "game-data/balance/units.json", data: { a: {} } });
   assert.equal(ok.path, "game-data/balance/units.json");
   assert.deepEqual(ok.data, { a: {} });
-  // A leading slash is normalised rather than rejected.
-  assert.equal(
-    validateSaveGameDataPayload({ path: "/game-data/balance/units.json", data: {} }).path,
-    "game-data/balance/units.json",
-  );
+  assert.throws(() => validateSaveGameDataPayload({ path: "/game-data/balance/units.json", data: {} }));
   for (const bad of [
     { path: "src/main.ts", data: {} },
     { path: "game-data/../secret.json", data: {} },

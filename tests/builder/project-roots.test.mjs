@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,9 +54,9 @@ async function serverFor(t, projectRoot) {
   t.after(() => server.close());
   await server.listen();
   const base = server.resolvedUrls.local[0];
-  return async (path, payload) => {
+  return async (path, payload, raw = false) => {
     const response = await fetch(new URL(path, base), payload === undefined ? {} : {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+      method: "POST", headers: { "content-type": raw ? "application/octet-stream" : "application/json" }, body: raw ? payload : JSON.stringify(payload),
     });
     const text = await response.text();
     return { status: response.status, text, json: () => JSON.parse(text) };
@@ -79,6 +79,60 @@ test("project selection fails closed and fences new public/source paths", async 
   await writeFile(resolve(b, "public/project.3dgame.json"), "invalid json");
   assert.throws(() => createProjectPaths({ forgeRoot, projectRoot: b }));
   assert.equal(createProjectPaths({ forgeRoot }).root.toLowerCase(), forgeRoot.toLowerCase());
+});
+
+// Compare every fixture file, not only its manifest: side effects in the other
+// project's assets, scene or sidecars must also fail this acceptance check.
+async function inventory(root) {
+  const result = {};
+  for (const path of (await readdir(root, { recursive: true, withFileTypes: true })).filter(entry => entry.isFile())) {
+    const absolute = resolve(path.parentPath, path.name);
+    result[absolute.slice(root.length)] = (await readFile(absolute)).toString("base64");
+  }
+  return result;
+}
+
+test("import, reimport and model sidecars stay in the selected project through rename/copy/delete", async (t) => {
+  const { a, b } = await fixture(t);
+  const beforeB = await inventory(b);
+  const api = await serverFor(t, a);
+  const model = Buffer.from(JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: [] }], scene: 0 }));
+  assert.equal((await api("/__import-asset?dir=assets&name=Probe.gltf", model, true)).status, 200);
+  assert.equal((await api("/__import-asset?dir=assets&name=Probe.gltf", model, true)).status, 409);
+  const collision = { complexity: "projectDefault", preset: "blockAll", primitives: [] };
+  assert.equal((await api("/__save-collision", { path: "assets/Probe.collision.json", collision })).status, 200);
+  assert.equal((await api("/__reimport-asset?path=assets/Probe.gltf&name=Probe.gltf", model, true)).status, 200);
+  assert.equal((await api("/__content-rename", { path: "assets/Probe.gltf", name: "Renamed" })).status, 200);
+  const sidecar = await readFile(resolve(a, "public/assets/Renamed.collision.json"), "utf8");
+  assert.deepEqual(JSON.parse(sidecar), collision);
+  await assert.rejects(readFile(resolve(a, "public/assets/Probe.collision.json")), { code: "ENOENT" });
+  assert.equal((await api("/__content-new", { kind: "folder", dir: "assets", name: "Copies" })).status, 200);
+  const copied = await api("/__content-transfer", { source: "assets/Renamed.gltf", destinationDir: "assets/Copies", operation: "copy" });
+  assert.equal(copied.status, 200);
+  const copiedPath = copied.json().path;
+  assert.equal(await readFile(resolve(a, `public/${copiedPath.replace(".gltf", ".collision.json")}`), "utf8"), sidecar);
+  for (const path of ["assets/Renamed.gltf", copiedPath]) {
+    assert.equal((await api("/__content-delete", { path })).status, 200);
+    await assert.rejects(readFile(resolve(a, `public/${path.replace(".gltf", ".collision.json")}`)), { code: "ENOENT" });
+  }
+  for (const dir of ["../b/public/assets", "/outside", "C:/outside", "\\\\server\\share"]) {
+    assert.equal((await api(`/__import-asset?dir=${encodeURIComponent(dir)}&name=Rejected.gltf`, model, true)).status, 400, dir);
+  }
+  for (const path of ["../b/public/assets/probe.collision.json", "C:/probe.collision.json"]) {
+    assert.equal((await api("/__save-collision", { path, collision })).status, 400);
+  }
+  for (const path of ["/assets/Renamed.gltf", "C:/assets/Renamed.gltf", "\\\\server\\share\\a.gltf"]) {
+    for (const [endpoint, payload] of [
+      ["/__content-rename", { path, name: "Rejected" }],
+      ["/__content-delete", { path }],
+      ["/__content-transfer", { source: path, destinationDir: "assets", operation: "copy" }],
+      ["/__content-new", { dir: path, kind: "folder", name: "Rejected" }],
+      ["/__open-level", { path: `${path}.json` }],
+    ]) assert.equal((await api(endpoint, payload)).status, 400, `${endpoint}: ${path}`);
+    assert.equal((await api(`/__reimport-asset?path=${encodeURIComponent(path)}&name=a.gltf`, model, true)).status, 400);
+  }
+  assert.equal((await api("/__save-gamedata", { path: "/game-data/test.json", data: {} })).status, 400);
+  assert.deepEqual(await inventory(b), beforeB);
 });
 
 test("two live servers isolate static reads, saves, content operations, behavior stubs and Git defaults", async (t) => {

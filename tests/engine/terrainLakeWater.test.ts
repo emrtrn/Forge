@@ -9,11 +9,38 @@ import type { RoomLayout } from "../../engine/scene/layout";
 import { createLakeFixture } from "./fixtures/lakeFixture";
 import { WaterReflectionRegistry } from "../../engine/render-three/waterReflectionRegistry";
 import { LakeWaterController } from "../../src/scene/lakeWaterController";
-import { Scene } from "three";
+import { Group, PerspectiveCamera, Scene, type Mesh, type WebGLRenderer } from "three";
+import { LakeWaterObject } from "../../engine/render-three/lakeWater";
 import { applyTerrainUndoPatches, revertTerrainUndoPatches, createTerrainEditWorld, createTerrainRegionPatches } from "../../engine/terrain/terrainEdit";
 import { readRoomLayout } from "../../engine/scene/layoutValidation";
 
 export async function registerTerrainLakeWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>) {
+  await check("terrain lake: normal and depth draws follow translated and moving parents", async () => {
+    const doc = createLakeFixture();
+    const geometry = await buildLakeGeometry(await prepareLakeSnapshot(doc, doc.lake));
+    const lake = new LakeWaterObject({ ...doc.lake, appearance: { surfaceWavesEnabled: true } }, geometry, null);
+    const parent = new Group(); parent.add(lake);
+    const camera = new PerspectiveCamera();
+    let drawn: Mesh | undefined;
+    const renderer = { autoClear: true, render(object: Mesh) {
+      // WebGLRenderer updates the detached root without forcing a dirty matrix.
+      object.updateMatrixWorld();
+      assert.deepEqual(object.matrixWorld.elements, lake.matrixWorld.elements);
+      drawn = object;
+    } } as unknown as WebGLRenderer;
+    for (const kind of ["normal", "depth"] as const) {
+      parent.position.set(130.5, -1, 102.5); parent.rotation.y = .3;
+      parent.updateMatrixWorld(true);
+      lake.renderWaveOverride(renderer, camera, kind);
+      const first = drawn;
+      parent.position.set(-250, 7, 84); parent.rotation.y = -.7; parent.scale.set(1.5, 1, .8);
+      parent.updateMatrixWorld(true);
+      lake.renderWaveOverride(renderer, camera, kind);
+      assert.equal(drawn, first, "moving a lake reuses its override mesh");
+      assert.equal(renderer.autoClear, true);
+    }
+    lake.dispose();
+  });
   await check("terrain lake: source schema, save and partition preserve full precision without derived buffers", async () => {
     const { lake } = createLakeFixture(); lake.seed[0] = -20.123456789;
     const initial = createLakeAppearance();

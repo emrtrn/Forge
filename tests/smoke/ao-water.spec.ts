@@ -14,6 +14,20 @@ for(const kind of ['flat','wave','river'])for(const below of [false,true])for(co
  });
 }
 
+for(const location of ['translated','moved'] as const)for(const below of [false,true]) {
+ test(`displaced lake hides submerged AO: ${location}, below=${below}`,async({page},info)=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+  await page.goto('/tests/smoke/fixtures/ao-water.html');await page.waitForFunction(()=>'waterAo' in window);
+  const result=await page.evaluate(({location,below})=>(window as unknown as {waterAo:(k:string,b:boolean,s:boolean,l:string)=>{normalLength:number;normalDifference:number;depthDifference:number;aoDifference:number;protrusionDifference:number}}).waterAo('wave',below,false,location),{location,below});
+  expect(result.normalLength).toBeGreaterThan(.95);expect(result.normalLength).toBeLessThan(1.05);
+  expect(result.normalDifference).toBe(0);expect(result.depthDifference).toBe(0);expect(result.aoDifference).toBe(0);
+  expect(result.protrusionDifference).toBeGreaterThan(0);
+  await page.screenshot({path:info.outputPath(`lake-${location}-normal.png`)});
+  expect(errors).toEqual([]);
+ });
+}
+
 for(const waves of [false,true])for(const floatDepth of [false,true]) {
  test(`river stays visible with AO: waves=${waves}, MSAA fallback=${floatDepth}`,async({page},info)=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));

@@ -424,6 +424,7 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       this.waveOverrides.set(kind, proxy);
     }
     proxy.matrix.copy(this.matrixWorld); proxy.layers.mask = this.layers.mask;
+    proxy.matrixWorldNeedsUpdate = true;
     const autoClear = renderer.autoClear;
     try { renderer.autoClear = false; renderer.render(proxy, camera); }
     finally { renderer.autoClear = autoClear; }

@@ -49,7 +49,7 @@ export function maximalWorldEnvironment(): LayoutWorldEnvironment {
     hidden: true,
     time: { hour: 7.5, dayLengthMinutes: 24 },
     sunPath: { azimuthDeg: 135, noonElevationDeg: 48, sunriseHour: 5.5, sunsetHour: 19.25 },
-    night: { moonIntensity: 0.12, moonColor: "#8899ff", moonAngularDiameterDeg: 2, moonBrightness: 0.7, ambientFloor: 0.2, ambientIntensity: 1.2 },
+    night: { moonIntensity: 0.12, moonShadowStrength: 0.4, moonColor: "#8899ff", moonAngularDiameterDeg: 2, moonBrightness: 0.7, ambientFloor: 0.2, ambientIntensity: 1.2 },
     season: "winter",
     weather: { preset: "snow", intensity: 0.75 },
     surface: {
@@ -79,6 +79,16 @@ function levelWith(worldEnvironment?: unknown): Record<string, unknown> {
 }
 
 export function registerWorldEnvironmentTests(check: Check): void {
+  check("world environment: moon shadow strength clamps, rejects invalid values and survives save", () => {
+    assert.equal(resolveWorldEnvironment({}).night.moonShadowStrength, 0.45);
+    for (const [input, expected] of [[-1, 0], [2, 1], [0, 0], [0.65, 0.65]] as const) {
+      assert.equal(validateLayout(levelWith({ night: { moonShadowStrength: input } })).worldEnvironment?.night?.moonShadowStrength, expected);
+    }
+    const repaired = normalizeWorldEnvironment({ night: { moonShadowStrength: "bad" } });
+    assert.equal(repaired.environment?.night, undefined);
+    assert.ok(repaired.warnings.some((warning) => warning.includes("moonShadowStrength")));
+  });
+
   check("world environment: an empty actor stays empty and resolves to the defaults", () => {
     const { environment, warnings } = normalizeWorldEnvironment({});
     assert.deepEqual(environment, {});

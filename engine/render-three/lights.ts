@@ -20,7 +20,8 @@ import type { ColorRepresentation } from "three";
 import { shadowDepthBias } from "./depthMode";
 
 import type { Entity } from "@engine/scene/entity";
-import { readLightComponent, readTransformComponent } from "@engine/scene/components";
+import { LIGHT_COMPONENT, readLightComponent, readTransformComponent } from "@engine/scene/components";
+import type { EntityComponentData } from "@engine/scene/entity";
 import type { SceneLightType } from "@engine/scene/components";
 import type { LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import { defaultLightIntensity } from "@engine/scene/lights";
@@ -177,6 +178,9 @@ export function createLightObject(
   }
 
   light.name = `${root.name} Light`;
+  // Three's spot/directional constructors start at (0, 1, 0). Our root owns
+  // the authored position, so that default would offset the lamp and its aim.
+  light.position.set(0, 0, 0);
   light.castShadow = item.castShadow ?? item.type === "directional";
   configureShadowCastingLight(light);
   root.add(light);
@@ -460,10 +464,10 @@ export function disposeLightGizmo(gizmo: Object3D): void {
 }
 
 /**
- * Attaches a Three.js light to a placed actor instance's host object when the
+ * Attaches all Three.js lights to a placed actor instance's host object when the
  * actor entity carries a Light component (returns false otherwise).
  *
- * The light is added at the host's *local* origin: the host (the actor's mesh,
+ * The light is added in the component's local frame: the host (the actor's mesh,
  * or an empty group for a light-only actor) already sits at the instance world
  * transform, so the light — and, for directional/spot, its target — track the
  * actor as behaviors or the gizmo move it. The editor wireframe/icon gizmo is
@@ -472,16 +476,50 @@ export function disposeLightGizmo(gizmo: Object3D): void {
  * from the entity's Light component instead of a `LayoutLightActor`.
  */
 export function attachActorLight(host: Object3D, entity: Entity): boolean {
-  const light = readLightComponent(entity);
-  if (!light) return false;
+  const data = entity.components[LIGHT_COMPONENT];
+  if (!data) return false;
+  const lights = Array.isArray(data.actorLights) ? data.actorLights : [data];
+  let attached = false;
+  for (const light of lights) {
+    if (!light || typeof light !== "object" || Array.isArray(light)) continue;
+    const lightEntity: Entity = {
+      ...entity,
+      components: { ...entity.components, [LIGHT_COMPONENT]: light },
+    };
+    if (!readLightComponent(lightEntity)) continue;
+    attachActorLightNode(host, lightEntity, light);
+    attached = true;
+  }
+  return attached;
+}
+
+function attachActorLightNode(host: Object3D, entity: Entity, data: EntityComponentData): void {
   const item = entityLightItem(entity);
+  if (typeof data.actorLightNodeId === "string") item.name = `${item.name}:${data.actorLightNodeId}`;
   // The host carries the instance world transform; build the light at identity.
   item.position = [0, 0, 0];
   item.rotation = [0, 0, 0];
   // No editor gizmo: a placed actor light illuminates but shows no wireframe/icon
   // (the host object is the pickable), and skipping it keeps this DOM-free.
   const record = createLightObject(item, item.color ?? "#ffffff", { gizmo: false });
-  host.add(record.root);
-  if (record.target) host.add(record.target);
-  return true;
+  const transforms = Array.isArray(data.actorLocalTransforms) ? data.actorLocalTransforms : [data];
+  let parent = host;
+  for (const transform of transforms) {
+    if (!transform || typeof transform !== "object" || Array.isArray(transform)) continue;
+    const frame = new Object3D();
+    const vec = (key: string, fallback: Vec3): Vec3 => {
+      const value = transform[key];
+      return Array.isArray(value) && value.length === 3 && value.every((v) => typeof v === "number" && Number.isFinite(v))
+        ? value as Vec3 : fallback;
+    };
+    frame.position.set(...vec("position", [0, 0, 0]));
+    applyEulerDegrees(frame, vec("rotation", [0, 0, 0]));
+    frame.scale.set(...vec("scale", [1, 1, 1]));
+    parent.add(frame);
+    parent = frame;
+  }
+  parent.add(record.root);
+  // A spot/directional target must share the light's local frame. Keeping it
+  // under the host alone would aim at the wrong point as components move.
+  if (record.target) parent.add(record.target);
 }

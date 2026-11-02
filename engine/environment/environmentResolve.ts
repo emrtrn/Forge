@@ -37,7 +37,7 @@ export interface ResolvedEnvironment {
   sunDirection: Vec3;
   sunElevationDeg: number;
   /** Override of the Sun light's three object; null when the level has no Sun. */
-  light: { direction: Vec3; color: Vec3; intensity: number; isMoon: boolean } | null;
+  light: { direction: Vec3; color: Vec3; intensity: number; isMoon: boolean; shadowStrength: number } | null;
   /** Multiplier of the authored ambient (world settings) intensity. */
   ambientMultiplier: number;
   /** Independent night fill: remains available with no authored ambient or Sun, zero in full daylight. */
@@ -92,6 +92,7 @@ export function resolveEnvironment(
         : [authoredColor[0] * sun.color[0], authoredColor[1] * sun.color[1], authoredColor[2] * sun.color[2]],
       intensity: authored.sun.intensity * sun.intensityFactor * weather.sunIntensityMultiplier,
       isMoon: sun.isMoon,
+      shadowStrength: sun.isMoon ? env.night.moonShadowStrength : 1,
     };
   }
 

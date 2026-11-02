@@ -59,6 +59,7 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
+  SpotLight,
   Quaternion,
   Raycaster,
   RepeatWrapping,
@@ -21787,6 +21788,106 @@ check("attachActorLight builds a scene light from an actor's Light component", (
   const emptyHost = new Object3D();
   assert.equal(attachActorLight(emptyHost, plain), false);
   assert.equal(emptyHost.children.length, 0);
+});
+
+check("attachActorLight preserves Gaz52 spot offset and aim as its host moves", () => {
+  const def = normalizeActorScriptDef({ name: "Gaz52Lamp", components: [
+    { id: "root", component: "Transform", props: {} },
+    { id: "light", parent: "root", component: "Light", props: {} },
+  ] });
+  const lamp = def.components.find((node) => node.component === "Light")!;
+  // Use the regression's authored values even if the vehicle is edited later.
+  lamp.props = { type: "spot", position: [0, 1.5, 2.5], rotation: [0, 180, 0], intensity: 100 };
+  lamp.parent = "root";
+  const entity = actorInstanceToEntity(def, { classRef: "gaz.actor.json", position: [0, 0, 0] }, 0);
+  const host = new Object3D();
+  attachActorLight(host, entity);
+  let spot: SpotLight | undefined;
+  host.traverse((child) => { if (child instanceof SpotLight) spot = child; });
+  assert.ok(spot);
+  for (const angle of [0, Math.PI / 2]) {
+    host.position.set(10, 2, 20);
+    host.rotation.y = angle;
+    host.updateMatrixWorld(true);
+    const origin = spot.getWorldPosition(new Vector3());
+    const expected = host.localToWorld(new Vector3(0, 1.5, 2.5));
+    assert.ok(origin.distanceTo(expected) < 1e-8, JSON.stringify({ origin: origin.toArray(), expected: expected.toArray(), light: entity.components.Light }));
+    const aim = spot.target.getWorldPosition(new Vector3()).sub(origin).normalize();
+    const expectedAim = host.localToWorld(new Vector3(0, 1.5, 3.5)).sub(expected).normalize();
+    assert.ok(aim.distanceTo(expectedAim) < 1e-8);
+    assert.equal(spot.intensity, 100);
+    assert.equal(spot.distance, 10);
+  }
+});
+
+check("attachActorLight preserves nested parent rotation and scale without doubling placement", () => {
+  const def = normalizeActorScriptDef({ name: "NestedLamp", components: [
+    { id: "root", component: "Transform", props: { position: [100, 0, 0] } },
+    { id: "mount", parent: "root", component: "Transform", props: { position: [1, 2, 3], rotation: [0, 90, 0], scale: [2, 3, 4] } },
+    { id: "lamp", parent: "mount", component: "Light", props: { type: "spot", position: [0, 1, 2], rotation: [0, 180, 0] } },
+  ] });
+  const entity = actorInstanceToEntity(def, { classRef: "nested.actor.json", position: [10, 0, 0] }, 0);
+  const host = new Object3D();
+  host.position.set(10, 0, 0);
+  attachActorLight(host, entity);
+  host.updateMatrixWorld(true);
+  let spot: SpotLight | undefined;
+  host.traverse((child) => { if (child instanceof SpotLight) spot = child; });
+  assert.ok(spot);
+  const origin = spot.getWorldPosition(new Vector3());
+  assert.ok(origin.distanceTo(new Vector3(19, 5, 3)) < 1e-8);
+  const aim = spot.target.getWorldPosition(new Vector3()).sub(origin).normalize();
+  assert.ok(aim.distanceTo(new Vector3(1, 0, 0)) < 1e-8);
+});
+
+check("attachActorLight keeps a point light after a spot and multiple lights of the same type", () => {
+  const def = normalizeActorScriptDef({ name: "MultiLamp", components: [
+    { id: "root", component: "Transform", props: {} },
+    { id: "spot", parent: "root", component: "Light", props: { type: "spot", position: [0, 1.5, 2.5], rotation: [0, 180, 0], intensity: 100 } },
+    { id: "mount", parent: "root", component: "Transform", props: { position: [1, 2, 3], rotation: [0, 90, 0] } },
+    { id: "point", parent: "root", component: "Light", props: { type: "point", position: [-0.0364, 1.8191, 7.4509], intensity: 10, distance: 5, color: "#ff0000" } },
+    { id: "point2", parent: "mount", component: "Light", props: { type: "point", position: [0, 1, 2], intensity: 25, distance: 9, decay: 1 } },
+  ] });
+  const entity = actorInstanceToEntity(def, { classRef: "multi.actor.json", position: [10, 0, 0] }, 0);
+  const host = new Object3D();
+  host.position.set(10, 0, 0);
+  host.rotation.y = Math.PI / 2;
+  assert.equal(attachActorLight(host, entity), true);
+  host.updateMatrixWorld(true);
+  const points: PointLight[] = [];
+  const spots: SpotLight[] = [];
+  host.traverse((child) => {
+    if (child instanceof PointLight) points.push(child);
+    if (child instanceof SpotLight) spots.push(child);
+  });
+  assert.equal(spots.length, 1);
+  assert.equal(points.length, 2);
+  assert.equal(spots[0]!.intensity, 100);
+  assert.equal(points[0]!.intensity, 10);
+  assert.equal(points[0]!.distance, 5);
+  assert.equal(points[0]!.color.getHexString(), "ff0000");
+  assert.equal(points[1]!.intensity, 25);
+  assert.equal(points[1]!.distance, 9);
+  assert.equal(points[1]!.decay, 1);
+  assert.ok(points[0]!.getWorldPosition(new Vector3()).distanceTo(host.localToWorld(new Vector3(-0.0364, 1.8191, 7.4509))) < 1e-8);
+  assert.ok(points[1]!.getWorldPosition(new Vector3()).distanceTo(host.localToWorld(new Vector3(3, 3, 3))) < 1e-8);
+  // Rendering metadata is instance-only; saving a script keeps authored props.
+  assert.equal(def.components.some((node) => "actorLights" in node.props || "actorLocalTransforms" in node.props), false);
+});
+
+check("attachActorLight skips malformed light nodes without dropping later valid lights", () => {
+  const def = normalizeActorScriptDef({ name: "Lamps", components: [
+    { id: "root", component: "Transform", props: {} },
+    { id: "bad", parent: "root", component: "Light", props: { type: "invalid" } },
+    { id: "good", parent: "root", component: "Light", props: { type: "point", intensity: 7 } },
+  ] });
+  const entity = actorInstanceToEntity(def, { classRef: "lamps.actor.json", position: [0, 0, 0] }, 0);
+  const host = new Object3D();
+  assert.equal(attachActorLight(host, entity), true);
+  const lights: PointLight[] = [];
+  host.traverse((child) => { if (child instanceof PointLight) lights.push(child); });
+  assert.equal(lights.length, 1);
+  assert.equal(lights[0]!.intensity, 7);
 });
 
 check("actorPreviewNodes keeps the whole tree with per-node local transforms", () => {

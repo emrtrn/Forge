@@ -1,5 +1,5 @@
 /**
- * Actor Script editor 3D viewport — a self-contained, read-only preview of a
+ * Actor Script editor 3D viewport — a self-contained, editable preview of a
  * class's component tree, rendered with its own `WebGLRenderer` / camera /
  * scene / grid / orbit controls (the {@link StaticMeshEditor} viewport pattern).
  *
@@ -139,7 +139,7 @@ export class ActorScriptViewport {
   private readonly hintEl: HTMLElement;
   private readonly toolsEl: HTMLElement;
   private transformControls: TransformControls | null = null;
-  private gizmoMode: GizmoMode = "select";
+  private gizmoMode: GizmoMode = "translate";
   private gizmoDragging = false;
 
   private readonly target = new Vector3(0, 0.5, 0);
@@ -256,9 +256,9 @@ export class ActorScriptViewport {
     tools.className = "as-viewport-tools";
     tools.innerHTML = GIZMO_BUTTONS.map(
       (button) =>
-        `<button type="button" data-gizmo="${button.mode}" title="${button.title}" class="${
+        `<button type="button" data-gizmo="${button.mode}" title="${button.title}" aria-label="${button.title}" aria-pressed="${button.mode === this.gizmoMode}" class="${
           button.mode === this.gizmoMode ? "is-active" : ""
-        }">${button.glyph}</button>`,
+        }">${button.glyph} ${button.mode === "select" ? "Select" : button.title}</button>`,
     ).join("");
     tools.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
       btn.addEventListener("click", () => this.setGizmoMode(btn.dataset.gizmo as GizmoMode));
@@ -270,6 +270,7 @@ export class ActorScriptViewport {
     this.gizmoMode = mode;
     this.toolsEl.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.gizmo === mode);
+      btn.setAttribute("aria-pressed", String(btn.dataset.gizmo === mode));
     });
     this.attachGizmo();
   }
@@ -575,8 +576,9 @@ export class ActorScriptViewport {
     const wire = record.gizmo.getObjectByName("light-wire");
     if (wire) wire.visible = true;
     this.buildLightGizmos.push(record.gizmo);
-    // The target is already positioned (and its world matrix updated) at creation;
-    // leaving it out of the node subtree avoids a double transform when nested.
+    // The light root is identity here: the node group carries its transform.
+    // Keep the target in that same frame so it follows node/ancestor edits.
+    if (record.target) record.root.add(record.target);
     return record.root;
   }
 

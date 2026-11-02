@@ -17,8 +17,16 @@
         "shape": "box",
         "isStatic": false,
         "isSensor": false,
-        "size": [2.38, 2.14, 6.9],
-        "center": [0, 1.53, -1.19],
+        "size": [
+          2.38,
+          2.14,
+          6.9
+        ],
+        "center": [
+          0,
+          1.53,
+          -1.19
+        ],
         "simulatePhysics": true,
         "linearDamping": 0.01,
         "angularDamping": 0.6,
@@ -39,6 +47,40 @@
       "component": "Vehicle",
       "props": {
         "asset": "assets/vehicles/gaz52/Gaz52.vehicle.json"
+      },
+      "parent": "root"
+    },
+    {
+      "id": "light",
+      "component": "Light",
+      "props": {
+        "type": "spot",
+        "position": [
+          0,
+          1.5,
+          2.5
+        ],
+        "intensity": 100,
+        "rotation": [
+          0,
+          180,
+          0
+        ]
+      },
+      "parent": "root"
+    },
+    {
+      "id": "light1",
+      "component": "Light",
+      "props": {
+        "type": "point",
+        "position": [
+          -0.0364,
+          1.8191,
+          7.4509
+        ],
+        "intensity": 10,
+        "distance": 5
       },
       "parent": "root"
     }

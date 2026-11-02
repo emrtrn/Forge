@@ -203,6 +203,13 @@ body {
   inset: 0;
   pointer-events: none;
 }
+/* Screens must cover HUDs and projected world labels regardless of mount order. */
+.forge-ui-screen-root {
+  z-index: 2;
+}
+.forge-ui-world-layer {
+  z-index: 1;
+}
 .forge-ui-screen-layer {
   position: absolute;
   inset: 0;

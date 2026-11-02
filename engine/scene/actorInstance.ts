@@ -11,7 +11,8 @@
  * v1 collapse (documented, not an oversight): Forge entities are flat — one
  * component per type. An actor's component *tree* (which can hold several nodes
  * of the same kind) collapses to a single entity taking the FIRST node of each
- * kind. The instance's world transform is authoritative (the root Transform
+ * kind. Lights additionally retain every node for rendering. The instance's
+ * world transform is authoritative (the root Transform
  * node's props are ignored for placement). Event bindings are preserved as an
  * `EventBindings` list; per-instance overrides and multi-node hierarchy are
  * later phases (see docs B4).
@@ -25,6 +26,7 @@ import type { MetadataFieldDef } from "./metadataSchema";
 import {
   BEHAVIOR_COMPONENT,
   COLLIDER_COMPONENT,
+  LIGHT_COMPONENT,
   EVENT_BINDINGS_COMPONENT,
   MESSAGE_BINDINGS_COMPONENT,
   SCRIPT_ACTOR_COMPONENT,
@@ -38,6 +40,7 @@ import {
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
 import type { LayoutActorInstance, MetadataValue, Vec3 } from "./layout";
 import { readRotation, readScale } from "./transform";
+import { actorPreviewNodes } from "./actorPreview";
 
 /** A placed actor instance paired with its resolved class + layout index. */
 export interface ResolvedActorClass {
@@ -202,6 +205,29 @@ export function actorInstanceToEntity(
       node.component === COLLIDER_COMPONENT
         ? bakeColliderScale({ ...node.props }, transform.scale)
         : { ...node.props };
+  }
+
+  // The entity transform is the placement, not a component's local transform.
+  // Retain every light's ancestor chain separately so attaching it to the
+  // render host preserves offsets, rotations and non-uniform parent scales.
+  // This is derived instance data; it is never written into the Actor Script.
+  const lights = def.components.filter((node) => node.component === LIGHT_COMPONENT);
+  if (lights.length > 0) {
+    const nodes = new Map(actorPreviewNodes(def).map((node) => [node.id, node]));
+    components[LIGHT_COMPONENT]!.actorLights = lights.map((light) => {
+      const chain: SceneJsonValue[] = [];
+      const visited = new Set<string>();
+      let node = nodes.get(light.id);
+      while (node && !visited.has(node.id)) {
+        visited.add(node.id);
+        // The placement replaces the actor's root Transform (existing contract).
+        if (node.parent || node.component !== TRANSFORM_COMPONENT) {
+          chain.unshift({ position: node.position, rotation: node.rotation, scale: node.scale });
+        }
+        node = node.parent ? nodes.get(node.parent) : undefined;
+      }
+      return { ...light.props, actorLightNodeId: light.id, actorLocalTransforms: chain };
+    });
   }
 
   // Generic Spline ids are level-owned. Keep a reusable Actor Script's default

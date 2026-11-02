@@ -26,7 +26,7 @@ export interface ResolvedWorldEnvironment {
   hidden: boolean;
   time: { hour: number; dayLengthMinutes: number };
   sunPath: { azimuthDeg: number; noonElevationDeg: number; sunriseHour: number; sunsetHour: number };
-  night: { moonIntensity: number; moonColor: string; moonAngularDiameterDeg: number; moonBrightness: number; ambientFloor: number; ambientIntensity: number };
+  night: { moonIntensity: number; moonShadowStrength: number; moonColor: string; moonAngularDiameterDeg: number; moonBrightness: number; ambientFloor: number; ambientIntensity: number };
   season: Season;
   weather: { preset: WeatherPreset; intensity: number };
   surface: {
@@ -46,7 +46,7 @@ export const WORLD_ENVIRONMENT_DEFAULTS: ResolvedWorldEnvironment = {
   hidden: false,
   time: { hour: 12, dayLengthMinutes: 0 },
   sunPath: { azimuthDeg: 180, noonElevationDeg: 60, sunriseHour: 6, sunsetHour: 18 },
-  night: { moonIntensity: 0.08, moonColor: "#9fb4ff", moonAngularDiameterDeg: 1.2, moonBrightness: 1, ambientFloor: 0.15, ambientIntensity: 1.5 },
+  night: { moonIntensity: 0.08, moonShadowStrength: 0.45, moonColor: "#9fb4ff", moonAngularDiameterDeg: 1.2, moonBrightness: 1, ambientFloor: 0.15, ambientIntensity: 1.5 },
   season: "summer",
   weather: { preset: "clear", intensity: 1 },
   surface: {
@@ -166,6 +166,7 @@ export function normalizeWorldEnvironment(value: unknown): WorldEnvironmentNorma
   if (night) {
     const next: NonNullable<LayoutWorldEnvironment["night"]> = {};
     assign(next, "moonIntensity", num(night.moonIntensity, "night.moonIntensity", 0, 2));
+    assign(next, "moonShadowStrength", num(night.moonShadowStrength, "night.moonShadowStrength", 0, 1));
     assign(next, "moonColor", color(night.moonColor, "night.moonColor"));
     assign(next, "moonAngularDiameterDeg", num(night.moonAngularDiameterDeg, "night.moonAngularDiameterDeg", 0.1, 10));
     assign(next, "moonBrightness", num(night.moonBrightness, "night.moonBrightness", 0, 10));

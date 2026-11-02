@@ -68,12 +68,12 @@
     "1_1"
   ],
   "skyAtmosphere": {
-    "rayleigh": 1.4,
-    "turbidity": 3,
+    "rayleigh": 1,
+    "turbidity": 2,
     "mie": 0.003,
     "mieDirectionalG": 0.8,
     "skyLightCapture": {
-      "intensity": 0.5
+      "intensity": 1
     }
   },
   "heightFog": {
@@ -91,6 +91,7 @@
   "postProcess": {
     "toneMapping": "aces",
     "antialias": "smaa",
+    "exposure": 1,
     "bloom": {
       "enabled": true,
       "threshold": 1,
@@ -101,6 +102,32 @@
       "enabled": true,
       "radius": 1,
       "intensity": 1
+    }
+  },
+  "worldEnvironment": {
+    "time": {
+      "hour": 17.63
+    },
+    "sunPath": {
+      "azimuthDeg": 96.947,
+      "noonElevationDeg": 60
+    },
+    "night": {
+      "moonIntensity": 0.1,
+      "moonShadowStrength": 0.5,
+      "moonAngularDiameterDeg": 2,
+      "moonBrightness": 2,
+      "ambientFloor": 0.2,
+      "ambientIntensity": 0.3
+    },
+    "season": "summer",
+    "weather": {
+      "preset": "clear",
+      "intensity": 1
+    },
+    "surface": {
+      "snowCoverage": 0,
+      "wetness": 0
     }
   },
   "lights": [
@@ -146,7 +173,8 @@
       "splineRef": "spline-1",
       "name": "River Water 1",
       "coordinateSpace": "world",
-      "surfaceLevel": -1
+      "surfaceLevel": -1,
+      "reflectionQuality": "medium"
     }
   ],
   "waterBodies": [

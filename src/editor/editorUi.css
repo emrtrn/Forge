@@ -4561,6 +4561,8 @@
   top: 10px;
   left: 10px;
   display: flex;
+  flex-wrap: wrap;
+  max-width: calc(100% - 20px);
   gap: 4px;
   padding: 4px;
   border-radius: 8px;
@@ -4568,7 +4570,8 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 .as-viewport-tools button {
-  width: 28px;
+  min-width: 28px;
+  padding: 0 7px;
   height: 28px;
   display: grid;
   place-items: center;
@@ -4576,7 +4579,8 @@
   border-radius: 6px;
   background: transparent;
   color: #cfd6db;
-  font-size: 15px;
+  font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 .as-viewport-tools button:hover { background: var(--forge-border-soft); }

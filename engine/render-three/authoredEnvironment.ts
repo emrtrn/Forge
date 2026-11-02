@@ -586,10 +586,12 @@ class SunLightOverride {
   private light: DirectionalLight | null = null;
   private readonly baseColor = new Color();
   private baseIntensity = 0;
+  private baseShadowIntensity = 1;
   /** Authored light → target unit vector (world). */
   private readonly baseForward = new Vector3();
   private readonly writtenColor = new Color();
   private writtenIntensity = Number.NaN;
+  private writtenShadowIntensity = Number.NaN;
   private readonly writtenForward = new Vector3();
   private hasWritten = false;
   private readonly scratchColor = new Color();
@@ -609,12 +611,14 @@ class SunLightOverride {
     if (next.isMoon) light.color.setRGB(next.color[0], next.color[1], next.color[2]);
     else light.color.copy(this.baseColor).multiply(this.scratchColor.setRGB(next.color[0], next.color[1], next.color[2]));
     light.intensity = next.intensity;
+    light.shadow.intensity = this.baseShadowIntensity * next.shadowStrength;
     // The light shines from the body toward the scene: forward = -direction.
     this.forward.set(-next.direction[0], -next.direction[1], -next.direction[2]).normalize();
     const moved = !this.hasWritten || this.forward.distanceToSquared(this.writtenForward) > 1e-12;
     this.aim(light, this.forward, distance);
     this.writtenColor.copy(light.color);
     this.writtenIntensity = light.intensity;
+    this.writtenShadowIntensity = light.shadow.intensity;
     this.writtenForward.copy(this.forward);
     this.hasWritten = true;
     return moved;
@@ -628,6 +632,7 @@ class SunLightOverride {
     }
     if (light.color.equals(this.writtenColor)) light.color.copy(this.baseColor);
     if (light.intensity === this.writtenIntensity) light.intensity = this.baseIntensity;
+    if (light.shadow.intensity === this.writtenShadowIntensity) light.shadow.intensity = this.baseShadowIntensity;
     const distance = this.measure(light);
     const moved = this.forward.distanceToSquared(this.writtenForward) <= 1e-10;
     if (moved) this.aim(light, this.baseForward, distance);
@@ -650,6 +655,7 @@ class SunLightOverride {
     const distance = this.measure(light);
     if (!this.hasWritten || !light.color.equals(this.writtenColor)) this.baseColor.copy(light.color);
     if (!this.hasWritten || light.intensity !== this.writtenIntensity) this.baseIntensity = light.intensity;
+    if (!this.hasWritten || light.shadow.intensity !== this.writtenShadowIntensity) this.baseShadowIntensity = light.shadow.intensity;
     if (!this.hasWritten || this.forward.distanceToSquared(this.writtenForward) > 1e-10) this.baseForward.copy(this.forward);
     return distance;
   }

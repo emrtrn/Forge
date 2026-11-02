@@ -18,7 +18,7 @@ const LEVEL = "layouts/__playwright-wes.level.json";
 test.setTimeout(180_000);
 
 interface SavedLayout {
-  worldEnvironment?: { time?: { hour?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number; moonBrightness?: number; moonAngularDiameterDeg?: number } };
+  worldEnvironment?: { time?: { hour?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number; moonBrightness?: number; moonAngularDiameterDeg?: number; moonShadowStrength?: number } };
 }
 
 test("World Environment: preview stays out of the level, Make Default is one undo step, Play starts from it", async ({ page, context }) => {
@@ -61,6 +61,11 @@ test("World Environment: preview stays out of the level, Make Default is one und
   const details = page.locator('[data-inspector-pane="details"]');
   await expect(details.locator("[data-wes-preview]")).toBeVisible();
   const nightFill = details.locator('[data-wes-number="night.ambientIntensity"]');
+  const moonShadow = details.locator('[data-wes-number="night.moonShadowStrength"]');
+  await expect(moonShadow).toHaveValue("0.45");
+  await moonShadow.fill("0.65");
+  await moonShadow.press("Tab");
+  await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonShadowStrength, { timeout: 15_000 }).toBe(0.65);
   await expect(nightFill).toHaveValue("1.5");
   await nightFill.fill("1.2");
   await nightFill.press("Tab");
@@ -106,6 +111,7 @@ test("World Environment: preview stays out of the level, Make Default is one und
   await expect(details.locator("[data-wes-preview-hour-label]")).toHaveText("18:00");
   await expect(details.locator("[data-wes-preview-default]")).toBeDisabled();
   await expect(nightFill).toHaveValue("1.2");
+  await expect(moonShadow).toHaveValue("0.65");
   await expect(moonSize).toHaveValue("2");
   await expect(moonBrightness).toHaveValue("0.7");
 

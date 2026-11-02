@@ -57,9 +57,12 @@ const MOON_GLSL = /* glsl */ `
     float albedo = 0.76 - 0.34 * maria + 0.08 * grain;
     albedo += forgeMoonCraters(surface, 5.5) + 0.5 * forgeMoonCraters(surface + 3.7, 15.0);
     float limb = 0.45 + 0.55 * pow(z, 0.3);
-    // Finite, modest radiance preserves crater contrast under ACES/bloom.
+    // Calibrated for exposure 1 and the composited HDR/bloom path. The old
+    // 18x radiance saturated the lunar surface as the twilight fade reached 1;
+    // direct-to-canvas tests missed it because they used the sky's lower local
+    // exposure, whereas the compositor tone-maps later in its OutputPass.
     vec3 lunarTint = mix(vec3(1.0), forgeMoonColor, 0.35);
-    vec3 radiance = lunarTint * max(0.12, albedo) * limb * 18.0;
+    vec3 radiance = lunarTint * max(0.12, albedo) * limb * 2.0;
     return mix(skyColor, radiance, mask * clamp(forgeMoonBrightness, 0.0, 1.0))
       + radiance * mask * max(0.0, forgeMoonBrightness - 1.0);
   }

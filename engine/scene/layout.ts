@@ -628,6 +628,8 @@ export interface LayoutWorldEnvironment {
   night?: {
     /** Intensity multiplier of the directional light while it is the moon. */
     moonIntensity?: number;
+    /** 0..1 multiplier of the authored shadow strength at night; 0 disables moon shadows. */
+    moonShadowStrength?: number;
     moonColor?: string;
     /** Visible full-moon diameter in degrees (art-directed, not an astronomical calendar). */
     moonAngularDiameterDeg?: number;

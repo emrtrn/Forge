@@ -14,6 +14,7 @@ import { stateFromDefaults, type WorldEnvironmentState } from "../../engine/envi
 import { evaluateSunLight } from "../../engine/environment/sunPath";
 import { resolveWorldEnvironment } from "../../engine/environment/worldEnvironment";
 import { AuthoredEnvironment } from "../../engine/render-three/authoredEnvironment";
+import { SunCascadeShadow } from "../../engine/render-three/sunCascadeShadow";
 import type { RoomLayout } from "../../engine/scene/layout";
 
 type Check = (label: string, fn: () => void) => void;
@@ -58,6 +59,51 @@ function at(hour: number, layout: RoomLayout): WorldEnvironmentState {
 }
 
 export function registerAuthoredEnvironmentTests(check: Check): void {
+  check("world environment binding: moon shadow strength preserves daylight, cascades and owner edits", () => {
+    const { env, sun, ambient, scene } = rig();
+    const layout = layoutWith({ night: { moonShadowStrength: 0.45 } });
+    const snapshot = structuredClone(layout);
+    sun.shadow.intensity = 0.8;
+    const cascades = new SunCascadeShadow(scene);
+    const camera = new PerspectiveCamera(60, 1, 0.1, 500);
+    const apply = (hour: number) => {
+      env.applyWorldEnvironment(layout, { state: at(hour, layout), sun, ambient });
+      cascades.update({ sun, camera, count: 3, stagger: false, mapSize: 512, distance: 100 });
+      for (const light of cascades.cascadeLights) assert.equal(light.shadow.intensity, sun.shadow.intensity);
+    };
+    for (const hour of [0, 23, 0]) {
+      apply(hour);
+      assert.ok(Math.abs(sun.shadow.intensity - 0.36) < 1e-12);
+    }
+    apply(12);
+    assert.equal(sun.shadow.intensity, 0.8);
+    layout.worldEnvironment!.night!.moonShadowStrength = 0;
+    apply(0);
+    assert.equal(sun.shadow.intensity, 0);
+    assert.ok(sun.intensity > 0, "zero shadow strength keeps moonlight");
+    layout.worldEnvironment!.night!.moonShadowStrength = 1;
+    apply(0);
+    assert.equal(sun.shadow.intensity, 0.8);
+    layout.worldEnvironment!.night!.moonShadowStrength = 0.45;
+    apply(0);
+    sun.shadow.intensity = 0.6; // Owner edit becomes the restored daytime base.
+    apply(0);
+    assert.ok(Math.abs(sun.shadow.intensity - 0.27) < 1e-12);
+    apply(12);
+    assert.equal(sun.shadow.intensity, 0.6);
+    apply(0);
+    layout.worldEnvironment!.hidden = true;
+    apply(0);
+    assert.equal(sun.shadow.intensity, 0.6);
+    delete layout.worldEnvironment!.hidden;
+    apply(0);
+    env.applyWorldEnvironment(layout, { state: null, sun, ambient });
+    assert.equal(sun.shadow.intensity, 0.6);
+    assert.deepEqual(layout, snapshot);
+    cascades.dispose();
+    env.teardown();
+  });
+
   check("world environment binding: visible moon follows preview and clears on disable without changing the authored sky", () => {
     const { env, sun, ambient } = rig();
     // Hidden sky avoids a GPU capture in this headless lifecycle test. The

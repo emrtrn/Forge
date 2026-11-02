@@ -1,5 +1,8 @@
 # Ridgebound metrik master → World Builder / P0a
 
+**2 Kasım P1 eki:** Kaynak arazi aktarımı aşağıdaki “P1 — kaynak heightfield”
+bölümünde uygulandı. İlk P0a sözleşmesi ve kabul sınırları tarihsel olarak korunur.
+
 2 Kasım 2026. Bu ilk dilim, aday masterın konumlarını taşır. Terrain, yol yüzeyi,
 köprü colliderı veya oynanabilir level üretimi değildir. F1b/WB-13 veya M0/M1/M2
 kabulü kapatılmaz.
@@ -98,3 +101,40 @@ Kilometrelik önizlemeyi görüntülerken bulunan kamera hatası da giderildi:
 World Builder Focus artık 80 m ortografik sınıra takılmaz; viewport oranını,
 gerekli uzak kesme düzlemini ve Top görünüşün kuzey yönünü korur. Bu değişiklik
 genel editör hesabındadır; sahne verisine yazılmaz.
+
+## P1 — kaynak heightfield (2 Kasım 2026)
+
+`--heightmap` verilirse yeni terrain paketi üretilir. Girdi, [Drive makro
+heightfield v0.2](https://drive.google.com/file/d/1mVdVcTWfzyOvJNAZkd6bvF2OtdIZfNU5/view)
+ile birebir doğrulanan `tests/engine/fixtures/ridgebound-valley-heightfield-v0.2.png`
+dosyasıdır. SHA-256:
+`bc0c67e06eded7f5533c582d540420b7963d33e46d7c131a1fa7cbf8ae623934`.
+Bu raster 1001×1001, 16-bit gri ve **6 m** aralıklıdır; kodlama 100…850 m.
+
+```powershell
+npm.cmd run world:ridgebound -- --source tests/engine/fixtures/ridgebound-spatial-master-v0.2.json --heightmap tests/engine/fixtures/ridgebound-valley-heightfield-v0.2.png --expect-heightmap-sha256 bc0c67e06eded7f5533c582d540420b7963d33e46d7c131a1fa7cbf8ae623934 --out output/ridgebound/yeni-terrain-incelemesi
+```
+
+Tile sınırını source lattice üzerinde dışarı yuvarlayan ve kenar dışına taşarsa
+reddeden genel yardımcı `engine/terrain/heightmapWindow.ts` içindedir. P1 teknik
+seçimi: 100 m test payı, 64 quad/tile; **8×3 tile, 3072×1152 m**, 513×193 kaynak
+örneği. Origin `[1536,0,4224]`; kaynak doğu 1536…4608 / kuzey 624…1776 m.
+Bu seçim masterı, mevcut kuzeybatı ankrajını veya mekânsal onayı değiştirmez.
+
+**Yeniden örnekleme yapılmaz.** Kaynağın U16 kodları aynen kesilip ortak tile
+kenarlarına kopyalanır; 1 m ayrıntı, yol profili, temel düzlüğü veya kıyı detayı
+üretilmiş sayılmaz. V0'nun ayrı 1 m rasterı bu sürümde birleştirilmez. Bilinmeyen
+raster boyutu, bit derinliği, renk türü, extent veya kodlama reddedilir.
+
+Ek çıktılar: `RidgeboundP1.level.json`/recipe, `.landscapes/pilot.terrain.json`,
+24 tile, global harita ve kayıpsız kesilmiş `pilot-heightfield-u16.png`.
+`import-report.json`, iki kaynak hash'ini, source window/spacing/extent'i,
+kontrol noktalarının gerçek terrain kotlarını ve bekleyen işleri kaydeder.
+
+Terrain collision aktiftir; bu, R01 yolunun veya B1 tabliyesinin hazır olduğu
+anlamına gelmez. B1 kontrol noktası ~209,84 m **ham yatak** kotudur. World Builder
+Plan blockout işaretleri artık bu arazinin üstüne oturur. Konum aktarımı, terrain
+veri doğruluğu, fizik üçgenleri, editor görüntüsü ve gerçek sürüş ayrı kabul edilir.
+
+P1 için de mevcut klasöre veya kullanıcı sahnesine yazma yoktur. Yeni masterı
+elle düzenlenmiş recipe'ye birleştirme hâlâ açık; yeni inceleme klasörü gerekir.

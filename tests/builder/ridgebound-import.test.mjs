@@ -20,6 +20,15 @@ test("ridgebound CLI: dry run, fresh output, hash guards and refusal to overwrit
   const forbidden = run(["--source", source, "--out", "public/layouts"]);
   assert.equal(forbidden.status, 1);
   assert.match(forbidden.stderr, /output\/ridgebound/);
+  const png = "tests/engine/fixtures/ridgebound-valley-heightfield-v0.2.png";
+  const badRasterHash = run(["--source", source, "--heightmap", png, "--expect-heightmap-sha256", "0".repeat(64)]);
+  assert.equal(badRasterHash.status, 1);
+  assert.match(badRasterHash.stderr, /Heightmap SHA-256/);
+  const terrain = run(["--source", source, "--heightmap", png]);
+  assert.equal(terrain.status, 0, terrain.stderr);
+  const terrainReport = JSON.parse(terrain.stdout);
+  assert.equal(terrainReport.grid.sampling, "EXACT_U16_CROP_NO_RESAMPLING");
+  assert.deepEqual(terrainReport.grid.extent, [3072, 1152]);
   const out = join(root, "output", "ridgebound", `cli-test-${randomUUID()}`);
   try {
     const first = run(["--source", source, "--out", out]);

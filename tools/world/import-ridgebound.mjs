@@ -10,16 +10,17 @@ const MAX_BYTES = 2 * 1024 * 1024;
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === "--help") {
-    console.log("Usage: npm run world:ridgebound -- --source <master.json> [--expect-sha256 <hash>] [--out output/ridgebound/<new-run>]\nWithout --out: validate and report only. Existing output directories are never overwritten.");
+    console.log("Usage: npm run world:ridgebound -- --source <master.json> [--expect-sha256 <hash>] [--heightmap <macro-u16.png>] [--expect-heightmap-sha256 <hash>] [--out output/ridgebound/<new-run>]\nWithout --out: validate and report only. Existing output directories are never overwritten.");
     return;
   }
   const options = new Map();
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i], value = args[i + 1];
-    if (!["--source", "--out", "--expect-sha256"].includes(key) || !value || value.startsWith("--") || options.has(key)) throw new Error(`Invalid or repeated option ${key}`);
+    if (!["--source", "--out", "--expect-sha256", "--heightmap", "--expect-heightmap-sha256"].includes(key) || !value || value.startsWith("--") || options.has(key)) throw new Error(`Invalid or repeated option ${key}`);
     options.set(key, value);
   }
   if (!options.has("--source")) throw new Error("--source is required; use --help");
+  if (options.has("--expect-heightmap-sha256") && !options.has("--heightmap")) throw new Error("--expect-heightmap-sha256 requires --heightmap");
   const input = resolve(options.get("--source"));
   if ((await stat(input)).size > MAX_BYTES) throw new Error("Source JSON exceeds 2 MiB");
   const bytes = await readFile(input);
@@ -28,10 +29,21 @@ async function main() {
   if (options.has("--expect-sha256") && options.get("--expect-sha256") !== sha256) throw new Error("Source SHA-256 does not match --expect-sha256; nothing written");
   const bundle = await build({
     absWorkingDir: root, tsconfig: join(root, "tsconfig.json"), bundle: true, format: "esm", platform: "node", write: false,
-    stdin: { contents: 'export * from "./tools/world/ridgeboundSpatial";', resolveDir: root, loader: "ts" },
+    stdin: { contents: 'export * from "./tools/world/ridgeboundSpatial"; export * from "./tools/world/ridgeboundTerrain";', resolveDir: root, loader: "ts" },
   });
-  const { buildRidgeboundPreview, RIDGEBOUND_LEVEL, RIDGEBOUND_RECIPE } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
-  const preview = buildRidgeboundPreview(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, "")), sha256);
+  const { buildRidgeboundPreview, buildRidgeboundTerrainPreview, RIDGEBOUND_LEVEL, RIDGEBOUND_RECIPE,
+    RIDGEBOUND_TERRAIN_LEVEL, RIDGEBOUND_TERRAIN_RECIPE, RIDGEBOUND_TERRAIN_REF } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
+  const source = JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, ""));
+  let preview;
+  if (options.has("--heightmap")) {
+    const pngPath = resolve(options.get("--heightmap"));
+    if ((await stat(pngPath)).size > 8 * MAX_BYTES) throw new Error("Heightmap PNG exceeds 16 MiB");
+    const png = await readFile(pngPath);
+    if (png.length > 8 * MAX_BYTES) throw new Error("Heightmap PNG exceeds 16 MiB");
+    const pngSha = createHash("sha256").update(png).digest("hex");
+    if (options.has("--expect-heightmap-sha256") && options.get("--expect-heightmap-sha256") !== pngSha) throw new Error("Heightmap SHA-256 does not match --expect-heightmap-sha256; nothing written");
+    preview = await buildRidgeboundTerrainPreview(source, sha256, png, pngSha);
+  } else preview = buildRidgeboundPreview(source, sha256);
   if (!options.has("--out")) {
     console.log(JSON.stringify({ mode: "dry-run", ...preview.report }, null, 2));
     return;
@@ -44,11 +56,16 @@ async function main() {
   if (await realpath(parent) !== parent) throw new Error("Output parent must not be a symbolic link");
   await mkdir(out); // EEXIST deliberately preserves all earlier output and manual edits.
   const json = value => `${JSON.stringify(value, null, 2)}\n`;
+  const terrain = options.has("--heightmap");
   const files = new Map([
-    [RIDGEBOUND_LEVEL, json(preview.level)], [RIDGEBOUND_RECIPE, json(preview.recipe)],
+    [terrain ? RIDGEBOUND_TERRAIN_LEVEL : RIDGEBOUND_LEVEL, json(preview.level)], [terrain ? RIDGEBOUND_TERRAIN_RECIPE : RIDGEBOUND_RECIPE, json(preview.recipe)],
     ["import-report.json", json(preview.report)], ["preview.svg", preview.svg],
-    ["README.md", `# Ridgebound P0 — schematic review\n\nSource SHA-256: ${sha256}\n\nOpen preview.svg for the metric plan. The level starts without generated markers: load it with its adjacent worldrecipe in an isolated Forge project, then use World Builder → Plan blockout → Dry Run / Apply.\n\nThis is not terrain, road mesh, bridge collision or driving acceptance. Roads/settlement generation can change the authored layout; do not run those stages for this coordinate check. No re-import into an edited recipe is implemented. Keep earlier output; use a new --out directory.\n\nSee import-report.json for deferred fields and missing POI-07. No project default scene was changed.\n`],
+    ["README.md", `# Ridgebound ${terrain ? "P1 — source terrain preview" : "P0 — schematic review"}\n\nSource SHA-256: ${sha256}\n\nOpen preview.svg for the metric plan. Load the level with all companion files in an isolated Forge public directory, then use World Builder → Plan blockout → Dry Run / Apply.\n\n${terrain ? "Native 6 m source terrain is cropped exactly to a technical test grid. The grid is not approved spatial geometry; no 1 m detail was invented." : "This is schematic only; no terrain is generated."} No road mesh, bridge collision or driving acceptance is included. Roads/settlement generation can change the authored layout; do not run those stages for this check. No re-import into an edited recipe is implemented. Keep earlier output; use a new --out directory.\n\nSee import-report.json for deferred fields and missing POI-07. No project default scene was changed.\n`],
   ]);
+  if (terrain) {
+    files.set(RIDGEBOUND_TERRAIN_REF, json(preview.world.def));
+    for (const [path, body] of preview.files) files.set(path, body);
+  }
   for (const [path, body] of files) {
     await mkdir(dirname(join(out, path)), { recursive: true });
     await writeFile(join(out, path), body, { encoding: "utf8", flag: "wx" });

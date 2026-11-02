@@ -1036,6 +1036,7 @@ import { registerPlacementIdentityTests } from "../tests/engine/placementIdentit
 import { registerPlacementColorTests } from "../tests/engine/placementColor.test";
 import { registerReferenceImportTests } from "../tests/engine/referenceImport.test";
 import { registerRidgeboundSpatialTests } from "../tests/engine/ridgeboundSpatial.test";
+import { registerRidgeboundTerrainTests } from "../tests/engine/ridgeboundTerrain.test";
 import { registerPreviewCameraFrameTests } from "../tests/engine/previewCameraFrame.test";
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerWorldEnvironmentTests, registerWorldEnvironmentTimeTests } from "../tests/engine/worldEnvironment.test";
@@ -1302,6 +1303,7 @@ registerTerrainRenderTests(check);
 registerTerrainLayerArrayTests(check);
 registerTerrainEditTests(check);
 await registerHeightmapPngTests(checkAsync);
+await registerRidgeboundTerrainTests(checkAsync);
 registerTerrainErosionTests(check);
 registerTerrainSplineTests(check);
 registerTerrainPadTests(check);

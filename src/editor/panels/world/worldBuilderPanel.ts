@@ -1,3 +1,4 @@
+import { MAX_REFERENCE_IMPORT_BYTES } from "@engine/worldbuilder/referenceImport";
 import { ROAD_NODE_KINDS, type ProtectedRegion, type WorldPlan, type WorldReference } from "@engine/worldbuilder/recipe";
 import { ROAD_CLASSES, type RoadClass } from "@engine/worldbuilder/vocabulary";
 import type { StagePlan } from "@engine/worldbuilder/stage";
@@ -36,6 +37,7 @@ export interface WorldBuilderPanelOptions {
  * report and on the selected node.
  */
 export class WorldBuilderPanel {
+  private analysisText = "";
   constructor(private readonly options: WorldBuilderPanelOptions) {
     options.body.addEventListener("click", (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-wb-action]");
@@ -44,6 +46,8 @@ export class WorldBuilderPanel {
     });
     // A typed plan field is one correction when it is committed (Enter or leaving the field).
     options.body.addEventListener("change", (event) => {
+      const file = (event.target as HTMLElement).closest<HTMLInputElement>("[data-wb-analysis-file]")?.files?.[0];
+      if (file) { void this.readAnalysisFile(file); return; }
       const pointField = (event.target as HTMLElement).closest<HTMLInputElement>("[data-wb-point-axis]");
       if (pointField) {
         const selection = options.session.getView().planEdit?.selection;
@@ -64,6 +68,8 @@ export class WorldBuilderPanel {
     });
     // Live while dragging, without redrawing the panel under the slider.
     options.body.addEventListener("input", (event) => {
+      const analysis = (event.target as HTMLElement).closest<HTMLTextAreaElement>("[data-wb-analysis]");
+      if (analysis) { this.analysisText = analysis.value; return; }
       const slider = (event.target as HTMLElement).closest<HTMLInputElement>("input[data-wb-opacity]");
       if (!slider) return;
       options.session.setLayerOptions({ opacity: Number(slider.value) });
@@ -75,13 +81,16 @@ export class WorldBuilderPanel {
   }
 
   update(): void {
-    this.options.body.innerHTML = renderView(this.options.session.getView());
+    this.options.body.innerHTML = renderView(this.options.session.getView(), this.analysisText);
   }
 
   private async run(action: string, stageId: string, id?: string, data: DOMStringMap = {}): Promise<void> {
     const { session } = this.options;
     const kind = data.wbKind as PlanElementKind | undefined;
-    if (action === "create") session.createRecipe();
+    if (action === "import-preview") session.previewReferenceImport(this.analysisText);
+    else if (action === "import-apply") session.applyReferenceImport();
+    else if (action === "import-clear") session.clearReferenceImport();
+    else if (action === "create") session.createRecipe();
     else if (action === "reload") await session.reload();
     else if (action === "dry-run") session.dryRun(stageId);
     else if (action === "apply") session.apply(stageId);
@@ -110,6 +119,21 @@ export class WorldBuilderPanel {
     else if (action === "preview-focus") {
       session.focusPreview(id);
       return;
+    }
+    this.update();
+  }
+
+  private async readAnalysisFile(file: File): Promise<void> {
+    const { session } = this.options;
+    const path = session.getView().path;
+    try {
+      if (file.size > MAX_REFERENCE_IMPORT_BYTES) { session.rejectReferenceImport("Reference JSON exceeds 2 MiB"); this.update(); return; }
+      const text = await file.text();
+      if (session.getView().path !== path) return;
+      this.analysisText = text;
+      session.previewReferenceImport(text);
+    } catch {
+      if (session.getView().path === path) session.rejectReferenceImport("The JSON file could not be read.");
     }
     this.update();
   }
@@ -185,14 +209,35 @@ function readLayerOptions(): Partial<RecipeLayerOptions> | null {
   }
 }
 
-function renderView(view: WorldBuilderView): string {
+function renderView(view: WorldBuilderView, analysisText: string): string {
   return `<div class="world-builder-panel" data-testid="world-builder-panel">
     ${renderRecipe(view)}
     ${view.state === "loaded" ? renderLayers(view) : ""}
+    ${view.state === "loaded" ? renderReferenceImport(view, analysisText) : ""}
     ${view.planEdit ? renderPlanEdit(view.planEdit) : ""}
     ${view.state === "loaded" ? renderStages(view) : ""}
     ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null, view.planEdit?.stranded ?? []) : ""}
     ${view.preview ? renderPreview(view.preview.preview.items, view.preview.drawn) : ""}
+  </div>`;
+}
+
+function renderReferenceImport(view: WorldBuilderView, text: string): string {
+  const { pending, canApply, changes, errors } = view.referenceImport;
+  const count = (change: string) => changes.filter(entry => entry.change === change).length;
+  const reasons = { manual: "manual edit", otherSource: "another source", protected: "protected settlement", deletedByHand: "deleted by hand", missingDependency: "missing dependency" };
+  const rows = changes.slice(0, LISTED_CHANGES).map(entry => `<li data-testid="world-builder-import-change" data-change="${entry.change}" data-reason="${entry.reason ?? ""}">${escapeHtml(entry.kind)} ${escapeHtml(entry.id)}: ${entry.change}${entry.reason ? ` (${escapeHtml(reasons[entry.reason])})` : ""}</li>`).join("");
+  return `<div class="detail-section" data-testid="world-builder-import">
+    <div class="detail-section-title">Reference Plan Import</div>
+    <div class="world-builder-summary">Choose or paste reference-analysis JSON (up to 2 MiB). Uses the current top-down image and scale. Manual edits/deletions and other sources are kept; omitted elements stay. Preview is temporary; Apply is one undo step.</div>
+    <label class="world-builder-reference">Analysis JSON <input type="file" accept=".json,application/json" data-wb-analysis-file data-testid="world-builder-import-file"></label>
+    <textarea rows="6" spellcheck="false" aria-label="Reference analysis JSON" data-wb-analysis data-testid="world-builder-import-json">${escapeHtml(text)}</textarea>
+    <div class="world-builder-actions">
+      <button type="button" data-wb-action="import-preview" data-testid="world-builder-import-preview">Preview Import</button>
+      <button type="button" data-wb-action="import-apply" data-testid="world-builder-import-apply" ${canApply ? "" : "disabled"}>Apply Import</button>
+      <button type="button" data-wb-action="import-clear" data-testid="world-builder-import-clear">Clear Import</button>
+    </div>
+    ${renderList("Import errors", errors, "world-builder-error")}
+    ${pending ? `<div data-testid="world-builder-import-counts">+${count("added")} added · ~${count("updated")} updated · ${count("kept")} kept · ${count("unchanged")} unchanged</div><div>Preview shown in the viewport; plan editing and stages resume after Apply or Clear.</div><ul class="world-builder-list">${rows}${changes.length > LISTED_CHANGES ? `<li>… ${changes.length - LISTED_CHANGES} more</li>` : ""}</ul>` : ""}
   </div>`;
 }
 
@@ -428,8 +473,8 @@ function renderStages(view: WorldBuilderView): string {
     return `<div class="world-builder-stage">
       <div><strong>${escapeHtml(stage.label)}</strong> <span class="world-builder-path">${escapeHtml(stage.id)} · ${recorded}</span></div>
       <div class="world-builder-actions">
-        <button type="button" data-wb-action="dry-run" data-wb-stage="${escapeHtml(stage.id)}" data-testid="world-builder-dry-run-${escapeHtml(stage.id)}">Dry Run</button>
-        <button type="button" data-wb-action="apply" data-wb-stage="${escapeHtml(stage.id)}" data-testid="world-builder-apply-${escapeHtml(stage.id)}">Apply</button>
+        <button type="button" data-wb-action="dry-run" data-wb-stage="${escapeHtml(stage.id)}" data-testid="world-builder-dry-run-${escapeHtml(stage.id)}" ${view.referenceImport.pending ? "disabled" : ""}>Dry Run</button>
+        <button type="button" data-wb-action="apply" data-wb-stage="${escapeHtml(stage.id)}" data-testid="world-builder-apply-${escapeHtml(stage.id)}" ${view.referenceImport.pending ? "disabled" : ""}>Apply</button>
       </div>
     </div>`;
   }).join("");
@@ -438,7 +483,7 @@ function renderStages(view: WorldBuilderView): string {
   const terrain = `<div class="world-builder-stage">
       <div><strong>Building pads</strong> <span class="world-builder-path">${pads} in the recipe · bakes into the terrain, one undo step</span></div>
       <div class="world-builder-actions">
-        <button type="button" data-wb-action="apply-pads" data-testid="world-builder-apply-pads" ${pads === 0 ? "disabled title=\"Run Buildings first\"" : ""}>Apply Pads</button>
+        <button type="button" data-wb-action="apply-pads" data-testid="world-builder-apply-pads" ${pads === 0 || view.referenceImport.pending ? "disabled title=\"Run Buildings first\"" : ""}>Apply Pads</button>
       </div>
     </div>`;
   return `<div class="detail-section"><div class="detail-section-title">Stages</div>${rows}</div>

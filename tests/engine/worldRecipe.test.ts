@@ -73,6 +73,7 @@ function maximalRecipe(): Record<string, unknown> {
       splines: { "road-e1": { stage: "roads", inputHash: "0c", edge: "e1" } },
       foliageRules: { "rule-meadow": { stage: "scatter" } },
       protectedRegions: [{ id: "manual_corner", kind: "manual", min: [0, 0], max: [64, 64] }],
+      deletedPlanElements: [{ kind: "water", id: "deleted_creek" }, { kind: "edge", id: "deleted_road" }],
     },
   };
 }
@@ -208,4 +209,18 @@ export function registerWorldRecipeTests(check: Check): void {
     });
     assert.deepEqual(Object.keys(recipe!.ownership.placements), ["plc-a", "plc-b"]);
   });
+
+  check("world recipe: deleted plan identities reject duplicates, live IDs and unknown kinds", () => {
+    const base = createWorldRecipe("deletions");
+    base.plan.water.push({ id: "live", source: "manual", kind: "stream", path: [[0, 0], [1, 1]] });
+    const broken = { ...base, ownership: { ...base.ownership, deletedPlanElements: [
+      { kind: "water", id: "gone" }, { kind: "water", id: "gone" }, { kind: "water", id: "live" },
+      { kind: "protected", id: "bad" }, { kind: "node", id: "bad/id" },
+    ] } };
+    const result = normalizeWorldRecipe(broken);
+    assert.deepEqual(result.recipe!.ownership.deletedPlanElements, [{ kind: "water", id: "gone" }]);
+    assert.equal(result.issues.length, 4);
+    assert.throws(() => validateSaveWorldRecipePayload({ level: "layouts/Test.level.json", recipe: broken }), /invalid world recipe/);
+  });
+
 }

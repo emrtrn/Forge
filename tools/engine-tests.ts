@@ -1030,6 +1030,7 @@ import { registerCapabilityCoverageTests } from "../tests/engine/capabilityCover
 import { registerSerializationDriftTests } from "../tests/engine/serializationDrift.test";
 import { registerPlacementIdentityTests } from "../tests/engine/placementIdentity.test";
 import { registerPlacementColorTests } from "../tests/engine/placementColor.test";
+import { registerReferenceImportTests } from "../tests/engine/referenceImport.test";
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerWorldEnvironmentTests, registerWorldEnvironmentTimeTests } from "../tests/engine/worldEnvironment.test";
 import { registerAuthoredEnvironmentTests } from "../tests/engine/authoredEnvironment.test";
@@ -1222,6 +1223,7 @@ registerSerializationDriftTests(check);
 registerPlacementIdentityTests(check);
 registerPlacementColorTests(check);
 registerWorldRecipeTests(check);
+registerReferenceImportTests(check);
 registerWorldEnvironmentTests(check);
 registerWorldEnvironmentTimeTests(check);
 registerAuthoredEnvironmentTests(check);

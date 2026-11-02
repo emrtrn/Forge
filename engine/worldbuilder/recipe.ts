@@ -78,6 +78,11 @@ export interface PlanProvenance {
   confidence?: number;
 }
 
+/** Stable plan namespaces used by reference imports and manual-deletion records. */
+export const WORLD_PLAN_KINDS = ["settlement", "node", "edge", "region", "water", "landmark"] as const;
+export type WorldPlanKind = (typeof WORLD_PLAN_KINDS)[number];
+export interface DeletedPlanElement { kind: WorldPlanKind; id: string }
+
 /**
  * A reference image laid over the world: the world point under its top-left
  * corner and the extent it covers, metres. Image right is +X, image down is +Z
@@ -274,6 +279,8 @@ export interface WorldRecipe {
     splines: Record<string, SplineOwnershipEntry>;
     foliageRules: Record<string, OwnershipEntry>;
     protectedRegions: ProtectedRegion[];
+    /** Explicit user deletions: a later analysis must not resurrect these identities. */
+    deletedPlanElements?: DeletedPlanElement[];
   };
 }
 
@@ -698,6 +705,23 @@ function normalizeOwnership(ctx: Ctx, value: unknown, plan: WorldPlan): WorldRec
       if (min[0] >= max[0] || min[1] >= max[1]) return reject(c, p, "min must be below max on both axes");
       return { id, kind, min, max };
     });
+  if (value.deletedPlanElements !== undefined) {
+    const seen = new Set<string>();
+    const deleted = arrayOf(ctx, "ownership.deletedPlanElements", value.deletedPlanElements, (c, p, entry) => {
+      if (!isRecord(entry) || !isOneOf(WORLD_PLAN_KINDS, entry.kind)) return reject(c, p, "needs a valid plan kind");
+      const id = requireId(c, p, entry.id);
+      if (id === null) return null;
+      const list = entry.kind === "node" ? plan.roadGraph.nodes : entry.kind === "edge" ? plan.roadGraph.edges
+        : entry.kind === "settlement" ? plan.settlements : entry.kind === "region" ? plan.regions
+          : entry.kind === "water" ? plan.water : plan.landmarks;
+      if (list.some(item => item.id === id)) return reject(c, p, "a deleted identity must not also be present in the plan");
+      const key = `${entry.kind}:${id}`;
+      if (seen.has(key)) return reject(c, p, "repeats a deleted identity");
+      seen.add(key);
+      return { kind: entry.kind, id };
+    });
+    if (deleted.length) ownership.deletedPlanElements = deleted;
+  }
   return ownership;
 }
 

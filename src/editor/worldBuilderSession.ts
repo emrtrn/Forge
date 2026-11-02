@@ -45,6 +45,7 @@ import {
   type WorldRecipe,
   type WorldReference,
 } from "@engine/worldbuilder/recipe";
+import { previewReferenceImport, type ReferenceImportChange, type ReferenceImportResult } from "@engine/worldbuilder/referenceImport";
 import { normalizeRegionProfile, type RegionProfile } from "@engine/worldbuilder/regionProfile";
 import {
   planStage,
@@ -148,6 +149,7 @@ export interface WorldBuilderView {
   /** The recipe layer in the viewport: what it shows and what it drew. */
   layer: { options: RecipeLayerOptions; counts: RecipeLayerCounts };
   reference: WorldReference | null;
+  referenceImport: { pending: boolean; canApply: boolean; changes: readonly ReferenceImportChange[]; errors: readonly string[] };
   /**
    * The plan and protected regions for the hand-correction list, the selected
    * element, and the road nodes the applied sites left stranded.
@@ -184,6 +186,8 @@ export class WorldBuilderSession {
   /** Called when the view changed outside a panel action (an underlay finished loading). */
   onChange: (() => void) | null = null;
   private loadedFor = "";
+  private referencePreview: { before: string; result: ReferenceImportResult } | null = null;
+  private referenceErrors: string[] = [];
 
   constructor(
     private readonly host: WorldBuilderHost,
@@ -199,6 +203,8 @@ export class WorldBuilderSession {
   async load(scenePath = this.host.scenePath()): Promise<void> {
     this.loadedFor = scenePath;
     this.recipe = null;
+    this.referencePreview = null;
+    this.referenceErrors = [];
     this.state = "loading";
     this.issues = [];
     this.profile = null;
@@ -229,9 +235,10 @@ export class WorldBuilderSession {
 
   /** Redraws the recipe layer, e.g. after the ground under it changed. */
   refreshLayer(): void {
+    if (this.referencePreview && this.referencePreview.before !== JSON.stringify(this.recipe)) this.referencePreview = null;
     // An undo can take the selected element away.
     if (this.selection && (!this.recipe || !hasPlanElement(this.recipe, this.selection))) this.selection = null;
-    this.layerCounts = this.host.showRecipeLayer(this.dragged ?? this.recipe, { ...this.layerOptions }, {
+    this.layerCounts = this.host.showRecipeLayer(this.dragged ?? this.referencePreview?.result.recipe ?? this.recipe, { ...this.layerOptions }, {
       selection: this.selection,
       handles: this.planHandlesShown(),
     });
@@ -276,6 +283,47 @@ export class WorldBuilderSession {
     this.host.executeCommand({
       label: reference ? "World Builder: set reference" : "World Builder: remove reference",
       redo: () => this.setRecipe(structuredClone(next)),
+      undo: () => this.setRecipe(structuredClone(before)),
+    });
+    return true;
+  }
+
+  /** Draw an external reference plan without changing recipe, history or dirty state. */
+  previewReferenceImport(text: string): boolean {
+    this.clearPreview();
+    this.referenceErrors = [];
+    if (!this.recipe || this.state !== "loaded") return this.rejectReferenceImport("Create or load a world recipe first.");
+    const result = previewReferenceImport(this.recipe, text);
+    if (!result.recipe || result.errors.length) return this.rejectReferenceImport(result.errors[0] ?? "Invalid reference JSON");
+    this.dragged = null;
+    this.referencePreview = { before: JSON.stringify(this.recipe), result };
+    this.refreshLayer();
+    return true;
+  }
+
+  rejectReferenceImport(message: string): false {
+    this.clearPreview();
+    this.referenceErrors = [message];
+    this.host.onStatus(`Reference import refused: ${message}`, "error");
+    return false;
+  }
+
+  clearReferenceImport(): void {
+    this.clearPreview();
+    this.referenceErrors = [];
+  }
+
+  /** Explicit acceptance is one undo step; stage generation and saving remain separate actions. */
+  applyReferenceImport(): boolean {
+    const pending = this.referencePreview;
+    if (!pending?.result.recipe || !this.recipe) return false;
+    if (pending.before !== JSON.stringify(this.recipe)) return this.rejectReferenceImport("Recipe changed; preview the analysis again.");
+    if (!pending.result.changes.some(entry => entry.change === "added" || entry.change === "updated")) return false;
+    const before = structuredClone(this.recipe), after = structuredClone(pending.result.recipe);
+    this.clearPreview();
+    this.host.executeCommand({
+      label: "World Builder: import reference plan",
+      redo: () => this.setRecipe(structuredClone(after)),
       undo: () => this.setRecipe(structuredClone(before)),
     });
     return true;
@@ -427,9 +475,10 @@ export class WorldBuilderSession {
 
   /** Drops the viewport preview of the last dry run. */
   clearPreview(): void {
-    if (!this.preview) return;
-    this.preview = null;
-    this.host.showPreview(null);
+    const hadReference = this.referencePreview !== null;
+    this.referencePreview = null;
+    if (this.preview) { this.preview = null; this.host.showPreview(null); }
+    if (hadReference) this.refreshLayer();
   }
 
   /** Frames a preview item by id, or the whole preview. */
@@ -478,6 +527,7 @@ export class WorldBuilderSession {
    * a building removed by hand or never placed leaves its ground alone.
    */
   async applyPads(): Promise<void> {
+    if (this.referencePreview) { this.host.onStatus("Apply or clear the reference preview first.", "warning"); return; }
     if (!this.recipe) {
       this.host.onStatus("Create or load a world recipe first.", "warning");
       return;
@@ -521,7 +571,10 @@ export class WorldBuilderSession {
       preview: this.preview,
       layer: { options: { ...this.layerOptions }, counts: { ...this.layerCounts } },
       reference: recipe?.reference ? structuredClone(recipe.reference) : null,
-      planEdit: recipe
+      referenceImport: { pending: this.referencePreview !== null,
+        canApply: this.referencePreview?.result.changes.some(entry => entry.change === "added" || entry.change === "updated") ?? false,
+        changes: this.referencePreview?.result.changes ?? [], errors: [...this.referenceErrors] },
+      planEdit: recipe && !this.referencePreview
         ? {
             plan: structuredClone(recipe.plan),
             protectedRegions: structuredClone(recipe.ownership.protectedRegions),
@@ -550,6 +603,7 @@ export class WorldBuilderSession {
   }
 
   private plan(stageId: string): StagePlan | null {
+    if (this.referencePreview) { this.host.onStatus("Apply or clear the reference preview first.", "warning"); return null; }
     const stage = this.stages.find((entry) => entry.id === stageId);
     const layout = this.host.layout();
     if (!stage || !layout) return null;
@@ -577,6 +631,10 @@ export class WorldBuilderSession {
    * adds no step.
    */
   private editPlan(action: string, edit: (recipe: WorldRecipe) => WorldRecipe | null): boolean {
+    if (this.referencePreview) {
+      this.host.onStatus("Apply or clear the reference import before editing the plan.", "warning");
+      return false;
+    }
     if (!this.recipe) {
       this.host.onStatus("Create or load a world recipe first.", "warning");
       return false;
@@ -602,7 +660,7 @@ export class WorldBuilderSession {
   }
 
   private planHandlesShown(): boolean {
-    return this.planEditing && this.layerOptions.plan && this.recipe !== null;
+    return this.planEditing && this.layerOptions.plan && this.recipe !== null && this.referencePreview === null;
   }
 
   /** Recipe pads whose building placement is in the level. */
@@ -614,6 +672,8 @@ export class WorldBuilderSession {
   }
 
   private setRecipe(recipe: WorldRecipe | null): void {
+    this.referencePreview = null;
+    this.referenceErrors = [];
     this.recipe = recipe;
     this.saveRevision.markDirty();
     this.refreshLayer();

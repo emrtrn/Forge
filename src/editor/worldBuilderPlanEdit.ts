@@ -28,6 +28,7 @@ import type {
   RoadNode,
   RoadNodeKind,
   WorldRecipe,
+  WorldPlanKind,
 } from "@engine/worldbuilder/recipe";
 import type { RoadClass } from "@engine/worldbuilder/vocabulary";
 
@@ -231,6 +232,17 @@ export function deletePlanElement(recipe: WorldRecipe, ref: PlanRef): WorldRecip
   } else {
     next.ownership.protectedRegions = next.ownership.protectedRegions.filter((entry) => entry.id !== ref.id);
   }
+  // Remember every removed identity, including edges removed with a node.
+  // Undo restores this together with the plan; the recipe save retains it.
+  const deleted = next.ownership.deletedPlanElements ?? [];
+  const remember = (kind: WorldPlanKind, id: string) => {
+    if (!deleted.some(entry => entry.kind === kind && entry.id === id)) deleted.push({ kind, id });
+  };
+  if (ref.kind !== "protected") remember(ref.kind, ref.id);
+  for (const edge of recipe.plan.roadGraph.edges) {
+    if (!next.plan.roadGraph.edges.some(entry => entry.id === edge.id)) remember("edge", edge.id);
+  }
+  if (deleted.length) next.ownership.deletedPlanElements = deleted;
   return next;
 }
 
@@ -437,6 +449,7 @@ export function nextPlanId(recipe: WorldRecipe, kind: PlanElementKind): string {
   const used = new Set([
     ...plan.settlements, ...plan.landmarks, ...plan.regions, ...plan.water,
     ...plan.roadGraph.nodes, ...plan.roadGraph.edges, ...recipe.ownership.protectedRegions,
+    ...(recipe.ownership.deletedPlanElements ?? []),
   ].map((entry) => entry.id));
   for (let index = 1; ; index += 1) {
     const id = `${ID_PREFIX[kind]}-${index}`;

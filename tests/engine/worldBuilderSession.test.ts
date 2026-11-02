@@ -111,6 +111,64 @@ function harness(files: Record<string, unknown> = {}) {
 }
 
 export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("world builder session: reference import previews without writes, applies once and undoes atomically", async () => {
+    const recipe = planRecipe();
+    recipe.reference = { image: "maps/test.png", origin: [-100, -200], size: [400, 200], view: "topDown" };
+    const { session, history, posts } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    const text = JSON.stringify({ schemaVersion: 1, coordinateSpace: "reference-normalized", referenceImage: "maps/test.png",
+      plan: { settlements: [{ id: "village", source: "reference", observed: true, confidence: 0.8, center: [0.5, 0.5], type: "village" }] } });
+    assert.equal(session.previewReferenceImport(text), true);
+    assert.equal(session.getView().referenceImport.canApply, true);
+    assert.equal(session.getView().planEdit, null);
+    assert.equal(session.captureSave(), null);
+    assert.equal(history.state().canUndo, false);
+    assert.equal(session.addPlanElement("region", [0, 0]), false);
+    assert.equal(session.apply("planBlockout"), false);
+    session.clearReferenceImport();
+    assert.deepEqual(session.getView().planEdit!.plan.settlements[0]!.center, [10, 20]);
+    assert.equal(session.previewReferenceImport(text), true);
+    assert.equal(session.applyReferenceImport(), true);
+    assert.equal(history.state().undoLabel, "World Builder: import reference plan");
+    assert.deepEqual(session.getView().planEdit!.plan.settlements[0]!.center, [100, -100]);
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan.settlements[0]!.center, [10, 20]);
+    history.redo();
+    await session.captureSave()!.write();
+    assert.equal(posts.length, 1);
+    assert.equal(session.previewReferenceImport(text), true);
+    assert.equal(session.getView().referenceImport.canApply, false);
+    assert.equal(session.applyReferenceImport(), false);
+    assert.equal(session.previewReferenceImport("{"), false);
+    assert.equal(session.getView().referenceImport.pending, false);
+    assert.equal(session.getView().referenceImport.errors.length, 1);
+    assert.equal(session.previewReferenceImport(text), true);
+    assert.equal(session.setReference({ ...recipe.reference!, origin: [0, 0] }), true);
+    assert.equal(session.getView().referenceImport.pending, false, "changing the reference invalidates an older transform");
+    assert.equal(session.applyReferenceImport(), false);
+  });
+
+  await checkAsync("world builder session: deleted node and cascading edge identities survive save/reload and undo", async () => {
+    const recipe = roadRecipe();
+    recipe.reference = { image: "maps/test.png", origin: [0, 0], size: [100, 100], view: "topDown" };
+    const { session, history, posts } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    assert.equal(session.deletePlanElement({ kind: "node", id: "a" }), true);
+    await session.captureSave()!.write();
+    const saved = (posts[0]!.body as { recipe: typeof recipe }).recipe;
+    assert.deepEqual(saved.ownership.deletedPlanElements, [{ kind: "node", id: "a" }, { kind: "edge", id: "main" }]);
+    history.undo();
+    assert.equal(session.getView().planEdit!.plan.roadGraph.edges.length, 1);
+    history.redo();
+    const reloaded = harness({ [RECIPE_URL]: saved }).session;
+    await reloaded.load();
+    assert.equal(reloaded.previewReferenceImport(JSON.stringify({ schemaVersion: 1, coordinateSpace: "reference-normalized", referenceImage: "maps/test.png",
+      plan: { roadGraph: { nodes: [{ id: "a", source: "reference", observed: true, confidence: 1, position: [0, 0], kind: "end" }],
+        edges: [{ id: "main", source: "reference", observed: true, confidence: 1, from: "a", to: "b", roadClass: "local" }] } } })), true);
+    assert.equal(reloaded.getView().referenceImport.canApply, false);
+    assert.equal(reloaded.getView().referenceImport.changes.every(entry => entry.reason === "deletedByHand"), true);
+  });
+
   await checkAsync("world builder session: before its level has loaded nothing runs and no recipe can be created", async () => {
     const { session, history, statuses } = harness({ [RECIPE_URL]: planRecipe() });
     assert.equal(session.getView().state, "loading");

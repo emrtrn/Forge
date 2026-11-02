@@ -750,7 +750,7 @@ test("World Builder water and regions: shape handles, point edits, minimum count
   await expect(shape).toHaveAttribute("data-count", "4");
 
   // Default shapes can also be authored without an imported plan.
-  for (const [button, id] of [["river", "water-1"], ["lake", "water-1"], ["region", "region-1"]]) {
+  for (const [button, id] of [["river", "water-1"], ["lake", "water-2"], ["region", "region-1"]]) {
     await page.getByTestId(`world-builder-plan-add-${button}`).click();
     await expect(page.getByTestId("world-builder-plan-selection")).toHaveAttribute("data-id", id!);
     await page.getByTestId("world-builder-plan-delete").click();
@@ -778,5 +778,89 @@ test("World Builder water and regions: shape handles, point edits, minimum count
   const screenshot = testInfo.outputPath("water-and-region-editing.png");
   await page.screenshot({ path: screenshot });
   await testInfo.attach("water-and-region-editing", { path: screenshot, contentType: "image/png" });
+  expect(errors).toEqual([]);
+});
+
+test("World Builder reference import: preview, guarded merge, undo and persistent deletion (T35)", async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
+  const levelPath = "layouts/__playwright-reference-import.level.json";
+  const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
+  const recipe = referenceRecipe();
+  recipe.plan.settlements[0]!.protected = true;
+  recipe.plan.regions[0]!.source = "manual";
+  await writeJson(levelPath, { ...base, name: "__playwright-reference-import" });
+  await writeJson(worldRecipePath(levelPath), recipe);
+  await writeFileIn(REFERENCE_IMAGE, await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/reference-underlay.png")));
+  expect((await request.post("/__open-level", { data: { path: levelPath } })).ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.clear());
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const boot = async () => {
+    await page.goto(`/?editor&referenceImport=${Date.now()}`);
+    await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("world-builder-tab").click();
+    await expect(page.getByTestId("world-builder-recipe")).toContainText(recipe.recipeId, { timeout: 30_000 });
+  };
+  const save = async () => {
+    const response = page.waitForResponse(res => res.url().endsWith("/__save-worldrecipe") && res.request().method() === "POST");
+    await page.getByTestId("editor-save").click();
+    expect((await response).ok()).toBeTruthy();
+  };
+  await boot();
+  await page.getByTestId("world-builder-plan-water-creek").click();
+  await page.getByTestId("world-builder-plan-delete").click();
+  await save();
+  await boot();
+  const meta = { source: "reference", observed: true, confidence: 0.8 };
+  const polygon = [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3]];
+  const analysis = JSON.stringify({ schemaVersion: 1, coordinateSpace: "reference-normalized", referenceImage: REFERENCE_IMAGE,
+    plan: { settlements: [{ ...meta, id: "village", center: [0, 0], type: "village" }],
+      regions: [{ ...meta, id: "forest", kind: "mountain", polygon }, { ...meta, id: "mountain", kind: "mountain", polygon }],
+      water: [{ ...meta, id: "creek", kind: "stream", path: [[0, 0], [1, 1]] }],
+      roadGraph: { nodes: [{ ...meta, id: "a", position: [0.25, 0.25], kind: "end" }] } } });
+  await page.getByTestId("world-builder-import-file").setInputFiles({ name: "analysis.json", mimeType: "application/json", buffer: Buffer.from(analysis) });
+  const counts = page.getByTestId("world-builder-import-counts");
+  await expect(counts).toHaveText("+1 added · ~1 updated · 3 kept · 0 unchanged");
+  await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+  await expect(page.getByTestId("world-builder-apply-planBlockout")).toBeDisabled();
+  expect((await readJson<WorldRecipe>(worldRecipePath(levelPath))).plan.regions).toHaveLength(1);
+  const screenshot = testInfo.outputPath("reference-import-preview.png");
+  await page.locator("[data-camera-button]").hover();
+  await page.locator('[data-camera-view="top"]').click();
+  await expect(page.locator("[data-camera-label]")).toHaveText("Top");
+  await page.mouse.move(650, 450);
+  await page.mouse.wheel(0, 600);
+  await page.getByTestId("world-builder-import-counts").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: screenshot });
+  await testInfo.attach("reference-import-preview", { path: screenshot, contentType: "image/png" });
+  await page.getByTestId("world-builder-import-clear").click();
+  await expect(counts).toHaveCount(0);
+  await expect(page.getByTestId("world-builder-import-json")).toHaveValue(analysis);
+  await page.getByTestId("world-builder-import-preview").click();
+  await page.getByTestId("world-builder-import-apply").click();
+  const mountain = page.getByTestId("world-builder-plan-region-mountain");
+  await expect(mountain).toHaveCount(1);
+  await page.getByTestId("editor-undo").click();
+  await expect(mountain).toHaveCount(0);
+  await page.getByTestId("editor-redo").click();
+  await expect(mountain).toHaveCount(1);
+  await save();
+  const saved = await readJson<WorldRecipe>(worldRecipePath(levelPath));
+  expect(saved.plan.regions[0]).toEqual(recipe.plan.regions[0]);
+  expect(saved.plan.settlements[0]).toEqual(recipe.plan.settlements[0]);
+  expect(saved.plan.water).toHaveLength(0);
+  expect(saved.ownership.deletedPlanElements).toContainEqual({ kind: "water", id: "creek" });
+  expect(saved.plan.roadGraph.nodes[0]!.position).toEqual([-20, -20]);
+  await boot();
+  await page.getByTestId("world-builder-import-json").fill(analysis);
+  await page.getByTestId("world-builder-import-preview").click();
+  await expect(counts).toHaveText("+0 added · ~0 updated · 3 kept · 2 unchanged");
+  await expect(page.getByTestId("world-builder-import-apply")).toBeDisabled();
+  await page.getByTestId("world-builder-import-json").fill("{");
+  await page.getByTestId("world-builder-import-preview").click();
+  await expect(counts).toHaveCount(0);
+  await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
   expect(errors).toEqual([]);
 });

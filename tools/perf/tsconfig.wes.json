@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.smoke.json",
+  "include": ["../../tests/smoke/pages/world-environment-acceptance.ts"]
+}

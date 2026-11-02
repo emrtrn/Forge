@@ -9,6 +9,8 @@
 
 **Görünür ay eki:** Ay ışığıyla aynı yönde prosedürel dolunay, çap/parlaklık ayarları ve gündüz sönmesi uygulandı. [Önizleme ve doğrulama](WES_GORUNUR_AY.md).
 
+**K1 kabul taraması:** 12 senaryolu araç/yol çalışması ve aynı kamera kareleri hazır; mevcut bulutta yalnız SwiftShader bulunduğu için gerçek GPU kabulü/E-015 açık. [2 Kasım ölçüm raporu ve yerel çalıştırma](WES_K1_KABUL_OLCUMU_2026_11_02.md), komut: `npm run perf:wes`.
+
 ---
 
 ## 1. Commit'ler

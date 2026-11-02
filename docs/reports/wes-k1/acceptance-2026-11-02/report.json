@@ -1,0 +1,3795 @@
+{
+  "schema": 1,
+  "capturedAt": "2026-11-02T08:08:05.528Z",
+  "sourceCommit": "bdba8d58e1994c77e73bea163e2eae5fc0ce066f",
+  "sourceHashes": {
+    "tools/wes-acceptance-report.mjs": "62e82c0542ecd3cf5c41e6236e6f8cc4d06fb0656481eb32012b25e3097cfe3b",
+    "tools/perf/wesAcceptanceProtocol.mjs": "5529a5e9e4752a6a9b067fb4894d5a657a7dee8225f6e706aef78e9d12aa228b",
+    "tests/smoke/pages/world-environment-acceptance.ts": "54e32a9a7a20e7403d2b184ff6fc90979868608c9a004bd809fa7694b1d1be4b",
+    "tests/smoke/fixtures/vehicle-test.level.json": "ce0b11ce85dd57d52d7f2aec174c8a312de3402e3e91071bcd682f27cc9333bc",
+    "engine/environment/environmentResolve.ts": "bc3af3900e81ae50f1fec679153040c27e3ff4c4dba3be10abf3cd2aa550a3e1",
+    "engine/render-three/authoredEnvironment.ts": "a15fb7dd6efabcd976705c35c2f721d28a7917627a791f2bffa83f1e6ef6440d",
+    "engine/render-three/moonDisc.ts": "e50ebd87e7c566ab0dc5860918ed9ff5a5d29604581fc82973a6610e8d2b2d8d"
+  },
+  "host": {
+    "os": "linux 6.18.57",
+    "cpu": "AMD EPYC 9V74 80-Core Processor"
+  },
+  "settings": {
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "dpr": 1,
+    "quality": "high",
+    "adaptive": false,
+    "durationMs": 6000,
+    "warmupMs": 2000,
+    "allowSoftware": true,
+    "headless": true,
+    "runtime": "Vite development server; full ForgeRuntime; stationary Reference Car + asphalt road fixture",
+    "camera": {
+      "position": [
+        0,
+        4,
+        16
+      ],
+      "target": [
+        0,
+        3.5,
+        0
+      ],
+      "fov": 65
+    },
+    "cloudTime": "frozen; physics remains active"
+  },
+  "methodology": {
+    "baselineOrder": "off-a / noon-a / noon-b / off-b (ABBA blocks)",
+    "frames": "wall-clock intervals between production render completions; includes simulation/environment work between frames",
+    "gpuRender": "TIME_ELAPSED around production render submission, including shadows/post-process; excludes earlier IBL rebuild",
+    "ibl": "separate, non-overlapping TIME_ELAPSED around AuthoredEnvironment.applyReflection; CPU is submission time",
+    "clock": "real WorldEnvironmentController advanced by the production capability with simulation delta (TimeControl semantics retained)",
+    "missingValues": "null, never zero; disjoint GPU batches discarded; software GPU timers refused",
+    "scope": "WES K1 atmosphere/clock/night; no K2 winter surfaces or K3 precipitation",
+    "acceptance": "No automatic visual or product-budget acceptance. Hardware measurements are a prerequisite, not final sign-off."
+  },
+  "cases": [
+    {
+      "id": "off-a",
+      "scenario": {
+        "id": "off-a",
+        "enabled": false,
+        "hour": 12,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 10,
+        "p50Ms": 645.3999999994412,
+        "p95Ms": 693.3999999994412,
+        "p99Ms": 693.3999999994412,
+        "maxMs": 693.3999999994412
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 11,
+        "p50Ms": 2.1000000005587935,
+        "p95Ms": 13.599999999627471,
+        "p99Ms": 13.599999999627471,
+        "maxMs": 13.599999999627471
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 23319736,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": null,
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 15,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 39,
+          "triangles": 6532
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6481.9000000003725,
+      "screenshot": "off-a.png",
+      "raw": {
+        "elapsedMs": 6481.9000000003725,
+        "samples": [
+          {
+            "tag": 1,
+            "at": 5.5,
+            "renderSubmitMs": 2.2999999998137355,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 2,
+            "at": 657.9000000003725,
+            "renderSubmitMs": 2.2000000001862645,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 652.4000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 3,
+            "at": 1332,
+            "renderSubmitMs": 13.599999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 674.0999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 4,
+            "at": 1966.7000000001863,
+            "renderSubmitMs": 2.099999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 634.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 5,
+            "at": 2598.2000000001863,
+            "renderSubmitMs": 2.2000000001862645,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 631.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 6,
+            "at": 3249.600000000559,
+            "renderSubmitMs": 2.1000000005587935,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 651.4000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 7,
+            "at": 3943,
+            "renderSubmitMs": 0.8999999994412065,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 693.3999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 8,
+            "at": 4593.100000000559,
+            "renderSubmitMs": 1.1000000005587935,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 650.1000000005588,
+            "gpuMs": null
+          },
+          {
+            "tag": 9,
+            "at": 5238.5,
+            "renderSubmitMs": 1.599999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 645.3999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 10,
+            "at": 5861.100000000559,
+            "renderSubmitMs": 3.5,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 622.6000000005588,
+            "gpuMs": null
+          },
+          {
+            "tag": 11,
+            "at": 6481.9000000003725,
+            "renderSubmitMs": 0.900000000372529,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 620.7999999998137,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": null,
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 15,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 39,
+            "triangles": 6532
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "noon-a",
+      "scenario": {
+        "id": "noon-a",
+        "enabled": true,
+        "hour": 12,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 8,
+        "p50Ms": 756.9000000003725,
+        "p95Ms": 818.3000000007451,
+        "p99Ms": 818.3000000007451,
+        "maxMs": 818.3000000007451
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 9,
+        "p50Ms": 0.7999999998137355,
+        "p95Ms": 1.7000000001862645,
+        "p99Ms": 1.7000000001862645,
+        "maxMs": 1.7000000001862645
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 23974708,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 12,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 15,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 37,
+          "triangles": 6424
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6102.9000000003725,
+      "screenshot": "noon-a.png",
+      "raw": {
+        "elapsedMs": 6102.9000000003725,
+        "samples": [
+          {
+            "tag": 12,
+            "at": 2.7000000001862645,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 13,
+            "at": 776.5,
+            "renderSubmitMs": 0.8999999994412065,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 773.7999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 14,
+            "at": 1594.800000000745,
+            "renderSubmitMs": 0.900000000372529,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 818.3000000007451,
+            "gpuMs": null
+          },
+          {
+            "tag": 15,
+            "at": 2358.7000000001863,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 763.8999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 16,
+            "at": 3115.600000000559,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 756.9000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 17,
+            "at": 3875.300000000745,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 759.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 18,
+            "at": 4620,
+            "renderSubmitMs": 0.6999999992549419,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 744.6999999992549,
+            "gpuMs": null
+          },
+          {
+            "tag": 19,
+            "at": 5357.700000000186,
+            "renderSubmitMs": 1.7000000001862645,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 737.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 20,
+            "at": 6102.9000000003725,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 745.2000000001863,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 12,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 15,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 37,
+            "triangles": 6424
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "noon-b",
+      "scenario": {
+        "id": "noon-b",
+        "enabled": true,
+        "hour": 12,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 8,
+        "p50Ms": 767.5,
+        "p95Ms": 790.2999999998137,
+        "p99Ms": 790.2999999998137,
+        "maxMs": 790.2999999998137
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 9,
+        "p50Ms": 0.6000000005587935,
+        "p95Ms": 1.400000000372529,
+        "p99Ms": 1.400000000372529,
+        "maxMs": 1.400000000372529
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 24657568,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 12,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 15,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 37,
+          "triangles": 6424
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6162.200000000186,
+      "screenshot": "noon-b.png",
+      "raw": {
+        "elapsedMs": 6162.200000000186,
+        "samples": [
+          {
+            "tag": 21,
+            "at": 2.900000000372529,
+            "renderSubmitMs": 1.400000000372529,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 22,
+            "at": 753.7000000001863,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 750.7999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 23,
+            "at": 1544,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 790.2999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 24,
+            "at": 2311.5,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 767.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 25,
+            "at": 3097.0999999996275,
+            "renderSubmitMs": 0.6999999992549419,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 785.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 26,
+            "at": 3869,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 771.9000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 27,
+            "at": 4625.700000000186,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 756.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 28,
+            "at": 5399.0999999996275,
+            "renderSubmitMs": 0.6999999992549419,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 773.3999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 29,
+            "at": 6162.200000000186,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 763.1000000005588,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 12,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 15,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 37,
+            "triangles": 6424
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "off-b",
+      "scenario": {
+        "id": "off-b",
+        "enabled": false,
+        "hour": 12,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 10,
+        "p50Ms": 624.5,
+        "p95Ms": 692,
+        "p99Ms": 692,
+        "maxMs": 692
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 11,
+        "p50Ms": 0.7000000001862645,
+        "p95Ms": 0.8000000007450581,
+        "p99Ms": 0.8000000007450581,
+        "maxMs": 0.8000000007450581
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 24812232,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": null,
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 15,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 39,
+          "triangles": 6532
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6431,
+      "screenshot": "off-b.png",
+      "raw": {
+        "elapsedMs": 6431,
+        "samples": [
+          {
+            "tag": 30,
+            "at": 4.099999999627471,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 31,
+            "at": 676.5,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 672.4000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 32,
+            "at": 1329.0999999996275,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 652.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 33,
+            "at": 2021.0999999996275,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 692,
+            "gpuMs": null
+          },
+          {
+            "tag": 34,
+            "at": 2699.2000000001863,
+            "renderSubmitMs": 0.8000000007450581,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 678.1000000005588,
+            "gpuMs": null
+          },
+          {
+            "tag": 35,
+            "at": 3345.2999999998137,
+            "renderSubmitMs": 0.5,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 646.0999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 36,
+            "at": 3951,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 605.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 37,
+            "at": 4575.5,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 624.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 38,
+            "at": 5196.0999999996275,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 620.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 39,
+            "at": 5819.299999999814,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 623.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 40,
+            "at": 6430.899999999441,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 611.5999999996275,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": null,
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 15,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 39,
+            "triangles": 6532
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "sunrise-0700",
+      "scenario": {
+        "id": "sunrise-0700",
+        "enabled": true,
+        "hour": 7,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 10,
+        "p50Ms": 625.7999999998137,
+        "p95Ms": 664.7999999998137,
+        "p99Ms": 664.7999999998137,
+        "maxMs": 664.7999999998137
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 11,
+        "p50Ms": 1.2999999998137355,
+        "p95Ms": 2.1000000005587935,
+        "p99Ms": 2.1000000005587935,
+        "maxMs": 2.1000000005587935
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 25468400,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 7,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 41,
+          "triangles": 6724
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6374.5,
+      "screenshot": "sunrise-0700.png",
+      "raw": {
+        "elapsedMs": 6374.5,
+        "samples": [
+          {
+            "tag": 41,
+            "at": 3.300000000745058,
+            "renderSubmitMs": 2.1000000005587935,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 42,
+            "at": 625.7000000001863,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 622.3999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 43,
+            "at": 1251.5,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 625.7999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 44,
+            "at": 1870,
+            "renderSubmitMs": 1.3999999994412065,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 618.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 45,
+            "at": 2510.9000000003725,
+            "renderSubmitMs": 0.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 640.9000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 46,
+            "at": 3175.7000000001863,
+            "renderSubmitMs": 1.2999999998137355,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 664.7999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 47,
+            "at": 3818.600000000559,
+            "renderSubmitMs": 1.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 642.9000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 48,
+            "at": 4483.100000000559,
+            "renderSubmitMs": 1.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 664.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 49,
+            "at": 5098.9000000003725,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 615.7999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 50,
+            "at": 5759.300000000745,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 660.4000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 51,
+            "at": 6374.5,
+            "renderSubmitMs": 1.2999999998137355,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 615.1999999992549,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 7,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 41,
+            "triangles": 6724
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "low-sun-0630",
+      "scenario": {
+        "id": "low-sun-0630",
+        "enabled": true,
+        "hour": 6.5,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 10,
+        "p50Ms": 599.7000000001863,
+        "p95Ms": 684.9000000003725,
+        "p99Ms": 684.9000000003725,
+        "maxMs": 684.9000000003725
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 11,
+        "p50Ms": 0.6000000005587935,
+        "p95Ms": 2.2999999998137355,
+        "p99Ms": 2.2999999998137355,
+        "maxMs": 2.2999999998137355
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 24955636,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 6.5,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 40,
+          "triangles": 6628
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6145.199999999255,
+      "screenshot": "low-sun-0630.png",
+      "raw": {
+        "elapsedMs": 6145.199999999255,
+        "samples": [
+          {
+            "tag": 52,
+            "at": 2.699999999254942,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 53,
+            "at": 636.0999999996275,
+            "renderSubmitMs": 2.2999999998137355,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 633.4000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 54,
+            "at": 1240.5999999996275,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 604.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 55,
+            "at": 1847.2999999998137,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 606.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 56,
+            "at": 2474.2999999998137,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 627,
+            "gpuMs": null
+          },
+          {
+            "tag": 57,
+            "at": 3067.899999999441,
+            "renderSubmitMs": 0.5,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 593.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 58,
+            "at": 3752.7999999998137,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 684.9000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 59,
+            "at": 4350.699999999255,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 597.8999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 60,
+            "at": 4950.399999999441,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 599.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 61,
+            "at": 5549.699999999255,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 599.2999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 62,
+            "at": 6145.199999999255,
+            "renderSubmitMs": 0.5,
+            "calls": 40,
+            "triangles": 6628,
+            "frameMs": 595.5,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 6.5,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 40,
+            "triangles": 6628
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "sunset-1830",
+      "scenario": {
+        "id": "sunset-1830",
+        "enabled": true,
+        "hour": 18.5,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 10,
+        "p50Ms": 650.6999999992549,
+        "p95Ms": 687.1999999992549,
+        "p99Ms": 687.1999999992549,
+        "maxMs": 687.1999999992549
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 11,
+        "p50Ms": 0.599999999627471,
+        "p95Ms": 1,
+        "p99Ms": 1,
+        "maxMs": 1
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 25288336,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 18.5,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 39,
+          "triangles": 6532
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6582.799999999814,
+      "screenshot": "sunset-1830.png",
+      "raw": {
+        "elapsedMs": 6582.799999999814,
+        "samples": [
+          {
+            "tag": 63,
+            "at": 2,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 64,
+            "at": 649.8999999994412,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 647.8999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 65,
+            "at": 1300.199999999255,
+            "renderSubmitMs": 0.5,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 650.2999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 66,
+            "at": 1960.0999999996275,
+            "renderSubmitMs": 0.5,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 659.9000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 67,
+            "at": 2607.199999999255,
+            "renderSubmitMs": 0.5,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 647.0999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 68,
+            "at": 3266.7999999998137,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 659.6000000005588,
+            "gpuMs": null
+          },
+          {
+            "tag": 69,
+            "at": 3922.7999999998137,
+            "renderSubmitMs": 0.5,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 656,
+            "gpuMs": null
+          },
+          {
+            "tag": 70,
+            "at": 4604.5,
+            "renderSubmitMs": 1,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 681.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 71,
+            "at": 5291.699999999255,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 687.1999999992549,
+            "gpuMs": null
+          },
+          {
+            "tag": 72,
+            "at": 5932,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 640.3000000007451,
+            "gpuMs": null
+          },
+          {
+            "tag": 73,
+            "at": 6582.699999999255,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 39,
+            "triangles": 6532,
+            "frameMs": 650.6999999992549,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 18.5,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 39,
+            "triangles": 6532
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "night-2300",
+      "scenario": {
+        "id": "night-2300",
+        "enabled": true,
+        "hour": 23,
+        "weather": "clear"
+      },
+      "frames": {
+        "count": 10,
+        "p50Ms": 648,
+        "p95Ms": 709.5,
+        "p99Ms": 709.5,
+        "maxMs": 709.5
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 11,
+        "p50Ms": 0.5,
+        "p95Ms": 1.900000000372529,
+        "p99Ms": 1.900000000372529,
+        "maxMs": 1.900000000372529
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 25768356,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 23,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 41,
+          "triangles": 6724
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6575.9000000003725,
+      "screenshot": "night-2300.png",
+      "raw": {
+        "elapsedMs": 6575.9000000003725,
+        "samples": [
+          {
+            "tag": 74,
+            "at": 4,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 75,
+            "at": 633.6000000005588,
+            "renderSubmitMs": 0.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 629.6000000005588,
+            "gpuMs": null
+          },
+          {
+            "tag": 76,
+            "at": 1270,
+            "renderSubmitMs": 0.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 636.3999999994412,
+            "gpuMs": null
+          },
+          {
+            "tag": 77,
+            "at": 1931.5,
+            "renderSubmitMs": 0.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 661.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 78,
+            "at": 2641,
+            "renderSubmitMs": 0.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 709.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 79,
+            "at": 3338.100000000559,
+            "renderSubmitMs": 0.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 697.1000000005588,
+            "gpuMs": null
+          },
+          {
+            "tag": 80,
+            "at": 3986.100000000559,
+            "renderSubmitMs": 1.900000000372529,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 648,
+            "gpuMs": null
+          },
+          {
+            "tag": 81,
+            "at": 4621.100000000559,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 635,
+            "gpuMs": null
+          },
+          {
+            "tag": 82,
+            "at": 5271.799999999814,
+            "renderSubmitMs": 0.5,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 650.6999999992549,
+            "gpuMs": null
+          },
+          {
+            "tag": 83,
+            "at": 5904.299999999814,
+            "renderSubmitMs": 1.199999999254942,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 632.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 84,
+            "at": 6575.799999999814,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 671.5,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 23,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 41,
+            "triangles": 6724
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "cloudy",
+      "scenario": {
+        "id": "cloudy",
+        "enabled": true,
+        "hour": 12,
+        "weather": "cloudy"
+      },
+      "frames": {
+        "count": 8,
+        "p50Ms": 778.5999999996275,
+        "p95Ms": 822.8000000007451,
+        "p99Ms": 822.8000000007451,
+        "maxMs": 822.8000000007451
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 9,
+        "p50Ms": 0.599999999627471,
+        "p95Ms": 1,
+        "p99Ms": 1,
+        "maxMs": 1
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 25748404,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 12,
+          "season": "summer",
+          "weather": {
+            "preset": "cloudy",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 37,
+          "triangles": 6424
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6229,
+      "screenshot": "cloudy.png",
+      "raw": {
+        "elapsedMs": 6229,
+        "samples": [
+          {
+            "tag": 85,
+            "at": 1.599999999627471,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 86,
+            "at": 787.9000000003725,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 786.3000000007451,
+            "gpuMs": null
+          },
+          {
+            "tag": 87,
+            "at": 1566.5,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 778.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 88,
+            "at": 2354.0999999996275,
+            "renderSubmitMs": 0.39999999944120646,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 787.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 89,
+            "at": 3104.7000000001863,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 750.6000000005588,
+            "gpuMs": null
+          },
+          {
+            "tag": 90,
+            "at": 3861.9000000003725,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 757.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 91,
+            "at": 4648.0999999996275,
+            "renderSubmitMs": 0.8999999994412065,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 786.1999999992549,
+            "gpuMs": null
+          },
+          {
+            "tag": 92,
+            "at": 5470.9000000003725,
+            "renderSubmitMs": 1,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 822.8000000007451,
+            "gpuMs": null
+          },
+          {
+            "tag": 93,
+            "at": 6229,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 758.0999999996275,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 12,
+            "season": "summer",
+            "weather": {
+              "preset": "cloudy",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 37,
+            "triangles": 6424
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "fog",
+      "scenario": {
+        "id": "fog",
+        "enabled": true,
+        "hour": 12,
+        "weather": "fog"
+      },
+      "frames": {
+        "count": 8,
+        "p50Ms": 763.2000000001863,
+        "p95Ms": 803.0999999996275,
+        "p99Ms": 803.0999999996275,
+        "maxMs": 803.0999999996275
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 9,
+        "p50Ms": 0.5,
+        "p95Ms": 0.6000000005587935,
+        "p99Ms": 0.6000000005587935,
+        "maxMs": 0.6000000005587935
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 22147008,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 12,
+          "season": "summer",
+          "weather": {
+            "preset": "fog",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 24,
+        "render": {
+          "drawCalls": 37,
+          "triangles": 6424
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6142.299999999814,
+      "screenshot": "fog.png",
+      "raw": {
+        "elapsedMs": 6142.299999999814,
+        "samples": [
+          {
+            "tag": 94,
+            "at": 1.6000000005587935,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 95,
+            "at": 755.7000000001863,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 754.0999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 96,
+            "at": 1519.2000000001863,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 763.5,
+            "gpuMs": null
+          },
+          {
+            "tag": 97,
+            "at": 2281.4000000003725,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 762.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 98,
+            "at": 3044,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 762.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 99,
+            "at": 3807.2000000001863,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 763.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 100,
+            "at": 4571.600000000559,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 764.4000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 101,
+            "at": 5339.200000000186,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 767.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 102,
+            "at": 6142.299999999814,
+            "renderSubmitMs": 0.5,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 803.0999999996275,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 12,
+            "season": "summer",
+            "weather": {
+              "preset": "fog",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 24,
+          "render": {
+            "drawCalls": 37,
+            "triangles": 6424
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "clock-24min",
+      "scenario": {
+        "id": "clock-24min",
+        "enabled": true,
+        "hour": 12,
+        "weather": "clear",
+        "dayLengthMinutes": 24
+      },
+      "frames": {
+        "count": 8,
+        "p50Ms": 759.2999999998137,
+        "p95Ms": 809.5999999996275,
+        "p99Ms": 809.5999999996275,
+        "maxMs": 809.5999999996275
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 9,
+        "p50Ms": 0.7000000001862645,
+        "p95Ms": 1.400000000372529,
+        "p99Ms": 1.400000000372529,
+        "maxMs": 1.400000000372529
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 23513276,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 12.021666666666668,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 27,
+        "render": {
+          "drawCalls": 37,
+          "triangles": 6424
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6157.199999999255,
+      "screenshot": "clock-24min.png",
+      "raw": {
+        "elapsedMs": 6157.199999999255,
+        "samples": [
+          {
+            "tag": 103,
+            "at": 2.7999999998137355,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 104,
+            "at": 781.0999999996275,
+            "renderSubmitMs": 1,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 778.2999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 105,
+            "at": 1549,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 767.9000000003725,
+            "gpuMs": null
+          },
+          {
+            "tag": 106,
+            "at": 2358.5999999996275,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 809.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 107,
+            "at": 3134.7999999998137,
+            "renderSubmitMs": 1.400000000372529,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 776.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 108,
+            "at": 3894.0999999996275,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 759.2999999998137,
+            "gpuMs": null
+          },
+          {
+            "tag": 109,
+            "at": 4652.299999999814,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 758.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 110,
+            "at": 5400,
+            "renderSubmitMs": 0.7000000001862645,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 747.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 111,
+            "at": 6157.0999999996275,
+            "renderSubmitMs": 0.40000000037252903,
+            "calls": 37,
+            "triangles": 6424,
+            "frameMs": 757.0999999996275,
+            "gpuMs": null
+          }
+        ],
+        "captures": [],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 12.021666666666668,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 27,
+          "render": {
+            "drawCalls": 37,
+            "triangles": 6424
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    },
+    {
+      "id": "clock-stress-1min",
+      "scenario": {
+        "id": "clock-stress-1min",
+        "enabled": true,
+        "hour": 16.5,
+        "weather": "clear",
+        "dayLengthMinutes": 1
+      },
+      "frames": {
+        "count": 8,
+        "p50Ms": 640.5999999996275,
+        "p95Ms": 1411.0999999996275,
+        "p99Ms": 1411.0999999996275,
+        "maxMs": 1411.0999999996275
+      },
+      "gpuRender": {
+        "count": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "maxMs": null
+      },
+      "renderCpuSubmit": {
+        "count": 9,
+        "p50Ms": 1.099999999627471,
+        "p95Ms": 1.699999999254942,
+        "p99Ms": 1.699999999254942,
+        "maxMs": 1.699999999254942
+      },
+      "iblDuringRun": {
+        "cpuSubmit": {
+          "count": 2,
+          "p50Ms": 17.399999999441206,
+          "p95Ms": 18.90000000037253,
+          "p99Ms": 18.90000000037253,
+          "maxMs": 18.90000000037253
+        },
+        "gpu": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "p99Ms": null,
+          "maxMs": null
+        }
+      },
+      "disjoint": false,
+      "jsHeapUsedBytes": 22392168,
+      "witness": {
+        "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "timerAvailable": false,
+        "gpuTimingEnabled": false,
+        "camera": {
+          "position": [
+            0,
+            4,
+            16
+          ],
+          "target": [
+            0,
+            3.5,
+            0
+          ],
+          "fov": 65
+        },
+        "worldEnvironment": {
+          "hour": 17.060000000000002,
+          "season": "summer",
+          "weather": {
+            "preset": "clear",
+            "intensity": 1
+          },
+          "surface": {
+            "snowCoverage": 0,
+            "wetness": 0
+          }
+        },
+        "quality": {
+          "renderScale": 1,
+          "maxPixelRatio": 1.75,
+          "aoAllowed": true,
+          "dofAllowed": true,
+          "bloomAllowed": true,
+          "bloomResolutionScale": 1,
+          "smaaAllowed": true,
+          "shadowsEnabled": true,
+          "shadowMapSize": 1024,
+          "shadowDistanceScale": 0.75,
+          "shadowCascades": 3,
+          "shadowCascadeStagger": false,
+          "particleDensity": 0.8,
+          "foliageCullDistanceScale": 0.85,
+          "grassDensity": 0.8,
+          "terrainTrackDetailLevels": 2,
+          "terrainSelfShadow": true,
+          "terrainFarTiling": true,
+          "terrainWaterQuality": "high",
+          "lakeCausticsAllowed": true,
+          "lakeFoamAllowed": true,
+          "lakeShoreWetnessAllowed": true,
+          "lakeReflectionQuality": "medium",
+          "lakeMaxRipples": 24
+        },
+        "buffer": {
+          "width": 1280,
+          "height": 720,
+          "pixelRatio": 1
+        },
+        "geometries": 17,
+        "textures": 20,
+        "programs": 27,
+        "render": {
+          "drawCalls": 41,
+          "triangles": 6724
+        },
+        "gameObjects": [
+          "Reference Car"
+        ],
+        "glError": 0
+      },
+      "elapsedMs": 6635.299999999814,
+      "screenshot": "clock-stress-1min.png",
+      "raw": {
+        "elapsedMs": 6635.299999999814,
+        "samples": [
+          {
+            "tag": 112,
+            "at": 5.6000000005587935,
+            "renderSubmitMs": 1.400000000372529,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": null,
+            "gpuMs": null
+          },
+          {
+            "tag": 113,
+            "at": 657.7000000001863,
+            "renderSubmitMs": 1.099999999627471,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 652.0999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 114,
+            "at": 1309.4000000003725,
+            "renderSubmitMs": 0.7999999998137355,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 651.7000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 116,
+            "at": 1950,
+            "renderSubmitMs": 1.3999999994412065,
+            "calls": 71,
+            "triangles": 7084,
+            "frameMs": 640.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 117,
+            "at": 3350.2000000001863,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 1400.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 118,
+            "at": 3969.4000000003725,
+            "renderSubmitMs": 1.2000000001862645,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 619.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 119,
+            "at": 4597.600000000559,
+            "renderSubmitMs": 0.6000000005587935,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 628.2000000001863,
+            "gpuMs": null
+          },
+          {
+            "tag": 121,
+            "at": 5224.200000000186,
+            "renderSubmitMs": 0.599999999627471,
+            "calls": 71,
+            "triangles": 7084,
+            "frameMs": 626.5999999996275,
+            "gpuMs": null
+          },
+          {
+            "tag": 122,
+            "at": 6635.299999999814,
+            "renderSubmitMs": 1.699999999254942,
+            "calls": 41,
+            "triangles": 6724,
+            "frameMs": 1411.0999999996275,
+            "gpuMs": null
+          }
+        ],
+        "captures": [
+          {
+            "tag": 115,
+            "cpuSubmitMs": 17.399999999441206,
+            "gpuMs": null
+          },
+          {
+            "tag": 120,
+            "cpuSubmitMs": 18.90000000037253,
+            "gpuMs": null
+          }
+        ],
+        "disjoint": false,
+        "witness": {
+          "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "timerAvailable": false,
+          "gpuTimingEnabled": false,
+          "camera": {
+            "position": [
+              0,
+              4,
+              16
+            ],
+            "target": [
+              0,
+              3.5,
+              0
+            ],
+            "fov": 65
+          },
+          "worldEnvironment": {
+            "hour": 17.060000000000002,
+            "season": "summer",
+            "weather": {
+              "preset": "clear",
+              "intensity": 1
+            },
+            "surface": {
+              "snowCoverage": 0,
+              "wetness": 0
+            }
+          },
+          "quality": {
+            "renderScale": 1,
+            "maxPixelRatio": 1.75,
+            "aoAllowed": true,
+            "dofAllowed": true,
+            "bloomAllowed": true,
+            "bloomResolutionScale": 1,
+            "smaaAllowed": true,
+            "shadowsEnabled": true,
+            "shadowMapSize": 1024,
+            "shadowDistanceScale": 0.75,
+            "shadowCascades": 3,
+            "shadowCascadeStagger": false,
+            "particleDensity": 0.8,
+            "foliageCullDistanceScale": 0.85,
+            "grassDensity": 0.8,
+            "terrainTrackDetailLevels": 2,
+            "terrainSelfShadow": true,
+            "terrainFarTiling": true,
+            "terrainWaterQuality": "high",
+            "lakeCausticsAllowed": true,
+            "lakeFoamAllowed": true,
+            "lakeShoreWetnessAllowed": true,
+            "lakeReflectionQuality": "medium",
+            "lakeMaxRipples": 24
+          },
+          "buffer": {
+            "width": 1280,
+            "height": 720,
+            "pixelRatio": 1
+          },
+          "geometries": 17,
+          "textures": 20,
+          "programs": 27,
+          "render": {
+            "drawCalls": 41,
+            "triangles": 6724
+          },
+          "gameObjects": [
+            "Reference Car"
+          ],
+          "glError": 0
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "gate": {
+    "measurementReady": false,
+    "visualAccepted": false,
+    "budgetAccepted": false,
+    "reasons": [
+      "Hardware GPU not verified",
+      "EXT_disjoint_timer_query_webgl2 unavailable",
+      "off-a: fewer than 30 frame samples",
+      "off-a: fewer than 30 valid render GPU samples",
+      "noon-a: fewer than 30 frame samples",
+      "noon-a: fewer than 30 valid render GPU samples",
+      "noon-b: fewer than 30 frame samples",
+      "noon-b: fewer than 30 valid render GPU samples",
+      "off-b: fewer than 30 frame samples",
+      "off-b: fewer than 30 valid render GPU samples",
+      "sunrise-0700: fewer than 30 frame samples",
+      "sunrise-0700: fewer than 30 valid render GPU samples",
+      "low-sun-0630: fewer than 30 frame samples",
+      "low-sun-0630: fewer than 30 valid render GPU samples",
+      "sunset-1830: fewer than 30 frame samples",
+      "sunset-1830: fewer than 30 valid render GPU samples",
+      "night-2300: fewer than 30 frame samples",
+      "night-2300: fewer than 30 valid render GPU samples",
+      "cloudy: fewer than 30 frame samples",
+      "cloudy: fewer than 30 valid render GPU samples",
+      "fog: fewer than 30 frame samples",
+      "fog: fewer than 30 valid render GPU samples",
+      "clock-24min: fewer than 30 frame samples",
+      "clock-24min: fewer than 30 valid render GPU samples",
+      "clock-stress-1min: fewer than 30 frame samples",
+      "clock-stress-1min: fewer than 30 valid render GPU samples",
+      "Fewer than five valid isolated IBL GPU samples"
+    ]
+  },
+  "fixtureSha256": "15cab81a842981f509a34d8eaab29a837b77e7769e26ab4cc548f38507018339",
+  "browser": "154.0.8037.57",
+  "gpuSystemInfo": {
+    "devices": [
+      {
+        "vendorId": 65535,
+        "deviceId": 65535,
+        "vendorString": "Google Inc. (Google)",
+        "deviceString": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+        "driverVendor": "SwANGLE",
+        "driverVersion": "5.0.0"
+      }
+    ],
+    "auxAttributes": {
+      "amdSwitchable": false,
+      "canSupportThreadedTextureMailbox": false,
+      "directRenderingVersion": "",
+      "displayType": "ANGLE_SWIFTSHADER",
+      "glExtensions": "GL_AMD_performance_monitor GL_ANGLE_base_vertex_base_instance_shader_builtin GL_ANGLE_blob_cache GL_ANGLE_client_arrays GL_ANGLE_clip_cull_distance GL_ANGLE_compressed_texture_etc GL_ANGLE_copy_texture_3d GL_ANGLE_depth_texture GL_ANGLE_framebuffer_blit GL_ANGLE_framebuffer_multisample GL_ANGLE_get_image GL_ANGLE_get_serialized_context_string GL_ANGLE_get_tex_level_parameter GL_ANGLE_instanced_arrays GL_ANGLE_memory_object_flags GL_ANGLE_memory_size GL_ANGLE_multi_draw GL_ANGLE_pack_reverse_row_order GL_ANGLE_polygon_mode GL_ANGLE_program_binary_readiness_query GL_ANGLE_program_cache_control GL_ANGLE_read_only_depth_stencil_feedback_loops GL_ANGLE_relaxed_vertex_attribute_type GL_ANGLE_renderability_validation GL_ANGLE_request_extension GL_ANGLE_rgbx_internal_format GL_ANGLE_robust_client_memory GL_ANGLE_robust_fragment_shader_output GL_ANGLE_robust_resource_initialization GL_ANGLE_shader_pixel_local_storage GL_ANGLE_shader_pixel_local_storage_coherent GL_ANGLE_stencil_texturing GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_ANGLE_texture_multisample GL_ANGLE_texture_usage GL_ANGLE_translated_shader_source GL_ANGLE_vulkan_image GL_ANGLE_yuv_internal_format GL_APPLE_clip_distance GL_ARM_rgba8 GL_ARM_shader_framebuffer_fetch GL_CHROMIUM_bind_generates_resource GL_CHROMIUM_bind_uniform_location GL_CHROMIUM_copy_compressed_texture GL_CHROMIUM_copy_texture GL_CHROMIUM_lose_context GL_EXT_EGL_image_array GL_EXT_EGL_image_external_wrap_modes GL_EXT_EGL_image_storage GL_EXT_base_instance GL_EXT_blend_minmax GL_EXT_buffer_storage GL_EXT_clear_texture GL_EXT_clip_control GL_EXT_clip_cull_distance GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_compressed_ETC1_RGB8_sub_texture GL_EXT_conservative_depth GL_EXT_copy_image GL_EXT_debug_label GL_EXT_debug_marker GL_EXT_depth_clamp GL_EXT_discard_framebuffer GL_EXT_disjoint_timer_query GL_EXT_draw_buffers GL_EXT_draw_buffers_indexed GL_EXT_draw_elements_base_vertex GL_EXT_float_blend GL_EXT_frag_depth GL_EXT_instanced_arrays GL_EXT_map_buffer_range GL_EXT_memory_object GL_EXT_memory_object_fd GL_EXT_occlusion_query_boolean GL_EXT_polygon_offset_clamp GL_EXT_read_format_bgra GL_EXT_robustness GL_EXT_sRGB GL_EXT_sRGB_write_control GL_EXT_semaphore GL_EXT_semaphore_fd GL_EXT_separate_shader_objects GL_EXT_shader_framebuffer_fetch GL_EXT_shader_framebuffer_fetch_non_coherent GL_EXT_shader_non_constant_global_initializers GL_EXT_shader_texture_lod GL_EXT_shadow_samplers GL_EXT_texture_border_clamp GL_EXT_texture_compression_bptc GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_compression_s3tc_srgb GL_EXT_texture_filter_anisotropic GL_EXT_texture_format_BGRA8888 GL_EXT_texture_lod_bias GL_EXT_texture_mirror_clamp_to_edge GL_EXT_texture_rg GL_EXT_texture_sRGB_R8 GL_EXT_texture_sRGB_RG8 GL_EXT_texture_sRGB_decode GL_EXT_texture_shadow_lod GL_EXT_texture_storage GL_EXT_texture_type_2_10_10_10_REV GL_EXT_unpack_subimage GL_KHR_blend_equation_advanced GL_KHR_debug GL_KHR_robust_buffer_access_behavior GL_KHR_robustness GL_KHR_texture_compression_astc_ldr GL_NV_fence GL_NV_framebuffer_blit GL_NV_pack_subimage GL_NV_pixel_buffer_object GL_NV_polygon_mode GL_NV_read_depth GL_NV_read_depth_stencil GL_NV_read_stencil GL_NV_shader_noperspective_interpolation GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_EGL_image_external_essl3 GL_OES_EGL_sync GL_OES_compressed_ETC1_RGB8_texture GL_OES_compressed_paletted_texture GL_OES_copy_image GL_OES_depth24 GL_OES_depth32 GL_OES_depth_texture GL_OES_depth_texture_cube_map GL_OES_draw_buffers_indexed GL_OES_draw_elements_base_vertex GL_OES_element_index_uint GL_OES_fbo_render_mipmap GL_OES_get_program_binary GL_OES_mapbuffer GL_OES_packed_depth_stencil GL_OES_required_internalformat GL_OES_rgb8_rgba8 GL_OES_sample_shading GL_OES_sample_variables GL_OES_shader_multisample_interpolation GL_OES_standard_derivatives GL_OES_surfaceless_context GL_OES_texture_3D GL_OES_texture_border_clamp GL_OES_texture_float GL_OES_texture_float_linear GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_texture_npot GL_OES_texture_stencil8 GL_OES_texture_storage_multisample_2d_array GL_OES_vertex_array_object GL_OES_vertex_half_float GL_OES_vertex_type_10_10_10_2 GL_OVR_multiview GL_OVR_multiview2 GL_QCOM_texture_lod_bias ",
+      "glImplementationParts": "(gl=egl-angle,angle=swiftshader)",
+      "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+      "glResetNotificationStrategy": 33362,
+      "glVendor": "Google Inc. (Google)",
+      "glVersion": "OpenGL ES 3.0 (ANGLE 2.1 git hash: unknown hash)",
+      "glWsExtensions": "EGL_EXT_create_context_robustness EGL_ANGLE_surface_orientation EGL_KHR_create_context EGL_KHR_image EGL_KHR_image_base EGL_EXT_image_gl_colorspace EGL_KHR_gl_colorspace EGL_KHR_gl_texture_2D_image EGL_KHR_gl_texture_cubemap_image EGL_KHR_gl_renderbuffer_image EGL_KHR_get_all_proc_addresses EGL_KHR_fence_sync EGL_KHR_wait_sync EGL_ANGLE_create_context_webgl_compatibility EGL_CHROMIUM_create_context_bind_generates_resource EGL_KHR_swap_buffers_with_damage EGL_EXT_pixel_format_float EGL_KHR_surfaceless_context EGL_ANGLE_display_texture_share_group EGL_ANGLE_display_semaphore_share_group EGL_ANGLE_create_context_client_arrays EGL_ANGLE_program_cache_control EGL_ANGLE_robust_resource_initialization EGL_ANGLE_create_context_extensions_enabled EGL_ANDROID_blob_cache EGL_ANDROID_recordable EGL_ANGLE_create_context_backwards_compatible EGL_KHR_no_config_context EGL_IMG_context_priority EGL_KHR_create_context_no_error EGL_KHR_reusable_sync EGL_EXT_buffer_age EGL_ANGLE_create_surface_swap_interval EGL_ANGLE_vulkan_image EGL_KHR_partial_update EGL_ANGLE_global_fence_sync EGL_ANGLE_memory_usage_report ",
+      "glWsVendor": "Google Inc. (Google)",
+      "glWsVersion": "1.5 (ANGLE 2.1 git hash: unknown hash)",
+      "hardwareSupportsVulkan": false,
+      "inProcessGpu": false,
+      "initializationTime": 0.030326,
+      "isAsan": false,
+      "isClangCoverage": false,
+      "jpegDecodeAcceleratorSupported": false,
+      "maxMsaaSamples": "4",
+      "optimus": false,
+      "passthroughCmdDecoder": true,
+      "pixelShaderVersion": "3.00",
+      "processCrashCount": 0,
+      "sandboxed": false,
+      "skiaBackendType": "None",
+      "subpixelFontRendering": true,
+      "targetCpuBits": 64,
+      "vertexShaderVersion": "3.00",
+      "visibilityCallbackCallCount": 0
+    },
+    "featureStatus": {
+      "2d_canvas": "unavailable_software",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "disabled_software",
+      "multiple_raster_threads": "disabled_off",
+      "opengl": "disabled_off",
+      "rasterization": "disabled_software",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "disabled_off",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "disabled_software",
+      "video_encode": "disabled_software",
+      "vulkan": "disabled_off",
+      "webgl": "unavailable_software",
+      "webgpu": "unavailable_software",
+      "webgpu_on_vk_via_gl_interop": "disabled_off",
+      "webnn": "unavailable_software"
+    },
+    "driverBugWorkarounds": [],
+    "videoDecoding": [],
+    "videoEncoding": []
+  },
+  "witness": {
+    "device": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "timerAvailable": false,
+    "gpuTimingEnabled": false,
+    "camera": {
+      "position": [
+        0,
+        4,
+        16
+      ],
+      "target": [
+        0,
+        3.5,
+        0
+      ],
+      "fov": 65
+    },
+    "worldEnvironment": {
+      "hour": 12,
+      "season": "summer",
+      "weather": {
+        "preset": "clear",
+        "intensity": 1
+      },
+      "surface": {
+        "snowCoverage": 0,
+        "wetness": 0
+      }
+    },
+    "quality": {
+      "renderScale": 1,
+      "maxPixelRatio": 1.75,
+      "aoAllowed": true,
+      "dofAllowed": true,
+      "bloomAllowed": true,
+      "bloomResolutionScale": 1,
+      "smaaAllowed": true,
+      "shadowsEnabled": true,
+      "shadowMapSize": 1024,
+      "shadowDistanceScale": 0.75,
+      "shadowCascades": 3,
+      "shadowCascadeStagger": false,
+      "particleDensity": 0.8,
+      "foliageCullDistanceScale": 0.85,
+      "grassDensity": 0.8,
+      "terrainTrackDetailLevels": 2,
+      "terrainSelfShadow": true,
+      "terrainFarTiling": true,
+      "terrainWaterQuality": "high",
+      "lakeCausticsAllowed": true,
+      "lakeFoamAllowed": true,
+      "lakeShoreWetnessAllowed": true,
+      "lakeReflectionQuality": "medium",
+      "lakeMaxRipples": 24
+    },
+    "buffer": {
+      "width": 1280,
+      "height": 720,
+      "pixelRatio": 1
+    },
+    "geometries": 14,
+    "textures": 20,
+    "programs": 24,
+    "render": {
+      "drawCalls": 69,
+      "triangles": 6808
+    },
+    "gameObjects": [
+      "Reference Car"
+    ],
+    "glError": 0
+  },
+  "deviceClass": "software",
+  "ibl": {
+    "cpuSubmit": {
+      "count": 12,
+      "p50Ms": 19.90000000037253,
+      "p95Ms": 50,
+      "p99Ms": 50,
+      "maxMs": 50
+    },
+    "gpu": {
+      "count": 0,
+      "p50Ms": null,
+      "p95Ms": null,
+      "p99Ms": null,
+      "maxMs": null
+    },
+    "disjoint": false,
+    "raw": {
+      "samples": [
+        {
+          "tag": 123,
+          "cpuSubmitMs": 19.90000000037253,
+          "gpuMs": null
+        },
+        {
+          "tag": 124,
+          "cpuSubmitMs": 18.5,
+          "gpuMs": null
+        },
+        {
+          "tag": 125,
+          "cpuSubmitMs": 19.700000000186265,
+          "gpuMs": null
+        },
+        {
+          "tag": 126,
+          "cpuSubmitMs": 19.90000000037253,
+          "gpuMs": null
+        },
+        {
+          "tag": 127,
+          "cpuSubmitMs": 18.899999999441206,
+          "gpuMs": null
+        },
+        {
+          "tag": 128,
+          "cpuSubmitMs": 50,
+          "gpuMs": null
+        },
+        {
+          "tag": 129,
+          "cpuSubmitMs": 20.600000000558794,
+          "gpuMs": null
+        },
+        {
+          "tag": 130,
+          "cpuSubmitMs": 18.90000000037253,
+          "gpuMs": null
+        },
+        {
+          "tag": 131,
+          "cpuSubmitMs": 20.699999999254942,
+          "gpuMs": null
+        },
+        {
+          "tag": 132,
+          "cpuSubmitMs": 21.299999999813735,
+          "gpuMs": null
+        },
+        {
+          "tag": 133,
+          "cpuSubmitMs": 20.199999999254942,
+          "gpuMs": null
+        },
+        {
+          "tag": 134,
+          "cpuSubmitMs": 19.200000000186265,
+          "gpuMs": null
+        }
+      ],
+      "disjoint": false
+    }
+  },
+  "staticDelta": {
+    "off": {
+      "count": 20,
+      "p50Ms": 645.3999999994412,
+      "p95Ms": 692,
+      "p99Ms": 693.3999999994412,
+      "maxMs": 693.3999999994412
+    },
+    "on": {
+      "count": 16,
+      "p50Ms": 763.1000000005588,
+      "p95Ms": 818.3000000007451,
+      "p99Ms": 818.3000000007451,
+      "maxMs": 818.3000000007451
+    },
+    "p50Ms": 117.70000000111759,
+    "p95Ms": 126.30000000074506,
+    "warning": "ABBA block comparison; different atmosphere/shadow directions are part of WES. Not a per-frame isolated shader benchmark."
+  }
+}

@@ -44,6 +44,18 @@ export class WorldBuilderPanel {
     });
     // A typed plan field is one correction when it is committed (Enter or leaving the field).
     options.body.addEventListener("change", (event) => {
+      const pointField = (event.target as HTMLElement).closest<HTMLInputElement>("[data-wb-point-axis]");
+      if (pointField) {
+        const selection = options.session.getView().planEdit?.selection;
+        const row = pointField.closest<HTMLElement>("[data-wb-shape-point]");
+        const x = row?.querySelector<HTMLInputElement>('[data-wb-point-axis="x"]')?.value.trim();
+        const z = row?.querySelector<HTMLInputElement>('[data-wb-point-axis="z"]')?.value.trim();
+        if (selection && (selection.kind === "water" || selection.kind === "region") && x && z) {
+          options.session.movePlanPoint({ kind: selection.kind, id: selection.id, index: Number(row!.dataset.wbShapePoint) }, [Number(x), Number(z)]);
+        }
+        this.update();
+        return;
+      }
       const field = (event.target as HTMLElement).closest<HTMLInputElement | HTMLSelectElement>("[data-wb-field]");
       if (!field) return;
       const selection = options.session.getView().planEdit?.selection;
@@ -85,12 +97,14 @@ export class WorldBuilderPanel {
     } else if (action === "reference-remove") session.setReference(null);
     else if (action === "plan-select" && kind && id) session.selectPlan({ kind, id });
     else if (action === "plan-edit-toggle") session.setPlanEditing(!session.getView().planEdit?.editing);
-    else if (action === "plan-add" && kind) session.addPlanElement(kind);
+    else if (action === "plan-add" && kind) session.addPlanElement(kind, null, { waterShape: data.wbShape === "polygon" ? "polygon" : "path" });
     else if (action === "plan-delete") session.deletePlanElement();
     else if (action === "plan-connect" && id) {
       const to = this.planControl("connect-to");
       if (to) session.addPlanElement("edge", null, { from: id, to, roadClass: this.planControl("connect-class") as RoadClass });
     } else if (action === "node-to-site" && id) session.moveNodeToSite(id);
+    else if (action === "shape-add" && kind && id) session.addShapePoint({ kind, id }, data.wbIndex === undefined ? undefined : Number(data.wbIndex));
+    else if (action === "shape-delete" && kind && id) session.deleteShapePoint({ kind, id }, Number(data.wbIndex));
     else if (action === "guide-add" && id) session.addGuidePoint(id);
     else if (action === "guide-delete" && id) session.deleteGuidePoint(id, Number(data.wbIndex));
     else if (action === "preview-focus") {
@@ -189,7 +203,7 @@ function renderRecipe(view: WorldBuilderView): string {
       ? '<span class="world-builder-error">The file is not a world recipe.</span>'
       : view.state === "loading" ? "Loading the level…" : "No world recipe for this level yet.";
   const counts = view.planCounts
-    ? `<div>Plan: ${view.planCounts.settlements} settlements, ${view.planCounts.landmarks} landmarks, ${view.planCounts.roadNodes} road nodes, ${view.planCounts.roadEdges} road edges · ${view.planCounts.owned} generated objects</div>`
+    ? `<div>Plan: ${view.planCounts.settlements} settlements, ${view.planCounts.landmarks} landmarks, ${view.planCounts.roadNodes} road nodes, ${view.planCounts.roadEdges} road edges, ${view.planCounts.water} water bodies, ${view.planCounts.regions} regions · ${view.planCounts.owned} generated objects</div>`
     : "";
   const profile = view.profile
     ? `<div>Region profile: ${escapeHtml(view.profile.label ?? view.profile.path)} (${view.profile.state}${view.profile.issues.length ? `, ${view.profile.issues.length} issues` : ""})</div>`
@@ -271,6 +285,8 @@ const PLAN_KIND_LABELS: Record<PlanElementKind, string> = {
   settlement: "Settlement",
   node: "Road node",
   edge: "Road edge",
+  water: "Water",
+  region: "Region",
   landmark: "Landmark",
   protected: "Protected region",
 };
@@ -290,6 +306,8 @@ function planRows(plan: WorldPlan, protectedRegions: readonly ProtectedRegion[])
     ...plan.roadGraph.nodes.map((entry): PlanRow => ({ ref: { kind: "node", id: entry.id }, label: entry.kind, source: entry.source, low: low(entry.confidence) })),
     ...plan.roadGraph.edges.map((entry): PlanRow => ({ ref: { kind: "edge", id: entry.id }, label: `${entry.from} → ${entry.to}, ${entry.roadClass}`, source: entry.source, low: low(entry.confidence) })),
     ...plan.landmarks.map((entry): PlanRow => ({ ref: { kind: "landmark", id: entry.id }, label: entry.kind, source: entry.source, low: low(entry.confidence) })),
+    ...plan.water.map((entry): PlanRow => ({ ref: { kind: "water", id: entry.id }, label: entry.kind, source: entry.source, low: low(entry.confidence) })),
+    ...plan.regions.map((entry): PlanRow => ({ ref: { kind: "region", id: entry.id }, label: entry.kind, source: entry.source, low: low(entry.confidence) })),
     ...protectedRegions.map((entry): PlanRow => ({ ref: { kind: "protected", id: entry.id }, label: entry.kind, low: false })),
   ];
 }
@@ -307,7 +325,7 @@ function renderPlanEdit(edit: NonNullable<WorldBuilderView["planEdit"]>): string
     }).join("");
     return `<div>${PLAN_KIND_LABELS[kind]}s (${own.length})<ul class="world-builder-list">${items}</ul></div>`;
   }).join("");
-  const add = (["settlement", "node", "landmark", "protected"] as const).map((kind) =>
+  const add = (["settlement", "node", "region", "landmark", "protected"] as const).map((kind) =>
     `<button type="button" data-wb-action="plan-add" data-wb-kind="${kind}" data-testid="world-builder-plan-add-${kind}">+ ${PLAN_KIND_LABELS[kind]}</button>`).join("");
   return `<div class="detail-section" data-testid="world-builder-plan-edit">
     <div class="detail-section-title">Plan Corrections</div>
@@ -319,7 +337,10 @@ function renderPlanEdit(edit: NonNullable<WorldBuilderView["planEdit"]>): string
         <button type="button" data-wb-action="plan-edit-toggle" data-testid="world-builder-plan-edit-toggle">${edit.editing ? "Stop Editing" : "Edit in Viewport"}</button></div>
       ${groups || "<div>The plan is empty.</div>"}
     </div>
-    <div class="world-builder-actions">${add}</div>
+    <div class="world-builder-actions">${add}
+      <button type="button" data-wb-action="plan-add" data-wb-kind="water" data-testid="world-builder-plan-add-river">+ River</button>
+      <button type="button" data-wb-action="plan-add" data-wb-kind="water" data-wb-shape="polygon" data-testid="world-builder-plan-add-lake">+ Lake</button>
+    </div>
     ${selection ? renderPlanSelection(edit, selection) : ""}
   </div>`;
 }
@@ -363,6 +384,23 @@ function renderPlanSelection(edit: NonNullable<WorldBuilderView["planEdit"]>, se
       <label class="world-builder-row">Road class ${select("road-class", ROAD_CLASSES, edge.roadClass)}</label>`;
     extra = `<div data-testid="world-builder-plan-guide" data-count="${edge.guide?.length ?? 0}">Guide points (${edge.guide?.length ?? 0}) — a corridor hint, not the final route<ul class="world-builder-list">${guide}</ul></div>
       <div class="world-builder-actions"><button type="button" data-wb-action="guide-add" data-wb-id="${escapeHtml(edge.id)}" data-testid="world-builder-plan-guide-add">Add Guide Point</button></div>`;
+  } else if (selection.kind === "water" || selection.kind === "region") {
+    const element = selection.kind === "water" ? plan.water.find((entry) => entry.id === selection.id) : plan.regions.find((entry) => entry.id === selection.id);
+    if (!element) return "";
+    const closed = selection.kind === "region" || ("polygon" in element && element.polygon !== undefined);
+    const points = ("path" in element ? element.path : undefined) ?? element.polygon ?? [];
+    const minimum = closed ? 3 : 2;
+    fields = `<label class="world-builder-row">Kind ${input("kind", element.kind, "text")}</label>`;
+    const pointInput = (axis: "x" | "z", value: number, index: number) =>
+      `<input type="number" aria-label="Point ${index + 1} ${axis}" data-wb-point-axis="${axis}" data-testid="world-builder-plan-point-${axis}-${index}" value="${value}">`;
+    const button = (action: "add" | "delete", text: string, index?: number, disabled = false) =>
+      `<button type="button" class="world-builder-change" data-wb-action="shape-${action}" data-wb-kind="${selection.kind}" data-wb-id="${escapeHtml(selection.id)}" ${index === undefined ? "" : `data-wb-index="${index}"`} data-testid="world-builder-plan-shape-${action}${index === undefined ? "" : `-${index}`}" ${disabled ? "disabled" : ""}>${text}</button>`;
+    const rows = points.map((point, index) => `<li data-wb-shape-point="${index}">
+      <div class="world-builder-row">Point ${index + 1}: <label>x ${pointInput("x", point[0], index)}</label> <label>z ${pointInput("z", point[1], index)}</label></div>
+      ${button("add", "Insert After", index)} ${button("delete", "Remove", index, points.length <= minimum)}
+    </li>`).join("");
+    extra = `<div data-testid="world-builder-plan-shape" data-count="${points.length}">${closed ? "Outline" : "Path"} points (${points.length}) — at least ${minimum}
+      <ul class="world-builder-list">${rows}</ul>${button("add", "Add Point")}</div>`;
   } else if (selection.kind === "landmark") {
     const landmark = plan.landmarks.find((entry) => entry.id === selection.id);
     if (!landmark) return "";

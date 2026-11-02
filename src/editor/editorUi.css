@@ -861,6 +861,7 @@
 /* Dry run preview (T10); swatch colours match WorldBuilderPreviewOverlay's PREVIEW_COLORS. */
 .world-builder-change { all: unset; cursor: pointer; color: var(--forge-text); }
 .world-builder-change:hover, .world-builder-change:focus-visible { text-decoration: underline; }
+.world-builder-change:disabled { opacity: 0.45; cursor: default; text-decoration: none; }
 .world-builder-selected { color: #3dff9a; font-weight: 600; }
 .world-builder-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; vertical-align: baseline; }
 .world-builder-swatch-added { background: #3ddc84; }

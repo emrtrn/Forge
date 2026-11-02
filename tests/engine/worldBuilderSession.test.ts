@@ -190,7 +190,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.equal(view.state, "loaded");
     assert.equal(view.dirty, false);
     assert.deepEqual(view.profile, { path: PROFILE, state: "loaded", label: "Neutral test profile", issues: [] });
-    assert.deepEqual(view.planCounts, { settlements: 1, landmarks: 1, roadNodes: 0, roadEdges: 0, owned: 0, pads: 0 });
+    assert.deepEqual(view.planCounts, { water: 0, regions: 0, settlements: 1, landmarks: 1, roadNodes: 0, roadEdges: 0, owned: 0, pads: 0 });
     assert.deepEqual(view.stages, [
       { id: "planBlockout", label: "Plan blockout", version: 1, recordedVersion: null },
       { id: "roads", label: "Roads", version: 4, recordedVersion: null },
@@ -591,4 +591,127 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     session.setPlanEditing(false);
     assert.equal(session.planEditSelection(), null, "shortcuts act only in Edit Plan mode");
   });
+
+  await checkAsync("world builder session: water and region vertices are selectable, draggable and restored by one undo (15c)", async () => {
+    const recipe = createWorldRecipe("shapes", 1);
+    recipe.plan.water.push({ id: "creek", source: "reference", observed: false, confidence: 0.2, kind: "stream", path: [[0, 0], [20, 0]] });
+    recipe.plan.regions.push({ id: "woods", source: "osm", confidence: 0.7, kind: "forest", polygon: [[0, 10], [20, 10], [10, 20]] });
+    const { session, history } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    session.setPlanEditing(true);
+    assert.equal(session.planHandles().length, 5);
+    assert.deepEqual(session.planHandles()[2]!.ref, { kind: "region", id: "woods", index: 0 });
+    assert.equal(session.getView().planCounts!.water, 1);
+    assert.equal(session.getView().planCounts!.regions, 1);
+    const point = { kind: "water", id: "creek", index: 1 } as const;
+    session.beginPlanDrag(point);
+    assert.deepEqual(session.planEditSelection(), { kind: "water", id: "creek" });
+    session.dragPlanPoint(point, [25, 3]);
+    assert.deepEqual(session.getView().planEdit!.plan.water[0], recipe.plan.water[0], "live drag is not committed");
+    session.endPlanDrag(point, null);
+    assert.equal(history.state().canUndo, false);
+    session.beginPlanDrag(point);
+    session.endPlanDrag(point, [25, 3]);
+    assert.deepEqual(session.getView().planEdit!.plan.water[0], { id: "creek", source: "manual", kind: "stream", path: [[0, 0], [25, 3]] });
+    assert.deepEqual(session.getView().planEdit!.plan.regions, recipe.plan.regions, "other elements remain unchanged");
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan.water[0], recipe.plan.water[0], "undo restores geometry AND provenance");
+    assert.equal(history.state().canUndo, false);
+    history.redo();
+    assert.equal(session.getView().planEdit!.plan.water[0]!.source, "manual");
+    assert.equal(session.movePlanPoint({ kind: "region", id: "woods", index: 0 }, [-4, 12]), true);
+    assert.deepEqual(session.getView().planEdit!.plan.regions[0]!.polygon[0], [-4, 12]);
+    assert.equal(session.getView().planEdit!.plan.regions[0]!.confidence, undefined);
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan.regions, recipe.plan.regions);
+  });
+
+  await checkAsync("world builder session: open water paths split, extend without closing, and keep two vertices (15c)", async () => {
+    const recipe = createWorldRecipe("shapes", 1);
+    recipe.plan.water.push({ id: "river", source: "reference", confidence: 0.5, kind: "river", path: [[0, 0], [20, 0]] });
+    const { session, history } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    const ref = { kind: "water", id: "river" } as const;
+    const line = () => session.getView().planEdit!.plan.water[0]!.path!;
+    assert.equal(session.deleteShapePoint(ref, 0), false);
+    assert.equal(history.state().canUndo, false, "minimum count rejection creates no history step");
+    assert.equal(session.addShapePoint(ref), true);
+    assert.deepEqual(line(), [[0, 0], [10, 0], [20, 0]]);
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan.water, recipe.plan.water);
+    assert.equal(session.addShapePoint(ref, 1), true);
+    assert.deepEqual(line(), [[0, 0], [20, 0], [30, 0]], "last-vertex insertion extends an open path");
+    assert.equal(session.deleteShapePoint(ref, 1), true);
+    assert.deepEqual(line(), [[0, 0], [30, 0]]);
+    assert.equal(session.deleteShapePoint(ref, 1), false);
+    assert.equal(session.getView().planEdit!.plan.water[0]!.polygon, undefined);
+  });
+
+  await checkAsync("world builder session: lake and region polygons insert on their closing edge and keep three vertices (15c)", async () => {
+    for (const kind of ["water", "region"] as const) {
+      const recipe = createWorldRecipe("shapes", 1);
+      const element = { id: "outline", source: "reference" as const, observed: false, confidence: 0.3, kind: kind === "water" ? "lake" : "valley", polygon: [[0, 0], [10, 0], [0, 10]] as [number, number][] };
+      if (kind === "water") recipe.plan.water.push(element);
+      else recipe.plan.regions.push(element);
+      const { session, history } = harness({ [RECIPE_URL]: recipe });
+      await session.load();
+      const ref = { kind, id: "outline" };
+      const polygon = () => (kind === "water" ? session.getView().planEdit!.plan.water[0] : session.getView().planEdit!.plan.regions[0])!.polygon!;
+      assert.equal(session.deleteShapePoint(ref, 0), false);
+      assert.equal(session.addShapePoint(ref, 2), true);
+      assert.deepEqual(polygon(), [[0, 0], [10, 0], [0, 10], [0, 5]]);
+      assert.equal(session.deleteShapePoint(ref, 1), true);
+      assert.equal(polygon().length, 3);
+      assert.equal(session.deleteShapePoint(ref, 1), false);
+      history.undo(); history.undo();
+      assert.deepEqual(polygon(), element.polygon);
+      assert.equal((kind === "water" ? session.getView().planEdit!.plan.water[0] : session.getView().planEdit!.plan.regions[0])!.source, "reference");
+    }
+  });
+
+  await checkAsync("world builder session: shape edits reject invalid/stale vertices and out-of-range positions without losing geometry (15c)", async () => {
+    const recipe = createWorldRecipe("shapes", 1);
+    recipe.plan.regions.push({ id: "woods", source: "manual", kind: "forest", polygon: [[0, 0], [10, 0], [0, 10]] });
+    const { session, history, statuses } = harness({ [RECIPE_URL]: recipe });
+    await session.load();
+    const ref = { kind: "region", id: "woods" } as const;
+    for (const index of [-1, 1.5, 3, NaN]) {
+      assert.equal(session.addShapePoint(ref, index), false);
+      assert.equal(session.deleteShapePoint(ref, index), false);
+      assert.equal(session.movePlanPoint({ ...ref, index }, [3, 4]), false);
+    }
+    assert.equal(session.movePlanPoint({ ...ref, index: 0 }, [Infinity, 4]), false);
+    assert.equal(session.movePlanPoint({ ...ref, index: 0 }, [1e15, 4]), false);
+    assert.match(statuses.at(-1)!, /^Plan edit refused/);
+    assert.equal(session.addShapePoint({ kind: "water", id: "missing" }), false);
+    assert.equal(history.state().canUndo, false);
+    assert.deepEqual(session.getView().planEdit!.plan.regions, recipe.plan.regions);
+  });
+
+  await checkAsync("world builder session: river/lake/region creation, field edits, deletion and save preserve shape identity (15c)", async () => {
+    const { session, history, posts } = harness({ [RECIPE_URL]: createWorldRecipe("shapes", 1) });
+    await session.load();
+    assert.equal(session.addPlanElement("water", [10, 20]), true);
+    assert.equal(session.addPlanElement("water", [30, 40], { waterShape: "polygon" }), true);
+    assert.equal(session.addPlanElement("region", [50, 60]), true);
+    assert.equal(session.updatePlanElement({ kind: "water", id: "water-2" }, { kind: "wetland" }), true);
+    assert.equal(session.updatePlanElement({ kind: "region", id: "region-1" }, { kind: "forest.conifer" }), true);
+    const plan = structuredClone(session.getView().planEdit!.plan);
+    assert.equal(plan.water[0]!.path!.length, 2);
+    assert.equal(plan.water[1]!.polygon!.length, 4);
+    assert.equal(plan.water[1]!.path, undefined);
+    assert.equal(plan.regions[0]!.kind, "forest.conifer");
+    assert.equal(session.deletePlanElement({ kind: "water", id: "water-2" }), true);
+    assert.equal(session.getView().planEdit!.plan.water.length, 1);
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan, plan);
+    assert.equal(session.deletePlanElement({ kind: "region", id: "region-1" }), true);
+    assert.equal(session.getView().planEdit!.selection, null);
+    history.undo();
+    assert.deepEqual(session.getView().planEdit!.plan, plan);
+    await session.captureSave()!.write();
+    const saved = posts.at(-1)!.body as { recipe: { plan: typeof plan } };
+    assert.deepEqual(saved.recipe.plan, plan);
+  });
+
 }

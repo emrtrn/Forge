@@ -155,11 +155,11 @@ export class WorldBuilderRecipeOverlay {
     };
     const { plan } = recipe;
     for (const region of plan.regions) {
-      const look = style(region, LAYER_COLORS.region);
+      const look = style(region, LAYER_COLORS.region, "region", region.id);
       this.loop(region.polygon, batch(look), look.dashed);
     }
     for (const water of plan.water) {
-      const look = style(water, LAYER_COLORS.water);
+      const look = style(water, LAYER_COLORS.water, "water", water.id);
       if (water.path) this.line(water.path, batch(look), look.dashed);
       if (water.polygon) this.loop(water.polygon, batch(look), look.dashed);
     }

@@ -68,8 +68,10 @@ import {
 } from "./worldBuilderLayer";
 import {
   addGuidePoint,
+  addShapePoint,
   addPlanElement,
   deleteGuidePoint,
+  deleteShapePoint,
   deletePlanElement,
   hasPlanElement,
   moveNodeToSite,
@@ -137,7 +139,7 @@ export interface WorldBuilderView {
   profile: { path: string; state: "loaded" | "missing" | "invalid"; label: string | null; issues: readonly string[] } | null;
   dirty: boolean;
   /** `owned`: generated placements and splines; `pads`: building pads Apply Pads would bake. */
-  planCounts: { settlements: number; landmarks: number; roadNodes: number; roadEdges: number; owned: number; pads: number } | null;
+  planCounts: { water: number; regions: number; settlements: number; landmarks: number; roadNodes: number; roadEdges: number; owned: number; pads: number } | null;
   stages: readonly WorldBuilderStageView[];
   /** The last dry run or apply, for the report. */
   lastPlan: StagePlan | null;
@@ -331,7 +333,7 @@ export class WorldBuilderSession {
    * Adds a plan element at `at`, or where the viewport looks, and selects it.
    * An edge joins `link.from` and `link.to`.
    */
-  addPlanElement(kind: PlanElementKind, at?: [number, number] | null, link?: { from?: string; to?: string; roadClass?: RoadClass }): boolean {
+  addPlanElement(kind: PlanElementKind, at?: [number, number] | null, link?: { from?: string; to?: string; roadClass?: RoadClass; waterShape?: "path" | "polygon" }): boolean {
     const point = at ?? this.host.viewTarget() ?? [0, 0];
     let added: PlanRef | null = null;
     const done = this.editPlan(`add ${kind}`, (recipe) => {
@@ -365,6 +367,14 @@ export class WorldBuilderSession {
 
   deleteGuidePoint(edgeId: string, index: number): boolean {
     return this.editPlan("delete guide point", (recipe) => deleteGuidePoint(recipe, edgeId, index));
+  }
+
+  addShapePoint(ref: PlanRef, afterIndex?: number): boolean {
+    return this.editPlan("add shape point", (recipe) => addShapePoint(recipe, ref, afterIndex));
+  }
+
+  deleteShapePoint(ref: PlanRef, index: number): boolean {
+    return this.editPlan("delete shape point", (recipe) => deleteShapePoint(recipe, ref, index));
   }
 
   /** Re-reads the recipe from disk, e.g. after an AI rewrote it. Refuses over unsaved edits. */
@@ -491,6 +501,8 @@ export class WorldBuilderSession {
       dirty: this.saveRevision.dirty,
       planCounts: recipe
         ? {
+            water: recipe.plan.water.length,
+            regions: recipe.plan.regions.length,
             settlements: recipe.plan.settlements.length,
             landmarks: recipe.plan.landmarks.length,
             roadNodes: recipe.plan.roadGraph.nodes.length,

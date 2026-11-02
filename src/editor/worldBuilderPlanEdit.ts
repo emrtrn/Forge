@@ -1,9 +1,9 @@
 /**
  * Hand corrections to a World Builder recipe's plan (plan v0.4 §13.2 step 4,
  * T36): move, add and delete settlements, road nodes, road edges (and their
- * guide points), landmarks and protected regions. Pure functions over a recipe
- * copy; the session runs each as one undo step and checks the result with the
- * recipe normalizer.
+ * guide points), water paths/outlines, region polygons, landmarks and protected
+ * regions. Pure functions over a recipe copy; the session runs each as one undo
+ * step and checks the result with the recipe normalizer.
  *
  * An element the user touched becomes theirs: `source` turns `manual` and the
  * reference's `observed` / `confidence` estimates are dropped (user decision
@@ -21,6 +21,8 @@ import type {
   PlanLandmark,
   PlanProvenance,
   PlanSettlement,
+  PlanWater,
+  PlanRegion,
   ProtectedRegion,
   RoadEdge,
   RoadNode,
@@ -29,7 +31,7 @@ import type {
 } from "@engine/worldbuilder/recipe";
 import type { RoadClass } from "@engine/worldbuilder/vocabulary";
 
-export const PLAN_ELEMENT_KINDS = ["settlement", "node", "edge", "landmark", "protected"] as const;
+export const PLAN_ELEMENT_KINDS = ["settlement", "node", "edge", "water", "region", "landmark", "protected"] as const;
 export type PlanElementKind = (typeof PLAN_ELEMENT_KINDS)[number];
 
 /** One plan element (a protected region is an `ownership` entry, edited alongside the plan). */
@@ -42,6 +44,7 @@ export interface PlanRef {
 export type PlanPointRef =
   | { kind: "settlement" | "node" | "landmark"; id: string }
   | { kind: "guide"; id: string; index: number }
+  | { kind: "water" | "region"; id: string; index: number }
   | { kind: "protected"; id: string; corner: "min" | "max" };
 
 export interface PlanPoint {
@@ -70,6 +73,8 @@ const ID_PREFIX: Record<PlanElementKind, string> = {
   settlement: "settlement",
   node: "node",
   edge: "edge",
+  water: "water",
+  region: "region",
   landmark: "landmark",
   protected: "protected",
 };
@@ -84,6 +89,12 @@ export function planPoints(recipe: WorldRecipe): PlanPoint[] {
   ];
   for (const edge of plan.roadGraph.edges) {
     (edge.guide ?? []).forEach((point, index) => points.push({ ref: { kind: "guide", id: edge.id, index }, point }));
+  }
+  for (const water of plan.water) {
+    (water.path ?? water.polygon ?? []).forEach((point, index) => points.push({ ref: { kind: "water", id: water.id, index }, point }));
+  }
+  for (const region of plan.regions) {
+    region.polygon.forEach((point, index) => points.push({ ref: { kind: "region", id: region.id, index }, point }));
   }
   for (const region of recipe.ownership.protectedRegions) {
     points.push({ ref: { kind: "protected", id: region.id, corner: "min" }, point: region.min });
@@ -112,6 +123,7 @@ export function hasPlanElement(recipe: WorldRecipe, ref: PlanRef): boolean {
  * them, so the box stays min-below-max.
  */
 export function movePlanPoint(recipe: WorldRecipe, ref: PlanPointRef, point: WorldPoint): WorldRecipe | null {
+  if (!point.every(Number.isFinite)) return null;
   const next = structuredClone(recipe);
   const to: WorldPoint = [point[0], point[1]];
   if (ref.kind === "settlement") {
@@ -134,6 +146,11 @@ export function movePlanPoint(recipe: WorldRecipe, ref: PlanPointRef, point: Wor
     if (!edge?.guide || ref.index < 0 || ref.index >= edge.guide.length) return null;
     edge.guide[ref.index] = to;
     markManual(edge);
+  } else if (ref.kind === "water" || ref.kind === "region") {
+    const shape = findShape(next, ref);
+    if (!shape || !validIndex(ref.index, shape.points.length)) return null;
+    shape.points[ref.index] = to;
+    markManual(shape.element);
   } else if ("corner" in ref) {
     const region = next.ownership.protectedRegions.find((entry) => entry.id === ref.id);
     if (!region) return null;
@@ -153,7 +170,7 @@ export function addPlanElement(
   recipe: WorldRecipe,
   kind: PlanElementKind,
   at: WorldPoint,
-  link: { from?: string; to?: string; roadClass?: RoadClass } = {},
+  link: { from?: string; to?: string; roadClass?: RoadClass; waterShape?: "path" | "polygon" } = {},
 ): { recipe: WorldRecipe; ref: PlanRef } | null {
   const next = structuredClone(recipe);
   const id = nextPlanId(recipe, kind);
@@ -172,6 +189,12 @@ export function addPlanElement(
     if (!link.from || !link.to || link.from === link.to || !nodes.has(link.from) || !nodes.has(link.to)) return null;
     const edge: RoadEdge = { id, source: "manual", from: link.from, to: link.to, roadClass: link.roadClass ?? "local" };
     next.plan.roadGraph.edges.push(edge);
+  } else if (kind === "water") {
+    next.plan.water.push(link.waterShape === "polygon"
+      ? { id, source: "manual", kind: "lake", polygon: squareAt(point) }
+      : { id, source: "manual", kind: "river", path: [[point[0] - 16, point[1]], [point[0] + 16, point[1]]] });
+  } else if (kind === "region") {
+    next.plan.regions.push({ id, source: "manual", kind: "forest", polygon: squareAt(point) });
   } else {
     const half = NEW_PROTECTED_SIZE / 2;
     const region: ProtectedRegion = { id, kind: "manual", min: [point[0] - half, point[1] - half], max: [point[0] + half, point[1] + half] };
@@ -199,6 +222,10 @@ export function deletePlanElement(recipe: WorldRecipe, ref: PlanRef): WorldRecip
     for (const edge of gone) dropEdge(next, edge);
   } else if (ref.kind === "edge") {
     dropEdge(next, ref.id);
+  } else if (ref.kind === "water") {
+    plan.water = plan.water.filter((entry) => entry.id !== ref.id);
+  } else if (ref.kind === "region") {
+    plan.regions = plan.regions.filter((entry) => entry.id !== ref.id);
   } else if (ref.kind === "landmark") {
     plan.landmarks = plan.landmarks.filter((entry) => entry.id !== ref.id);
   } else {
@@ -243,12 +270,67 @@ export function deleteGuidePoint(recipe: WorldRecipe, edgeId: string, index: num
   return next;
 }
 
+/** Insert after a chosen vertex, or split the longest segment by default. */
+export function addShapePoint(recipe: WorldRecipe, ref: PlanRef, afterIndex?: number): WorldRecipe | null {
+  const next = structuredClone(recipe);
+  const shape = findShape(next, ref);
+  if (!shape || shape.points.length < (shape.closed ? 3 : 2)) return null;
+  const { points, closed } = shape;
+  let index = afterIndex ?? 0;
+  if (afterIndex === undefined) {
+    for (let i = 1; i < points.length - (closed ? 0 : 1); i++) {
+      if (span(points[i]!, points[(i + 1) % points.length]!) > span(points[index]!, points[(index + 1) % points.length]!)) index = i;
+    }
+  }
+  if (!validIndex(index, points.length)) return null;
+  const a = points[index]!;
+  const b = points[(index + 1) % points.length]!;
+  // Extending an open line at its last vertex must not connect back to its start.
+  const point: WorldPoint = !closed && index === points.length - 1
+    ? [a[0] + (a[0] - points[index - 1]![0]) / 2, a[1] + (a[1] - points[index - 1]![1]) / 2]
+    : lerp(a, b, 0.5);
+  points.splice(index + 1, 0, point);
+  markManual(shape.element);
+  return next;
+}
+
+/** Preserve the recipe's minimum vertex count: two for a path, three for a polygon. */
+export function deleteShapePoint(recipe: WorldRecipe, ref: PlanRef, index: number): WorldRecipe | null {
+  const next = structuredClone(recipe);
+  const shape = findShape(next, ref);
+  if (!shape || !validIndex(index, shape.points.length) || shape.points.length <= (shape.closed ? 3 : 2)) return null;
+  shape.points.splice(index, 1);
+  markManual(shape.element);
+  return next;
+}
+
+function validIndex(index: number, length: number): boolean {
+  return Number.isInteger(index) && index >= 0 && index < length;
+}
+
+function findShape(recipe: WorldRecipe, ref: PlanRef): { element: PlanWater | PlanRegion; points: WorldPoint[]; closed: boolean } | null {
+  if (ref.kind === "water") {
+    const element = recipe.plan.water.find((entry) => entry.id === ref.id);
+    const points = element?.path ?? element?.polygon;
+    return element && points ? { element, points, closed: element.polygon !== undefined } : null;
+  }
+  if (ref.kind === "region") {
+    const element = recipe.plan.regions.find((entry) => entry.id === ref.id);
+    return element ? { element, points: element.polygon, closed: true } : null;
+  }
+  return null;
+}
+
+function squareAt([x, z]: WorldPoint): WorldPoint[] {
+  return [[x - 16, z - 16], [x + 16, z - 16], [x + 16, z + 16], [x - 16, z + 16]];
+}
+
 /** Sets the panel's fields on one element; null when it is gone. Unknown-to-kind fields are ignored. */
 export function updatePlanElement(recipe: WorldRecipe, ref: PlanRef, fields: PlanElementFields): WorldRecipe | null {
   const next = structuredClone(recipe);
   const element = findElement(next, ref);
   if (!element) return null;
-  if (fields.position && ref.kind !== "edge" && ref.kind !== "protected") {
+  if (fields.position && (ref.kind === "settlement" || ref.kind === "node" || ref.kind === "landmark")) {
     const { position, ...rest } = fields;
     return updatePlanElement(movePlanPoint(next, { kind: ref.kind, id: ref.id }, position)!, ref, rest);
   }
@@ -261,6 +343,8 @@ export function updatePlanElement(recipe: WorldRecipe, ref: PlanRef, fields: Pla
     if (fields.nodeKind !== undefined) (element as RoadNode).kind = fields.nodeKind;
   } else if (ref.kind === "edge") {
     if (fields.roadClass !== undefined) (element as RoadEdge).roadClass = fields.roadClass;
+  } else if (ref.kind === "water" || ref.kind === "region") {
+    if (fields.kind !== undefined) (element as PlanWater | PlanRegion).kind = fields.kind;
   } else if (ref.kind === "landmark") {
     if (fields.kind !== undefined) (element as PlanLandmark).kind = fields.kind;
   } else {
@@ -372,8 +456,10 @@ function findElement(recipe: WorldRecipe, ref: PlanRef): PlanProvenance | Protec
   const list: ReadonlyArray<{ id: string }> = ref.kind === "settlement" ? plan.settlements
     : ref.kind === "node" ? plan.roadGraph.nodes
       : ref.kind === "edge" ? plan.roadGraph.edges
-        : ref.kind === "landmark" ? plan.landmarks
-          : recipe.ownership.protectedRegions;
+        : ref.kind === "water" ? plan.water
+          : ref.kind === "region" ? plan.regions
+            : ref.kind === "landmark" ? plan.landmarks
+              : recipe.ownership.protectedRegions;
   return (list.find((entry) => entry.id === ref.id) as PlanProvenance | ProtectedRegion | undefined) ?? null;
 }
 

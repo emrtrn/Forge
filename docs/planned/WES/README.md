@@ -6,7 +6,7 @@ Bu klasör iki bağlantılı planı içerir. 27 Ekim 2026'da `main@f9aa05f` üze
 |---|---|---|
 | [WES teknik plan v0.3](FORGE_WORLD_ENVIRONMENT_MEVSIM_HAVA_ZAMAN_TEKNIK_TASARIM_VE_UYGULAMA_PLANI_v0.3.md) | Mevsim, hava, gün–gece, kar/ıslaklık örtüsü, mevsimsel foliage: mimari, veri sözleşmesi, K1–K6, WES-002–016, ENV testleri | K0 kapandı; **K1 kod tarafı tamam** (2026-10-30, [kabul raporu](../../reports/WES_K1_KABUL_RAPORU.md)); görsel kabul + GPU ölçümü açık; K2 sırada |
 | [K1 görev talimatı v0.2](FORGE_WES_K1_GOREV_TALIMATI_v0.2.md) | WES-002 … WES-005 uygulama brifi (Claude/Codex'e verilebilir) | Uygulandı (`41f7c2d4` … `26d4c203`) |
-| [World Builder plan v0.4](FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.4.md) | AI destekli recipe/stage tabanlı dünya üretimi; mevcut editör araçlarının durum envanteri (T01–T41); yerleşim, yol ağı, bölge profili, AI görselinden ve OSM'den başlama (§13) | Tasarım; F0 kapandı, F1 + F1b sıradaki |
+| [World Builder plan v0.4](FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.4.md) | AI destekli recipe/stage tabanlı dünya üretimi; mevcut editör araçlarının durum envanteri (T01–T41); yerleşim, yol ağı, bölge profili, AI görselinden ve OSM'den başlama (§13) | F1 kapandı; F1b altlık + elle düzeltme (15b/15c) mevcut; T35 içe aktarma/birleştirme ve üç test görseli açık |
 
 **Okuma sırası:**
 1. WES §0–§3: ne değişti ve repo gerçeği.
@@ -26,3 +26,5 @@ Bu klasör iki bağlantılı planı içerir. 27 Ekim 2026'da `main@f9aa05f` üze
 **Görünür ay:** Prosedürel kraterli dolunay, mevcut gece ışığı yönünde Sky'a eklendi. Çap ve disk parlaklığı Night panelinden düzenlenir. [Uygulama, önizleme ve test raporu](../../reports/WES_GORUNUR_AY.md).
 
 **K1 kabul çalışması:** Araç/yol sahnesinde 12 senaryo, sabit kamera kareleri ve yazılımsal baz ölçümler tamamlandı. Gerçek GPU bulunmadığından K1/E-015 kapanmadı. Yerelde `npm run perf:wes` aynı taramayı tekrarlar. [Kareler, sonuçlar ve yönerge](../../reports/WES_K1_KABUL_OLCUMU_2026_11_02.md).
+
+**World Builder — 15c:** Su çizgileri, göl sınırları ve bölge çokgenleri panel/viewport üzerinden düzenlenir; nokta ekle/sil, minimum nokta sayısı, manual kaynak, tek undo/redo ve kayıt/reload tamam. [Kabul raporu](../../reports/WORLD_BUILDER_F1B_15C_KABUL_RAPORU.md). Sıradaki iş T35: AI planını içe aktarma/birleştirme ve elle düzeltilen öğeleri koruma.

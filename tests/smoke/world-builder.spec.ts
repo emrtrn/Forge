@@ -12,6 +12,12 @@ import { generateWbTestValley, WB_TEST_VALLEY_LEVEL, WB_TEST_VALLEY_PROFILE, WB_
 import { expect, test } from "./test";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
 
+// These isolated projects have no site icon. Chromium versions that request
+// one must not turn its unrelated 404 into an editor console-error failure.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/favicon.ico", route => route.fulfill({ status: 204 }));
+});
+
 /**
  * World Builder F1 steps 5b and 6b: the left panel's World Builder tab reads
  * the open level's recipe, a Dry Run reports without changing the level, Apply
@@ -463,8 +469,8 @@ test("World Builder reference: the underlay and the plan layer draw, switch, and
 });
 
 const CORRECTION_LEVEL = "layouts/__playwright-world-builder-corrections.level.json";
-/** The handles in the order the layer draws them: settlements, nodes, landmarks, guide points. */
-const HANDLE_OWNERS = [["settlement", "village"], ["settlement", "hamlet"], ["node", "a"], ["node", "b"], ["landmark", "depot"], ["edge", "main"], ["edge", "main"]];
+/** The handles in layer order: settlements, nodes, landmarks, guides, water, regions. */
+const HANDLE_OWNERS = [["settlement", "village"], ["settlement", "hamlet"], ["node", "a"], ["node", "b"], ["landmark", "depot"], ["edge", "main"], ["edge", "main"], ["water", "creek"], ["water", "creek"], ["region", "forest"], ["region", "forest"], ["region", "forest"]];
 
 test("World Builder plan corrections: panel fields, viewport handle drag, add and Delete, each one undo step that makes the element manual (WB-13, 15b)", async ({ page, request }) => {
   test.setTimeout(180_000);
@@ -626,5 +632,151 @@ test("World Builder test valley: the generated mountain level opens, its terrain
   await expect(page.getByTestId("world-builder-plan-node-hamlet-end")).toHaveAttribute("data-source", "manual");
   await page.getByTestId("world-builder-dry-run-roads").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~1 updated · −0 removed · 2 unchanged");
+  expect(errors).toEqual([]);
+});
+
+test("World Builder water and regions: shape handles, point edits, minimum counts, undo and save/reload (15c)", async ({ page, request }, testInfo) => {
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (isFailureMessage(message.type(), message.text())) errors.push(message.text()); });
+  const levelPath = "layouts/__playwright-world-builder-shapes.level.json";
+  const base = JSON.parse(await readFile(resolve(REPO_ROOT, "tests/smoke/fixtures/base.level.json"), "utf8"));
+  await writeJson(levelPath, { ...base, name: "__playwright-world-builder-shapes" });
+  const recipe = createWorldRecipe("playwright_shapes", 4);
+  recipe.plan.water.push(
+    { id: "creek", source: "reference", observed: false, confidence: 0.2, kind: "stream", path: [[-1, 0], [1, 0], [3, 0]] },
+    { id: "lake", source: "reference", kind: "lake", polygon: [[4, 2], [6, 2], [6, 4], [4, 4]] },
+  );
+  recipe.plan.regions.push({ id: "woods", source: "reference", observed: true, confidence: 0.4, kind: "forest", polygon: [[-4, -3], [-2, -3], [-2, -1], [-4, -1]] });
+  await writeJson(worldRecipePath(levelPath), recipe);
+  expect((await request.post("/__open-level", { data: { path: levelPath } })).ok()).toBeTruthy();
+  await page.addInitScript(() => {
+    localStorage.clear();
+    const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __wbRenderers: any[] };
+    w.__wbRenderers = [];
+    w.__THREE_DEVTOOLS__ = new EventTarget();
+    w.__THREE_DEVTOOLS__.addEventListener("observe", (event) => {
+      const object = (event as CustomEvent).detail;
+      if (object?.isWebGLRenderer) w.__wbRenderers.push(object);
+    });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const boot = async () => {
+    await page.goto(`/?editor&wbShapes=${Date.now()}`);
+    await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("world-builder-tab").click();
+    await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_shapes", { timeout: 30_000 });
+  };
+  await boot();
+  const shape = page.getByTestId("world-builder-plan-shape");
+  const creek = page.getByTestId("world-builder-plan-water-creek");
+  const woods = page.getByTestId("world-builder-plan-region-woods");
+  const lake = page.getByTestId("world-builder-plan-water-lake");
+  await expect(creek).toHaveAttribute("data-source", "reference");
+  await expect(woods).toHaveAttribute("data-source", "reference");
+  await page.locator("[data-camera-button]").hover();
+  await page.locator('[data-camera-view="top"]').click();
+  await page.getByTestId("world-builder-plan-edit-toggle").click();
+  await expect(page.getByTestId("world-builder-plan-handles")).toHaveAttribute("data-handles", "11");
+
+  // Both new handle kinds travel through real pointer picking, selection and
+  // the terrain/ground drop. Undo also restores the reference provenance.
+  for (const [index, kind, id] of [[0, "water", "creek"], [9, "region", "woods"]] as const) {
+    const target = await page.evaluate((index) => new Promise<{ x: number; y: number }>((done) => {
+      const w = window as unknown as { __wbRenderers: any[] };
+      const restore: Array<() => void> = [];
+      for (const renderer of w.__wbRenderers) {
+        const render = renderer.render;
+        restore.push(() => { renderer.render = render; });
+        renderer.render = function (scene: any, camera: any) {
+          let handles: any = null;
+          scene?.traverse?.((node: any) => { if (node.name === "world-builder-plan-handles") handles = node; });
+          if (handles) {
+            for (const undo of restore) undo();
+            const attr = handles.geometry.getAttribute("position");
+            const ndc = handles.position.clone().set(attr.getX(index), attr.getY(index), attr.getZ(index)).project(camera);
+            const rect = renderer.domElement.getBoundingClientRect();
+            done({ x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width, y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height });
+          }
+          return render.call(this, scene, camera);
+        };
+      }
+    }), index);
+    await page.mouse.move(target.x, target.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x + 35, target.y + 20, { steps: 6 });
+    await page.mouse.up();
+    await expect(page.getByTestId("world-builder-plan-selection")).toHaveAttribute("data-id", id);
+    await expect(page.getByTestId(`world-builder-plan-${kind}-${id}`)).toHaveAttribute("data-source", "manual");
+    await page.getByTestId("editor-undo").click();
+    await expect(page.getByTestId(`world-builder-plan-${kind}-${id}`)).toHaveAttribute("data-source", "reference");
+  }
+
+  await creek.click();
+  await page.getByTestId("world-builder-plan-point-x-0").fill("-3");
+  await page.getByTestId("world-builder-plan-point-x-0").press("Enter");
+  await expect(creek).toHaveAttribute("data-source", "manual");
+  await page.getByTestId("world-builder-plan-shape-add-0").click();
+  await expect(shape).toHaveAttribute("data-count", "4");
+  await page.getByTestId("editor-undo").click();
+  await expect(shape).toHaveAttribute("data-count", "3");
+  await page.getByTestId("world-builder-plan-shape-delete-2").click();
+  await expect(shape).toHaveAttribute("data-count", "2");
+  await expect(page.getByTestId("world-builder-plan-shape-delete-0")).toBeDisabled();
+  await page.getByTestId("editor-undo").click();
+  await expect(shape).toHaveAttribute("data-count", "3");
+
+  await lake.click();
+  await page.getByTestId("world-builder-plan-shape-delete-3").click();
+  await expect(shape).toHaveAttribute("data-count", "3");
+  await expect(page.getByTestId("world-builder-plan-shape-delete-0")).toBeDisabled();
+  await page.getByTestId("world-builder-plan-shape-add-2").click();
+  await expect(shape).toHaveAttribute("data-count", "4");
+  await page.getByTestId("world-builder-plan-delete").click();
+  await expect(lake).toHaveCount(0);
+  await page.getByTestId("editor-undo").click();
+  await expect(lake).toHaveAttribute("data-source", "manual");
+
+  await woods.click();
+  await page.getByTestId("world-builder-plan-field-kind").fill("forest.conifer");
+  await page.getByTestId("world-builder-plan-field-kind").press("Enter");
+  await page.getByTestId("world-builder-plan-point-z-0").fill("-4");
+  await page.getByTestId("world-builder-plan-point-z-0").press("Enter");
+  await page.getByTestId("world-builder-plan-shape-delete-3").click();
+  await expect(shape).toHaveAttribute("data-count", "3");
+  await expect(page.getByTestId("world-builder-plan-shape-delete-0")).toBeDisabled();
+  await page.getByTestId("editor-undo").click();
+  await expect(shape).toHaveAttribute("data-count", "4");
+
+  // Default shapes can also be authored without an imported plan.
+  for (const [button, id] of [["river", "water-1"], ["lake", "water-1"], ["region", "region-1"]]) {
+    await page.getByTestId(`world-builder-plan-add-${button}`).click();
+    await expect(page.getByTestId("world-builder-plan-selection")).toHaveAttribute("data-id", id!);
+    await page.getByTestId("world-builder-plan-delete").click();
+  }
+  const savedResponse = page.waitForResponse(res => res.url().endsWith("/__save-worldrecipe") && res.request().method() === "POST");
+  await page.getByTestId("editor-save").click();
+  expect((await savedResponse).ok()).toBeTruthy();
+  const saved = await readJson<WorldRecipe>(worldRecipePath(levelPath));
+  expect(saved.plan.water[0]!.path![0]).toEqual([-3, 0]);
+  expect(saved.plan.water[0]!.source).toBe("manual");
+  expect(saved.plan.water[0]!.confidence).toBeUndefined();
+  expect(saved.plan.water[1]!.path).toBeUndefined();
+  expect(saved.plan.water[1]!.polygon).toHaveLength(4);
+  expect(saved.plan.regions[0]!.kind).toBe("forest.conifer");
+  expect(saved.plan.regions[0]!.polygon[0]).toEqual([-4, -4]);
+  expect(saved.plan.regions[0]!.source).toBe("manual");
+  expect(saved.plan.regions[0]!.observed).toBeUndefined();
+  await boot();
+  await creek.click();
+  await expect(page.getByTestId("world-builder-plan-point-x-0")).toHaveValue("-3");
+  await woods.click();
+  await expect(page.getByTestId("world-builder-plan-field-kind")).toHaveValue("forest.conifer");
+  await expect(page.getByTestId("world-builder-plan-point-z-0")).toHaveValue("-4");
+  await page.getByTestId("world-builder-plan-selection").scrollIntoViewIfNeeded();
+  const screenshot = testInfo.outputPath("water-and-region-editing.png");
+  await page.screenshot({ path: screenshot });
+  await testInfo.attach("water-and-region-editing", { path: screenshot, contentType: "image/png" });
   expect(errors).toEqual([]);
 });

@@ -631,6 +631,8 @@ export interface LayoutWorldEnvironment {
     moonColor?: string;
     /** Lower bound of the night ambient as a fraction of the authored ambient. */
     ambientFloor?: number;
+    /** Independent night fill in moonColor (absolute AmbientLight intensity); 0 disables it. Fades out by day. */
+    ambientIntensity?: number;
   };
   season?: "spring" | "summer" | "autumn" | "winter";
   weather?: {

@@ -292,6 +292,7 @@ interface LayoutWorldEnvironment {
     moonIntensity?: number;      // gece aynı directional ışığın şiddeti (lux benzeri çarpan); varsayılan 0.08
     moonColor?: string;          // varsayılan "#9fb4ff"
     ambientFloor?: number;       // gece ortam ışığının authored ambient'e oranı alt sınırı; varsayılan 0.15
+    ambientIntensity?: number;   // 2 Kasım eki: bağımsız ay renkli gece dolgusu; 0..10, varsayılan 1.5; 0 kapatır
   };
   season?: Season;               // varsayılan "summer" (= authored görünüm)
   weather?: {
@@ -417,7 +418,7 @@ Astronomik model (enlem/tarih) v1'de yoktur. `sunPath.ts`:
 - **Gece:** aynı directional ışık **ay** olur.
   - Yön, güneş yolunun karşı tarafı ve sabit alçak bir yükseklik.
   - Renk `moonColor`, şiddet `moonIntensity`. Gölgeler aynı kaskadlarla çalışır.
-  - Ekstra ışık veya gölge haritası yoktur.
+  - Ekstra directional ışık veya gölge haritası yoktur. 2 Kasım gece düzeltmesi ayrıca gölgesiz ambient dolgu kullanır; bkz. §6.3.
 - **Geçiş:** alacakaranlıkta (güneş yüksekliği ±6°) güneş ve ay ışığı yumuşak geçer. Gün doğumu ve batımında ışık rengi turuncuya kayar; renk ve şiddet eğrileri `sunPath.ts` içinde veri tablosudur.
 - **Mevsim:** v1'de gün uzunluğunu değiştirmez (v0.2 §8.1 "kış her yerde kısa gün olmasın" ilkesi). Mevsimsel `sunrise/sunset` farkı K5'teki takvimle gelir.
 
@@ -427,6 +428,7 @@ Astronomik model (enlem/tarih) v1'de yoktur. `sunPath.ts`:
 |---|---|---|
 | Sky | Güneş yönü (gök diski, ufuk parlaması); gece three `Sky` kendiliğinden kararır | `applySkySunDirection` |
 | Ortam ışığı | `worldSettings.ambientIntensity × max(ambientFloor, gündüz faktörü)` | Kabuk ambient'i; authored değer çarpılır, yazılmaz |
+| Gece dolgusu (2 Kasım eki) | `night.ambientIntensity × (1 − gündüz faktörü)`, `moonColor` renginde | Ortak render bağında bağımsız AmbientLight; authored ambient 0/yok olsa da çalışır, gündüz sıfırdır |
 | Sis rengi | Authored renk, gece koyulaşır, alacakaranlıkta ısınır | `applySceneFog` override'ı |
 | Bulut rengi | Authored renk × ışık rengi/şiddeti | `applyCloudUniforms` override'ı |
 | Exposure | Gece hafif açılır (göz uyumu), K1'de sabit eğri | `applySkyPostProcessExposure` yolu |

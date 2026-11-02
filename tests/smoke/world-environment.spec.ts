@@ -18,7 +18,7 @@ const LEVEL = "layouts/__playwright-wes.level.json";
 test.setTimeout(180_000);
 
 interface SavedLayout {
-  worldEnvironment?: { time?: { hour?: number }; season?: string; weather?: { preset?: string } };
+  worldEnvironment?: { time?: { hour?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number } };
 }
 
 test("World Environment: preview stays out of the level, Make Default is one undo step, Play starts from it", async ({ page, context }) => {
@@ -60,6 +60,11 @@ test("World Environment: preview stays out of the level, Make Default is one und
   const derivedHour = saves.at(-1)!.worldEnvironment!.time!.hour!;
   const details = page.locator('[data-inspector-pane="details"]');
   await expect(details.locator("[data-wes-preview]")).toBeVisible();
+  const nightFill = details.locator('[data-wes-number="night.ambientIntensity"]');
+  await expect(nightFill).toHaveValue("1.5");
+  await nightFill.fill("1.2");
+  await nightFill.press("Tab");
+  await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.ambientIntensity, { timeout: 15_000 }).toBe(1.2);
 
   // 2. Scrub + weather + season preview: nothing is saved, the level is not dirty.
   const saveCount = saves.length;
@@ -90,6 +95,7 @@ test("World Environment: preview stays out of the level, Make Default is one und
   await page.getByTestId("outliner-row").filter({ hasText: "World Environment" }).click();
   await expect(details.locator("[data-wes-preview-hour-label]")).toHaveText("18:00");
   await expect(details.locator("[data-wes-preview-default]")).toBeDisabled();
+  await expect(nightFill).toHaveValue("1.2");
 
   // The Sun's rotation is read-only while the World Environment drives it.
   await page.getByTestId("outliner-row").getByText("sun", { exact: true }).click();

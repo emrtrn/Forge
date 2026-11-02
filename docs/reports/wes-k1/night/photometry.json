@@ -1,0 +1,75 @@
+{
+  "baseCommit": "995b713260e5c8ea979ad43455fd0bdfdd2d2426",
+  "sceneInputs": "RuntimeParity Sun, Sky and Post Process; no authored ambient",
+  "surface": "sRGB #808080 roughness=1 metalness=0 vertical card; central 64x64 pixels of 128x128 framebuffer",
+  "luma": "0.2126 R + 0.7152 G + 0.0722 B; 8-bit encoded output (0..255), not linear luminance",
+  "nightAmbientIntensity": 1.5,
+  "realGpuPerformanceMeasured": false,
+  "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "samples": [
+    {
+      "hour": 12,
+      "full": 121.29060000000466,
+      "withoutFill": 121.29060000000466,
+      "fillOnly": 0,
+      "programs": 2
+    },
+    {
+      "hour": 0,
+      "full": 12.304799999999844,
+      "withoutFill": 0,
+      "fillOnly": 12.232600000000746,
+      "programs": 2
+    },
+    {
+      "hour": 5.9999,
+      "full": 39.953999999998466,
+      "withoutFill": 31.512799999997696,
+      "fillOnly": 6.296800000000071,
+      "programs": 2
+    },
+    {
+      "hour": 6,
+      "full": 39.953999999998466,
+      "withoutFill": 31.512799999997696,
+      "fillOnly": 6.296800000000071,
+      "programs": 2
+    },
+    {
+      "hour": 6.0001,
+      "full": 39.953999999998466,
+      "withoutFill": 31.512799999997696,
+      "fillOnly": 6.296800000000071,
+      "programs": 2
+    },
+    {
+      "hour": 17.9999,
+      "full": 6.3689999999996925,
+      "withoutFill": 0,
+      "fillOnly": 6.296800000000071,
+      "programs": 2
+    },
+    {
+      "hour": 18,
+      "full": 6.3689999999996925,
+      "withoutFill": 0,
+      "fillOnly": 6.296800000000071,
+      "programs": 2
+    },
+    {
+      "hour": 18.0001,
+      "full": 6.3689999999996925,
+      "withoutFill": 0,
+      "fillOnly": 6.296800000000071,
+      "programs": 2
+    },
+    {
+      "hour": 23,
+      "full": 13.30479999999971,
+      "withoutFill": 0,
+      "fillOnly": 12.232600000000746,
+      "programs": 2
+    }
+  ],
+  "layoutUnchanged": true
+}

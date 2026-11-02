@@ -40,6 +40,8 @@ export interface ResolvedEnvironment {
   light: { direction: Vec3; color: Vec3; intensity: number; isMoon: boolean } | null;
   /** Multiplier of the authored ambient (world settings) intensity. */
   ambientMultiplier: number;
+  /** Independent night fill: remains available with no authored ambient or Sun, zero in full daylight. */
+  nightAmbient: { color: Vec3; intensity: number };
   /** Sky turbidity to render; null when there is no (visible) sky. */
   skyTurbidity: number | null;
   /** The fog to render in place of the authored one; null when there is none. */
@@ -121,6 +123,7 @@ export function resolveEnvironment(
     sunElevationDeg: sun.sunElevationDeg,
     light,
     ambientMultiplier: Math.max(env.night.ambientFloor, sun.daylight),
+    nightAmbient: { color: hexToLinear(env.night.moonColor), intensity: env.night.ambientIntensity * (1 - sun.daylight) },
     skyTurbidity: authored.sky && !authored.sky.hidden ? authored.sky.turbidity + weather.skyTurbidityAdd : null,
     fog,
     cloud,

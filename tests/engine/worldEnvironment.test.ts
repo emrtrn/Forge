@@ -49,7 +49,7 @@ export function maximalWorldEnvironment(): LayoutWorldEnvironment {
     hidden: true,
     time: { hour: 7.5, dayLengthMinutes: 24 },
     sunPath: { azimuthDeg: 135, noonElevationDeg: 48, sunriseHour: 5.5, sunsetHour: 19.25 },
-    night: { moonIntensity: 0.12, moonColor: "#8899ff", ambientFloor: 0.2 },
+    night: { moonIntensity: 0.12, moonColor: "#8899ff", ambientFloor: 0.2, ambientIntensity: 1.2 },
     season: "winter",
     weather: { preset: "snow", intensity: 0.75 },
     surface: {
@@ -119,6 +119,18 @@ export function registerWorldEnvironmentTests(check: Check): void {
     const { environment, warnings } = normalizeWorldEnvironment({ sunPath: { sunriseHour: 18, sunsetHour: 6, azimuthDeg: 90 } });
     assert.deepEqual(environment, { sunPath: { azimuthDeg: 90 } });
     assert.equal(warnings.length, 1);
+  });
+
+  check("world environment: absolute night fill clamps, rejects invalid values and preserves zero", () => {
+    for (const [input, expected] of [[-1, 0], [20, 10], [0, 0], [1.23456, 1.235]] as const) {
+      const result = normalizeWorldEnvironment({ night: { ambientIntensity: input } });
+      assert.equal(result.environment?.night?.ambientIntensity, expected);
+    }
+    for (const input of [null, true, "bad", Infinity]) {
+      const result = normalizeWorldEnvironment({ night: { ambientIntensity: input } });
+      assert.equal(result.environment?.night, undefined);
+      assert.match(result.warnings[0]!, /night.ambientIntensity/);
+    }
   });
 
   check("world environment: a non-object actor is rejected by the save, a broken group only warns", () => {
@@ -307,6 +319,25 @@ export function registerWorldEnvironmentTimeTests(check: Check): void {
     assert.equal(rain.skyTurbidity, 10);
     assert.notEqual(rain.captureKey, night.captureKey);
     assert.deepEqual(authored, snapshot);
+  });
+
+  check("world environment resolve: night fill is independent of authored lights and fades continuously at dawn/dusk", () => {
+    const authored = { sun: null, sky: null, fog: null, cloud: null };
+    const env = resolveWorldEnvironment({ night: { ambientIntensity: 1.2, moonColor: "#ffffff" } });
+    const fillAt = (hour: number) => resolveEnvironment(authored, env, { ...stateFromDefaults(env), hour }).nightAmbient;
+    assert.deepEqual(fillAt(0), { color: [1, 1, 1], intensity: 1.2 });
+    assert.equal(fillAt(12).intensity, 0);
+    for (const hour of [6, 18, 0, 24]) {
+      assert.ok(Math.abs(fillAt(hour - 1e-6).intensity - fillAt(hour + 1e-6).intensity) < 1e-5);
+    }
+    let previous = fillAt(5).intensity;
+    for (let hour = 5.01; hour <= 7; hour += 0.01) {
+      const current = fillAt(hour).intensity;
+      assert.ok(current <= previous + 1e-12, "the fill only fades as daylight returns");
+      previous = current;
+    }
+    const disabled = resolveWorldEnvironment({ night: { ambientIntensity: 0 } });
+    assert.equal(resolveEnvironment(authored, disabled, { ...stateFromDefaults(disabled), hour: 0 }).nightAmbient.intensity, 0);
   });
 
   check("world environment recapture: by sun movement, finest at the horizon, never by time or while scrubbing (ENV-18)", () => {

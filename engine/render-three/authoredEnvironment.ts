@@ -27,9 +27,8 @@
  * tone-mapping exposure — is exposed as {@link applySkyPostProcessExposure} so
  * the owner keeps driving it.
  */
-import { Color, Fog, FogExp2, Mesh, Vector3 } from "three";
+import { AmbientLight, Color, Fog, FogExp2, Mesh, Vector3 } from "three";
 import type {
-  AmbientLight,
   DirectionalLight,
   Object3D,
   PerspectiveCamera,
@@ -151,6 +150,8 @@ export class AuthoredEnvironment {
   private readonly ambientSlot = new NumberOverride();
   private readonly exposureSlot = new NumberOverride();
   private ambientTarget: AmbientLight | null = null;
+  /** Render-only WES contribution; never a level actor or a replacement for the authored ambient. */
+  private nightAmbient: AmbientLight | null = null;
   /** The sky dome's authored local tone-mapping exposure (null = follows the renderer). */
   private skyLocalExposure: number | null = null;
 
@@ -329,6 +330,7 @@ export class AuthoredEnvironment {
       this.lastCapture = null;
       const sunMoved = frame.sun ? this.sunSlot.restore(frame.sun) : false;
       this.restoreAmbient();
+      this.disposeNightAmbient();
       this.restoreExposure();
       // Only the sky's uniforms: applySky would also reset tone mapping, which
       // the shell's Post Process owns after it.
@@ -358,6 +360,7 @@ export class AuthoredEnvironment {
     if (this.cloudObject && this.override.cloud) applyCloudUniforms(this.cloudObject, this.override.cloud);
     const sunMoved = frame.sun && this.override.light ? this.sunSlot.apply(frame.sun, this.override.light) : false;
     this.applyAmbient(frame.ambient, this.override.ambientMultiplier);
+    this.applyNightAmbient(this.override.nightAmbient);
     this.applyExposure(this.override.exposureMultiplier);
 
     this.dynamicClock = frame.dynamicClock === true;
@@ -414,6 +417,25 @@ export class AuthoredEnvironment {
     this.ambientTarget = null;
   }
 
+  private applyNightAmbient(fill: ResolvedEnvironment["nightAmbient"]): void {
+    // Keep one light while WES is active, even at zero intensity in daylight:
+    // crossing dawn/dusk then changes uniforms without changing shader variants.
+    if (!this.nightAmbient) {
+      this.nightAmbient = new AmbientLight();
+      this.nightAmbient.name = "world-environment-night-fill";
+      this.scene.add(this.nightAmbient);
+    }
+    this.nightAmbient.color.setRGB(...fill.color);
+    this.nightAmbient.intensity = fill.intensity;
+  }
+
+  private disposeNightAmbient(): void {
+    if (!this.nightAmbient) return;
+    this.nightAmbient.removeFromParent();
+    this.nightAmbient.dispose();
+    this.nightAmbient = null;
+  }
+
   private applyExposure(multiplier: number): void {
     this.renderer.toneMappingExposure = this.exposureSlot.apply(
       this.renderer.toneMappingExposure,
@@ -453,6 +475,7 @@ export class AuthoredEnvironment {
    * `scene.environment`. Called on scene rebuild/teardown; safe to call twice.
    */
   teardown(): void {
+    this.disposeNightAmbient();
     this.override = null;
     this.lastCapture = null;
     this.sunSlot.reset();

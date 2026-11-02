@@ -5,6 +5,8 @@
 **Kaynak tasarım:** [WES v0.3](../planned/WES/FORGE_WORLD_ENVIRONMENT_MEVSIM_HAVA_ZAMAN_TEKNIK_TASARIM_VE_UYGULAMA_PLANI_v0.3.md)
 **Durum:** Kod tarafı tamam ve `main`'de. Açık kalan iki kalem var; ikisi de gerçek tarayıcı/GPU ister: **görsel kabul** (aynı kameradan çekilmiş kareler) ve **GPU perf ölçümü**. Ayrıntısı §4 ve §5'te.
 
+**2 Kasım 2026 güncellemesi:** §8'deki gece aydınlatması için bağımsız Night Fill uygulandı ve otomatik testler geçti. Ölçüm, karşılaştırma kareleri ve kalan gerçek GPU kabulü: [gece aydınlatması raporu](WES_K1_GECE_AYDINLATMASI.md). Aşağıdaki 30 Ekim ölçümleri tarihsel bazdır.
+
 ---
 
 ## 1. Commit'ler
@@ -96,11 +98,13 @@ Gerçek tarayıcıda yapılacak kontrol:
 | Görsel kabul kareleri | Kullanıcı, gerçek tarayıcıda | §4 |
 | GPU perf + IBL yakalama süresi (E-015) | Gerçek GPU | §5 |
 | `sun-cascaded-shadows` 16-unit vakası | Ayrı inceleme | WES'ten bağımsız |
-| **Gece aydınlatması (sıradaki iş)** | Kod | Gece sahne neredeyse siyah; §8 |
+| **Gece aydınlatması** | Gerçek GPU'da araç/yol görsel kabulü | Kod ve otomatik testler tamam (2 Kasım); [rapor](WES_K1_GECE_AYDINLATMASI.md) |
 | K2 başlangıcı | E-023 içerik boşlukları: kış çıplak ağaç mesh'i, çatı modeli | K2 talimatı bu rapor kabul edildikten sonra yazılacak |
 | `river-water-optics` 2–3 vakası | Ayrı inceleme | Bu makinede WES'ten önce de kırık |
 
-## 8. Sıradaki iş: ay ışığı ve gece ortam ışığı
+## 8. Gece ortam ışığı — 30 Ekim teşhisi, 2 Kasım'da uygulandı
+
+Bu bölüm ilk teşhisi korur. Güncel çözüm `night.ambientIntensity` ile bağımsız dolgudur; sonuçlar [takip raporunda](WES_K1_GECE_AYDINLATMASI.md).
 
 **Gözlem (2026-10-30):** Kullanıcının 0.25 h/s önizleme kaydı (`docs/video/bandicam 2026-10-30 11-42-18-009_frames_0.5s`). Gece karelerinde (0001–0007, 0105–0110) ortalama parlaklık 0–255 ölçeğinde 0.1–0.5. Sahne, araç dahil fiilen görünmüyor. Gece "karanlık ama okunur" olmalı (plan §6.2–6.3).
 

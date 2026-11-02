@@ -26,7 +26,7 @@ export interface ResolvedWorldEnvironment {
   hidden: boolean;
   time: { hour: number; dayLengthMinutes: number };
   sunPath: { azimuthDeg: number; noonElevationDeg: number; sunriseHour: number; sunsetHour: number };
-  night: { moonIntensity: number; moonColor: string; ambientFloor: number };
+  night: { moonIntensity: number; moonColor: string; ambientFloor: number; ambientIntensity: number };
   season: Season;
   weather: { preset: WeatherPreset; intensity: number };
   surface: {
@@ -46,7 +46,7 @@ export const WORLD_ENVIRONMENT_DEFAULTS: ResolvedWorldEnvironment = {
   hidden: false,
   time: { hour: 12, dayLengthMinutes: 0 },
   sunPath: { azimuthDeg: 180, noonElevationDeg: 60, sunriseHour: 6, sunsetHour: 18 },
-  night: { moonIntensity: 0.08, moonColor: "#9fb4ff", ambientFloor: 0.15 },
+  night: { moonIntensity: 0.08, moonColor: "#9fb4ff", ambientFloor: 0.15, ambientIntensity: 1.5 },
   season: "summer",
   weather: { preset: "clear", intensity: 1 },
   surface: {
@@ -168,6 +168,7 @@ export function normalizeWorldEnvironment(value: unknown): WorldEnvironmentNorma
     assign(next, "moonIntensity", num(night.moonIntensity, "night.moonIntensity", 0, 2));
     assign(next, "moonColor", color(night.moonColor, "night.moonColor"));
     assign(next, "ambientFloor", num(night.ambientFloor, "night.ambientFloor", 0, 1));
+    assign(next, "ambientIntensity", num(night.ambientIntensity, "night.ambientIntensity", 0, 10));
     if (Object.keys(next).length > 0) out.night = next;
   }
 

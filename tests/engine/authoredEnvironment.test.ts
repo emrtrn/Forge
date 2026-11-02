@@ -58,6 +58,40 @@ function at(hour: number, layout: RoomLayout): WorldEnvironmentState {
 }
 
 export function registerAuthoredEnvironmentTests(check: Check): void {
+  check("world environment binding: night fill works without authored lights, reuses one light and leaves no residue", () => {
+    const { env, scene } = rig();
+    const layout = layoutWith({ night: { ambientIntensity: 1.2, moonColor: "#8899ff" } });
+    const snapshot = structuredClone(layout);
+    const apply = (hour: number) => env.applyWorldEnvironment(layout, { state: at(hour, layout), sun: null, ambient: null });
+    apply(0);
+    const fill = scene.getObjectByName("world-environment-night-fill") as AmbientLight;
+    assert.ok(fill instanceof AmbientLight);
+    assert.equal(fill.intensity, 1.2);
+    assert.equal(fill.color.getHexString(), "8899ff");
+    assert.equal(fill.castShadow, false);
+    for (const hour of [12, 0, 6, 18, 12, 0]) {
+      apply(hour);
+      assert.equal(scene.getObjectByName(fill.name), fill, "one light is reused through day/night cycles");
+      assert.equal(scene.children.filter((child) => child.name === fill.name).length, 1);
+      if (hour === 12) assert.equal(fill.intensity, 0, "no daytime fill");
+    }
+    assert.deepEqual(layout, snapshot);
+    layout.worldEnvironment!.hidden = true;
+    apply(0);
+    assert.equal(fill.parent, null, "hiding the actor removes the contribution");
+    layout.worldEnvironment!.hidden = false;
+    apply(0);
+    layout.worldEnvironment!.night!.ambientIntensity = 0;
+    apply(0);
+    assert.equal((scene.getObjectByName(fill.name) as AmbientLight).intensity, 0);
+    env.applyWorldEnvironment(null, { state: null, sun: null, ambient: null });
+    assert.equal(scene.getObjectByName(fill.name), undefined, "unloading removes the contribution");
+    apply(0);
+    env.teardown();
+    env.teardown();
+    assert.equal(scene.getObjectByName(fill.name), undefined, "teardown is idempotent");
+  });
+
   check("world environment binding: no actor or no state renders the authored look (ENV-00)", () => {
     const { env, sun, ambient, renderer, scene } = rig();
     const layout = layoutWith();

@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "type": "worldTerrain",
+  "name": "Ridgebound source terrain — test grid",
+  "tileQuads": 64,
+  "spacing": 6,
+  "tilesX": 8,
+  "tilesZ": 3,
+  "origin": [
+    1536,
+    0,
+    4224
+  ],
+  "heightMin": 100,
+  "heightMax": 850,
+  "layers": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "color": "#5f9449"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "color": "#7f8485"
+    },
+    {
+      "id": "snow",
+      "name": "Snow",
+      "color": "#dce7ec"
+    }
+  ],
+  "tiles": [
+    {
+      "key": "0_0",
+      "minHeight": 361.58160400390625,
+      "maxHeight": 398.6953430175781
+    },
+    {
+      "key": "1_0",
+      "minHeight": 333.6232604980469,
+      "maxHeight": 385.5001220703125
+    },
+    {
+      "key": "2_0",
+      "minHeight": 285.8091125488281,
+      "maxHeight": 352.14007568359375
+    },
+    {
+      "key": "3_0",
+      "minHeight": 237.19386291503906,
+      "maxHeight": 300.3776550292969
+    },
+    {
+      "key": "4_0",
+      "minHeight": 213.08079528808594,
+      "maxHeight": 253.21583557128906
+    },
+    {
+      "key": "5_0",
+      "minHeight": 222.40786743164062,
+      "maxHeight": 282.9136962890625
+    },
+    {
+      "key": "6_0",
+      "minHeight": 255.1270294189453,
+      "maxHeight": 342.1606750488281
+    },
+    {
+      "key": "7_0",
+      "minHeight": 311.4328308105469,
+      "maxHeight": 390.53558349609375
+    },
+    {
+      "key": "0_1",
+      "minHeight": 341.6685791015625,
+      "maxHeight": 371.9958801269531
+    },
+    {
+      "key": "1_1",
+      "minHeight": 319.3522644042969,
+      "maxHeight": 361.58160400390625
+    },
+    {
+      "key": "2_1",
+      "minHeight": 276.2760314941406,
+      "maxHeight": 333.6232604980469
+    },
+    {
+      "key": "3_1",
+      "minHeight": 225.58938598632812,
+      "maxHeight": 285.8091125488281
+    },
+    {
+      "key": "4_1",
+      "minHeight": 193.1677703857422,
+      "maxHeight": 237.19386291503906
+    },
+    {
+      "key": "5_1",
+      "minHeight": 192.9274444580078,
+      "maxHeight": 255.1270294189453
+    },
+    {
+      "key": "6_1",
+      "minHeight": 224.19317626953125,
+      "maxHeight": 311.4328308105469
+    },
+    {
+      "key": "7_1",
+      "minHeight": 276.81390380859375,
+      "maxHeight": 358.21697998046875
+    },
+    {
+      "key": "0_2",
+      "minHeight": 322.4994201660156,
+      "maxHeight": 349.2561340332031
+    },
+    {
+      "key": "1_2",
+      "minHeight": 303.5820617675781,
+      "maxHeight": 341.6685791015625
+    },
+    {
+      "key": "2_2",
+      "minHeight": 264.0077819824219,
+      "maxHeight": 319.3522644042969
+    },
+    {
+      "key": "3_2",
+      "minHeight": 212.71458435058594,
+      "maxHeight": 276.2760314941406
+    },
+    {
+      "key": "4_2",
+      "minHeight": 181.75784301757812,
+      "maxHeight": 225.58938598632812
+    },
+    {
+      "key": "5_2",
+      "minHeight": 172.7626495361328,
+      "maxHeight": 224.19317626953125
+    },
+    {
+      "key": "6_2",
+      "minHeight": 197.01304626464844,
+      "maxHeight": 276.81390380859375
+    },
+    {
+      "key": "7_2",
+      "minHeight": 246.09750366210938,
+      "maxHeight": 324.2503967285156
+    }
+  ],
+  "collision": true
+}

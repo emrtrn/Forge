@@ -1037,6 +1037,7 @@ import { registerPlacementColorTests } from "../tests/engine/placementColor.test
 import { registerReferenceImportTests } from "../tests/engine/referenceImport.test";
 import { registerRidgeboundSpatialTests } from "../tests/engine/ridgeboundSpatial.test";
 import { registerRidgeboundTerrainTests } from "../tests/engine/ridgeboundTerrain.test";
+import { registerMacroReliefTests } from "../tests/engine/macroRelief.test";
 import { registerPreviewCameraFrameTests } from "../tests/engine/previewCameraFrame.test";
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerWorldEnvironmentTests, registerWorldEnvironmentTimeTests } from "../tests/engine/worldEnvironment.test";
@@ -1304,6 +1305,7 @@ registerTerrainLayerArrayTests(check);
 registerTerrainEditTests(check);
 await registerHeightmapPngTests(checkAsync);
 await registerRidgeboundTerrainTests(checkAsync);
+await registerMacroReliefTests(checkAsync);
 registerTerrainErosionTests(check);
 registerTerrainSplineTests(check);
 registerTerrainPadTests(check);
@@ -1453,9 +1455,9 @@ const layout: RoomLayout = {
 };
 ensureDefaultSceneLights(layout);
 const doc = roomLayoutToSceneDocument(layout);
-check("asset manifest validates against the public assets tree", () => {
+check("asset manifest validates against the public root including registered levels outside assets", () => {
   const report = validateAssetManifest(assetManifest, {
-    publicFiles: listPublicFiles("public/assets"),
+    publicFiles: listPublicFiles("public"),
   });
   const errors = report.issues
     .filter((issue) => issue.level === "error")

@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "recipeId": "ridgebound_relief_a",
+  "seed": 0,
+  "generators": {
+    "planBlockout": 1
+  },
+  "plan": {
+    "regions": [],
+    "water": [],
+    "landmarks": [
+      {
+        "id": "B1",
+        "source": "manual",
+        "kind": "infrastructure.bridge",
+        "position": [
+          3397,
+          4670
+        ]
+      },
+      {
+        "id": "POI-01",
+        "source": "manual",
+        "kind": "residential.familyHome",
+        "position": [
+          3775,
+          4480
+        ],
+        "settlement": "V0"
+      },
+      {
+        "id": "POI-02",
+        "source": "manual",
+        "kind": "logistics.depot",
+        "position": [
+          4020,
+          4920
+        ],
+        "settlement": "V0"
+      },
+      {
+        "id": "POI-03",
+        "source": "manual",
+        "kind": "service.workshop",
+        "position": [
+          4155,
+          4760
+        ],
+        "settlement": "V0"
+      },
+      {
+        "id": "POI-04",
+        "source": "manual",
+        "kind": "social.cafe",
+        "position": [
+          3760,
+          4632
+        ],
+        "settlement": "V0"
+      },
+      {
+        "id": "POI-05",
+        "source": "manual",
+        "kind": "civic.school",
+        "position": [
+          4040,
+          4470
+        ],
+        "settlement": "V0"
+      },
+      {
+        "id": "POI-06",
+        "source": "manual",
+        "kind": "public.market",
+        "position": [
+          3865,
+          4658
+        ],
+        "settlement": "V0"
+      }
+    ],
+    "settlements": [
+      {
+        "id": "V0",
+        "source": "manual",
+        "center": [
+          3925,
+          4800
+        ],
+        "type": "village",
+        "protected": true
+      },
+      {
+        "id": "V1",
+        "source": "manual",
+        "center": [
+          1700,
+          4350
+        ],
+        "type": "village",
+        "protected": true
+      }
+    ],
+    "roadGraph": {
+      "nodes": [
+        {
+          "id": "V0",
+          "source": "manual",
+          "position": [
+            3925,
+            4800
+          ],
+          "kind": "end",
+          "settlement": "V0"
+        },
+        {
+          "id": "V1",
+          "source": "manual",
+          "position": [
+            1700,
+            4350
+          ],
+          "kind": "end",
+          "settlement": "V1"
+        }
+      ],
+      "edges": [
+        {
+          "id": "R01",
+          "source": "manual",
+          "from": "V0",
+          "to": "V1",
+          "roadClass": "local",
+          "guide": [
+            [
+              3925,
+              4800
+            ],
+            [
+              3820,
+              4740
+            ],
+            [
+              3640,
+              4680
+            ],
+            [
+              3397,
+              4670
+            ],
+            [
+              3100,
+              4610
+            ],
+            [
+              2800,
+              4520
+            ],
+            [
+              2420,
+              4490
+            ],
+            [
+              2080,
+              4440
+            ],
+            [
+              1700,
+              4350
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "generated": {
+    "sites": [],
+    "parcels": [],
+    "pads": []
+  },
+  "generation": {
+    "preserveManualOverrides": true,
+    "stages": [
+      "planBlockout"
+    ]
+  },
+  "ownership": {
+    "placements": {
+      "wb-blockout-landmark-B1": {
+        "stage": "planBlockout",
+        "outputHash": "ecba76415dcf775b"
+      },
+      "wb-blockout-landmark-POI-01": {
+        "stage": "planBlockout",
+        "outputHash": "3a245637c4e85d29"
+      },
+      "wb-blockout-landmark-POI-02": {
+        "stage": "planBlockout",
+        "outputHash": "c39c69f0d113f40a"
+      },
+      "wb-blockout-landmark-POI-03": {
+        "stage": "planBlockout",
+        "outputHash": "6fefc43d3fb254ef"
+      },
+      "wb-blockout-landmark-POI-04": {
+        "stage": "planBlockout",
+        "outputHash": "27c98087844a5d55"
+      },
+      "wb-blockout-landmark-POI-05": {
+        "stage": "planBlockout",
+        "outputHash": "ccbad2a75a1dd6f9"
+      },
+      "wb-blockout-landmark-POI-06": {
+        "stage": "planBlockout",
+        "outputHash": "75905e7c11c52216"
+      },
+      "wb-blockout-roadNode-V0": {
+        "stage": "planBlockout",
+        "outputHash": "27ff831a367372e0"
+      },
+      "wb-blockout-roadNode-V1": {
+        "stage": "planBlockout",
+        "outputHash": "ddbc880fd4cdf6cd"
+      },
+      "wb-blockout-settlement-V0": {
+        "stage": "planBlockout",
+        "outputHash": "0414eb56b10ac6d4"
+      },
+      "wb-blockout-settlement-V1": {
+        "stage": "planBlockout",
+        "outputHash": "9f161dc82c46da5e"
+      }
+    },
+    "splines": {},
+    "foliageRules": {},
+    "protectedRegions": []
+  }
+}

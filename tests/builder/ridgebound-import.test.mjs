@@ -29,6 +29,16 @@ test("ridgebound CLI: dry run, fresh output, hash guards and refusal to overwrit
   const terrainReport = JSON.parse(terrain.stdout);
   assert.equal(terrainReport.grid.sampling, "EXACT_U16_CROP_NO_RESAMPLING");
   assert.deepEqual(terrainReport.grid.extent, [3072, 1152]);
+  const missingHeightmap = run(["--source", source, "--terrain-variant", "relief-a"]);
+  assert.equal(missingHeightmap.status, 1);
+  assert.match(missingHeightmap.stderr, /requires --heightmap/);
+  const unknownVariant = run(["--source", source, "--heightmap", png, "--terrain-variant", "unknown"]);
+  assert.equal(unknownVariant.status, 1);
+  const candidate = run(["--source", source, "--heightmap", png, "--terrain-variant", "relief-a"]);
+  assert.equal(candidate.status, 0, candidate.stderr);
+  const candidateReport = JSON.parse(candidate.stdout);
+  assert.equal(candidateReport.operation.rebuild, "ALWAYS_FROM_SOURCE_NOT_ACCUMULATIVE");
+  assert.ok(candidateReport.groundCheckpoints.every(c => c.delta === 0));
   const out = join(root, "output", "ridgebound", `cli-test-${randomUUID()}`);
   try {
     const first = run(["--source", source, "--out", out]);

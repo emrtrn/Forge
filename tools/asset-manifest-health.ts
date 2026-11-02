@@ -50,10 +50,22 @@ async function main(): Promise<void> {
     return;
   }
 
-  const [manifest, publicFiles] = await Promise.all([
+  const [manifest, allPublicFiles] = await Promise.all([
     readJson(manifestFullPath),
-    walkFiles(resolve(publicRoot, "assets"), publicDir),
+    walkFiles(publicRoot, publicDir),
   ]);
+  // Content Browser can register levels in layouts/ as well as assets/. Check
+  // those real files too, while retaining the existing loose-assets warning scope.
+  const assets: unknown[] = manifest && typeof manifest === "object" && "assets" in manifest
+    && Array.isArray(manifest.assets) ? manifest.assets : [];
+  const registeredFiles = new Set(assets.flatMap(asset => {
+    if (!asset || typeof asset !== "object") return [];
+    return ["path", "file", "thumbnail"].flatMap(key => {
+      const value = (asset as Record<string, unknown>)[key];
+      return typeof value === "string" ? [value] : [];
+    });
+  }));
+  const publicFiles = allPublicFiles.filter(path => path.startsWith("assets/") || registeredFiles.has(path));
   const report = validateAssetManifest(manifest, { publicFiles });
   const baselineIndex = process.argv.indexOf("--baseline");
   let baseline: string[] | null = null;

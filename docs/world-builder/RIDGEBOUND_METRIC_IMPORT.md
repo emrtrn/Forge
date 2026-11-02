@@ -138,3 +138,46 @@ veri doğruluğu, fizik üçgenleri, editor görüntüsü ve gerçek sürüş ay
 
 P1 için de mevcut klasöre veya kullanıcı sahnesine yazma yoktur. Yeni masterı
 elle düzenlenmiş recipe'ye birleştirme hâlâ açık; yeni inceleme klasörü gerekir.
+
+## Relief A — koruma maskeli makro arazi adayı (2 Kasım 2026)
+
+P1'in doğru aktarılmış olması, topoğrafik çeşitlilik kabulü değildir. Kaynak
+pilotunda 172,76–398,70 m kot aralığı bulunmasına rağmen baskın biçim geniş,
+yumuşak vadi yamaçlarıdır. Ayrı bir karşılaştırma adayı için CLI'ya
+`--terrain-variant relief-a` eklenmiştir; varsayılan P0/P1 davranışı korunur.
+
+```powershell
+npm.cmd run world:ridgebound -- --source tests/engine/fixtures/ridgebound-spatial-master-v0.2.json --heightmap tests/engine/fixtures/ridgebound-valley-heightfield-v0.2.png --expect-sha256 72afa23b7264b2e6e419ca700511e1b61cbdb6178bdf18fe53eb91e8e5e7f09b --expect-heightmap-sha256 bc0c67e06eded7f5533c582d540420b7963d33e46d7c131a1fa7cbf8ae623934 --terrain-variant relief-a --out output/ridgebound/yeni-rolyef-adayi
+```
+
+Genel ve saf çekirdek `engine/worldbuilder/macroRelief.ts`, dünya koordinatlarında
+seed'li sırt rölyefi ve yumuşak koruma maskelerini hesaplar. Ridgebound parametreleri,
+H-01/H-02 adaptasyonu ve konum/koridor kararları `tools/world/ridgeboundRelief.ts`
+içindedir. Kaynak ifadeleri çalıştırılmaz; H-01 formülü desteklenen sözleşmeyle
+eşleşmezse aktarım reddedilir. Ham kaynak rasterdan yeniden başlanır; önceki
+adayın veya P1'in üstüne birikimli sculpt uygulanmaz.
+
+İlk aday: seed `20261102`, genlik üst sınırı 190 m, dalga boyu 490 m, yön -25°.
+Gerçek en büyük ek yükselti yaklaşık 139,49 m'dir; 85.522 örnek değişmiş, koruma
+ve sınır maskelerinde 13.227 örnek değişmeden kalmıştır. V0/V1, B1 ve POI kontrol
+noktalarının hesaplanan kot farkı sıfırdır. Arazi, P1 ile aynı 24 tile / 6 m
+ızgarasındadır. Yerel 1 m ayrıntı veya fiziksel yol oluşturulmaz.
+
+Koruma çekirdekleri: V0/V1 110 m, diğer kontrol noktaları 55 m, R01 rehberi 34 m,
+H-01 örneklenmiş merkez çizgisi 70 m, H-02 55 m. Geçiş genişlikleri ve bütün aday
+parametreleri `import-report.json` içinde kayıtlıdır. Bunlar teknik aday
+değerleridir; parsel/yerleşim/yol/hidroloji için onaylanmış alan ölçüleri değildir.
+Maske garantisi raster örnekleri içindir; tam yerleşim ayak izleri ayrıca tasarlanır.
+
+Çıktı `RidgeboundReliefA.level.json`, eş recipe ve ayrı `.landscapes/` dizinidir.
+Seçilen aday, bütün companion dosyalarıyla `public/layouts/` altına yeni dosyalar
+olarak alınabilir. Mevcut Content Browser import/Open Level mekanizması kullanılır;
+yalnız Plan blockout uygulanarak 11 konum işareti kaydedilir. Kullanıcı sahneleri,
+kaydedilmemiş P1 sculpt işlemleri veya düzenlenmiş recipe bu adaya birleştirilmez.
+
+Bu dilim **panelde Macro Terrain aşamasını tamamlamaz**. Stage Runner
+dry-run/preview/apply/undo yükseklik patch entegrasyonu, erozyon/hidroloji kabulü,
+görsel karakterin kullanıcı kabulü, yollar ve gerçek sürüş testi açık kalır.
+Çekirdek ve adaptör testleri deterministik byte çıktısını, ortak tile kenarlarını,
+korunan kaynak kodlarını ve değiştirilmiş zeminde collider/yükseklik sorgusu uyumunu
+doğrular. CLI bilinmeyen adayları ve heightmap'siz rölyef isteğini reddeder.

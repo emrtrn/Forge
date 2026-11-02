@@ -1,3 +1,4 @@
+import { createDefaultLevel } from "../engine/scene/defaultLevel";
 import { validateWaterCrestFoam } from "../engine/scene/waterCrestFoam";
 import { resolveRiverSurface } from "../engine/scene/riverWater";
 import { validateLakeGeometryFoam } from "../engine/scene/lakeFoamBake";
@@ -4067,8 +4068,7 @@ function contentStubJson(payload: ContentNewPayload): string {
   const { kind, name } = payload;
   let body: Record<string, unknown>;
   if (kind === "level") {
-    // Empty RoomLayout (engine/scene/layout.ts).
-    body = { schema: 1, name, loadGroups: [], instances: [], characters: [] };
+    body = createDefaultLevel(name) as unknown as Record<string, unknown>;
   } else if (kind === "script") {
     // Actor Script class-asset (engine/scene/actorScript.ts), seeded with the
     // picked parent class and a root Transform component.

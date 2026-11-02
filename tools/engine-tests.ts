@@ -984,6 +984,9 @@ import {
   SHAPE_PRIMITIVE_SIZE,
   shapeAssetCollisionDef,
 } from "../engine/scene/shapes";
+import { resolveSkyAtmosphere } from "../engine/scene/skyAtmosphere";
+import { resolveWorldEnvironment } from "../engine/environment/worldEnvironment";
+import { createDefaultLevel, createDefaultEnvironmentActor } from "../engine/scene/defaultLevel";
 import { createProceduralAssetGltf } from "../src/scene/shapePrimitives";
 import type { LightObjectRecord } from "../engine/render-three/lights";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -1032,6 +1035,8 @@ import { registerSerializationDriftTests } from "../tests/engine/serializationDr
 import { registerPlacementIdentityTests } from "../tests/engine/placementIdentity.test";
 import { registerPlacementColorTests } from "../tests/engine/placementColor.test";
 import { registerReferenceImportTests } from "../tests/engine/referenceImport.test";
+import { registerRidgeboundSpatialTests } from "../tests/engine/ridgeboundSpatial.test";
+import { registerPreviewCameraFrameTests } from "../tests/engine/previewCameraFrame.test";
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerWorldEnvironmentTests, registerWorldEnvironmentTimeTests } from "../tests/engine/worldEnvironment.test";
 import { registerAuthoredEnvironmentTests } from "../tests/engine/authoredEnvironment.test";
@@ -1225,6 +1230,8 @@ registerPlacementIdentityTests(check);
 registerPlacementColorTests(check);
 registerWorldRecipeTests(check);
 registerReferenceImportTests(check);
+registerRidgeboundSpatialTests(check);
+registerPreviewCameraFrameTests(check);
 registerWorldEnvironmentTests(check);
 registerWorldEnvironmentTimeTests(check);
 registerAuthoredEnvironmentTests(check);
@@ -20946,6 +20953,57 @@ check("content-new payload validates kind/name and rejects unsafe names", () => 
   assert.throws(() => validateContentNewPayload({ kind: "level", dir: "", name: ".." }));
   assert.throws(() => validateContentNewPayload({ kind: "level", dir: "../escape", name: "x" }));
 });
+check("default level preserves the starter scene and independent environment creation presets", () => {
+  const level = createDefaultLevel("New World");
+  assert.equal(level.name, "New World");
+  assert.deepEqual(level.instances, [
+    { assetId: "floor-400x400", placements: [{ position: [-2, 0, -2], rotationYDeg: 0, scale: 1 }] },
+    { assetId: "shape:cube", placements: [{ position: [0, 0.5, 0], name: "Cube", scaleLocked: true, rotationYDeg: 0, scale: 2 }] },
+  ]);
+  assert.deepEqual(level.worldSettings, { staticObjectsCastShadow: true });
+  assert.equal(level.lights?.[0]?.cascadedShadows, true);
+  assert.deepEqual(level.worldEnvironment?.time, { hour: 10, dayLengthMinutes: 1 });
+  assert.deepEqual(level.worldEnvironment?.sunPath, { azimuthDeg: 96.056, noonElevationDeg: 60, sunriseHour: 6, sunsetHour: 18 });
+  assert.deepEqual(level.worldEnvironment?.night, {
+    moonIntensity: 0.1, moonShadowStrength: 0.5, moonColor: "#9fb4ff",
+    moonAngularDiameterDeg: 2, moonBrightness: 2, ambientFloor: 0.2, ambientIntensity: 0.3,
+  });
+  assert.equal(level.skyAtmosphere?.rayleigh, 1);
+  assert.equal(level.skyAtmosphere?.turbidity, 2);
+  assert.equal(level.skyAtmosphere?.mie, 0.003);
+  assert.equal(level.heightFog?.density, 0.001);
+  assert.equal(level.cloudLayer?.coverage, 0.4);
+  assert.equal(level.cloudLayer?.density, 0.4);
+  assert.equal(level.cloudLayer?.softness, 0.4);
+  assert.equal(level.cloudLayer?.speed, 0.1);
+  assert.equal(level.postProcess?.antialias, "smaa");
+  assert.deepEqual(level.postProcess?.bloom, { enabled: true, threshold: 1, intensity: 1, radius: 1 });
+  assert.deepEqual(level.postProcess?.ao, { enabled: true, radius: 1, intensity: 1 });
+  for (const kind of ["skyAtmosphere", "heightFog", "cloudLayer", "postProcess", "worldEnvironment"] as const) {
+    assert.deepEqual(createDefaultEnvironmentActor(kind), level[kind]);
+  }
+  const saved = validateLayout(level) as RoomLayout;
+  assert.deepEqual(saved.instances, level.instances);
+  assert.deepEqual(saved.lights, level.lights);
+  assert.deepEqual(saved.worldSettings, level.worldSettings);
+  assert.deepEqual(resolveSkyAtmosphere(saved.skyAtmosphere), level.skyAtmosphere);
+  assert.deepEqual(resolveHeightFog(saved.heightFog), level.heightFog);
+  assert.deepEqual(resolveCloudLayer(saved.cloudLayer), level.cloudLayer);
+  assert.deepEqual(resolvePostProcess(saved.postProcess), level.postProcess);
+  assert.deepEqual(resolveWorldEnvironment(saved.worldEnvironment), level.worldEnvironment);
+  const post = createDefaultEnvironmentActor("postProcess");
+  post.bloom.intensity = 99;
+  const environment = createDefaultEnvironmentActor("worldEnvironment");
+  environment.time.hour = 23;
+  level.instances[0]!.placements[0]!.position[0] = 999;
+  level.postProcess!.bloom!.intensity = 42;
+  const fresh = createDefaultLevel("Fresh");
+  assert.equal(fresh.instances[0]?.placements[0]?.position[0], -2);
+  assert.equal(fresh.postProcess?.bloom?.intensity, 1);
+  assert.equal(createDefaultEnvironmentActor("postProcess").bloom.intensity, 1);
+  assert.equal(createDefaultEnvironmentActor("worldEnvironment").time.hour, 10);
+});
+
 check("content-new resolves to typed stub files and folders", () => {
   const folder = resolveContentNewFile({ kind: "folder", dir: "assets", name: "Props" });
   assert.equal(folder.path, "assets/Props");
@@ -21023,13 +21081,7 @@ check("content-new resolves to typed stub files and folders", () => {
 
   const level = resolveContentNewFile({ kind: "level", dir: "", name: "Main" });
   assert.equal(level.path, "Main.level.json");
-  assert.deepEqual(JSON.parse(level.content ?? ""), {
-    schema: 1,
-    name: "Main",
-    loadGroups: [],
-    instances: [],
-    characters: [],
-  });
+  assert.deepEqual(JSON.parse(level.content ?? ""), createDefaultLevel("Main"));
 
   const particle = resolveContentNewFile({ kind: "particle", dir: "assets/effects", name: "Dust Hit" });
   assert.equal(particle.path, "assets/effects/Dust Hit.effect.json");

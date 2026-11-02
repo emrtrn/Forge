@@ -241,7 +241,7 @@ export interface WorldEnvironmentPreview {
   /** Preview playback speed in game hours per real second. */
   hoursPerSecond: number;
 }
-import { initialWorldEnvironmentForSun } from "@engine/environment/sunPath";
+import { createDefaultEnvironmentActor } from "@engine/scene/defaultLevel";
 import {
   applyPostProcessToneMapping,
   createPostProcessAntialiasPass,
@@ -348,6 +348,7 @@ import { EditorSaveSession, type EditorSaveSource } from "@/editor/editorSaveCoo
 import { WorldTerrainEditSession } from "@/editor/terrainStore";
 import { WorldBuilderSession } from "@/editor/worldBuilderSession";
 import type { PreviewItem, StagePreview } from "@/editor/worldBuilderPreview";
+import { framePreviewCamera } from "@/editor/previewCameraFrame";
 import { WorldBuilderPreviewOverlay } from "./worldBuilderPreviewOverlay";
 import { HANDLE_LIFT, WorldBuilderRecipeOverlay } from "./worldBuilderRecipeOverlay";
 import type { PlanPointRef } from "@/editor/worldBuilderPlanEdit";
@@ -2795,17 +2796,12 @@ export class SceneApp {
       return;
     }
     const camera = this.editorViewportCamera();
-    const viewDirection = camera.getWorldDirection(new Vector3());
-    if (viewDirection.lengthSq() === 0) viewDirection.copy(SCENE_CAMERA_TARGET).sub(camera.position).normalize();
-    const target = box.getCenter(new Vector3());
-    const radius = Math.max(box.getSize(new Vector3()).length() * 0.5, 1);
-    if (camera instanceof OrthographicCamera) {
-      this.orthoViewHeight = clamp(radius * 2.4, ORTHO_MIN_VIEW_HEIGHT, ORTHO_MAX_VIEW_HEIGHT);
+    const canvas = this.renderer.domElement;
+    const height = framePreviewCamera(camera, box, canvas.clientWidth / Math.max(1, canvas.clientHeight));
+    if (height !== null) {
+      this.orthoViewHeight = height;
       this.updateOrthoProjection();
     }
-    camera.position.copy(target).addScaledVector(viewDirection, -radius * 1.8);
-    camera.up.set(0, 1, 0);
-    camera.lookAt(target);
     this.cameraController.markViewChanged();
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(item ? `Focused ${item.id}.` : `Focused the ${preview.stageLabel} preview.`, "info");
@@ -13090,7 +13086,7 @@ export class SceneApp {
       this.onStatus?.("Sky Atmosphere already exists - selected it.", "info");
       return;
     }
-    this.commitSky({}, "Add Sky Atmosphere");
+    this.commitSky(createDefaultEnvironmentActor("skyAtmosphere"), "Add Sky Atmosphere");
     this.select({ kind: "sky" });
     this.onStatus?.("Added Sky Atmosphere.", "info");
   }
@@ -13167,7 +13163,7 @@ export class SceneApp {
       this.onStatus?.("Exponential Height Fog already exists - selected it.", "info");
       return;
     }
-    this.commitFog({}, "Add Exponential Height Fog");
+    this.commitFog(createDefaultEnvironmentActor("heightFog"), "Add Exponential Height Fog");
     this.select({ kind: "fog" });
     this.onStatus?.("Added Exponential Height Fog.", "info");
   }
@@ -13240,7 +13236,7 @@ export class SceneApp {
       this.onStatus?.("Cloud Layer already exists - selected it.", "info");
       return;
     }
-    this.commitCloud({}, "Add Cloud Layer");
+    this.commitCloud(createDefaultEnvironmentActor("cloudLayer"), "Add Cloud Layer");
     this.select({ kind: "cloud" });
     this.onStatus?.("Added Cloud Layer.", "info");
   }
@@ -13357,7 +13353,7 @@ export class SceneApp {
       this.onStatus?.("Post Process already exists - selected it.", "info");
       return;
     }
-    this.commitPostProcess({}, "Add Post Process");
+    this.commitPostProcess(createDefaultEnvironmentActor("postProcess"), "Add Post Process");
     this.select({ kind: "post" });
     this.onStatus?.("Added Post Process.", "info");
   }
@@ -13575,11 +13571,8 @@ export class SceneApp {
       this.onStatus?.("World Environment already exists - selected it.", "info");
       return;
     }
-    // Start from the hour/sun path that reproduce the current Sun, so adding
-    // the actor does not move the light (ENV-00b).
-    const sun = this.sunLightActor();
     this.commitWorldEnvironment(
-      initialWorldEnvironmentForSun(sun ? readRotation(sun) : null),
+      createDefaultEnvironmentActor("worldEnvironment"),
       "Add World Environment",
     );
     this.select({ kind: "worldEnvironment" });

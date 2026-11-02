@@ -1,0 +1,172 @@
+{
+  "schema": 1,
+  "name": "NewLevel",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "floor-400x400",
+      "placements": [
+        {
+          "position": [
+            -2,
+            0,
+            -2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": [
+        {
+          "position": [
+            0,
+            0.5,
+            0
+          ],
+          "name": "Cube",
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true
+  },
+  "skyAtmosphere": {
+    "name": "Sky Atmosphere",
+    "hidden": false,
+    "rayleigh": 1,
+    "turbidity": 2,
+    "mie": 0.003,
+    "mieDirectionalG": 0.8,
+    "exposure": 1,
+    "skyLightCapture": {
+      "intensity": 1
+    }
+  },
+  "heightFog": {
+    "name": "Exponential Height Fog",
+    "hidden": false,
+    "mode": "exp",
+    "color": "#bcc6d1",
+    "density": 0.001,
+    "start": 5,
+    "end": 60
+  },
+  "cloudLayer": {
+    "name": "Cloud Layer",
+    "hidden": false,
+    "color": "#ffffff",
+    "coverage": 0.4,
+    "density": 0.4,
+    "softness": 0.4,
+    "scale": 2,
+    "speed": 0.1
+  },
+  "postProcess": {
+    "name": "Post Process",
+    "hidden": false,
+    "exposure": 1,
+    "toneMapping": "aces",
+    "antialias": "smaa",
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    },
+    "vignette": {
+      "enabled": false,
+      "intensity": 0.35,
+      "offset": 1
+    },
+    "chromaticAberration": {
+      "enabled": false,
+      "amount": 0.5
+    },
+    "grain": {
+      "enabled": false,
+      "intensity": 0.5
+    },
+    "dof": {
+      "enabled": false,
+      "focusDistance": 10,
+      "aperture": 1,
+      "maxBlur": 1
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1,
+      "intensity": 1
+    },
+    "saturation": 1,
+    "contrast": 1,
+    "temperature": 0,
+    "tint": 0
+  },
+  "worldEnvironment": {
+    "name": "World Environment",
+    "hidden": false,
+    "time": {
+      "hour": 10,
+      "dayLengthMinutes": 1
+    },
+    "sunPath": {
+      "azimuthDeg": 96.056,
+      "noonElevationDeg": 60,
+      "sunriseHour": 6,
+      "sunsetHour": 18
+    },
+    "night": {
+      "moonIntensity": 0.1,
+      "moonShadowStrength": 0.5,
+      "moonColor": "#9fb4ff",
+      "moonAngularDiameterDeg": 2,
+      "moonBrightness": 2,
+      "ambientFloor": 0.2,
+      "ambientIntensity": 0.3
+    },
+    "season": "summer",
+    "weather": {
+      "preset": "clear",
+      "intensity": 1
+    },
+    "surface": {
+      "snowCoverage": 0,
+      "wetness": 0,
+      "winterSnowCoverage": 0.6,
+      "snowColor": "#f2f5fa",
+      "snowSlopeStartDeg": 30,
+      "snowSlopeEndDeg": 55,
+      "snowMinAltitude": null,
+      "snowAltitudeBlend": 20
+    }
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -55,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true,
+      "cascadedShadows": true
+    }
+  ]
+}

@@ -58,6 +58,32 @@ function at(hour: number, layout: RoomLayout): WorldEnvironmentState {
 }
 
 export function registerAuthoredEnvironmentTests(check: Check): void {
+  check("world environment binding: visible moon follows preview and clears on disable without changing the authored sky", () => {
+    const { env, sun, ambient } = rig();
+    // Hidden sky avoids a GPU capture in this headless lifecycle test. The
+    // browser test covers the visible sky and real shader rasterisation.
+    const layout = layoutWith({ night: { moonAngularDiameterDeg: 2, moonBrightness: 0.8 } });
+    layout.skyAtmosphere = { hidden: true };
+    env.applySky(layout);
+    const sky = env.sky!;
+    const snapshot = structuredClone(layout);
+    const u = sky.material.uniforms;
+    assert.equal(u.forgeMoonBrightness!.value, 0);
+    env.applyWorldEnvironment(layout, { state: at(0, layout), sun, ambient });
+    assert.equal(u.forgeMoonBrightness!.value, 0.8);
+    assert.deepEqual((u.forgeMoonDirection!.value as Vector3).toArray(), env.worldEnvironmentOverride!.light!.direction);
+    assert.ok(Math.abs(u.forgeMoonRadiusSin!.value - Math.sin(Math.PI / 180)) < 1e-12);
+    assert.equal(sky.visible, false, "a hidden sky never reveals the moon");
+    env.applyWorldEnvironment(layout, { state: at(12, layout), sun, ambient });
+    assert.equal(u.forgeMoonBrightness!.value, 0);
+    env.applyWorldEnvironment(layout, { state: at(0, layout), sun, ambient });
+    env.applyWorldEnvironment(layout, { state: null, sun, ambient });
+    assert.equal(u.forgeMoonBrightness!.value, 0, "ending WES restores the original sky");
+    assert.deepEqual(layout, snapshot);
+    env.teardown();
+    assert.equal(env.sky, null);
+  });
+
   check("world environment binding: night fill works without authored lights, reuses one light and leaves no residue", () => {
     const { env, scene } = rig();
     const layout = layoutWith({ night: { ambientIntensity: 1.2, moonColor: "#8899ff" } });

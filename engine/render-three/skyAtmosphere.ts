@@ -8,6 +8,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
+import { installMoonDisc } from "./moonDisc";
 
 import type { Vec3 } from "@engine/scene/layout";
 import type { ResolvedSkyAtmosphere } from "@engine/scene/skyAtmosphere";
@@ -84,6 +85,7 @@ export function createSkyObject(): Sky {
   // Background geometry is never a pick target.
   sky.raycast = () => {};
   installSkyLocalToneMappingExposure(sky);
+  installMoonDisc(sky);
   return sky;
 }
 

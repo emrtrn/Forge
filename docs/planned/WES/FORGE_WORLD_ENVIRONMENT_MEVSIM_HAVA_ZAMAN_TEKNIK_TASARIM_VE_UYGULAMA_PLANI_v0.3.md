@@ -291,6 +291,8 @@ interface LayoutWorldEnvironment {
   night?: {
     moonIntensity?: number;      // gece aynı directional ışığın şiddeti (lux benzeri çarpan); varsayılan 0.08
     moonColor?: string;          // varsayılan "#9fb4ff"
+    moonAngularDiameterDeg?: number; // 2 Kasım görünür ay eki: açısal çap 0.1..10°, varsayılan 1.2
+    moonBrightness?: number;     // 2 Kasım görünür ay eki: disk parlaklığı 0..10, varsayılan 1; 0 gizler
     ambientFloor?: number;       // gece ortam ışığının authored ambient'e oranı alt sınırı; varsayılan 0.15
     ambientIntensity?: number;   // 2 Kasım eki: bağımsız ay renkli gece dolgusu; 0..10, varsayılan 1.5; 0 kapatır
   };
@@ -427,6 +429,7 @@ Astronomik model (enlem/tarih) v1'de yoktur. `sunPath.ts`:
 | Tüketici | Saatle değişen | Kaynak |
 |---|---|---|
 | Sky | Güneş yönü (gök diski, ufuk parlaması); gece three `Sky` kendiliğinden kararır | `applySkySunDirection` |
+| Görünür ay (2 Kasım eki) | Gece ışığıyla aynı yönde kraterli dolunay; ±6° alacakaranlık bandında söner | Canlı Sky shader'ı; çap/parlaklık Night panelinde, IBL yakalamasına girmez |
 | Ortam ışığı | `worldSettings.ambientIntensity × max(ambientFloor, gündüz faktörü)` | Kabuk ambient'i; authored değer çarpılır, yazılmaz |
 | Gece dolgusu (2 Kasım eki) | `night.ambientIntensity × (1 − gündüz faktörü)`, `moonColor` renginde | Ortak render bağında bağımsız AmbientLight; authored ambient 0/yok olsa da çalışır, gündüz sıfırdır |
 | Sis rengi | Authored renk, gece koyulaşır, alacakaranlıkta ısınır | `applySceneFog` override'ı |

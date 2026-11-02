@@ -1,7 +1,7 @@
 import type { ResolvedCloudLayer } from "../scene/cloudLayer";
 import type { ResolvedHeightFog } from "../scene/heightFog";
 import type { Vec3 } from "../scene/layout";
-import { evaluateSunLight, hexToLinear, lerp } from "./sunPath";
+import { evaluateSunLight, hexToLinear, lerp, smoothstep, TWILIGHT_DEG } from "./sunPath";
 import { weatherFactors } from "./weatherPresets";
 import type { ResolvedWorldEnvironment, Season, WeatherPreset } from "./worldEnvironment";
 
@@ -42,6 +42,8 @@ export interface ResolvedEnvironment {
   ambientMultiplier: number;
   /** Independent night fill: remains available with no authored ambient or Sun, zero in full daylight. */
   nightAmbient: { color: Vec3; intensity: number };
+  /** Visual full moon, following the very same direction as the night directional light. */
+  moon: { direction: Vec3; color: Vec3; angularDiameterDeg: number; brightness: number };
   /** Sky turbidity to render; null when there is no (visible) sky. */
   skyTurbidity: number | null;
   /** The fog to render in place of the authored one; null when there is none. */
@@ -124,6 +126,12 @@ export function resolveEnvironment(
     light,
     ambientMultiplier: Math.max(env.night.ambientFloor, sun.daylight),
     nightAmbient: { color: hexToLinear(env.night.moonColor), intensity: env.night.ambientIntensity * (1 - sun.daylight) },
+    moon: {
+      direction: sun.lightDirection,
+      color: hexToLinear(env.night.moonColor),
+      angularDiameterDeg: env.night.moonAngularDiameterDeg,
+      brightness: sun.isMoon ? env.night.moonBrightness * smoothstep(0, TWILIGHT_DEG, -sun.sunElevationDeg) : 0,
+    },
     skyTurbidity: authored.sky && !authored.sky.hidden ? authored.sky.turbidity + weather.skyTurbidityAdd : null,
     fog,
     cloud,

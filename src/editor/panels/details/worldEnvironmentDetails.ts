@@ -72,9 +72,11 @@ const SECTIONS: Array<{ title: string; hint?: string; fields: NumberField[] }> =
   },
   {
     title: "Night",
-    hint: "Night Fill, ay renginde bağımsız ortam ışığıdır; gündüz söner. 0 kapatır. Ambient Floor mevcut ortam ışığının oranıdır.",
+    hint: "Moon Intensity ay ışığını, Moon Disc Brightness görünür diski ayarlar; disk parlaklığı 0 ise ay gizlenir. Night Fill bağımsız ortam ışığıdır; gündüz söner. Ambient Floor mevcut ortam ışığının oranıdır.",
     fields: [
       { group: "night", key: "moonIntensity", label: "Moon Intensity", min: 0, max: 2, step: 0.01 },
+      { group: "night", key: "moonAngularDiameterDeg", label: "Moon Diameter (deg)", min: 0.1, max: 10, step: 0.1 },
+      { group: "night", key: "moonBrightness", label: "Moon Disc Brightness", min: 0, max: 10, step: 0.1 },
       { group: "night", key: "ambientFloor", label: "Ambient Floor", min: 0, max: 1, step: 0.05 },
       { group: "night", key: "ambientIntensity", label: "Night Fill", min: 0, max: 10, step: 0.05 },
     ],

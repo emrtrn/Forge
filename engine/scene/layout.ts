@@ -629,6 +629,10 @@ export interface LayoutWorldEnvironment {
     /** Intensity multiplier of the directional light while it is the moon. */
     moonIntensity?: number;
     moonColor?: string;
+    /** Visible full-moon diameter in degrees (art-directed, not an astronomical calendar). */
+    moonAngularDiameterDeg?: number;
+    /** Visible disc brightness, independent of direct light intensity; 0 hides it. */
+    moonBrightness?: number;
     /** Lower bound of the night ambient as a fraction of the authored ambient. */
     ambientFloor?: number;
     /** Independent night fill in moonColor (absolute AmbientLight intensity); 0 disables it. Fades out by day. */

@@ -7,6 +7,8 @@
 
 **2 Kasım 2026 güncellemesi:** §8'deki gece aydınlatması için bağımsız Night Fill uygulandı ve otomatik testler geçti. Ölçüm, karşılaştırma kareleri ve kalan gerçek GPU kabulü: [gece aydınlatması raporu](WES_K1_GECE_AYDINLATMASI.md). Aşağıdaki 30 Ekim ölçümleri tarihsel bazdır.
 
+**Görünür ay eki:** Ay ışığıyla aynı yönde prosedürel dolunay, çap/parlaklık ayarları ve gündüz sönmesi uygulandı. [Önizleme ve doğrulama](WES_GORUNUR_AY.md).
+
 ---
 
 ## 1. Commit'ler

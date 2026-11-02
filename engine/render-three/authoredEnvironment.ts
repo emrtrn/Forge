@@ -72,6 +72,7 @@ import {
   type WorldEnvironmentState,
 } from "../environment/environmentResolve";
 import { shouldRecapture, skyLightCompensation, type CaptureRecord } from "../environment/recapturePolicy";
+import { applyMoonDisc } from "./moonDisc";
 
 /** Sky Light capture size while the clock runs; ambient bounce and sky reflections are low-frequency. */
 export const DYNAMIC_CAPTURE_SIZE = 128;
@@ -190,6 +191,7 @@ export class AuthoredEnvironment {
       this.scene.add(this.skyObject);
     }
     applySkyUniforms(this.skyObject, this.withSkyOverride(resolved));
+    applyMoonDisc(this.skyObject, this.override?.moon ?? null);
     this.applySunDirection();
     followCameraWithSky(this.skyObject, this.camera());
     applySkyToneMapping(this.renderer, resolved);
@@ -327,6 +329,7 @@ export class AuthoredEnvironment {
     if (!env || env.hidden || !frame.state) {
       if (!wasActive) return { active: false, sunMoved: false };
       this.override = null;
+      if (this.skyObject) applyMoonDisc(this.skyObject, null);
       this.lastCapture = null;
       const sunMoved = frame.sun ? this.sunSlot.restore(frame.sun) : false;
       this.restoreAmbient();
@@ -355,6 +358,7 @@ export class AuthoredEnvironment {
     }, env, frame.state);
 
     if (this.skyObject && sky) applySkyUniforms(this.skyObject, this.withSkyOverride(sky));
+    if (this.skyObject) applyMoonDisc(this.skyObject, this.override.moon);
     this.applySunDirection();
     this.applyFog(layout);
     if (this.cloudObject && this.override.cloud) applyCloudUniforms(this.cloudObject, this.override.cloud);

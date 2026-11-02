@@ -18,7 +18,7 @@ const LEVEL = "layouts/__playwright-wes.level.json";
 test.setTimeout(180_000);
 
 interface SavedLayout {
-  worldEnvironment?: { time?: { hour?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number } };
+  worldEnvironment?: { time?: { hour?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number; moonBrightness?: number; moonAngularDiameterDeg?: number } };
 }
 
 test("World Environment: preview stays out of the level, Make Default is one undo step, Play starts from it", async ({ page, context }) => {
@@ -65,6 +65,16 @@ test("World Environment: preview stays out of the level, Make Default is one und
   await nightFill.fill("1.2");
   await nightFill.press("Tab");
   await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.ambientIntensity, { timeout: 15_000 }).toBe(1.2);
+  const moonSize = details.locator('[data-wes-number="night.moonAngularDiameterDeg"]');
+  const moonBrightness = details.locator('[data-wes-number="night.moonBrightness"]');
+  await expect(moonSize).toHaveValue("1.2");
+  await expect(moonBrightness).toHaveValue("1");
+  await moonSize.fill("2");
+  await moonSize.press("Tab");
+  await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonAngularDiameterDeg, { timeout: 15_000 }).toBe(2);
+  await moonBrightness.fill("0.7");
+  await moonBrightness.press("Tab");
+  await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonBrightness, { timeout: 15_000 }).toBe(0.7);
 
   // 2. Scrub + weather + season preview: nothing is saved, the level is not dirty.
   const saveCount = saves.length;
@@ -96,6 +106,8 @@ test("World Environment: preview stays out of the level, Make Default is one und
   await expect(details.locator("[data-wes-preview-hour-label]")).toHaveText("18:00");
   await expect(details.locator("[data-wes-preview-default]")).toBeDisabled();
   await expect(nightFill).toHaveValue("1.2");
+  await expect(moonSize).toHaveValue("2");
+  await expect(moonBrightness).toHaveValue("0.7");
 
   // The Sun's rotation is read-only while the World Environment drives it.
   await page.getByTestId("outliner-row").getByText("sun", { exact: true }).click();

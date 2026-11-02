@@ -22,3 +22,5 @@ Bu klasör iki bağlantılı planı içerir. 27 Ekim 2026'da `main@f9aa05f` üze
 **Eski sürümler:** v0.1/v0.2 metinleri git geçmişindedir. Repo dışı Drive kopyaları tarihli bağlamdır; güncel kodun yerine geçmez.
 
 **2 Kasım 2026:** K1 gece aydınlatmasına bağımsız **Night Fill** eklendi; kod ve otomatik kontroller tamam. [Ölçüm ve karşılaştırma raporu](../../reports/WES_K1_GECE_AYDINLATMASI.md). Sıradaki adım gerçek GPU'da araç/yol görsel kabulü ve E-015 ölçümü; ardından K2 talimatı/içerik hazırlığı.
+
+**Görünür ay:** Prosedürel kraterli dolunay, mevcut gece ışığı yönünde Sky'a eklendi. Çap ve disk parlaklığı Night panelinden düzenlenir. [Uygulama, önizleme ve test raporu](../../reports/WES_GORUNUR_AY.md).

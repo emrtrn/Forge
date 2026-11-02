@@ -49,7 +49,7 @@ export function maximalWorldEnvironment(): LayoutWorldEnvironment {
     hidden: true,
     time: { hour: 7.5, dayLengthMinutes: 24 },
     sunPath: { azimuthDeg: 135, noonElevationDeg: 48, sunriseHour: 5.5, sunsetHour: 19.25 },
-    night: { moonIntensity: 0.12, moonColor: "#8899ff", ambientFloor: 0.2, ambientIntensity: 1.2 },
+    night: { moonIntensity: 0.12, moonColor: "#8899ff", moonAngularDiameterDeg: 2, moonBrightness: 0.7, ambientFloor: 0.2, ambientIntensity: 1.2 },
     season: "winter",
     weather: { preset: "snow", intensity: 0.75 },
     surface: {
@@ -131,6 +131,15 @@ export function registerWorldEnvironmentTests(check: Check): void {
       assert.equal(result.environment?.night, undefined);
       assert.match(result.warnings[0]!, /night.ambientIntensity/);
     }
+  });
+
+  check("world environment: visible moon controls clamp and zero brightness survives save", () => {
+    assert.deepEqual(normalizeWorldEnvironment({ night: { moonAngularDiameterDeg: 50, moonBrightness: -1 } }).environment,
+      { night: { moonAngularDiameterDeg: 10, moonBrightness: 0 } });
+    const repaired = normalizeWorldEnvironment({ night: { moonAngularDiameterDeg: 0, moonBrightness: "invalid" } });
+    assert.deepEqual(repaired.environment, { night: { moonAngularDiameterDeg: 0.1 } });
+    assert.ok(repaired.warnings.some((warning) => warning.includes("moonBrightness")));
+    assert.equal(validateLayout(levelWith({ night: { moonBrightness: 0 } })).worldEnvironment?.night?.moonBrightness, 0);
   });
 
   check("world environment: a non-object actor is rejected by the save, a broken group only warns", () => {
@@ -338,6 +347,25 @@ export function registerWorldEnvironmentTimeTests(check: Check): void {
     }
     const disabled = resolveWorldEnvironment({ night: { ambientIntensity: 0 } });
     assert.equal(resolveEnvironment(authored, disabled, { ...stateFromDefaults(disabled), hour: 0 }).nightAmbient.intensity, 0);
+  });
+
+  check("world environment resolve: visible moon matches the moonlight direction and fades at sunrise/sunset", () => {
+    const authored = { sun: { color: "#ffffff", intensity: 4.5 }, sky: null, fog: null, cloud: null };
+    const env = resolveWorldEnvironment({ night: { moonAngularDiameterDeg: 2, moonBrightness: 0.8 } });
+    const atHour = (hour: number) => resolveEnvironment(authored, env, { ...stateFromDefaults(env), hour });
+    for (const hour of [0, 1, 5, 19, 23]) {
+      const state = atHour(hour);
+      assert.deepEqual(state.moon.direction, state.light!.direction);
+      assert.equal(state.moon.brightness, 0.8);
+      assert.equal(state.moon.angularDiameterDeg, 2);
+    }
+    assert.equal(atHour(12).moon.brightness, 0);
+    for (const hour of [6, 18]) {
+      assert.ok(atHour(hour - 1e-6).moon.brightness < 1e-8);
+      assert.ok(atHour(hour + 1e-6).moon.brightness < 1e-8);
+    }
+    const disabled = resolveWorldEnvironment({ night: { moonBrightness: 0 } });
+    assert.equal(resolveEnvironment(authored, disabled, { ...stateFromDefaults(disabled), hour: 0 }).moon.brightness, 0);
   });
 
   check("world environment recapture: by sun movement, finest at the horizon, never by time or while scrubbing (ENV-18)", () => {

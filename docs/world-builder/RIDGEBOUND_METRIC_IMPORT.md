@@ -181,3 +181,16 @@ görsel karakterin kullanıcı kabulü, yollar ve gerçek sürüş testi açık 
 Çekirdek ve adaptör testleri deterministik byte çıktısını, ortak tile kenarlarını,
 korunan kaynak kodlarını ve değiştirilmiş zeminde collider/yükseklik sorgusu uyumunu
 doğrular. CLI bilinmeyen adayları ve heightmap'siz rölyef isteğini reddeder.
+
+## v0.3 konut katmanı — salt okunur inceleme
+
+`world:ridgebound:review`, v0.3 `settlement_fabric` katmanındaki 24 konut ve
+12 müştemilatı kayıtlı P1/Relief A terrain'i üzerinde karşılaştırır. v0.2/P1
+import sözleşmesini veya Forge sahnesini değiştirmez; evleri POI olarak
+normalizer'a sokmaz. Kaynak hash ve devralınan geometri eşitliği zorunludur.
+
+[2 Kasım inceleme raporu](../reports/RIDGEBOUND_V03_KONUT_ARAZI_KARSILASTIRMASI.md)
+ve bağlı pafta/CSV; kot, temel alanı, yol mesafesi semantiği, RES-006 erişimi ve
+okul parseli–R03 ilişkisini kaydeder. Relief A yeni konutlar için hazır yerleşim
+zemini sayılmaz. Sonraki arazi adayında mahalle ve erişim korumaları ayrıca
+tasarlanır; yeni temel/yol/ev üretimi bu incelemeye dahil değildir.

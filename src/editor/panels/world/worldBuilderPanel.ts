@@ -7,6 +7,7 @@ import { LOW_CONFIDENCE, type RecipeLayerOptions, type UnderlayState } from "@/e
 import { PLAN_ELEMENT_KINDS, type PlanElementFields, type PlanElementKind, type PlanRef, type StrandedNode } from "@/editor/worldBuilderPlanEdit";
 import { PREVIEW_CHANGES, previewItemDrawable, type PreviewChange, type PreviewItem } from "@/editor/worldBuilderPreview";
 import type { WorldBuilderSession, WorldBuilderView } from "@/editor/worldBuilderSession";
+import type { ForgeWindow } from "./worldBuilderWindow";
 
 /** At most this many ids are listed per report line; the rest are counted. */
 const LISTED_IDS = 8;
@@ -15,23 +16,40 @@ const LISTED_CHANGES = 40;
 /** Per-viewer layer switches and underlay opacity (browser storage; never in the recipe). */
 const LAYER_STORAGE_KEY = "forge.worldBuilder.layers";
 
+/** The window's tabs (WORLD_BUILDER_WINDOW_PLAN §2.3), in strip order. */
+const TABS = [
+  { id: "setup", label: "Setup" },
+  { id: "plan", label: "Plan" },
+  { id: "stages", label: "Stages" },
+  { id: "preview", label: "Preview" },
+  { id: "layers", label: "Layers" },
+] as const;
+type WorldBuilderTab = (typeof TABS)[number]["id"];
+
+function isTab(id: string | null): id is WorldBuilderTab {
+  return TABS.some((tab) => tab.id === id);
+}
+
 export interface WorldBuilderPanelOptions {
-  body: HTMLElement;
+  /** The window it draws in: the title shows the recipe, the strip the tabs, the body the active tab. */
+  frame: ForgeWindow;
   session: WorldBuilderSession;
-  /** False while the window is closed: session changes are then not drawn. */
-  isShown: () => boolean;
 }
 
 /**
- * World Builder panel (plan v0.4 §6.2, §7.1): the open level's recipe, its
- * region profile, the stages with Dry Run / Apply, and the last plan's report.
+ * World Builder panel (plan v0.4 §6.2, §7.1), drawn in the World Builder
+ * window: the recipe and its id / unsaved mark in the title, and five tabs —
+ * Setup (recipe, region profile, reference image and import), Plan (hand
+ * corrections), Stages (Dry Run / Apply and the last plan's report), Preview
+ * and Layers. Only Setup is enabled without a loaded recipe.
  * Apply is one undo step; the recipe is written by Save Layout. A dry run with
  * changes is drawn in the viewport (T10) and listed by change; a row frames
- * its object, Focus frames them all and Clear Preview drops the drawing.
- * Viewport Layers switch the recipe layer's parts (reference image, plan,
- * generated data) and set the reference image (an undoable recipe edit).
- * Plan Corrections list the plan's elements and protected regions: a row
- * selects one (highlighted in the viewport), its fields and Add / Delete are
+ * its object, Focus frames them all and Clear Preview drops the drawing; the
+ * Preview tab's badge counts it. Layers switch the recipe layer's parts
+ * (reference image, plan, generated data); the reference image is set in
+ * Setup (an undoable recipe edit). Plan Corrections list the plan's elements
+ * and protected regions: a row (or a handle picked in the viewport, which
+ * brings the Plan tab forward) selects one, its fields and Add / Delete are
  * hand corrections, each one undo step (§13.2 step 4). Edit in Viewport
  * turns on the viewport handles (drag a point over the ground; Delete removes
  * the selected element, Escape deselects). A road node the applied sites
@@ -39,15 +57,29 @@ export interface WorldBuilderPanelOptions {
  * report and on the selected node.
  */
 export class WorldBuilderPanel {
+  /** Kept across tabs and redraws: leaving Setup must not lose pasted JSON. */
   private analysisText = "";
+  private tab: WorldBuilderTab;
+  /** The plan selection last drawn, to notice one the viewport made. */
+  private selectionKey: string | null = null;
+  private readonly body: HTMLElement;
   constructor(private readonly options: WorldBuilderPanelOptions) {
-    options.body.addEventListener("click", (event) => {
+    const { frame } = options;
+    const stored = frame.storedTab();
+    this.tab = isTab(stored) ? stored : "setup";
+    frame.onTabSelect = (id) => {
+      if (!isTab(id)) return;
+      this.tab = id;
+      this.update();
+    };
+    this.body = frame.body;
+    this.body.addEventListener("click", (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-wb-action]");
       if (!button || button.disabled) return;
       void this.run(button.dataset.wbAction ?? "", button.dataset.wbStage ?? "", button.dataset.wbId, button.dataset);
     });
     // A typed plan field is one correction when it is committed (Enter or leaving the field).
-    options.body.addEventListener("change", (event) => {
+    this.body.addEventListener("change", (event) => {
       const file = (event.target as HTMLElement).closest<HTMLInputElement>("[data-wb-analysis-file]")?.files?.[0];
       if (file) { void this.readAnalysisFile(file); return; }
       const pointField = (event.target as HTMLElement).closest<HTMLInputElement>("[data-wb-point-axis]");
@@ -69,7 +101,7 @@ export class WorldBuilderPanel {
       this.update();
     });
     // Live while dragging, without redrawing the panel under the slider.
-    options.body.addEventListener("input", (event) => {
+    this.body.addEventListener("input", (event) => {
       const analysis = (event.target as HTMLElement).closest<HTMLTextAreaElement>("[data-wb-analysis]");
       if (analysis) { this.analysisText = analysis.value; return; }
       const slider = (event.target as HTMLElement).closest<HTMLInputElement>("input[data-wb-opacity]");
@@ -77,13 +109,34 @@ export class WorldBuilderPanel {
       options.session.setLayerOptions({ opacity: Number(slider.value) });
       this.storeLayerOptions();
     });
-    const stored = readLayerOptions();
-    if (stored) options.session.setLayerOptions(stored);
-    options.session.onChange = () => { if (options.isShown()) this.update(); };
+    const layers = readLayerOptions();
+    if (layers) options.session.setLayerOptions(layers);
+    // The viewport changed the session (a handle pick or drop, a shortcut, an
+    // underlay load). A newly selected plan element is edited in the Plan tab.
+    options.session.onChange = () => {
+      const key = selectionKey(options.session.getView());
+      if (key !== null && key !== this.selectionKey) this.tab = "plan";
+      this.selectionKey = key;
+      if (frame.isOpen) this.update();
+    };
   }
 
   update(): void {
-    this.options.body.innerHTML = renderView(this.options.session.getView(), this.analysisText);
+    const { frame, session } = this.options;
+    const view = session.getView();
+    // Without a loaded recipe only Setup (Create Recipe) has anything to do.
+    const loaded = view.state === "loaded";
+    const tab = loaded ? this.tab : "setup";
+    frame.titleExtra.innerHTML = renderTitle(view);
+    frame.setTabs(TABS.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      disabled: entry.id !== "setup" && !loaded,
+      ...(entry.id !== "setup" && !loaded ? { title: "Önce bir recipe oluştur" } : {}),
+      badge: entry.id === "preview" && view.preview ? view.preview.drawn : null,
+    })), tab);
+    this.body.innerHTML = renderTab(tab, view, this.analysisText);
+    this.selectionKey = selectionKey(view);
   }
 
   private async run(action: string, stageId: string, id?: string, data: DOMStringMap = {}): Promise<void> {
@@ -141,12 +194,12 @@ export class WorldBuilderPanel {
   }
 
   private planControl(name: string): string {
-    return this.options.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-plan="${name}"]`)?.value.trim() ?? "";
+    return this.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-plan="${name}"]`)?.value.trim() ?? "";
   }
 
   /** The selected element's typed fields; an empty optional number clears it. */
   private readPlanFields(): PlanElementFields {
-    const value = (name: string) => this.options.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-field="${name}"]`)?.value.trim();
+    const value = (name: string) => this.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-field="${name}"]`)?.value.trim();
     const number = (name: string) => {
       const text = value(name);
       return text === undefined || text === "" ? null : Number(text);
@@ -175,7 +228,7 @@ export class WorldBuilderPanel {
   }
 
   private readReferenceForm(): WorldReference | null {
-    const field = (name: string) => this.options.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-ref="${name}"]`)?.value.trim() ?? "";
+    const field = (name: string) => this.body.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-wb-ref="${name}"]`)?.value.trim() ?? "";
     const number = (name: string) => Number(field(name));
     const image = field("image");
     const reference: WorldReference = {
@@ -211,16 +264,43 @@ function readLayerOptions(): Partial<RecipeLayerOptions> | null {
   }
 }
 
-function renderView(view: WorldBuilderView, analysisText: string): string {
-  return `<div class="world-builder-panel" data-testid="world-builder-panel">
-    ${renderRecipe(view)}
-    ${view.state === "loaded" ? renderLayers(view) : ""}
-    ${view.state === "loaded" ? renderReferenceImport(view, analysisText) : ""}
-    ${view.planEdit ? renderPlanEdit(view.planEdit) : ""}
-    ${view.state === "loaded" ? renderStages(view) : ""}
-    ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null, view.planEdit?.stranded ?? []) : ""}
-    ${view.preview ? renderPreview(view.preview.preview.items, view.preview.drawn) : ""}
-  </div>`;
+function selectionKey(view: WorldBuilderView): string | null {
+  const selection = view.planEdit?.selection;
+  return selection ? `${selection.kind}:${selection.id}` : null;
+}
+
+/** The title bar, shown over every tab: the recipe id and whether it is unsaved. */
+function renderTitle(view: WorldBuilderView): string {
+  const status = view.state === "loaded"
+    ? `${escapeHtml(view.recipeId ?? "")}${view.dirty ? ' <span class="world-builder-dirty">unsaved</span>' : ""}`
+    : view.state === "invalid" ? "not a recipe" : view.state === "loading" ? "loading…" : "no recipe";
+  return `<span data-testid="world-builder-recipe" data-state="${view.state}">${status}</span>`;
+}
+
+function renderTab(tab: WorldBuilderTab, view: WorldBuilderView, analysisText: string): string {
+  const loaded = view.state === "loaded";
+  // Plan editing and the stages wait for an import preview to be applied or cleared (Setup).
+  const pending = loaded && view.referenceImport.pending
+    ? '<div class="world-builder-notice" data-testid="world-builder-import-pending">Import preview pending — Apply or Clear in Setup</div>'
+    : "";
+  let content: string;
+  if (tab === "setup") {
+    content = `${renderRecipe(view)}
+      ${loaded ? `<div class="detail-section"><div class="detail-section-title">Reference Image</div>${renderReferenceForm(view.reference)}</div>` : ""}
+      ${loaded ? renderReferenceImport(view, analysisText) : ""}`;
+  } else if (tab === "plan") {
+    content = `${pending}${view.planEdit ? renderPlanEdit(view.planEdit) : ""}`;
+  } else if (tab === "stages") {
+    content = `${pending}${renderStages(view)}
+      ${view.lastPlan ? renderPlan(view.lastPlan, view.preview !== null, view.planEdit?.stranded ?? []) : ""}`;
+  } else if (tab === "preview") {
+    content = view.preview
+      ? renderPreview(view.preview.preview.items, view.preview.drawn)
+      : '<div class="world-builder-summary" data-testid="world-builder-preview-empty">No preview. A Dry Run in Stages draws its changes in the viewport and lists them here.</div>';
+  } else {
+    content = renderLayers(view);
+  }
+  return `<div class="world-builder-panel" data-testid="world-builder-panel" data-tab="${tab}">${content}</div>`;
 }
 
 function renderReferenceImport(view: WorldBuilderView, text: string): string {
@@ -258,7 +338,7 @@ function renderRecipe(view: WorldBuilderView): string {
   return `<div class="detail-section">
     <div class="detail-section-title">World Recipe</div>
     <div class="world-builder-summary">
-      <div data-testid="world-builder-recipe">${status}</div>
+      <div>${status}</div>
       <div class="world-builder-path">${escapeHtml(view.path)}</div>
       ${counts}
       ${profile}
@@ -302,7 +382,6 @@ function renderLayers(view: WorldBuilderView): string {
       <div data-testid="world-builder-layer-generated" data-cores="${options.generated ? counts.cores : 0}" data-parcels="${options.generated ? counts.parcels : 0}" data-pads="${options.generated ? counts.pads : 0}">Generated: ${generated} ${toggle("generated")}</div>
       <div class="world-builder-legend">${swatch("core", "core")} ${swatch("pad", "pad")} · parcels by land use</div>
     </div>
-    ${renderReferenceForm(view.reference)}
   </div>`;
 }
 
@@ -311,7 +390,7 @@ function renderReferenceForm(reference: WorldReference | null): string {
   const input = (name: string, current: string, type = "number", extra = "") =>
     `<input type="${type}" data-wb-ref="${name}" data-testid="world-builder-reference-${name}" value="${escapeHtml(current)}" ${extra}>`;
   const view = reference?.view ?? "topDown";
-  return `<div class="world-builder-reference">
+  return `<div class="world-builder-reference" data-testid="world-builder-reference">
     <label class="world-builder-row">Image ${input("image", reference?.image ?? "", "text", 'placeholder="assets/…/reference.png"')}</label>
     <label class="world-builder-row">Top-left x ${input("origin-x", value(reference?.origin[0]))} z ${input("origin-z", value(reference?.origin[1]))}</label>
     <label class="world-builder-row">Size x ${input("size-x", value(reference?.size[0]), "number", 'min="0"')} z ${input("size-z", value(reference?.size[1]), "number", 'min="0"')}</label>

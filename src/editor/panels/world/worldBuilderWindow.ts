@@ -13,6 +13,17 @@ export interface ForgeWindowGeometry {
   height: number;
 }
 
+/** One entry of the window's tab strip; the owner draws the active tab's body. */
+export interface ForgeWindowTab {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  /** Tooltip, e.g. why the tab is disabled. */
+  title?: string;
+  /** A small count beside the label; null or undefined hides it. */
+  badge?: number | null;
+}
+
 export interface ForgeWindowOptions {
   /** The element the window lives in and is clamped to (the editor root). */
   host: HTMLElement;
@@ -31,7 +42,8 @@ export interface ForgeWindowOptions {
 
 /**
  * A non-modal editor window: a title bar that drags it, a close button, a
- * resize handle at the bottom right and a body the owner fills. The viewport
+ * resize handle at the bottom right, an optional tab strip and a body the
+ * owner fills (the strip and title stay put while the body scrolls). The viewport
  * and the other panels stay usable behind it, and Escape is left to them.
  * Position and size are a per-viewer convenience kept in `localStorage`;
  * the window is always clamped inside its host so the title bar stays
@@ -42,7 +54,11 @@ export class ForgeWindow {
   /** Owner content beside the title (e.g. an id and an "unsaved" mark). */
   readonly titleExtra: HTMLElement;
   readonly body: HTMLElement;
+  /** A tab button was pressed (not called for a disabled one or the active one). */
+  onTabSelect: ((id: string) => void) | null = null;
+  private readonly tabStrip: HTMLElement;
   private geometry: ForgeWindowGeometry | null;
+  private activeTab: string | null = null;
 
   constructor(private readonly options: ForgeWindowOptions) {
     this.geometry = readGeometry(options.storageKey);
@@ -59,11 +75,20 @@ export class ForgeWindow {
         <span class="forge-window-title-extra" data-forge-window-title-extra></span>
         <button type="button" class="forge-window-close" data-forge-window-close aria-label="Close ${escapeHtml(options.title)}" title="Kapat">×</button>
       </header>
+      <div class="forge-window-tabs" data-forge-window-tabs role="tablist" hidden></div>
       <div class="forge-window-body" data-forge-window-body></div>
       <div class="forge-window-resize" data-forge-window-resize aria-hidden="true"></div>`;
     this.element = element;
     this.titleExtra = element.querySelector<HTMLElement>("[data-forge-window-title-extra]")!;
     this.body = element.querySelector<HTMLElement>("[data-forge-window-body]")!;
+    this.tabStrip = element.querySelector<HTMLElement>("[data-forge-window-tabs]")!;
+    this.tabStrip.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-forge-window-tab]");
+      const id = button?.dataset.forgeWindowTab;
+      if (!button || button.disabled || !id || id === this.activeTab) return;
+      writeStored(this.options.storageKey, { tab: id });
+      this.onTabSelect?.(id);
+    });
     element.querySelector("[data-forge-window-close]")!.addEventListener("click", () => this.close());
     this.bindDrag(element.querySelector<HTMLElement>("[data-forge-window-titlebar]")!, "move");
     this.bindDrag(element.querySelector<HTMLElement>("[data-forge-window-resize]")!, "resize");
@@ -85,6 +110,28 @@ export class ForgeWindow {
     if (this.element.hidden) return;
     this.element.hidden = true;
     this.options.onClose?.();
+  }
+
+  /** The last tab this viewer picked (browser storage), or null. */
+  storedTab(): string | null {
+    const tab = readStored(this.options.storageKey)?.tab;
+    return typeof tab === "string" ? tab : null;
+  }
+
+  /** Redraws the tab strip with `active` marked; the owner fills the body. A new active tab scrolls the body to the top. */
+  setTabs(tabs: readonly ForgeWindowTab[], active: string): void {
+    const prefix = this.options.testId ? `${this.options.testId}-tab-` : null;
+    this.tabStrip.hidden = tabs.length === 0;
+    this.tabStrip.innerHTML = tabs.map((tab) => {
+      const selected = tab.id === active;
+      const testId = prefix ? ` data-testid="${escapeHtml(prefix + tab.id)}"` : "";
+      const badge = tab.badge === null || tab.badge === undefined
+        ? ""
+        : `<span class="forge-window-tab-badge"${prefix ? ` data-testid="${escapeHtml(`${prefix}${tab.id}-badge`)}"` : ""}>${tab.badge}</span>`;
+      return `<button type="button" class="inspector-tab forge-window-tab${selected ? " active" : ""}" role="tab" aria-selected="${selected}" data-forge-window-tab="${escapeHtml(tab.id)}"${testId}${tab.disabled ? " disabled" : ""}${tab.title ? ` title="${escapeHtml(tab.title)}"` : ""}>${escapeHtml(tab.label)}${badge}</button>`;
+    }).join("");
+    if (this.activeTab !== null && this.activeTab !== active) this.body.scrollTop = 0;
+    this.activeTab = active;
   }
 
   dispose(): void {
@@ -167,7 +214,7 @@ export class ForgeWindow {
         handle.removeEventListener("pointermove", move);
         handle.removeEventListener("pointerup", end);
         handle.removeEventListener("pointercancel", end);
-        if (this.geometry) writeGeometry(this.options.storageKey, this.geometry);
+        if (this.geometry) writeStored(this.options.storageKey, { ...this.geometry });
       };
       handle.addEventListener("pointermove", move);
       handle.addEventListener("pointerup", end);
@@ -176,27 +223,30 @@ export class ForgeWindow {
   }
 }
 
-function readGeometry(key: string): ForgeWindowGeometry | null {
+/** The viewer's stored geometry and last tab; null when absent, unreadable or storage is blocked. */
+function readStored(key: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(localStorage.getItem(key) ?? "null") as unknown;
-    if (!value || typeof value !== "object") return null;
-    const stored = value as Record<string, unknown>;
-    const { x, y, width, height } = stored;
-    const finite = (entry: unknown): entry is number => typeof entry === "number" && Number.isFinite(entry);
-    return finite(x) && finite(y) && finite(width) && finite(height) ? { x, y, width, height } : null;
+    return value && typeof value === "object" ? value as Record<string, unknown> : null;
   } catch {
     return null;
   }
 }
 
-function writeGeometry(key: string, geometry: ForgeWindowGeometry): void {
+function readGeometry(key: string): ForgeWindowGeometry | null {
+  const stored = readStored(key);
+  if (!stored) return null;
+  const { x, y, width, height } = stored;
+  const finite = (entry: unknown): entry is number => typeof entry === "number" && Number.isFinite(entry);
+  return finite(x) && finite(y) && finite(width) && finite(height) ? { x, y, width, height } : null;
+}
+
+/** Merges `fields` into the stored record, so the geometry and the last tab keep each other. */
+function writeStored(key: string, fields: Record<string, unknown>): void {
   try {
-    // Keep fields the owner stores beside the geometry (e.g. the last tab).
-    const current = JSON.parse(localStorage.getItem(key) ?? "null") as unknown;
-    const base = current && typeof current === "object" ? current as Record<string, unknown> : {};
-    localStorage.setItem(key, JSON.stringify({ ...base, ...geometry }));
+    localStorage.setItem(key, JSON.stringify({ ...readStored(key), ...fields }));
   } catch {
-    // Storage may be unavailable (private window); the geometry then lasts this session.
+    // Storage may be unavailable (private window); the window then remembers nothing past this session.
   }
 }
 

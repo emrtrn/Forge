@@ -4279,11 +4279,7 @@ export class EditorUi {
       testId: "world-builder-window",
     });
     const frame = this.worldBuilderWindow;
-    this.worldBuilderPanel ??= new WorldBuilderPanel({
-      body: frame.body,
-      session: this.app.worldBuilder,
-      isShown: () => frame.isOpen,
-    });
+    this.worldBuilderPanel ??= new WorldBuilderPanel({ frame, session: this.app.worldBuilder });
     frame.open();
     this.worldBuilderPanel.update();
     // The hover menu would linger over the window (its close grace delay);

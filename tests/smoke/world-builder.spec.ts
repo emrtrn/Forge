@@ -11,7 +11,7 @@ import { createWorldRecipe, worldRecipePath, type WorldRecipe } from "../../engi
 import { generateWbTestValley, WB_TEST_VALLEY_LEVEL, WB_TEST_VALLEY_PROFILE, WB_TEST_VALLEY_TERRAIN } from "../../tools/world/wbTestValley";
 import { expect, test } from "./test";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
-import { openWorldBuilder, parkWorldBuilder } from "./worldBuilder";
+import { expectNoSidewaysOverflow, openWorldBuilder, parkWorldBuilder, showWorldBuilderTab, type WorldBuilderTab } from "./worldBuilder";
 
 // These isolated projects have no site icon. Chromium versions that request
 // one must not turn its unrelated 404 into an editor console-error failure.
@@ -83,11 +83,26 @@ test("World Builder window: dry run, apply as one undo step, save the recipe, up
 
   await bootEditor();
   await expect(page.getByTestId("world-builder-panel")).toContainText("Plan: 2 settlements, 1 landmarks");
+  // The Preview tab's badge waits for a dry run.
+  const previewBadge = page.getByTestId("world-builder-window-tab-preview-badge");
+  await expect(previewBadge).toHaveCount(0);
+  // The window opens at its default 520 × 640 and no tab needs a sideways scroll there.
+  const frame = await page.getByTestId("world-builder-window").boundingBox();
+  expect([frame?.width, frame?.height]).toEqual([520, 640]);
+  for (const tab of ["plan", "stages", "preview", "layers", "setup"] satisfies WorldBuilderTab[]) {
+    await showWorldBuilderTab(page, tab);
+    await expectNoSidewaysOverflow(page);
+  }
 
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+3 added · ~0 updated · −0 removed · 0 unchanged");
   await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+  // A dry run stays in Stages; the Preview badge counts what the viewport drew.
+  await expect(page.getByTestId("world-builder-panel")).toHaveAttribute("data-tab", "stages");
+  await expect(previewBadge).toHaveText("3");
   // T10 preview: the viewport layer drew all three (data-drawn is the overlay's own count), listed by change.
+  await showWorldBuilderTab(page, "preview");
   const preview = page.getByTestId("world-builder-preview");
   await expect(preview).toHaveAttribute("data-drawn", "3");
   await expect(page.getByTestId("world-builder-preview-added")).toHaveAttribute("data-count", "3");
@@ -97,16 +112,20 @@ test("World Builder window: dry run, apply as one undo step, save the recipe, up
   await expect(page.getByTestId("editor-status")).toContainText("Focused the Plan blockout preview");
   await page.getByTestId("world-builder-preview-clear").click();
   await expect(preview).toHaveCount(0);
+  await expect(page.getByTestId("world-builder-preview-empty")).toBeVisible();
+  await expect(previewBadge).toHaveCount(0);
+  await showWorldBuilderTab(page, "stages");
   await expect(page.getByTestId("world-builder-report")).toBeVisible();
   await page.locator('[data-outliner-tab="scene"]').click();
   await expect(markerRows()).toHaveCount(0);
   await openWorldBuilder(page);
 
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
-  await expect(preview).toHaveAttribute("data-drawn", "3");
+  await expect(previewBadge).toHaveText("3");
   await page.getByTestId("world-builder-apply-planBlockout").click();
-  await expect(preview).toHaveCount(0);
+  await expect(previewBadge).toHaveCount(0);
   await expect(page.getByTestId("world-builder-recipe")).toContainText("unsaved");
+  await showWorldBuilderTab(page, "setup");
   await expect(page.getByTestId("world-builder-panel")).toContainText("3 generated objects");
   await page.locator('[data-outliner-tab="scene"]').click();
   await expect(markerRows()).toHaveCount(3);
@@ -114,11 +133,11 @@ test("World Builder window: dry run, apply as one undo step, save the recipe, up
   await page.getByTestId("editor-undo").click();
   await expect(markerRows()).toHaveCount(0);
   // A history step drops a preview planned against the level before it.
-  await openWorldBuilder(page);
+  await openWorldBuilder(page, "stages");
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
-  await expect(preview).toHaveAttribute("data-drawn", "3");
+  await expect(previewBadge).toHaveText("3");
   await page.getByTestId("editor-redo").click();
-  await expect(preview).toHaveCount(0);
+  await expect(previewBadge).toHaveCount(0);
   await page.locator('[data-outliner-tab="scene"]').click();
   await expect(markerRows()).toHaveCount(3);
 
@@ -135,6 +154,7 @@ test("World Builder window: dry run, apply as one undo step, save the recipe, up
 
   await bootEditor();
   await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(page.getByTestId("world-builder-report")).toContainText("Up to date");
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~0 updated · −0 removed · 3 unchanged");
@@ -215,6 +235,7 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
   await bootEditor();
   await expect(page.getByTestId("world-builder-panel")).toContainText("3 road nodes, 2 road edges");
 
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-roads").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+2 added · ~0 updated · −0 removed · 0 unchanged");
   await expect(page.getByTestId("world-builder-report")).toContainText("no region profile road spec for local");
@@ -222,6 +243,7 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
 
   await page.getByTestId("world-builder-apply-roads").click();
   await expect(page.getByTestId("world-builder-recipe")).toContainText("unsaved");
+  await showWorldBuilderTab(page, "setup");
   await expect(page.getByTestId("world-builder-panel")).toContainText("2 generated objects");
   expect(await save()).toEqual(["recipe", "terrain", "level"]);
   expect(await savedSplineIds()).toEqual(["spline-1", ...ROADS]);
@@ -248,6 +270,7 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
   expect(await savedSplineIds()).toEqual(["spline-1", ...ROADS]);
 
   await bootEditor();
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-roads").click();
   await expect(page.getByTestId("world-builder-report")).toContainText("Up to date");
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~0 updated · −0 removed · 2 unchanged");
@@ -334,6 +357,7 @@ test("World Builder village: the settlement chain places coloured buildings and 
 
   await bootEditor();
   await expect(page.getByTestId("world-builder-panel")).toContainText("Neutral test profile (loaded)");
+  await showWorldBuilderTab(page, "stages");
   await expect(page.getByTestId("world-builder-apply-pads")).toBeDisabled();
   for (const stage of VILLAGE_STAGES) {
     await page.getByTestId(`world-builder-apply-${stage}`).click();
@@ -342,6 +366,7 @@ test("World Builder village: the settlement chain places coloured buildings and 
   }
   await expect(page.getByTestId("world-builder-apply-pads")).toBeEnabled();
   // The recipe layer draws the village's grown core and its parcels (the overlay's own counts).
+  await showWorldBuilderTab(page, "layers");
   const generated = page.getByTestId("world-builder-layer-generated");
   await expect(generated).toHaveAttribute("data-cores", "1");
   expect(Number(await generated.getAttribute("data-parcels"))).toBeGreaterThan(5);
@@ -349,6 +374,7 @@ test("World Builder village: the settlement chain places coloured buildings and 
   await expect(generated).toHaveAttribute("data-cores", "0");
   await page.getByTestId("world-builder-layer-toggle-generated").click();
   await expect(generated).toHaveAttribute("data-cores", "1");
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-apply-pads").click();
   // The bake is async (tile demand); wait for it, or fences would read the ground before it.
   await expect(page.getByTestId("editor-status")).toContainText("Pads applied", { timeout: 30_000 });
@@ -389,6 +415,7 @@ test("World Builder village: the settlement chain places coloured buildings and 
   // re-sample, but land use ranks low ground by its street's spline level, buildings stand on their own pads and
   // furniture at its road's spline level; the fences already follow the baked ground.
   await bootEditor();
+  await showWorldBuilderTab(page, "stages");
   for (const stage of ["landUse", "buildings", "furniture", "fences"]) {
     await page.getByTestId(`world-builder-dry-run-${stage}`).click();
     await expect(page.getByTestId("world-builder-report")).toContainText("Up to date");
@@ -441,6 +468,7 @@ test("World Builder reference: the underlay and the plan layer draw, switch, and
   await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_reference", { timeout: 30_000 });
   await expect(page.getByTestId("world-builder-panel")).not.toContainText("Load issues");
 
+  await showWorldBuilderTab(page, "layers");
   const underlay = page.getByTestId("world-builder-layer-underlay");
   const plan = page.getByTestId("world-builder-layer-plan");
   await expect(underlay).toHaveAttribute("data-state", "shown", { timeout: 15_000 });
@@ -456,15 +484,18 @@ test("World Builder reference: the underlay and the plan layer draw, switch, and
   await expect(plan).toHaveAttribute("data-drawn", "8");
   await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
 
-  // The reference is a recipe edit: set from the form, one undo step.
+  // The reference is a recipe edit: set from the form (Setup), one undo step.
+  await showWorldBuilderTab(page, "setup");
   await page.getByTestId("world-builder-reference-size-x").fill("120");
   await page.getByTestId("world-builder-reference-view").selectOption("perspective");
   await page.getByTestId("world-builder-reference-set").click();
   await expect(page.getByTestId("world-builder-recipe")).toContainText("unsaved");
-  await expect(underlay).toHaveAttribute("data-state", "perspective");
   await expect(page.getByTestId("world-builder-reference-size-x")).toHaveValue("120");
+  await showWorldBuilderTab(page, "layers");
+  await expect(underlay).toHaveAttribute("data-state", "perspective");
   await page.getByTestId("editor-undo").click();
   await expect(underlay).toHaveAttribute("data-state", "shown");
+  await showWorldBuilderTab(page, "setup");
   await expect(page.getByTestId("world-builder-reference-size-x")).toHaveValue("80");
   expect(errors).toEqual([]);
 });
@@ -498,13 +529,15 @@ test("World Builder plan corrections: panel fields, viewport handle drag, add an
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/?editor&worldBuilderCorrections=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-  await openWorldBuilder(page);
+  await openWorldBuilder(page, "layers");
   await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_reference", { timeout: 30_000 });
+  await parkWorldBuilder(page);
   const plan = page.getByTestId("world-builder-layer-plan");
   const recipeStatus = page.getByTestId("world-builder-recipe");
   await expect(plan).toHaveAttribute("data-low", "1");
 
   // Panel: a typed field corrects the low-confidence hamlet; it turns manual and stops being red.
+  await showWorldBuilderTab(page, "plan");
   const hamlet = page.getByTestId("world-builder-plan-settlement-hamlet");
   await expect(hamlet).toHaveAttribute("data-source", "reference");
   await hamlet.click();
@@ -512,11 +545,13 @@ test("World Builder plan corrections: panel fields, viewport handle drag, add an
   await page.getByTestId("world-builder-plan-field-population").fill("40");
   await page.getByTestId("world-builder-plan-field-population").press("Enter");
   await expect(page.getByTestId("world-builder-plan-settlement-hamlet")).toHaveAttribute("data-source", "manual");
-  await expect(plan).toHaveAttribute("data-low", "0");
   await expect(recipeStatus).toContainText("unsaved");
+  await showWorldBuilderTab(page, "layers");
+  await expect(plan).toHaveAttribute("data-low", "0");
   await page.getByTestId("editor-undo").click();
-  await expect(page.getByTestId("world-builder-plan-settlement-hamlet")).toHaveAttribute("data-source", "reference");
   await expect(plan).toHaveAttribute("data-low", "1");
+  await showWorldBuilderTab(page, "plan");
+  await expect(page.getByTestId("world-builder-plan-settlement-hamlet")).toHaveAttribute("data-source", "reference");
 
   // Viewport: Edit in Viewport puts a handle on every movable point; from the top view, drag one in view.
   await page.locator("[data-camera-button]").hover();
@@ -526,6 +561,12 @@ test("World Builder plan corrections: panel fields, viewport handle drag, add an
   const handles = page.getByTestId("world-builder-plan-handles");
   await expect(handles).toHaveAttribute("data-editing", "true");
   await expect(handles).toHaveAttribute("data-handles", String(HANDLE_OWNERS.length));
+  // Away from the Plan tab, a handle picked in the viewport brings it back (its fields are there).
+  await page.getByTestId("world-builder-plan-settlement-hamlet").click();
+  await page.locator("#game-canvas").hover({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("world-builder-plan-selection")).toHaveCount(0);
+  await showWorldBuilderTab(page, "layers");
   // Project the handles with the camera of the next frame that draws them.
   const target = await page.evaluate(() => new Promise<{ index: number; x: number; y: number } | null>((done) => {
     const w = window as unknown as { __wbRenderers: any[] };
@@ -564,6 +605,7 @@ test("World Builder plan corrections: panel fields, viewport handle drag, add an
   await page.mouse.move(target!.x + 30, target!.y + 10, { steps: 4 });
   await page.mouse.move(target!.x + 60, target!.y + 20, { steps: 4 });
   await page.mouse.up();
+  await expect(page.getByTestId("world-builder-panel")).toHaveAttribute("data-tab", "plan");
   await expect(page.getByTestId("world-builder-plan-selection")).toHaveAttribute("data-id", id!);
   await expect(page.getByTestId(`world-builder-plan-${kind}-${id}`)).toHaveAttribute("data-source", "manual");
   await page.getByTestId("editor-undo").click();
@@ -618,6 +660,7 @@ test("World Builder test valley: the generated mountain level opens, its terrain
   await expect(page.getByTestId("world-builder-panel")).toContainText("Neutral test profile (loaded)");
 
   // The terrain is loaded: the track's planned line is too steep and is routed over it.
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-roads").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+3 added · ~0 updated · −0 removed · 0 unchanged");
   await expect(page.getByTestId("world-builder-report")).toContainText("road hamlet-track: the planned line climbs");
@@ -630,7 +673,9 @@ test("World Builder test valley: the generated mountain level opens, its terrain
   await expect(page.getByTestId("world-builder-stranded")).toHaveAttribute("data-count", "1");
   await page.getByTestId("world-builder-node-to-site-hamlet-end").click();
   await expect(page.getByTestId("world-builder-stranded")).toHaveCount(0);
+  await showWorldBuilderTab(page, "plan");
   await expect(page.getByTestId("world-builder-plan-node-hamlet-end")).toHaveAttribute("data-source", "manual");
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-roads").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~1 updated · −0 removed · 2 unchanged");
   expect(errors).toEqual([]);
@@ -666,7 +711,7 @@ test("World Builder water and regions: shape handles, point edits, minimum count
   const boot = async () => {
     await page.goto(`/?editor&wbShapes=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await openWorldBuilder(page);
+    await openWorldBuilder(page, "plan");
     await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_shapes", { timeout: 30_000 });
     await parkWorldBuilder(page);
   };
@@ -776,6 +821,7 @@ test("World Builder water and regions: shape handles, point edits, minimum count
   await woods.click();
   await expect(page.getByTestId("world-builder-plan-field-kind")).toHaveValue("forest.conifer");
   await expect(page.getByTestId("world-builder-plan-point-z-0")).toHaveValue("-4");
+  await expectNoSidewaysOverflow(page);
   await page.getByTestId("world-builder-plan-selection").scrollIntoViewIfNeeded();
   const screenshot = testInfo.outputPath("water-and-region-editing.png");
   await page.screenshot({ path: screenshot });
@@ -802,7 +848,7 @@ test("World Builder reference import: preview, guarded merge, undo and persisten
   const boot = async () => {
     await page.goto(`/?editor&referenceImport=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await openWorldBuilder(page);
+    await openWorldBuilder(page, "plan");
     await expect(page.getByTestId("world-builder-recipe")).toContainText(recipe.recipeId, { timeout: 30_000 });
   };
   const save = async () => {
@@ -815,6 +861,7 @@ test("World Builder reference import: preview, guarded merge, undo and persisten
   await page.getByTestId("world-builder-plan-delete").click();
   await save();
   await boot();
+  await showWorldBuilderTab(page, "setup");
   const meta = { source: "reference", observed: true, confidence: 0.8 };
   const polygon = [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3]];
   const analysis = JSON.stringify({ schemaVersion: 1, coordinateSpace: "reference-normalized", referenceImage: REFERENCE_IMAGE,
@@ -826,7 +873,15 @@ test("World Builder reference import: preview, guarded merge, undo and persisten
   const counts = page.getByTestId("world-builder-import-counts");
   await expect(counts).toHaveText("+1 added · ~1 updated · 3 kept · 0 unchanged");
   await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+  // A pending import says so where it holds the work back.
+  await showWorldBuilderTab(page, "stages");
+  await expect(page.getByTestId("world-builder-import-pending")).toBeVisible();
   await expect(page.getByTestId("world-builder-apply-planBlockout")).toBeDisabled();
+  await showWorldBuilderTab(page, "plan");
+  await expect(page.getByTestId("world-builder-import-pending")).toBeVisible();
+  // Leaving Setup keeps the analysis JSON.
+  await showWorldBuilderTab(page, "setup");
+  await expect(page.getByTestId("world-builder-import-json")).toHaveValue(analysis);
   expect((await readJson<WorldRecipe>(worldRecipePath(levelPath))).plan.regions).toHaveLength(1);
   const screenshot = testInfo.outputPath("reference-import-preview.png");
   await page.locator("[data-camera-button]").hover();
@@ -842,6 +897,8 @@ test("World Builder reference import: preview, guarded merge, undo and persisten
   await expect(page.getByTestId("world-builder-import-json")).toHaveValue(analysis);
   await page.getByTestId("world-builder-import-preview").click();
   await page.getByTestId("world-builder-import-apply").click();
+  await showWorldBuilderTab(page, "plan");
+  await expect(page.getByTestId("world-builder-import-pending")).toHaveCount(0);
   const mountain = page.getByTestId("world-builder-plan-region-mountain");
   await expect(mountain).toHaveCount(1);
   await page.getByTestId("editor-undo").click();
@@ -856,6 +913,7 @@ test("World Builder reference import: preview, guarded merge, undo and persisten
   expect(saved.ownership.deletedPlanElements).toContainEqual({ kind: "water", id: "creek" });
   expect(saved.plan.roadGraph.nodes[0]!.position).toEqual([-20, -20]);
   await boot();
+  await showWorldBuilderTab(page, "setup");
   await page.getByTestId("world-builder-import-json").fill(analysis);
   await page.getByTestId("world-builder-import-preview").click();
   await expect(counts).toHaveText("+0 added · ~0 updated · 3 kept · 2 unchanged");

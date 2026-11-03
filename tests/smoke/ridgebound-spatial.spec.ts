@@ -6,7 +6,7 @@ import { normalizeWorldRecipe, type WorldRecipe } from "../../engine/worldbuilde
 import { buildRidgeboundTerrainPreview, RIDGEBOUND_HEIGHTMAP_SHA256, RIDGEBOUND_TERRAIN_LEVEL, RIDGEBOUND_TERRAIN_RECIPE, RIDGEBOUND_TERRAIN_REF } from "../../tools/world/ridgeboundTerrain";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
 import { expect, test } from "./test";
-import { openWorldBuilder } from "./worldBuilder";
+import { openWorldBuilder, showWorldBuilderTab } from "./worldBuilder";
 
 test("Ridgebound metric master: preview, blockout undo, save/reload and repeat without replacing authored levels", async ({ page, request }, testInfo) => {
   test.setTimeout(180_000);
@@ -40,9 +40,11 @@ test("Ridgebound metric master: preview, blockout undo, save/reload and repeat w
   };
   await boot();
   await expect(page.getByTestId("world-builder-panel")).toContainText("2 settlements, 7 landmarks");
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+11 added · ~0 updated · −0 removed · 0 unchanged");
   await expect(page.getByTestId("world-builder-recipe")).not.toContainText("unsaved");
+  await showWorldBuilderTab(page, "preview");
   await page.getByTestId("world-builder-preview-focus").click();
   await page.locator("[data-camera-button]").hover();
   await page.locator('[data-camera-view="top"]').click();
@@ -77,7 +79,9 @@ test("Ridgebound metric master: preview, blockout undo, save/reload and repeat w
   expect(visible.maxXY).toBeLessThan(1);
   expect(visible.maxZ).toBeLessThan(1);
   await page.screenshot({ path: testInfo.outputPath("ridgebound-plan-preview.png") });
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-apply-planBlockout").click();
+  await showWorldBuilderTab(page, "setup");
   await expect(page.getByTestId("world-builder-panel")).toContainText("11 generated objects");
   await page.getByTestId("editor-undo").click();
   await expect(page.getByTestId("world-builder-panel")).toContainText("0 generated objects");
@@ -90,6 +94,7 @@ test("Ridgebound metric master: preview, blockout undo, save/reload and repeat w
   expect(recipe.plan).toEqual(preview.recipe.plan);
   expect(recipe.plan.landmarks.some(p => p.id === "POI-07")).toBe(false);
   await boot();
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~0 updated · −0 removed · 11 unchanged");
   expect(errors).toEqual([]);
@@ -124,9 +129,11 @@ test("Ridgebound source terrain: 24 native tiles, grounded markers and save/relo
     await expect(page.getByTestId("world-builder-recipe")).toContainText("ridgebound_p1_terrain", { timeout: 30_000 });
   };
   await boot();
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+11 added · ~0 updated · −0 removed · 0 unchanged");
   await expect(page.getByTestId("world-builder-report")).not.toContainText("off the terrain");
+  await showWorldBuilderTab(page, "preview");
   await page.getByTestId("world-builder-preview-focus").click();
   await page.mouse.move(900, 450);
   // Focus frames the markers, while the crop deliberately includes a surrounding margin.
@@ -140,6 +147,7 @@ test("Ridgebound source terrain: 24 native tiles, grounded markers and save/relo
   for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 600);
   await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => done())));
   await page.screenshot({ path: testInfo.outputPath("ridgebound-terrain-top.png") });
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-apply-planBlockout").click();
   const save = page.waitForResponse(r => r.url().endsWith("/__save-worldrecipe") && r.request().method() === "POST");
   await page.getByTestId("editor-save").click();
@@ -153,6 +161,7 @@ test("Ridgebound source terrain: 24 native tiles, grounded markers and save/relo
       .toBe(createHash("sha256").update(body).digest("hex"));
   }
   await boot();
+  await showWorldBuilderTab(page, "stages");
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(page.getByTestId("world-builder-counts")).toHaveText("+0 added · ~0 updated · −0 removed · 11 unchanged");
   expect(errors).toEqual([]);

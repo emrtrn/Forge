@@ -1,11 +1,36 @@
 import { expect, type Page } from "./test";
 
-/** Add Actor → Terrain → World Builder…: opens the World Builder window (or keeps it open). */
-export async function openWorldBuilder(page: Page): Promise<void> {
+export type WorldBuilderTab = "setup" | "plan" | "stages" | "preview" | "layers";
+
+/**
+ * Add Actor → Terrain → World Builder…: opens the World Builder window (or
+ * keeps it open), then shows `tab` when given. A tab other than Setup waits
+ * for the recipe to load (only Setup is enabled before).
+ */
+export async function openWorldBuilder(page: Page, tab?: WorldBuilderTab): Promise<void> {
   await page.getByTestId("add-actor-button").hover();
   await page.locator("[data-add-actor-popover]").getByRole("button", { name: /^Terrain/ }).hover();
   await page.locator('[data-add-categories] [data-add-key="worldBuilder"]').click();
   await expect(page.getByTestId("world-builder-window")).toBeVisible();
+  if (tab) await showWorldBuilderTab(page, tab);
+}
+
+/** Switches the open World Builder window to `tab`. */
+export async function showWorldBuilderTab(page: Page, tab: WorldBuilderTab): Promise<void> {
+  const button = page.getByTestId(`world-builder-window-tab-${tab}`);
+  await expect(button).toBeEnabled({ timeout: 30_000 });
+  await button.click();
+  await expect(page.getByTestId("world-builder-panel")).toHaveAttribute("data-tab", tab);
+}
+
+/**
+ * The active tab fits the window's width: nothing in the body (which clips
+ * sideways) is wider than it, so no row is cut off or needs a sideways scroll.
+ */
+export async function expectNoSidewaysOverflow(page: Page): Promise<void> {
+  const widths = await page.getByTestId("world-builder-window").locator("[data-forge-window-body]")
+    .evaluate((body) => ({ scroll: body.scrollWidth, client: body.clientWidth }));
+  expect(widths.scroll, "World Builder tab content wider than the window").toBeLessThanOrEqual(widths.client);
 }
 
 /**

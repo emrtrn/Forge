@@ -853,7 +853,7 @@
   position: absolute;
   z-index: 45;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   box-sizing: border-box;
   min-width: 0;
   background: #111820;
@@ -879,7 +879,13 @@
 .forge-window-title { color: #f5f8fb; font-size: 12px; font-weight: 700; }
 .forge-window-title-extra { flex: 1; min-width: 0; overflow: hidden; color: var(--forge-text-secondary); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
 .editor-shell .forge-window-close { width: 26px; height: 26px; padding: 0; border: 0; background: transparent; font-size: 16px; line-height: 1; cursor: pointer; }
-.forge-window-body { min-height: 0; padding: 10px 12px 18px; overflow-x: hidden; overflow-y: auto; }
+/* Tab strip: the inspector tab look, a little shorter; a hidden strip leaves its row empty. */
+.forge-window-tabs { display: flex; min-width: 0; padding: 0 6px; overflow-x: auto; border-bottom: 1px solid var(--forge-border); background: #121922; }
+.forge-window-tabs[hidden] { display: none; }
+.editor-shell .forge-window-tab { flex: 0 0 auto; height: 34px; padding: 0 10px; }
+.editor-shell .forge-window-tab:disabled { opacity: 0.4; cursor: default; }
+.forge-window-tab-badge { display: inline-block; min-width: 16px; margin-left: 6px; padding: 0 5px; border-radius: 8px; background: var(--forge-accent); color: #ffffff; font-size: 10px; line-height: 16px; text-align: center; box-sizing: border-box; }
+.forge-window-body { grid-row: 3; min-height: 0; padding: 10px 12px 18px; overflow-x: hidden; overflow-y: auto; }
 .forge-window-resize {
   position: absolute;
   right: 0;
@@ -903,6 +909,7 @@
 .world-builder-list { margin: 2px 0 0; padding-left: 16px; }
 .world-builder-dirty { color: #ff9b52; font-size: 11px; }
 .world-builder-error { color: #ff7a7a; }
+.world-builder-notice { padding: 6px 8px; border: 1px solid rgba(255, 155, 82, 0.4); border-radius: 4px; color: #ffb27a; font-size: 12px; }
 /* Dry run preview (T10); swatch colours match WorldBuilderPreviewOverlay's PREVIEW_COLORS. */
 .world-builder-change { all: unset; cursor: pointer; color: var(--forge-text); }
 .world-builder-change:hover, .world-builder-change:focus-visible { text-decoration: underline; }

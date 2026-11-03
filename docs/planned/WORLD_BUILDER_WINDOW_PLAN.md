@@ -1,7 +1,7 @@
 # World Builder Penceresi Planı
 
-> Durum: **D1 tamam** (2026-11-03); sırada D2 (sekmeler). §6 varsayılanlarıyla
-> gidildi.
+> Durum: **D1 + D2 tamam** (2026-11-03); sırada D3 (yerleşim cilası). §6
+> varsayılanlarıyla gidildi.
 >
 > Sorun (kullanıcı): World Builder paneli çok sıkışık.
 >
@@ -196,16 +196,27 @@ Uygulamada öğrenilenler:
 
 ### D2 — Sekmeler
 
-- [ ] Sekme şeridi; içerik §2.3 tablosuna göre dağıtılır.
-- [ ] Başlıkta recipe kimliği + unsaved.
-- [ ] Recipe yokken yalnız Setup etkin; Preview rozeti; import bekliyor
+- [x] Sekme şeridi; içerik §2.3 tablosuna göre dağıtılır.
+- [x] Başlıkta recipe kimliği + unsaved.
+- [x] Recipe yokken yalnız Setup etkin; Preview rozeti; import bekliyor
       uyarısı; viewport'tan plan seçimi → Plan sekmesi.
-- [ ] Son sekme `localStorage`'da.
-- [ ] Smoke yardımcısına `openWorldBuilder(page, tab)` parametresi. Her test
+- [x] Son sekme `localStorage`'da.
+- [x] Smoke yardımcısına `openWorldBuilder(page, tab)` parametresi. Her test
       kullandığı öğeden önce doğru sekmeye geçer.
 
 Kabul: smoke'lar yeşil. Pencere 520 × 640'ta hiçbir sekmede yatay kaydırma
-göstermiyor.
+göstermiyor. (17/17 world-builder + ridgebound + add-actor-menu, 2026-11-03;
+`expectNoSidewaysOverflow` her sekmeyi ve 15c'nin nokta satırlarını ölçer.)
+
+Uygulamada:
+
+- Sekme şeridi çerçevede (`ForgeWindow.setTabs`, `storedTab`); son sekme
+  geometriyle aynı `localStorage` kaydında. Testid'ler
+  `world-builder-window-tab-<id>` ve `…-preview-badge`.
+- `world-builder-recipe` testid'i başlığa taşındı (her sekmede görünür).
+  `world-builder-panel` yalnız aktif sekmenin içeriği, `data-tab` taşır.
+- Plan sekmesine geçiş yalnız oturumun `onChange`'inde (viewport tutamacı,
+  klavye); panelin kendi eylemleri ve undo/redo sekmeyi değiştirmez.
 
 ### D3 — Yerleşim cilası
 

@@ -20,6 +20,9 @@ import {
 import type { LayoutLandscape } from "../../engine/scene/layout";
 import { EditorSelectionOutline } from "../../src/scene/editorSelectionOutline";
 import { SunCascadeShadow } from "../../engine/render-three/sunCascadeShadow";
+import { normalizeForgeMaterialDef } from "../../engine/assets/material";
+import { validateForgeMaterialDef } from "../../tools/saveValidator";
+import { createTerrainLayerArray } from "../../engine/render-three/terrain/terrainLayerArray";
 
 type Check = (label: string, fn: () => void) => void;
 
@@ -120,6 +123,73 @@ function uniformsOf(terrain: TerrainRenderer): TerrainUniforms {
 
 /** Cloud renderer cases ported to the streaming/deformation renderer retained at integration. */
 export function registerTerrainRenderTests(check: Check): void {
+  check("terrain detail: settings survive save and normalization without changing material UV", () => {
+    const material = normalizeForgeMaterialDef({ name: "Detail", uvTiling: { x: 2, y: 3 }, terrainDetail: {
+      normalTexture: "tracks", atlasSize: 2, uvTiling: { x: .8, y: 1.2 }, strength: .7,
+      coverage: .55, baseNormalStrength: .35, patchSize: 6, direction: 30, directionVariation: 12, seed: 37, roughness: .4,
+    } });
+    const saved = validateForgeMaterialDef(material);
+    assert.deepEqual(saved.terrainDetail, material.terrainDetail);
+    assert.deepEqual(normalizeForgeMaterialDef(saved), material);
+    assert.deepEqual(saved.uvTiling, { x: 2, y: 3 });
+    assert.equal(material.terrainDetail!.baseNormalStrength,.35);
+    assert.equal(normalizeForgeMaterialDef({terrainDetail:{normalTexture:"legacy-detail"}}).terrainDetail!.baseNormalStrength,1);
+    assert.equal(normalizeForgeMaterialDef({}).terrainDetail, undefined);
+    for (const invalid of [NaN, Infinity, -.1, 1.1]) {
+      assert.throws(() => validateForgeMaterialDef({ ...material, terrainDetail: { ...material.terrainDetail, coverage: invalid } }), /coverage/);
+    }
+    assert.throws(() => validateForgeMaterialDef({ ...material, terrainDetail: { normalTexture: null } }), /normalTexture/);
+    assert.throws(() => validateForgeMaterialDef({ ...material, terrainDetail: { ...material.terrainDetail, atlasSize: 3 } }), /atlasSize/);
+    assert.throws(() => validateForgeMaterialDef({ ...material, terrainDetail: { ...material.terrainDetail, baseNormalStrength: 2.1 } }), /baseNormalStrength/);
+  });
+
+  check("terrain detail: atlas variants become isolated repeatable array slices, including flipped sources", () => {
+    for (const flipY of [false, true]) {
+      const atlas = rgbaTexture(4, 4, [0,0,0,255]);
+      for (let y=0; y<4; y++) for (let x=0; x<4; x++) {
+        atlas.image.data[(y*4+x)*4] = (Math.floor(y/2)*2+Math.floor(x/2)+1)*40;
+      }
+      atlas.flipY = flipY;
+      const base = rgbaTexture(2,2,[128,128,255,255]);
+      const array = createTerrainLayerArray([base,atlas],true,[1,2]);
+      assert.deepEqual(array.index,[0,1]);
+      assert.equal(array.texture!.image.depth,5);
+      assert.equal(array.texture!.image.width,2);
+      const pixels = array.texture!.image.data!;
+      const reds = flipY ? [120,160,40,80] : [40,80,120,160];
+      reds.forEach((red,variant) => {
+        for (let pixel=0; pixel<4; pixel++) assert.equal(pixels[(variant+1)*16+pixel*4],red);
+      });
+      array.texture!.dispose(); atlas.dispose(); base.dispose();
+    }
+  });
+
+  check("terrain detail: Landscape binds optional detail with material UV and no additional sampler", () => {
+    const { def,tile } = reliefTerrain();
+    const atlas = rgbaTexture(4,4,[128,128,255,255]);
+    const detail = normalizeForgeMaterialDef({ terrainDetail: { normalTexture: "atlas", atlasSize: 2, seed: 37, direction: 30 } }).terrainDetail!;
+    const group = createWorldTerrainObject({ ...resolveLandscape({ id: "detail", name: "Detail", position: [0,0,0] }),
+      document: { def,tiles: new Map([["0_0",tile]]) },
+      layerTextures: [{ id: "layer0",texture: null,color: "#ffffff",tiling: 4,uvTiling: {x:2,y:3},detailNormalTexture: atlas,terrainDetail: detail }],
+    });
+    const terrain = terrainRendererOf(group.children[0]!)!;
+    const uniforms = uniformsOf(terrain);
+    assert.deepEqual((uniforms.uLayerScale!.value as Vector2[])[0]!.toArray(),[.25,.375]);
+    assert.deepEqual(uniforms.uLayerNormalIndex!.value,[-1,-1,-1,-1,-1,-1,-1,-1]);
+    assert.deepEqual(uniforms.uLayerDetailIndex!.value,[0,-1,-1,-1,-1,-1,-1,-1]);
+    assert.equal((uniforms.uLayerNormalArray!.value as { image: { depth: number } }).image.depth,4);
+    assert.equal(terrain.litFragmentSamplers,terrainLitFragmentSamplers(false,true));
+    const material = (terrain as any).materials.material;
+    const shader = { vertexShader: ShaderLib.standard.vertexShader,fragmentShader: ShaderLib.standard.fragmentShader,uniforms: {} } as WebGLProgramParametersWithUniforms;
+    material.onBeforeCompile(shader,{} as WebGLRenderer);
+    assert.match(material.customProgramCacheKey(),/-n1-d1$/);
+    assert.match(shader.fragmentShader,/textureGrad\(uLayerNormalArray/);
+    assert.match(shader.fragmentShader,/transpose\(rotation\)\*n.xy/);
+    assert.match(shader.fragmentShader,/forgeW0\[0\] > .001 && uLayerDetailIndex/);
+    assert.equal((shader.fragmentShader.match(/^uniform\s+(?:\w+\s+)?sampler\w*\s/gm) ?? []).length,terrain.litFragmentSamplers);
+    disposeLandscapeObject(group); atlas.dispose();
+  });
+
   check("terrain render source: a sparse World Terrain retains world queries, holes and invalidated bounds", () => {
     const def = worldDef(3, 2, 6);
     const tiles = new Map([["0_0", createFlatTerrainTile(def, 0, 0, 4)], ["2_1", createFlatTerrainTile(def, 2, 1, -3)]]);
@@ -283,6 +353,23 @@ export function registerTerrainRenderTests(check: Check): void {
     assert.equal(uniforms.uTerrainActiveLayer!.value, 5);
     assert.equal((uniforms.uLayerColors!.value as Color[])[0]!.getHexString(), "123456");
     terrain.dispose();
+  });
+
+  check("terrain paint: material UV axes multiply default and authored world repeat scales", () => {
+    const { def, tile } = reliefTerrain();
+    const actor: LayoutLandscape = { id: "uv-probe", name: "UV probe", position: [0, 0, 0] };
+    const group = createWorldTerrainObject({
+      ...resolveLandscape(actor), document: { def, tiles: new Map([["0_0", tile]]) },
+      layerTextures: [
+        { id: "layer0", texture: null, color: "#ffffff", tiling: 4 },
+        { id: "layer1", texture: null, color: "#ffffff", tiling: 4, uvTiling: { x: 2, y: 0.5 } },
+        { id: "layer2", texture: null, color: "#ffffff", tiling: 4, textureScale: 0.5, uvTiling: { x: 3, y: 2 } },
+      ],
+    });
+    const terrain = terrainRendererOf(group.children[0]!)!;
+    const scales = (uniformsOf(terrain).uLayerScale!.value as Vector2[]).map((scale) => scale.toArray());
+    assert.deepEqual(scales.slice(0, 3), [[0.125, 0.125], [0.25, 0.0625], [1.5, 1]]);
+    disposeLandscapeObject(group);
   });
 
   check("terrain renderer: the paint layers share one array sampler, as the cascade budget counts", () => {

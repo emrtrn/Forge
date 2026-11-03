@@ -1,7 +1,7 @@
 import { DataTexture, LinearFilter, LinearMipmapLinearFilter, NoColorSpace, RepeatWrapping, SRGBColorSpace, TextureLoader, type Texture } from "three";
 
 import { assetPath, assetRecordById, assetType, type AssetManifest } from "@engine/assets/manifest";
-import { normalizeForgeMaterialDef } from "@engine/assets/material";
+import { normalizeForgeMaterialDef, type ForgeMaterialTerrainDetail } from "@engine/assets/material";
 import {
   createThreeMaterialFromForgeDef,
   type ForgeThreeMaterial,
@@ -83,6 +83,10 @@ export async function loadForgeMaterial(
 }
 
 export interface ForgeMaterialLayer {
+  terrainDetail?: ForgeMaterialTerrainDetail;
+  detailNormalTexture?: Texture | null;
+  /** Material UV multiplier, applied to the terrain's world-space repeat scale. */
+  uvTiling?: { x: number; y: number };
   normalTexture?: Texture | null;
   /** Texture repeats per metre, when authored by the material. */
   textureScale?: number;
@@ -112,10 +116,21 @@ export async function loadForgeMaterialLayer(
   if (!materialRecord || assetType(materialRecord) !== "material") return null;
   let texture: Texture | null = null;
   let normalTexture: Texture | null = null;
+  let detailNormalTexture: Texture | null = null;
   try {
     const response = await fetch(projectFileUrl(assetPath(materialRecord)), { cache: "no-cache" });
     if (!response.ok) return null;
     const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
+    if (def.terrainDetail) {
+      try {
+        detailNormalTexture = await loadTextureByAssetId(manifest, def.terrainDetail.normalTexture, textureLoader);
+        detailNormalTexture.colorSpace = NoColorSpace;
+        detailNormalTexture.flipY = def.flipY;
+        detailNormalTexture.wrapS = detailNormalTexture.wrapT = RepeatWrapping;
+        if (options.maxAnisotropy) detailNormalTexture.anisotropy = options.maxAnisotropy;
+        detailNormalTexture.needsUpdate = true;
+      } catch { detailNormalTexture = null; }
+    }
     if (def.normalTexture) {
       try {
         normalTexture = await loadTextureByAssetId(manifest, def.normalTexture, textureLoader);
@@ -147,11 +162,12 @@ export async function loadForgeMaterialLayer(
         roughness.dispose();
       }
     }
-    return { baseColor: def.baseColor ?? "#ffffff", texture, normalTexture, roughness: def.roughness, roughnessInAlpha: Boolean(def.roughnessTexture),
+    return { baseColor: def.baseColor ?? "#ffffff", texture, normalTexture, detailNormalTexture, ...(def.terrainDetail ? { terrainDetail: def.terrainDetail } : {}), uvTiling: def.uvTiling, roughness: def.roughness, roughnessInAlpha: Boolean(def.roughnessTexture),
       ...(def.terrainMetersPerRepeat ? { textureScale: 1 / def.terrainMetersPerRepeat } : {}) };
   } catch {
     texture?.dispose();
     normalTexture?.dispose();
+    detailNormalTexture?.dispose();
     return null;
   }
 }

@@ -85,7 +85,43 @@ export interface ForgeMaterialLayerBlend {
   invertVertexColor: boolean;
 }
 
+/** Static terrain detail, distributed in long, seeded patches. Angles are degrees. */
+export interface ForgeMaterialTerrainDetail {
+  normalTexture: string;
+  /** One image, or a 2x2 atlas of individually tiling normal variants. */
+  atlasSize: 1 | 2;
+  /** Relative to the material UV repeat, independently of the base mud detail. */
+  uvTiling: ForgeMaterialUvTiling;
+  strength: number;
+  coverage: number;
+  baseNormalStrength: number;
+  patchSize: number;
+  direction: number;
+  directionVariation: number;
+  seed: number;
+  roughness: number;
+}
+
+export function normalizeForgeMaterialTerrainDetail(value: unknown): ForgeMaterialTerrainDetail | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const input = value as Record<string, unknown>;
+  const normalTexture = textureRefOrNull(input.normalTexture);
+  if (!normalTexture) return undefined;
+  const bounded = (key: string, fallback: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, numberOr(input[key], fallback)));
+  return {
+    normalTexture, atlasSize: input.atlasSize === 2 ? 2 : 1,
+    uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
+    strength: bounded("strength", 0.65, 0, 2), coverage: bounded("coverage", 0.55, 0, 1),
+    baseNormalStrength: bounded("baseNormalStrength", 1, 0, 2),
+    patchSize: bounded("patchSize", 6, 0.5, 100), direction: bounded("direction", 0, -360, 360),
+    directionVariation: bounded("directionVariation", 12, 0, 45),
+    seed: Math.round(bounded("seed", 1, 0, 65535)), roughness: bounded("roughness", 0.4, 0.05, 1),
+  };
+}
+
 export interface ForgeMaterialDef {
+  terrainDetail?: ForgeMaterialTerrainDetail;
   /** Optional terrain-only isotropic texture footprint in world metres. */
   terrainMetersPerRepeat?: number;
   schema: 1;
@@ -227,6 +263,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
   const legacyMaskTexture = textureRefOrNull(input.maskTexture);
   const layerBlend = layerBlendOrNull(input.layerBlend, legacyMaskTexture);
   const normalMotion = normalMotionOrNull(input.normalMotion);
+  const terrainDetail = normalizeForgeMaterialTerrainDetail(input.terrainDetail);
   const legacyMaskConsumedByLayerBlend =
     layerBlend?.driver === "maskTexture" &&
     layerBlend.maskTexture === legacyMaskTexture &&
@@ -267,6 +304,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     side: isForgeMaterialSide(input.side) ? input.side : "front",
     emissive: colorOr(input.emissive, "#000000"),
     emissiveIntensity: Math.max(0, numberOr(input.emissiveIntensity, 0)),
+    ...(terrainDetail ? { terrainDetail } : {}),
     normalMotion,
     layerBlend,
   };

@@ -21443,6 +21443,109 @@
       "license": "AI-generated project asset"
     },
     {
+      "id": "lt-wet-mud-normal",
+      "name": "LT Wet Mud Tire Tracks Normal",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Wet_Mud_Normal.png",
+      "thumbnail": "assets/starter-content/Textures/LT_Wet_Mud_Normal.png",
+      "tags": [
+        "terrain",
+        "mud",
+        "wet",
+        "normal",
+        "tire-tracks"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3348570
+      },
+      "source": {
+        "origin": "OpenAI image_gen",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "AI-generated project asset"
+    },
+    {
+      "id": "lt-wet-mud-base-normal",
+      "name": "LT Wet Mud Base Normal",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Wet_Mud_Base_Normal.png",
+      "thumbnail": "assets/starter-content/Textures/LT_Wet_Mud_Base_Normal.png",
+      "tags": [
+        "terrain",
+        "mud",
+        "wet",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3937482
+      },
+      "source": {
+        "origin": "OpenAI image_gen",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "AI-generated project asset"
+    },
+    {
+      "id": "lt-wet-mud-track-atlas",
+      "name": "LT Wet Mud Track Variants",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/LT_Wet_Mud_Track_Atlas.png",
+      "thumbnail": "assets/starter-content/Textures/LT_Wet_Mud_Track_Atlas.png",
+      "tags": [
+        "terrain",
+        "mud",
+        "wet",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1586245
+      },
+      "source": {
+        "origin": "OpenAI image_gen",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "AI-generated project asset"
+    },
+    {
       "id": "lt-wet-mud",
       "name": "LT Wet Mud",
       "assetType": "material",

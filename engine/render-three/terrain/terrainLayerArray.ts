@@ -147,7 +147,7 @@ export interface TerrainLayerArray {
 }
 
 /** Packs the layers' readable textures into one sRGB, mipmapped, repeating array. */
-export function createTerrainLayerArray(textures: readonly (Texture | null | undefined)[], linear = false): TerrainLayerArray {
+export function createTerrainLayerArray(textures: readonly (Texture | null | undefined)[], linear = false, atlasSizes: readonly number[] = []): TerrainLayerArray {
   const index = textures.map(() => -1);
   const sources: TerrainLayerPixels[] = [];
   let anisotropy = 1;
@@ -155,7 +155,21 @@ export function createTerrainLayerArray(textures: readonly (Texture | null | und
     const pixels = texture ? readTerrainLayerPixels(texture) : null;
     if (!texture || !pixels) return;
     index[layer] = sources.length;
-    sources.push(pixels);
+    const grid = atlasSizes[layer] === 2 ? 2 : 1;
+    if (grid === 1) sources.push(pixels);
+    else {
+      // Separate array slices prevent atlas neighbours bleeding through filtering/mips.
+      const width = Math.floor(pixels.width / grid), height = Math.floor(pixels.height / grid);
+      if (width < 1 || height < 1) { index[layer] = -1; return; }
+      for (let y = 0; y < grid; y++) for (let x = 0; x < grid; x++) {
+        const data = new Uint8Array(width * height * 4);
+        for (let row = 0; row < height; row++) {
+          const start = ((y * height + row) * pixels.width + x * width) * 4;
+          data.set(pixels.data.subarray(start, start + width * 4), row * width * 4);
+        }
+        sources.push({ width, height, data });
+      }
+    }
     anisotropy = Math.max(anisotropy, texture.anisotropy);
   });
   if (sources.length === 0) return { texture: null, index };

@@ -8,6 +8,7 @@ import {
   RGBADepthPacking,
   Vector2,
   Vector3,
+  Vector4,
   type DataArrayTexture,
   type DataTexture,
   type Material,
@@ -31,6 +32,7 @@ import {
   type TerrainDeformationTexture,
 } from "./terrainDeformation";
 import { createTerrainLayerArray } from "./terrainLayerArray";
+import { TERRAIN_STATIC_DETAIL_PARS } from "./terrainStaticDetail";
 import { createTerrainCausticsUniforms, TERRAIN_CAUSTICS_PARS, TERRAIN_CAUSTICS_VERTEX_PARS, TERRAIN_CAUSTICS_VERTEX } from "./terrainCaustics";
 
 /**
@@ -105,11 +107,15 @@ export function terrainSlotHeight(
 }
 
 export interface TerrainLayerInput {
+  terrainDetail?: import("../../assets/material").ForgeMaterialTerrainDetail;
+  detailNormalTexture?: Texture | null;
   normalTexture?: Texture | null;
   texture: Texture | null;
   color: string;
   /** Texture repeats per metre. */
   scale: number;
+  /** Material UV X/Y multipliers on the terrain X/Z axes. */
+  uvTiling?: { x: number; y: number };
   roughness?: number;
   /** Optional linear roughness packed in the albedo texture's alpha channel. */
   roughnessInAlpha?: boolean;
@@ -308,7 +314,7 @@ const FRAGMENT_NORMAL = /* glsl */ `
  * texture unit: units are what the sun's shadow cascades compete for. A
  * terrain with no layer texture declares no sampler at all.
  */
-const fragmentColorPars = (textured: boolean, normalMapped = false): string => /* glsl */ `
+const fragmentColorPars = (textured: boolean, normalMapped = false, detailMapped = false): string => /* glsl */ `
 uniform highp sampler2DArray uTerrainWeights;
 uniform highp sampler2DArray uTerrainGlobalWeights;
 uniform float uTerrainView;
@@ -317,8 +323,9 @@ uniform float uTerrainActiveLayer;
 uniform vec3 uLayerColors[${TERRAIN_RENDER_LAYERS}];
 ${textured ? "uniform mediump sampler2DArray uLayerTexArray;" : ""}
 ${normalMapped ? "uniform mediump sampler2DArray uLayerNormalArray;\nuniform float uLayerNormalIndex[8];\nvec3 forgeLayerNormal = vec3(0.0, 0.0, 1.0);" : ""}
+${detailMapped ? TERRAIN_STATIC_DETAIL_PARS : ""}
 uniform float uLayerTexIndex[${TERRAIN_RENDER_LAYERS}];
-uniform float uLayerScale[${TERRAIN_RENDER_LAYERS}];
+uniform vec2 uLayerScale[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerRoughness[${TERRAIN_RENDER_LAYERS}];
 uniform float uLayerRoughnessInAlpha[${TERRAIN_RENDER_LAYERS}];
 float forgeLayerRoughness = 1.0;
@@ -332,7 +339,7 @@ export const TERRAIN_FAR_TILING_SCALE = 0.23;
 const TERRAIN_FAR_TILING_ANGLE = 0.6;
 
 // The Landscape look: weighted layer colours/textures, or a debug view.
-const fragmentColor = (textured: boolean, normalMapped = false): string => /* glsl */ `
+const fragmentColor = (textured: boolean, normalMapped = false, detailMapped = false): string => /* glsl */ `
 #include <color_fragment>
 {
   vec2 forgeUv = forgeTerrainUv();
@@ -379,7 +386,18 @@ const fragmentColor = (textured: boolean, normalMapped = false): string => /* gl
     float forgeTotal = dot(forgeW0, vec4(1.0)) + dot(forgeW1, vec4(1.0));
     forgeColor = forgeTotal > 0.0001 ? forgeSum / forgeTotal : uLayerColors[0];
     ${normalMapped ? `vec3 forgeNormalSum = vec3(0.0);
-    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => `forgeNormalSum += (uLayerNormalIndex[${i}] >= 0.0 ? texture(uLayerNormalArray, vec3(forgeP * uLayerScale[${i}], uLayerNormalIndex[${i}])).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0)) * ${i < 4 ? `forgeW0[${i}]` : `forgeW1[${i - 4}]`};`).join("\n    ")}
+    ${detailMapped ? "vec2 forgeDetailDx = dFdx(forgeP), forgeDetailDy = dFdy(forgeP);" : ""}
+    ${Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => {
+      const weight = i < 4 ? `forgeW0[${i}]` : `forgeW1[${i - 4}]`;
+      return `vec3 forgeN${i} = uLayerNormalIndex[${i}] >= 0.0 ? texture(uLayerNormalArray, vec3(forgeP * uLayerScale[${i}], uLayerNormalIndex[${i}])).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
+    ${detailMapped ? `if (${weight} > .001 && uLayerDetailIndex[${i}] >= 0.0) {
+      forgeN${i} = normalize(vec3(forgeN${i}.xy*uLayerDetailUv[${i}].z,forgeN${i}.z));
+      vec4 detail = forgeStaticDetail(forgeP,forgeDetailDx,forgeDetailDy,uLayerScale[${i}]*uLayerDetailUv[${i}].xy,uLayerDetailIndex[${i}],uLayerDetailParams[${i}],uLayerDetailShape[${i}]);
+      forgeN${i} = normalize(vec3(forgeN${i}.xy+detail.xy,forgeN${i}.z*detail.z));
+      forgeR${i} = mix(forgeR${i},uLayerDetailShape[${i}].z,detail.w);
+    }` : ""}
+    forgeNormalSum += forgeN${i} * ${weight};`;
+    }).join("\n    ")}
     forgeLayerNormal = forgeTotal > 0.0001 ? normalize(forgeNormalSum + vec3(0.0, 0.0, 0.00001)) : vec3(0.0, 0.0, 1.0);` : ""}
     forgeLayerRoughness = forgeTotal > 0.0001 ? (
       dot(vec4(forgeR0, forgeR1, forgeR2, forgeR3), forgeW0)
@@ -464,7 +482,11 @@ function layerUniforms(uniforms: TerrainUniforms, layers: TerrainLayerInput[]): 
   const array = createTerrainLayerArray(layers.slice(0, TERRAIN_RENDER_LAYERS).map((layer) => layer.texture));
   if (array.texture) uniforms.uLayerTexArray = { value: array.texture };
   uniforms.uLayerTexIndex = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => array.index[i] ?? -1) };
-  uniforms.uLayerScale = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.scale ?? 1) };
+  uniforms.uLayerScale = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => {
+    const layer = layers[i];
+    const scale = layer?.scale ?? 1;
+    return new Vector2(scale * (layer?.uvTiling?.x ?? 1), scale * (layer?.uvTiling?.y ?? 1));
+  }) };
   uniforms.uLayerRoughness = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.roughness ?? 1) };
   uniforms.uLayerRoughnessInAlpha = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => layers[i]?.roughnessInAlpha ? 1 : 0) };
   const fallback = layers[0]?.color ?? "#808080";
@@ -497,11 +519,24 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainHeightRange: { value: inputs.heightRange },
   };
   const layerArray = layerUniforms(uniforms, inputs.layers);
-  const normals = createTerrainLayerArray(inputs.layers.slice(0, TERRAIN_RENDER_LAYERS).map((layer) => layer.normalTexture), true);
+  const layers = inputs.layers.slice(0, TERRAIN_RENDER_LAYERS);
+  const normals = createTerrainLayerArray([
+    ...layers.map((layer) => layer.normalTexture),
+    ...layers.map((layer) => layer.terrainDetail ? layer.detailNormalTexture : null),
+  ], true, [...layers.map(() => 1), ...layers.map((layer) => layer.terrainDetail?.atlasSize ?? 1)]);
   const normalMapped = normals.texture !== null;
+  const detailMapped = layers.some((_, i) => (normals.index[layers.length+i] ?? -1) >= 0);
   if (normals.texture) {
     uniforms.uLayerNormalArray = { value: normals.texture };
-    uniforms.uLayerNormalIndex = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => normals.index[i] ?? -1) };
+    // Missing base layers must not accidentally index the appended detail slices.
+    uniforms.uLayerNormalIndex = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => i < layers.length ? normals.index[i] ?? -1 : -1) };
+  }
+  if (detailMapped) {
+    const detail = (i: number) => layers[i]?.terrainDetail;
+    uniforms.uLayerDetailIndex = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => i < layers.length ? normals.index[layers.length+i] ?? -1 : -1) };
+    uniforms.uLayerDetailUv = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => new Vector3(detail(i)?.uvTiling.x ?? 1,detail(i)?.uvTiling.y ?? 1,detail(i)?.baseNormalStrength ?? 1)) };
+    uniforms.uLayerDetailParams = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => new Vector4(detail(i)?.strength ?? 0,detail(i)?.coverage ?? 0,detail(i)?.patchSize ?? 6,detail(i)?.seed ?? 1)) };
+    uniforms.uLayerDetailShape = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => new Vector4((detail(i)?.direction ?? 0)*Math.PI/180,(detail(i)?.directionVariation ?? 0)*Math.PI/180,detail(i)?.roughness ?? .4,detail(i)?.atlasSize ?? 1)) };
   }
   Object.assign(uniforms, createTerrainCausticsUniforms(), createTerrainShoreWetnessUniforms());
   const textured = layerArray !== null;
@@ -521,12 +556,12 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
   (material.defines ??= {}).FORGE_TERRAIN_CAUSTIC_BODIES = 0;
   material.defines.FORGE_TERRAIN_WET_SHORES = 0;
-  patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}${normalMapped ? "-n1" : ""}`, (shader) => {
+  patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}${normalMapped ? "-n1" : ""}${detailMapped ? "-d1" : ""}`, (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
-      FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${FRAGMENT_MAIN}`);
+      FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped, detailMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <color_fragment>", `forgeSampleDeformation();\n// Before the colour block: the track look reads it. Wet tyre prints wet the\n// ground the same way a Lake shore does (debug views show neither).\nforgeShoreWet = max(forgeShoreWetness(), uTerrainView < 0.5 ? forgeTrailWet : 0.0);\n${fragmentColor(textured, normalMapped)}\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n// Before the colour block: the track look reads it. Wet tyre prints wet the\n// ground the same way a Lake shore does (debug views show neither).\nforgeShoreWet = max(forgeShoreWetness(), uTerrainView < 0.5 ? forgeTrailWet : 0.0);\n${fragmentColor(textured, normalMapped, detailMapped)}\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
       .replace("#include <roughnessmap_fragment>", `${TERRAIN_DEFORMATION_ROUGHNESS}\nroughnessFactor=mix(roughnessFactor,min(roughnessFactor,.32),forgeShoreWet);`)
       .replace("#include <lights_fragment_begin>", "forgePrepareCaustics();\n#include <lights_fragment_begin>")
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)

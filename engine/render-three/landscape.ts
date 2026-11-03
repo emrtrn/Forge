@@ -60,6 +60,10 @@ export type LandscapeLayerColors = Record<string, string>;
  * "lit" view; `color` is the fallback tint (and the debug-view look).
  */
 export interface LandscapeLayerTexture {
+  terrainDetail?: import("../assets/material").ForgeMaterialTerrainDetail;
+  detailNormalTexture?: Texture | null;
+  /** Material UV X/Y multipliers on the terrain X/Z axes. */
+  uvTiling?: { x: number; y: number };
   textureScale?: number;
   normalTexture?: Texture | null;
   roughness?: number;
@@ -108,7 +112,10 @@ function terrainLayerInputs(
     // `tiling` repeats across the grid's X width, from its min corner.
     return {
       texture: texture?.texture ?? null, color, scale: texture?.textureScale ?? (texture?.tiling ?? 1) / worldSize,
+      uvTiling: texture?.uvTiling ?? { x: 1, y: 1 },
       normalTexture: texture?.normalTexture ?? null,
+      detailNormalTexture: texture?.detailNormalTexture ?? null,
+      ...(texture?.terrainDetail ? { terrainDetail: texture.terrainDetail } : {}),
       physicalMaterial: layers[index]?.physicalMaterial ?? null,
       ...(layers[index]?.physicalMaterialOverrides ? { physicalMaterialOverrides: layers[index]!.physicalMaterialOverrides } : {}),
       roughness: texture?.roughness ?? 1,

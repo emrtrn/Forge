@@ -22,6 +22,7 @@ import {
   FORGE_MATERIAL_TYPES,
   defaultForgeMaterialNormalMotion,
   normalizeForgeMaterialDef,
+  normalizeForgeMaterialTerrainDetail,
   type ForgeMaterialAlphaMode,
   type ForgeMaterialDef,
   type ForgeMaterialLayerBlend,
@@ -61,6 +62,7 @@ export interface MaterialEditorOptions {
 }
 
 type TextureField =
+  | "terrainDetailNormalTexture"
   | "baseColorTexture"
   | "normalTexture"
   | "roughnessTexture"
@@ -301,7 +303,7 @@ export class MaterialEditor {
       <div class="me-section">
         <div class="me-section-title">Base Material</div>
         ${this.textureColorRow("Base Color Map", "baseColorTexture", "baseColor", this.def.baseColor)}
-        ${this.textureVector3Row("Normal Map", "normalTexture", [0, 0, 1], false)}
+        ${this.textureVector3Row("Base Normal Map", "normalTexture", [0, 0, 1], false)}
         ${this.textureNumberRow("Roughness Map", "roughnessTexture", "roughness", this.def.roughness, 0, 1, 0.01)}
         ${this.textureNumberRow("Metalness Map", "metalnessTexture", "metalness", this.def.metalness, 0, 1, 0.01)}
         ${this.textureNumberRow("Opacity Map", "opacityTexture", "opacity", this.def.opacity, 0, 1, 0.01)}
@@ -312,6 +314,7 @@ export class MaterialEditor {
         <label class="me-row" title="Dokuları yüklerken dikey çevirir (three.js varsayılanı). Motorun ürettiği UV'lerde açık bırakın: landscape katmanları, UVW projeksiyonu, primitifler. Materyal bir glTF/GLB mesh'inin materyal yuvasına atanmışsa KAPATIN: glTF UV'leri görselin üstünden aşağı doğru ilerler; çevrilmiş doku ters oturur ve UV düzeni bozuk görünür."><span>Flip Y</span><input data-me-field="flipY" type="checkbox" ${this.def.flipY ? "checked" : ""} /></label>
       </div>
       ${this.normalMotionSection()}
+      ${this.terrainDetailSection()}
       ${this.layerBlendSection()}
       ${blend ? this.layerSettingsSection(blend) : ""}
     `;
@@ -500,6 +503,28 @@ export class MaterialEditor {
     `;
   }
 
+  private terrainDetailSection(): string {
+    const detail = this.def.terrainDetail;
+    return `<div class="me-section">
+      <div class="me-section-title">Terrain Detail</div>
+      <div class="me-row">Temel çamur normali korunur, detay üzerine eklenir. Landscape üzerinde görünür.</div>
+      <label class="me-row"><span>Detail Normal</span><select data-me-field="terrainDetailNormalTexture">${this.textureOptions("terrainDetailNormalTexture")}</select></label>
+      ${detail ? `
+        <label class="me-row"><span>Variants</span><select data-me-field="terrainDetailAtlasSize"><option value="1" ${detail.atlasSize === 1 ? "selected" : ""}>Single</option><option value="2" ${detail.atlasSize === 2 ? "selected" : ""}>2 × 2 Atlas</option></select></label>
+        ${this.layerNumberRow("Detail UV X", "terrainDetailUvX", detail.uvTiling.x, .001, 100, .1)}
+        ${this.layerNumberRow("Detail UV Y", "terrainDetailUvY", detail.uvTiling.y, .001, 100, .1)}
+        ${this.layerNumberRow("Strength", "terrainDetailStrength", detail.strength, 0, 2, .05)}
+        ${this.layerNumberRow("Base Normal Strength", "terrainDetailBaseNormalStrength", detail.baseNormalStrength, 0, 2, .05)}
+        ${this.layerNumberRow("Coverage", "terrainDetailCoverage", detail.coverage, 0, 1, .05)}
+        ${this.layerNumberRow("Patch Size (m)", "terrainDetailPatchSize", detail.patchSize, .5, 100, .5)}
+        ${this.layerNumberRow("Direction (°)", "terrainDetailDirection", detail.direction, -360, 360, 1)}
+        ${this.layerNumberRow("Direction Variation (°)", "terrainDetailDirectionVariation", detail.directionVariation, 0, 45, 1)}
+        ${this.layerNumberRow("Seed", "terrainDetailSeed", detail.seed, 0, 65535, 1)}
+        ${this.layerNumberRow("Detail Roughness", "terrainDetailRoughness", detail.roughness, .05, 1, .05)}
+      ` : ""}
+    </div>`;
+  }
+
   private layerBlendSection(): string {
     const enabled = this.def.layerBlend !== null;
     const blend = this.def.layerBlend ?? defaultLayerBlend(null);
@@ -570,7 +595,7 @@ export class MaterialEditor {
   }
 
   private textureOptions(field: TextureField): string {
-    const current = isLayerTextureField(field)
+    const current = field === "terrainDetailNormalTexture" ? this.def.terrainDetail?.normalTexture : isLayerTextureField(field)
       ? this.layerTextureValue(field)
       : this.def[field];
     const textures = this.sortedTextureAssets(current);
@@ -687,6 +712,20 @@ export class MaterialEditor {
     else if (field === "flipY") next.flipY = !(input instanceof HTMLInputElement) || input.checked;
     else if (field === "uvTilingX") next.uvTiling = { ...next.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "uvTilingY") next.uvTiling = { ...next.uvTiling, y: numberInput(input.value, 0.001, 100) };
+    else if (field === "terrainDetailNormalTexture") {
+      const detail = normalizeForgeMaterialTerrainDetail({ ...next.terrainDetail, normalTexture: input.value });
+      if (detail) next.terrainDetail = detail;
+      else delete next.terrainDetail;
+    }
+    else if (field.startsWith("terrainDetail") && next.terrainDetail) {
+      if (field === "terrainDetailUvX" || field === "terrainDetailUvY") {
+        next.terrainDetail = { ...next.terrainDetail, uvTiling: { ...next.terrainDetail.uvTiling, [field === "terrainDetailUvX" ? "x" : "y"]: numberInput(input.value,.001,100) } };
+      } else {
+        const key = field.slice("terrainDetail".length);
+        const property = key.charAt(0).toLowerCase()+key.slice(1);
+        next.terrainDetail = normalizeForgeMaterialTerrainDetail({ ...next.terrainDetail, [property]: Number(input.value) })!;
+      }
+    }
     else if (field === "normalMotionEnabled") {
       next.normalMotion = input instanceof HTMLInputElement && input.checked
         ? defaultForgeMaterialNormalMotion()
@@ -720,7 +759,7 @@ export class MaterialEditor {
       field === "layerBlendEnabled" ||
       field === "layerBlendDriver" ||
       field === "useBaseColorAlphaForOpacity" ||
-      field === "normalMotionEnabled"
+      field === "normalMotionEnabled" || field === "terrainDetailNormalTexture"
     ) this.renderDetails();
     await this.updatePreviewMaterial();
     this.warnIfTransparentMaterial(field);
@@ -1073,6 +1112,7 @@ function isLayerTextureField(field: string): field is
 
 function isTextureField(field: string): field is TextureField {
   return (
+    field === "terrainDetailNormalTexture" ||
     field === "baseColorTexture" ||
     field === "normalTexture" ||
     field === "roughnessTexture" ||

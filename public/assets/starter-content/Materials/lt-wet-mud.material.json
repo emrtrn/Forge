@@ -5,7 +5,7 @@
   "name": "LT Wet Mud",
   "baseColor": "#493226",
   "baseColorTexture": "lt-wet-mud-bc",
-  "normalTexture": null,
+  "normalTexture": "lt-wet-mud-base-normal",
   "maskTexture": null,
   "roughnessTexture": "lt-wet-mud-roughness",
   "metalnessTexture": null,
@@ -15,8 +15,8 @@
   "emissiveTexture": null,
   "ormTexture": null,
   "uvTiling": {
-    "x": 1,
-    "y": 1
+    "x": 2,
+    "y": 2
   },
   "flipY": true,
   "roughness": 1,
@@ -28,6 +28,22 @@
   "side": "front",
   "emissive": "#000000",
   "emissiveIntensity": 0,
+  "terrainDetail": {
+    "normalTexture": "lt-wet-mud-track-atlas",
+    "atlasSize": 2,
+    "uvTiling": {
+      "x": 1,
+      "y": 1
+    },
+    "strength": 1.2,
+    "coverage": 0.75,
+    "baseNormalStrength": 0.35,
+    "patchSize": 6,
+    "direction": 73,
+    "directionVariation": 12,
+    "seed": 37,
+    "roughness": 0.4
+  },
   "normalMotion": null,
   "layerBlend": null
 }

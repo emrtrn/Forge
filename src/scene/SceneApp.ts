@@ -2196,7 +2196,7 @@ export class SceneApp {
       this.landscapeRampPreview.material.dispose();
       this.landscapeRampPreview = null;
     }
-    for (const layer of this.landscapeLayerMaterialCache.values()) { layer.texture?.dispose(); layer.normalTexture?.dispose(); }
+    for (const layer of this.landscapeLayerMaterialCache.values()) { layer.texture?.dispose(); layer.normalTexture?.dispose(); layer.detailNormalTexture?.dispose(); }
     this.landscapeLayerMaterialCache.clear();
     for (const water of this.riverWaterObjects) {
       this.scene.remove(water);
@@ -7439,6 +7439,9 @@ export class SceneApp {
         id: layer.id,
         texture: cached?.texture ?? null,
         normalTexture: cached?.normalTexture ?? null,
+        detailNormalTexture: cached?.detailNormalTexture ?? null,
+        ...(cached?.terrainDetail ? { terrainDetail: cached.terrainDetail } : {}),
+        uvTiling: cached?.uvTiling ?? { x: 1, y: 1 },
         ...(cached?.textureScale ? { textureScale: cached.textureScale } : {}),
         color: cached?.baseColor ?? presetColor,
         roughness: cached?.roughness ?? 1,
@@ -15357,6 +15360,7 @@ export class SceneApp {
     await Promise.all(affectedLandscapes.map((index) => this.warmLandscapeLayerMaterials(index)));
     cachedLayer?.texture?.dispose();
     cachedLayer?.normalTexture?.dispose();
+    cachedLayer?.detailNormalTexture?.dispose();
     const affectedAssetIds = new Set<string>();
     for (const instance of this.layout.instances) {
       const defaultSlots = this.assetMaterialSlots.get(instance.assetId)?.slots ?? [];

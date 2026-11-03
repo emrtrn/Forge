@@ -48,6 +48,7 @@ import { normalizeMeshPaintData } from "../engine/scene/meshPaint";
 import { normalizeAssetVertexColors } from "../engine/scene/assetVertexColors";
 import {
   defaultForgeMaterialDef,
+  normalizeForgeMaterialTerrainDetail,
   isForgeMaterialPreset,
   isForgeMaterialAlphaMode,
   isForgeMaterialLayerBlendDriver,
@@ -3230,6 +3231,18 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
   const maskTexture = legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture;
   const ormTexture = validateTextureRef(input.ormTexture, "material.ormTexture") ?? maskTexture;
   const normalMotion = validateForgeMaterialNormalMotion(input.normalMotion);
+  let terrainDetail;
+  if (input.terrainDetail !== undefined && input.terrainDetail !== null) {
+    if (typeof input.terrainDetail !== "object" || Array.isArray(input.terrainDetail)) throw new Error("material.terrainDetail must be an object");
+    const detail = input.terrainDetail as Record<string, unknown>;
+    if (!validateTextureRef(detail.normalTexture, "material.terrainDetail.normalTexture")) throw new Error("material.terrainDetail.normalTexture is required");
+    if (detail.atlasSize !== undefined && detail.atlasSize !== 1 && detail.atlasSize !== 2) throw new Error("material.terrainDetail.atlasSize must be 1 or 2");
+    validateUvTiling(detail.uvTiling, "material.terrainDetail.uvTiling");
+    for (const [key, min, max] of [["strength", 0, 2], ["baseNormalStrength", 0, 2], ["coverage", 0, 1], ["patchSize", 0.5, 100], ["direction", -360, 360], ["directionVariation", 0, 45], ["seed", 0, 65535], ["roughness", 0.05, 1]] as const) {
+      validateOptionalNumber(detail[key], `material.terrainDetail.${key}`, min, max);
+    }
+    terrainDetail = normalizeForgeMaterialTerrainDetail(detail);
+  }
 
   return {
     schema: 1,
@@ -3264,6 +3277,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissive: validateColorHex(input.emissive ?? "#000000", "material.emissive"),
     emissiveIntensity:
       validateOptionalNumber(input.emissiveIntensity, "material.emissiveIntensity", 0, 20) ?? 0,
+    ...(terrainDetail ? { terrainDetail } : {}),
     normalMotion,
     layerBlend,
   };

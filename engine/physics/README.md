@@ -9,5 +9,9 @@ Pure engine physics layer.
   and dynamic render poses are interpolated between the last two slices.
 - `vehicle/`: ray-cast wheeled vehicles (`Vehicle` component → Rapier
   `DynamicRayCastVehicleController`) plus the pure pedal/steer mapping.
+- `impactEvents.ts`: pure impact aggregation (`PhysicsImpact`,
+  `ImpactAccumulator`): merges a frame's fixed-slice contact-force samples into
+  one impulse/point/normal per body pair, with a noise floor and a per-frame
+  budget. See `docs/planned/DEFORMABLE_FRACTURABLE_WORK_PLAN.md` Faz 1.
 - `fixedStep.ts`: the fixed-timestep accumulator (`FixedStepClock`) and the
   pose blend helpers it drives. See `VEHICLE_PHYSICS_PLAN.md` Faz 0 (archived, see `docs/COMPLETED_WORK_INDEX.md`).

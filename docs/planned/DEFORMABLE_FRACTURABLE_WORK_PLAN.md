@@ -1,7 +1,8 @@
 # Deformable & Fracturable Çalışma Planı
 
 > Durum: **Faz 0 tamam** (2026-11-02): spike'lar ve açık kararlar kapandı.
-> Sıradaki: Faz 1 (impact olay yüzeyi). Üretim kodu henüz yazılmadı.
+> **Faz 1 sürüyor** (2026-11-03): saf `impactEvents.ts` (tip, kare içi
+> toplama, eşik/bütçe) yazıldı; Rapier bağlantısı sırada.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -265,21 +266,32 @@ parçalar navmesh engeli olmuyor; v1 için kabul edilebilir.
 
 ### Faz 1 — Impact olay yüzeyi (engine/physics)
 
-- [ ] `PhysicsImpact { a, b, point, normal, impulse, relativeSpeed }` tipi.
+- [x] `PhysicsImpact { a, b, point, normal, impulse, relativeSpeed }` tipi.
       Body başına fizik karesi içinde toplanır (alt adımlar birleşir).
+      `engine/physics/impactEvents.ts`: `ImpactAccumulator` çift başına
+      impulse'u toplar, nokta ve normali impulse ağırlıklı alır (birbirini
+      silen normallerde en güçlü adım karar verir), hızın en büyüğünü tutar.
+      Çift yönelimi `PhysicsContact` ile aynı (`a < b`), normal `a`'dan `b`'ye.
+      Manifold noktası olmayan çiftte `point` null; tüketici body konumuna düşer.
 - [ ] Opt-in: yalnız impact isteyen collider'lar (fracture/deformable sidecar'ı
       olanlar veya açık bir `generateImpactEvents`) olay üretir. Diğer
       body'lerin maliyeti değişmez.
 - [ ] Hibrit okuma (K-03): `EventQueue` her alt adımdan sonra boşaltılır;
       eşiği geçen çiftte o adımda manifold okunur (impulse ağırlıklı nokta,
       `flipped` düzeltmeli normal).
-- [ ] Gürültü eşiği ve olay bütçesi (kare başına üst sınır).
+- [~] Gürültü eşiği ve olay bütçesi (kare başına üst sınır). Saf taraf
+      tamam: `minImpulse` (kare toplamına uygulanır) ve
+      `maxImpactsPerFrame` (en güçlüler kalır, `overBudget` sayılır);
+      `impulseToForceThreshold` / `forceToImpulse` / `restingImpulseFloor`
+      dönüşümleri testte sabit. Subsystem ayarına bağlanması açık.
 - [ ] `physicsSubsystem` API'si: `impacts()` veya listener. Rapier dışı
       (AABB) backend'de boş liste.
 - [ ] Actor script `"hit"` olayına isteğe bağlı `impulse`/`point`/`normal`
       yükü. Geriye uyumlu.
-- [ ] Testler: kutu düşmesi → beklenen aralıkta impulse; eşik altı olay yok;
+- [~] Testler: kutu düşmesi → beklenen aralıkta impulse; eşik altı olay yok;
       30/60/144 Hz render'da aynı sabit adımda aynı olay dizisi.
+      Saf testler `tests/engine/impactEvents.test.ts`'te (11 kontrol); Rapier
+      senaryoları bağlantıyla gelecek.
 - [ ] Yeni collider alanı eklenirse allowlist (`applyTransformFields`,
       collision sidecar) ve `CLAUDE.md`.
 
@@ -522,3 +534,7 @@ kullanıcı kararı).
 - 2026-11-02: **Faz 0 kapandı.** Rapier spike'ları (impact doğruluğu,
   determinizm, maliyet, statik hedef, kinematik), paylaşımlı geometri ve
   navmesh doğrulaması yapıldı. K-01…K-06 kapandı.
+- 2026-11-03: Faz 1 ilk dilim: saf `engine/physics/impactEvents.ts` +
+  `tests/engine/impactEvents.test.ts`. Sırada `physicsSubsystem` bağlantısı
+  (opt-in `CONTACT_FORCE_EVENTS`, alt adım başına `EventQueue` boşaltma,
+  eşiği geçen çiftte manifold okuma, `impacts()` API'si).

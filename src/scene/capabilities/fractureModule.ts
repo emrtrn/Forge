@@ -32,7 +32,7 @@ import {
   type FractureOverride,
   type FracturePlacement,
 } from "@engine/physics/fracture/fractureRuntime";
-import type { AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
+import { fractureGrain, type AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
 import { polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
 import { fractureChunkGeometry, fractureSourceFromObject } from "@engine/render-three/fractureGeometry";
 import { applyEulerDegrees } from "@engine/render-three/transforms";
@@ -209,6 +209,7 @@ export function createFractureModule(): CapabilityModule {
       cellCount: def.cellCount,
       totalMass: volume * def.density,
       interiorUvScale: def.interiorUvScale,
+      ...(fractureGrain(def) ? { grain: fractureGrain(def)! } : {}),
     });
     const interior = def.interiorMaterialId ? await hostRef.loadMaterial(def.interiorMaterialId) : null;
     return {

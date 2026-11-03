@@ -51,8 +51,8 @@ test("fracture runtime: driving into breakable crates breaks them within budget"
   const stats = page.locator("#debug-stats");
   await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
 
-  // 4 crates + 1 wall + 2 panels + 1 Fracturable crate actor, all intact.
-  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 8, broken: 0, chunks: 0 });
+  // 4 crates + 3 wood posts + 1 wall + 2 panels + 1 Fracturable crate actor, all intact.
+  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 11, broken: 0, chunks: 0 });
 
   // Drive forward into the crate row 12 m ahead.
   await page.locator("#game-canvas").click();
@@ -98,7 +98,7 @@ test("fracture runtime: a placement override opts a breakable out", async ({ pag
   });
   await page.goto(`/?debug&fractureOverride=${Date.now()}`);
   await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
-  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 7, broken: 0 });
+  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 10, broken: 0 });
 });
 
 test("fracture runtime: a Fracturable actor breaks where it is, not where it was placed", async ({ page }) => {
@@ -142,7 +142,7 @@ test("fracture runtime: a Fracturable actor breaks where it is, not where it was
   // The falling actor breaks on landing; the resting one stays whole.
   await expect.poll(async () => (await readFracture(page))?.broken ?? 0, { timeout: 30_000 }).toBe(1);
   const line = (await readFracture(page))!;
-  expect(line.objects).toBe(9);
+  expect(line.objects).toBe(12);
   expect(line.chunks).toBeGreaterThan(0);
   expect(line.chunks).toBeLessThanOrEqual(12);
   const heights = await page.evaluate(() => {

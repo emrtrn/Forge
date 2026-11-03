@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   FRACTURE_DEFAULTS, FRACTURE_LIMITS, createAssetFracture, fractureSidecarPath,
-  fractureSourceHash, fractureWarnings, normalizeAssetFracture,
+  fractureGrain, fractureSourceHash, fractureWarnings, normalizeAssetFracture,
   type AssetFractureDef, type FractureCheckInput,
 } from "../../engine/physics/fracture/fractureTypes";
 import type { FractureSourceMesh } from "../../engine/physics/fracture/voronoiFracture";
@@ -13,7 +13,7 @@ import { collectDroppedFields } from "../../tools/droppedFields";
 
 const maximal: AssetFractureDef = {
   version: 1, source: "voronoi", enabled: false, seed: 999999,
-  cellCount: 64, density: 20000, interiorMaterialId: "cut-stone", interiorUvScale: 100,
+  cellCount: 64, pattern: "splinter", grainAxis: "z", grainStretch: 16, density: 20000, interiorMaterialId: "cut-stone", interiorUvScale: 100,
   breakImpulse: 1000000, damageToBreak: 1000000, chunkLifetime: 600,
   maxActiveChunks: 256, sourceHash: "fnv1a:1234abcd",
 };
@@ -214,6 +214,17 @@ export function registerFractureAssetTests(check: (label: string, fn: () => void
       def: { ...createAssetFracture(), enabled: false, cellCount: 64, breakImpulse: 0 },
       closed: false, convex: false, materialCount: 2,
     })), []);
+  });
+
+  check("fracture asset: pattern and grain fall back and clamp, grain only for splinter", () => {
+    const def = normalizeAssetFracture({ pattern: "shatter", grainAxis: "w", grainStretch: 99 })!;
+    assert.equal(def.pattern, "uniform");
+    assert.equal(def.grainAxis, "y");
+    assert.equal(def.grainStretch, FRACTURE_LIMITS.grainStretch[1]);
+    assert.equal(normalizeAssetFracture({ grainStretch: 0 })!.grainStretch, FRACTURE_LIMITS.grainStretch[0]);
+    assert.equal(fractureGrain(def), undefined);
+    assert.deepEqual(fractureGrain({ ...def, pattern: "splinter", grainAxis: "x", grainStretch: 5 }), { axis: 0, stretch: 5 });
+    assert.deepEqual(fractureGrain({ ...def, pattern: "splinter", grainAxis: "z" }), { axis: 2, stretch: 16 });
   });
 
   check("fracture placement override: save keeps opt-out and threshold, editor clone copies it", () => {

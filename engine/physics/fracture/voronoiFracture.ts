@@ -78,15 +78,24 @@ export function fractureSeeds(options: FractureSeedOptions): FractureVec3[] {
   return seeds;
 }
 
-/** Bisectors in seed order; distances below 1e-12 are treated as coincident. */
-export function voronoiCellPlanes(seeds: readonly FractureVec3[], index: number): FracturePlane[] {
+/**
+ * Bisectors in seed order; distances below 1e-12 are treated as coincident.
+ * `weights` measures distance as Σ wᵢ·Δᵢ² (anisotropic Voronoi): an axis with
+ * a small weight counts less, so cells stretch along it — wood splinters along
+ * the grain. The bisector is still a plane, normal w ⊙ (b − a) through the
+ * midpoint, so clipping, hulls and mass stay convex and unchanged.
+ */
+export function voronoiCellPlanes(
+  seeds: readonly FractureVec3[], index: number, weights: FractureVec3 = [1, 1, 1],
+): FracturePlane[] {
   const seed = seeds[index];
   if (!seed) throw new Error("Fracture seed index is out of range");
   const planes: FracturePlane[] = [];
   for (let j = 0; j < seeds.length; j += 1) {
     if (j === index) continue;
     const other = seeds[j]!;
-    const delta = subtract(other, seed);
+    const raw = subtract(other, seed);
+    const delta: FractureVec3 = [raw[0] * weights[0], raw[1] * weights[1], raw[2] * weights[2]];
     const length = Math.hypot(...delta);
     if (length < 1e-12) continue;
     const normal = multiply(delta, 1 / length);
@@ -113,12 +122,17 @@ export function polyhedronFromMesh(mesh: FractureSourceMesh): FracturePolyhedron
   return { faces };
 }
 
-/** Keeps the inside half and caps the cut with outward normals and box UVs. */
+/**
+ * Keeps the inside half and caps the cut with outward normals and box UVs.
+ * With `grainAxis`, a cap that projects along a plane containing that axis
+ * maps it to U — wood textures (the starter `T_Wood_Oak_D` too) draw the grain
+ * horizontally — so the grain runs along every splinter.
+ */
 export function clipPolyhedron(
   poly: FracturePolyhedron, plane: FracturePlane,
-  options: { epsilon: number; interiorUvScale: number },
+  options: { epsilon: number; interiorUvScale: number; grainAxis?: 0 | 1 | 2 },
 ): FracturePolyhedron | null {
-  const { epsilon, interiorUvScale } = options;
+  const { epsilon, interiorUvScale, grainAxis } = options;
   const distance = (p: FractureVec3): number => dot(plane.normal, p) - plane.offset;
   let outside = false;
   let inside = false;
@@ -175,7 +189,8 @@ export function clipPolyhedron(
     // Dominant-axis ties use X, then Y, then Z. Drop X -> YZ, Y -> XZ, Z -> XY.
     const dominant = Math.abs(n[0]) >= Math.abs(n[1]) && Math.abs(n[0]) >= Math.abs(n[2]) ? 0
       : Math.abs(n[1]) >= Math.abs(n[2]) ? 1 : 2;
-    const axes = dominant === 0 ? [1, 2] : dominant === 1 ? [0, 2] : [0, 1];
+    const projected = dominant === 0 ? [1, 2] : dominant === 1 ? [0, 2] : [0, 1];
+    const axes = grainAxis !== undefined && projected[1] === grainAxis ? [grainAxis, projected[0]!] : projected;
     const vertices = cap.map((position): FractureVertex => ({
       position, normal: n, uv: [position[axes[0]!]! / interiorUvScale, position[axes[1]!]! / interiorUvScale],
     }));

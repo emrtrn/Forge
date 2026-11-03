@@ -659,6 +659,18 @@ Her madde kendi tüketici ihtiyacıyla açılır.
       okunabiliyor mu, Faz 0 notuna bakılır.
 - [ ] Dışbükey olmayan mesh için CSG (K-01): `three-bvh-csg` bağımlılığı ve
       geometri saklama (bu durumda yeniden bake pahalı → binary sidecar).
+- [x] Ahşap kıymık deseni (2026-11-03, Faz 8'den öne alındı): sidecar
+      `pattern` (`uniform` | `splinter`), `grainAxis` (x/y/z), `grainStretch`
+      (1–16). Anizotropik Voronoi: lif ekseninde uzaklık `1/s²` ağırlıkla
+      ölçülür; ortay yine düzlemdir (normal `w ⊙ (b − a)`), bu yüzden kırpma,
+      hull, kütle ve runtime değişmedi (`voronoiCellPlanes(…, weights)`,
+      `bakeFracture({ grain })`, `fractureGrain(def)`). Kesik yüz UV'sinde lif
+      ekseni U'ya gider (başlangıç `T_Wood_Oak_D` damarı yatay). Static Mesh
+      Editor: Pattern, Grain Axis, Grain Stretch (yalnız Splinter'da), değişince
+      yeniden bake. Test level'ında sandık splinter (y, 6) + 3 ahşap direk
+      (placement override 400 N·s). Ölçüm: birim küpte ortalama lif/enine oranı
+      uniform 1.18 → splinter 2.81. Sınır: parçalar dışbükey prizma; girintili
+      kıymık için şerit kesimi ya da import yolu.
 
 ### Faz 9 — Simüle deformasyon (gereksinim kapılı)
 
@@ -783,3 +795,5 @@ kullanıcı kararı).
 - 2026-11-03: Faz 4b-2: actor `Fracturable` component, canlı kırılma pozu,
   World Partition hücre temizliği, kırılan kaynağa EndPlay. Sırada 4b-3
   (kırılma VFX/ses alanları).
+- 2026-11-03: Ahşap kıymık deseni (`pattern: "splinter"`, anizotropik
+  Voronoi) eklendi; 4b-3 (VFX/ses) sırada.

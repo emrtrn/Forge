@@ -15,12 +15,16 @@ import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js"
 import { DEFAULT_PHYSICS_FIXED_STEP } from "@engine/physics/fixedStep";
 import { bakeFracture, type FractureBakeResult } from "@engine/physics/fracture/fractureBake";
 import {
+  FRACTURE_GRAIN_AXES,
   FRACTURE_LIMITS,
   createAssetFracture,
+  fractureGrain,
   fractureSourceHash,
   fractureWarnings,
   normalizeAssetFracture,
   type AssetFractureDef,
+  type FractureGrainAxis,
+  type FracturePattern,
   type FractureWarning,
 } from "@engine/physics/fracture/fractureTypes";
 import { checkFractureSource, polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
@@ -68,10 +72,11 @@ interface BakeState {
   readonly hulls: LineSegments[];
 }
 
-type NumberKey = "cellCount" | "seed" | "density" | "interiorUvScale" | "breakImpulse" | "chunkLifetime" | "maxActiveChunks";
+type NumberKey = "cellCount" | "grainStretch" | "seed" | "density" | "interiorUvScale" | "breakImpulse" | "chunkLifetime" | "maxActiveChunks";
 
 const NUMBER_FIELDS: readonly { key: NumberKey; label: string; step: number; title: string; sliderMax?: number }[] = [
   { key: "cellCount", label: "Cell Count", step: 1, title: "Kaç parçaya bölüneceği" },
+  { key: "grainStretch", label: "Grain Stretch", step: 0.5, title: "Kıymıklar lif yönünde enine göre kaç kat uzun olsun (1 = taş gibi)" },
   { key: "seed", label: "Seed", step: 1, title: "Aynı seed aynı parçaları üretir", sliderMax: 9999 },
   { key: "density", label: "Density (kg/m³)", step: 10, title: "Parça kütlesi = hacim × yoğunluk (ahşap ≈ 600, beton ≈ 2400)", sliderMax: 8000 },
   { key: "breakImpulse", label: "Break Impulse (N·s)", step: 10, title: "Bu impulse'u aşan çarpma nesneyi kırar", sliderMax: 5000 },
@@ -136,7 +141,22 @@ export class StaticMeshFracture {
       .concat(materials.map((asset) =>
         `<option value="${escapeHtml(asset.id)}" ${asset.id === def.interiorMaterialId ? "selected" : ""}>${escapeHtml(asset.name)}</option>`))
       .join("");
-    const numberRows = NUMBER_FIELDS.map(({ key, label, step, title, sliderMax }) => {
+    const splinter = def.pattern === "splinter";
+    const axisOptions = FRACTURE_GRAIN_AXES.map((axis) =>
+      `<option value="${axis}" ${axis === def.grainAxis ? "selected" : ""}>${axis.toUpperCase()}</option>`).join("");
+    const patternRows = `
+        <label class="sm-row" title="Uniform: her yönde eşit parçalar (taş, cam). Splinter: lif yönünde uzayan kıymıklar (ahşap)">
+          <span>Pattern</span>
+          <select data-sm-fracture-pattern>
+            <option value="uniform" ${splinter ? "" : "selected"}>Uniform</option>
+            <option value="splinter" ${splinter ? "selected" : ""}>Splinter</option>
+          </select>
+        </label>
+        ${splinter ? `<label class="sm-row" title="Modelin lif (damar) yönü; kıymıklar bu eksen boyunca uzar, kesik yüz dokusu da bu yönde akar">
+          <span>Grain Axis</span>
+          <select data-sm-fracture-grain-axis>${axisOptions}</select>
+        </label>` : ""}`;
+    const numberRows = NUMBER_FIELDS.filter(({ key }) => key !== "grainStretch" || splinter).map(({ key, label, step, title, sliderMax }) => {
       const [min, max] = FRACTURE_LIMITS[key];
       return `
         <label class="sm-row" title="${title}">
@@ -160,6 +180,7 @@ export class StaticMeshFracture {
           <input type="checkbox" data-sm-fracture-enabled ${def.enabled ? "checked" : ""} />
           <span>Enabled</span>
         </label>
+        ${patternRows}
         ${numberRows}
         <label class="sm-row" title="Bu kadar Damage.Apply birikince kırılır; boş = yalnız çarpma">
           <span>Damage To Break</span>
@@ -207,9 +228,17 @@ export class StaticMeshFracture {
         const key = input.dataset.smFractureNum as NumberKey;
         this.patch({ [key]: value });
         // Shape parameters change the chunks: re-bake so the preview never lies.
-        if (key === "cellCount" || key === "seed" || key === "interiorUvScale") this.bakeNow();
+        if (key === "cellCount" || key === "seed" || key === "interiorUvScale" || key === "grainStretch") this.bakeNow();
         else if (key === "density" && this.bake) this.bakeNow();
       });
+    });
+    root.querySelector<HTMLSelectElement>("[data-sm-fracture-pattern]")?.addEventListener("change", (event) => {
+      this.patch({ pattern: (event.currentTarget as HTMLSelectElement).value as FracturePattern });
+      this.bakeNow();
+    });
+    root.querySelector<HTMLSelectElement>("[data-sm-fracture-grain-axis]")?.addEventListener("change", (event) => {
+      this.patch({ grainAxis: (event.currentTarget as HTMLSelectElement).value as FractureGrainAxis });
+      this.bakeNow();
     });
     root.querySelector<HTMLInputElement>("[data-sm-fracture-damage]")?.addEventListener("change", (event) => {
       const raw = (event.currentTarget as HTMLInputElement).value.trim();
@@ -263,6 +292,7 @@ export class StaticMeshFracture {
       cellCount: def.cellCount,
       totalMass: volume * def.density,
       interiorUvScale: def.interiorUvScale,
+      ...(fractureGrain(def) ? { grain: fractureGrain(def)! } : {}),
     });
     const milliseconds = performance.now() - started;
     const check = checkFractureSource(source.mesh, 1e-6 * new Box3().setFromObject(root).getSize(new Vector3()).length());

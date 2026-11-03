@@ -375,4 +375,72 @@ export function registerFractureTests(check: Check): void {
     console.log(`[fracture] 16-cell box bake median ${median.toFixed(3)} ms`);
     assert.ok(median < 500, `bake median ${median} ms exceeds 500 ms`);
   });
+
+  check("fracture: weighted bisectors are equidistant under the anisotropic metric", () => {
+    const seeds: FractureVec3[] = [[0.1, 0.2, -0.3], [0.7, -0.4, 0.5]];
+    const weights: FractureVec3 = [1, 1 / 36, 1];
+    const [plane] = voronoiCellPlanes(seeds, 0, weights);
+    close(Math.hypot(...plane!.normal), 1);
+    const metric = (a: FractureVec3, b: FractureVec3): number =>
+      a.reduce((sum, value, axis) => sum + weights[axis]! * (value - b[axis]!) ** 2, 0);
+    // Any point on the plane: midpoint plus directions orthogonal to the normal.
+    const mid: FractureVec3 = [0.4, -0.1, 0.1];
+    for (const direction of [[1, 0, 0], [0, 1, 0], [0, 0, 1]] as FractureVec3[]) {
+      const along = direction.reduce((sum, value, axis) => sum + value * plane!.normal[axis]!, 0);
+      const tangent = direction.map((value, axis) => value - along * plane!.normal[axis]!) as unknown as FractureVec3;
+      const point = mid.map((value, axis) => value + 0.8 * tangent[axis]!) as unknown as FractureVec3;
+      close(plane!.normal.reduce((sum, n, axis) => sum + n * point[axis]!, 0), plane!.offset, 1e-9);
+      close(metric(point, seeds[0]!), metric(point, seeds[1]!), 1e-9);
+    }
+  });
+
+  check("fracture: splinter pattern stretches chunks along the grain and conserves volume", () => {
+    const mesh = box([1, 1, 1]);
+    const elongation = (result: FractureBakeResult, axis: number): number => {
+      const ratios = result.chunks.map((chunk) => {
+        const extent = [0, 1, 2].map((a) => {
+          const values = chunk.hull.map((point) => point[a]!);
+          return Math.max(...values) - Math.min(...values);
+        });
+        const across = extent.filter((_, a) => a !== axis);
+        return extent[axis]! / ((across[0]! + across[1]!) / 2);
+      });
+      return ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length;
+    };
+    const uniform = bakeFracture(mesh, { seed: 42, cellCount: 12, totalMass: 6 });
+    const splinter = bakeFracture(mesh, { seed: 42, cellCount: 12, totalMass: 6, grain: { axis: 1, stretch: 8 } });
+    conserve(splinter, 1, 6);
+    const flat = elongation(uniform, 1);
+    const long = elongation(splinter, 1);
+    console.log(`[fracture] mean grain elongation uniform ${flat.toFixed(2)} splinter ${long.toFixed(2)}`);
+    assert.ok(long > 2, `splinters should be long along the grain, got ${long}`);
+    assert.ok(long > 1.6 * flat, `splinter ${long} vs uniform ${flat}`);
+    // Stretch 1 cuts the uniform pattern's cells (only the cut-face UV axes turn).
+    const unstretched = bakeFracture(mesh, { seed: 42, cellCount: 12, totalMass: 6, grain: { axis: 1, stretch: 1 } });
+    assert.deepEqual(unstretched.chunks.map((chunk) => [chunk.pivot, chunk.volume, chunk.hull]),
+      uniform.chunks.map((chunk) => [chunk.pivot, chunk.volume, chunk.hull]));
+    assert.throws(() => bakeFracture(mesh, { seed: 1, cellCount: 4, totalMass: 1, grain: { axis: 0, stretch: 0.5 } }), /stretch/);
+  });
+
+  check("fracture: splinter cut faces run interior UV U along the grain", () => {
+    const scale = 0.5;
+    for (const axis of [0, 1, 2] as const) {
+      const result = bakeFracture(box([1, 1, 1]), { seed: 9, cellCount: 10, totalMass: 1, interiorUvScale: scale, grain: { axis, stretch: 6 } });
+      let checked = 0;
+      for (const chunk of result.chunks) {
+        const { positions, normals, uvs, indices, groups } = chunk.geometry;
+        const interior = groups.find((group) => group.materialIndex === 1);
+        if (!interior) continue;
+        for (let i = interior.start; i < interior.start + interior.count; i += 1) {
+          const vertex = indices[i]!;
+          // Caps that contain the grain axis (normal across it) carry it in U.
+          if (Math.abs(normals[vertex * 3 + axis]!) > 0.5) continue;
+          const coordinate = positions[vertex * 3 + axis]! + chunk.pivot[axis]!;
+          close(uvs[vertex * 2]!, coordinate / scale, 1e-4);
+          checked += 1;
+        }
+      }
+      assert.ok(checked > 0, `axis ${axis}: no grain-parallel cut faces`);
+    }
+  });
 }

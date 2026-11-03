@@ -12,6 +12,12 @@ export interface AssetFractureDef {
   enabled: boolean;
   seed: number; // integer 0..999 999
   cellCount: number; // integer
+  /** `uniform`: even cells (stone, glass); `splinter`: cells stretched along the grain (wood). */
+  pattern: FracturePattern;
+  /** Model-root axis the grain runs along; used by `splinter`. */
+  grainAxis: FractureGrainAxis;
+  /** How many times longer a splinter is along the grain than across it. */
+  grainStretch: number;
   /** kg per cubic metre of model-root space; mass = volume × density (× placement scale³ at runtime). */
   density: number;
   /** Manifest material asset id for cut faces; null reuses the exterior material. */
@@ -29,11 +35,17 @@ export interface AssetFractureDef {
   sourceHash: string | null;
 }
 
+export type FracturePattern = "uniform" | "splinter";
+export type FractureGrainAxis = "x" | "y" | "z";
+export const FRACTURE_PATTERNS: readonly FracturePattern[] = ["uniform", "splinter"];
+export const FRACTURE_GRAIN_AXES: readonly FractureGrainAxis[] = ["x", "y", "z"];
+
 /** Inclusive numeric bounds shared by normalization and editor sliders. */
 export const FRACTURE_LIMITS = {
   // Any integer seeds the bake; a six-digit range keeps the editor field readable.
   seed: [0, 999999],
   cellCount: [2, 64],
+  grainStretch: [1, 16],
   density: [1, 20000],
   interiorUvScale: [0.01, 100],
   breakImpulse: [0, 1000000],
@@ -49,6 +61,9 @@ export const FRACTURE_DEFAULTS: AssetFractureDef = {
   enabled: true,
   seed: 1,
   cellCount: 12,
+  pattern: "uniform",
+  grainAxis: "y",
+  grainStretch: 6,
   density: 600,
   interiorMaterialId: null,
   interiorUvScale: 1,
@@ -69,6 +84,12 @@ export interface PlacementFractureOverride {
   enabled?: false;
   /** Replaces the asset's `breakImpulse`, N·s (`FRACTURE_LIMITS.breakImpulse`). */
   breakImpulse?: number;
+}
+
+/** The bake's grain option for a def; undefined for the uniform pattern. */
+export function fractureGrain(def: AssetFractureDef): { axis: 0 | 1 | 2; stretch: number } | undefined {
+  if (def.pattern !== "splinter") return undefined;
+  return { axis: FRACTURE_GRAIN_AXES.indexOf(def.grainAxis) as 0 | 1 | 2, stretch: def.grainStretch };
 }
 
 /** Returns a fresh copy of the defaults. */
@@ -95,6 +116,10 @@ export function normalizeAssetFracture(value: unknown): AssetFractureDef | null 
     enabled: typeof input.enabled === "boolean" ? input.enabled : defaults.enabled,
     seed: bounded(input.seed, defaults.seed, FRACTURE_LIMITS.seed, true),
     cellCount: bounded(input.cellCount, defaults.cellCount, FRACTURE_LIMITS.cellCount, true),
+    pattern: FRACTURE_PATTERNS.includes(input.pattern as FracturePattern) ? input.pattern as FracturePattern : defaults.pattern,
+    grainAxis: FRACTURE_GRAIN_AXES.includes(input.grainAxis as FractureGrainAxis)
+      ? input.grainAxis as FractureGrainAxis : defaults.grainAxis,
+    grainStretch: bounded(input.grainStretch, defaults.grainStretch, FRACTURE_LIMITS.grainStretch),
     density: bounded(input.density, defaults.density, FRACTURE_LIMITS.density),
     interiorMaterialId: typeof input.interiorMaterialId === "string" && input.interiorMaterialId.length > 0
       ? input.interiorMaterialId : null,

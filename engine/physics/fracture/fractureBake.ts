@@ -14,6 +14,11 @@ export interface FractureBakeOptions {
   readonly interiorUvScale?: number;
   /** Minimum share of source volume, default 0.002. */
   readonly minChunkVolumeFraction?: number;
+  /**
+   * Splinter pattern: cells are `stretch` times longer along `axis` (source
+   * space), and cut-face UVs run U along it. Absent = uniform (stone) cells.
+   */
+  readonly grain?: { readonly axis: 0 | 1 | 2; readonly stretch: number };
 }
 
 /** Pivot-relative render buffers, with exterior indices before interior indices. */
@@ -65,14 +70,23 @@ export function bakeFracture(mesh: FractureSourceMesh, options: FractureBakeOpti
     ...(options.focus ? { focus: options.focus } : {}),
   });
   const minimum = (options.minChunkVolumeFraction ?? 0.002) * sourceVolume;
+  const grain = options.grain;
+  if (grain && (!(grain.stretch >= 1) || !Number.isFinite(grain.stretch))) {
+    throw new Error("Fracture grain stretch must be a finite number >= 1");
+  }
+  // Distance along the grain counts 1/stretch² as much: cells grow stretch× longer there.
+  const weights: FractureVec3 = grain
+    ? [0, 1, 2].map((axis) => axis === grain.axis ? 1 / (grain.stretch * grain.stretch) : 1) as unknown as FractureVec3
+    : [1, 1, 1];
+  const clipOptions = { epsilon, interiorUvScale, ...(grain ? { grainAxis: grain.axis } : {}) };
   let mergedCells = 0;
   let cells: (FracturePolyhedron | null)[];
   let volumes: number[];
   for (;;) {
     cells = seeds.map((_, index) => {
       let cell: FracturePolyhedron | null = source;
-      for (const plane of voronoiCellPlanes(seeds, index)) {
-        cell = clipPolyhedron(cell, plane, { epsilon, interiorUvScale });
+      for (const plane of voronoiCellPlanes(seeds, index, weights)) {
+        cell = clipPolyhedron(cell, plane, clipOptions);
         if (!cell) break;
       }
       return cell;

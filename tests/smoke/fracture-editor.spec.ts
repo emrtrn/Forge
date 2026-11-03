@@ -200,3 +200,56 @@ test("fracture editor: the Actor Script Fracturable form writes its override", a
   expect(node.props).toEqual({ enabled: false });
   expect(errors).toEqual([]);
 });
+
+test("fracture editor: the splinter pattern shows grain fields, re-bakes and saves", async ({ page }) => {
+  // Wood splinters: the breakable crate's sidecar uses `pattern: "splinter"`.
+  // Switching pattern / axis / stretch re-bakes the preview; Save carries them.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const saves: { path: string; fracture: Record<string, unknown> }[] = [];
+  await page.route("**/__save-fracture", async (route) => {
+    const payload = JSON.parse(route.request().postData() ?? "{}");
+    saves.push(payload);
+    await route.fulfill({ json: { ok: true, path: payload.path, changed: true, dropped: [] } });
+  });
+  for (const endpoint of ["__save-collision", "__save-material-slots", "__save-uvw", "__save-vertex-colors", "__save-layout"]) {
+    await page.route(`**/${endpoint}**`, async (route) => {
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      await route.fulfill({ json: { ok: true, path: payload.path ?? "x", changed: false, dropped: [] } });
+    });
+  }
+  await page.setViewportSize({ width: 1600, height: 950 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  const drawer = page.locator("[data-content-drawer]");
+  await drawer.locator('button.folder-row[title="assets/starter-content/StaticMeshes/Destructible"]').click();
+  await drawer.getByRole("button", { name: /^Breakable Crate Static Mesh/ }).first().dblclick();
+  const editor = page.locator(".sm-editor-overlay");
+  await expect(editor.locator("[data-sm-status]")).toHaveText("Ready.", { timeout: 20_000 });
+  const section = editor.locator("[data-sm-fracture]");
+
+  await expect(section.locator("[data-sm-fracture-pattern]")).toHaveValue("splinter");
+  await expect(section.locator("[data-sm-fracture-grain-axis]")).toHaveValue("y");
+  await expect(section.locator('[data-sm-fracture-num="grainStretch"]')).toHaveValue("6");
+  await section.locator("[data-sm-fracture-bake]").click();
+  await expect(section.locator("[data-sm-fracture-stats]")).toContainText("parça");
+
+  // Uniform hides the grain fields; Splinter brings them back.
+  await section.locator("[data-sm-fracture-pattern]").selectOption("uniform");
+  await expect(section.locator("[data-sm-fracture-grain-axis]")).toHaveCount(0);
+  await expect(section.locator('[data-sm-fracture-num="grainStretch"]')).toHaveCount(0);
+  await section.locator("[data-sm-fracture-pattern]").selectOption("splinter");
+  await section.locator("[data-sm-fracture-grain-axis]").selectOption("x");
+  const stretch = section.locator('[data-sm-fracture-num="grainStretch"]');
+  await stretch.fill("10");
+  await stretch.press("Tab");
+  await expect(section.locator('[data-sm-fracture-num="grainStretch"]')).toHaveValue("10");
+  await expect(section.locator("[data-sm-fracture-stats]")).toContainText("parça");
+
+  await editor.locator("[data-sm-save]").click();
+  await expect.poll(() => saves.length, { timeout: 15_000 }).toBe(1);
+  expect(saves[0]!.path).toBe("assets/starter-content/StaticMeshes/Destructible/SM_BreakableCrate.fracture.json");
+  expect(saves[0]!.fracture).toMatchObject({ pattern: "splinter", grainAxis: "x", grainStretch: 10 });
+  expect(errors).toEqual([]);
+});

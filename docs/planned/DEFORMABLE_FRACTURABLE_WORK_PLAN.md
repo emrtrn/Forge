@@ -3,8 +3,8 @@
 > Durum: **Faz 0 tamam** (2026-11-02): spike'lar ve açık kararlar kapandı.
 > **Faz 1 kod tarafı tamam** (2026-11-03): saf `impactEvents.ts`, Rapier
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
-> olayı. **Faz 6 kod tarafı ve GPU ölçümü tamam** (2026-11-03), görsel
-> kabul bekliyor. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
+> olayı. **Faz 6 kapandı** (2026-11-03): kod, GPU ölçümü ve kullanıcı
+> görsel kabulü. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
 > **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. **Faz 3 tamam**
 > (2026-11-03): fracture sidecar'ı + Static Mesh Editor bölümü. **Faz 4
 > çekirdeği tamam** (2026-11-03): static placement'lar oyunda kırılıyor;
@@ -850,7 +850,7 @@ Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
       için sayılmadı.)
 
 Kabul: görsel kabul (kullanıcı) + yoğun foliage sahnesinde GPU ölçümü.
-GPU ölçümü tamam; **görsel kabul bekleniyor.**
+GPU ölçümü tamam; **görsel kabul verildi (kullanıcı, 2026-11-03). Faz 6 kapandı.**
 
 Görsel kabulde bulunan (2026-11-03): editörde salınıyor, Play'de salınmıyordu.
 Sebep sway değil, editör kaydı: o oturumda oluşturulan foliage type'ın sonraki
@@ -1080,3 +1080,5 @@ kullanıcı kararı).
 - 2026-11-03: **Faz 5 kapandı** (5-4): save capture/restore shell'e bağlandı,
   `SAVE_GAME_CONTRACT.md` güncellendi, kır → quick-save → quick-load smoke'u.
   Kırılma sırasında kalan: Faz 4d Extended Structures (ihtiyaç olunca).
+- 2026-11-03: **Faz 6 kapandı**: kullanıcı görsel kabulü (Play'de salınmama
+  sorunu editörün foliage type kaydıydı, 23f54cd7).

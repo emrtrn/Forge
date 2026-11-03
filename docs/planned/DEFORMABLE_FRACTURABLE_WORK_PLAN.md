@@ -10,6 +10,13 @@
 > çekirdeği tamam** (2026-11-03): static placement'lar oyunda kırılıyor;
 > actor component / override / VFX-ses alanları açık.
 >
+> **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
+> devam: (1) Faz 4b-3 kırılma VFX/ses + debris ayarları → (2) **Faz 4c destek
+> grafiği** (anchor/sabit parçalar, World Support, kısmi kırılma, ada çöküşü)
+> → (3) Faz 5 kalıcılık (4c yüzünden parça bit maskesiyle) → (4) Faz 4d
+> Extended Structures (ihtiyaç olunca). 4b-1, 4b-2 ve ahşap kıymık deseni
+> tamam. APEX Destruction değerlendirmesi Faz 4c başlığının altında.
+>
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
 >
@@ -526,10 +533,106 @@ Kabul: `build:verify` yeşil, smoke yeşil; kullanıcı görsel/oynanış kabul�
 ayrı raporlanır. **Çekirdek kapandı (2026-11-03)**; açık maddeler (actor
 component, placement override, VFX/ses alanları, hücre temizliği) Faz 4b.
 
+### Faz 4b-3 — Kırılma VFX/ses ve debris ayarları
+
+Sidecar alanları (normalizer + maksimal test + Static Mesh Editor), hepsi
+veriyle bağlanır, kod sabiti yok:
+
+- [ ] `breakEffect` (manifest `effect` id | null): kırılma noktasında
+      (`impact.point`, yoksa hacim merkezi) bir kez oynar.
+- [ ] `breakSound` (manifest `sound` ya da `soundCue` id | null): aynı
+      noktada uzamsal, tek seferlik. `AudioCommands.playOneShot(sourceId,
+      options)` eklenir (bus yalnız ham sesi çalıyor; cue rastgeleliği kırılma
+      sesleri için önemli).
+- [ ] `crumbleBelow` (kaynak hacmin payı, 0 = kapalı): bu paydan küçük parçalar
+      gövde olarak doğmaz; `crumbleEffect` (effect id | null) parça yerinde
+      oynar (APEX "Crumble Smallest Chunks"; fizik maliyetini de düşürür).
+      Kırılma başına efekt sayısı sınırlı.
+- [ ] `maxSeparation` (m, 0 = kapalı): kırılma noktasından bu kadar uzaklaşan
+      parça silinir (APEX "Debris Max Separation").
+- [ ] APEX "Debris Lifetime Min/Max" karşılığı zaten var: `chunkLifetime ×
+      (0.5 + 0.5·hacim oranı)`; ayrı alan açılmaz.
+- [ ] Test level: sandık/direk `starter-fx-dust-hit` + `starter-snd-impact-light`.
+      Smoke: kırılınca efekt ve ses isteği; crumble'da gövde sayısı düşer.
+
+### Faz 4c — Destek grafiği (APEX "support" fikri)
+
+Amaç: kırılma "hep ya da hiç" olmasın. Duvarın vurulan bölgesi yıkılsın,
+sabitlenmiş parçalar yerinde kalsın, desteği kopan parçalar düşsün.
+
+APEX Destruction'dan alınanlar → Forge karşılığı:
+
+| APEX | Forge |
+|---|---|
+| Support chunks / Support Depth | Bake'te parça komşuluk grafiği (ortak kesim düzlemi = kenar) |
+| World Support | Level yüklenince statik dünyaya değen/gömülü parçalar otomatik anchor |
+| Asset Defined Support | Sidecar anchor bölgeleri (model uzayı kutu / "alttan %N") + editörde boyama |
+| Damage Spread / Damage Radius | Çarpma noktası çevresinde impulse'a bağlı yarıçap: yalnız oradaki parçalar serbest |
+| (bağlantı kopunca çöküş) | Her kırılmadan sonra anchor'lardan BFS; desteğe yolu kalmayan ada dinamik olur |
+| Accumulate Damage | Parça başına birikim (`damageToBreak` mantığı) |
+| Form Extended Structures | Faz 4d: komşu placement'ların değen parçaları tek grafikte |
+
+Bilinçli olarak alınmayanlar: hiyerarşi derinliği (Depth 0/1/2; bake ve
+bellek katlanır — gerekirse tek seviyeli "büyük parçayı bir kez daha böl"),
+Essential LOD Depth, Accurate Raycasts, Valid Bounds (PhysX dönemine özgü),
+Chaos strain/yük hesabı (bağlantı grafiği oyun için yeterli).
+
+Veri modeli (taslak):
+
+```jsonc
+// <Model>.fracture.json ek alanları
+"support": {
+  "mode": "none" | "anchored",          // none = bugünkü hep-ya-da-hiç kırılma
+  "anchors": [ { "min": [x,y,z], "max": [x,y,z] } ],  // model uzayı kutular
+  "worldSupport": true,                  // statik dünyaya değen parçalar anchor
+  "damageRadius": 0.6,                   // m, impulse ile ölçeklenir
+  "damageRadiusPerImpulse": 0.0005       // m / N·s
+}
+```
+
+Anchor'lar parça id'si değil **bölge** olarak saklanır: id seed'e bağlı,
+yeniden bake'te kayar; bölge kaymaz.
+
+Dilimler:
+
+- [ ] 4c-1 (saf, Codex'e uygun): `fractureBake` komşuluk listesi (her iç yüzün
+      hangi tohum çiftinden geldiği; birleşen hücrelerde kenarlar devralınır),
+      `supportIslands(adjacency, anchored, released)` BFS, `chunksInRadius`.
+      Testler: kutu bake'inde komşuluk simetrik ve bağlı; anchor'sız ada
+      tespiti; deterministik.
+- [ ] 4c-2: sidecar `support` normalizer + maksimal test + `/__save-fracture`
+      kapsamı (7. allowlist yüzeyi, yeni yüzey yok).
+- [ ] 4c-3 runtime: `support.mode: "anchored"` nesne ilk darbeye kadar bugünkü
+      gibi tek gövde; ilk darbede kaynak, parçalarından statik convex
+      gövdelere (render: parça mesh'leri) dönüşür; yarıçap içindekiler +
+      desteksiz adalar dinamik doğar. Sonraki darbeler kalan statik parçalara
+      aynı kuralı uygular. World Support yükleme anında fizik sorgusuyla.
+      Durum: `intact → damaged (bit maskesi) → fractured`; Faz 5'in durum
+      modeliyle aynı.
+- [ ] 4c-4 editör: Static Mesh Editor'da Support bölümü (mode, anchor kutuları
+      + "alttan %N" kısayolu, World Support, yarıçap), önizlemede anchor
+      parçaları farklı renk, grafik kenarları tel; "Simulate hit" düğmesi
+      (önizlemede bir noktaya vurup hangi parçaların düşeceğini gösterir).
+- [ ] 4c-5 smoke: duvara araçla çarp → yalnız çarpma bölgesi düşer, anchor'lı
+      alt kısım kalır; ikinci çarpma kalan desteği kesince üst kısım çöker.
+
+Riskler: statik parça gövde sayısı (nesne başına ≤64; yalnız vurulmuş
+nesnelerde), adalar dinamikleşirken üst üste binen hull'ların itişmesi
+(parçalar zaten bitişik — gerekirse kısa süre çarpışma filtresi), World
+Support sorgusunun eğimli zeminde fazla anchor seçmesi (tolerans editörde).
+
+### Faz 4d — Extended Structures (ihtiyaç olunca)
+
+- [ ] "extended" işaretli komşu statik placement'ların değen parçaları
+      yüklemede tek destek grafiğinde birleşir (APEX Form Extended
+      Structures). Hareketli placement/aktör dahil değil. Kalıcılık bit
+      maskesi placement başına kalır.
+
 ### Faz 5 — Hasar durumu ve kalıcılık
 
 - [ ] Asgari durum modeli: `intact | damaged | fractured` + birikmiş hasar
-      (0..1). Ara durumların oyundaki anlamı fork'a aittir.
+      (0..1). Ara durumların oyundaki anlamı fork'a aittir. Faz 4c'den sonra
+      `damaged` durumu düşen parçaların bit maskesini taşır (≤64 parça).
 - [ ] `GameSaveState`'e isteğe bağlı `destructibles` bölümü: placement/actor
       id → durum. Eski save'ler (alan yok) sorunsuz yüklenir.
 - [ ] Restore: kırık nesne parçasız gelir (K-05), çift kırılma olmaz.
@@ -797,3 +900,6 @@ kullanıcı kararı).
   (kırılma VFX/ses alanları).
 - 2026-11-03: Ahşap kıymık deseni (`pattern: "splinter"`, anizotropik
   Voronoi) eklendi; 4b-3 (VFX/ses) sırada.
+- 2026-11-03: Kullanıcıyla APEX Destruction değerlendirildi; sıra kayda
+  geçti: 4b-3 (VFX/ses + debris) → Faz 4c destek grafiği → Faz 5 (bit
+  maskesi) → Faz 4d Extended Structures. Tasarım ilgili faz başlıklarında.

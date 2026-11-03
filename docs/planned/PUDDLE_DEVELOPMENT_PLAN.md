@@ -1,7 +1,8 @@
 # Puddle — çamurlu zemin ve gerçek tekerlek oyukları
 
-Tarih: 3 Kasım 2026. Durum: **İzole avlu prototipi uygulandı.** W3 editör ve
-production entegrasyonu henüz tamamlanmadı. Kaynak planlar:
+Tarih: 3 Kasım 2026. Durum: **İzole avlu prototipi ve Landscape/Water geçici
+Puddle önizlemesi uygulandı.** Kalıcı W3 ve production entegrasyonu henüz
+tamamlanmadı. Kaynak planlar:
 [Water Body / W3](WORLD_TERRAIN_WATER_BODY_PLAN.md),
 [Terrain Deformasyonu](TERRAIN_DEFORMATION_PLAN.md).
 
@@ -59,9 +60,10 @@ Sınırlar:
 1. **Prototip kabulü:** yakın/eğik açıda gerçek oyuk, yükselen çamur kenarı,
    sabit seviyede değişen su sınırı; hedef GPU'da CPU/GPU ölçümü. Örnekleme
    doğruluğu ve kabul edilen görünüm belirlenmeden büyük dünya entegrasyonu yok.
-2. **Landscape Puddle modu:** mevcut çukura tıklama, çalışma alanı ve su
-   seviyesi; kuru/ıslak önizleme ve taşan sınır uyarısı. Paint yumuşaklık/ıslaklık
-   için kullanılır; suyu eğimli araziye yapıştıran bir materyal boyaması yapılmaz.
+2. **Landscape Puddle önizlemesi — uygulandı:** mevcut çukura tıklama, çalışma
+   alanı ve su seviyesi; kuru/ıslak önizleme ve taşan sınır uyarısı. Panel bu
+   önizlemenin Save/Play içine alınmadığını açıkça belirtir. Gerçek terrain
+   aralığı kullanılır; düzlemi ayarlamak yeni Sculpt veya paint verisi üretmez.
 3. **Kalıcı veri:** Puddle kimliği, terrain referansı, seed, sınır, seviye,
    appearance; validator, save/load, seçim ve undo/redo birlikte eklenir.
 4. **World Terrain bağlantısı:** gerçek tile üçgenleri, Sculpt revizyonları,
@@ -81,3 +83,19 @@ geometriyi koruma ve gerçek tekerlek derinliğiyle büyüyen su alanı.
 Playwright: kontrollü tekerlek geçişi, değişen geometri/alan, sabit su seviyesi,
 su seviyesi değişirken izlerin korunması, konsol/WebGL ve tekrar reset kaynakları.
 Nihai koşu sonuçları `docs/reports/PUDDLE_PROTOTYPE_2026-11-03.md` içindedir.
+
+## Landscape önizlemesinin kullanımı
+
+World Terrain seç → **Landscape Mode: Water** → **Puddle Preview** →
+**Preview Puddle** → çukura tıkla. **Water Level (World Y)** yatay su kotunu,
+**Working Area (m)** başlangıç noktası çevresindeki kare bölgeyi ayarlar.
+Alan native terrain grid'ine hizalanır. İlk kot tıklanan tabanın 5 cm üzeridir;
+çukur sınıra kadar açık kalırsa alanı genişletmek veya kotu düşürmek gerekir.
+
+**Clear Preview**, Esc, başka seçim/mod veya level değişimi geçici yüzeyi
+temizler. Esc panel alanında yazarken de çalışır. Eksik tile yüklemeleri
+iptal edilebilir; geç tamamlanan yükleme temizlenmiş yüzeyi geri getirmez.
+Tek önizleme ve en fazla 16 eksik tile okuması vardır; gövde başına ek planar
+capture tahsis edilmez. Kayıt, undo/redo ve canlı araç/deformasyon bağlantısı bu
+önizlemenin kapsamı değildir. Teknik kayıt:
+[Landscape Puddle önizlemesi](../reports/PUDDLE_EDITOR_PREVIEW_2026-11-03.md).

@@ -116,6 +116,57 @@ async function save(page: Page) {
   await button.click(); const saved=await response;expect(saved.ok(),await saved.text()).toBeTruthy(); await expect(button).toBeEnabled({ timeout: 120_000 });
 }
 
+test("Puddle preview uses native terrain, reports open bounds, clears on Escape and never writes a body", async ({ page, request }, info) => {
+  test.setTimeout(240_000);
+  const defaults = defaultUserSettings();
+  await page.addInitScript(value => localStorage.setItem("forge.userSettings", value), JSON.stringify({ schema: 1,
+    updatedAt: new Date().toISOString(), payload: { ...defaults, graphics: { ...defaults.graphics,
+      selectedQualityLevel: "low", manuallySelected: true, adaptiveOptimizationEnabled: false } } }));
+  const { errors } = await setup(page, request);
+  const hash = await terrainHash();
+  const diskBefore = await readFile(smokePublicPath(LEVEL), "utf8");
+  const frame = () => page.evaluate(() => (window as any).__lakeQA.puddleFrame());
+  await frame();
+  const section = page.locator('[data-detail-section="puddle-preview"]');
+  if (await section.evaluate(element => element.classList.contains("collapsed"))) await section.locator(".detail-section-toggle").click();
+  await page.locator("[data-puddle-begin]").click();
+  await expect(page.locator("[data-puddle-status]")).toContainText("Çukurun içine");
+  await clickWorld(page, [30, 10, 0]);
+  await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const initial = await frame();
+  expect(initial.visible).toBe(true); expect(initial.vertices).toBeGreaterThan(0);
+  expect(initial.state.state.spacing).toBe(1); expect(initial.waterBodies).toBe(0);
+  const level = page.locator('[data-puddle-number="level"]');
+  await level.fill("10.6"); await level.press("Tab");
+  await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const size = page.locator('[data-puddle-number="size"]');
+  await size.fill("16"); await size.press("Tab");
+  await expect(size).toHaveValue("16");
+  const raised = await frame(); expect(raised.state.state.area).toBeGreaterThan(initial.state.state.area);
+  await level.fill("20"); await level.press("Tab");
+  await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "open-boundary");
+  const overflow = await frame(); expect(overflow.geometry).toBe(raised.geometry);
+  await page.screenshot({ path: info.outputPath("puddle-editor-overflow.png") });
+  await level.fill("10.6"); await level.press("Tab");
+  await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "ready");
+  await frame(); await page.screenshot({ path: info.outputPath("puddle-editor-ready.png") });
+  await level.focus();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-puddle-number]")).toHaveCount(0);
+  expect((await frame()).visible).toBe(false);
+  await page.locator("[data-puddle-begin]").click(); await page.locator("[data-puddle-clear]").click();
+  await expect(page.locator("[data-puddle-status]")).toHaveCount(0);
+  expect((await frame()).state.picking).toBe(false);
+  await page.locator("[data-puddle-begin]").click(); await clickWorld(page, [30, 10, 0]);
+  await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "ready");
+  await page.locator("[data-landscape-mode]").selectOption("sculpt");
+  const cleared = await frame(); expect(cleared.visible).toBe(false); expect(cleared.waterBodies).toBe(0);
+  expect(await terrainHash()).toBe(hash);
+  expect(await readFile(smokePublicPath(LEVEL), "utf8")).toBe(diskBefore);
+  expect(cleared.glError).toBe(0); expect(errors).toEqual([]);
+  await info.attach("puddle-editor", { body: JSON.stringify({ initial, raised, overflow, cleared }), contentType: "application/json" });
+});
+
 test("Lake crest foam controls survive undo Save Reload and runtime", async ({ page, request }, info) => {
   test.setTimeout(240_000);
   const { errors } = await setup(page, request, true);

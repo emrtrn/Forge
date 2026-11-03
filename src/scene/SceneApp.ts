@@ -1,5 +1,6 @@
 import { validateWaterCrestFoam } from "@engine/scene/waterCrestFoam";
 import { LakeFoamStore } from "./lakeFoamStore";
+import { PuddlePreview } from "@/editor/puddlePreview";
 import { validateWaterCaustics, type WaterCaustics } from "@engine/scene/waterCaustics";
 import { validateWaterShoreWetness, type WaterShoreWetness } from "@engine/scene/waterShoreWetness";
 import { validateLakeGeometryFoam, type LakeGeometryFoam } from "@engine/scene/lakeFoamBake";
@@ -1411,7 +1412,8 @@ export class SceneApp {
   private readonly waterReflections = new WaterReflectionRegistry();
   private lakeDraft: LayoutLakeWaterBody | null = null;
   private lakePendingSelection: (() => void) | null = null;
-  private lakePick: { terrainRef: string; reseed: string | null } | null = null;
+  private lakePick: { terrainRef: string; reseed: string | null; puddle?: boolean } | null = null;
+  private puddlePreview: PuddlePreview | null = null;
   private lakeSeedAbort = new AbortController();
   private lakeDrag: { before: LayoutLakeWaterBody; edge: number; pointerId: number; draft: boolean } | null = null;
   private lakeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2194,6 +2196,7 @@ export class SceneApp {
     this.riverFoamAborter.abort(); this.riverFoam.clear(); this.riverFoamMessages.clear();
     this.lakeFoamJob?.controller.abort(); this.lakeFoamJob=null;
     this.lakes?.dispose();
+    this.clearPuddlePreview();
     if (this.lakeTimer) clearTimeout(this.lakeTimer);
     for (const texture of this.riverWaterTextures.values()) texture.dispose();
     this.riverWaterTextures.clear();
@@ -2505,6 +2508,7 @@ export class SceneApp {
     const previousFoamStampId = this.landscapeSculptSettings.activeRiverWaterFoamStampId;
     const previousFoamStampAnchor = this.landscapeSculptSettings.activeRiverWaterFoamStampAnchor;
     const next = { ...this.landscapeSculptSettings, ...patch };
+    if (next.editMode !== "water") this.clearPuddlePreview();
     const layerIds = new Set<string>(LANDSCAPE_DEFAULT_LAYERS.map((layer) => layer.id));
     // World Terrain layers may use ids of their own.
     for (const world of this.worldTerrains.values()) for (const layer of world.def.layers) layerIds.add(layer.id);
@@ -7653,6 +7657,7 @@ export class SceneApp {
    * freshly authored landscape whose sidecar hasn't been saved).
    */
   private async buildLandscapes(): Promise<void> {
+    this.clearPuddlePreview();
     this.lakes?.dispose(); this.lakeDraft = null; this.lakePick = null; this.lakePendingSelection = null;
     if (this.lakeTimer) { clearTimeout(this.lakeTimer); this.lakeTimer = null; }
     this.riverWaterBuild += 1;
@@ -7728,6 +7733,7 @@ export class SceneApp {
   }
 
   private updateLakesForTerrainPatches(id: string, patches: readonly TerrainUndoPatch[]): void {
+    if (this.puddlePreview?.snapshot().terrainRef === id) void this.puddlePreview.rebuild();
     const document = this.lakeDocument(id); if (!document) return;
     const bodies = [...(this.layout?.waterBodies ?? []), ...(this.lakeDraft ? [this.lakeDraft] : [])].filter((w) => w.terrainRef === id);
     if (!bodies.length) return;
@@ -7898,7 +7904,7 @@ export class SceneApp {
     const actor = this.selection?.kind === "landscape" ? this.layout?.landscapes?.[this.selection.index] : undefined;
     return { source: source ? structuredClone(source) : null, result: source ? this.lakes?.results.get(source.id) ?? null : null,
       leaving: !!this.lakePendingSelection,
-      draft: !!this.lakeDraft, picking: !!this.lakePick, available: !!(actor && !actor.locked && this.lakeDocument(actor.id)) };
+      draft: !!this.lakeDraft, picking: !!this.lakePick && !this.lakePick.puddle, available: !!(actor && !actor.locked && this.lakeDocument(actor.id)) };
   }
 
   /** Context shared by the Landscape water panel and a selected Lake inspector. */
@@ -7913,7 +7919,7 @@ export class SceneApp {
     const activeRiver = rivers.find((water) => water.id === this.landscapeSculptSettings.activeRiverWaterId) ?? rivers[0];
     return {
       index, name: terrain.name ?? terrain.id, locked: !!terrain.locked,
-      busy: lake.draft || lake.picking,
+      busy: lake.draft || lake.picking || !!this.lakePick?.puddle || this.puddlePreview?.snapshot().status === "loading",
       bodies: [
         ...rivers.map((water) => ({ id: water.id, name: water.name ?? water.id, kind: "river" as const,
           active: !lake.source && water.id === activeRiver?.id })),
@@ -7947,8 +7953,49 @@ export class SceneApp {
     }
   }
 
+  getPuddlePreviewState() {
+    const state = this.puddlePreview?.snapshot();
+    return { state: state ?? null, picking: !!this.lakePick?.puddle,
+      available: this.getLakeEditorState().available && !this.lakeDraft };
+  }
+
+  beginPuddlePreview(): void {
+    if (!this.getPuddlePreviewState().available || this.selection?.kind !== "landscape") return;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    if (!actor) return;
+    this.clearPuddlePreview();
+    this.lakePick = { terrainRef: actor.id, reseed: null, puddle: true };
+    this.onStatus?.("Puddle önizleme: çukura tıklayın. Esc iptal eder; önizleme kaydedilmez.", "info");
+    this.emitSelectionChanged();
+  }
+
+  editPuddlePreview(patch: { level?: number; size?: number }): void {
+    if (this.getPuddlePreviewState().available) void this.puddlePreview?.edit(patch);
+  }
+
+  cancelPuddlePreview(): void { this.clearPuddlePreview(); this.emitSelectionChanged(); }
+
+  private clearPuddlePreview(): void {
+    if (this.lakePick?.puddle) { this.lakeSeedAbort.abort(); this.lakePick = null; }
+    this.puddlePreview?.dispose(); this.puddlePreview = null;
+  }
+
+  private puddleController(): PuddlePreview {
+    return this.puddlePreview ??= new PuddlePreview({ scene: this.scene,
+      document: id => this.lakeDocument(id),
+      load: async (id, key, signal) => {
+        const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);
+        if (!actor || !document) throw new Error("Missing Puddle terrain");
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { signal, cache: "no-cache" });
+        if (!response.ok) throw new Error(`Puddle tile ${key}: HTTP ${response.status}`);
+        return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+      }, changed: () => this.emitSelectionChanged(),
+    });
+  }
+
   beginLakeFill(): void {
     if (this.lakeDraft) return;
+    this.clearPuddlePreview();
     if (this.selection?.kind !== "landscape") return;
     const actor = this.layout?.landscapes?.[this.selection.index];
     if (!actor || actor.locked || !this.lakeDocument(actor.id)) return;
@@ -7958,6 +8005,7 @@ export class SceneApp {
   }
 
   beginLakeReseed(): void {
+    this.clearPuddlePreview();
     const source = this.getLakeEditorState().source;
     if (!source || source.locked) return;
     this.lakePick = { terrainRef: source.terrainRef, reseed: source.id }; this.emitSelectionChanged();
@@ -7975,6 +8023,7 @@ export class SceneApp {
 
   /** Escape ends the current gesture, never discards an uncommitted lake. */
   escapeLake(): boolean {
+    if (this.lakePick?.puddle || this.puddlePreview) { this.cancelPuddlePreview(); return true; }
     const gesture = !!(this.lakePick || this.lakeDrag);
     this.lakeSeedAbort.abort();
     const active = !!(this.lakePick || this.lakeDraft || this.lakeDrag);
@@ -8003,6 +8052,7 @@ export class SceneApp {
   }
 
   private deferLakeSelection(next: () => void): boolean {
+    this.clearPuddlePreview();
     if (!this.lakeDraft) { this.lakeSeedAbort.abort(); this.lakePick = null; return false; }
     this.escapeLake(); this.lakePendingSelection = next; this.emitSelectionChanged(); return true;
   }
@@ -8100,7 +8150,7 @@ export class SceneApp {
     this.canvas.setPointerCapture(event.pointerId); return true;
   }
 
-  private async chooseLakeSeed(clientX: number, clientY: number, picking: { terrainRef: string; reseed: string | null }): Promise<void> {
+  private async chooseLakeSeed(clientX: number, clientY: number, picking: { terrainRef: string; reseed: string | null; puddle?: boolean }): Promise<void> {
     this.lakeSeedAbort.abort(); this.lakeSeedAbort = new AbortController(); const signal = this.lakeSeedAbort.signal;
     const actor = this.layout?.landscapes?.find((a) => a.id === picking.terrainRef), document = this.lakeDocument(picking.terrainRef);
     if (!actor || actor.locked || !document) return;
@@ -8119,6 +8169,10 @@ export class SceneApp {
       if (!hit || hit.approximate) throw new Error("No exact Lake seed hit; move closer and retry");
       const [x, height, z] = hit.point;
       this.lakePick = null;
+      if (picking.puddle) {
+        await this.puddleController().begin(actor.id, [x, z], height + .05);
+        return;
+      }
       if (picking.reseed) this.editLake({ seed: [x, z] });
       else {
         const ids = new Set(this.layout?.waterBodies?.map((w) => w.id)); let i = 1; while (ids.has(`lake-${i}`)) i++;

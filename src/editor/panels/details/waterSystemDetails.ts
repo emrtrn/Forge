@@ -4,6 +4,7 @@ import type { SpecialActorDetailsOptions } from "./specialActorDetails";
 import { LANDSCAPE_EDIT_MODES, landscapeModeSelect } from "./specialActorDetails";
 import { applyWaterTooltips } from "./waterTooltips";
 import { renderLakeDetails } from "./lakeDetails";
+import { renderPuddlePreviewDetails } from "./puddlePreviewDetails";
 import type { LandscapeEditMode, RiverWaterDetailsPatch, RiverWaterDetailsView } from "@/scene/SceneApp";
 
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
@@ -20,11 +21,12 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
       ${landscapeModeSelect({ ...app.getLandscapeSculptSettings(), editMode: "water" }, context.busy ? "disabled" : "", LANDSCAPE_EDIT_MODES)}
       ${options ? `<label class="detail-toggle"><input type="checkbox" data-detail-toggle="locked" ${context.locked ? "checked" : ""} /><span>Lock Movement</span></label>` : ""}
     </div>`;
-  if (options) renderRiverWaterDetails(options, app.getLakeEditorState().available, app);
+  if (options) renderRiverWaterDetails(options, app.getLakeEditorState().available && !context.busy, app);
   else body.insertAdjacentHTML("beforeend", `<div class="detail-section"><div class="detail-section-title">Water</div>
     <button type="button" class="detail-action-button" data-water-terrain ${context.busy ? "disabled" : ""}>Back to Water</button>
     ${context.busy ? '<div class="detail-hint">Araç değiştirmeden önce nokta seçimini bitirin, ardından göl taslağını oluşturun ya da silin.</div>' : ""}
     </div><div data-water-bodies-slot></div>`);
+  if (options) renderPuddlePreviewDetails(body, app);
   const slot = body.querySelector("[data-water-bodies-slot]");
   if (slot) slot.outerHTML = `<div class="detail-section" data-detail-section="water-bodies"><div class="detail-section-title">Water Bodies</div>
     <div class="landscape-layer-list">${context.bodies.map((water) => `<button type="button" data-water-body="${escapeHtml(water.id)}" data-water-kind="${water.kind}" class="${water.active ? "active" : ""}" aria-pressed="${water.active}" ${context.busy ? "disabled" : ""}>

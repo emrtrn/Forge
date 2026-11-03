@@ -1405,10 +1405,10 @@ export class EditorUi {
 
   private handleKeyDown(event: KeyboardEvent): void {
     if (this.app.isCameraNavigating()) return;
-    // Lake gestures also end while a Details field has focus. Do not intercept
+    // Water gestures also end while a Details field has focus. Do not intercept
     // Escape belonging to a modal editor or another inspector.
     if (event.code === "Escape" && !event.ctrlKey && !event.metaKey && !event.altKey &&
-        (event.target as HTMLElement | null)?.closest?.("[data-lake-panel]")) {
+        (event.target as HTMLElement | null)?.closest?.("[data-lake-panel], [data-puddle-panel]")) {
       if (!this.app.escapeLake()) this.app.clearSelection();
       event.preventDefault(); (event.target as HTMLElement).blur(); return;
     }

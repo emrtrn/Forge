@@ -23,11 +23,21 @@ export function installLakeProbe(app: unknown) {
     postProcessPipeline: { render(dt: number): void; underwaterStats?: unknown } | null;
     worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
     getLakeEditorState?: SceneApp["getLakeEditorState"];
+    getPuddlePreviewState?: SceneApp["getPuddlePreviewState"];
     getRiverGeometryFoamState?: SceneApp["getRiverGeometryFoamState"];
     worldTerrainSessions?: WeakMap<WorldTerrainDocument, WorldTerrainEditSession>;
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    puddleFrame() {
+      cancelAnimationFrame(a.frameHandle);
+      a.renderer.render(a.scene, a.camera);
+      const group = a.scene.getObjectByName("puddle-editor-preview");
+      const surface = group?.getObjectByName("terrain-puddle-prototype") as import("three").Mesh | undefined;
+      return { state: a.getPuddlePreviewState?.(), visible: group?.visible ?? false, geometry: surface?.geometry.uuid ?? null,
+        vertices: surface?.geometry.getAttribute("position")?.count ?? 0, waterBodies: a.layout?.waterBodies?.length ?? 0,
+        glError: a.renderer.getContext().getError() };
+    },
     underwaterFrame() {
       cancelAnimationFrame(a.frameHandle);
       a.camera.position.set(-20,11,-12); a.camera.lookAt(-20,11,-30); a.camera.updateMatrixWorld(true);

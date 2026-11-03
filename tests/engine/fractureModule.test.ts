@@ -427,9 +427,12 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       assert.ok(shell.added.length > before, "freed chunks become dynamic bodies");
       for (const id of freed) assert.equal(shell.thresholds.has(id), false);
 
-      // A scripted break brings down what still stands.
+      // A scripted break brings down what still stands; it cuts no support, so `collapsed` stays.
+      const collapsed = commands.snapshot().collapsedChunks;
+      assert.ok(Number.isInteger(collapsed) && collapsed >= 0 && collapsed < wholeCount);
       assert.equal(commands.breakEntity(SOURCE), true);
       assert.equal(commands.snapshot().staticChunks, 0);
+      assert.equal(commands.snapshot().collapsedChunks, collapsed);
       assert.equal(commands.breakEntity(SOURCE), false, "nothing left to break");
     }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
   });

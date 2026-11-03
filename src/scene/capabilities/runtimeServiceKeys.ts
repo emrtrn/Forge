@@ -366,6 +366,8 @@ export interface FractureDebugSnapshot {
   readonly activeChunks: number;
   /** Chunks still standing as static bodies of partly broken (anchored) objects. */
   readonly staticChunks: number;
+  /** Chunks of anchored objects that fell because a hit cut their support (island collapse), summed. */
+  readonly collapsedChunks: number;
   /** Chunk spawn time of the last break, ms (the hitch the plan's risk 1 watches). */
   readonly lastSpawnMs: number;
   readonly breaks: number;

@@ -12,7 +12,7 @@
 >
 > **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
 > devam: (1) ~~Faz 4b-3 kırılma VFX/ses + debris ayarları~~ (tamam) → (2) **Faz 4c destek
-> grafiği** (4c-1…4c-4 tamam, sırada 4c-5; anchor/sabit parçalar, World Support, kısmi kırılma, ada çöküşü)
+> grafiği** (4c-1…4c-5 tamam; anchor/sabit parçalar, World Support, kısmi kırılma, ada çöküşü)
 > → (3) Faz 5 kalıcılık (4c yüzünden parça bit maskesiyle) → (4) Faz 4d
 > Extended Structures (ihtiyaç olunca). 4b-1, 4b-2 ve ahşap kıymık deseni
 > tamam. APEX Destruction değerlendirmesi Faz 4c başlığının altında.
@@ -684,8 +684,22 @@ Dilimler:
       `fractureSupport.test.ts` "a hit releases the radius then the islands",
       `fracture-editor.spec.ts` "Support section" (mode, Bottom %20, Hit
       Center + viewport tıklaması, Reset, Save payload'ında `support`).
-- [ ] 4c-5 smoke: duvara araçla çarp → yalnız çarpma bölgesi düşer, anchor'lı
+- [x] 4c-5 smoke: duvara araçla çarp → yalnız çarpma bölgesi düşer, anchor'lı
       alt kısım kalır; ikinci çarpma kalan desteği kesince üst kısım çöker.
+      **4c-5 kapandı (2026-11-03):** `?debug` satırına `collapsed N`
+      (`FractureDebugSnapshot.collapsedChunks`: vurulmadan, desteği kesildiği
+      için düşen parçaların toplamı). `fracture-runtime.spec.ts` ortak
+      `openWallLevel` (sidecar `support`'u route ile değiştirir) + yeni
+      senaryo "a wall held at one end": World Support kapalı, yalnız sol uçta
+      anchor kutusu; araç ortaya vurur → 12 yarıçapta, 7 desteksiz çöker,
+      5 ayakta, 3 s sonra aynı (iki koşuda birebir). **Ölçülen sapma:** araçla
+      ikinci vuruş deterministik değil — stok duvarda (World Support) ikinci
+      vuruş 12 → 10 ayakta, çöküş 0 (kalan her parça zemine değiyor); dar
+      yarıçapta araç küçük delikte sıkışıp eşiğin altında (10 km/h) kalıyor.
+      Bu yüzden ada çöküşü tek vuruşla, tek uçtan tutturulmuş duvarla
+      gösteriliyor; çok vuruşlu çöküş birim testinde (`fractureModule.test.ts`
+      "second hard hit … what it cut off falls with it") ve editörde Simulate
+      Hit'in biriken vuruşlarında.
 
 Riskler: statik parça gövde sayısı (nesne başına ≤64; yalnız vurulmuş
 nesnelerde), adalar dinamikleşirken üst üste binen hull'ların itişmesi
@@ -989,3 +1003,7 @@ kullanıcı kararı).
   (anchor kutuları, Bottom %, yarıçap alanları, renkli önizleme, Show Links,
   Simulate Hit / Hit Center); runtime ile ortak `releaseSupportHit`. Sırada
   4c-5 (ikinci vuruşla ada çöküşü smoke'u), sonra Faz 5.
+- 2026-11-03: **Faz 4c kapandı** (4c-5): `?debug` `collapsed N` sayacı +
+  tek uçtan tutturulmuş duvar smoke'u (12 koptu / 7 çöktü / 5 ayakta).
+  Araçla ikinci vuruş deterministik çıkmadı (ölçüm 4c-5 notunda). Sırada
+  Faz 5 kalıcılık (düşen parçalar bit maskesiyle).

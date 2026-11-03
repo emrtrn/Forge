@@ -161,11 +161,17 @@ test("fracture runtime: a Fracturable actor breaks where it is, not where it was
   expect(errors).toEqual([]);
 });
 
-test("fracture runtime: an anchored wall breaks around the hit and the rest stands", async ({ page }) => {
-  // Faz 4c: the test wall's sidecar is `support.mode: "anchored"` with World
-  // Support. The crates and posts are taken off the car's path, so it drives
-  // straight into the wall: chunks around the hit fall, the chunks still
-  // joined to the floor stand as static bodies and stay standing.
+interface WallSupportLine { standing: number; collapsed: number }
+
+/**
+ * Opens `PhysicsInteractionTest` with the crates and posts taken off the car's
+ * path, so it drives straight into the anchored wall; `support` overrides the
+ * wall sidecar's support block. Returns the page's errors and a reader for the
+ * debug line's `static` / `collapsed` counters.
+ */
+async function openWallLevel(page: Page, support?: Record<string, unknown>): Promise<{
+  errors: string[]; readSupport: () => Promise<WallSupportLine>;
+}> {
   const errors: string[] = [];
   const messages: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -186,19 +192,35 @@ test("fracture runtime: an anchored wall breaks around the hit and the rest stan
     project.editor.defaultScene = LEVEL;
     await route.fulfill({ response, json: project });
   });
+  if (support) {
+    await page.route("**/SM_BreakableWall.fracture.json", async (route) => {
+      const response = await route.fetch();
+      const fracture = await response.json();
+      fracture.support = { ...fracture.support, ...support };
+      await route.fulfill({ response, json: fracture });
+    });
+  }
   await page.goto(`/?debug&fractureWall=${Date.now()}`);
   await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
   await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
-  const readStatic = async (): Promise<number> => {
+  const readSupport = async (): Promise<WallSupportLine> => {
     const text = (await page.locator("#debug-stats").textContent()) ?? "";
-    const match = text.match(/fracture: .* static (\d+)/);
-    return match ? Number(match[1]) : -1;
+    const match = text.match(/fracture: .* static (\d+) collapsed (\d+)/);
+    return match ? { standing: Number(match[1]), collapsed: Number(match[2]) } : { standing: -1, collapsed: -1 };
   };
   // Wall + 2 panels + the Fracturable crate actor.
   await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 4, broken: 0, chunks: 0 });
-  expect(await readStatic()).toBe(0);
+  expect(await readSupport()).toEqual({ standing: 0, collapsed: 0 });
+  return { errors, readSupport };
+}
 
+test("fracture runtime: an anchored wall breaks around the hit and the rest stands", async ({ page }) => {
+  // Faz 4c: the test wall's sidecar is `support.mode: "anchored"` with World
+  // Support: chunks around the hit fall, the chunks still joined to the floor
+  // stand as static bodies and stay standing.
+  const { errors, readSupport } = await openWallLevel(page);
+  const readStatic = async (): Promise<number> => (await readSupport()).standing;
   await page.locator("#game-canvas").click();
   await page.keyboard.down("KeyW");
   await expect.poll(async () => (await readFracture(page))?.broken ?? 0, { timeout: 25_000 }).toBeGreaterThan(0);
@@ -211,5 +233,29 @@ test("fracture runtime: an anchored wall breaks around the hit and the rest stan
   // Still standing a moment later: nothing else knocked it down.
   await page.waitForTimeout(3000);
   expect(await readStatic()).toBe(standing);
+  expect(errors).toEqual([]);
+});
+
+test("fracture runtime: a wall held at one end loses the part a hit cuts off (island collapse)", async ({ page }) => {
+  // Faz 4c-5: anchored by a box over its left end only (a wall tied to a
+  // pillar, no World Support). The car hits the middle: the chunks within the
+  // damage radius fall, and the right part, which now has no path of
+  // neighbouring chunks to the anchor, collapses with them. The left part stands.
+  const { errors, readSupport } = await openWallLevel(page, {
+    worldSupport: false,
+    anchors: [{ min: [-0.52, -0.02, -0.52], max: [-0.3, 1.02, 0.52] }],
+  });
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(async () => (await readSupport()).standing, { timeout: 25_000 }).toBeGreaterThan(0);
+  await page.keyboard.up("KeyW");
+  const after = await readSupport();
+  const fell = (await readFracture(page))!.chunks;
+  console.log(`[fracture smoke] one-end wall: ${after.standing} stand, ${after.collapsed} collapsed, ${fell} chunks fell`);
+  expect(after.collapsed).toBeGreaterThan(0);
+  expect(after.standing).toBeGreaterThan(0);
+  expect(after.standing + fell).toBeLessThanOrEqual(24);
+  await page.waitForTimeout(3000);
+  expect(await readSupport()).toEqual(after);
   expect(errors).toEqual([]);
 });

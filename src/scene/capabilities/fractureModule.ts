@@ -177,6 +177,8 @@ export function createFractureModule(): CapabilityModule {
   let generation = 0;
   let clock = 0;
   let breaks = 0;
+  /** Chunks released because their island lost its path to an anchor (not hit directly). */
+  let collapsed = 0;
   let lastSpawnMs = 0;
   let chunkSerial = 0;
 
@@ -313,9 +315,10 @@ export function createFractureModule(): CapabilityModule {
   ): number[] => {
     const support = state.asset.def.support;
     const radius = damageRadius(support.damageRadius, support.damageRadiusPerImpulse, impulse, support.damageRadiusMax);
-    const { inRadius, collapsed } = releaseSupportHit(
+    const { inRadius, collapsed: cut } = releaseSupportHit(
       specs.map((spec) => spec.position), state.asset.bake.links, state.anchored, state.present, hit, radius);
-    return [...inRadius, ...collapsed];
+    collapsed += cut.length;
+    return [...inRadius, ...cut];
   };
 
   /** Released chunks fall: the largest become bodies (per-asset cap), the rest crumble. */
@@ -577,6 +580,7 @@ export function createFractureModule(): CapabilityModule {
           fractured: registry.ids().filter((id) => registry.state(id) === "fractured").length,
           activeChunks: chunks.size,
           staticChunks: staticChunks.size,
+          collapsedChunks: collapsed,
           lastSpawnMs,
           breaks,
         }),

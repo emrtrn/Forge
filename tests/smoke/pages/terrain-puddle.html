@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forge · Çamurlu avlu</title><link rel="icon" href="data:,">
+<style>
+body{margin:0;background:#1d2427;color:#eee;font:14px system-ui}canvas{display:block;width:100vw;height:100vh}
+aside{position:fixed;left:20px;top:20px;padding:18px;background:#182024ed;border:1px solid #ffffff26;border-radius:12px;width:280px}
+h1{font-size:19px;margin:0 0 8px}p{line-height:1.5;color:#bac4c7}button{cursor:pointer;background:#35484c;color:white;border:1px solid #657c80;border-radius:5px;padding:8px;margin:3px 2px}
+label{display:block;margin:12px 0}input[type=range]{width:100%}output{display:block;color:#afd6bd;line-height:1.5}small{color:#a8b3b7}
+</style></head><body><canvas></canvas><aside>
+<h1>Çamurlu avlu · Puddle</h1><p>Avludaki bir çukura tıklayarak su ekle. Sağ fareyle döndür, tekerlekle yakınlaş.</p>
+<button id="drive">Aracı geçir</button><button id="reset">Sıfırla</button>
+<label>Su seviyesi <span id="level-text">−2 cm</span><input id="level" type="range" min="-10" max="1" value="-2" step="1"></label>
+<label><input id="water" type="checkbox" checked> Su yüzeyini göster</label>
+<output id="status"></output><p><small>Kontrollü tekerlek geçişi prototipi. Zeminde gerçek geometri deformasyonu vardır; bu sayfa araç dinamiğini simüle etmez. Su miktarı/taşma hesabı yoktur.</small></p>
+</aside><script type="module" src="./terrain-puddle.ts"></script></body></html>

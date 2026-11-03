@@ -2,6 +2,11 @@
 
 Tarih: 29 Ekim 2026 · Durum: V1b ve V1c + güneş parıltısı uygulandı; son Lake görünümü kullanıcı tarafından kabul edildi. Teknik doğrulama ve yeni GPU maliyeti açık.
 
+**3 Kasım — W3 Puddle başlangıcı:** Gerçek tekerlek deformasyonu ile ayrı yatay
+su yüzeyini birleştiren izole avlu prototipi eklendi.
+[Puddle planı ve sınırları](PUDDLE_DEVELOPMENT_PLAN.md). Landscape editör modu,
+kalıcı veri ve production terrain/araç bağlantısı henüz tamamlanmadı.
+
 **30 Ekim — RDR2 tarzı görünüm:** Köpük dokusu Voronoi kenar ağından (caustic
 görünümü) kabarcık kümesine geçti; tepe köpüğü artık dalga **dikliğiyle** oluşur
 (`crestFoamThreshold` anlamı değişti), River'da rapid beyaz suyu ve akış aşağı

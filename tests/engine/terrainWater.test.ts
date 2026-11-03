@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { registerTerrainPuddleTests } from "./terrainPuddle.test";
 import { TerrainWaterState, terrainWaterRenderDepth, TERRAIN_WATER_MAX_IMPULSES, TERRAIN_WATER_MAX_RIPPLES, TERRAIN_WATER_RIPPLE_LIFETIME, type TerrainWaterContact } from "../../engine/render-three/terrain/terrainWaterState";
 import { TerrainWater, setTerrainWaterQuality } from "../../engine/render-three/terrain/terrainWater";
 import { normalizeGraphicsPreferences, QUALITY_PROFILES } from "../../engine/perf/qualityProfiles";
@@ -9,6 +10,7 @@ const contact = (patch: Partial<TerrainWaterContact> = {}): TerrainWaterContact 
   z: 0, width: 0.3, rotation: 0, radius: 0.5, wetness: 0.9, ...patch });
 
 export function registerTerrainWaterTests(check: (name: string, fn: () => void) => void): void {
+  registerTerrainPuddleTests(check);
   check("terrain water: planar clipping keeps the same half-space in standard and reversed depth for both camera types", () => {
     for (const camera of [new PerspectiveCamera(50, 1, 0.1, 100), new OrthographicCamera(-5, 5, 5, -5, 0.1, 100)]) {
       for (const reversed of [false, true]) {

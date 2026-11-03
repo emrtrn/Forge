@@ -422,6 +422,13 @@ export class FoliageRenderBinding {
     this.windSwayUniforms = options.windSwayUniforms ?? createWindSwayGlobalUniforms();
   }
 
+  /** Groups whose type sways in the wind (GPU sweep row, statistics). */
+  swayingGroupCount(): number {
+    let count = 0;
+    for (const object of this.objects.values()) if (object.patched?.sway) count += 1;
+    return count;
+  }
+
   /** All InstancedMeshes currently drawn across every chunk (picking/statistics). */
   allMeshes(): InstancedMesh[] {
     const meshes: InstancedMesh[] = [];

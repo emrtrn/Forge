@@ -1242,6 +1242,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       renderStats: () => this.getRenderStats(),
       sceneSeconds: () => this.engineApp.sceneSeconds,
       postProcessActive: () => this.postProcessPipeline !== null,
+      windSwayActive: () => (this.foliageBinding?.swayingGroupCount() ?? 0) > 0,
       // The sweep holds the world still for the duration under its own holder,
       // because an A/B across several seconds only means anything if the two
       // sides are the same scene. Rendering carries on — that is the whole
@@ -6610,7 +6611,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private updateWindSway(): void {
     const binding = this.foliageBinding;
     if (!binding) return;
-    const wind = resolveLevelWind(this.layout, this.worldEnvironmentState());
+    const resolved = resolveLevelWind(this.layout, this.worldEnvironmentState());
+    const wind = this.gpuSweepSession.bypassWindSway ? { ...resolved, strength: 0 } : resolved;
     updateWindSwayUniforms(
       binding.windSwayUniforms,
       wind,

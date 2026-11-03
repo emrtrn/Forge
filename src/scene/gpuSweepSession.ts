@@ -35,6 +35,7 @@ const GPU_SWEEP_MAX_CATEGORIES = 8;
 /** Synthetic steps: not scene content, but the two biggest per-frame passes. */
 const GPU_SWEEP_SHADOW_ID = "shadow map";
 const GPU_SWEEP_POST_ID = "post-process";
+const GPU_SWEEP_WIND_SWAY_ID = "wind sway";
 
 /**
  * One entry of the sweep plan: a label, and how to switch that content out of
@@ -55,6 +56,8 @@ export interface GpuSweepSessionOptions {
   readonly sceneSeconds: () => number;
   /** Whether this shell is drawing through a post-process pipeline right now. */
   readonly postProcessActive?: () => boolean;
+  /** Whether anything in the frame sways in the wind (Faz 6); adds a "wind sway" row. */
+  readonly windSwayActive?: () => boolean;
   /**
    * Optional hold on the simulation for the length of the run. The runtime
    * takes its own pause holder here; the editor viewport has no time control
@@ -96,12 +99,23 @@ export class GpuSweepSession {
   private disjointSeen = 0;
   /** Set by the sweep's post-process step: draw straight, skipping the pipeline. */
   private bypassPost = false;
+  /** Set by the sweep's wind sway step: the shell writes calm air. */
+  private bypassWind = false;
 
   constructor(private readonly options: GpuSweepSessionOptions) {}
 
   /** True while the sweep's post-process step wants the pipeline skipped. */
   get bypassPostProcess(): boolean {
     return this.bypassPost;
+  }
+
+  /**
+   * True while the sweep's wind sway step wants calm air. The shell rewrites the
+   * wind every frame, so the step cannot set a uniform itself; strength 0 makes
+   * the shader skip the sway per instance, which is the saving this row reports.
+   */
+  get bypassWindSway(): boolean {
+    return this.bypassWind;
   }
 
   /**
@@ -202,7 +216,7 @@ export class GpuSweepSession {
    * single things in the frame.
    */
   private buildPlan(): GpuSweepStep[] {
-    const { scene, renderer, postProcessActive } = this.options;
+    const { scene, renderer, postProcessActive, windSwayActive } = this.options;
     const bySource = new Map<string, Object3D[]>();
     for (const child of scene.children) {
       // Already hidden: turning it off would measure nothing and spend twenty
@@ -244,6 +258,14 @@ export class GpuSweepSession {
         renderer.shadowMap.autoUpdate = !off;
       },
     });
+    if (windSwayActive?.()) {
+      steps.push({
+        id: GPU_SWEEP_WIND_SWAY_ID,
+        apply: (off: boolean) => {
+          this.bypassWind = off;
+        },
+      });
+    }
     if (postProcessActive?.()) {
       steps.push({
         id: GPU_SWEEP_POST_ID,
@@ -299,6 +321,7 @@ export class GpuSweepSession {
   private finish(): ((outcome: GpuSweepOutcome) => void) | null {
     this.applyStep(null);
     this.bypassPost = false;
+    this.bypassWind = false;
     this.options.renderer.shadowMap.autoUpdate = true;
     this.runner = null;
     this.plan = [];

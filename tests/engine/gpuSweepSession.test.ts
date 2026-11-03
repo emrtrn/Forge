@@ -112,7 +112,7 @@ interface Harness {
  * more while the post-process pipeline runs. A run should therefore recover
  * exactly those numbers, one row at a time.
  */
-function harness(options: { sources: string[]; postProcess?: boolean }): Harness {
+function harness(options: { sources: string[]; postProcess?: boolean; windSway?: boolean }): Harness {
   const children = options.sources.map(object);
   const shadowMap = { autoUpdate: true };
   const state = {
@@ -125,7 +125,8 @@ function harness(options: { sources: string[]; postProcess?: boolean }): Harness
     const visible = children.filter((child) => child.visible).length;
     const shadows = shadowMap.autoUpdate ? 3 : 0;
     const post = options.postProcess && !session.bypassPostProcess ? 4 : 0;
-    return visible * 2 + shadows + post;
+    const sway = options.windSway && !session.bypassWindSway ? 1.5 : 0;
+    return visible * 2 + shadows + post + sway;
   });
   const renderer = { getContext: () => gl, shadowMap } as unknown as WebGLRenderer;
   const scene = { children, userData: {}, parent: null, name: "scene" } as unknown as Scene;
@@ -135,6 +136,7 @@ function harness(options: { sources: string[]; postProcess?: boolean }): Harness
     renderStats: () => ({ drawCalls: 100, triangles: 50_000 }),
     sceneSeconds: () => 12,
     ...(options.postProcess ? { postProcessActive: () => true } : {}),
+    ...(options.windSway ? { windSwayActive: () => true } : {}),
     hold: () => {
       state.holds += 1;
     },
@@ -248,6 +250,22 @@ export function registerGpuSweepSessionTests(check: Check): void {
     const plainRows = (plain as { sweep: { rows: { label: string }[] } }).sweep.rows;
     assert.equal(plainRows.some((row) => row.label === "post-process"), false);
     assert.equal(withoutPipeline.bypassSeen, false);
+  });
+
+  check("the wind sway row exists only where something sways, and the calm is lifted after", () => {
+    const swaying = harness({ sources: ["foliage"], windSway: true });
+    swaying.session.enable();
+    const outcome = runToCompletion(swaying);
+    assert.equal(outcome?.kind, "done");
+    const rows = (outcome as { sweep: { rows: { label: string; savingMs: number }[] } }).sweep.rows;
+    assert.equal(rows.find((row) => row.label === "wind sway")?.savingMs, 1.5);
+    assert.equal(swaying.session.bypassWindSway, false);
+
+    const still = harness({ sources: ["foliage"] });
+    still.session.enable();
+    const plain = runToCompletion(still);
+    const plainRows = (plain as { sweep: { rows: { label: string }[] } }).sweep.rows;
+    assert.equal(plainRows.some((row) => row.label === "wind sway"), false);
   });
 
   check("switching timing off mid-run restores the scene and reports nothing", () => {

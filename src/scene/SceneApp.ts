@@ -1806,6 +1806,7 @@ export class SceneApp {
       renderStats: () => this.getRenderStats(),
       sceneSeconds: () => this.engineApp.sceneSeconds,
       postProcessActive: () => this.postProcessPipeline !== null,
+      windSwayActive: () => (this.foliageBinding?.swayingGroupCount() ?? 0) > 0,
     });
     this.environment = new AuthoredEnvironment({
       scene: this.scene,
@@ -13588,7 +13589,8 @@ export class SceneApp {
     const binding = this.foliageBinding;
     if (!binding) return;
     this.windSwaySeconds += deltaSeconds;
-    const wind = resolveLevelWind(this.layout, this.worldEnvironmentState());
+    const resolved = resolveLevelWind(this.layout, this.worldEnvironmentState());
+    const wind = this.gpuSweepSession.bypassWindSway ? { ...resolved, strength: 0 } : resolved;
     updateWindSwayUniforms(binding.windSwayUniforms, wind, this.windSwaySeconds, viewOrigin, this.editorQuality.windSwayDistance);
   }
 

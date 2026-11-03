@@ -3,10 +3,9 @@
 > Durum: **Faz 0 tamam** (2026-11-02): spike'lar ve açık kararlar kapandı.
 > **Faz 1 kod tarafı tamam** (2026-11-03): saf `impactEvents.ts`, Rapier
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
-> olayı. **Faz 6 sürüyor** (2026-11-03): rüzgâr verisi, `windSway.ts`,
-> foliage type opt-in'i ve editör alanları (World Settings / WES Wind, Foliage
-> Type "Wind Sway") ve kalite mesafesi tamam; static mesh materyali,
-> etkileşim alanı ve GPU ölçümü açık. Faz 2 (Voronoi bake) başlamadı.
+> olayı. **Faz 6 kod tarafı ve GPU ölçümü tamam** (2026-11-03), görsel
+> kabul bekliyor. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
+> Faz 2 (Voronoi bake) başlamadı.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -436,8 +435,9 @@ Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
       gust dalgası; dünya ofseti `transpose(B)/s²` ile yerele çevrilir.
       Uniform'lar paylaşılır, program yeniden derlenmez. Vertex rengi maskesi
       ihtiyaç çıkınca.
-- [~] Foliage type ve static mesh materyalinde opt-in (`sway` parametreleri);
-      materyal editörü alanları.
+- [x] Foliage type ve static mesh materyalinde opt-in (`sway` parametreleri);
+      materyal editörü alanları. **Static mesh materyali Faz 6b'ye taşındı**
+      (2026-11-03, kullanıcı onayı); bu madde foliage type için kapandı.
       Foliage type tamam: `sway?: { amplitude, height, frequency }`
       (`normalizeWindSwaySettings`, yok = salınmaz; save validator normalizer'ı
       yeniden kullanıyor). `FoliageRenderBinding` sway'li grupları paylaşılan
@@ -450,23 +450,46 @@ Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
       Gust; WES'te boş alan World Settings değerini gösterir).
       `tests/smoke/wind-editor.spec.ts` World Settings + WES kayıt/undo'yu
       doğrular; Foliage Type anahtarı smoke'suz (mevcut `updateType` yolu).
-      Açık: static mesh materyali ve materyal editörü alanı.
-- [ ] Etkileşim alanı: yakındaki araç/pawn konumları (küçük sabit dizi
-      uniform) → yönlü eğilme ve kademeli geri dönüş.
+- [-] Etkileşim alanı: yakındaki araç/pawn konumları (küçük sabit dizi
+      uniform) → yönlü eğilme ve kademeli geri dönüş. **Faz 6b'ye taşındı**
+      (2026-11-03, kullanıcı onayı): Faz 6 kabulü buna bağlı değil.
 - [x] Kalite profili: uzak mesafede salınımı kapat.
       `QualitySettings.windSwayDistance` (ultra 150, high 100, medium 60,
       low 30 m; `0` = sınırsız): son çeyrekte söner, ötesinde shader dalı
       hesabı instance başına atlar (rüzgâr 0 iken de). Editör
       `editorQuality` değerini kullanır.
-- [~] Test: shader enjeksiyonu derlenir, kapalıyken çıktı değişmez; GPU
+- [x] Test: shader enjeksiyonu derlenir, kapalıyken çıktı değişmez; GPU
       ölçümü (`gpuSweep`).
       `tests/engine/wind.test.ts` (5), `windSway.test.ts` (9): sway'siz type
       orijinal materyalde kalır, paylaşılan materyale dokunulmaz.
       `tests/smoke/wind-sway.spec.ts`: lit + gölge programı GPU'da derlenir,
       güç 0'da çıktı aynı, güç 1'de tepe rüzgâr yönüne kayar, taban yerinde.
-      GPU ölçümü açık.
+      GPU ölçümü (2026-11-03): gpuSweep'e "wind sway" satırı eklendi
+      (`GpuSweepSession.windSwayActive`; adım açıkken shell gücü 0 yazar, yani
+      satır "salınımı kapatmanın kazancı"dır, sway'siz programla fark değil).
+      Ölçüm: RTX 3060 (ANGLE D3D11), Chrome, 1600×900, Ultra, adaptif kapalı;
+      40 000 `kenney-grass-large` + 1 600 `commontree`, hepsi sway'li, gölge
+      açık; 16.6 M üçgen, taban 10.5–10.7 ms GPU. Dört geçerli sweep'te wind
+      sway: 0.19 ms, ~0, uncertain, 0.13 ms (kare %1–2, gürültü sınırında).
+      Aynı sahnede foliage'ın kendisi 10.6 ms, gölge haritası 3.7–4.7 ms.
+      (Ölçüm betiği depoya girmedi; ilk sweep foliage yüklenmeden başladığı
+      için sayılmadı.)
 
 Kabul: görsel kabul (kullanıcı) + yoğun foliage sahnesinde GPU ölçümü.
+GPU ölçümü tamam; **görsel kabul bekleniyor.**
+
+### Faz 6b — Temas salınımı ve static mesh sway (Faz 6'dan ayrıldı)
+
+Faz 6 kabulünden bağımsız; tüketici ihtiyacıyla açılır.
+
+- [ ] Etkileşim alanı: yakındaki araç/pawn konumları → yönlü eğilme ve
+      kademeli geri dönüş. Önerilen v1: gövde başına son birkaç konum + yaşı
+      (küçük sabit uniform dizisi), kısa bir iz bırakır; durumsuz shader'da
+      gerçek "ezilip yavaş kalkma" için bir ezilme haritası render target'ı
+      gerekir (daha büyük iş, ayrı karar).
+- [ ] Static mesh materyalinde `sway` opt-in + materyal editörü alanı
+      (`normalizeWindSwaySettings` ve `installWindSway` hazır; instancing
+      slotları ve klon yolu `asClone` emsaliyle).
 
 ### Faz 7 — Kalıcı çarpma göçüğü (`deformableModule`, mode `impact`)
 
@@ -610,3 +633,6 @@ kullanıcı kararı).
   yüksekliğinin ham geometri biriminde olduğunu yakaladı (`shape-cube`
   0..100); maske metreye çevrildi. Not: `foliage-fade.spec.ts` aynı ölçüm
   sahnesinde küpü ekranı dolduracak ölçekte çiziyor (oran testi yine geçerli).
+- 2026-11-03: Faz 6 editör alanları (8176da75), kalite mesafesi (ff9f22b5),
+  gpuSweep "wind sway" satırı + GPU ölçümü (sway ≈ kare %1–2). Etkileşim alanı
+  ve static mesh sway Faz 6b'ye ayrıldı; Faz 6 görsel kabul bekliyor.

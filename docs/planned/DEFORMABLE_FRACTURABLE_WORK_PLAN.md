@@ -3,7 +3,9 @@
 > Durum: **Faz 0 tamam** (2026-11-02): spike'lar ve açık kararlar kapandı.
 > **Faz 1 kod tarafı tamam** (2026-11-03): saf `impactEvents.ts`, Rapier
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
-> olayı. Sıradaki: Faz 2 (Voronoi bake) ve Faz 6 (rüzgâr) paralel.
+> olayı. **Faz 6 sürüyor** (2026-11-03): rüzgâr verisi, `windSway.ts` ve
+> foliage type opt-in'i tamam; static mesh, etkileşim alanı, kalite ve editör
+> alanları açık. Faz 2 (Voronoi bake) başlamadı.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -415,18 +417,43 @@ yeşil.
 
 Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
 
-- [ ] Global rüzgâr kaynağı: yön + güç + gust, WES/World Settings verisi
+- [x] Global rüzgâr kaynağı: yön + güç + gust, WES/World Settings verisi
       olarak normalizer'dan geçer (`normalizeWorldEnvironment`).
-- [ ] `windSway.ts`: vertex rengi veya yükseklik maskeli salınım. **Renk ve
+      `engine/environment/wind.ts`: `LayoutWind { directionDeg, strength, gust }`
+      seyrek grup; WES'te `worldEnvironment.wind` (normalizer içinde),
+      WES'siz level'da `worldSettings.wind` (`validateWorldSettings` aynı
+      `normalizeLayoutWind`'i katı kullanır). `resolveLevelWind`: alan alan
+      WES → World Settings → varsayılan (45°, 0.3, 0.3); WES grubu yalnız WES
+      aktifken sayılır (gizli = yok). Hava tablosuna `windStrengthMultiplier`
+      / `windGustAdd` (sis 0.4, yağmur 1.7), mevsim çarpanı (sonbahar 1.25).
+- [x] `windSway.ts`: vertex rengi veya yükseklik maskeli salınım. **Renk ve
       gölge/derinlik materyallerine birlikte** enjekte edilir (foliageFade
       deseni), instancing ile uyumlu.
-- [ ] Foliage type ve static mesh materyalinde opt-in (`sway` parametreleri);
+      Yükseklik maskesi: instance ölçeği 1'de pivot üstü metre
+      (`transformed.y × |modelMatrix[1]|`, GLTF düğüm ölçeği dahil). Rüzgâr
+      yönüne eğilme + instance başına fazlı titreşim + rüzgârla ilerleyen
+      gust dalgası; dünya ofseti `transpose(B)/s²` ile yerele çevrilir.
+      Uniform'lar paylaşılır, program yeniden derlenmez. Vertex rengi maskesi
+      ihtiyaç çıkınca.
+- [~] Foliage type ve static mesh materyalinde opt-in (`sway` parametreleri);
       materyal editörü alanları.
+      Foliage type tamam: `sway?: { amplitude, height, frequency }`
+      (`normalizeWindSwaySettings`, yok = salınmaz; save validator normalizer'ı
+      yeniden kullanıyor). `FoliageRenderBinding` sway'li grupları paylaşılan
+      GLTF materyalinin klonuna geçirir (fade ile tek program), shell'ler her
+      karede `windSwayUniforms`'u yazar (runtime simülasyon saati → pause'da
+      durur; editör kendi saati). Açık: static mesh materyali, Foliage Type
+      Details / materyal editörü alanları.
 - [ ] Etkileşim alanı: yakındaki araç/pawn konumları (küçük sabit dizi
       uniform) → yönlü eğilme ve kademeli geri dönüş.
 - [ ] Kalite profili: uzak mesafede salınımı kapat.
-- [ ] Test: shader enjeksiyonu derlenir, kapalıyken çıktı değişmez; GPU
+- [~] Test: shader enjeksiyonu derlenir, kapalıyken çıktı değişmez; GPU
       ölçümü (`gpuSweep`).
+      `tests/engine/wind.test.ts` (5), `windSway.test.ts` (9): sway'siz type
+      orijinal materyalde kalır, paylaşılan materyale dokunulmaz.
+      `tests/smoke/wind-sway.spec.ts`: lit + gölge programı GPU'da derlenir,
+      güç 0'da çıktı aynı, güç 1'de tepe rüzgâr yönüne kayar, taban yerinde.
+      GPU ölçümü açık.
 
 Kabul: görsel kabul (kullanıcı) + yoğun foliage sahnesinde GPU ölçümü.
 
@@ -567,3 +594,8 @@ kullanıcı kararı).
 - 2026-11-03: Actor "On Impact" olayı (`ACTOR_EVENT_KINDS`'e `impact`).
   Faz 1 kod tarafı kapandı; kabul maddesindeki "impact kapalı sahnede maliyet
   değişmemiş": opt-in yokken `step()` çağrısı birebir eski hâliyle.
+- 2026-11-03: Faz 6 ilk üç dilim: rüzgâr verisi (cf1bcbd1), `windSway.ts` +
+  foliage type opt-in + shell güncellemesi + smoke. Smoke, maske
+  yüksekliğinin ham geometri biriminde olduğunu yakaladı (`shape-cube`
+  0..100); maske metreye çevrildi. Not: `foliage-fade.spec.ts` aynı ölçüm
+  sahnesinde küpü ekranı dolduracak ölçekte çiziyor (oran testi yine geçerli).

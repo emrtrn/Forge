@@ -1043,6 +1043,7 @@ import { registerPreviewCameraFrameTests } from "../tests/engine/previewCameraFr
 import { registerWorldRecipeTests } from "../tests/engine/worldRecipe.test";
 import { registerWorldEnvironmentTests, registerWorldEnvironmentTimeTests } from "../tests/engine/worldEnvironment.test";
 import { registerWindTests } from "../tests/engine/wind.test";
+import { registerWindSwayTests } from "../tests/engine/windSway.test";
 import { registerAuthoredEnvironmentTests } from "../tests/engine/authoredEnvironment.test";
 import { registerWorldEnvironmentModuleTests } from "../tests/engine/worldEnvironmentModule.test";
 import { registerRegionProfileTests } from "../tests/engine/regionProfile.test";
@@ -1242,6 +1243,7 @@ registerPreviewCameraFrameTests(check);
 registerWorldEnvironmentTests(check);
 registerWorldEnvironmentTimeTests(check);
 registerWindTests(check);
+registerWindSwayTests(check);
 registerAuthoredEnvironmentTests(check);
 registerWorldEnvironmentModuleTests(check);
 registerRegionProfileTests(check);

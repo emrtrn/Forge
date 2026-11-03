@@ -25,6 +25,8 @@ import {
 } from "@engine/world/viewDistance";
 import { resolveHeightFog } from "@engine/scene/heightFog";
 import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
+import { resolveLevelWind } from "@engine/environment/wind";
+import { updateWindSwayUniforms } from "@engine/render-three/windSway";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
 import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
@@ -1872,6 +1874,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.camera.position,
         this.qualitySettings.foliageCullDistanceScale,
       );
+      this.updateWindSway();
       this.perfRegion(FRAME_REGION_FOLIAGE, mark);
       // Shadow frusta first: the terrain keeps the nodes its own shadow casts from.
       this.updateFollowShadow();
@@ -6601,6 +6604,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       ambient: this.ambientLight,
     });
     if (result.sunMoved) this.fitSunShadowToScene();
+  }
+
+  /** Faz 6 sway: the level wind on simulation time, so a paused game holds the grass still. */
+  private updateWindSway(): void {
+    const binding = this.foliageBinding;
+    if (!binding) return;
+    const wind = resolveLevelWind(this.layout, this.worldEnvironmentState());
+    updateWindSwayUniforms(binding.windSwayUniforms, wind, this.simulationClockMs / 1000, this.camera.position);
   }
 
   /** The live World Environment state from the Play clock; null (authored look) when its module is off. */

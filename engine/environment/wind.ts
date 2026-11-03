@@ -108,3 +108,57 @@ export function resolveWind(
     gust: Math.min(1, Math.max(0, gust)),
   };
 }
+
+/**
+ * How one foliage type or material answers the wind (Faz 6). Absent on the
+ * asset means it never sways; present fields are filled with
+ * {@link WIND_SWAY_DEFAULTS}.
+ */
+export interface WindSwaySettings {
+  /** Tip displacement in metres at wind strength 1, before flutter and gusts. */
+  amplitude: number;
+  /** Metres above the pivot (instance scale 1) where the sway mask reaches 1; at or below the pivot nothing moves. */
+  height: number;
+  /** Flutter frequency in Hz. */
+  frequency: number;
+}
+
+export const WIND_SWAY_DEFAULTS: WindSwaySettings = { amplitude: 0.15, height: 1, frequency: 0.6 };
+export const WIND_SWAY_LIMITS = {
+  amplitude: [0, 5],
+  height: [0.01, 100],
+  frequency: [0, 10],
+} as const satisfies Record<keyof WindSwaySettings, readonly [number, number]>;
+
+/**
+ * Lenient like the foliage type normalizer it serves: a non-object is "no
+ * sway" (undefined), numbers clamp to {@link WIND_SWAY_LIMITS}, missing or
+ * broken ones take the defaults.
+ */
+export function normalizeWindSwaySettings(value: unknown): WindSwaySettings | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const read = (key: keyof WindSwaySettings): number => {
+    const raw = source[key];
+    const [min, max] = WIND_SWAY_LIMITS[key];
+    const n = typeof raw === "number" && Number.isFinite(raw) ? raw : WIND_SWAY_DEFAULTS[key];
+    return Number(Math.min(max, Math.max(min, n)).toFixed(3));
+  };
+  return { amplitude: read("amplitude"), height: read("height"), frequency: read("frequency") };
+}
+
+/**
+ * The wind of a level this frame. `environment` is the active World
+ * Environment's live state, or null when there is none or it is hidden; the
+ * actor's `wind` group only counts while it is active ("as if absent" rule).
+ */
+export function resolveLevelWind(
+  layout: { worldEnvironment?: { wind?: LayoutWind } | undefined; worldSettings?: { wind?: LayoutWind } | undefined } | null | undefined,
+  environment: WindEnvironmentState | null,
+): ResolvedWind {
+  return resolveWind(
+    environment ? layout?.worldEnvironment?.wind : undefined,
+    layout?.worldSettings?.wind,
+    environment,
+  );
+}

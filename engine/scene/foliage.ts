@@ -1,3 +1,4 @@
+import { normalizeWindSwaySettings, type WindSwaySettings } from "../environment/wind";
 import { parseWorldCellKey } from "../world/worldGrid";
 import type { Vec3 } from "./layout";
 
@@ -60,6 +61,8 @@ export interface ForgeFoliageTypeDef {
   /** Distance cull window (`0` = disabled). Shader fade is a later phase. */
   cullStart: number;
   cullEnd: number;
+  /** Wind sway (Faz 6). Absent: the type never sways. */
+  sway?: WindSwaySettings;
 }
 
 export const FOLIAGE_TYPE_DEFAULTS: Omit<ForgeFoliageTypeDef, "name" | "meshAssetId"> = {
@@ -141,6 +144,7 @@ export function normalizeFoliageType(raw: unknown): ForgeFoliageTypeDef {
   const heightMax = readOptionalNumber(source.heightMax);
   const cullStart = clampMin(finiteNumber(source.cullStart, d.cullStart), 0);
   const cullEnd = clampMin(finiteNumber(source.cullEnd, d.cullEnd), 0);
+  const sway = normalizeWindSwaySettings(source.sway);
   return {
     schema: 1,
     type: "foliageType",
@@ -163,6 +167,7 @@ export function normalizeFoliageType(raw: unknown): ForgeFoliageTypeDef {
     collision: readBool(source.collision, d.collision),
     cullStart,
     cullEnd,
+    ...(sway ? { sway } : {}),
   };
 }
 

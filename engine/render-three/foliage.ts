@@ -37,6 +37,15 @@ import {
   foliageFadeWindow,
   type FoliageFadeUniforms,
 } from "./foliageFade";
+import {
+  clonePatchableMaterial,
+  createWindSwayGlobalUniforms,
+  createWindSwayMaterialUniforms,
+  createWindSwayShadowMaterials,
+  installWindSway,
+  type WindSwayGlobalUniforms,
+  type WindSwayMaterialUniforms,
+} from "./windSway";
 
 const WORLD_UP = new Vector3(0, 1, 0);
 
@@ -238,9 +247,12 @@ interface FoliageChunkObject {
   radius: number;
 }
 
-/** A group's fading materials (owned by the group, disposed with it). */
-interface FoliageGroupFade {
-  uniforms: FoliageFadeUniforms;
+/** A group's patched (fading and/or swaying) materials, owned by the group and disposed with it. */
+interface FoliageGroupMaterials {
+  /** Null when the type never culls (sway only). */
+  fade: FoliageFadeUniforms | null;
+  /** Null when the type does not sway (fade only). */
+  sway: WindSwayMaterialUniforms | null;
   materials: Material[];
   depth: MeshDepthMaterial;
   distance: MeshDistanceMaterial;
@@ -254,8 +266,8 @@ interface FoliageGroupObject {
   /** Type cull window (`cullEnd <= 0` disables distance culling for this group). */
   cullStart: number;
   cullEnd: number;
-  /** Per-instance dither fade, null when the type never culls. */
-  fade: FoliageGroupFade | null;
+  /** Per-instance dither fade and/or wind sway; null when the type does neither. */
+  patched: FoliageGroupMaterials | null;
 }
 
 /** One group's selected instance indices (Foliage Mode selection overlay input). */
@@ -281,41 +293,53 @@ function disposeGroupObject(object: FoliageGroupObject): void {
   for (const chunk of object.chunks) {
     for (const mesh of chunk.meshes) mesh.dispose();
   }
-  if (object.fade) {
-    for (const material of object.fade.materials) material.dispose();
-    object.fade.depth.dispose();
-    object.fade.distance.dispose();
+  if (object.patched) {
+    for (const material of object.patched.materials) material.dispose();
+    object.patched.depth.dispose();
+    object.patched.distance.dispose();
   }
 }
 
 /**
- * Swaps every chunk mesh onto fading clones of its (slot-resolved) materials and
- * the matching shadow materials. One clone per source material per group, so a
- * group's chunks share programs and uniforms.
+ * Swaps every chunk mesh onto patched clones of its (slot-resolved) materials
+ * and matching shadow materials: the distance fade when `origin` is given, the
+ * wind sway when `sway` is. One clone per source material per group, so a
+ * group's chunks share programs and uniforms; the shared GLTF materials are
+ * never touched. Null (meshes unchanged) when neither applies.
  */
-function applyGroupFade(chunks: readonly FoliageChunkObject[], origin: { value: Vector3 }): FoliageGroupFade {
-  const uniforms: FoliageFadeUniforms = {
-    uFoliageFadeOrigin: origin,
-    uFoliageFadeRange: { value: new Vector2() },
-  };
+function applyGroupMaterials(
+  chunks: readonly FoliageChunkObject[],
+  origin: { value: Vector3 } | null,
+  sway: WindSwayMaterialUniforms | null,
+  wind: WindSwayGlobalUniforms,
+): FoliageGroupMaterials | null {
+  if (!origin && !sway) return null;
+  const fade: FoliageFadeUniforms | null = origin
+    ? { uFoliageFadeOrigin: origin, uFoliageFadeRange: { value: new Vector2() } }
+    : null;
   const clones = new Map<Material, Material>();
-  const fadeOf = (source: Material): Material => {
+  const patchedOf = (source: Material): Material => {
     let clone = clones.get(source);
     if (!clone) {
-      clone = createFoliageFadeMaterial(source, uniforms);
+      clone = fade ? createFoliageFadeMaterial(source, fade) : clonePatchableMaterial(source);
+      if (sway) installWindSway(clone, wind, sway);
       clones.set(source, clone);
     }
     return clone;
   };
-  const { depth, distance } = createFoliageFadeShadowMaterials(uniforms);
+  const { depth, distance } = fade ? createFoliageFadeShadowMaterials(fade) : createWindSwayShadowMaterials(wind, sway!);
+  if (fade && sway) {
+    installWindSway(depth, wind, sway);
+    installWindSway(distance, wind, sway);
+  }
   for (const chunk of chunks) {
     for (const mesh of chunk.meshes) {
-      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(fadeOf) : fadeOf(mesh.material);
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(patchedOf) : patchedOf(mesh.material);
       mesh.customDepthMaterial = depth;
       mesh.customDistanceMaterial = distance;
     }
   }
-  return { uniforms, materials: [...clones.values()], depth, distance };
+  return { fade, sway, materials: [...clones.values()], depth, distance };
 }
 
 /** Builds a chunk render object, deriving its instance center + distance-cull radius. */
@@ -387,9 +411,15 @@ export class FoliageRenderBinding {
   private readonly cellObjects = new Map<string, string[]>();
   /** Keys of procedural batches ({@link setPackedGroup}). */
   private readonly packedKeys = new Set<string>();
+  /**
+   * Level wind every swaying group reads (Faz 6). The shell writes it each frame
+   * with `updateWindSwayUniforms`; pass one in to share it with other swaying meshes.
+   */
+  readonly windSwayUniforms: WindSwayGlobalUniforms;
 
-  constructor() {
+  constructor(options: { windSwayUniforms?: WindSwayGlobalUniforms } = {}) {
     this.root.name = "Foliage";
+    this.windSwayUniforms = options.windSwayUniforms ?? createWindSwayGlobalUniforms();
   }
 
   /** All InstancedMeshes currently drawn across every chunk (picking/statistics). */
@@ -437,7 +467,7 @@ export class FoliageRenderBinding {
     this.cullDistanceScale = scale;
     this.fadeOrigin.value.copy(cameraPosition);
     for (const object of this.objects.values()) {
-      if (object.fade) this.setFadeWindow(object);
+      if (object.patched?.fade) this.setFadeWindow(object);
       const cullEnd = object.cullEnd * scale;
       if (cullEnd <= 0) {
         for (const chunk of object.chunks) {
@@ -534,9 +564,9 @@ export class FoliageRenderBinding {
       chunks: [chunk],
       cullStart: type.cullStart,
       cullEnd: type.cullEnd,
-      fade: type.cullEnd > 0 ? applyGroupFade([chunk], this.fadeOrigin) : null,
+      patched: this.patchGroup([chunk], type),
     };
-    if (object.fade) this.setFadeWindow(object);
+    if (object.patched?.fade) this.setFadeWindow(object);
     this.objects.set(key, object);
     this.packedKeys.add(key);
     return count;
@@ -600,15 +630,25 @@ export class FoliageRenderBinding {
       chunks,
       cullStart: type.cullStart,
       cullEnd: type.cullEnd,
-      fade: type.cullEnd > 0 ? applyGroupFade(chunks, this.fadeOrigin) : null,
+      patched: this.patchGroup(chunks, type),
     };
-    if (object.fade) this.setFadeWindow(object);
+    if (object.patched?.fade) this.setFadeWindow(object);
     return object;
   }
 
   private setFadeWindow(object: FoliageGroupObject): void {
     const fadeWindow = foliageFadeWindow(object.cullStart, object.cullEnd, this.cullDistanceScale);
-    if (fadeWindow) object.fade!.uniforms.uFoliageFadeRange.value.set(fadeWindow[0], fadeWindow[1]);
+    if (fadeWindow) object.patched?.fade?.uFoliageFadeRange.value.set(fadeWindow[0], fadeWindow[1]);
+  }
+
+  /** The group's fade/sway materials for a type (see {@link applyGroupMaterials}). */
+  private patchGroup(chunks: readonly FoliageChunkObject[], type: ForgeFoliageTypeDef): FoliageGroupMaterials | null {
+    return applyGroupMaterials(
+      chunks,
+      type.cullEnd > 0 ? this.fadeOrigin : null,
+      type.sway ? createWindSwayMaterialUniforms(type.sway) : null,
+      this.windSwayUniforms,
+    );
   }
 
   /** Removes and disposes a single group's chunk batches, if present. */

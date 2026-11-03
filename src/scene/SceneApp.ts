@@ -235,6 +235,8 @@ import { resolveCloudLayer } from "@engine/render-three/cloudLayer";
 import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
 import { stateFromDefaults, type WorldEnvironmentState } from "@engine/environment/environmentResolve";
 import { wrapHour } from "@engine/environment/worldClock";
+import { resolveLevelWind } from "@engine/environment/wind";
+import { updateWindSwayUniforms } from "@engine/render-three/windSway";
 
 /** The editor's World Environment preview, as the Details preview strip shows it. */
 export interface WorldEnvironmentPreview {
@@ -1348,6 +1350,8 @@ export class SceneApp {
   private aiNavigationVolumeObjects: AiNavigationVolumeObject[] = [];
   /** InstancedMesh foliage batches painted onto the level (Foliage Mode). */
   private foliageBinding: FoliageRenderBinding | null = null;
+  /** Viewport sway clock (seconds), advanced by the editor frame delta. */
+  private windSwaySeconds = 0;
   /** In-memory level foliage sidecar (`<layout>.foliage.json`). */
   private foliageData: LayoutFoliageData = createEmptyFoliageData();
   /** Placement-scoped vertex-color sidecar for Mesh Paint Mode. */
@@ -2086,6 +2090,7 @@ export class SceneApp {
       const foliageCamera = this.editorViewportCamera().position;
       this.foliageRing?.update([foliageCamera.x, foliageCamera.z], 1, 1, 2);
       this.foliageBinding?.updateCulling(foliageCamera);
+      this.updateWindSway(deltaSeconds, foliageCamera);
       this.updateWorldTerrainStreaming();
       if (this.worldTerrainCollisionWiresDirty) {
         this.worldTerrainCollisionWiresDirty = false;
@@ -13570,6 +13575,15 @@ export class SceneApp {
       ambient: this.ambientLight,
     });
     if (result.sunMoved) this.fitSunShadowToScene();
+  }
+
+  /** Faz 6 sway in the viewport: the level wind (with the WES preview) on the editor's own clock. */
+  private updateWindSway(deltaSeconds: number, viewOrigin: { x: number; y: number; z: number }): void {
+    const binding = this.foliageBinding;
+    if (!binding) return;
+    this.windSwaySeconds += deltaSeconds;
+    const wind = resolveLevelWind(this.layout, this.worldEnvironmentState());
+    updateWindSwayUniforms(binding.windSwayUniforms, wind, this.windSwaySeconds, viewOrigin);
   }
 
   /** The level's World Environment defaults, or null when there is none (or it is hidden). */

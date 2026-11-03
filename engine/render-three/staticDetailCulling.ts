@@ -17,6 +17,8 @@ import {
   createFoliageFadeShadowMaterials,
   type FoliageFadeUniforms,
 } from "./foliageFade";
+import { meshBaseScale } from "./models";
+import { installWindSway, windSwayBindingOf } from "./windSway";
 
 /**
  * Small-object distance culling for static mesh batches (OPEN_WORLD_PLAN Faz 7e).
@@ -45,6 +47,8 @@ interface AssetFade {
   fades: Set<Material>;
   depth: MeshDepthMaterial;
   distance: MeshDistanceMaterial;
+  /** Fading shadow materials that also sway, by the mesh's own sway depth material. */
+  swayShadows: Map<Material, { depth: MeshDepthMaterial; distance: MeshDistanceMaterial }>;
 }
 
 interface CulledMesh {
@@ -86,8 +90,9 @@ export class StaticDetailCulling {
       mesh.material = Array.isArray(mesh.material)
         ? mesh.material.map((material) => this.fadeOf(fade, material))
         : this.fadeOf(fade, mesh.material);
-      mesh.customDepthMaterial = fade.depth;
-      mesh.customDistanceMaterial = fade.distance;
+      const shadow = this.shadowOf(fade, mesh);
+      mesh.customDepthMaterial = shadow.depth;
+      mesh.customDistanceMaterial = shadow.distance;
       if (instanced && !options.skipWholeInstanced) return;
       let sphere: Sphere;
       if (instanced) {
@@ -168,10 +173,30 @@ export class StaticDetailCulling {
     if (!fade) {
       const uniforms: FoliageFadeUniforms = { uFoliageFadeOrigin: this.origin, uFoliageFadeRange: { value: new Vector2() } };
       const shadow = createFoliageFadeShadowMaterials(uniforms, "instanceScaled");
-      fade = { cullDistance, baseScale, uniforms, clones: new Map(), fades: new Set(), depth: shadow.depth, distance: shadow.distance };
+      fade = { cullDistance, baseScale, uniforms, clones: new Map(), fades: new Set(), depth: shadow.depth, distance: shadow.distance, swayShadows: new Map() };
       this.assets.set(key, fade);
     }
     return fade;
+  }
+
+  /** The fade's shadow materials, with the mesh's wind sway when it has one (Faz 6b). */
+  private shadowOf(fade: AssetFade, mesh: Mesh): { depth: MeshDepthMaterial; distance: MeshDistanceMaterial } {
+    const swayDepth = mesh.customDepthMaterial;
+    const sway = swayDepth ? windSwayBindingOf(swayDepth) : null;
+    if (!swayDepth || !sway) return fade;
+    // A batch rebuilt from already-faded meshes keeps its shadow.
+    for (const other of this.assets.values()) {
+      if (other.fades.has(swayDepth)) return { depth: swayDepth as MeshDepthMaterial, distance: mesh.customDistanceMaterial as MeshDistanceMaterial };
+    }
+    let shadow = fade.swayShadows.get(swayDepth);
+    if (!shadow) {
+      shadow = createFoliageFadeShadowMaterials(fade.uniforms, "instanceScaled");
+      installWindSway(shadow.depth, sway.global, sway.uniforms);
+      installWindSway(shadow.distance, sway.global, sway.uniforms);
+      fade.swayShadows.set(swayDepth, shadow);
+      fade.fades.add(shadow.depth).add(shadow.distance);
+    }
+    return shadow;
   }
 
   private fadeOf(fade: AssetFade, source: Material): Material {
@@ -185,24 +210,6 @@ export class StaticDetailCulling {
     }
     return clone;
   }
-}
-
-/**
- * A mesh's own scale inside its asset: an InstancedMesh keeps its source node
- * matrix (`createInstancedModelGroup`'s `userData.sourceMatrix`); a placement
- * clone's mesh is its world scale over the clone root's (the placement).
- */
-function meshBaseScale(mesh: Mesh, instanced: boolean): number {
-  let scale = 1;
-  if (instanced) {
-    const source = mesh.userData.sourceMatrix as Matrix4 | undefined;
-    scale = source?.isMatrix4 ? source.getMaxScaleOnAxis() : 1;
-  } else {
-    let root: Object3D | null = mesh.parent;
-    while (root && root.userData.placementIndex === undefined) root = root.parent;
-    if (root) scale = mesh.matrixWorld.getMaxScaleOnAxis() / Math.max(root.matrixWorld.getMaxScaleOnAxis(), 1e-6);
-  }
-  return Number.isFinite(scale) && scale > 1e-6 ? scale : 1;
 }
 
 /** The largest axis scale over a batch's instances (its farthest-fading instance). */

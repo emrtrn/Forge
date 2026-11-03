@@ -1,4 +1,4 @@
-import { Color, Group, InstancedMesh, type Material, Matrix4, Object3D } from "three";
+import { Color, Group, InstancedMesh, type Material, Matrix4, type Mesh, Object3D } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 
@@ -118,6 +118,27 @@ export function createInstancedModelGroup(
   });
 
   return { group, meshes };
+}
+
+/**
+ * A mesh's own scale inside its asset: an InstancedMesh keeps its source node
+ * matrix (`createInstancedModelGroup`'s `userData.sourceMatrix`); a placement
+ * clone's mesh is its world scale over the clone root's (the placement). The
+ * editor tags every node of a clone, so the root is the topmost tagged one.
+ */
+export function meshBaseScale(mesh: Mesh, instanced: boolean): number {
+  let scale = 1;
+  if (instanced) {
+    const source = mesh.userData.sourceMatrix as Matrix4 | undefined;
+    scale = source?.isMatrix4 ? source.getMaxScaleOnAxis() : 1;
+  } else {
+    let root: Object3D | null = null;
+    for (let node = mesh.parent; node; node = node.parent) {
+      if (node.userData.placementIndex !== undefined) root = node;
+    }
+    if (root) scale = mesh.matrixWorld.getMaxScaleOnAxis() / Math.max(root.matrixWorld.getMaxScaleOnAxis(), 1e-6);
+  }
+  return Number.isFinite(scale) && scale > 1e-6 ? scale : 1;
 }
 
 /**

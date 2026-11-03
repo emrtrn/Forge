@@ -31,6 +31,7 @@ import {
   type ForgeMaterialSide,
   type ForgeMaterialType,
 } from "@engine/assets/material";
+import { WIND_SWAY_DEFAULTS, WIND_SWAY_LIMITS, type WindSwaySettings } from "@engine/environment/wind";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadMaterialAsset, saveMaterialAsset } from "@/editor/materialStore";
 import {
@@ -314,6 +315,7 @@ export class MaterialEditor {
         <label class="me-row" title="Dokuları yüklerken dikey çevirir (three.js varsayılanı). Motorun ürettiği UV'lerde açık bırakın: landscape katmanları, UVW projeksiyonu, primitifler. Materyal bir glTF/GLB mesh'inin materyal yuvasına atanmışsa KAPATIN: glTF UV'leri görselin üstünden aşağı doğru ilerler; çevrilmiş doku ters oturur ve UV düzeni bozuk görünür."><span>Flip Y</span><input data-me-field="flipY" type="checkbox" ${this.def.flipY ? "checked" : ""} /></label>
       </div>
       ${this.normalMotionSection()}
+      ${this.windSwaySection()}
       ${this.terrainDetailSection()}
       ${this.layerBlendSection()}
       ${blend ? this.layerSettingsSection(blend) : ""}
@@ -350,6 +352,23 @@ export class MaterialEditor {
       </div>`;
   }
 
+  /** Wind Sway toggle and, while on, its response rows (limits from the engine normalizer). */
+  private windSwaySection(): string {
+    const sway = this.def.sway;
+    const row = (label: string, field: "swayAmplitude" | "swayHeight" | "swayFrequency", key: keyof WindSwaySettings, step: number, title: string): string =>
+      this.numberRow(label, field, sway?.[key] ?? 0, WIND_SWAY_LIMITS[key][0], WIND_SWAY_LIMITS[key][1], step, title);
+    return `
+      <div class="me-section">
+        <div class="me-section-title">Wind Sway</div>
+        <label class="me-row" title="Bu materyali kullanan static mesh'ler rüzgârda salınır (yalnızca görsel; gölge de salınır). Actor ve spline mesh'lerinde etkisi yoktur; önizleme küresi salınmaz."><span>Enabled</span><input data-me-field="swayEnabled" type="checkbox" ${sway ? "checked" : ""} /></label>
+        ${sway ? `
+          ${row("Amplitude", "swayAmplitude", "amplitude", 0.01, "Rüzgâr gücü 1 iken tepenin metre cinsinden kayması")}
+          ${row("Height", "swayHeight", "height", 0.05, "Salınımın tam güce ulaştığı, pivotun üstündeki yükseklik (metre, ölçek 1); taban sabit kalır")}
+          ${row("Frequency", "swayFrequency", "frequency", 0.05, "Titreşim sıklığı (Hz)")}
+        ` : ""}
+      </div>`;
+  }
+
   private enumOptions<T extends string>(values: readonly T[], current: T): string {
     return values
       .map((value) => `<option value="${value}" ${value === current ? "selected" : ""}>${value}</option>`)
@@ -370,14 +389,18 @@ export class MaterialEditor {
       | "normalMotionSecondaryX"
       | "normalMotionSecondaryY"
       | "normalMotionStrength"
+      | "swayAmplitude"
+      | "swayHeight"
+      | "swayFrequency"
     ),
     value: number,
     min: number,
     max: number,
     step: number,
+    title?: string,
   ): string {
     return `
-      <label class="me-row">
+      <label class="me-row"${title ? ` title="${escapeHtml(title)}"` : ""}>
         <span>${label}</span>
         <input data-me-field="${field}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" />
       </label>
@@ -734,6 +757,13 @@ export class MaterialEditor {
     else if (field.startsWith("normalMotion")) {
       next.normalMotion = this.applyNormalMotionField(next.normalMotion, field, input);
     }
+    else if (field === "swayEnabled") {
+      if (input instanceof HTMLInputElement && input.checked) next.sway = { ...WIND_SWAY_DEFAULTS };
+      else delete next.sway;
+    }
+    else if (field === "swayAmplitude" && next.sway) next.sway = { ...next.sway, amplitude: numberInput(input.value, ...WIND_SWAY_LIMITS.amplitude) };
+    else if (field === "swayHeight" && next.sway) next.sway = { ...next.sway, height: numberInput(input.value, ...WIND_SWAY_LIMITS.height) };
+    else if (field === "swayFrequency" && next.sway) next.sway = { ...next.sway, frequency: numberInput(input.value, ...WIND_SWAY_LIMITS.frequency) };
     else if (field === "roughness") next.roughness = numberInput(input.value, 0, 1);
     else if (field === "metalness") next.metalness = numberInput(input.value, 0, 1);
     else if (field === "aoIntensity") next.aoIntensity = numberInput(input.value, 0, 1);
@@ -759,7 +789,7 @@ export class MaterialEditor {
       field === "layerBlendEnabled" ||
       field === "layerBlendDriver" ||
       field === "useBaseColorAlphaForOpacity" ||
-      field === "normalMotionEnabled" || field === "terrainDetailNormalTexture"
+      field === "normalMotionEnabled" || field === "swayEnabled" || field === "terrainDetailNormalTexture"
     ) this.renderDetails();
     await this.updatePreviewMaterial();
     this.warnIfTransparentMaterial(field);

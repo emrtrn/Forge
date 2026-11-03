@@ -237,7 +237,7 @@ import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/envi
 import { stateFromDefaults, type WorldEnvironmentState } from "@engine/environment/environmentResolve";
 import { wrapHour } from "@engine/environment/worldClock";
 import { normalizeLayoutWind, resolveLevelWind } from "@engine/environment/wind";
-import { updateWindSwayUniforms } from "@engine/render-three/windSway";
+import { applyMaterialWindSway, createWindSwayGlobalUniforms, materialSways, updateWindSwayUniforms } from "@engine/render-three/windSway";
 
 /** The editor's World Environment preview, as the Details preview strip shows it. */
 export interface WorldEnvironmentPreview {
@@ -1354,6 +1354,8 @@ export class SceneApp {
   private foliageBinding: FoliageRenderBinding | null = null;
   /** Viewport sway clock (seconds), advanced by the editor frame delta. */
   private windSwaySeconds = 0;
+  /** Level wind shared by swaying foliage and static meshes (Faz 6, 6b). */
+  private readonly windSwayUniforms = createWindSwayGlobalUniforms();
   /** In-memory level foliage sidecar (`<layout>.foliage.json`). */
   private foliageData: LayoutFoliageData = createEmptyFoliageData();
   /** Placement-scoped vertex-color sidecar for Mesh Paint Mode. */
@@ -1809,7 +1811,7 @@ export class SceneApp {
       renderStats: () => this.getRenderStats(),
       sceneSeconds: () => this.engineApp.sceneSeconds,
       postProcessActive: () => this.postProcessPipeline !== null,
-      windSwayActive: () => (this.foliageBinding?.swayingGroupCount() ?? 0) > 0,
+      windSwayActive: () => (this.foliageBinding?.swayingGroupCount() ?? 0) > 0 || [...this.materialCache.values()].some(materialSways),
     });
     this.environment = new AuthoredEnvironment({
       scene: this.scene,
@@ -4593,6 +4595,7 @@ export class SceneApp {
       group.add(object);
       renderedOverrideObjects.push(object);
     });
+    applyMaterialWindSway(group, this.windSwayUniforms, clonedMaterials);
     this.instanceGroups.set(assetId, group);
     this.instanceMeshes.set(assetId, meshes);
     this.instanceOverrideObjects.set(assetId, renderedOverrideObjects);
@@ -8502,7 +8505,7 @@ export class SceneApp {
       this.foliageTypes = await loadFoliageTypesForData(this.foliageData, manifest);
     }
     await this.ensureFoliageMeshesLoaded();
-    const binding = new FoliageRenderBinding();
+    const binding = new FoliageRenderBinding({ windSwayUniforms: this.windSwayUniforms });
     this.scene.add(binding.root);
     binding.rebuild(this.foliageRenderData(), this.foliageResolver());
     this.foliageBinding = binding;
@@ -13633,12 +13636,10 @@ export class SceneApp {
 
   /** Faz 6 sway in the viewport: the level wind (with the WES preview) on the editor's own clock. */
   private updateWindSway(deltaSeconds: number, viewOrigin: { x: number; y: number; z: number }): void {
-    const binding = this.foliageBinding;
-    if (!binding) return;
     this.windSwaySeconds += deltaSeconds;
     const resolved = resolveLevelWind(this.layout, this.worldEnvironmentState());
     const wind = this.gpuSweepSession.bypassWindSway ? { ...resolved, strength: 0 } : resolved;
-    updateWindSwayUniforms(binding.windSwayUniforms, wind, this.windSwaySeconds, viewOrigin, this.editorQuality.windSwayDistance);
+    updateWindSwayUniforms(this.windSwayUniforms, wind, this.windSwaySeconds, viewOrigin, this.editorQuality.windSwayDistance);
   }
 
   /** The level's World Environment defaults, or null when there is none (or it is hidden). */

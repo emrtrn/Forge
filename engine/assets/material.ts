@@ -1,3 +1,5 @@
+import { normalizeWindSwaySettings, type WindSwaySettings } from "../environment/wind";
+
 export const FORGE_MATERIAL_TYPES = ["standard", "basic"] as const;
 export type ForgeMaterialType = (typeof FORGE_MATERIAL_TYPES)[number];
 
@@ -122,6 +124,8 @@ export function normalizeForgeMaterialTerrainDetail(value: unknown): ForgeMateri
 
 export interface ForgeMaterialDef {
   terrainDetail?: ForgeMaterialTerrainDetail;
+  /** Wind sway of static meshes drawn with this material (Faz 6b); absent never sways. */
+  sway?: WindSwaySettings;
   /** Optional terrain-only isotropic texture footprint in world metres. */
   terrainMetersPerRepeat?: number;
   schema: 1;
@@ -264,6 +268,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
   const layerBlend = layerBlendOrNull(input.layerBlend, legacyMaskTexture);
   const normalMotion = normalMotionOrNull(input.normalMotion);
   const terrainDetail = normalizeForgeMaterialTerrainDetail(input.terrainDetail);
+  const sway = normalizeWindSwaySettings(input.sway);
   const legacyMaskConsumedByLayerBlend =
     layerBlend?.driver === "maskTexture" &&
     layerBlend.maskTexture === legacyMaskTexture &&
@@ -305,6 +310,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     emissive: colorOr(input.emissive, "#000000"),
     emissiveIntensity: Math.max(0, numberOr(input.emissiveIntensity, 0)),
     ...(terrainDetail ? { terrainDetail } : {}),
+    ...(sway ? { sway } : {}),
     normalMotion,
     layerBlend,
   };

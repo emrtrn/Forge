@@ -89,7 +89,7 @@ import { normalizeSplineComponentData } from "../engine/scene/spline";
 import { normalizeSplineGenerators } from "../engine/scene/splineGenerator";
 import { normalizeWorldRecipe, worldRecipePath } from "../engine/worldbuilder/recipe";
 import { normalizeWorldEnvironment } from "../engine/environment/worldEnvironment";
-import { normalizeLayoutWind } from "../engine/environment/wind";
+import { normalizeLayoutWind, normalizeWindSwaySettings } from "../engine/environment/wind";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -3243,6 +3243,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     }
     terrainDetail = normalizeForgeMaterialTerrainDetail(detail);
   }
+  const sway = normalizeWindSwaySettings(input.sway);
 
   return {
     schema: 1,
@@ -3278,6 +3279,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissiveIntensity:
       validateOptionalNumber(input.emissiveIntensity, "material.emissiveIntensity", 0, 20) ?? 0,
     ...(terrainDetail ? { terrainDetail } : {}),
+    ...(sway ? { sway } : {}),
     normalMotion,
     layerBlend,
   };

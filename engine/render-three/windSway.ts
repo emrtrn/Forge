@@ -1,12 +1,17 @@
 import {
+  type InstancedMesh,
   Material,
+  type Mesh,
   MeshDepthMaterial,
   MeshDistanceMaterial,
+  type Object3D,
   Vector2,
   Vector3,
   type WebGLRenderer,
 } from "three";
 import type { ResolvedWind, WindSwaySettings } from "../environment/wind";
+import { MATERIAL_SWAY_KEY } from "./materials";
+import { meshBaseScale } from "./models";
 
 /**
  * Vertex wind sway for foliage and static meshes (DEFORMABLE_FRACTURABLE_WORK_PLAN
@@ -48,6 +53,11 @@ export interface WindSwayMaterialUniforms {
   uSwayHeight: { value: number };
   /** Flutter frequency in Hz. */
   uSwayFrequency: { value: number };
+  /**
+   * The mesh's node scale inside its asset. Static batches pass it because their
+   * instance matrices already hold it; 0 reads it from `modelMatrix` (foliage).
+   */
+  uSwayBaseScale: { value: number };
 }
 
 export function createWindSwayGlobalUniforms(): WindSwayGlobalUniforms {
@@ -61,11 +71,12 @@ export function createWindSwayGlobalUniforms(): WindSwayGlobalUniforms {
   };
 }
 
-export function createWindSwayMaterialUniforms(settings: WindSwaySettings): WindSwayMaterialUniforms {
+export function createWindSwayMaterialUniforms(settings: WindSwaySettings, baseScale = 0): WindSwayMaterialUniforms {
   return {
     uSwayAmplitude: { value: settings.amplitude },
     uSwayHeight: { value: settings.height },
     uSwayFrequency: { value: settings.frequency },
+    uSwayBaseScale: { value: baseScale },
   };
 }
 
@@ -97,6 +108,7 @@ const VERTEX_PARS = [
   "uniform float uSwayAmplitude;",
   "uniform float uSwayHeight;",
   "uniform float uSwayFrequency;",
+  "uniform float uSwayBaseScale;",
 ].join("\n");
 
 const VERTEX_MAIN = [
@@ -113,9 +125,11 @@ const VERTEX_MAIN = [
   "    : 1.0;",
   // Uniform per instance, so calm air or a far instance really skips the work.
   "  if (uWindStrength > 0.0 && swayFade > 0.0) {",
-  // Height in metres at instance scale 1: modelMatrix carries the asset's own
-  // node scale (a mesh authored in centimetres), the instance matrix does not.
-  "  float swayMask = clamp(transformed.y * length(modelMatrix[1].xyz) / max(uSwayHeight, 1e-4), 0.0, 1.0);",
+  // Height in metres at instance scale 1: a foliage mesh's modelMatrix carries the
+  // asset's own node scale (a mesh authored in centimetres), its instance matrix
+  // does not; a static batch's meshes pass theirs in uSwayBaseScale.
+  "  float swayNodeScale = uSwayBaseScale > 0.0 ? uSwayBaseScale : length(modelMatrix[1].xyz);",
+  "  float swayMask = clamp(transformed.y * swayNodeScale / max(uSwayHeight, 1e-4), 0.0, 1.0);",
   "  swayMask *= swayMask;",
   "  float swayPhase = dot(swayOrigin.xz, vec2(0.37, 0.23));",
   "  float swayGustWave = 0.5 + 0.5 * sin(dot(swayOrigin.xz, uWindDirection) * 0.08 - uWindTime * 1.3);",
@@ -193,6 +207,78 @@ export function clonePatchableMaterial(source: Material): Material {
   const key = ownOrNull(source, "customProgramCacheKey");
   if (key) material.customProgramCacheKey = key;
   return material;
+}
+
+function materialSwaySettings(material: Material): WindSwaySettings | null {
+  return (material.userData[MATERIAL_SWAY_KEY] as WindSwaySettings | undefined) ?? null;
+}
+
+/** True for a material whose asset opted into wind sway. */
+export function materialSways(material: Material): boolean {
+  return materialSwaySettings(material) !== null;
+}
+
+/** The sway bindings of a patched material (a sway shadow material, for instance); null when unpatched. */
+export function windSwayBindingOf(material: Material): { global: WindSwayGlobalUniforms; uniforms: WindSwayMaterialUniforms } | null {
+  return (material.userData as { forgeWindSway?: { global: WindSwayGlobalUniforms; uniforms: WindSwayMaterialUniforms } }).forgeWindSway ?? null;
+}
+
+interface MaterialSwaySet {
+  uniforms: WindSwayMaterialUniforms;
+  depth: MeshDepthMaterial;
+  distance: MeshDistanceMaterial;
+  clones: Map<Material, Material>;
+}
+
+/**
+ * Faz 6b: moves the meshes under `root` (a static batch with its placement
+ * clones) onto swaying clones of the materials that opted in, with matching
+ * shadow materials. The cached source materials are never touched. Clones and
+ * shadow materials go to `owned`, the batch's own disposal list. One uniform set
+ * per settings and node scale, so a batch shares programs. Three copies a
+ * cutout's `alphaTest`/`map` onto the custom depth material at draw time.
+ */
+export function applyMaterialWindSway(root: Object3D, global: WindSwayGlobalUniforms, owned: Material[]): void {
+  root.updateWorldMatrix(true, true);
+  const sets = new Map<string, MaterialSwaySet>();
+  root.traverse((node) => {
+    const mesh = node as Mesh;
+    if (!mesh.isMesh) return;
+    const sources = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const firstSwaying = sources.find(materialSways);
+    if (!firstSwaying) return;
+    const baseScale = meshBaseScale(mesh, (mesh as InstancedMesh).isInstancedMesh === true);
+    const setOf = (settings: WindSwaySettings): MaterialSwaySet => {
+      const key = `${settings.amplitude}|${settings.height}|${settings.frequency}|${baseScale.toPrecision(6)}`;
+      let set = sets.get(key);
+      if (!set) {
+        const uniforms = createWindSwayMaterialUniforms(settings, baseScale);
+        const { depth, distance } = createWindSwayShadowMaterials(global, uniforms);
+        owned.push(depth, distance);
+        set = { uniforms, depth, distance, clones: new Map() };
+        sets.set(key, set);
+      }
+      return set;
+    };
+    const swayOf = (source: Material): Material => {
+      const settings = materialSwaySettings(source);
+      if (!settings) return source;
+      const set = setOf(settings);
+      let clone = set.clones.get(source);
+      if (!clone) {
+        clone = clonePatchableMaterial(source);
+        installWindSway(clone, global, set.uniforms);
+        owned.push(clone);
+        set.clones.set(source, clone);
+      }
+      return clone;
+    };
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(swayOf) : swayOf(mesh.material);
+    // A mesh has one shadow material: on a mixed slot list the first swaying slot sets it.
+    const shadow = setOf(materialSwaySettings(firstSwaying)!);
+    mesh.customDepthMaterial = shadow.depth;
+    mesh.customDistanceMaterial = shadow.distance;
+  });
 }
 
 /** Shadow-pass materials (directional/spot depth, point-light distance) applying the same sway. */

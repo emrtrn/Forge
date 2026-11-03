@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
-import { BoxGeometry, Group, type Material, Mesh, MeshStandardMaterial, ShaderLib, Vector3 } from "three";
+import { BoxGeometry, Group, InstancedMesh, type Material, Matrix4, Mesh, MeshStandardMaterial, ShaderLib, Vector3 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+import { normalizeForgeMaterialDef } from "../../engine/assets/material";
 import { normalizeWindSwaySettings, resolveLevelWind, resolveWind, WIND_SWAY_DEFAULTS } from "../../engine/environment/wind";
 import { FoliageRenderBinding } from "../../engine/render-three/foliage";
+import { createThreeMaterialFromForgeDef, MATERIAL_SWAY_KEY } from "../../engine/render-three/materials";
+import { StaticDetailCulling } from "../../engine/render-three/staticDetailCulling";
 import { normalizeFoliageData, normalizeFoliageType } from "../../engine/scene/foliage";
-import { validateFoliageTypeAsset } from "../../tools/saveValidator";
+import { validateFoliageTypeAsset, validateForgeMaterialDef } from "../../tools/saveValidator";
 import { QUALITY_PROFILES } from "../../engine/perf/qualityProfiles";
 import {
+  applyMaterialWindSway,
   createWindSwayGlobalUniforms,
   createWindSwayMaterialUniforms,
   createWindSwayShadowMaterials,
   installWindSway,
+  materialSways,
   patchWindSwayShader,
   updateWindSwayUniforms,
 } from "../../engine/render-three/windSway";
@@ -52,7 +57,109 @@ function compiledVertex(material: Material, name: keyof typeof ShaderLib): Shade
   return shader;
 }
 
+function swayingMaterial(): Material {
+  return createThreeMaterialFromForgeDef(normalizeForgeMaterialDef({ name: "Sway", sway: settings }));
+}
+
+/** A static batch as the shells build it: an InstancedMesh holding a 0.01 node scale in its instances. */
+function staticBatch(material: Material): { group: Group; mesh: InstancedMesh } {
+  const group = new Group();
+  const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), material, 1);
+  mesh.userData.sourceMatrix = new Matrix4().makeScale(0.01, 0.01, 0.01);
+  group.add(mesh);
+  return { group, mesh };
+}
+
 export function registerWindSwayTests(check: Check): void {
+  check("wind sway: material sway round-trips the normalizer and the save allowlist", () => {
+    const material = normalizeForgeMaterialDef({ name: "Sway", sway: { amplitude: 0.4, height: 2, frequency: 1.5 } });
+    assert.deepEqual(material.sway, { amplitude: 0.4, height: 2, frequency: 1.5 });
+    const saved = validateForgeMaterialDef(material);
+    assert.deepEqual(saved.sway, material.sway);
+    assert.deepEqual(normalizeForgeMaterialDef(saved), material);
+    assert.equal("sway" in normalizeForgeMaterialDef({ name: "Still" }), false, "absent stays absent");
+    assert.equal("sway" in validateForgeMaterialDef(normalizeForgeMaterialDef({ name: "Still" })), false);
+    assert.equal(normalizeForgeMaterialDef({ name: "Wild", sway: { amplitude: 99 } }).sway?.amplitude, 5);
+  });
+
+  check("wind sway: a static batch moves onto clones, leaving the cached material and still meshes alone", () => {
+    const source = swayingMaterial();
+    assert.equal(materialSways(source), true);
+    const still = new MeshStandardMaterial();
+    const { group, mesh } = staticBatch(source);
+    const stillMesh = new Mesh(new BoxGeometry(1, 1, 1), still);
+    group.add(stillMesh);
+    const global = createWindSwayGlobalUniforms();
+    const owned: Material[] = [];
+    applyMaterialWindSway(group, global, owned);
+
+    assert.notEqual(mesh.material, source);
+    assert.equal(Object.prototype.hasOwnProperty.call(source, "onBeforeCompile"), false, "the cached material stays unpatched");
+    assert.equal(stillMesh.material, still);
+    assert.equal(stillMesh.customDepthMaterial, undefined);
+    assert.equal(owned.length, 3, "clone + depth + distance go to the batch's disposal list");
+    assert.ok(owned.includes(mesh.material as Material) && owned.includes(mesh.customDepthMaterial!) && owned.includes(mesh.customDistanceMaterial!));
+    const shader = compiledVertex(mesh.material as Material, "physical");
+    assert.equal(shader.uniforms.uWindStrength, global.uWindStrength, "shares the level wind with foliage");
+    assert.equal(shader.uniforms.uSwayBaseScale!.value, 0.01, "the instance matrix holds the node scale, so it comes in a uniform");
+    assert.equal(compiledVertex(mesh.customDepthMaterial!, "depth").uniforms.uSwayBaseScale!.value, 0.01, "the shadow agrees");
+  });
+
+  check("wind sway: a material's own patch and a placement tint's clone survive", () => {
+    const source = swayingMaterial();
+    const order: string[] = [];
+    source.onBeforeCompile = () => { order.push("own"); };
+    const { group, mesh } = staticBatch(source);
+    applyMaterialWindSway(group, createWindSwayGlobalUniforms(), []);
+    compiledVertex(mesh.material as Material, "physical");
+    assert.deepEqual(order, ["own"]);
+    assert.equal(materialSways(swayingMaterial().clone()), true, "the opt-in survives Material.clone()");
+    assert.equal(MATERIAL_SWAY_KEY in new MeshStandardMaterial().userData, false);
+  });
+
+  check("wind sway: a placement clone's mask ignores the placement scale in both tagging styles", () => {
+    for (const tagEveryNode of [false, true]) {
+      const placement = new Group();
+      placement.userData.placementIndex = 0;
+      placement.scale.setScalar(3);
+      const node = new Group();
+      node.scale.setScalar(0.01);
+      if (tagEveryNode) node.userData.placementIndex = 0;
+      const mesh = new Mesh(new BoxGeometry(1, 1, 1), swayingMaterial());
+      if (tagEveryNode) mesh.userData.placementIndex = 0;
+      node.add(mesh);
+      placement.add(node);
+      applyMaterialWindSway(placement, createWindSwayGlobalUniforms(), []);
+      const scale = compiledVertex(mesh.material as Material, "physical").uniforms.uSwayBaseScale!.value as number;
+      assert.ok(Math.abs(scale - 0.01) < 1e-6, `node scale only, got ${scale}`);
+    }
+  });
+
+  check("wind sway: small-object culling fades a swaying mesh without losing its swaying shadow", () => {
+    const { group, mesh } = staticBatch(swayingMaterial());
+    const global = createWindSwayGlobalUniforms();
+    applyMaterialWindSway(group, global, []);
+    const culling = new StaticDetailCulling();
+    assert.equal(culling.register("small", 0.5, group, { skipWholeInstanced: false }), true);
+    const lit = compiledVertex(mesh.material as Material, "physical");
+    assert.ok(lit.vertexShader.includes("swayBasis") && lit.uniforms.uFoliageFadeRange, "lit: fade and sway");
+    const depth = mesh.customDepthMaterial!;
+    const shadow = compiledVertex(depth, "depth");
+    assert.ok(shadow.vertexShader.includes("swayBasis") && shadow.uniforms.uFoliageFadeRange, "shadow: fade and sway");
+    assert.equal(shadow.uniforms.uWindStrength, global.uWindStrength);
+    culling.register("small", 0.5, group, { skipWholeInstanced: false });
+    assert.equal(mesh.customDepthMaterial, depth, "registering again keeps the shadow");
+    culling.dispose();
+  });
+
+  check("wind sway: a still small object keeps the shared fade shadow", () => {
+    const { group, mesh } = staticBatch(new MeshStandardMaterial());
+    const culling = new StaticDetailCulling();
+    culling.register("small", 0.5, group, { skipWholeInstanced: false });
+    assert.equal(compiledVertex(mesh.customDepthMaterial!, "depth").vertexShader.includes("swayBasis"), false);
+    culling.dispose();
+  });
+
   check("wind sway: the patch splices after begin_vertex in lit, depth and distance shaders", () => {
     for (const name of ["physical", "standard", "lambert", "depth", "distance"] as const) {
       const shader = shaderOf(name);

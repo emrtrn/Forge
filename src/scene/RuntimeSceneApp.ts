@@ -28,7 +28,7 @@ import {
 import { resolveHeightFog } from "@engine/scene/heightFog";
 import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
 import { resolveLevelWind } from "@engine/environment/wind";
-import { updateWindSwayUniforms } from "@engine/render-three/windSway";
+import { applyMaterialWindSway, createWindSwayGlobalUniforms, materialSways, updateWindSwayUniforms } from "@engine/render-three/windSway";
 import { setSceneDepthMode } from "@engine/render-three/depthMode";
 import { FOLLOW_SHADOW_HALF_EXTENT, updateSunFollowShadow } from "@engine/render-three/sunFollowShadow";
 import { affordableSunCascades, SunCascadeShadow } from "@engine/render-three/sunCascadeShadow";
@@ -972,6 +972,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly textureLoader = new TextureLoader();
   /** Loaded material override assets, cached by material id. */
   private readonly materialCache = new Map<string, Material>();
+  /** Level wind shared by swaying foliage and static meshes (Faz 6, 6b). */
+  private readonly windSwayUniforms = createWindSwayGlobalUniforms();
   /** In-flight material loads, deduped by material id. */
   private readonly materialLoads = new Map<string, Promise<Material | undefined>>();
   /** Per-asset default material slots (`*.materials.json` sidecars). */
@@ -1267,7 +1269,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       renderStats: () => this.getRenderStats(),
       sceneSeconds: () => this.engineApp.sceneSeconds,
       postProcessActive: () => this.postProcessPipeline !== null,
-      windSwayActive: () => (this.foliageBinding?.swayingGroupCount() ?? 0) > 0,
+      windSwayActive: () => (this.foliageBinding?.swayingGroupCount() ?? 0) > 0 || [...this.materialCache.values()].some(materialSways),
       // The sweep holds the world still for the duration under its own holder,
       // because an A/B across several seconds only means anything if the two
       // sides are the same scene. Rendering carries on — that is the whole
@@ -5501,6 +5503,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       group.add(object);
       this.instanceOverrideObjects.set(overrideObjectKey(assetId, placementIndex), object);
     });
+    applyMaterialWindSway(group, this.windSwayUniforms, clonedMaterials);
     return { group, meshes, clonedMaterials };
   }
 
@@ -6251,7 +6254,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (missingModels.length > 0 && this.assetLoader) {
       this.storeModels(await this.assetLoader.loadModels(missingModels));
     }
-    const binding = new FoliageRenderBinding();
+    const binding = new FoliageRenderBinding({ windSwayUniforms: this.windSwayUniforms });
     this.scene.add(tagSceneSource(binding.root, "foliage"));
     const ringRules: ProceduralFoliageRuleSource[] = [];
     for (const rule of data.landscapeRules ?? []) {
@@ -6714,12 +6717,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Faz 6 sway: the level wind on simulation time, so a paused game holds the grass still. */
   private updateWindSway(): void {
-    const binding = this.foliageBinding;
-    if (!binding) return;
     const resolved = resolveLevelWind(this.layout, this.worldEnvironmentState());
     const wind = this.gpuSweepSession.bypassWindSway ? { ...resolved, strength: 0 } : resolved;
     updateWindSwayUniforms(
-      binding.windSwayUniforms,
+      this.windSwayUniforms,
       wind,
       this.simulationClockMs / 1000,
       this.camera.position,

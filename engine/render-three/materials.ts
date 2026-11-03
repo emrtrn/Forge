@@ -85,6 +85,9 @@ interface NormalMotionState {
 
 const normalMotionStates = new Map<MeshStandardMaterial, NormalMotionState>();
 
+/** `userData` key of a material's authored wind sway settings; plain data, so `Material.clone()` keeps it. */
+export const MATERIAL_SWAY_KEY = "forgeSwaySettings";
+
 /** Updates all live authored normal-motion materials once per rendered frame. */
 export function advanceForgeMaterialAnimations(elapsedSeconds: number): void {
   const time = Math.max(0, elapsedSeconds);
@@ -206,6 +209,7 @@ export function createThreeMaterialFromForgeDef(
   }
 
   material.needsUpdate = true;
+  if (def.sway) material.userData[MATERIAL_SWAY_KEY] = { ...def.sway };
   return material;
 }
 

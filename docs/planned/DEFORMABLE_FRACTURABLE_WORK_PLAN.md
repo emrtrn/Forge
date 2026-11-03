@@ -863,14 +863,53 @@ Düzeltme: kayıt bulamazsa manifest'i bir kez yeniden okur. Smoke
 
 Faz 6 kabulünden bağımsız; tüketici ihtiyacıyla açılır.
 
+Dilimler (2026-11-04):
+
+A1–A4 kapandı (2026-11-04), görsel kabul kullanıcıda.
+
+- **A1 veri:** `ForgeMaterialDef.sway?` (`normalizeForgeMaterialDef` +
+  `validateForgeMaterialDef`, yok = salınmaz), maksimal round-trip testi.
+- **A2 render:** `applyMaterialWindSway(root, global, owned)`: batch kurulunca
+  sway'li materyalin klonuna geçirir (paylaşılan önbellek materyaline dokunmaz),
+  gölge materyallerini bağlar; klonlar placement klon materyalleriyle aynı
+  ömürde (`clonedMaterials`). Maske için mesh başına düğüm ölçeği:
+  `uSwayBaseScale` (static instance matrisi düğüm ölçeğini taşır, foliage'da
+  `modelMatrix` taşır; 0 = eski yol). Küçük nesne culling'i sway gölgesini
+  ezmez. Foliage type'ın kendi `sway`'i geçerlidir; v1'de actor mesh'leri ve
+  spline/landscape spline mesh'leri salınmaz.
+- **A3 editör:** Material Editor "Wind Sway" bölümü.
+- **A4 smoke:** Play GPU derleme + yön, düzenle → kaydet → Play zinciri.
+- **B1 tasarım onayı:** kullanıcıya sunuldu (2026-11-04), onaysız kod yok.
+  Öneri: 4 gövde × 4 iz noktası (doğrusal parçalar; nokta başına konum + yaş,
+  sabit uniform dizisi); foliage type opt-in `contact`; yarıçap gövdeden
+  (kapsül yarıçapı, araç yarı genişliği), güç type'tan; kalite: ultra/high 4,
+  medium 2, low 0 gövde; bütçe yoğun sahnede en çok 0.3 ms.
+- **B2+ uygulama:** onaylanan tasarıma göre dilimlenir.
+
 - [ ] Etkileşim alanı: yakındaki araç/pawn konumları → yönlü eğilme ve
       kademeli geri dönüş. Önerilen v1: gövde başına son birkaç konum + yaşı
       (küçük sabit uniform dizisi), kısa bir iz bırakır; durumsuz shader'da
       gerçek "ezilip yavaş kalkma" için bir ezilme haritası render target'ı
       gerekir (daha büyük iş, ayrı karar).
-- [ ] Static mesh materyalinde `sway` opt-in + materyal editörü alanı
-      (`normalizeWindSwaySettings` ve `installWindSway` hazır; instancing
-      slotları ve klon yolu `asClone` emsaliyle).
+- [x] Static mesh materyalinde `sway` opt-in + materyal editörü alanı.
+      `ForgeMaterialDef.sway?`; `createThreeMaterialFromForgeDef` ayarı düz
+      veri olarak `userData.forgeSwaySettings`'e yazar (klonlarda kalır).
+      `applyMaterialWindSway(group, global, owned)` iki noktada, batch kurulup
+      klonlar eklendikten sonra çalışır (`buildInstancedBatch`, editör
+      `createInstancedModel`): önbellek materyali hiç yamanmaz, mesh'ler klona
+      geçer, klon ve gölge materyalleri batch'in `clonedMaterials` listesine
+      girer. `asClone` kararı değişmedi: instanced mesh instanced kalır, shader
+      her iki yolu da çözer. Gölgede cutout'u three çizim anında custom depth
+      materyaline kopyalar. `StaticDetailCulling.shadowOf` fade + sway gölgesini
+      birleştirir. `uSwayBaseScale`: maskedeki düğüm ölçeği (`meshBaseScale`
+      models.ts'e taşındı, editörün her düğümü etiketlediği klonda en üst
+      etiketli kök sayılır). Sınırlar v1: actor ve spline/landscape spline
+      mesh'leri salınmaz; foliage'da type'ın `sway`'i geçerlidir; mesh başına
+      tek gölge materyali (karışık slotta ilk salınan belirler); Material Editor
+      önizleme küresi salınmaz.
+      Smoke `material-wind-sway.spec.ts`: izole kopyada gerçek
+      `/__save-material`, editörde iki klon, Play'de instanced + klon yolu,
+      lit + gölge programı, güç 0 aynı, güç 1 tepe rüzgâr yönüne.
 
 ### Faz 7 — Kalıcı çarpma göçüğü (`deformableModule`, mode `impact`)
 
@@ -1082,3 +1121,5 @@ kullanıcı kararı).
   Kırılma sırasında kalan: Faz 4d Extended Structures (ihtiyaç olunca).
 - 2026-11-03: **Faz 6 kapandı**: kullanıcı görsel kabulü (Play'de salınmama
   sorunu editörün foliage type kaydıydı, 23f54cd7).
+- 2026-11-04: Faz 6b A: static mesh materyali `sway` (veri, render, Material
+  Editor, smoke); görsel kabul bekliyor. B tasarımı onaya sunuldu.

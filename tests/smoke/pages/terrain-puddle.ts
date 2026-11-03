@@ -1,6 +1,7 @@
 import { AmbientLight, BoxGeometry, BufferGeometry, Color, CylinderGeometry, DirectionalLight,
   Float32BufferAttribute, Group, Mesh, MeshStandardMaterial, PerspectiveCamera, PMREMGenerator,
-  Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from "three";
+  Raycaster, RepeatWrapping, Scene, TextureLoader, Vector2, Vector3, WebGLRenderer } from "three";
+import { resolveLevelWind } from "@engine/environment/wind";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { DeformationField } from "@engine/scene/deformationField";
@@ -90,6 +91,7 @@ function addPuddle(seed: [number, number]) {
   if (puddles.some(p => ray.intersectObject(p.surface).length > 0)) return;
   if (puddles.length >= 4) { status.textContent = "Prototipte en fazla dört birikinti."; return; }
   const surface = new TerrainPuddleSurface(); scene.add(surface); reflection.addConsumer(surface);
+  surface.setWindOrigin(seed[0], seed[1]);
   puddles.push({ seed, surface, area: data.area }); rebuild();
 }
 const chassis = new Group();
@@ -153,7 +155,21 @@ function frame() {
   renderer.render(scene, camera);
 }
 reset(); renderer.setAnimationLoop(frame);
+let windNormal: ReturnType<TextureLoader["loadAsync"]> | null = null;
 const api = {
+  wind: async (strength: number, seconds: number, angle = false) => {
+    renderer.setAnimationLoop(null);
+    const texture = await (windNormal ??= new TextureLoader().loadAsync("/assets/starter-content/Textures/T_Water_N.png"));
+    texture.wrapS = texture.wrapT = RepeatWrapping;
+    const wind = resolveLevelWind({ worldEnvironment: { wind: { directionDeg: 70, strength, gust: .4 } } }, { season: "summer", weather: { preset: "clear", intensity: 1 } });
+    camera.position.set(angle ? 3 : 1.8, angle ? 4 : 1.5, angle ? 3 : 3.5); camera.lookAt(0, -.02, -.4); camera.updateMatrixWorld(true);
+    for (const puddle of puddles) {
+      puddle.surface.setWindNormal(texture); puddle.surface.updateWind(wind, seconds);
+      puddle.surface.setPlanarReflectionBinding(reflection.binding);
+    }
+    scene.updateMatrixWorld(true); reflection.update(renderer, scene, camera); renderer.render(scene, camera);
+    return { glError: renderer.getContext().getError(), geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
+  },
   pause: () => { renderer.setAnimationLoop(null); frame(); },
   render: frame,
   drive: () => { driving = true; travel = lastRing = -4.5; },
@@ -168,6 +184,7 @@ declare global { interface Window { __terrainPuddle: typeof api } }
 globalThis.window.__terrainPuddle = api;
 addEventListener("pagehide", () => {
   renderer.setAnimationLoop(null); controls.dispose(); environment.dispose(); reflection.dispose();
+  void windNormal?.then(texture => texture.dispose());
   scene.traverse(object => { if (object instanceof Mesh) { object.geometry.dispose(); const m = object.material; if (!Array.isArray(m)) m.dispose(); } });
   renderer.dispose();
 });

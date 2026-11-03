@@ -3,14 +3,17 @@
 Tarih: 3 Kasım 2026. Durum: **İzole prototip, Landscape/Water önizlemesi ve
 kalıcı Puddle kaydı, planar yansıma ve canlı deforme yatak bağlantısı uygulandı.**
 Editör ve Play aynı terrain örnekleme/doldurma çekirdeğini paylaşır. Puddle Wheel
-Ripples (Faz 3) uygulandı; genel W3 performans ve kullanıcı görsel kabulü açık. Kaynak planlar:
+Ripples (Faz 3) uygulandı. Faz 4–5 için kullanıcı görsel kabulü verildi;
+genel W3/hedef donanım performans kabulü ayrı açık kalır. Kaynak planlar:
 [Water Body / W3](WORLD_TERRAIN_WATER_BODY_PLAN.md),
 [Terrain Deformasyonu](TERRAIN_DEFORMATION_PLAN.md).
 
 **Yeni iş sırası — 3 Kasım 2026:** Wheel Ripples (Faz 3) tamamlandıktan sonra
 **Faz 4: World Environment rüzgarına bağlı normal-map dalgacıkları** ve
-**Faz 5: dibi örten çamurlu su yoğunluğu** uygulanacak. Bu iki faz şu anda yalnız
-planlandı; uygulamaya başlanmadı. Aşağıdaki yeni görünüm kararı, Faz 2'deki
+**Faz 5: dibi örten çamurlu su yoğunluğu** sırasını izler. Faz 4 uygulandı;
+Faz 5 uygulandı; kullanıcı görsel kabulünden sonra toplu teknik doğrulama ve
+main'e teslim istenmiştir. Son durum [Faz 4–5 teslim raporundadır](../reports/PUDDLE_MUD_DENSITY_2026-11-03.md).
+Aşağıdaki yeni görünüm kararı, Faz 2'deki
 “su altı tabanı/izi okunur” görsel hedefinin yerini alır. Deforme yatak sorgusu,
 su sınırı, derinlik ve araç teması hesapları geçerliliğini korur.
 
@@ -289,38 +292,43 @@ Save/Reload/undo/redo ayarları korur; Lake/River dalgaları regresyona uğramaz
 
 ### Faz 4 — World Environment rüzgarına bağlı normal-map dalgacıkları
 
-Durum: **Planlandı / Wheel Ripples tamamlanana kadar beklemede.** Faz 3'ün
-son kodu ve teslim kanıtları başlangıçta tekrar okunacak; şu anda çalışma
-ağacında bulunan Wheel Ripples değişiklikleri tamamlanmış kabul edilmez.
+Durum: **Uygulandı.** Faz 3 teslimi okunup temel alındı. Normal-map katmanı,
+World Environment bağlantısı, taslak/kalıcı ayarlar ve Play saati eklendi.
+Kullanıcı sahnesindeki son görünüm kabul edildi. Hedef donanım GPU/bellek
+performans kabulü açık. [Faz 4 teslim raporu](../reports/PUDDLE_WIND_RIPPLES_2026-11-03.md).
+
+**Görünüm referansı:** kullanıcının ilettiği kavisli, ince, birbirini izleyen
+çizgi biçimli dalga sırtları esas alınır. Genel normal-map ayrıntısı yardımcı
+katmandır; görünür ana desen rüzgar yönünde ilerleyen yumuşak yaylardır.
 
 **Amaç:** araç yokken de Puddle üzerinde rüzgar esintisini gösteren küçük,
 doğal yüzey dalgacıkları. Su geometrisi ve kotu yatay kalır; etki normal map,
 ışık ve yansıma üzerinden görünür.
 
-- [ ] `engine/environment/wind.ts` içindeki `resolveLevelWind` sonucunu kullan:
+- [x] `engine/environment/wind.ts` içindeki `resolveLevelWind` sonucunu kullan:
   yön, etkin şiddet ve gust. World Environment canlı hava/mevsim etkileri,
   editör önizlemesi ve Play durumu aynı mevcut çözümleme kurallarını izlesin.
   World Environment yokken/gizliyken World Settings ve varsayılanlara dönüş
   korunsun. Puddle için bağımsız rüzgar yönü veya hava sistemi kurulmasın.
-- [ ] `SceneApp` ve `RuntimeSceneApp` üzerinden kalıcı controller ve Draft
+- [x] `SceneApp` ve `RuntimeSceneApp` üzerinden kalıcı controller ve Draft
   Preview'ya rüzgar/zaman aktar. Bağlantı foliage varlığına bağlı olmasın:
   mevcut `updateWindSway` fonksiyonları foliage yoksa erken dönüyor.
   Editör kendi önizleme saatini, Play simülasyon saatini kullansın; pause
   dalgacık animasyonunu dondursun. Ayar değişiminde faz atlaması önlensin.
-- [ ] Mevcut manifestteki uygun su normal asset'ini değerlendir; dünya XZ
+- [x] Mevcut manifestteki uygun su normal asset'ini değerlendir; dünya XZ
   metre ölçeğinde iki farklı ölçek/hızda örnekle. Kayma yönü global rüzgarla
   uyumlu olsun; şiddet normal genliğini, gust zamana yayılan esintiyi etkilesin.
   Güç sıfırken rüzgar katkısı sıfır olsun. Sığ kıyıda sönüm, uzak görünümde
   mip/filtre ve parlama kontrolü ile tekrar eden kayış görünümü azaltılsın.
-- [ ] Rüzgar normali ile Faz 3 tekerlek dalga eğimini aynı dünya/view uzayında
+- [x] Rüzgar normali ile Faz 3 tekerlek dalga eğimini aynı dünya/view uzayında
   birleştir; toplam normal planar ve ortam yansımalarına tutarlı uygulansın.
   Wheel Ripples kapatılması rüzgarı kapatmasın; rüzgarın sıfırlanması araç
   halkalarını durdurmasın. Faz 3 emisyonu, havza maskesi ve halka bütçesi korunsun.
-- [ ] Puddle Details ve taslakta küçük bir **Wind Ripples** bölümü planla:
+- [x] Puddle Details ve taslakta küçük bir **Wind Ripples** bölümü ekle:
   Enabled, Normal Strength, World Scale ve Speed Response. Yön/etkin güç
   World Environment'tan gelsin. Nihai varsayılan ve aralıklar küçük/sığ
   birikintide görsel karşılaştırmayla seçilsin; göl boyutunda dalga oluşmasın.
-- [ ] Normal doku lineer veri olarak yüklensin; paylaşılan asset ownership ve
+- [x] Normal doku lineer veri olarak yüklensin; paylaşılan asset ownership ve
   dispose kuralları korunsun. Eksik doku konsol/WebGL hatası üretmesin ve
   Wheel Ripples çalışmaya devam etsin. Geç gelen yükleme silinmiş gövdeyi
   geri getirmesin. Yeni gövde başına capture veya her kare geometri rebuild yok.
@@ -333,41 +341,46 @@ pause, World Environment gizleme ve hava/mevsim değişimleri doğrulanır.
 
 ### Faz 5 — Dibi örten çamurlu su yoğunluğu
 
-Durum: **Planlandı / Faz 3 ve Faz 4 sonrasında.**
+Durum: **Uygulandı / kullanıcı görsel kabulü verildi.**
+Son kullanıcı kararı: su bütünüyle opak olmayacak; sığ kısımlarda dip kısmen
+görünecek, derinleştikçe çamur rengi ve örtücülük artacak. Bu karar aşağıdaki
+eski “sığ iç bölgede de dip görünmesin” kabulünün yerini alır. Gerçek yatak
+derinliğine üstel soğurma, Mud Density ve Mud Color kontrolleri eklendi.
+Görsel kabulden sonraki toplu koşuda tam `build:verify`, 2396 engine kontrolü
+ve 5 Puddle tarayıcı regresyonu geçti. Son sonuçlar teslim raporundadır.
 
-**Amaç:** kahverengi, yoğun ve bulanık birikinti. Su kaplı iç bölgede dip taşı,
-toprak dokusu ve su altında kalan tekerlek oyuğu görünmesin. Su kotunu aşan
+**Amaç:** kahverengi, derinliğe bağlı bulanık birikinti. Sığ suyun altında dip
+kısmen görünür; derinleştikçe çamur rengi ve örtücülük artar. Su kotunu aşan
 çamur sırtları, kuru adalar ve kıyılar görünmeye devam etsin.
 
 - [ ] Faz 3 sonrası aynı kamera/ışıkta mevcut görünümü kaydet. Renk, mevcut
   `opacity` ve derinlik alpha geçişinin etkilerini ayrı karşılaştır. Şu anki
   `.82` opaklık ve `smoothstep(0, .012, depth)` yaklaşımını başlangıç kabul et;
   yalnız rengi koyulaştırmayı dip gizleme çözümü sayma.
-- [ ] İç bölgeyi örten çamurlu su rengi ve yoğunluk profili uygula. Varsayılan
-  hedef iç bölgede tam örtücülük olsun; derinlikten bağımsız olarak sığ iç
-  bölgede de dip seçilmesin. Derinlik renk tonunu etkileyebilir, fakat zemini
-  görünür kılan geniş bir saydamlık bandı üretmesin. Yalnız gerçek su sınırında
-  dar, yumuşak coverage geçişi kalsın; geometri maskesi kuru bölgeleri dışarıda tutsun.
-- [ ] Details'ta Color, Opacity ve yeni yoğunluk kontrolünün görevlerini netleştir.
-  Yoğunluk bulanık görünümü, Opacity nihai örtücülüğü belirlesin; varsayılan
-  çamurlu profil dibi gizlesin. Kullanıcının Opacity'yi elle düşürmesi berrak
-  bir görünümü yeniden mümkün kılabilir. Renk değerleri ışık altında seçilsin;
+- [x] Gerçek yatak derinliğine göre üstel soğurma ve çamur rengi uygula.
+  Sığ bölgeler daha saydam, derin bölgeler giderek daha örtücü olsun.
+  Gerçek su sınırında dar, yumuşak coverage geçişi kalsın;
+  geometri maskesi kuru bölgeleri dışarıda tutsun.
+- [x] Details'ta Color, Opacity, Mud Color ve Mud Density görevlerini netleştir.
+  Mud Density derinlikle artan örtücülüğün hızını, Mud Color çamur tonunu
+  belirlesin. Opacity optik yoğunluğu ölçeklesin; 0 yüzeyi gizlesin.
+  Renk değerleri ışık altında seçilsin;
   yalnız siyah veya aşırı parlak vernik görünümü oluşmasın.
-- [ ] Fiziksel materyal roughness/Fresnel ve planar karışımını birlikte ayarla:
+- [x] Fiziksel materyal roughness/Fresnel ve planar karışımını birlikte ayarla:
   kahverengi gövde rengi okunurken rüzgar dalgacıkları, araç halkaları ve
   nesne yansımaları görünür kalsın. Planar kapalı/Low durumda da dip gizlensin.
   Depth/sıralama davranışı araç tekerini veya su üstü çamurunu yanlış örtmesin.
-- [ ] Deforme yatak ve derinlik sorgularını görünürlükten ayır: dibi gizlemek
+- [x] Deforme yatak ve derinlik sorgularını görünürlükten ayır: dibi gizlemek
   deformasyonu veya Wheel Ripples temas hesabını kapatmasın. Çamur sırtının
   su kotunu aşması yüzeyi kesmeye devam etsin. Yeni refraction/underwater
   render target veya çamur taşınım simülasyonu eklenmesin.
-- [ ] Yeni ve mevcut kayıtlar için geçişi açık yap: eksik yeni alanlar çamurlu
+- [x] Yeni ve mevcut kayıtlar için geçişi açık yap: eksik yeni alanlar çamurlu
   varsayılanı kullansın; açıkça yazılmış renk/opacity değerleri sessizce ezilmesin.
   Mevcut sahnede kayıtlı düşük opacity varsa ayrıca görünüm ayarı gerektiği
   raporlansın; bu plan authored level/terrain dosyalarını değiştirmez.
 
-**Kabul:** aynı konumda su açık/kapalı karşılaştırmasında su altı taban detayı
-yalnız su kapalıyken okunur; su üstü sırt/ada her iki durumda doğru yerde kalır.
+**Kabul:** aynı konumda su açık/kapalı karşılaştırmasında sığ taban kısmen
+okunur, derin taban örtülür; su üstü sırt/ada her iki durumda doğru yerde kalır.
 En sığ iç bölge, daha derin oyuk, güneş/gölge, üstten/eğik açı, planar açık/kapalı
 ve farklı kalite seviyeleri incelenir. Faz 4 esintileri ve Faz 3 halkaları yoğun
 kahverengi yüzeyde okunur; geniş saydam kıyı bandı veya çift parlama oluşmaz.

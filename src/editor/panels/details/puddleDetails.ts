@@ -2,6 +2,8 @@ import type { SceneApp } from "@/scene/SceneApp";
 import { PUDDLE_APPEARANCE } from "@engine/scene/puddleWater";
 import { renderPuddleReflectionDetails } from "./puddleReflectionDetails";
 import { renderPuddleRippleDetails } from "./puddleRippleDetails";
+import { renderPuddleWindDetails } from "./puddleWindDetails";
+import { renderPuddleMudDetails } from "./puddleMudDetails";
 
 const escape = (text: string) => text.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 export function renderPuddleDetails(body: HTMLElement, app: SceneApp): void {
@@ -36,6 +38,10 @@ export function renderPuddleDetails(body: HTMLElement, app: SceneApp): void {
   body.querySelector("[data-puddle-delete]")?.addEventListener("click", () => app.deletePuddle());
   renderPuddleReflectionDetails(body, puddle.appearance ?? {}, !!puddle.locked,
     patch => app.editPuddle({ appearance: { ...puddle.appearance, ...patch } }));
+  renderPuddleMudDetails(body, puddle.appearance ?? {}, !!puddle.locked,
+    patch => app.editPuddle({ appearance: { ...puddle.appearance, ...patch } }));
   renderPuddleRippleDetails(body, puddle.appearance ?? {}, !!puddle.locked,
+    patch => app.editPuddle({ appearance: { ...puddle.appearance, ...patch } }));
+  renderPuddleWindDetails(body, puddle.appearance ?? {}, !!puddle.locked,
     patch => app.editPuddle({ appearance: { ...puddle.appearance, ...patch } }));
 }

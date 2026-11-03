@@ -1,4 +1,5 @@
-import type { Scene } from "three";
+import type { Scene, Texture } from "three";
+import type { ResolvedWind } from "@engine/environment/wind";
 import { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
 import { PUDDLE_APPEARANCE, PUDDLE_LIMITS, resolvePuddleWheelRipples, validatePuddleWaters, type PuddleWaterBody } from "@engine/scene/puddleWater";
 import { LakeRippleState, type LakeRipple, type LakeWheelContact } from "@engine/terrain/lakeInteraction";
@@ -27,6 +28,7 @@ interface PuddleHost {
   vehicles?: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "onPhysicsStep" | "isSurfaceFxActive"> | undefined;
   terrainForGround?: (id: string) => string | null;
   rippleLimit?: () => number;
+  normal?: () => Promise<Texture | null>;
 }
 export interface PuddleResult { status: "loading" | "ready" | "dry" | "open-boundary" | "missing-terrain" | "error"; area: number; message: string; bedRevision?: number; spacing?: number }
 type PreparedBed = Awaited<ReturnType<typeof preparePuddleBed>>;
@@ -51,6 +53,7 @@ export class PuddleWaterController {
   private work: Promise<void> | null = null;
   private unsubscribePhysics: (() => void) | null = null;
   private readonly interactions = new Map<string, PuddleInteraction>();
+  private normal: Promise<Texture | null> | null = null;
   constructor(private readonly host: PuddleHost) {
     this.reflections = host.reflections ?? new PuddlePlanarReflections();
     this.deformation = host.deformation ?? sharedTerrainDeformation();
@@ -82,9 +85,11 @@ export class PuddleWaterController {
       if (data.coverage) setPuddleTerrainCoverage(this.host.scene, surface, body.terrainRef, data.coverage, levels);
       else clearPuddleTerrainCoverage(this.host.scene, surface);
       surface.rebuild(data);
+      surface.setWindOrigin(body.seed[0], body.seed[1]);
       const interaction = this.interactions.get(body.id);
       if (interaction) { interaction.stops = new WeakMap(); if (data.status !== "ready") interaction.state.clear(); }
       const appearance = { ...PUDDLE_APPEARANCE, ...body.appearance };
+      surface.setMudAppearance(appearance);
       surface.material.color.set(appearance.color); surface.material.opacity = appearance.opacity;
       surface.material.roughness = appearance.roughness; surface.material.envMapIntensity = appearance.reflectionStrength;
       if (data.status === "ready") this.reflections.set(surface, body.surfaceLevel, appearance); else this.reflections.remove(surface);
@@ -140,8 +145,10 @@ export class PuddleWaterController {
         this.results.set(body.id, { status: "loading", area: this.results.get(body.id)?.area ?? 0, message: "Preparing water…" });
         const prepared = await preparePuddleBed(body, document, (key, pending) => this.host.load(body.terrainRef, key, pending), signal);
         const bed = this.deformation.captureBed(), { data, levels } = await this.build(body, prepared, bed, signal);
+        const normal = await (this.normal ??= this.host.normal?.().catch(() => null) ?? Promise.resolve(null));
         if (signal.aborted || revision !== this.revision) return;
         this.publish(body, prepared, data, bed, levels);
+        this.objects.get(body.id)?.setWindNormal(normal);
       } catch (error) {
         if (signal.aborted || revision !== this.revision) return;
         this.results.set(body.id, { status: "error", area: 0, message: error instanceof Error ? error.message : String(error) });
@@ -160,6 +167,9 @@ export class PuddleWaterController {
       if (performance.now() - entry.builtAt >= 100) this.pending.add(id);
     }
     if (!this.work && this.pending.size) this.work = this.pump().finally(() => { this.work = null; });
+  }
+  updateWind(wind: ResolvedWind, seconds: number): void {
+    for (const [id, surface] of this.objects) surface.updateWind(wind, seconds, this.beds.get(id)?.body.appearance);
   }
   private async pump(): Promise<void> {
     const id = this.pending.values().next().value as string | undefined; if (!id) return;

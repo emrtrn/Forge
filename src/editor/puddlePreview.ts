@@ -1,4 +1,5 @@
-import { Box3, Box3Helper, Group, Vector3, type Scene } from "three";
+import { Box3, Box3Helper, Group, Vector3, type Scene, type Texture } from "three";
+import type { ResolvedWind } from "@engine/environment/wind";
 import type { TerrainPuddleGeometry, TerrainPuddleRegion } from "@engine/terrain/terrainPuddle";
 import { preparePuddleWater, puddleRegionAroundSeed } from "@engine/terrain/terrainPuddlePreparation";
 import { NEW_PUDDLE_APPEARANCE, validatePuddleWater, type PuddleWaterBody } from "@engine/scene/puddleWater";
@@ -25,6 +26,7 @@ interface PreviewHost {
   load(id: string, key: string, signal: AbortSignal): Promise<TerrainTileData>;
   changed(): void;
   reflections?: PuddlePlanarReflections;
+  normal?: () => Promise<Texture | null>;
 }
 
 /** Editor-only, transient tool. Never adds a layout actor, terrain mutation or
@@ -39,6 +41,7 @@ export class PuddlePreview {
   private region: TerrainPuddleRegion | null = null;
   private state: PuddlePreviewState = { terrainRef: null, seed: null, level: 0, size: 12, spacing: 1, area: 0, status: "idle", message: "", appearance: { ...NEW_PUDDLE_APPEARANCE } };
   private readonly reflections: PuddlePlanarReflections;
+  private normal: Promise<Texture | null> | null = null;
 
   constructor(private readonly host: PreviewHost) {
     this.reflections = host.reflections ?? new PuddlePlanarReflections();
@@ -56,6 +59,7 @@ export class PuddlePreview {
     if (!body) return;
     const next = validatePuddleWater({ ...body, appearance: { ...this.state.appearance, ...patch } });
     this.state.appearance = next.appearance!;
+    this.surface.setMudAppearance(this.state.appearance);
     this.surface.material.envMapIntensity = this.state.appearance.reflectionStrength ?? NEW_PUDDLE_APPEARANCE.reflectionStrength;
     this.reflections.set(this.surface, body.surfaceLevel, this.state.appearance);
     this.host.changed();
@@ -90,7 +94,11 @@ export class PuddlePreview {
       const body: PuddleWaterBody = { schema: 1, kind: "puddle", coordinateSpace: "world", id: "preview", terrainRef,
         seed: [...seed], surfaceLevel: level, bounds: { min: [region.minX, region.minZ], max: [region.minX + region.size, region.minZ + region.size] } };
       const data = await preparePuddleWater(body, document, (key, pending) => this.host.load(terrainRef, key, pending), signal);
+      const normal = await (this.normal ??= this.host.normal?.().catch(() => null) ?? Promise.resolve(null));
       if (signal.aborted || revision !== this.revision) return;
+      this.surface.setWindNormal(normal);
+      this.surface.setMudAppearance(this.state.appearance);
+      this.surface.setWindOrigin(seed[0], seed[1]);
       if (data.status === "ready") this.region = region;
       if (this.surface.rebuild(data)) this.state.area = data.area;
       if (data.coverage) setPuddleTerrainCoverage(this.host.scene, this.surface, terrainRef, data.coverage, null);
@@ -123,6 +131,8 @@ export class PuddlePreview {
   }
 
   private fail(message: string): void { this.state = { ...this.state, status: "error", message }; this.host.changed(); }
+
+  updateWind(wind: ResolvedWind, seconds: number): void { this.surface.updateWind(wind, seconds, this.state.appearance); }
 
   clear(): void {
     clearPuddleTerrainCoverage(this.host.scene, this.surface);

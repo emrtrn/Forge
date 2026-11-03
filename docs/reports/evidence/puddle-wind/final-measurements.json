@@ -1,0 +1,58 @@
+{
+  "wind": {
+    "low": 4926,
+    "strong": 13381,
+    "animation": 18016,
+    "pause": 0,
+    "direction": 24297,
+    "disabled": 0,
+    "missing": 0,
+    "wheel": 25217,
+    "normalLoaded": true,
+    "geometryStable": true,
+    "extraDraws": 0,
+    "textures": 14,
+    "glError": 0
+  },
+  "draftProbe": {
+    "low": 4926,
+    "strong": 13381,
+    "animation": 18016,
+    "pause": 0,
+    "direction": 24297,
+    "disabled": 0,
+    "missing": 0,
+    "wheel": 25217,
+    "normalLoaded": true,
+    "geometryStable": true,
+    "extraDraws": 0,
+    "textures": 14,
+    "glError": 0
+  },
+  "runtimeWind": {
+    "low": 2519,
+    "strong": 6533,
+    "animation": 8714,
+    "pause": 0,
+    "direction": 10657,
+    "disabled": 0,
+    "missing": 0,
+    "wheel": 13503,
+    "normalLoaded": true,
+    "geometryStable": true,
+    "extraDraws": 0,
+    "textures": 12,
+    "glError": 0
+  },
+  "mud": {
+    "shallow": 54,
+    "middle": 195,
+    "deep": 253,
+    "denser": 241,
+    "clear": 0,
+    "invisible": 0,
+    "edge": 0,
+    "geometryStable": true,
+    "glError": 0
+  }
+}

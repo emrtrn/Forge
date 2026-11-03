@@ -1,0 +1,47 @@
+{
+  "wind": {
+    "low": 92387,
+    "strong": 423308,
+    "animation": 612190,
+    "pause": 0,
+    "direction": 446053,
+    "disabled": 0,
+    "missing": 0,
+    "wheel": 25217,
+    "normalLoaded": true,
+    "geometryStable": true,
+    "extraDraws": 0,
+    "textures": 14,
+    "glError": 0
+  },
+  "draftProbe": {
+    "low": 92387,
+    "strong": 423308,
+    "animation": 612190,
+    "pause": 0,
+    "direction": 446053,
+    "disabled": 0,
+    "missing": 0,
+    "wheel": 25217,
+    "normalLoaded": true,
+    "geometryStable": true,
+    "extraDraws": 0,
+    "textures": 14,
+    "glError": 0
+  },
+  "runtimeWind": {
+    "low": 39654,
+    "strong": 185096,
+    "animation": 268338,
+    "pause": 0,
+    "direction": 188236,
+    "disabled": 0,
+    "missing": 0,
+    "wheel": 13503,
+    "normalLoaded": true,
+    "geometryStable": true,
+    "extraDraws": 0,
+    "textures": 12,
+    "glError": 0
+  }
+}

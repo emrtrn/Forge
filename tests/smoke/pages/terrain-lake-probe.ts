@@ -1,8 +1,8 @@
 import { terrainCausticsResources } from "@engine/render-three/terrain/terrainCaustics";
 import { riverFoamSurfaceFingerprint } from "@engine/render-three/lakeFoamBake";
 import type { RiverWaterObject } from "@engine/render-three/riverWater";
-import { BoxGeometry, Mesh, MeshBasicMaterial, Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
-import type { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
+import { BoxGeometry, Mesh, MeshBasicMaterial, OrthographicCamera, Scene, Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Group } from "three";
+import { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
 import type { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import type { LakeWaterController } from "@/scene/lakeWaterController";
 import type { PuddleWaterController } from "@/scene/puddleWaterController";
@@ -16,6 +16,8 @@ import { resolveLakeAppearance } from "@engine/scene/waterBody";
 import type { RoomLayout } from "@engine/scene/layout";
 import type { SceneApp } from "@/scene/SceneApp";
 import type { WorldTerrainEditSession } from "@/editor/terrainStore";
+import { resolveLevelWind } from "@engine/environment/wind";
+import type { Texture } from "three";
 
 export function installLakeProbe(app: unknown) {
   let riverGate: { entered: boolean; release: () => void } | undefined;
@@ -35,6 +37,71 @@ export function installLakeProbe(app: unknown) {
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    puddleMudProbe() {
+      cancelAnimationFrame(a.frameHandle);
+      const surface = new TerrainPuddleSurface(), scene = new Scene(), target = new WebGLRenderTarget(16, 16);
+      const camera = new OrthographicCamera(-1, 1, 1, -1, .1, 10); camera.position.set(0, 3, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0);
+      surface.rebuild({ status: "ready", area: 4, positions: new Float32Array([-1,0,-1, -1,0,1, 1,0,1, -1,0,-1, 1,0,1, 1,0,-1]), depths: new Float32Array(6).fill(.02) });
+      scene.add(surface); const compile = surface.material.onBeforeCompile;
+      surface.material.onBeforeCompile = (shader, renderer) => {
+        compile(shader, renderer);
+        shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", "gl_FragColor=vec4(vec3(diffuseColor.a),1.);return;\n#include <opaque_fragment>");
+      };
+      surface.material.customProgramCacheKey = () => "puddle-mud-optical-qa";
+      const geometry = surface.geometry, previous = a.renderer.getRenderTarget();
+      const sample = (depth: number, density = 12, opacity = .82) => {
+        const attribute = geometry.getAttribute("puddleDepth"); (attribute.array as Float32Array).fill(depth); attribute.needsUpdate = true;
+        surface.setMudAppearance({ mudDensity: density }); surface.material.opacity = opacity;
+        a.renderer.setRenderTarget(target); a.renderer.render(scene, camera);
+        const pixel = new Uint8Array(4); a.renderer.readRenderTargetPixels(target, 8, 8, 1, 1, pixel); return pixel[0]!;
+      };
+      try { return { shallow: sample(.02), middle: sample(.12), deep: sample(.4), denser: sample(.12, 24),
+        clear: sample(.12, 0), invisible: sample(.4, 12, 0), edge: sample(0), geometryStable: geometry === surface.geometry, glError: a.renderer.getContext().getError() }; }
+      finally { a.renderer.setRenderTarget(previous); target.dispose(); surface.dispose(); }
+    },
+    puddleWindProbe(draft = false) {
+      cancelAnimationFrame(a.frameHandle);
+      const surface = draft ? a.puddlePreview?.surface : [...(a.puddles?.objects.values() ?? [])][0];
+      if (!surface) throw new Error("Missing Puddle");
+      a.camera.position.set(31.6, 12.1, 2.5); a.camera.lookAt(30, 10.6, 0); a.camera.updateMatrixWorld(true);
+      for (const object of a.landscapeObjects) updateLandscapeLod(object, a.camera);
+      const geometry = surface.geometry, compile = surface.material.onBeforeCompile, cache = surface.material.customProgramCacheKey;
+      const debug = { value: 1 }, target = new WebGLRenderTarget(128, 128), previous = a.renderer.getRenderTarget();
+      let normal: Texture | null = null;
+      surface.material.onBeforeCompile = (shader, renderer) => {
+        compile(shader, renderer); normal = shader.uniforms.puddleWindNormal!.value;
+        shader.uniforms.puddleWindDebug = debug;
+        shader.fragmentShader = `uniform float puddleWindDebug;\n${shader.fragmentShader}`.replace("#include <opaque_fragment>",
+          "if(puddleWindDebug>.5){gl_FragColor=vec4(vec2(.5)+gradient*3.,.5,1.);return;}\n#include <opaque_fragment>");
+      };
+      surface.material.customProgramCacheKey = () => "puddle-wind-qa"; surface.material.needsUpdate = true;
+      const wind = (strength: number, directionDeg = 45) => resolveLevelWind({ worldEnvironment: { wind: { strength, directionDeg, gust: .4 } } }, { season: "autumn", weather: { preset: "clear", intensity: 1 } });
+      const draw = () => {
+        a.renderer.info.reset(); a.renderer.setRenderTarget(target); a.renderer.render(a.scene, a.camera);
+        const pixels = new Uint8Array(128 * 128 * 4); a.renderer.readRenderTargetPixels(target, 0, 0, 128, 128, pixels); return pixels;
+      };
+      const delta = (left: Uint8Array, right: Uint8Array) => left.reduce((sum, value, i) => sum + Math.abs(value - right[i]!), 0);
+      try {
+        surface.clearRipples(); surface.updateWind(wind(0), 0); const calm = draw(), baseCalls = a.renderer.info.render.calls;
+        surface.updateWind(wind(.2), 0); const low = draw();
+        surface.updateWind(wind(1), 0); const strong = draw();
+        surface.updateWind(wind(1), 1); const moved = draw();
+        surface.updateWind(wind(1), 1); const paused = draw();
+        surface.updateWind(wind(1, 90), 2); const turned = draw();
+        surface.updateWind(wind(1), 2, { windRipplesEnabled: false }); const disabled = draw();
+        surface.setWindNormal(null); surface.updateWind(wind(1), 2); const missing = draw();
+        surface.setWindNormal(normal); surface.updateWind(wind(0), 2);
+        surface.setWheelRipples([{ x: 30, z: 0, age: .4, strength: 1 }]); const wheel = draw();
+        return { low: delta(calm, low), strong: delta(calm, strong), animation: delta(strong, moved), pause: delta(moved, paused),
+          direction: delta(paused, turned), disabled: delta(calm, disabled), missing: delta(calm, missing), wheel: delta(calm, wheel),
+          normalLoaded: !!normal, geometryStable: geometry === surface.geometry, extraDraws: a.renderer.info.render.calls - baseCalls,
+          textures: a.renderer.info.memory.textures, glError: a.renderer.getContext().getError() };
+      } finally {
+        surface.clearRipples(); surface.setWindNormal(normal); surface.updateWind(wind(.6), 2);
+        surface.material.onBeforeCompile = compile; surface.material.customProgramCacheKey = cache; surface.material.needsUpdate = true;
+        a.renderer.setRenderTarget(previous); target.dispose(); a.renderer.render(a.scene, a.camera);
+      }
+    },
     puddlePlanarFrame(draft = false, offset = 0) {
       cancelAnimationFrame(a.frameHandle);
       let marker = a.scene.getObjectByName("puddle-planar-marker") as Mesh | undefined;

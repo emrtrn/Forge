@@ -25,6 +25,10 @@ import { PUDDLE_WHEEL_RIPPLE_DEFAULTS, PUDDLE_WHEEL_RIPPLE_RANGES } from "../../
 import { puddleRippleStops, puddleWheelContact } from "../../engine/terrain/puddleInteraction";
 import { LakeRippleState } from "../../engine/terrain/lakeInteraction";
 import type { VehicleWheelState } from "../../engine/physics/vehicle/vehicleTypes";
+import { PUDDLE_MUD_DEFAULTS, PUDDLE_WIND_DEFAULTS, PUDDLE_WIND_RANGES } from "../../engine/scene/puddleWater";
+import { PuddleWindMotion } from "../../engine/environment/puddleWind";
+import { resolveLevelWind } from "../../engine/environment/wind";
+import { Texture } from "three";
 
 const body = (): PuddleWaterBody => ({ schema: 1, kind: "puddle", coordinateSpace: "world", id: "puddle-1", name: "Courtyard",
   terrainRef: "terrain", seed: [30, 0], bounds: { min: [24, -6], max: [36, 6] }, surfaceLevel: 10.2,
@@ -32,6 +36,83 @@ const body = (): PuddleWaterBody => ({ schema: 1, kind: "puddle", coordinateSpac
     reflectionMode: "sharedPlanar", reflectionQuality: "high", planarReflectionStrength: .7 } });
 
 export async function registerPuddlePersistenceTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("puddle mud: density and tint survive save/read, reject invalid fields and preserve sparse legacy data", async () => {
+    const source = { ...body(), appearance: { ...body().appearance, mudDensity: 18, mudColor: "#68452a" } };
+    const layout: RoomLayout = { schema: 1, name: "Mud", loadGroups: [], instances: [], characters: [], puddleWaters: [source] };
+    const saved = validateLayout(layout) as RoomLayout;
+    assert.deepEqual(saved.puddleWaters, [source]);
+    assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(saved)), "mud").puddleWaters, [source]);
+    assert.deepEqual(collectDroppedFields(layout, saved).paths, []);
+    for (const mudDensity of [-.01, 80.01, NaN, Infinity, "12", null])
+      assert.throws(() => validatePuddleWater({ ...source, appearance: { mudDensity } }));
+    for (const mudColor of ["brown", "#fff", "#1234567", 12, null])
+      assert.throws(() => validatePuddleWater({ ...source, appearance: { mudColor } }));
+    assert.deepEqual(validatePuddleWater(body()), body());
+    assert.equal(PUDDLE_APPEARANCE.mudDensity, PUDDLE_MUD_DEFAULTS.mudDensity);
+  });
+  await check("puddle wind: bounded appearance survives actual save/read without resolved state", async () => {
+    const source = { ...body(), appearance: { ...body().appearance, ...PUDDLE_WIND_DEFAULTS, windWorldScale: .45 } };
+    const layout: RoomLayout = { schema: 1, name: "Wind", loadGroups: [], instances: [], characters: [], puddleWaters: [source] };
+    const saved = validateLayout(layout) as RoomLayout;
+    assert.deepEqual(saved.puddleWaters, [source]);
+    assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(saved)), "wind").puddleWaters, [source]);
+    assert.deepEqual(collectDroppedFields(layout, saved).paths, []);
+    for (const [key, [min, max]] of Object.entries(PUDDLE_WIND_RANGES)) for (const value of [min - .001, max + .001, NaN, Infinity, "1"])
+      assert.throws(() => validatePuddleWater({ ...source, appearance: { [key]: value } }));
+    assert.throws(() => validatePuddleWater({ ...source, appearance: { windRipplesEnabled: 1 } }));
+    assert.deepEqual(validatePuddleWater(body()), body(), "legacy sparse values are not rewritten");
+  });
+  await check("puddle wind: time integration pauses, stays continuous on strength edits and follows global wind", async () => {
+    const motion = new PuddleWindMotion(), east = resolveLevelWind({ worldSettings: { wind: { directionDeg: 90, strength: 1, gust: 0 } } }, null);
+    motion.update(east, 100); motion.update(east, 101);
+    assert.ok(motion.offset[0]! > 0); assert.ok(Math.abs(motion.offset[1]!) < 1e-12);
+    const before = [...motion.offset], crestPhase = motion.phase;
+    motion.update(east, 101); assert.deepEqual(motion.offset, before, "pause freezes travel"); assert.equal(motion.phase, crestPhase);
+    motion.update({ ...east, strength: .2 }, 101, { windSpeedResponse: 3 });
+    assert.deepEqual(motion.offset, before, "new speed/strength never jumps absolute phase");
+    assert.equal(motion.phase, crestPhase, "curved crests keep phase when speed/strength changes");
+    motion.update({ ...east, strength: 0 }, 102); assert.equal(motion.strength, 0); assert.deepEqual(motion.offset, before);
+    motion.update(east, 103, { windRipplesEnabled: false }); assert.equal(motion.strength, 0);
+    motion.update(east, 104); assert.ok(motion.strength > 0);
+    const still = [...motion.offset]; motion.update(east, 104, { windSpeedResponse: 0 }); assert.deepEqual(motion.offset, still);
+    motion.update(east, 105, { windSpeedResponse: 0 }); assert.deepEqual(motion.offset, still);
+    const frames = [30, 60, 144].map(hz => {
+      const m = new PuddleWindMotion(); for (let i = 0; i <= hz; i++) m.update(east, i / hz); return m.offset;
+    });
+    for (const frame of frames) frame.forEach((v, i) => assert.ok(Math.abs(v - frames[0]![i]!) < 1e-10));
+  });
+  await check("puddle wind: draft/controller share borrowed texture, preserve mesh and independent wheel history", async () => {
+    const doc = createLakeFixture(), scene = new Scene(), normal = new Texture(); let disposed = 0, loads = 0;
+    normal.addEventListener("dispose", () => disposed++);
+    const controller = new PuddleWaterController({ scene, document: () => doc, load: async () => { throw new Error("load"); }, normal: async () => { loads++; return normal; } });
+    const preview = new PuddlePreview({ scene, document: () => doc, load: async () => { throw new Error("load"); }, changed() {}, normal: async () => normal });
+    try {
+      await controller.rebuild([body()]); await preview.begin("terrain", [30, 0], 10.2);
+      preview.editAppearance({ windNormalStrength: .25 }); assert.equal(preview.toBody("draft", "Draft")?.appearance?.windNormalStrength, .25);
+      preview.editAppearance({ mudDensity: 21, mudColor: "#6b4931" });
+      assert.equal(preview.toBody("draft", "Draft")?.appearance?.mudDensity, 21);
+      assert.equal(preview.toBody("draft", "Draft")?.appearance?.mudColor, "#6b4931");
+      const surface = controller.objects.get("puddle-1")!, geometry = surface.geometry, sample = controller.sample("terrain", 30, 0);
+      surface.setWheelRipples([{ x: 30, z: 0, age: .2, strength: 1 }]);
+      const calm = resolveLevelWind({ worldSettings: { wind: { strength: 0 } } }, null);
+      controller.updateWind(calm, 0); controller.updateWind(calm, 1); preview.updateWind(calm, 1);
+      assert.equal(surface.wheelRippleCount, 1); assert.equal(surface.geometry, geometry); assert.deepEqual(controller.sample("terrain", 30, 0), sample);
+      surface.clearRipples(); controller.updateWind({ ...calm, strength: 1 }, 2); assert.equal(surface.wheelRippleCount, 0);
+      await controller.rebuild([body()], true); assert.equal(loads, 1);
+    } finally { controller.dispose(); preview.dispose(); }
+    assert.equal(disposed, 0, "scene owns the shared normal"); normal.dispose(); assert.equal(disposed, 1);
+    assert.equal(scene.children.length, 0);
+  });
+  await check("puddle wind: late normal load cannot resurrect a deleted body or discarded draft", async () => {
+    const doc = createLakeFixture(), scene = new Scene(); let resolve!: (value: Texture | null) => void;
+    const pending = new Promise<Texture | null>(done => { resolve = done; });
+    let started!: () => void; const loading = new Promise<void>(done => { started = done; });
+    const controller = new PuddleWaterController({ scene, document: () => doc, load: async () => { throw new Error("load"); }, normal: () => { started(); return pending; } });
+    const build = controller.rebuild([body()]); await loading; await controller.rebuild([]); resolve(null); await build;
+    assert.equal(controller.objects.size, 0); assert.equal(scene.children.length, 0); controller.dispose();
+    const preview = new PuddlePreview({ scene, document: () => doc, load: async () => { throw new Error("load"); }, changed() {}, normal: () => Promise.reject(new Error("missing")) });
+    await preview.begin("terrain", [30, 0], 10.2); assert.equal(preview.snapshot().status, "ready"); preview.dispose();
+  });
   await check("puddle wheel ripples: persisted bounded settings survive save/read without runtime history", async () => {
     const source = { ...body(), appearance: { ...body().appearance, ...PUDDLE_WHEEL_RIPPLE_DEFAULTS, wheelRippleStrength: 2.1 } };
     const layout: RoomLayout = { schema: 1, name: "Ripples", loadGroups: [], instances: [], characters: [], puddleWaters: [source] };

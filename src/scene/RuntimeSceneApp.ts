@@ -5,6 +5,7 @@ import { worldStreamingService, type TerrainStreamingSnapshot } from "./capabili
 import { worldPartitionService } from "./capabilities/worldPartitionModule";
 import { LakeWaterController } from "./lakeWaterController";
 import { PuddleWaterController } from "./puddleWaterController";
+import { PUDDLE_WIND_NORMAL } from "@engine/scene/puddleWater";
 import { lakeQuality } from "@engine/perf/lakeQuality";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import { PuddlePlanarReflections } from "@engine/render-three/puddlePlanarReflections";
@@ -1962,6 +1963,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       mark = this.perfMark();
       const shadowLights = this.terrainShadowLights();
       this.puddles?.update();
+      this.puddles?.updateWind(resolveLevelWind(this.layout, this.worldEnvironmentState()), this.simulationClockMs / 1000);
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera, shadowLights);
       this.perfRegion(FRAME_REGION_TERRAIN, mark);
       mark = this.perfMark();
@@ -6110,6 +6112,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }, normal: (id) => this.loadRuntimeRiverWaterTexture(id, "normal"),
     });
     this.puddles ??= new PuddleWaterController({ scene: this.scene, document: terrain, reflections: this.puddleReflections,
+      normal: () => this.loadRuntimeRiverWaterTexture(PUDDLE_WIND_NORMAL, "normal"),
       vehicles: this.runtimeServices.resolve(vehicleHostService), terrainForGround: landscapeColliderActorId,
       rippleLimit: () => lakeQuality(this.qualitySettings).maxRipples,
       load: async (id, key, signal) => {

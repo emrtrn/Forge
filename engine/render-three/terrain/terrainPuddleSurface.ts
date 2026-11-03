@@ -1,4 +1,7 @@
-import { BufferGeometry, DataTexture, Float32BufferAttribute, FloatType, Matrix4, Mesh, MeshPhysicalMaterial, NearestFilter, RedFormat, Vector4 } from "three";
+import { BufferGeometry, Color, DataTexture, Float32BufferAttribute, FloatType, Matrix4, Mesh, MeshPhysicalMaterial, NearestFilter, RedFormat, Vector4, Vector3, Vector2, type Texture } from "three";
+import type { ResolvedWind } from "@engine/environment/wind";
+import { PuddleWindMotion } from "@engine/environment/puddleWind";
+import { PUDDLE_MUD_DEFAULTS, PUDDLE_WIND_DEFAULTS, type PuddleWindSettings } from "@engine/scene/puddleWater";
 import { PUDDLE_WHEEL_RIPPLE_DEFAULTS, type PuddleWheelRippleSettings } from "@engine/scene/puddleWater";
 import type { LakeRipple } from "@engine/terrain/lakeInteraction";
 import type { TerrainPuddleGeometry } from "@engine/terrain/terrainPuddle";
@@ -13,6 +16,14 @@ export class TerrainPuddleSurface extends Mesh<BufferGeometry, MeshPhysicalMater
   private readonly rings = { value: Array.from({ length: 12 }, () => new Vector4()) };
   private readonly history: { x: number; z: number; born: number; strength: number }[] = [];
   private seconds = 0;
+  private readonly windMotion = new PuddleWindMotion();
+  private readonly mudDensity = { value: PUDDLE_MUD_DEFAULTS.mudDensity };
+  private readonly mudColor = { value: new Color(PUDDLE_MUD_DEFAULTS.mudColor) };
+  private readonly windNormal = { value: null as Texture | null };
+  private readonly windOffset = { value: new Vector4() };
+  private readonly windWave = { value: new Vector3(0, 1, 0) };
+  private readonly windOrigin = { value: new Vector2() };
+  private readonly windParameters = { value: new Vector4(0, PUDDLE_WIND_DEFAULTS.windWorldScale, 0, 0) };
   private readonly parameters = { value: new Vector4(.65, .135, .21, 2) };
   private readonly stopData = new Float32Array(32 * 12).fill(10000);
   private readonly stopTexture = new DataTexture(this.stopData, 32, 12, RedFormat, FloatType);
@@ -27,13 +38,20 @@ export class TerrainPuddleSurface extends Mesh<BufferGeometry, MeshPhysicalMater
 
   constructor() {
     super(new BufferGeometry(), new MeshPhysicalMaterial({ color: "#504a35", roughness: .13,
-      metalness: 0, transparent: true, opacity: .82, depthWrite: false, envMapIntensity: 1.4 }));
+      metalness: 0, ior: 1.333, transparent: true, opacity: .82, depthWrite: false, envMapIntensity: 1.4 }));
     this.name = "terrain-puddle-prototype";
     this.visible = false;
     this.stopTexture.minFilter = this.stopTexture.magFilter = NearestFilter;
     this.stopTexture.needsUpdate = true;
     this.material.onBeforeCompile = shader => {
       shader.uniforms.puddleTime = this.time;
+      shader.uniforms.puddleMudDensity = this.mudDensity;
+      shader.uniforms.puddleMudColor = this.mudColor;
+      shader.uniforms.puddleWindNormal = this.windNormal;
+      shader.uniforms.puddleWindOffset = this.windOffset;
+      shader.uniforms.puddleWindWave = this.windWave;
+      shader.uniforms.puddleWindOrigin = this.windOrigin;
+      shader.uniforms.puddleWindParameters = this.windParameters;
       shader.uniforms.puddleRingCount = this.ringCount;
       shader.uniforms.puddleRings = this.rings;
       shader.uniforms.puddleRippleParameters = this.parameters;
@@ -49,11 +67,69 @@ uniform mat4 puddlePlanarMatrix; varying vec4 vPuddleProjected;\n${shader.vertex
 vPuddleDepth = puddleDepth; vPuddleWorld = (modelMatrix * vec4(position, 1.0)).xz;
 vPuddleProjected = puddlePlanarMatrix * modelMatrix * vec4(position, 1.0);`);
       shader.fragmentShader = `varying float vPuddleDepth; varying vec2 vPuddleWorld;
-uniform sampler2D puddlePlanar; uniform float puddlePlanarReady; uniform float puddlePlanarStrength; uniform float puddlePlanarTexel; varying vec4 vPuddleProjected;
+uniform float puddleMudDensity; uniform vec3 puddleMudColor;
+uniform sampler2D puddlePlanar; uniform mat4 puddlePlanarMatrix; uniform float puddlePlanarReady; uniform float puddlePlanarStrength; uniform float puddlePlanarTexel; varying vec4 vPuddleProjected;
 uniform float puddleTime; uniform int puddleRingCount; uniform vec4 puddleRings[12];
-uniform vec4 puddleRippleParameters; uniform sampler2D puddleRippleStops;\n${shader.fragmentShader}`
+uniform vec4 puddleRippleParameters; uniform sampler2D puddleRippleStops;
+uniform sampler2D puddleWindNormal; uniform vec4 puddleWindOffset; uniform vec4 puddleWindParameters; uniform vec3 puddleWindWave; uniform vec2 puddleWindOrigin;
+float puddleWindNoise(vec2 p) {
+  vec2 cell = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  vec4 h = vec4(dot(cell, vec2(127.1, 311.7)), dot(cell + vec2(1., 0.), vec2(127.1, 311.7)),
+    dot(cell + vec2(0., 1.), vec2(127.1, 311.7)), dot(cell + vec2(1.), vec2(127.1, 311.7)));
+  h = fract(sin(h) * 43758.5453);
+  return mix(mix(h.x, h.y, f.x), mix(h.z, h.w, f.x), f.y);
+}\n${shader.fragmentShader}`
+        .replace("#include <color_fragment>", `#include <color_fragment>
+// Optical thickness comes from the actual live bed. Shallow water stays
+// translucent; longer paths progressively hide the bed in suspended mud.
+float puddleOpticalDepth = max(0.0, vPuddleDepth) * puddleMudDensity * (opacity / .82);
+float puddleMudAmount = 1.0 - exp(-puddleOpticalDepth);
+diffuseColor.rgb = mix(diffuseColor.rgb, puddleMudColor, puddleMudAmount * .85);`)
         .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
 vec2 gradient = vec2(0.0);
+if (puddleWindParameters.z > .5 && puddleWindParameters.x > 0.0) {
+  vec2 uv = vPuddleWorld / puddleWindParameters.y;
+  mat2 rotation = mat2(.8, .6, -.6, .8);
+  vec3 n1 = texture2D(puddleWindNormal, uv - puddleWindOffset.xy).xyz * 2.0 - 1.0;
+  vec3 n2 = texture2D(puddleWindNormal, rotation * uv * 1.73 - puddleWindOffset.zw + 17.3).xyz * 2.0 - 1.0;
+  vec2 detailSlope = .65 * n1.xy / max(.35, n1.z) + .35 * transpose(rotation) * n2.xy / max(.35, n2.z);
+  // Local wind streaks: coherent curved crests appear in soft, uneven patches,
+  // with quiet gaps instead of one repeated wave train across the whole basin.
+  vec2 downwind = puddleWindWave.xy;
+  vec2 across = vec2(-downwind.y, downwind.x);
+  vec2 local = vPuddleWorld - puddleWindOrigin;
+  float lateral = dot(local, across);
+  float radius = max(.6, puddleWindParameters.y * 1.7);
+  float arc = sqrt(lateral * lateral + radius * radius);
+  float bend = .65 * (arc - radius);
+  float bendDerivative = .65 * lateral / arc;
+  float along = dot(local, downwind);
+  vec2 patchUV = vec2(along, lateral) / max(.7, puddleWindParameters.y * 2.0);
+  vec2 drift = vec2(puddleWindParameters.w * .13, -puddleWindParameters.w * .035);
+  float broad = puddleWindNoise(patchUV * vec2(.7, 1.1) - drift + 8.3);
+  float breakup = puddleWindNoise(patchUV * vec2(2.1, 1.3) - drift * .7 + 31.7);
+  float packet = smoothstep(.35, .7, broad * .7 + breakup * .3);
+  // Travelling, irregular breeze windows: individual streaks grow, pass and
+  // disappear while neighbouring patches can stay quiet or respond later.
+  float breeze = .5 + .32 * sin(puddleWindParameters.w * 1.35 - patchUV.x * .9 + patchUV.y * .8)
+    + .18 * sin(puddleWindParameters.w * .57 - patchUV.x * .6 + 2.1);
+  packet *= smoothstep(.32, .72, breeze);
+  float warp = puddleWindNoise(patchUV * 1.6 + 17.9) - .5;
+  float cycles = (along + bend) / (puddleWindParameters.y * .24) + warp * 1.3 - puddleWindWave.z;
+  float phase = cycles * 6.28318530718;
+  float resolved = 1.0 - smoothstep(.16, .48, fwidth(cycles));
+  float ridge = (cos(phase) + .22 * cos(phase * 2.0 + warp)) / 1.22;
+  vec2 crestDirection = downwind + across * bendDerivative;
+  vec2 slope = crestDirection * ridge * 1.6 * resolved * packet + detailSlope * (.08 + .24 * packet);
+  gradient += slope * puddleWindParameters.x;
+  // Unresolved small ripples broaden the light lobe inside a breeze patch;
+  // coherent crests should not all turn into razor-white sun reflections.
+  float breezeRoughness = smoothstep(.0, .08, puddleWindParameters.x) * packet;
+  roughnessFactor = mix(roughnessFactor, max(roughnessFactor, .36), breezeRoughness);
+  // Widen highlights when fine normal detail becomes subpixel.
+  roughnessFactor = clamp(roughnessFactor + min(.18, length(fwidth(slope)) * puddleWindParameters.x * .3), .04, 1.0);
+}
 for (int i = 0; i < 12; i++) {
   if (i >= puddleRingCount) break;
   vec4 ring = puddleRings[i];
@@ -71,25 +147,53 @@ for (int i = 0; i < 12; i++) {
 }
 gradient *= smoothstep(0.0, .025, vPuddleDepth);
 normal = normalize(normal + mat3(viewMatrix) * vec3(-gradient.x, 0.0, -gradient.y));`)
-        .replace("#include <opaque_fragment>", `
+        .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>
+// Keep captured scene reflections intact while reducing the narrow direct-light glint.
+reflectedLight.directSpecular *= .2;`)
+        .replace("#include <lights_fragment_maps>", `#include <lights_fragment_maps>
+#if defined( RE_IndirectSpecular )
 if (puddlePlanarReady > .5 && vPuddleProjected.w > 0.0) {
-  vec2 projected = vPuddleProjected.xy / vPuddleProjected.w + gradient * .015;
+  // Project the world-space surface slope through the reflection camera.
+  // Camera rotation/perspective must also rotate/scale the distortion.
+  vec4 bentProjection = vPuddleProjected + puddlePlanarMatrix * vec4(-gradient.x * .18, 0.0, -gradient.y * .18, 0.0);
+  vec2 projected = bentProjection.xy / max(.0001, bentProjection.w);
   if (all(greaterThanEqual(projected, vec2(0.0))) && all(lessThanEqual(projected, vec2(1.0)))) {
     // Small roughness-aware footprint in linear HDR, retaining premultiplied geometry coverage.
     vec2 footprint = vec2(puddlePlanarTexel * roughnessFactor * 3.0, 0.0);
     vec4 reflected = texture2D(puddlePlanar, projected) * .4
       + (texture2D(puddlePlanar, projected + footprint) + texture2D(puddlePlanar, projected - footprint)
       + texture2D(puddlePlanar, projected + footprint.yx) + texture2D(puddlePlanar, projected - footprint.yx)) * .15;
-    float fresnel = .02 + .98 * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 5.0);
     vec2 border = min(projected, vec2(1.0) - projected);
     float edge = smoothstep(0.0, .025, min(border.x, border.y));
-    outgoingLight = mix(outgoingLight, reflected.rgb / max(reflected.a, .0001), clamp(reflected.a, 0.0, 1.0) * edge * (.18 + .78 * fresnel) * puddlePlanarStrength);
+    // Replace only incoming environment radiance. Three's physical BRDF applies
+    // water Fresnel/roughness once, retaining diffuse colour and direct light.
+    radiance = mix(radiance, reflected.rgb / max(reflected.a, .0001), clamp(reflected.a, 0.0, 1.0) * edge * puddlePlanarStrength);
   }
 }
-#include <opaque_fragment>`)
-        .replace("#include <alphatest_fragment>", "diffuseColor.a *= smoothstep(0.0, .012, vPuddleDepth);\n#include <alphatest_fragment>");
+#endif`)
+        .replace("#include <alphatest_fragment>", "diffuseColor.a = puddleMudAmount * smoothstep(0.0, .006, vPuddleDepth);\n#include <alphatest_fragment>");
     };
-    this.material.customProgramCacheKey = () => "terrain-puddle-wheel-ripples-v3";
+    this.material.customProgramCacheKey = () => "terrain-puddle-depth-mud-v12";
+  }
+
+  setMudAppearance(appearance: Partial<typeof PUDDLE_MUD_DEFAULTS>): void {
+    this.mudDensity.value = appearance.mudDensity ?? PUDDLE_MUD_DEFAULTS.mudDensity;
+    this.mudColor.value.set(appearance.mudColor ?? PUDDLE_MUD_DEFAULTS.mudColor);
+  }
+
+  /** Borrowed from the scene's water texture cache; the surface never disposes it. */
+  setWindNormal(texture: Texture | null): void {
+    this.windNormal.value = texture;
+    this.windParameters.value.z = texture ? 1 : 0;
+  }
+  /** Stable authored seed, independent of the live deformed shore/bounds. */
+  setWindOrigin(x: number, z: number): void { this.windOrigin.value.set(x, z); }
+  updateWind(wind: ResolvedWind, seconds: number, appearance: Partial<PuddleWindSettings> = {}): void {
+    this.windMotion.update(wind, seconds, appearance);
+    this.windOffset.value.fromArray(this.windMotion.offset);
+    this.windWave.value.set(wind.direction[0], wind.direction[1], this.windMotion.phase);
+    this.windParameters.value.set(this.windMotion.strength, appearance.windWorldScale ?? PUDDLE_WIND_DEFAULTS.windWorldScale,
+      this.windNormal.value ? 1 : 0, this.windMotion.seconds);
   }
 
   setPlanarReflectionBinding(binding: PlanarReflectionBinding | null): void {

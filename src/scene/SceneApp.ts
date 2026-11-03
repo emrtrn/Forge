@@ -2,7 +2,7 @@ import { validateWaterCrestFoam } from "@engine/scene/waterCrestFoam";
 import { LakeFoamStore } from "./lakeFoamStore";
 import { PuddlePreview } from "@/editor/puddlePreview";
 import { PuddleWaterController } from "./puddleWaterController";
-import { PUDDLE_LIMITS, validatePuddleWater, type PuddleWaterBody } from "@engine/scene/puddleWater";
+import { PUDDLE_LIMITS, PUDDLE_WIND_NORMAL, validatePuddleWater, type PuddleWaterBody } from "@engine/scene/puddleWater";
 import { puddleRegionAroundSeed } from "@engine/terrain/terrainPuddlePreparation";
 import { validateWaterCaustics, type WaterCaustics } from "@engine/scene/waterCaustics";
 import { validateWaterShoreWetness, type WaterShoreWetness } from "@engine/scene/waterShoreWetness";
@@ -2106,6 +2106,9 @@ export class SceneApp {
         : this.sunCascades?.isActive ? this.sunCascades.cascadeLights
           : this.sun?.castShadow ? [this.sun] : [];
       this.puddles?.update();
+      const puddleWind = resolveLevelWind(this.layout, this.worldEnvironmentState());
+      this.puddles?.updateWind(puddleWind, now / 1000);
+      this.puddlePreview?.updateWind(puddleWind, now / 1000);
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera(), shadowLights);
       advanceForgeMaterialAnimations(now / 1000);
 
@@ -8007,6 +8010,7 @@ export class SceneApp {
   private rebuildPuddles(force = false): void {
     if (!this.layout?.puddleWaters?.length && !this.puddles) return;
     this.puddles ??= new PuddleWaterController({ scene: this.scene, reflections: this.puddleReflections,
+      normal: () => this.loadRiverWaterNormalTexture(PUDDLE_WIND_NORMAL),
       document: id => this.layout?.landscapes?.some(actor => actor.id === id) ? this.lakeDocument(id) : undefined,
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);
@@ -8100,6 +8104,7 @@ export class SceneApp {
 
   private puddleController(): PuddlePreview {
     return this.puddlePreview ??= new PuddlePreview({ scene: this.scene, reflections: this.puddleReflections,
+      normal: () => this.loadRiverWaterNormalTexture(PUDDLE_WIND_NORMAL),
       document: id => this.lakeDocument(id),
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);

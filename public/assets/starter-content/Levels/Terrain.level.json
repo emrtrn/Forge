@@ -140,6 +140,11 @@
     "surface": {
       "snowCoverage": 0,
       "wetness": 0
+    },
+    "wind": {
+      "directionDeg": 51,
+      "strength": 1,
+      "gust": 0.35
     }
   },
   "lights": [
@@ -274,6 +279,43 @@
         "crestFoamEnabled": true,
         "crestFoamStrength": 1,
         "crestFoamThreshold": 0.25
+      }
+    }
+  ],
+  "puddleWaters": [
+    {
+      "schema": 1,
+      "kind": "puddle",
+      "coordinateSpace": "world",
+      "id": "puddle-1",
+      "terrainRef": "landscape-1",
+      "seed": [
+        181.9815552315269,
+        110.75385121567783
+      ],
+      "bounds": {
+        "min": [
+          169,
+          98
+        ],
+        "max": [
+          193,
+          122
+        ]
+      },
+      "surfaceLevel": -0.2,
+      "name": "Puddle 1",
+      "appearance": {
+        "color": "#504a35",
+        "opacity": 0.82,
+        "roughness": 0.13,
+        "reflectionStrength": 1.4,
+        "wheelRippleStrength": 3,
+        "wheelRippleSpeed": 2,
+        "wheelRippleWidth": 0.6,
+        "planarReflectionStrength": 0.5,
+        "reflectionMode": "sharedPlanar",
+        "reflectionQuality": "medium"
       }
     }
   ],

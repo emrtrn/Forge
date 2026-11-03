@@ -7,6 +7,13 @@ Ripples (Faz 3) uygulandı; genel W3 performans ve kullanıcı görsel kabulü a
 [Water Body / W3](WORLD_TERRAIN_WATER_BODY_PLAN.md),
 [Terrain Deformasyonu](TERRAIN_DEFORMATION_PLAN.md).
 
+**Yeni iş sırası — 3 Kasım 2026:** Wheel Ripples (Faz 3) tamamlandıktan sonra
+**Faz 4: World Environment rüzgarına bağlı normal-map dalgacıkları** ve
+**Faz 5: dibi örten çamurlu su yoğunluğu** uygulanacak. Bu iki faz şu anda yalnız
+planlandı; uygulamaya başlanmadı. Aşağıdaki yeni görünüm kararı, Faz 2'deki
+“su altı tabanı/izi okunur” görsel hedefinin yerini alır. Deforme yatak sorgusu,
+su sınırı, derinlik ve araç teması hesapları geçerliliğini korur.
+
 **3 Kasım 2026 güncellemesi:** Planar yansıma **Faz 1**, canlı çamur deformasyonu
 ile suyun birleşimi **Faz 2** kapsamında uygulandı; Wheel Ripples **Faz 3** olarak
 uygulandı. Kullanıcı fazların sırayla uygulanıp ayrı ayrı main'e push edilmesini istedi.
@@ -128,7 +135,7 @@ Ripples üretimi Faz 3'tedir. Teknik kayıt:
 
 ## Sıralı uygulama fazları — 3 Kasım 2026
 
-Üç kullanıcı isteği sırayla uygulanır. Her fazın teknik kontrolleri ve görsel
+İlk üç kullanıcı isteği ve bunları izleyen Faz 4–5 sırayla uygulanır. Her fazın teknik kontrolleri ve görsel
 kabulü ayrı kaydedilir; bir fazın geçmesi diğerlerini tamamlanmış saydırmaz.
 Araç ve deformasyon entegrasyonunun ortak temeli Faz 2'de hazırlanır, Wheel
 Ripples bu temeli Faz 3'te kullanır. Mevcut kaynak/kabul dilimleri de geçerlidir.
@@ -279,6 +286,116 @@ benzer sıklıkta dalga üretir. Durma, havaya kalkma ve kuru zeminde yeni emisy
 kesilir; mevcut dalga ömrünü tamamlar. Çok araç, iki ayrı çukur, ada/kuru kenar,
 kalite değişimi, respawn ve tekrar Edit/Play ile sızıntı/çift abonelik sınanır.
 Save/Reload/undo/redo ayarları korur; Lake/River dalgaları regresyona uğramaz.
+
+### Faz 4 — World Environment rüzgarına bağlı normal-map dalgacıkları
+
+Durum: **Planlandı / Wheel Ripples tamamlanana kadar beklemede.** Faz 3'ün
+son kodu ve teslim kanıtları başlangıçta tekrar okunacak; şu anda çalışma
+ağacında bulunan Wheel Ripples değişiklikleri tamamlanmış kabul edilmez.
+
+**Amaç:** araç yokken de Puddle üzerinde rüzgar esintisini gösteren küçük,
+doğal yüzey dalgacıkları. Su geometrisi ve kotu yatay kalır; etki normal map,
+ışık ve yansıma üzerinden görünür.
+
+- [ ] `engine/environment/wind.ts` içindeki `resolveLevelWind` sonucunu kullan:
+  yön, etkin şiddet ve gust. World Environment canlı hava/mevsim etkileri,
+  editör önizlemesi ve Play durumu aynı mevcut çözümleme kurallarını izlesin.
+  World Environment yokken/gizliyken World Settings ve varsayılanlara dönüş
+  korunsun. Puddle için bağımsız rüzgar yönü veya hava sistemi kurulmasın.
+- [ ] `SceneApp` ve `RuntimeSceneApp` üzerinden kalıcı controller ve Draft
+  Preview'ya rüzgar/zaman aktar. Bağlantı foliage varlığına bağlı olmasın:
+  mevcut `updateWindSway` fonksiyonları foliage yoksa erken dönüyor.
+  Editör kendi önizleme saatini, Play simülasyon saatini kullansın; pause
+  dalgacık animasyonunu dondursun. Ayar değişiminde faz atlaması önlensin.
+- [ ] Mevcut manifestteki uygun su normal asset'ini değerlendir; dünya XZ
+  metre ölçeğinde iki farklı ölçek/hızda örnekle. Kayma yönü global rüzgarla
+  uyumlu olsun; şiddet normal genliğini, gust zamana yayılan esintiyi etkilesin.
+  Güç sıfırken rüzgar katkısı sıfır olsun. Sığ kıyıda sönüm, uzak görünümde
+  mip/filtre ve parlama kontrolü ile tekrar eden kayış görünümü azaltılsın.
+- [ ] Rüzgar normali ile Faz 3 tekerlek dalga eğimini aynı dünya/view uzayında
+  birleştir; toplam normal planar ve ortam yansımalarına tutarlı uygulansın.
+  Wheel Ripples kapatılması rüzgarı kapatmasın; rüzgarın sıfırlanması araç
+  halkalarını durdurmasın. Faz 3 emisyonu, havza maskesi ve halka bütçesi korunsun.
+- [ ] Puddle Details ve taslakta küçük bir **Wind Ripples** bölümü planla:
+  Enabled, Normal Strength, World Scale ve Speed Response. Yön/etkin güç
+  World Environment'tan gelsin. Nihai varsayılan ve aralıklar küçük/sığ
+  birikintide görsel karşılaştırmayla seçilsin; göl boyutunda dalga oluşmasın.
+- [ ] Normal doku lineer veri olarak yüklensin; paylaşılan asset ownership ve
+  dispose kuralları korunsun. Eksik doku konsol/WebGL hatası üretmesin ve
+  Wheel Ripples çalışmaya devam etsin. Geç gelen yükleme silinmiş gövdeyi
+  geri getirmesin. Yeni gövde başına capture veya her kare geometri rebuild yok.
+
+**Kabul:** sabit kamera ve araçsız yüzeyde 0/düşük/yüksek rüzgar, yön değişimi
+ve gust karşılaştırılır. Foliage olmayan sahnede de çalışır. Üstten/yakın eğik
+açıda küçük esintiler ve yansıma kırılması görülür; kot ve su alanı değişmez.
+Wind/Wheel Ripples ayrı ayrı ve birlikte sınanır. Draft/Create/Edit/Play,
+pause, World Environment gizleme ve hava/mevsim değişimleri doğrulanır.
+
+### Faz 5 — Dibi örten çamurlu su yoğunluğu
+
+Durum: **Planlandı / Faz 3 ve Faz 4 sonrasında.**
+
+**Amaç:** kahverengi, yoğun ve bulanık birikinti. Su kaplı iç bölgede dip taşı,
+toprak dokusu ve su altında kalan tekerlek oyuğu görünmesin. Su kotunu aşan
+çamur sırtları, kuru adalar ve kıyılar görünmeye devam etsin.
+
+- [ ] Faz 3 sonrası aynı kamera/ışıkta mevcut görünümü kaydet. Renk, mevcut
+  `opacity` ve derinlik alpha geçişinin etkilerini ayrı karşılaştır. Şu anki
+  `.82` opaklık ve `smoothstep(0, .012, depth)` yaklaşımını başlangıç kabul et;
+  yalnız rengi koyulaştırmayı dip gizleme çözümü sayma.
+- [ ] İç bölgeyi örten çamurlu su rengi ve yoğunluk profili uygula. Varsayılan
+  hedef iç bölgede tam örtücülük olsun; derinlikten bağımsız olarak sığ iç
+  bölgede de dip seçilmesin. Derinlik renk tonunu etkileyebilir, fakat zemini
+  görünür kılan geniş bir saydamlık bandı üretmesin. Yalnız gerçek su sınırında
+  dar, yumuşak coverage geçişi kalsın; geometri maskesi kuru bölgeleri dışarıda tutsun.
+- [ ] Details'ta Color, Opacity ve yeni yoğunluk kontrolünün görevlerini netleştir.
+  Yoğunluk bulanık görünümü, Opacity nihai örtücülüğü belirlesin; varsayılan
+  çamurlu profil dibi gizlesin. Kullanıcının Opacity'yi elle düşürmesi berrak
+  bir görünümü yeniden mümkün kılabilir. Renk değerleri ışık altında seçilsin;
+  yalnız siyah veya aşırı parlak vernik görünümü oluşmasın.
+- [ ] Fiziksel materyal roughness/Fresnel ve planar karışımını birlikte ayarla:
+  kahverengi gövde rengi okunurken rüzgar dalgacıkları, araç halkaları ve
+  nesne yansımaları görünür kalsın. Planar kapalı/Low durumda da dip gizlensin.
+  Depth/sıralama davranışı araç tekerini veya su üstü çamurunu yanlış örtmesin.
+- [ ] Deforme yatak ve derinlik sorgularını görünürlükten ayır: dibi gizlemek
+  deformasyonu veya Wheel Ripples temas hesabını kapatmasın. Çamur sırtının
+  su kotunu aşması yüzeyi kesmeye devam etsin. Yeni refraction/underwater
+  render target veya çamur taşınım simülasyonu eklenmesin.
+- [ ] Yeni ve mevcut kayıtlar için geçişi açık yap: eksik yeni alanlar çamurlu
+  varsayılanı kullansın; açıkça yazılmış renk/opacity değerleri sessizce ezilmesin.
+  Mevcut sahnede kayıtlı düşük opacity varsa ayrıca görünüm ayarı gerektiği
+  raporlansın; bu plan authored level/terrain dosyalarını değiştirmez.
+
+**Kabul:** aynı konumda su açık/kapalı karşılaştırmasında su altı taban detayı
+yalnız su kapalıyken okunur; su üstü sırt/ada her iki durumda doğru yerde kalır.
+En sığ iç bölge, daha derin oyuk, güneş/gölge, üstten/eğik açı, planar açık/kapalı
+ve farklı kalite seviyeleri incelenir. Faz 4 esintileri ve Faz 3 halkaları yoğun
+kahverengi yüzeyde okunur; geniş saydam kıyı bandı veya çift parlama oluşmaz.
+
+### Faz 4–5 uygulama noktaları ve doğrulama
+
+- Veri/varsayılanlar: `engine/scene/puddleWater.ts`; renderer:
+  `engine/render-three/terrain/terrainPuddleSurface.ts`; kalıcı/taslak bağlantıları:
+  `src/scene/puddleWaterController.ts`, `src/editor/puddlePreview.ts`;
+  rüzgar aktarımı: `src/scene/SceneApp.ts`, `src/scene/RuntimeSceneApp.ts`.
+  Panel başlangıcı `src/editor/panels/details/puddleDetails.ts` ve taslak
+  görünüm panelidir. Yeni kontroller Details finalize düzenini korusun.
+- Yeni görünüm alanları ortak `validatePuddleWater` yolunda allowlist ve sonlu
+  değer/aralık kontrolüyle eklensin. `tools/saveValidator.ts` üzerinden gerçek
+  save/read round-trip, eski kayıt varsayılanları, undo/redo ve Save/Reload/Play
+  doğrulansın. Animasyon fazı, çözülmüş rüzgar ve halka geçmişi kaydedilmesin.
+- Her fazın ilgili engine regresyonları ve TypeScript kontrolü yapılsın;
+  engine/runtime tesliminde `npm.cmd run test:engine` ve
+  `npm.cmd run build:verify` çalıştırılsın. Playwright ile gerçek editör/Play
+  görünümü ve konsol/WebGL hataları ayrıca doğrulansın. Shader kaynak kontrolü
+  veya yalnız test başarısı görsel kabul sayılmasın.
+- Aynı kamera/kalite/gövde sayısında özellik açık/kapalı CPU/GPU ölçümü ve doku
+  belleği/kaynak sayıları kaydedilsin. İlave draw/capture olmaması, per-frame
+  geometri işi açılmaması ve tekrar oluştur/sil/level geçişinde kaynakların
+  bırakılması doğrulansın. Hedef donanım kabulü ölçüm yapılmadan tamamlanmasın.
+- Yeni save/asset alanları için uygulama sonunda kapsamlı olmayan, bu değişimle
+  sınırlı **Codex Security diff incelemesi önerilir**; tarama kullanıcı başlatır
+  veya onaylarsa çalıştırılır. Planlama sırasında tarama/test başlatılmaz.
 
 ### Fazlar için ortak teslim ve kapsam sınırı
 

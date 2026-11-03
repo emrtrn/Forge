@@ -31,26 +31,6 @@
           "scale": 1
         }
       ]
-    },
-    {
-      "assetId": "shape:plane",
-      "placements": [
-        {
-          "position": [
-            182.39,
-            -0.08,
-            111.34
-          ],
-          "name": "Plane",
-          "materialSlot": "red-material",
-          "rotationYDeg": 0,
-          "scale": [
-            20.7,
-            1,
-            20.7
-          ]
-        }
-      ]
     }
   ],
   "actors": [

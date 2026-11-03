@@ -193,6 +193,8 @@ export class StaticMeshEditor {
   private readonly complexCollisionGroup = new Group();
   /** Fracture preview chunks (Faz 3); shown in place of the model while previewing. */
   private readonly fracturePreviewGroup = new Group();
+  /** Fracture support overlay (Faz 4c-4): anchor boxes, visible over the intact model too. */
+  private readonly fractureSupportGroup = new Group();
   private readonly fracture: StaticMeshFracture;
   /** The loaded `gltf.scene`, the root the fracture bake and hash read. */
   private loadedModel: Object3D | null = null;
@@ -289,6 +291,7 @@ export class StaticMeshEditor {
       modelPath: options.modelPath,
       modelRoot: () => this.loadedModel,
       previewGroup: this.fracturePreviewGroup,
+      supportGroup: this.fractureSupportGroup,
       setModelVisible: (visible) => {
         this.modelGroup.visible = visible;
       },
@@ -343,6 +346,7 @@ export class StaticMeshEditor {
     this.scene.add(this.complexCollisionGroup);
     this.fracturePreviewGroup.visible = false;
     this.scene.add(this.fracturePreviewGroup);
+    this.scene.add(this.fractureSupportGroup);
     this.complexCollisionGroup.visible = this.showComplexCollision;
 
     const controls = new TransformControls(this.camera, this.renderer.domElement);
@@ -410,7 +414,10 @@ export class StaticMeshEditor {
       // A click (no meaningful drag, left button) selects a primitive under the
       // cursor — or clears the selection when clicking empty space.
       onClick: (event, dragDistance) => {
-        if (!this.gizmoDragging && dragDistance < 4) this.pickPrimitiveAt(event);
+        if (this.gizmoDragging || dragDistance >= 4) return;
+        // Fracture Simulate Hit (Faz 4c-4) takes a click that lands on a chunk.
+        if (this.fracture.wantsViewportHit && this.fracture.pickHit(this.rayAt(event))) return;
+        this.pickPrimitiveAt(event);
       },
     });
   }
@@ -1164,13 +1171,19 @@ export class StaticMeshEditor {
     if (small) small.textContent = primitive.size.map((axis) => axis.toFixed(2)).join(" × ");
   }
 
-  private pickPrimitiveAt(event: PointerEvent): void {
+  /** Aims the shared raycaster through the viewport pixel under the pointer. */
+  private rayAt(event: PointerEvent): Raycaster {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
+    return this.raycaster;
+  }
+
+  private pickPrimitiveAt(event: PointerEvent): void {
+    this.rayAt(event);
     if (this.uvwOverlay) {
       const uvwHits = this.raycaster.intersectObject(this.uvwOverlay.pickMesh, false);
       if (uvwHits.length > 0) {

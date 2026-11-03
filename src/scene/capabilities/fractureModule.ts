@@ -34,7 +34,7 @@ import {
   type FractureOverride,
   type FracturePlacement,
 } from "@engine/physics/fracture/fractureRuntime";
-import { anchoredChunks, chunksInRadius, damageRadius, supportIslands } from "@engine/physics/fracture/fractureSupport";
+import { anchoredChunks, damageRadius, releaseSupportHit } from "@engine/physics/fracture/fractureSupport";
 import { fractureGrain, type AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
 import { polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
 import { fractureChunkGeometry, fractureSourceFromObject } from "@engine/render-three/fractureGeometry";
@@ -313,16 +313,9 @@ export function createFractureModule(): CapabilityModule {
   ): number[] => {
     const support = state.asset.def.support;
     const radius = damageRadius(support.damageRadius, support.damageRadiusPerImpulse, impulse, support.damageRadiusMax);
-    const released = chunksInRadius(specs.map((spec) => spec.position), state.present, hit, radius);
-    for (const index of released) state.present[index] = false;
-    const { islands } = supportIslands(state.present.length, state.asset.bake.links, state.anchored, state.present);
-    for (const island of islands) {
-      for (const index of island) {
-        state.present[index] = false;
-        released.push(index);
-      }
-    }
-    return released;
+    const { inRadius, collapsed } = releaseSupportHit(
+      specs.map((spec) => spec.position), state.asset.bake.links, state.anchored, state.present, hit, radius);
+    return [...inRadius, ...collapsed];
   };
 
   /** Released chunks fall: the largest become bodies (per-asset cap), the rest crumble. */

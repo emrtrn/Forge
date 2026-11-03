@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { bakeFracture, type FractureBakeResult, type FractureChunk } from "../../engine/physics/fracture/fractureBake";
 import {
-  anchoredChunks, bottomAnchorBox, chunksInRadius, damageRadius, supportIslands, type FractureLink,
+  anchoredChunks, bottomAnchorBox, chunksInRadius, damageRadius, releaseSupportHit, supportIslands, type FractureLink,
 } from "../../engine/physics/fracture/fractureSupport";
 import {
   clipPolyhedron, faceArea, meshBounds, polyhedronFromMesh, voronoiCellPlanes,
@@ -208,5 +208,20 @@ export function registerFractureSupportTests(check: (label: string, fn: () => vo
       close(damageRadius(2, 0.5, value, 10), 2);
       close(damageRadius(2, 0.5, 100, value), 52);
     }
+  });
+
+  check("fracture support: a hit releases the radius then the islands it cut off, and a second hit collapses the rest", () => {
+    // Column 0-1-2-3-4 standing on anchored 0, with 4 also braced by 2.
+    const positions: FractureVec3[] = [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 3, 0], [1, 3, 0]];
+    const links: FractureLink[] = [{ a: 0, b: 1, area: 1 }, { a: 1, b: 2, area: 1 }, { a: 2, b: 3, area: 1 }, { a: 3, b: 4, area: 1 }];
+    const anchored = [true, false, false, false, false];
+    const present = [true, true, true, true, true];
+    assert.deepEqual(releaseSupportHit(positions, links, anchored, present, [1, 3, 0], 0.1), { inRadius: [4], collapsed: [] });
+    assert.deepEqual(present, [true, true, true, true, false]);
+    assert.deepEqual(releaseSupportHit(positions, links, anchored, present, [0, 1, 0], 0.1), { inRadius: [1], collapsed: [2, 3] });
+    assert.deepEqual(present, [true, false, false, false, false]);
+    // Nothing anchored: the whole remainder is one island.
+    const free = [true, true, true, true, true];
+    assert.deepEqual(releaseSupportHit(positions, links, [], free, [0, 0, 0], 0.1), { inRadius: [0], collapsed: [1, 2, 3, 4] });
   });
 }

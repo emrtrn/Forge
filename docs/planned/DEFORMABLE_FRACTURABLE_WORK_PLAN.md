@@ -12,7 +12,7 @@
 >
 > **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
 > devam: (1) ~~Faz 4b-3 kırılma VFX/ses + debris ayarları~~ (tamam) → (2) **Faz 4c destek
-> grafiği** (anchor/sabit parçalar, World Support, kısmi kırılma, ada çöküşü)
+> grafiği** (4c-1…4c-4 tamam, sırada 4c-5; anchor/sabit parçalar, World Support, kısmi kırılma, ada çöküşü)
 > → (3) Faz 5 kalıcılık (4c yüzünden parça bit maskesiyle) → (4) Faz 4d
 > Extended Structures (ihtiyaç olunca). 4b-1, 4b-2 ve ahşap kıymık deseni
 > tamam. APEX Destruction değerlendirmesi Faz 4c başlığının altında.
@@ -661,10 +661,29 @@ Dilimler:
       vuruş yok sayılır. Smoke artık: 12 düşer, 12 ayakta, 3 s sonra da
       ayakta. Sadeleştirme: enkaz yapıyı yıkmaz (ağır enkazın üstteki
       parçaları ezmesi istenirse ayrı bir eşik gerekir).
-- [ ] 4c-4 editör: Static Mesh Editor'da Support bölümü (mode, anchor kutuları
+- [x] 4c-4 editör: Static Mesh Editor'da Support bölümü (mode, anchor kutuları
       + "alttan %N" kısayolu, World Support, yarıçap), önizlemede anchor
       parçaları farklı renk, grafik kenarları tel; "Simulate hit" düğmesi
       (önizlemede bir noktaya vurup hangi parçaların düşeceğini gösterir).
+      **4c-4 kapandı (2026-11-03):** `staticMeshFracture.ts` Fracture'ın
+      altında ayrı "Support" bölümü: Mode (None'da diğer alanlar gizli),
+      World Support, Damage Radius / Per Impulse / Max (kaydırıcı + kutu,
+      `FRACTURE_SUPPORT_LIMITS`), Anchors listesi (Remove, min/max XYZ),
+      `Bottom %` + Add Bottom (`bottomAnchorBox`, model sınırları
+      `meshBounds`), Add Box (model sınırları), en çok 16. Önizleme: anchor'lı
+      parçalar yeşil, kutular tel kafes (`supportGroup`, sağlam modelin
+      üstünde de), Show Links komşuluk kenarları. Simulate Hit (açık/kapalı;
+      viewport tıklaması parçaya isabet ederse oraya vurur, Explode ofseti
+      geri alınır), Hit Center, Reset Hits, Hit Impulse (yalnız önizleme):
+      yarıçapta kopan kırmızı, desteksiz düşen turuncu, aşağı kayar; vuruşlar
+      birikir (ada çöküşü editörde görülebilir). Kural tek kaynak:
+      `releaseSupportHit` (`fractureSupport.ts`) — runtime `releaseAround`
+      da onu çağırıyor. World Support editörde hesaplanmaz (ipucu var);
+      önizleme model ölçeğinde (duvar asset'i 1 m blok, ölçek yerleşimden).
+      Her alan `normalizeAssetFracture`'dan geçer, Save mevcut yol. Testler:
+      `fractureSupport.test.ts` "a hit releases the radius then the islands",
+      `fracture-editor.spec.ts` "Support section" (mode, Bottom %20, Hit
+      Center + viewport tıklaması, Reset, Save payload'ında `support`).
 - [ ] 4c-5 smoke: duvara araçla çarp → yalnız çarpma bölgesi düşer, anchor'lı
       alt kısım kalır; ikinci çarpma kalan desteği kesince üst kısım çöker.
 
@@ -966,3 +985,7 @@ kullanıcı kararı).
   tekrar vuruşu ve enkazın ayaktaki parçalara çarpmasıydı; enkaz sayılmıyor,
   kaynak başına 0.25 s vuruş penceresi. Anchored duvar smoke'u açıldı.
   Sırada 4c-4 (editör Support bölümü).
+- 2026-11-03: **Faz 4c-4 kapandı**: Static Mesh Editor "Support" bölümü
+  (anchor kutuları, Bottom %, yarıçap alanları, renkli önizleme, Show Links,
+  Simulate Hit / Hit Center); runtime ile ortak `releaseSupportHit`. Sırada
+  4c-5 (ikinci vuruşla ada çöküşü smoke'u), sonra Faz 5.

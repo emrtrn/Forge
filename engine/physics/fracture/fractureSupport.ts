@@ -114,3 +114,25 @@ export function damageRadius(base: number, perImpulse: number, impulse: number, 
   const cap = Number.isFinite(max) ? Math.max(0, max) : Infinity;
   return Math.max(0, Math.min(cap, radius));
 }
+
+/**
+ * One hit on a damaged source (APEX support): the present chunks within
+ * `radius` of `center` are released, then every island that release cut off
+ * from the anchors. Marks them absent in `present` (mutated) and returns both
+ * groups; the runtime and the editor's Simulate Hit share it.
+ */
+export function releaseSupportHit(
+  positions: readonly FractureVec3[], links: readonly FractureLink[], anchored: readonly boolean[],
+  present: boolean[], center: FractureVec3, radius: number,
+): { inRadius: number[]; collapsed: number[] } {
+  const inRadius = chunksInRadius(positions, present, center, radius);
+  for (const index of inRadius) present[index] = false;
+  const collapsed: number[] = [];
+  for (const island of supportIslands(present.length, links, anchored, present).islands) {
+    for (const index of island) {
+      present[index] = false;
+      collapsed.push(index);
+    }
+  }
+  return { inRadius, collapsed };
+}

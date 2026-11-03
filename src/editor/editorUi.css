@@ -3754,6 +3754,10 @@
 }
 .sm-row.sm-toggle { grid-template-columns: auto 1fr; }
 .sm-fracture-warning { color: var(--forge-warning, #e6b450); }
+.sm-fracture-vec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.sm-fracture-vec input[type="number"] { min-width: 0; width: 100%; }
+.sm-fracture-anchor { margin: 2px 6px; border-left: 2px solid #3fbf6f; }
+[data-sm-fracture-simulate][aria-pressed="true"] { outline: 1px solid #ffb648; background: #3a2c14; }
 .sm-row.sm-toggle input { width: 16px; height: 16px; }
 
 .sm-prim-list { padding: 6px; display: flex; flex-direction: column; gap: 4px; }

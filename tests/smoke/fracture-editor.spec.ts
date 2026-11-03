@@ -265,3 +265,92 @@ test("fracture editor: the splinter pattern shows grain fields, re-bakes and sav
   });
   expect(errors).toEqual([]);
 });
+
+test("fracture editor: the Support section anchors the bottom, simulates a hit and saves the support block", async ({ page }) => {
+  // Faz 4c-4: the breakable wall is `anchored` with World Support only. The
+  // editor cannot evaluate World Support (no ground here), so a box anchor is
+  // what holds in the preview; Simulate Hit marks what a hit would drop.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const saves: { path: string; fracture: Record<string, unknown> }[] = [];
+  await page.route("**/__save-fracture", async (route) => {
+    const payload = JSON.parse(route.request().postData() ?? "{}");
+    saves.push(payload);
+    await route.fulfill({ json: { ok: true, path: payload.path, changed: true, dropped: [] } });
+  });
+  for (const endpoint of ["__save-collision", "__save-material-slots", "__save-uvw", "__save-vertex-colors", "__save-layout"]) {
+    await page.route(`**/${endpoint}**`, async (route) => {
+      const payload = JSON.parse(route.request().postData() ?? "{}");
+      await route.fulfill({ json: { ok: true, path: payload.path ?? "x", changed: false, dropped: [] } });
+    });
+  }
+  await page.setViewportSize({ width: 1600, height: 950 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  const drawer = page.locator("[data-content-drawer]");
+  await drawer.locator('button.folder-row[title="assets/starter-content/StaticMeshes/Destructible"]').click();
+  await drawer.getByRole("button", { name: /^Breakable Wall Static Mesh/ }).first().dblclick();
+  const editor = page.locator(".sm-editor-overlay");
+  await expect(editor.locator("[data-sm-status]")).toHaveText("Ready.", { timeout: 20_000 });
+  const support = editor.locator("[data-sm-fracture-support]");
+
+  // None hides every other support field; Anchored brings them back.
+  await expect(support.locator("[data-sm-fracture-support-mode]")).toHaveValue("anchored");
+  await support.locator("[data-sm-fracture-support-mode]").selectOption("none");
+  await expect(support.locator("[data-sm-fracture-world-support]")).toHaveCount(0);
+  await support.locator("[data-sm-fracture-support-mode]").selectOption("anchored");
+  await expect(support.locator("[data-sm-fracture-world-support]")).toBeChecked();
+  await expect(support.locator(".param-slider").first()).toBeVisible();
+
+  await editor.locator("[data-sm-fracture-bake]").click();
+  const stats = support.locator("[data-sm-fracture-support-stats]");
+  await expect(stats).toHaveAttribute("data-anchored", "0");
+  await support.locator("[data-sm-fracture-anchor-bottom]").click();
+  await expect(support.locator("[data-sm-fracture-anchor-row]")).toHaveCount(1);
+  const anchoredCount = Number(await stats.getAttribute("data-anchored"));
+  expect(anchoredCount).toBeGreaterThan(0);
+  await support.locator("[data-sm-fracture-links]").check();
+
+  // A hit in the middle drops the radius plus whatever lost its path to the bottom.
+  // The wall mesh is a unit block scaled by its placement: keep the radius small.
+  const smallRadius = support.locator('[data-sm-fracture-support-num="damageRadius"]');
+  await smallRadius.fill("0.2");
+  await smallRadius.press("Tab");
+  const hitImpulse = support.locator("[data-sm-fracture-hit-impulse]");
+  await hitImpulse.fill("0");
+  await hitImpulse.press("Tab");
+  await support.locator("[data-sm-fracture-hit-center]").click();
+  const sim = support.locator("[data-sm-fracture-sim]");
+  await expect(sim).toContainText("1 vuruş");
+  const released = Number(await sim.getAttribute("data-released"));
+  const collapsed = Number(await sim.getAttribute("data-collapsed"));
+  const standing = Number(await sim.getAttribute("data-standing"));
+  expect(released).toBeGreaterThan(0);
+  expect(standing).toBeGreaterThanOrEqual(anchoredCount);
+  expect(released + collapsed + standing).toBe(24);
+  await support.locator("[data-sm-fracture-sim-reset]").click();
+  await expect(support.locator("[data-sm-fracture-sim]")).toHaveAttribute("data-standing", "24");
+
+  // Armed, a viewport click on a chunk hits there.
+  await support.locator("[data-sm-fracture-simulate]").click();
+  await expect(support.locator("[data-sm-fracture-simulate]")).toHaveAttribute("aria-pressed", "true");
+  const box = (await editor.locator("canvas").first().boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(support.locator("[data-sm-fracture-sim]")).toContainText("1 vuruş");
+  expect(Number(await support.locator("[data-sm-fracture-sim]").getAttribute("data-released"))).toBeGreaterThan(0);
+  await support.locator("[data-sm-fracture-simulate]").click();
+
+  // Simulate Hit is preview only; the edited support block is what Save writes.
+  const radius = support.locator('[data-sm-fracture-support-num="damageRadius"]');
+  await radius.fill("1.2");
+  await radius.press("Tab");
+  await editor.locator("[data-sm-save]").click();
+  await expect.poll(() => saves.length, { timeout: 15_000 }).toBe(1);
+  expect(saves[0]!.path).toBe("assets/starter-content/StaticMeshes/Destructible/SM_BreakableWall.fracture.json");
+  const saved = saves[0]!.fracture.support as { mode: string; worldSupport: boolean; damageRadius: number; anchors: { min: number[]; max: number[] }[] };
+  expect(saved).toMatchObject({ mode: "anchored", worldSupport: true, damageRadius: 1.2 });
+  expect(saved.anchors).toHaveLength(1);
+  expect(saved.anchors[0]!.max[1]!).toBeGreaterThan(saved.anchors[0]!.min[1]!);
+  expect(errors).toEqual([]);
+});

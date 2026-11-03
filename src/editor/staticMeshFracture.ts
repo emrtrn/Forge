@@ -1,6 +1,10 @@
 import {
   Box3,
+  Box3Helper,
+  BufferGeometry,
+  Color,
   EdgesGeometry,
+  Float32BufferAttribute,
   Group,
   LineBasicMaterial,
   LineSegments,
@@ -9,14 +13,20 @@ import {
   Vector3,
   type Material,
   type Object3D,
+  type Raycaster,
 } from "three";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
 
 import { DEFAULT_PHYSICS_FIXED_STEP } from "@engine/physics/fixedStep";
 import { bakeFracture, type FractureBakeResult } from "@engine/physics/fracture/fractureBake";
 import {
+  anchoredChunks, bottomAnchorBox, damageRadius, releaseSupportHit,
+} from "@engine/physics/fracture/fractureSupport";
+import {
   FRACTURE_GRAIN_AXES,
   FRACTURE_LIMITS,
+  FRACTURE_MAX_ANCHORS,
+  FRACTURE_SUPPORT_LIMITS,
   createAssetFracture,
   fractureGrain,
   fractureSourceHash,
@@ -25,9 +35,13 @@ import {
   type AssetFractureDef,
   type FractureGrainAxis,
   type FracturePattern,
+  type FractureSupportDef,
+  type FractureSupportMode,
   type FractureWarning,
 } from "@engine/physics/fracture/fractureTypes";
-import { checkFractureSource, polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
+import {
+  checkFractureSource, meshBounds, polyhedronFromMesh, polyhedronVolume, type FractureVec3,
+} from "@engine/physics/fracture/voronoiFracture";
 import { fractureChunkGeometry, fractureSourceFromObject } from "@engine/render-three/fractureGeometry";
 import { loadAssetFracture, saveAssetFracture } from "@/editor/assetFractureStore";
 
@@ -46,6 +60,8 @@ export interface StaticMeshFractureHost {
   modelRoot(): Object3D | null;
   /** Viewport group the preview chunks live in (owned by the editor's scene). */
   readonly previewGroup: Group;
+  /** Viewport group for the support overlay (anchor boxes), shown over the intact model too. */
+  readonly supportGroup: Group;
   /** Hide the intact model while the chunks are shown. */
   setModelVisible(visible: boolean): void;
   /** Manifest material assets for the interior material picker. */
@@ -105,6 +121,29 @@ const NUMBER_FIELDS: readonly { key: NumberKey; label: string; step: number; tit
 const HULL_MATERIAL = new LineBasicMaterial({ color: 0x5fd4ff, transparent: true, opacity: 0.8, depthTest: false });
 const FALLBACK_INTERIOR = new MeshStandardMaterial({ color: 0x8a7158, roughness: 0.95 });
 
+type SupportNumberKey = "damageRadius" | "damageRadiusPerImpulse" | "damageRadiusMax";
+
+const SUPPORT_NUMBER_FIELDS: readonly { key: SupportNumberKey; label: string; step: number; title: string; sliderMax?: number }[] = [
+  { key: "damageRadius", label: "Damage Radius (m)", step: 0.05, title: "Darbe noktasının bu yarıçapındaki parçalar kopar (en az en yakın parça)", sliderMax: 5 },
+  { key: "damageRadiusPerImpulse", label: "Radius Per Impulse (m/N·s)", step: 0.00005, title: "Darbe impulse'unun her N·s'si yarıçapa bu kadar ekler", sliderMax: 0.002 },
+  { key: "damageRadiusMax", label: "Damage Radius Max (m)", step: 0.1, title: "Yarıçapın üst sınırı; 0 sınırsız", sliderMax: 10 },
+];
+
+/** Support preview tints: anchored, released by the hit's radius, collapsed with no path to an anchor. */
+const ANCHORED_MATERIAL = new MeshStandardMaterial({ color: 0x3fbf6f, roughness: 0.8 });
+const RELEASED_MATERIAL = new MeshStandardMaterial({ color: 0xe0533d, roughness: 0.8 });
+const COLLAPSED_MATERIAL = new MeshStandardMaterial({ color: 0xf0a030, roughness: 0.8 });
+const LINK_MATERIAL = new LineBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.9, depthTest: false });
+const ANCHOR_BOX_COLOR = new Color(0x3fbf6f);
+
+/** Simulate Hit state over the current bake (preview only, never saved). */
+interface SupportSimulation {
+  readonly present: boolean[];
+  readonly inRadius: Set<number>;
+  readonly collapsed: Set<number>;
+  hits: number;
+}
+
 export class StaticMeshFracture {
   private def: AssetFractureDef | null = null;
   /** The def as last loaded or saved, to tell whether saving has anything to write. */
@@ -115,14 +154,46 @@ export class StaticMeshFracture {
   private showChunks = true;
   private showHulls = false;
   private warnings: FractureWarning[] = [];
+  /** Support preview (Faz 4c-4): chunk anchored flags of the current bake, box anchors only. */
+  private anchored: boolean[] = [];
+  private showSupport = true;
+  private showLinks = false;
+  private bottomPercent = 20;
+  /** Simulate Hit impulse; null follows the asset's Break Impulse. */
+  private hitImpulse: number | null = null;
+  /** Simulate Hit armed: the next viewport click on a chunk hits there. */
+  private hitArmed = false;
+  private sim: SupportSimulation | null = null;
+  private links: LineSegments | null = null;
 
   constructor(private readonly host: StaticMeshFractureHost) {}
+
+  /** True while Simulate Hit waits for a viewport click; the editor then routes clicks to {@link pickHit}. */
+  get wantsViewportHit(): boolean {
+    return this.hitArmed && this.bake !== null && this.def?.support.mode === "anchored";
+  }
+
+  /** Hits the chunk under the ray (model space); false when the ray misses every chunk. */
+  pickHit(raycaster: Raycaster): boolean {
+    const bake = this.bake;
+    if (!bake || !this.showChunks) return false;
+    const standing = bake.meshes.filter((_, index) => this.sim?.present[index] ?? true);
+    const hit = raycaster.intersectObjects(standing, false)[0];
+    if (!hit) return false;
+    const mesh = hit.object as Mesh;
+    // Undo the Explode offset: the hit lands on the chunk where the bake put it.
+    const local = this.host.previewGroup.worldToLocal(hit.point.clone())
+      .sub(mesh.position).add(mesh.userData.fracturePivot as Vector3);
+    this.hitAt([local.x, local.y, local.z]);
+    return true;
+  }
 
   async load(): Promise<void> {
     this.def = await loadAssetFracture(this.host.modelPath);
     this.saved = JSON.stringify(this.def);
     await this.refreshInterior();
     this.refreshWarnings();
+    this.refreshSupportPreview();
   }
 
   /** The model arrived: warnings can now compare against its real hash. */
@@ -239,6 +310,111 @@ export class StaticMeshFracture {
           <span>Show Hulls</span>
         </label>
         ${warnings}
+      </div>
+      ${this.supportHtml(def.support)}`;
+  }
+
+  /** The "Support" section (Faz 4c-4): anchors, damage radius and the Simulate Hit preview. */
+  private supportHtml(support: FractureSupportDef): string {
+    const anchored = support.mode === "anchored";
+    const modeRow = `
+        <label class="sm-row" title="None: vurulunca bütün nesne kırılır. Anchored: yalnız darbe çevresi kopar, sabitlenmiş parçalara bağlı kalanlar ayakta durur">
+          <span>Mode</span>
+          <select data-sm-fracture-support-mode>
+            <option value="none" ${anchored ? "" : "selected"}>None</option>
+            <option value="anchored" ${anchored ? "selected" : ""}>Anchored</option>
+          </select>
+        </label>`;
+    if (!anchored) {
+      return `
+      <div class="sm-section" data-sm-fracture-support>
+        <div class="sm-section-title">Support</div>
+        ${modeRow}
+      </div>`;
+    }
+    const numberRows = SUPPORT_NUMBER_FIELDS.map(({ key, label, step, title, sliderMax }) => {
+      const [min, max] = FRACTURE_SUPPORT_LIMITS[key];
+      return `
+        <label class="sm-row" title="${title}">
+          <span>${label}</span>
+          <input type="number" data-sm-fracture-support-num="${key}" min="${min}" max="${max}" step="${step}"
+            ${sliderMax !== undefined ? `data-slider-max="${sliderMax}"` : ""} value="${support[key]}" />
+        </label>`;
+    }).join("");
+    const [low, high] = FRACTURE_SUPPORT_LIMITS.anchorCoordinate;
+    const corner = (index: number, name: "min" | "max", values: readonly number[]): string => `
+        <div class="sm-row" title="Kutunun model uzayındaki ${name === "min" ? "alt" : "üst"} köşesi (m)">
+          <span>${name === "min" ? "Min" : "Max"}</span>
+          <div class="sm-fracture-vec">${[0, 1, 2].map((axis) => `
+            <input type="number" data-sm-fracture-anchor="${index}" data-corner="${name}" data-axis="${axis}"
+              min="${low}" max="${high}" step="0.05" aria-label="${name} ${"XYZ"[axis]}" value="${round(values[axis]!)}" />`).join("")}
+          </div>
+        </div>`;
+    const anchorRows = support.anchors.map((box, index) => `
+        <div class="sm-fracture-anchor" data-sm-fracture-anchor-row="${index}">
+          <div class="sm-row">
+            <span>Anchor ${index + 1}</span>
+            <button type="button" data-sm-fracture-anchor-remove="${index}" title="Bu anchor kutusunu sil">Remove</button>
+          </div>
+          ${corner(index, "min", box.min)}
+          ${corner(index, "max", box.max)}
+        </div>`).join("");
+    const full = support.anchors.length >= FRACTURE_MAX_ANCHORS;
+    const bake = this.bake;
+    const anchoredCount = this.anchored.filter(Boolean).length;
+    const supportStats = bake
+      ? `${anchoredCount} / ${bake.result.chunks.length} parça anchor'lı · ${bake.result.links.length} bağ`
+      : "Önizleme için Bake et.";
+    const sim = this.sim;
+    const standing = sim ? sim.present.filter(Boolean).length : bake?.result.chunks.length ?? 0;
+    const simStats = sim
+      ? `${sim.hits} vuruş · ${sim.inRadius.size} yarıçapta koptu · ${sim.collapsed.size} desteksiz düştü · ${standing} ayakta`
+      : "Simulate Hit'e basıp önizlemede bir parçaya tıkla ya da Hit Center ile ortadan vur.";
+    const impulse = this.hitImpulse ?? this.def?.breakImpulse ?? 0;
+    const [impulseMin, impulseMax] = FRACTURE_LIMITS.breakImpulse;
+    return `
+      <div class="sm-section" data-sm-fracture-support>
+        <div class="sm-section-title">Support</div>
+        ${modeRow}
+        <label class="sm-row sm-toggle" title="Oyunda ilk darbe anında statik dünyaya (zemin, duvar) değen parçalar da anchor olur">
+          <input type="checkbox" data-sm-fracture-world-support ${support.worldSupport ? "checked" : ""} />
+          <span>World Support</span>
+        </label>
+        ${support.worldSupport ? `<div class="sm-hint">World Support editörde hesaplanmaz (burada zemin yok); önizleme yalnız anchor kutularını kullanır.</div>` : ""}
+        ${numberRows}
+        <div class="sm-section-title">Anchors <span class="sm-count">${support.anchors.length}</span></div>
+        ${anchorRows || `<div class="sm-hint">Anchor kutusu yok${support.worldSupport ? "; oyunda yalnız World Support tutar" : ""}.</div>`}
+        <label class="sm-row" title="Bottom kısayolu modelin alttan bu yüzdesini kaplayan bir kutu ekler">
+          <span>Bottom %</span>
+          <input type="number" data-sm-fracture-bottom-percent min="1" max="100" step="1" value="${this.bottomPercent}" />
+        </label>
+        <div class="sm-prim-list">
+          <button type="button" data-sm-fracture-anchor-bottom ${full ? "disabled" : ""} title="Modelin alttan Bottom % kadarını anchor yap">Add Bottom ${this.bottomPercent}%</button>
+          <button type="button" data-sm-fracture-anchor-add ${full ? "disabled" : ""} title="Modelin sınırları büyüklüğünde bir kutu ekle; köşelerini sonra daralt">Add Box</button>
+        </div>
+        <div class="sm-hint" data-sm-fracture-support-stats data-anchored="${anchoredCount}">${supportStats}</div>
+        <label class="sm-row sm-toggle" title="Anchor'lı parçaları yeşil, kopanları kırmızı, desteksiz düşenleri turuncu göster; anchor kutularını tel kafes çiz">
+          <input type="checkbox" data-sm-fracture-show-support ${this.showSupport ? "checked" : ""} />
+          <span>Show Support</span>
+        </label>
+        <label class="sm-row sm-toggle" title="Parça komşuluk grafiğini (ortak kesim yüzü olan parçalar) tel çiz">
+          <input type="checkbox" data-sm-fracture-links ${this.showLinks ? "checked" : ""} ${bake ? "" : "disabled"} />
+          <span>Show Links</span>
+        </label>
+        <label class="sm-row" title="Simulate Hit'in impulse'u; yarıçap = Damage Radius + Per Impulse × impulse (yalnız önizleme)">
+          <span>Hit Impulse (N·s)</span>
+          <input type="number" data-sm-fracture-hit-impulse min="${impulseMin}" max="${impulseMax}" step="100"
+            data-slider-max="50000" value="${impulse}" ${bake ? "" : "disabled"} />
+        </label>
+        <div class="sm-prim-list">
+          <button type="button" data-sm-fracture-simulate aria-pressed="${this.hitArmed}" ${bake ? "" : "disabled"}
+            title="Açıkken önizlemede tıkladığın parçaya vurur; art arda vuruşlar birikir (dosyaya yazılmaz)">Simulate Hit</button>
+          <button type="button" data-sm-fracture-hit-center ${bake ? "" : "disabled"} title="Modelin ortasına vur">Hit Center</button>
+          <button type="button" data-sm-fracture-sim-reset ${sim ? "" : "disabled"} title="Bütün parçaları geri getir">Reset Hits</button>
+        </div>
+        <div class="sm-hint">Önizleme model ölçeğindedir; yerleşimin ölçeği oyunda parçaları büyütür ama yarıçap metre olarak kalır.</div>
+        <div class="sm-hint" data-sm-fracture-sim
+          data-released="${sim?.inRadius.size ?? 0}" data-collapsed="${sim?.collapsed.size ?? 0}" data-standing="${standing}">${simStats}</div>
       </div>`;
   }
 
@@ -309,6 +485,89 @@ export class StaticMeshFracture {
       this.showHulls = (event.currentTarget as HTMLInputElement).checked;
       this.applyVisibility();
     });
+    this.bindSupport(root);
+  }
+
+  private bindSupport(root: HTMLElement): void {
+    root.querySelector<HTMLSelectElement>("[data-sm-fracture-support-mode]")?.addEventListener("change", (event) => {
+      this.patchSupport({ mode: (event.currentTarget as HTMLSelectElement).value as FractureSupportMode });
+    });
+    root.querySelector<HTMLInputElement>("[data-sm-fracture-world-support]")?.addEventListener("change", (event) => {
+      this.patchSupport({ worldSupport: (event.currentTarget as HTMLInputElement).checked });
+    });
+    root.querySelectorAll<HTMLInputElement>("[data-sm-fracture-support-num]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const value = Number(input.value);
+        if (Number.isFinite(value)) this.patchSupport({ [input.dataset.smFractureSupportNum as SupportNumberKey]: value });
+      });
+    });
+    root.querySelectorAll<HTMLInputElement>("[data-sm-fracture-anchor]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const value = Number(input.value);
+        const anchors = this.def?.support.anchors;
+        const index = Number(input.dataset.smFractureAnchor);
+        const box = anchors?.[index];
+        if (!anchors || !box || !Number.isFinite(value)) return;
+        const corner = input.dataset.corner === "max" ? "max" : "min";
+        const point = [...box[corner]] as [number, number, number];
+        point[Number(input.dataset.axis)] = value;
+        this.patchSupport({ anchors: anchors.map((entry, at) => at === index ? { ...entry, [corner]: point } : entry) });
+      });
+    });
+    root.querySelectorAll<HTMLButtonElement>("[data-sm-fracture-anchor-remove]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const index = Number(button.dataset.smFractureAnchorRemove);
+        this.patchSupport({ anchors: (this.def?.support.anchors ?? []).filter((_, at) => at !== index) });
+      });
+    });
+    root.querySelector<HTMLInputElement>("[data-sm-fracture-bottom-percent]")?.addEventListener("change", (event) => {
+      const value = Number((event.currentTarget as HTMLInputElement).value);
+      if (!Number.isFinite(value)) return;
+      this.bottomPercent = Math.min(100, Math.max(1, Math.round(value)));
+      this.host.rerender();
+    });
+    root.querySelector<HTMLButtonElement>("[data-sm-fracture-anchor-bottom]")?.addEventListener("click", () => {
+      const bounds = this.modelBounds();
+      if (bounds) this.addAnchor(bottomAnchorBox(bounds, this.bottomPercent / 100));
+    });
+    root.querySelector<HTMLButtonElement>("[data-sm-fracture-anchor-add]")?.addEventListener("click", () => {
+      const bounds = this.modelBounds();
+      if (bounds) this.addAnchor(bounds);
+    });
+    root.querySelector<HTMLInputElement>("[data-sm-fracture-show-support]")?.addEventListener("change", (event) => {
+      this.showSupport = (event.currentTarget as HTMLInputElement).checked;
+      this.refreshSupportPreview();
+    });
+    root.querySelector<HTMLInputElement>("[data-sm-fracture-links]")?.addEventListener("change", (event) => {
+      this.showLinks = (event.currentTarget as HTMLInputElement).checked;
+      this.refreshSupportPreview();
+    });
+    root.querySelector<HTMLInputElement>("[data-sm-fracture-hit-impulse]")?.addEventListener("change", (event) => {
+      const value = Number((event.currentTarget as HTMLInputElement).value);
+      if (Number.isFinite(value)) this.hitImpulse = Math.max(0, value);
+    });
+    root.querySelector<HTMLButtonElement>("[data-sm-fracture-simulate]")?.addEventListener("click", () => {
+      this.hitArmed = !this.hitArmed;
+      if (this.hitArmed) {
+        this.showChunks = true;
+        this.applyVisibility();
+        this.host.setStatus("Simulate Hit: önizlemede bir parçaya tıkla (kapatmak için düğmeye tekrar bas).");
+      }
+      this.host.rerender();
+    });
+    root.querySelector<HTMLButtonElement>("[data-sm-fracture-hit-center]")?.addEventListener("click", () => {
+      const bounds = this.modelBounds();
+      if (!bounds) return;
+      this.showChunks = true;
+      this.applyVisibility();
+      this.hitAt(bounds.min.map((value, axis) => (value + bounds.max[axis]!) / 2) as unknown as FractureVec3);
+    });
+    root.querySelector<HTMLButtonElement>("[data-sm-fracture-sim-reset]")?.addEventListener("click", () => {
+      this.sim = null;
+      this.setExplode(this.explode);
+      this.refreshSupportPreview();
+      this.host.rerender();
+    });
   }
 
   /** Bakes from the loaded model and swaps the preview in. */
@@ -344,6 +603,7 @@ export class StaticMeshFracture {
       const mesh = new Mesh(fractureChunkGeometry(chunk), [exterior, this.interior ?? exterior]);
       mesh.name = `fracture-${chunk.id}`;
       mesh.userData.fracturePivot = new Vector3(...chunk.pivot);
+      mesh.userData.baseMaterials = mesh.material;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.host.previewGroup.add(mesh);
@@ -366,8 +626,11 @@ export class StaticMeshFracture {
       totalMass: result.chunks.reduce((sum, chunk) => sum + chunk.mass, 0),
       milliseconds, center, meshes, hulls,
     };
+    // New chunk indices: an earlier Simulate Hit points at chunks that no longer exist.
+    this.sim = null;
     this.setExplode(this.explode);
     this.applyVisibility();
+    this.refreshSupportPreview();
     this.refreshWarnings();
     this.host.setStatus(`Fracture: ${result.chunks.length} parça bake edildi (${milliseconds.toFixed(1)} ms).`);
     this.host.rerender();
@@ -375,6 +638,11 @@ export class StaticMeshFracture {
 
   dispose(): void {
     this.clearPreview();
+    for (const child of [...this.host.supportGroup.children]) {
+      child.removeFromParent();
+      (child as Box3Helper).geometry.dispose();
+      ((child as Box3Helper).material as Material).dispose();
+    }
     this.host.setModelVisible(true);
   }
 
@@ -383,6 +651,110 @@ export class StaticMeshFracture {
     // Through the normalizer, so the editor never holds a value the save would change.
     this.def = normalizeAssetFracture({ ...this.def, ...values }) ?? this.def;
     this.changed();
+  }
+
+  private patchSupport(values: Partial<FractureSupportDef>): void {
+    if (!this.def) return;
+    // The anchors or the radius changed: an earlier Simulate Hit no longer says what the asset does.
+    this.sim = null;
+    this.def = normalizeAssetFracture({ ...this.def, support: { ...this.def.support, ...values } }) ?? this.def;
+    // Preview first, so the re-rendered section counts the new anchors.
+    this.setExplode(this.explode);
+    this.refreshSupportPreview();
+    this.changed();
+  }
+
+  private addAnchor(box: { readonly min: FractureVec3; readonly max: FractureVec3 }): void {
+    const anchors = this.def?.support.anchors ?? [];
+    if (anchors.length >= FRACTURE_MAX_ANCHORS) return;
+    const rounded = (point: FractureVec3): [number, number, number] => [round(point[0]), round(point[1]), round(point[2])];
+    this.patchSupport({ anchors: [...anchors, { min: rounded(box.min), max: rounded(box.max) }] });
+  }
+
+  /** Model-space bounds of the source mesh (the space anchors and chunk pivots live in). */
+  private modelBounds(): { min: FractureVec3; max: FractureVec3 } | null {
+    const root = this.host.modelRoot();
+    if (!root) return null;
+    const mesh = fractureSourceFromObject(root).mesh;
+    return mesh.positions.length ? meshBounds(mesh) : null;
+  }
+
+  /** One Simulate Hit at a model-space point: the runtime's anchored-break rule over box anchors. */
+  private hitAt(point: FractureVec3): void {
+    const def = this.def;
+    const bake = this.bake;
+    if (!def || !bake) return;
+    const chunks = bake.result.chunks;
+    const sim = this.sim ??= { present: chunks.map(() => true), inRadius: new Set(), collapsed: new Set(), hits: 0 };
+    if (!sim.present.some(Boolean)) {
+      this.host.setStatus("Simulate Hit: ayakta parça kalmadı; Reset Hits ile geri getir.", "warning");
+      return;
+    }
+    const support = def.support;
+    const impulse = this.hitImpulse ?? def.breakImpulse;
+    const radius = damageRadius(support.damageRadius, support.damageRadiusPerImpulse, impulse, support.damageRadiusMax);
+    const { inRadius, collapsed } = releaseSupportHit(
+      chunks.map((chunk) => chunk.pivot), bake.result.links, this.anchored, sim.present, point, radius);
+    for (const index of inRadius) sim.inRadius.add(index);
+    for (const index of collapsed) sim.collapsed.add(index);
+    sim.hits += 1;
+    this.setExplode(this.explode);
+    this.refreshSupportPreview();
+    this.host.setStatus(`Simulate Hit: yarıçap ${radius.toFixed(2)} m · ${inRadius.length} koptu · ${collapsed.length} desteksiz düştü.`);
+    this.host.rerender();
+  }
+
+  /** Re-derives the anchored chunks and redraws tints, anchor boxes and links. */
+  private refreshSupportPreview(): void {
+    const support = this.def?.support;
+    const anchored = support?.mode === "anchored";
+    const chunks = this.bake?.result.chunks ?? [];
+    this.anchored = anchored && support ? anchoredChunks(chunks, support.anchors) : chunks.map(() => false);
+    const sim = this.sim;
+    this.bake?.meshes.forEach((mesh, index) => {
+      const base = mesh.userData.baseMaterials as Material[];
+      mesh.material = sim?.inRadius.has(index) ? RELEASED_MATERIAL
+        : sim?.collapsed.has(index) ? COLLAPSED_MATERIAL
+          : this.showSupport && this.anchored[index] ? ANCHORED_MATERIAL
+            : base;
+    });
+    const group = this.host.supportGroup;
+    for (const child of [...group.children]) {
+      child.removeFromParent();
+      (child as Box3Helper).geometry.dispose();
+      ((child as Box3Helper).material as Material).dispose();
+    }
+    if (anchored && support && this.showSupport) {
+      for (const box of support.anchors) {
+        const helper = new Box3Helper(new Box3(new Vector3(...box.min), new Vector3(...box.max)), ANCHOR_BOX_COLOR);
+        (helper.material as LineBasicMaterial).depthTest = false;
+        helper.renderOrder = 11;
+        group.add(helper);
+      }
+    }
+    this.updateLinks();
+  }
+
+  /** Neighbour graph wires between the standing chunks' (exploded) pivots. */
+  private updateLinks(): void {
+    if (this.links) {
+      this.links.removeFromParent();
+      this.links.geometry.dispose();
+      this.links = null;
+    }
+    const bake = this.bake;
+    if (!bake || !this.showLinks || this.def?.support.mode !== "anchored") return;
+    const present = this.sim?.present;
+    const points: number[] = [];
+    for (const { a, b } of bake.result.links) {
+      if (present && (!present[a] || !present[b])) continue;
+      points.push(...bake.meshes[a]!.position.toArray(), ...bake.meshes[b]!.position.toArray());
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(points, 3));
+    this.links = new LineSegments(geometry, LINK_MATERIAL);
+    this.links.renderOrder = 12;
+    this.host.previewGroup.add(this.links);
   }
 
   private changed(): void {
@@ -428,6 +800,12 @@ export class StaticMeshFracture {
       if (length > 1e-9) away.multiplyScalar((this.explode * size * 0.5) / length);
       mesh.position.copy(pivot).add(length > 1e-9 ? away : new Vector3());
     }
+    // Simulate Hit: chunks that fell sink below the standing ones so the gap reads at a glance.
+    const sim = this.sim;
+    bake.meshes.forEach((mesh, index) => {
+      if (sim && !sim.present[index]) mesh.position.y -= size * 0.15;
+    });
+    this.updateLinks();
   }
 
   private applyVisibility(): void {
@@ -444,12 +822,16 @@ export class StaticMeshFracture {
 
   private applyInterior(): void {
     for (const mesh of this.bake?.meshes ?? []) {
-      const materials = mesh.material as Material[];
-      mesh.material = [materials[0]!, this.interior ?? materials[0]!];
+      const materials = mesh.userData.baseMaterials as Material[];
+      mesh.userData.baseMaterials = [materials[0]!, this.interior ?? materials[0]!];
     }
+    this.refreshSupportPreview();
   }
 
   private clearPreview(): void {
+    this.links?.removeFromParent();
+    this.links?.geometry.dispose();
+    this.links = null;
     for (const mesh of this.bake?.meshes ?? []) {
       mesh.removeFromParent();
       mesh.geometry.dispose();
@@ -457,6 +839,10 @@ export class StaticMeshFracture {
     }
     this.bake = null;
   }
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function escapeHtml(value: string): string {

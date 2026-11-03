@@ -5,6 +5,7 @@ export type FractureVec3 = readonly [number, number, number];
 export interface FracturePlane {
   readonly normal: FractureVec3;
   readonly offset: number;
+  readonly neighbor?: number;
 }
 
 /** Polygon vertex attributes carried through clipping. */
@@ -18,6 +19,7 @@ export interface FractureVertex {
 export interface FractureFace {
   readonly vertices: readonly FractureVertex[];
   readonly interior: boolean;
+  readonly neighbor?: number;
 }
 
 /** Closed convex polyhedron represented by its boundary faces. */
@@ -99,7 +101,7 @@ export function voronoiCellPlanes(
     const length = Math.hypot(...delta);
     if (length < 1e-12) continue;
     const normal = multiply(delta, 1 / length);
-    planes.push({ normal, offset: dot(normal, multiply(add(seed, other), 0.5)) });
+    planes.push({ normal, offset: dot(normal, multiply(add(seed, other), 0.5)), neighbor: j });
   }
   return planes;
 }
@@ -174,7 +176,8 @@ export function clipPolyhedron(
     }
     const clean = vertices.filter((v, i) => !near(v.position, vertices[(i + vertices.length - 1) % vertices.length]!.position, epsilon));
     if (clean.length >= 3 && faceArea2(clean) > epsilon * epsilon) {
-      faces.push({ vertices: clean, interior: face.interior });
+      faces.push({ vertices: clean, interior: face.interior,
+        ...(face.neighbor !== undefined ? { neighbor: face.neighbor } : {}) });
     }
   }
   if (cap.length >= 3) {
@@ -194,7 +197,10 @@ export function clipPolyhedron(
     const vertices = cap.map((position): FractureVertex => ({
       position, normal: n, uv: [position[axes[0]!]! / interiorUvScale, position[axes[1]!]! / interiorUvScale],
     }));
-    if (faceArea2(vertices) > epsilon * epsilon) faces.push({ vertices, interior: true });
+    if (faceArea2(vertices) > epsilon * epsilon) {
+      faces.push({ vertices, interior: true,
+        ...(plane.neighbor !== undefined ? { neighbor: plane.neighbor } : {}) });
+    }
   }
   return faces.length ? { faces } : null;
 }
@@ -275,6 +281,11 @@ function measures(poly: FracturePolyhedron): { volume: number; moment: FractureV
     }
   }
   return { volume, moment };
+}
+
+/** True polygon area from half the magnitude of its triangle cross-sum. */
+export function faceArea(vertices: readonly FractureVertex[]): number {
+  return vertices.length < 3 ? 0 : faceArea2(vertices) / 2;
 }
 
 function faceArea2(vertices: readonly FractureVertex[]): number {

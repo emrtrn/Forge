@@ -44,9 +44,46 @@ export interface AssetFractureDef {
   crumbleEffect: string | null;
   /** Metres a chunk may travel from the break point before it is removed; 0 = no limit. */
   maxSeparation: number;
+  /** Support graph (Faz 4c): which chunks hold, and how much of it a hit breaks. */
+  support: FractureSupportDef;
   /** Source mesh hash when last baked in the editor; null = never baked. */
   sourceHash: string | null;
 }
+
+/**
+ * How a fractured object holds together (DEFORMABLE_FRACTURABLE Faz 4c, after
+ * APEX Destruction's support chunks). `none` keeps the all-or-nothing break;
+ * `anchored` breaks only the chunks around a hit and lets the rest stand while
+ * a path of neighbouring chunks still reaches an anchor.
+ */
+export interface FractureSupportDef {
+  mode: FractureSupportMode;
+  /**
+   * Model-space boxes; chunks overlapping one are anchored. Regions, not chunk
+   * ids, so a re-bake (new seed, cell count) keeps them meaningful.
+   */
+  anchors: FractureAnchorRegion[];
+  /** Chunks touching static world geometry at level load are anchored too (APEX World Support). */
+  worldSupport: boolean;
+  /** Metres around the hit point whose chunks break, before the impulse term. */
+  damageRadius: number;
+  /** Extra metres of damage radius per N·s of impulse. */
+  damageRadiusPerImpulse: number;
+  /** Upper bound of the damage radius, metres. */
+  damageRadiusMax: number;
+}
+
+export type FractureSupportMode = "none" | "anchored";
+export const FRACTURE_SUPPORT_MODES: readonly FractureSupportMode[] = ["none", "anchored"];
+
+/** An axis-aligned model-space box (`min` ≤ `max` per axis). */
+export interface FractureAnchorRegion {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+/** Anchor boxes a sidecar may hold. */
+export const FRACTURE_MAX_ANCHORS = 16;
 
 export type FracturePattern = "uniform" | "splinter";
 export type FractureGrainAxis = "x" | "y" | "z";
@@ -67,6 +104,15 @@ export const FRACTURE_LIMITS = {
   maxActiveChunks: [1, 256],
   crumbleBelow: [0, 0.2],
   maxSeparation: [0, 500],
+} as const;
+
+/** Bounds of the `support` block's fields (same role as {@link FRACTURE_LIMITS}). */
+export const FRACTURE_SUPPORT_LIMITS = {
+  damageRadius: [0, 20],
+  damageRadiusPerImpulse: [0, 0.05],
+  damageRadiusMax: [0, 50],
+  // Anchor box coordinates, model space (metres).
+  anchorCoordinate: [-10000, 10000],
 } as const;
 
 /** Defaults for a new fracture sidecar. */
@@ -91,6 +137,14 @@ export const FRACTURE_DEFAULTS: AssetFractureDef = {
   crumbleBelow: 0,
   crumbleEffect: null,
   maxSeparation: 0,
+  support: {
+    mode: "none",
+    anchors: [],
+    worldSupport: true,
+    damageRadius: 0.4,
+    damageRadiusPerImpulse: 0.0004,
+    damageRadiusMax: 3,
+  },
   sourceHash: null,
 };
 
@@ -114,7 +168,49 @@ export function fractureGrain(def: AssetFractureDef): { axis: 0 | 1 | 2; stretch
 
 /** Returns a fresh copy of the defaults. */
 export function createAssetFracture(): AssetFractureDef {
-  return { ...FRACTURE_DEFAULTS };
+  return { ...FRACTURE_DEFAULTS, support: normalizeFractureSupport(undefined) };
+}
+
+/** Normalizes the `support` block; missing or malformed fields take the defaults. */
+export function normalizeFractureSupport(value: unknown): FractureSupportDef {
+  const defaults = FRACTURE_DEFAULTS.support;
+  const input = typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+  const anchors: FractureAnchorRegion[] = [];
+  for (const entry of Array.isArray(input.anchors) ? input.anchors : []) {
+    const region = normalizeAnchorRegion(entry);
+    if (region && anchors.length < FRACTURE_MAX_ANCHORS) anchors.push(region);
+  }
+  return {
+    mode: FRACTURE_SUPPORT_MODES.includes(input.mode as FractureSupportMode)
+      ? input.mode as FractureSupportMode : defaults.mode,
+    anchors,
+    worldSupport: typeof input.worldSupport === "boolean" ? input.worldSupport : defaults.worldSupport,
+    damageRadius: bounded(input.damageRadius, defaults.damageRadius, FRACTURE_SUPPORT_LIMITS.damageRadius),
+    damageRadiusPerImpulse: bounded(
+      input.damageRadiusPerImpulse, defaults.damageRadiusPerImpulse, FRACTURE_SUPPORT_LIMITS.damageRadiusPerImpulse,
+    ),
+    damageRadiusMax: bounded(input.damageRadiusMax, defaults.damageRadiusMax, FRACTURE_SUPPORT_LIMITS.damageRadiusMax),
+  };
+}
+
+/** A finite box with min ≤ max per axis (swapped when authored the other way round); else null. */
+function normalizeAnchorRegion(value: unknown): FractureAnchorRegion | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const { min, max } = value as Record<string, unknown>;
+  const read = (corner: unknown): [number, number, number] | null => {
+    if (!Array.isArray(corner) || corner.length !== 3) return null;
+    if (!corner.every((item) => typeof item === "number" && Number.isFinite(item))) return null;
+    const [low, high] = FRACTURE_SUPPORT_LIMITS.anchorCoordinate;
+    return corner.map((item: number) => Math.max(low, Math.min(high, item))) as [number, number, number];
+  };
+  const a = read(min);
+  const b = read(max);
+  if (!a || !b) return null;
+  return {
+    min: [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])],
+    max: [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])],
+  };
 }
 
 function bounded(value: unknown, fallback: number, limits: readonly [number, number], integer = false): number {
@@ -161,6 +257,7 @@ export function normalizeAssetFracture(value: unknown): AssetFractureDef | null 
     crumbleBelow: bounded(input.crumbleBelow, defaults.crumbleBelow, FRACTURE_LIMITS.crumbleBelow),
     crumbleEffect: assetIdOrNull(input.crumbleEffect),
     maxSeparation: bounded(input.maxSeparation, defaults.maxSeparation, FRACTURE_LIMITS.maxSeparation),
+    support: normalizeFractureSupport(input.support),
     sourceHash: typeof input.sourceHash === "string" && /^fnv1a:[0-9a-f]{8}$/.test(input.sourceHash)
       ? input.sourceHash : null,
   };

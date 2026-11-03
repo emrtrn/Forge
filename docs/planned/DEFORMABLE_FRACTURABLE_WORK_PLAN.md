@@ -609,13 +609,25 @@ yeniden bake'te kayar; bölge kaymaz.
 
 Dilimler:
 
-- [ ] 4c-1 (saf, Codex'e uygun): `fractureBake` komşuluk listesi (her iç yüzün
+- [x] 4c-1 (saf, Codex yazdı, Claude inceledi): `fractureBake` komşuluk listesi (her iç yüzün
       hangi tohum çiftinden geldiği; birleşen hücrelerde kenarlar devralınır),
       `supportIslands(adjacency, anchored, released)` BFS, `chunksInRadius`.
       Testler: kutu bake'inde komşuluk simetrik ve bağlı; anchor'sız ada
       tespiti; deterministik.
-- [ ] 4c-2: sidecar `support` normalizer + maksimal test + `/__save-fracture`
+- [x] 4c-2: sidecar `support` normalizer + maksimal test + `/__save-fracture`
       kapsamı (7. allowlist yüzeyi, yeni yüzey yok).
+      **4c-1/4c-2 yapıldı (2026-11-03):** `FracturePlane.neighbor` /
+      `FractureFace.neighbor` (kapak hangi tohumla paylaşılıyor),
+      `FractureBakeResult.links` (`{a<b, area}`, birleşme sonrası indeksler,
+      iki taraf alanı ortalaması), `faceArea`; `engine/physics/fracture/
+      fractureSupport.ts`: `supportIslands`, `anchoredChunks`,
+      `bottomAnchorBox`, `chunksInRadius`, `damageRadius`. Sidecar
+      `support: { mode, anchors (≤16 kutu, köşeler sıralanır), worldSupport,
+      damageRadius, damageRadiusPerImpulse, damageRadiusMax }`,
+      `normalizeFractureSupport`, sınırlar `FRACTURE_SUPPORT_LIMITS` (iç içe
+      alanlar `FRACTURE_LIMITS`'e girmez: o tablo üst düzey alan sayılıyor).
+      Testler: `fractureSupport.test.ts` (8; iç yüz alanı = bağ alanları
+      toplamı), `fractureAsset.test.ts` (maksimal + support normalizer).
 - [ ] 4c-3 runtime: `support.mode: "anchored"` nesne ilk darbeye kadar bugünkü
       gibi tek gövde; ilk darbede kaynak, parçalarından statik convex
       gövdelere (render: parça mesh'leri) dönüşür; yarıçap içindekiler +
@@ -919,3 +931,5 @@ kullanıcı kararı).
   maskesi) → Faz 4d Extended Structures. Tasarım ilgili faz başlıklarında.
 - 2026-11-03: **Faz 4b-3 kapandı**: kırılma efekti/sesi, crumble, max
   separation (veriyle), `AudioCommands.playOneShot`. Sırada Faz 4c.
+- 2026-11-03: Faz 4c-1 (komşuluk grafiği + destek yardımcıları, Codex) ve
+  4c-2 (sidecar `support`) tamam. Sırada 4c-3 runtime.

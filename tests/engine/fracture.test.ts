@@ -132,7 +132,8 @@ export function registerFractureTests(check: Check): void {
 
   check("fracture: bisectors are outward unit planes in seed order and skip coincidence", () => {
     assert.deepEqual(voronoiCellPlanes([[0, 0, 0], [2, 0, 0], [0, 0, 0], [0, 4, 0]], 0), [
-      { normal: [1, 0, 0], offset: 1 }, { normal: [0, 1, 0], offset: 2 },
+      // `neighbor` names the other seed (support graph, Faz 4c); coincident seed 2 is skipped.
+      { normal: [1, 0, 0], offset: 1, neighbor: 1 }, { normal: [0, 1, 0], offset: 2, neighbor: 3 },
     ]);
   });
 

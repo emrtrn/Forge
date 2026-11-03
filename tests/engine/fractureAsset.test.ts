@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  FRACTURE_DEFAULTS, FRACTURE_LIMITS, createAssetFracture, fractureSidecarPath,
+  FRACTURE_DEFAULTS, FRACTURE_LIMITS, FRACTURE_SUPPORT_LIMITS, createAssetFracture, fractureSidecarPath,
   fractureGrain, fractureSourceHash, fractureWarnings, normalizeAssetFracture,
   type AssetFractureDef, type FractureCheckInput,
 } from "../../engine/physics/fracture/fractureTypes";
@@ -16,7 +16,13 @@ const maximal: AssetFractureDef = {
   cellCount: 64, pattern: "splinter", grainAxis: "z", grainStretch: 16, density: 20000, interiorMaterialId: "cut-stone", interiorUvScale: 100,
   breakImpulse: 1000000, damageToBreak: 1000000, chunkLifetime: 600,
   maxActiveChunks: 256, breakEffect: "fx-wood-dust", breakSound: "sc-wood-break",
-  crumbleBelow: 0.2, crumbleEffect: "fx-splinters", maxSeparation: 500, sourceHash: "fnv1a:1234abcd",
+  crumbleBelow: 0.2, crumbleEffect: "fx-splinters", maxSeparation: 500,
+  support: {
+    mode: "anchored",
+    anchors: [{ min: [-0.5, 0, -0.5], max: [0.5, 0.2, 0.5] }, { min: [-10000, -1, 0], max: [0, 0, 10000] }],
+    worldSupport: false, damageRadius: 20, damageRadiusPerImpulse: 0.05, damageRadiusMax: 50,
+  },
+  sourceHash: "fnv1a:1234abcd",
 };
 const currentHash = "fnv1a:12345678";
 const input = (patch: Partial<FractureCheckInput> = {}): FractureCheckInput => ({
@@ -215,6 +221,39 @@ export function registerFractureAssetTests(check: (label: string, fn: () => void
       def: { ...createAssetFracture(), enabled: false, cellCount: 64, breakImpulse: 0 },
       closed: false, convex: false, materialCount: 2,
     })), []);
+  });
+
+  check("fracture asset: support anchors are ordered, finite, capped and never shared", () => {
+    const support = normalizeAssetFracture({
+      support: {
+        mode: "anchored",
+        anchors: [
+          { min: [1, 2, 3], max: [0, 0, 0] },
+          { min: [0, 0], max: [1, 1, 1] },
+          { min: [0, Number.NaN, 0], max: [1, 1, 1] },
+          "box",
+          { min: [-1e9, 0, 0], max: [1e9, 1, 1] },
+          ...Array.from({ length: 20 }, () => ({ min: [0, 0, 0], max: [1, 1, 1] })),
+        ],
+        worldSupport: "yes",
+        damageRadius: 99,
+        damageRadiusPerImpulse: -1,
+      },
+    })!.support;
+    assert.equal(support.mode, "anchored");
+    assert.deepEqual(support.anchors[0], { min: [0, 0, 0], max: [1, 2, 3] });
+    assert.deepEqual(support.anchors[1], { min: [-10000, 0, 0], max: [10000, 1, 1] });
+    assert.equal(support.anchors.length, 16);
+    assert.equal(support.worldSupport, true);
+    assert.equal(support.damageRadius, FRACTURE_SUPPORT_LIMITS.damageRadius[1]);
+    assert.equal(support.damageRadiusPerImpulse, 0);
+    assert.equal(normalizeAssetFracture({ support: { mode: "rigid" } })!.support.mode, "none");
+    assert.deepEqual(normalizeAssetFracture({})!.support, FRACTURE_DEFAULTS.support);
+    // Fresh defaults do not alias the shared constant's nested block.
+    const fresh = createAssetFracture();
+    fresh.support.anchors.push({ min: [0, 0, 0], max: [1, 1, 1] });
+    assert.equal(FRACTURE_DEFAULTS.support.anchors.length, 0);
+    assert.notEqual(createAssetFracture().support, FRACTURE_DEFAULTS.support);
   });
 
   check("fracture asset: break presentation ids must be manifest ids, debris limits clamp", () => {

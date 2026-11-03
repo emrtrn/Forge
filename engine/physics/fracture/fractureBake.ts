@@ -1,8 +1,9 @@
 import {
-  clipPolyhedron, fractureSeeds, meshBounds, polyhedronCentroid, polyhedronCorners,
+  clipPolyhedron, faceArea, fractureSeeds, meshBounds, polyhedronCentroid, polyhedronCorners,
   polyhedronFromMesh, polyhedronVolume, voronoiCellPlanes,
   type FracturePolyhedron, type FractureSeedOptions, type FractureSourceMesh, type FractureVec3,
 } from "./voronoiFracture";
+import type { FractureLink } from "./fractureSupport";
 
 /** Deterministic fracture sampling, volume threshold and mass settings. */
 export interface FractureBakeOptions {
@@ -44,6 +45,7 @@ export interface FractureChunk {
 /** Final chunks and surviving seeds in matching order. */
 export interface FractureBakeResult {
   readonly chunks: readonly FractureChunk[];
+  readonly links: readonly FractureLink[];
   readonly seeds: readonly FractureVec3[];
   readonly sourceVolume: number;
   /** Removed seeds whose neighbours absorbed their cells. */
@@ -113,7 +115,27 @@ export function bakeFracture(mesh: FractureSourceMesh, options: FractureBakeOpti
       geometry: chunkGeometry(poly, pivot),
     };
   });
-  return { chunks, seeds, sourceVolume, mergedCells };
+  const sides = cells.map((cell) => {
+    const areas = new Map<number, number>();
+    for (const face of cell?.faces ?? []) {
+      if (face.interior && face.neighbor !== undefined) {
+        areas.set(face.neighbor, (areas.get(face.neighbor) ?? 0) + faceArea(face.vertices));
+      }
+    }
+    return areas;
+  });
+  const links: FractureLink[] = [];
+  for (let a = 0; a < cells.length; a += 1) {
+    for (let b = a + 1; b < cells.length; b += 1) {
+      const left = sides[a]!.get(b);
+      const right = sides[b]!.get(a);
+      if ((left ?? 0) > epsilon * epsilon || (right ?? 0) > epsilon * epsilon) {
+        const area = left !== undefined && right !== undefined ? (left + right) / 2 : (left ?? right)!;
+        links.push({ a, b, area });
+      }
+    }
+  }
+  return { chunks, links, seeds, sourceVolume, mergedCells };
 }
 
 function chunkGeometry(poly: FracturePolyhedron, pivot: FractureVec3): FractureChunkGeometry {

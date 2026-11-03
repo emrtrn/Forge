@@ -15,7 +15,8 @@ const maximal: AssetFractureDef = {
   version: 1, source: "voronoi", enabled: false, seed: 999999,
   cellCount: 64, pattern: "splinter", grainAxis: "z", grainStretch: 16, density: 20000, interiorMaterialId: "cut-stone", interiorUvScale: 100,
   breakImpulse: 1000000, damageToBreak: 1000000, chunkLifetime: 600,
-  maxActiveChunks: 256, sourceHash: "fnv1a:1234abcd",
+  maxActiveChunks: 256, breakEffect: "fx-wood-dust", breakSound: "sc-wood-break",
+  crumbleBelow: 0.2, crumbleEffect: "fx-splinters", maxSeparation: 500, sourceHash: "fnv1a:1234abcd",
 };
 const currentHash = "fnv1a:12345678";
 const input = (patch: Partial<FractureCheckInput> = {}): FractureCheckInput => ({
@@ -214,6 +215,19 @@ export function registerFractureAssetTests(check: (label: string, fn: () => void
       def: { ...createAssetFracture(), enabled: false, cellCount: 64, breakImpulse: 0 },
       closed: false, convex: false, materialCount: 2,
     })), []);
+  });
+
+  check("fracture asset: break presentation ids must be manifest ids, debris limits clamp", () => {
+    for (const bad of ["", "fx/dust", "fx\\dust", "C:dust", 3, null, "x".repeat(201)]) {
+      const def = normalizeAssetFracture({ breakEffect: bad, breakSound: bad, crumbleEffect: bad })!;
+      assert.equal(def.breakEffect, null);
+      assert.equal(def.breakSound, null);
+      assert.equal(def.crumbleEffect, null);
+    }
+    const clamped = normalizeAssetFracture({ crumbleBelow: 0.9, maxSeparation: -4 })!;
+    assert.equal(clamped.crumbleBelow, FRACTURE_LIMITS.crumbleBelow[1]);
+    assert.equal(clamped.maxSeparation, FRACTURE_LIMITS.maxSeparation[0]);
+    assert.equal(normalizeAssetFracture({})!.crumbleBelow, 0);
   });
 
   check("fracture asset: pattern and grain fall back and clamp, grain only for splinter", () => {

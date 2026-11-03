@@ -24,10 +24,16 @@ import { createRuntimeContext } from "../../src/scene/capabilities/RuntimeContex
 import { createRuntimeServiceHost, type RuntimeServices } from "../../src/scene/capabilities/RuntimeServices";
 import {
   assetManifestService,
+  audioCommandsService,
   fractureCommandsService,
   fractureHostService,
+  vfxCommandsService,
+  type AudioCommands,
   type FractureHost,
+  type VfxCommands,
+  type VfxSpawnOptions,
 } from "../../src/scene/capabilities/runtimeServiceKeys";
+import type { AudioPlayOptions } from "../../engine/audio/audioSubsystem";
 
 const ASSET_ID = "sm-crate";
 const MODEL_PATH = "Meshes/Crate.glb";
@@ -124,19 +130,37 @@ function harness() {
   return { services, shell, module, commands };
 }
 
+interface Presented {
+  effects: { id: string; position: readonly number[] }[];
+  sounds: { id: string; position: readonly number[] | null; spatial: boolean }[];
+}
+
 /** Each level owns its fetch stub and releases listeners and baked geometry. */
 async function withLevel(
-  run: (test: ReturnType<typeof harness> & { requested: string[] }) => Promise<void>,
-  options: { layout?: RoomLayout; entities?: Entity[]; modelPath?: string } = {},
+  run: (test: ReturnType<typeof harness> & { requested: string[]; presented: Presented }) => Promise<void>,
+  options: { layout?: RoomLayout; entities?: Entity[]; modelPath?: string; sidecar?: object } = {},
 ): Promise<void> {
   const original = globalThis.fetch;
   const requested: string[] = [];
   const test = harness();
+  // Break presentation goes to the VFX and audio capabilities: record it.
+  const presented: Presented = { effects: [], sounds: [] };
+  test.services.provide(vfxCommandsService, {
+    spawnEffectAt: async (id: string, spawn: VfxSpawnOptions) => {
+      presented.effects.push({ id, position: spawn.position });
+      return null;
+    },
+  } as unknown as VfxCommands);
+  test.services.provide(audioCommandsService, {
+    playOneShot: (id: string, play?: AudioPlayOptions) => {
+      presented.sounds.push({ id, position: play?.position ?? null, spatial: play?.spatial === true });
+    },
+  } as unknown as AudioCommands);
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
     requested.push(url);
     return url === "/Meshes/Crate.fracture.json"
-      ? { ok: true, status: 200, json: async () => SIDECAR } as unknown as Response
+      ? { ok: true, status: 200, json: async () => options.sidecar ?? SIDECAR } as unknown as Response
       : { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
   }) as typeof globalThis.fetch;
   try {
@@ -157,7 +181,7 @@ async function withLevel(
       services: test.services,
     });
     await test.module.onLevelLoaded!(context);
-    await run({ ...test, requested });
+    await run({ ...test, requested, presented });
   } finally {
     globalThis.fetch = original;
     test.module.dispose!();
@@ -288,5 +312,56 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       assert.deepEqual([...shell.removed].sort(), shell.added.map(({ id }) => id).sort());
       assert.equal(commands.isFractured("actor:0"), false);
     }, { layout: placementLayout(), entities: [actor("actor:0")] });
+  });
+
+  await check("fracture module: a break plays the asset's effect and sound at the impact point", async () => {
+    const sidecar = { ...SIDECAR, breakEffect: "fx-dust", breakSound: "sc-break" };
+    await withLevel(async ({ shell, module, presented }) => {
+      shell.impacts.push({
+        a: "car", b: instanceEntityId(ASSET_ID, 0), point: [0.2, 0.7, 0.1], normal: [0, 0, 1], impulse: 1000, relativeSpeed: 8,
+      });
+      module.update!(0.016);
+      assert.deepEqual(presented.effects, [{ id: "fx-dust", position: [0.2, 0.7, 0.1] }]);
+      assert.deepEqual(presented.sounds, [{ id: "sc-break", position: [0.2, 0.7, 0.1], spatial: true }]);
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar });
+    // Without them nothing is asked of the VFX or audio capabilities.
+    await withLevel(async ({ commands, presented }) => {
+      assert.equal(commands.breakEntity(instanceEntityId(ASSET_ID, 0)), true);
+      assert.deepEqual(presented, { effects: [], sounds: [] });
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]) });
+  });
+
+  await check("fracture module: chunks below crumbleBelow become effects, not bodies", async () => {
+    let planned = 0;
+    await withLevel(async ({ commands, shell }) => {
+      assert.equal(commands.breakEntity(instanceEntityId(ASSET_ID, 0)), true);
+      planned = shell.added.length;
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: { ...SIDECAR, cellCount: 12, maxActiveChunks: 12 } });
+    await withLevel(async ({ commands, shell, presented }) => {
+      assert.equal(commands.breakEntity(instanceEntityId(ASSET_ID, 0)), true);
+      const crumbled = planned - shell.added.length;
+      assert.ok(crumbled > 0, "some chunks are under a fifth of the volume");
+      assert.equal(commands.snapshot().activeChunks, shell.added.length);
+      assert.equal(presented.effects.length, Math.min(6, crumbled));
+      assert.ok(presented.effects.every((effect) => effect.id === "fx-bits"));
+    }, {
+      layout: layoutOf([{ position: [0, 0, 0] }]),
+      sidecar: { ...SIDECAR, cellCount: 12, maxActiveChunks: 12, crumbleBelow: 0.2, crumbleEffect: "fx-bits" },
+    });
+  });
+
+  await check("fracture module: a chunk past maxSeparation from the break point is removed", async () => {
+    await withLevel(async ({ commands, shell, module }) => {
+      assert.equal(commands.breakEntity(instanceEntityId(ASSET_ID, 0)), true);
+      const count = shell.added.length;
+      assert.ok(count > 1);
+      module.update!(0.016);
+      assert.equal(commands.snapshot().activeChunks, count, "chunks near the break stay");
+      const far = shell.attachments.find(({ object }) => object !== null)!;
+      far.object!.position.set(40, 0, 0);
+      module.update!(0.016);
+      assert.deepEqual(shell.removed, [far.id]);
+      assert.equal(commands.snapshot().activeChunks, count - 1);
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: { ...SIDECAR, maxSeparation: 5 } });
   });
 }

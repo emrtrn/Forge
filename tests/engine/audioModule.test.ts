@@ -304,6 +304,39 @@ export async function registerAudioModuleTests(checkAsync: CheckAsync): Promise<
     });
   });
 
+  await checkAsync("audio module fires a one-shot: a raw clip at once, a cue through its graph and bus", async () => {
+    await withStubbedFetch(async () => {
+      await withMutedWarnings(async () => {
+        const { host } = startedHost();
+        const commands = host.resolve(audioCommandsService)!;
+        commands.prepareLevel(MANIFEST as never);
+        const last = () => drain(commands).at(-1) as AudioPlayRequest;
+
+        commands.playOneShot("SFX_Chime", { volume: 0.6, spatial: true, position: [1, 2, 3], loop: true });
+        const raw = last();
+        assert.equal(raw.clipId, "SFX_Chime");
+        assert.equal(raw.loop, false, "a one-shot never loops");
+        assert.deepEqual(raw.position, [1, 2, 3]);
+
+        // A cue loads first, then plays its source scaled by the caller (0.5 × 0.8).
+        commands.playOneShot("SC_Chime", { volume: 0.8, spatial: true, position: [4, 5, 6] });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const cue = last();
+        assert.equal(cue.clipId, "SFX_Chime");
+        assert.equal(cue.loop, false);
+        assert.ok(Math.abs((cue.volume ?? 0) - 0.4) < 1e-9, `volume ${cue.volume}`);
+        assert.deepEqual(cue.position, [4, 5, 6]);
+        assert.equal(cue.bus, "sfx");
+
+        // A cue that cannot play stays silent.
+        const before = drain(commands).length;
+        commands.playOneShot("SC_Broken");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(drain(commands).length, before);
+      });
+    });
+  });
+
   await checkAsync("a runtime with no audio module is simply silent", async () => {
     const host = createRuntimeServiceHost({ syncEntityTransform: () => {} });
     const registry = createCapabilityRegistry([]);

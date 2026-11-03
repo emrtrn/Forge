@@ -141,6 +141,8 @@ test("fracture runtime: a Fracturable actor breaks where it is, not where it was
   await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
   // The falling actor breaks on landing; the resting one stays whole.
   await expect.poll(async () => (await readFracture(page))?.broken ?? 0, { timeout: 30_000 }).toBe(1);
+  // Faz 4b-3: the crate's sidecar names a break effect; the VFX block lists it while it plays.
+  await expect(page.locator("#debug-stats")).toContainText("starter-fx-dust-hit", { timeout: 5_000 });
   const line = (await readFracture(page))!;
   expect(line.objects).toBe(12);
   expect(line.chunks).toBeGreaterThan(0);

@@ -295,6 +295,9 @@ export class StaticMeshEditor {
       materialAssets: () => (this.options.assets ?? [])
         .filter((asset) => asset.assetType === "material")
         .map((asset) => ({ id: asset.id, name: asset.name })),
+      assetsOfType: (types) => (this.options.assets ?? [])
+        .filter((asset) => types.includes(asset.assetType ?? ""))
+        .map((asset) => ({ id: asset.id, name: asset.name })),
       loadMaterial: async (id) => {
         try {
           return await loadForgeMaterial(this.previewAssetManifest(), id, this.textureLoader, {

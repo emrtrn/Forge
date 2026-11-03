@@ -239,6 +239,20 @@ export function createAudioModule(): CapabilityModule {
    * A steered loop of a raw sound, or of a cue's first play event (a looped
    * engine is one layer; a cue's random/mix graph has no meaning for it).
    */
+  function playOneShot(sourceId: string, options: AudioPlayOptions = {}): void {
+    if (!soundCueUrlById.has(sourceId)) {
+      audio.playOneShot(sourceId, { ...options, loop: false });
+      return;
+    }
+    playSoundCue(sourceId, (event, cue) => ({
+      ...options,
+      volume: event.volume * (options.volume ?? 1),
+      pitch: event.pitch * (options.pitch ?? 1),
+      loop: false,
+      ...(cue.output.bus ? { bus: cue.output.bus } : {}),
+    }));
+  }
+
   function playLoop(sourceId: string, options: AudioPlayOptions = {}): AudioPlaybackHandle {
     const loop = new SteeredLoop(sourceId, options);
     const looped: AudioPlayOptions = { ...options, loop: true };
@@ -368,6 +382,7 @@ export function createAudioModule(): CapabilityModule {
         },
         playEntityAudio,
         playLoop,
+        playOneShot,
         setListenerPose: (position, forward) => audio.setListenerPose(position, forward),
         setBusVolume: (bus: AudioBusId, volume: number) => audio.setBusVolume(bus, volume),
         getBusVolume: (bus: AudioBusId) => audio.getBusVolume(bus),

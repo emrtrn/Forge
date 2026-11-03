@@ -431,6 +431,13 @@ export interface AudioCommands {
    * back a handle that reads as stopped.
    */
   playLoop(sourceId: string, options?: AudioPlayOptions): AudioPlaybackHandle;
+  /**
+   * Fires a manifest `sound` or `soundCue` once — an event sound such as a
+   * break. A cue runs its own graph (random variation, its bus) with `options`
+   * volume/pitch as multipliers; position/spatial settings apply to every
+   * event. Unknown ids play nothing.
+   */
+  playOneShot(sourceId: string, options?: AudioPlayOptions): void;
   /** Spatial listener pose; pushed from the frame loop, after the camera moves. */
   setListenerPose(
     position: readonly [number, number, number],

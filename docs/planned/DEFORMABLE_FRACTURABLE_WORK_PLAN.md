@@ -11,7 +11,7 @@
 > actor component / override / VFX-ses alanları açık.
 >
 > **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
-> devam: (1) Faz 4b-3 kırılma VFX/ses + debris ayarları → (2) **Faz 4c destek
+> devam: (1) ~~Faz 4b-3 kırılma VFX/ses + debris ayarları~~ (tamam) → (2) **Faz 4c destek
 > grafiği** (anchor/sabit parçalar, World Support, kısmi kırılma, ada çöküşü)
 > → (3) Faz 5 kalıcılık (4c yüzünden parça bit maskesiyle) → (4) Faz 4d
 > Extended Structures (ihtiyaç olunca). 4b-1, 4b-2 ve ahşap kıymık deseni
@@ -538,22 +538,36 @@ component, placement override, VFX/ses alanları, hücre temizliği) Faz 4b.
 Sidecar alanları (normalizer + maksimal test + Static Mesh Editor), hepsi
 veriyle bağlanır, kod sabiti yok:
 
-- [ ] `breakEffect` (manifest `effect` id | null): kırılma noktasında
+- [x] `breakEffect` (manifest `effect` id | null): kırılma noktasında
       (`impact.point`, yoksa hacim merkezi) bir kez oynar.
-- [ ] `breakSound` (manifest `sound` ya da `soundCue` id | null): aynı
+- [x] `breakSound` (manifest `sound` ya da `soundCue` id | null): aynı
       noktada uzamsal, tek seferlik. `AudioCommands.playOneShot(sourceId,
       options)` eklenir (bus yalnız ham sesi çalıyor; cue rastgeleliği kırılma
       sesleri için önemli).
-- [ ] `crumbleBelow` (kaynak hacmin payı, 0 = kapalı): bu paydan küçük parçalar
+- [x] `crumbleBelow` (kaynak hacmin payı, 0 = kapalı): bu paydan küçük parçalar
       gövde olarak doğmaz; `crumbleEffect` (effect id | null) parça yerinde
       oynar (APEX "Crumble Smallest Chunks"; fizik maliyetini de düşürür).
       Kırılma başına efekt sayısı sınırlı.
-- [ ] `maxSeparation` (m, 0 = kapalı): kırılma noktasından bu kadar uzaklaşan
+- [x] `maxSeparation` (m, 0 = kapalı): kırılma noktasından bu kadar uzaklaşan
       parça silinir (APEX "Debris Max Separation").
-- [ ] APEX "Debris Lifetime Min/Max" karşılığı zaten var: `chunkLifetime ×
+- [x] APEX "Debris Lifetime Min/Max" karşılığı zaten var: `chunkLifetime ×
       (0.5 + 0.5·hacim oranı)`; ayrı alan açılmaz.
-- [ ] Test level: sandık/direk `starter-fx-dust-hit` + `starter-snd-impact-light`.
+- [x] Test level: sandık/direk `starter-fx-dust-hit` + `starter-snd-impact-light`.
       Smoke: kırılınca efekt ve ses isteği; crumble'da gövde sayısı düşer.
+
+**Kapandı (2026-11-03).** Sidecar alanları `fractureTypes.ts` normalizer'ında
+(`assetIdOrNull`: boş, `/`, `\`, `:` içeren ya da 200'den uzun id null olur);
+`ChunkSpawnSpec.volumeFraction` (bütün bake hacmine pay). Modül:
+`presentBreak` efekt/ses + kırılma başına en çok 6 crumble efekti;
+`maxSeparation` her karede parça mesh konumundan. `AudioCommands.playOneShot`
+(cue grafiği + bus, döngü yok). Static Mesh Editor: Break Effect, Break Sound,
+Crumble Effect seçicileri; Crumble Below, Max Separation kaydırıcıları. Test
+verisi: sandık + duvar `starter-fx-dust-hit` / `starter-snd-impact-light`
+(sandık crumble 0.03, ayrılma 30 m; duvar 40 m). Testler: `fractureAsset`
+(maksimal + id/limit), `fractureRuntime` (hacim payı), `fractureModule`
+(efekt/ses çarpma noktasında, crumble, ayrılma), `audioModule` (one-shot ham
+ve cue); smoke'lar kırılınca `?debug` VFX satırında efekt + editör seçicileri.
+Sırada: **Faz 4c**.
 
 ### Faz 4c — Destek grafiği (APEX "support" fikri)
 
@@ -903,3 +917,5 @@ kullanıcı kararı).
 - 2026-11-03: Kullanıcıyla APEX Destruction değerlendirildi; sıra kayda
   geçti: 4b-3 (VFX/ses + debris) → Faz 4c destek grafiği → Faz 5 (bit
   maskesi) → Faz 4d Extended Structures. Tasarım ilgili faz başlıklarında.
+- 2026-11-03: **Faz 4b-3 kapandı**: kırılma efekti/sesi, crumble, max
+  separation (veriyle), `AudioCommands.playOneShot`. Sırada Faz 4c.

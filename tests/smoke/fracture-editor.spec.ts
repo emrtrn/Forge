@@ -247,9 +247,21 @@ test("fracture editor: the splinter pattern shows grain fields, re-bakes and sav
   await expect(section.locator('[data-sm-fracture-num="grainStretch"]')).toHaveValue("10");
   await expect(section.locator("[data-sm-fracture-stats]")).toContainText("parça");
 
+  // Faz 4b-3: break presentation pickers read the sidecar and write manifest ids.
+  await expect(section.locator('[data-sm-fracture-asset="breakEffect"]')).toHaveValue("starter-fx-dust-hit");
+  await expect(section.locator('[data-sm-fracture-asset="breakSound"]')).toHaveValue("starter-snd-impact-light");
+  await section.locator('[data-sm-fracture-asset="breakEffect"]').selectOption("starter-fx-smoke-puff");
+  await section.locator('[data-sm-fracture-asset="crumbleEffect"]').selectOption("");
+  const separation = section.locator('[data-sm-fracture-num="maxSeparation"]');
+  await separation.fill("12");
+  await separation.press("Tab");
+
   await editor.locator("[data-sm-save]").click();
   await expect.poll(() => saves.length, { timeout: 15_000 }).toBe(1);
   expect(saves[0]!.path).toBe("assets/starter-content/StaticMeshes/Destructible/SM_BreakableCrate.fracture.json");
-  expect(saves[0]!.fracture).toMatchObject({ pattern: "splinter", grainAxis: "x", grainStretch: 10 });
+  expect(saves[0]!.fracture).toMatchObject({
+    pattern: "splinter", grainAxis: "x", grainStretch: 10,
+    breakEffect: "starter-fx-smoke-puff", breakSound: "starter-snd-impact-light", crumbleEffect: null, maxSeparation: 12,
+  });
   expect(errors).toEqual([]);
 });

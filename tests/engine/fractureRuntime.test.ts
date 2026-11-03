@@ -225,8 +225,11 @@ export function registerFractureRuntimeTests(check: Check): void {
   check("fracture runtime: identity preserves pivots, hulls and masses with independent copies", () => {
     const specs = planChunkSpawns(bake, definition(), identity, velocity, null);
     assert.equal(specs.length, bake.chunks.length);
+    // Shares of the whole baked volume (crumble threshold input): they sum to one.
+    close(specs.reduce((sum, spec) => sum + spec.volumeFraction, 0), 1);
     for (const spec of specs) {
       const chunk = bake.chunks[spec.chunkIndex]!;
+      close(spec.volumeFraction, chunk.volume / bake.chunks.reduce((sum, item) => sum + item.volume, 0));
       close3(spec.position, chunk.pivot);
       assert.deepEqual(spec.hull, chunk.hull);
       close(spec.massKg, chunk.mass);

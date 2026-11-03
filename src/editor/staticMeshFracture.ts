@@ -50,6 +50,8 @@ export interface StaticMeshFractureHost {
   setModelVisible(visible: boolean): void;
   /** Manifest material assets for the interior material picker. */
   materialAssets(): readonly { id: string; name: string }[];
+  /** Manifest assets of these types (`effect`, `sound`, `soundCue`) for the break presentation pickers. */
+  assetsOfType(types: readonly string[]): readonly { id: string; name: string }[];
   /** Loads a manifest material for the preview; null when it cannot. */
   loadMaterial(id: string): Promise<Material | null>;
   markDirty(): void;
@@ -72,7 +74,20 @@ interface BakeState {
   readonly hulls: LineSegments[];
 }
 
-type NumberKey = "cellCount" | "grainStretch" | "seed" | "density" | "interiorUvScale" | "breakImpulse" | "chunkLifetime" | "maxActiveChunks";
+type NumberKey = "cellCount" | "grainStretch" | "seed" | "density" | "interiorUvScale" | "breakImpulse" | "chunkLifetime"
+  | "maxActiveChunks" | "crumbleBelow" | "maxSeparation";
+
+/** Asset pickers of the break presentation, all optional (null = none). */
+const ASSET_FIELDS: readonly {
+  key: "breakEffect" | "breakSound" | "crumbleEffect";
+  label: string;
+  types: readonly string[];
+  title: string;
+}[] = [
+  { key: "breakEffect", label: "Break Effect", types: ["effect"], title: "Kırıldığı noktada bir kez oynayan efekt (toz, kıymık)" },
+  { key: "breakSound", label: "Break Sound", types: ["sound", "soundCue"], title: "Kırıldığı noktada bir kez çalan ses; Sound Cue rastgele çeşitleme verir" },
+  { key: "crumbleEffect", label: "Crumble Effect", types: ["effect"], title: "Crumble Below'dan küçük parçaların yerinde oynayan efekt" },
+];
 
 const NUMBER_FIELDS: readonly { key: NumberKey; label: string; step: number; title: string; sliderMax?: number }[] = [
   { key: "cellCount", label: "Cell Count", step: 1, title: "Kaç parçaya bölüneceği" },
@@ -83,6 +98,8 @@ const NUMBER_FIELDS: readonly { key: NumberKey; label: string; step: number; tit
   { key: "chunkLifetime", label: "Chunk Lifetime (s)", step: 1, title: "Parçaların sahnede kalma süresi; 0 kalıcı" },
   { key: "maxActiveChunks", label: "Max Active Chunks", step: 1, title: "Bu nesneden aynı anda yaşayan en fazla parça", sliderMax: 64 },
   { key: "interiorUvScale", label: "Interior UV Scale (m)", step: 0.05, title: "Kesik yüz dokusunun bir tekrarı kaç metre", sliderMax: 10 },
+  { key: "crumbleBelow", label: "Crumble Below", step: 0.005, title: "Toplam hacmin bu payından küçük parçalar gövde olmaz, efektle ufalanır (0.02 = %2; 0 kapalı)" },
+  { key: "maxSeparation", label: "Max Separation (m)", step: 1, title: "Kırılma noktasından bu kadar uzaklaşan parça silinir; 0 sınırsız", sliderMax: 100 },
 ];
 
 const HULL_MATERIAL = new LineBasicMaterial({ color: 0x5fd4ff, transparent: true, opacity: 0.8, depthTest: false });
@@ -165,6 +182,18 @@ export class StaticMeshFracture {
             ${sliderMax !== undefined ? `data-slider-max="${sliderMax}"` : ""} value="${def[key]}" />
         </label>`;
     }).join("");
+    const assetRows = ASSET_FIELDS.map(({ key, label, types, title }) => {
+      const current = def[key];
+      const options = [`<option value="" ${current ? "" : "selected"}>None</option>`]
+        .concat(this.host.assetsOfType(types).map((asset) =>
+          `<option value="${escapeHtml(asset.id)}" ${asset.id === current ? "selected" : ""}>${escapeHtml(asset.name)}</option>`))
+        .join("");
+      return `
+        <label class="sm-row" title="${title}">
+          <span>${label}</span>
+          <select data-sm-fracture-asset="${key}">${options}</select>
+        </label>`;
+    }).join("");
     const [damageMin, damageMax] = FRACTURE_LIMITS.damageToBreak;
     const bake = this.bake;
     const stats = bake
@@ -191,6 +220,7 @@ export class StaticMeshFracture {
           <span>Interior Material</span>
           <select data-sm-fracture-interior>${materialOptions}</select>
         </label>
+        ${assetRows}
         <div class="sm-prim-list">
           <button type="button" data-sm-fracture-bake title="Parçaları üret ve önizle; mesh'in izi kaydedilir">Bake</button>
           <button type="button" data-sm-fracture-reseed title="Yeni bir seed seç ve yeniden bake et">New Seed</button>
@@ -244,6 +274,12 @@ export class StaticMeshFracture {
       const raw = (event.currentTarget as HTMLInputElement).value.trim();
       const value = Number(raw);
       this.patch({ damageToBreak: raw === "" || !Number.isFinite(value) ? null : value });
+    });
+    root.querySelectorAll<HTMLSelectElement>("[data-sm-fracture-asset]").forEach((select) => {
+      select.addEventListener("change", () => {
+        const key = select.dataset.smFractureAsset as (typeof ASSET_FIELDS)[number]["key"];
+        this.patch({ [key]: select.value || null });
+      });
     });
     root.querySelector<HTMLSelectElement>("[data-sm-fracture-interior]")?.addEventListener("change", (event) => {
       const id = (event.currentTarget as HTMLSelectElement).value;

@@ -28,7 +28,9 @@ import {
   ChunkBudget,
   FractureRegistry,
   planChunkSpawns,
+  type ChunkSpawnSpec,
   type FractureImpactInfo,
+  type FractureVec3,
   type FractureOverride,
   type FracturePlacement,
 } from "@engine/physics/fracture/fractureRuntime";
@@ -51,9 +53,11 @@ import type { RuntimeContext } from "./RuntimeContext";
 import type { RuntimeServices } from "./RuntimeServices";
 import {
   assetManifestService,
+  audioCommandsService,
   fractureCommandsService,
   fractureHostService,
   scriptMessageBusService,
+  vfxCommandsService,
   type FractureHost,
 } from "./runtimeServiceKeys";
 
@@ -92,6 +96,21 @@ interface FractureSource {
 
 interface LiveChunkObject {
   readonly mesh: Mesh;
+  /** Where its source broke; it is removed past `maxSeparation` metres from here (0 = never). */
+  readonly origin: FractureVec3;
+  readonly maxSeparation: number;
+}
+
+/** Crumble effects one break may spawn; the rest of the small chunks just vanish. */
+const MAX_CRUMBLE_EFFECTS = 6;
+
+function meanPosition(specs: readonly ChunkSpawnSpec[]): FractureVec3 | null {
+  if (specs.length === 0) return null;
+  const sum = specs.reduce<[number, number, number]>(
+    (total, spec) => [total[0] + spec.position[0], total[1] + spec.position[1], total[2] + spec.position[2]],
+    [0, 0, 0],
+  );
+  return [sum[0] / specs.length, sum[1] / specs.length, sum[2] / specs.length];
 }
 
 export function createFractureModule(): CapabilityModule {
@@ -128,6 +147,21 @@ export function createFractureModule(): CapabilityModule {
     }
   };
 
+  /** The asset's break effect and sound at the break point, and its crumble effects. */
+  const presentBreak = (def: AssetFractureDef, origin: FractureVec3, crumbled: readonly ChunkSpawnSpec[]): void => {
+    const vfx = services?.resolve(vfxCommandsService);
+    const position = (point: FractureVec3): [number, number, number] => [point[0], point[1], point[2]];
+    if (vfx && def.breakEffect) void vfx.spawnEffectAt(def.breakEffect, { position: position(origin) }).catch(() => null);
+    if (vfx && def.crumbleEffect) {
+      for (const spec of crumbled.slice(0, MAX_CRUMBLE_EFFECTS)) {
+        void vfx.spawnEffectAt(def.crumbleEffect, { position: position(spec.position) }).catch(() => null);
+      }
+    }
+    if (def.breakSound) {
+      services?.resolve(audioCommandsService)?.playOneShot(def.breakSound, { spatial: true, position: position(origin) });
+    }
+  };
+
   const breakEntity = (entityId: string, impact: FractureImpactInfo | null, instigator: string | null): void => {
     const source = sources.get(entityId);
     const asset = source ? ready.get(source.assetId) : undefined;
@@ -136,11 +170,17 @@ export function createFractureModule(): CapabilityModule {
     // Actors and simulated placements move: break where the object is now.
     const pose = host.sourcePose(entityId) ?? source.authored;
     const velocity = host.physics.velocityOf(entityId) ?? [0, 0, 0];
-    const specs = planChunkSpawns(asset.bake, asset.def, pose, velocity, impact);
+    const planned = planChunkSpawns(asset.bake, asset.def, pose, velocity, impact);
+    const def = asset.def;
+    // Chunks too small to be worth a body crumble into an effect instead.
+    const crumbles = (spec: ChunkSpawnSpec): boolean => def.crumbleBelow > 0 && spec.volumeFraction < def.crumbleBelow;
+    const specs = planned.filter((spec) => !crumbles(spec));
+    const origin = impact?.point ?? meanPosition(planned) ?? pose.position;
     const cell = host.cellOf(entityId);
     if (cell) brokenCells.set(entityId, cell);
     host.physics.setImpactEventThreshold(entityId, null);
     host.destroySource(entityId);
+    presentBreak(def, origin, planned.filter(crumbles));
 
     const entities: Entity[] = [];
     const ids: string[] = [];
@@ -182,7 +222,7 @@ export function createFractureModule(): CapabilityModule {
       applyEulerDegrees(mesh, [spec.rotation[0], spec.rotation[1], spec.rotation[2]]);
       context!.scene.add(mesh);
       host!.attachDynamicObject(id, mesh);
-      chunks.set(id, { mesh });
+      chunks.set(id, { mesh, origin, maxSeparation: def.maxSeparation });
       budget.add({ id, ownerId: entityId, bornAt: clock, expiresAt: clock + spec.lifetime });
     });
     removeChunks(budget.enforce(host.chunkBudget()));
@@ -412,6 +452,14 @@ export function createFractureModule(): CapabilityModule {
         }
       }
       removeChunks(budget.expire(clock));
+      const strayed: string[] = [];
+      for (const [id, chunk] of chunks) {
+        if (chunk.maxSeparation <= 0) continue;
+        const { x, y, z } = chunk.mesh.position;
+        if (Math.hypot(x - chunk.origin[0], y - chunk.origin[1], z - chunk.origin[2]) > chunk.maxSeparation) strayed.push(id);
+      }
+      for (const id of strayed) budget.remove(id);
+      removeChunks(strayed);
     },
 
     dispose() {

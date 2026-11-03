@@ -31,6 +31,19 @@ export interface AssetFractureDef {
   /** Seconds a chunk lives; 0 = permanent. */
   chunkLifetime: number;
   maxActiveChunks: number; // integer
+  /** Manifest `effect` id played once where it breaks; null = none. */
+  breakEffect: string | null;
+  /** Manifest `sound` or `soundCue` id played once, spatially, where it breaks; null = none. */
+  breakSound: string | null;
+  /**
+   * Chunks smaller than this share of the source volume do not become bodies:
+   * `crumbleEffect` plays where they were (APEX "Crumble Smallest Chunks"). 0 = off.
+   */
+  crumbleBelow: number;
+  /** Manifest `effect` id for crumbled chunks; null = they just vanish. */
+  crumbleEffect: string | null;
+  /** Metres a chunk may travel from the break point before it is removed; 0 = no limit. */
+  maxSeparation: number;
   /** Source mesh hash when last baked in the editor; null = never baked. */
   sourceHash: string | null;
 }
@@ -52,6 +65,8 @@ export const FRACTURE_LIMITS = {
   damageToBreak: [0.001, 1000000],
   chunkLifetime: [0, 600],
   maxActiveChunks: [1, 256],
+  crumbleBelow: [0, 0.2],
+  maxSeparation: [0, 500],
 } as const;
 
 /** Defaults for a new fracture sidecar. */
@@ -71,6 +86,11 @@ export const FRACTURE_DEFAULTS: AssetFractureDef = {
   damageToBreak: null,
   chunkLifetime: 8,
   maxActiveChunks: 16,
+  breakEffect: null,
+  breakSound: null,
+  crumbleBelow: 0,
+  crumbleEffect: null,
+  maxSeparation: 0,
   sourceHash: null,
 };
 
@@ -102,6 +122,11 @@ function bounded(value: unknown, fallback: number, limits: readonly [number, num
   return Math.max(limits[0], Math.min(limits[1], integer ? Math.round(value) : value));
 }
 
+/** A manifest asset id reference (non-empty, no path separators); anything else is null. */
+function assetIdOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= 200 && !/[\\/:\u0000]/.test(value) ? value : null;
+}
+
 /** Normalizes the shared loader/save field shape; unsupported objects return null. */
 export function normalizeAssetFracture(value: unknown): AssetFractureDef | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
@@ -131,6 +156,11 @@ export function normalizeAssetFracture(value: unknown): AssetFractureDef | null 
         : defaults.damageToBreak,
     chunkLifetime: bounded(input.chunkLifetime, defaults.chunkLifetime, FRACTURE_LIMITS.chunkLifetime),
     maxActiveChunks: bounded(input.maxActiveChunks, defaults.maxActiveChunks, FRACTURE_LIMITS.maxActiveChunks, true),
+    breakEffect: assetIdOrNull(input.breakEffect),
+    breakSound: assetIdOrNull(input.breakSound),
+    crumbleBelow: bounded(input.crumbleBelow, defaults.crumbleBelow, FRACTURE_LIMITS.crumbleBelow),
+    crumbleEffect: assetIdOrNull(input.crumbleEffect),
+    maxSeparation: bounded(input.maxSeparation, defaults.maxSeparation, FRACTURE_LIMITS.maxSeparation),
     sourceHash: typeof input.sourceHash === "string" && /^fnv1a:[0-9a-f]{8}$/.test(input.sourceHash)
       ? input.sourceHash : null,
   };

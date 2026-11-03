@@ -11,5 +11,10 @@
   "damageToBreak": null,
   "chunkLifetime": 15,
   "maxActiveChunks": 24,
+  "breakEffect": "starter-fx-dust-hit",
+  "breakSound": "starter-snd-impact-light",
+  "crumbleBelow": 0,
+  "crumbleEffect": null,
+  "maxSeparation": 40,
   "sourceHash": "fnv1a:7e214c06"
 }

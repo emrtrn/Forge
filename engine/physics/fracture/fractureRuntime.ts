@@ -138,6 +138,8 @@ export interface ChunkSpawnSpec {
   readonly impulse: FractureVec3;
   /** Seconds; Infinity means permanent. */
   readonly lifetime: number;
+  /** The chunk's share of the whole baked volume (every chunk, kept or not). */
+  readonly volumeFraction: number;
 }
 
 /** Maximum outward kick speed before the impact attenuation, m/s. */
@@ -181,6 +183,7 @@ export function planChunkSpawns(
   const totalMass = masses.reduce((sum, mass) => sum + mass, 0);
   const totalVolume = kept.reduce((sum, { chunk }) => sum + chunk.volume, 0);
   const meanVolume = totalVolume / kept.length;
+  const bakedVolume = bake.chunks.reduce((sum, chunk) => sum + chunk.volume, 0);
   const centre: [number, number, number] = [0, 0, 0];
   if (totalVolume > 0) {
     for (const { chunk } of kept) {
@@ -208,6 +211,7 @@ export function planChunkSpawns(
       impulse: [direction[0] * kick, direction[1] * kick, direction[2] * kick],
       lifetime: def.chunkLifetime === 0 ? Infinity
         : def.chunkLifetime * (meanVolume === 0 ? 1 : 0.5 + 0.5 * Math.min(1, chunk.volume / meanVolume)),
+      volumeFraction: bakedVolume > 0 ? chunk.volume / bakedVolume : 0,
     };
   });
 }

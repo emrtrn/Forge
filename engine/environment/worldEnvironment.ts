@@ -1,4 +1,5 @@
 import type { LayoutWorldEnvironment } from "../scene/layout";
+import { normalizeLayoutWind } from "./wind";
 
 /**
  * World Environment (WES) data contract: the season / weather / time-of-day
@@ -205,6 +206,11 @@ export function normalizeWorldEnvironment(value: unknown): WorldEnvironmentNorma
     assign(next, "snowAltitudeBlend", num(surface.snowAltitudeBlend, "surface.snowAltitudeBlend", 0, 10000));
     if (Object.keys(next).length > 0) out.surface = next;
   }
+
+  // Not default-filled by resolveWorldEnvironment: an absent group falls back
+  // to worldSettings.wind (see resolveWind in ./wind).
+  const wind = normalizeLayoutWind(value.wind, "worldEnvironment.wind", warnings);
+  if (wind && Object.keys(wind).length > 0) out.wind = wind;
 
   return { environment: out, warnings };
 }

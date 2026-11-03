@@ -1,3 +1,4 @@
+import type { LayoutWind } from "../environment/wind";
 import type { LakeGeometryFoam } from "./lakeFoamBake";
 import type { WaterCaustics } from "./waterCaustics";
 import type { WaterShoreWetness } from "./waterShoreWetness";
@@ -379,6 +380,8 @@ export interface LayoutWorldSettings {
   gravity?: Vec3;
   /** World Y threshold that kills/respawns the possessed pawn. Absent means the default. */
   killZ?: number;
+  /** Sway wind for levels without a World Environment actor (Faz 6). Absent means the defaults. */
+  wind?: LayoutWind;
   /**
    * Authored view distance in metres, before the quality `viewDistanceMultiplier`.
    * Absent keeps each camera's own far clip.
@@ -658,6 +661,8 @@ export interface LayoutWorldEnvironment {
     snowMinAltitude?: number | null;
     snowAltitudeBlend?: number;
   };
+  /** Faz 6 sway wind; absent falls back to `worldSettings.wind`. Weather and season scale it. */
+  wind?: LayoutWind;
 }
 
 export interface LayoutLightActor {

@@ -87,6 +87,7 @@ import { normalizeSplineComponentData } from "../engine/scene/spline";
 import { normalizeSplineGenerators } from "../engine/scene/splineGenerator";
 import { normalizeWorldRecipe, worldRecipePath } from "../engine/worldbuilder/recipe";
 import { normalizeWorldEnvironment } from "../engine/environment/worldEnvironment";
+import { normalizeLayoutWind } from "../engine/environment/wind";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -846,6 +847,14 @@ function validateWorldSettings(value: unknown): Record<string, unknown> | null {
   if (input.viewDistance !== undefined) {
     const viewDistance = validateOptionalNumber(input.viewDistance, "worldSettings.viewDistance", VIEW_DISTANCE_MIN, VIEW_DISTANCE_MAX);
     if (viewDistance !== undefined) worldSettings.viewDistance = viewDistance;
+  }
+  if (input.wind !== undefined) {
+    // Same normalizer as the World Environment's wind group, but strict like
+    // the rest of World Settings: any repair rejects the save.
+    const warnings: string[] = [];
+    const wind = normalizeLayoutWind(input.wind, "worldSettings.wind", warnings);
+    if (warnings.length > 0) throw new Error(warnings.join("; "));
+    if (wind && Object.keys(wind).length > 0) worldSettings.wind = wind;
   }
   if (input.gameMode !== undefined) {
     if (typeof input.gameMode !== "string" || input.gameMode.length === 0) {

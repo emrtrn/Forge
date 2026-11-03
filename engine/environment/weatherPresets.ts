@@ -22,17 +22,21 @@ export interface WeatherFactors {
   sunIntensityMultiplier: number;
   /** Added to the sky's turbidity (haze). */
   skyTurbidityAdd: number;
+  /** Multiplier of the wind strength (Faz 6 sway); fog is still air. */
+  windStrengthMultiplier: number;
+  /** Added to the wind gust share. */
+  windGustAdd: number;
 }
 
 const GREY = "#9aa3ad";
 const COLD_WHITE = "#dfe8f2";
 
 export const WEATHER_PRESET_TABLE: Readonly<Record<WeatherPreset, WeatherFactors>> = {
-  clear: { weight: 0, cloudCoverageMin: null, fogDensityMultiplier: 1, fogTintMix: 0, fogTint: GREY, sunIntensityMultiplier: 1, skyTurbidityAdd: 0 },
-  cloudy: { weight: 1, cloudCoverageMin: 0.7, fogDensityMultiplier: 1.5, fogTintMix: 0.3, fogTint: GREY, sunIntensityMultiplier: 0.6, skyTurbidityAdd: 4 },
-  rain: { weight: 1, cloudCoverageMin: 0.9, fogDensityMultiplier: 2.5, fogTintMix: 0.5, fogTint: GREY, sunIntensityMultiplier: 0.35, skyTurbidityAdd: 8 },
-  snow: { weight: 1, cloudCoverageMin: 0.9, fogDensityMultiplier: 3, fogTintMix: 0.4, fogTint: COLD_WHITE, sunIntensityMultiplier: 0.45, skyTurbidityAdd: 6 },
-  fog: { weight: 1, cloudCoverageMin: null, fogDensityMultiplier: 6, fogTintMix: 0, fogTint: GREY, sunIntensityMultiplier: 0.7, skyTurbidityAdd: 3 },
+  clear: { weight: 0, cloudCoverageMin: null, fogDensityMultiplier: 1, fogTintMix: 0, fogTint: GREY, sunIntensityMultiplier: 1, skyTurbidityAdd: 0, windStrengthMultiplier: 1, windGustAdd: 0 },
+  cloudy: { weight: 1, cloudCoverageMin: 0.7, fogDensityMultiplier: 1.5, fogTintMix: 0.3, fogTint: GREY, sunIntensityMultiplier: 0.6, skyTurbidityAdd: 4, windStrengthMultiplier: 1.3, windGustAdd: 0.1 },
+  rain: { weight: 1, cloudCoverageMin: 0.9, fogDensityMultiplier: 2.5, fogTintMix: 0.5, fogTint: GREY, sunIntensityMultiplier: 0.35, skyTurbidityAdd: 8, windStrengthMultiplier: 1.7, windGustAdd: 0.25 },
+  snow: { weight: 1, cloudCoverageMin: 0.9, fogDensityMultiplier: 3, fogTintMix: 0.4, fogTint: COLD_WHITE, sunIntensityMultiplier: 0.45, skyTurbidityAdd: 6, windStrengthMultiplier: 1.3, windGustAdd: 0.15 },
+  fog: { weight: 1, cloudCoverageMin: null, fogDensityMultiplier: 6, fogTintMix: 0, fogTint: GREY, sunIntensityMultiplier: 0.7, skyTurbidityAdd: 3, windStrengthMultiplier: 0.4, windGustAdd: 0 },
 };
 
 /** The preset blended with clear by `intensity` (0..1). */
@@ -48,6 +52,8 @@ export function weatherFactors(preset: WeatherPreset, intensity: number): Weathe
     fogTint: full.fogTint,
     sunIntensityMultiplier: mix(1, full.sunIntensityMultiplier),
     skyTurbidityAdd: full.skyTurbidityAdd * w,
+    windStrengthMultiplier: mix(1, full.windStrengthMultiplier),
+    windGustAdd: full.windGustAdd * w,
   };
 }
 

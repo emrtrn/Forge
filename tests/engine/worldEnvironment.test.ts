@@ -62,6 +62,7 @@ export function maximalWorldEnvironment(): LayoutWorldEnvironment {
       snowMinAltitude: 120,
       snowAltitudeBlend: 15,
     },
+    wind: { directionDeg: 270, strength: 0.6, gust: 0.4 },
   };
 }
 

@@ -11,6 +11,7 @@ import { createWorldRecipe, worldRecipePath, type WorldRecipe } from "../../engi
 import { generateWbTestValley, WB_TEST_VALLEY_LEVEL, WB_TEST_VALLEY_PROFILE, WB_TEST_VALLEY_TERRAIN } from "../../tools/world/wbTestValley";
 import { expect, test } from "./test";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
+import { openWorldBuilder, parkWorldBuilder } from "./worldBuilder";
 
 // These isolated projects have no site icon. Chromium versions that request
 // one must not turn its unrelated 404 into an editor console-error failure.
@@ -19,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 /**
- * World Builder F1 steps 5b and 6b: the left panel's World Builder tab reads
+ * World Builder F1 steps 5b and 6b: the World Builder window (Add Actor → Terrain) reads
  * the open level's recipe, a Dry Run reports without changing the level, Apply
  * adds the plan blockout (placements) or the roads (World Terrain splines) as
  * one undo step, Save Layout writes the recipe first, then the terrain and the
@@ -52,7 +53,7 @@ function cubeIds(level: RoomLayout): string[] {
     .sort();
 }
 
-test("World Builder tab: dry run, apply as one undo step, save the recipe, up to date after reload", async ({ page, request }) => {
+test("World Builder window: dry run, apply as one undo step, save the recipe, up to date after reload", async ({ page, request }) => {
   test.setTimeout(180_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -74,7 +75,7 @@ test("World Builder tab: dry run, apply as one undo step, save the recipe, up to
   const bootEditor = async () => {
     await page.goto(`/?editor&worldBuilder=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId("world-builder-tab").click();
+    await openWorldBuilder(page);
     await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder", { timeout: 30_000 });
   };
   const markerRows = () => page.getByTestId("outliner-row")
@@ -99,7 +100,7 @@ test("World Builder tab: dry run, apply as one undo step, save the recipe, up to
   await expect(page.getByTestId("world-builder-report")).toBeVisible();
   await page.locator('[data-outliner-tab="scene"]').click();
   await expect(markerRows()).toHaveCount(0);
-  await page.getByTestId("world-builder-tab").click();
+  await openWorldBuilder(page);
 
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(preview).toHaveAttribute("data-drawn", "3");
@@ -113,7 +114,7 @@ test("World Builder tab: dry run, apply as one undo step, save the recipe, up to
   await page.getByTestId("editor-undo").click();
   await expect(markerRows()).toHaveCount(0);
   // A history step drops a preview planned against the level before it.
-  await page.getByTestId("world-builder-tab").click();
+  await openWorldBuilder(page);
   await page.getByTestId("world-builder-dry-run-planBlockout").click();
   await expect(preview).toHaveAttribute("data-drawn", "3");
   await page.getByTestId("editor-redo").click();
@@ -187,7 +188,7 @@ test("World Builder roads: apply writes terrain splines as one undo step, recipe
   const bootEditor = async () => {
     await page.goto(`/?editor&worldBuilderRoads=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId("world-builder-tab").click();
+    await openWorldBuilder(page);
     await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_roads", { timeout: 30_000 });
   };
   const savedSplineIds = async () =>
@@ -321,7 +322,7 @@ test("World Builder village: the settlement chain places coloured buildings and 
   const bootEditor = async () => {
     await page.goto(`/?editor&worldBuilderVillage=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId("world-builder-tab").click();
+    await openWorldBuilder(page);
     await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_village", { timeout: 30_000 });
   };
   const save = async () => {
@@ -436,7 +437,7 @@ test("World Builder reference: the underlay and the plan layer draw, switch, and
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/?editor&worldBuilderReference=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("world-builder-tab").click();
+  await openWorldBuilder(page);
   await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_reference", { timeout: 30_000 });
   await expect(page.getByTestId("world-builder-panel")).not.toContainText("Load issues");
 
@@ -497,7 +498,7 @@ test("World Builder plan corrections: panel fields, viewport handle drag, add an
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/?editor&worldBuilderCorrections=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("world-builder-tab").click();
+  await openWorldBuilder(page);
   await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_world_builder_reference", { timeout: 30_000 });
   const plan = page.getByTestId("world-builder-layer-plan");
   const recipeStatus = page.getByTestId("world-builder-recipe");
@@ -612,7 +613,7 @@ test("World Builder test valley: the generated mountain level opens, its terrain
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/?editor&wbTestValley=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("world-builder-tab").click();
+  await openWorldBuilder(page);
   await expect(page.getByTestId("world-builder-recipe")).toContainText("wb_test_valley", { timeout: 30_000 });
   await expect(page.getByTestId("world-builder-panel")).toContainText("Neutral test profile (loaded)");
 
@@ -665,8 +666,9 @@ test("World Builder water and regions: shape handles, point edits, minimum count
   const boot = async () => {
     await page.goto(`/?editor&wbShapes=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId("world-builder-tab").click();
+    await openWorldBuilder(page);
     await expect(page.getByTestId("world-builder-recipe")).toContainText("playwright_shapes", { timeout: 30_000 });
+    await parkWorldBuilder(page);
   };
   await boot();
   const shape = page.getByTestId("world-builder-plan-shape");
@@ -800,7 +802,7 @@ test("World Builder reference import: preview, guarded merge, undo and persisten
   const boot = async () => {
     await page.goto(`/?editor&referenceImport=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId("world-builder-tab").click();
+    await openWorldBuilder(page);
     await expect(page.getByTestId("world-builder-recipe")).toContainText(recipe.recipeId, { timeout: 30_000 });
   };
   const save = async () => {

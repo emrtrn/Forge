@@ -18,6 +18,8 @@ const LAYER_STORAGE_KEY = "forge.worldBuilder.layers";
 export interface WorldBuilderPanelOptions {
   body: HTMLElement;
   session: WorldBuilderSession;
+  /** False while the window is closed: session changes are then not drawn. */
+  isShown: () => boolean;
 }
 
 /**
@@ -77,7 +79,7 @@ export class WorldBuilderPanel {
     });
     const stored = readLayerOptions();
     if (stored) options.session.setLayerOptions(stored);
-    options.session.onChange = () => this.update();
+    options.session.onChange = () => { if (options.isShown()) this.update(); };
   }
 
   update(): void {

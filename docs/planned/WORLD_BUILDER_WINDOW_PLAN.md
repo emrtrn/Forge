@@ -1,6 +1,7 @@
 # World Builder Penceresi Planı
 
-> Durum: **planlandı, başlanmadı** (2026-11-02). Uygulama 2026-11-03'te başlıyor.
+> Durum: **D1 tamam** (2026-11-03); sırada D2 (sekmeler). §6 varsayılanlarıyla
+> gidildi.
 >
 > Sorun (kullanıcı): World Builder paneli çok sıkışık.
 >
@@ -166,20 +167,32 @@ Her dilim kendi başına yeşil kapıyla (`npx tsc --noEmit`,
 
 ### D1 — Pencere + giriş, içerik aynen
 
-- [ ] `worldBuilderWindow.ts` çerçevesi: başlık, sürükle, boyutlandır,
+- [x] `worldBuilderWindow.ts` çerçevesi: başlık, sürükle, boyutlandır,
       kıstır, kapat, geometri `localStorage`.
-- [ ] Add Actor → Terrain → World Builder… girişi.
-- [ ] Panel pencerenin gövdesine taşınır, henüz sekme yok (tek kaydırmalı
+- [x] Add Actor → Terrain → World Builder… girişi.
+- [x] Panel pencerenin gövdesine taşınır, henüz sekme yok (tek kaydırmalı
       gövde, bugünkü sıra).
-- [ ] Outliner sekmesi ve pane'i silinir; `setOutlinerTab` ve
+- [x] Outliner sekmesi ve pane'i silinir; `setOutlinerTab` ve
       `refreshWorldBuilderPanel` güncellenir.
-- [ ] Smoke: `tests/smoke/world-builder.spec.ts` (9 test) ve
+- [x] Smoke: `tests/smoke/world-builder.spec.ts` (9 test) ve
       `tests/smoke/ridgebound-spatial.spec.ts` içindeki
       `getByTestId("world-builder-tab").click()` çağrıları ortak bir
       `openWorldBuilder(page)` yardımcısına çevrilir (Add Actor → Terrain →
       World Builder…). Diğer testid'ler değişmez.
 
-Kabul: bütün World Builder smoke'ları ve ridgebound-spatial yeşil.
+Kabul: bütün World Builder smoke'ları ve ridgebound-spatial yeşil (10/10,
+2026-11-03).
+
+Uygulamada öğrenilenler:
+
+- Üst bar (z-index 50) pencerenin üstünde ve yüksekliği ekran genişliğiyle
+  değişiyor (44 / 80 / 116 px). Çerçeve sabit ölçü kullanmaz; sahibinden
+  `area()` (viewport host) alır, varsayılan konum ve üst sınır oradan gelir.
+- Add Actor hover menüsü kapanma gecikmesiyle pencerenin üstünde kalıyordu;
+  World Builder… tıklanınca `force-closed` alır, geri girişte açılır.
+- Viewport'ta tutamaç sürükleyen smoke'lar pencereyi `parkWorldBuilder(page)`
+  ile sağa (Details'in üstüne) taşır.
+
 
 ### D2 — Sekmeler
 

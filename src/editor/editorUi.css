@@ -845,9 +845,53 @@
 .outliner-pane[data-outliner-pane="worldPartition"][hidden] { display: none; }
 .world-partition-panel { display: grid; gap: 8px; }
 
-/* World Builder tab (World Builder plan v0.4 §6.2): recipe, stages, last plan. */
-.outliner-pane[data-outliner-pane="worldBuilder"] { display: block; overflow-y: auto; }
-.outliner-pane[data-outliner-pane="worldBuilder"][hidden] { display: none; }
+/* Non-modal editor window (worldBuilderWindow.ts): above the side panels (40)
+   and the content drawer (30), below the toolbar and modal editor overlays
+   (50+), toasts (60) and menus (80+); it never goes above the viewport's top,
+   so the toolbar is never covered. No backdrop: the viewport stays usable. */
+.forge-window {
+  position: absolute;
+  z-index: 45;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  box-sizing: border-box;
+  min-width: 0;
+  background: #111820;
+  border: 1px solid var(--forge-border);
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  overflow: hidden;
+}
+.forge-window[hidden] { display: none; }
+.forge-window-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--forge-border);
+  background: #121922;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+.forge-window-title { color: #f5f8fb; font-size: 12px; font-weight: 700; }
+.forge-window-title-extra { flex: 1; min-width: 0; overflow: hidden; color: var(--forge-text-secondary); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.editor-shell .forge-window-close { width: 26px; height: 26px; padding: 0; border: 0; background: transparent; font-size: 16px; line-height: 1; cursor: pointer; }
+.forge-window-body { min-height: 0; padding: 10px 12px 18px; overflow-x: hidden; overflow-y: auto; }
+.forge-window-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, var(--forge-border) 50%);
+}
+
+/* World Builder window (WORLD_BUILDER_WINDOW_PLAN; plan v0.4 §6.2): recipe, stages, last plan. */
 .world-builder-panel { display: grid; gap: 8px; }
 .world-builder-panel textarea { box-sizing: border-box; width: 100%; resize: vertical; font: 11px/1.4 monospace; }
 .world-builder-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }

@@ -6,6 +6,7 @@ import { normalizeWorldRecipe, type WorldRecipe } from "../../engine/worldbuilde
 import { buildRidgeboundTerrainPreview, RIDGEBOUND_HEIGHTMAP_SHA256, RIDGEBOUND_TERRAIN_LEVEL, RIDGEBOUND_TERRAIN_RECIPE, RIDGEBOUND_TERRAIN_REF } from "../../tools/world/ridgeboundTerrain";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
 import { expect, test } from "./test";
+import { openWorldBuilder } from "./worldBuilder";
 
 test("Ridgebound metric master: preview, blockout undo, save/reload and repeat without replacing authored levels", async ({ page, request }, testInfo) => {
   test.setTimeout(180_000);
@@ -34,7 +35,7 @@ test("Ridgebound metric master: preview, blockout undo, save/reload and repeat w
   const boot = async () => {
     await page.goto(`/?editor&ridgebound=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId("world-builder-tab").click();
+    await openWorldBuilder(page);
     await expect(page.getByTestId("world-builder-recipe")).toContainText("ridgebound_p0", { timeout: 30_000 });
   };
   await boot();
@@ -119,7 +120,7 @@ test("Ridgebound source terrain: 24 native tiles, grounded markers and save/relo
   const boot = async () => {
     await page.goto(`/?editor&ridgeboundTerrain=${Date.now()}`);
     await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId("world-builder-tab").click();
+    await openWorldBuilder(page);
     await expect(page.getByTestId("world-builder-recipe")).toContainText("ridgebound_p1_terrain", { timeout: 30_000 });
   };
   await boot();

@@ -149,6 +149,7 @@ import {
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
 import { WorldPartitionPanel } from "./panels/world/worldPartitionPanel";
 import { WorldBuilderPanel } from "./panels/world/worldBuilderPanel";
+import { ForgeWindow } from "./panels/world/worldBuilderWindow";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
 import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
 import {
@@ -402,6 +403,7 @@ export class EditorUi {
   /** Polls the World Partition view while its tab is open. */
   private worldPartitionTimer: number | null = null;
   private worldBuilderPanel: WorldBuilderPanel | null = null;
+  private worldBuilderWindow: ForgeWindow | null = null;
   private statusText: HTMLElement;
   private statusToast: HTMLElement;
   private statusToastText: HTMLElement;
@@ -618,15 +620,6 @@ export class EditorUi {
             aria-selected="false"
             aria-controls="world-partition-pane"
           >World Partition</button>
-          <button
-            type="button"
-            class="inspector-tab outliner-tab"
-            data-outliner-tab="worldBuilder"
-            data-testid="world-builder-tab"
-            role="tab"
-            aria-selected="false"
-            aria-controls="world-builder-pane"
-          >World Builder</button>
         </div>
         <div class="outliner-pane" id="scene-outliner-pane" data-outliner-pane="scene" role="tabpanel">
           <div class="outliner-search-row">
@@ -658,9 +651,6 @@ export class EditorUi {
         </div>
         <div class="outliner-pane" id="world-partition-pane" data-outliner-pane="worldPartition" role="tabpanel" hidden>
           <div class="world-partition-body" data-world-partition-body></div>
-        </div>
-        <div class="outliner-pane" id="world-builder-pane" data-outliner-pane="worldBuilder" role="tabpanel" hidden>
-          <div class="world-builder-body" data-world-builder-body></div>
         </div>
       </aside>
       <aside class="editor-panel editor-details">
@@ -1242,7 +1232,7 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLButtonElement>("[data-outliner-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         const tab = button.dataset.outlinerTab;
-        if (tab === "scene" || tab === "worldPartition" || tab === "worldBuilder") this.setOutlinerTab(tab);
+        if (tab === "scene" || tab === "worldPartition") this.setOutlinerTab(tab);
       });
     });
 
@@ -2301,6 +2291,8 @@ export class EditorUi {
     );
 
     singleton("landscape", "Landscape", "Terrain", "terrain", () => void this.addLandscape());
+    // Not an actor: opens the World Builder window (or keeps it open).
+    singleton("worldBuilder", "World Builder…", "Terrain", "terrain", () => this.openWorldBuilderWindow());
 
     entries.push({
       key: "ambientSound",
@@ -4269,7 +4261,34 @@ export class EditorUi {
   };
 
   private refreshWorldBuilderPanel(): void {
-    if (this.worldBuilderPanel && !requireElement(this.root, "#world-builder-pane").hidden) this.worldBuilderPanel.update();
+    if (this.worldBuilderWindow?.isOpen) this.worldBuilderPanel?.update();
+  }
+
+  /**
+   * Add Actor → Terrain → World Builder…: the non-modal World Builder window
+   * (WORLD_BUILDER_WINDOW_PLAN). Built on first use; opening it again keeps it
+   * where it is. Closing it only stops drawing the panel: the session's
+   * preview, layers and plan handles stay in the viewport.
+   */
+  private openWorldBuilderWindow(): void {
+    this.worldBuilderWindow ??= new ForgeWindow({
+      host: this.root,
+      area: () => requireElement(this.root, "[data-viewport-host]").getBoundingClientRect(),
+      title: "World Builder",
+      storageKey: "forge.worldBuilder.window",
+      testId: "world-builder-window",
+    });
+    const frame = this.worldBuilderWindow;
+    this.worldBuilderPanel ??= new WorldBuilderPanel({
+      body: frame.body,
+      session: this.app.worldBuilder,
+      isShown: () => frame.isOpen,
+    });
+    frame.open();
+    this.worldBuilderPanel.update();
+    // The hover menu would linger over the window (its close grace delay);
+    // shut it now. bindMenuHoverIntent reopens it when the pointer re-enters.
+    this.root.querySelector<HTMLElement>(".add-actor-menu")?.classList.add("force-closed");
   }
 
   private renderHistory(state: EditorHistoryState): void {
@@ -4284,11 +4303,10 @@ export class EditorUi {
   }
 
   /**
-   * Scene Outliner, World Partition or World Builder. The World Partition map
-   * polls the scene only while its tab is open (residency and the camera change
-   * every frame); World Builder redraws on its own actions and on undo/redo.
+   * Scene Outliner or World Partition. The World Partition map polls the scene
+   * only while its tab is open (residency and the camera change every frame).
    */
-  private setOutlinerTab(tab: "scene" | "worldPartition" | "worldBuilder"): void {
+  private setOutlinerTab(tab: "scene" | "worldPartition"): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-outliner-tab]").forEach((button) => {
       const active = button.dataset.outlinerTab === tab;
       button.classList.toggle("active", active);
@@ -4297,13 +4315,6 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLElement>("[data-outliner-pane]").forEach((pane) => {
       pane.hidden = pane.dataset.outlinerPane !== tab;
     });
-    if (tab === "worldBuilder") {
-      this.worldBuilderPanel ??= new WorldBuilderPanel({
-        body: requireElement(this.root, "[data-world-builder-body]"),
-        session: this.app.worldBuilder,
-      });
-      this.worldBuilderPanel.update();
-    }
     if (tab !== "worldPartition") {
       if (this.worldPartitionTimer !== null) window.clearInterval(this.worldPartitionTimer);
       this.worldPartitionTimer = null;

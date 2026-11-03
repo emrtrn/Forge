@@ -78,14 +78,15 @@ export function readGameModeDefaultPawnClassRef(def: ActorScriptDef): string | u
 /**
  * Runtime event a binding hooks into. A small fixed set mirroring the existing
  * behavior triggers (`src/game/behaviors.ts`): begin-play one-shots, per-tick
- * updates, sensor overlap, physics hit, interaction, and the end-play teardown
- * one-shot (Unreal `Event EndPlay`).
+ * updates, sensor overlap, physics hit, physics impact strength, interaction,
+ * and the end-play teardown one-shot (Unreal `Event EndPlay`).
  */
 export const ACTOR_EVENT_KINDS = [
   "beginPlay",
   "tick",
   "overlap",
   "hit",
+  "impact",
   "interact",
   "endPlay",
 ] as const;
@@ -96,6 +97,7 @@ export const ACTOR_EVENT_LABELS: Record<ActorEventKind, string> = {
   tick: "Tick",
   overlap: "On Overlap",
   hit: "On Hit",
+  impact: "On Impact",
   interact: "On Interact",
   endPlay: "End Play",
 };
@@ -105,6 +107,7 @@ export const ACTOR_EVENT_DESCRIPTIONS: Record<ActorEventKind, string> = {
   tick: "Runs every runtime frame while the actor exists.",
   overlap: "Runs on sensor overlap begin and end edges; context.event.phase identifies the edge.",
   hit: "Runs on blocking contact begin and end edges; context.event.otherEntityId identifies the other actor.",
+  impact: "Runs on each frame a hit on the actor exceeds its impact threshold (only actors opted in to impact events, e.g. fracturable ones); context.event.impact carries impulse (N·s), point, normal (out of impact.a) and relativeSpeed.",
   interact: "Runs when a host/runtime source emits an interact event for this actor.",
   endPlay: "Runs once as the actor leaves play (destroyed, scene teardown, or World Partition cell unloaded); context.event.reason says which. Unloaded actors may return as fresh instances. Cleanup only — cross-actor messaging is best-effort here.",
 };

@@ -1,8 +1,9 @@
 # Deformable & Fracturable Çalışma Planı
 
 > Durum: **Faz 0 tamam** (2026-11-02): spike'lar ve açık kararlar kapandı.
-> **Faz 1 sürüyor** (2026-11-03): saf `impactEvents.ts` ve Rapier bağlantısı
-> (`setImpactEventThreshold` / `impacts()`) tamam; actor `"hit"` yükü açık.
+> **Faz 1 kod tarafı tamam** (2026-11-03): saf `impactEvents.ts`, Rapier
+> bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
+> olayı. Sıradaki: Faz 2 (Voronoi bake) ve Faz 6 (rüzgâr) paralel.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -300,8 +301,13 @@ parçalar navmesh engeli olmuyor; v1 için kabul edilebilir.
       (AABB) backend'de boş liste.
       `impacts()`, `impactsForEntity(id)`, `impactsOverBudget()`; her
       `update()` başında boşalır, adım atılmayan karede boş.
-- [ ] Actor script `"hit"` olayına isteğe bağlı `impulse`/`point`/`normal`
+- [x] Actor script `"hit"` olayına isteğe bağlı `impulse`/`point`/`normal`
       yükü. Geriye uyumlu.
+      Karar (kullanıcı, 2026-11-03): `"hit"`'e yük yerine **ayrı `impact`
+      olayı** ("On Impact"). `hit` yalnız temas kenarında tetiklendiği için
+      çarpma ondan sonraki bir adımda olabiliyordu. `impact` opt-in nesnede
+      impact olan her karede `context.event.impact` ile çalışır; mevcut hit
+      script'leri etkilenmez. `PhysicsQuery.impactsForEntity` isteğe bağlı.
 - [x] Testler: kutu düşmesi → beklenen aralıkta impulse; eşik altı olay yok;
       30/60/144 Hz render'da aynı sabit adımda aynı olay dizisi.
       Saf: `tests/engine/impactEvents.test.ts` (11). Rapier:
@@ -558,3 +564,6 @@ kullanıcı kararı).
 - 2026-11-03: Faz 1 Rapier bağlantısı: `setImpactEventThreshold` +
   `impacts()`; Rapier testleri Faz 0 ölçümünü birebir tekrarladı. Açık: actor
   `"hit"` yükü (tasarım sorusu: begin olayına mı eklenir, ayrı faz/olay mı).
+- 2026-11-03: Actor "On Impact" olayı (`ACTOR_EVENT_KINDS`'e `impact`).
+  Faz 1 kod tarafı kapandı; kabul maddesindeki "impact kapalı sahnede maliyet
+  değişmemiş": opt-in yokken `step()` çağrısı birebir eski hâliyle.

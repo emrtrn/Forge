@@ -27,6 +27,7 @@ import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId, SceneJsonValue } from "../scene/entity";
 import type { NavigationRole } from "../scene/collision";
 import type { ActorEventKind } from "../scene/actorScript";
+import type { PhysicsImpact } from "../physics/impactEvents";
 import type { ActionMap } from "../input/actionMap";
 import type { AudioBus } from "../audio/audioSubsystem";
 import {
@@ -128,6 +129,8 @@ export interface ActorEventEnvelope {
   readonly phase?: ActorEventPhase;
   readonly otherEntityId?: EntityId;
   readonly contact?: PhysicsContact;
+  /** Present on `impact` events: the frame's merged impact of this pair. */
+  readonly impact?: PhysicsImpact;
   /** Present on `endPlay` events: why the actor left play. */
   readonly reason?: ActorEndPlayReason;
   readonly payload?: ScriptMessagePayload;
@@ -415,6 +418,8 @@ export interface PhysicsSurfaceTriangle {
 
 export interface PhysicsQuery {
   contactsForEntity(entityId: EntityId): readonly PhysicsContact[];
+  /** The latest frame's impacts involving the entity (opt-in sources only). */
+  impactsForEntity?(entityId: EntityId): readonly PhysicsImpact[];
   /** World-space AABBs of every static, non-sensor collider (movement blockers). */
   staticBlockerAabbs(): readonly PhysicsAabb[];
   /** Inclusive X/Z square candidates; hosts without the index use the full list. */
@@ -852,6 +857,7 @@ export class BehaviorSubsystem implements Subsystem {
       });
     }
     this.dispatchContactEvents(engine);
+    this.dispatchImpactEvents(engine);
     this.advanceTimers(engine);
     this.advanceLifeSpans(engine);
     this.lastMessageFlushResult = this.messageBus.flush();
@@ -945,6 +951,31 @@ export class BehaviorSubsystem implements Subsystem {
       this.dispatchContactEvent(engine, contact, "end");
     }
     this.previousContactKeys = new Set(current.keys());
+  }
+
+  /**
+   * `impact` events: unlike `hit` edges they fire on every frame the physics
+   * reported an impact for the pair, so a crate resting on a wall it already
+   * touches still learns when a car rams it.
+   */
+  private dispatchImpactEvents(engine: EngineUpdateContext): void {
+    const impactsForEntity = this.physics?.impactsForEntity?.bind(this.physics);
+    if (!impactsForEntity) return;
+    const listeners = new Set<EntityId>();
+    for (const instance of this.instances) {
+      if (instance.event === "impact") listeners.add(instance.runtime.id);
+    }
+    for (const entityId of listeners) {
+      for (const impact of impactsForEntity(entityId)) {
+        this.dispatchEntityEvent(entityId, engine, {
+          kind: "impact",
+          frame: engine.frame,
+          entityId,
+          otherEntityId: impact.a === entityId ? impact.b : impact.a,
+          impact,
+        });
+      }
+    }
   }
 
   private dispatchContactEvent(

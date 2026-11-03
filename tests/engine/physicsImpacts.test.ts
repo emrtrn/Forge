@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { EngineApp } from "../../engine/core/EngineApp";
+import { BehaviorSubsystem, type BehaviorRegistry } from "../../engine/behavior/behaviorSubsystem";
+import { ActionMap } from "../../engine/input/actionMap";
+import { EVENT_BINDINGS_COMPONENT } from "../../engine/scene/components";
 import { PhysicsSubsystem } from "../../engine/physics/physicsSubsystem";
 import type { PhysicsImpact } from "../../engine/physics/impactEvents";
 import type { Entity } from "../../engine/scene/entity";
@@ -117,6 +120,38 @@ export async function registerPhysicsImpactTests(checkAsync: CheckAsync): Promis
     physics.clear();
     physics.setEntities([floor(), crate(2)]);
     assert.deepEqual(run(app, physics, STEP, 120).flat(), [], "clear() forgets the opt-in");
+    await app.dispose();
+  }));
+
+  await checkAsync("physics impacts: an On Impact binding receives the impact, On Hit edges are unchanged", () => withQuietRapier(async () => {
+    const events: string[] = [];
+    const impacts: PhysicsImpact[] = [];
+    const registry: BehaviorRegistry = {
+      get: () => (context) => {
+        const event = context.event;
+        events.push(`${context.entityId}:${event?.kind}:${event?.phase ?? "-"}:${event?.otherEntityId}`);
+        if (event?.impact) impacts.push(event.impact);
+      },
+    };
+    const target = floor();
+    (target.components as Record<string, unknown>)[EVENT_BINDINGS_COMPONENT] = {
+      bindings: [{ event: "impact", scriptId: "record" }, { event: "hit", scriptId: "record" }],
+    };
+    const entities = [target, crate(2)];
+    const physics = new PhysicsSubsystem({ backend: "rapier" });
+    physics.setEntities(entities);
+    physics.setImpactEventThreshold("floor", 5);
+    const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+    behavior.setEntities(entities);
+    const app = new EngineApp();
+    app.registerSubsystem(physics);
+    app.registerSubsystem(behavior);
+    await app.init();
+    run(app, physics, STEP, 120);
+    assert.deepEqual(events, ["floor:hit:begin:crate", "floor:impact:-:crate"]);
+    assert.equal(impacts.length, 1);
+    assert.equal(impacts[0]?.a, "crate");
+    assert.ok((impacts[0]?.impulse ?? 0) > 50);
     await app.dispose();
   }));
 

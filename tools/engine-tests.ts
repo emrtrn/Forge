@@ -1134,6 +1134,7 @@ import { registerDeformationPersistenceTests } from "../tests/engine/deformation
 import { registerImpactEventTests } from "../tests/engine/impactEvents.test";
 import { registerFractureTests } from "../tests/engine/fracture.test";
 import { registerFractureSupportTests } from "../tests/engine/fractureSupport.test";
+import { registerFracturePersistenceTests } from "../tests/engine/fracturePersistence.test";
 import { registerFractureAssetTests } from "../tests/engine/fractureAsset.test";
 import { registerFractureGeometryTests } from "../tests/engine/fractureGeometry.test";
 import { registerFractureRuntimeTests } from "../tests/engine/fractureRuntime.test";
@@ -1319,6 +1320,7 @@ registerDeformationPersistenceTests(check);
 registerImpactEventTests(check);
 registerFractureTests(check);
 registerFractureSupportTests(check);
+registerFracturePersistenceTests(check);
 registerFractureAssetTests(check);
 registerFractureGeometryTests(check);
 registerFractureRuntimeTests(check);
@@ -16104,6 +16106,7 @@ check("game save serializer: collects level, player facing, and persistent state
     ],
     vehicles: [],
     drivingVehicleId: null,
+    destructibles: [],
   });
   assert.deepEqual(applySaveState(state), {
     levelPath: "Levels/Playground.level.json",
@@ -16114,6 +16117,7 @@ check("game save serializer: collects level, player facing, and persistent state
     ],
     vehicles: [],
     drivingVehicleId: null,
+    destructibles: [],
   });
 });
 
@@ -16190,6 +16194,7 @@ check("game save serializer: rejects bad player transforms and drops non-json fl
       persistentState: [{ entityId: "ok", key: "enabled", value: true }],
       vehicles: [],
       drivingVehicleId: null,
+      destructibles: [],
     },
   );
 });

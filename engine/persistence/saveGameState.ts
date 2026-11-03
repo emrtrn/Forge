@@ -13,6 +13,7 @@
  * on top of this one, not in here.
  */
 import type { PersistentScriptStateEntry } from "../behavior/behaviorSubsystem";
+import { decodeChunkMask, FRACTURE_MASK_MAX_CHUNKS } from "../physics/fracture/fractureMask";
 import type { TransformComponent } from "../scene/components";
 import type { SceneJsonValue } from "../scene/entity";
 
@@ -47,6 +48,28 @@ export interface SavedVehicleState {
   readonly drivetrain: SavedVehicleDrivetrain | null;
 }
 
+/**
+ * One fracturable placement or actor that is no longer as authored
+ * (DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 5). Sources not listed load intact.
+ */
+export type SavedDestructibleState =
+  /** Not broken, but `Damage.Apply` has accumulated toward `damageToBreak`. */
+  | { readonly entityId: string; readonly state: "intact"; readonly damage: number }
+  /** Partly broken anchored source (Faz 4c): these chunks still stand. */
+  | {
+    readonly entityId: string;
+    readonly state: "damaged";
+    readonly damage: number;
+    /** Chunks of the bake it broke with; a re-baked asset with another count cannot restore the masks. */
+    readonly chunkCount: number;
+    /** Hex chunk mask (`fractureMask.ts`) of the standing chunks; never empty. */
+    readonly standing: string;
+    /** Hex chunk mask of the chunks that hold the rest up. */
+    readonly anchored: string;
+  }
+  /** Broken whole (or every chunk fell): it loads without its object or any chunk. */
+  | { readonly entityId: string; readonly state: "fractured"; readonly damage: number };
+
 export interface GameSaveState {
   readonly activeLevelPath: string;
   /**
@@ -64,6 +87,8 @@ export interface GameSaveState {
    * Null on foot, and for a Game Mode whose pawn *is* the vehicle.
    */
   readonly drivingVehicleId?: string | null;
+  /** Broken or damaged fracturable sources. Absent in saves written before fracture plan Faz 5. */
+  readonly destructibles?: readonly SavedDestructibleState[];
 }
 
 export interface GameSaveRestoreRequest {
@@ -72,6 +97,7 @@ export interface GameSaveRestoreRequest {
   readonly persistentState: readonly PersistentScriptStateEntry[];
   readonly vehicles: readonly SavedVehicleState[];
   readonly drivingVehicleId: string | null;
+  readonly destructibles: readonly SavedDestructibleState[];
 }
 
 export interface CollectSaveStateInput {
@@ -80,6 +106,7 @@ export interface CollectSaveStateInput {
   readonly persistentState?: readonly PersistentScriptStateEntry[];
   readonly vehicles?: readonly SavedVehicleState[];
   readonly drivingVehicleId?: string | null;
+  readonly destructibles?: readonly SavedDestructibleState[];
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -176,6 +203,53 @@ function normalizeDrivingVehicleId(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function normalizeDestructible(value: unknown): SavedDestructibleState | null {
+  if (!isPlainObject(value)) return null;
+  if (typeof value.entityId !== "string" || value.entityId.length === 0) return null;
+  const entityId = value.entityId;
+  const damage = value.damage === undefined ? 0 : value.damage;
+  if (!isFiniteNumber(damage) || damage < 0) return null;
+  switch (value.state) {
+    case "intact":
+      // Nothing to restore: an intact source without damage is what the level builds.
+      return damage > 0 ? { entityId, state: "intact", damage } : null;
+    case "fractured":
+      return { entityId, state: "fractured", damage };
+    case "damaged": {
+      const { chunkCount } = value;
+      if (!isFiniteNumber(chunkCount) || !Number.isInteger(chunkCount) || chunkCount < 1 || chunkCount > FRACTURE_MASK_MAX_CHUNKS) {
+        return null;
+      }
+      const standing = decodeChunkMask(value.standing, chunkCount);
+      const anchored = decodeChunkMask(value.anchored, chunkCount);
+      if (!standing || !anchored) return null;
+      // Every chunk fell: that is a fractured source.
+      if (!standing.some(Boolean)) return { entityId, state: "fractured", damage };
+      return {
+        entityId, state: "damaged", damage, chunkCount,
+        standing: (value.standing as string).toLowerCase(),
+        anchored: (value.anchored as string).toLowerCase(),
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+/** Valid entries only, one per entity (the first wins), sorted by entity id. */
+function normalizeDestructibles(value: unknown): SavedDestructibleState[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const entries: SavedDestructibleState[] = [];
+  for (const raw of value) {
+    const entry = normalizeDestructible(raw);
+    if (!entry || seen.has(entry.entityId)) continue;
+    seen.add(entry.entityId);
+    entries.push(entry);
+  }
+  return entries.sort((a, b) => a.entityId.localeCompare(b.entityId));
+}
+
 function normalizePersistentState(value: unknown): PersistentScriptStateEntry[] {
   if (!Array.isArray(value)) return [];
   const entries: PersistentScriptStateEntry[] = [];
@@ -208,6 +282,7 @@ export function collectSaveState(input: CollectSaveStateInput): GameSaveState {
     flags: normalizePersistentState(input.persistentState ?? []),
     vehicles: normalizeVehicles(input.vehicles ?? []),
     drivingVehicleId: normalizeDrivingVehicleId(input.drivingVehicleId),
+    destructibles: normalizeDestructibles(input.destructibles ?? []),
   };
 }
 
@@ -223,6 +298,8 @@ export function applySaveState(value: unknown): GameSaveRestoreRequest | null {
     // A damaged vehicle entry costs that car its saved pose, never the load.
     vehicles: normalizeVehicles(value.vehicles),
     drivingVehicleId: normalizeDrivingVehicleId(value.drivingVehicleId),
+    // Like vehicles: a damaged entry costs that object its saved state, never the load.
+    destructibles: normalizeDestructibles(value.destructibles),
   };
 }
 

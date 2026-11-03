@@ -731,6 +731,31 @@ Support sorgusunun eğimli zeminde fazla anchor seçmesi (tolerans editörde).
 Kabul: save/load ve hücre yeniden girişinde tutarlı durum, `build:verify`
 yeşil.
 
+Dilimler (2026-11-03):
+
+- [x] 5-1 saf: `engine/physics/fracture/fractureMask.ts` (parça maskesi
+      onaltılık dize, bit i = parça i, en çok 64 parça → 16 hane; JSON'da
+      BigInt yok) + `GameSaveState.destructibles?: SavedDestructibleState[]`
+      (`saveGameState.ts`): `intact` (yalnız `damage > 0`), `damaged`
+      (`chunkCount`, `standing`, `anchored` maskeleri), `fractured`.
+      Normalizer bozuk girdiyi tek tek atar (yükleme değil), id başına ilk
+      geçerli kalır, id'ye göre sıralar; ayakta parçası kalmayan `damaged` →
+      `fractured`; alanı olmayan eski save → `[]`. Anchored maskesi de
+      saklanır: World Support yüklemede yeniden sorgulanmaz (kaynak artık
+      yok), ilk darbedeki karar korunur. Testler `fracturePersistence.test.ts`.
+- [ ] 5-2 modül: `FractureCommands.captureState()` / `restoreState(entries)`;
+      restore kayıt sırasından bağımsız (bekleyen girdi kaynak register
+      olunca uygulanır: placement'lar seviye yüklemesinde, aktörler spawn'da).
+      `fractured` → kaynak parçasız gider (efekt/ses/olay yok, K-05),
+      `damaged` → yalnız maskedeki parçalar statik durur, `intact` → birikmiş
+      hasar. `chunkCount` bake'le uyuşmazsa uyarı + `fractured` (açılmış
+      geçit kapanmasın). Bilinmeyen id: uyarı + atla.
+- [ ] 5-3 World Partition: hücre boşalınca kırık/hasarlı durum bellekte
+      kalır, hücre dönünce yeniden uygulanır (bugün kaynak bütün döner);
+      boşalmış hücredekiler de save'e girer.
+- [ ] 5-4 shell + sözleşme: `RuntimeSceneApp` capture/restore bağlantısı,
+      `SAVE_GAME_CONTRACT.md`, smoke (kır → kaydet → yükle → aynı durum).
+
 ### Faz 6 — Rüzgâr ve temas salınımı (fiziksiz görsel)
 
 Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
@@ -1007,3 +1032,5 @@ kullanıcı kararı).
   tek uçtan tutturulmuş duvar smoke'u (12 koptu / 7 çöktü / 5 ayakta).
   Araçla ikinci vuruş deterministik çıkmadı (ölçüm 4c-5 notunda). Sırada
   Faz 5 kalıcılık (düşen parçalar bit maskesiyle).
+- 2026-11-03: Faz 5-1: parça maskesi + save `destructibles` şekli ve
+  normalizer. Sırada 5-2 (modül capture/restore).

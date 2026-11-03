@@ -4200,6 +4200,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (restoredVehicles.has(entityId)) return;
       const current = this.transformForEntity(entityId);
       if (!current) return;
+      this.puddles?.clearWheelInteractions();
       this.physicsSubsystem.resetVehicle(entityId, {
         position: [...player.position],
         rotation: [0, player.facingYawDeg, 0],
@@ -4356,7 +4357,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         setInput: (entityId, input) => this.physicsSubsystem.setVehicleInput(entityId, input),
         state: (entityId) => this.physicsSubsystem.vehicleState(entityId),
         object: (entityId) => this.actorObjects.get(entityId) ?? null,
-        reset: (entityId, transform) => this.physicsSubsystem.resetVehicle(entityId, transform),
+        reset: (entityId, transform) => { this.puddles?.clearWheelInteractions(); return this.physicsSubsystem.resetVehicle(entityId, transform); },
       },
       setEntityHidden: (entityId, hidden) => this.setEntityHidden(entityId, hidden),
       setEntityCollisionEnabled: (entityId, enabled) =>
@@ -6098,6 +6099,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }, normal: (id) => this.loadRuntimeRiverWaterTexture(id, "normal"),
     });
     this.puddles ??= new PuddleWaterController({ scene: this.scene, document: terrain, reflections: this.puddleReflections,
+      vehicles: this.runtimeServices.resolve(vehicleHostService), terrainForGround: landscapeColliderActorId,
+      rippleLimit: () => lakeQuality(this.qualitySettings).maxRipples,
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = terrain(id);
         if (!actor || !document) throw new Error("Missing Puddle terrain");

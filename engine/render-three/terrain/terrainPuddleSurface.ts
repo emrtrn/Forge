@@ -1,4 +1,6 @@
-import { BufferGeometry, Float32BufferAttribute, Matrix4, Mesh, MeshPhysicalMaterial, Vector4 } from "three";
+import { BufferGeometry, DataTexture, Float32BufferAttribute, FloatType, Matrix4, Mesh, MeshPhysicalMaterial, NearestFilter, RedFormat, Vector4 } from "three";
+import { PUDDLE_WHEEL_RIPPLE_DEFAULTS, type PuddleWheelRippleSettings } from "@engine/scene/puddleWater";
+import type { LakeRipple } from "@engine/terrain/lakeInteraction";
 import type { TerrainPuddleGeometry } from "@engine/terrain/terrainPuddle";
 import type { PlanarReflectionBinding, PlanarReflectionSource } from "../planarReflectionSource";
 
@@ -11,6 +13,11 @@ export class TerrainPuddleSurface extends Mesh<BufferGeometry, MeshPhysicalMater
   private readonly rings = { value: Array.from({ length: 12 }, () => new Vector4()) };
   private readonly history: { x: number; z: number; born: number; strength: number }[] = [];
   private seconds = 0;
+  private readonly parameters = { value: new Vector4(.65, .135, .21, 2) };
+  private readonly stopData = new Float32Array(32 * 12).fill(10000);
+  private readonly stopTexture = new DataTexture(this.stopData, 32, 12, RedFormat, FloatType);
+  private stopRows: readonly Float32Array[] = [];
+  get wheelRippleCount(): number { return this.ringCount.value; }
   private readonly planar = { value: null as PlanarReflectionBinding["texture"] | null };
   private readonly planarMatrix = { value: new Matrix4() };
   private readonly planarReady = { value: 0 };
@@ -23,10 +30,14 @@ export class TerrainPuddleSurface extends Mesh<BufferGeometry, MeshPhysicalMater
       metalness: 0, transparent: true, opacity: .82, depthWrite: false, envMapIntensity: 1.4 }));
     this.name = "terrain-puddle-prototype";
     this.visible = false;
+    this.stopTexture.minFilter = this.stopTexture.magFilter = NearestFilter;
+    this.stopTexture.needsUpdate = true;
     this.material.onBeforeCompile = shader => {
       shader.uniforms.puddleTime = this.time;
       shader.uniforms.puddleRingCount = this.ringCount;
       shader.uniforms.puddleRings = this.rings;
+      shader.uniforms.puddleRippleParameters = this.parameters;
+      shader.uniforms.puddleRippleStops = { value: this.stopTexture };
       shader.uniforms.puddlePlanar = this.planar;
       shader.uniforms.puddlePlanarMatrix = this.planarMatrix;
       shader.uniforms.puddlePlanarReady = this.planarReady;
@@ -39,7 +50,8 @@ vPuddleDepth = puddleDepth; vPuddleWorld = (modelMatrix * vec4(position, 1.0)).x
 vPuddleProjected = puddlePlanarMatrix * modelMatrix * vec4(position, 1.0);`);
       shader.fragmentShader = `varying float vPuddleDepth; varying vec2 vPuddleWorld;
 uniform sampler2D puddlePlanar; uniform float puddlePlanarReady; uniform float puddlePlanarStrength; uniform float puddlePlanarTexel; varying vec4 vPuddleProjected;
-uniform float puddleTime; uniform int puddleRingCount; uniform vec4 puddleRings[12];\n${shader.fragmentShader}`
+uniform float puddleTime; uniform int puddleRingCount; uniform vec4 puddleRings[12];
+uniform vec4 puddleRippleParameters; uniform sampler2D puddleRippleStops;\n${shader.fragmentShader}`
         .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
 vec2 gradient = vec2(0.0);
 for (int i = 0; i < 12; i++) {
@@ -48,9 +60,14 @@ for (int i = 0; i < 12; i++) {
   float age = puddleTime - ring.z;
   vec2 delta = vPuddleWorld - ring.xy;
   float distanceToRing = length(delta);
-  float band = distanceToRing - age * .65;
-  float amplitude = exp(-band * band / .018) * exp(-age * 2.0) * ring.w;
-  gradient += delta / max(.001, distanceToRing) * cos(band * 30.0) * amplitude * .12;
+  float radius = age * puddleRippleParameters.x;
+  float width = puddleRippleParameters.y;
+  float band = distanceToRing - radius;
+  float sector = floor(mod(atan(delta.y, delta.x) + 6.28318530718, 6.28318530718) * (32.0 / 6.28318530718));
+  float stopRadius = texture2D(puddleRippleStops, vec2((sector + .5) / 32.0, (float(i) + .5) / 12.0)).r;
+  float blocked = step(.0001, stopRadius) * (1.0 - smoothstep(max(0.0, stopRadius - width), max(.0001, stopRadius), max(distanceToRing, radius)));
+  float amplitude = exp(-band * band / (width * width)) * exp(-age * 4.0 / puddleRippleParameters.w) * ring.w * blocked;
+  gradient += delta / max(.001, distanceToRing) * cos(band * 6.28318530718 / puddleRippleParameters.z) * amplitude * .12;
 }
 gradient *= smoothstep(0.0, .025, vPuddleDepth);
 normal = normalize(normal + mat3(viewMatrix) * vec3(-gradient.x, 0.0, -gradient.y));`)
@@ -72,7 +89,7 @@ if (puddlePlanarReady > .5 && vPuddleProjected.w > 0.0) {
 #include <opaque_fragment>`)
         .replace("#include <alphatest_fragment>", "diffuseColor.a *= smoothstep(0.0, .012, vPuddleDepth);\n#include <alphatest_fragment>");
     };
-    this.material.customProgramCacheKey = () => "terrain-puddle-planar-v2";
+    this.material.customProgramCacheKey = () => "terrain-puddle-wheel-ripples-v3";
   }
 
   setPlanarReflectionBinding(binding: PlanarReflectionBinding | null): void {
@@ -120,6 +137,19 @@ if (puddlePlanarReady > .5 && vPuddleProjected.w > 0.0) {
     this.ringCount.value = this.history.length;
     this.history.forEach((r, i) => this.rings.value[i]!.set(r.x, r.z, r.born, r.strength));
   }
+  /** Managed physics history. Only bounded normal/reflective distortion; never moves water or its shore. */
+  setWheelRipples(ripples: readonly LakeRipple[], settings: PuddleWheelRippleSettings = PUDDLE_WHEEL_RIPPLE_DEFAULTS,
+    stops: readonly Float32Array[] = []): void {
+    this.time.value = 0;
+    this.parameters.value.set(settings.wheelRippleSpeed, settings.wheelRippleWidth, settings.wheelRippleWavelength, settings.wheelRippleLifetime);
+    this.ringCount.value = Math.min(12, ripples.length);
+    ripples.slice(0, 12).forEach((r, i) => this.rings.value[i]!.set(r.x, r.z, -r.age, r.strength * settings.wheelRippleStrength));
+    if (stops.length !== this.stopRows.length || stops.some((r, i) => r !== this.stopRows[i])) {
+      this.stopData.fill(0);
+      stops.slice(0, 12).forEach((row, i) => this.stopData.set(row, i * 32));
+      this.stopRows = [...stops]; this.stopTexture.needsUpdate = true;
+    }
+  }
   clearRipples(): void { this.history.length = 0; this.ringCount.value = 0; }
-  dispose(): void { this.useReflectionSource(null); this.setPlanarReflectionBinding(null); this.clearRipples(); this.geometry.dispose(); this.material.dispose(); }
+  dispose(): void { this.useReflectionSource(null); this.setPlanarReflectionBinding(null); this.clearRipples(); this.stopTexture.dispose(); this.geometry.dispose(); this.material.dispose(); }
 }

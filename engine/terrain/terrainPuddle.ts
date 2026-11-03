@@ -11,6 +11,8 @@ export interface TerrainPuddleGeometry {
   depths: Float32Array;
   area: number;
   coverage?: { region: TerrainPuddleRegion; bed: Float32Array; triangles: Uint8Array; cells: number };
+  /** Exact shoreline segments (x,z,x,z), including dry islands and raised rims. */
+  shore?: Float32Array;
 }
 type Vertex = { x: number; z: number; h: number };
 const empty = (status: TerrainPuddleGeometry["status"]): TerrainPuddleGeometry =>
@@ -69,7 +71,7 @@ export function* terrainPuddleSteps(region: TerrainPuddleRegion, heightAt: (x: n
     if (index % 128 === 0) yield;
   }
   const queue = [start], visited = new Set(queue);
-  const positions: number[] = [], depths: number[] = [];
+  const positions: number[] = [], depths: number[] = [], shore: number[] = [];
   let area = 0;
   const faces = new Uint8Array(n * n);
   for (let cursor = 0; cursor < queue.length; cursor++) {
@@ -82,7 +84,7 @@ export function* terrainPuddleSteps(region: TerrainPuddleRegion, heightAt: (x: n
       if (neighbours.length === 1) return empty("open-boundary");
       for (const next of neighbours) if (!visited.has(next)) { visited.add(next); queue.push(next); }
     }
-    const polygon: Vertex[] = [];
+    const polygon: Vertex[] = [], crossings: Vertex[] = [];
     const face = queue[cursor]!;
     faces[Math.floor(face / 2)]! |= 1 << (face % 2);
     for (let i = 0; i < 3; i++) {
@@ -90,8 +92,12 @@ export function* terrainPuddleSteps(region: TerrainPuddleRegion, heightAt: (x: n
       if (a.h < level) polygon.push(a);
       if ((a.h < level) !== (b.h < level)) {
         const f = (level - a.h) / (b.h - a.h);
-        polygon.push({ x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, h: level });
+        const cut = { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, h: level };
+        polygon.push(cut); crossings.push(cut);
       }
+    }
+    if (crossings.length === 2 && Math.hypot(crossings[0]!.x - crossings[1]!.x, crossings[0]!.z - crossings[1]!.z) > 1e-8) {
+      shore.push(crossings[0]!.x, crossings[0]!.z, crossings[1]!.x, crossings[1]!.z);
     }
     for (let i = 1; i + 1 < polygon.length; i++) {
       const a = polygon[0]!, b = polygon[i]!, c = polygon[i + 1]!;
@@ -103,6 +109,7 @@ export function* terrainPuddleSteps(region: TerrainPuddleRegion, heightAt: (x: n
     if (cursor % 128 === 0) yield;
   }
   return { status: "ready", positions: new Float32Array(positions), depths: new Float32Array(depths), area,
+    shore: new Float32Array(shore),
     coverage: { region, bed: Float32Array.from(vertices, v => v.h), triangles: faces, cells: n } };
 }
 

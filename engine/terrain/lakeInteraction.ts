@@ -77,7 +77,7 @@ export interface LakeRipple { x: number; z: number; age: number; strength: numbe
 /** World-space tyre volume versus the water plane. Ground contact is optional:
  * a hanging wheel can cut water; a submerged wheel cannot agitate its surface. */
 export function lakeWheelContact(id: string, wheel: VehicleWheelState, width: number,
-  level: number, query: LakeSurfaceQuery, waves?: { time: number; parameters: LakeWaveParameters }): LakeWheelContact | null {
+  level: number, query: Pick<LakeSurfaceQuery, "depthAt" | "offsetAt">, waves?: { time: number; parameters: LakeWaveParameters }): LakeWheelContact | null {
   const centre = wheel.worldCenter, axle = wheel.worldAxle;
   if (!centre || !axle || ![...centre, ...axle, width, level, wheel.radius, wheel.rotation, wheel.tractionSlip ?? 0].every(Number.isFinite)
     || wheel.radius <= 0 || width <= 0) return null;

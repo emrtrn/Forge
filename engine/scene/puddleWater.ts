@@ -1,15 +1,28 @@
 /** Persistent source parameters only; runtime water geometry is derived from terrain. */
+export const PUDDLE_WHEEL_RIPPLE_DEFAULTS = {
+  wheelRipplesEnabled: true, wheelRippleStrength: 1.5, wheelRippleSpeed: .65,
+  wheelRippleWidth: .135, wheelRippleWavelength: .21, wheelRippleLifetime: 2, wheelRippleInterval: .14,
+};
+export const PUDDLE_WHEEL_RIPPLE_RANGES = {
+  wheelRippleStrength: [0, 6], wheelRippleSpeed: [.1, 3], wheelRippleWidth: [.02, .6],
+  wheelRippleWavelength: [.05, 1.5], wheelRippleLifetime: [.2, 4], wheelRippleInterval: [.04, .5],
+} as const;
+export type PuddleWheelRippleSettings = typeof PUDDLE_WHEEL_RIPPLE_DEFAULTS;
 export interface PuddleWaterBody {
   schema: 1; kind: "puddle"; coordinateSpace: "world";
   id: string; terrainRef: string; name?: string; hidden?: boolean; locked?: boolean;
   seed: [number, number]; bounds: { min: [number, number]; max: [number, number] };
   surfaceLevel: number;
-  appearance?: { color?: string; opacity?: number; roughness?: number; reflectionStrength?: number;
+  appearance?: Partial<PuddleWheelRippleSettings> & { color?: string; opacity?: number; roughness?: number; reflectionStrength?: number;
     reflectionMode?: "environment" | "sharedPlanar"; reflectionQuality?: "low" | "medium" | "high"; planarReflectionStrength?: number };
 }
 export const PUDDLE_LIMITS = { bodies: 16, cells: 128 * 128, totalCells: 65536, tiles: 16, extent: 128 } as const;
 export const PUDDLE_APPEARANCE = { color: "#504a35", opacity: .82, roughness: .13, reflectionStrength: 1.4,
-  reflectionMode: "environment" as "environment" | "sharedPlanar", reflectionQuality: "medium" as "low" | "medium" | "high", planarReflectionStrength: 1 };
+  reflectionMode: "environment" as "environment" | "sharedPlanar", reflectionQuality: "medium" as "low" | "medium" | "high", planarReflectionStrength: 1, ...PUDDLE_WHEEL_RIPPLE_DEFAULTS };
+export function resolvePuddleWheelRipples(body: PuddleWaterBody): PuddleWheelRippleSettings {
+  const a = body.appearance;
+  return Object.fromEntries(Object.entries(PUDDLE_WHEEL_RIPPLE_DEFAULTS).map(([key, value]) => [key, a?.[key as keyof PuddleWheelRippleSettings] ?? value])) as PuddleWheelRippleSettings;
+}
 /** Only new authored bodies opt into an extra render; old files retain environment reflection. */
 export const NEW_PUDDLE_APPEARANCE = { ...PUDDLE_APPEARANCE, reflectionMode: "sharedPlanar" as const };
 
@@ -54,6 +67,14 @@ export function validatePuddleWater(value: unknown): PuddleWaterBody {
     if (source.opacity !== undefined) appearance.opacity = number(source.opacity, 0, 1);
     if (source.roughness !== undefined) appearance.roughness = number(source.roughness, .04, 1);
     if (source.reflectionStrength !== undefined) appearance.reflectionStrength = number(source.reflectionStrength, 0, 3);
+    if (source.wheelRipplesEnabled !== undefined) {
+      if (typeof source.wheelRipplesEnabled !== "boolean") throw new Error("Invalid Puddle Wheel Ripples Enabled");
+      appearance.wheelRipplesEnabled = source.wheelRipplesEnabled;
+    }
+    for (const key of Object.keys(PUDDLE_WHEEL_RIPPLE_RANGES) as (keyof typeof PUDDLE_WHEEL_RIPPLE_RANGES)[]) {
+      const range = PUDDLE_WHEEL_RIPPLE_RANGES[key];
+      if (source[key] !== undefined) appearance[key] = number(source[key], range[0], range[1]);
+    }
     if (source.planarReflectionStrength !== undefined) appearance.planarReflectionStrength = number(source.planarReflectionStrength, 0, 1);
     if (source.reflectionMode !== undefined) {
       if (source.reflectionMode !== "environment" && source.reflectionMode !== "sharedPlanar") throw new Error("Invalid Puddle reflection mode");

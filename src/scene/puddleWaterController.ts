@@ -1,6 +1,10 @@
 import type { Scene } from "three";
 import { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
-import { PUDDLE_APPEARANCE, PUDDLE_LIMITS, validatePuddleWaters, type PuddleWaterBody } from "@engine/scene/puddleWater";
+import { PUDDLE_APPEARANCE, PUDDLE_LIMITS, resolvePuddleWheelRipples, validatePuddleWaters, type PuddleWaterBody } from "@engine/scene/puddleWater";
+import { LakeRippleState, type LakeRipple, type LakeWheelContact } from "@engine/terrain/lakeInteraction";
+import { PUDDLE_MAX_RIPPLES, PUDDLE_TOTAL_RIPPLES, PUDDLE_MAX_RIPPLE_SHORE_SEGMENTS, puddleRippleStops, puddleWheelContact } from "@engine/terrain/puddleInteraction";
+import { vehicleWheelWidth } from "@engine/physics/surface/sinkage";
+import type { VehicleHost } from "./capabilities/runtimeServiceKeys";
 import { preparePuddleBed } from "@engine/terrain/terrainPuddlePreparation";
 import { terrainPuddleSteps, samplePuddleWater, type TerrainPuddleGeometry } from "@engine/terrain/terrainPuddle";
 import { CooperativeWork, type WorkSlice } from "@engine/core/cooperativeWork";
@@ -20,9 +24,13 @@ interface PuddleHost {
   deformation?: TerrainDeformationTexture;
   detailLevels?: () => number;
   onWorkSlice?: (slice: WorkSlice) => void;
+  vehicles?: Pick<VehicleHost, "vehicleIds" | "vehicleState" | "vehicleDefinition" | "onPhysicsStep" | "isSurfaceFxActive"> | undefined;
+  terrainForGround?: (id: string) => string | null;
+  rippleLimit?: () => number;
 }
 export interface PuddleResult { status: "loading" | "ready" | "dry" | "open-boundary" | "missing-terrain" | "error"; area: number; message: string; bedRevision?: number; spacing?: number }
 type PreparedBed = Awaited<ReturnType<typeof preparePuddleBed>>;
+interface PuddleInteraction { state: LakeRippleState; stops: WeakMap<LakeRipple, Float32Array> }
 interface LiveBed { body: PuddleWaterBody; prepared: PreparedBed; geometry: TerrainPuddleGeometry; revision: number; seenRevision: number; levels: number | null; attemptedLevels: number | null; builtAt: number }
 const intersects = (a: { minX: number; minZ: number; maxX: number; maxZ: number }, b: PuddleWaterBody) =>
   a.minX < b.bounds.max[0] && a.maxX > b.bounds.min[0] && a.minZ < b.bounds.max[1] && a.maxZ > b.bounds.min[1];
@@ -41,6 +49,8 @@ export class PuddleWaterController {
   private readonly pending = new Set<string>();
   private readonly authored = new Map<string, string>();
   private work: Promise<void> | null = null;
+  private unsubscribePhysics: (() => void) | null = null;
+  private readonly interactions = new Map<string, PuddleInteraction>();
   constructor(private readonly host: PuddleHost) {
     this.reflections = host.reflections ?? new PuddlePlanarReflections();
     this.deformation = host.deformation ?? sharedTerrainDeformation();
@@ -72,6 +82,8 @@ export class PuddleWaterController {
       if (data.coverage) setPuddleTerrainCoverage(this.host.scene, surface, body.terrainRef, data.coverage, levels);
       else clearPuddleTerrainCoverage(this.host.scene, surface);
       surface.rebuild(data);
+      const interaction = this.interactions.get(body.id);
+      if (interaction) { interaction.stops = new WeakMap(); if (data.status !== "ready") interaction.state.clear(); }
       const appearance = { ...PUDDLE_APPEARANCE, ...body.appearance };
       surface.material.color.set(appearance.color); surface.material.opacity = appearance.opacity;
       surface.material.roughness = appearance.roughness; surface.material.envMapIntensity = appearance.reflectionStrength;
@@ -81,11 +93,17 @@ export class PuddleWaterController {
     }
     this.results.set(body.id, { status: data.status, area: data.area, bedRevision: bed.revision,
       spacing: prepared.region.cellSize / 2 ** (levels ?? 0),
-      message: data.status === "ready" ? `Ready · bed grid ${prepared.region.cellSize / 2 ** (levels ?? 0)} m` : data.status === "dry" ? "Seed is dry" : "Previous valid surface retained; check bounds/terrain" });
+      message: data.status === "ready" ? `Ready · bed grid ${prepared.region.cellSize / 2 ** (levels ?? 0)} m${(data.shore?.length ?? 0) / 4 > PUDDLE_MAX_RIPPLE_SHORE_SEGMENTS ? " · Wheel Ripples paused: shoreline complexity limit" : ""}` : data.status === "dry" ? "Seed is dry" : "Previous valid surface retained; check bounds/terrain" });
   }
 
   async rebuild(input: readonly PuddleWaterBody[], force = false): Promise<void> {
     const bodies = validatePuddleWaters(input);
+    if (!this.unsubscribePhysics) this.unsubscribePhysics = this.host.vehicles?.onPhysicsStep?.(dt => this.advanceWheelInteractions(dt)) ?? null;
+    for (const [id, interaction] of this.interactions) {
+      if (!bodies.some(b => b.id === id && !b.hidden && JSON.stringify(b) === this.authored.get(id)) || force) {
+        interaction.state.clear(); this.objects.get(id)?.clearRipples(); this.interactions.delete(id);
+      }
+    }
     this.abort.abort(); this.abort = new AbortController();
     this.pending.clear();
     this.authored.clear(); for (const body of bodies) this.authored.set(body.id, JSON.stringify(body));
@@ -169,8 +187,68 @@ export class PuddleWaterController {
     return null;
   }
   async whenIdle(): Promise<void> { await this.work; }
+  clearWheelInteractions(): void {
+    this.interactions.clear(); for (const surface of this.objects.values()) surface.clearRipples();
+  }
+
+  /** One owner, fixed physics time. Revalidate live bed while its cooperative mesh job is pending. */
+  advanceWheelInteractions(dt: number): void {
+    if (!Number.isFinite(dt) || dt <= 0 || !this.host.vehicles || !this.host.terrainForGround) return;
+    const host = this.host.vehicles;
+    const vehicles = host.vehicleIds().filter(id => host.isSurfaceFxActive?.(id) !== false).slice(0, 32)
+      .map(id => ({ id, state: host.vehicleState(id), definition: host.vehicleDefinition(id) }));
+    const active: { id: string; surface: TerrainPuddleSurface; interaction: PuddleInteraction; contacts: LakeWheelContact[] }[] = [];
+    for (const [id, entry] of this.beds) {
+      const surface = this.objects.get(id); if (!surface) continue;
+      const settings = resolvePuddleWheelRipples(entry.body);
+      let interaction = this.interactions.get(id);
+      if (!interaction) { interaction = { state: new LakeRippleState(settings), stops: new WeakMap() }; this.interactions.set(id, interaction); }
+      let visible = surface.visible; for (let p = surface.parent; p; p = p.parent) visible &&= p.visible;
+      if (!visible || this.results.get(id)?.status !== "ready" || !settings.wheelRipplesEnabled || settings.wheelRippleStrength <= 0
+        || (entry.geometry.shore?.length ?? 0) / 4 > PUDDLE_MAX_RIPPLE_SHORE_SEGMENTS) {
+        interaction.state.clear(); surface.clearRipples(); continue;
+      }
+      const depthAt = (x: number, z: number): number | null => {
+        if (!samplePuddleWater(entry.geometry, x, z)) return null;
+        const base = entry.prepared.heightAt(x, z); if (base === null) return null;
+        const depth = entry.body.surfaceLevel - base - (entry.levels === null ? 0 : this.deformation.currentBedOffsetAt(x, z));
+        if (depth <= 1e-5) return null;
+        // A new raised barrier must not connect an old wet face to the seed.
+        if (entry.revision !== this.deformation.bedRevision) {
+          const seed = entry.body.seed;
+          for (let i = 1; i <= 32; i++) {
+            const sx = x + (seed[0] - x) * i / 32, sz = z + (seed[1] - z) * i / 32;
+            const h = entry.prepared.heightAt(sx, sz);
+            if (h === null || h + (entry.levels === null ? 0 : this.deformation.currentBedOffsetAt(sx, sz)) >= entry.body.surfaceLevel) return null;
+          }
+        }
+        return depth;
+      };
+      const contacts: LakeWheelContact[] = [];
+      for (const v of vehicles) for (let i = 0; i < (v.state?.wheels.length ?? 0) && contacts.length < 128; i++) {
+        const wheel = v.state!.wheels[i]!;
+        const contact = puddleWheelContact(`${v.id}:${i}`, wheel, vehicleWheelWidth(v.definition?.wheels[i] ?? wheel), entry.body.surfaceLevel,
+          entry.body.terrainRef, this.host.terrainForGround, depthAt);
+        if (contact) contacts.push(contact);
+      }
+      if (contacts.length || interaction.state.ripples.length) active.push({ id, surface, interaction, contacts });
+      else interaction.state.advance(dt, []);
+    }
+    const limit = Math.max(0, Math.min(PUDDLE_MAX_RIPPLES, Math.floor(PUDDLE_TOTAL_RIPPLES / Math.max(1, active.length)), this.host.rippleLimit?.() ?? PUDDLE_MAX_RIPPLES));
+    for (const { id, surface, interaction, contacts } of active) {
+      const entry = this.beds.get(id)!, settings = resolvePuddleWheelRipples(entry.body);
+      interaction.state.setLimit(limit); interaction.state.advance(dt, contacts);
+      const stops = interaction.state.ripples.map(r => {
+        let row = interaction.stops.get(r);
+        if (!row) { row = puddleRippleStops(r.x, r.z, entry.geometry.shore ?? new Float32Array(), settings.wheelRippleSpeed * settings.wheelRippleLifetime + settings.wheelRippleWidth * 4); interaction.stops.set(r, row); }
+        return row;
+      });
+      surface.setWheelRipples(interaction.state.ripples, settings, stops);
+    }
+  }
 
   dispose(): void {
+    this.unsubscribePhysics?.(); this.unsubscribePhysics = null; this.interactions.clear();
     this.abort.abort(); this.revision++;
     for (const object of this.objects.values()) { clearPuddleTerrainCoverage(this.host.scene, object); this.reflections.remove(object); object.removeFromParent(); object.dispose(); }
     this.beds.clear(); this.pending.clear(); this.authored.clear();

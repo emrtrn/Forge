@@ -21,6 +21,10 @@ import { TerrainRenderer } from "../../engine/render-three/terrain/terrainRender
 import { worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { Vector3 } from "three";
 import { puddleTerrainDetails, puddleTerrainRevision } from "../../engine/render-three/terrain/terrainPuddleCoverage";
+import { PUDDLE_WHEEL_RIPPLE_DEFAULTS, PUDDLE_WHEEL_RIPPLE_RANGES } from "../../engine/scene/puddleWater";
+import { puddleRippleStops, puddleWheelContact } from "../../engine/terrain/puddleInteraction";
+import { LakeRippleState } from "../../engine/terrain/lakeInteraction";
+import type { VehicleWheelState } from "../../engine/physics/vehicle/vehicleTypes";
 
 const body = (): PuddleWaterBody => ({ schema: 1, kind: "puddle", coordinateSpace: "world", id: "puddle-1", name: "Courtyard",
   terrainRef: "terrain", seed: [30, 0], bounds: { min: [24, -6], max: [36, 6] }, surfaceLevel: 10.2,
@@ -28,6 +32,63 @@ const body = (): PuddleWaterBody => ({ schema: 1, kind: "puddle", coordinateSpac
     reflectionMode: "sharedPlanar", reflectionQuality: "high", planarReflectionStrength: .7 } });
 
 export async function registerPuddlePersistenceTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("puddle wheel ripples: persisted bounded settings survive save/read without runtime history", async () => {
+    const source = { ...body(), appearance: { ...body().appearance, ...PUDDLE_WHEEL_RIPPLE_DEFAULTS, wheelRippleStrength: 2.1 } };
+    const layout: RoomLayout = { schema: 1, name: "Ripples", loadGroups: [], instances: [], characters: [], puddleWaters: [source] };
+    const saved = validateLayout(layout) as RoomLayout;
+    assert.deepEqual(saved.puddleWaters, [source]);
+    assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(saved)), "ripples").puddleWaters, [source]);
+    for (const [key, [min, max]] of Object.entries(PUDDLE_WHEEL_RIPPLE_RANGES)) for (const value of [min - .001, max + .001, NaN, Infinity, "1"])
+      assert.throws(() => validatePuddleWater({ ...source, appearance: { [key]: value } }));
+    assert.throws(() => validatePuddleWater({ ...source, appearance: { wheelRipplesEnabled: 1 } }));
+  });
+  await check("puddle wheel ripples: conservative sectors stop at narrow islands and complexity limit", async () => {
+    const shore = new Float32Array([-4,-4,4,-4, 4,-4,4,4, 4,4,-4,4, -4,4,-4,-4]);
+    const open = puddleRippleStops(0, 0, shore, 10); assert.ok(open.every(v => v >= 3.99 && v < 5.7));
+    const island = new Float32Array([...shore, 1,.01,1,.02]);
+    const blocked = puddleRippleStops(0, 0, island, 10);
+    assert.ok(blocked[0]! < 1.01, "an island between centre rays blocks the whole sector");
+    assert.equal(blocked[16], open[16]);
+    assert.ok(puddleRippleStops(0,0,new Float32Array(4100),10).every(v => v === 0));
+  });
+  await check("puddle wheel ripples: fixed-step motion/slip, dry air ground rejection and one subscription", async () => {
+    const wheel: VehicleWheelState = { position:[0,0,0], radius:.5, suspensionLength:.2, suspensionForce:100,
+      steering:0,rotation:0,inContact:true,groundEntityId:"terrain:0_0",contactPoint:[30,10,0],hardPoint:[30,11,0],worldCenter:[30,10.5,0],worldAxle:[1,0,0],tractionSlip:0 };
+    const contact = (w: VehicleWheelState, depth = .2) => puddleWheelContact("car:0", w, .3, 10.2, "terrain", id => id.startsWith("terrain:") ? "terrain" : null, () => depth > 0 ? depth : null);
+    assert.ok(contact(wheel)); assert.equal(contact({ ...wheel,inContact:false }),null);
+    assert.equal(contact({ ...wheel,groundEntityId:"bridge" }),null); assert.equal(contact(wheel,0),null);
+    assert.equal(contact({ ...wheel,worldCenter:[30,12,0] }),null);
+    const counts = [30,60,144].map(hz => {
+      const state = new LakeRippleState({ ...PUDDLE_WHEEL_RIPPLE_DEFAULTS, wheelRippleLifetime:4 }); state.setLimit(12);
+      for (let i=0;i<hz;i++) state.advance(1/hz,[{ ...contact(wheel)!,x:30+i/hz }]);
+      return state.ripples.length;
+    });
+    assert.ok(Math.max(...counts) - Math.min(...counts) <= 1);
+    const slip = new LakeRippleState(PUDDLE_WHEEL_RIPPLE_DEFAULTS);
+    for (let i=0;i<60;i++) slip.advance(1/60,[{ ...contact(wheel)!, tractionSlip:1 }]);
+    assert.ok(slip.ripples.length > 3); for(let i=0;i<180;i++) slip.advance(1/60,[]); assert.equal(slip.ripples.length,0);
+    let listener: ((dt:number)=>void) | null = null, subscriptions = 0, released = 0, x = 30, wet = true, limit = 12, slipping = false;
+    const doc = createLakeFixture(), controller = new PuddleWaterController({ scene:new Scene(),document:()=>doc,load:async()=>{throw new Error("load");},terrainForGround:()=>"terrain",rippleLimit:()=>limit,
+      vehicles:{ vehicleIds:()=>["car"], vehicleDefinition:()=>null,vehicleState:()=>({forwardSpeed:1,engineLoad:1,drivetrain:null,wheels:[{...wheel,worldCenter:[x,10.5,0],inContact:wet,tractionSlip:slipping?1:0}]}),
+        onPhysicsStep:fn=>{listener=fn;subscriptions++;return()=>{released++;listener=null;};} } });
+    try {
+      await controller.rebuild([body()]); await controller.rebuild([body()]); assert.equal(subscriptions,1);
+      const tick = () => { x+=.01; (listener as ((dt:number)=>void) | null)?.(1/60); };
+      for(let i=0;i<60;i++) tick(); assert.ok(controller.objects.get("puddle-1")!.wheelRippleCount>0);
+      limit=2; tick(); assert.ok(controller.objects.get("puddle-1")!.wheelRippleCount<=2);
+      wet=false; for(let i=0;i<180;i++) tick(); assert.equal(controller.objects.get("puddle-1")!.wheelRippleCount,0);
+      assert.equal(body().appearance?.wheelRippleStrength,undefined);
+      wet=true; limit=12; x=30; slipping=true;
+      await controller.rebuild(Array.from({length:8},(_,i)=>({...body(),id:`budget-${i}`})));
+      for(let i=0;i<150;i++) { x=30; tick(); }
+      const counts=[...controller.objects.values()].map(surface=>surface.wheelRippleCount);
+      assert.ok(counts.every(count=>count<=12)); assert.equal(counts.reduce((sum,n)=>sum+n,0),48);
+      controller.clearWheelInteractions(); assert.ok([...controller.objects.values()].every(surface=>surface.wheelRippleCount===0));
+      assert.equal(subscriptions,1);
+      await controller.rebuild([{...body(),hidden:true}]); assert.equal(controller.objects.size,0);
+    } finally { controller.dispose(); }
+    assert.equal(released,1); assert.equal(listener,null);
+  });
   await check("puddle persistence: exact save/read/partition round trip, strict fields and bounded collection", async () => {
     const layout: RoomLayout = { schema: 1, name: "Puddle", loadGroups: [], instances: [], characters: [], puddleWaters: [body()] };
     const saved = validateLayout(layout) as RoomLayout;
@@ -163,6 +224,7 @@ export async function registerPuddlePersistenceTests(check: (label: string, fn: 
     field.stampWheel({ from: [0, -1], to: [0, 1], width: .5, contactLength: .5, targetDepth: .2, compaction: 1, disturbance: 255 });
     texture.captureBed(); const dirty = field.takeDirty(); assert.ok(dirty.length, "readers leave the upload queue intact");
     texture.update(dirty); const after = texture.captureBed();
+    for(let z=-1;z<=1;z+=.13) for(let x=-1;x<=1;x+=.13) assert.equal(texture.currentBedOffsetAt(x,z),after.offsetAt(x,z));
     assert.equal(before.offsetAt(0, 0), 0); assert.ok(after.offsetAt(0, 0) < -.1);
     const changes = texture.bedChangesSince(before.revision)!; assert.ok(changes && changes.minX < 0 && changes.maxX > 0);
     const revision = texture.bedRevision; texture.update([]); assert.equal(texture.bedRevision, revision);

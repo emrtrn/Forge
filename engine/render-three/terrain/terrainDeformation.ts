@@ -124,6 +124,18 @@ export class TerrainDeformationTexture {
     };
     return { revision, window, cellSize, offsetAt: (x, z) => terrainDeformationDisplacement(sample, window, x, z).offset };
   }
+  /** Synchronous current GPU-depth query for contacts between bed publications. No snapshot allocation. */
+  currentBedOffsetAt(x: number, z: number): number {
+    const window = this.trackWindow(); if (!window || !this.texture || !this.field) return 0;
+    const data = this.texture.image.data as Uint8Array, size = this.field.cellsPerSide, cell = this.field.cellSize;
+    const mod = (v: number) => ((v % size) + size) % size;
+    const at = (ix: number, iz: number) => data[(mod(iz) * size + mod(ix)) * 4]! * TERRAIN_DEFORMATION_DEPTH_RANGE / 255;
+    const sample = (wx: number, wz: number) => {
+      const gx = wx / cell - .5, gz = wz / cell - .5, ix = Math.floor(gx), iz = Math.floor(gz), fx = gx - ix, fz = gz - iz;
+      return (at(ix, iz) * (1 - fx) + at(ix + 1, iz) * fx) * (1 - fz) + (at(ix, iz + 1) * (1 - fx) + at(ix + 1, iz + 1) * fx) * fz;
+    };
+    return terrainDeformationDisplacement(sample, window, x, z).offset;
+  }
   private recordBed(bounds: TerrainBedBounds | null): void {
     this.bedChanges.push({ revision: ++this.depthRevision, bounds });
     if (this.bedChanges.length > 32) this.bedChanges.shift();

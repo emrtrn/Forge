@@ -1,6 +1,7 @@
 import type { SceneApp } from "@/scene/SceneApp";
 import { UI_ICONS } from "../../editorIcons";
 import { renderPuddleReflectionDetails } from "./puddleReflectionDetails";
+import { renderPuddleRippleDetails } from "./puddleRippleDetails";
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 
@@ -42,5 +43,7 @@ export function renderPuddlePreviewDetails(body: HTMLElement, app: SceneApp): vo
     });
   });
   if (state?.seed) renderPuddleReflectionDetails(body, state.appearance, state.status !== "ready" || !available,
+    patch => app.editPuddlePreviewAppearance(patch));
+  if (state?.seed) renderPuddleRippleDetails(body, state.appearance, state.status !== "ready" || !available,
     patch => app.editPuddlePreviewAppearance(patch));
 }

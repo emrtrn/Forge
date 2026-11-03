@@ -1,0 +1,88 @@
+{
+  "before": {
+    "vehicles": 1,
+    "contacts": 0,
+    "tracks": 0,
+    "rutDepth": 0,
+    "wet": 1025,
+    "dry": 0,
+    "maxDepth": 0.010000002384185802,
+    "maxLevelError": 2.980232227667301e-9,
+    "ripples": 0,
+    "revision": 0,
+    "waterRevision": 0,
+    "result": {
+      "status": "ready",
+      "area": 145.6033336525494,
+      "bedRevision": 0,
+      "spacing": 1,
+      "message": "Ready · bed grid 1 m"
+    },
+    "glError": 0
+  },
+  "settled": {
+    "vehicles": 1,
+    "contacts": 4,
+    "tracks": 84,
+    "rutDepth": 0.2156,
+    "wet": 1001,
+    "dry": 24,
+    "maxDepth": 0.19823529645800592,
+    "maxLevelError": 2.980232227667301e-9,
+    "ripples": 12,
+    "revision": 10,
+    "waterRevision": 10,
+    "result": {
+      "status": "ready",
+      "area": 144.90320328280814,
+      "bedRevision": 10,
+      "spacing": 0.25,
+      "message": "Ready · bed grid 0.25 m"
+    },
+    "glError": 0
+  },
+  "driven": {
+    "vehicles": 1,
+    "contacts": 4,
+    "tracks": 315,
+    "rutDepth": 0.2156,
+    "wet": 965,
+    "dry": 60,
+    "maxDepth": 0.19823529645800592,
+    "maxLevelError": 2.980232227667301e-9,
+    "ripples": 12,
+    "revision": 78,
+    "waterRevision": 78,
+    "result": {
+      "status": "ready",
+      "area": 143.36766030520653,
+      "bedRevision": 78,
+      "spacing": 0.25,
+      "message": "Ready · bed grid 0.25 m"
+    },
+    "glError": 0
+  },
+  "film": {
+    "masked": 791867,
+    "unmasked": 804215,
+    "glError": 0
+  },
+  "ripples": {
+    "count": 12,
+    "changed": 101,
+    "delta": 2138,
+    "glError": 0
+  },
+  "barrier": {
+    "open": {
+      "shadow": 3446,
+      "free": 6784
+    },
+    "blocked": {
+      "shadow": 0,
+      "free": 6784
+    },
+    "status": "ready",
+    "glError": 0
+  }
+}

@@ -3,16 +3,17 @@
 Tarih: 3 Kasım 2026. Durum: **İzole prototip, Landscape/Water önizlemesi ve
 kalıcı Puddle kaydı, planar yansıma ve canlı deforme yatak bağlantısı uygulandı.**
 Editör ve Play aynı terrain örnekleme/doldurma çekirdeğini paylaşır. Puddle Wheel
-Ripples ve genel W3 performans kabulü açık. Kaynak planlar:
+Ripples (Faz 3) uygulandı; genel W3 performans ve kullanıcı görsel kabulü açık. Kaynak planlar:
 [Water Body / W3](WORLD_TERRAIN_WATER_BODY_PLAN.md),
 [Terrain Deformasyonu](TERRAIN_DEFORMATION_PLAN.md).
 
 **3 Kasım 2026 güncellemesi:** Planar yansıma **Faz 1**, canlı çamur deformasyonu
 ile suyun birleşimi **Faz 2** kapsamında uygulandı; Wheel Ripples **Faz 3** olarak
-açık. Kullanıcı fazların sırayla uygulanıp ayrı ayrı main'e push edilmesini istedi.
+uygulandı. Kullanıcı fazların sırayla uygulanıp ayrı ayrı main'e push edilmesini istedi.
 Donanım performansı ve kullanıcı görsel kabulü, teknik doğrulamadan ayrıdır.
 Teslim ayrıntıları: [Puddle planar yansıma](../reports/PUDDLE_PLANAR_2026-11-03.md).
 [Canlı Puddle yatağı](../reports/PUDDLE_LIVE_BED_2026-11-03.md).
+[Faz 3 Wheel Ripples ve doğrulama sınırları](../reports/PUDDLE_WHEEL_RIPPLES_2026-11-03.md).
 
 ## Kullanıcı hedefi ve yaklaşım
 
@@ -249,29 +250,29 @@ yetmiyorsa doğruluk sessizce düşürülmez; açık sınır sonucu verilir.
 su yüzeyinde sönümlenen halkalar üretmesi. Zemindeki kalıcı oyukla geçici su
 dalgası iki ayrı etkidir.
 
-- [ ] Editörde Puddle için **Wheel Ripples** bölümü ekle: Enabled, Strength,
+- [x] Editörde Puddle için **Wheel Ripples** bölümü ekle: Enabled, Strength,
   Spread Speed, Ring Width, Wavelength, Lifetime, Emission Interval ve Reset.
   Sığ/küçük yüzeye uygun başlangıç değerleri ve sınırlı aralıklar kullan.
-- [ ] Gerçek `VehicleHost.onPhysicsStep` temaslarını kullan. Ground entity ve
+- [x] Gerçek `VehicleHost.onPhysicsStep` temaslarını kullan. Ground entity ve
   terrain kimliği, gerçek temas, su kotu/derinliği ve bağlı ıslak bölgeyi Faz 2
   sorgusuyla doğrula; yalnız XZ bounds içinde olmak yeterli olmasın.
-- [ ] Hız ve patinaja göre emisyon üret; düz sürüş patinajında
+- [x] Hız ve patinaja göre emisyon üret; düz sürüş patinajında
   `tractionSlip` kullan, tekerlek dönüş farkını tek belirleyici yapma. Havada,
   kuru yerde veya durup patinaj yapmayan tekerde yeni halka üretme.
-- [ ] Lake'in temas/emisyon mantığının yeniden kullanılabilir kısımlarını paylaş;
+- [x] Lake'in temas/emisyon mantığının yeniden kullanılabilir kısımlarını paylaş;
   Lake'in renderer'ını veya büyük su dalgalarını Puddle'a taşımak gerekmez.
   Abonelik ve güncellemeler tek sahipte olsun; FPS'e bağlı çift emisyon oluşmasın.
-- [ ] Mevcut 12 halkalık yüzey sınırını ve sonlu ömür yaklaşımını temel al;
+- [x] Mevcut 12 halkalık yüzey sınırını ve sonlu ömür yaklaşımını temel al;
   çok gövde/araç için toplam aktif halka ve güncelleme bütçesi belirle.
-- [ ] Halka görünümü Puddle sınırı/deforme ıslak maske ile kesilsin. Kuru ada veya
+- [x] Halka görünümü Puddle sınırı/deforme ıslak maske ile kesilsin. Kuru ada veya
   çamur engelinin ötesine analitik çember çizmek fiziksel yayılım sayılmaz:
   ilk sürümde engelde sonlandırma ya da bağlantı farkında sınırlı maskeleme
   seçilip doğrulansın; ayrı çukura halka atlamasın.
-- [ ] Faz 1 planar yansımasında dalga normal etkisi doğal görünsün; ripple
+- [x] Faz 1 planar yansımasında dalga normal etkisi doğal görünsün; ripple
   animasyonu su kotunu veya Faz 2'nin sakin yüzey sınırını oynatmasın.
-- [ ] Grafik kalite değişimi kayıtlı ayarları değiştirmeden etkin halka sayısını
+- [x] Grafik kalite değişimi kayıtlı ayarları değiştirmeden etkin halka sayısını
   sınırlasın. Hide/Delete/respawn/reset/level geçişinde geçmiş ve abonelik temizlensin.
-- [ ] Yalnız ayarlar kaydedilsin; canlı halka geçmişi Save/Reload ile saklanmasın.
+- [x] Yalnız ayarlar kaydedilsin; canlı halka geçmişi Save/Reload ile saklanmasın.
 
 **Kabul:** 30/60/144 Hz'de gerçek araç geçişi ve patinaj görünür, sınırlı ve
 benzer sıklıkta dalga üretir. Durma, havaya kalkma ve kuru zeminde yeni emisyon

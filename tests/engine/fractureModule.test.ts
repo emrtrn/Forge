@@ -34,6 +34,7 @@ import {
   type VfxSpawnOptions,
 } from "../../src/scene/capabilities/runtimeServiceKeys";
 import type { AudioPlayOptions } from "../../engine/audio/audioSubsystem";
+import type { SavedDestructibleState } from "../../engine/persistence/saveGameState";
 
 const ASSET_ID = "sm-crate";
 const MODEL_PATH = "Meshes/Crate.glb";
@@ -141,7 +142,11 @@ interface Presented {
 /** Each level owns its fetch stub and releases listeners and baked geometry. */
 async function withLevel(
   run: (test: ReturnType<typeof harness> & { requested: string[]; presented: Presented }) => Promise<void>,
-  options: { layout?: RoomLayout; entities?: Entity[]; modelPath?: string; sidecar?: object } = {},
+  options: {
+    layout?: RoomLayout; entities?: Entity[]; modelPath?: string; sidecar?: object;
+    /** Runs before `onLevelLoaded` (a save-game restore that beats the module's own level build). */
+    beforeLoad?: (test: ReturnType<typeof harness>) => void;
+  } = {},
 ): Promise<void> {
   const original = globalThis.fetch;
   const requested: string[] = [];
@@ -183,6 +188,7 @@ async function withLevel(
       sceneDocument: { schema: 1, name: "fracture-test", entities: options.entities ?? [] },
       services: test.services,
     });
+    options.beforeLoad?.(test);
     await test.module.onLevelLoaded!(context);
     await run({ ...test, requested, presented });
   } finally {
@@ -501,5 +507,85 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       assert.equal(commands.isFractured(SOURCE), false);
       assert.equal(shell.thresholds.get(SOURCE), 400);
     }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
+  });
+
+  await check("fracture module: a damaged source's save restores the same standing chunks, quietly", async () => {
+    let saved: SavedDestructibleState[] = [];
+    let standing = 0;
+    await withLevel(async ({ commands, shell, module }) => {
+      hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
+      standing = commands.snapshot().staticChunks;
+      saved = commands.captureState();
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0]!.state, "damaged");
+    assert.ok(standing > 0);
+
+    // The load's restore arrives before the module has rebuilt the level.
+    await withLevel(async ({ commands, shell, module, presented }) => {
+      assert.deepEqual(shell.destroyed, [SOURCE]);
+      assert.equal(commands.isFractured(SOURCE), true);
+      assert.equal(commands.snapshot().staticChunks, standing);
+      assert.equal(commands.snapshot().activeChunks, 0, "nothing falls on load");
+      assert.equal(shell.added.filter((entity) => !isStatic(entity)).length, 0);
+      assert.deepEqual(presented, { effects: [], sounds: [] });
+      assert.deepEqual(commands.captureState(), saved);
+      // It goes on breaking from where it was.
+      for (let frame = 0; frame < 20; frame += 1) module.update!(0.016);
+      const target = shell.added.filter(isStatic).at(-1)!.id;
+      hitSource(shell, module, target, [0.5, 0.35, 0], 1000);
+      assert.ok(commands.snapshot().staticChunks < standing);
+    }, {
+      layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar(),
+      beforeLoad: ({ commands }) => commands.restoreState(saved),
+    });
+  });
+
+  await check("fracture module: fractured and damage-only entries restore; others load intact", async () => {
+    await withLevel(async ({ commands, shell }) => {
+      const broken = instanceEntityId(ASSET_ID, 0);
+      const worn = instanceEntityId(ASSET_ID, 2);
+      commands.restoreState([
+        { entityId: broken, state: "fractured", damage: 0 },
+        { entityId: worn, state: "intact", damage: 7 },
+      ]);
+      assert.deepEqual(shell.destroyed, [broken]);
+      assert.equal(shell.added.length, 0, "a fractured source loads without chunks");
+      assert.equal(shell.thresholds.has(broken), false);
+      assert.equal(commands.isFractured(worn), false);
+      assert.deepEqual(commands.captureState(), [
+        { entityId: broken, state: "fractured", damage: 0 },
+        { entityId: worn, state: "intact", damage: 7 },
+      ]);
+      // Restoring again does not break twice.
+      commands.restoreState([{ entityId: broken, state: "fractured", damage: 0 }]);
+      assert.deepEqual(shell.destroyed, [broken]);
+    }, { layout: placementLayout() });
+  });
+
+  await check("fracture module: a re-baked asset or an unknown id never breaks the load", async () => {
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (message: unknown) => { warnings.push(String(message)); };
+    try {
+      await withLevel(async ({ commands, shell }) => {
+        commands.restoreState([
+          { entityId: SOURCE, state: "damaged", damage: 0, chunkCount: 5, standing: "1f", anchored: "01" },
+          { entityId: "sm-gone:4", state: "fractured", damage: 0 },
+        ]);
+        // Other chunk count: the opening it made stays, as a fractured source.
+        assert.deepEqual(shell.destroyed, [SOURCE]);
+        assert.equal(commands.snapshot().staticChunks, 0);
+        assert.ok(warnings.some((message) => message.includes(SOURCE) && message.includes("5 chunks")));
+        assert.ok(warnings.some((message) => message.includes("sm-gone:4")));
+        // The unmatched entry is kept for a source that may still appear.
+        assert.deepEqual(commands.captureState(), [
+          { entityId: SOURCE, state: "fractured", damage: 0 },
+          { entityId: "sm-gone:4", state: "fractured", damage: 0 },
+        ]);
+      }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
+    } finally {
+      console.warn = warn;
+    }
   });
 }

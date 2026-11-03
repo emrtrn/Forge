@@ -103,6 +103,12 @@ export class FractureRegistry {
     return true;
   }
 
+  /** Restores a save-game's accumulated damage on an intact entity (finite, non-negative). */
+  restoreDamage(entityId: string, amount: number): void {
+    const entry = this.entries.get(entityId);
+    if (entry && Number.isFinite(amount)) entry.damage = Math.max(0, amount);
+  }
+
   /** Restores a fractured save-game state without emitting a break. */
   markFractured(entityId: string): void {
     const entry = this.entries.get(entityId);

@@ -55,6 +55,7 @@ import type {
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
 import type { PhysicsImpact } from "@engine/physics/impactEvents";
+import type { SavedDestructibleState } from "@engine/persistence/saveGameState";
 import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
 import type { VehicleDefinition, VehicleInput, VehicleState, VehicleVec3, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
 import type { SurfaceDeformationSample } from "@engine/terrain/terrainSurface";
@@ -379,6 +380,14 @@ export interface FractureCommands {
   breakEntity(entityId: string, instigator?: string): boolean;
   isFractured(entityId: string): boolean;
   snapshot(): FractureDebugSnapshot;
+  /** Every source no longer as authored, for the save-game (fracture plan Faz 5). */
+  captureState(): SavedDestructibleState[];
+  /**
+   * Applies a save-game's destructibles without breaks, effects or messages.
+   * Entries wait for their source when it is not registered yet (bakes still
+   * running, an actor not spawned); the next restore replaces them.
+   */
+  restoreState(entries: readonly SavedDestructibleState[]): void;
 }
 
 export const fractureCommandsService = runtimeServiceKey<FractureCommands>("fracture-commands");

@@ -34,7 +34,9 @@ import {
   type FractureOverride,
   type FracturePlacement,
 } from "@engine/physics/fracture/fractureRuntime";
+import { decodeChunkMask, encodeChunkMask } from "@engine/physics/fracture/fractureMask";
 import { anchoredChunks, damageRadius, releaseSupportHit } from "@engine/physics/fracture/fractureSupport";
+import type { SavedDestructibleState } from "@engine/persistence/saveGameState";
 import { fractureGrain, type AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
 import { polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
 import { fractureChunkGeometry, fractureSourceFromObject } from "@engine/render-three/fractureGeometry";
@@ -173,6 +175,14 @@ export function createFractureModule(): CapabilityModule {
   /** Standing chunk body id → where it belongs. */
   const staticChunks = new Map<string, StaticChunk>();
   const unsubscribes: Array<() => void> = [];
+  /**
+   * Save-game entries waiting for their source to register (Faz 5). Not part
+   * of the level teardown: a load's restore may arrive before this module's
+   * own `onLevelLoaded` has rebuilt the registry.
+   */
+  const pendingRestore = new Map<string, SavedDestructibleState>();
+  /** The level's placements and level-start actors are registered; unmatched restore entries can be reported. */
+  let levelRegistered = false;
   /** Bumped by every teardown so a bake finishing for an old level is dropped. */
   let generation = 0;
   let clock = 0;
@@ -502,6 +512,82 @@ export function createFractureModule(): CapabilityModule {
     if (!host || !asset || !registry.register(entityId, asset.def, source.override)) return;
     sources.set(entityId, source);
     host.physics.setImpactEventThreshold(entityId, registry.breakImpulse(entityId));
+    applyRestore(entityId);
+  };
+
+  /** Takes the intact source out of the world as a break would, without chunks, effects or messages. */
+  const retireSource = (entityId: string): void => {
+    if (!host) return;
+    const cell = host.cellOf(entityId);
+    if (cell) brokenCells.set(entityId, cell);
+    host.physics.setImpactEventThreshold(entityId, null);
+    host.destroySource(entityId);
+  };
+
+  /** Applies the pending save entry of a registered source (Faz 5); a no-op without one. */
+  const applyRestore = (entityId: string): void => {
+    const entry = pendingRestore.get(entityId);
+    const source = sources.get(entityId);
+    const asset = source ? ready.get(source.assetId) : undefined;
+    if (!entry || !host || !source || !asset || registry.state(entityId) !== "intact") return;
+    pendingRestore.delete(entityId);
+    registry.restoreDamage(entityId, entry.damage);
+    if (entry.state === "intact") return;
+    const count = asset.bake.chunks.length;
+    const standing = entry.state === "damaged" ? decodeChunkMask(entry.standing, count) : null;
+    const anchored = entry.state === "damaged" ? decodeChunkMask(entry.anchored, count) : null;
+    registry.markFractured(entityId);
+    if (entry.state === "damaged" && (entry.chunkCount !== count || !standing || !anchored)) {
+      // Re-baked since the save: the masks name other chunks. Keep the opening it made.
+      console.warn(`[fracture] save: ${entityId} was saved with ${entry.chunkCount} chunks, its asset bakes ${count}; it loads broken.`);
+    }
+    if (!standing || !anchored) {
+      retireSource(entityId);
+      return;
+    }
+    const pose = host.sourcePose(entityId) ?? source.authored;
+    const specs = planAll(asset, pose, null);
+    const state: DamagedSource = {
+      asset,
+      pose,
+      threshold: registry.breakImpulse(entityId) ?? asset.def.breakImpulse,
+      anchored,
+      present: standing,
+      staticIds: specs.map(() => null),
+      lastHitAt: -Infinity,
+    };
+    retireSource(entityId);
+    damaged.set(entityId, state);
+    addStaticChunks(entityId, state, specs);
+  };
+
+  /** Reports save entries no source of this level matched (kept: a streamed or spawned actor may still come). */
+  const reportUnmatched = (): void => {
+    if (!levelRegistered) return;
+    for (const entityId of pendingRestore.keys()) {
+      if (!sources.has(entityId)) console.warn(`[fracture] save: no fracturable ${entityId} in this level yet; its saved state waits for it.`);
+    }
+  };
+
+  const captureState = (): SavedDestructibleState[] => {
+    const entries: SavedDestructibleState[] = [];
+    for (const entityId of registry.ids()) {
+      const damage = registry.damage(entityId);
+      const partly = damaged.get(entityId);
+      if (partly) {
+        entries.push({
+          entityId, state: "damaged", damage, chunkCount: partly.present.length,
+          standing: encodeChunkMask(partly.present), anchored: encodeChunkMask(partly.anchored),
+        });
+      } else if (registry.state(entityId) === "fractured") {
+        entries.push({ entityId, state: "fractured", damage });
+      } else if (damage > 0) {
+        entries.push({ entityId, state: "intact", damage });
+      }
+    }
+    // Entries still waiting for their source are part of the game's state too.
+    for (const [entityId, entry] of pendingRestore) if (!registry.has(entityId)) entries.push(entry);
+    return entries;
   };
 
   /** Starts tracking an actor with a `Fracturable` component (spawned, streamed or at level start). */
@@ -560,6 +646,7 @@ export function createFractureModule(): CapabilityModule {
     chunks.clear();
     manifest = null;
     clock = 0;
+    levelRegistered = false;
   };
 
   return {
@@ -575,6 +662,13 @@ export function createFractureModule(): CapabilityModule {
           return true;
         },
         isFractured: (entityId) => registry.state(entityId) === "fractured",
+        captureState,
+        restoreState: (entries) => {
+          pendingRestore.clear();
+          for (const entry of entries) pendingRestore.set(entry.entityId, entry);
+          for (const entityId of [...pendingRestore.keys()]) applyRestore(entityId);
+          reportUnmatched();
+        },
         snapshot: () => ({
           fracturable: registry.ids().length,
           fractured: registry.ids().filter((id) => registry.state(id) === "fractured").length,
@@ -638,6 +732,8 @@ export function createFractureModule(): CapabilityModule {
       }
       await Promise.all(levelContext.sceneDocument.entities.map((entity) => trackActor(entity)));
       if (level !== generation) return;
+      levelRegistered = true;
+      reportUnmatched();
       const bus = levelContext.resolve(scriptMessageBusService);
       if (!bus) return;
       unsubscribes.push(bus.subscribe(DAMAGE_APPLY_MESSAGE, (envelope) => {
@@ -662,6 +758,7 @@ export function createFractureModule(): CapabilityModule {
 
     onLevelUnloaded() {
       teardown();
+      pendingRestore.clear();
       context = null;
       host = null;
     },

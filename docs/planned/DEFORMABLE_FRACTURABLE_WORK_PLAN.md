@@ -743,13 +743,23 @@ Dilimler (2026-11-03):
       `fractured`; alanı olmayan eski save → `[]`. Anchored maskesi de
       saklanır: World Support yüklemede yeniden sorgulanmaz (kaynak artık
       yok), ilk darbedeki karar korunur. Testler `fracturePersistence.test.ts`.
-- [ ] 5-2 modül: `FractureCommands.captureState()` / `restoreState(entries)`;
+- [x] 5-2 modül: `FractureCommands.captureState()` / `restoreState(entries)`;
       restore kayıt sırasından bağımsız (bekleyen girdi kaynak register
       olunca uygulanır: placement'lar seviye yüklemesinde, aktörler spawn'da).
       `fractured` → kaynak parçasız gider (efekt/ses/olay yok, K-05),
       `damaged` → yalnız maskedeki parçalar statik durur, `intact` → birikmiş
       hasar. `chunkCount` bake'le uyuşmazsa uyarı + `fractured` (açılmış
       geçit kapanmasın). Bilinmeyen id: uyarı + atla.
+      **Yapıldı (2026-11-03):** `pendingRestore` level teardown'una dahil
+      değil (yüklemenin restore'u modülün kendi `onLevelLoaded`'ından önce
+      gelebilir), `onLevelUnloaded`'da temizlenir; `register` sonunda
+      `applyRestore`. Eşleşmeyen girdi silinmez, uyarılır ve
+      `captureState`'e aynen girer (sonradan spawn olan aktör için).
+      `FractureRegistry.restoreDamage`. Geri yüklenen hasarlı kaynak sonraki
+      vuruşlarda kaldığı yerden kırılmaya devam eder (eşik = kaynağın
+      eşiği). Testler `fractureModule.test.ts` (3 yeni: hasarlı round-trip
+      restore yüklemeden önce, fractured + yalnız hasar + çift restore,
+      yeniden bake + bilinmeyen id).
 - [ ] 5-3 World Partition: hücre boşalınca kırık/hasarlı durum bellekte
       kalır, hücre dönünce yeniden uygulanır (bugün kaynak bütün döner);
       boşalmış hücredekiler de save'e girer.
@@ -1034,3 +1044,5 @@ kullanıcı kararı).
   Faz 5 kalıcılık (düşen parçalar bit maskesiyle).
 - 2026-11-03: Faz 5-1: parça maskesi + save `destructibles` şekli ve
   normalizer. Sırada 5-2 (modül capture/restore).
+- 2026-11-03: Faz 5-2: fracture modülü `captureState` / `restoreState`.
+  Sırada 5-3 (World Partition hücre dönüşü).

@@ -1,4 +1,5 @@
 import type { LayoutWind } from "@engine/environment/wind";
+import type { PlacementFractureOverride } from "@engine/physics/fracture/fractureTypes";
 import type { ResolvedWorldEnvironment } from "@engine/environment/worldEnvironment";
 import type {
   BrushShape,
@@ -280,6 +281,8 @@ export interface EditableSelection {
   interaction?: LayoutInteraction;
   /** Authored moving-platform motion; absent when the object has no Moving Platform component. */
   movingPlatform?: LayoutMovingPlatform;
+  /** Placement override on the asset's fracture sidecar; absent inherits. */
+  fracture?: PlacementFractureOverride;
   /**
    * Play-mode animation clip for a directly-placed skeletal mesh; present only
    * when `kind === "character"`. Mirrors {@link LayoutCharacter.animation}.

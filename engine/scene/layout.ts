@@ -218,6 +218,8 @@ export interface LayoutPlacement {
   interaction?: LayoutInteraction;
   /** Kinematic moving-platform motion; presence makes the collider movable. */
   movingPlatform?: LayoutMovingPlatform;
+  /** Override on the asset's `.fracture.json` (opt out, own break impulse); absent inherits. */
+  fracture?: import("../physics/fracture/fractureTypes").PlacementFractureOverride;
 }
 
 export interface LayoutModelInstances {

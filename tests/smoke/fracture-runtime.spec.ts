@@ -77,3 +77,26 @@ test("fracture runtime: driving into breakable crates breaks them within budget"
   expect(settled.broken).toBeGreaterThanOrEqual(broken.broken);
   expect(errors).toEqual([]);
 });
+
+test("fracture runtime: a placement override opts a breakable out", async ({ page }) => {
+  const messages: string[] = [];
+  page.on("console", (message) => messages.push(message.text()));
+  await page.context().addInitScript(() => localStorage.clear());
+  await page.route(`**/${LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    // Plan §4 / K-04: the second panel keeps itself whole.
+    const panels = level.instances.find((group: { assetId: string }) => group.assetId === "sm-breakable-panel");
+    panels.placements[1].fracture = { enabled: false };
+    await route.fulfill({ response, json: level });
+  });
+  await page.route("**/project.3dgame.json", async (route) => {
+    const response = await route.fetch();
+    const project = await response.json();
+    project.editor.defaultScene = LEVEL;
+    await route.fulfill({ response, json: project });
+  });
+  await page.goto(`/?debug&fractureOverride=${Date.now()}`);
+  await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
+  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 6, broken: 0 });
+});

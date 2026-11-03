@@ -611,6 +611,7 @@ import type { AiPatrolRoute, ColliderHeightfield, TransformComponent } from "@en
 import { VEHICLE_COMPONENT } from "@engine/scene/components";
 import type { SceneJsonValue } from "@engine/scene/entity";
 import type { VehicleOverrides } from "@engine/physics/vehicle/vehicleTypes";
+import type { PlacementFractureOverride } from "@engine/physics/fracture/fractureTypes";
 import type { Entity } from "@engine/scene/entity";
 import { EditorRecastPreview, type EditorRecastPreviewInput } from "./editorRecastPreview";
 import { createCharacterSceneObject, entityCharacterItem, tintedMaterial } from "@engine/render-three/models";
@@ -13007,6 +13008,10 @@ export class SceneApp {
   /** Details "AI Navigation" role override (undefined inherits asset default). */
   setSelectionNavigationRole(value: NavigationRole | undefined): void {
     this.editorSceneController.setSelectionNavigationRole(value);
+  }
+
+  setSelectionFractureOverride(value: PlacementFractureOverride | undefined): void {
+    this.editorSceneController.setSelectionFractureOverride(value);
   }
 
   /** Details / Content Drawer material slot override for static mesh instances. */

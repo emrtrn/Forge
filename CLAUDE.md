@@ -107,7 +107,9 @@ engine/editor.
   live in `applyTransformFields`. Placement-only identity — `id` (unique per
   layout) and semantic `role` (`engine/scene/placementIdentity.ts`) — lives in
   `validatePlacement`, not the shared `applyTransformFields`, and so does the
-  placement `color` (`#rrggbb` base colour, e.g. World Builder placeholders); undo snapshots
+  placement `color` (`#rrggbb` base colour, e.g. World Builder placeholders) and
+  the `fracture` override (`{ enabled: false, breakImpulse }` on the asset's
+  `.fracture.json`; `validatePlacementFracture`); undo snapshots
   keep the id and duplicates mint a fresh one (`reidentifyDuplicatePlacement`).
   World Partition's `spatiallyLoaded` (only `false`
   is persisted) is copied by `applyTransformFields` and the actor, light,

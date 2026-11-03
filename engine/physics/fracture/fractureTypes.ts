@@ -59,6 +59,18 @@ export const FRACTURE_DEFAULTS: AssetFractureDef = {
   sourceHash: null,
 };
 
+/**
+ * Level-owned override on one placement (`LayoutPlacement.fracture`, plan §4
+ * K-04). The asset sidecar stays the definition: a placement can only keep
+ * itself whole (`enabled: false`) or move the threshold. Absent fields use the
+ * asset; without an enabled sidecar the override does nothing.
+ */
+export interface PlacementFractureOverride {
+  enabled?: false;
+  /** Replaces the asset's `breakImpulse`, N·s (`FRACTURE_LIMITS.breakImpulse`). */
+  breakImpulse?: number;
+}
+
 /** Returns a fresh copy of the defaults. */
 export function createAssetFracture(): AssetFractureDef {
   return { ...FRACTURE_DEFAULTS };

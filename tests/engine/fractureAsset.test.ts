@@ -6,7 +6,9 @@ import {
 } from "../../engine/physics/fracture/fractureTypes";
 import type { FractureSourceMesh } from "../../engine/physics/fracture/voronoiFracture";
 import { restingImpulseFloor } from "../../engine/physics/impactEvents";
-import { validateSaveFracturePayload } from "../../tools/saveValidator";
+import { validatePlacement, validateSaveFracturePayload } from "../../tools/saveValidator";
+import { clonePlacement } from "../../editor/core/layoutSnapshots";
+import type { LayoutPlacement } from "../../engine/scene/layout";
 import { collectDroppedFields } from "../../tools/droppedFields";
 
 const maximal: AssetFractureDef = {
@@ -212,5 +214,31 @@ export function registerFractureAssetTests(check: (label: string, fn: () => void
       def: { ...createAssetFracture(), enabled: false, cellCount: 64, breakImpulse: 0 },
       closed: false, convex: false, materialCount: 2,
     })), []);
+  });
+
+  check("fracture placement override: save keeps opt-out and threshold, editor clone copies it", () => {
+    const placement: LayoutPlacement = { position: [0, 0, 0], fracture: { enabled: false, breakImpulse: 250 } };
+    const saved = validatePlacement(placement);
+    assert.deepEqual(saved.fracture, { enabled: false, breakImpulse: 250 });
+    assert.deepEqual(collectDroppedFields(placement, saved).paths, []);
+    const clone = clonePlacement(placement);
+    assert.deepEqual(clone.fracture, placement.fracture);
+    assert.notEqual(clone.fracture, placement.fracture);
+  });
+
+  check("fracture placement override: inherited enabled and empty overrides are not written", () => {
+    assert.equal(validatePlacement({ position: [0, 0, 0], fracture: {} }).fracture, undefined);
+    assert.equal(validatePlacement({ position: [0, 0, 0], fracture: { enabled: true } }).fracture, undefined);
+    const [min, max] = FRACTURE_LIMITS.breakImpulse;
+    assert.deepEqual(validatePlacement({ position: [0, 0, 0], fracture: { breakImpulse: min } }).fracture, { breakImpulse: min });
+    assert.deepEqual(validatePlacement({ position: [0, 0, 0], fracture: { breakImpulse: max } }).fracture, { breakImpulse: max });
+  });
+
+  check("fracture placement override: malformed values reject the save", () => {
+    const [min, max] = FRACTURE_LIMITS.breakImpulse;
+    for (const fracture of [null, [], "off", { enabled: "no" }, { breakImpulse: "400" },
+      { breakImpulse: Number.NaN }, { breakImpulse: min - 1 }, { breakImpulse: max + 1 }]) {
+      assert.throws(() => validatePlacement({ position: [0, 0, 0], fracture }), /placement fracture/);
+    }
   });
 }

@@ -2,7 +2,8 @@
  * Pre-baked fracture at runtime (DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 4).
  *
  * Every static-mesh placement whose model has an enabled `<Model>.fracture.json`
- * becomes fracturable — read from the layout, so placements in World Partition
+ * becomes fracturable unless its `fracture` override opts out (which can also
+ * move the break impulse) — read from the layout, so placements in World Partition
  * cells that stream in later are covered too: its chunks are baked once per asset at level load (the
  * same pure bake the Static Mesh Editor previews), its collider opts into
  * impact events at the asset's break impulse, and the module listens for
@@ -249,7 +250,8 @@ export function createFractureModule(): CapabilityModule {
         group.placements.forEach((placement, index) => {
           if (placement.hidden) return;
           const entityId = instanceEntityId(group.assetId, index);
-          if (!registry.register(entityId, asset.def)) return;
+          // The placement may opt out or move the threshold (plan §4, K-04).
+          if (!registry.register(entityId, asset.def, placement.fracture)) return;
           sourceAsset.set(entityId, group.assetId);
           sourcePlacement.set(entityId, {
             position: [placement.position[0], placement.position[1], placement.position[2]],

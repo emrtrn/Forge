@@ -124,6 +124,7 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.movingPlatform !== undefined) {
     clone.movingPlatform = cloneMovingPlatform(placement.movingPlatform);
   }
+  if (placement.fracture !== undefined) clone.fracture = { ...placement.fracture };
   if (placement.nodeId !== undefined) clone.nodeId = placement.nodeId;
   if (placement.parentId !== undefined) clone.parentId = placement.parentId;
   return clone;

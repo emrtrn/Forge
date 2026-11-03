@@ -10,6 +10,8 @@ export interface InstanceDetailsSections {
   navigation: string;
   collision: string;
   physics: string;
+  /** Placement fracture override; only non-empty for a fracturable static mesh. */
+  fracture: string;
   components: string;
   metadata: string;
 }
@@ -125,6 +127,7 @@ export function renderInstanceDetails({
       ${isAmbientSound ? "" : sections.navigation}
       ${isAmbientSound ? "" : sections.collision}
       ${isAmbientSound ? "" : sections.physics}
+      ${isAmbientSound ? "" : sections.fracture}
       ${sections.components}
       ${sections.metadata}
     `;

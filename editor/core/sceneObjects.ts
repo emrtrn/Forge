@@ -880,6 +880,7 @@ export function buildEditableSelection(
       ...(placement.movingPlatform
         ? { movingPlatform: cloneMovingPlatform(placement.movingPlatform) }
         : {}),
+      ...(placement.fracture ? { fracture: { ...placement.fracture } } : {}),
     };
   }
 

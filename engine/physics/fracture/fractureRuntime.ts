@@ -1,16 +1,15 @@
 import type { FractureBakeResult } from "./fractureBake";
-import type { AssetFractureDef } from "./fractureTypes";
+import type { AssetFractureDef, PlacementFractureOverride } from "./fractureTypes";
 
 /** A three-component vector independent of the render and physics backends. */
 export type FractureVec3 = readonly [number, number, number];
 /** Irreversible fracture state of a registered entity. */
 export type FractureState = "intact" | "fractured";
 
-/** Level-owned override on one placement; absent fields use the asset. */
-export interface FractureOverride {
+/** Level-owned override on one placement or actor; absent fields use the asset. */
+export type FractureOverride = Readonly<Omit<PlacementFractureOverride, "enabled">> & {
   readonly enabled?: boolean;
-  readonly breakImpulse?: number;
-}
+};
 
 interface RegistryEntry {
   readonly def: AssetFractureDef;

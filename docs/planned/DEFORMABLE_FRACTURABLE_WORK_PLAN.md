@@ -487,9 +487,21 @@ vermez. Kullanıcı görsel kabulü ayrı.
 - [x] Browser smoke: Play'de araçla kutuya çarp → kırılır, parça sayısı
       sınırda. `tests/smoke/fracture-runtime.spec.ts`: 2 sandık / 20 parça,
       spawn ≈1.4 ms, araç kırıp geçer, parçalar ömürde temizlenir.
+- [x] Placement override `fracture: { enabled?: false, breakImpulse? }` (§4,
+      K-04, Faz 4b-1). Asset sidecar asıl tanım: placement yalnız kapatabilir
+      (asset `enabled: false` her zaman kazanır; `true` yazılmaz) ya da eşiği
+      `FRACTURE_LIMITS.breakImpulse` içinde değiştirir. Tip
+      `PlacementFractureOverride` (`fractureTypes.ts`); save
+      `validatePlacementFracture` (`validatePlacement`, bozuk değer kaydı
+      reddeder); `clonePlacement`; modül `registry.register(…, placement.fracture)`.
+      Editör: Details "Fracture" bölümü (`panels/details/fractureDetails.ts`)
+      yalnız sidecar'ı açık asset'lerde görünür (sidecar seçimde okunur,
+      seçim kalkınca yeniden okunur); Breakable + Break Impulse (boş = asset,
+      kaydırıcı 0–5000), geri alınabilir. Testler: `fractureAsset.test.ts` (3
+      yeni), drift fixture'ı; smoke'lar: editör override + undo/redo + Save
+      payload, runtime opt-out (7 → 6 nesne).
 - [ ] Actor Script aktörleri için `Fracturable` component (aynı sidecar'ı
-      referanslar). v1 yalnız static placement'lar; placement override
-      `fracture: { enabled, breakImpulse }` (§4) de açık.
+      referanslar). v1 yalnız static placement'lar.
 
 Kabul: `build:verify` yeşil, smoke yeşil; kullanıcı görsel/oynanış kabulü
 ayrı raporlanır. **Çekirdek kapandı (2026-11-03)**; açık maddeler (actor
@@ -746,3 +758,6 @@ kullanıcı kararı).
   collider'da `massKg` uygulanmıyordu.
 - 2026-11-03: **Faz 3 kapandı.** Static Mesh Editor "Fracture" bölümü (3c):
   bake, önizleme, Explode, hull wire'ları, uyarılar, kaydetme; editör smoke'u.
+- 2026-11-03: Faz 4b-1: placement `fracture` override (allowlist,
+  editör Details bölümü, runtime). Sırada 4b-2 actor `Fracturable` + hücre
+  temizliği, 4b-3 kırılma VFX/ses alanları.

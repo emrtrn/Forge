@@ -67,7 +67,7 @@ import { compareWorldCellKeys, normalizeWorldCellDocument, normalizeWorldPartiti
 import { parseWorldCellKey } from "../engine/world/worldGrid";
 import { VIEW_DISTANCE_MIN, VIEW_DISTANCE_MAX } from "../engine/world/viewDistance";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
-import { normalizeAssetFracture } from "../engine/physics/fracture/fractureTypes";
+import { FRACTURE_LIMITS, normalizeAssetFracture } from "../engine/physics/fracture/fractureTypes";
 import {
   normalizeVehicleAsset,
   normalizeVehicleAssetPath,
@@ -534,7 +534,36 @@ export function validatePlacement(value: unknown): Record<string, unknown> {
   placement.position = entry.position.map((item) => Number(item.toFixed(3)));
   applyTransformFields(entry, placement, "placement");
   if (entry.color !== undefined) placement.color = validateColorHex(entry.color, "placement color");
+  const fracture = validatePlacementFracture(entry.fracture);
+  if (fracture) placement.fracture = fracture;
   return placement;
+}
+
+/**
+ * `LayoutPlacement.fracture`: the asset sidecar decides, a placement may only
+ * opt out (`enabled: false`; `true` is the inherited default and is not kept)
+ * or replace the break impulse inside `FRACTURE_LIMITS`. Empty → omitted.
+ */
+function validatePlacementFracture(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("placement fracture must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const fracture: Record<string, unknown> = {};
+  if (input.enabled !== undefined) {
+    if (typeof input.enabled !== "boolean") throw new Error("placement fracture.enabled must be boolean");
+    if (input.enabled === false) fracture.enabled = false;
+  }
+  if (input.breakImpulse !== undefined) {
+    const [min, max] = FRACTURE_LIMITS.breakImpulse;
+    if (typeof input.breakImpulse !== "number" || !Number.isFinite(input.breakImpulse)
+      || input.breakImpulse < min || input.breakImpulse > max) {
+      throw new Error(`placement fracture.breakImpulse must be a number in ${min}..${max}`);
+    }
+    fracture.breakImpulse = input.breakImpulse;
+  }
+  return Object.keys(fracture).length > 0 ? fracture : undefined;
 }
 
 /**

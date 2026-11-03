@@ -59,6 +59,7 @@ import type {
   RoomLayout,
 } from "@engine/scene/layout";
 import { metadataValuesEqual } from "@engine/scene/metadataSchema";
+import type { PlacementFractureOverride } from "@engine/physics/fracture/fractureTypes";
 import type {
   CollisionEnabled,
   CollisionObjectChannel,
@@ -68,6 +69,13 @@ import type {
 } from "@engine/scene/collision";
 
 type StatusTone = "info" | "success" | "warning" | "error";
+
+function fractureOverridesEqual(
+  a: PlacementFractureOverride | undefined,
+  b: PlacementFractureOverride | undefined,
+): boolean {
+  return a?.enabled === b?.enabled && a?.breakImpulse === b?.breakImpulse;
+}
 
 const DEFAULT_LINEAR_DAMPING = 0.12;
 const DEFAULT_ANGULAR_DAMPING = 0.45;
@@ -86,6 +94,7 @@ type MutableHierarchyTransform = {
   responses?: CollisionResponseMap;
   physicalMaterialId?: string;
   navigationRole?: NavigationRole;
+  fracture?: PlacementFractureOverride;
   generateOverlapEvents?: boolean;
   simulationGeneratesHitEvents?: boolean;
   materialSlot?: string;
@@ -1004,6 +1013,43 @@ export class EditorSceneController {
     if (value === undefined) delete target.navigationRole;
     else target.navigationRole = value;
     if (options.notify !== false) this.host.emitSelectionChanged();
+  }
+
+  /**
+   * Replaces the per-placement fracture override of the selected static mesh
+   * instances (`undefined` clears it, so the asset sidecar decides alone).
+   */
+  setSelectionFractureOverride(value: PlacementFractureOverride | undefined): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind !== "instance") return;
+    const next = value && Object.keys(value).length > 0 ? { ...value } : undefined;
+    const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind === "instance")
+      .flatMap((selection) => {
+        const target = this.host.getMutableTransform(selection);
+        if (!target || fractureOverridesEqual(target.fracture, next)) return [];
+        return [{
+          selection: cloneSelection(selection),
+          previous: target.fracture ? { ...target.fracture } : undefined,
+        }];
+      });
+    if (entries.length === 0) return;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        const target = this.host.getMutableTransform(entry.selection);
+        if (!target) continue;
+        const value = mode === "redo" ? next : entry.previous;
+        if (value === undefined) delete target.fracture;
+        else target.fracture = { ...value };
+      }
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: entries.length === 1 ? "Set fracture override" : "Set selected fracture overrides",
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
   }
 
   /** Sets or clears per-placement collision profile/material/event overrides. */

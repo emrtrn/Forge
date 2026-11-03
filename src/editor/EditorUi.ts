@@ -109,6 +109,9 @@ import {
   bindNavigationInputs,
   renderNavigationSection,
 } from "./panels/details/navigationDetails";
+import { bindFractureInputs, renderFractureSection } from "./panels/details/fractureDetails";
+import { loadAssetFracture } from "./assetFractureStore";
+import type { AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
 import { renderMaterialSection } from "./panels/details/materialDetails";
 import {
   bindPhysicsInputs,
@@ -420,6 +423,7 @@ export class EditorUi {
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
   private editableAssets: EditableAsset[] = [];
+  private fractureDetailsCache: { assetId: string; def: AssetFractureDef | null | undefined } | null = null;
   /** Vehicle assets read for the Details Vehicle section (null = unreadable). */
   private readonly vehicleAssetDefs = new Map<string, VehicleDefinition | null>();
   private readonly vehicleAssetLoads = new Set<string>();
@@ -1661,6 +1665,30 @@ export class EditorUi {
    * as `assetId`, so they resolve directly; other instances map their manifest
    * `assetId` to the registered asset path.
    */
+  /**
+   * The selected instance's fracture sidecar for the Details override section:
+   * `undefined` while it loads (the section re-renders when it arrives), null
+   * when the asset has none. Re-read after a deselect, so a sidecar just added
+   * in the Static Mesh Editor shows up on the next selection.
+   */
+  private detailsFractureAsset(selection: EditableSelection): AssetFractureDef | null | undefined {
+    if (selection.kind !== "instance") return null;
+    const cached = this.fractureDetailsCache;
+    if (cached?.assetId === selection.assetId) return cached.def;
+    const asset = this.editableAssets.find((entry) => entry.id === selection.assetId);
+    if (!asset || !isModelAssetType(assetType(asset))) return null;
+    const entry: { assetId: string; def: AssetFractureDef | null | undefined } = { assetId: selection.assetId, def: undefined };
+    this.fractureDetailsCache = entry;
+    void loadAssetFracture(assetPath(asset)).then((def) => {
+      if (this.fractureDetailsCache !== entry) return;
+      entry.def = def;
+      if (def?.enabled && this.selected?.kind === "instance" && this.selected.assetId === entry.assetId) {
+        this.renderDetails(this.selected);
+      }
+    });
+    return undefined;
+  }
+
   private selectedAssetContentPath(): string | null {
     const selection = this.selected;
     if (!selection) return null;
@@ -4636,6 +4664,7 @@ export class EditorUi {
     }
     if (!selection) {
       this.detailsScale = null;
+      this.fractureDetailsCache = null;
       this.detailsBody.innerHTML = `
         <div class="empty-details">
           <strong>No selection</strong>
@@ -4752,6 +4781,7 @@ export class EditorUi {
           locked: selection.locked,
           complexAsSimple: this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple",
         }),
+        fracture: renderFractureSection(selection, this.detailsFractureAsset(selection)),
         components:
           renderComponentsSection(selection, this.editableAssets)
           + renderActorVariableSection(this.app.getSelectedActorVariables(), selection.locked)
@@ -4826,6 +4856,11 @@ export class EditorUi {
             this.app.setSelectionMetadata(key, value, label),
         }),
     });
+    bindFractureInputs(
+      this.detailsBody,
+      () => this.selected?.fracture,
+      (value) => this.app.setSelectionFractureOverride(value),
+    );
     this.finalizeDetailsRender(selection);
   }
 

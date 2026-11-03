@@ -92,3 +92,70 @@ test("fracture editor: add, bake, preview and save a fracture, then read it back
 
   expect(errors).toEqual([]);
 });
+
+test("fracture editor: a placement's Details override opts out and moves the break impulse", async ({ page }) => {
+  // Plan §4 / K-04: the asset sidecar decides, a placement may opt out or set
+  // its own threshold. The test level is served in flight and the layout save
+  // answered in flight, so the request payload is what is checked.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const LEVEL = "layouts/__playwright-fracture-override.level.json";
+  const level = await (await page.request.get("/layouts/PhysicsInteractionTest.level.json")).json();
+  level.name = "__playwright-fracture-override";
+  for (const group of level.instances) {
+    group.placements.forEach((placement: { name?: string }, index: number) => {
+      placement.name = `${group.assetId} ${index}`;
+    });
+  }
+  await page.route(`**/${LEVEL}`, (route) => route.fulfill({ json: level }));
+  await page.route("**/project.3dgame.json", async (route) => {
+    const response = await route.fetch();
+    const project = await response.json();
+    project.editor.defaultScene = LEVEL;
+    await route.fulfill({ response, json: project });
+  });
+  const layoutSaves: Array<{ layout?: { instances?: Array<{ assetId: string; placements: Array<Record<string, unknown>> }> } }> = [];
+  await page.route("**/__save-layout**", async (route) => {
+    layoutSaves.push(JSON.parse(route.request().postData() ?? "{}"));
+    await route.fulfill({ json: { ok: true, changed: true, dropped: [] } });
+  });
+  await page.route("**/__save-world-cells**", (route) => route.fulfill({ json: { ok: true, dropped: [] } }));
+  await page.addInitScript(() => localStorage.clear());
+  await page.setViewportSize({ width: 1600, height: 950 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  const details = page.locator('[data-inspector-pane="details"]');
+  // A non-fracturable mesh shows no Fracture section.
+  await page.getByTestId("outliner-row").filter({ hasText: "marker:playerStart 0" }).first().click();
+  await expect(details.locator("[data-detail-section=\"transform\"]")).toBeVisible();
+  await expect(details.locator("[data-detail-section=\"fracture\"]")).toHaveCount(0);
+
+  await page.getByTestId("outliner-row").filter({ hasText: "sm-breakable-panel 1" }).first().click();
+  const section = details.locator("[data-detail-section=\"fracture\"]");
+  await expect(section).toBeVisible({ timeout: 15_000 });
+  const breakable = section.locator("[data-fracture-enabled]");
+  const impulse = section.locator("[data-fracture-break-impulse]");
+  await expect(breakable).toBeChecked();
+  await expect(impulse).toHaveValue("");
+  await expect(impulse).toHaveAttribute("placeholder", /^Asset \(\d+(\.\d+)?\)$/);
+
+  await breakable.uncheck();
+  await expect(section.locator("[data-fracture-enabled]")).not.toBeChecked();
+  await section.locator("[data-fracture-break-impulse]").fill("250");
+  await section.locator("[data-fracture-break-impulse]").press("Tab");
+  await expect(section.locator("[data-fracture-break-impulse]")).toHaveValue("250");
+
+  // Undo restores the impulse, redo brings it back.
+  await page.keyboard.press("Control+z");
+  await expect(section.locator("[data-fracture-break-impulse]")).toHaveValue("");
+  await page.keyboard.press("Control+y");
+  await expect(section.locator("[data-fracture-break-impulse]")).toHaveValue("250");
+
+  await page.getByTestId("editor-save").click();
+  await expect.poll(() => layoutSaves.length, { timeout: 15_000 }).toBeGreaterThan(0);
+  const saved = layoutSaves.at(-1)!.layout!.instances!.find((group) => group.assetId === "sm-breakable-panel")!;
+  expect(saved.placements[1]!.fracture).toEqual({ enabled: false, breakImpulse: 250 });
+  expect(saved.placements[0]!.fracture).toBeUndefined();
+  expect(errors).toEqual([]);
+});

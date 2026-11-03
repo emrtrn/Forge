@@ -85,6 +85,8 @@ function fakeHost(services: RuntimeServices) {
   const poses = new Map<string, NonNullable<ReturnType<FractureHost["sourcePose"]>>>();
   const cells = new Map<string, string>();
   const listeners = new Set<(key: string) => void>();
+  /** Sources the shell has not built (their cell is unloaded or queued). */
+  const unbuilt = new Set<string>();
   // World Support probe: a test decides which chunk poses touch the world.
   const world = { touches: (_position: readonly number[]) => false };
   const host: FractureHost = {
@@ -111,6 +113,7 @@ function fakeHost(services: RuntimeServices) {
     },
     sourcePose: (id) => poses.get(id) ?? null,
     cellOf: (id) => cells.get(id) ?? null,
+    isSourceLive: (id) => !unbuilt.has(id),
     onCellUnloaded(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
@@ -118,7 +121,7 @@ function fakeHost(services: RuntimeServices) {
     attachDynamicObject(id, object) { attachments.push({ id, object }); },
   };
   return {
-    host, thresholds, impacts, added, removed, destroyed, impulses, attachments, poses, cells, listeners, world,
+    host, thresholds, impacts, added, removed, destroyed, impulses, attachments, poses, cells, listeners, world, unbuilt,
     dispose() { geometry.dispose(); material.dispose(); },
   };
 }
@@ -293,11 +296,15 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       assert.ok(retainedChunks.length > 0);
       assert.equal(commands.snapshot().activeChunks, shell.added.length);
       assert.equal(shell.listeners.size, 1);
+      // As the shell does: an unloaded cell's placement is not built.
+      shell.unbuilt.add(first);
       for (const listener of shell.listeners) listener("1_0");
       assert.deepEqual([...shell.removed].sort(), expectedRemoved.sort());
       assert.equal(commands.snapshot().activeChunks, retainedChunks.length);
+      // Registered again; its broken state waits for the cell to be built (Faz 5).
       assert.equal(commands.isFractured(first), false);
       assert.deepEqual(shell.thresholds, new Map([[first, 400]]));
+      assert.ok(commands.captureState().some((entry) => entry.entityId === first && entry.state === "fractured"));
       assert.equal(commands.isFractured("actor:0"), false);
       assert.equal(commands.breakEntity("actor:0"), false, "unloaded actor must respawn before registering again");
       assert.equal(commands.snapshot().fracturable, 2);
@@ -500,10 +507,11 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
       const statics = shell.added.filter(isStatic).map((entity) => entity.id);
       assert.ok(statics.length > 0);
+      shell.unbuilt.add(SOURCE);
       for (const listener of shell.listeners) listener("2_0");
       assert.equal(commands.snapshot().staticChunks, 0);
       for (const id of statics) assert.ok(shell.removed.includes(id));
-      // The placement is whole again and breaks anew.
+      // Registered again, unbuilt: the standing chunks come back with the cell (next check).
       assert.equal(commands.isFractured(SOURCE), false);
       assert.equal(shell.thresholds.get(SOURCE), 400);
     }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
@@ -587,5 +595,44 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
     } finally {
       console.warn = warn;
     }
+  });
+
+  await check("fracture module: a broken source stays broken when its cell unloads and returns", async () => {
+    await withLevel(async ({ services, commands, shell, module }) => {
+      shell.cells.set(SOURCE, "2_0");
+      hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
+      const standing = commands.snapshot().staticChunks;
+      const saved = commands.captureState();
+      assert.ok(standing > 0);
+
+      // The cell goes: its chunks with it, the broken state stays (and is saved).
+      shell.unbuilt.add(SOURCE);
+      for (const listener of shell.listeners) listener("2_0");
+      assert.equal(commands.snapshot().staticChunks, 0);
+      assert.deepEqual(commands.captureState(), saved);
+
+      // The cell comes back: the shell builds the placement whole, the module breaks it back.
+      shell.unbuilt.delete(SOURCE);
+      services.addEntity({ id: SOURCE, components: {} });
+      assert.deepEqual(shell.destroyed, [SOURCE, SOURCE]);
+      assert.equal(commands.snapshot().staticChunks, standing);
+      assert.equal(commands.snapshot().activeChunks, 0);
+      assert.deepEqual(commands.captureState(), saved);
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
+  });
+
+  await check("fracture module: a restore for an unbuilt source waits until the shell builds it", async () => {
+    await withLevel(async ({ services, commands, shell }) => {
+      const broken = instanceEntityId(ASSET_ID, 0);
+      shell.unbuilt.add(broken);
+      commands.restoreState([{ entityId: broken, state: "fractured", damage: 0 }]);
+      assert.deepEqual(shell.destroyed, []);
+      assert.equal(commands.isFractured(broken), false);
+      assert.deepEqual(commands.captureState(), [{ entityId: broken, state: "fractured", damage: 0 }]);
+      shell.unbuilt.delete(broken);
+      services.addEntity({ id: broken, components: {} });
+      assert.deepEqual(shell.destroyed, [broken]);
+      assert.equal(commands.isFractured(broken), true);
+    }, { layout: placementLayout() });
   });
 }

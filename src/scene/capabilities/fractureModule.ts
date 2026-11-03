@@ -530,6 +530,8 @@ export function createFractureModule(): CapabilityModule {
     const source = sources.get(entityId);
     const asset = source ? ready.get(source.assetId) : undefined;
     if (!entry || !host || !source || !asset || registry.state(entityId) !== "intact") return;
+    // Not built yet (its cell is unloaded or queued): the entity sink calls again once it is.
+    if (!host.isSourceLive(entityId)) return;
     pendingRestore.delete(entityId);
     registry.restoreDamage(entityId, entry.damage);
     if (entry.state === "intact") return;
@@ -569,21 +571,26 @@ export function createFractureModule(): CapabilityModule {
     }
   };
 
+  /** A registered source's live state as a save entry; null when it is as authored. */
+  const entryOf = (entityId: string): SavedDestructibleState | null => {
+    const damage = registry.damage(entityId);
+    const partly = damaged.get(entityId);
+    if (partly) {
+      return {
+        entityId, state: "damaged", damage, chunkCount: partly.present.length,
+        standing: encodeChunkMask(partly.present), anchored: encodeChunkMask(partly.anchored),
+      };
+    }
+    if (registry.state(entityId) === "fractured") return { entityId, state: "fractured", damage };
+    return damage > 0 ? { entityId, state: "intact", damage } : null;
+  };
+
   const captureState = (): SavedDestructibleState[] => {
     const entries: SavedDestructibleState[] = [];
     for (const entityId of registry.ids()) {
-      const damage = registry.damage(entityId);
-      const partly = damaged.get(entityId);
-      if (partly) {
-        entries.push({
-          entityId, state: "damaged", damage, chunkCount: partly.present.length,
-          standing: encodeChunkMask(partly.present), anchored: encodeChunkMask(partly.anchored),
-        });
-      } else if (registry.state(entityId) === "fractured") {
-        entries.push({ entityId, state: "fractured", damage });
-      } else if (damage > 0) {
-        entries.push({ entityId, state: "intact", damage });
-      }
+      // A source waiting to be built (its cell unloaded) is what its entry says.
+      const entry = pendingRestore.get(entityId) ?? entryOf(entityId);
+      if (entry) entries.push(entry);
     }
     // Entries still waiting for their source are part of the game's state too.
     for (const [entityId, entry] of pendingRestore) if (!registry.has(entityId)) entries.push(entry);
@@ -613,14 +620,18 @@ export function createFractureModule(): CapabilityModule {
   };
 
   /**
-   * A World Partition cell unloaded: the chunks of sources it owned go with it,
-   * and those sources are whole again when it returns — placements re-register
-   * now (the shell rebuilds them from the layout), actors when they respawn.
+   * A World Partition cell unloaded: the chunks of sources it owned go with it.
+   * Their broken state is kept as a waiting restore entry (Faz 5), applied when
+   * the cell returns — placements re-register now and wait to be built (the
+   * shell rebuilds them from the layout), actors when they respawn. Falling
+   * chunks are not kept: what had fallen is gone.
    */
   const cellUnloaded = (key: string): void => {
     for (const [entityId, cell] of [...brokenCells]) {
       if (cell !== key) continue;
       brokenCells.delete(entityId);
+      const entry = entryOf(entityId);
+      if (entry) pendingRestore.set(entityId, entry);
       removeChunks(budget.removeOwner(entityId));
       clearDamaged(entityId);
       const source = sources.get(entityId);
@@ -684,7 +695,10 @@ export function createFractureModule(): CapabilityModule {
       runtimeServices.addEntitySink({
         setEntities: () => {},
         addEntity: (entity) => {
-          if (host) void trackActor(entity);
+          if (!host) return;
+          // A streamed placement just got built: apply its waiting save entry.
+          if (registry.has(entity.id)) applyRestore(entity.id);
+          void trackActor(entity);
         },
         removeEntity: (entityId) => {
           const source = sources.get(entityId);

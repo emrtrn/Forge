@@ -760,9 +760,21 @@ Dilimler (2026-11-03):
       eşiği). Testler `fractureModule.test.ts` (3 yeni: hasarlı round-trip
       restore yüklemeden önce, fractured + yalnız hasar + çift restore,
       yeniden bake + bilinmeyen id).
-- [ ] 5-3 World Partition: hücre boşalınca kırık/hasarlı durum bellekte
+- [x] 5-3 World Partition: hücre boşalınca kırık/hasarlı durum bellekte
       kalır, hücre dönünce yeniden uygulanır (bugün kaynak bütün döner);
       boşalmış hücredekiler de save'e girer.
+      **Yapıldı (2026-11-03):** `FractureHost.isSourceLive(id)` (shell:
+      aktör canlı mı / placement'ın hücresi inşa edilmiş mi —
+      `liveStaticCells[cell].added`); inşa edilmemiş kaynağın girdisi
+      bekler, shell kaynağı kurunca entity sink `addEntity` → `applyRestore`.
+      Hücre boşalırken kırık kaynağın durumu (`entryOf`) bekleyen girdiye
+      yazılır, placement yeniden register olur ve hücre dönünce aynı ayakta
+      parçalarla geri gelir; düşmüş parçalar geri gelmez. `captureState`
+      bekleyen girdiyi canlı durumdan önce okur (boşalmış hücre de save'e
+      girer). Shell düzeltmesi: `processStaticBuildQueue` hücre kaydını
+      (`state.added`) sink'lerden önce günceller. Açık: hücresi boşalan
+      *sağlam* aktörün birikmiş `Damage.Apply` hasarı korunmaz (placement'ınki
+      korunur). Testler: hücre dönüşü + inşa bekleyen restore.
 - [ ] 5-4 shell + sözleşme: `RuntimeSceneApp` capture/restore bağlantısı,
       `SAVE_GAME_CONTRACT.md`, smoke (kır → kaydet → yükle → aynı durum).
 
@@ -1046,3 +1058,6 @@ kullanıcı kararı).
   normalizer. Sırada 5-2 (modül capture/restore).
 - 2026-11-03: Faz 5-2: fracture modülü `captureState` / `restoreState`.
   Sırada 5-3 (World Partition hücre dönüşü).
+- 2026-11-03: Faz 5-3: kırık/hasarlı kaynak hücre boşalıp dönünce aynı
+  durumda; `isSourceLive`. Sırada 5-4 (shell save bağlantısı + sözleşme +
+  smoke).

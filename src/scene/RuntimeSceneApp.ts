@@ -1578,6 +1578,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           : null;
       },
       cellOf: (entityId) => this.partitionCellByEntityId.get(entityId) ?? null,
+      isSourceLive: (entityId) => {
+        if (this.actorEntityById.has(entityId)) return true;
+        const cell = this.partitionCellByEntityId.get(entityId);
+        if (!cell) return true;
+        if (this.partitionActorIndexById.has(entityId)) return false;
+        return this.liveStaticCells.get(cell)?.added.some((entity) => entity.id === entityId) ?? false;
+      },
       onCellUnloaded: (listener) => {
         this.cellUnloadedListeners.add(listener);
         return () => this.cellUnloadedListeners.delete(listener);
@@ -4843,13 +4850,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       while (count < state.pending.length && left > 0) left -= staticEntityWeight(state.pending[count++]!);
       const chunk = state.pending.splice(0, count);
       this.physicsSubsystem.addEntities(chunk);
+      // Built before the sinks hear of them: a sink may ask whether a source is live.
+      state.added.push(...chunk);
       for (const entity of chunk) {
         this.behaviorSubsystem.addEntity(entity);
         this.runtimeServices.addEntity(entity);
         this.audioCommands()?.playEntityAudio(entity);
         void this.vfxCommands()?.playAutoPlayEntity(entity);
       }
-      state.added.push(...chunk);
     }
   }
 

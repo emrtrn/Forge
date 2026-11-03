@@ -348,6 +348,12 @@ export interface FractureHost {
   } | null;
   /** The World Partition cell that streams this source; null = persistent or no partition. */
   cellOf(entityId: string): string | null;
+  /**
+   * Whether the source is built (body and render object exist) — false while
+   * its World Partition cell is unloaded or still queued. A save-game restore
+   * waits for it: retiring an unbuilt source would leave nothing to retire.
+   */
+  isSourceLive(entityId: string): boolean;
   /** Calls `listener` after a World Partition cell unloads; returns the unsubscribe. */
   onCellUnloaded(listener: (key: string) => void): () => void;
   /** Renders `object` at the entity's interpolated physics pose (null detaches). */

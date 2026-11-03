@@ -10,7 +10,7 @@ export interface AssetFractureDef {
   source: "voronoi";
   /** Off keeps the sidecar but the asset never breaks. */
   enabled: boolean;
-  seed: number; // uint32
+  seed: number; // integer 0..999 999
   cellCount: number; // integer
   /** kg per cubic metre of model-root space; mass = volume × density (× placement scale³ at runtime). */
   density: number;
@@ -31,7 +31,8 @@ export interface AssetFractureDef {
 
 /** Inclusive numeric bounds shared by normalization and editor sliders. */
 export const FRACTURE_LIMITS = {
-  seed: [0, 4294967295],
+  // Any integer seeds the bake; a six-digit range keeps the editor field readable.
+  seed: [0, 999999],
   cellCount: [2, 64],
   density: [1, 20000],
   interiorUvScale: [0.01, 100],
@@ -80,7 +81,7 @@ export function normalizeAssetFracture(value: unknown): AssetFractureDef | null 
     version: FRACTURE_ASSET_VERSION,
     source: "voronoi",
     enabled: typeof input.enabled === "boolean" ? input.enabled : defaults.enabled,
-    seed: bounded(input.seed, defaults.seed, FRACTURE_LIMITS.seed, true) >>> 0,
+    seed: bounded(input.seed, defaults.seed, FRACTURE_LIMITS.seed, true),
     cellCount: bounded(input.cellCount, defaults.cellCount, FRACTURE_LIMITS.cellCount, true),
     density: bounded(input.density, defaults.density, FRACTURE_LIMITS.density),
     interiorMaterialId: typeof input.interiorMaterialId === "string" && input.interiorMaterialId.length > 0

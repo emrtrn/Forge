@@ -5,8 +5,9 @@
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
 > olayı. **Faz 6 kod tarafı ve GPU ölçümü tamam** (2026-11-03), görsel
 > kabul bekliyor. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
-> **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. **Faz 3 sürüyor:**
-> veri yüzeyi + three köprüsü tamam, Static Mesh Editor bölümü sırada.
+> **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. **Faz 3 tamam**
+> (2026-11-03): fracture sidecar'ı + Static Mesh Editor bölümü. Sıradaki:
+> Faz 4 (fracture runtime).
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -370,7 +371,7 @@ hedef değil). **Kapandı:** filtre yeşil, medyan 2.9–3.5 ms.
       yerine manifest materyal id'si; null = dış materyal), `interiorUvScale`,
       `breakImpulse`, `damageToBreak`, `chunkLifetime`, `maxActiveChunks`,
       `sourceHash`. Sınırlar `FRACTURE_LIMITS` (editör kaydırıcılarının da
-      kaynağı). §4'teki `chunks` dizisi yok (K-02).
+      kaynağı; seed 0–999 999). §4'teki `chunks` dizisi yok (K-02).
 - [x] Yükleyici: `<Model>.fracture.json`, `assetCollisionLoader` desenini
       izler. `src/scene/assetFractureLoader.ts`: sidecar yok = kırılmaz
       (null, uyarısız); bozuk = bir kez uyarı + null.
@@ -389,16 +390,29 @@ hedef değil). **Kapandı:** filtre yeşil, medyan 2.9–3.5 ms.
       aynı hash'i verir. Hash UVW eşlemesi uygulandıktan sonraki modelden
       alınır (runtime da UVW'yi `gltf.scene`'e uygular) — Faz 4 bu sırayı
       korumalı.
-- [ ] Static Mesh Editor'da "Fracture" bölümü: etkin, hücre sayısı, seed, iç
+- [x] Static Mesh Editor'da "Fracture" bölümü: etkin, hücre sayısı, seed, iç
       yüz slotu, eşik, ömür, en fazla aktif parça. Parametre UI kurallarına
       uyar (kaydırıcı + kutu, TR ipucu / EN ad).
-- [ ] "Bake" düğmesi, patlatılmış önizleme kaydırıcısı, parça hull wire'ı
-      (`collisionView` genişletmesi).
-- [~] Doğrulama uyarıları: bayat bake, dışbükey olmayan mesh (v1'de
-      desteklenmez), aşırı parça sayısı. `fractureWarnings` hazır (sıra:
+      `src/editor/staticMeshFracture.ts` (editöre ince bağlantı): "Add
+      Fracture" sidecar'ı oluşturur; Enabled, Cell Count, Seed, Density,
+      Break Impulse, Chunk Lifetime, Max Active Chunks, Interior UV Scale,
+      Damage To Break (boş = yalnız çarpma), Interior Material (manifest
+      materyali ya da dış materyal). Her alan normalizer'dan geçer; Save
+      yalnız değişiklik varsa ve fracture eklenmişse yazar. `paramFields`
+      seçicisine `.sm-row` eklendi (Static Mesh Editor'ın sınırlı alanları da
+      kaydırıcı alır; mevcutlardan etkilenen yalnız Fill Alpha).
+- [x] "Bake" düğmesi, patlatılmış önizleme kaydırıcısı, parça hull wire'ı
+      (`collisionView` genişletmesi). Bake modeli `fractureSourceFromObject`
+      ile okur, `sourceHash`'i yazar; Cell Count / Seed / UV ölçeği değişince
+      kendiliğinden yeniden bake eder. "New Seed", Show Chunks (model yerine
+      parçalar), Explode (merkezden dışa, yalnız önizleme), Show Hulls
+      (`ConvexGeometry` kenarları; collisionView yerine bölümün kendi
+      grubunda).
+- [x] Doğrulama uyarıları: bayat bake, dışbükey olmayan mesh (v1'de
+      desteklenmez), aşırı parça sayısı. `fractureWarnings` (sıra:
       not-baked/stale-bake, not-closed, not-convex, many-chunks >32,
-      self-weight `breakImpulse < 4·m·g·dt`, multi-material); editör
-      gösterimi açık.
+      self-weight `breakImpulse < 4·m·g·dt`, multi-material) bölümün
+      altında listelenir; model yüklenmeden "bayat" denmez.
 - [x] droppedFields / serializationDrift testleri, maksimal sidecar
       round-trip. `tests/engine/fractureAsset.test.ts` (23): maksimal def
       kendine normalize olur, kayıttan `dropped[]` boş geçer, bilinmeyen
@@ -406,7 +420,11 @@ hedef değil). **Kapandı:** filtre yeşil, medyan 2.9–3.5 ms.
       `tests/engine/fractureGeometry.test.ts` (4).
 
 Kabul: kaydet → yeniden aç round-trip, `dropped[]` boş, editör smoke'u
-(5273) bake + önizleme.
+(5273) bake + önizleme. **Kapandı (2026-11-03):**
+`tests/smoke/fracture-editor.spec.ts` Shape Cube'a fracture ekler, 12 → 6
+parça yeniden bake eder, Explode + hull'ları açar, kaydeder (`sourceHash`
+dahil), ikinci Save'de yazmaz, yeniden açınca değerleri okur ve bayat uyarısı
+vermez. Kullanıcı görsel kabulü ayrı.
 
 ### Faz 4 — Fracture runtime (`fractureModule`)
 
@@ -684,3 +702,5 @@ kullanıcı kararı).
   sidecar tipleri/normalizer/uyarılar/hash, `/__save-fracture` (7. allowlist
   yüzeyi), yükleyici + editör store'u, `fractureGeometry.ts`. Sırada editör
   bölümü (3c).
+- 2026-11-03: **Faz 3 kapandı.** Static Mesh Editor "Fracture" bölümü (3c):
+  bake, önizleme, Explode, hull wire'ları, uyarılar, kaydetme; editör smoke'u.

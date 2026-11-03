@@ -34,6 +34,7 @@ import {
   Vector2,
   Vector3,
   WebGLRenderer,
+  type Object3D,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
@@ -56,6 +57,7 @@ import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 import { loadAssetCollision, saveAssetCollision } from "@/editor/assetCollisionStore";
+import { StaticMeshFracture } from "@/editor/staticMeshFracture";
 import {
   applyAssetUvwMapping,
   defaultAssetUvw,
@@ -189,6 +191,11 @@ export class StaticMeshEditor {
   private readonly modelGroup = new Group();
   private readonly overlayGroup = new Group();
   private readonly complexCollisionGroup = new Group();
+  /** Fracture preview chunks (Faz 3); shown in place of the model while previewing. */
+  private readonly fracturePreviewGroup = new Group();
+  private readonly fracture: StaticMeshFracture;
+  /** The loaded `gltf.scene`, the root the fracture bake and hash read. */
+  private loadedModel: Object3D | null = null;
   private readonly resizeObserver: ResizeObserver;
 
   private readonly target = new Vector3();
@@ -278,6 +285,30 @@ export class StaticMeshEditor {
     this.viewportHost.append(this.renderer.domElement);
     this.loader = createForgeGltfLoader(this.renderer);
 
+    this.fracture = new StaticMeshFracture({
+      modelPath: options.modelPath,
+      modelRoot: () => this.loadedModel,
+      previewGroup: this.fracturePreviewGroup,
+      setModelVisible: (visible) => {
+        this.modelGroup.visible = visible;
+      },
+      materialAssets: () => (this.options.assets ?? [])
+        .filter((asset) => asset.assetType === "material")
+        .map((asset) => ({ id: asset.id, name: asset.name })),
+      loadMaterial: async (id) => {
+        try {
+          return await loadForgeMaterial(this.previewAssetManifest(), id, this.textureLoader, {
+            maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
+          });
+        } catch {
+          return null;
+        }
+      },
+      markDirty: () => this.markDirty(),
+      setStatus: (message, tone) => this.setStatus(message, tone),
+      rerender: () => this.renderDetails(),
+    });
+
     this.buildScene();
     this.bindCameraControls();
     this.bindKeyboard();
@@ -295,6 +326,9 @@ export class StaticMeshEditor {
     void this.loadUvw();
     void this.loadMaterialSlots();
     void this.loadVertexColors();
+    void this.fracture.load().then(() => {
+      if (!this.disposed) this.renderDetails();
+    });
   }
 
   // --- scene setup -------------------------------------------------------
@@ -304,6 +338,8 @@ export class StaticMeshEditor {
     this.scene.add(this.modelGroup);
     this.scene.add(this.overlayGroup);
     this.scene.add(this.complexCollisionGroup);
+    this.fracturePreviewGroup.visible = false;
+    this.scene.add(this.fracturePreviewGroup);
     this.complexCollisionGroup.visible = this.showComplexCollision;
 
     const controls = new TransformControls(this.camera, this.renderer.domElement);
@@ -411,6 +447,7 @@ export class StaticMeshEditor {
       if (this.disposed) return;
       const model = gltf.scene;
       this.modelGroup.add(model);
+      this.loadedModel = model;
       model.traverse((object) => {
         if (object instanceof Mesh && !this.originalMeshMaterials.has(object)) {
           this.originalMeshMaterials.set(object, object.material);
@@ -434,6 +471,8 @@ export class StaticMeshEditor {
       if (assignedMaterialSlotIds(this.materialSlots).length > 0) {
         void this.applyPreviewMaterials({ dirty: false, status: false });
       }
+      this.fracture.modelLoaded();
+      this.renderDetails();
       this.setStatus("Ready.");
     } catch (error) {
       this.setStatus(`Failed to load model: ${describeError(error)}`, "error");
@@ -1371,7 +1410,9 @@ export class StaticMeshEditor {
         <div class="sm-section-title">Primitives <span class="sm-count">${this.collision.primitives.length}</span></div>
         <div class="sm-prim-list">${primitiveRows}</div>
       </div>
+      ${this.fracture.html()}
     `;
+    this.fracture.bind(this.detailsHost);
 
     this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-sm-material-slot]").forEach((select) => {
       select.addEventListener("change", (event) => {
@@ -1606,18 +1647,22 @@ export class StaticMeshEditor {
 
   private async save(): Promise<void> {
     try {
-      const [collisionResult, materialResult, uvwResult, vertexColorResult] = await Promise.all([
+      const [collisionResult, materialResult, uvwResult, vertexColorResult, fractureResult] = await Promise.all([
         saveAssetCollision(this.options.modelPath, this.collision),
         saveAssetMaterialSlots(this.options.modelPath, this.materialSlots),
         saveAssetUvw(this.options.modelPath, this.uvw),
         saveAssetVertexColors(this.options.modelPath, this.vertexColors),
+        this.fracture.save(),
       ]);
       this.overlay.querySelector<HTMLButtonElement>("[data-sm-save]")?.classList.remove("is-dirty");
-      const changed = collisionResult.changed || materialResult.changed || uvwResult.changed || vertexColorResult.changed;
+      const changed = collisionResult.changed || materialResult.changed || uvwResult.changed || vertexColorResult.changed
+        || (fractureResult?.changed ?? false);
+      const fractureNote = fractureResult ? `, ${fractureResult.path}` : "";
       this.setStatus(
         changed
-          ? `Saved ${collisionResult.path}, ${materialResult.path}, ${uvwResult.path}, and ${vertexColorResult.path}`
+          ? `Saved ${collisionResult.path}, ${materialResult.path}, ${uvwResult.path}, ${vertexColorResult.path}${fractureNote}`
           : "No changes to save.",
+        fractureResult && fractureResult.dropped.length > 0 ? "warning" : "info",
       );
       if (this.options.assetId) {
         this.options.onMaterialSlotsSaved?.(this.options.assetId);
@@ -1652,6 +1697,7 @@ export class StaticMeshEditor {
     for (const overlay of this.overlays) disposeOverlay(overlay);
     this.disposeUvwOverlay();
     this.disposeComplexCollisionOverlay();
+    this.fracture.dispose();
     this.complexCollisionMaterial.dispose();
     this.renderer.dispose();
     this.overlay.remove();

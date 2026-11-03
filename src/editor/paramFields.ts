@@ -16,8 +16,8 @@
  */
 
 const ENHANCED = "paramEnhanced";
-/** Name + control rows: Details panels, Material, Particle/Vehicle and UI Widget editors. */
-export const PARAM_ROW_SELECTOR = ".detail-row, .me-row, .pfx-row, .uie-field";
+/** Name + control rows: Details panels, Material, Particle/Vehicle, UI Widget and Static Mesh editors. */
+export const PARAM_ROW_SELECTOR = ".detail-row, .me-row, .pfx-row, .uie-field, .sm-row";
 const PARAM_INPUT_SELECTOR = PARAM_ROW_SELECTOR.split(", ").map((row) => `${row} > input[type="number"]`).join(", ");
 
 function bound(input: HTMLInputElement, name: "min" | "max"): number | null {

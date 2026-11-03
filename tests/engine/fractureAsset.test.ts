@@ -10,7 +10,7 @@ import { validateSaveFracturePayload } from "../../tools/saveValidator";
 import { collectDroppedFields } from "../../tools/droppedFields";
 
 const maximal: AssetFractureDef = {
-  version: 1, source: "voronoi", enabled: false, seed: 4294967295,
+  version: 1, source: "voronoi", enabled: false, seed: 999999,
   cellCount: 64, density: 20000, interiorMaterialId: "cut-stone", interiorUvScale: 100,
   breakImpulse: 1000000, damageToBreak: 1000000, chunkLifetime: 600,
   maxActiveChunks: 256, sourceHash: "fnv1a:1234abcd",
@@ -57,7 +57,8 @@ export function registerFractureAssetTests(check: (label: string, fn: () => void
     assert.equal(normalizeAssetFracture({ breakImpulse: -5 })?.breakImpulse, 0);
     assert.equal(normalizeAssetFracture({ chunkLifetime: 1e9 })?.chunkLifetime, 600);
     assert.equal(normalizeAssetFracture({ seed: 12.6 })?.seed, 13);
-    assert.equal(normalizeAssetFracture({ seed: 4294967295.9 })?.seed, 4294967295);
+    assert.equal(normalizeAssetFracture({ seed: 4294967295 })?.seed, 999999);
+    assert.equal(normalizeAssetFracture({ seed: -3 })?.seed, 0);
     assert.equal(normalizeAssetFracture({ maxActiveChunks: 12.6 })?.maxActiveChunks, 13);
   });
 

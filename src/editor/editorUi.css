@@ -3753,6 +3753,7 @@
   color: var(--forge-text);
 }
 .sm-row.sm-toggle { grid-template-columns: auto 1fr; }
+.sm-fracture-warning { color: var(--forge-warning, #e6b450); }
 .sm-row.sm-toggle input { width: 16px; height: 16px; }
 
 .sm-prim-list { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
@@ -7012,7 +7013,7 @@
 /* Bounded parameters (src/editor/paramFields.ts): visible range under the
    name, slider + compact number box in the control half. The number box comes
    first in the DOM so the label targets it; `order` shows the slider first. */
-:is(.detail-row, .me-row, .pfx-row, .uie-field) > span .param-range {
+:is(.detail-row, .me-row, .pfx-row, .uie-field, .sm-row) > span .param-range {
   display: block;
   margin-top: 1px;
   color: var(--forge-text-secondary, #8593a0);
@@ -7027,7 +7028,7 @@
   min-width: 0;
 }
 
-:is(.detail-row, .me-row, .pfx-row, .uie-field) .param-control input.param-slider {
+:is(.detail-row, .me-row, .pfx-row, .uie-field, .sm-row) .param-control input.param-slider {
   order: 0;
   flex: 1 1 auto;
   width: auto;
@@ -7042,7 +7043,7 @@
   cursor: pointer;
 }
 
-:is(.detail-row, .me-row, .pfx-row, .uie-field) .param-control input[type="number"] {
+:is(.detail-row, .me-row, .pfx-row, .uie-field, .sm-row) .param-control input[type="number"] {
   order: 1;
   flex: 0 0 62px;
   width: 62px;

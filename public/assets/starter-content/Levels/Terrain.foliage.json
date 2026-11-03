@@ -4,7 +4,7 @@
   "groups": [
     {
       "id": "foliage-group-1",
-      "foliageTypeId": "pine-foliagetype",
+      "foliageTypeId": "tree-foliagetype",
       "target": {
         "kind": "landscape",
         "id": "landscape-1"
@@ -14,10 +14,6 @@
   ],
   "landscapeRules": [],
   "foliageCells": [
-    "1_1",
-    "2_1",
-    "1_2",
-    "2_2",
-    "2_3"
+    "2_1"
   ]
 }

@@ -20,10 +20,23 @@
   "crumbleEffect": null,
   "maxSeparation": 0,
   "support": {
-    "mode": "none",
-    "anchors": [],
+    "mode": "anchored",
+    "anchors": [
+      {
+        "min": [
+          -0.045,
+          -0.045,
+          -0.145
+        ],
+        "max": [
+          4.045,
+          1.1,
+          0.145
+        ]
+      }
+    ],
     "worldSupport": true,
-    "damageRadius": 0.4,
+    "damageRadius": 0.25,
     "damageRadiusPerImpulse": 0.0004,
     "damageRadiusMax": 3
   },

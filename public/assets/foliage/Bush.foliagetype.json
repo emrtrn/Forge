@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "type": "foliageType",
+  "name": "Bush",
+  "meshAssetId": "commonbush",
+  "radius": 0.5,
+  "density": 1,
+  "scaleMin": [
+    1,
+    1,
+    1
+  ],
+  "scaleMax": [
+    1,
+    1,
+    1
+  ],
+  "randomYaw": true,
+  "alignToNormal": true,
+  "zOffsetMin": 0,
+  "zOffsetMax": 0,
+  "slopeMin": 0,
+  "slopeMax": 90,
+  "castShadow": true,
+  "receiveShadow": true,
+  "collision": false,
+  "cullStart": 0,
+  "cullEnd": 0
+}
